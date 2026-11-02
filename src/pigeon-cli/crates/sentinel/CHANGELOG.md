@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.8 (2026-11-02)
+
+- refactor(cobot): move release machinery from sentinel to cobot ([#33](https://github.com/noisypigeon/pigeon/pull/33))
+
 ## v0.1.7 (2026-11-02)
 
 - feat(infra): cloudflare provisioner unit ([#30](https://github.com/noisypigeon/pigeon/pull/30))

@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.5 (2026-11-02)
+
+- refactor(cobot): move release machinery from sentinel to cobot ([#33](https://github.com/noisypigeon/pigeon/pull/33))
+
 ## v0.1.4 (2026-11-02)
 
 - fix(sentinel): release a unit only when its build changed ([#28](https://github.com/noisypigeon/pigeon/pull/28))
