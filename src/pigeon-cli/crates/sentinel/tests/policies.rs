@@ -288,7 +288,7 @@ fn changelog_rules() {
 #[test]
 fn every_policy_is_valid() {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../../.config/policies");
-    assert_eq!(sentinel::load_dir(&dir).expect("loads").len(), 7);
+    assert_eq!(sentinel::load_dir(&dir).expect("loads").len(), 8);
 }
 
 fn layout_root(skip: &[&str], extra: &[&str]) -> TempDir {
@@ -437,6 +437,72 @@ fn terraform_actions_rules() {
         files.retain(|(f, _)| *f != file);
         files.push((file, content));
         let v = violations("terraform-actions", tree_root(&files).path(), None);
+        assert!(
+            v.iter().any(|m| m.starts_with(&format!("{file}:1:"))),
+            "{file}: {v:?}"
+        );
+    }
+}
+
+#[test]
+fn sentinel_actions_keeps_sentinel_read_only() {
+    let ok = [
+        (
+            "src/pigeon-cli/crates/sentinel/src/lib.rs",
+            "use std::fs;\n",
+        ),
+        (
+            "src/pigeon-cli/crates/sentinel/tests/t.rs",
+            "fs::write(p, c);\n",
+        ),
+        (
+            "src/pigeon-cli/crates/cobot/src/release/git.rs",
+            "Command::new(\"git\");\n",
+        ),
+        (
+            ".github/workflows/lifecycle.yml",
+            "run: docker run \"$IMAGE\" sentinel check --root /repo\n",
+        ),
+        (
+            ".github/workflows/release.yml",
+            "run: cargo run -p pigeon -- cobot release\n",
+        ),
+        (
+            ".github/workflows/a.yml",
+            "# runs the pigeon-sentinel image\n",
+        ),
+    ];
+    passes(&violations("sentinel-actions", tree_root(&ok).path(), None));
+    for (file, content) in [
+        (
+            "src/pigeon-cli/crates/sentinel/src/lib.rs",
+            "use std::process::Command;\n",
+        ),
+        (
+            "src/pigeon-cli/crates/sentinel/src/x.rs",
+            "let c = Command::new(\"git\");\n",
+        ),
+        (
+            "src/pigeon-cli/crates/sentinel/src/y.rs",
+            "fs::write(p, c)?;\n",
+        ),
+        (
+            ".github/workflows/release.yml",
+            "run: cargo run -p pigeon -- sentinel release\n",
+        ),
+        (
+            ".github/workflows/lifecycle.yml",
+            "run: docker run \"$IMAGE\" sentinel tags\n",
+        ),
+        (
+            ".github/workflows/b.yml",
+            "run: pigeon sentinel release --dry-run\n",
+        ),
+    ] {
+        let mut files = ok.to_vec();
+        files.retain(|(f, _)| *f != file);
+        files.push((file, content));
+        let v = violations("sentinel-actions", tree_root(&files).path(), None);
         assert!(
             v.iter().any(|m| m.starts_with(&format!("{file}:1:"))),
             "{file}: {v:?}"

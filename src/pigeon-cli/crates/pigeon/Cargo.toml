@@ -10,9 +10,9 @@ publish.workspace = true
 
 [features]
 default = ["sentinel", "gantry", "cobot"]
-sentinel = ["dep:sentinel", "dep:serde", "dep:serde_json"]
+sentinel = ["dep:sentinel"]
 gantry = ["dep:gantry"]
-cobot = ["dep:cobot"]
+cobot = ["dep:cobot", "dep:serde", "dep:serde_json"]
 
 [dependencies]
 clap.workspace = true
