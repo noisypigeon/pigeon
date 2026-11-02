@@ -37,10 +37,18 @@ The context of what is being built, related ADRs, etc.
 ## Implementation plan.
 
 The detailed implementation plan.
+
+## Amendments
+
+### YYYY-MM-DD: <summary>
+
+What changed, and the steps to execute it.
 ```
 
 - `Date` and `Category` must match the filename.
-- The only H2s are the title, `## Context` and `## Implementation plan.`, in
-  that order. Use `###` inside them.
-- A merged ADR is not edited to change what it decided. A later ADR
-  supersedes it and cites it by filename.
+- The only H2s are the title, `## Context`, `## Implementation plan.` and an
+  optional `## Amendments`, in that order. Use `###` inside them.
+- Leave out `## Amendments` until the first amendment. Each entry is
+  `### YYYY-MM-DD: <summary>`, in date order, no earlier than `Date`.
+- A merged ADR's text is never rewritten. Amend it by appending an entry, or
+  supersede it with a new ADR that cites it by filename.
