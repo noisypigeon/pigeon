@@ -199,9 +199,8 @@ fn entries(ctx: &mut Ctx, root: &Path, r: &EntriesRule) {
     }
 }
 
-/// Repo-relative paths of every file and symlink under `root` (symlinks are
-/// reported, never followed), skipping `ignore`d paths, sorted; plus every path
-/// that could not be listed, with why.
+/// Repo-relative files and symlinks under `root` (never followed), minus `ignore`,
+/// sorted; plus each path that could not be listed, and why.
 fn walk(root: &Path, ignore: &[crate::policy::Pattern]) -> (Vec<String>, Vec<(String, String)>) {
     let mut found = Vec::new();
     let mut failed = Vec::new();
