@@ -480,8 +480,10 @@ workloads/
       path: workloads
       dirs: ['^cloudflare$', '^[a-z0-9-]+(\.[a-z0-9-]+)+$']
       files: ['^README\.md$']
-      require: [README.md, cloudflare]
+      require: [README.md]
 ```
+
+git tracks no empty directory, so `cloudflare` joins `require` only in PR C′, the PR that adds the unit's first file.
 
 #### 2. The apex config
 
@@ -625,7 +627,8 @@ OpenTofu 1.13, as pinned, supports this. It was checked against cloudflare 5.28.
 4. **PR C′**, `feat(workloads): noisypigeon.com apex with Proton Mail`, holds:
    - `workloads/cloudflare/apex/config.yaml` from step 2;
    - the owner's secrets file;
-   - the `apex-noisypigeon.com` token.
+   - the `apex-noisypigeon.com` token;
+   - `cloudflare` added to the layout rule's `require`.
 
 #### 8. Verification
 
