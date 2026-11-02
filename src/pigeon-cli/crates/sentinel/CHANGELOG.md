@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.2 (2026-11-02)
+
+- feat(sentinel): find rule and optional release images ([#19](https://github.com/noisypigeon/pigeon/pull/19))
+
 ## v0.1.1 (2026-11-02)
 
 - fix(sentinel): publish every unpublished release tag ([#16](https://github.com/noisypigeon/pigeon/pull/16))

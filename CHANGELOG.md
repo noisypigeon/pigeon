@@ -2,6 +2,7 @@
 
 ## 2026-11-02
 
+- feat(sentinel): find rule and optional release images ([#19](https://github.com/noisypigeon/pigeon/pull/19))
 - docs(adr): amend cobot with engine-first execution and safe plans ([#18](https://github.com/noisypigeon/pigeon/pull/18))
 - docs(adr): cobot, infrastructure as code with state in git ([#17](https://github.com/noisypigeon/pigeon/pull/17))
 - fix(sentinel): publish every unpublished release tag ([#16](https://github.com/noisypigeon/pigeon/pull/16))
