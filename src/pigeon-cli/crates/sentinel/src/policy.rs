@@ -21,20 +21,22 @@ pub struct Policy {
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
 pub enum Target {
-    /// `pull-request`.
-    PullRequest(PullRequestTarget),
+    /// `pull-request` or `tree`.
+    Named(NamedTarget),
     /// `{ file: PATH }`.
     File(FileTarget),
     /// `{ dir: PATH, exclude, min }`.
     Dir(DirTarget),
 }
 
-/// The literal `pull-request`.
-#[derive(Debug, Deserialize)]
-pub enum PullRequestTarget {
+/// A target named by a literal.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum NamedTarget {
     /// A pull request's title, body and number.
-    #[serde(rename = "pull-request")]
     PullRequest,
+    /// The repository's directories, for `entries` rules.
+    Tree,
 }
 
 /// One file.
@@ -90,6 +92,28 @@ pub enum Rule {
     Field(FieldRule),
     /// A file contains a literal.
     Contains(ContainsRule),
+    /// A directory holds only allowed entries.
+    Entries(EntriesRule),
+}
+
+/// See [`Rule::Entries`].
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct EntriesRule {
+    /// The directory, relative to the root.
+    pub path: PathBuf,
+    /// Allowed subdirectory names; absent allows none.
+    #[serde(default)]
+    pub dirs: Vec<Pattern>,
+    /// Allowed file names; absent allows none.
+    #[serde(default)]
+    pub files: Vec<Pattern>,
+    /// Names that must exist.
+    #[serde(default)]
+    pub require: Vec<String>,
+    /// Names skipped entirely.
+    #[serde(default)]
+    pub ignore: Vec<Pattern>,
 }
 
 /// See [`Rule::Filename`].
@@ -309,10 +333,14 @@ impl Policy {
         if self.description.trim().is_empty() || self.description.contains('\n') {
             return Err("description must be one non-empty line".into());
         }
-        let pr = matches!(self.target, Target::PullRequest(_));
+        let pr = matches!(self.target, Target::Named(NamedTarget::PullRequest));
+        let tree = matches!(self.target, Target::Named(NamedTarget::Tree));
         for (i, rule) in self.rules.iter().enumerate() {
             let at = |m: &str| Err(format!("rule {}: {m}", i + 1));
             match rule {
+                Rule::Entries(_) if !tree => return at("`entries` needs the `tree` target"),
+                Rule::Entries(_) => {}
+                _ if tree => return at("only `entries` applies to `tree`"),
                 Rule::Field(r) => {
                     if !pr {
                         return at("`field` needs the `pull-request` target");
@@ -373,6 +401,7 @@ mod tests {
     fn parses_every_target() {
         for target in [
             "pull-request",
+            "tree",
             "{ file: CHANGELOG.md }",
             "{ dir: d, exclude: [a], min: 1 }",
         ] {
@@ -399,6 +428,11 @@ mod tests {
     #[test]
     fn rejects_inconsistent_options() {
         let file = "description: x\ntarget: { file: f }\nrules:\n";
+        assert!(err(&format!("{file}  - entries: {{ path: . }}\n")).contains("`tree`"));
+        assert!(
+            err("description: x\ntarget: tree\nrules:\n  - line: { at: 1 }\n")
+                .contains("only `entries`")
+        );
         assert!(err(&format!("{file}  - headings: {{ level: 2 }}\n")).contains("exactly one of"));
         assert!(
             err(&format!(

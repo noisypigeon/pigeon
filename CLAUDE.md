@@ -16,7 +16,10 @@ belong in the ADR, never in the file.
   [`2026-11-02-development-adr-driven-lifecycle.md`](.claude/decisions/2026-11-02-development-adr-driven-lifecycle.md).
 - The Rust workspace and its Mise-pinned toolchain are
   [`2026-11-02-development-cargo-workspace-mise-toolchain.md`](.claude/decisions/2026-11-02-development-cargo-workspace-mise-toolchain.md).
-  Crates live in `pigeon/crates/<name>/`.
+  Crates live in `src/pigeon-cli/crates/<name>/`.
+- The repository's areas are `src/<project>/`, `tooling/`, `infra/` and
+  `workloads/`, per
+  [`2026-11-02-development-repository-area-layout.md`](.claude/decisions/2026-11-02-development-repository-area-layout.md).
 - `pigeon sentinel` enforces the policies in `.config/policies/`, one YAML file
   per subject.
 - Every PR adds one line to [`CHANGELOG.md`](CHANGELOG.md), under today's UTC

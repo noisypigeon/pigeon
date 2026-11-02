@@ -8,8 +8,8 @@ use regex::Regex;
 
 use crate::markdown::{self, Line};
 use crate::policy::{
-    ContainsRule, Direction, Elsewhere, FieldRule, FieldsRule, HeadingsRule, ItemsRule, LineRule,
-    Order, PrField, Rule,
+    ContainsRule, Direction, Elsewhere, EntriesRule, FieldRule, FieldsRule, HeadingsRule,
+    ItemsRule, LineRule, Order, PrField, Rule,
 };
 use crate::report::Violation;
 use crate::{LoadedPolicy, PullRequest};
@@ -107,7 +107,7 @@ pub fn run_document(
             Rule::Headings(r) => headings(&mut ctx, &lines, r),
             Rule::Items(r) => items(&mut ctx, &lines, r),
             Rule::Contains(r) => contains(&mut ctx, root, r),
-            Rule::Field(_) => {}
+            Rule::Field(_) | Rule::Entries(_) => {}
         }
     }
 }
@@ -142,6 +142,56 @@ pub fn run_pull_request(
             Rule::Field(r) => field(&mut ctx, root, r),
             Rule::Contains(r) => contains(&mut ctx, root, r),
             _ => {}
+        }
+    }
+}
+
+/// Runs a `tree` policy's `entries` rules.
+pub fn run_tree(loaded: &LoadedPolicy, root: &Path, out: &mut Vec<Violation>) {
+    let mut ctx = Ctx {
+        policy: &loaded.name,
+        path: String::new(),
+        vars: Vars::new(),
+        out,
+    };
+    for rule in &loaded.policy.rules {
+        if let Rule::Entries(r) = rule {
+            entries(&mut ctx, root, r);
+        }
+    }
+}
+
+fn entries(ctx: &mut Ctx, root: &Path, r: &EntriesRule) {
+    let path = r.path.display().to_string();
+    let listing = match fs::read_dir(root.join(&r.path)) {
+        Ok(listing) => listing,
+        Err(e) => {
+            ctx.push_at(path, None, format!("cannot list: {e}"));
+            return;
+        }
+    };
+    let mut names = Vec::new();
+    for entry in listing.flatten() {
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if r.ignore.iter().any(|p| p.0.is_match(&name)) {
+            continue;
+        }
+        names.push((name, entry.path().is_dir()));
+    }
+    names.sort();
+    for (name, is_dir) in &names {
+        let (allowed, kind) = if *is_dir {
+            (&r.dirs, "directory")
+        } else {
+            (&r.files, "file")
+        };
+        if !allowed.iter().any(|p| p.0.is_match(name)) {
+            ctx.push_at(path.clone(), None, format!("unexpected {kind} '{name}'"));
+        }
+    }
+    for want in &r.require {
+        if !names.iter().any(|(name, _)| name == want) {
+            ctx.push_at(path.clone(), None, format!("missing '{want}'"));
         }
     }
 }
@@ -539,5 +589,69 @@ mod tests {
             run(rules, "f", "## s\n### ok\n```\n### bad\n```\n"),
             Vec::<String>::new()
         );
+    }
+}
+
+#[cfg(test)]
+mod tree_tests {
+    use std::fs;
+
+    use tempfile::TempDir;
+
+    use super::run_tree;
+    use crate::{LoadedPolicy, Policy};
+
+    fn run(rule: &str, root: &TempDir) -> Vec<String> {
+        let yaml = format!("description: test.\ntarget: tree\nrules:\n  - entries: {rule}\n");
+        let loaded = LoadedPolicy {
+            name: "t".into(),
+            policy: Policy::parse(&yaml).expect("valid"),
+        };
+        let mut out = Vec::new();
+        run_tree(&loaded, root.path(), &mut out);
+        out.iter().map(ToString::to_string).collect()
+    }
+
+    fn tree() -> TempDir {
+        let root = TempDir::new().expect("tempdir");
+        fs::create_dir(root.path().join("a")).expect("mkdir");
+        fs::create_dir(root.path().join(".git")).expect("mkdir");
+        fs::write(root.path().join("f.md"), "").expect("write");
+        root
+    }
+
+    #[test]
+    fn allows_by_kind() {
+        let root = tree();
+        let rule = "{ path: ., dirs: ['^a$'], files: ['^f\\.md$'], ignore: ['^\\.git$'] }";
+        assert_eq!(run(rule, &root), Vec::<String>::new());
+        let swapped = "{ path: ., dirs: ['^f\\.md$'], files: ['^a$'], ignore: ['^\\.git$'] }";
+        assert_eq!(
+            run(swapped, &root),
+            vec![
+                ".: t: unexpected directory 'a'",
+                ".: t: unexpected file 'f.md'"
+            ]
+        );
+    }
+
+    #[test]
+    fn absent_lists_allow_nothing_and_ignore_skips() {
+        let root = tree();
+        assert_eq!(run("{ path: . }", &root).len(), 3);
+        assert_eq!(run("{ path: ., ignore: ['.'] }", &root).len(), 0);
+    }
+
+    #[test]
+    fn require_and_unlistable_paths() {
+        let root = tree();
+        assert_eq!(
+            run(
+                "{ path: ., dirs: ['.'], files: ['.'], require: [a, b] }",
+                &root
+            ),
+            vec![".: t: missing 'b'"]
+        );
+        assert_eq!(run("{ path: nope }", &root).len(), 1);
     }
 }
