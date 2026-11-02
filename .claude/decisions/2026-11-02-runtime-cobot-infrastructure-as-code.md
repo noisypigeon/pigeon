@@ -193,7 +193,7 @@ Each new rule gets fixtures in the sentinel tests, and each fixture is checked t
 A review of #17 found three defects in this ADR's plan, and a review of this amendment found three more:
 
 - **The release-first loop blocks PR B.** The `lifecycle` check runs the released `pigeon-sentinel` image, which cannot parse a policy using the new `find` rule. A PR adding both could never pass, so §9 has to land in more than one PR.
-- **Fork PRs get no secrets, and no write token.** GitHub withholds repository secrets from `pull_request` runs triggered from forks, and gives them a read-only `GITHUB_TOKEN`. A fork PR can neither be planned nor be told why in a comment from the same event.
+- **Fork PRs get no secrets, and no write token.** GitHub withholds repository secrets from `pull_request` runs triggered from forks, and gives them a read-only `GITHUB_TOKEN`. A fork PR could neither be planned nor be told why. pigeon takes no external contributions, so forks are excluded rather than accommodated.
 - **PR code runs beside the secrets.** As written, `plan` builds cobot from the PR and initializes the PR's HCL, while `BOT_GITHUB_TOKEN` and `COBOT_STATE_PASSPHRASE` are present. A changed `build.rs`, test or module could read both, and decrypt every state file.
 - **PR configuration can read the runner.** Even without a provider, HCL functions such as `file("/proc/self/environ")` read the environment and the filesystem during `plan`, and whatever a plan shows is posted publicly.
 - **The first cobot PR could not plan.** A plan built from `main` has no `pigeon cobot` until cobot itself has merged.
@@ -236,12 +236,8 @@ This supersedes §5's `plan` job and §9's execution. Both texts stay as written
   - The state repository is checked out read-only, with `persist-credentials: false`, before the PR checkout. The bot token appears only in that step.
 - **Trust boundary.** Only someone with write access can open a same-repository PR, and those people are trusted with this repository. These measures keep them from leaking the secrets by accident or through a careless dependency, not from acting in bad faith.
 
-#### 3. Forks are told, not planned
+#### 3. No external contributions
 
-- The `plan` job runs only when `github.event.pull_request.head.repo.full_name == github.repository`.
-- For a fork, a separate workflow, `cobot-fork.yml`, posts the explanation:
-  - trigger: `pull_request_target`, for PRs whose head repository differs;
-  - permissions: `pull-requests: write` only;
-  - it checks out nothing and runs no code from the PR;
-  - it posts or updates the sticky comment: "Plans are not run for fork pull requests; a maintainer must re-open this change from a branch of noisypigeon/pigeon to plan it."
-- `plan` is not a required check, so a fork PR is not blocked by a check that cannot run.
+- pigeon takes no external contributions. Its interaction limits are set to collaborators only, by hand in the repository settings, so fork PRs, issues and comments from others are not expected.
+- As a guard, the `plan` job still runs only when `github.event.pull_request.head.repo.full_name == github.repository`. A fork PR that slips through is skipped, and nothing is posted.
+- No `pull_request_target` workflow is added.
