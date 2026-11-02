@@ -2,6 +2,7 @@
 
 ## 2026-11-02
 
+- feat(cobot): apexes from infra/cloudflare, workload secrets and token handoff ([#37](https://github.com/noisypigeon/pigeon/pull/37))
 - docs(adr): apex constituents live in infra/cloudflare ([#36](https://github.com/noisypigeon/pigeon/pull/36))
 - docs(adr): workloads by zone, each with an apex ([#34](https://github.com/noisypigeon/pigeon/pull/34))
 - refactor(cobot): move release machinery from sentinel to cobot ([#33](https://github.com/noisypigeon/pigeon/pull/33))
