@@ -389,3 +389,14 @@ The entries the old rule wrote are corrected once, by the bot, so no pull reques
 1. This amendment lands first, with the cargo-workspace amendment of the same date.
 2. Then `fix(sentinel): release a unit only when its build changed`, holding steps 1–6 and that amendment's CI change.
 3. Its own merge still bumps every unit, because splitting `cli.rs` changes `pigeon`'s shared code. The next cobot-only change is the first to show the new rule: it should bump `cobot` alone.
+
+### 2026-11-02: The release machinery moves to cobot
+
+[`2026-11-02-development-sentinel-policy-cobot-actions.md`](2026-11-02-development-sentinel-policy-cobot-actions.md) decides that sentinel is policy and cobot performs the actions policies govern. Releasing is an action, so:
+
+- `release.rs`, `changelog.rs` and `git.rs` move to `cobot::release`. Their behaviour is unchanged.
+- `pigeon sentinel release` and `pigeon sentinel tags`, named in §4, §5 and the amendments above, become `pigeon cobot release` and `pigeon cobot tags`, with the same flags and JSON.
+- `release.yml` calls the cobot subcommands.
+- Wherever this ADR says sentinel generates, bumps or tags, read cobot. Sentinel still enforces the changelog policies of §6 and §7.
+
+The steps are in that ADR's implementation plan.
