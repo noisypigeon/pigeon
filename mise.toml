@@ -3,6 +3,7 @@ min_version = "2026.10.12"
 
 [tools]
 rust = { version = "1.99.1", profile = "minimal", components = "clippy,rustfmt" }
+opentofu = "1.13.1"
 
 [tasks.build]
 dir = "src/pigeon-cli"
@@ -30,6 +31,7 @@ run = [
   "cargo clippy -p pigeon --all-targets --locked --no-default-features -- -D warnings",
   "cargo clippy -p pigeon --all-targets --locked --no-default-features --features sentinel -- -D warnings",
   "cargo clippy -p pigeon --all-targets --locked --no-default-features --features gantry -- -D warnings",
+  "cargo clippy -p pigeon --all-targets --locked --no-default-features --features cobot -- -D warnings",
 ]
 
 [tasks.rust]

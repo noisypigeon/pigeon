@@ -1,5 +1,7 @@
 //! Command dispatch.
 
+#[cfg(feature = "cobot")]
+pub mod cobot;
 #[cfg(feature = "gantry")]
 pub mod gantry;
 #[cfg(feature = "sentinel")]
@@ -17,10 +19,10 @@ pub const INVALID: i32 = 2;
 /// Runs a command and returns its exit code.
 #[must_use]
 #[cfg_attr(
-    not(feature = "sentinel"),
+    not(any(feature = "sentinel", feature = "cobot")),
     expect(
         clippy::needless_pass_by_value,
-        reason = "only `sentinel` carries arguments"
+        reason = "only `sentinel` and `cobot` carry arguments"
     )
 )]
 pub fn dispatch(command: Commands) -> i32 {
@@ -29,5 +31,7 @@ pub fn dispatch(command: Commands) -> i32 {
         Commands::Sentinel(c) => sentinel::run(c),
         #[cfg(feature = "gantry")]
         Commands::Gantry => gantry::run(),
+        #[cfg(feature = "cobot")]
+        Commands::Cobot(c) => cobot::run(c),
     }
 }

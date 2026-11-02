@@ -13,6 +13,7 @@ publish = false
 [workspace.dependencies]
 sentinel = { path = "crates/sentinel" }
 gantry = { path = "crates/gantry" }
+cobot = { path = "crates/cobot" }
 assert_cmd = "2.2.2"
 clap = { version = "4.6.7", features = ["derive"] }
 predicates = "3.1.4"
