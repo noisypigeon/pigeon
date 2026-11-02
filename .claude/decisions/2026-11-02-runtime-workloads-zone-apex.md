@@ -433,3 +433,206 @@ Each gets a changelog tier beside its files, written by the bot, and `release-ch
   - for `infra/cloudflare`, one `cloudflare_account_token` to create;
   - for `workloads/noisypigeon.com/apex`, nine `cloudflare_dns_record`s to create, with the pending-credentials note, and nothing to change or destroy.
 - **After PR C merges:** the apply mints the token, then creates the nine records, commits encrypted state for both units, and the next plan shows "No changes" for both.
+
+## Amendments
+
+### 2026-11-02: Apex constituents live in infra/cloudflare
+
+`infra/cloudflare` is where every Cloudflare resource is defined, so the apex's schema, modules and presets belong there, versioned and released with the rest. `workloads/` only enables what it defines. A review of the first implementation (#35, closed unmerged) also found defects that this amendment fixes.
+
+This supersedes, each left as written:
+
+- §1, the layout;
+- §2's path and per-zone shape;
+- §4's, §7's and §8's file locations, and §7's `x-cobot`;
+- §9's handoff shape;
+- §11, the releases;
+- §13's steps 2 to 4;
+- §14's paths.
+
+§3 to §6 (hosts, presets, records, claims) and §10 (workload secrets) stand, as does the pending-credentials rule and the ordering. They now apply per zone inside one unit.
+
+#### 1. Layout
+
+```
+infra/cloudflare/
+  schema.json              gains $defs.apex and x-cobot.apex
+  modules/dns-record/      beside zone, permission-groups and api-token
+  presets/<service>.yaml   one file per service
+workloads/
+  README.md
+  cloudflare/apex/         the one apex unit, for every zone
+    config.yaml
+    secrets.config.yaml    optional; COBOT_WORKLOAD_SECRETS_PASSPHRASE
+  <zone>/<workload>/       one unit per workload, unchanged
+```
+
+- `workloads/.apex/` is not created.
+- `workloads/cloudflare/` holds only `apex/`.
+- `workloads/cloudflare/apex/` holds no `schema.json` and no `modules/`.
+- Every other directory directly under `workloads/` is a zone in `infra/cloudflare/config.yaml`'s `zones`, and holds only workload units.
+- A zone directory no longer needs an `apex/`. Its apex is its entry in the unit below.
+
+`.config/policies/layout.yaml`'s `workloads` rule becomes:
+
+```yaml
+  - entries:
+      path: workloads
+      dirs: ['^cloudflare$', '^[a-z0-9-]+(\.[a-z0-9-]+)+$']
+      files: ['^README\.md$']
+      require: [README.md, cloudflare]
+```
+
+#### 2. The apex config
+
+`workloads/cloudflare/apex/config.yaml`, in full:
+
+```yaml
+# Every zone's apex; see .claude/decisions/2026-11-02-runtime-workloads-zone-apex.md.
+zones:
+  noisypigeon.com:
+    apex: blog
+    services:
+      proton:
+        verification:
+          protonmail: { secret: protonmail_verification }
+          pm: { secret: pm_verification }
+        dmarc: default
+    records: {}
+```
+
+- **Zone keys.** Each key under `zones` is a zone in `infra/cloudflare/config.yaml`'s `zones`, and needs that unit's `apex-<zone>` token, holding exactly `DNS Write` on that zone. §9's token rule is unchanged.
+- **Zone values.** Each value is §2's former per-zone object: `apex`, `hosts`, `services` and `records`.
+- **Hosts.** §3's hosts are read from `workloads/<zone>/<workload>/`, as before.
+- **Secrets.** Keys are flat, and may be shared across zones. `secrets: referenced` collects every `{ secret: <key> }` in the file.
+
+#### 3. The schema extends `infra/cloudflare/schema.json`
+
+`infra/cloudflare/schema.json` gains two `$defs`. `$defs.apex` is the unit's shape:
+
+```json
+"apex": {
+  "description": "workloads/cloudflare/apex: every zone's apex.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["zones"],
+  "properties": {
+    "zones": {
+      "type": "object",
+      "propertyNames": { "pattern": "^[a-z0-9-]+(\\.[a-z0-9-]+)+$" },
+      "additionalProperties": { "$ref": "#/$defs/zone_apex" }
+    }
+  }
+}
+```
+
+`$defs.zone_apex` is §7's top-level object, unchanged apart from three things:
+
+- its `properties`, `required` and `additionalProperties` move under that name;
+- §7's `$defs` (`key`, `workload`, `name`, `secret`, `record`, `ingress`) join `infra/cloudflare/schema.json`'s `$defs` beside it;
+- the fixes in step 6 below.
+
+`x-cobot` gains `apex`, the unit's composition:
+
+```json
+"apex": {
+  "secrets": "referenced",
+  "handoff": "zone-token",
+  "providers": {
+    "cloudflare": { "per_zone": true, "api_token": "$handoff.api_token" }
+  },
+  "derived": {
+    "dns_records": {
+      "expand": "zone-records",
+      "module": "dns-record",
+      "inputs": {
+        "zone_id": "$handoff.zone_id",
+        "name": "$item.name",
+        "type": "$item.type",
+        "content": "$item.content",
+        "ttl": "$item.ttl",
+        "priority": "$item.priority",
+        "proxied": "$item.proxied"
+      }
+    }
+  }
+}
+```
+
+**How cobot reads it.** For `workloads/cloudflare/apex`, cobot loads `infra/cloudflare/schema.json` and validates the config against `{ "$ref": "#/$defs/apex" }`, resolved within that file. It composes with `x-cobot.apex`, whose `version` is the file's own `x-cobot.version`, and resolves modules and presets under `infra/cloudflare/`.
+
+- So one schema version covers the provisioner unit and every apex.
+- `x-cobot.apex` is valid only in `infra/cloudflare/schema.json`, and it is read only for `workloads/cloudflare/apex`.
+- The provisioner unit's own validation checks only the modules its blocks name. Every module under `infra/cloudflare/modules/` is still scanned by the unit rules.
+
+#### 4. Zones, providers and the handoff
+
+**One provider instance per zone.** `per_zone: true` renders one aliased provider with `for_each` over the configured zone names. They are literal, so they are known and never sensitive:
+
+```json
+"provider": { "cloudflare": [{
+  "alias": "zone",
+  "for_each": "${toset([\"noisypigeon.com\"])}",
+  "api_token": "${var.handoff[each.key].api_token}"
+}] }
+```
+
+OpenTofu 1.13, as pinned, supports this. It was checked against cloudflare 5.28.0 with two zones.
+
+**Records.**
+
+- `zone-records` runs §3 to §6 once per zone.
+- Each item gains `zone`, and is keyed `<zone>:<record key>`, e.g. `noisypigeon.com:proton-mx1`.
+- Each problem is prefixed `zones.<zone>.`.
+- The derived block renders `"providers": { "cloudflare": "cloudflare.zone[each.value.zone]" }`, a bare reference as JSON syntax requires. `$handoff.<key>` in it renders `${var.handoff[each.value.zone].<key>}`.
+
+**Handoff.**
+
+- `variable "handoff"` becomes `map(object({ api_token = string, zone_id = string }))`, still sensitive, still passed only as `TF_VAR_handoff`.
+- It holds every configured zone's `zone_ids` entry and live `apex-<zone>` generation, taken from `infra/cloudflare`'s outputs as §9 decided.
+- A zone with no live generation or zone id yet gets inert placeholders, and the plan notes it by name. An apply refuses, as before.
+
+**An expired token on an existing apex.** When a zone's handoff is pending and the unit already has state, the plan runs with `-refresh=false`, and its note says refresh was skipped. Refreshing with a placeholder would fail authentication before the plan could show anything.
+
+#### 5. Modules, presets and releases
+
+- `dns-record`, as §8 specified, is `infra/cloudflare/modules/dns-record/`.
+- `proton`, as §4 specified, is `infra/cloudflare/presets/proton.yaml`.
+- `.config/releases.yaml` gains `infra-cloudflare-dns-record`, like the other modules. `infra-cloudflare-schema`'s paths gain `infra/cloudflare/presets/`, so a preset change bumps the schema.
+- §11's `workloads-apex-*` units are never created.
+- `release-changelog.yaml` lists `infra/cloudflare/modules/dns-record/CHANGELOG.md`.
+
+#### 6. Fixes from the review of #35
+
+- **Injection.** `$defs.name` is anchored at both ends. Every `{ secret: <key> }` is checked against `^[a-z0-9_]+$` in Rust, as are record names and hosts, before any template is built.
+- **Host keys.** Two hosts of one workload whose record keys collide (`a.b` and `a-b`) are rejected, naming both.
+- **Optional booleans.** `false` unsets an optional input of any type, booleans included.
+- **Changing an MX's type.** An override that changes an `MX` to another type drops the inherited `priority`. An override may set `priority: null`.
+- **Module trust.** It is unchanged. Units' modules run in PR plans beside the passphrases under the cobot ADR amendment's §2: trusted writers only, `main`'s binary and providers, scanned HCL, and summaries that print only addresses and actions.
+
+#### 7. Execution
+
+1. This amendment lands first.
+2. **PR B′**, `feat(cobot): apexes from infra/cloudflare, workload secrets and token handoff`, on a branch restarted from `main`, holds:
+   - #35's engine, reworked to steps 1 to 6;
+   - the module, the preset and the schema changes;
+   - §10's workload secrets;
+   - `infra/cloudflare`'s outputs and dotted token names;
+   - the policies, releases, `cobot.yml` and docs.
+
+   Its plan shows "No changes": PR plans run `main`'s binary, which does not render outputs yet. Its merge's apply records `output.zone_ids` and `output.tokens` in `infra/cloudflare`'s state, and changes no resource.
+3. **By hand, before PR C′**, as §13 step 3, with the secrets written to `workloads/cloudflare/apex`.
+4. **PR C′**, `feat(workloads): noisypigeon.com apex with Proton Mail`, holds:
+   - `workloads/cloudflare/apex/config.yaml` from step 2;
+   - the owner's secrets file;
+   - the `apex-noisypigeon.com` token.
+
+#### 8. Verification
+
+§14 holds, with these paths, plus:
+
+- two zones render with their own provider instances and keys;
+- a pending zone with existing state plans with refresh skipped;
+- each of step 6's fixes has a failing case;
+- `tofu validate` passes on the rendered unit against cloudflare 5.28.0;
+- PR C′'s plan comment shows one `cloudflare_account_token` for `infra/cloudflare`, and nine `cloudflare_dns_record` creates for `workloads/cloudflare/apex` with the pending note, and nothing to destroy.
