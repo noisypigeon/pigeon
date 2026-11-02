@@ -293,10 +293,8 @@ fn settings_commits<'a>(root: &Path, config: &Config, range: &'a [Commit]) -> Ve
 
 static SCRATCH: AtomicUsize = AtomicUsize::new(0);
 
-/// A unit's resolved dependencies at `rev`, and its workspace crates' paths.
-///
-/// Workspace crates are listed by name only, since their versions move with
-/// releases; their paths are returned so their sources count as the unit's.
+/// A unit's resolved dependencies at `rev`, workspace crates by name, and
+/// those crates' repository-relative paths.
 fn dependency_tree(
     root: &Path,
     rev: &str,
@@ -464,9 +462,7 @@ fn unit_release(
     if let Some(cargo) = &unit.cargo {
         let (now, workspace) = dependency_tree(root, to, cargo, &unit.features)?;
         prefixes.extend(workspace);
-        let before = dependency_tree(root, last, cargo, &unit.features)
-            .map(|(t, _)| t)
-            .unwrap_or_default();
+        let (before, _) = dependency_tree(root, last, cargo, &unit.features)?;
         dependencies_changed = before != now;
     }
     let settings: Vec<&str> = settings_commits(root, config, &range)
