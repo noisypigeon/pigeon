@@ -1,0 +1,111 @@
+# Plan on PR, apply on merge; see .claude/decisions/2026-11-02-runtime-cobot-infrastructure-as-code.md.
+name: cobot
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+env:
+  STATE_REPO: noisypigeon/pigeon-cobot-state
+
+jobs:
+  plan:
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Check out main, for the trusted binary
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: main
+          persist-credentials: false
+      - name: Check out the state repository, read-only
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: ${{ env.STATE_REPO }}
+          token: ${{ secrets.BOT_GITHUB_TOKEN }}
+          path: .state
+          persist-credentials: false
+      - name: Check out the PR, as data
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: .pr
+          persist-credentials: false
+      - uses: jdx/mise-action@9b200bcecbfd6303e69a4a261b2e09e3757440a7 # v5.2.0
+        with:
+          version: 2026.10.12
+      - name: Build pigeon from main
+        run: cargo build -q --locked -p pigeon --no-default-features --features cobot --manifest-path src/pigeon-cli/Cargo.toml
+      - name: Validate
+        run: src/pigeon-cli/target/debug/pigeon cobot validate --root .pr
+      - name: Plan
+        env:
+          COBOT_STATE_PASSPHRASE: ${{ secrets.COBOT_STATE_PASSPHRASE }}
+        run: |
+          src/pigeon-cli/target/debug/pigeon cobot plan --root .pr --state .state --summary "$RUNNER_TEMP/summary.md"
+          cat "$RUNNER_TEMP/summary.md" >>"$GITHUB_STEP_SUMMARY"
+      - name: Comment
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          id=$(gh api "repos/$REPO/issues/$PR/comments" --paginate \
+            --jq '.[] | select(.body | startswith("<!-- cobot-plan -->")) | .id' | head -n 1)
+          if [ -n "$id" ]; then
+            gh api -X PATCH "repos/$REPO/issues/comments/$id" -F body=@"$RUNNER_TEMP/summary.md" >/dev/null
+          else
+            gh api "repos/$REPO/issues/$PR/comments" -F body=@"$RUNNER_TEMP/summary.md" >/dev/null
+          fi
+
+  apply:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: cobot-apply
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - name: Check out the state repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: ${{ env.STATE_REPO }}
+          token: ${{ secrets.BOT_GITHUB_TOKEN }}
+          path: .state
+      - uses: jdx/mise-action@9b200bcecbfd6303e69a4a261b2e09e3757440a7 # v5.2.0
+        with:
+          version: 2026.10.12
+      - name: Build pigeon
+        run: cargo build -q --locked -p pigeon --no-default-features --features cobot --manifest-path src/pigeon-cli/Cargo.toml
+      - name: Apply
+        env:
+          COBOT_STATE_PASSPHRASE: ${{ secrets.COBOT_STATE_PASSPHRASE }}
+        run: |
+          src/pigeon-cli/target/debug/pigeon cobot apply --root . --state .state | tee "$RUNNER_TEMP/apply.md"
+          cat "$RUNNER_TEMP/apply.md" >>"$GITHUB_STEP_SUMMARY"
+      - name: Commit state
+        env:
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          cd .state
+          git add -A
+          if git diff --cached --quiet; then
+            echo "no state changes"
+            exit 0
+          fi
+          units=$(git diff --cached --name-only | xargs -n1 dirname | sort -u | paste -sd, -)
+          git config user.name istx25
+          git config user.email 6799989+istx25@users.noreply.github.com
+          git commit -q -m "cobot: apply $units from noisypigeon/pigeon@$SHA"
+          git push origin HEAD

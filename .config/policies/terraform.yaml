@@ -1,0 +1,10 @@
+description: Terraform lives only in infra/ and workloads/, and state never lives in this repository.
+target: tree
+rules:
+  - find:
+      match: '(\.tf|\.tf\.json|\.tofu|\.tofu\.json|\.tfvars|\.tfvars\.json|(^|/)\.terraform\.lock\.hcl|(^|/)unit\.yaml)$'
+      allow_under: [infra/, workloads/]
+      ignore: ['^\.git$', '(^|/)target$', '(^|/)\.cobot$']
+  - find:
+      match: '(\.tfstate(\.backup)?$|(^|/)\.terraform/)'
+      ignore: ['^\.git$', '(^|/)target$', '(^|/)\.cobot$']
