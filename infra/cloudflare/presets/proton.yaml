@@ -1,0 +1,26 @@
+# Proton Mail; see .claude/decisions/2026-11-02-runtime-workloads-zone-apex.md.
+description: Proton Mail at the zone apex.
+inputs:
+  verification.protonmail: { type: string, secret: true, optional: true }
+  verification.pm: { type: string, secret: true, optional: true }
+  dmarc:
+    type: string
+    optional: true
+    default: "v=DMARC1; p=quarantine; pct=100; adkim=s; aspf=s"
+claims:
+  - { name: "@", type: MX }
+  - { name: "@", type: SPF }
+  - { name: dkim._domainkey, type: ADDRESS }
+  - { name: dkim02._domainkey, type: ADDRESS }
+  - { name: dkim03._domainkey, type: ADDRESS }
+  - { name: _dmarc, type: DMARC, when: dmarc }
+records:
+  mx1: { name: "@", type: MX, content: mx1.alias.proton.me, priority: 10 }
+  mx2: { name: "@", type: MX, content: mx2.alias.proton.me, priority: 20 }
+  dkim: { name: dkim._domainkey, type: CNAME, content: dkim._domainkey.alias.proton.me }
+  dkim02: { name: dkim02._domainkey, type: CNAME, content: dkim02._domainkey.alias.proton.me }
+  dkim03: { name: dkim03._domainkey, type: CNAME, content: dkim03._domainkey.alias.proton.me }
+  spf: { name: "@", type: TXT, content: "v=spf1 include:alias.proton.me ~all" }
+  verification-protonmail: { name: "@", type: TXT, content: "protonmail-verification=${verification.protonmail}" }
+  verification-pm: { name: "@", type: TXT, content: "pm-verification=${verification.pm}" }
+  dmarc: { name: _dmarc, type: TXT, content: "${dmarc}" }

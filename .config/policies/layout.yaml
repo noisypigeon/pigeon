@@ -13,4 +13,8 @@ rules:
       require: [pigeon-cli]
   - entries: { path: tooling, dirs: ['.'], files: ['.'], require: [README.md] }
   - entries: { path: infra, dirs: ['.'], files: ['.'], require: [README.md] }
-  - entries: { path: workloads, dirs: ['.'], files: ['.'], require: [README.md] }
+  - entries:
+      path: workloads
+      dirs: ['^cloudflare$', '^[a-z0-9-]+(\.[a-z0-9-]+)+$']
+      files: ['^README\.md$']
+      require: [README.md]
