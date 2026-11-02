@@ -38,6 +38,13 @@ belong in the ADR, never in the file.
   `cobot.yml` plans on PR and applies on merge, committing encrypted state to
   the private `noisypigeon/pigeon-cobot-state`. Never run `tofu apply` or
   `pigeon cobot apply` by hand against that repository.
+- Config units (`config.yaml` validated by `schema.json`, composed from its
+  `x-cobot` annotations into single-resource `modules/`) are per
+  [`2026-11-02-runtime-cloudflare-provisioner-unit.md`](.claude/decisions/2026-11-02-runtime-cloudflare-provisioner-unit.md).
+  A unit's `secrets.config.yaml` holds only `ENC[cobot:v1:…]` values under
+  `COBOT_SECRETS_PASSPHRASE`; only `infra/` units have one, and a break-glass
+  key is never handed to a workload, which gets only minted tokens. Providers
+  come only from `main`'s `.config/providers.yaml` and `providers.lock.hcl`.
 - The repo is public: never push secrets, credentials, key IDs or private
   bucket names, in commits, branch names, PR text or CI logs.
 
@@ -50,6 +57,10 @@ belong in the ADR, never in the file.
 - `mise run features`: clippy with each subcommand feature alone.
 - `pigeon cobot validate|render|plan`: check, render and plan units;
   `plan` needs `COBOT_STATE_PASSPHRASE` and a `--state` directory.
+- `pigeon cobot secrets set <unit> <key>` (value on stdin) and
+  `pigeon cobot secrets check <unit>`, with `COBOT_SECRETS_PASSPHRASE`; there is
+  no `get`.
+- `pigeon cobot lock`: rewrite `.config/providers.lock.hcl` from the allowlist.
 - `mise run sentinel`: `pigeon sentinel check` against `.config/policies/`.
 - `PR_TITLE='…' PR_BODY='…' PR_NUMBER=N PR_FILES="$(git diff --name-only main...)" mise run sentinel-pr`:
   adds the pull-request policy.

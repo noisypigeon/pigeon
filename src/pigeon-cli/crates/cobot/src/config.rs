@@ -1,0 +1,709 @@
+//! Config units: `config.yaml` validated by `schema.json`, rendered from its
+//! `x-cobot` annotations; see
+//! `.claude/decisions/2026-11-02-runtime-cloudflare-provisioner-unit.md` §1–§3.
+
+use std::collections::{BTreeMap, BTreeSet};
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::sync::LazyLock;
+
+use regex::Regex;
+use serde_json::{Map, Value, json};
+
+use crate::generations::{self, Day, Generation};
+use crate::providers::Allowlist;
+use crate::secrets;
+
+/// The config file inside a unit.
+pub const CONFIG: &str = "config.yaml";
+/// The schema file inside a unit.
+pub const SCHEMA: &str = "schema.json";
+
+static BLOCK: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^[a-z][a-z0-9_]*$").expect("valid regex"));
+static MODULE_REF: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"^\$module\.(?<block>[a-z][a-z0-9_]*)(\[(?<index>\*|\$item(\.[A-Za-z0-9_]+)*)\])?\.(?<out>[A-Za-z0-9_]+)$")
+        .expect("valid regex")
+});
+static VARIABLE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r#"(?m)^\s*variable\s+"([A-Za-z0-9_-]+)""#).expect("valid regex"));
+static OUTPUT: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r#"(?m)^\s*output\s+"([A-Za-z0-9_-]+)""#).expect("valid regex"));
+static RESOURCE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"(?m)^\s*(resource|data)\s+"([A-Za-z0-9_]+)"\s+"[A-Za-z0-9_-]+""#)
+        .expect("valid regex")
+});
+static SEMVER: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^[0-9]+\.[0-9]+\.[0-9]+$").expect("valid regex"));
+static CREDENTIAL: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^[A-Za-z0-9_\-]{32,}$").expect("valid regex"));
+static MODULE_VERSION: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?m)^version:\s*[0-9]+\.[0-9]+\.[0-9]+\s*$").expect("valid regex")
+});
+
+/// A parsed config unit.
+#[derive(Debug, Clone)]
+pub struct ConfigUnit {
+    /// `config.yaml`, as JSON.
+    pub config: Value,
+    /// `schema.json`.
+    pub schema: Value,
+}
+
+/// One `x-cobot` expression.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Expr {
+    /// `$item` or `$item.<path>`.
+    Item(Vec<String>),
+    /// `$config.<path>`.
+    Config(Vec<String>),
+    /// `$secret.<key>`.
+    Secret(String),
+    /// `$generation.not_before` or `$generation.expires_on`.
+    Generation(String),
+    /// `$module.<block>.<out>`, `$module.<block>[*].<out>` or `$module.<block>[$item.<path>].<out>`.
+    Module {
+        /// The referenced block.
+        block: String,
+        /// `None`, `Some(None)` for `[*]`, or `Some(Some(path))` for `[$item.<path>]`.
+        index: Option<Option<Vec<String>>>,
+        /// The output.
+        output: String,
+    },
+}
+
+fn path(rest: &str) -> Option<Vec<String>> {
+    if rest.is_empty() {
+        return Some(Vec::new());
+    }
+    let rest = rest.strip_prefix('.')?;
+    let parts: Vec<String> = rest.split('.').map(str::to_string).collect();
+    parts
+        .iter()
+        .all(|p| !p.is_empty() && p.chars().all(|c| c.is_ascii_alphanumeric() || c == '_'))
+        .then_some(parts)
+}
+
+/// Parses an expression; `None` for an unknown form.
+#[must_use]
+pub fn parse(text: &str) -> Option<Expr> {
+    if let Some(c) = MODULE_REF.captures(text) {
+        let index = match c.name("index").map(|i| i.as_str()) {
+            None => None,
+            Some("*") => Some(None),
+            Some(i) => Some(Some(
+                path(i.trim_start_matches("$item")).filter(|p| !p.is_empty())?,
+            )),
+        };
+        return Some(Expr::Module {
+            block: c["block"].to_string(),
+            index,
+            output: c["out"].to_string(),
+        });
+    }
+    if let Some(rest) = text.strip_prefix("$item") {
+        return path(rest).map(Expr::Item);
+    }
+    if let Some(rest) = text.strip_prefix("$config") {
+        return path(rest).filter(|p| !p.is_empty()).map(Expr::Config);
+    }
+    if let Some(key) = text.strip_prefix("$secret.") {
+        return path(&format!(".{key}"))
+            .filter(|p| p.len() == 1)
+            .map(|p| Expr::Secret(p[0].clone()));
+    }
+    match text {
+        "$generation.not_before" => Some(Expr::Generation("not_before".into())),
+        "$generation.expires_on" => Some(Expr::Generation("expires_on".into())),
+        _ => None,
+    }
+}
+
+/// One rendered module block.
+#[derive(Debug, Clone)]
+struct Block {
+    name: String,
+    module: String,
+    for_each: Option<String>,
+    rotate: Option<(Value, Value)>,
+    inputs: Map<String, Value>,
+}
+
+/// A module's interface, read from its `.tf` files.
+#[derive(Debug, Clone, Default)]
+struct ModuleInfo {
+    variables: BTreeSet<String>,
+    outputs: BTreeSet<String>,
+    resources: Vec<String>,
+    tf: String,
+}
+
+fn module_info(dir: &Path) -> ModuleInfo {
+    let mut info = ModuleInfo::default();
+    let Ok(listing) = fs::read_dir(dir) else {
+        return info;
+    };
+    let mut files: Vec<PathBuf> = listing
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.extension().is_some_and(|e| e.eq_ignore_ascii_case("tf")))
+        .collect();
+    files.sort();
+    for f in files {
+        let Ok(text) = fs::read_to_string(&f) else {
+            continue;
+        };
+        info.variables
+            .extend(VARIABLE.captures_iter(&text).map(|c| c[1].to_string()));
+        info.outputs
+            .extend(OUTPUT.captures_iter(&text).map(|c| c[1].to_string()));
+        info.resources
+            .extend(RESOURCE.captures_iter(&text).map(|c| c[2].to_string()));
+        info.tf.push_str(&text);
+        info.tf.push('\n');
+    }
+    info
+}
+
+fn x_cobot(schema: &Value) -> &Value {
+    &schema["x-cobot"]
+}
+
+fn blocks(schema: &Value) -> Vec<Block> {
+    let mut out = Vec::new();
+    let mut push = |name: &str, x: &Value, from_property: bool| {
+        out.push(Block {
+            name: name.to_string(),
+            module: x["module"].as_str().unwrap_or_default().to_string(),
+            for_each: from_property
+                .then(|| x["for_each"].as_str().map(str::to_string))
+                .flatten(),
+            rotate: x
+                .get("rotate")
+                .map(|r| (r["period_days"].clone(), r["overlap_days"].clone())),
+            inputs: x["inputs"].as_object().cloned().unwrap_or_default(),
+        });
+    };
+    if let Some(props) = schema["properties"].as_object() {
+        for (name, prop) in props {
+            if let Some(x) = prop.get("x-cobot") {
+                push(name, x, true);
+            }
+        }
+    }
+    if let Some(singles) = x_cobot(schema)["singletons"].as_object() {
+        for (name, x) in singles {
+            push(name, x, false);
+        }
+    }
+    out
+}
+
+/// The secret keys the schema declares.
+#[must_use]
+pub fn secret_keys(schema: &Value) -> BTreeSet<String> {
+    x_cobot(schema)["secrets"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .map(str::to_string)
+        .collect()
+}
+
+/// The blocks that rotate, by name.
+#[must_use]
+pub fn rotating_blocks(schema: &Value) -> Vec<String> {
+    blocks(schema)
+        .into_iter()
+        .filter(|b| b.rotate.is_some())
+        .map(|b| b.name)
+        .collect()
+}
+
+/// Loads `config.yaml` and `schema.json` from `dir`.
+///
+/// # Errors
+///
+/// A message naming the file that failed to read or parse.
+pub fn load(dir: &Path) -> Result<ConfigUnit, String> {
+    let config_text = fs::read_to_string(dir.join(CONFIG)).map_err(|e| format!("{CONFIG}: {e}"))?;
+    let config: Value =
+        serde_saphyr::from_str(&config_text).map_err(|e| format!("{CONFIG}: {e}"))?;
+    let schema_text = fs::read_to_string(dir.join(SCHEMA)).map_err(|e| format!("{SCHEMA}: {e}"))?;
+    let schema: Value = serde_json::from_str(&schema_text).map_err(|e| format!("{SCHEMA}: {e}"))?;
+    Ok(ConfigUnit { config, schema })
+}
+
+fn walk_strings<'a>(value: &'a Value, out: &mut Vec<&'a str>) {
+    match value {
+        Value::String(s) => out.push(s),
+        Value::Array(a) => a.iter().for_each(|v| walk_strings(v, out)),
+        Value::Object(o) => o.values().for_each(|v| walk_strings(v, out)),
+        _ => {}
+    }
+}
+
+fn exprs_in(value: &Value) -> Vec<&str> {
+    let mut strings = Vec::new();
+    walk_strings(value, &mut strings);
+    strings.into_iter().filter(|s| s.starts_with('$')).collect()
+}
+
+/// Checks a config unit; each problem is `(file, message)`.
+#[must_use]
+pub fn validate(
+    unit: &ConfigUnit,
+    dir: &Path,
+    area: &str,
+    allow: &Allowlist,
+) -> Vec<(String, String)> {
+    let mut problems = Vec::new();
+    check_top(unit, &mut problems);
+    check_secrets(unit, dir, area, &mut problems);
+    check_blocks(unit, dir, area, allow, &mut problems);
+    problems
+}
+
+fn check_top(unit: &ConfigUnit, problems: &mut Vec<(String, String)>) {
+    let mut add = |file: &str, m: String| problems.push((file.to_string(), m));
+    let x = x_cobot(&unit.schema);
+    if !x["version"].as_str().is_some_and(|v| SEMVER.is_match(v)) {
+        add(SCHEMA, "`x-cobot.version` must be X.Y.Z".into());
+    }
+    match jsonschema::validator_for(&unit.schema) {
+        Ok(validator) => {
+            for e in validator.iter_errors(&unit.config) {
+                add(CONFIG, format!("{} at `{}`", e, e.instance_path()));
+            }
+        }
+        Err(e) => add(SCHEMA, format!("not a valid JSON Schema: {e}")),
+    }
+    let mut strings = Vec::new();
+    walk_strings(&unit.config, &mut strings);
+    if strings.iter().any(|s| CREDENTIAL.is_match(s)) {
+        add(
+            CONFIG,
+            "holds a value that looks like a credential; secrets belong in secrets.config.yaml"
+                .into(),
+        );
+    }
+}
+
+fn check_secrets(unit: &ConfigUnit, dir: &Path, area: &str, problems: &mut Vec<(String, String)>) {
+    let mut add = |file: &str, m: String| problems.push((file.to_string(), m));
+    let declared = secret_keys(&unit.schema);
+    let secrets_file = dir.join(secrets::FILE);
+    if area == "workloads" {
+        if !declared.is_empty() || secrets_file.exists() {
+            add(
+                secrets::FILE,
+                "workloads never hold secrets; only infra/ units do".into(),
+            );
+        }
+    } else if !declared.is_empty() || secrets_file.exists() {
+        match secrets::read(&secrets_file) {
+            Ok(values) => {
+                let present: BTreeSet<String> = values.keys().cloned().collect();
+                if present != declared {
+                    add(
+                        secrets::FILE,
+                        format!("keys {present:?} differ from x-cobot.secrets {declared:?}"),
+                    );
+                }
+                for (k, v) in &values {
+                    if !secrets::is_encrypted(v) {
+                        add(secrets::FILE, format!("`{k}` is not ENC[cobot:v1:…]"));
+                    }
+                }
+            }
+            Err(e) => add(secrets::FILE, e.to_string()),
+        }
+    }
+}
+
+fn check_blocks(
+    unit: &ConfigUnit,
+    dir: &Path,
+    area: &str,
+    allow: &Allowlist,
+    problems: &mut Vec<(String, String)>,
+) {
+    let mut add = |file: &str, m: String| problems.push((file.to_string(), m));
+    let x = x_cobot(&unit.schema);
+    let declared = secret_keys(&unit.schema);
+    let all = blocks(&unit.schema);
+    let mut infos: BTreeMap<String, ModuleInfo> = BTreeMap::new();
+    for b in &all {
+        if !BLOCK.is_match(&b.name) {
+            add(
+                SCHEMA,
+                format!("block name `{}` must be lowercase with underscores", b.name),
+            );
+        }
+        let mdir = dir.join("modules").join(&b.module);
+        if b.module.is_empty() || !mdir.is_dir() {
+            add(
+                SCHEMA,
+                format!("block `{}` names missing module `{}`", b.name, b.module),
+            );
+            continue;
+        }
+        let info = module_info(&mdir);
+        let manifest = fs::read_to_string(mdir.join("module.yaml")).unwrap_or_default();
+        if !MODULE_VERSION.is_match(&manifest) {
+            add(
+                &format!("modules/{}/module.yaml", b.module),
+                "needs `version: X.Y.Z`".into(),
+            );
+        }
+        let provider_resources = info
+            .resources
+            .iter()
+            .filter(|r| *r != "terraform_data")
+            .count();
+        let triggers = info.resources.len() - provider_resources;
+        if provider_resources > 1 || triggers > 1 || info.resources.is_empty() {
+            add(
+                &format!("modules/{}", b.module),
+                "a module holds one resource, plus at most one terraform_data trigger".into(),
+            );
+        }
+        infos.insert(b.name.clone(), info);
+    }
+    for b in &all {
+        let Some(info) = infos.get(&b.name) else {
+            continue;
+        };
+        for (input, value) in &b.inputs {
+            if !info.variables.contains(input) {
+                add(
+                    SCHEMA,
+                    format!("block `{}` sets undeclared input `{input}`", b.name),
+                );
+            }
+            check_exprs(value, b, &all, &infos, &declared, area, &mut add);
+        }
+        if b.for_each.is_some() && !unit.config.get(&b.name).is_some_and(Value::is_array) {
+            add(CONFIG, format!("`{}` must be a list", b.name));
+        }
+        if let Some((p, o)) = &b.rotate {
+            check_exprs(p, b, &all, &infos, &declared, area, &mut add);
+            check_exprs(o, b, &all, &infos, &declared, area, &mut add);
+        }
+    }
+    if let Some(providers) = x["providers"].as_object() {
+        for (name, cfg) in providers {
+            if allow.by_name(name).is_none() {
+                add(SCHEMA, format!("provider `{name}` is not in the allowlist"));
+            }
+            let pseudo = Block {
+                name: format!("provider.{name}"),
+                module: String::new(),
+                for_each: None,
+                rotate: None,
+                inputs: Map::new(),
+            };
+            check_exprs(cfg, &pseudo, &all, &infos, &declared, area, &mut add);
+        }
+    }
+}
+
+fn check_exprs(
+    value: &Value,
+    block: &Block,
+    all: &[Block],
+    infos: &BTreeMap<String, ModuleInfo>,
+    declared: &BTreeSet<String>,
+    area: &str,
+    add: &mut impl FnMut(&str, String),
+) {
+    for text in exprs_in(value) {
+        match parse(text) {
+            None => add(SCHEMA, format!("unknown expression `{text}`")),
+            Some(Expr::Item(_) | Expr::Generation(_)) if block.for_each.is_none() => {
+                add(SCHEMA, format!("`{text}` needs a list block with for_each"));
+            }
+            Some(Expr::Generation(_)) if block.rotate.is_none() => {
+                add(SCHEMA, format!("`{text}` needs a rotating block"));
+            }
+            Some(Expr::Secret(k)) => {
+                if area == "workloads" {
+                    add(
+                        SCHEMA,
+                        format!("`{text}`: workloads never reference secrets"),
+                    );
+                } else if !declared.contains(&k) {
+                    add(SCHEMA, format!("`{text}` is not in x-cobot.secrets"));
+                }
+            }
+            Some(Expr::Module {
+                block: b, output, ..
+            }) => match infos.get(&b) {
+                _ if !all.iter().any(|x| x.name == b) => {
+                    add(SCHEMA, format!("`{text}` names an unknown block"));
+                }
+                Some(info) if !info.outputs.contains(&output) => {
+                    add(SCHEMA, format!("`{text}`: module has no output `{output}`"));
+                }
+                _ => {}
+            },
+            Some(_) => {}
+        }
+    }
+}
+
+/// Escapes template sequences so a literal string is never evaluated.
+fn literal(value: &Value) -> Value {
+    match value {
+        Value::String(s) => Value::String(s.replace("${", "$${").replace("%{", "%%{")),
+        Value::Array(a) => Value::Array(a.iter().map(literal).collect()),
+        Value::Object(o) => Value::Object(o.iter().map(|(k, v)| (k.clone(), literal(v))).collect()),
+        other => other.clone(),
+    }
+}
+
+fn lookup<'a>(value: &'a Value, path: &[String]) -> Option<&'a Value> {
+    path.iter().try_fold(value, |v, p| v.get(p))
+}
+
+fn dotted(path: &[String]) -> String {
+    path.iter().fold(String::new(), |mut out, p| {
+        out.push('.');
+        out.push_str(p);
+        out
+    })
+}
+
+fn render_value(value: &Value, config: &Value) -> Value {
+    match value {
+        Value::String(s) if s.starts_with('$') => match parse(s) {
+            Some(Expr::Item(p)) => Value::String(format!("${{each.value{}}}", dotted(&p))),
+            Some(Expr::Config(p)) => literal(lookup(config, &p).unwrap_or(&Value::Null)),
+            Some(Expr::Secret(k)) => Value::String(format!("${{var.secrets[\"{k}\"]}}")),
+            Some(Expr::Generation(f)) => Value::String(format!("${{each.value._generation.{f}}}")),
+            Some(Expr::Module {
+                block,
+                index,
+                output,
+            }) => Value::String(match index {
+                None => format!("${{module.{block}.{output}}}"),
+                Some(None) => format!("${{{{ for k, m in module.{block} : k => m.{output} }}}}"),
+                Some(Some(p)) => format!("${{module.{block}[each.value{}].{output}}}", dotted(&p)),
+            }),
+            None => Value::Null,
+        },
+        Value::Array(a) => Value::Array(a.iter().map(|v| render_value(v, config)).collect()),
+        Value::Object(o) => Value::Object(
+            o.iter()
+                .map(|(k, v)| (k.clone(), render_value(v, config)))
+                .collect(),
+        ),
+        other => literal(other),
+    }
+}
+
+fn number(value: &Value, config: &Value) -> i64 {
+    match value {
+        Value::String(s) => match parse(s) {
+            Some(Expr::Config(p)) => lookup(config, &p).and_then(Value::as_i64).unwrap_or(0),
+            _ => 0,
+        },
+        other => other.as_i64().unwrap_or(0),
+    }
+}
+
+/// Existing generations in state, by block then item key.
+pub type Existing = BTreeMap<String, BTreeMap<String, Vec<Generation>>>;
+
+/// Reads existing rotating instances from `tofu show -json` state output.
+#[must_use]
+pub fn existing(state_json: &str, rotating: &[String]) -> Existing {
+    let mut out = Existing::new();
+    let Ok(state) = serde_json::from_str::<Value>(state_json) else {
+        return out;
+    };
+    for m in state["values"]["root_module"]["child_modules"]
+        .as_array()
+        .into_iter()
+        .flatten()
+    {
+        let Some(address) = m["address"].as_str() else {
+            continue;
+        };
+        for block in rotating {
+            let prefix = format!("module.{block}[\"");
+            if let Some(key) = address
+                .strip_prefix(&prefix)
+                .and_then(|k| k.strip_suffix("\"]"))
+                && let Some((name, g)) = Generation::parse(key)
+            {
+                let gens = out
+                    .entry(block.clone())
+                    .or_default()
+                    .entry(name)
+                    .or_default();
+                if !gens.contains(&g) {
+                    gens.push(g);
+                }
+            }
+        }
+    }
+    out
+}
+
+/// Renders `main.tf.json` for a config unit.
+#[must_use]
+pub fn render(
+    unit: &ConfigUnit,
+    dir: &Path,
+    state_file: &Path,
+    allow: &Allowlist,
+    today: Day,
+    existing: &Existing,
+) -> Value {
+    let config = &unit.config;
+    let x = x_cobot(&unit.schema);
+    let mut required = Map::new();
+    let mut provider = Map::new();
+    if let Some(providers) = x["providers"].as_object() {
+        for (name, cfg) in providers {
+            if let Some((source, version)) = allow.by_name(name) {
+                required.insert(
+                    name.clone(),
+                    json!({ "source": source, "version": version }),
+                );
+            }
+            provider.insert(name.clone(), render_value(cfg, config));
+        }
+    }
+    let mut modules = Map::new();
+    for b in blocks(&unit.schema) {
+        let mut block = Map::new();
+        block.insert(
+            "source".into(),
+            Value::String(dir.join("modules").join(&b.module).display().to_string()),
+        );
+        if let Some(key_expr) = &b.for_each {
+            let mut each = Map::new();
+            for item in config[&b.name].as_array().into_iter().flatten() {
+                let key = match parse(key_expr) {
+                    Some(Expr::Item(p)) => lookup(item, &p)
+                        .and_then(Value::as_str)
+                        .unwrap_or_default()
+                        .to_string(),
+                    _ => String::new(),
+                };
+                match &b.rotate {
+                    None => {
+                        each.insert(key, literal(item));
+                    }
+                    Some((period, overlap)) => {
+                        let have = existing
+                            .get(&b.name)
+                            .and_then(|e| e.get(&key))
+                            .cloned()
+                            .unwrap_or_default();
+                        let gens = generations::instances(
+                            today,
+                            number(period, config),
+                            number(overlap, config),
+                            &have,
+                        );
+                        for g in gens {
+                            let mut value = literal(item);
+                            if let Value::Object(o) = &mut value {
+                                o.insert(
+                                    "_generation".into(),
+                                    json!({
+                                        "not_before": g.not_before_rfc3339(),
+                                        "expires_on": g.expires_on_rfc3339(),
+                                    }),
+                                );
+                            }
+                            each.insert(g.key(&key), value);
+                        }
+                    }
+                }
+            }
+            block.insert("for_each".into(), Value::Object(each));
+        }
+        for (k, v) in &b.inputs {
+            block.insert(k.clone(), render_value(v, config));
+        }
+        modules.insert(b.name.clone(), Value::Object(block));
+    }
+    let mut terraform = json!({
+        "required_version": ">= 1.13.0",
+        "backend": { "local": { "path": state_file.display().to_string() } }
+    });
+    if !required.is_empty() {
+        terraform["required_providers"] = Value::Object(required);
+    }
+    let mut root = json!({ "terraform": terraform, "module": modules });
+    if !provider.is_empty() {
+        root["provider"] = Value::Object(provider);
+    }
+    if !secret_keys(&unit.schema).is_empty() {
+        root["variable"] = json!({ "secrets": { "type": "map(string)", "sensitive": true } });
+    }
+    root
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Expr, parse};
+
+    #[test]
+    fn expressions_parse() {
+        assert_eq!(parse("$item"), Some(Expr::Item(vec![])));
+        assert_eq!(parse("$item.name"), Some(Expr::Item(vec!["name".into()])));
+        assert_eq!(
+            parse("$config.rotation.period_days"),
+            Some(Expr::Config(vec!["rotation".into(), "period_days".into()]))
+        );
+        assert_eq!(
+            parse("$secret.account_id"),
+            Some(Expr::Secret("account_id".into()))
+        );
+        assert_eq!(
+            parse("$generation.expires_on"),
+            Some(Expr::Generation("expires_on".into()))
+        );
+        assert_eq!(
+            parse("$module.zones[*].id"),
+            Some(Expr::Module {
+                block: "zones".into(),
+                index: Some(None),
+                output: "id".into()
+            })
+        );
+        assert_eq!(
+            parse("$module.zones[$item.zone].id"),
+            Some(Expr::Module {
+                block: "zones".into(),
+                index: Some(Some(vec!["zone".into()])),
+                output: "id".into()
+            })
+        );
+        assert_eq!(
+            parse("$module.permission_groups.ids"),
+            Some(Expr::Module {
+                block: "permission_groups".into(),
+                index: None,
+                output: "ids".into()
+            })
+        );
+        for bad in [
+            "$items",
+            "$config",
+            "$secret.a.b",
+            "$generation.x",
+            "$module.Zones.id",
+            "$module.z[x].id",
+            "$env.HOME",
+        ] {
+            assert_eq!(parse(bad), None, "{bad}");
+        }
+    }
+}

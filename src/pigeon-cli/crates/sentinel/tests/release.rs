@@ -275,3 +275,46 @@ fn a_unit_may_have_no_image() {
     let images: Vec<Option<String>> = outcome.released.iter().map(|r| r.image.clone()).collect();
     assert_eq!(images, [Some("img/a".to_string()), None]);
 }
+
+#[test]
+fn tags_carry_each_units_changelog() {
+    let (dir, _) = repo();
+    let root = dir.path();
+    let config_path = root.join("releases.yaml");
+    fs::write(&config_path, CONFIG).expect("write");
+    let config = Config::load(&config_path).expect("config");
+    git(root, &["tag", "a/v0.1.0"], "2026-01-01");
+    let rows = release::tags(root, &config).expect("tags");
+    assert_eq!(rows[0].changelog.as_deref(), Some("a/CHANGELOG.md"));
+}
+
+#[test]
+fn yaml_manifests_bump_in_place() {
+    let (dir, _) = repo();
+    let root = dir.path();
+    write(
+        root,
+        "m/module.yaml",
+        "version: 0.1.0\ndescription: A module.\n",
+    );
+    let yaml_config = format!("{CONFIG}  - {{ file: m/CHANGELOG.md, unit: m }}\n").replace(
+        "tiers:\n",
+        "  m:\n    manifest: m/module.yaml\n    paths: [m/]\ntiers:\n",
+    );
+    let config_path = root.join("releases.yaml");
+    fs::write(&config_path, &yaml_config).expect("write");
+    let config = Config::load(&config_path).expect("config");
+    let first = release::run(root, &config, None, "HEAD", None, false).expect("first");
+    land(root, &first, "2026-01-01");
+    commit(root, "fix: m (#2)", &["m/main.tf"], "2026-01-02");
+    let second = release::run(root, &config, None, "HEAD", None, false).expect("second");
+    assert!(
+        second.released.iter().any(|r| r.tag == "m/v0.1.1"),
+        "{:?}",
+        second.released
+    );
+    assert_eq!(
+        read(root, "m/module.yaml"),
+        "version: 0.1.1\ndescription: A module.\n"
+    );
+}

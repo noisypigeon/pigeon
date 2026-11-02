@@ -99,7 +99,7 @@ jobs:
           IMAGE: ${{ matrix.image }}
           VERSION: ${{ matrix.version }}
           FEATURES: ${{ matrix.features }}
-          UNIT: ${{ matrix.unit }}
+          CHANGELOG: ${{ matrix.changelog }}
           TAG: ${{ matrix.tag }}
           NEWEST: ${{ matrix.newest }}
           GH_TOKEN: ${{ github.token }}
@@ -118,5 +118,5 @@ jobs:
           fi
           notes="$RUNNER_TEMP/notes.md"
           awk -v h="## v$VERSION " 'index($0, h) == 1 { on = 1; next } on && /^## / { exit } on && NF' \
-            "src/pigeon-cli/crates/$UNIT/CHANGELOG.md" >"$notes"
+            "$CHANGELOG" >"$notes"
           gh release create "$TAG" --verify-tag --title "$TAG" --notes-file "$notes" --latest="$NEWEST"

@@ -14,7 +14,9 @@ publish = false
 sentinel = { path = "crates/sentinel" }
 gantry = { path = "crates/gantry" }
 cobot = { path = "crates/cobot" }
+age = { version = "0.12.1", default-features = false }
 assert_cmd = "2.2.2"
+jsonschema = { version = "0.59.0", default-features = false }
 clap = { version = "4.6.7", features = ["derive"] }
 predicates = "3.1.4"
 regex = "1.13.1"

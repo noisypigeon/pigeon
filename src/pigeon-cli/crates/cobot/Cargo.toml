@@ -9,6 +9,8 @@ repository.workspace = true
 publish.workspace = true
 
 [dependencies]
+age.workspace = true
+jsonschema.workspace = true
 regex.workspace = true
 serde.workspace = true
 serde-saphyr.workspace = true
