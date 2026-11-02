@@ -16,53 +16,80 @@ jobs:
   release:
     if: ${{ !startsWith(github.event.head_commit.message, 'chore(release):') }}
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    outputs:
-      released: ${{ steps.release.outputs.released }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
+          ref: main
           fetch-depth: 0
+          token: ${{ secrets.BOT_GITHUB_TOKEN }}
       - uses: jdx/mise-action@9b200bcecbfd6303e69a4a261b2e09e3757440a7 # v5.2.0
         with:
           version: 2026.10.12
-      - id: release
+      - run: |
+          set -euo pipefail
+          git config user.name istx25
+          git config user.email 6799989+istx25@users.noreply.github.com
+          for attempt in 1 2 3; do
+            git fetch -q --tags origin main
+            git reset -q --hard origin/main
+            out=$(cd src/pigeon-cli && cargo run -q --locked -p pigeon -- sentinel release --root ../..)
+            echo "$out"
+            (cd src/pigeon-cli && cargo update -w --offline)
+            mapfile -t written < <(jq -r '.written[]' <<<"$out")
+            git add -- "${written[@]}" src/pigeon-cli/Cargo.lock
+            if git diff --cached --quiet; then exit 0; fi
+            title=$(jq -r '[.released[] | "\(.unit) v\(.version)"] | join(", ") | if . == "" then "changelogs" else . end' <<<"$out")
+            git commit -q -m "chore(release): $title"
+            mapfile -t tags < <(jq -r '.released[].tag' <<<"$out")
+            for tag in "${tags[@]}"; do git tag "$tag"; done
+            if git push --atomic origin HEAD:main "${tags[@]}"; then exit 0; fi
+            for tag in "${tags[@]}"; do git tag -d "$tag"; done
+            echo "push rejected; retrying from the new main ($attempt/3)"
+          done
+          exit 1
+
+  pending:
+    needs: release
+    if: ${{ always() && !cancelled() }}
+    runs-on: ubuntu-latest
+    outputs:
+      units: ${{ steps.pending.outputs.units }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: jdx/mise-action@9b200bcecbfd6303e69a4a261b2e09e3757440a7 # v5.2.0
+        with:
+          version: 2026.10.12
+      - id: pending
         env:
-          BEFORE: ${{ github.event.before }}
-          AFTER: ${{ github.sha }}
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          notes="$RUNNER_TEMP/notes"
-          out=$(cd src/pigeon-cli && cargo run -q --locked -p pigeon -- sentinel release --root ../.. --from "$BEFORE" --to "$AFTER" --notes-dir "$notes")
-          echo "$out"
-          (cd src/pigeon-cli && cargo update -w --offline)
-          released=$(jq -c '.released' <<<"$out")
-          echo "released=$released" >>"$GITHUB_OUTPUT"
-          if git diff --quiet; then exit 0; fi
-          tags=$(jq -r '.released[].tag' <<<"$out")
-          title=$(jq -r '[.released[] | "\(.unit) v\(.version)"] | join(", ") | if . == "" then "changelogs" else . end' <<<"$out")
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -qam "chore(release): $title"
-          for tag in $tags; do git tag "$tag"; done
-          git push --atomic origin HEAD:main $tags
-          for unit in $(jq -r '.released[].unit' <<<"$out"); do
-            tag=$(jq -r --arg u "$unit" '.released[] | select(.unit == $u) | .tag' <<<"$out")
-            gh release create "$tag" --title "$tag" --notes-file "$notes/$unit.md"
-          done
+          all=$(cd src/pigeon-cli && cargo run -q --locked -p pigeon -- sentinel units --root ../..)
+          pending='[]'
+          while read -r row; do
+            tag=$(jq -r '.tag' <<<"$row")
+            if ! gh release view "$tag" >/dev/null 2>&1; then
+              pending=$(jq -c --argjson r "$row" '. + [$r]' <<<"$pending")
+            fi
+          done < <(jq -c '.[] | select(.tag != null)' <<<"$all")
+          echo "$pending"
+          echo "units=$pending" >>"$GITHUB_OUTPUT"
 
   image:
-    needs: release
-    if: ${{ needs.release.outputs.released != '' && needs.release.outputs.released != '[]' }}
+    needs: pending
+    if: ${{ always() && !cancelled() && needs.pending.outputs.units != '' && needs.pending.outputs.units != '[]' }}
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
       packages: write
     strategy:
+      fail-fast: false
       matrix:
-        include: ${{ fromJSON(needs.release.outputs.released) }}
+        include: ${{ fromJSON(needs.pending.outputs.units) }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -72,12 +99,18 @@ jobs:
           IMAGE: ${{ matrix.image }}
           VERSION: ${{ matrix.version }}
           FEATURES: ${{ matrix.features }}
-          TOKEN: ${{ github.token }}
+          UNIT: ${{ matrix.unit }}
+          TAG: ${{ matrix.tag }}
+          GH_TOKEN: ${{ github.token }}
           ACTOR: ${{ github.actor }}
         run: |
           set -euo pipefail
-          echo "$TOKEN" | docker login ghcr.io -u "$ACTOR" --password-stdin
+          echo "$GH_TOKEN" | docker login ghcr.io -u "$ACTOR" --password-stdin
           docker build --build-arg FEATURES="$FEATURES" -t "$IMAGE:$VERSION" -t "$IMAGE:latest" src/pigeon-cli
           docker run --rm "$IMAGE:$VERSION" "$FEATURES" --version
           docker push "$IMAGE:$VERSION"
           docker push "$IMAGE:latest"
+          notes="$RUNNER_TEMP/notes.md"
+          awk -v h="## v$VERSION " 'index($0, h) == 1 { on = 1; next } on && /^## / { exit } on && NF' \
+            "src/pigeon-cli/crates/$UNIT/CHANGELOG.md" >"$notes"
+          gh release create "$TAG" --verify-tag --title "$TAG" --notes-file "$notes"

@@ -37,6 +37,8 @@ pub enum SentinelCommand {
     Check(CheckArgs),
     /// Bump changed release units and generate changelogs; print JSON
     Release(ReleaseArgs),
+    /// Print each release unit and its newest tag as JSON
+    Units(UnitsArgs),
 }
 
 /// `pigeon sentinel check` arguments.
@@ -56,6 +58,19 @@ pub struct CheckArgs {
     pub pull_request: bool,
 }
 
+/// `pigeon sentinel units` arguments.
+#[cfg(feature = "sentinel")]
+#[derive(Args, Debug)]
+pub struct UnitsArgs {
+    /// The repository root
+    #[arg(long, default_value = ".")]
+    pub root: PathBuf,
+
+    /// The release configuration [default: <ROOT>/.config/releases.yaml]
+    #[arg(long)]
+    pub config: Option<PathBuf>,
+}
+
 /// `pigeon sentinel release` arguments.
 #[cfg(feature = "sentinel")]
 #[derive(Args, Debug)]
@@ -68,7 +83,7 @@ pub struct ReleaseArgs {
     #[arg(long)]
     pub config: Option<PathBuf>,
 
-    /// The last commit already released; omitted or unknown means all history
+    /// Start after this commit [default: the last `chore(release):` commit, or all history]
     #[arg(long)]
     pub from: Option<String>,
 

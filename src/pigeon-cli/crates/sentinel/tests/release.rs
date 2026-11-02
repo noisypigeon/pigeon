@@ -204,3 +204,50 @@ fn invalid_config_is_rejected() {
         assert!(Config::load(&path).is_err());
     }
 }
+
+#[test]
+fn non_ascii_paths_release_their_unit() {
+    let (dir, _) = repo();
+    let root = dir.path();
+    let first = run(root, None);
+    land(root, &first, "2026-01-01");
+    commit(
+        root,
+        "docs: caf\u{e9} (#2)",
+        &["b/caf\u{e9}.md"],
+        "2026-01-02",
+    );
+    assert_eq!(released(&run(root, None)), ["b/v0.1.1"]);
+}
+
+#[test]
+fn default_range_starts_after_the_last_release_commit() {
+    let (dir, _) = repo();
+    let root = dir.path();
+    let first = run(root, None);
+    land(root, &first, "2026-01-01");
+    commit(root, "docs: one (#2)", &["docs/one"], "2026-01-02");
+    commit(root, "docs: two (#3)", &["docs/two"], "2026-01-02");
+    fs::write(root.join("CHANGELOG.md"), "# Changelog\n").expect("write");
+    let outcome = run(root, None);
+    assert_eq!(released(&outcome), Vec::<String>::new());
+    assert_eq!(
+        read(root, "CHANGELOG.md"),
+        "# Changelog\n\n## 2026-01-02\n\n- docs: two ([#3](https://x/pull/3))\n- docs: one ([#2](https://x/pull/2))\n"
+    );
+}
+
+#[test]
+fn units_report_their_newest_tags() {
+    let (dir, _) = repo();
+    let root = dir.path();
+    let config_path = root.join("releases.yaml");
+    fs::write(&config_path, CONFIG).expect("write");
+    let config = Config::load(&config_path).expect("config");
+    assert_eq!(release::units(root, &config).expect("units")[0].tag, None);
+    let first = run(root, None);
+    land(root, &first, "2026-01-01");
+    let units = release::units(root, &config).expect("units");
+    assert_eq!(units[0].tag.as_deref(), Some("a/v0.1.0"));
+    assert_eq!(units[1].version.as_deref(), Some("0.1.0"));
+}

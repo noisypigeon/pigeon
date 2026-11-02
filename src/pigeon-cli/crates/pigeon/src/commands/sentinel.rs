@@ -6,7 +6,7 @@ use sentinel::PullRequest;
 use sentinel::release::{self, Config};
 
 use super::{INVALID, SUCCESS, VIOLATION};
-use crate::cli::{CheckArgs, ReleaseArgs, SentinelCommand};
+use crate::cli::{CheckArgs, ReleaseArgs, SentinelCommand, UnitsArgs};
 
 /// Runs a `pigeon sentinel` command and returns its exit code.
 #[must_use]
@@ -14,6 +14,7 @@ pub fn run(command: SentinelCommand) -> i32 {
     match command {
         SentinelCommand::Check(args) => check(&args),
         SentinelCommand::Release(args) => release(&args),
+        SentinelCommand::Units(args) => units(&args),
     }
 }
 
@@ -50,12 +51,37 @@ fn check(args: &CheckArgs) -> i32 {
     }
 }
 
+fn print_json<T: serde::Serialize>(result: Result<T, sentinel::Error>) -> i32 {
+    match result.map(|v| serde_json::to_string(&v)) {
+        Ok(Ok(json)) => {
+            println!("{json}");
+            SUCCESS
+        }
+        Ok(Err(e)) => {
+            eprintln!("sentinel: {e}");
+            INVALID
+        }
+        Err(e) => {
+            eprintln!("sentinel: {e}");
+            INVALID
+        }
+    }
+}
+
+fn units(args: &UnitsArgs) -> i32 {
+    let path = args
+        .config
+        .clone()
+        .unwrap_or_else(|| args.root.join(".config/releases.yaml"));
+    print_json(Config::load(&path).and_then(|config| release::units(&args.root, &config)))
+}
+
 fn release(args: &ReleaseArgs) -> i32 {
     let path = args
         .config
         .clone()
         .unwrap_or_else(|| args.root.join(".config/releases.yaml"));
-    let result = Config::load(&path).and_then(|config| {
+    print_json(Config::load(&path).and_then(|config| {
         release::run(
             &args.root,
             &config,
@@ -64,21 +90,5 @@ fn release(args: &ReleaseArgs) -> i32 {
             args.notes_dir.as_deref(),
             args.dry_run,
         )
-    });
-    match result {
-        Ok(outcome) => match serde_json::to_string(&outcome) {
-            Ok(json) => {
-                println!("{json}");
-                SUCCESS
-            }
-            Err(e) => {
-                eprintln!("sentinel: {e}");
-                INVALID
-            }
-        },
-        Err(e) => {
-            eprintln!("sentinel: {e}");
-            INVALID
-        }
-    }
+    }))
 }

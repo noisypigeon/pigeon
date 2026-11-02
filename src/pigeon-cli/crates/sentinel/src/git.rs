@@ -82,6 +82,7 @@ pub fn commits(root: &Path, from: Option<&str>, to: &str) -> Result<Vec<Commit>,
             root,
             &[
                 "diff-tree",
+                "-z",
                 "--no-commit-id",
                 "--name-only",
                 "-r",
@@ -91,7 +92,8 @@ pub fn commits(root: &Path, from: Option<&str>, to: &str) -> Result<Vec<Commit>,
                 sha,
             ],
         )?
-        .lines()
+        .split('\0')
+        .filter(|p| !p.is_empty())
         .map(str::to_string)
         .collect();
         commits.push(Commit {
@@ -102,6 +104,15 @@ pub fn commits(root: &Path, from: Option<&str>, to: &str) -> Result<Vec<Commit>,
         });
     }
     Ok(commits)
+}
+
+/// The newest first-parent commit up to `to` whose subject starts with `prefix`.
+pub fn last_with_subject(root: &Path, to: &str, prefix: &str) -> Result<Option<String>, Error> {
+    let log = run(root, &["log", "--first-parent", "--format=%H%x09%s", to])?;
+    Ok(log.lines().find_map(|l| {
+        let (sha, subject) = l.split_once('\t')?;
+        subject.starts_with(prefix).then(|| sha.to_string())
+    }))
 }
 
 /// The newest `<unit>/v*` tag, by version.

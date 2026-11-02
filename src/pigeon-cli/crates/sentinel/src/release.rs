@@ -259,7 +259,49 @@ fn render_tiers(
     Ok(())
 }
 
-/// Runs a release over `from..to`; with `dry_run`, writes nothing.
+/// A unit and its newest release tag.
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct UnitStatus {
+    /// The unit.
+    pub unit: String,
+    /// The image repository.
+    pub image: String,
+    /// The `pigeon` features.
+    pub features: String,
+    /// The newest `<unit>/v*` tag, if any.
+    pub tag: Option<String>,
+    /// That tag's version.
+    pub version: Option<String>,
+}
+
+/// Every unit with its newest tag.
+///
+/// # Errors
+///
+/// [`Error::Git`] if git fails.
+pub fn units(root: &Path, config: &Config) -> Result<Vec<UnitStatus>, Error> {
+    config
+        .units
+        .iter()
+        .map(|(name, unit)| {
+            let tag = git::last_tag(root, name)?;
+            let version = tag
+                .as_deref()
+                .and_then(|t| t.strip_prefix(&format!("{name}/v")))
+                .map(str::to_string);
+            Ok(UnitStatus {
+                unit: name.clone(),
+                image: unit.image.clone(),
+                features: unit.features.clone(),
+                tag,
+                version,
+            })
+        })
+        .collect()
+}
+
+/// Runs a release over `from..to`; with `dry_run`, writes nothing. Without
+/// `from`, the range starts after the last `chore(release):` commit.
 ///
 /// # Errors
 ///
@@ -273,6 +315,11 @@ pub fn run(
     notes_dir: Option<&Path>,
     dry_run: bool,
 ) -> Result<Outcome, Error> {
+    let last_release = match from {
+        Some(_) => None,
+        None => git::last_with_subject(root, to, RELEASE_PREFIX)?,
+    };
+    let from = from.or(last_release.as_deref());
     let mut files: BTreeMap<PathBuf, String> = BTreeMap::new();
     let mut releases = Vec::new();
     for (name, unit) in &config.units {
