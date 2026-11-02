@@ -330,7 +330,7 @@ A unit releases when, since its last tag, any of these changed:
    - An added, removed or re-versioned crate, or a changed feature set, releases the unit. `Cargo.lock` and `[workspace.dependencies]` count only through this, so adding a dependency to one crate releases only the units that build it.
    - Workspace crates are compared by name alone. Their `(path)` differs between the two temporary directories and their version moves with every release, so neither is compared.
    - Their paths, relative to the archive, are kept: each one's directory, except `pigeon`'s, joins the unit's paths for this run, so a change to a library a unit depends on releases it even though its version did not move.
-   - A release caused by dependencies alone lists the first commit in the range that changed `Cargo.lock`.
+   - A release caused by dependencies alone lists the first commit in the range that changed `Cargo.lock` or a `Cargo.toml`, since a feature change may leave `Cargo.lock` alone.
 4. **Workspace-wide build settings.** Any line of `src/pigeon-cli/Cargo.toml`'s `[profile.*]` tables, or `[workspace.package]`'s `edition` and `rust-version`, or the `rust` line of `mise.toml`, releases every unit. They are compared as text, with no TOML parser added.
 
 #### 2. `cli.rs` is split by feature
@@ -342,7 +342,7 @@ A unit releases when, since its last tag, any of these changed:
 #### 3. Changelog lines
 
 - A release's lines are only the commits that satisfied the predicate.
-- A release caused by dependencies alone lists that `Cargo.lock` commit, suffixed ` (dependencies)`.
+- A release caused by dependencies alone lists that commit, suffixed ` (dependencies)`.
 - A release caused by build settings alone lists the commit that changed them.
 - **A first release lists only the commits that touched the unit's own crate.** This replaces §4's "all of history", and its "a release caused only by shared paths lists those shared changes".
 - Date tiers are unchanged.
