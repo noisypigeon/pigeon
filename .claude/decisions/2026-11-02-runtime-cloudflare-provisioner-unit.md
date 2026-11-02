@@ -29,12 +29,12 @@ The decisions:
 - **Single-resource modules with a unified shape.** runway's modules are the inspiration. Nothing is copied, and every module here starts from scratch.
 - **Versioning.** Each module, and the schema, is versioned on its own by the existing release bot. A schema version is tied to the module versions it was built with.
 - **Composition is generated.** cobot builds the unit's root module from annotations in `schema.json`. There is no hand-written root HCL.
-- **Secrets live in this public repository, encrypted.** `secrets.config.yaml` is encrypted value by value with a key from `COBOT_STATE_PASSPHRASE`, the same secret that guards state.
-  - The secrets key is derived differently from the state key, so the two are never the same key.
-  - That keeps one secret to manage, at a known cost, accepted here: the ciphertext is public, so **the passphrase alone unlocks the break-glass key**. No access to the state repository is needed.
-  - The passphrase therefore carries break-glass weight. It lives only as an Actions secret and in the owner's password manager.
-  - Rotating `provisioner_token` is the response to any suspicion that the passphrase has leaked.
-- **Providers are allowlisted, pinned and taken only from `main`.** That is the "explicit, pinned" path the cobot amendment deferred. Hashes are verified by one committed lockfile. A pull request cannot choose which provider code runs beside the passphrase.
+- **Secrets live in this public repository, encrypted under a passphrase of their own.**
+  - `secrets.config.yaml` is encrypted value by value with `COBOT_SECRETS_PASSPHRASE`, a second secret, separate from `COBOT_STATE_PASSPHRASE`.
+  - The ciphertext is public, so whoever holds the secrets passphrase holds the break-glass key. That is why it is not the state passphrase: leaking the state passphrase alone exposes no break-glass material, and leaking the secrets passphrase alone exposes no state.
+  - Minted token values live in state, so they stay behind the state passphrase plus access to the state repository, as before.
+  - Both passphrases live only as Actions secrets and in the owner's password manager. Rotating `provisioner_token` is the response to any suspected leak of the secrets passphrase.
+- **Providers are allowlisted, pinned and taken only from `main`.** That is the "explicit, pinned" path the cobot amendment deferred. Hashes are verified by one committed lockfile. A pull request cannot choose which provider code runs beside the passphrases.
 - **Rotation keeps two generations.** A rotated token's predecessor lives until its overlap ends, so workloads have time to switch.
 
 This supersedes two parts of the cobot ADR, both left as written:
@@ -143,11 +143,15 @@ The first four modules:
 
 **Rotation in generations.** Each token is minted once per generation, as a separate instance, rather than replaced in place. Replacing in place would revoke the old token in the same apply that creates the new one.
 
-- **Generations.** At render time, cobot computes the current generation, `g = floor(days since 1970-01-01 UTC / period_days)`. Generation `g` starts on day `g × period_days`.
-- **Instances.** Each configured token renders as instance `<name>@g`.
-- **Overlap.** It also renders as `<name>@g-1` while the current day is before generation `g`'s start plus `overlap_days`. So the previous generation stays in state until its overlap ends, then disappears from the render. The next apply destroys it.
-- **Validity.** Instance `@k` has `not_before` at its generation's start, and `expires_on` at the generation's end plus `overlap_days`. Cloudflare would revoke it on time even if no apply ran.
-- **Failed applies.** These are safe. An instance that failed to create is planned again, and one past its overlap is destroyed by the next successful apply.
+- **Keys describe their own validity.** An instance's key is `<name>@<not_before>..<expires_on>`, in UTC dates, e.g. `blog-deploy@2026-11-02..2027-02-07`. Its `not_before` and `expires_on` are taken from the key.
+- **What cobot renders, per configured token:**
+  - **Current.** One instance for the current generation. It starts on day `floor(days since 1970-01-01 UTC / period_days) × period_days`, and expires `period_days + overlap_days` after that.
+  - **Retained.** Every instance already in the unit's state with the same `<name>` whose `expires_on` is still in the future. Before rendering, cobot reads them by running `tofu show -json` on the current state.
+  - **Dropped.** Instances whose `expires_on` has passed. They are destroyed on the next apply.
+- **A token removed from `config.yaml`** renders no instances at all, so its live instances are destroyed, which revokes them deliberately.
+- **Changing `period_days` or `overlap_days`** shapes only new generations. Live instances keep their own dates, retained from state, and expire as minted. A configuration change never destroys a valid token early.
+- **Cloudflare enforces expiry.** Each token carries its own `expires_on`, so Cloudflare revokes it on time even if no apply runs.
+- **Failed applies are safe.** Keys come from dates and existing state, never from a recomputed index. An instance that failed to create is planned again, and an expired one is destroyed by the next successful apply.
 - **Scheduled apply.** Rotation needs applies even when nothing merges, so `cobot.yml`'s `apply` job also runs on a daily `schedule`, at 04:17 UTC. A day with no generation boundary plans "No changes".
 
 Minted values live only in encrypted state.
@@ -161,8 +165,9 @@ account_id: ENC[cobot:v1:...]
 provisioner_token: ENC[cobot:v1:...]
 ```
 
-- Each value is the base64 of an age file encrypted to an scrypt recipient, with `COBOT_STATE_PASSPHRASE` as the passphrase.
-- scrypt with its own random salt is a different derivation from OpenTofu's `pbkdf2`, so the secrets key and the state key are never the same key.
+- Each value is the base64 of an age file encrypted to an scrypt recipient, with `COBOT_SECRETS_PASSPHRASE` as the passphrase.
+- `secrets set` and `secrets check`, and any `plan` or `apply` of a unit with secrets, refuse (exit `2`) unless `COBOT_SECRETS_PASSPHRASE` is set, with the same 16-character minimum as the state passphrase.
+- In `cobot.yml`, `COBOT_SECRETS_PASSPHRASE` is set only on the `plan` and `apply` steps, beside `COBOT_STATE_PASSPHRASE`.
 
 **Commands:**
 
@@ -271,12 +276,13 @@ So the schema bumps whenever any module does. The schema's tag pins the exact mo
 
 1. **PR A** holds this ADR.
 2. **PR B**, `feat(cobot): config units, secrets and pinned providers`, holds the engine of §1, §2, §4, §5 and §6.
-   - That includes generation rendering, the scheduled apply, `--providers`, and the `changelog` field with the release workflow's use of it.
+   - That includes date-keyed generations retained from state, the scheduled apply, `COBOT_SECRETS_PASSPHRASE`, `--providers`, and the `changelog` field with the release workflow's use of it.
    - Its tests use a fixture config unit built only from built-in resources.
    - It holds no `infra/cloudflare` and no provider yet.
    - Its merge releases `cobot` and `sentinel`.
 3. **PR C**, `build(cobot): allow the cloudflare provider`, holds only `.config/providers.yaml` and `.config/providers.lock.hcl`.
-4. **PR D**, `feat(infra): cloudflare provisioner unit`, holds:
+4. **By hand, before PR D:** the owner generates `COBOT_SECRETS_PASSPHRASE` (for example with `openssl rand -base64 32`), adds it as an Actions secret, and keeps a copy in a password manager.
+5. **PR D**, `feat(infra): cloudflare provisioner unit`, holds:
    - the modules, `schema.json`, `config.yaml`, the release units, the policy and the docs.
    - `secrets.config.yaml`, which the owner writes locally by running `pigeon cobot secrets set` for `account_id` and `provisioner_token`, and commits to the PR branch. The values are never seen by anyone else.
    - Its plan uses `main`'s providers, and should show four zone lookups and the permission-group lookup, and no tokens.
@@ -291,6 +297,12 @@ So the schema bumps whenever any module does. The schema's tag pins the exact mo
   - an unlisted or mispinned provider is rejected;
   - YAML and JSON version lines bump.
 - **End to end:** a built-in-only config unit plans, applies and replans to "No changes", with state and plan encrypted.
-- **Rotation:** render tests with a fixed clock check the generation boundaries. Inside the overlap both `@g` and `@g-1` are present; after it only `@g` is; and the `not_before` and `expires_on` dates are correct.
+- **Rotation:** render tests with a fixed clock and a fixture state check that:
+  - a fresh unit renders only the current instance;
+  - inside the overlap, the previous instance is retained beside the current one;
+  - after the overlap, only the current instance remains;
+  - changing `period_days` keeps every live instance and adds the new current one;
+  - removing a token from config drops all of its instances;
+  - every key's dates match its `not_before` and `expires_on`.
 - **Providers:** a test checks that `plan --providers` ignores a PR-local allowlist, and refuses when the PR changes it.
 - **PR D:** its plan comment shows `data.cloudflare_zone` ×4 and `data.cloudflare_api_token_permission_groups_list`. After merge, the apply commits encrypted state, and the bot tags and publishes every module and the schema, with notes read from each unit's own changelog.
