@@ -2,11 +2,8 @@
 //!
 //! See `.claude/decisions/2026-11-02-development-cargo-workspace-mise-toolchain.md`.
 
-mod changelog;
-mod git;
 mod markdown;
 pub mod policy;
-pub mod release;
 pub mod report;
 mod rules;
 mod target;
@@ -31,20 +28,6 @@ pub enum Error {
         /// The underlying error.
         source: std::io::Error,
     },
-    /// A git command failed.
-    Git {
-        /// The arguments.
-        args: String,
-        /// Its stderr, or why it could not start.
-        message: String,
-    },
-    /// Another program failed.
-    Tool {
-        /// The command line.
-        command: String,
-        /// Its stderr, or why it could not start.
-        message: String,
-    },
     /// A policy file is not a valid policy.
     Policy {
         /// The policy file.
@@ -58,8 +41,6 @@ impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Io { path, source } => write!(f, "{}: {source}", path.display()),
-            Self::Git { args, message } => write!(f, "git {args}: {message}"),
-            Self::Tool { command, message } => write!(f, "{command}: {message}"),
             Self::Policy { path, message } => write!(f, "{}: {message}", path.display()),
         }
     }
