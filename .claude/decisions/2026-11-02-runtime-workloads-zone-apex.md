@@ -188,13 +188,20 @@ The record rules, applied after merging:
 
 ### 6. Claims and conflicts
 
-Everything that renders, or reserves, a name claims it:
+Claims are taken after every override has merged, so they describe the records that will actually render.
 
-- an enabled preset claims what it declares;
-- a workload claims `ADDRESS` at each of its hosts, whether or not it renders;
-- an explicit new record claims by its content: `ADDRESS` for `A`, `AAAA` or `CNAME`; `MX`; `SPF` for a `TXT` starting `v=spf1`; `DMARC` for a `TXT` starting `v=DMARC1`. Any other `TXT` claims nothing, since many may share a name.
+**Who claims what:**
 
-Two claims with the same name and type are rejected, naming both owners: `@ MX is claimed by proton and records.backup-mx`. Overrides claim nothing new.
+- an enabled preset claims what it declares, whether or not its records survive overrides;
+- a workload reserves `ADDRESS` at each of its hosts, whether or not it renders;
+- every rendered record claims by its final name, type and content: `ADDRESS` for `A`, `AAAA` or `CNAME`; `MX`; `SPF` for a `TXT` starting `v=spf1`; `DMARC` for a `TXT` starting `v=DMARC1`. Any other `TXT` claims nothing, since many may share a name.
+
+A rendered record's owner is where it came from: its preset, its workload, or `records.<key>` for a new record. An override keeps the owner of the record it changes, so `records.host-blog-www: { name: shop }` claims `shop` for `workload blog`, and conflicts with `workload shop`.
+
+**Conflicts, each rejected naming both sides:**
+
+- two owners claiming the same name and type: `@ MX is claimed by proton and records.backup-mx`;
+- a `CNAME` at any name but `@` beside any other rendered record at that name, whoever owns them: `mail holds a CNAME (host-mail-mail), which shares its name with no other record: backup-mx`. Cloudflare flattens a `CNAME` at `@`, so there it may sit beside `MX` and `TXT`.
 
 ### 7. The apex schema
 
@@ -414,6 +421,7 @@ Each gets a changelog tier beside its files, written by the bot, and `release-ch
   - presets expand to the expected records, a record with an unset input is skipped, and an override changes only its fields;
   - `false` drops a record, and an unknown `proton-*` or `host-*` key is rejected;
   - two presets claiming `@ MX`, a workload named `www` beside an apex workload, and an explicit `v=spf1` record beside Proton are each rejected, naming both owners;
+  - an override that moves a host record onto another workload's host is rejected, and so is a `CNAME` sharing a non-apex name with an `MX`;
   - an apex assigned to a missing workload renders no host record and passes; a `hosts` entry naming a missing workload fails;
   - a workload with `ingress` renders its host records;
   - the layout rules of §1 each fail for their own reason;
