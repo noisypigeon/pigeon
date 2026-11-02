@@ -5,35 +5,35 @@ min_version = "2026.10.12"
 rust = { version = "1.99.1", profile = "minimal", components = "clippy,rustfmt" }
 
 [tasks.build]
-dir = "pigeon"
+dir = "src/pigeon-cli"
 run = "cargo build --workspace --locked"
 
 [tasks.test]
-dir = "pigeon"
+dir = "src/pigeon-cli"
 run = "cargo test --workspace --locked"
 
 [tasks.fmt]
-dir = "pigeon"
+dir = "src/pigeon-cli"
 run = "cargo fmt --all"
 
 [tasks.fmt-check]
-dir = "pigeon"
+dir = "src/pigeon-cli"
 run = "cargo fmt --all -- --check"
 
 [tasks.lint]
-dir = "pigeon"
+dir = "src/pigeon-cli"
 run = "cargo clippy --workspace --all-targets --locked -- -D warnings"
 
 [tasks.rust]
 depends = ["fmt-check", "lint", "test"]
 
 [tasks.sentinel]
-dir = "pigeon"
-run = "cargo run -q --locked -p pigeon -- sentinel check --root .."
+dir = "src/pigeon-cli"
+run = "cargo run -q --locked -p pigeon -- sentinel check --root ../.."
 
 [tasks.sentinel-pr]
-dir = "pigeon"
-run = "cargo run -q --locked -p pigeon -- sentinel check --root .. --pull-request"
+dir = "src/pigeon-cli"
+run = "cargo run -q --locked -p pigeon -- sentinel check --root ../.. --pull-request"
 
 [tasks.ci]
 depends = ["rust", "sentinel"]

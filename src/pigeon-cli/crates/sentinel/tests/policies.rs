@@ -12,7 +12,7 @@ const GOOD_NAME: &str = "2026-01-02-development-a-sample-decision.md";
 
 fn policy(name: &str) -> LoadedPolicy {
     let path = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../../.config/policies")
+        .join("../../../../.config/policies")
         .join(format!("{name}.yaml"));
     sentinel::load_file(&path).expect("policy loads")
 }
@@ -270,6 +270,64 @@ fn changelog_rules() {
 
 #[test]
 fn every_policy_is_valid() {
-    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../.config/policies");
-    assert_eq!(sentinel::load_dir(&dir).expect("loads").len(), 3);
+    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../../.config/policies");
+    assert_eq!(sentinel::load_dir(&dir).expect("loads").len(), 4);
+}
+
+fn layout_root(skip: &[&str], extra: &[&str]) -> TempDir {
+    let root = TempDir::new().expect("tempdir");
+    let dirs = [
+        ".claude",
+        ".config",
+        ".github",
+        ".git",
+        "src/pigeon-cli",
+        "tooling",
+        "infra",
+        "workloads",
+    ];
+    let files = [
+        ".gitignore",
+        "CHANGELOG.md",
+        "CLAUDE.md",
+        "mise.toml",
+        "tooling/README.md",
+        "infra/README.md",
+        "workloads/README.md",
+    ];
+    for d in dirs.iter().filter(|d| !skip.contains(d)) {
+        fs::create_dir_all(root.path().join(d)).expect("mkdir");
+    }
+    for f in files.iter().chain(extra).filter(|f| !skip.contains(f)) {
+        if f.ends_with('/') {
+            fs::create_dir_all(root.path().join(f)).expect("mkdir");
+        } else {
+            fs::write(root.path().join(f), "").expect("write");
+        }
+    }
+    root
+}
+
+fn layout(skip: &[&str], extra: &[&str]) -> Vec<String> {
+    violations("layout", layout_root(skip, extra).path(), None)
+}
+
+#[test]
+fn layout_rules() {
+    passes(&layout(&[], &[]));
+    passes(&layout(
+        &[],
+        &["tooling/garden/", "infra/notes.md", "src/second-project/"],
+    ));
+    for (skip, extra) in [
+        (&[][..], &["stray/"][..]),
+        (&[], &["stray.txt"]),
+        (&["workloads", "workloads/README.md"], &[]),
+        (&[], &["src/README.md"]),
+        (&[], &["src/Bad_Name/"]),
+        (&["infra/README.md"], &[]),
+        (&["src/pigeon-cli"], &[]),
+    ] {
+        fails(&layout(skip, extra));
+    }
 }

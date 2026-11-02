@@ -3,7 +3,7 @@
 use std::fs;
 use std::path::Path;
 
-use crate::policy::Target;
+use crate::policy::{NamedTarget, Target};
 use crate::report::{Report, Violation};
 use crate::rules;
 use crate::{Error, LoadedPolicy, PullRequest};
@@ -22,7 +22,10 @@ pub fn run(
         message,
     };
     match &loaded.policy.target {
-        Target::PullRequest(_) => {
+        Target::Named(NamedTarget::Tree) => {
+            rules::run_tree(loaded, root, &mut report.violations);
+        }
+        Target::Named(NamedTarget::PullRequest) => {
             let Some(pr) = pull_request else {
                 return Ok(false);
             };

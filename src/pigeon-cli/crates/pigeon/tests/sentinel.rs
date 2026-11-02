@@ -8,7 +8,7 @@ use predicates::prelude::*;
 use tempfile::TempDir;
 
 fn repo_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../..")
 }
 
 fn check(root: &std::path::Path) -> Command {
