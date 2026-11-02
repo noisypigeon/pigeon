@@ -2,6 +2,7 @@
 
 ## 2026-11-02
 
+- fix(sentinel): release a unit only when its build changed ([#28](https://github.com/noisypigeon/pigeon/pull/28))
 - fix(cobot): copy only the lockfile blocks a unit uses ([#27](https://github.com/noisypigeon/pigeon/pull/27))
 - docs(adr): path-gated Rust CI and dependency-aware releases ([#26](https://github.com/noisypigeon/pigeon/pull/26))
 - build(cobot): allow the cloudflare provider ([#25](https://github.com/noisypigeon/pigeon/pull/25))

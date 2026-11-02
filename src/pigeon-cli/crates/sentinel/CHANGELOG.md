@@ -1,16 +1,20 @@
 # Changelog
 
+## v0.1.6 (2026-11-02)
+
+- fix(sentinel): release a unit only when its build changed ([#28](https://github.com/noisypigeon/pigeon/pull/28))
+
 ## v0.1.5 (2026-11-02)
 
 - feat(cobot): config units, secrets and pinned providers ([#23](https://github.com/noisypigeon/pigeon/pull/23))
 
 ## v0.1.4 (2026-11-02)
 
-- feat(cobot): plan on PR, apply on merge ([#21](https://github.com/noisypigeon/pigeon/pull/21))
+- No changes of its own; released by a shared-path change in feat(cobot): plan on PR, apply on merge ([#21](https://github.com/noisypigeon/pigeon/pull/21))
 
 ## v0.1.3 (2026-11-02)
 
-- feat(cobot): the cobot crate and pigeon cobot ([#20](https://github.com/noisypigeon/pigeon/pull/20))
+- No changes of its own; released by a shared-path change in feat(cobot): the cobot crate and pigeon cobot ([#20](https://github.com/noisypigeon/pigeon/pull/20))
 
 ## v0.1.2 (2026-11-02)
 
