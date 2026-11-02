@@ -311,3 +311,49 @@ So the schema bumps whenever any module does. The schema's tag pins the exact mo
   - every key's dates match its `not_before` and `expires_on`.
 - **Providers:** a test checks that `plan --providers` ignores a PR-local allowlist, and refuses when the PR changes it.
 - **PR D:** its plan comment shows `data.cloudflare_zone` ×4 and `data.cloudflare_api_token_permission_groups_list`. After merge, the apply commits encrypted state, and the bot tags and publishes every module and the schema, with notes read from each unit's own changelog.
+
+## Amendments
+
+### 2026-11-02: Account tokens, and permission groups by scope
+
+Before writing PR D, §3's modules were checked against the provider's schema at 5.28.0 (`tofu providers schema -json`). Two of them name the wrong Cloudflare API:
+
+- **`cloudflare_api_token` is a user token.** It has no `account_id`, and it is created through `/user/tokens`, which the break-glass key cannot reach: §4 makes it an account token, with Account API Tokens Write. Tokens an account token can mint are `cloudflare_account_token`.
+- **`cloudflare_api_token_permission_groups_list` is the user-scoped list.** The account-scoped one is `cloudflare_account_api_token_permission_groups_list`, which takes `account_id`.
+- **Permission group names are not unique.** One name can appear once per scope, so §3's `ids`, a map from name to id, could collide.
+
+§1, §2, §4 and the break-glass permissions are unchanged.
+
+#### 1. `zone`
+
+- Wraps `data.cloudflare_zone` with `filter = { name, match = "all", account = { id = account_id } }`.
+- Inputs and outputs are unchanged: `name` and `account_id` in; `id` and `name` out.
+
+#### 2. `permission-groups`
+
+- Wraps `data.cloudflare_account_api_token_permission_groups_list`, with one input, `account_id`.
+- Outputs:
+  - `groups`, a map from each group name to the list of `{ id, scopes }` carrying that name. This replaces `ids`.
+  - `id`, a digest of the sorted group ids, since the list has no id of its own.
+
+#### 3. `api-token`
+
+- Wraps `cloudflare_account_token`.
+- Inputs: `name`, `capabilities`, `zone_ids` (a map from zone name to id), `groups` (the output above), `account_id`, `not_before` and `expires_on`.
+- Outputs: `id`, `name` and a sensitive `value`.
+- One `allow` policy per capability, built in `locals`:
+  - its permission group is the one with that name whose `scopes` contain `com.cloudflare.api.account.zone` for a `zones` capability, or `com.cloudflare.api.account` for an `account: true` one;
+  - its `resources` are `com.cloudflare.api.account.zone.<id>` for each listed zone, or `com.cloudflare.api.account.<account_id>`, each mapped to `*` and JSON-encoded, as the provider takes them;
+  - a name with no group in that scope, or more than one, fails the plan through a `precondition`, naming the capability.
+
+#### 4. Schema wiring
+
+- `permission_groups` is a singleton block over `permission-groups`, fed `$secret.account_id`.
+- `zones` feeds `zone` with `name: $item` and `account_id: $secret.account_id`.
+- `tokens` feeds `api-token` with `zone_ids: $module.zones[*].id`, `groups: $module.permission_groups.groups`, `account_id: $secret.account_id`, and its generation's dates.
+
+#### 5. Execution
+
+1. This amendment lands first.
+2. PR D then follows §8, with these modules. It also deletes `.config/changelog-corrections.yaml` and the code that reads it, as the release ADR's amendment of the same date directs.
+3. Its plan comment shows `data.cloudflare_zone` ×4 and `data.cloudflare_account_api_token_permission_groups_list`, and no tokens.
