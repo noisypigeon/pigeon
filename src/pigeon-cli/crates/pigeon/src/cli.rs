@@ -1,9 +1,9 @@
 //! Command-line arguments; each subcommand is a cargo feature.
 
-#[cfg(feature = "sentinel")]
+#[cfg(any(feature = "sentinel", feature = "cobot"))]
 use std::path::PathBuf;
 
-#[cfg(feature = "sentinel")]
+#[cfg(any(feature = "sentinel", feature = "cobot"))]
 use clap::Args;
 use clap::{Parser, Subcommand};
 
@@ -27,6 +27,59 @@ pub enum Commands {
     #[cfg(feature = "gantry")]
     #[command(version = gantry::VERSION)]
     Gantry,
+    /// Validate, render, plan and apply infrastructure units
+    #[cfg(feature = "cobot")]
+    #[command(subcommand, version = cobot::VERSION)]
+    Cobot(CobotCommand),
+}
+
+/// `pigeon cobot` commands.
+#[cfg(feature = "cobot")]
+#[derive(Subcommand, Debug)]
+pub enum CobotCommand {
+    /// Check every unit under infra/ and workloads/; exit 1 on a problem
+    Validate(CobotRoot),
+    /// Write each unit's main.tf.json under <ROOT>/.cobot/
+    Render(CobotRun),
+    /// Plan units against the state repository; print a summary
+    Plan(CobotPlan),
+    /// Plan, then apply units with changes
+    Apply(CobotRun),
+}
+
+/// The repository root.
+#[cfg(feature = "cobot")]
+#[derive(Args, Debug)]
+pub struct CobotRoot {
+    /// The repository root
+    #[arg(long, default_value = ".")]
+    pub root: PathBuf,
+}
+
+/// Units and their state.
+#[cfg(feature = "cobot")]
+#[derive(Args, Debug)]
+pub struct CobotRun {
+    /// The repository root
+    #[arg(long, default_value = ".")]
+    pub root: PathBuf,
+    /// The state repository's checkout
+    #[arg(long)]
+    pub state: PathBuf,
+    /// Unit paths, e.g. infra/bootstrap [default: every unit]
+    pub units: Vec<String>,
+}
+
+/// `pigeon cobot plan` arguments.
+#[cfg(feature = "cobot")]
+#[derive(Args, Debug)]
+pub struct CobotPlan {
+    /// Units and their state
+    #[command(flatten)]
+    pub run: CobotRun,
+    /// Also write the Markdown summary here
+    #[arg(long)]
+    pub summary: Option<PathBuf>,
 }
 
 /// `pigeon sentinel` commands.

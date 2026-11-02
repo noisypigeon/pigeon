@@ -6,7 +6,7 @@ rules:
       dirs: ['^\.claude$', '^\.config$', '^\.github$', '^src$', '^tooling$', '^infra$', '^workloads$']
       files: ['^\.gitignore$', '^CHANGELOG\.md$', '^CLAUDE\.md$', '^mise\.toml$']
       require: [src, tooling, infra, workloads]
-      ignore: ['^\.git$']
+      ignore: ['^\.git$', '^\.cobot$']
   - entries:
       path: src
       dirs: ['^[a-z0-9]+(-[a-z0-9]+)*$']

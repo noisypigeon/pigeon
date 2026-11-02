@@ -23,9 +23,18 @@ units:
       - src/pigeon-cli/Cargo.lock
       - src/pigeon-cli/Dockerfile
       - src/pigeon-cli/.dockerignore
+  cobot:
+    manifest: src/pigeon-cli/crates/cobot/Cargo.toml
+    features: cobot
+    paths:
+      - src/pigeon-cli/crates/cobot/
+      - src/pigeon-cli/crates/pigeon/
+      - src/pigeon-cli/Cargo.toml
+      - src/pigeon-cli/Cargo.lock
 tiers:
   - { file: CHANGELOG.md, paths: [''] }
   - { file: src/pigeon-cli/CHANGELOG.md, paths: [src/pigeon-cli/] }
   - { file: src/pigeon-cli/crates/pigeon/CHANGELOG.md, paths: [src/pigeon-cli/crates/pigeon/] }
   - { file: src/pigeon-cli/crates/sentinel/CHANGELOG.md, unit: sentinel }
   - { file: src/pigeon-cli/crates/gantry/CHANGELOG.md, unit: gantry }
+  - { file: src/pigeon-cli/crates/cobot/CHANGELOG.md, unit: cobot }
