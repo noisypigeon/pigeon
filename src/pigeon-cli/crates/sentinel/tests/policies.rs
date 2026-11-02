@@ -288,7 +288,7 @@ fn changelog_rules() {
 #[test]
 fn every_policy_is_valid() {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../../.config/policies");
-    assert_eq!(sentinel::load_dir(&dir).expect("loads").len(), 5);
+    assert_eq!(sentinel::load_dir(&dir).expect("loads").len(), 7);
 }
 
 fn layout_root(skip: &[&str], extra: &[&str]) -> TempDir {
@@ -373,5 +373,73 @@ fn release_changelog_rules() {
         g.replace("[#2]", "[#3]"),
     ] {
         fails(&release_changelog(&content));
+    }
+}
+
+fn tree_root(files: &[(&str, &str)]) -> TempDir {
+    let root = TempDir::new().expect("tempdir");
+    for (path, content) in files {
+        let p = root.path().join(path);
+        fs::create_dir_all(p.parent().expect("parent")).expect("mkdir");
+        fs::write(p, content).expect("write");
+    }
+    root
+}
+
+#[test]
+fn terraform_rules() {
+    let ok = [
+        ("infra/a/unit.yaml", ""),
+        ("infra/a/modules/m/main.tf", ""),
+        ("workloads/w/unit.yaml", ""),
+        ("src/x/target/debug/build.tf", ""),
+        (".cobot/infra/a/main.tf.json", ""),
+    ];
+    passes(&violations("terraform", tree_root(&ok).path(), None));
+    for bad in [
+        "src/pigeon-cli/main.tf",
+        "tooling/x.tf.json",
+        "x.tofu",
+        "src/vars.tfvars",
+        ".terraform.lock.hcl",
+        "src/unit.yaml",
+        "infra/a/terraform.tfstate",
+        "workloads/w/terraform.tfstate.backup",
+        "infra/a/.terraform/providers/x",
+    ] {
+        let mut files = ok.to_vec();
+        files.push((bad, ""));
+        let v = violations("terraform", tree_root(&files).path(), None);
+        assert!(v.iter().any(|m| m.starts_with(bad)), "{bad}: {v:?}");
+    }
+}
+
+#[test]
+fn terraform_actions_rules() {
+    let ok = [
+        (".github/workflows/cobot.yml", "run: tofu apply\n"),
+        (".github/workflows/rust.yml", "run: mise run rust\n"),
+    ];
+    passes(&violations(
+        "terraform-actions",
+        tree_root(&ok).path(),
+        None,
+    ));
+    for (file, content) in [
+        (".github/workflows/rust.yml", "run: tofu plan\n"),
+        (
+            ".github/workflows/x.yml",
+            "uses: hashicorp/setup-terraform@v3\n",
+        ),
+        (".github/workflows/y.yml", "run: pigeon cobot apply\n"),
+    ] {
+        let mut files = ok.to_vec();
+        files.retain(|(f, _)| *f != file);
+        files.push((file, content));
+        let v = violations("terraform-actions", tree_root(&files).path(), None);
+        assert!(
+            v.iter().any(|m| m.starts_with(&format!("{file}:1:"))),
+            "{file}: {v:?}"
+        );
     }
 }

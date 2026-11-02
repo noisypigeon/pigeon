@@ -32,6 +32,12 @@ belong in the ADR, never in the file.
   - `pigeon` compiles in only the features (subcommands) asked for;
   - a policy that needs an unreleased sentinel feature waits: merge and
     release the engine change first, then use it in a later PR.
+- Infrastructure is cobot's, per
+  [`2026-11-02-runtime-cobot-infrastructure-as-code.md`](.claude/decisions/2026-11-02-runtime-cobot-infrastructure-as-code.md):
+  units (`unit.yaml`, schema v0) live only under `infra/` and `workloads/`;
+  `cobot.yml` plans on PR and applies on merge, committing encrypted state to
+  the private `noisypigeon/pigeon-cobot-state`. Never run `tofu apply` or
+  `pigeon cobot apply` by hand against that repository.
 - The repo is public: never push secrets, credentials, key IDs or private
   bucket names, in commits, branch names, PR text or CI logs.
 
@@ -42,6 +48,8 @@ belong in the ADR, never in the file.
 - `mise run build` / `test` / `fmt` / `lint`
 - `mise run rust`: fmt-check, clippy `-D warnings`, `features`, tests.
 - `mise run features`: clippy with each subcommand feature alone.
+- `pigeon cobot validate|render|plan`: check, render and plan units;
+  `plan` needs `COBOT_STATE_PASSPHRASE` and a `--state` directory.
 - `mise run sentinel`: `pigeon sentinel check` against `.config/policies/`.
 - `PR_TITLE='…' PR_BODY='…' PR_NUMBER=N PR_FILES="$(git diff --name-only main...)" mise run sentinel-pr`:
   adds the pull-request policy.

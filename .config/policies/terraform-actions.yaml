@@ -1,0 +1,7 @@
+description: Only the cobot workflow acts on infrastructure.
+target: tree
+rules:
+  - find:
+      match: '^\.github/workflows/'
+      allow_under: [.github/workflows/cobot.yml]
+      forbid_content: '\b(tofu|terraform)\b|cobot apply'
