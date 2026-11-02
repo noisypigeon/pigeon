@@ -1,0 +1,33 @@
+# See .claude/decisions/2026-11-02-development-cargo-workspace-mise-toolchain.md.
+min_version = "2026.10.12"
+
+[tools]
+rust = { version = "1.99.1", profile = "minimal", components = "clippy,rustfmt" }
+
+[tasks.build]
+run = "cargo build --workspace --locked"
+
+[tasks.test]
+run = "cargo test --workspace --locked"
+
+[tasks.fmt]
+run = "cargo fmt --all"
+
+[tasks.fmt-check]
+run = "cargo fmt --all -- --check"
+
+[tasks.lint]
+run = "cargo clippy --workspace --all-targets --locked -- -D warnings"
+
+[tasks.rust]
+depends = ["fmt-check", "lint", "test"]
+
+[tasks.lifecycle]
+run = [
+  "bash .github/scripts/check-decisions.sh",
+  "bash .github/scripts/check-changelog.sh",
+  "bash .github/scripts/test-checks.sh",
+]
+
+[tasks.ci]
+depends = ["rust", "lifecycle"]
