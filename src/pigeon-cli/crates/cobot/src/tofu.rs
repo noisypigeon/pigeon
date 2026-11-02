@@ -118,6 +118,8 @@ pub struct Env {
     pub hidden: Vec<String>,
     /// The repository lockfile, if providers are allowed.
     pub lockfile: Option<std::path::PathBuf>,
+    /// The allowlisted sources this unit uses; only their lockfile blocks are copied.
+    pub providers: Vec<String>,
 }
 
 impl Env {
@@ -220,8 +222,10 @@ fn io(path: &Path) -> impl Fn(std::io::Error) -> Error + '_ {
 /// otherwise with only built-in providers.
 pub fn init(unit: &str, work: &Path, env: &Env) -> Result<(), Error> {
     let lock = work.join(".terraform.lock.hcl");
-    if let Some(source) = &env.lockfile {
-        fs::copy(source, &lock).map_err(io(&lock))?;
+    if let Some(source) = env.lockfile.as_ref().filter(|_| !env.providers.is_empty()) {
+        let text = fs::read_to_string(source).map_err(io(source))?;
+        let sources: Vec<&str> = env.providers.iter().map(String::as_str).collect();
+        fs::write(&lock, crate::providers::lock_for(&text, &sources)).map_err(io(&lock))?;
         step(
             unit,
             work,
