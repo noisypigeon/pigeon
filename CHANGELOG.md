@@ -2,6 +2,7 @@
 
 ## 2026-11-02
 
+- docs(adr): workloads by zone, each with an apex ([#34](https://github.com/noisypigeon/pigeon/pull/34))
 - refactor(cobot): move release machinery from sentinel to cobot ([#33](https://github.com/noisypigeon/pigeon/pull/33))
 - docs(adr): sentinel is policy, cobot performs actions ([#31](https://github.com/noisypigeon/pigeon/pull/31))
 - feat(infra): cloudflare provisioner unit ([#30](https://github.com/noisypigeon/pigeon/pull/30))
