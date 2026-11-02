@@ -315,6 +315,10 @@ fn a_unit_without_providers_plans_beside_a_lockfile() {
         ".config/providers.lock.hcl",
         "provider \"registry.opentofu.org/cloudflare/cloudflare\" {\n  version     = \"5.28.0\"\n  constraints = \"5.28.0\"\n  hashes = [\n    \"h1:3MScc9whgqTm8wB64P4pb4M3zzm8JHylgpnQGSvPjBE=\",\n  ]\n}\n",
     );
+    let unit = repo.path().join("infra/bootstrap/unit.yaml");
+    let yaml = fs::read_to_string(&unit).expect("read");
+    assert!(yaml.contains("hello"), "{yaml}");
+    fs::write(&unit, yaml.replace("hello", "cloudflare/cloudflare")).expect("write");
     let state = TempDir::new().expect("tempdir");
     let units = cobot::select(repo.path(), &repo.path().join(".config"), &[]).expect("valid");
     let plans = cobot::plan(&ctx(repo.path(), state.path(), PASSPHRASE), &units).expect("plan");

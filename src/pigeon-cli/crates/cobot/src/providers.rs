@@ -139,22 +139,47 @@ pub fn lockfile(dir: &Path) -> Option<PathBuf> {
     path.is_file().then_some(path)
 }
 
-/// The allowlisted sources a unit names: `"<source>"` in any file under `dirs`.
+/// The `source` of every provider a HCL file's `required_providers` declares.
+fn declared(tf: &str) -> Vec<String> {
+    required_blocks(tf)
+        .into_iter()
+        .flat_map(|b| ENTRY.captures_iter(b))
+        .filter_map(|c| {
+            let body = c.name("body")?.as_str();
+            SOURCE.captures(body).map(|s| s[1].to_string())
+        })
+        .collect()
+}
+
+/// The allowlisted sources a unit declares: in `required_providers` of the
+/// `.tf` files under `unit_dir`, and of the rendered root `main.tf.json`.
 #[must_use]
-pub fn used<'a>(allow: &'a Allowlist, dirs: &[&Path]) -> Vec<&'a str> {
-    let mut text = String::new();
-    for dir in dirs {
-        collect(dir, &mut text);
+pub fn used<'a>(allow: &'a Allowlist, unit_dir: &Path, rendered: &Path) -> Vec<&'a str> {
+    let mut sources = Vec::new();
+    collect(unit_dir, &mut sources);
+    if let Ok(text) = fs::read_to_string(rendered)
+        && let Ok(root) = serde_json::from_str::<serde_json::Value>(&text)
+        && let Some(required) = root["terraform"]["required_providers"].as_object()
+    {
+        sources.extend(
+            required
+                .values()
+                .filter_map(|p| p["source"].as_str().map(str::to_string)),
+        );
     }
     allow
         .providers
         .keys()
-        .filter(|s| text.contains(&format!("\"{s}\"")))
+        .filter(|s| {
+            sources
+                .iter()
+                .any(|d| d == *s || d.ends_with(&format!("/{s}")))
+        })
         .map(String::as_str)
         .collect()
 }
 
-fn collect(dir: &Path, text: &mut String) {
+fn collect(dir: &Path, sources: &mut Vec<String>) {
     let Ok(entries) = fs::read_dir(dir) else {
         return;
     };
@@ -164,9 +189,11 @@ fn collect(dir: &Path, text: &mut String) {
             continue;
         }
         if path.is_dir() {
-            collect(&path, text);
-        } else if let Ok(t) = fs::read_to_string(&path) {
-            text.push_str(&t);
+            collect(&path, sources);
+        } else if path.extension().is_some_and(|e| e == "tf")
+            && let Ok(t) = fs::read_to_string(&path)
+        {
+            sources.extend(declared(&t));
         }
     }
 }
@@ -196,13 +223,23 @@ pub fn lock_for(lock: &str, sources: &[&str]) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{Allowlist, lock_for};
+    use super::{Allowlist, declared, lock_for};
 
     fn allow() -> Allowlist {
         Allowlist {
             description: "x".into(),
             providers: [("cloudflare/cloudflare".to_string(), "5.1.0".to_string())].into(),
         }
+    }
+
+    #[test]
+    fn only_declarations_count_as_use() {
+        let tf = "terraform {\n  required_providers {\n    cf = {\n      source = \"cloudflare/cloudflare\"\n      version = \"5.28.0\"\n    }\n  }\n}\nresource \"terraform_data\" \"x\" { input = \"hashicorp/random\" }\n";
+        assert_eq!(declared(tf), ["cloudflare/cloudflare"]);
+        assert_eq!(
+            declared("locals { x = \"cloudflare/cloudflare\" }\n"),
+            Vec::<String>::new()
+        );
     }
 
     #[test]
