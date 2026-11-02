@@ -2,6 +2,7 @@
 
 ## 2026-11-02
 
+- fix(sentinel): publish every unpublished release tag ([#16](https://github.com/noisypigeon/pigeon/pull/16))
 - docs(adr): publish every unpublished release tag ([#15](https://github.com/noisypigeon/pigeon/pull/15))
 - ci: run lifecycle checks from the pigeon-sentinel image ([#14](https://github.com/noisypigeon/pigeon/pull/14))
 - fix(sentinel): recoverable release bot ([#13](https://github.com/noisypigeon/pigeon/pull/13))

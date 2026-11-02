@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.1 (2026-11-02)
+
+- fix(sentinel): publish every unpublished release tag ([#16](https://github.com/noisypigeon/pigeon/pull/16))
+
 ## v0.1.0 (2026-11-02)
 
 - fix(sentinel): recoverable release bot ([#13](https://github.com/noisypigeon/pigeon/pull/13))
