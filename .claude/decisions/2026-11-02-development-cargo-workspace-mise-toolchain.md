@@ -353,3 +353,33 @@ They replace `.github/scripts/` rule for rule.
 - Breaking a decision, the changelog or a PR title by hand makes `pigeon sentinel check` exit `1`, naming `path:line`.
 - A malformed policy exits `2`, naming the file.
 - On GitHub, PR B's `rust`, `sentinel` and `sentinel-pr` checks are green, and so are the post-merge `push` runs.
+
+### 2026-11-02: `rust.yml` runs only when Rust changed
+
+§5 runs `rust.yml` on every pull request and every push to `main`, so a docs-only or `infra/` change pays for fmt, four clippy passes, the tests and two image builds. Its `rust` job is one of `main`'s required checks, which rules out the obvious fix: a workflow skipped by an `on: paths` filter never reports, and a required check that never reports blocks the merge forever. A job skipped by its own `if:` reports Skipped, which a required check accepts.
+
+#### 1. A `changes` job decides
+
+- It outputs `rust=true` when any changed path is a Rust input:
+  - anything under `src/pigeon-cli/` except `*.md`;
+  - `mise.toml`, which pins the toolchain and defines `mise run rust`;
+  - `.github/workflows/rust.yml` itself.
+- On `pull_request`, the changed paths are the PR's files from `gh api repos/<repo>/pulls/<n>/files --paginate`, written to a file first so a failed call fails the job rather than reading as "nothing changed".
+- On `push`, they are `git diff --name-only <before> <after>`, from a full-depth checkout. A `before` of zeroes means `rust=true`.
+- It needs `pull-requests: read` and nothing else.
+
+#### 2. `rust` and `image` follow it
+
+- Both take `needs: changes` and `if: needs.changes.outputs.rust == 'true'`.
+- Job names are unchanged, so the required `rust` check keeps its name and reports Skipped when nothing Rust changed.
+- Their steps are unchanged.
+
+#### 3. Execution
+
+1. This amendment lands first, with the release amendment of the same date.
+2. Then `ci(rust): run only when Rust changed`, holding steps 1–2, in the same PR as the release implementation.
+
+#### 4. Verification
+
+- A docs-only PR shows `rust` and `image` as Skipped and is still mergeable.
+- A PR touching `src/pigeon-cli/` runs both.

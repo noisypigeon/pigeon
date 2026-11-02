@@ -308,3 +308,81 @@ So a late-published old version never becomes the latest image or release.
 
 1. This amendment lands first.
 2. Then `fix(sentinel): publish every unpublished release tag`, holding steps 1–4.
+
+### 2026-11-02: A unit releases only when its own build changed
+
+Every unit's `paths` in §3 include `crates/pigeon/`, `Cargo.toml` and `Cargo.lock`. Almost every Rust change touches one of them, so every unit releases together. #20, #21 and #23 were cobot changes, and each cut new `sentinel` and `gantry` versions whose changelogs list nothing but cobot PRs. §4 makes it worse on a first release, which lists all of history: `cobot/v0.1.0` lists the sentinel PRs that preceded it.
+
+A unit's version should move when, and only when, its image or binary could differ. The entries already written stay; they are generated history. This applies from the next release.
+
+#### 1. The predicate
+
+A unit releases when, since its last tag, any of these changed:
+
+1. **Its own paths, minus `exclude`.**
+   - `paths` narrows to the unit's crate, its own slice of `pigeon` (`crates/pigeon/src/commands/<unit>.rs`, `crates/pigeon/src/cli/<unit>.rs`), and, for an imaged unit, `Dockerfile` and `.dockerignore`.
+   - A new `exclude` list removes what never ships: `tests/`, `benches/` and `*.md`, under any listed path.
+2. **`pigeon`'s shared code.** `crates/pigeon/Cargo.toml` and the files every feature build compiles, `src/main.rs`, `src/lib.rs`, `src/cli/mod.rs` and `src/commands/mod.rs`, stay in every unit's `paths`.
+3. **Its resolved dependencies.**
+   - sentinel runs `cargo tree --locked -p pigeon --no-default-features --features <unit> -e normal,build --prefix none` at the last tag and at the new head, and compares the sorted, de-duplicated crate lists.
+   - The tag's tree is read from `git archive <tag> src/pigeon-cli`, unpacked into a temporary directory.
+   - An added, removed or re-versioned crate releases the unit. `Cargo.lock` and `[workspace.dependencies]` count only through this, so adding a dependency to one crate releases only the units that build it.
+   - Workspace crates in the tree are listed with their `(path)`. Their `src/` and `Cargo.toml` join the unit's paths for this run, so a change to a library a unit depends on releases it even though its version did not move.
+4. **Workspace-wide build settings.** Any line of `src/pigeon-cli/Cargo.toml`'s `[profile.*]` tables, or `[workspace.package]`'s `edition` and `rust-version`, or the `rust` line of `mise.toml`, releases every unit. They are compared as text, with no TOML parser added.
+
+#### 2. `cli.rs` is split by feature
+
+- Today's feature-gated items are interleaved in `crates/pigeon/src/cli.rs`, so a cobot flag would still touch every unit.
+- It becomes `cli/mod.rs` (the root command and anything ungated), `cli/sentinel.rs` and `cli/cobot.rs`, each gated once on its `mod` line. Gantry has no CLI items of its own today and gets a file only when it does.
+- The move is pure: no behaviour or interface changes.
+
+#### 3. Changelog lines
+
+- A release's lines are only the commits that satisfied the predicate.
+- A release caused by dependencies alone lists the first commit that changed the tree, suffixed ` (dependencies)`.
+- A release caused by build settings alone lists the commit that changed them.
+- **A first release lists only the commits that touched the unit's own crate.** This replaces §4's "all of history", and its "a release caused only by shared paths lists those shared changes".
+- Date tiers are unchanged.
+
+#### 4. `.config/releases.yaml`
+
+- Each unit gains `exclude: [tests/, benches/, '*.md']` and its narrowed `paths`.
+- `Cargo.toml` and `Cargo.lock` leave every unit's `paths`; §1.3 and §1.4 cover them.
+
+#### 5. Tests
+
+Against temporary repositories with a small path-only workspace, so they run offline:
+
+- a change to one unit's command file releases that unit only;
+- a `tests/`-only or `README.md`-only change releases nothing;
+- a dependency added to one crate releases only the units that build it;
+- a `[profile.release]` change releases every unit;
+- a first release lists only commits touching that unit's crate.
+
+#### 6. A one-time correction of the entries already written
+
+The entries the old rule wrote are corrected once, by the bot, so no pull request edits a changelog and `pull-request.yaml` keeps its rule.
+
+- A hand-written `.config/changelog-corrections.yaml` lists, per unit and version, the PR numbers whose lines do not belong there. A PR belongs when it changed the unit's own crate, or its image inputs for an imaged unit:
+
+  | Unit | Version | Remove |
+  | --- | --- | --- |
+  | sentinel | v0.1.3 | #20 |
+  | sentinel | v0.1.4 | #21 |
+  | gantry | v0.1.0 | #9, #13 |
+  | gantry | v0.1.1 | #16 |
+  | gantry | v0.1.2 | #20 |
+  | gantry | v0.1.3 | #23 |
+  | cobot | v0.1.0 | #9, #11, #13, #16 |
+
+- `pigeon sentinel release` applies it on its next run: it drops each listed line from that version's section and reports the file in `written`, so the bot commits it with the rest.
+- A section left empty keeps its heading, because the tag and GitHub Release exist. Its one line becomes `- No changes of its own; released by a shared-path change in <subject> ([#N](…))`, naming the removed PR. That line satisfies `release-changelog.yaml` as it stands.
+- Applying it is idempotent: a line already gone is skipped, so later runs change nothing.
+- The GitHub Releases' notes are not edited; they are a record of what was published.
+- The file and the code that reads it are deleted by the next PR that changes `.config/releases.yaml`, once the bot's commit shows the corrected files.
+
+#### 7. Execution
+
+1. This amendment lands first, with the cargo-workspace amendment of the same date.
+2. Then `fix(sentinel): release a unit only when its build changed`, holding steps 1–6 and that amendment's CI change.
+3. Its own merge still bumps every unit, because splitting `cli.rs` changes `pigeon`'s shared code. The next cobot-only change is the first to show the new rule: it should bump `cobot` alone.
