@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.2 (2026-11-02)
+
+- feat(cobot): the cobot crate and pigeon cobot ([#20](https://github.com/noisypigeon/pigeon/pull/20))
+
 ## v0.1.1 (2026-11-02)
 
 - fix(sentinel): publish every unpublished release tag ([#16](https://github.com/noisypigeon/pigeon/pull/16))

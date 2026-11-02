@@ -2,6 +2,7 @@
 
 ## 2026-11-02
 
+- feat(cobot): the cobot crate and pigeon cobot ([#20](https://github.com/noisypigeon/pigeon/pull/20))
 - feat(sentinel): find rule and optional release images ([#19](https://github.com/noisypigeon/pigeon/pull/19))
 - docs(adr): amend cobot with engine-first execution and safe plans ([#18](https://github.com/noisypigeon/pigeon/pull/18))
 - docs(adr): cobot, infrastructure as code with state in git ([#17](https://github.com/noisypigeon/pigeon/pull/17))

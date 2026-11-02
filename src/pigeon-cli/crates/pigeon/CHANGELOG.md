@@ -2,6 +2,7 @@
 
 ## 2026-11-02
 
+- feat(cobot): the cobot crate and pigeon cobot ([#20](https://github.com/noisypigeon/pigeon/pull/20))
 - fix(sentinel): publish every unpublished release tag ([#16](https://github.com/noisypigeon/pigeon/pull/16))
 - fix(sentinel): recoverable release bot ([#13](https://github.com/noisypigeon/pigeon/pull/13))
 - feat(sentinel): release units, generated changelogs, gantry and images ([#11](https://github.com/noisypigeon/pigeon/pull/11))
