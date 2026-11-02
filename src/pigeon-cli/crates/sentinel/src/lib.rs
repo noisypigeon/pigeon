@@ -38,6 +38,13 @@ pub enum Error {
         /// Its stderr, or why it could not start.
         message: String,
     },
+    /// Another program failed.
+    Tool {
+        /// The command line.
+        command: String,
+        /// Its stderr, or why it could not start.
+        message: String,
+    },
     /// A policy file is not a valid policy.
     Policy {
         /// The policy file.
@@ -52,6 +59,7 @@ impl fmt::Display for Error {
         match self {
             Self::Io { path, source } => write!(f, "{}: {source}", path.display()),
             Self::Git { args, message } => write!(f, "git {args}: {message}"),
+            Self::Tool { command, message } => write!(f, "{command}: {message}"),
             Self::Policy { path, message } => write!(f, "{}: {message}", path.display()),
         }
     }

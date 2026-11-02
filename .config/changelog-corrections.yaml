@@ -1,0 +1,9 @@
+description: One-time removal of changelog lines the shared-path rule wrote; applied by the release bot, then deleted.
+corrections:
+  - { unit: sentinel, version: 0.1.3, remove: [20] }
+  - { unit: sentinel, version: 0.1.4, remove: [21] }
+  - { unit: gantry, version: 0.1.0, remove: [9, 13] }
+  - { unit: gantry, version: 0.1.1, remove: [16] }
+  - { unit: gantry, version: 0.1.2, remove: [20] }
+  - { unit: gantry, version: 0.1.3, remove: [23] }
+  - { unit: cobot, version: 0.1.0, remove: [9, 11, 13, 16] }
