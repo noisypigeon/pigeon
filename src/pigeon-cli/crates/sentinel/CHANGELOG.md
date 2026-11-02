@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.4 (2026-11-02)
+
+- feat(cobot): plan on PR, apply on merge ([#21](https://github.com/noisypigeon/pigeon/pull/21))
+
 ## v0.1.3 (2026-11-02)
 
 - feat(cobot): the cobot crate and pigeon cobot ([#20](https://github.com/noisypigeon/pigeon/pull/20))
