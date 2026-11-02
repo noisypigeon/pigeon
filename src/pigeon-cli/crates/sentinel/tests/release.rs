@@ -238,16 +238,28 @@ fn default_range_starts_after_the_last_release_commit() {
 }
 
 #[test]
-fn units_report_their_newest_tags() {
+fn tags_lists_every_tag_and_flags_the_newest_by_version() {
     let (dir, _) = repo();
     let root = dir.path();
     let config_path = root.join("releases.yaml");
     fs::write(&config_path, CONFIG).expect("write");
     let config = Config::load(&config_path).expect("config");
-    assert_eq!(release::units(root, &config).expect("units")[0].tag, None);
-    let first = run(root, None);
-    land(root, &first, "2026-01-01");
-    let units = release::units(root, &config).expect("units");
-    assert_eq!(units[0].tag.as_deref(), Some("a/v0.1.0"));
-    assert_eq!(units[1].version.as_deref(), Some("0.1.0"));
+    assert_eq!(release::tags(root, &config).expect("tags"), []);
+    for tag in ["a/v0.1.0", "a/v0.1.1", "a/v0.1.10", "b/v0.1.0"] {
+        git(root, &["tag", tag], "2026-01-01");
+    }
+    let rows: Vec<(String, bool)> = release::tags(root, &config)
+        .expect("tags")
+        .into_iter()
+        .map(|r| (r.tag, r.newest))
+        .collect();
+    assert_eq!(
+        rows,
+        [
+            ("a/v0.1.10".to_string(), true),
+            ("a/v0.1.1".to_string(), false),
+            ("a/v0.1.0".to_string(), false),
+            ("b/v0.1.0".to_string(), true),
+        ]
+    );
 }
