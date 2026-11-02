@@ -62,3 +62,36 @@ fn cobot_reports_its_own_version() {
         .success()
         .stdout(predicate::str::contains(cobot::VERSION));
 }
+
+#[test]
+fn render_with_relative_root_and_state_writes_absolute_paths() {
+    let repo = TempDir::new().expect("tempdir");
+    let unit = repo.path().join("infra/bootstrap");
+    std::fs::create_dir_all(unit.join("modules/proof")).expect("mkdir");
+    std::fs::write(
+        unit.join("unit.yaml"),
+        "schema: 0\nname: bootstrap\nkind: infra\nmodules:\n  - { name: proof, source: ./modules/proof }\n",
+    )
+    .expect("write");
+    std::fs::write(
+        unit.join("modules/proof/main.tf"),
+        "resource \"terraform_data\" \"this\" {}\n",
+    )
+    .expect("write");
+    cobot()
+        .current_dir(repo.path())
+        .args(["render", "--state", "./state"])
+        .assert()
+        .code(0);
+    let json: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(repo.path().join(".cobot/infra/bootstrap/main.tf.json"))
+            .expect("rendered"),
+    )
+    .expect("json");
+    let state = json["terraform"]["backend"]["local"]["path"]
+        .as_str()
+        .expect("path");
+    let source = json["module"]["proof"]["source"].as_str().expect("source");
+    assert!(std::path::Path::new(state).is_absolute(), "{state}");
+    assert!(std::path::Path::new(source).is_dir(), "{source}");
+}

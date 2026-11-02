@@ -3,12 +3,24 @@
 use std::fs;
 use std::path::Path;
 use std::process::{Command, Output};
+use std::sync::LazyLock;
+
+use regex::Regex;
 
 use serde_json::Value;
 
 use crate::Error;
 
 const PLAN_FILE: &str = "plan.tfplan";
+
+/// A quoted string, which may hold a value.
+static QUOTED: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r#""(?:[^"\\]|\\.)*""#).expect("valid regex"));
+
+/// Masks quoted text, so instance keys and diagnostic values never print.
+fn mask(text: &str) -> String {
+    QUOTED.replace_all(text, "\"…\"").into_owned()
+}
 
 /// What `tofu` will do to a resource.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -109,7 +121,7 @@ fn diagnostics(output: &Output, passphrase: &str) -> String {
     } else {
         summaries.join("; ")
     };
-    redact(&body, passphrase)
+    mask(&redact(&body, passphrase))
 }
 
 fn run(unit: &str, work: &Path, passphrase: &str, args: &[&str]) -> Result<Output, Error> {
@@ -171,7 +183,7 @@ fn changes(json: &str) -> Vec<Change> {
         };
         if let Some(address) = rc["address"].as_str() {
             out.push(Change {
-                address: address.to_string(),
+                address: mask(address),
                 action,
             });
         }
@@ -266,6 +278,15 @@ mod tests {
         let cfg = encryption("pa\"ss${x}word-0123456789");
         assert!(cfg.contains(r#"passphrase = "pa\"ss$${x}word-0123456789""#));
         assert!(cfg.contains("enforced = true"));
+    }
+
+    #[test]
+    fn quoted_values_are_masked() {
+        assert_eq!(
+            super::mask(r#"module.m.x.y["s3cr\"et"] and Error: bad "value""#),
+            r#"module.m.x.y["…"] and Error: bad "…""#
+        );
+        assert_eq!(super::mask("x.y[0]"), "x.y[0]");
     }
 
     #[test]

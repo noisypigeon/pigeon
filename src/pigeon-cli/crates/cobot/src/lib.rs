@@ -87,6 +87,7 @@ pub fn passphrase(value: Option<String>) -> Result<String, Error> {
 ///
 /// [`Error::Invalid`] listing every problem.
 pub fn validate(root: &Path) -> Result<Vec<Unit>, Error> {
+    let root = &root.canonicalize().map_err(io(root))?;
     let problems = unit::validate(root);
     if !problems.is_empty() {
         return Err(Error::Invalid(problems));
@@ -157,6 +158,8 @@ pub fn render_json(unit: &Unit, state: &Path) -> Value {
 ///
 /// [`Error::Io`] if the work directory cannot be written.
 pub fn render(root: &Path, unit: &Unit, state: &Path) -> Result<PathBuf, Error> {
+    let root = &root.canonicalize().map_err(io(root))?;
+    let state = &absolute(state)?;
     let work = root.join(WORK_DIR).join(&unit.path);
     fs::create_dir_all(&work).map_err(io(&work))?;
     let file = work.join("main.tf.json");
@@ -206,6 +209,7 @@ pub fn apply(
     passphrase: &str,
 ) -> Result<Vec<UnitPlan>, Error> {
     let plans = plan(root, units, state, passphrase)?;
+    let root = &root.canonicalize().map_err(io(root))?;
     for (u, p) in units.iter().zip(&plans) {
         if p.has_changes() {
             tofu::apply(&u.path, &root.join(WORK_DIR).join(&u.path), passphrase)?;

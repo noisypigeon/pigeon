@@ -135,25 +135,48 @@ pub fn discover(root: &Path) -> (Vec<Unit>, Vec<Problem>) {
     (units, problems)
 }
 
-/// Every `.tf` file under `dir`, recursively.
-fn tf_files(dir: &Path) -> Vec<PathBuf> {
-    let mut found = Vec::new();
+/// Whether `name` ends with `suffix`, ignoring ASCII case.
+fn suffix(name: &str, suffix: &str) -> bool {
+    name.len() >= suffix.len()
+        && name.is_char_boundary(name.len() - suffix.len())
+        && name[name.len() - suffix.len()..].eq_ignore_ascii_case(suffix)
+}
+
+/// The `.tf` files under `dir` to scan, and the paths schema v0 rejects: symlinks
+/// and other `OpenTofu` configuration formats.
+fn unit_files(dir: &Path) -> (Vec<PathBuf>, Vec<(PathBuf, &'static str)>) {
+    let mut tf = Vec::new();
+    let mut rejected = Vec::new();
     let mut stack = vec![dir.to_path_buf()];
     while let Some(d) = stack.pop() {
         let Ok(listing) = fs::read_dir(&d) else {
+            rejected.push((d, "cannot be listed"));
             continue;
         };
         for entry in listing.flatten() {
             let path = entry.path();
-            if entry.file_type().is_ok_and(|t| t.is_dir()) {
-                stack.push(path);
-            } else if path.extension().is_some_and(|e| e == "tf") {
-                found.push(path);
+            let name = entry.file_name().to_string_lossy().into_owned();
+            match entry.file_type() {
+                Ok(t) if t.is_symlink() => {
+                    rejected.push((path, "symlinks are not allowed in a unit"));
+                }
+                Ok(t) if t.is_dir() => stack.push(path),
+                Ok(_) if suffix(&name, ".tf") => tf.push(path),
+                Ok(_)
+                    if [".tf.json", ".tofu", ".tofu.json"]
+                        .iter()
+                        .any(|s| suffix(&name, s)) =>
+                {
+                    rejected.push((path, "only `.tf` files are allowed in schema v0"));
+                }
+                Ok(_) => {}
+                Err(_) => rejected.push((path, "cannot be inspected")),
             }
         }
     }
-    found.sort();
-    found
+    tf.sort();
+    rejected.sort();
+    (tf, rejected)
 }
 
 /// Whether `source` is a relative path that stays inside the unit.
@@ -239,14 +262,23 @@ pub fn validate(root: &Path) -> Vec<Problem> {
                     &file,
                     format!("module `{}` source leaves the unit", m.name),
                 ));
-            } else if !unit.dir.join(&m.source).is_dir() {
+            } else if !unit.dir.join(&m.source).canonicalize().is_ok_and(|p| {
+                p.is_dir() && unit.dir.canonicalize().is_ok_and(|u| p.starts_with(u))
+            }) {
                 problems.push(problem(
                     &file,
                     format!("module `{}` source is not a directory", m.name),
                 ));
             }
         }
-        for tf in tf_files(&unit.dir) {
+        let (tf_paths, rejected) = unit_files(&unit.dir);
+        for (path, why) in rejected {
+            let rel = path
+                .strip_prefix(root)
+                .map_or_else(|_| path.display().to_string(), |p| p.display().to_string());
+            problems.push(problem(rel, why));
+        }
+        for tf in tf_paths {
             let rel = tf
                 .strip_prefix(root)
                 .map_or_else(|_| tf.display().to_string(), |p| p.display().to_string());

@@ -241,3 +241,39 @@ fn plan_and_apply_write_only_encrypted_state() {
         "{err}"
     );
 }
+
+#[test]
+fn other_config_formats_and_symlinks_are_rejected() {
+    for (path, want) in [
+        (
+            "infra/bootstrap/modules/proof/x.tf.json",
+            "only `.tf` files",
+        ),
+        ("infra/bootstrap/modules/proof/x.tofu", "only `.tf` files"),
+        (
+            "infra/bootstrap/modules/proof/x.tofu.json",
+            "only `.tf` files",
+        ),
+    ] {
+        let repo = proof_repo();
+        write(repo.path(), path, "{}");
+        let got = messages(repo.path());
+        assert!(got.iter().any(|m| m.contains(want)), "{path}: {got:?}");
+    }
+    #[cfg(unix)]
+    {
+        let repo = proof_repo();
+        let outside = TempDir::new().expect("tempdir");
+        write(outside.path(), "evil/main.tf", PROOF);
+        std::os::unix::fs::symlink(
+            outside.path().join("evil"),
+            repo.path().join("infra/bootstrap/modules/linked"),
+        )
+        .expect("symlink");
+        let got = messages(repo.path());
+        assert!(
+            got.iter().any(|m| m.contains("symlinks are not allowed")),
+            "{got:?}"
+        );
+    }
+}
