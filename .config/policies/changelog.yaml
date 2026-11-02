@@ -1,0 +1,20 @@
+description: CHANGELOG.md has dated sections, newest first, one linked line per PR.
+target: { file: CHANGELOG.md }
+rules:
+  - line:
+      at: 1
+      matches: '^# Changelog$'
+  - headings:
+      level: 2
+      each: '^(?<day>[0-9]{4}-[0-9]{2}-[0-9]{2})$'
+      min: 1
+      order: { by: day, direction: descending, strict: true }
+  - items:
+      under: { level: 2 }
+      lines: true
+      matches: '^- .*\S \((?:\[#(?<pr>[0-9]+)\]\(https://github\.com/noisypigeon/pigeon/pull/(?<pr_url>[0-9]+)\)|\[(?<sha>[0-9a-f]{7,40})\]\(https://github\.com/noisypigeon/pigeon/commit/(?<sha_url>[0-9a-f]{40})\))\)$'
+      min: 1
+      elsewhere: forbid
+      equal: [pr, pr_url]
+      prefix: [sha, sha_url]
+      unique: pr

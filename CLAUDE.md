@@ -16,7 +16,9 @@ belong in the ADR, never in the file.
   [`2026-11-02-development-adr-driven-lifecycle.md`](.claude/decisions/2026-11-02-development-adr-driven-lifecycle.md).
 - The Rust workspace and its Mise-pinned toolchain are
   [`2026-11-02-development-cargo-workspace-mise-toolchain.md`](.claude/decisions/2026-11-02-development-cargo-workspace-mise-toolchain.md).
-  Crates live in `crates/<name>/`.
+  Crates live in `pigeon/crates/<name>/`.
+- `pigeon sentinel` enforces the policies in `.config/policies/`, one YAML file
+  per subject.
 - Every PR adds one line to [`CHANGELOG.md`](CHANGELOG.md), under today's UTC
   date, linking itself: `- <change> ([#N](https://github.com/noisypigeon/pigeon/pull/N))`.
 - The repo is public: never push secrets, credentials, key IDs or private
@@ -28,5 +30,6 @@ belong in the ADR, never in the file.
 
 - `mise run build` / `test` / `fmt` / `lint`
 - `mise run rust`: fmt-check, clippy `-D warnings`, tests.
-- `mise run lifecycle`: the ADR, changelog and script checks.
-- `PR_TITLE='…' PR_BODY='…' PR_NUMBER=N bash .github/scripts/check-pr.sh`
+- `mise run sentinel`: `pigeon sentinel check` against `.config/policies/`.
+- `PR_TITLE='…' PR_BODY='…' PR_NUMBER=N mise run sentinel-pr`: adds the
+  pull-request policy.
