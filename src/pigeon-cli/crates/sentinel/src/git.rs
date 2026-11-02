@@ -117,11 +117,18 @@ pub fn last_with_subject(root: &Path, to: &str, prefix: &str) -> Result<Option<S
 
 /// The newest `<unit>/v*` tag, by version.
 pub fn last_tag(root: &Path, unit: &str) -> Result<Option<String>, Error> {
-    let tags = run(
+    Ok(tags(root, unit)?.into_iter().next())
+}
+
+/// Every `<unit>/v*` tag, newest version first.
+pub fn tags(root: &Path, unit: &str) -> Result<Vec<String>, Error> {
+    Ok(run(
         root,
         &["tag", "--list", &format!("{unit}/v*"), "--sort=-v:refname"],
-    )?;
-    Ok(tags.lines().next().map(str::to_string))
+    )?
+    .lines()
+    .map(str::to_string)
+    .collect())
 }
 
 /// The UTC date of `rev`.

@@ -259,45 +259,47 @@ fn render_tiers(
     Ok(())
 }
 
-/// A unit and its newest release tag.
+/// One release tag of a unit.
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
-pub struct UnitStatus {
+pub struct TagStatus {
     /// The unit.
     pub unit: String,
     /// The image repository.
     pub image: String,
     /// The `pigeon` features.
     pub features: String,
-    /// The newest `<unit>/v*` tag, if any.
-    pub tag: Option<String>,
-    /// That tag's version.
-    pub version: Option<String>,
+    /// `<unit>/vX.Y.Z`.
+    pub tag: String,
+    /// `X.Y.Z`.
+    pub version: String,
+    /// Whether this is the unit's highest version.
+    pub newest: bool,
 }
 
-/// Every unit with its newest tag.
+/// Every release tag of every unit, each unit's newest version first.
 ///
 /// # Errors
 ///
 /// [`Error::Git`] if git fails.
-pub fn units(root: &Path, config: &Config) -> Result<Vec<UnitStatus>, Error> {
-    config
-        .units
-        .iter()
-        .map(|(name, unit)| {
-            let tag = git::last_tag(root, name)?;
-            let version = tag
-                .as_deref()
-                .and_then(|t| t.strip_prefix(&format!("{name}/v")))
-                .map(str::to_string);
-            Ok(UnitStatus {
+pub fn tags(root: &Path, config: &Config) -> Result<Vec<TagStatus>, Error> {
+    let mut rows = Vec::new();
+    for (name, unit) in &config.units {
+        let prefix = format!("{name}/v");
+        for (i, tag) in git::tags(root, name)?.into_iter().enumerate() {
+            let Some(version) = tag.strip_prefix(&prefix).map(str::to_string) else {
+                continue;
+            };
+            rows.push(TagStatus {
                 unit: name.clone(),
                 image: unit.image.clone(),
                 features: unit.features.clone(),
                 tag,
                 version,
-            })
-        })
-        .collect()
+                newest: i == 0,
+            });
+        }
+    }
+    Ok(rows)
 }
 
 /// Runs a release over `from..to`; with `dry_run`, writes nothing. Without

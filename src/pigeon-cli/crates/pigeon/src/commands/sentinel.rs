@@ -6,7 +6,7 @@ use sentinel::PullRequest;
 use sentinel::release::{self, Config};
 
 use super::{INVALID, SUCCESS, VIOLATION};
-use crate::cli::{CheckArgs, ReleaseArgs, SentinelCommand, UnitsArgs};
+use crate::cli::{CheckArgs, ReleaseArgs, SentinelCommand, TagsArgs};
 
 /// Runs a `pigeon sentinel` command and returns its exit code.
 #[must_use]
@@ -14,7 +14,7 @@ pub fn run(command: SentinelCommand) -> i32 {
     match command {
         SentinelCommand::Check(args) => check(&args),
         SentinelCommand::Release(args) => release(&args),
-        SentinelCommand::Units(args) => units(&args),
+        SentinelCommand::Tags(args) => tags(&args),
     }
 }
 
@@ -68,12 +68,12 @@ fn print_json<T: serde::Serialize>(result: Result<T, sentinel::Error>) -> i32 {
     }
 }
 
-fn units(args: &UnitsArgs) -> i32 {
+fn tags(args: &TagsArgs) -> i32 {
     let path = args
         .config
         .clone()
         .unwrap_or_else(|| args.root.join(".config/releases.yaml"));
-    print_json(Config::load(&path).and_then(|config| release::units(&args.root, &config)))
+    print_json(Config::load(&path).and_then(|config| release::tags(&args.root, &config)))
 }
 
 fn release(args: &ReleaseArgs) -> i32 {

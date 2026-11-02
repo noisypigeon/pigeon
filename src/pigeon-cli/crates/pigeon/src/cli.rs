@@ -37,8 +37,8 @@ pub enum SentinelCommand {
     Check(CheckArgs),
     /// Bump changed release units and generate changelogs; print JSON
     Release(ReleaseArgs),
-    /// Print each release unit and its newest tag as JSON
-    Units(UnitsArgs),
+    /// Print every release tag as JSON, flagging each unit's newest
+    Tags(TagsArgs),
 }
 
 /// `pigeon sentinel check` arguments.
@@ -58,10 +58,10 @@ pub struct CheckArgs {
     pub pull_request: bool,
 }
 
-/// `pigeon sentinel units` arguments.
+/// `pigeon sentinel tags` arguments.
 #[cfg(feature = "sentinel")]
 #[derive(Args, Debug)]
-pub struct UnitsArgs {
+pub struct TagsArgs {
     /// The repository root
     #[arg(long, default_value = ".")]
     pub root: PathBuf,
