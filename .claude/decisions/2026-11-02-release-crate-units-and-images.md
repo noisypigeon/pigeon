@@ -324,10 +324,13 @@ A unit releases when, since its last tag, any of these changed:
    - A new `exclude` list removes what never ships: `tests/`, `benches/` and `*.md`, under any listed path.
 2. **`pigeon`'s shared code.** `crates/pigeon/Cargo.toml` and the files every feature build compiles, `src/main.rs`, `src/lib.rs`, `src/cli/mod.rs` and `src/commands/mod.rs`, stay in every unit's `paths`.
 3. **Its resolved dependencies.**
-   - sentinel runs `cargo tree --locked -p pigeon --no-default-features --features <unit> -e normal,build --prefix none` at the last tag and at the new head, and compares the sorted, de-duplicated crate lists.
-   - The tag's tree is read from `git archive <tag> src/pigeon-cli`, unpacked into a temporary directory.
-   - An added, removed or re-versioned crate releases the unit. `Cargo.lock` and `[workspace.dependencies]` count only through this, so adding a dependency to one crate releases only the units that build it.
-   - Workspace crates in the tree are listed with their `(path)`. Their `src/` and `Cargo.toml` join the unit's paths for this run, so a change to a library a unit depends on releases it even though its version did not move.
+   - sentinel runs `cargo tree --locked -p pigeon --no-default-features --features <unit> -e normal,build,features --prefix none` at the last tag and at the new head, and compares the sorted, de-duplicated rows.
+   - Both revisions are read the same way, from `git archive <rev> src/pigeon-cli` unpacked into a temporary directory, never from the checkout.
+   - `features` edges make each activated feature a row of its own, so enabling a feature that adds no crate still changes the tree.
+   - An added, removed or re-versioned crate, or a changed feature set, releases the unit. `Cargo.lock` and `[workspace.dependencies]` count only through this, so adding a dependency to one crate releases only the units that build it.
+   - Workspace crates are compared by name alone. Their `(path)` differs between the two temporary directories and their version moves with every release, so neither is compared.
+   - Their paths, relative to the archive, are kept: each one's directory, except `pigeon`'s, joins the unit's paths for this run, so a change to a library a unit depends on releases it even though its version did not move.
+   - A release caused by dependencies alone lists the first commit in the range that changed `Cargo.lock`.
 4. **Workspace-wide build settings.** Any line of `src/pigeon-cli/Cargo.toml`'s `[profile.*]` tables, or `[workspace.package]`'s `edition` and `rust-version`, or the `rust` line of `mise.toml`, releases every unit. They are compared as text, with no TOML parser added.
 
 #### 2. `cli.rs` is split by feature
@@ -339,7 +342,7 @@ A unit releases when, since its last tag, any of these changed:
 #### 3. Changelog lines
 
 - A release's lines are only the commits that satisfied the predicate.
-- A release caused by dependencies alone lists the first commit that changed the tree, suffixed ` (dependencies)`.
+- A release caused by dependencies alone lists that `Cargo.lock` commit, suffixed ` (dependencies)`.
 - A release caused by build settings alone lists the commit that changed them.
 - **A first release lists only the commits that touched the unit's own crate.** This replaces §4's "all of history", and its "a release caused only by shared paths lists those shared changes".
 - Date tiers are unchanged.
