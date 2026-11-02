@@ -77,6 +77,16 @@ decisions fail "extra H2" "$good_name" "$good"$'\n\n## Consequences\n\nMore.'
 decisions fail "H1 present" "$good_name" "$good"$'\n\n# Stray\n'
 decisions fail "frontmatter" "$good_name" $'---\ntitle: x\n---\n'"$good"
 
+amend=$'\n\n## Amendments\n\n### 2026-01-02: First\n\n#### Detail\n\nText.\n\n### 2026-02-01: Second\n'
+decisions pass "valid amendments" "$good_name" "$good$amend"
+decisions fail "amendments out of order" "$good_name" "$good"$'\n\n## Amendments\n\n### 2026-02-01: Later\n\n### 2026-01-05: Earlier\n'
+decisions fail "amendment before ADR date" "$good_name" "$good"$'\n\n## Amendments\n\n### 2026-01-01: Too early\n'
+decisions fail "malformed amendment heading" "$good_name" "$good"$'\n\n## Amendments\n\n### Second thoughts\n'
+decisions fail "amendment without summary" "$good_name" "$good"$'\n\n## Amendments\n\n### 2026-01-03:\n'
+decisions fail "empty amendments" "$good_name" "$good"$'\n\n## Amendments\n\nNothing.\n'
+decisions fail "amendments before the plan" "$good_name" "$(sed 's/^## Implementation plan\.$/## Amendments\n\n### 2026-01-03: Early\n\n## Implementation plan./' <<<"$good")"
+decisions fail "H2 after amendments" "$good_name" "$good$amend"$'\n## Consequences\n\nMore.\n'
+
 mkdir -p "$tmp/empty"
 expect fail "decisions: empty directory" bash "$script_dir/check-decisions.sh" "$tmp/empty"
 mkdir -p "$tmp/readme-only" && echo "# Decisions" >"$tmp/readme-only/README.md"

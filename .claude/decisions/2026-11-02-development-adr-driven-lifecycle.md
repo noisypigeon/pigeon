@@ -186,3 +186,92 @@ It does not restate the template; it links to it.
 - All three local commands pass against the real repository.
 - `scripts/test-checks.sh` proves every rule in §1, §2 and §4 rejects a bad input. A check that passes everything is a failure of this ADR.
 - The implementation PR's `decisions` and `pr` jobs are green on GitHub, and the post-merge `push` run on `main` is green.
+
+## Amendments
+
+### 2026-11-02: Scripts under .github, terse comments, a changelog
+
+The first implementation left three things to settle:
+
+- the lint scripts sit in a top-level `scripts/` beside the code to come, although they serve only CI;
+- `CLAUDE.md` restates the lifecycle that this ADR already decides;
+- nothing records what each merge changed.
+
+This amendment also defines how an ADR is amended. Until now the ADR only said that a merged ADR is "not edited".
+
+#### 1. Amendments
+
+- An ADR may end with an optional `## Amendments` H2, after `## Implementation plan.`. It is the only H2 allowed besides the title, `## Context` and `## Implementation plan.`.
+- Each entry is a `### YYYY-MM-DD: <summary>` heading. Entries:
+  - come in date order;
+  - are dated no earlier than the ADR's `Date`;
+  - may use `####` and below inside.
+- An amendment adds to a decision and never rewrites earlier text. This replaces §3's rule that a merged ADR is not edited to change what it decided. Where an amendment supersedes earlier text, it says so, and the earlier text stays as written.
+- A change too large to read as an amendment is still a new ADR that supersedes this one.
+- An amendment lands by PR like any ADR. That PR also carries any lint change the amendment needs to pass CI. This amendment's PR carries the `## Amendments` rule in `check-decisions.sh` and its tests.
+
+#### 2. Scripts move to `.github/scripts/`
+
+- `scripts/check-decisions.sh`, `scripts/check-pr.sh` and `scripts/test-checks.sh` move to `.github/scripts/`.
+- Each script still resolves its default paths from its own location, now two levels below the repository root.
+- The workflow, `CLAUDE.md` and `.claude/decisions/README.md` name the new paths.
+- The `scripts/` paths in §5 to §8 are superseded by this step and left as written.
+
+#### 3. Comments in code and config stay terse
+
+- A comment in code or config says what something is in a line or two.
+- Where the reason matters, the comment cites the ADR that holds it.
+- Rationale, history and alternatives belong in the ADR, never in the file.
+- The existing script and workflow headers are cut to one line naming this ADR.
+
+#### 4. `CLAUDE.md` is rewritten around that principle
+
+In this order, in roughly 25 lines:
+
+1. the terse-comments rule from step 3;
+2. that decisions are ADRs in `.claude/decisions/`, with a link to its README;
+3. a link to this ADR for the lifecycle, which is not restated;
+4. the changelog rule from step 5;
+5. the public-repository rule;
+6. the local commands.
+
+#### 5. `CHANGELOG.md`
+
+A file at the repository root, sectioned by date:
+
+```
+# Changelog
+
+## 2026-11-02
+
+- <one line: what the change is> ([#N](https://github.com/noisypigeon/pigeon/pull/N))
+```
+
+- Dates are UTC, newest first. Within a date, the newest bullet is on top.
+- Every PR adds exactly one bullet, linked to itself. The number is known only once the PR is open, so the bullet comes in a follow-up commit on the same branch.
+- One bullet links to a commit instead, as `([<short-sha>](https://github.com/noisypigeon/pigeon/commit/<sha>))`: the bootstrap ADR commit, which had no PR.
+- The file is created backfilled with that commit, #1, this amendment's PR and the PR that implements it.
+
+#### 6. Enforcement
+
+- A new `.github/scripts/check-changelog.sh` checks:
+  - that the first line is `# Changelog`;
+  - that every `## YYYY-MM-DD` heading is strictly older than the one above it, and has at least one bullet;
+  - that every bullet is `- <text> (<link>)`, where the link is a PR link whose `#N` matches its URL, or a commit link;
+  - that no PR is listed twice.
+- `check-pr.sh` reads a new `PR_NUMBER` from the environment. It fails unless `CHANGELOG.md` holds this PR's link.
+- `test-checks.sh` gains a failing fixture for each new rule, and for `## Amendments`:
+  - a valid amendment, which passes;
+  - dates out of order;
+  - an entry dated before the ADR;
+  - a malformed `###` heading;
+  - `## Amendments` before `## Implementation plan.`;
+  - an empty `## Amendments`.
+- The `decisions` job runs `check-changelog.sh`. The `pr` job passes `PR_NUMBER` through `env:`.
+
+#### 7. Executing this amendment
+
+1. **PR A**, the amendment. It holds this text, the `## Amendments` rule in the still-unmoved `scripts/check-decisions.sh` with its tests, and the README's template update. It is merged once green.
+2. **PR B**, the implementation, on a branch restarted from the new `main`. It holds steps 2 to 6.
+   - Its first CI run fails until its own changelog bullet lands in the follow-up commit. Only then is it merged.
+3. After the merge, confirm that the `push` run on `main` is green.

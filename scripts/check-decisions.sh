@@ -69,10 +69,10 @@ check_file() {
     i=$((i + 1))
   done
 
-  # Headings outside fenced code blocks: no H1, and exactly these H2s in order.
-  local -a want=("## Context" "## Implementation plan.")
+  # Headings outside fences: no H1; H2s are Context, Implementation plan., then optionally Amendments.
+  local -a want=("## Context" "## Implementation plan." "## Amendments")
   local -a got=() got_lines=()
-  local in_fence=0 n
+  local in_fence=0 n section="" last="$date" entries=0 d
   for ((n = 1; n < ${#lines[@]}; n++)); do
     line="${lines[n]%$'\r'}"
     if [[ "$line" =~ ^[[:space:]]*(\`\`\`|~~~) ]]; then
@@ -83,19 +83,35 @@ check_file() {
     if [[ "$line" =~ ^#\  ]]; then
       fail "$f" $((n + 1)) "no H1 headings; the title is the first line's H2"
     elif [[ "$line" =~ ^##\  ]]; then
-      got+=("${line%"${line##*[![:space:]]}"}")
+      section="${line%"${line##*[![:space:]]}"}"
+      got+=("$section")
       got_lines+=($((n + 1)))
+    elif [[ "$section" == "## Amendments" && "$line" =~ ^###\  ]]; then
+      entries=$((entries + 1))
+      if [[ ! "$line" =~ ^###\ ([0-9]{4}-[0-9]{2}-[0-9]{2}):\ .*[^[:space:]] ]]; then
+        fail "$f" $((n + 1)) "an amendment heading is '### YYYY-MM-DD: <summary>'"
+        continue
+      fi
+      d="${BASH_REMATCH[1]}"
+      if [[ "$d" < "$date" ]]; then
+        fail "$f" $((n + 1)) "amendment dated $d is earlier than the ADR's Date $date"
+      elif [[ "$d" < "$last" ]]; then
+        fail "$f" $((n + 1)) "amendment dated $d is out of date order (after $last)"
+      fi
+      last="$d"
     fi
   done
   local j
   for ((j = 0; j < ${#got[@]}; j++)); do
     if ((j >= ${#want[@]})) || [[ "${got[j]}" != "${want[j]}" ]]; then
-      fail "$f" "${got_lines[j]}" "unexpected H2 '${got[j]}'; the only H2s after the title are '${want[0]}' then '${want[1]}' (use ### inside them)"
+      fail "$f" "${got_lines[j]}" "unexpected H2 '${got[j]}'; after the title the H2s are '${want[0]}', '${want[1]}', then optionally '${want[2]}' (use ### inside them)"
       return
     fi
   done
-  if ((${#got[@]} < ${#want[@]})); then
+  if ((${#got[@]} < 2)); then
     fail "$f" "${#lines[@]}" "missing '${want[${#got[@]}]}'"
+  elif ((${#got[@]} == 3 && entries == 0)); then
+    fail "$f" "${got_lines[2]}" "'## Amendments' holds no '### YYYY-MM-DD: <summary>' entry"
   fi
 }
 
