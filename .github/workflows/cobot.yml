@@ -1,10 +1,13 @@
-# Plan on PR, apply on merge; see .claude/decisions/2026-11-02-runtime-cobot-infrastructure-as-code.md.
+# Plan on PR, apply on merge and daily; see .claude/decisions/2026-11-02-runtime-cobot-infrastructure-as-code.md
+# and .claude/decisions/2026-11-02-runtime-cloudflare-provisioner-unit.md.
 name: cobot
 
 on:
   pull_request:
   push:
     branches: [main]
+  schedule:
+    - cron: "17 4 * * *"
 
 permissions:
   contents: read
@@ -43,11 +46,23 @@ jobs:
           version: 2026.10.12
       - name: Build pigeon from main
         run: cargo build -q --locked -p pigeon --no-default-features --features cobot --manifest-path src/pigeon-cli/Cargo.toml
+      - name: Refuse provider changes
+        run: |
+          set -euo pipefail
+          for f in providers.yaml providers.lock.hcl; do
+            if ! cmp -s ".config/$f" ".pr/.config/$f"; then
+              if [ -e ".config/$f" ] || [ -e ".pr/.config/$f" ]; then
+                echo "::error::.config/$f differs from main; providers change only on main"
+                exit 1
+              fi
+            fi
+          done
       - name: Validate
         run: src/pigeon-cli/target/debug/pigeon cobot validate --root .pr
       - name: Plan
         env:
           COBOT_STATE_PASSPHRASE: ${{ secrets.COBOT_STATE_PASSPHRASE }}
+          COBOT_SECRETS_PASSPHRASE: ${{ secrets.COBOT_SECRETS_PASSPHRASE }}
         run: |
           src/pigeon-cli/target/debug/pigeon cobot plan --root .pr --state .state --summary "$RUNNER_TEMP/summary.md"
           cat "$RUNNER_TEMP/summary.md" >>"$GITHUB_STEP_SUMMARY"
@@ -67,7 +82,7 @@ jobs:
           fi
 
   apply:
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' || github.event_name == 'schedule'
     runs-on: ubuntu-latest
     concurrency:
       group: cobot-apply
@@ -91,6 +106,7 @@ jobs:
         id: apply
         env:
           COBOT_STATE_PASSPHRASE: ${{ secrets.COBOT_STATE_PASSPHRASE }}
+          COBOT_SECRETS_PASSPHRASE: ${{ secrets.COBOT_SECRETS_PASSPHRASE }}
         run: |
           set -o pipefail
           src/pigeon-cli/target/debug/pigeon cobot apply --root . --state .state | tee "$RUNNER_TEMP/apply.md"

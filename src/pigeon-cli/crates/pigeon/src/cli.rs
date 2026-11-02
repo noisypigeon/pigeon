@@ -45,24 +45,43 @@ pub enum CobotCommand {
     Plan(CobotPlan),
     /// Plan, then apply units with changes
     Apply(CobotRun),
+    /// Write <PROVIDERS>/providers.lock.hcl for the allowlist
+    Lock(CobotRoot),
+    /// Manage a unit's encrypted secrets.config.yaml
+    #[command(subcommand)]
+    Secrets(SecretsCommand),
 }
 
-/// The repository root.
+/// The repository root and its provider allowlist.
 #[cfg(feature = "cobot")]
 #[derive(Args, Debug)]
 pub struct CobotRoot {
     /// The repository root
     #[arg(long, default_value = ".")]
     pub root: PathBuf,
+    /// The directory holding providers.yaml and providers.lock.hcl [default: ./.config]
+    #[arg(long)]
+    pub providers: Option<PathBuf>,
+}
+
+#[cfg(feature = "cobot")]
+impl CobotRoot {
+    /// The providers directory.
+    #[must_use]
+    pub fn providers_dir(&self) -> PathBuf {
+        self.providers
+            .clone()
+            .unwrap_or_else(|| PathBuf::from(".config"))
+    }
 }
 
 /// Units and their state.
 #[cfg(feature = "cobot")]
 #[derive(Args, Debug)]
 pub struct CobotRun {
-    /// The repository root
-    #[arg(long, default_value = ".")]
-    pub root: PathBuf,
+    /// The repository root and providers
+    #[command(flatten)]
+    pub at: CobotRoot,
     /// The state repository's checkout
     #[arg(long)]
     pub state: PathBuf,
@@ -80,6 +99,38 @@ pub struct CobotPlan {
     /// Also write the Markdown summary here
     #[arg(long)]
     pub summary: Option<PathBuf>,
+}
+
+/// `pigeon cobot secrets` commands; there is deliberately no `get`.
+#[cfg(feature = "cobot")]
+#[derive(Subcommand, Debug)]
+pub enum SecretsCommand {
+    /// Encrypt a value read from stdin into <UNIT>/secrets.config.yaml
+    Set(SecretsKey),
+    /// List the keys and verify each decrypts; never prints a value
+    Check(SecretsUnit),
+}
+
+/// A unit's secrets file.
+#[cfg(feature = "cobot")]
+#[derive(Args, Debug)]
+pub struct SecretsUnit {
+    /// The repository root
+    #[arg(long, default_value = ".")]
+    pub root: PathBuf,
+    /// The unit path, e.g. infra/cloudflare
+    pub unit: String,
+}
+
+/// One key in a unit's secrets file.
+#[cfg(feature = "cobot")]
+#[derive(Args, Debug)]
+pub struct SecretsKey {
+    /// The unit
+    #[command(flatten)]
+    pub at: SecretsUnit,
+    /// The key
+    pub key: String,
 }
 
 /// `pigeon sentinel` commands.

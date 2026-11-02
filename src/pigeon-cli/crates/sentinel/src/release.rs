@@ -34,7 +34,8 @@ pub struct Config {
 pub struct Unit {
     /// The crate's `Cargo.toml`, holding its version.
     pub manifest: PathBuf,
-    /// The `pigeon` features its image is built with.
+    /// The `pigeon` features its image is built with; empty for non-crate units.
+    #[serde(default)]
     pub features: String,
     /// The image repository; none publishes no image.
     #[serde(default)]
@@ -149,15 +150,20 @@ fn user_commits(root: &Path, from: Option<&str>, to: &str) -> Result<Vec<Commit>
         .collect())
 }
 
+/// The first version line, in TOML (`version = "X.Y.Z"`), YAML (`version: X.Y.Z`)
+/// or JSON (`"version": "X.Y.Z"`): the span of `X.Y.Z`, the patch, and `X.Y`.
 fn read_version(manifest: &str) -> Option<(usize, usize, usize, String)> {
-    let re = Regex::new(r#"(?m)^version\s*=\s*"([0-9]+)\.([0-9]+)\.([0-9]+)"[ \t]*$"#)
-        .expect("valid regex");
+    let re = Regex::new(
+        r#"(?m)(?:^version\s*=\s*"|^version:\s*"?|"version"\s*:\s*")(?<v>(?<major>[0-9]+)\.(?<minor>[0-9]+)\.(?<patch>[0-9]+))"#,
+    )
+    .expect("valid regex");
     let c = re.captures(manifest)?;
+    let v = c.name("v")?;
     Some((
-        c.get(0)?.start(),
-        c.get(0)?.end(),
-        c[3].parse().ok()?,
-        format!("{}.{}", &c[1], &c[2]),
+        v.start(),
+        v.end(),
+        c["patch"].parse().ok()?,
+        format!("{}.{}", &c["major"], &c["minor"]),
     ))
 }
 
@@ -192,7 +198,7 @@ fn unit_release(
         (Some(_), false) => {
             let version = format!("{major_minor}.{}", patch + 1);
             let mut bumped = manifest.clone();
-            bumped.replace_range(start..end, &format!("version = \"{version}\""));
+            bumped.replace_range(start..end, &version);
             files.insert(unit.manifest.clone(), bumped);
             version
         }
@@ -275,6 +281,8 @@ pub struct TagStatus {
     pub version: String,
     /// Whether this is the unit's highest version.
     pub newest: bool,
+    /// The unit's release changelog tier, if it has one.
+    pub changelog: Option<String>,
 }
 
 /// Every release tag of every unit, each unit's newest version first.
@@ -297,6 +305,11 @@ pub fn tags(root: &Path, config: &Config) -> Result<Vec<TagStatus>, Error> {
                 tag,
                 version,
                 newest: i == 0,
+                changelog: config
+                    .tiers
+                    .iter()
+                    .find(|t| t.unit.as_deref() == Some(name.as_str()))
+                    .map(|t| t.file.display().to_string()),
             });
         }
     }
@@ -383,10 +396,13 @@ mod tests {
     fn reads_the_package_version_line() {
         let m = "[package]\nname = \"x\"\nversion = \"0.1.9\"\n";
         let (start, end, patch, mm) = read_version(m).expect("version");
-        assert_eq!(
-            (&m[start..end], patch, mm.as_str()),
-            ("version = \"0.1.9\"", 9, "0.1")
-        );
+        assert_eq!((&m[start..end], patch, mm.as_str()), ("0.1.9", 9, "0.1"));
         assert!(read_version("version.workspace = true\n").is_none());
+        let yaml = "description: x\nversion: 1.2.3\n";
+        let (s, e, p, mm) = read_version(yaml).expect("yaml");
+        assert_eq!((&yaml[s..e], p, mm.as_str()), ("1.2.3", 3, "1.2"));
+        let json = "{\n  \"x-cobot\": { \"version\": \"0.4.0\" }\n}\n";
+        let (s, e, p, _) = read_version(json).expect("json");
+        assert_eq!((&json[s..e], p), ("0.4.0", 0));
     }
 }

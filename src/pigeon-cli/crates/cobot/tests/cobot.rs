@@ -34,7 +34,7 @@ fn proof_repo() -> TempDir {
 }
 
 fn messages(root: &Path) -> Vec<String> {
-    cobot::unit::validate(root)
+    cobot::unit::validate(root, &cobot::providers::Allowlist::default())
         .into_iter()
         .map(|p| format!("{}: {}", p.path, p.message))
         .collect()
@@ -44,7 +44,7 @@ fn messages(root: &Path) -> Vec<String> {
 fn a_valid_unit_passes() {
     let repo = proof_repo();
     assert_eq!(messages(repo.path()), Vec::<String>::new());
-    let units = cobot::select(repo.path(), &[]).expect("valid");
+    let units = cobot::select(repo.path(), &repo.path().join(".config"), &[]).expect("valid");
     assert_eq!(units.len(), 1);
     assert_eq!(units[0].path, "infra/bootstrap");
 }
@@ -169,8 +169,14 @@ fn units_do_not_nest() {
 #[test]
 fn render_points_modules_and_state_at_absolute_paths() {
     let repo = proof_repo();
-    let units = cobot::select(repo.path(), &[]).expect("valid");
-    let json = cobot::render_json(&units[0], Path::new("/state"));
+    let units = cobot::select(repo.path(), &repo.path().join(".config"), &[]).expect("valid");
+    let json = cobot::render_json(
+        &units[0],
+        Path::new("/state"),
+        &cobot::providers::Allowlist::default(),
+        0,
+        &cobot::config::Existing::new(),
+    );
     assert_eq!(
         json["terraform"]["backend"]["local"]["path"],
         "/state/infra/bootstrap/terraform.tfstate"
@@ -191,6 +197,17 @@ fn passphrase_is_required() {
     assert!(cobot::passphrase(Some(PASSPHRASE.into())).is_ok());
 }
 
+fn ctx(root: &Path, state: &Path, passphrase: &str) -> cobot::Context {
+    cobot::Context {
+        root: root.to_path_buf(),
+        providers: root.join(".config"),
+        state: state.to_path_buf(),
+        state_passphrase: passphrase.to_string(),
+        secrets_passphrase: None,
+        today: 0,
+    }
+}
+
 fn tofu_available() -> bool {
     Command::new("tofu")
         .arg("version")
@@ -206,9 +223,9 @@ fn plan_and_apply_write_only_encrypted_state() {
     }
     let repo = proof_repo();
     let state = TempDir::new().expect("tempdir");
-    let units = cobot::select(repo.path(), &[]).expect("valid");
+    let units = cobot::select(repo.path(), &repo.path().join(".config"), &[]).expect("valid");
 
-    let plans = cobot::plan(repo.path(), &units, state.path(), PASSPHRASE).expect("plan");
+    let plans = cobot::plan(&ctx(repo.path(), state.path(), PASSPHRASE), &units).expect("plan");
     assert_eq!(plans[0].changes.len(), 1);
     assert_eq!(
         plans[0].changes[0].address,
@@ -224,17 +241,20 @@ fn plan_and_apply_write_only_encrypted_state() {
         "summary leaked a value: {summary}"
     );
 
-    cobot::apply(repo.path(), &units, state.path(), PASSPHRASE).expect("apply");
+    cobot::apply(&ctx(repo.path(), state.path(), PASSPHRASE), &units).expect("apply");
     let written = fs::read_to_string(state.path().join("infra/bootstrap/terraform.tfstate"))
         .expect("state written");
     assert!(written.contains("encrypted_data"), "state is not encrypted");
     assert!(!written.contains("hello"), "state holds plaintext");
     assert!(!written.contains("terraform_data"), "state holds plaintext");
 
-    let again = cobot::plan(repo.path(), &units, state.path(), PASSPHRASE).expect("replan");
+    let again = cobot::plan(&ctx(repo.path(), state.path(), PASSPHRASE), &units).expect("replan");
     assert!(!again[0].has_changes());
 
-    let wrong = cobot::plan(repo.path(), &units, state.path(), "another-passphrase-0123");
+    let wrong = cobot::plan(
+        &ctx(repo.path(), state.path(), "another-passphrase-0123"),
+        &units,
+    );
     let err = wrong.expect_err("wrong passphrase fails").to_string();
     assert!(
         !err.contains(PASSPHRASE) && !err.contains("another-passphrase-0123"),

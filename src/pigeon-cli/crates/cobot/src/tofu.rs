@@ -107,8 +107,31 @@ fn redact(text: &str, passphrase: &str) -> String {
     }
 }
 
+/// What every `tofu` call in one unit needs.
+#[derive(Debug, Clone, Default)]
+pub struct Env {
+    /// The state passphrase.
+    pub passphrase: String,
+    /// Extra environment, e.g. `TF_VAR_secrets`.
+    pub vars: Vec<(String, String)>,
+    /// Values never to print, beside the passphrase.
+    pub hidden: Vec<String>,
+    /// The repository lockfile, if providers are allowed.
+    pub lockfile: Option<std::path::PathBuf>,
+}
+
+impl Env {
+    fn scrub(&self, text: &str) -> String {
+        let mut out = redact(text, &self.passphrase);
+        for h in self.hidden.iter().filter(|h| h.len() >= 4) {
+            out = out.replace(h.as_str(), "***");
+        }
+        out
+    }
+}
+
 /// Only each diagnostic's summary line, never its detail.
-fn diagnostics(output: &Output, passphrase: &str) -> String {
+fn diagnostics(output: &Output, env: &Env) -> String {
     let text = String::from_utf8_lossy(&output.stderr).into_owned()
         + &String::from_utf8_lossy(&output.stdout);
     let summaries: Vec<&str> = text
@@ -121,16 +144,17 @@ fn diagnostics(output: &Output, passphrase: &str) -> String {
     } else {
         summaries.join("; ")
     };
-    mask(&redact(&body, passphrase))
+    mask(&env.scrub(&body))
 }
 
-fn run(unit: &str, work: &Path, passphrase: &str, args: &[&str]) -> Result<Output, Error> {
+fn run(unit: &str, work: &Path, env: &Env, args: &[&str]) -> Result<Output, Error> {
     Command::new("tofu")
         .args(args)
         .current_dir(work)
-        .env("TF_ENCRYPTION", encryption(passphrase))
+        .env("TF_ENCRYPTION", encryption(&env.passphrase))
         .env("TF_IN_AUTOMATION", "1")
         .env("TF_INPUT", "0")
+        .envs(env.vars.iter().map(|(k, v)| (k.as_str(), v.as_str())))
         .output()
         .map_err(|e| Error::Tofu {
             unit: unit.to_string(),
@@ -138,14 +162,8 @@ fn run(unit: &str, work: &Path, passphrase: &str, args: &[&str]) -> Result<Outpu
         })
 }
 
-fn step(
-    unit: &str,
-    work: &Path,
-    passphrase: &str,
-    args: &[&str],
-    ok: &[i32],
-) -> Result<Output, Error> {
-    let output = run(unit, work, passphrase, args)?;
+fn step(unit: &str, work: &Path, env: &Env, args: &[&str], ok: &[i32]) -> Result<Output, Error> {
+    let output = run(unit, work, env, args)?;
     let code = output.status.code().unwrap_or(-1);
     if ok.contains(&code) {
         Ok(output)
@@ -155,7 +173,7 @@ fn step(
             message: format!(
                 "`tofu {}` exited {code}: {}",
                 args[0],
-                diagnostics(&output, passphrase)
+                diagnostics(&output, env)
             ),
         })
     }
@@ -191,31 +209,66 @@ fn changes(json: &str) -> Vec<Change> {
     out
 }
 
-/// Initializes with only built-in providers, then plans to `plan.tfplan`.
-pub fn plan(unit: &str, work: &Path, passphrase: &str) -> Result<UnitPlan, Error> {
-    let plugins = work.join(".no-plugins");
-    fs::create_dir_all(&plugins).map_err(|e| Error::Io {
-        path: plugins.clone(),
+fn io(path: &Path) -> impl Fn(std::io::Error) -> Error + '_ {
+    move |e| Error::Io {
+        path: path.to_path_buf(),
         message: e.to_string(),
-    })?;
-    let plugin_dir = format!("-plugin-dir={}", plugins.display());
-    step(
-        unit,
-        work,
-        passphrase,
-        &[
-            "init",
-            "-input=false",
-            "-no-color",
-            "-reconfigure",
-            &plugin_dir,
-        ],
-        &[0],
-    )?;
+    }
+}
+
+/// Initializes: from the repository lockfile, read-only, when there is one;
+/// otherwise with only built-in providers.
+pub fn init(unit: &str, work: &Path, env: &Env) -> Result<(), Error> {
+    let lock = work.join(".terraform.lock.hcl");
+    if let Some(source) = &env.lockfile {
+        fs::copy(source, &lock).map_err(io(&lock))?;
+        step(
+            unit,
+            work,
+            env,
+            &[
+                "init",
+                "-input=false",
+                "-no-color",
+                "-reconfigure",
+                "-lockfile=readonly",
+            ],
+            &[0],
+        )?;
+    } else {
+        let _ = fs::remove_file(&lock);
+        let plugins = work.join(".no-plugins");
+        fs::create_dir_all(&plugins).map_err(io(&plugins))?;
+        let plugin_dir = format!("-plugin-dir={}", plugins.display());
+        step(
+            unit,
+            work,
+            env,
+            &[
+                "init",
+                "-input=false",
+                "-no-color",
+                "-reconfigure",
+                &plugin_dir,
+            ],
+            &[0],
+        )?;
+    }
+    Ok(())
+}
+
+/// The unit's current state, as `tofu show -json`.
+pub fn show_state(unit: &str, work: &Path, env: &Env) -> Result<String, Error> {
+    let shown = step(unit, work, env, &["show", "-json", "-no-color"], &[0])?;
+    Ok(String::from_utf8_lossy(&shown.stdout).into_owned())
+}
+
+/// Plans to `plan.tfplan`; the work directory must already be initialized.
+pub fn plan(unit: &str, work: &Path, env: &Env) -> Result<UnitPlan, Error> {
     let planned = step(
         unit,
         work,
-        passphrase,
+        env,
         &[
             "plan",
             "-input=false",
@@ -234,7 +287,7 @@ pub fn plan(unit: &str, work: &Path, passphrase: &str) -> Result<UnitPlan, Error
     let shown = step(
         unit,
         work,
-        passphrase,
+        env,
         &["show", "-json", "-no-color", PLAN_FILE],
         &[0],
     )?;
@@ -245,11 +298,11 @@ pub fn plan(unit: &str, work: &Path, passphrase: &str) -> Result<UnitPlan, Error
 }
 
 /// Applies `plan.tfplan`.
-pub fn apply(unit: &str, work: &Path, passphrase: &str) -> Result<(), Error> {
+pub fn apply(unit: &str, work: &Path, env: &Env) -> Result<(), Error> {
     step(
         unit,
         work,
-        passphrase,
+        env,
         &["apply", "-input=false", "-no-color", PLAN_FILE],
         &[0],
     )?;

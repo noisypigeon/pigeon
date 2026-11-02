@@ -6,6 +6,8 @@ use std::path::{Component, Path, PathBuf};
 use std::sync::LazyLock;
 
 use regex::Regex;
+
+use crate::providers::Allowlist;
 use serde::Deserialize;
 
 /// The areas that may hold units.
@@ -67,8 +69,18 @@ pub struct Unit {
     pub path: String,
     /// Its directory.
     pub dir: PathBuf,
-    /// Its parsed `unit.yaml`, if it parsed.
+    /// Its parsed `unit.yaml`, if it is a v0 unit and parsed.
     pub spec: Option<Spec>,
+    /// Its parsed `config.yaml` and `schema.json`, if it is a config unit and parsed.
+    pub config: Option<crate::config::ConfigUnit>,
+}
+
+impl Unit {
+    /// Whether this is a config unit.
+    #[must_use]
+    pub fn is_config(&self) -> bool {
+        self.dir.join(crate::config::CONFIG).is_file()
+    }
 }
 
 /// A validation problem.
@@ -100,7 +112,27 @@ pub fn discover(root: &Path) -> (Vec<Unit>, Vec<Problem>) {
     while let Some(rel) = stack.pop() {
         let dir = root.join(&rel);
         let unit_file = dir.join(UNIT_FILE);
-        if unit_file.is_file() {
+        let config_file = dir.join(crate::config::CONFIG);
+        if unit_file.is_file() && config_file.is_file() {
+            problems.push(problem(
+                rel.clone(),
+                "holds both unit.yaml and config.yaml; a unit is one or the other",
+            ));
+        } else if config_file.is_file() {
+            let config = match crate::config::load(&dir) {
+                Ok(c) => Some(c),
+                Err(e) => {
+                    problems.push(problem(format!("{rel}/{e}"), "cannot be loaded"));
+                    None
+                }
+            };
+            units.push(Unit {
+                path: rel.clone(),
+                dir: dir.clone(),
+                spec: None,
+                config,
+            });
+        } else if unit_file.is_file() {
             let spec = match fs::read_to_string(&unit_file) {
                 Ok(text) => match serde_saphyr::from_str::<Spec>(&text) {
                     Ok(spec) => Some(spec),
@@ -118,6 +150,7 @@ pub fn discover(root: &Path) -> (Vec<Unit>, Vec<Problem>) {
                 path: rel.clone(),
                 dir: dir.clone(),
                 spec,
+                config: None,
             });
         }
         match fs::read_dir(&dir) {
@@ -200,11 +233,39 @@ fn stays_inside(source: &str) -> bool {
     true
 }
 
-/// Checks every unit against schema v0; empty means valid.
+/// Checks every unit's files: formats, symlinks, provisioners, runner reads, providers.
+fn scan(root: &Path, unit: &Unit, allow: &Allowlist, problems: &mut Vec<Problem>) {
+    let rel_of = |path: &Path| {
+        path.strip_prefix(root)
+            .map_or_else(|_| path.display().to_string(), |p| p.display().to_string())
+    };
+    let (tf_paths, rejected) = unit_files(&unit.dir);
+    for (path, why) in rejected {
+        problems.push(problem(rel_of(&path), why));
+    }
+    for tf in tf_paths {
+        let rel = rel_of(&tf);
+        let Ok(text) = fs::read_to_string(&tf) else {
+            problems.push(problem(&rel, "cannot be read"));
+            continue;
+        };
+        if PROVISIONER.is_match(&text) {
+            problems.push(problem(&rel, "provisioners are not allowed"));
+        }
+        if let Some(m) = FUNCTIONS.captures(&text) {
+            problems.push(problem(&rel, format!("`{}()` is not allowed", &m[1])));
+        }
+        for p in allow.check(&text) {
+            problems.push(problem(&rel, p));
+        }
+    }
+}
+
+/// Checks every unit; empty means valid.
 #[must_use]
-pub fn validate(root: &Path) -> Vec<Problem> {
+pub fn validate(root: &Path, allow: &Allowlist) -> Vec<Problem> {
     let (units, mut problems) = discover(root);
-    let (name_re, provisioner, functions) = (&*NAME, &*PROVISIONER, &*FUNCTIONS);
+    let name_re = &*NAME;
     for (i, unit) in units.iter().enumerate() {
         let file = format!("{}/{UNIT_FILE}", unit.path);
         if let Some(outer) = units[..i]
@@ -215,6 +276,16 @@ pub fn validate(root: &Path) -> Vec<Problem> {
                 &file,
                 format!("units do not nest; inside {}", outer.path),
             ));
+        }
+        let area = unit.path.split('/').next().unwrap_or_default();
+        if unit.is_config() {
+            if let Some(config) = &unit.config {
+                for (file, message) in crate::config::validate(config, &unit.dir, area, allow) {
+                    problems.push(problem(format!("{}/{file}", unit.path), message));
+                }
+            }
+            scan(root, unit, allow, &mut problems);
+            continue;
         }
         let Some(spec) = &unit.spec else {
             continue;
@@ -231,7 +302,6 @@ pub fn validate(root: &Path) -> Vec<Problem> {
                 format!("name `{}` is not lowercase-dash", spec.name),
             ));
         }
-        let area = unit.path.split('/').next().unwrap_or_default();
         let expected = if area == "infra" {
             Kind::Infra
         } else {
@@ -271,28 +341,7 @@ pub fn validate(root: &Path) -> Vec<Problem> {
                 ));
             }
         }
-        let (tf_paths, rejected) = unit_files(&unit.dir);
-        for (path, why) in rejected {
-            let rel = path
-                .strip_prefix(root)
-                .map_or_else(|_| path.display().to_string(), |p| p.display().to_string());
-            problems.push(problem(rel, why));
-        }
-        for tf in tf_paths {
-            let rel = tf
-                .strip_prefix(root)
-                .map_or_else(|_| tf.display().to_string(), |p| p.display().to_string());
-            let Ok(text) = fs::read_to_string(&tf) else {
-                problems.push(problem(&rel, "cannot be read"));
-                continue;
-            };
-            if provisioner.is_match(&text) {
-                problems.push(problem(&rel, "provisioners are not allowed"));
-            }
-            if let Some(m) = functions.captures(&text) {
-                problems.push(problem(&rel, format!("`{}()` is not allowed", &m[1])));
-            }
-        }
+        scan(root, unit, allow, &mut problems);
     }
     problems
 }
