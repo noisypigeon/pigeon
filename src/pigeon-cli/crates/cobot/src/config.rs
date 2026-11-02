@@ -33,6 +33,8 @@ static RESOURCE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r#"(?m)^\s*(resource|data)\s+"([A-Za-z0-9_]+)"\s+"[A-Za-z0-9_-]+""#)
         .expect("valid regex")
 });
+static MODULE_NAME: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^[a-z0-9]+(-[a-z0-9]+)*$").expect("valid regex"));
 static SEMVER: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^[0-9]+\.[0-9]+\.[0-9]+$").expect("valid regex"));
 static CREDENTIAL: LazyLock<Regex> =
@@ -322,6 +324,60 @@ fn check_secrets(unit: &ConfigUnit, dir: &Path, area: &str, problems: &mut Vec<(
     }
 }
 
+/// Checks one block's name and module; the module's info if it exists.
+fn check_module(b: &Block, dir: &Path, add: &mut impl FnMut(&str, String)) -> Option<ModuleInfo> {
+    if !BLOCK.is_match(&b.name) {
+        add(
+            SCHEMA,
+            format!("block name `{}` must be lowercase with underscores", b.name),
+        );
+    }
+    if !MODULE_NAME.is_match(&b.module) {
+        add(
+            SCHEMA,
+            format!(
+                "block `{}` names module `{}`, which is not a lowercase-dash name under modules/",
+                b.name, b.module
+            ),
+        );
+        return None;
+    }
+    let mdir = dir.join("modules").join(&b.module);
+    let inside = mdir
+        .canonicalize()
+        .ok()
+        .zip(dir.join("modules").canonicalize().ok())
+        .is_some_and(|(m, root)| m.starts_with(root) && m.is_dir());
+    if !inside {
+        add(
+            SCHEMA,
+            format!("block `{}` names missing module `{}`", b.name, b.module),
+        );
+        return None;
+    }
+    let info = module_info(&mdir);
+    let manifest = fs::read_to_string(mdir.join("module.yaml")).unwrap_or_default();
+    if !MODULE_VERSION.is_match(&manifest) {
+        add(
+            &format!("modules/{}/module.yaml", b.module),
+            "needs `version: X.Y.Z`".into(),
+        );
+    }
+    let provider_resources = info
+        .resources
+        .iter()
+        .filter(|r| *r != "terraform_data")
+        .count();
+    let triggers = info.resources.len() - provider_resources;
+    if provider_resources > 1 || triggers > 1 || info.resources.is_empty() {
+        add(
+            &format!("modules/{}", b.module),
+            "a module holds one resource, plus at most one terraform_data trigger".into(),
+        );
+    }
+    Some(info)
+}
+
 fn check_blocks(
     unit: &ConfigUnit,
     dir: &Path,
@@ -335,41 +391,9 @@ fn check_blocks(
     let all = blocks(&unit.schema);
     let mut infos: BTreeMap<String, ModuleInfo> = BTreeMap::new();
     for b in &all {
-        if !BLOCK.is_match(&b.name) {
-            add(
-                SCHEMA,
-                format!("block name `{}` must be lowercase with underscores", b.name),
-            );
+        if let Some(info) = check_module(b, dir, &mut add) {
+            infos.insert(b.name.clone(), info);
         }
-        let mdir = dir.join("modules").join(&b.module);
-        if b.module.is_empty() || !mdir.is_dir() {
-            add(
-                SCHEMA,
-                format!("block `{}` names missing module `{}`", b.name, b.module),
-            );
-            continue;
-        }
-        let info = module_info(&mdir);
-        let manifest = fs::read_to_string(mdir.join("module.yaml")).unwrap_or_default();
-        if !MODULE_VERSION.is_match(&manifest) {
-            add(
-                &format!("modules/{}/module.yaml", b.module),
-                "needs `version: X.Y.Z`".into(),
-            );
-        }
-        let provider_resources = info
-            .resources
-            .iter()
-            .filter(|r| *r != "terraform_data")
-            .count();
-        let triggers = info.resources.len() - provider_resources;
-        if provider_resources > 1 || triggers > 1 || info.resources.is_empty() {
-            add(
-                &format!("modules/{}", b.module),
-                "a module holds one resource, plus at most one terraform_data trigger".into(),
-            );
-        }
-        infos.insert(b.name.clone(), info);
     }
     for b in &all {
         let Some(info) = infos.get(&b.name) else {
@@ -382,14 +406,28 @@ fn check_blocks(
                     format!("block `{}` sets undeclared input `{input}`", b.name),
                 );
             }
-            check_exprs(value, b, &all, &infos, &declared, area, &mut add);
+            check_exprs(
+                value,
+                b,
+                &all,
+                &infos,
+                &declared,
+                area,
+                &unit.config,
+                &mut add,
+            );
         }
-        if b.for_each.is_some() && !unit.config.get(&b.name).is_some_and(Value::is_array) {
-            add(CONFIG, format!("`{}` must be a list", b.name));
+        if b.for_each.is_some()
+            && let Err(e) = item_keys(b, &unit.config)
+        {
+            add(CONFIG, e);
         }
         if let Some((p, o)) = &b.rotate {
-            check_exprs(p, b, &all, &infos, &declared, area, &mut add);
-            check_exprs(o, b, &all, &infos, &declared, area, &mut add);
+            check_exprs(p, b, &all, &infos, &declared, area, &unit.config, &mut add);
+            check_exprs(o, b, &all, &infos, &declared, area, &unit.config, &mut add);
+            if let Err(e) = rotation(b, &unit.config) {
+                add(CONFIG, e);
+            }
         }
     }
     if let Some(providers) = x["providers"].as_object() {
@@ -404,11 +442,24 @@ fn check_blocks(
                 rotate: None,
                 inputs: Map::new(),
             };
-            check_exprs(cfg, &pseudo, &all, &infos, &declared, area, &mut add);
+            check_exprs(
+                cfg,
+                &pseudo,
+                &all,
+                &infos,
+                &declared,
+                area,
+                &unit.config,
+                &mut add,
+            );
         }
     }
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "one validation pass over shared context"
+)]
 fn check_exprs(
     value: &Value,
     block: &Block,
@@ -416,6 +467,7 @@ fn check_exprs(
     infos: &BTreeMap<String, ModuleInfo>,
     declared: &BTreeSet<String>,
     area: &str,
+    config: &Value,
     add: &mut impl FnMut(&str, String),
 ) {
     for text in exprs_in(value) {
@@ -437,11 +489,30 @@ fn check_exprs(
                     add(SCHEMA, format!("`{text}` is not in x-cobot.secrets"));
                 }
             }
+            Some(Expr::Config(p)) if lookup(config, &p).is_none() => {
+                add(
+                    SCHEMA,
+                    format!("`{text}` names a path absent from config.yaml"),
+                );
+            }
             Some(Expr::Module {
-                block: b, output, ..
+                block: b,
+                output,
+                index,
             }) => match infos.get(&b) {
                 _ if !all.iter().any(|x| x.name == b) => {
                     add(SCHEMA, format!("`{text}` names an unknown block"));
+                }
+                _ if all
+                    .iter()
+                    .any(|x| x.name == b && x.for_each.is_some() != index.is_some()) =>
+                {
+                    add(
+                        SCHEMA,
+                        format!(
+                            "`{text}`: a list block needs `[*]` or `[$item.…]`, a singleton takes no index"
+                        ),
+                    );
                 }
                 Some(info) if !info.outputs.contains(&output) => {
                     add(SCHEMA, format!("`{text}`: module has no output `{output}`"));
@@ -503,14 +574,59 @@ fn render_value(value: &Value, config: &Value) -> Value {
     }
 }
 
-fn number(value: &Value, config: &Value) -> i64 {
+fn number(value: &Value, config: &Value) -> Option<i64> {
     match value {
         Value::String(s) => match parse(s) {
-            Some(Expr::Config(p)) => lookup(config, &p).and_then(Value::as_i64).unwrap_or(0),
-            _ => 0,
+            Some(Expr::Config(p)) => lookup(config, &p).and_then(Value::as_i64),
+            _ => None,
         },
-        other => other.as_i64().unwrap_or(0),
+        other => other.as_i64(),
     }
+}
+
+/// A rotating block's period and overlap, both checked.
+fn rotation(block: &Block, config: &Value) -> Result<(i64, i64), String> {
+    let Some((period, overlap)) = &block.rotate else {
+        return Err(format!("`{}` does not rotate", block.name));
+    };
+    match (number(period, config), number(overlap, config)) {
+        (Some(p), Some(o)) if p >= 1 && o >= 0 => Ok((p, o)),
+        _ => Err(format!(
+            "`{}` rotation needs a positive integer period_days and a non-negative integer overlap_days",
+            block.name
+        )),
+    }
+}
+
+/// Each list item's key, checked to be a non-empty string and unique.
+fn item_keys(block: &Block, config: &Value) -> Result<Vec<String>, String> {
+    let Some(Expr::Item(path)) = block.for_each.as_deref().and_then(parse) else {
+        return Err(format!(
+            "`{}`: for_each must be `$item` or `$item.<field>`",
+            block.name
+        ));
+    };
+    let Some(items) = config.get(&block.name).and_then(Value::as_array) else {
+        return Err(format!("`{}` must be a list", block.name));
+    };
+    let mut keys = Vec::new();
+    for item in items {
+        match lookup(item, &path).and_then(Value::as_str) {
+            Some(k) if !k.is_empty() && !k.contains('@') => {
+                if keys.iter().any(|x| x == k) {
+                    return Err(format!("`{}` repeats the key `{k}`", block.name));
+                }
+                keys.push(k.to_string());
+            }
+            _ => {
+                return Err(format!(
+                    "`{}`: every item needs a non-empty string key without `@`",
+                    block.name
+                ));
+            }
+        }
+    }
+    Ok(keys)
 }
 
 /// Existing generations in state, by block then item key.
@@ -584,46 +700,35 @@ pub fn render(
             "source".into(),
             Value::String(dir.join("modules").join(&b.module).display().to_string()),
         );
-        if let Some(key_expr) = &b.for_each {
+        if b.for_each.is_some() {
             let mut each = Map::new();
-            for item in config[&b.name].as_array().into_iter().flatten() {
-                let key = match parse(key_expr) {
-                    Some(Expr::Item(p)) => lookup(item, &p)
-                        .and_then(Value::as_str)
-                        .unwrap_or_default()
-                        .to_string(),
-                    _ => String::new(),
+            let keys = item_keys(&b, config).unwrap_or_default();
+            let items = config[&b.name].as_array().cloned().unwrap_or_default();
+            for (key, item) in keys.into_iter().zip(items.iter()) {
+                if b.rotate.is_none() {
+                    each.insert(key, literal(item));
+                    continue;
+                }
+                let Ok((period, overlap)) = rotation(&b, config) else {
+                    continue;
                 };
-                match &b.rotate {
-                    None => {
-                        each.insert(key, literal(item));
-                    }
-                    Some((period, overlap)) => {
-                        let have = existing
-                            .get(&b.name)
-                            .and_then(|e| e.get(&key))
-                            .cloned()
-                            .unwrap_or_default();
-                        let gens = generations::instances(
-                            today,
-                            number(period, config),
-                            number(overlap, config),
-                            &have,
+                let have = existing
+                    .get(&b.name)
+                    .and_then(|e| e.get(&key))
+                    .cloned()
+                    .unwrap_or_default();
+                for g in generations::instances(today, period, overlap, &have) {
+                    let mut value = literal(item);
+                    if let Value::Object(o) = &mut value {
+                        o.insert(
+                            "_generation".into(),
+                            json!({
+                                "not_before": g.not_before_rfc3339(),
+                                "expires_on": g.expires_on_rfc3339(),
+                            }),
                         );
-                        for g in gens {
-                            let mut value = literal(item);
-                            if let Value::Object(o) = &mut value {
-                                o.insert(
-                                    "_generation".into(),
-                                    json!({
-                                        "not_before": g.not_before_rfc3339(),
-                                        "expires_on": g.expires_on_rfc3339(),
-                                    }),
-                                );
-                            }
-                            each.insert(g.key(&key), value);
-                        }
                     }
+                    each.insert(g.key(&key), value);
                 }
             }
             block.insert("for_each".into(), Value::Object(each));

@@ -253,6 +253,27 @@ fn bad_schemas_and_configs_fail_for_their_reasons() {
             "rotating block",
         ),
         (
+            "absent config path",
+            Box::new(|s| {
+                s["x-cobot"]["singletons"]["single"]["inputs"]["label"] = json!("$config.nope");
+            }),
+            "absent from config.yaml",
+        ),
+        (
+            "unindexed list reference",
+            Box::new(|s| {
+                s["properties"]["tokens"]["x-cobot"]["inputs"]["items"] = json!("$module.items.id");
+            }),
+            "a list block needs",
+        ),
+        (
+            "escaping module",
+            Box::new(|s| {
+                s["properties"]["items"]["x-cobot"]["module"] = json!("../../escape");
+            }),
+            "lowercase-dash name",
+        ),
+        (
             "no version",
             Box::new(|s| {
                 s["x-cobot"]["version"] = json!("one");
@@ -268,6 +289,10 @@ fn bad_schemas_and_configs_fail_for_their_reasons() {
         let got = problems(repo.path());
         assert!(got.iter().any(|p| p.contains(want)), "{what}: {got:?}");
     }
+}
+
+#[test]
+fn configs_are_schema_checked_and_credential_free() {
     let repo = repo("infra/proof", &[]);
     write(
         repo.path(),
@@ -294,6 +319,37 @@ fn bad_schemas_and_configs_fail_for_their_reasons() {
             .iter()
             .any(|p| p.contains("looks like a credential"))
     );
+}
+
+#[test]
+fn bad_keys_and_rotations_fail() {
+    for (what, config, want) in [
+        (
+            "duplicate key",
+            CONFIG.replace("items: [a, b]", "items: [a, a]"),
+            "repeats the key",
+        ),
+        (
+            "empty key",
+            CONFIG.replace("items: [a, b]", "items: [a, \"\"]"),
+            "non-empty string key",
+        ),
+        (
+            "zero period",
+            CONFIG.replace("period_days: 90", "period_days: 0"),
+            "positive integer period_days",
+        ),
+        (
+            "negative overlap",
+            CONFIG.replace("overlap_days: 7", "overlap_days: -1"),
+            "non-negative integer overlap_days",
+        ),
+    ] {
+        let repo = repo("infra/proof", &[]);
+        write(repo.path(), "infra/proof/config.yaml", &config);
+        let got = problems(repo.path());
+        assert!(got.iter().any(|p| p.contains(want)), "{what}: {got:?}");
+    }
 }
 
 #[test]

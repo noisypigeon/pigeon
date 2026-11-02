@@ -59,7 +59,7 @@ pub struct CobotRoot {
     /// The repository root
     #[arg(long, default_value = ".")]
     pub root: PathBuf,
-    /// The directory holding providers.yaml and providers.lock.hcl [default: <ROOT>/.config]
+    /// The directory holding providers.yaml and providers.lock.hcl [default: ./.config]
     #[arg(long)]
     pub providers: Option<PathBuf>,
 }
@@ -71,7 +71,7 @@ impl CobotRoot {
     pub fn providers_dir(&self) -> PathBuf {
         self.providers
             .clone()
-            .unwrap_or_else(|| self.root.join(".config"))
+            .unwrap_or_else(|| PathBuf::from(".config"))
     }
 }
 

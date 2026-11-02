@@ -16,12 +16,39 @@ pub const ALLOWLIST: &str = "providers.yaml";
 /// The lockfile inside the providers directory.
 pub const LOCKFILE: &str = "providers.lock.hcl";
 
-static REQUIRED: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(
-        r#"(?s)\b(?<name>[A-Za-z0-9_-]+)\s*=\s*\{[^{}]*?\bsource\s*=\s*"(?<source>[^"]+)"[^{}]*?\bversion\s*=\s*"(?<version>[^"]+)"[^{}]*?\}"#,
-    )
-    .expect("valid regex")
+static BLOCK_START: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"\brequired_providers\s*\{").expect("valid regex"));
+static ENTRY: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"(?s)\b(?<name>[A-Za-z0-9_-]+)\s*=\s*(?:\{(?<body>[^{}]*)\}|"(?<short>[^"]*)")"#)
+        .expect("valid regex")
 });
+static SOURCE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r#"\bsource\s*=\s*"([^"]+)""#).expect("valid regex"));
+static VERSION: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r#"\bversion\s*=\s*"([^"]+)""#).expect("valid regex"));
+
+/// The bodies of every `required_providers { … }` block, braces matched.
+fn required_blocks(tf: &str) -> Vec<&str> {
+    let mut out = Vec::new();
+    for m in BLOCK_START.find_iter(tf) {
+        let start = m.end();
+        let mut depth = 1usize;
+        for (i, c) in tf[start..].char_indices() {
+            match c {
+                '{' => depth += 1,
+                '}' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        out.push(&tf[start..start + i]);
+                        break;
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    out
+}
 
 /// `.config/providers.yaml`.
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -72,8 +99,25 @@ impl Allowlist {
     #[must_use]
     pub fn check(&self, tf: &str) -> Vec<String> {
         let mut problems = Vec::new();
-        for c in REQUIRED.captures_iter(tf) {
-            let (source, version) = (&c["source"], &c["version"]);
+        for c in required_blocks(tf)
+            .into_iter()
+            .flat_map(|b| ENTRY.captures_iter(b))
+        {
+            let name = &c["name"];
+            let Some(body) = c.name("body").map(|b| b.as_str()) else {
+                problems.push(format!(
+                    "provider `{name}` must declare `source` and `version`"
+                ));
+                continue;
+            };
+            let (Some(source), Some(version)) = (SOURCE.captures(body), VERSION.captures(body))
+            else {
+                problems.push(format!(
+                    "provider `{name}` must declare both `source` and `version`"
+                ));
+                continue;
+            };
+            let (source, version) = (&source[1], &version[1]);
             match self.providers.get(source) {
                 None => problems.push(format!("provider `{source}` is not in the allowlist")),
                 Some(pinned) if pinned != version.trim_start_matches(['=', ' ']) => {
@@ -121,6 +165,12 @@ mod tests {
                 .len(),
             1
         );
+        let reordered = "terraform {\n  required_providers {\n    cf = {\n      version = \"5.1.0\"\n      source = \"evil/cloudflare\"\n    }\n  }\n}\n";
+        assert_eq!(allow().check(reordered).len(), 1);
+        let unpinned = "terraform {\n  required_providers {\n    cf = { source = \"cloudflare/cloudflare\" }\n  }\n}\n";
+        assert_eq!(allow().check(unpinned).len(), 1);
+        let shorthand = "terraform {\n  required_providers {\n    evil = \"1.0.0\"\n  }\n}\n";
+        assert_eq!(allow().check(shorthand).len(), 1);
         assert_eq!(
             allow().by_name("cloudflare"),
             Some(("cloudflare/cloudflare", "5.1.0"))

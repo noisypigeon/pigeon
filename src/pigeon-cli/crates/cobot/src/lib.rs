@@ -251,13 +251,10 @@ fn prepare(ctx: &Context, unit: &Unit) -> Result<(PathBuf, tofu::Env, UnitPlan),
     if let Some(c) = &unit.config
         && !config::secret_keys(&c.schema).is_empty()
     {
-        let pass = ctx
-            .secrets_passphrase
-            .as_deref()
-            .ok_or(Error::SecretsPassphrase)?;
+        let pass = &secrets_passphrase(ctx.secrets_passphrase.clone())?;
         let values = secrets::decrypt_all(&unit.dir.join(secrets::FILE), pass)?;
         env.hidden.extend(values.values().cloned());
-        env.hidden.push(pass.to_string());
+        env.hidden.push(pass.clone());
         let json = serde_json::to_string(&values).map_err(|e| Error::Io {
             path: unit.dir.join(secrets::FILE),
             message: e.to_string(),

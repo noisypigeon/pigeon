@@ -103,6 +103,16 @@ pub fn decrypt_all(path: &Path, passphrase: &str) -> Result<BTreeMap<String, Str
 ///
 /// [`Error::Io`] if the file cannot be read, encrypted or written.
 pub fn set(path: &Path, key: &str, value: &str, passphrase: &str) -> Result<(), Error> {
+    if key.is_empty()
+        || !key
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_')
+    {
+        return Err(failed(
+            path,
+            format!("key `{key}` must be lowercase letters, digits and underscores"),
+        ));
+    }
     let mut all = if path.exists() {
         read(path)?
     } else {
@@ -157,7 +167,22 @@ fn unbase64(text: &str) -> Option<Vec<u8>> {
 
 #[cfg(test)]
 mod tests {
-    use super::{base64, decrypt, encrypt, is_encrypted, unbase64};
+    use super::{base64, decrypt, encrypt, is_encrypted, set, unbase64};
+
+    #[test]
+    fn keys_must_be_plain_names() {
+        let dir = tempfile::TempDir::new().expect("tempdir");
+        let path = dir.path().join("secrets.config.yaml");
+        for bad in ["", "Key", "a: b", "x\ny", "a-b"] {
+            assert!(
+                set(&path, bad, "v", "secrets-passphrase-0123").is_err(),
+                "{bad:?}"
+            );
+        }
+        assert!(!path.exists());
+        set(&path, "account_id", "v", "secrets-passphrase-0123").expect("sets");
+        assert!(path.exists());
+    }
 
     #[test]
     fn base64_round_trips() {

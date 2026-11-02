@@ -117,6 +117,9 @@ jobs:
             fi
           fi
           notes="$RUNNER_TEMP/notes.md"
-          awk -v h="## v$VERSION " 'index($0, h) == 1 { on = 1; next } on && /^## / { exit } on && NF' \
-            "$CHANGELOG" >"$notes"
+          if [ -n "$CHANGELOG" ] && [ "$CHANGELOG" != null ] && [ -f "$CHANGELOG" ]; then
+            awk -v h="## v$VERSION " 'index($0, h) == 1 { on = 1; next } on && /^## / { exit } on && NF' \
+              "$CHANGELOG" >"$notes"
+          fi
+          [ -s "$notes" ] || echo "Release $TAG" >"$notes"
           gh release create "$TAG" --verify-tag --title "$TAG" --notes-file "$notes" --latest="$NEWEST"
