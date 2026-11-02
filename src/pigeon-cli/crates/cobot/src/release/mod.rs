@@ -1,6 +1,9 @@
 //! Release units and generated changelog tiers; see
 //! `.claude/decisions/2026-11-02-release-crate-units-and-images.md`.
 
+mod changelog;
+mod git;
+
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -11,8 +14,8 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 
 use crate::Error;
-use crate::changelog::Changelog;
-use crate::git::{self, Commit};
+use changelog::Changelog;
+use git::Commit;
 
 const RELEASE_PREFIX: &str = "chore(release):";
 
@@ -96,13 +99,13 @@ impl Config {
     ///
     /// # Errors
     ///
-    /// [`Error::Io`] if unreadable, [`Error::Policy`] if invalid.
+    /// [`Error::Io`] if unreadable or invalid.
     pub fn load(path: &Path) -> Result<Self, Error> {
         let text = fs::read_to_string(path).map_err(|source| Error::Io {
             path: path.to_path_buf(),
-            source,
+            message: source.to_string(),
         })?;
-        let invalid = |message: String| Error::Policy {
+        let invalid = |message: String| Error::Io {
             path: path.to_path_buf(),
             message,
         };
@@ -256,13 +259,13 @@ fn dependency_tree(
     features: &str,
 ) -> Result<(BTreeSet<String>, Vec<String>), Error> {
     let dir = std::env::temp_dir().join(format!(
-        "sentinel-tree-{}-{}",
+        "cobot-tree-{}-{}",
         std::process::id(),
         SCRATCH.fetch_add(1, Ordering::Relaxed)
     ));
-    let io = |source| Error::Io {
+    let io = |source: std::io::Error| Error::Io {
         path: dir.clone(),
-        source,
+        message: source.to_string(),
     };
     fs::create_dir_all(&dir).map_err(io)?;
     let result = (|| {
@@ -381,10 +384,10 @@ fn unit_release(
     let manifest_path = root.join(&unit.manifest);
     let manifest = fs::read_to_string(&manifest_path).map_err(|source| Error::Io {
         path: manifest_path.clone(),
-        source,
+        message: source.to_string(),
     })?;
     let Some((start, end, patch, major_minor)) = read_version(&manifest) else {
-        return Err(Error::Policy {
+        return Err(Error::Io {
             path: unit.manifest.clone(),
             message: "no `version = \"X.Y.Z\"` line".into(),
         });
@@ -565,7 +568,7 @@ pub fn tags(root: &Path, config: &Config) -> Result<Vec<TagStatus>, Error> {
 /// # Errors
 ///
 /// [`Error::Git`] if git fails, [`Error::Io`] if a file cannot be read or
-/// written, [`Error::Policy`] if a manifest has no plain `version` line.
+/// written, or a manifest has no plain `version` line.
 pub fn run(
     root: &Path,
     config: &Config,
@@ -590,17 +593,22 @@ pub fn run(
     if !dry_run {
         for (rel, content) in &files {
             let path = root.join(rel);
-            fs::write(&path, content).map_err(|source| Error::Io { path, source })?;
+            fs::write(&path, content).map_err(|source| Error::Io {
+                path,
+                message: source.to_string(),
+            })?;
         }
         if let Some(dir) = notes_dir {
             fs::create_dir_all(dir).map_err(|source| Error::Io {
                 path: dir.to_path_buf(),
-                source,
+                message: source.to_string(),
             })?;
             for (released, lines) in &releases {
                 let path = dir.join(format!("{}.md", released.unit));
-                fs::write(&path, lines.join("\n") + "\n")
-                    .map_err(|source| Error::Io { path, source })?;
+                fs::write(&path, lines.join("\n") + "\n").map_err(|source| Error::Io {
+                    path,
+                    message: source.to_string(),
+                })?;
             }
         }
     }

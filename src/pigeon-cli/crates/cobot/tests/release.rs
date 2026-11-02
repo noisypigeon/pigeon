@@ -1,10 +1,10 @@
-//! `sentinel::release` against throwaway git repositories.
+//! `cobot::release` against throwaway git repositories.
 
 use std::fs;
 use std::path::Path;
 use std::process::Command;
 
-use sentinel::release::{self, Config, Outcome};
+use cobot::release::{self, Config, Outcome};
 use tempfile::TempDir;
 
 const CONFIG: &str = "description: test.

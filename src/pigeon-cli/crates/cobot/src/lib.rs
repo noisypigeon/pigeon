@@ -4,6 +4,7 @@
 pub mod config;
 pub mod generations;
 pub mod providers;
+pub mod release;
 pub mod secrets;
 mod tofu;
 pub mod unit;
@@ -37,7 +38,7 @@ pub enum Error {
     Passphrase,
     /// The secrets passphrase is missing or too short.
     SecretsPassphrase,
-    /// A file could not be read or written.
+    /// A file could not be read, written or parsed.
     Io {
         /// The path.
         path: PathBuf,
@@ -49,6 +50,20 @@ pub enum Error {
         /// The unit.
         unit: String,
         /// The step and its diagnostic summaries, redacted.
+        message: String,
+    },
+    /// A git command failed.
+    Git {
+        /// The arguments.
+        args: String,
+        /// Its stderr, or why it could not start.
+        message: String,
+    },
+    /// Another program failed.
+    Tool {
+        /// The command line.
+        command: String,
+        /// Its stderr, or why it could not start.
         message: String,
     },
 }
@@ -75,6 +90,8 @@ impl fmt::Display for Error {
             ),
             Self::Io { path, message } => write!(f, "{}: {message}", path.display()),
             Self::Tofu { unit, message } => write!(f, "{unit}: {message}"),
+            Self::Git { args, message } => write!(f, "git {args}: {message}"),
+            Self::Tool { command, message } => write!(f, "{command}: {message}"),
         }
     }
 }

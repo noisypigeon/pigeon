@@ -24,7 +24,7 @@ pub struct Cli {
 /// Top-level commands.
 #[derive(Subcommand, Debug)]
 pub enum Commands {
-    /// Check the repository against its policies, and cut releases
+    /// Check the repository against its policies
     #[cfg(feature = "sentinel")]
     #[command(subcommand, version = ::sentinel::VERSION)]
     Sentinel(SentinelCommand),
@@ -32,7 +32,7 @@ pub enum Commands {
     #[cfg(feature = "gantry")]
     #[command(version = gantry::VERSION)]
     Gantry,
-    /// Validate, render, plan and apply infrastructure units
+    /// Validate, render, plan and apply infrastructure units, and cut releases
     #[cfg(feature = "cobot")]
     #[command(subcommand, version = ::cobot::VERSION)]
     Cobot(CobotCommand),

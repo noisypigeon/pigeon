@@ -4,7 +4,7 @@ use std::fs;
 use std::path::Path;
 use std::process::Command;
 
-use sentinel::release::{self, Config, Outcome};
+use cobot::release::{self, Config, Outcome};
 use tempfile::TempDir;
 
 const CONFIG: &str = r"description: test.

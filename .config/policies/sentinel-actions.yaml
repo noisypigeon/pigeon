@@ -1,0 +1,9 @@
+description: Sentinel only judges; actions are cobot's, per 2026-11-02-development-sentinel-policy-cobot-actions.md.
+target: tree
+rules:
+  - find:
+      match: '^src/pigeon-cli/crates/sentinel/src/'
+      forbid_content: 'std::process::Command|Command::new|fs::write'
+  - find:
+      match: '^\.github/workflows/.*\.ya?ml$'
+      forbid_content: '(\bpigeon|--|IMAGE"?)\s+sentinel\s+([abd-z]|c[a-gi-z]|ch[a-df-z]|che[a-bd-z]|chec[a-jl-z])'
