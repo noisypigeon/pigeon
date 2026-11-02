@@ -216,3 +216,59 @@ This lands in its own PR, after the first release exists.
 - A PR touching any `CHANGELOG.md` fails `sentinel-pr`.
 - After PR B merges, the `release` run is green, both tags, releases and images exist, and the bot's commit holds the generated tiers.
 - PR C's jobs pass using `pigeon-sentinel:latest`, and its merge releases nothing.
+
+## Amendments
+
+### 2026-11-02: A bot user, a recoverable range, and publication from tags
+
+The first `release` run, after #11, failed to push. The `main` ruleset requires three status checks, and a push made with `GITHUB_TOKEN` cannot bypass that. A review of #11 also found four defects:
+
+- **New tier files are never committed.** `git commit -a` skips untracked files, so the first release would have dropped four generated changelogs.
+- **A rejected push loses entries.** The range came from the push event's `before`. If another merge lands while the bot runs, the bot's push is rejected and the next run's range starts after the missed merge.
+- **A failed publish strands its release.** Tags were pushed before the GitHub Releases and images were made. If a later step failed, a rerun found the tags already present and had nothing left to publish.
+- **Non-ASCII paths are missed.** `git diff-tree` quotes them, so a change to one did not match its unit's prefix.
+
+#### 1. The bot user
+
+- The bot pushes as `istx25` (`6799989+istx25@users.noreply.github.com`), as runway's bot does, with a `BOT_GITHUB_TOKEN` Actions secret.
+  - For a repository owned by a personal account, this is a classic PAT with the `repo` scope.
+  - For an organization, it is a fine-grained PAT with Contents read and write.
+- `istx25` must be able to bypass the `main` ruleset. That is a settings change outside this repository.
+- Images still push with the job's own `GITHUB_TOKEN` and `packages: write`.
+- A push with a PAT does trigger workflows. `release.yml` still skips `chore(release):` head commits, and `rust` and `lifecycle` simply run on the bot's commit.
+
+#### 2. The range comes from `main`, not the event
+
+- `--from` defaults to the newest first-parent commit whose subject starts with `chore(release):`. With no such commit, it covers all of history.
+- The workflow no longer passes the event's `before`.
+- Each run first fetches and checks out the current `origin/main`.
+- If the push is rejected, it resets to the new `origin/main`, regenerates and retries, up to three times.
+- Date tiers already skip lines that are present, so a wide range is safe.
+
+#### 3. The bot stages exactly what it wrote
+
+- The bot runs `git add` on the paths in `written`, plus `src/pigeon-cli/Cargo.lock`, then commits from the index.
+- It decides whether anything changed with `git diff --cached --quiet`, so a run that only creates new files still commits.
+
+#### 4. Publication follows tags, and the GitHub Release marks it done
+
+- `release` pushes the commit and tags, and does nothing else.
+- A new `pigeon sentinel units` prints each unit's `unit`, `image`, `features`, newest `tag` and `version` as JSON.
+- A new `pending` job selects the units whose newest tag has no GitHub Release yet.
+- `image` runs once per pending unit:
+  1. checks out the tag;
+  2. builds and pushes the image;
+  3. creates the GitHub Release last, with notes taken from that version's section of the unit's `CHANGELOG.md`.
+- A failure anywhere leaves the release pending, and the next run of `release.yml`, or a rerun, finishes it.
+- `--notes-dir` is no longer used by the workflow.
+
+#### 5. Paths are read NUL-delimited
+
+- `git diff-tree` runs with `-z`, and its output is split on NUL. Paths reach `touches` exactly as committed.
+- A test commits a non-ASCII path inside a unit and expects that unit to release.
+
+#### 6. Execution
+
+1. This amendment lands first.
+2. Then `fix(sentinel): recoverable release bot`, holding steps 1–5. Once the `BOT_GITHUB_TOKEN` secret and the ruleset bypass exist, its merge cuts `sentinel/v0.1.0` and `gantry/v0.1.0`.
+3. Step 9's PR follows, as before.
