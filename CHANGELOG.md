@@ -2,6 +2,7 @@
 
 ## 2026-11-02
 
+- docs(adr): establish the src, tooling, infra and workloads areas ([#8](https://github.com/noisypigeon/pigeon/pull/8))
 - feat(sentinel): replace the lint scripts with pigeon sentinel and YAML policies ([#7](https://github.com/noisypigeon/pigeon/pull/7))
 - docs(adr): amend the cargo workspace ADR with pigeon sentinel ([#6](https://github.com/noisypigeon/pigeon/pull/6))
 - build: set up the Cargo workspace and Mise toolchain ([#5](https://github.com/noisypigeon/pigeon/pull/5))
