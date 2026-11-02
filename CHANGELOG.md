@@ -2,6 +2,7 @@
 
 ## 2026-11-02
 
+- fix(cobot): copy only the lockfile blocks a unit uses ([#27](https://github.com/noisypigeon/pigeon/pull/27))
 - docs(adr): path-gated Rust CI and dependency-aware releases ([#26](https://github.com/noisypigeon/pigeon/pull/26))
 - build(cobot): allow the cloudflare provider ([#25](https://github.com/noisypigeon/pigeon/pull/25))
 - fix(cobot): stop the plan, not fail it, on provider changes ([#24](https://github.com/noisypigeon/pigeon/pull/24))

@@ -2,6 +2,7 @@
 
 ## 2026-11-02
 
+- fix(cobot): copy only the lockfile blocks a unit uses ([#27](https://github.com/noisypigeon/pigeon/pull/27))
 - feat(cobot): config units, secrets and pinned providers ([#23](https://github.com/noisypigeon/pigeon/pull/23))
 - feat(cobot): plan on PR, apply on merge ([#21](https://github.com/noisypigeon/pigeon/pull/21))
 - feat(cobot): the cobot crate and pigeon cobot ([#20](https://github.com/noisypigeon/pigeon/pull/20))
