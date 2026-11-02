@@ -2,6 +2,7 @@
 
 ## 2026-11-02
 
+- docs(adr): amend cobot with engine-first execution and safe plans ([#18](https://github.com/noisypigeon/pigeon/pull/18))
 - docs(adr): cobot, infrastructure as code with state in git ([#17](https://github.com/noisypigeon/pigeon/pull/17))
 - fix(sentinel): publish every unpublished release tag ([#16](https://github.com/noisypigeon/pigeon/pull/16))
 - docs(adr): publish every unpublished release tag ([#15](https://github.com/noisypigeon/pigeon/pull/15))
