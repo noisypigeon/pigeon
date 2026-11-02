@@ -263,3 +263,15 @@ fn tags_lists_every_tag_and_flags_the_newest_by_version() {
         ]
     );
 }
+
+#[test]
+fn a_unit_may_have_no_image() {
+    let (dir, _) = repo();
+    let root = dir.path();
+    let path = root.join("releases.yaml");
+    fs::write(&path, CONFIG.replace("    image: img/b\n", "")).expect("write");
+    let config = Config::load(&path).expect("config");
+    let outcome = release::run(root, &config, None, "HEAD", None, true).expect("release");
+    let images: Vec<Option<String>> = outcome.released.iter().map(|r| r.image.clone()).collect();
+    assert_eq!(images, [Some("img/a".to_string()), None]);
+}

@@ -107,6 +107,25 @@ pub enum Rule {
     Contains(ContainsRule),
     /// A directory holds only allowed entries.
     Entries(EntriesRule),
+    /// Matching paths exist only where allowed.
+    Find(FindRule),
+}
+
+/// See [`Rule::Find`].
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct FindRule {
+    /// Matched against each file's path relative to the root, with `/` separators.
+    #[serde(rename = "match")]
+    pub matches: Pattern,
+    /// Path prefixes where a match is allowed; empty allows it nowhere.
+    #[serde(default)]
+    pub allow_under: Vec<String>,
+    /// If set, a disallowed match fails only when its content matches.
+    pub forbid_content: Option<Pattern>,
+    /// Paths (files or directories) never walked.
+    #[serde(default)]
+    pub ignore: Vec<Pattern>,
 }
 
 /// See [`Rule::Entries`].
@@ -355,9 +374,11 @@ impl Policy {
         for (i, rule) in self.rules.iter().enumerate() {
             let at = |m: &str| Err(format!("rule {}: {m}", i + 1));
             match rule {
-                Rule::Entries(_) if !tree => return at("`entries` needs the `tree` target"),
-                Rule::Entries(_) => {}
-                _ if tree => return at("only `entries` applies to `tree`"),
+                Rule::Entries(_) | Rule::Find(_) if !tree => {
+                    return at("`entries` and `find` need the `tree` target");
+                }
+                Rule::Entries(_) | Rule::Find(_) => {}
+                _ if tree => return at("only `entries` and `find` apply to `tree`"),
                 Rule::Field(r) => {
                     if !pr {
                         return at("`field` needs the `pull-request` target");
