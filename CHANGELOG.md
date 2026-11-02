@@ -2,6 +2,7 @@
 
 ## 2026-11-02
 
+- docs(adr): sentinel is policy, cobot performs actions ([#31](https://github.com/noisypigeon/pigeon/pull/31))
 - feat(infra): cloudflare provisioner unit ([#30](https://github.com/noisypigeon/pigeon/pull/30))
 - docs(adr): account tokens and permission groups by scope ([#29](https://github.com/noisypigeon/pigeon/pull/29))
 - fix(sentinel): release a unit only when its build changed ([#28](https://github.com/noisypigeon/pigeon/pull/28))
