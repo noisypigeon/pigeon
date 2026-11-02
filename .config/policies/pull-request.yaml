@@ -1,0 +1,17 @@
+description: PRs have a Conventional Commit title, cite an ADR, and add their changelog line.
+target: pull-request
+rules:
+  - field:
+      name: title
+      matches: '^(feat|fix|docs|chore|ci|refactor|test|build|perf|revert)(\([a-z0-9][a-z0-9-]*\))?!?: .+'
+  - field:
+      name: number
+      matches: '^[1-9][0-9]*$'
+  - field:
+      name: body
+      references: '\.claude/decisions/[A-Za-z0-9._-]+\.md'
+      exclude: [.claude/decisions/README.md]
+      min: 1
+  - contains:
+      file: CHANGELOG.md
+      text: '([#{number}](https://github.com/noisypigeon/pigeon/pull/{number}))'

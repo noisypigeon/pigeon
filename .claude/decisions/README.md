@@ -4,7 +4,8 @@ Every decision about how pigeon is built, released, run or secured is an
 Architecture Decision Record (ADR) here, written before the code it decides.
 The rules are set by
 [`2026-11-02-development-adr-driven-lifecycle.md`](2026-11-02-development-adr-driven-lifecycle.md)
-and checked by `.github/scripts/check-decisions.sh`.
+and enforced by `pigeon sentinel` through
+[`.config/policies/decisions.yaml`](../../.config/policies/decisions.yaml).
 
 ## Naming
 

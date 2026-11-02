@@ -1,4 +1,4 @@
-# Enforces .claude/decisions/2026-11-02-development-adr-driven-lifecycle.md.
+# Runs pigeon sentinel; see .claude/decisions/2026-11-02-development-cargo-workspace-mise-toolchain.md.
 name: lifecycle
 
 on:
@@ -11,17 +11,18 @@ permissions:
   contents: read
 
 jobs:
-  decisions:
+  sentinel:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
-      - run: bash .github/scripts/check-decisions.sh
-      - run: bash .github/scripts/check-changelog.sh
-      - run: bash .github/scripts/test-checks.sh
+      - uses: jdx/mise-action@9b200bcecbfd6303e69a4a261b2e09e3757440a7 # v5.2.0
+        with:
+          version: 2026.10.12
+      - run: mise run sentinel
 
-  pr:
+  sentinel-pr:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
@@ -29,7 +30,10 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           persist-credentials: false
-      - run: bash .github/scripts/check-pr.sh
+      - uses: jdx/mise-action@9b200bcecbfd6303e69a4a261b2e09e3757440a7 # v5.2.0
+        with:
+          version: 2026.10.12
+      - run: mise run sentinel-pr
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}
           PR_BODY: ${{ github.event.pull_request.body }}

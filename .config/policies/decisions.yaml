@@ -1,0 +1,31 @@
+description: ADRs are named, shaped and dated as the lifecycle ADR decides.
+target: { dir: .claude/decisions, exclude: [README.md], min: 1 }
+rules:
+  - filename:
+      pattern: '^(?<date>[0-9]{4}-[0-9]{2}-[0-9]{2})-(?<category>development|release|runtime|security|other)-[a-z0-9]+(-[a-z0-9]+){2,4}\.md$'
+  - line:
+      at: 1
+      matches: '^## (?<title>.*\S.*)$'
+      not: '^## Title$'
+  - fields:
+      after: 1
+      pattern: '^\* (?<key>[A-Za-z]+):[ \t]*(?<value>.*?)\s*$'
+      expect:
+        - { key: Date, equals: '{date}' }
+        - { key: Model, nonempty: true }
+        - { key: Author, equals: 'Willow Graysen (@noisypigeon).' }
+        - { key: Category, equals: '{category}' }
+  - headings:
+      level: 2
+      from: 2
+      sequence:
+        - { text: Context }
+        - { text: Implementation plan. }
+        - { text: Amendments, optional: true }
+      forbid_levels: [1]
+  - items:
+      under: { level: 2, text: Amendments }
+      heading: 3
+      matches: '^(?<when>[0-9]{4}-[0-9]{2}-[0-9]{2}): \S'
+      min: 1
+      order: { by: when, direction: ascending, from: '{date}' }
