@@ -21,7 +21,6 @@ infra/cloudflare/
   config.yaml            non-secret options, validated by schema.json
   schema.json            JSON Schema plus x-cobot composition; versioned
   secrets.config.yaml    keys in clear, every value encrypted
-  .terraform.lock.hcl    provider hashes
   modules/<name>/        one resource each; individually versioned
 ```
 
@@ -31,9 +30,12 @@ The decisions:
 - **Versioning.** Each module, and the schema, is versioned on its own by the existing release bot. A schema version is tied to the module versions it was built with.
 - **Composition is generated.** cobot builds the unit's root module from annotations in `schema.json`. There is no hand-written root HCL.
 - **Secrets live in this public repository, encrypted.** `secrets.config.yaml` is encrypted value by value with a key from `COBOT_STATE_PASSPHRASE`, the same secret that guards state.
-  - That keeps one secret to manage, at the cost of one blast radius. Anyone holding the passphrase and read access to the state repository holds every minted token anyway.
   - The secrets key is derived differently from the state key, so the two are never the same key.
-- **Providers are allowlisted and pinned.** That is the "explicit, pinned" path the cobot amendment deferred. Hashes are verified by a committed lockfile.
+  - That keeps one secret to manage, at a known cost, accepted here: the ciphertext is public, so **the passphrase alone unlocks the break-glass key**. No access to the state repository is needed.
+  - The passphrase therefore carries break-glass weight. It lives only as an Actions secret and in the owner's password manager.
+  - Rotating `provisioner_token` is the response to any suspicion that the passphrase has leaked.
+- **Providers are allowlisted, pinned and taken only from `main`.** That is the "explicit, pinned" path the cobot amendment deferred. Hashes are verified by one committed lockfile. A pull request cannot choose which provider code runs beside the passphrase.
+- **Rotation keeps two generations.** A rotated token's predecessor lives until its overlap ends, so workloads have time to switch.
 
 This supersedes two parts of the cobot ADR, both left as written:
 
@@ -72,7 +74,7 @@ tokens: []
 ```
 
 - `zones` lists existing zones this account may use. They are looked up, never created.
-- `rotation` sets how long a minted token lives, and how long it overlaps its successor.
+- `rotation` sets how long each token generation lasts, and how long a generation overlaps its successor.
 - `tokens` lists the tokens to mint. Each is `{ name, capabilities: [{ permission, zones | account: true }] }`, where `permission` is a Cloudflare permission group name. The list starts empty, and each workload ADR adds its own entries.
 
 ### 2. Generated composition: `x-cobot`
@@ -135,14 +137,18 @@ The first four modules:
 | --- | --- | --- | --- |
 | `zone` | `data.cloudflare_zone` | `name`, `account_id` | `id`, `name` |
 | `permission-groups` | `data.cloudflare_api_token_permission_groups_list` | none | `id`, plus `ids`, a map from name to id |
-| `rotation` | `time_rotating` | `period_days` | `id`, `rfc3339` |
-| `api-token` | `cloudflare_api_token` | `name`, `capabilities`, `zone_ids`, `permission_ids`, `account_id`, `rotation_id`, `rotation_rfc3339`, `period_days`, `overlap_days` | `id`, `name`, and a sensitive `value` |
+| `api-token` | `cloudflare_api_token` | `name`, `capabilities`, `zone_ids`, `permission_ids`, `account_id`, `not_before`, `expires_on` | `id`, `name`, and a sensitive `value` |
 
-`api-token` in more detail:
+`api-token` builds its policies, in `locals`, from `capabilities` and the id maps.
 
-- It builds its policies, in `locals`, from `capabilities` and the id maps.
-- Its `expires_on` is the rotation time plus `period_days` plus `overlap_days`.
-- A `terraform_data` keyed on `rotation_id` replaces the token whenever the rotation fires, so each rotation produces a new value, not just a new expiry.
+**Rotation in generations.** Each token is minted once per generation, as a separate instance, rather than replaced in place. Replacing in place would revoke the old token in the same apply that creates the new one.
+
+- **Generations.** At render time, cobot computes the current generation, `g = floor(days since 1970-01-01 UTC / period_days)`. Generation `g` starts on day `g × period_days`.
+- **Instances.** Each configured token renders as instance `<name>@g`.
+- **Overlap.** It also renders as `<name>@g-1` while the current day is before generation `g`'s start plus `overlap_days`. So the previous generation stays in state until its overlap ends, then disappears from the render. The next apply destroys it.
+- **Validity.** Instance `@k` has `not_before` at its generation's start, and `expires_on` at the generation's end plus `overlap_days`. Cloudflare would revoke it on time even if no apply ran.
+- **Failed applies.** These are safe. An instance that failed to create is planned again, and one past its overlap is destroyed by the next successful apply.
+- **Scheduled apply.** Rotation needs applies even when nothing merges, so `cobot.yml`'s `apply` job also runs on a daily `schedule`, at 04:17 UTC. A day with no generation boundary plans "No changes".
 
 Minted values live only in encrypted state.
 
@@ -189,20 +195,29 @@ So a workload can never hold, or reference, break-glass material. It gets only t
 description: Providers cobot may load, each pinned to an exact version.
 providers:
   cloudflare/cloudflare: <newest 5.x at least two weeks old>
-  hashicorp/time: <newest at least two weeks old>
 ```
 
-**Checks.** `validate` rejects any provider that a module's `required_providers` declares when it is missing from the allowlist, or pinned there to a different version.
+**Lockfile.** `.config/providers.lock.hcl` is one repository-wide lockfile.
 
-**Lockfile.**
+- `pigeon cobot lock` writes it by running `tofu providers lock` for `linux_amd64`, `linux_arm64` and `darwin_arm64`, against a scratch configuration requiring exactly the allowlist.
+- It is committed.
 
-- `pigeon cobot lock <unit>` writes the unit's `.terraform.lock.hcl`. It runs `tofu providers lock` for `linux_amd64`, `linux_arm64` and `darwin_arm64`.
-- The lockfile is committed. `terraform.yaml` already allows it under `infra/`.
+**Checks.** `validate` rejects:
+
+- any provider a module's `required_providers` declares that is missing from the allowlist, or pinned there to a different version;
+- a lockfile that disagrees with the allowlist.
 
 **`init`.** cobot copies the lockfile into the work directory and runs `tofu init -input=false -lockfile=readonly`.
 
 - Providers install from the registry, and their hashes must match the lockfile.
 - `-plugin-dir` is no longer used.
+
+**Providers come only from `main`.**
+
+- The `plan` job passes `--providers` pointing at `main`'s `.config/`, so a plan uses `main`'s allowlist and lockfile, never the PR's.
+- If the PR changes either file, `plan` stops before `init` and posts "Provider changes are planned after they merge; land them in their own PR first."
+- A PR therefore cannot pick the provider code that runs beside `COBOT_STATE_PASSPHRASE`.
+- Adding a provider is its own PR. It changes only the allowlist and the lockfile, it merges, and only then can units use it.
 
 **Unchanged from part one:**
 
@@ -239,6 +254,11 @@ So the schema bumps whenever any module does. The schema's tag pins the exact mo
 
 **Changelogs.** Each module and the schema get a release changelog tier, beside their files, and `release-changelog.yaml` covers them.
 
+**Publishing.**
+
+- Each row from `pigeon sentinel tags` gains a `changelog` field: the path of its unit's release tier, taken from `.config/releases.yaml`.
+- The release workflow reads notes from that path, never from a fixed `src/pigeon-cli/crates/<unit>/` path. Publishing an infra unit then works exactly as publishing a crate does.
+
 ### 7. Docs
 
 `CLAUDE.md` gains:
@@ -251,13 +271,15 @@ So the schema bumps whenever any module does. The schema's tag pins the exact mo
 
 1. **PR A** holds this ADR.
 2. **PR B**, `feat(cobot): config units, secrets and pinned providers`, holds the engine of §1, §2, §4, §5 and §6.
+   - That includes generation rendering, the scheduled apply, `--providers`, and the `changelog` field with the release workflow's use of it.
    - Its tests use a fixture config unit built only from built-in resources.
-   - It holds no `infra/cloudflare` yet.
+   - It holds no `infra/cloudflare` and no provider yet.
    - Its merge releases `cobot` and `sentinel`.
-3. **PR C**, `feat(infra): cloudflare provisioner unit`, holds:
-   - the modules, `schema.json`, `config.yaml`, `.config/providers.yaml`, the lockfile, the release units, the policy and the docs.
+3. **PR C**, `build(cobot): allow the cloudflare provider`, holds only `.config/providers.yaml` and `.config/providers.lock.hcl`.
+4. **PR D**, `feat(infra): cloudflare provisioner unit`, holds:
+   - the modules, `schema.json`, `config.yaml`, the release units, the policy and the docs.
    - `secrets.config.yaml`, which the owner writes locally by running `pigeon cobot secrets set` for `account_id` and `provisioner_token`, and commits to the PR branch. The values are never seen by anyone else.
-   - Its plan should show four zone lookups, the permission-group lookup and one `time_rotating`, and no tokens.
+   - Its plan uses `main`'s providers, and should show four zone lookups and the permission-group lookup, and no tokens.
 
 ### 9. Verification
 
@@ -269,4 +291,6 @@ So the schema bumps whenever any module does. The schema's tag pins the exact mo
   - an unlisted or mispinned provider is rejected;
   - YAML and JSON version lines bump.
 - **End to end:** a built-in-only config unit plans, applies and replans to "No changes", with state and plan encrypted.
-- **PR C:** its plan comment shows `data.cloudflare_zone` ×4, `data.cloudflare_api_token_permission_groups_list` and `time_rotating`. After merge, the apply commits encrypted state, and the bot tags every module and the schema.
+- **Rotation:** render tests with a fixed clock check the generation boundaries. Inside the overlap both `@g` and `@g-1` are present; after it only `@g` is; and the `not_before` and `expires_on` dates are correct.
+- **Providers:** a test checks that `plan --providers` ignores a PR-local allowlist, and refuses when the PR changes it.
+- **PR D:** its plan comment shows `data.cloudflare_zone` ×4 and `data.cloudflare_api_token_permission_groups_list`. After merge, the apply commits encrypted state, and the bot tags and publishes every module and the schema, with notes read from each unit's own changelog.
