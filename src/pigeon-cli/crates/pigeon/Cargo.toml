@@ -8,9 +8,16 @@ license.workspace = true
 repository.workspace = true
 publish.workspace = true
 
+[features]
+default = ["sentinel", "gantry"]
+sentinel = ["dep:sentinel", "dep:serde_json"]
+gantry = ["dep:gantry"]
+
 [dependencies]
 clap.workspace = true
-sentinel.workspace = true
+gantry = { workspace = true, optional = true }
+sentinel = { workspace = true, optional = true }
+serde_json = { workspace = true, optional = true }
 
 [dev-dependencies]
 assert_cmd.workspace = true

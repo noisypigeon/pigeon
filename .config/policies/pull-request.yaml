@@ -1,4 +1,4 @@
-description: PRs have a Conventional Commit title, cite an ADR, and add their changelog line.
+description: PRs have a Conventional Commit title, cite an ADR, and never hand-edit a changelog.
 target: pull-request
 rules:
   - field:
@@ -12,6 +12,6 @@ rules:
       references: '\.claude/decisions/[A-Za-z0-9._-]+\.md'
       exclude: [.claude/decisions/README.md]
       min: 1
-  - contains:
-      file: CHANGELOG.md
-      text: '([#{number}](https://github.com/noisypigeon/pigeon/pull/{number}))'
+  - field:
+      name: files
+      not: '(?m)(^|/)CHANGELOG\.md$'

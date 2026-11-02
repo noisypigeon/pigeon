@@ -1,5 +1,7 @@
-description: CHANGELOG.md has dated sections, newest first, one linked line per PR.
-target: { file: CHANGELOG.md }
+description: Generated dated changelogs have dated sections, newest first, one linked line per change.
+target:
+  files: [CHANGELOG.md, src/pigeon-cli/CHANGELOG.md, src/pigeon-cli/crates/pigeon/CHANGELOG.md]
+  optional: true
 rules:
   - line:
       at: 1

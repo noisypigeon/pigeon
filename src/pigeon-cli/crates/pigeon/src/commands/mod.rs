@@ -1,5 +1,8 @@
 //! Command dispatch.
 
+#[cfg(feature = "gantry")]
+pub mod gantry;
+#[cfg(feature = "sentinel")]
 pub mod sentinel;
 
 use crate::cli::Commands;
@@ -13,8 +16,18 @@ pub const INVALID: i32 = 2;
 
 /// Runs a command and returns its exit code.
 #[must_use]
+#[cfg_attr(
+    not(feature = "sentinel"),
+    expect(
+        clippy::needless_pass_by_value,
+        reason = "only `sentinel` carries arguments"
+    )
+)]
 pub fn dispatch(command: Commands) -> i32 {
     match command {
+        #[cfg(feature = "sentinel")]
         Commands::Sentinel(c) => sentinel::run(c),
+        #[cfg(feature = "gantry")]
+        Commands::Gantry => gantry::run(),
     }
 }

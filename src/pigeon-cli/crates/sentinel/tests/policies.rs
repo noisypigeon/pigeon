@@ -173,11 +173,16 @@ fn pr_root() -> TempDir {
 }
 
 fn pr(title: &str, body: &str, number: Option<&str>) -> Vec<String> {
+    pr_files(title, body, number, Some("src/x.rs\nREADME.md"))
+}
+
+fn pr_files(title: &str, body: &str, number: Option<&str>, files: Option<&str>) -> Vec<String> {
     let root = pr_root();
     let pr = PullRequest {
         title: Some(title.into()),
         body: Some(body.into()),
         number: number.map(Into::into),
+        files: files.map(Into::into),
     };
     violations("pull-request", root.path(), Some(&pr))
 }
@@ -207,7 +212,6 @@ fn pull_request() {
             format!("{cite} and .claude/decisions/2026-01-02-other-not-here-at-all.md"),
             Some("7"),
         ),
-        ("ci: x", cite.clone(), Some("8")),
         ("ci: x", cite.clone(), Some("")),
         ("ci: x", cite.clone(), None),
         ("ci: x", cite.clone(), Some("7; true")),
@@ -215,6 +219,19 @@ fn pull_request() {
     ] {
         fails(&pr(title, &body, number));
     }
+    for files in [
+        Some("CHANGELOG.md"),
+        Some("src/a.rs\nsrc/pigeon-cli/crates/gantry/CHANGELOG.md"),
+        None,
+    ] {
+        fails(&pr_files("ci: x", &cite, Some("7"), files));
+    }
+    passes(&pr_files(
+        "ci: x",
+        &cite,
+        Some("7"),
+        Some("docs/CHANGELOG.md.bak\nsrc/a.rs"),
+    ));
 }
 
 #[test]
@@ -241,7 +258,7 @@ fn cl_good() -> String {
 fn changelog_rules() {
     let g = cl_good();
     passes(&changelog(Some(&g)));
-    fails(&changelog(None));
+    passes(&changelog(None));
     for content in [
         g.replace("# Changelog", "# Changes"),
         g.replace("2026-01-02", "2026-01-04"),
@@ -271,7 +288,7 @@ fn changelog_rules() {
 #[test]
 fn every_policy_is_valid() {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../../.config/policies");
-    assert_eq!(sentinel::load_dir(&dir).expect("loads").len(), 4);
+    assert_eq!(sentinel::load_dir(&dir).expect("loads").len(), 5);
 }
 
 fn layout_root(skip: &[&str], extra: &[&str]) -> TempDir {
@@ -329,5 +346,32 @@ fn layout_rules() {
         (&["src/pigeon-cli"], &[]),
     ] {
         fails(&layout(skip, extra));
+    }
+}
+
+fn release_changelog(content: &str) -> Vec<String> {
+    let root = TempDir::new().expect("tempdir");
+    let path = root
+        .path()
+        .join("src/pigeon-cli/crates/sentinel/CHANGELOG.md");
+    fs::create_dir_all(path.parent().expect("parent")).expect("mkdir");
+    fs::write(path, content).expect("write");
+    violations("release-changelog", root.path(), None)
+}
+
+#[test]
+fn release_changelog_rules() {
+    let g = format!(
+        "# Changelog\n\n## v0.1.1 (2026-01-03)\n\n- feat: b ([#2]({URL}/pull/2))\n\n## v0.1.0 (2026-01-03)\n\n- feat: a ([#1]({URL}/pull/1))\n- chore: x ([0123456]({URL}/commit/{SHA}))\n"
+    );
+    passes(&release_changelog(&g));
+    for content in [
+        g.replace("v0.1.0 (2026-01-03)", "v0.1.0 (2026-01-04)"),
+        g.replace("v0.1.0", "v0.1.1"),
+        g.replace("## v0.1.0 (2026-01-03)", "## 2026-01-03"),
+        g.replace(&format!("- feat: b ([#2]({URL}/pull/2))\n"), ""),
+        g.replace("[#2]", "[#3]"),
+    ] {
+        fails(&release_changelog(&content));
     }
 }

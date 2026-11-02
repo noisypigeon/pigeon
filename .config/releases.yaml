@@ -1,0 +1,31 @@
+description: Release units and changelog tiers; only the release bot writes versions and changelogs.
+repository: https://github.com/noisypigeon/pigeon
+units:
+  sentinel:
+    manifest: src/pigeon-cli/crates/sentinel/Cargo.toml
+    features: sentinel
+    image: ghcr.io/noisypigeon/pigeon-sentinel
+    paths:
+      - src/pigeon-cli/crates/sentinel/
+      - src/pigeon-cli/crates/pigeon/
+      - src/pigeon-cli/Cargo.toml
+      - src/pigeon-cli/Cargo.lock
+      - src/pigeon-cli/Dockerfile
+      - src/pigeon-cli/.dockerignore
+  gantry:
+    manifest: src/pigeon-cli/crates/gantry/Cargo.toml
+    features: gantry
+    image: ghcr.io/noisypigeon/pigeon-gantry
+    paths:
+      - src/pigeon-cli/crates/gantry/
+      - src/pigeon-cli/crates/pigeon/
+      - src/pigeon-cli/Cargo.toml
+      - src/pigeon-cli/Cargo.lock
+      - src/pigeon-cli/Dockerfile
+      - src/pigeon-cli/.dockerignore
+tiers:
+  - { file: CHANGELOG.md, paths: [''] }
+  - { file: src/pigeon-cli/CHANGELOG.md, paths: [src/pigeon-cli/] }
+  - { file: src/pigeon-cli/crates/pigeon/CHANGELOG.md, paths: [src/pigeon-cli/crates/pigeon/] }
+  - { file: src/pigeon-cli/crates/sentinel/CHANGELOG.md, unit: sentinel }
+  - { file: src/pigeon-cli/crates/gantry/CHANGELOG.md, unit: gantry }

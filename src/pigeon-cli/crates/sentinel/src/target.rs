@@ -39,6 +39,19 @@ pub fn run(
                 .violations
                 .push(violation(&t.file, format!("cannot read: {e}"))),
         },
+        Target::Files(t) => {
+            for file in &t.files {
+                match fs::read_to_string(root.join(file)) {
+                    Ok(content) => {
+                        rules::run_document(loaded, file, &content, root, &mut report.violations);
+                    }
+                    Err(e) if t.optional && e.kind() == std::io::ErrorKind::NotFound => {}
+                    Err(e) => report
+                        .violations
+                        .push(violation(file, format!("cannot read: {e}"))),
+                }
+            }
+        }
         Target::Dir(t) => {
             let dir = root.join(&t.dir);
             let mut names = Vec::new();
