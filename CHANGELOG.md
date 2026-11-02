@@ -2,6 +2,7 @@
 
 ## 2026-11-02
 
+- ci: run lifecycle checks from the pigeon-sentinel image ([#14](https://github.com/noisypigeon/pigeon/pull/14))
 - fix(sentinel): recoverable release bot ([#13](https://github.com/noisypigeon/pigeon/pull/13))
 - docs(adr): amend the release ADR with a bot user and recoverable publishing ([#12](https://github.com/noisypigeon/pigeon/pull/12))
 - feat(sentinel): release units, generated changelogs, gantry and images ([#11](https://github.com/noisypigeon/pigeon/pull/11))
