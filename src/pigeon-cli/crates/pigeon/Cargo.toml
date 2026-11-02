@@ -10,13 +10,14 @@ publish.workspace = true
 
 [features]
 default = ["sentinel", "gantry"]
-sentinel = ["dep:sentinel", "dep:serde_json"]
+sentinel = ["dep:sentinel", "dep:serde", "dep:serde_json"]
 gantry = ["dep:gantry"]
 
 [dependencies]
 clap.workspace = true
 gantry = { workspace = true, optional = true }
 sentinel = { workspace = true, optional = true }
+serde = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
 
 [dev-dependencies]

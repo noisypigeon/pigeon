@@ -343,6 +343,7 @@ dependencies = [
  "gantry",
  "predicates",
  "sentinel",
+ "serde",
  "serde_json",
  "tempfile",
 ]
