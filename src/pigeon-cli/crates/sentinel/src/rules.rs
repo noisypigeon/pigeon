@@ -199,15 +199,34 @@ fn entries(ctx: &mut Ctx, root: &Path, r: &EntriesRule) {
     }
 }
 
-/// Repo-relative paths of every file under `root`, skipping `ignore`d paths, sorted.
-fn walk(root: &Path, ignore: &[crate::policy::Pattern]) -> Vec<String> {
+/// Repo-relative paths of every file and symlink under `root` (symlinks are
+/// reported, never followed), skipping `ignore`d paths, sorted; plus every path
+/// that could not be listed, with why.
+fn walk(root: &Path, ignore: &[crate::policy::Pattern]) -> (Vec<String>, Vec<(String, String)>) {
     let mut found = Vec::new();
+    let mut failed = Vec::new();
     let mut stack = vec![String::new()];
     while let Some(rel) = stack.pop() {
-        let Ok(listing) = fs::read_dir(root.join(&rel)) else {
-            continue;
+        let shown = if rel.is_empty() {
+            ".".to_string()
+        } else {
+            rel.clone()
         };
-        for entry in listing.flatten() {
+        let listing = match fs::read_dir(root.join(&rel)) {
+            Ok(listing) => listing,
+            Err(e) => {
+                failed.push((shown, e.to_string()));
+                continue;
+            }
+        };
+        for entry in listing {
+            let entry = match entry {
+                Ok(entry) => entry,
+                Err(e) => {
+                    failed.push((shown.clone(), e.to_string()));
+                    continue;
+                }
+            };
             let name = entry.file_name().to_string_lossy().into_owned();
             let path = if rel.is_empty() {
                 name
@@ -219,49 +238,55 @@ fn walk(root: &Path, ignore: &[crate::policy::Pattern]) -> Vec<String> {
             }
             match entry.file_type() {
                 Ok(t) if t.is_dir() => stack.push(path),
-                Ok(t) if t.is_file() => found.push(path),
-                _ => {}
+                Ok(_) => found.push(path),
+                Err(e) => failed.push((path, e.to_string())),
             }
         }
     }
     found.sort();
-    found
+    failed.sort();
+    (found, failed)
 }
 
 fn find(ctx: &mut Ctx, root: &Path, r: &FindRule) {
-    for path in walk(root, &r.ignore) {
+    let (paths, failed) = walk(root, &r.ignore);
+    for (path, why) in failed {
+        ctx.push_at(path, None, format!("cannot be inspected: {why}"));
+    }
+    for path in paths {
         if !r.matches.0.is_match(&path)
             || r.allow_under.iter().any(|p| path.starts_with(p.as_str()))
         {
             continue;
         }
-        match &r.forbid_content {
-            None => ctx.push_at(
-                path,
-                None,
-                if r.allow_under.is_empty() {
-                    "not allowed anywhere".to_string()
-                } else {
-                    format!("allowed only under {}", r.allow_under.join(", "))
-                },
-            ),
-            Some(forbidden) => {
-                let Ok(content) = fs::read_to_string(root.join(&path)) else {
-                    continue;
-                };
-                if let Some((i, line)) = content
-                    .lines()
-                    .enumerate()
-                    .find(|(_, l)| forbidden.0.is_match(l))
-                {
-                    let found = forbidden.0.find(line).map_or("", |m| m.as_str());
-                    ctx.push_at(
-                        path,
-                        Some(i + 1),
-                        format!("mentions `{found}`, which is not allowed here"),
-                    );
-                }
+        let Some(forbidden) = &r.forbid_content else {
+            let message = if r.allow_under.is_empty() {
+                "not allowed anywhere".to_string()
+            } else {
+                format!("allowed only under {}", r.allow_under.join(", "))
+            };
+            ctx.push_at(path, None, message);
+            continue;
+        };
+        let bytes = match fs::read(root.join(&path)) {
+            Ok(bytes) => bytes,
+            Err(e) => {
+                ctx.push_at(path, None, format!("cannot be inspected: {e}"));
+                continue;
             }
+        };
+        let content = String::from_utf8_lossy(&bytes);
+        if let Some((i, line)) = content
+            .lines()
+            .enumerate()
+            .find(|(_, l)| forbidden.0.is_match(l))
+        {
+            let found = forbidden.0.find(line).map_or("", |m| m.as_str());
+            ctx.push_at(
+                path,
+                Some(i + 1),
+                format!("mentions `{found}`, which is not allowed here"),
+            );
         }
     }
 }
@@ -797,6 +822,48 @@ mod find_tests {
         assert_eq!(
             run(rule, &root),
             [".github/workflows/a.yml:2: t: mentions `tofu`, which is not allowed here"]
+        );
+    }
+
+    #[test]
+    fn missing_root_and_unreadable_content_are_violations() {
+        let missing = TempDir::new().expect("tempdir");
+        let gone = missing.path().join("gone");
+        let yaml = "description: t.\ntarget: tree\nrules:\n  - find: { match: x }\n";
+        let loaded = LoadedPolicy {
+            name: "t".into(),
+            policy: Policy::parse(yaml).expect("valid"),
+        };
+        let mut out = Vec::new();
+        run_tree(&loaded, &gone, &mut out);
+        assert_eq!(out.len(), 1);
+        assert!(out[0].message.starts_with("cannot be inspected"));
+
+        let root = tree(&[(".github/workflows/bin.yml", "")]);
+        fs::write(
+            root.path().join(".github/workflows/bin.yml"),
+            b"name: \xff\nrun: tofu apply\n",
+        )
+        .expect("write");
+        let rule = "{ match: '^\\.github/', forbid_content: '\\btofu\\b' }";
+        assert_eq!(
+            run(rule, &root),
+            [".github/workflows/bin.yml:2: t: mentions `tofu`, which is not allowed here"]
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn symlinks_are_reported_not_followed() {
+        let root = tree(&[("infra/main.tf", "")]);
+        fs::create_dir_all(root.path().join("src")).expect("mkdir");
+        std::os::unix::fs::symlink("../infra/main.tf", root.path().join("src/main.tf"))
+            .expect("symlink");
+        std::os::unix::fs::symlink("../infra", root.path().join("src/linked")).expect("symlink");
+        let rule = "{ match: '\\.tf$', allow_under: [infra/] }";
+        assert_eq!(
+            run(rule, &root),
+            ["src/main.tf: t: allowed only under infra/"]
         );
     }
 
