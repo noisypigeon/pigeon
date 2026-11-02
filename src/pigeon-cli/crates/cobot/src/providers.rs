@@ -139,15 +139,81 @@ pub fn lockfile(dir: &Path) -> Option<PathBuf> {
     path.is_file().then_some(path)
 }
 
+/// The allowlisted sources a unit names: `"<source>"` in any file under `dirs`.
+#[must_use]
+pub fn used<'a>(allow: &'a Allowlist, dirs: &[&Path]) -> Vec<&'a str> {
+    let mut text = String::new();
+    for dir in dirs {
+        collect(dir, &mut text);
+    }
+    allow
+        .providers
+        .keys()
+        .filter(|s| text.contains(&format!("\"{s}\"")))
+        .map(String::as_str)
+        .collect()
+}
+
+fn collect(dir: &Path, text: &mut String) {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.file_name().is_some_and(|n| n == ".terraform") {
+            continue;
+        }
+        if path.is_dir() {
+            collect(&path, text);
+        } else if let Ok(t) = fs::read_to_string(&path) {
+            text.push_str(&t);
+        }
+    }
+}
+
+/// The lockfile cut down to the blocks for `sources`.
+#[must_use]
+pub fn lock_for(lock: &str, sources: &[&str]) -> String {
+    let mut out = String::new();
+    let mut keep = true;
+    for line in lock.lines() {
+        if let Some(addr) = line
+            .strip_prefix("provider \"")
+            .and_then(|r| r.split('"').next())
+        {
+            keep = sources.iter().any(|s| addr.ends_with(&format!("/{s}")));
+        }
+        if keep {
+            out.push_str(line);
+            out.push('\n');
+        }
+        if line == "}" {
+            keep = true;
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
-    use super::Allowlist;
+    use super::{Allowlist, lock_for};
 
     fn allow() -> Allowlist {
         Allowlist {
             description: "x".into(),
             providers: [("cloudflare/cloudflare".to_string(), "5.1.0".to_string())].into(),
         }
+    }
+
+    #[test]
+    fn lockfiles_keep_only_the_named_providers() {
+        let lock = "# header\n\nprovider \"registry.opentofu.org/cloudflare/cloudflare\" {\n  version = \"5.28.0\"\n}\n\nprovider \"registry.opentofu.org/hashicorp/random\" {\n  version = \"3.0.0\"\n}\n";
+        let cf = lock_for(lock, &["cloudflare/cloudflare"]);
+        assert!(
+            cf.contains("cloudflare/cloudflare") && !cf.contains("random"),
+            "{cf}"
+        );
+        assert!(!lock_for(lock, &[]).contains("provider"));
     }
 
     #[test]

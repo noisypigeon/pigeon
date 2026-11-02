@@ -264,6 +264,10 @@ fn prepare(ctx: &Context, unit: &Unit) -> Result<(PathBuf, tofu::Env, UnitPlan),
     let work = root.join(WORK_DIR).join(&unit.path);
     let none = config::Existing::new();
     write_render(&work, &render_json(unit, &state, &allow, ctx.today, &none))?;
+    env.providers = providers::used(&allow, &[&work, &unit.dir])
+        .into_iter()
+        .map(str::to_string)
+        .collect();
     tofu::init(&unit.path, &work, &env)?;
     if let Some(c) = &unit.config {
         let rotating = config::rotating_blocks(&c.schema);

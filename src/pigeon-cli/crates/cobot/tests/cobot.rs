@@ -297,3 +297,26 @@ fn other_config_formats_and_symlinks_are_rejected() {
         );
     }
 }
+
+#[test]
+fn a_unit_without_providers_plans_beside_a_lockfile() {
+    if !tofu_available() {
+        eprintln!("skipped: tofu is not on PATH");
+        return;
+    }
+    let repo = proof_repo();
+    write(
+        repo.path(),
+        ".config/providers.yaml",
+        "description: x\nproviders:\n  cloudflare/cloudflare: 5.28.0\n",
+    );
+    write(
+        repo.path(),
+        ".config/providers.lock.hcl",
+        "provider \"registry.opentofu.org/cloudflare/cloudflare\" {\n  version     = \"5.28.0\"\n  constraints = \"5.28.0\"\n  hashes = [\n    \"h1:3MScc9whgqTm8wB64P4pb4M3zzm8JHylgpnQGSvPjBE=\",\n  ]\n}\n",
+    );
+    let state = TempDir::new().expect("tempdir");
+    let units = cobot::select(repo.path(), &repo.path().join(".config"), &[]).expect("valid");
+    let plans = cobot::plan(&ctx(repo.path(), state.path(), PASSPHRASE), &units).expect("plan");
+    assert_eq!(plans[0].changes.len(), 1);
+}
