@@ -1,12 +1,9 @@
 #!/usr/bin/env bash
-# Lints every ADR in .claude/decisions/ against
-# .claude/decisions/2026-11-02-development-adr-driven-lifecycle.md §1 and §2.
-#
-# Usage: scripts/check-decisions.sh [decisions-dir]
+# Lints ADRs; rules in .claude/decisions/2026-11-02-development-adr-driven-lifecycle.md. Usage: check-decisions.sh [dir]
 set -uo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-dir="${1:-$script_dir/../.claude/decisions}"
+dir="${1:-$script_dir/../../.claude/decisions}"
 
 name_re='^([0-9]{4}-[0-9]{2}-[0-9]{2})-(development|release|runtime|security|other)-[a-z0-9]+(-[a-z0-9]+){2,4}\.md$'
 author='Willow Graysen (@noisypigeon).'

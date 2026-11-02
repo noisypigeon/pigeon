@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# Proves each rule in check-decisions.sh and check-pr.sh rejects a bad input
-# (.claude/decisions/2026-11-02-development-adr-driven-lifecycle.md §8).
+# Proves each check rejects bad input; see .claude/decisions/2026-11-02-development-adr-driven-lifecycle.md.
 set -uo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -101,8 +100,10 @@ root="$tmp/repo"
 mkdir -p "$root/.claude/decisions"
 printf '%s\n' "$good" >"$root/.claude/decisions/$good_name"
 cite=".claude/decisions/$good_name"
-pr() { # want name title body
-  expect "$1" "pr: $2" env PR_TITLE="$3" PR_BODY="$4" bash "$script_dir/check-pr.sh" "$root"
+url=https://github.com/noisypigeon/pigeon
+printf '# Changelog\n\n## 2026-01-02\n\n- ci: x ([#7](%s/pull/7))\n' "$url" >"$root/CHANGELOG.md"
+pr() { # want name title body [number]
+  expect "$1" "pr: $2" env PR_TITLE="$3" PR_BODY="$4" PR_NUMBER="${5-7}" bash "$script_dir/check-pr.sh" "$root"
 }
 pr pass "valid" "ci: enforce the lifecycle" "## Decision"$'\n\n'"$cite"
 pr pass "scope and bang" "feat(cli)!: break things" "$cite"
@@ -113,7 +114,46 @@ pr fail "no ADR cited" "ci: x" "No decision here."
 pr fail "README is not an ADR" "ci: x" ".claude/decisions/README.md"
 pr fail "cites a missing ADR" "ci: x" ".claude/decisions/2026-01-02-development-does-not-exist.md"
 pr fail "one of two citations missing" "ci: x" "$cite and .claude/decisions/2026-01-02-other-not-here-at-all.md"
+pr fail "PR not in changelog" "ci: x" "$cite" 8
+pr fail "missing PR_NUMBER" "ci: x" "$cite" ""
+pr fail "non-numeric PR_NUMBER" "ci: x" "$cite" "7; true"
 pr fail "injection stays data" 'ci: x"; exit 0; "' "\$(exit 0) \`true\`"
+
+changelog() { # want name content
+  local f="$tmp/changelog.$RANDOM$RANDOM.md"
+  printf '%s\n' "$3" >"$f"
+  expect "$1" "changelog: $2" bash "$script_dir/check-changelog.sh" "$f"
+}
+sha=0123456789abcdef0123456789abcdef01234567
+cl_good="# Changelog
+
+## 2026-01-03
+
+- ci: second ([#2]($url/pull/2))
+- feat: first ([#1]($url/pull/1))
+
+## 2026-01-02
+
+- docs(adr): bootstrap ([0123456]($url/commit/$sha))"
+changelog pass "valid" "$cl_good"
+expect fail "changelog: no such file" bash "$script_dir/check-changelog.sh" "$tmp/nope.md"
+changelog fail "wrong title" "${cl_good/\# Changelog/# Changes}"
+changelog fail "dates ascending" "${cl_good/2026-01-02/2026-01-04}"
+changelog fail "duplicate date" "${cl_good/2026-01-02/2026-01-03}"
+changelog fail "malformed date heading" "${cl_good/\#\# 2026-01-02/## Jan 2}"
+changelog fail "empty section" "$cl_good"$'\n\n## 2026-01-01\n'
+changelog fail "no sections" "# Changelog"
+changelog fail "bullet without link" "${cl_good/" ([#1]($url/pull/1))"/}"
+changelog fail "link to another repo" "${cl_good/"$url/pull/1"/https://github.com/other/repo/pull/1}"
+changelog fail "number mismatch" "${cl_good/"[#1]"/[#3]}"
+changelog fail "duplicate PR" "${cl_good/"[#2]($url/pull/2)"/[#1]($url/pull/1)}"
+changelog fail "short commit URL" "${cl_good/"commit/$sha"/commit/0123456}"
+changelog fail "sha text not a prefix" "${cl_good/"[0123456]"/[fedcba9]}"
+changelog fail "multi-line bullet" "$cl_good"$'\n  continued'
+changelog fail "text before sections" "# Changelog
+
+Intro.
+${cl_good#\# Changelog}"
 
 echo "test-checks: $passed passed, $failed failed"
 ((failed == 0))
