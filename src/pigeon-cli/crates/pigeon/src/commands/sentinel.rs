@@ -3,15 +3,17 @@
 use std::env;
 
 use sentinel::PullRequest;
+use sentinel::release::{self, Config};
 
 use super::{INVALID, SUCCESS, VIOLATION};
-use crate::cli::{CheckArgs, SentinelCommand};
+use crate::cli::{CheckArgs, ReleaseArgs, SentinelCommand};
 
 /// Runs a `pigeon sentinel` command and returns its exit code.
 #[must_use]
 pub fn run(command: SentinelCommand) -> i32 {
     match command {
         SentinelCommand::Check(args) => check(&args),
+        SentinelCommand::Release(args) => release(&args),
     }
 }
 
@@ -31,6 +33,7 @@ fn check(args: &CheckArgs) -> i32 {
         title: env::var("PR_TITLE").ok(),
         body: env::var("PR_BODY").ok(),
         number: env::var("PR_NUMBER").ok(),
+        files: env::var("PR_FILES").ok(),
     });
     match sentinel::check(&policies, &args.root, pull_request.as_ref()) {
         Ok(report) => {
@@ -40,6 +43,39 @@ fn check(args: &CheckArgs) -> i32 {
             println!("{}", report.summary());
             if report.passed() { SUCCESS } else { VIOLATION }
         }
+        Err(e) => {
+            eprintln!("sentinel: {e}");
+            INVALID
+        }
+    }
+}
+
+fn release(args: &ReleaseArgs) -> i32 {
+    let path = args
+        .config
+        .clone()
+        .unwrap_or_else(|| args.root.join(".config/releases.yaml"));
+    let result = Config::load(&path).and_then(|config| {
+        release::run(
+            &args.root,
+            &config,
+            args.from.as_deref(),
+            &args.to,
+            args.notes_dir.as_deref(),
+            args.dry_run,
+        )
+    });
+    match result {
+        Ok(outcome) => match serde_json::to_string(&outcome) {
+            Ok(json) => {
+                println!("{json}");
+                SUCCESS
+            }
+            Err(e) => {
+                eprintln!("sentinel: {e}");
+                INVALID
+            }
+        },
         Err(e) => {
             eprintln!("sentinel: {e}");
             INVALID

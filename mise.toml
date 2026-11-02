@@ -24,8 +24,16 @@ run = "cargo fmt --all -- --check"
 dir = "src/pigeon-cli"
 run = "cargo clippy --workspace --all-targets --locked -- -D warnings"
 
+[tasks.features]
+dir = "src/pigeon-cli"
+run = [
+  "cargo clippy -p pigeon --all-targets --locked --no-default-features -- -D warnings",
+  "cargo clippy -p pigeon --all-targets --locked --no-default-features --features sentinel -- -D warnings",
+  "cargo clippy -p pigeon --all-targets --locked --no-default-features --features gantry -- -D warnings",
+]
+
 [tasks.rust]
-depends = ["fmt-check", "lint", "test"]
+depends = ["fmt-check", "lint", "features", "test"]
 
 [tasks.sentinel]
 dir = "src/pigeon-cli"

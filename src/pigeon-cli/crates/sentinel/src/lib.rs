@@ -2,8 +2,11 @@
 //!
 //! See `.claude/decisions/2026-11-02-development-cargo-workspace-mise-toolchain.md`.
 
+mod changelog;
+mod git;
 mod markdown;
 pub mod policy;
+pub mod release;
 pub mod report;
 mod rules;
 mod target;
@@ -15,6 +18,9 @@ use std::path::{Path, PathBuf};
 pub use policy::Policy;
 pub use report::{Report, Violation};
 
+/// This crate's version.
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+
 /// A policy file that failed to load, or a file a policy could not read.
 #[derive(Debug)]
 pub enum Error {
@@ -24,6 +30,13 @@ pub enum Error {
         path: PathBuf,
         /// The underlying error.
         source: std::io::Error,
+    },
+    /// A git command failed.
+    Git {
+        /// The arguments.
+        args: String,
+        /// Its stderr, or why it could not start.
+        message: String,
     },
     /// A policy file is not a valid policy.
     Policy {
@@ -38,6 +51,7 @@ impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Io { path, source } => write!(f, "{}: {source}", path.display()),
+            Self::Git { args, message } => write!(f, "git {args}: {message}"),
             Self::Policy { path, message } => write!(f, "{}: {message}", path.display()),
         }
     }
@@ -63,6 +77,8 @@ pub struct PullRequest {
     pub body: Option<String>,
     /// The number.
     pub number: Option<String>,
+    /// The changed paths, one per line.
+    pub files: Option<String>,
 }
 
 /// Loads and validates one policy file.

@@ -25,6 +25,8 @@ pub enum Target {
     Named(NamedTarget),
     /// `{ file: PATH }`.
     File(FileTarget),
+    /// `{ files: [PATH...], optional }`.
+    Files(FilesTarget),
     /// `{ dir: PATH, exclude, min }`.
     Dir(DirTarget),
 }
@@ -45,6 +47,17 @@ pub enum NamedTarget {
 pub struct FileTarget {
     /// Relative to the root.
     pub file: PathBuf,
+}
+
+/// Several files.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct FilesTarget {
+    /// Relative to the root.
+    pub files: Vec<PathBuf>,
+    /// A missing file is skipped rather than a violation.
+    #[serde(default)]
+    pub optional: bool,
 }
 
 /// Every regular file directly in a directory.
@@ -285,6 +298,8 @@ pub struct FieldRule {
     pub name: PrField,
     /// The field matches.
     pub matches: Option<Pattern>,
+    /// The field does not match.
+    pub not: Option<Pattern>,
     /// Every match is a path that exists under the root.
     pub references: Option<Pattern>,
     /// Paths not counted as references.
@@ -305,6 +320,8 @@ pub enum PrField {
     Body,
     /// The number.
     Number,
+    /// The changed paths, one per line.
+    Files,
 }
 
 /// See [`Rule::Contains`].
@@ -345,8 +362,8 @@ impl Policy {
                     if !pr {
                         return at("`field` needs the `pull-request` target");
                     }
-                    if r.matches.is_some() == r.references.is_some() {
-                        return at("`field` takes exactly one of `matches` and `references`");
+                    if (r.matches.is_some() || r.not.is_some()) == r.references.is_some() {
+                        return at("`field` takes `references`, or `matches` and/or `not`");
                     }
                 }
                 Rule::Contains(_) => {}

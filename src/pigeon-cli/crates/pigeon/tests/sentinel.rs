@@ -1,4 +1,5 @@
 //! `pigeon sentinel check` end to end.
+#![cfg(feature = "sentinel")]
 
 use std::fs;
 use std::path::PathBuf;
@@ -14,7 +15,7 @@ fn repo_root() -> PathBuf {
 fn check(root: &std::path::Path) -> Command {
     let mut cmd = Command::cargo_bin("pigeon").expect("binary");
     cmd.args(["sentinel", "check", "--root"]).arg(root);
-    for var in ["PR_TITLE", "PR_BODY", "PR_NUMBER"] {
+    for var in ["PR_TITLE", "PR_BODY", "PR_NUMBER", "PR_FILES"] {
         cmd.env_remove(var);
     }
     cmd
@@ -84,6 +85,7 @@ fn pull_request_reads_the_environment() {
         .env("PR_TITLE", "hi")
         .env("PR_BODY", "")
         .env("PR_NUMBER", "1")
+        .env("PR_FILES", "")
         .assert()
         .code(0);
     check(root.path())
@@ -91,6 +93,7 @@ fn pull_request_reads_the_environment() {
         .env("PR_TITLE", "bye")
         .env("PR_BODY", "")
         .env("PR_NUMBER", "1")
+        .env("PR_FILES", "")
         .assert()
         .code(1);
     check(root.path())
@@ -105,11 +108,11 @@ fn pull_request_reads_the_environment() {
 }
 
 #[test]
-fn version_flag() {
+fn sentinel_reports_its_own_version() {
     Command::cargo_bin("pigeon")
         .expect("binary")
-        .arg("--version")
+        .args(["sentinel", "--version"])
         .assert()
         .success()
-        .stdout(predicate::str::starts_with("pigeon 0.1.0"));
+        .stdout(predicate::str::contains(sentinel::VERSION));
 }

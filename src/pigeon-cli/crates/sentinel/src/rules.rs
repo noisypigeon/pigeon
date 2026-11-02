@@ -129,6 +129,7 @@ pub fn run_pull_request(
         ("title", &pr.title),
         ("body", &pr.body),
         ("number", &pr.number),
+        ("files", &pr.files),
     ] {
         match value {
             Some(v) => {
@@ -489,6 +490,7 @@ fn field(ctx: &mut Ctx, root: &Path, r: &FieldRule) {
         PrField::Title => "title",
         PrField::Body => "body",
         PrField::Number => "number",
+        PrField::Files => "files",
     };
     let Some(value) = ctx.vars.get(name).cloned() else {
         return;
@@ -496,12 +498,24 @@ fn field(ctx: &mut Ctx, root: &Path, r: &FieldRule) {
     if let Some(m) = &r.matches
         && !m.0.is_match(&value)
     {
-        let shown = if matches!(r.name, PrField::Body) {
+        let shown = if matches!(r.name, PrField::Body | PrField::Files) {
             String::new()
         } else {
             format!(" `{value}`")
         };
         ctx.push(None, format!("`{name}`{shown} does not match `{}`", m.0));
+    }
+    if let Some(n) = &r.not
+        && let Some(found) = n.0.find(&value)
+    {
+        ctx.push(
+            None,
+            format!(
+                "`{name}` holds `{}`, which `{}` forbids",
+                found.as_str(),
+                n.0
+            ),
+        );
     }
     if let Some(re) = &r.references {
         let mut cited: Vec<&str> = Vec::new();
