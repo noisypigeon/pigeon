@@ -357,3 +357,25 @@ Before writing PR D, §3's modules were checked against the provider's schema at
 1. This amendment lands first.
 2. PR D then follows §8, with these modules. It also deletes `.config/changelog-corrections.yaml` and the code that reads it, as the release ADR's amendment of the same date directs.
 3. Its plan comment shows `data.cloudflare_zone` ×4 and `data.cloudflare_account_api_token_permission_groups_list`, and no tokens.
+
+### 2026-11-02: Workload secrets, and minted tokens handed to apexes
+
+`.claude/decisions/2026-11-02-runtime-workloads-zone-apex.md` gives every zone a `workloads/<zone>/apex/` unit. It needs a few values of its own that stay out of the repository, and a Cloudflare token. This takes up two items from Context's out-of-scope list: handing minted tokens to workloads, and DNS records.
+
+§4's guards are superseded in part, and stay as written:
+
+- **Workloads may hold secrets.** A `workloads/` unit may hold `secrets.config.yaml`, in the same format, under a third passphrase, `COBOT_WORKLOAD_SECRETS_PASSPHRASE`, never `COBOT_SECRETS_PASSPHRASE`. It has the same 16-character minimum, and cobot refuses when it equals `COBOT_SECRETS_PASSPHRASE`.
+- **`$secret` under `workloads/`** is allowed for keys the unit declares.
+- **Break-glass keys stay infra-only.** `validate` rejects, under `workloads/`, any key an `infra/` unit declares, and `provisioner_token` by name.
+- **`terraform.yaml`'s secrets rule** allows `secrets.config.yaml` under `infra/` and `workloads/`.
+
+The rule that a workload never holds or sees break-glass material is unchanged: leaking the workload passphrase exposes no `infra/` key.
+
+**Minted tokens reach apexes, and nothing else.**
+
+- `tokens` holds one `apex-<zone>` entry per apex, with only `DNS Write` on that zone. Token names may hold dots, so the name carries the zone.
+- `schema.json` gains root `outputs`, the zone ids and the minted token values, always sensitive and only in encrypted state.
+- cobot reads the live generation from this unit's state and hands it to that zone's apex through `TF_VAR_handoff`, never on disk. The apex ADR's §9 has the detail.
+- `provisioner_token` must be able to grant `DNS Write` on each zone with an apex, as §4 already requires of every minted permission.
+
+The steps are the apex ADR's §13.
