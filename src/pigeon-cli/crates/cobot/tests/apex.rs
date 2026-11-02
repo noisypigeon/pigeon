@@ -745,3 +745,62 @@ fn the_apex_token_is_handed_off_after_infra_applies() {
         );
     }
 }
+
+#[test]
+fn absolute_hosts_and_orphan_workloads_are_rejected() {
+    let repo = repo(&PROTON.replace(
+        "services:",
+        "hosts: { blog: [www.noisypigeon.com] }\nservices:",
+    ));
+    assert_fails(
+        repo.path(),
+        "`www.noisypigeon.com` must be relative to the zone",
+    );
+    let repo = self::repo(PROTON);
+    write(
+        repo.path(),
+        "workloads/noisypigeon.com/blog/README.md",
+        "x\n",
+    );
+    assert_fails(
+        repo.path(),
+        "a workload directory holds config.yaml or unit.yaml",
+    );
+}
+
+#[test]
+fn secret_mail_policies_are_claimed_once_decrypted() {
+    let config = apex(&PROTON.replace(
+        "records: {}",
+        "records:\n  extra: { name: \"@\", type: TXT, content: { secret: extra_spf } }",
+    ));
+    let repo = repo_with(&config);
+    set_secrets(
+        repo.path(),
+        &["protonmail_verification", "pm_verification", "extra_spf"],
+    );
+    assert_eq!(problems(repo.path()), Vec::<String>::new());
+    let parsed: Value = serde_saphyr::from_str(&config).expect("yaml");
+    let site = cobot::apex::Site {
+        root: repo.path().to_path_buf(),
+    };
+    let home = repo.path().join("infra/cloudflare");
+    let mut secrets = BTreeMap::new();
+    secrets.insert("extra_spf".to_string(), "v=spf1 -all".to_string());
+    let found = cobot::apex::check_decrypted(&parsed, &home, &site, &secrets);
+    assert!(
+        found
+            .iter()
+            .any(|p| p.contains("@ SPF is claimed by proton and records.extra")),
+        "{found:?}"
+    );
+    assert!(
+        !found.iter().any(|p| p.contains("v=spf1 -all")),
+        "{found:?}"
+    );
+    secrets.insert("extra_spf".to_string(), "site-verification=x".to_string());
+    assert_eq!(
+        cobot::apex::check_decrypted(&parsed, &home, &site, &secrets),
+        Vec::<String>::new()
+    );
+}

@@ -237,6 +237,8 @@ struct Rec {
     name: String,
     kind: String,
     content: String,
+    /// The content as published, when known: literals, plus secrets once decrypted.
+    raw: Option<String>,
     ttl: i64,
     priority: Option<i64>,
     proxied: Option<bool>,
@@ -400,6 +402,27 @@ fn resolve(
     out
 }
 
+/// A preset template as published; `None` when a secret is not decrypted.
+fn fill_raw(
+    template: &str,
+    values: &BTreeMap<String, Resolved>,
+    secrets: &BTreeMap<String, String>,
+) -> Option<String> {
+    let mut out = String::new();
+    let mut last = 0;
+    for c in PLACE.captures_iter(template) {
+        let m = c.get(0).expect("match");
+        out.push_str(&template[last..m.start()]);
+        match values.get(&c[1])? {
+            Resolved::Literal(l) => out.push_str(l),
+            Resolved::Secret(k) => out.push_str(secrets.get(k)?),
+        }
+        last = m.end();
+    }
+    out.push_str(&template[last..]);
+    Some(out)
+}
+
 /// Renders a preset template; `None` when it names an unset input.
 fn fill(template: &str, values: &BTreeMap<String, Resolved>) -> Option<String> {
     let mut out = String::new();
@@ -505,6 +528,8 @@ fn check_ingress(v: &Value) -> Result<(String, String, bool), String> {
 /// An apex's records and claims as they are assembled.
 #[derive(Default)]
 struct Expansion {
+    /// Decrypted secrets, when planning; empty when validating.
+    secrets: BTreeMap<String, String>,
     recs: BTreeMap<String, Rec>,
     claims: Vec<Claim>,
     prefixes: Vec<String>,
@@ -532,6 +557,7 @@ impl Expansion {
             }
             for (key, r) in &preset.records {
                 if let Some(content) = fill(&r.content, &values) {
+                    let raw = fill_raw(&r.content, &values, &self.secrets);
                     self.recs.insert(
                         format!("{service}-{key}"),
                         Rec {
@@ -539,6 +565,7 @@ impl Expansion {
                             name: r.name.clone(),
                             kind: r.kind.clone(),
                             content,
+                            raw,
                             ttl: r.ttl.unwrap_or(1),
                             priority: r.priority,
                             proxied: r.proxied,
@@ -582,6 +609,10 @@ impl Expansion {
                 if !ok {
                     self.problems
                         .push(format!("hosts.{w}: `{h}` is not a host name"));
+                } else if h == zone || h.ends_with(&format!(".{zone}")) {
+                    self.problems
+                        .push(format!("hosts.{w}: `{h}` must be relative to the zone"));
+                    return false;
                 }
                 ok
             });
@@ -616,6 +647,7 @@ impl Expansion {
                                 name: h.clone(),
                                 kind: kind.clone(),
                                 content: escape(&content),
+                                raw: Some(content.clone()),
                                 ttl: 1,
                                 priority: None,
                                 proxied: Some(proxied),
@@ -648,6 +680,9 @@ impl Expansion {
             };
             if let Some(r) = self.recs.get_mut(key) {
                 r.merge(o);
+                if let Some(c) = o.get("content") {
+                    r.raw = raw_of(c, &self.secrets);
+                }
                 continue;
             }
             if let Some(p) = self.prefixes.iter().find(|p| key.starts_with(p.as_str())) {
@@ -666,11 +701,13 @@ impl Expansion {
                     .push(format!("{at}: a new record needs name, type and content"));
                 continue;
             };
+            let raw = o.get("content").and_then(|c| raw_of(c, &self.secrets));
             let mut rec = Rec {
                 owner: at.clone(),
                 name: name.to_string(),
                 kind: kind.to_string(),
                 content,
+                raw,
                 ttl: 1,
                 priority: None,
                 proxied: None,
@@ -684,7 +721,7 @@ impl Expansion {
     fn finish(mut self, zone: &str) -> (Map<String, Value>, Vec<String>) {
         let mut by_name: BTreeMap<&str, Vec<(&str, &Rec)>> = BTreeMap::new();
         for (key, r) in &self.recs {
-            if let Some(c) = implied_claim(&r.kind, Some(&r.content)) {
+            if let Some(c) = implied_claim(&r.kind, r.raw.as_deref()) {
                 self.claims.push((r.name.clone(), c, r.owner.clone()));
             }
             by_name.entry(&r.name).or_default().push((key, r));
@@ -763,6 +800,14 @@ impl Rec {
     }
 }
 
+/// An explicit record's content as published, when known.
+fn raw_of(c: &Value, secrets: &BTreeMap<String, String>) -> Option<String> {
+    as_secret(c).map_or_else(
+        || c.as_str().map(str::to_string),
+        |k| secrets.get(k).cloned(),
+    )
+}
+
 /// An explicit record's content as an HCL template.
 fn content_of(c: &Value) -> String {
     as_secret(c).map_or_else(|| escape(c.as_str().unwrap_or_default()), secret_ref)
@@ -774,8 +819,12 @@ fn expand_zone(
     home: &Path,
     root: &Path,
     zone: &str,
+    secrets: &BTreeMap<String, String>,
 ) -> (Map<String, Value>, Vec<String>) {
-    let mut e = Expansion::default();
+    let mut e = Expansion {
+        secrets: secrets.clone(),
+        ..Expansion::default()
+    };
     bad_secrets(config, "config", &mut e.problems);
     e.services(config, home);
     e.hosts(config, root, zone);
@@ -786,10 +835,31 @@ fn expand_zone(
 /// Every zone's records, keyed `<zone>:<record key>`, each with its `zone`, and their problems.
 #[must_use]
 pub fn expand(config: &Value, home: &Path, site: &Site) -> (Map<String, Value>, Vec<String>) {
+    expand_with(config, home, site, &BTreeMap::new())
+}
+
+/// The problems once secret-backed records are classified by their decrypted
+/// content; messages name records and claims, never values.
+#[must_use]
+pub fn check_decrypted(
+    config: &Value,
+    home: &Path,
+    site: &Site,
+    secrets: &BTreeMap<String, String>,
+) -> Vec<String> {
+    expand_with(config, home, site, secrets).1
+}
+
+fn expand_with(
+    config: &Value,
+    home: &Path,
+    site: &Site,
+    secrets: &BTreeMap<String, String>,
+) -> (Map<String, Value>, Vec<String>) {
     let mut out = Map::new();
     let mut problems = Vec::new();
     for zone in zones(config) {
-        let (recs, ps) = expand_zone(&config["zones"][&zone], home, &site.root, &zone);
+        let (recs, ps) = expand_zone(&config["zones"][&zone], home, &site.root, &zone, secrets);
         problems.extend(ps.into_iter().map(|p| format!("zones.{zone}: {p}")));
         for (key, mut item) in recs {
             item["zone"] = Value::String(zone.clone());
@@ -835,6 +905,31 @@ fn check_record(r: &Rec, zone: &str) -> Result<(), String> {
         return Err("content is empty".into());
     }
     Ok(())
+}
+
+/// Checks one zone directory: only workload directories, each a unit.
+fn zone_dir(rel: &str, dir: &Path, out: &mut Vec<(String, String)>) {
+    for e in fs::read_dir(dir).into_iter().flatten().flatten() {
+        let n = e.file_name().to_string_lossy().into_owned();
+        if !e.path().is_dir() {
+            out.push((
+                format!("{rel}/{n}"),
+                "a zone holds only workload directories".into(),
+            ));
+        } else if n == APEX || !NAME.is_match(&n) {
+            out.push((
+                format!("{rel}/{n}"),
+                "a workload's name is lowercase words joined by dashes, never `apex`".into(),
+            ));
+        } else if !e.path().join(crate::config::CONFIG).is_file()
+            && !e.path().join("unit.yaml").is_file()
+        {
+            out.push((
+                format!("{rel}/{n}"),
+                "a workload directory holds config.yaml or unit.yaml".into(),
+            ));
+        }
+    }
 }
 
 /// Checks the `workloads/` layout against `infra/cloudflare`'s config; problems are `(path, message)`.
@@ -887,20 +982,7 @@ pub fn layout(root: &Path) -> Vec<(String, String)> {
             ));
             continue;
         }
-        for e in fs::read_dir(&dir).into_iter().flatten().flatten() {
-            let n = e.file_name().to_string_lossy().into_owned();
-            if !e.path().is_dir() {
-                out.push((
-                    format!("{rel}/{n}"),
-                    "a zone holds only workload directories".into(),
-                ));
-            } else if n == APEX || !NAME.is_match(&n) {
-                out.push((
-                    format!("{rel}/{n}"),
-                    "a workload's name is lowercase words joined by dashes, never `apex`".into(),
-                ));
-            }
-        }
+        zone_dir(&rel, &dir, &mut out);
     }
     let apex: Value = fs::read_to_string(root.join(UNIT).join(crate::config::CONFIG))
         .ok()

@@ -335,6 +335,7 @@ fn prepare(
             ctx.workload_secrets_passphrase.clone(),
         )?;
         let values = secrets::decrypt_all(&unit.dir.join(secrets::FILE), pass)?;
+        decrypted_records(unit, c, &values)?;
         env.hidden.extend(values.values().cloned());
         env.hidden.push(pass.clone());
         let json = serde_json::to_string(&values).map_err(|e| Error::Io {
@@ -406,6 +407,30 @@ fn prepare(
     let mut plan = tofu::plan(&unit.path, &work, &env)?;
     plan.note = pending;
     Ok((work, env, plan))
+}
+
+/// Rejects an apex whose secret-backed records conflict once decrypted.
+fn decrypted_records(
+    unit: &Unit,
+    c: &config::ConfigUnit,
+    values: &std::collections::BTreeMap<String, String>,
+) -> Result<(), Error> {
+    let Some(site) = &c.site else {
+        return Ok(());
+    };
+    let found = apex::check_decrypted(&c.config, &c.home, site, values);
+    if found.is_empty() {
+        return Ok(());
+    }
+    Err(Error::Invalid(
+        found
+            .into_iter()
+            .map(|message| Problem {
+                path: format!("{}/{}", unit.path, config::CONFIG),
+                message,
+            })
+            .collect(),
+    ))
 }
 
 /// Each zone's handed-off values from `infra/cloudflare`'s state; empty where it has none.
