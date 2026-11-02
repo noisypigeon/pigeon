@@ -1,6 +1,7 @@
 //! Infrastructure as code; see
 //! `.claude/decisions/2026-11-02-runtime-cobot-infrastructure-as-code.md`.
 
+pub mod apex;
 pub mod config;
 pub mod generations;
 pub mod providers;
@@ -38,6 +39,17 @@ pub enum Error {
     Passphrase,
     /// The secrets passphrase is missing or too short.
     SecretsPassphrase,
+    /// The workload secrets passphrase is missing or too short.
+    WorkloadSecretsPassphrase,
+    /// The two secrets passphrases are equal.
+    SamePassphrase,
+    /// An apply needs a handoff that state does not hold yet.
+    Pending {
+        /// The unit.
+        unit: String,
+        /// The token it waits for.
+        token: String,
+    },
     /// A file could not be read, written or parsed.
     Io {
         /// The path.
@@ -88,6 +100,22 @@ impl fmt::Display for Error {
                 "{} must be set, at least 16 characters, for a unit with secrets",
                 secrets::PASSPHRASE_VAR
             ),
+            Self::WorkloadSecretsPassphrase => write!(
+                f,
+                "{} must be set, at least 16 characters, for a workload unit with secrets",
+                secrets::WORKLOAD_PASSPHRASE_VAR
+            ),
+            Self::SamePassphrase => write!(
+                f,
+                "{} must differ from {}",
+                secrets::WORKLOAD_PASSPHRASE_VAR,
+                secrets::PASSPHRASE_VAR
+            ),
+            Self::Pending { unit, token } => write!(
+                f,
+                "{unit}: {} holds no live `{token}` yet; it applies after that token is minted",
+                apex::CLOUDFLARE
+            ),
             Self::Io { path, message } => write!(f, "{}: {message}", path.display()),
             Self::Tofu { unit, message } => write!(f, "{unit}: {message}"),
             Self::Git { args, message } => write!(f, "git {args}: {message}"),
@@ -120,6 +148,29 @@ pub fn secrets_passphrase(value: Option<String>) -> Result<String, Error> {
         .ok_or(Error::SecretsPassphrase)
 }
 
+/// The passphrase for the secrets of the unit at `unit_path`: the workload
+/// passphrase under `workloads/`, the infra one elsewhere; the two must differ.
+///
+/// # Errors
+///
+/// [`Error::SecretsPassphrase`], [`Error::WorkloadSecretsPassphrase`] or [`Error::SamePassphrase`].
+pub fn secrets_passphrase_for(
+    unit_path: &str,
+    infra: Option<String>,
+    workload: Option<String>,
+) -> Result<String, Error> {
+    if infra.is_some() && infra == workload {
+        return Err(Error::SamePassphrase);
+    }
+    if unit_path.trim_start_matches("./").starts_with("workloads/") {
+        workload
+            .filter(|p| p.chars().count() >= 16)
+            .ok_or(Error::WorkloadSecretsPassphrase)
+    } else {
+        secrets_passphrase(infra)
+    }
+}
+
 /// Validates every unit, against the provider allowlist in `providers`.
 ///
 /// # Errors
@@ -143,20 +194,23 @@ pub fn validate(root: &Path, providers: &Path) -> Result<Vec<Unit>, Error> {
 /// unknown selection.
 pub fn select(root: &Path, providers: &Path, wanted: &[String]) -> Result<Vec<Unit>, Error> {
     let units = validate(root, providers)?;
-    if wanted.is_empty() {
-        return Ok(units);
-    }
-    wanted
-        .iter()
-        .map(|w| {
-            let w = w.trim_end_matches('/');
-            units
-                .iter()
-                .find(|u| u.path == w)
-                .cloned()
-                .ok_or_else(|| Error::UnknownUnit(w.to_string()))
-        })
-        .collect()
+    let mut chosen: Vec<Unit> = if wanted.is_empty() {
+        units
+    } else {
+        wanted
+            .iter()
+            .map(|w| {
+                let w = w.trim_end_matches('/');
+                units
+                    .iter()
+                    .find(|u| u.path == w)
+                    .cloned()
+                    .ok_or_else(|| Error::UnknownUnit(w.to_string()))
+            })
+            .collect::<Result<_, _>>()?
+    };
+    chosen.sort_by_key(|u| !u.path.starts_with("infra/"));
+    Ok(chosen)
 }
 
 fn io(path: &Path) -> impl Fn(std::io::Error) -> Error + '_ {
@@ -177,8 +231,10 @@ pub struct Context {
     pub state: PathBuf,
     /// The state passphrase.
     pub state_passphrase: String,
-    /// The secrets passphrase, needed only by units with secrets.
+    /// The secrets passphrase, needed only by infra units with secrets.
     pub secrets_passphrase: Option<String>,
+    /// The workload secrets passphrase, needed only by workload units with secrets.
+    pub workload_secrets_passphrase: Option<String>,
     /// Today, for token generations.
     pub today: generations::Day,
 }
@@ -194,7 +250,7 @@ pub fn render_json(
 ) -> Value {
     let state_file = state.join(&unit.path).join("terraform.tfstate");
     if let Some(c) = &unit.config {
-        return config::render(c, &unit.dir, &state_file, allow, today, existing);
+        return config::render(c, &state_file, allow, today, existing);
     }
     let mut modules = Map::new();
     if let Some(spec) = &unit.spec {
@@ -256,7 +312,11 @@ fn absolute(path: &Path) -> Result<PathBuf, Error> {
 }
 
 /// Renders, initializes and plans one unit, retaining live generations from state.
-fn prepare(ctx: &Context, unit: &Unit) -> Result<(PathBuf, tofu::Env, UnitPlan), Error> {
+fn prepare(
+    ctx: &Context,
+    unit: &Unit,
+    apply: bool,
+) -> Result<(PathBuf, tofu::Env, UnitPlan), Error> {
     let root = ctx.root.canonicalize().map_err(io(&ctx.root))?;
     let state = absolute(&ctx.state)?;
     let allow = providers::Allowlist::load(&ctx.providers)?;
@@ -265,10 +325,15 @@ fn prepare(ctx: &Context, unit: &Unit) -> Result<(PathBuf, tofu::Env, UnitPlan),
         lockfile: providers::lockfile(&ctx.providers),
         ..tofu::Env::default()
     };
+    let mut pending = None;
     if let Some(c) = &unit.config
-        && !config::secret_keys(&c.schema).is_empty()
+        && !config::declared_secrets(c).is_empty()
     {
-        let pass = &secrets_passphrase(ctx.secrets_passphrase.clone())?;
+        let pass = &secrets_passphrase_for(
+            &unit.path,
+            ctx.secrets_passphrase.clone(),
+            ctx.workload_secrets_passphrase.clone(),
+        )?;
         let values = secrets::decrypt_all(&unit.dir.join(secrets::FILE), pass)?;
         env.hidden.extend(values.values().cloned());
         env.hidden.push(pass.clone());
@@ -278,10 +343,52 @@ fn prepare(ctx: &Context, unit: &Unit) -> Result<(PathBuf, tofu::Env, UnitPlan),
         })?;
         env.vars.push(("TF_VAR_secrets".into(), json));
     }
+    if let Some(c) = &unit.config
+        && config::has_handoff(c)
+        && c.site.is_some()
+    {
+        let zones = apex::zones(&c.config);
+        let mut values = handoff(ctx, &root, &state, &allow, &zones)?;
+        let waiting: Vec<String> = values
+            .iter()
+            .filter(|(_, v)| !apex::HANDOFF_KEYS.iter().all(|k| v.contains_key(*k)))
+            .map(|(z, _)| apex::token_name(z))
+            .collect();
+        if !waiting.is_empty() {
+            let tokens = waiting.join("`, `");
+            if apply {
+                return Err(Error::Pending {
+                    unit: unit.path.clone(),
+                    token: tokens,
+                });
+            }
+            let existing = state.join(&unit.path).join("terraform.tfstate").exists();
+            env.no_refresh = existing;
+            pending = Some(format!(
+                "Credentials pending: planned with placeholders{} until {} mints `{tokens}`.",
+                if existing { ", refresh skipped," } else { "" },
+                apex::CLOUDFLARE
+            ));
+            for v in values.values_mut() {
+                v.entry("api_token".into())
+                    .or_insert_with(|| apex::PLACEHOLDER_TOKEN.into());
+                v.entry("zone_id".into())
+                    .or_insert_with(|| apex::PLACEHOLDER_ZONE_ID.into());
+            }
+        }
+        env.hidden
+            .extend(values.values().flat_map(|v| v.values().cloned()));
+        let json = serde_json::to_string(&values).map_err(|e| Error::Io {
+            path: unit.dir.clone(),
+            message: e.to_string(),
+        })?;
+        env.vars.push(("TF_VAR_handoff".into(), json));
+    }
     let work = root.join(WORK_DIR).join(&unit.path);
     let none = config::Existing::new();
     write_render(&work, &render_json(unit, &state, &allow, ctx.today, &none))?;
-    env.providers = providers::used(&allow, &unit.dir, &work.join("main.tf.json"))
+    let home = unit.config.as_ref().map_or(&unit.dir, |c| &c.home);
+    env.providers = providers::used(&allow, home, &work.join("main.tf.json"))
         .into_iter()
         .map(str::to_string)
         .collect();
@@ -296,8 +403,49 @@ fn prepare(ctx: &Context, unit: &Unit) -> Result<(PathBuf, tofu::Env, UnitPlan),
             )?;
         }
     }
-    let plan = tofu::plan(&unit.path, &work, &env)?;
+    let mut plan = tofu::plan(&unit.path, &work, &env)?;
+    plan.note = pending;
     Ok((work, env, plan))
+}
+
+/// Each zone's handed-off values from `infra/cloudflare`'s state; empty where it has none.
+fn handoff(
+    ctx: &Context,
+    root: &Path,
+    state: &Path,
+    allow: &providers::Allowlist,
+    zones: &[String],
+) -> Result<std::collections::BTreeMap<String, std::collections::BTreeMap<String, String>>, Error> {
+    let empty = apex::handoff("{}", zones, ctx.today);
+    if !state
+        .join(apex::CLOUDFLARE)
+        .join("terraform.tfstate")
+        .exists()
+    {
+        return Ok(empty);
+    }
+    let Some(source) = unit::discover(root)
+        .0
+        .into_iter()
+        .find(|u| u.path == apex::CLOUDFLARE)
+    else {
+        return Ok(empty);
+    };
+    let work = root.join(WORK_DIR).join(&source.path);
+    let rendered = render_json(&source, state, allow, ctx.today, &config::Existing::new());
+    write_render(&work, &rendered)?;
+    let mut env = tofu::Env {
+        passphrase: ctx.state_passphrase.clone(),
+        lockfile: providers::lockfile(&ctx.providers),
+        ..tofu::Env::default()
+    };
+    env.providers = providers::used(allow, &source.dir, &work.join("main.tf.json"))
+        .into_iter()
+        .map(str::to_string)
+        .collect();
+    tofu::init(&source.path, &work, &env)?;
+    let shown = tofu::show_state(&source.path, &work, &env)?;
+    Ok(apex::handoff(&shown, zones, ctx.today))
 }
 
 /// Plans each unit.
@@ -308,7 +456,7 @@ fn prepare(ctx: &Context, unit: &Unit) -> Result<(PathBuf, tofu::Env, UnitPlan),
 pub fn plan(ctx: &Context, units: &[Unit]) -> Result<Vec<UnitPlan>, Error> {
     units
         .iter()
-        .map(|u| prepare(ctx, u).map(|(_, _, p)| p))
+        .map(|u| prepare(ctx, u, false).map(|(_, _, p)| p))
         .collect()
 }
 
@@ -320,7 +468,7 @@ pub fn plan(ctx: &Context, units: &[Unit]) -> Result<Vec<UnitPlan>, Error> {
 pub fn apply(ctx: &Context, units: &[Unit]) -> Result<Vec<UnitPlan>, Error> {
     let mut plans = Vec::new();
     for u in units {
-        let (work, env, p) = prepare(ctx, u)?;
+        let (work, env, p) = prepare(ctx, u, true)?;
         if p.has_changes() {
             tofu::apply(&u.path, &work, &env)?;
         }
@@ -382,6 +530,9 @@ pub fn summary(plans: &[UnitPlan]) -> String {
     let mut out = String::from("<!-- cobot-plan -->\n## cobot plan\n");
     for p in plans {
         let _ = write!(out, "\n### `{}`\n\n", p.unit);
+        if let Some(note) = &p.note {
+            let _ = write!(out, "{note}\n\n");
+        }
         if p.has_changes() {
             for c in &p.changes {
                 let _ = writeln!(out, "- {} `{}`", c.action.word(), c.address);

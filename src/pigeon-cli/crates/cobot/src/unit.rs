@@ -119,7 +119,17 @@ pub fn discover(root: &Path) -> (Vec<Unit>, Vec<Problem>) {
                 "holds both unit.yaml and config.yaml; a unit is one or the other",
             ));
         } else if config_file.is_file() {
-            let config = match crate::config::load(&dir) {
+            let (home, site) = if rel == crate::apex::UNIT {
+                (
+                    root.join(crate::apex::CLOUDFLARE),
+                    Some(crate::apex::Site {
+                        root: root.to_path_buf(),
+                    }),
+                )
+            } else {
+                (dir.clone(), None)
+            };
+            let config = match crate::config::load(&dir, &home, site) {
                 Ok(c) => Some(c),
                 Err(e) => {
                     problems.push(problem(format!("{rel}/{e}"), "cannot be loaded"));
@@ -233,13 +243,13 @@ fn stays_inside(source: &str) -> bool {
     true
 }
 
-/// Checks every unit's files: formats, symlinks, provisioners, runner reads, providers.
-fn scan(root: &Path, unit: &Unit, allow: &Allowlist, problems: &mut Vec<Problem>) {
+/// Checks a directory's files: formats, symlinks, provisioners, runner reads, providers.
+fn scan(root: &Path, dir: &Path, allow: &Allowlist, problems: &mut Vec<Problem>) {
     let rel_of = |path: &Path| {
         path.strip_prefix(root)
             .map_or_else(|_| path.display().to_string(), |p| p.display().to_string())
     };
-    let (tf_paths, rejected) = unit_files(&unit.dir);
+    let (tf_paths, rejected) = unit_files(dir);
     for (path, why) in rejected {
         problems.push(problem(rel_of(&path), why));
     }
@@ -261,11 +271,34 @@ fn scan(root: &Path, unit: &Unit, allow: &Allowlist, problems: &mut Vec<Problem>
     }
 }
 
+/// A problem when a unit other than `infra/cloudflare` declares `x-cobot.apex`.
+fn misplaced_apex(unit: &Unit) -> Option<Problem> {
+    let c = unit.config.as_ref()?;
+    (unit.path != crate::apex::CLOUDFLARE
+        && c.site.is_none()
+        && c.schema["x-cobot"].get("apex").is_some())
+    .then(|| {
+        problem(
+            format!("{}/{}", unit.path, crate::config::SCHEMA),
+            format!("`x-cobot.apex` belongs only in {}", crate::apex::CLOUDFLARE),
+        )
+    })
+}
+
 /// Checks every unit; empty means valid.
 #[must_use]
 pub fn validate(root: &Path, allow: &Allowlist) -> Vec<Problem> {
     let (units, mut problems) = discover(root);
     let name_re = &*NAME;
+    for (path, message) in crate::apex::layout(root) {
+        problems.push(problem(path, message));
+    }
+    let infra_keys: std::collections::BTreeSet<String> = units
+        .iter()
+        .filter(|u| u.path.starts_with("infra/"))
+        .filter_map(|u| u.config.as_ref())
+        .flat_map(crate::config::declared_secrets)
+        .collect();
     for (i, unit) in units.iter().enumerate() {
         let file = format!("{}/{UNIT_FILE}", unit.path);
         if let Some(outer) = units[..i]
@@ -278,13 +311,16 @@ pub fn validate(root: &Path, allow: &Allowlist) -> Vec<Problem> {
             ));
         }
         let area = unit.path.split('/').next().unwrap_or_default();
+        problems.extend(misplaced_apex(unit));
         if unit.is_config() {
             if let Some(config) = &unit.config {
-                for (file, message) in crate::config::validate(config, &unit.dir, area, allow) {
+                for (file, message) in
+                    crate::config::validate(config, &unit.dir, area, allow, &infra_keys)
+                {
                     problems.push(problem(format!("{}/{file}", unit.path), message));
                 }
             }
-            scan(root, unit, allow, &mut problems);
+            scan(root, &unit.dir, allow, &mut problems);
             continue;
         }
         let Some(spec) = &unit.spec else {
@@ -341,7 +377,7 @@ pub fn validate(root: &Path, allow: &Allowlist) -> Vec<Problem> {
                 ));
             }
         }
-        scan(root, unit, allow, &mut problems);
+        scan(root, &unit.dir, allow, &mut problems);
     }
     problems
 }
