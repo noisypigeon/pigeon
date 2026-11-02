@@ -47,19 +47,31 @@ jobs:
       - name: Build pigeon from main
         run: cargo build -q --locked -p pigeon --no-default-features --features cobot --manifest-path src/pigeon-cli/Cargo.toml
       - name: Refuse provider changes
+        id: providers
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
         run: |
           set -euo pipefail
-          for f in providers.yaml providers.lock.hcl; do
-            if ! cmp -s ".config/$f" ".pr/.config/$f"; then
-              if [ -e ".config/$f" ] || [ -e ".pr/.config/$f" ]; then
-                echo "::error::.config/$f differs from main; providers change only on main"
-                exit 1
-              fi
-            fi
-          done
+          files="$RUNNER_TEMP/pr-files.txt"
+          gh api "repos/$REPO/pulls/$PR/files" --paginate --jq '.[].filename' >"$files"
+          changed=false
+          if grep -qxE '\.config/providers\.(yaml|lock\.hcl)' "$files"; then changed=true; fi
+          echo "changed=$changed" >>"$GITHUB_OUTPUT"
+          [ "$changed" = true ] || exit 0
+          msg="Provider changes are planned after they merge; land them in their own PR first."
+          printf '<!-- cobot-plan -->\n%s\n' "$msg" >"$RUNNER_TEMP/summary.md"
+          cat "$RUNNER_TEMP/summary.md" >>"$GITHUB_STEP_SUMMARY"
+          if grep -qE '^(infra|workloads)/' "$files"; then
+            echo "::error::$msg"
+            exit 1
+          fi
       - name: Validate
+        if: steps.providers.outputs.changed != 'true'
         run: src/pigeon-cli/target/debug/pigeon cobot validate --root .pr
       - name: Plan
+        if: steps.providers.outputs.changed != 'true'
         env:
           COBOT_STATE_PASSPHRASE: ${{ secrets.COBOT_STATE_PASSPHRASE }}
           COBOT_SECRETS_PASSPHRASE: ${{ secrets.COBOT_SECRETS_PASSPHRASE }}
