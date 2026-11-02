@@ -2,6 +2,7 @@
 
 ## 2026-11-02
 
+- docs(adr): release sentinel and gantry independently with generated changelogs ([#10](https://github.com/noisypigeon/pigeon/pull/10))
 - build: move pigeon/ to src/pigeon-cli and add tooling, infra and workloads ([#9](https://github.com/noisypigeon/pigeon/pull/9))
 - docs(adr): establish the src, tooling, infra and workloads areas ([#8](https://github.com/noisypigeon/pigeon/pull/8))
 - feat(sentinel): replace the lint scripts with pigeon sentinel and YAML policies ([#7](https://github.com/noisypigeon/pigeon/pull/7))
