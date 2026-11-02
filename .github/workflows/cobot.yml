@@ -54,19 +54,16 @@ jobs:
           PR: ${{ github.event.pull_request.number }}
         run: |
           set -euo pipefail
+          files="$RUNNER_TEMP/pr-files.txt"
+          gh api "repos/$REPO/pulls/$PR/files" --paginate --jq '.[].filename' >"$files"
           changed=false
-          for f in providers.yaml providers.lock.hcl; do
-            if [ -e ".config/$f" ] || [ -e ".pr/.config/$f" ]; then
-              cmp -s ".config/$f" ".pr/.config/$f" 2>/dev/null || changed=true
-            fi
-          done
+          if grep -qxE '\.config/providers\.(yaml|lock\.hcl)' "$files"; then changed=true; fi
           echo "changed=$changed" >>"$GITHUB_OUTPUT"
           [ "$changed" = true ] || exit 0
           msg="Provider changes are planned after they merge; land them in their own PR first."
           printf '<!-- cobot-plan -->\n%s\n' "$msg" >"$RUNNER_TEMP/summary.md"
           cat "$RUNNER_TEMP/summary.md" >>"$GITHUB_STEP_SUMMARY"
-          units=$(gh api "repos/$REPO/pulls/$PR/files" --paginate --jq '.[].filename' | grep -E '^(infra|workloads)/' || true)
-          if [ -n "$units" ]; then
+          if grep -qE '^(infra|workloads)/' "$files"; then
             echo "::error::$msg"
             exit 1
           fi
