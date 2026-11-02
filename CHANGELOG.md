@@ -2,6 +2,7 @@
 
 ## 2026-11-02
 
+- build(cobot): allow the cloudflare provider ([#25](https://github.com/noisypigeon/pigeon/pull/25))
 - fix(cobot): stop the plan, not fail it, on provider changes ([#24](https://github.com/noisypigeon/pigeon/pull/24))
 - feat(cobot): config units, secrets and pinned providers ([#23](https://github.com/noisypigeon/pigeon/pull/23))
 - docs(adr): infra/cloudflare, the provisioner unit ([#22](https://github.com/noisypigeon/pigeon/pull/22))
