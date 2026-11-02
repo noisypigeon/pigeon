@@ -48,6 +48,22 @@ units:
       - src/pigeon-cli/crates/pigeon/Cargo.toml
     exclude: [tests/, benches/, '*.md']
     cargo: { workspace: src/pigeon-cli, package: pigeon }
+  infra-cloudflare-zone:
+    manifest: infra/cloudflare/modules/zone/module.yaml
+    paths: [infra/cloudflare/modules/zone/]
+    exclude: ['*.md']
+  infra-cloudflare-permission-groups:
+    manifest: infra/cloudflare/modules/permission-groups/module.yaml
+    paths: [infra/cloudflare/modules/permission-groups/]
+    exclude: ['*.md']
+  infra-cloudflare-api-token:
+    manifest: infra/cloudflare/modules/api-token/module.yaml
+    paths: [infra/cloudflare/modules/api-token/]
+    exclude: ['*.md']
+  infra-cloudflare-schema:
+    manifest: infra/cloudflare/schema.json
+    paths: [infra/cloudflare/schema.json, infra/cloudflare/modules/]
+    exclude: ['*.md']
 settings:
   - { file: src/pigeon-cli/Cargo.toml, tables: '^\[profile\.', keys: '^(edition|rust-version)\s*=' }
   - { file: mise.toml, keys: '^rust\s*=' }
@@ -58,3 +74,7 @@ tiers:
   - { file: src/pigeon-cli/crates/sentinel/CHANGELOG.md, unit: sentinel }
   - { file: src/pigeon-cli/crates/gantry/CHANGELOG.md, unit: gantry }
   - { file: src/pigeon-cli/crates/cobot/CHANGELOG.md, unit: cobot }
+  - { file: infra/cloudflare/modules/zone/CHANGELOG.md, unit: infra-cloudflare-zone }
+  - { file: infra/cloudflare/modules/permission-groups/CHANGELOG.md, unit: infra-cloudflare-permission-groups }
+  - { file: infra/cloudflare/modules/api-token/CHANGELOG.md, unit: infra-cloudflare-api-token }
+  - { file: infra/cloudflare/CHANGELOG.md, unit: infra-cloudflare-schema }

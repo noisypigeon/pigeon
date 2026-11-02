@@ -31,9 +31,6 @@ pub struct Config {
     /// Workspace-wide build settings whose change releases every unit.
     #[serde(default)]
     pub settings: Vec<Setting>,
-    /// One-time changelog corrections, from `changelog-corrections.yaml` beside the config.
-    #[serde(skip)]
-    pub corrections: Vec<Correction>,
 }
 
 /// Lines of a file that are build settings: whole tables, and single keys.
@@ -49,29 +46,6 @@ pub struct Setting {
     #[serde(default)]
     pub keys: Option<String>,
 }
-
-/// Lines to drop from one released version's changelog section.
-#[derive(Debug, Clone, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct Correction {
-    /// The unit.
-    pub unit: String,
-    /// `X.Y.Z`.
-    pub version: String,
-    /// PR numbers whose lines do not belong there.
-    pub remove: Vec<u32>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct Corrections {
-    #[allow(dead_code, reason = "documents the file")]
-    description: String,
-    corrections: Vec<Correction>,
-}
-
-/// The file of one-time corrections, beside `releases.yaml`.
-pub const CORRECTIONS: &str = "changelog-corrections.yaml";
 
 /// Where a unit's dependency tree comes from.
 #[derive(Debug, Deserialize)]
@@ -132,31 +106,11 @@ impl Config {
             path: path.to_path_buf(),
             message,
         };
-        let mut config: Self = serde_saphyr::from_str(&text).map_err(|e| invalid(e.to_string()))?;
+        let config: Self = serde_saphyr::from_str(&text).map_err(|e| invalid(e.to_string()))?;
         for setting in &config.settings {
             for re in setting.tables.iter().chain(&setting.keys) {
                 Regex::new(re).map_err(|e| invalid(format!("setting `{re}`: {e}")))?;
             }
-        }
-        let corrections = path.with_file_name(CORRECTIONS);
-        if corrections.exists() {
-            let text = fs::read_to_string(&corrections).map_err(|source| Error::Io {
-                path: corrections.clone(),
-                source,
-            })?;
-            let file: Corrections = serde_saphyr::from_str(&text).map_err(|e| Error::Policy {
-                path: corrections.clone(),
-                message: e.to_string(),
-            })?;
-            for c in &file.corrections {
-                if !config.units.contains_key(&c.unit) {
-                    return Err(Error::Policy {
-                        path: corrections.clone(),
-                        message: format!("unknown unit `{}`", c.unit),
-                    });
-                }
-            }
-            config.corrections = file.corrections;
         }
         for tier in &config.tiers {
             match (&tier.paths, &tier.unit) {
@@ -512,33 +466,6 @@ fn released(name: &str, unit: &Unit, version: String) -> Released {
     }
 }
 
-/// Drops corrected lines from `log`, a unit's release tier.
-fn correct(log: &mut Changelog, unit: &str, corrections: &[Correction]) {
-    const NOTE: &str = "- No changes of its own; released by a shared-path change in ";
-    for c in corrections.iter().filter(|c| c.unit == unit) {
-        let heading = format!("v{} (", c.version);
-        let Some((_, lines)) = log
-            .sections
-            .iter_mut()
-            .find(|(h, _)| h.starts_with(&heading))
-        else {
-            continue;
-        };
-        let wrong = |l: &String| {
-            !l.starts_with(NOTE)
-                && c.remove
-                    .iter()
-                    .any(|n| l.ends_with(&format!("/pull/{n}))")))
-        };
-        let first = lines.iter().find(|l| wrong(l)).cloned();
-        lines.retain(|l| !wrong(l));
-        if lines.is_empty()
-            && let Some(first) = first
-        {
-            lines.push(format!("{NOTE}{}", first.trim_start_matches("- ")));
-        }
-    }
-}
 /// Renders every tier, recording the ones that changed in `files`.
 fn render_tiers(
     root: &Path,
@@ -569,11 +496,10 @@ fn render_tiers(
                     log.add_dated(&c.date, l);
                 }
             }
-        } else if let Some(unit) = &tier.unit {
-            if let Some((released, lines)) = releases.iter().find(|(r, _)| &r.unit == unit) {
-                log.prepend(format!("v{} ({today})", released.version), lines.clone());
-            }
-            correct(&mut log, unit, &config.corrections);
+        } else if let Some(unit) = &tier.unit
+            && let Some((released, lines)) = releases.iter().find(|(r, _)| &r.unit == unit)
+        {
+            log.prepend(format!("v{} ({today})", released.version), lines.clone());
         }
         let rendered = log.render();
         if existing.as_deref() != Some(rendered.as_str()) {
