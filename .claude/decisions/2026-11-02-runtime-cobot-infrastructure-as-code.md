@@ -185,3 +185,40 @@ Each new rule gets fixtures in the sentinel tests, and each fixture is checked t
 - After merge:
   - `pigeon-cobot-state` holds `infra/bootstrap/terraform.tfstate`, and its content is an encrypted envelope, not readable state;
   - the next PR plans "No changes" for the unit.
+
+## Amendments
+
+### 2026-11-02: Engine first, no fork plans, and no PR code near the state secrets
+
+A review of #17 found three defects in this ADR's plan:
+
+- **The release-first loop blocks PR B.** The `lifecycle` check runs the released `pigeon-sentinel` image, which cannot parse a policy using the new `find` rule. A PR adding both could never pass, so §9 has to land in more than one PR.
+- **Fork PRs get no secrets.** GitHub withholds repository secrets from `pull_request` runs triggered from forks. The `plan` job cannot read the state repository or decrypt state, so it fails.
+- **PR code runs beside the secrets.** As written, `plan` builds cobot from the PR and initializes the PR's HCL, while `BOT_GITHUB_TOKEN` and `COBOT_STATE_PASSPHRASE` are present. A changed `build.rs`, test or module could read both, and decrypt every state file.
+
+This supersedes §5's `plan` job and §9's execution. Both texts stay as written.
+
+#### 1. Execution, engine first
+
+1. **`feat(sentinel): find rule and optional release images`** lands first. It holds:
+   - the `find` rule kind and its tests, with no policy using it;
+   - optional `image` in the release configuration.
+
+   The release bot cuts and publishes the new `sentinel` image.
+2. **`feat(cobot): …`** follows, holding everything else in §1–§8, including `terraform.yaml` and `terraform-actions.yaml`. The `lifecycle` image now understands `find`.
+
+#### 2. Plans never run PR-built code with secrets
+
+- **The binary comes from `main`.** The `plan` job builds `pigeon` from a checkout of `main`, in its own directory, and never from the PR's Rust. It then checks out the PR into a second directory, and reads only its `infra/` and `workloads/` as data.
+- **Providers are allowlisted by construction.** cobot runs `tofu init` with `-plugin-dir` pointing at an empty directory, so only the built-in `terraform` provider is available. A unit that needs any other provider fails `init` before any secret-bearing step. Later amendments that add providers do so through an explicit, pinned plugin mirror, not network installation.
+- **Provisioners are rejected.** `pigeon cobot validate` rejects any `provisioner` block in a unit's modules. They only run during apply, and apply only runs on `main` after review, but a unit should never need one.
+- **Secrets are scoped to the step that needs them.**
+  - `COBOT_STATE_PASSPHRASE` is set only on the `plan` step.
+  - The state repository is checked out read-only, with `persist-credentials: false`, before the PR checkout. The bot token appears only in that step.
+- **Trust boundary.** Only someone with write access can open a same-repository PR, and those people are trusted with this repository. This amendment keeps them from leaking the secrets by accident, not from acting in bad faith.
+
+#### 3. Forks are told, not planned
+
+- The `plan` job runs only when `github.event.pull_request.head.repo.full_name == github.repository`.
+- For a fork, a separate secret-free job posts the sticky comment: "Plans are not run for fork pull requests; a maintainer must re-open this change from a branch of noisypigeon/pigeon to plan it."
+- `plan` is not a required check, so a fork PR is not blocked by a check that cannot run.
