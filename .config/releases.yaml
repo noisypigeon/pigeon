@@ -7,30 +7,50 @@ units:
     image: ghcr.io/noisypigeon/pigeon-sentinel
     paths:
       - src/pigeon-cli/crates/sentinel/
-      - src/pigeon-cli/crates/pigeon/
-      - src/pigeon-cli/Cargo.toml
-      - src/pigeon-cli/Cargo.lock
+      - src/pigeon-cli/crates/pigeon/src/commands/sentinel.rs
+      - src/pigeon-cli/crates/pigeon/src/cli/sentinel.rs
+      - src/pigeon-cli/crates/pigeon/src/main.rs
+      - src/pigeon-cli/crates/pigeon/src/lib.rs
+      - src/pigeon-cli/crates/pigeon/src/cli/mod.rs
+      - src/pigeon-cli/crates/pigeon/src/commands/mod.rs
+      - src/pigeon-cli/crates/pigeon/Cargo.toml
       - src/pigeon-cli/Dockerfile
       - src/pigeon-cli/.dockerignore
+    exclude: [tests/, benches/, '*.md']
+    cargo: { workspace: src/pigeon-cli, package: pigeon }
   gantry:
     manifest: src/pigeon-cli/crates/gantry/Cargo.toml
     features: gantry
     image: ghcr.io/noisypigeon/pigeon-gantry
     paths:
       - src/pigeon-cli/crates/gantry/
-      - src/pigeon-cli/crates/pigeon/
-      - src/pigeon-cli/Cargo.toml
-      - src/pigeon-cli/Cargo.lock
+      - src/pigeon-cli/crates/pigeon/src/commands/gantry.rs
+      - src/pigeon-cli/crates/pigeon/src/main.rs
+      - src/pigeon-cli/crates/pigeon/src/lib.rs
+      - src/pigeon-cli/crates/pigeon/src/cli/mod.rs
+      - src/pigeon-cli/crates/pigeon/src/commands/mod.rs
+      - src/pigeon-cli/crates/pigeon/Cargo.toml
       - src/pigeon-cli/Dockerfile
       - src/pigeon-cli/.dockerignore
+    exclude: [tests/, benches/, '*.md']
+    cargo: { workspace: src/pigeon-cli, package: pigeon }
   cobot:
     manifest: src/pigeon-cli/crates/cobot/Cargo.toml
     features: cobot
     paths:
       - src/pigeon-cli/crates/cobot/
-      - src/pigeon-cli/crates/pigeon/
-      - src/pigeon-cli/Cargo.toml
-      - src/pigeon-cli/Cargo.lock
+      - src/pigeon-cli/crates/pigeon/src/commands/cobot.rs
+      - src/pigeon-cli/crates/pigeon/src/cli/cobot.rs
+      - src/pigeon-cli/crates/pigeon/src/main.rs
+      - src/pigeon-cli/crates/pigeon/src/lib.rs
+      - src/pigeon-cli/crates/pigeon/src/cli/mod.rs
+      - src/pigeon-cli/crates/pigeon/src/commands/mod.rs
+      - src/pigeon-cli/crates/pigeon/Cargo.toml
+    exclude: [tests/, benches/, '*.md']
+    cargo: { workspace: src/pigeon-cli, package: pigeon }
+settings:
+  - { file: src/pigeon-cli/Cargo.toml, tables: '^\[profile\.', keys: '^(edition|rust-version)\s*=' }
+  - { file: mise.toml, keys: '^rust\s*=' }
 tiers:
   - { file: CHANGELOG.md, paths: [''] }
   - { file: src/pigeon-cli/CHANGELOG.md, paths: [src/pigeon-cli/] }

@@ -146,3 +146,11 @@ pub fn date(root: &Path, rev: &str) -> Result<String, Error> {
     .trim()
     .to_string())
 }
+
+/// The content of `file` at `rev`; empty if either does not exist.
+pub fn show(root: &Path, rev: &str, file: &str) -> String {
+    if !is_commit(root, rev) {
+        return String::new();
+    }
+    run(root, &["show", &format!("{rev}:{file}")]).unwrap_or_default()
+}
