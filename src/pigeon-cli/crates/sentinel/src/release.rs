@@ -36,8 +36,9 @@ pub struct Unit {
     pub manifest: PathBuf,
     /// The `pigeon` features its image is built with.
     pub features: String,
-    /// The image repository.
-    pub image: String,
+    /// The image repository; none publishes no image.
+    #[serde(default)]
+    pub image: Option<String>,
     /// Path prefixes whose changes release it.
     pub paths: Vec<String>,
 }
@@ -96,8 +97,8 @@ pub struct Released {
     pub version: String,
     /// `<unit>/v<version>`.
     pub tag: String,
-    /// The image repository.
-    pub image: String,
+    /// The image repository, if the unit has one.
+    pub image: Option<String>,
     /// The `pigeon` features.
     pub features: String,
 }
@@ -264,8 +265,8 @@ fn render_tiers(
 pub struct TagStatus {
     /// The unit.
     pub unit: String,
-    /// The image repository.
-    pub image: String,
+    /// The image repository, if the unit has one.
+    pub image: Option<String>,
     /// The `pigeon` features.
     pub features: String,
     /// `<unit>/vX.Y.Z`.
