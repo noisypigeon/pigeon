@@ -1,6 +1,7 @@
 //! Config units: `config.yaml` validated by `schema.json`, rendered from its
 //! `x-cobot` annotations; see
-//! `.claude/decisions/2026-11-02-runtime-cloudflare-provisioner-unit.md` §1–§3.
+//! `.claude/decisions/2026-11-02-runtime-cloudflare-provisioner-unit.md` §1–§3
+//! and `.claude/decisions/2026-11-02-runtime-workloads-zone-apex.md` §7.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
@@ -10,6 +11,7 @@ use std::sync::LazyLock;
 use regex::Regex;
 use serde_json::{Map, Value, json};
 
+use crate::apex::{self, Site};
 use crate::generations::{self, Day, Generation};
 use crate::providers::Allowlist;
 use crate::secrets;
@@ -50,6 +52,10 @@ pub struct ConfigUnit {
     pub config: Value,
     /// `schema.json`.
     pub schema: Value,
+    /// The directory holding `schema.json` and `modules/`.
+    pub home: PathBuf,
+    /// Set for an apex: its root and zone.
+    pub site: Option<Site>,
 }
 
 /// One `x-cobot` expression.
@@ -63,6 +69,8 @@ pub enum Expr {
     Secret(String),
     /// `$generation.not_before` or `$generation.expires_on`.
     Generation(String),
+    /// `$handoff.api_token` or `$handoff.zone_id`.
+    Handoff(String),
     /// `$module.<block>.<out>`, `$module.<block>[*].<out>` or `$module.<block>[$item.<path>].<out>`.
     Module {
         /// The referenced block.
@@ -114,6 +122,11 @@ pub fn parse(text: &str) -> Option<Expr> {
             .filter(|p| p.len() == 1)
             .map(|p| Expr::Secret(p[0].clone()));
     }
+    if let Some(key) = text.strip_prefix("$handoff.")
+        && apex::HANDOFF_KEYS.contains(&key)
+    {
+        return Some(Expr::Handoff(key.to_string()));
+    }
     match text {
         "$generation.not_before" => Some(Expr::Generation("not_before".into())),
         "$generation.expires_on" => Some(Expr::Generation("expires_on".into())),
@@ -127,8 +140,16 @@ struct Block {
     name: String,
     module: String,
     for_each: Option<String>,
+    derived: Option<String>,
     rotate: Option<(Value, Value)>,
     inputs: Map<String, Value>,
+}
+
+impl Block {
+    /// Whether the block has one instance per key.
+    fn is_list(&self) -> bool {
+        self.for_each.is_some() || self.derived.is_some()
+    }
 }
 
 /// A module's interface, read from its `.tf` files.
@@ -173,13 +194,14 @@ fn x_cobot(schema: &Value) -> &Value {
 
 fn blocks(schema: &Value) -> Vec<Block> {
     let mut out = Vec::new();
-    let mut push = |name: &str, x: &Value, from_property: bool| {
+    let mut push = |name: &str, x: &Value, from_property: bool, derived: bool| {
         out.push(Block {
             name: name.to_string(),
             module: x["module"].as_str().unwrap_or_default().to_string(),
             for_each: from_property
                 .then(|| x["for_each"].as_str().map(str::to_string))
                 .flatten(),
+            derived: derived.then(|| x["expand"].as_str().unwrap_or_default().to_string()),
             rotate: x
                 .get("rotate")
                 .map(|r| (r["period_days"].clone(), r["overlap_days"].clone())),
@@ -189,19 +211,39 @@ fn blocks(schema: &Value) -> Vec<Block> {
     if let Some(props) = schema["properties"].as_object() {
         for (name, prop) in props {
             if let Some(x) = prop.get("x-cobot") {
-                push(name, x, true);
+                push(name, x, true, false);
             }
         }
     }
     if let Some(singles) = x_cobot(schema)["singletons"].as_object() {
         for (name, x) in singles {
-            push(name, x, false);
+            push(name, x, false, false);
+        }
+    }
+    if let Some(derived) = x_cobot(schema)["derived"].as_object() {
+        for (name, x) in derived {
+            push(name, x, false, true);
         }
     }
     out
 }
 
-/// The secret keys the schema declares.
+/// The secret keys a unit declares: its schema's list, or what its config references.
+#[must_use]
+pub fn declared_secrets(unit: &ConfigUnit) -> BTreeSet<String> {
+    if x_cobot(&unit.schema)["secrets"] == "referenced" {
+        return apex::referenced_secrets(&unit.config);
+    }
+    secret_keys(&unit.schema)
+}
+
+/// Whether the unit takes a handoff.
+#[must_use]
+pub fn has_handoff(unit: &ConfigUnit) -> bool {
+    x_cobot(&unit.schema).get("handoff").is_some()
+}
+
+/// The secret keys the schema lists.
 #[must_use]
 pub fn secret_keys(schema: &Value) -> BTreeSet<String> {
     x_cobot(schema)["secrets"]
@@ -223,18 +265,24 @@ pub fn rotating_blocks(schema: &Value) -> Vec<String> {
         .collect()
 }
 
-/// Loads `config.yaml` and `schema.json` from `dir`.
+/// Loads `config.yaml` from `dir`, and `schema.json` from `home`.
 ///
 /// # Errors
 ///
 /// A message naming the file that failed to read or parse.
-pub fn load(dir: &Path) -> Result<ConfigUnit, String> {
+pub fn load(dir: &Path, home: &Path, site: Option<Site>) -> Result<ConfigUnit, String> {
     let config_text = fs::read_to_string(dir.join(CONFIG)).map_err(|e| format!("{CONFIG}: {e}"))?;
     let config: Value =
         serde_saphyr::from_str(&config_text).map_err(|e| format!("{CONFIG}: {e}"))?;
-    let schema_text = fs::read_to_string(dir.join(SCHEMA)).map_err(|e| format!("{SCHEMA}: {e}"))?;
+    let schema_text =
+        fs::read_to_string(home.join(SCHEMA)).map_err(|e| format!("{SCHEMA}: {e}"))?;
     let schema: Value = serde_json::from_str(&schema_text).map_err(|e| format!("{SCHEMA}: {e}"))?;
-    Ok(ConfigUnit { config, schema })
+    Ok(ConfigUnit {
+        config,
+        schema,
+        home: home.to_path_buf(),
+        site,
+    })
 }
 
 fn walk_strings<'a>(value: &'a Value, out: &mut Vec<&'a str>) {
@@ -252,19 +300,55 @@ fn exprs_in(value: &Value) -> Vec<&str> {
     strings.into_iter().filter(|s| s.starts_with('$')).collect()
 }
 
-/// Checks a config unit; each problem is `(file, message)`.
+/// Checks a config unit; each problem is `(file, message)`. `infra_keys` are
+/// the break-glass keys a workload may never hold.
 #[must_use]
 pub fn validate(
     unit: &ConfigUnit,
     dir: &Path,
     area: &str,
     allow: &Allowlist,
+    infra_keys: &BTreeSet<String>,
 ) -> Vec<(String, String)> {
     let mut problems = Vec::new();
     check_top(unit, &mut problems);
-    check_secrets(unit, dir, area, &mut problems);
-    check_blocks(unit, dir, area, allow, &mut problems);
+    check_secrets(unit, dir, area, infra_keys, &mut problems);
+    check_blocks(unit, allow, &mut problems);
+    check_outputs(unit, &mut problems);
+    check_apex(unit, &mut problems);
     problems
+}
+
+fn check_apex(unit: &ConfigUnit, problems: &mut Vec<(String, String)>) {
+    let x = x_cobot(&unit.schema);
+    let handoff = x.get("handoff");
+    if handoff.is_some_and(|h| h != apex::HANDOFF) {
+        problems.push((
+            SCHEMA.into(),
+            format!("`handoff` must be `{}`", apex::HANDOFF),
+        ));
+    }
+    if handoff.is_some() && unit.site.is_none() {
+        problems.push((SCHEMA.into(), "only a zone's apex takes a handoff".into()));
+    }
+    for b in blocks(&unit.schema).iter().filter(|b| b.derived.is_some()) {
+        if b.derived.as_deref() != Some(apex::EXPANDER) {
+            problems.push((
+                SCHEMA.into(),
+                format!("block `{}`: `expand` must be `{}`", b.name, apex::EXPANDER),
+            ));
+        } else if unit.site.is_none() {
+            problems.push((SCHEMA.into(), "only a zone's apex derives records".into()));
+        }
+    }
+    if let (Some(site), true) = (
+        &unit.site,
+        blocks(&unit.schema).iter().any(|b| b.derived.is_some()),
+    ) {
+        for p in apex::expand(&unit.config, &unit.home, site).1 {
+            problems.push((CONFIG.into(), p));
+        }
+    }
 }
 
 fn check_top(unit: &ConfigUnit, problems: &mut Vec<(String, String)>) {
@@ -292,18 +376,27 @@ fn check_top(unit: &ConfigUnit, problems: &mut Vec<(String, String)>) {
     }
 }
 
-fn check_secrets(unit: &ConfigUnit, dir: &Path, area: &str, problems: &mut Vec<(String, String)>) {
+fn check_secrets(
+    unit: &ConfigUnit,
+    dir: &Path,
+    area: &str,
+    infra_keys: &BTreeSet<String>,
+    problems: &mut Vec<(String, String)>,
+) {
     let mut add = |file: &str, m: String| problems.push((file.to_string(), m));
-    let declared = secret_keys(&unit.schema);
+    let declared = declared_secrets(unit);
     let secrets_file = dir.join(secrets::FILE);
     if area == "workloads" {
-        if !declared.is_empty() || secrets_file.exists() {
-            add(
-                secrets::FILE,
-                "workloads never hold secrets; only infra/ units do".into(),
-            );
+        for k in &declared {
+            if infra_keys.contains(k) || k == "provisioner_token" {
+                add(
+                    secrets::FILE,
+                    format!("`{k}` is an infra/ key; a workload never holds break-glass material"),
+                );
+            }
         }
-    } else if !declared.is_empty() || secrets_file.exists() {
+    }
+    if !declared.is_empty() || secrets_file.exists() {
         match secrets::read(&secrets_file) {
             Ok(values) => {
                 let present: BTreeSet<String> = values.keys().cloned().collect();
@@ -325,7 +418,7 @@ fn check_secrets(unit: &ConfigUnit, dir: &Path, area: &str, problems: &mut Vec<(
 }
 
 /// Checks one block's name and module; the module's info if it exists.
-fn check_module(b: &Block, dir: &Path, add: &mut impl FnMut(&str, String)) -> Option<ModuleInfo> {
+fn check_module(b: &Block, home: &Path, add: &mut impl FnMut(&str, String)) -> Option<ModuleInfo> {
     if !BLOCK.is_match(&b.name) {
         add(
             SCHEMA,
@@ -342,11 +435,11 @@ fn check_module(b: &Block, dir: &Path, add: &mut impl FnMut(&str, String)) -> Op
         );
         return None;
     }
-    let mdir = dir.join("modules").join(&b.module);
+    let mdir = home.join("modules").join(&b.module);
     let inside = mdir
         .canonicalize()
         .ok()
-        .zip(dir.join("modules").canonicalize().ok())
+        .zip(home.join("modules").canonicalize().ok())
         .is_some_and(|(m, root)| m.starts_with(root) && m.is_dir());
     if !inside {
         add(
@@ -378,20 +471,15 @@ fn check_module(b: &Block, dir: &Path, add: &mut impl FnMut(&str, String)) -> Op
     Some(info)
 }
 
-fn check_blocks(
-    unit: &ConfigUnit,
-    dir: &Path,
-    area: &str,
-    allow: &Allowlist,
-    problems: &mut Vec<(String, String)>,
-) {
+fn check_blocks(unit: &ConfigUnit, allow: &Allowlist, problems: &mut Vec<(String, String)>) {
     let mut add = |file: &str, m: String| problems.push((file.to_string(), m));
     let x = x_cobot(&unit.schema);
-    let declared = secret_keys(&unit.schema);
+    let declared = declared_secrets(unit);
+    let handoff = has_handoff(unit);
     let all = blocks(&unit.schema);
     let mut infos: BTreeMap<String, ModuleInfo> = BTreeMap::new();
     for b in &all {
-        if let Some(info) = check_module(b, dir, &mut add) {
+        if let Some(info) = check_module(b, &unit.home, &mut add) {
             infos.insert(b.name.clone(), info);
         }
     }
@@ -412,7 +500,7 @@ fn check_blocks(
                 &all,
                 &infos,
                 &declared,
-                area,
+                handoff,
                 &unit.config,
                 &mut add,
             );
@@ -423,8 +511,26 @@ fn check_blocks(
             add(CONFIG, e);
         }
         if let Some((p, o)) = &b.rotate {
-            check_exprs(p, b, &all, &infos, &declared, area, &unit.config, &mut add);
-            check_exprs(o, b, &all, &infos, &declared, area, &unit.config, &mut add);
+            check_exprs(
+                p,
+                b,
+                &all,
+                &infos,
+                &declared,
+                handoff,
+                &unit.config,
+                &mut add,
+            );
+            check_exprs(
+                o,
+                b,
+                &all,
+                &infos,
+                &declared,
+                handoff,
+                &unit.config,
+                &mut add,
+            );
             if let Err(e) = rotation(b, &unit.config) {
                 add(CONFIG, e);
             }
@@ -439,6 +545,7 @@ fn check_blocks(
                 name: format!("provider.{name}"),
                 module: String::new(),
                 for_each: None,
+                derived: None,
                 rotate: None,
                 inputs: Map::new(),
             };
@@ -448,11 +555,65 @@ fn check_blocks(
                 &all,
                 &infos,
                 &declared,
-                area,
+                handoff,
                 &unit.config,
                 &mut add,
             );
         }
+    }
+}
+
+/// Checks `x-cobot.outputs`: each a `$module` expression.
+fn check_outputs(unit: &ConfigUnit, problems: &mut Vec<(String, String)>) {
+    let Some(outputs) = x_cobot(&unit.schema).get("outputs") else {
+        return;
+    };
+    let Some(map) = outputs.as_object() else {
+        problems.push((SCHEMA.into(), "`outputs` must be a map".into()));
+        return;
+    };
+    let all = blocks(&unit.schema);
+    let infos: BTreeMap<String, ModuleInfo> = all
+        .iter()
+        .map(|b| {
+            (
+                b.name.clone(),
+                module_info(&unit.home.join("modules").join(&b.module)),
+            )
+        })
+        .collect();
+    let pseudo = Block {
+        name: "outputs".into(),
+        module: String::new(),
+        for_each: None,
+        derived: None,
+        rotate: None,
+        inputs: Map::new(),
+    };
+    let mut add = |file: &str, m: String| problems.push((file.to_string(), m));
+    for (name, v) in map {
+        if !BLOCK.is_match(name)
+            || !v
+                .as_str()
+                .and_then(parse)
+                .is_some_and(|e| matches!(e, Expr::Module { .. }))
+        {
+            add(
+                SCHEMA,
+                format!("output `{name}` must be a `$module` expression"),
+            );
+            continue;
+        }
+        check_exprs(
+            v,
+            &pseudo,
+            &all,
+            &infos,
+            &BTreeSet::new(),
+            false,
+            &unit.config,
+            &mut add,
+        );
     }
 }
 
@@ -466,28 +627,24 @@ fn check_exprs(
     all: &[Block],
     infos: &BTreeMap<String, ModuleInfo>,
     declared: &BTreeSet<String>,
-    area: &str,
+    handoff: bool,
     config: &Value,
     add: &mut impl FnMut(&str, String),
 ) {
     for text in exprs_in(value) {
         match parse(text) {
             None => add(SCHEMA, format!("unknown expression `{text}`")),
-            Some(Expr::Item(_) | Expr::Generation(_)) if block.for_each.is_none() => {
+            Some(Expr::Item(_) | Expr::Generation(_)) if !block.is_list() => {
                 add(SCHEMA, format!("`{text}` needs a list block with for_each"));
             }
             Some(Expr::Generation(_)) if block.rotate.is_none() => {
                 add(SCHEMA, format!("`{text}` needs a rotating block"));
             }
-            Some(Expr::Secret(k)) => {
-                if area == "workloads" {
-                    add(
-                        SCHEMA,
-                        format!("`{text}`: workloads never reference secrets"),
-                    );
-                } else if !declared.contains(&k) {
-                    add(SCHEMA, format!("`{text}` is not in x-cobot.secrets"));
-                }
+            Some(Expr::Secret(k)) if !declared.contains(&k) => {
+                add(SCHEMA, format!("`{text}` is not in x-cobot.secrets"));
+            }
+            Some(Expr::Handoff(_)) if !handoff => {
+                add(SCHEMA, format!("`{text}` needs `handoff`"));
             }
             Some(Expr::Config(p)) if lookup(config, &p).is_none() => {
                 add(
@@ -505,7 +662,7 @@ fn check_exprs(
                 }
                 _ if all
                     .iter()
-                    .any(|x| x.name == b && x.for_each.is_some() != index.is_some()) =>
+                    .any(|x| x.name == b && x.is_list() != index.is_some()) =>
                 {
                     add(
                         SCHEMA,
@@ -553,6 +710,7 @@ fn render_value(value: &Value, config: &Value) -> Value {
             Some(Expr::Config(p)) => literal(lookup(config, &p).unwrap_or(&Value::Null)),
             Some(Expr::Secret(k)) => Value::String(format!("${{var.secrets[\"{k}\"]}}")),
             Some(Expr::Generation(f)) => Value::String(format!("${{each.value._generation.{f}}}")),
+            Some(Expr::Handoff(k)) => Value::String(format!("${{var.handoff[\"{k}\"]}}")),
             Some(Expr::Module {
                 block,
                 index,
@@ -668,11 +826,44 @@ pub fn existing(state_json: &str, rotating: &[String]) -> Existing {
     out
 }
 
+/// Adds the unit's sensitive variables and root outputs to `root`.
+fn extras(unit: &ConfigUnit, root: &mut Value) {
+    let x = x_cobot(&unit.schema);
+    let config = &unit.config;
+    let mut variables = Map::new();
+    if !declared_secrets(unit).is_empty() {
+        variables.insert(
+            "secrets".into(),
+            json!({ "type": "map(string)", "sensitive": true }),
+        );
+    }
+    if has_handoff(unit) {
+        variables.insert(
+            "handoff".into(),
+            json!({ "type": "map(string)", "sensitive": true }),
+        );
+    }
+    if !variables.is_empty() {
+        root["variable"] = Value::Object(variables);
+    }
+    if let Some(outputs) = x["outputs"].as_object() {
+        let rendered: Map<String, Value> = outputs
+            .iter()
+            .map(|(k, v)| {
+                (
+                    k.clone(),
+                    json!({ "value": render_value(v, config), "sensitive": true }),
+                )
+            })
+            .collect();
+        root["output"] = Value::Object(rendered);
+    }
+}
+
 /// Renders `main.tf.json` for a config unit.
 #[must_use]
 pub fn render(
     unit: &ConfigUnit,
-    dir: &Path,
     state_file: &Path,
     allow: &Allowlist,
     today: Day,
@@ -698,9 +889,22 @@ pub fn render(
         let mut block = Map::new();
         block.insert(
             "source".into(),
-            Value::String(dir.join("modules").join(&b.module).display().to_string()),
+            Value::String(
+                unit.home
+                    .join("modules")
+                    .join(&b.module)
+                    .display()
+                    .to_string(),
+            ),
         );
-        if b.for_each.is_some() {
+        if b.derived.is_some() {
+            let items = unit
+                .site
+                .as_ref()
+                .map(|site| apex::expand(config, &unit.home, site).0)
+                .unwrap_or_default();
+            block.insert("for_each".into(), Value::Object(items));
+        } else if b.for_each.is_some() {
             let mut each = Map::new();
             let keys = item_keys(&b, config).unwrap_or_default();
             let items = config[&b.name].as_array().cloned().unwrap_or_default();
@@ -749,9 +953,7 @@ pub fn render(
     if !provider.is_empty() {
         root["provider"] = Value::Object(provider);
     }
-    if !secret_keys(&unit.schema).is_empty() {
-        root["variable"] = json!({ "secrets": { "type": "map(string)", "sensitive": true } });
-    }
+    extras(unit, &mut root);
     root
 }
 

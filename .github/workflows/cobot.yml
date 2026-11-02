@@ -1,5 +1,6 @@
 # Plan on PR, apply on merge and daily; see .claude/decisions/2026-11-02-runtime-cobot-infrastructure-as-code.md
-# and .claude/decisions/2026-11-02-runtime-cloudflare-provisioner-unit.md.
+# .claude/decisions/2026-11-02-runtime-cloudflare-provisioner-unit.md
+# and .claude/decisions/2026-11-02-runtime-workloads-zone-apex.md.
 name: cobot
 
 on:
@@ -75,6 +76,7 @@ jobs:
         env:
           COBOT_STATE_PASSPHRASE: ${{ secrets.COBOT_STATE_PASSPHRASE }}
           COBOT_SECRETS_PASSPHRASE: ${{ secrets.COBOT_SECRETS_PASSPHRASE }}
+          COBOT_WORKLOAD_SECRETS_PASSPHRASE: ${{ secrets.COBOT_WORKLOAD_SECRETS_PASSPHRASE }}
         run: |
           src/pigeon-cli/target/debug/pigeon cobot plan --root .pr --state .state --summary "$RUNNER_TEMP/summary.md"
           cat "$RUNNER_TEMP/summary.md" >>"$GITHUB_STEP_SUMMARY"
@@ -119,6 +121,7 @@ jobs:
         env:
           COBOT_STATE_PASSPHRASE: ${{ secrets.COBOT_STATE_PASSPHRASE }}
           COBOT_SECRETS_PASSPHRASE: ${{ secrets.COBOT_SECRETS_PASSPHRASE }}
+          COBOT_WORKLOAD_SECRETS_PASSPHRASE: ${{ secrets.COBOT_WORKLOAD_SECRETS_PASSPHRASE }}
         run: |
           set -o pipefail
           src/pigeon-cli/target/debug/pigeon cobot apply --root . --state .state | tee "$RUNNER_TEMP/apply.md"

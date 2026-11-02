@@ -1,0 +1,107 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "workloads/<zone>/apex",
+  "description": "A zone's apex: its global config and DNS; see .claude/decisions/2026-11-02-runtime-workloads-zone-apex.md.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["services", "records"],
+  "x-cobot": {
+    "version": "0.1.0",
+    "secrets": "referenced",
+    "handoff": "zone-token",
+    "providers": {
+      "cloudflare": { "api_token": "$handoff.api_token" }
+    },
+    "derived": {
+      "dns_records": {
+        "expand": "zone-records",
+        "module": "dns-record",
+        "inputs": {
+          "zone_id": "$handoff.zone_id",
+          "name": "$item.name",
+          "type": "$item.type",
+          "content": "$item.content",
+          "ttl": "$item.ttl",
+          "priority": "$item.priority",
+          "proxied": "$item.proxied"
+        }
+      }
+    }
+  },
+  "properties": {
+    "apex": {
+      "description": "The workload served at @ and www.",
+      "$ref": "#/$defs/workload"
+    },
+    "hosts": {
+      "description": "A workload's names, relative to the zone, replacing its default.",
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/workload" },
+      "additionalProperties": {
+        "type": "array",
+        "minItems": 1,
+        "uniqueItems": true,
+        "items": { "$ref": "#/$defs/name" }
+      }
+    },
+    "services": {
+      "description": "Presets by name, each workloads/.apex/presets/<name>.yaml; cobot checks their inputs.",
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/key" },
+      "additionalProperties": { "type": "object" }
+    },
+    "records": {
+      "description": "Explicit records by key; a preset or host record's key overrides it field by field, and false drops it.",
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/key" },
+      "additionalProperties": {
+        "oneOf": [{ "const": false }, { "$ref": "#/$defs/record" }]
+      }
+    }
+  },
+  "$defs": {
+    "key": { "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$" },
+    "workload": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+      "not": { "const": "apex" }
+    },
+    "name": {
+      "type": "string",
+      "pattern": "^(@|(\\*\\.)?[a-z0-9_]([a-z0-9_-]*[a-z0-9_])?(\\.[a-z0-9_]([a-z0-9_-]*[a-z0-9_])?)*)$"
+    },
+    "secret": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["secret"],
+      "properties": { "secret": { "type": "string", "pattern": "^[a-z0-9_]+$" } }
+    },
+    "record": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": { "$ref": "#/$defs/name" },
+        "type": { "enum": ["A", "AAAA", "CNAME", "MX", "TXT"] },
+        "content": {
+          "oneOf": [{ "type": "string", "minLength": 1 }, { "$ref": "#/$defs/secret" }]
+        },
+        "ttl": {
+          "type": "integer",
+          "anyOf": [{ "const": 1 }, { "minimum": 60, "maximum": 86400 }]
+        },
+        "priority": { "type": "integer", "minimum": 0, "maximum": 65535 },
+        "proxied": { "type": "boolean" }
+      }
+    },
+    "ingress": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "content"],
+      "properties": {
+        "type": { "enum": ["A", "AAAA", "CNAME"] },
+        "content": { "type": "string", "minLength": 1 },
+        "proxied": { "type": "boolean" }
+      }
+    }
+  }
+}

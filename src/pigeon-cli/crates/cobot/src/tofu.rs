@@ -64,6 +64,8 @@ pub struct UnitPlan {
     pub unit: String,
     /// Its changes; empty when there are none.
     pub changes: Vec<Change>,
+    /// A line to print beside its changes, e.g. pending credentials.
+    pub note: Option<String>,
 }
 
 impl UnitPlan {
@@ -182,28 +184,40 @@ fn step(unit: &str, work: &Path, env: &Env, args: &[&str], ok: &[i32]) -> Result
 }
 
 /// Parses `tofu show -json` output into changes.
+fn action(change: &Value) -> Option<Action> {
+    let actions: Vec<&str> = change["actions"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .collect();
+    match actions.as_slice() {
+        ["create"] => Some(Action::Create),
+        ["update"] => Some(Action::Update),
+        ["delete"] => Some(Action::Delete),
+        ["delete", "create"] | ["create", "delete"] => Some(Action::Replace),
+        _ => None,
+    }
+}
+
+/// Parses `tofu show -json` output into resource changes, then root output changes.
 fn changes(json: &str) -> Vec<Change> {
     let Ok(plan) = serde_json::from_str::<Value>(json) else {
         return Vec::new();
     };
     let mut out = Vec::new();
     for rc in plan["resource_changes"].as_array().into_iter().flatten() {
-        let actions: Vec<&str> = rc["change"]["actions"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .filter_map(Value::as_str)
-            .collect();
-        let action = match actions.as_slice() {
-            ["create"] => Action::Create,
-            ["update"] => Action::Update,
-            ["delete"] => Action::Delete,
-            ["delete", "create"] | ["create", "delete"] => Action::Replace,
-            _ => continue,
-        };
-        if let Some(address) = rc["address"].as_str() {
+        if let (Some(action), Some(address)) = (action(&rc["change"]), rc["address"].as_str()) {
             out.push(Change {
                 address: mask(address),
+                action,
+            });
+        }
+    }
+    for (name, change) in plan["output_changes"].as_object().into_iter().flatten() {
+        if let Some(action) = action(change) {
+            out.push(Change {
+                address: mask(&format!("output.{name}")),
                 action,
             });
         }
@@ -286,6 +300,7 @@ pub fn plan(unit: &str, work: &Path, env: &Env) -> Result<UnitPlan, Error> {
         return Ok(UnitPlan {
             unit: unit.to_string(),
             changes: Vec::new(),
+            note: None,
         });
     }
     let shown = step(
@@ -298,6 +313,7 @@ pub fn plan(unit: &str, work: &Path, env: &Env) -> Result<UnitPlan, Error> {
     Ok(UnitPlan {
         unit: unit.to_string(),
         changes: changes(&String::from_utf8_lossy(&shown.stdout)),
+        note: None,
     })
 }
 
@@ -322,9 +338,11 @@ mod tests {
         let json = r#"{"resource_changes":[
             {"address":"module.p.terraform_data.this","change":{"actions":["create"],"after":{"input":"secret"}}},
             {"address":"a.b","change":{"actions":["no-op"]}},
-            {"address":"c.d","change":{"actions":["delete","create"]}}]}"#;
+            {"address":"c.d","change":{"actions":["delete","create"]}}],
+            "output_changes":{"tokens":{"actions":["create"],"after":"secret"},"same":{"actions":["no-op"]}}}"#;
         let got = changes(json);
-        assert_eq!(got.len(), 2);
+        assert_eq!(got.len(), 3);
+        assert_eq!(got[2].address, "output.tokens");
         assert_eq!(got[0].address, "module.p.terraform_data.this");
         assert_eq!(got[1].action, Action::Replace);
         assert!(!format!("{got:?}").contains("secret"));

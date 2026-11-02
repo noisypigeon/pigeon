@@ -1,4 +1,4 @@
-description: Terraform lives only in infra/ and workloads/, secrets only in infra/, and state never in this repository.
+description: Terraform and encrypted secrets live only in infra/ and workloads/, and state never in this repository.
 target: tree
 rules:
   - find:
@@ -10,5 +10,5 @@ rules:
       ignore: ['^\.git$', '(^|/)target$', '(^|/)\.cobot$']
   - find:
       match: '(^|/)secrets\.config\.yaml$'
-      allow_under: [infra/]
+      allow_under: [infra/, workloads/]
       ignore: ['^\.git$', '(^|/)target$', '(^|/)\.cobot$']

@@ -51,10 +51,15 @@ belong in the ADR, never in the file.
 - Config units (`config.yaml` validated by `schema.json`, composed from its
   `x-cobot` annotations into single-resource `modules/`) are per
   [`2026-11-02-runtime-cloudflare-provisioner-unit.md`](.claude/decisions/2026-11-02-runtime-cloudflare-provisioner-unit.md).
-  A unit's `secrets.config.yaml` holds only `ENC[cobot:v1:…]` values under
-  `COBOT_SECRETS_PASSPHRASE`; only `infra/` units have one, and a break-glass
-  key is never handed to a workload, which gets only minted tokens. Providers
+  A unit's `secrets.config.yaml` holds only `ENC[cobot:v1:…]` values, under
+  `COBOT_SECRETS_PASSPHRASE` in `infra/` and `COBOT_WORKLOAD_SECRETS_PASSPHRASE`
+  in `workloads/`. Only `infra/` keys are break-glass, and they are never handed
+  to a workload, which gets only its own secrets and minted tokens. Providers
   come only from `main`'s `.config/providers.yaml` and `providers.lock.hcl`.
+- Workloads live in `workloads/<zone>/`, each zone with an `apex/` unit on the
+  shared `workloads/.apex/` schema, per
+  [`2026-11-02-runtime-workloads-zone-apex.md`](.claude/decisions/2026-11-02-runtime-workloads-zone-apex.md);
+  a DNS service is a preset file in `workloads/.apex/presets/`.
 - The repo is public: never push secrets, credentials, key IDs or private
   bucket names, in commits, branch names, PR text or CI logs.
 
@@ -68,8 +73,8 @@ belong in the ADR, never in the file.
 - `pigeon cobot validate|render|plan`: check, render and plan units;
   `plan` needs `COBOT_STATE_PASSPHRASE` and a `--state` directory.
 - `pigeon cobot secrets set <unit> <key>` (value on stdin) and
-  `pigeon cobot secrets check <unit>`, with `COBOT_SECRETS_PASSPHRASE`; there is
-  no `get`.
+  `pigeon cobot secrets check <unit>`, with `COBOT_SECRETS_PASSPHRASE` (or
+  `COBOT_WORKLOAD_SECRETS_PASSPHRASE` under `workloads/`); there is no `get`.
 - `pigeon cobot lock`: rewrite `.config/providers.lock.hcl` from the allowlist.
 - `pigeon cobot release --dry-run` / `pigeon cobot tags`: preview the bot's
   release JSON.

@@ -8,6 +8,8 @@ target:
     - infra/cloudflare/modules/permission-groups/CHANGELOG.md
     - infra/cloudflare/modules/api-token/CHANGELOG.md
     - infra/cloudflare/CHANGELOG.md
+    - workloads/.apex/modules/dns-record/CHANGELOG.md
+    - workloads/.apex/CHANGELOG.md
   optional: true
 rules:
   - line:

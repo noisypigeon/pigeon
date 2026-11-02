@@ -302,6 +302,7 @@ fn layout_root(skip: &[&str], extra: &[&str]) -> TempDir {
         "tooling",
         "infra",
         "workloads",
+        "workloads/.apex",
     ];
     let files = [
         ".gitignore",
@@ -334,16 +335,27 @@ fn layout_rules() {
     passes(&layout(&[], &[]));
     passes(&layout(
         &[],
-        &["tooling/garden/", "infra/notes.md", "src/second-project/"],
+        &[
+            "tooling/garden/",
+            "infra/notes.md",
+            "src/second-project/",
+            "workloads/noisypigeon.com/",
+        ],
     ));
     for (skip, extra) in [
         (&[][..], &["stray/"][..]),
         (&[], &["stray.txt"]),
-        (&["workloads", "workloads/README.md"], &[]),
+        (
+            &["workloads", "workloads/.apex", "workloads/README.md"],
+            &[],
+        ),
         (&[], &["src/README.md"]),
         (&[], &["src/Bad_Name/"]),
         (&["infra/README.md"], &[]),
         (&["src/pigeon-cli"], &[]),
+        (&["workloads/.apex"], &[]),
+        (&[], &["workloads/notes.md"]),
+        (&[], &["workloads/Not_A_Zone/"]),
     ] {
         fails(&layout(skip, extra));
     }

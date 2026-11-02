@@ -10,6 +10,7 @@ use tempfile::TempDir;
 
 const STATE_PASS: &str = "state-passphrase-0123456789";
 const SECRETS_PASS: &str = "secrets-passphrase-0123456789";
+const WORKLOAD_PASS: &str = "workload-passphrase-0123456789";
 
 fn write(root: &Path, rel: &str, content: &str) {
     let path = root.join(rel);
@@ -137,6 +138,7 @@ fn ctx(root: &Path, state: &Path, today: i64) -> cobot::Context {
         state: state.to_path_buf(),
         state_passphrase: STATE_PASS.into(),
         secrets_passphrase: Some(SECRETS_PASS.into()),
+        workload_secrets_passphrase: Some(WORKLOAD_PASS.into()),
         today,
     }
 }
@@ -389,9 +391,17 @@ fn secrets_are_infra_only_and_always_encrypted() {
     cobot::secrets::set(&path, "extra", "value-2", SECRETS_PASS).expect("set");
     assert!(problems(repo.path()).iter().any(|p| p.contains("differ")));
 
-    let workload = self::repo("workloads/proof", &["token"]);
+    let workload = self::repo("infra/proof", &["provisioner_token"]);
+    let path = workload.path().join("infra/proof/secrets.config.yaml");
+    cobot::secrets::set(&path, "provisioner_token", "v", SECRETS_PASS).expect("set");
+    assert_eq!(problems(workload.path()), Vec::<String>::new());
+    fs::rename(
+        workload.path().join("infra"),
+        workload.path().join("workloads"),
+    )
+    .expect("mv");
     let got = problems(workload.path());
-    assert!(got.iter().any(|p| p.contains("workloads never")), "{got:?}");
+    assert!(got.iter().any(|p| p.contains("break-glass")), "{got:?}");
 }
 
 fn tofu_available() -> bool {

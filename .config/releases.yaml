@@ -64,6 +64,14 @@ units:
     manifest: infra/cloudflare/schema.json
     paths: [infra/cloudflare/schema.json, infra/cloudflare/modules/]
     exclude: ['*.md']
+  workloads-apex-dns-record:
+    manifest: workloads/.apex/modules/dns-record/module.yaml
+    paths: [workloads/.apex/modules/dns-record/]
+    exclude: ['*.md']
+  workloads-apex-schema:
+    manifest: workloads/.apex/schema.json
+    paths: [workloads/.apex/schema.json, workloads/.apex/modules/, workloads/.apex/presets/]
+    exclude: ['*.md']
 settings:
   - { file: src/pigeon-cli/Cargo.toml, tables: '^\[profile\.', keys: '^(edition|rust-version)\s*=' }
   - { file: mise.toml, keys: '^rust\s*=' }
@@ -78,3 +86,5 @@ tiers:
   - { file: infra/cloudflare/modules/permission-groups/CHANGELOG.md, unit: infra-cloudflare-permission-groups }
   - { file: infra/cloudflare/modules/api-token/CHANGELOG.md, unit: infra-cloudflare-api-token }
   - { file: infra/cloudflare/CHANGELOG.md, unit: infra-cloudflare-schema }
+  - { file: workloads/.apex/modules/dns-record/CHANGELOG.md, unit: workloads-apex-dns-record }
+  - { file: workloads/.apex/CHANGELOG.md, unit: workloads-apex-schema }

@@ -13,8 +13,12 @@ use crate::Error;
 /// The secrets file name inside a unit.
 pub const FILE: &str = "secrets.config.yaml";
 
-/// The environment variable holding the secrets passphrase.
+/// The environment variable holding the infra secrets passphrase.
 pub const PASSPHRASE_VAR: &str = "COBOT_SECRETS_PASSPHRASE";
+
+/// The environment variable holding the workload secrets passphrase; see
+/// `.claude/decisions/2026-11-02-runtime-workloads-zone-apex.md` §10.
+pub const WORKLOAD_PASSPHRASE_VAR: &str = "COBOT_WORKLOAD_SECRETS_PASSPHRASE";
 
 const PREFIX: &str = "ENC[cobot:v1:";
 

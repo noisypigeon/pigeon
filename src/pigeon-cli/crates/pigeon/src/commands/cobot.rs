@@ -59,6 +59,7 @@ fn context(args: &CobotRun) -> Result<cobot::Context, cobot::Error> {
         state: args.state.clone(),
         state_passphrase: cobot::passphrase(env::var(cobot::PASSPHRASE_VAR).ok())?,
         secrets_passphrase: env::var(cobot::secrets::PASSPHRASE_VAR).ok(),
+        workload_secrets_passphrase: env::var(cobot::secrets::WORKLOAD_PASSPHRASE_VAR).ok(),
         today: cobot::generations::today(),
     })
 }
@@ -96,6 +97,14 @@ fn apply(args: &CobotRun) -> Result<(), cobot::Error> {
     Ok(())
 }
 
+fn secrets_pass(args: &SecretsUnit) -> Result<String, cobot::Error> {
+    cobot::secrets_passphrase_for(
+        &args.unit,
+        env::var(cobot::secrets::PASSPHRASE_VAR).ok(),
+        env::var(cobot::secrets::WORKLOAD_PASSPHRASE_VAR).ok(),
+    )
+}
+
 fn secrets_path(args: &SecretsUnit) -> std::path::PathBuf {
     args.root
         .join(args.unit.trim_end_matches('/'))
@@ -103,7 +112,7 @@ fn secrets_path(args: &SecretsUnit) -> std::path::PathBuf {
 }
 
 fn secrets_set(args: &SecretsKey) -> Result<(), cobot::Error> {
-    let pass = cobot::secrets_passphrase(env::var(cobot::secrets::PASSPHRASE_VAR).ok())?;
+    let pass = secrets_pass(&args.at)?;
     let mut value = String::new();
     std::io::stdin()
         .read_to_string(&mut value)
@@ -119,7 +128,7 @@ fn secrets_set(args: &SecretsKey) -> Result<(), cobot::Error> {
 }
 
 fn secrets_check(args: &SecretsUnit) -> Result<(), cobot::Error> {
-    let pass = cobot::secrets_passphrase(env::var(cobot::secrets::PASSPHRASE_VAR).ok())?;
+    let pass = secrets_pass(args)?;
     let path = secrets_path(args);
     let values = cobot::secrets::decrypt_all(&path, &pass)?;
     for key in values.keys() {
