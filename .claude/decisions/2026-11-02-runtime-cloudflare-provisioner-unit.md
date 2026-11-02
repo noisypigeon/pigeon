@@ -145,11 +145,14 @@ The first four modules:
 
 - **Keys describe their own validity.** An instance's key is `<name>@<not_before>..<expires_on>`, in UTC dates, e.g. `blog-deploy@2026-11-02..2027-02-07`. Its `not_before` and `expires_on` are taken from the key.
 - **What cobot renders, per configured token:**
-  - **Current.** One instance for the current generation. It starts on day `floor(days since 1970-01-01 UTC / period_days) × period_days`, and expires `period_days + overlap_days` after that.
+  - **Current.** One instance for the current generation, which starts on day `floor(days since 1970-01-01 UTC / period_days) × period_days`.
+    - If state already holds a live instance of this name with that `not_before`, it is the current instance, and its key is kept unchanged.
+    - Only otherwise does cobot render a new key, expiring `period_days + overlap_days` after the start.
+    - So a generation is minted once, whatever happens to the config during it.
   - **Retained.** Every instance already in the unit's state with the same `<name>` whose `expires_on` is still in the future. Before rendering, cobot reads them by running `tofu show -json` on the current state.
   - **Dropped.** Instances whose `expires_on` has passed. They are destroyed on the next apply.
 - **A token removed from `config.yaml`** renders no instances at all, so its live instances are destroyed, which revokes them deliberately.
-- **Changing `period_days` or `overlap_days`** shapes only new generations. Live instances keep their own dates, retained from state, and expire as minted. A configuration change never destroys a valid token early.
+- **Changing `period_days` or `overlap_days`** shapes only new generations. Live instances keep their own dates, retained from state, and expire as minted. A configuration change never destroys a valid token early, and never mints a second token for a generation that already has one.
 - **Cloudflare enforces expiry.** Each token carries its own `expires_on`, so Cloudflare revokes it on time even if no apply runs.
 - **Failed applies are safe.** Keys come from dates and existing state, never from a recomputed index. An instance that failed to create is planned again, and an expired one is destroyed by the next successful apply.
 - **Scheduled apply.** Rotation needs applies even when nothing merges, so `cobot.yml`'s `apply` job also runs on a daily `schedule`, at 04:17 UTC. A day with no generation boundary plans "No changes".
@@ -302,6 +305,7 @@ So the schema bumps whenever any module does. The schema's tag pins the exact mo
   - inside the overlap, the previous instance is retained beside the current one;
   - after the overlap, only the current instance remains;
   - changing `period_days` keeps every live instance and adds the new current one;
+  - changing `overlap_days` mid-generation keeps the current instance's key, and adds nothing;
   - removing a token from config drops all of its instances;
   - every key's dates match its `not_before` and `expires_on`.
 - **Providers:** a test checks that `plan --providers` ignores a PR-local allowlist, and refuses when the PR changes it.
