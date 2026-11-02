@@ -88,14 +88,18 @@ jobs:
       - name: Build pigeon
         run: cargo build -q --locked -p pigeon --no-default-features --features cobot --manifest-path src/pigeon-cli/Cargo.toml
       - name: Apply
+        id: apply
         env:
           COBOT_STATE_PASSPHRASE: ${{ secrets.COBOT_STATE_PASSPHRASE }}
         run: |
+          set -o pipefail
           src/pigeon-cli/target/debug/pigeon cobot apply --root . --state .state | tee "$RUNNER_TEMP/apply.md"
           cat "$RUNNER_TEMP/apply.md" >>"$GITHUB_STEP_SUMMARY"
-      - name: Commit state
+      - name: Commit state, even after a failed apply
+        if: ${{ !cancelled() && steps.apply.outcome != 'skipped' }}
         env:
           SHA: ${{ github.sha }}
+          OUTCOME: ${{ steps.apply.outcome }}
         run: |
           set -euo pipefail
           cd .state
@@ -107,5 +111,7 @@ jobs:
           units=$(git diff --cached --name-only | xargs -n1 dirname | sort -u | paste -sd, -)
           git config user.name istx25
           git config user.email 6799989+istx25@users.noreply.github.com
-          git commit -q -m "cobot: apply $units from noisypigeon/pigeon@$SHA"
+          suffix=""
+          if [ "$OUTCOME" != success ]; then suffix=" (apply failed; partial)"; fi
+          git commit -q -m "cobot: apply $units from noisypigeon/pigeon@$SHA$suffix"
           git push origin HEAD
