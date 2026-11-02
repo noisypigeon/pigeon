@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.7 (2026-11-02)
+
+- feat(infra): cloudflare provisioner unit ([#30](https://github.com/noisypigeon/pigeon/pull/30))
+
 ## v0.1.6 (2026-11-02)
 
 - fix(sentinel): release a unit only when its build changed ([#28](https://github.com/noisypigeon/pigeon/pull/28))

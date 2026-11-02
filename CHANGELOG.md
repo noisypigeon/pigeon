@@ -2,6 +2,7 @@
 
 ## 2026-11-02
 
+- feat(infra): cloudflare provisioner unit ([#30](https://github.com/noisypigeon/pigeon/pull/30))
 - docs(adr): account tokens and permission groups by scope ([#29](https://github.com/noisypigeon/pigeon/pull/29))
 - fix(sentinel): release a unit only when its build changed ([#28](https://github.com/noisypigeon/pigeon/pull/28))
 - fix(cobot): copy only the lockfile blocks a unit uses ([#27](https://github.com/noisypigeon/pigeon/pull/27))
