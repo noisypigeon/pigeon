@@ -272,3 +272,39 @@ The first `release` run, after #11, failed to push. The `main` ruleset requires 
 1. This amendment lands first.
 2. Then `fix(sentinel): recoverable release bot`, holding steps 1–5. Once the `BOT_GITHUB_TOKEN` secret and the ruleset bypass exist, its merge cuts `sentinel/v0.1.0` and `gantry/v0.1.0`.
 3. Step 9's PR follows, as before.
+
+### 2026-11-02: Publish every unpublished tag, latest only for the newest
+
+A review of #13 found that publication still strands releases. `pigeon sentinel units` reports only each unit's newest tag, so `pending` sees only that one. Suppose `sentinel/v0.1.1` is tagged and its image fails to build. Then `v0.1.2` is tagged and published before anyone notices. `v0.1.1` is never picked up again.
+
+Publishing every unpublished tag fixes that, but publishing an old version late must not move `:latest`, or GitHub's "Latest release", backwards.
+
+This supersedes `units` in step 4 of the previous amendment. That text stays as written.
+
+#### 1. `pigeon sentinel tags`
+
+- It replaces `pigeon sentinel units`, whose only caller is `release.yml`.
+- It prints one JSON row per `<unit>/vX.Y.Z` tag of each configured unit, with `unit`, `image`, `features`, `tag`, `version` and `newest`.
+- `newest` is true only for each unit's highest version, ordered by version (`git tag --sort=-v:refname`), not as strings.
+- A unit with no tags has no rows.
+
+#### 2. `pending`
+
+It selects every row whose tag has no GitHub Release, not only each unit's newest.
+
+#### 3. `image`, per pending row
+
+1. Push `:<version>` always.
+2. Push `:latest` only when `newest` is true.
+3. Create the GitHub Release with `--latest=<newest>`.
+
+So a late-published old version never becomes the latest image or release.
+
+#### 4. Tests
+
+`tags` is tested against a temporary repository tagged `v0.1.0`, `v0.1.1` and `v0.1.10`. All three are listed, and only `v0.1.10` is newest.
+
+#### 5. Execution
+
+1. This amendment lands first.
+2. Then `fix(sentinel): publish every unpublished release tag`, holding steps 1–4.
