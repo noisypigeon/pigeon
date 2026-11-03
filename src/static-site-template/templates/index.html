@@ -39,7 +39,7 @@
 {% block content %}
 <div class="site-page zoomable">
   <div class="trix-content e-content">
-    {{ section.content | safe }}
+    {% if section.content %}{{ section.content | safe }}{% elif config.extra.intro %}{{ config.extra.intro | markdown | safe }}{% endif %}
 
     <ul class="t-list-of-posts site-list-of-posts h-feed">
       {% set posts_section = get_section(path="posts/_index.md") %}

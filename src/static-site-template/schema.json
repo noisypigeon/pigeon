@@ -1,0 +1,157 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/noisypigeon/pigeon/tree/main/src/static-site-template/schema.json",
+  "description": "A workload's static_site.site; each x-site target names where cobot writes the value. See .claude/decisions/2026-11-03-runtime-static-site-config-contract.md.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["title", "description"],
+  "properties": {
+    "title": {
+      "description": "The site's name: page titles, the header, and the manifest's name.",
+      "type": "string",
+      "minLength": 1,
+      "x-site": [
+        { "file": "config.toml", "key": "title" },
+        { "file": "static/manifest.json", "key": "name" }
+      ]
+    },
+    "short_name": {
+      "description": "The manifest's short name.",
+      "type": "string",
+      "minLength": 1,
+      "x-site": [{ "file": "static/manifest.json", "key": "short_name" }]
+    },
+    "description": {
+      "description": "The site's description: meta tags, JSON-LD and the manifest.",
+      "type": "string",
+      "minLength": 1,
+      "x-site": [
+        { "file": "config.toml", "key": "description" },
+        { "file": "static/manifest.json", "key": "description" }
+      ]
+    },
+    "intro": {
+      "description": "Markdown above the home page's list of posts.",
+      "type": "string",
+      "x-site": [{ "file": "config.toml", "key": "extra.intro" }]
+    },
+    "avatar": {
+      "description": "The header's image and the JSON-LD person's image, as a site path.",
+      "$ref": "#/$defs/path",
+      "x-site": [{ "file": "config.toml", "key": "extra.avatar" }]
+    },
+    "social_preview": {
+      "description": "The default Open Graph and Twitter image, as a site path.",
+      "$ref": "#/$defs/path",
+      "x-site": [{ "file": "config.toml", "key": "extra.social_preview" }]
+    },
+    "og_image_size": {
+      "description": "The Open Graph image's size; default 1188 by 670.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["width", "height"],
+      "properties": {
+        "width": { "type": "integer", "minimum": 1 },
+        "height": { "type": "integer", "minimum": 1 }
+      },
+      "x-site": [{ "file": "config.toml", "key": "extra.og_image_size" }]
+    },
+    "author": {
+      "description": "The byline and JSON-LD person; name defaults to title.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "alternate_names": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "page": { "$ref": "#/$defs/link" }
+      },
+      "x-site": [{ "file": "config.toml", "key": "extra.author" }]
+    },
+    "nav": {
+      "description": "The header's links, in order; external ones are also the JSON-LD sameAs.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["title", "link"],
+        "properties": {
+          "title": { "type": "string", "minLength": 1 },
+          "link": { "$ref": "#/$defs/link" }
+        }
+      },
+      "x-site": [{ "file": "config.toml", "key": "extra.nav" }]
+    },
+    "labels": {
+      "description": "Footer labels; default \"Back to all posts\" and \"Subscribe via RSS\".",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["back", "subscribe"],
+      "properties": {
+        "back": { "type": "string", "minLength": 1 },
+        "subscribe": { "type": "string", "minLength": 1 }
+      },
+      "x-site": [{ "file": "config.toml", "key": "extra.labels" }]
+    },
+    "look": {
+      "description": "The color-theme-* and font-theme-* classes, and the Bunny Fonts family for the fonts feature; default gameboy, ibm-plex and IBM Plex Sans.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["color", "font", "font_family"],
+      "properties": {
+        "color": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+        "font": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+        "font_family": { "type": "string", "minLength": 1 }
+      },
+      "x-site": [{ "file": "config.toml", "key": "extra.look" }]
+    },
+    "theme_color": {
+      "description": "The theme-color meta, light and dark; light is also the manifest's colours.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["light", "dark"],
+      "properties": {
+        "light": {
+          "type": "string",
+          "minLength": 1,
+          "x-site": [
+            { "file": "static/manifest.json", "key": "theme_color" },
+            { "file": "static/manifest.json", "key": "background_color" }
+          ]
+        },
+        "dark": { "type": "string", "minLength": 1 }
+      },
+      "x-site": [{ "file": "config.toml", "key": "extra.theme_color" }]
+    },
+    "banner": {
+      "description": "A one-line notice above the header, with the banner feature.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["message"],
+      "properties": {
+        "message": { "type": "string", "minLength": 1 },
+        "link": { "$ref": "#/$defs/link" },
+        "link_text": { "type": "string" }
+      },
+      "x-site": [{ "file": "config.toml", "key": "extra.banner" }]
+    },
+    "icons": {
+      "description": "The manifest's icons.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["src", "sizes", "type"],
+        "properties": {
+          "src": { "$ref": "#/$defs/path" },
+          "sizes": { "type": "string", "pattern": "^[0-9]+x[0-9]+( [0-9]+x[0-9]+)*$" },
+          "type": { "type": "string", "pattern": "^image/[a-z0-9.+-]+$" }
+        }
+      },
+      "x-site": [{ "file": "static/manifest.json", "key": "icons" }]
+    }
+  },
+  "$defs": {
+    "path": { "type": "string", "pattern": "^/[^\\s]*$" },
+    "link": { "type": "string", "pattern": "^(/|https://)[^\\s]*$" }
+  }
+}

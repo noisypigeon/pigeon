@@ -11,3 +11,6 @@ features:
   fonts: { default: true, description: "Bunny Fonts, for extra.look.font_family." }
   banner: { default: false, description: "A one-line notice above the header, from extra.banner." }
   commit: { default: true, description: "The build's commit, from SITE_COMMIT_SHA, in the footer." }
+# Posts are named YYYY-MM-DD-<slug>.md; see .claude/decisions/2026-11-03-runtime-static-site-config-contract.md.
+content:
+  posts: { filename: date-slug }
