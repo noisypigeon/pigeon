@@ -1,5 +1,24 @@
-# The blog, a static site on R2; see .claude/decisions/2026-11-03-runtime-cloudflare-static-sites-r2.md.
+# The blog, a static site on R2; see .claude/decisions/2026-11-03-runtime-static-site-config-contract.md.
 static_site:
   template:
-    version: 1.0.0
-    features: [changelog, math]
+    version: 1.0.1
+    features: [math]
+  site:
+    title: Willow Graysen
+    short_name: noisypigeon
+    description: Infra dev, data hoarder, mechanic-ish, photographer.
+    intro: Hi, I’m Willow Graysen. This is my digital shoebox — equal parts time capsule, portfolio, and proof I was here.
+    avatar: /assets/images/site/avatar.png
+    social_preview: /assets/images/site/social_preview.png
+    author:
+      alternate_names: [Willow Finch, Kara Finch, Kara Graysen, Luna Graysen]
+      page: /pages/about
+    nav:
+      - { title: About, link: /pages/about }
+      - { title: GitHub, link: "https://github.com/noisypigeon" }
+      - { title: Bluesky, link: "https://bsky.app/profile/noisypigeon.com" }
+      - { title: LinkedIn, link: "https://www.linkedin.com/in/noisypigeon" }
+      - { title: Unsplash, link: "https://unsplash.com/@noisypigeon" }
+    icons:
+      - { src: /assets/images/site/icon-192.png, sizes: 192x192, type: image/png }
+      - { src: /assets/images/site/icon-512.png, sizes: 512x512, type: image/png }
