@@ -12,10 +12,6 @@ use serde_json::{Map, Value, json};
 
 use crate::generations::{Day, Generation};
 
-/// The one apex unit, for every zone.
-pub const UNIT: &str = "workloads/cloudflare/apex";
-/// The directory under `workloads/` that holds it.
-pub const PROVIDER_DIR: &str = "cloudflare";
 /// A name no workload may take.
 pub const APEX: &str = "apex";
 /// The unit that mints apex tokens.
@@ -53,25 +49,21 @@ static SECRET_KEY: LazyLock<Regex> =
 static INPUT: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^[a-z0-9_]+(\.[a-z0-9_]+)*$").expect("valid regex"));
 
-/// Where an apex unit sits: the repository root, and its zone for a per-zone apex.
+/// Where an apex unit sits: the repository root and its zone.
 #[derive(Debug, Clone)]
 pub struct Site {
     /// The repository root.
     pub root: PathBuf,
-    /// The zone of `workloads/<zone>/apex`; `None` for the all-zones unit.
-    pub zone: Option<String>,
+    /// The zone of `workloads/<zone>/apex`.
+    pub zone: String,
 }
 
-/// The zone of a per-zone apex path, `workloads/<zone>/apex`.
+/// The zone of an apex path, `workloads/<zone>/apex`.
 #[must_use]
 pub fn zone_apex(path: &str) -> Option<&str> {
     let mut parts = path.split('/');
     match (parts.next(), parts.next(), parts.next(), parts.next()) {
-        (Some("workloads"), Some(zone), Some(APEX), None)
-            if zone != PROVIDER_DIR && ZONE.is_match(zone) =>
-        {
-            Some(zone)
-        }
+        (Some("workloads"), Some(zone), Some(APEX), None) if ZONE.is_match(zone) => Some(zone),
         _ => None,
     }
 }
@@ -961,21 +953,9 @@ fn zone_dir(rel: &str, dir: &Path, out: &mut Vec<(String, String)>) {
     }
 }
 
-/// Checks each apex's zone is listed and has exactly its `apex-<zone>` token.
-fn apex_tokens(
-    cf: &Value,
-    listed: &BTreeSet<&str>,
-    apexes: Vec<(String, String)>,
-    out: &mut Vec<(String, String)>,
-) {
+/// Checks each apex has exactly its `apex-<zone>` token.
+fn apex_tokens(cf: &Value, apexes: Vec<(String, String)>, out: &mut Vec<(String, String)>) {
     for (zone, at) in apexes {
-        if !listed.contains(zone.as_str()) {
-            out.push((
-                at,
-                format!("zones.{zone}: not a zone in {CLOUDFLARE}/config.yaml"),
-            ));
-            continue;
-        }
         let token = token_name(&zone);
         let found = cf["tokens"]
             .as_array()
@@ -986,7 +966,7 @@ fn apex_tokens(
         match found {
             None => out.push((
                 at,
-                format!("zones.{zone}: {CLOUDFLARE}/config.yaml needs a `{token}` token"),
+                format!("{CLOUDFLARE}/config.yaml needs a `{token}` token"),
             )),
             Some(t) if t["capabilities"] != want => out.push((
                 format!("{CLOUDFLARE}/config.yaml"),
@@ -1023,23 +1003,6 @@ pub fn layout(root: &Path) -> Vec<(String, String)> {
     for name in &dirs {
         let rel = format!("workloads/{name}");
         let dir = root.join(&rel);
-        if name == PROVIDER_DIR {
-            for e in fs::read_dir(&dir).into_iter().flatten().flatten() {
-                let n = e.file_name().to_string_lossy().into_owned();
-                if n != APEX {
-                    out.push((format!("{rel}/{n}"), format!("{rel}/ holds only {APEX}/")));
-                }
-            }
-            for own in [crate::config::SCHEMA, "modules", "unit.yaml"] {
-                if dir.join(APEX).join(own).exists() {
-                    out.push((
-                        format!("{UNIT}/{own}"),
-                        format!("the apex uses {CLOUDFLARE}'s schema and modules, never its own"),
-                    ));
-                }
-            }
-            continue;
-        }
         if !ZONE.is_match(name) || !listed.contains(name.as_str()) {
             out.push((
                 rel,
@@ -1049,34 +1012,19 @@ pub fn layout(root: &Path) -> Vec<(String, String)> {
         }
         zone_dir(&rel, &dir, &mut out);
     }
-    let apex: Value = fs::read_to_string(root.join(UNIT).join(crate::config::CONFIG))
-        .ok()
-        .and_then(|t| serde_saphyr::from_str(&t).ok())
-        .unwrap_or(Value::Null);
-    let mut apexes: Vec<(String, String)> = zones(&apex)
-        .into_iter()
-        .map(|z| (z, format!("{UNIT}/config.yaml")))
-        .collect();
-    for name in &dirs {
-        if name != PROVIDER_DIR
-            && root
-                .join("workloads")
+    let apexes: Vec<(String, String)> = dirs
+        .iter()
+        .filter(|name| listed.contains(name.as_str()))
+        .filter(|name| {
+            root.join("workloads")
                 .join(name)
                 .join(APEX)
                 .join(crate::config::CONFIG)
                 .is_file()
-        {
-            let at = format!("workloads/{name}/{APEX}/config.yaml");
-            if let Some((_, first)) = apexes.iter().find(|(z, _)| z == name) {
-                out.push((
-                    at.clone(),
-                    format!("`{name}` already has an apex in {first}"),
-                ));
-            }
-            apexes.push((name.clone(), at));
-        }
-    }
-    apex_tokens(&cf, &listed, apexes, &mut out);
+        })
+        .map(|name| (name.clone(), format!("workloads/{name}/{APEX}/config.yaml")))
+        .collect();
+    apex_tokens(&cf, apexes, &mut out);
     out
 }
 

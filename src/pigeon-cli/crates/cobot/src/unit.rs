@@ -119,17 +119,15 @@ pub fn discover(root: &Path) -> (Vec<Unit>, Vec<Problem>) {
                 "holds both unit.yaml and config.yaml; a unit is one or the other",
             ));
         } else if config_file.is_file() {
-            let zone = crate::apex::zone_apex(&rel);
-            let (home, site) = if rel == crate::apex::UNIT || zone.is_some() {
-                (
+            let (home, site) = match crate::apex::zone_apex(&rel) {
+                Some(zone) => (
                     root.join(crate::apex::CLOUDFLARE),
                     Some(crate::apex::Site {
                         root: root.to_path_buf(),
-                        zone: zone.map(str::to_string),
+                        zone: zone.to_string(),
                     }),
-                )
-            } else {
-                (dir.clone(), None)
+                ),
+                None => (dir.clone(), None),
             };
             let config = match crate::config::load(&dir, &home, site) {
                 Ok(c) => Some(c),

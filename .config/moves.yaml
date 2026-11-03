@@ -1,3 +1,2 @@
 description: Units whose state moves to a new path, once; see .claude/decisions/2026-11-02-runtime-cobot-infrastructure-as-code.md.
-moves:
-  - { from: workloads/cloudflare/apex, to: workloads/noisypigeon.com/apex }
+moves: []
