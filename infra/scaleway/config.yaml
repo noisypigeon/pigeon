@@ -1,0 +1,7 @@
+# Non-secret settings; see .claude/decisions/2026-11-03-runtime-scaleway-provisioner-unit.md.
+region: fr-par
+projects:
+  - { name: pigeon, description: Resources provisioned by cobot. }
+rotation: { period_days: 90, overlap_days: 7 }
+applications: []
+keys: []

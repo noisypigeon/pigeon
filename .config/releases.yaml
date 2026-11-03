@@ -91,6 +91,26 @@ units:
     manifest: infra/agnostic/schema.json
     paths: [infra/agnostic/schema.json, infra/agnostic/modules/]
     exclude: ['*.md']
+  infra-scaleway-project:
+    manifest: infra/scaleway/modules/project/module.yaml
+    paths: [infra/scaleway/modules/project/]
+    exclude: ['*.md']
+  infra-scaleway-iam-application:
+    manifest: infra/scaleway/modules/iam-application/module.yaml
+    paths: [infra/scaleway/modules/iam-application/]
+    exclude: ['*.md']
+  infra-scaleway-iam-policy:
+    manifest: infra/scaleway/modules/iam-policy/module.yaml
+    paths: [infra/scaleway/modules/iam-policy/]
+    exclude: ['*.md']
+  infra-scaleway-iam-api-key:
+    manifest: infra/scaleway/modules/iam-api-key/module.yaml
+    paths: [infra/scaleway/modules/iam-api-key/]
+    exclude: ['*.md']
+  infra-scaleway-schema:
+    manifest: infra/scaleway/schema.json
+    paths: [infra/scaleway/schema.json, infra/scaleway/modules/]
+    exclude: ['*.md']
   static-site-template:
     manifest: src/static-site-template/template.yaml
     paths: [src/static-site-template/]
@@ -115,4 +135,9 @@ tiers:
   - { file: infra/cloudflare/modules/ruleset/CHANGELOG.md, unit: infra-cloudflare-ruleset }
   - { file: infra/agnostic/modules/random-string/CHANGELOG.md, unit: infra-agnostic-random-string }
   - { file: infra/agnostic/CHANGELOG.md, unit: infra-agnostic-schema }
+  - { file: infra/scaleway/modules/project/CHANGELOG.md, unit: infra-scaleway-project }
+  - { file: infra/scaleway/modules/iam-application/CHANGELOG.md, unit: infra-scaleway-iam-application }
+  - { file: infra/scaleway/modules/iam-policy/CHANGELOG.md, unit: infra-scaleway-iam-policy }
+  - { file: infra/scaleway/modules/iam-api-key/CHANGELOG.md, unit: infra-scaleway-iam-api-key }
+  - { file: infra/scaleway/CHANGELOG.md, unit: infra-scaleway-schema }
   - { file: src/static-site-template/CHANGELOG.md, unit: static-site-template }

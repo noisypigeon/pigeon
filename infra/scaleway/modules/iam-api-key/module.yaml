@@ -1,0 +1,2 @@
+version: 0.1.0
+description: One generation of a Scaleway IAM API key, expiring with it.

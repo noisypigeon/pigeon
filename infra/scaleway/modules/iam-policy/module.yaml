@@ -1,0 +1,2 @@
+version: 0.1.0
+description: One Scaleway IAM policy for an application, one rule per entry.

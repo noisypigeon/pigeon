@@ -1,0 +1,235 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "infra/scaleway",
+  "description": "The Scaleway provisioner unit; see .claude/decisions/2026-11-03-runtime-scaleway-provisioner-unit.md.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "region",
+    "projects",
+    "rotation",
+    "applications",
+    "keys"
+  ],
+  "x-cobot": {
+    "version": "0.1.0",
+    "secrets": [
+      "access_key",
+      "secret_key",
+      "organization_id"
+    ],
+    "providers": {
+      "scaleway": {
+        "access_key": "$secret.access_key",
+        "secret_key": "$secret.secret_key",
+        "organization_id": "$secret.organization_id",
+        "region": "$config.region"
+      }
+    },
+    "each": {
+      "policies": {
+        "module": "iam-policy",
+        "over": "applications",
+        "for_each": "$item.name",
+        "inputs": {
+          "name": "$item.name",
+          "application_id": "$module.applications[$item.name].id",
+          "rules": "$item.rules",
+          "project_ids": "$module.projects[*].id",
+          "organization_id": "$secret.organization_id"
+        }
+      }
+    },
+    "outputs": {
+      "project_ids": "$module.projects[*].id",
+      "application_ids": "$module.applications[*].id",
+      "access_keys": "$module.keys[*].access_key",
+      "secret_keys": "$module.keys[*].secret_key"
+    }
+  },
+  "properties": {
+    "region": {
+      "description": "The provider's region.",
+      "type": "string",
+      "pattern": "^[a-z]{2}-[a-z]{3}$"
+    },
+    "projects": {
+      "description": "Projects to create; never the organization's default.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "description"
+        ],
+        "properties": {
+          "name": {
+            "$ref": "#/$defs/key"
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 200
+          }
+        }
+      },
+      "x-cobot": {
+        "module": "project",
+        "for_each": "$item.name",
+        "inputs": {
+          "name": "$item.name",
+          "description": "$item.description"
+        }
+      }
+    },
+    "rotation": {
+      "description": "How long each API key generation lasts, and how long it overlaps its successor.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "period_days",
+        "overlap_days"
+      ],
+      "properties": {
+        "period_days": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "overlap_days": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "applications": {
+      "description": "IAM applications, each with one policy of the given rules.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "description",
+          "rules"
+        ],
+        "properties": {
+          "name": {
+            "$ref": "#/$defs/key"
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "rules": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "$ref": "#/$defs/rule"
+            }
+          }
+        }
+      },
+      "x-cobot": {
+        "module": "iam-application",
+        "for_each": "$item.name",
+        "inputs": {
+          "name": "$item.name",
+          "description": "$item.description"
+        }
+      }
+    },
+    "keys": {
+      "description": "API keys to mint, one instance per generation.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "application",
+          "project"
+        ],
+        "properties": {
+          "name": {
+            "$ref": "#/$defs/key"
+          },
+          "application": {
+            "$ref": "#/$defs/key"
+          },
+          "project": {
+            "$ref": "#/$defs/key"
+          }
+        }
+      },
+      "x-cobot": {
+        "module": "iam-api-key",
+        "for_each": "$item.name",
+        "rotate": {
+          "period_days": "$config.rotation.period_days",
+          "overlap_days": "$config.rotation.overlap_days"
+        },
+        "inputs": {
+          "name": "$item.name",
+          "application_id": "$module.applications[$item.application].id",
+          "default_project_id": "$module.projects[$item.project].id",
+          "not_before": "$generation.not_before",
+          "expires_on": "$generation.expires_on"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "key": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+    },
+    "rule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "permission_sets"
+      ],
+      "properties": {
+        "permission_sets": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9]+$",
+            "not": {
+              "enum": [
+                "IAMManager",
+                "OrganizationManager",
+                "ProjectManager"
+              ]
+            }
+          }
+        },
+        "projects": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/key"
+          }
+        },
+        "organization": {
+          "const": true
+        }
+      },
+      "oneOf": [
+        {
+          "required": [
+            "projects"
+          ]
+        },
+        {
+          "required": [
+            "organization"
+          ]
+        }
+      ]
+    }
+  }
+}
