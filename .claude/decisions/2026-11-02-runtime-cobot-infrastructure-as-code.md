@@ -241,3 +241,51 @@ This supersedes §5's `plan` job and §9's execution. Both texts stay as written
 - pigeon takes no external contributions. Its interaction limits are set to collaborators only, by hand in the repository settings, so fork PRs, issues and comments from others are not expected.
 - As a guard, the `plan` job still runs only when `github.event.pull_request.head.repo.full_name == github.repository`. A fork PR that slips through is skipped, and nothing is posted.
 - No `pull_request_target` workflow is added.
+
+### 2026-11-03: Moving a unit's state
+
+Context's out-of-scope list left "moving or renaming a unit, and migrating its state" to a later amendment. The workloads ADR's amendment of this date moves `workloads/cloudflare/apex` to `workloads/noisypigeon.com/apex`. That unit's nine DNS records are live, and they must not be destroyed and recreated.
+
+A move changes only where the state lives. The addresses inside the state must already match, as they do here, because the per-zone apex composes to the same addresses. Renaming addresses within a unit stays out of scope.
+
+#### 1. `.config/moves.yaml`
+
+```yaml
+description: Units whose state moves to a new path, once.
+moves:
+  - { from: workloads/cloudflare/apex, to: workloads/noisypigeon.com/apex }
+```
+
+`validate` rejects:
+
+- a move between areas;
+- a `to` that is not a discovered unit;
+- a `from` that still is one;
+- a path in two moves.
+
+#### 2. Plan and apply
+
+- **Plan.** While `to` has no state and `from` does, cobot plans `to` against a copy of `from`'s state. The summary notes "state moves from `<from>`".
+- **Apply.**
+  1. While `to` has no state, cobot copies `from`'s state file to `to`, still encrypted, byte for byte.
+  2. Once `to` has state, it is never overwritten: it may hold what a failed apply already changed.
+  3. cobot applies `to`.
+  4. After any successful apply of `to`, including one with no changes, it deletes `from`'s file.
+
+  The workflow's `git add -A` commits the result in the run's single state commit. If the apply fails, `to` keeps whatever partial state it wrote, `from` stays, and the next run retries against `to` alone.
+- **Spent entries.** Once `from` has no state, the entry does nothing, and a later PR removes it.
+- **Address moves.** A resource change with a `previous_address` is listed as `move <from> → <to>`, never hidden as "No changes".
+
+#### 3. Verification
+
+An end-to-end test with built-in fixtures:
+
+1. applies a unit;
+2. moves it with an entry;
+3. plans the note with no changes;
+4. applies, checking that the new state file exists and the old one is gone;
+5. replans "No changes".
+
+A second end-to-end test fails an apply after the copy, and checks that the retry plans against `to`'s partial state, never `from`'s.
+
+Unit tests cover each `validate` rejection.
