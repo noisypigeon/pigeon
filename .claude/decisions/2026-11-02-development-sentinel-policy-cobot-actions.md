@@ -106,3 +106,16 @@ rules:
 - In a throwaway clone with tags fetched from `origin`, `pigeon cobot release --root . --dry-run` prints the same JSON as `pigeon sentinel release --root . --dry-run` did at the parent commit.
 - Temporarily adding `Command::new` to a sentinel source file, or `-- sentinel tags` to a workflow, makes `pigeon sentinel check` fail.
 - The implementation merge's `chore(release):` commit comes from a `release` run whose log shows `cobot release`.
+
+## Amendments
+
+### 2026-11-03: A third role, composition
+
+§1 asks every new crate to state its side. [`2026-11-03-development-backplane-platform-composition-layer.md`](2026-11-03-development-backplane-platform-composition-layer.md) adds `backplane`, which is on neither side:
+
+- **`backplane` composes.**
+  - It judges through sentinel.
+  - It acts through cobot.
+  - It writes no file and starts no process itself.
+- A capability backplane offers is still split by §1: the check goes in sentinel and the action in cobot. Backplane only sequences and exposes them.
+- `.config/policies/backplane.yaml` enforces this, as `sentinel-actions.yaml` does for sentinel.
