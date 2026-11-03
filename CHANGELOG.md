@@ -2,6 +2,7 @@
 
 ## 2026-11-03
 
+- docs(adr): infra/digitalocean provisioner unit ([#61](https://github.com/noisypigeon/pigeon/pull/61))
 - refactor(cobot): only the site config contract ([#60](https://github.com/noisypigeon/pigeon/pull/60))
 - feat(workloads): the blog's config from config.yaml ([#59](https://github.com/noisypigeon/pigeon/pull/59))
 - feat(cobot): build static sites from config.yaml ([#58](https://github.com/noisypigeon/pigeon/pull/58))
