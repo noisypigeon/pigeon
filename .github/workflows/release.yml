@@ -108,7 +108,7 @@ jobs:
           set -euo pipefail
           if [ -n "$IMAGE" ]; then
             echo "$GH_TOKEN" | docker login ghcr.io -u "$ACTOR" --password-stdin
-            docker build --build-arg FEATURES="$FEATURES" -t "$IMAGE:$VERSION" src/pigeon-cli
+            docker build --target "$FEATURES" --build-arg FEATURES="$FEATURES" -t "$IMAGE:$VERSION" src/pigeon-cli
             docker run --rm "$IMAGE:$VERSION" "$FEATURES" --version
             docker push "$IMAGE:$VERSION"
             if [ "$NEWEST" = true ]; then

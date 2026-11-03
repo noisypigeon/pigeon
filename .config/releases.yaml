@@ -37,6 +37,7 @@ units:
   cobot:
     manifest: src/pigeon-cli/crates/cobot/Cargo.toml
     features: cobot
+    image: ghcr.io/noisypigeon/pigeon-cobot
     paths:
       - src/pigeon-cli/crates/cobot/
       - src/pigeon-cli/crates/pigeon/src/commands/cobot.rs
@@ -46,6 +47,8 @@ units:
       - src/pigeon-cli/crates/pigeon/src/cli/mod.rs
       - src/pigeon-cli/crates/pigeon/src/commands/mod.rs
       - src/pigeon-cli/crates/pigeon/Cargo.toml
+      - src/pigeon-cli/Dockerfile
+      - src/pigeon-cli/.dockerignore
     exclude: [tests/, benches/, '*.md']
     cargo: { workspace: src/pigeon-cli, package: pigeon }
   infra-cloudflare-zone:
