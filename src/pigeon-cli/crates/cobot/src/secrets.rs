@@ -64,6 +64,32 @@ pub fn encrypt(value: &str, passphrase: &str) -> Result<String, Error> {
     Ok(format!("{PREFIX}{}]", base64(&out)))
 }
 
+/// Why a value does not open.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Closed {
+    Malformed(&'static str),
+    WrongPassphrase,
+}
+
+fn open(value: &str, passphrase: &str) -> Result<String, Closed> {
+    let body = value
+        .strip_prefix(PREFIX)
+        .and_then(|v| v.strip_suffix(']'))
+        .ok_or(Closed::Malformed("not ENC[cobot:v1:…]"))?;
+    let bytes = unbase64(body).ok_or(Closed::Malformed("bad base64"))?;
+    let decryptor =
+        age::Decryptor::new(&bytes[..]).map_err(|_| Closed::Malformed("not an age file"))?;
+    let identity = age::scrypt::Identity::new(SecretString::from(passphrase.to_string()));
+    let mut reader = decryptor
+        .decrypt(std::iter::once(&identity as &dyn age::Identity))
+        .map_err(|_| Closed::WrongPassphrase)?;
+    let mut out = String::new();
+    reader
+        .read_to_string(&mut out)
+        .map_err(|_| Closed::Malformed("not UTF-8"))?;
+    Ok(out)
+}
+
 /// Decrypts one value.
 ///
 /// # Errors
@@ -71,22 +97,13 @@ pub fn encrypt(value: &str, passphrase: &str) -> Result<String, Error> {
 /// [`Error::Io`] if the value is malformed or the passphrase is wrong; the
 /// message never includes the value.
 pub fn decrypt(value: &str, passphrase: &str) -> Result<String, Error> {
-    let bad = |why: &str| failed(Path::new(FILE), format!("cannot decrypt: {why}"));
-    let body = value
-        .strip_prefix(PREFIX)
-        .and_then(|v| v.strip_suffix(']'))
-        .ok_or_else(|| bad("not ENC[cobot:v1:…]"))?;
-    let bytes = unbase64(body).ok_or_else(|| bad("bad base64"))?;
-    let decryptor = age::Decryptor::new(&bytes[..]).map_err(|_| bad("not an age file"))?;
-    let identity = age::scrypt::Identity::new(SecretString::from(passphrase.to_string()));
-    let mut reader = decryptor
-        .decrypt(std::iter::once(&identity as &dyn age::Identity))
-        .map_err(|_| bad("wrong passphrase"))?;
-    let mut out = String::new();
-    reader
-        .read_to_string(&mut out)
-        .map_err(|_| bad("not UTF-8"))?;
-    Ok(out)
+    open(value, passphrase).map_err(|c| {
+        let why = match c {
+            Closed::Malformed(why) => why,
+            Closed::WrongPassphrase => "wrong passphrase",
+        };
+        failed(Path::new(FILE), format!("cannot decrypt: {why}"))
+    })
 }
 
 /// Decrypts every value in `path`.
@@ -99,6 +116,55 @@ pub fn decrypt_all(path: &Path, passphrase: &str) -> Result<BTreeMap<String, Str
         .into_iter()
         .map(|(k, v)| decrypt(&v, passphrase).map(|plain| (k, plain)))
         .collect()
+}
+
+/// A passphrase and the variable it came from.
+#[derive(Clone, Copy)]
+pub struct Named<'a> {
+    /// The environment variable.
+    pub var: &'a str,
+    /// Its value.
+    pub passphrase: &'a str,
+}
+
+/// Decrypts every value in `path` with `using`; a failure names `shown` (the
+/// file as reported), the key and the variable. When `other` opens a value
+/// `using` cannot, the error says so; that value is dropped, never returned.
+///
+/// # Errors
+///
+/// [`Error::Io`] if the file cannot be read or any value cannot be decrypted.
+pub fn decrypt_all_named(
+    path: &Path,
+    shown: &Path,
+    using: Named<'_>,
+    other: Option<Named<'_>>,
+) -> Result<BTreeMap<String, String>, Error> {
+    let mut out = BTreeMap::new();
+    for (k, v) in read(path)? {
+        match open(&v, using.passphrase) {
+            Ok(plain) => {
+                out.insert(k, plain);
+            }
+            Err(Closed::Malformed(why)) => {
+                return Err(failed(shown, format!("`{k}` cannot be decrypted: {why}")));
+            }
+            Err(Closed::WrongPassphrase) => {
+                let hint = other
+                    .filter(|o| open(&v, o.passphrase).is_ok())
+                    .map(|o| {
+                        format!(
+                            "; it decrypts with {}, so re-encrypt it under {} with `pigeon cobot secrets set` from a current build",
+                            o.var, using.var
+                        )
+                    })
+                    .unwrap_or_default();
+                let message = format!("`{k}` cannot be decrypted with {}{hint}", using.var);
+                return Err(failed(shown, message));
+            }
+        }
+    }
+    Ok(out)
 }
 
 /// Sets `key` to `value`, encrypted, creating the file if needed.
@@ -171,7 +237,12 @@ fn unbase64(text: &str) -> Option<Vec<u8>> {
 
 #[cfg(test)]
 mod tests {
-    use super::{base64, decrypt, encrypt, is_encrypted, set, unbase64};
+    use std::path::Path;
+
+    use super::{
+        FILE, Named, PASSPHRASE_VAR, WORKLOAD_PASSPHRASE_VAR, base64, decrypt, decrypt_all_named,
+        encrypt, is_encrypted, set, unbase64,
+    };
 
     #[test]
     fn keys_must_be_plain_names() {
@@ -213,5 +284,51 @@ mod tests {
             "{err}"
         );
         assert!(decrypt("plaintext", "x").is_err());
+    }
+
+    #[test]
+    fn named_failures_say_which_key_variable_and_fix() {
+        let dir = tempfile::TempDir::new().expect("tempdir");
+        let path = dir.path().join(FILE);
+        let (infra, workload) = ("infra-passphrase-0123", "workload-passphrase-0123");
+        set(&path, "token", "s3cret-value", infra).expect("set");
+        let shown = Path::new("workloads/x.com/apex/secrets.config.yaml");
+        let using = Named {
+            var: WORKLOAD_PASSPHRASE_VAR,
+            passphrase: workload,
+        };
+        let other = Named {
+            var: PASSPHRASE_VAR,
+            passphrase: infra,
+        };
+        let err = decrypt_all_named(&path, shown, using, Some(other))
+            .expect_err("wrong")
+            .to_string();
+        assert!(
+            err.starts_with("workloads/x.com/apex/secrets.config.yaml: `token` cannot be decrypted with COBOT_WORKLOAD_SECRETS_PASSPHRASE; it decrypts with COBOT_SECRETS_PASSPHRASE")
+                && !err.contains("s3cret"),
+            "{err}"
+        );
+        let err = decrypt_all_named(&path, shown, using, None)
+            .expect_err("wrong")
+            .to_string();
+        assert!(!err.contains("it decrypts with"), "{err}");
+        let other = Named {
+            var: PASSPHRASE_VAR,
+            passphrase: "unrelated-passphrase-01",
+        };
+        let err = decrypt_all_named(&path, shown, using, Some(other))
+            .expect_err("wrong")
+            .to_string();
+        assert!(!err.contains("it decrypts with"), "{err}");
+        let got = decrypt_all_named(&path, shown, other_named(infra), None).expect("opens");
+        assert_eq!(got["token"], "s3cret-value");
+    }
+
+    fn other_named(passphrase: &str) -> Named<'_> {
+        Named {
+            var: PASSPHRASE_VAR,
+            passphrase,
+        }
     }
 }

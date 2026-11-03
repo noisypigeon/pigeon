@@ -11,6 +11,7 @@ pub mod secrets;
 mod tofu;
 pub mod unit;
 
+use std::collections::BTreeMap;
 use std::fmt::{self, Write as _};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -172,6 +173,50 @@ pub fn secrets_passphrase_for(
     }
 }
 
+/// The passphrase for the unit at `unit_path` and its decrypted secrets from
+/// `file`; a value that does not open names its key and variable, and says
+/// when the other secrets passphrase opens it.
+///
+/// # Errors
+///
+/// As [`secrets_passphrase_for`], or [`Error::Io`] if a value cannot be decrypted.
+pub fn unit_secrets(
+    unit_path: &str,
+    file: &Path,
+    infra: Option<String>,
+    workload: Option<String>,
+) -> Result<(String, BTreeMap<String, String>), Error> {
+    let pass = secrets_passphrase_for(unit_path, infra.clone(), workload.clone())?;
+    let is_workload = unit_path.trim_start_matches("./").starts_with("workloads/");
+    let (var, other_var, other) = if is_workload {
+        (
+            secrets::WORKLOAD_PASSPHRASE_VAR,
+            secrets::PASSPHRASE_VAR,
+            infra,
+        )
+    } else {
+        (
+            secrets::PASSPHRASE_VAR,
+            secrets::WORKLOAD_PASSPHRASE_VAR,
+            workload,
+        )
+    };
+    let shown = Path::new(unit_path.trim_end_matches('/')).join(secrets::FILE);
+    let values = secrets::decrypt_all_named(
+        file,
+        &shown,
+        secrets::Named {
+            var,
+            passphrase: &pass,
+        },
+        other.as_deref().map(|passphrase| secrets::Named {
+            var: other_var,
+            passphrase,
+        }),
+    )?;
+    Ok((pass, values))
+}
+
 /// Validates every unit, against the provider allowlist in `providers`.
 ///
 /// # Errors
@@ -331,15 +376,15 @@ fn prepare(
     if let Some(c) = &unit.config
         && !config::declared_secrets(c).is_empty()
     {
-        let pass = &secrets_passphrase_for(
+        let (pass, values) = unit_secrets(
             &unit.path,
+            &unit.dir.join(secrets::FILE),
             ctx.secrets_passphrase.clone(),
             ctx.workload_secrets_passphrase.clone(),
         )?;
-        let values = secrets::decrypt_all(&unit.dir.join(secrets::FILE), pass)?;
         decrypted_records(unit, c, &values)?;
         env.hidden.extend(values.values().cloned());
-        env.hidden.push(pass.clone());
+        env.hidden.push(pass);
         let json = serde_json::to_string(&values).map_err(|e| Error::Io {
             path: unit.dir.join(secrets::FILE),
             message: e.to_string(),

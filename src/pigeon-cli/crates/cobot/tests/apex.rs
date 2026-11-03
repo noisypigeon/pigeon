@@ -910,3 +910,27 @@ fn a_moved_unit_keeps_its_state_and_never_loses_a_retry() {
         cobot::summary(&again)
     );
 }
+
+#[test]
+fn secrets_under_the_wrong_passphrase_say_so_without_the_value() {
+    let repo = builtin_repo();
+    let root = repo.path();
+    let path = root.join(APEX).join("secrets.config.yaml");
+    secrets_file(
+        &path,
+        &["protonmail_verification", "pm_verification"],
+        |k| format!("value-of-{k}"),
+        SECRETS_PASS,
+    );
+    let state = TempDir::new().expect("state");
+    let units = cobot::select(root, &root.join(".config"), &[APEX.into()]).expect("valid");
+    let err = cobot::plan(&ctx(root, state.path()), &units)
+        .expect_err("wrong passphrase")
+        .to_string();
+    assert!(
+        err.starts_with(&format!(
+            "{APEX}/secrets.config.yaml: `pm_verification` cannot be decrypted with COBOT_WORKLOAD_SECRETS_PASSPHRASE; it decrypts with COBOT_SECRETS_PASSPHRASE"
+        )) && !err.contains("value-of-"),
+        "{err}"
+    );
+}
