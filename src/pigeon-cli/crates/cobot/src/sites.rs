@@ -581,9 +581,7 @@ pub fn check_layout(src: &Path, date_slug: bool) -> Vec<String> {
         }
     }
     for dir in ["posts", "pages"] {
-        if src.join(dir).join("_index.md").exists() {
-            out.push(format!("`{dir}/_index.md` is the template's scaffold"));
-        }
+        indexes(&src.join(dir), dir, &mut out);
     }
     if date_slug && let Ok(posts) = fs::read_dir(src.join("posts")) {
         let mut names: Vec<_> = posts.flatten().collect();
@@ -605,16 +603,43 @@ pub fn check_layout(src: &Path, date_slug: bool) -> Vec<String> {
 /// words of `[a-z0-9]` joined by dashes.
 fn date_prefix(name: &str) -> Option<&str> {
     let stem = name.strip_suffix(".md")?;
-    let (date, slug) = (stem.get(..10)?, stem.get(10..)?.strip_prefix('-')?);
-    let digits = |r: std::ops::Range<usize>| date[r].bytes().all(|b| b.is_ascii_digit());
-    let dated =
-        digits(0..4) && &date[4..5] == "-" && digits(5..7) && &date[7..8] == "-" && digits(8..10);
-    let slugged = slug.split('-').all(|w| {
+    let bytes = stem.as_bytes();
+    let dated = bytes.len() > 11
+        && bytes[..10].iter().enumerate().all(|(i, b)| {
+            if i == 4 || i == 7 {
+                *b == b'-'
+            } else {
+                b.is_ascii_digit()
+            }
+        })
+        && bytes[10] == b'-';
+    if !dated {
+        return None;
+    }
+    let slugged = stem[11..].split('-').all(|w| {
         !w.is_empty()
             && w.bytes()
                 .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit())
     });
-    (dated && slugged).then_some(date)
+    slugged.then(|| &stem[..10])
+}
+
+/// Each `_index.md` under `dir`, at any depth: sections are the scaffold's.
+fn indexes(dir: &Path, at: &str, out: &mut Vec<String>) {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return;
+    };
+    let mut entries: Vec<_> = entries.flatten().collect();
+    entries.sort_by_key(fs::DirEntry::file_name);
+    for e in entries {
+        let name = e.file_name().to_string_lossy().into_owned();
+        let rel = format!("{at}/{name}");
+        if e.file_type().is_ok_and(|t| t.is_dir()) {
+            indexes(&e.path(), &rel, out);
+        } else if name == "_index.md" {
+            out.push(format!("`{rel}`: sections are the template's scaffold"));
+        }
+    }
 }
 
 /// A post's name against `date-slug`: `YYYY-MM-DD-<slug>.md`, its prefix the
@@ -1038,6 +1063,9 @@ mod tests {
         for (name, text, why) in [
             ("0001-hello.md", POST, "is not named"),
             ("2015-02-15-Hello.md", POST, "is not named"),
+            ("2026é-01-01-a.md", POST, "is not named"),
+            ("2015-02-15-.md", POST, "is not named"),
+            ("2015-02-15.md", POST, "is not named"),
             (
                 "2015-02-16-hello.md",
                 POST,
@@ -1077,6 +1105,8 @@ mod tests {
         std::fs::write(src.join("config.toml"), "").expect("config");
         std::fs::create_dir_all(src.join("content")).expect("content");
         std::fs::write(src.join("posts/_index.md"), "").expect("index");
+        std::fs::create_dir_all(src.join("pages/team")).expect("nested");
+        std::fs::write(src.join("pages/team/_index.md"), "").expect("nested index");
         std::fs::write(src.join("posts/0002-b.md"), POST).expect("post");
         let problems = check_layout(src, true).join("\n");
         for want in [
