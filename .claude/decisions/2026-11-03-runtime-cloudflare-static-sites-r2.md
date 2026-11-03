@@ -371,7 +371,9 @@ Nothing else changes:
 
 **Two engine PRs.** §9's step 3 becomes two PRs, in order. Each is reviewable alone, and the first lands without touching a live unit.
 
-- **3a**, `feat(cobot): static-site workloads on R2`, holds §1's modules, §2's schema extension and expanders, §3's handoff and outputs, and §4's apex changes. Its plan shows `infra/cloudflare` creating its new outputs, and nothing else.
+- **3a**, `feat(cobot): static-site workloads on R2`, holds §1's modules, §2's schema extension and expanders, §3's handoff and outputs, and §4's apex changes. A PR's plan runs `main`'s binary, so 3a lands in two steps, as the per-zone apex did:
+  1. the engine and the modules, with tests that compose their own schema; its plan shows "No changes";
+  2. once that is merged, `infra/cloudflare/schema.json`'s extension and outputs; its plan shows `infra/cloudflare` creating its new outputs, and nothing else.
 - **3b**, `feat(cobot): sites build and publish`, holds §7's commands, S3 client, `mise.toml` and workflows, and §8's docs.
 
 The blog PR follows both.
