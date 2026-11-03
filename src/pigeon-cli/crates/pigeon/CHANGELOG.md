@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-11-03
+
+- fix(cobot): name the unit and passphrase in decrypt errors ([#45](https://github.com/noisypigeon/pigeon/pull/45))
+
 ## 2026-11-02
 
 - feat(cobot): apexes from infra/cloudflare, workload secrets and token handoff ([#37](https://github.com/noisypigeon/pigeon/pull/37))
