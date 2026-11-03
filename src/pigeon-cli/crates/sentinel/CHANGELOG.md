@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.10 (2026-11-03)
+
+- feat(backplane): pigeon-backplane crate, instance manifest and pigeon backplane ([#75](https://github.com/noisypigeon/pigeon/pull/75))
+
 ## v0.1.9 (2026-11-03)
 
 - feat(cobot): release a pigeon-cobot image ([#53](https://github.com/noisypigeon/pigeon/pull/53))

@@ -1,7 +1,7 @@
 [package]
 name = "sentinel"
 description = "A policy engine that checks a repository against YAML policies."
-version = "0.1.9"
+version = "0.1.10"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true

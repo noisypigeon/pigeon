@@ -2,6 +2,7 @@
 
 ## 2026-11-03
 
+- feat(backplane): pigeon-backplane crate, instance manifest and pigeon backplane ([#75](https://github.com/noisypigeon/pigeon/pull/75))
 - feat(cobot): sites build and publish ([#49](https://github.com/noisypigeon/pigeon/pull/49))
 - fix(cobot): name the unit and passphrase in decrypt errors ([#45](https://github.com/noisypigeon/pigeon/pull/45))
 

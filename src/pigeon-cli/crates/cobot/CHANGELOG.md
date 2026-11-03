@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.16 (2026-11-03)
+
+- feat(backplane): pigeon-backplane crate, instance manifest and pigeon backplane ([#75](https://github.com/noisypigeon/pigeon/pull/75))
+
 ## v0.1.15 (2026-11-03)
 
 - feat(cobot): agnostic modules and each blocks ([#67](https://github.com/noisypigeon/pigeon/pull/67))
