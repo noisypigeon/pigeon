@@ -986,26 +986,6 @@ fn cloudflare_with_sites() -> String {
     )
 }
 
-/// Adds the apex's `zone_rulesets` block and the account outputs to the fixture's schema.
-fn with_rulesets(root: &Path) {
-    let path = root.join("infra/cloudflare/schema.json");
-    let mut schema: Value =
-        serde_json::from_str(&fs::read_to_string(&path).expect("schema")).expect("json");
-    schema["x-cobot"]["apex"]["derived"]["zone_rulesets"] = json!({
-        "expand": "zone-rulesets",
-        "module": "ruleset",
-        "inputs": {
-            "zone_id": "$handoff.zone_id",
-            "name": "$item.name",
-            "phase": "$item.phase",
-            "rules": "$item.rules"
-        }
-    });
-    schema["x-cobot"]["outputs"]["token_ids"] = json!("$module.tokens[*].id");
-    schema["x-cobot"]["outputs"]["account_id"] = json!("$secret.account_id");
-    fs::write(path, schema.to_string()).expect("write");
-}
-
 /// A repository serving the blog as a static site at the apex's `@` and `www`.
 fn site_repo() -> TempDir {
     let repo = repo(PROTON);
@@ -1016,7 +996,6 @@ fn site_repo() -> TempDir {
         &cloudflare_with_sites(),
     );
     write(root, &format!("{BLOG}/config.yaml"), SITE);
-    with_rulesets(root);
     repo
 }
 
@@ -1117,7 +1096,6 @@ fn the_apex_rewrites_and_redirects_for_its_static_sites_and_renders_no_records_f
     );
 
     let repo = self::repo(PROTON);
-    with_rulesets(repo.path());
     assert_eq!(
         render(repo.path())["module"]["zone_rulesets"]["for_each"],
         json!({})
@@ -1261,7 +1239,6 @@ fn a_site_token_is_handed_off_after_infra_applies() {
         &cloudflare_with_sites(),
     );
     write(root, &format!("{BLOG}/config.yaml"), SITE);
-    with_rulesets(root);
     let state = TempDir::new().expect("state");
     let blog = cobot::select(root, &root.join(".config"), &[BLOG.into()]).expect("valid");
 

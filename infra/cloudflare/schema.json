@@ -33,6 +33,16 @@
             "priority": "$item.priority",
             "proxied": "$item.proxied"
           }
+        },
+        "zone_rulesets": {
+          "expand": "zone-rulesets",
+          "module": "ruleset",
+          "inputs": {
+            "zone_id": "$handoff.zone_id",
+            "name": "$item.name",
+            "phase": "$item.phase",
+            "rules": "$item.rules"
+          }
         }
       }
     },
@@ -65,7 +75,9 @@
     },
     "outputs": {
       "zone_ids": "$module.zones[*].id",
-      "tokens": "$module.tokens[*].value"
+      "tokens": "$module.tokens[*].value",
+      "token_ids": "$module.tokens[*].id",
+      "account_id": "$secret.account_id"
     },
     "singletons": {
       "permission_groups": {
