@@ -1,6 +1,7 @@
 //! `pigeon cobot sites`: build each static site with its pinned template, and
 //! publish it to its R2 bucket; see
-//! `.claude/decisions/2026-11-03-runtime-cloudflare-static-sites-r2.md` §5 and §7.
+//! `.claude/decisions/2026-11-03-runtime-cloudflare-static-sites-r2.md` §5 and §7,
+//! and `.claude/decisions/2026-11-03-runtime-static-site-config-contract.md`.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
@@ -21,6 +22,10 @@ use crate::{Error, WORK_DIR, unit};
 pub const TEMPLATE: &str = "src/static-site-template";
 /// The template's theme name, under a build's `themes/`.
 pub const THEME: &str = "static-site-template";
+/// The post naming rule `YYYY-MM-DD-<slug>.md`.
+pub const DATE_SLUG: &str = "date-slug";
+/// What a contract site's `site/` may hold.
+pub const SITE_DIRS: [&str; 3] = ["posts", "pages", "assets"];
 
 /// A static site, as found under `workloads/`.
 #[derive(Debug, Clone)]
@@ -39,6 +44,8 @@ pub struct Site {
     pub features: Vec<String>,
     /// Its hosts' fully qualified names, as the apex assigns them.
     pub hosts: Vec<String>,
+    /// Its settings, `static_site.site`, built through the template's contract.
+    pub settings: Option<Value>,
 }
 
 impl Site {
@@ -85,6 +92,25 @@ struct Feature {
 #[derive(Debug, Deserialize)]
 struct Manifest {
     features: BTreeMap<String, Feature>,
+    #[serde(default)]
+    content: Content,
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct Content {
+    #[serde(default)]
+    posts: Option<Posts>,
+}
+
+#[derive(Debug, Deserialize)]
+struct Posts {
+    filename: String,
+}
+
+/// What a tag declares: its features' defaults, and whether posts are named by date.
+struct Declared {
+    features: BTreeMap<String, bool>,
+    date_slug: bool,
 }
 
 fn io(path: &Path) -> impl Fn(std::io::Error) -> Error + '_ {
@@ -157,6 +183,7 @@ pub fn find(root: &Path, wanted: &[String]) -> Result<Vec<Site>, Error> {
                 .map(str::to_string)
                 .collect(),
             hosts,
+            settings: c.config["static_site"].get("site").cloned(),
         });
     }
     if let Some(missing) = wanted
@@ -198,19 +225,25 @@ pub fn features(
     Ok(out)
 }
 
-/// The tag's features and their defaults, from its `template.yaml`.
-fn declared(root: &Path, tag: &str) -> Result<BTreeMap<String, bool>, Error> {
+/// The tag's features, their defaults, and its post naming, from its `template.yaml`.
+fn declared(root: &Path, tag: &str) -> Result<Declared, Error> {
     let text = git(root, &["show", &format!("{tag}:{TEMPLATE}/template.yaml")])?;
     let manifest: Manifest =
         serde_saphyr::from_str(&String::from_utf8_lossy(&text)).map_err(|e| Error::Io {
             path: PathBuf::from(format!("{tag}:{TEMPLATE}/template.yaml")),
             message: e.to_string(),
         })?;
-    Ok(manifest
-        .features
-        .into_iter()
-        .map(|(k, f)| (k, f.default))
-        .collect())
+    Ok(Declared {
+        features: manifest
+            .features
+            .into_iter()
+            .map(|(k, f)| (k, f.default))
+            .collect(),
+        date_slug: manifest
+            .content
+            .posts
+            .is_some_and(|p| p.filename == DATE_SLUG),
+    })
 }
 
 fn copy_dir(from: &Path, to: &Path) -> Result<(), Error> {
@@ -267,61 +300,39 @@ pub fn site_config(
     Ok(out)
 }
 
-/// Builds each site into `.cobot/<unit>/site/public`.
+/// Builds each site into `.cobot/<unit>/site/public`: from the template's
+/// contract when it sets `static_site.site`, else from its own Zola project.
 ///
 /// # Errors
 ///
 /// [`Error::Git`] for a template tag that does not resolve, [`Error::Io`] for
-/// an unknown feature or an unreadable site, [`Error::Tool`] if Zola fails.
+/// an unknown feature, settings the contract rejects, a misnamed post or an
+/// unreadable site, [`Error::Tool`] if Zola fails.
 pub fn build(root: &Path, sites: &[Site]) -> Result<Vec<Built>, Error> {
     let commit = String::from_utf8_lossy(&git(root, &["rev-parse", "--short", "HEAD"])?)
         .trim()
         .to_string();
     let mut out = Vec::new();
     for site in sites {
-        let src = site.dir.join("site");
-        let config_path = src.join("config.toml");
-        let text = fs::read_to_string(&config_path).map_err(io(&config_path))?;
         let declared = declared(root, &site.tag())?;
-        let features = features(site, &declared)?;
-        let base = site.canonical().ok_or_else(|| Error::Io {
-            path: PathBuf::from(&site.unit),
-            message: "the apex assigns this static site no host".into(),
-        })?;
-        let config =
-            site_config(&text, &format!("https://{base}"), &features).map_err(|message| {
-                Error::Io {
-                    path: PathBuf::from(&site.unit).join("site/config.toml"),
-                    message,
-                }
-            })?;
+        let features = features(site, &declared.features)?;
+        let base = format!(
+            "https://{}",
+            site.canonical().ok_or_else(|| Error::Io {
+                path: PathBuf::from(&site.unit),
+                message: "the apex assigns this static site no host".into(),
+            })?
+        );
         let work = root.join(WORK_DIR).join(&site.unit).join("site");
         if work.exists() {
             fs::remove_dir_all(&work).map_err(io(&work))?;
         }
-        copy_dir(&src, &work)?;
-        fs::write(work.join("config.toml"), config).map_err(io(&work))?;
-        let theme = work.join("themes").join(THEME);
-        fs::create_dir_all(&theme).map_err(io(&theme))?;
-        let tar = git(
-            root,
-            &[
-                "archive",
-                "--format=tar",
-                &format!("{}:{TEMPLATE}", site.tag()),
-            ],
-        )?;
-        let archive = work.join("themes").join(format!("{THEME}.tar"));
-        fs::write(&archive, tar).map_err(io(&archive))?;
-        run(
-            Command::new("tar")
-                .arg("-xf")
-                .arg(&archive)
-                .arg("-C")
-                .arg(&theme),
-            "tar -xf",
-        )?;
-        fs::remove_file(&archive).map_err(io(&archive))?;
+        if let Some(settings) = &site.settings {
+            assemble(root, site, settings, &declared, &base, &features, &work)?;
+        } else {
+            legacy(site, &base, &features, &work)?;
+            theme(root, site, &work)?;
+        }
         run(
             Command::new("zola")
                 .arg("build")
@@ -336,6 +347,306 @@ pub fn build(root: &Path, sites: &[Site]) -> Result<Vec<Built>, Error> {
         });
     }
     Ok(out)
+}
+
+/// A site with its own Zola project: copied, with `base_url` and features written in.
+fn legacy(
+    site: &Site,
+    base: &str,
+    features: &BTreeMap<String, bool>,
+    work: &Path,
+) -> Result<(), Error> {
+    let src = site.dir.join("site");
+    let config_path = src.join("config.toml");
+    let text = fs::read_to_string(&config_path).map_err(io(&config_path))?;
+    let config = site_config(&text, base, features).map_err(|message| Error::Io {
+        path: PathBuf::from(&site.unit).join("site/config.toml"),
+        message,
+    })?;
+    copy_dir(&src, work)?;
+    fs::write(work.join("config.toml"), config).map_err(io(work))
+}
+
+/// The template at the site's tag, under `themes/`.
+fn theme(root: &Path, site: &Site, work: &Path) -> Result<(), Error> {
+    let theme = work.join("themes").join(THEME);
+    fs::create_dir_all(&theme).map_err(io(&theme))?;
+    let tar = git(
+        root,
+        &[
+            "archive",
+            "--format=tar",
+            &format!("{}:{TEMPLATE}", site.tag()),
+        ],
+    )?;
+    let archive = work.join("themes").join(format!("{THEME}.tar"));
+    fs::write(&archive, tar).map_err(io(&archive))?;
+    run(
+        Command::new("tar")
+            .arg("-xf")
+            .arg(&archive)
+            .arg("-C")
+            .arg(&theme),
+        "tar -xf",
+    )?;
+    fs::remove_file(&archive).map_err(io(&archive))
+}
+
+/// A contract site: the tag's scaffold, the settings at their `x-site`
+/// targets, then `site/`'s posts, pages and assets.
+fn assemble(
+    root: &Path,
+    site: &Site,
+    settings: &Value,
+    declared: &Declared,
+    base: &str,
+    features: &BTreeMap<String, bool>,
+    work: &Path,
+) -> Result<(), Error> {
+    let fail = |message: String| Error::Io {
+        path: PathBuf::from(&site.unit).join(crate::config::CONFIG),
+        message,
+    };
+    let schema_text = git(
+        root,
+        &["show", &format!("{}:{TEMPLATE}/schema.json", site.tag())],
+    )
+    .map_err(|_| {
+        fail(format!(
+            "static_site.site: {} has no schema.json; it predates the config contract",
+            site.tag()
+        ))
+    })?;
+    let schema: Value = serde_json::from_slice(&schema_text)
+        .map_err(|e| fail(format!("{}:{TEMPLATE}/schema.json: {e}", site.tag())))?;
+    check_settings(&schema, settings).map_err(fail)?;
+    let src = site.dir.join("site");
+    let problems = check_layout(&src, declared.date_slug);
+    if !problems.is_empty() {
+        return Err(Error::Io {
+            path: PathBuf::from(&site.unit).join("site"),
+            message: problems.join("; "),
+        });
+    }
+
+    theme(root, site, work)?;
+    copy_dir(&work.join("themes").join(THEME).join("scaffold"), work)?;
+    let config_path = work.join("config.toml");
+    let manifest_path = work.join("static/manifest.json");
+    let mut config: toml::Value =
+        toml::from_str(&fs::read_to_string(&config_path).map_err(io(&config_path))?)
+            .map_err(|e| fail(format!("scaffold/config.toml: {e}")))?;
+    let mut manifest: Value =
+        serde_json::from_str(&fs::read_to_string(&manifest_path).map_err(io(&manifest_path))?)
+            .map_err(|e| fail(format!("scaffold/static/manifest.json: {e}")))?;
+    let mut targets = Vec::new();
+    site_targets(&schema, settings, &mut targets);
+    for (file, key, value) in targets {
+        match file.as_str() {
+            "config.toml" => {
+                let v = toml::Value::try_from(&value).map_err(|e| fail(format!("{key}: {e}")))?;
+                set_toml(&mut config, &key, v).map_err(fail)?;
+            }
+            "static/manifest.json" => set_json(&mut manifest, &key, value).map_err(fail)?,
+            other => return Err(fail(format!("x-site: unknown file `{other}`"))),
+        }
+    }
+    set_toml(
+        &mut config,
+        "base_url",
+        toml::Value::String(base.to_string()),
+    )
+    .map_err(fail)?;
+    let flags = features
+        .iter()
+        .map(|(k, v)| (k.clone(), toml::Value::Boolean(*v)))
+        .collect();
+    set_toml(&mut config, "extra.features", toml::Value::Table(flags)).map_err(fail)?;
+    fs::write(
+        &config_path,
+        toml::to_string(&config).map_err(|e| fail(format!("config.toml: {e}")))?,
+    )
+    .map_err(io(&config_path))?;
+    let mut json =
+        serde_json::to_string_pretty(&manifest).map_err(|e| fail(format!("manifest.json: {e}")))?;
+    json.push('\n');
+    fs::write(&manifest_path, json).map_err(io(&manifest_path))?;
+
+    for dir in SITE_DIRS {
+        let from = src.join(dir);
+        if from.is_dir() {
+            let to = if dir == "assets" {
+                work.join("static").join(dir)
+            } else {
+                work.join("content").join(dir)
+            };
+            copy_dir(&from, &to)?;
+        }
+    }
+    Ok(())
+}
+
+/// `settings` against the tag's schema, with every error.
+fn check_settings(schema: &Value, settings: &Value) -> Result<(), String> {
+    let validator = jsonschema::validator_for(schema).map_err(|e| format!("schema.json: {e}"))?;
+    let errors: Vec<String> = validator
+        .iter_errors(settings)
+        .map(|e| {
+            let at = e.instance_path().to_string();
+            format!("static_site.site{}: {e}", at.replace('/', "."))
+        })
+        .collect();
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(errors.join("; "))
+    }
+}
+
+/// Each `(file, key, value)` the settings write: every set property whose
+/// schema carries `x-site`, at any depth.
+fn site_targets(schema: &Value, value: &Value, out: &mut Vec<(String, String, Value)>) {
+    let Some(props) = schema.get("properties").and_then(Value::as_object) else {
+        return;
+    };
+    for (name, prop) in props {
+        let Some(v) = value.get(name) else { continue };
+        for t in prop
+            .get("x-site")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+        {
+            if let (Some(file), Some(key)) = (t["file"].as_str(), t["key"].as_str()) {
+                out.push((file.to_string(), key.to_string(), v.clone()));
+            }
+        }
+        site_targets(prop, v, out);
+    }
+}
+
+/// Sets the dotted `key` in a TOML table, creating tables on the way.
+fn set_toml(doc: &mut toml::Value, key: &str, value: toml::Value) -> Result<(), String> {
+    let mut at = doc;
+    let parts: Vec<&str> = key.split('.').collect();
+    for (i, part) in parts.iter().enumerate() {
+        let table = at
+            .as_table_mut()
+            .ok_or_else(|| format!("config.toml: `{key}` crosses a non-table"))?;
+        if i + 1 == parts.len() {
+            table.insert((*part).to_string(), value);
+            return Ok(());
+        }
+        at = table
+            .entry((*part).to_string())
+            .or_insert_with(|| toml::Value::Table(toml::value::Table::new()));
+    }
+    Ok(())
+}
+
+/// Sets the dotted `key` in a JSON object, creating objects on the way.
+fn set_json(doc: &mut Value, key: &str, value: Value) -> Result<(), String> {
+    let mut at = doc;
+    let parts: Vec<&str> = key.split('.').collect();
+    for (i, part) in parts.iter().enumerate() {
+        let map = at
+            .as_object_mut()
+            .ok_or_else(|| format!("manifest.json: `{key}` crosses a non-object"))?;
+        if i + 1 == parts.len() {
+            map.insert((*part).to_string(), value);
+            return Ok(());
+        }
+        at = map
+            .entry((*part).to_string())
+            .or_insert_with(|| Value::Object(serde_json::Map::new()));
+    }
+    Ok(())
+}
+
+/// Every way a contract site's `site/` breaks the layout: anything but
+/// [`SITE_DIRS`], an `_index.md`, and, with `date_slug`, a misnamed post.
+#[must_use]
+pub fn check_layout(src: &Path, date_slug: bool) -> Vec<String> {
+    let mut out = Vec::new();
+    let Ok(entries) = fs::read_dir(src) else {
+        return vec![format!("{} is missing", src.display())];
+    };
+    for e in entries.flatten() {
+        let name = e.file_name().to_string_lossy().into_owned();
+        let is_dir = e.file_type().is_ok_and(|t| t.is_dir());
+        if !is_dir || !SITE_DIRS.contains(&name.as_str()) {
+            out.push(format!(
+                "`{name}` does not belong in site/, which holds only posts/, pages/ and assets/"
+            ));
+        }
+    }
+    for dir in ["posts", "pages"] {
+        if src.join(dir).join("_index.md").exists() {
+            out.push(format!("`{dir}/_index.md` is the template's scaffold"));
+        }
+    }
+    if date_slug && let Ok(posts) = fs::read_dir(src.join("posts")) {
+        let mut names: Vec<_> = posts.flatten().collect();
+        names.sort_by_key(fs::DirEntry::file_name);
+        for e in names {
+            let name = e.file_name().to_string_lossy().into_owned();
+            if name == "_index.md" {
+                continue;
+            }
+            if let Err(m) = check_post(&name, &fs::read_to_string(e.path()).unwrap_or_default()) {
+                out.push(format!("posts/{name}: {m}"));
+            }
+        }
+    }
+    out
+}
+
+/// The `YYYY-MM-DD` of a name `YYYY-MM-DD-<slug>.md`, its slug lowercase
+/// words of `[a-z0-9]` joined by dashes.
+fn date_prefix(name: &str) -> Option<&str> {
+    let stem = name.strip_suffix(".md")?;
+    let (date, slug) = (stem.get(..10)?, stem.get(10..)?.strip_prefix('-')?);
+    let digits = |r: std::ops::Range<usize>| date[r].bytes().all(|b| b.is_ascii_digit());
+    let dated =
+        digits(0..4) && &date[4..5] == "-" && digits(5..7) && &date[7..8] == "-" && digits(8..10);
+    let slugged = slug.split('-').all(|w| {
+        !w.is_empty()
+            && w.bytes()
+                .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit())
+    });
+    (dated && slugged).then_some(date)
+}
+
+/// A post's name against `date-slug`: `YYYY-MM-DD-<slug>.md`, its prefix the
+/// date of its `date`, and no `slug` of its own.
+///
+/// # Errors
+///
+/// What is wrong, in a few words.
+pub fn check_post(name: &str, text: &str) -> Result<(), String> {
+    let Some(prefix) = date_prefix(name) else {
+        return Err("is not named YYYY-MM-DD-<slug>.md".into());
+    };
+    let front = text
+        .strip_prefix("+++")
+        .and_then(|rest| rest.split_once("\n+++"))
+        .map(|(f, _)| f)
+        .ok_or("has no +++ TOML front matter")?;
+    let front: toml::Value = toml::from_str(front).map_err(|e| format!("front matter: {e}"))?;
+    if front.get("slug").is_some() {
+        return Err("sets slug; its name after the date is the slug".into());
+    }
+    let date = front
+        .get("date")
+        .map(|d| match d {
+            toml::Value::String(s) => s.clone(),
+            other => other.to_string(),
+        })
+        .ok_or("has no date")?;
+    if date.get(..10) != Some(prefix) {
+        return Err(format!("is prefixed {prefix}, but its date is {date}"));
+    }
+    Ok(())
 }
 
 fn run(command: &mut Command, name: &str) -> Result<(), Error> {
@@ -646,7 +957,12 @@ pub fn checks(
 mod tests {
     use std::collections::BTreeMap;
 
-    use super::{Site, content_type, features, site_config};
+    use serde_json::json;
+
+    use super::{
+        Site, check_layout, check_post, check_settings, content_type, features, set_json, set_toml,
+        site_config, site_targets,
+    };
 
     fn site(features: &[&str]) -> Site {
         Site {
@@ -657,6 +973,7 @@ mod tests {
             version: "1.0.0".into(),
             features: features.iter().map(|f| (*f).to_string()).collect(),
             hosts: vec!["z.com".into(), "www.z.com".into()],
+            settings: None,
         }
     }
 
@@ -709,5 +1026,124 @@ mod tests {
         assert!(site_config("[extra.features]\nfeed = false\n", "https://z.com", &f).is_err());
         assert_eq!(content_type("a/b.CSS"), "text/css; charset=utf-8");
         assert_eq!(content_type("noext"), "application/octet-stream");
+    }
+
+    const POST: &str = "+++\ntitle = \"A\"\ndate = 2015-02-15T20:00:00+00:00\n+++\nBody.\n";
+
+    #[test]
+    fn posts_are_named_by_their_date() {
+        assert_eq!(check_post("2015-02-15-hello-medium.md", POST), Ok(()));
+        let string_date = "+++\ndate = \"2015-02-15\"\n+++\n";
+        assert_eq!(check_post("2015-02-15-a.md", string_date), Ok(()));
+        for (name, text, why) in [
+            ("0001-hello.md", POST, "is not named"),
+            ("2015-02-15-Hello.md", POST, "is not named"),
+            (
+                "2015-02-16-hello.md",
+                POST,
+                "but its date is 2015-02-15T20:00:00+00:00",
+            ),
+            (
+                "2015-02-15-hello.md",
+                "+++\ndate = 2015-02-15\nslug = \"x\"\n+++\n",
+                "sets slug",
+            ),
+            (
+                "2015-02-15-hello.md",
+                "+++\ntitle = \"A\"\n+++\n",
+                "has no date",
+            ),
+            (
+                "2015-02-15-hello.md",
+                "---\ndate: 2015-02-15\n---\n",
+                "front matter",
+            ),
+        ] {
+            let err = check_post(name, text).expect_err(name);
+            assert!(err.contains(why), "{name}: {err}");
+        }
+    }
+
+    #[test]
+    fn site_holds_only_posts_pages_and_assets() {
+        let dir = tempfile::tempdir().expect("tmp");
+        let src = dir.path();
+        for d in ["posts", "pages", "assets/images"] {
+            std::fs::create_dir_all(src.join(d)).expect("dir");
+        }
+        std::fs::write(src.join("posts/2015-02-15-a.md"), POST).expect("post");
+        assert_eq!(check_layout(src, true), Vec::<String>::new());
+
+        std::fs::write(src.join("config.toml"), "").expect("config");
+        std::fs::create_dir_all(src.join("content")).expect("content");
+        std::fs::write(src.join("posts/_index.md"), "").expect("index");
+        std::fs::write(src.join("posts/0002-b.md"), POST).expect("post");
+        let problems = check_layout(src, true).join("\n");
+        for want in [
+            "`config.toml`",
+            "`content`",
+            "`posts/_index.md`",
+            "posts/0002-b.md",
+        ] {
+            assert!(problems.contains(want), "{want}: {problems}");
+        }
+        assert!(!check_layout(src, false).join("\n").contains("0002-b.md"));
+    }
+
+    #[test]
+    fn settings_land_at_each_target() {
+        let schema = json!({
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["title"],
+            "properties": {
+                "title": { "type": "string", "x-site": [
+                    { "file": "config.toml", "key": "title" },
+                    { "file": "static/manifest.json", "key": "name" }
+                ] },
+                "theme_color": {
+                    "type": "object",
+                    "properties": { "light": { "type": "string", "x-site": [
+                        { "file": "static/manifest.json", "key": "theme_color" }
+                    ] } },
+                    "x-site": [{ "file": "config.toml", "key": "extra.theme_color" }]
+                }
+            }
+        });
+        let settings = json!({ "title": "T", "theme_color": { "light": "#fff" } });
+        assert_eq!(check_settings(&schema, &settings), Ok(()));
+        let err = check_settings(&schema, &json!({ "typo": 1 })).expect_err("bad");
+        assert!(err.contains("static_site.site"), "{err}");
+
+        let mut out = Vec::new();
+        site_targets(&schema, &settings, &mut out);
+        let got: Vec<(String, String)> =
+            out.iter().map(|(f, k, _)| (f.clone(), k.clone())).collect();
+        assert_eq!(
+            got,
+            [
+                ("config.toml".to_string(), "extra.theme_color".to_string()),
+                ("static/manifest.json".into(), "theme_color".into()),
+                ("config.toml".into(), "title".into()),
+                ("static/manifest.json".into(), "name".into()),
+            ]
+        );
+
+        let mut config: toml::Value =
+            toml::from_str("theme = \"t\"\n[extra]\nintro = \"\"\n").expect("toml");
+        set_toml(
+            &mut config,
+            "extra.author.page",
+            toml::Value::String("/a".into()),
+        )
+        .expect("set");
+        set_toml(&mut config, "title", toml::Value::String("T".into())).expect("set");
+        assert_eq!(config["extra"]["author"]["page"].as_str(), Some("/a"));
+        assert_eq!(config["extra"]["intro"].as_str(), Some(""));
+        assert!(set_toml(&mut config, "theme.x", toml::Value::Boolean(true)).is_err());
+
+        let mut manifest = json!({ "display": "standalone" });
+        set_json(&mut manifest, "name", json!("T")).expect("set");
+        assert_eq!(manifest, json!({ "display": "standalone", "name": "T" }));
     }
 }

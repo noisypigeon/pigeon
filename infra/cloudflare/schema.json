@@ -265,7 +265,11 @@
                 }
               }
             },
-            "storage_class": { "enum": ["Standard", "InfrequentAccess"] }
+            "storage_class": { "enum": ["Standard", "InfrequentAccess"] },
+            "site": {
+              "description": "The site's settings, validated against the pinned template's schema.json; see .claude/decisions/2026-11-03-runtime-static-site-config-contract.md.",
+              "type": "object"
+            }
           }
         }
       }
