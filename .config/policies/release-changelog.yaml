@@ -4,6 +4,7 @@ target:
     - src/pigeon-cli/crates/sentinel/CHANGELOG.md
     - src/pigeon-cli/crates/gantry/CHANGELOG.md
     - src/pigeon-cli/crates/cobot/CHANGELOG.md
+    - src/pigeon-cli/crates/backplane/CHANGELOG.md
     - infra/cloudflare/modules/zone/CHANGELOG.md
     - infra/cloudflare/modules/permission-groups/CHANGELOG.md
     - infra/cloudflare/modules/api-token/CHANGELOG.md

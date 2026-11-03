@@ -92,6 +92,7 @@ impl Instance {
                 self.name
             ));
         }
+        let root = self.root.canonicalize().ok();
         for (key, path) in [
             ("policies", &self.paths.policies),
             ("providers", &self.paths.providers),
@@ -102,7 +103,11 @@ impl Instance {
                 problems.push(format!("{MANIFEST}: paths.{key} `{shown}` is absolute"));
             } else if path.components().any(|c| c == Component::ParentDir) {
                 problems.push(format!("{MANIFEST}: paths.{key} `{shown}` leaves the root"));
-            } else if !self.resolve(path).exists() {
+            } else if let Ok(real) = self.resolve(path).canonicalize() {
+                if root.as_ref().is_some_and(|root| !real.starts_with(root)) {
+                    problems.push(format!("{MANIFEST}: paths.{key} `{shown}` leaves the root"));
+                }
+            } else {
                 problems.push(format!("{MANIFEST}: paths.{key} `{shown}` does not exist"));
             }
         }

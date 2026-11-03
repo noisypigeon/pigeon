@@ -83,6 +83,22 @@ fn every_problem_is_reported_together() {
     }
 }
 
+#[cfg(unix)]
+#[test]
+fn a_symlink_out_of_the_root_fails() {
+    let outside = TempDir::new().expect("tempdir");
+    let root = fixture(MANIFEST, "ok\n");
+    let releases = root.path().join(".config/releases.yaml");
+    fs::remove_file(&releases).expect("remove");
+    std::os::unix::fs::symlink(outside.path(), &releases).expect("symlink");
+    let p = problems(root.path());
+    assert!(
+        p.iter()
+            .any(|m| m.contains("paths.releases") && m.contains("leaves the root")),
+        "{p:?}"
+    );
+}
+
 #[test]
 fn a_missing_manifest_is_io() {
     let root = TempDir::new().expect("tempdir");
