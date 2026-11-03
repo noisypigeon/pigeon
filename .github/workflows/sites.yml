@@ -1,0 +1,29 @@
+# Build static sites on PR, with no secrets; see .claude/decisions/2026-11-03-runtime-cloudflare-static-sites-r2.md.
+name: sites
+
+on:
+  pull_request:
+    paths:
+      - "workloads/**/site/**"
+      - "workloads/**/config.yaml"
+      - "src/static-site-template/**"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+          persist-credentials: false
+      - uses: jdx/mise-action@9b200bcecbfd6303e69a4a261b2e09e3757440a7 # v5.2.0
+        with:
+          version: 2026.10.12
+      - name: Build pigeon
+        run: cargo build -q --locked -p pigeon --no-default-features --features cobot --manifest-path src/pigeon-cli/Cargo.toml
+      - name: Build the sites
+        run: src/pigeon-cli/target/debug/pigeon cobot sites build --root .

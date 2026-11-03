@@ -20,6 +20,9 @@ pub enum CobotCommand {
     /// Manage a unit's encrypted secrets.config.yaml
     #[command(subcommand)]
     Secrets(SecretsCommand),
+    /// Build static sites, or publish them to their R2 buckets
+    #[command(subcommand)]
+    Sites(SitesCommand),
     /// Bump changed release units and generate changelogs; print JSON
     Release(ReleaseArgs),
     /// Print every release tag as JSON, flagging each unit's newest
@@ -78,6 +81,36 @@ pub enum SecretsCommand {
     Set(SecretsKey),
     /// List the keys and verify each decrypts; never prints a value
     Check(SecretsUnit),
+}
+
+/// `pigeon cobot sites` commands.
+#[derive(Subcommand, Debug)]
+pub enum SitesCommand {
+    /// Build each static site with its pinned template; needs no secrets
+    Build(SitesBuild),
+    /// Build, sync each site to its bucket, then check it live
+    Publish(SitesPublish),
+}
+
+/// `pigeon cobot sites build` arguments.
+#[derive(Args, Debug)]
+pub struct SitesBuild {
+    /// The repository root
+    #[arg(long, default_value = ".")]
+    pub root: PathBuf,
+    /// Workload paths, e.g. workloads/noisypigeon.com/blog [default: every static site]
+    pub workloads: Vec<String>,
+}
+
+/// `pigeon cobot sites publish` arguments.
+#[derive(Args, Debug)]
+pub struct SitesPublish {
+    /// Workloads and their state
+    #[command(flatten)]
+    pub run: CobotRun,
+    /// How many times each live check is tried, 15 seconds apart; 0 skips them
+    #[arg(long, default_value_t = 12)]
+    pub checks: u32,
 }
 
 /// A unit's secrets file.

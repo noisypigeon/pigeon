@@ -11,7 +11,7 @@ use cobot::release::{self, Config};
 use super::{INVALID, SUCCESS, VIOLATION};
 use crate::cli::{
     CobotCommand, CobotPlan, CobotRun, ReleaseArgs, SecretsCommand, SecretsKey, SecretsUnit,
-    TagsArgs,
+    SitesBuild, SitesCommand, SitesPublish, TagsArgs,
 };
 
 /// Runs a `pigeon cobot` command and returns its exit code.
@@ -27,6 +27,8 @@ pub fn run(command: CobotCommand) -> i32 {
             .map(|path| println!("cobot: wrote {}", path.display())),
         CobotCommand::Secrets(SecretsCommand::Set(args)) => secrets_set(&args),
         CobotCommand::Secrets(SecretsCommand::Check(args)) => secrets_check(&args),
+        CobotCommand::Sites(SitesCommand::Build(args)) => sites_build(&args),
+        CobotCommand::Sites(SitesCommand::Publish(args)) => sites_publish(&args),
         CobotCommand::Release(args) => return release(&args),
         CobotCommand::Tags(args) => return tags(&args),
     };
@@ -50,6 +52,72 @@ fn render(args: &CobotRun) -> Result<(), cobot::Error> {
         println!("{}", work.display());
     }
     Ok(())
+}
+
+fn sites_build(args: &SitesBuild) -> Result<(), cobot::Error> {
+    let root = args.root.canonicalize().map_err(|e| cobot::Error::Io {
+        path: args.root.clone(),
+        message: e.to_string(),
+    })?;
+    let sites = cobot::sites::find(&root, &args.workloads)?;
+    for b in cobot::sites::build(&root, &sites)? {
+        let on: Vec<&str> = b
+            .features
+            .iter()
+            .filter(|(_, on)| **on)
+            .map(|(f, _)| f.as_str())
+            .collect();
+        println!(
+            "cobot: built {} with {} [{}] into {}",
+            b.site.unit,
+            b.site.tag(),
+            on.join(", "),
+            b.public.display()
+        );
+    }
+    if sites.is_empty() {
+        println!("cobot: no static sites");
+    }
+    Ok(())
+}
+
+fn sites_publish(args: &SitesPublish) -> Result<(), cobot::Error> {
+    let ctx = context(&args.run)?;
+    let published = cobot::publish(&ctx, &args.run.units, args.checks)?;
+    let mut failed = Vec::new();
+    for p in &published {
+        println!(
+            "cobot: {} → {}: {} put, {} unchanged, {} deleted",
+            p.unit,
+            p.bucket,
+            p.synced.put.len(),
+            p.synced.unchanged,
+            p.synced.deleted.len()
+        );
+        for k in &p.synced.put {
+            println!("  put {k}");
+        }
+        for k in &p.synced.deleted {
+            println!("  delete {k}");
+        }
+        for c in &p.checks {
+            println!("  {} {}", if c.passed { "ok" } else { "FAILED" }, c.what);
+            if !c.passed {
+                failed.push(c.what.clone());
+            }
+        }
+    }
+    if published.is_empty() {
+        println!("cobot: no static sites");
+    }
+    if failed.is_empty() {
+        Ok(())
+    } else {
+        Err(cobot::Error::Tool {
+            command: "live checks".into(),
+            message: failed.join("; "),
+        })
+    }
 }
 
 fn context(args: &CobotRun) -> Result<cobot::Context, cobot::Error> {

@@ -7,7 +7,9 @@ pub mod generations;
 pub mod moves;
 pub mod providers;
 pub mod release;
+pub mod s3;
 pub mod secrets;
+pub mod sites;
 pub mod static_site;
 mod tofu;
 pub mod unit;
@@ -617,6 +619,62 @@ fn infra_state(
         .collect();
     tofu::init(&source.path, &work, &env)?;
     tofu::show_state(&source.path, &work, &env).map(Some)
+}
+
+/// One published static site.
+#[derive(Debug, Clone)]
+pub struct Published {
+    /// The unit path.
+    pub unit: String,
+    /// Its bucket.
+    pub bucket: String,
+    /// What the sync did.
+    pub synced: sites::Synced,
+    /// The live checks.
+    pub checks: Vec<sites::Check>,
+}
+
+/// Builds each static site, syncs it to its bucket with its site token, then
+/// runs the live checks; `checks` of 0 skips them.
+///
+/// # Errors
+///
+/// [`Error::Pending`] while `infra/cloudflare`'s state lacks a site's token,
+/// or any [`Error`] from building or syncing; never a credential.
+pub fn publish(ctx: &Context, wanted: &[String], checks: u32) -> Result<Vec<Published>, Error> {
+    let root = ctx.root.canonicalize().map_err(io(&ctx.root))?;
+    let state = absolute(&ctx.state)?;
+    let allow = providers::Allowlist::load(&ctx.providers)?;
+    let found = sites::find(&root, wanted)?;
+    if found.is_empty() {
+        return Ok(Vec::new());
+    }
+    let built = sites::build(&root, &found)?;
+    let shown = infra_state(ctx, &root, &state, &allow)?.unwrap_or_else(|| "{}".into());
+    let mut out = Vec::new();
+    for b in built {
+        let Some((creds, account)) = sites::credentials(&shown, &b.site, ctx.today) else {
+            return Err(Error::Pending {
+                unit: b.site.unit.clone(),
+                token: static_site::token_name(&b.site.zone, &b.site.workload),
+            });
+        };
+        let bucket = s3::Bucket {
+            endpoint: sites::endpoint(&account),
+            name: b.site.bucket(),
+            creds,
+        };
+        let expected = sites::expected(&b.public)?;
+        let synced = sites::sync(&bucket, &expected)?;
+        let checks = sites::checks(&b, &expected, checks, std::time::Duration::from_secs(15));
+        out.push(Published {
+            unit: b.site.unit.clone(),
+            bucket: bucket.name.clone(),
+            synced,
+            checks,
+        });
+    }
+    Ok(out)
 }
 
 /// Plans each unit.
