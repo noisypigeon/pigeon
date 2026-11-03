@@ -390,3 +390,12 @@ cobot reads them from the pinned tag's `template.yaml`, as §5 says. The theme's
 ### 2026-11-03: The transform rules permission's name
 
 Cloudflare names the zone permission for transform rules `Zone Transform Rules Write`, not `Transform Rules Write`. Wherever this ADR names it (§3's apex token and §9, step 4), the permission is `Zone Transform Rules Write`; the earlier text stays as written. `validate`'s apex-token check uses this name, and `apex-<zone>` holds `DNS Write`, `Dynamic URL Redirects Write` and `Zone Transform Rules Write` on its zone when the zone has a static site.
+
+### 2026-11-03: A site's settings come from its config.yaml
+
+`2026-11-03-runtime-static-site-config-contract.md` moves a static site's settings into `static_site.site` in its `config.yaml`. A contract in the pinned template, `schema.json` and `scaffold/`, turns them into Zola's files. That supersedes:
+
+- §6's layout, a whole Zola project under `site/`. `site/` now holds only `posts/`, `pages/` and `assets/`;
+- §7's `build` steps 1 and 3. cobot assembles the project from the tag's scaffold, the site's settings and `site/`, and then writes `base_url` and `[extra.features]` as before.
+
+The earlier text stays as written. Workloads without `static_site.site` build as before until that ADR's cleanup step.
