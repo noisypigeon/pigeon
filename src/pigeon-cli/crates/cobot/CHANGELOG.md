@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.9 (2026-11-03)
+
+- feat(cobot): static-site workloads on R2 ([#47](https://github.com/noisypigeon/pigeon/pull/47))
+
 ## v0.1.8 (2026-11-03)
 
 - fix(cobot): name the unit and passphrase in decrypt errors ([#45](https://github.com/noisypigeon/pigeon/pull/45))

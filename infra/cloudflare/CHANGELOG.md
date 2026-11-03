@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.3 (2026-11-03)
+
+- feat(cobot): static-site workloads on R2 ([#47](https://github.com/noisypigeon/pigeon/pull/47))
+
 ## v0.1.2 (2026-11-03)
 
 - refactor(cobot): drop the all-zones apex ([#43](https://github.com/noisypigeon/pigeon/pull/43))
