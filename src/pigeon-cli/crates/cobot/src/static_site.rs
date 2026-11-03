@@ -26,7 +26,7 @@ pub const BUCKET_KEY: &str = "site";
 pub const PLACEHOLDER_ACCOUNT_ID: &str = "00000000000000000000000000000000";
 /// The zone permissions an apex token adds for its static sites' rulesets.
 pub const APEX_RULE_PERMISSIONS: [&str; 2] =
-    ["Transform Rules Write", "Dynamic URL Redirects Write"];
+    ["Zone Transform Rules Write", "Dynamic URL Redirects Write"];
 /// A site token's account permission.
 pub const R2_WRITE: &str = "Workers R2 Storage Write";
 /// A site token's zone permissions, beside [`apex::DNS_WRITE`].
