@@ -13,7 +13,7 @@
     <entry xml:lang="{{ page.lang }}">
         <title>{{ page.title }}</title>
         <published>{{ page.date | date(format="%Y-%m-%dT%H:%M:%S%:z") }}</published>
-        <updated>{{ page.date | date(format="%Y-%m-%dT%H:%M:%S%:z") }}</updated>
+        <updated>{% if page.updated %}{{ page.updated | date(format="%Y-%m-%dT%H:%M:%S%:z") }}{% else %}{{ page.date | date(format="%Y-%m-%dT%H:%M:%S%:z") }}{% endif %}</updated>
         <link rel="alternate" type="text/html" href="{{ page.permalink | safe }}"/>
         <id>{{ page.permalink | safe }}</id>
         {%- if page.description %}

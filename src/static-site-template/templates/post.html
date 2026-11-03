@@ -17,21 +17,23 @@
 {% block extra_head %}
 {% if page.updated %}{% set modified_date = page.updated %}{% else %}{% set modified_date = page.date %}{% endif %}
 {% if page.description %}{% set jsonld_description = page.description %}{% else %}{% set jsonld_description = config.description %}{% endif %}
+{% if page.extra.og_image %}{% set jsonld_image = config.base_url ~ page.extra.og_image %}{% else %}{% set jsonld_image = config.base_url ~ config.extra.social_preview %}{% endif %}
+{% if config.extra.author.name %}{% set author = config.extra.author.name %}{% else %}{% set author = config.title %}{% endif %}
 <meta property="article:published_time" content="{{ page.date | date(format="%Y-%m-%dT%H:%M:%S%:z") }}">
 <meta property="article:modified_time" content="{{ modified_date | date(format="%Y-%m-%dT%H:%M:%S%:z") }}">
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
   "@type": "BlogPosting",
-  "headline": {{ page.title | json_encode() | safe }},
-  "description": {{ jsonld_description | json_encode() | safe }},
+  "headline": {{ page.title | json_encode() | replace(from="<", to="\\u003c") | safe }},
+  "description": {{ jsonld_description | json_encode() | replace(from="<", to="\\u003c") | safe }},
   "datePublished": "{{ page.date | date(format="%Y-%m-%dT%H:%M:%S%:z") }}",
   "dateModified": "{{ modified_date | date(format="%Y-%m-%dT%H:%M:%S%:z") }}",
-  "url": "{{ page.permalink }}",
-  "mainEntityOfPage": "{{ page.permalink }}",
-  "image": "{% if page.extra.og_image %}{{ config.base_url }}{{ page.extra.og_image }}{% else %}{{ config.base_url }}{{ config.extra.social_preview }}{% endif %}",
-  "author": { "@type": "Person", "name": "{% if config.extra.author.name %}{{ config.extra.author.name }}{% else %}{{ config.title }}{% endif %}", "url": "{{ config.base_url }}/" },
-  "publisher": { "@type": "Person", "name": "{% if config.extra.author.name %}{{ config.extra.author.name }}{% else %}{{ config.title }}{% endif %}", "url": "{{ config.base_url }}/" }
+  "url": {{ page.permalink | json_encode() | replace(from="<", to="\\u003c") | safe }},
+  "mainEntityOfPage": {{ page.permalink | json_encode() | replace(from="<", to="\\u003c") | safe }},
+  "image": {{ jsonld_image | json_encode() | replace(from="<", to="\\u003c") | safe }},
+  "author": { "@type": "Person", "name": {{ author | json_encode() | replace(from="<", to="\\u003c") | safe }}, "url": {{ (config.base_url ~ "/") | json_encode() | replace(from="<", to="\\u003c") | safe }} },
+  "publisher": { "@type": "Person", "name": {{ author | json_encode() | replace(from="<", to="\\u003c") | safe }}, "url": {{ (config.base_url ~ "/") | json_encode() | replace(from="<", to="\\u003c") | safe }} }
 }
 </script>
 {% endblock extra_head %}

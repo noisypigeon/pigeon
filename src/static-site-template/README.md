@@ -25,5 +25,9 @@ holds the version, the features and their defaults.
 | `extra.og_image_size.width`, `.height` | `1188`, `670` | Open Graph image size |
 | `extra.banner.message`, `.link`, `.link_text` | none | the banner, with `banner` |
 
+`feed` links to `/posts/posts_feed.xml`. That file exists only when the site
+sets `feed_filenames = ["posts_feed.xml"]` in `config.toml` and
+`generate_feeds = true` in `content/posts/_index.md`.
+
 A site supplies its own `content/`, its static files (icons, `manifest.json`,
 `robots.txt`, images), and any template it overrides.

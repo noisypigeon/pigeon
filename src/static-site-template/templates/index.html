@@ -11,26 +11,27 @@
 {% block body_class %}site-page-body site-home-page{% endblock body_class %}
 
 {% block extra_head %}
+{%- if config.extra.author.name %}{% set author = config.extra.author.name %}{% else %}{% set author = config.title %}{% endif %}
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
   "@type": "WebSite",
-  "name": "{{ config.title }}",
-  "url": "{{ config.base_url }}/",
-  "description": "{{ config.description }}",
-  "author": { "@id": "{{ config.base_url }}/#person" }
+  "name": {{ config.title | json_encode() | replace(from="<", to="\\u003c") | safe }},
+  "url": {{ (config.base_url ~ "/") | json_encode() | replace(from="<", to="\\u003c") | safe }},
+  "description": {{ config.description | json_encode() | replace(from="<", to="\\u003c") | safe }},
+  "author": { "@id": {{ (config.base_url ~ "/#person") | json_encode() | replace(from="<", to="\\u003c") | safe }} }
 }
 </script>
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
   "@type": "Person",
-  "@id": "{{ config.base_url }}/#person",
-  "name": "{% if config.extra.author.name %}{{ config.extra.author.name }}{% else %}{{ config.title }}{% endif %}",
-  "url": "{{ config.base_url }}/",
-  "image": "{{ config.base_url }}{{ config.extra.avatar }}",{% if config.extra.author.alternate_names %}
-  "alternateName": {{ config.extra.author.alternate_names | json_encode() | safe }},{% endif %}
-  "sameAs": [{% set_global same_as_emitted = false %}{% for item in config.extra.nav %}{% if item.link is starting_with(pat="http") %}{% if same_as_emitted %}, {% endif %}"{{ item.link }}"{% set_global same_as_emitted = true %}{% endif %}{% endfor %}]
+  "@id": {{ (config.base_url ~ "/#person") | json_encode() | replace(from="<", to="\\u003c") | safe }},
+  "name": {{ author | json_encode() | replace(from="<", to="\\u003c") | safe }},
+  "url": {{ (config.base_url ~ "/") | json_encode() | replace(from="<", to="\\u003c") | safe }},
+  "image": {{ (config.base_url ~ config.extra.avatar) | json_encode() | replace(from="<", to="\\u003c") | safe }},{% if config.extra.author.alternate_names %}
+  "alternateName": {{ config.extra.author.alternate_names | json_encode() | replace(from="<", to="\\u003c") | safe }},{% endif %}
+  "sameAs": [{% set_global same_as_emitted = false %}{% for item in config.extra.nav %}{% if item.link is starting_with(pat="http") %}{% if same_as_emitted %}, {% endif %}{{ item.link | json_encode() | replace(from="<", to="\\u003c") | safe }}{% set_global same_as_emitted = true %}{% endif %}{% endfor %}]
 }
 </script>
 {% endblock extra_head %}
