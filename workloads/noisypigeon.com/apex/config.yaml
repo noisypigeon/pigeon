@@ -1,0 +1,9 @@
+# The noisypigeon.com apex; see .claude/decisions/2026-11-02-runtime-workloads-zone-apex.md.
+apex: blog
+services:
+  proton:
+    verification:
+      protonmail: { secret: protonmail_verification }
+      pm: { secret: pm_verification }
+    dmarc: default
+records: {}

@@ -56,8 +56,8 @@ belong in the ADR, never in the file.
   in `workloads/`. Only `infra/` keys are break-glass, and they are never handed
   to a workload, which gets only its own secrets and minted tokens. Providers
   come only from `main`'s `.config/providers.yaml` and `providers.lock.hcl`.
-- Workloads live in `workloads/<zone>/`; every zone's apex (global config and
-  DNS) is one unit, `workloads/cloudflare/apex/`, which only enables what
+- Workloads live in `workloads/<zone>/`; each zone's apex (global config and
+  DNS) is its own unit, `workloads/<zone>/apex/`, which only enables what
   `infra/cloudflare/` defines (its schema's `$defs.apex`, its `modules/` and
   `presets/`), per
   [`2026-11-02-runtime-workloads-zone-apex.md`](.claude/decisions/2026-11-02-runtime-workloads-zone-apex.md).

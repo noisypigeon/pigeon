@@ -15,6 +15,6 @@ rules:
   - entries: { path: infra, dirs: ['.'], files: ['.'], require: [README.md] }
   - entries:
       path: workloads
-      dirs: ['^cloudflare$', '^[a-z0-9-]+(\.[a-z0-9-]+)+$']
+      dirs: ['^[a-z0-9-]+(\.[a-z0-9-]+)+$']
       files: ['^README\.md$']
-      require: [README.md, cloudflare]
+      require: [README.md]
