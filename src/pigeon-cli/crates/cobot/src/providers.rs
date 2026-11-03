@@ -151,21 +151,31 @@ fn declared(tf: &str) -> Vec<String> {
         .collect()
 }
 
-/// The allowlisted sources a unit declares: in `required_providers` of the
-/// `.tf` files under `unit_dir`, and of the rendered root `main.tf.json`.
+/// The allowlisted sources a unit uses: in `required_providers` of the rendered
+/// root `main.tf.json`, and of the `.tf` files of each module it sources, local
+/// or from `infra/agnostic`; a relative source resolves against `unit_dir`.
 #[must_use]
 pub fn used<'a>(allow: &'a Allowlist, unit_dir: &Path, rendered: &Path) -> Vec<&'a str> {
     let mut sources = Vec::new();
-    collect(unit_dir, &mut sources);
     if let Ok(text) = fs::read_to_string(rendered)
         && let Ok(root) = serde_json::from_str::<serde_json::Value>(&text)
-        && let Some(required) = root["terraform"]["required_providers"].as_object()
     {
-        sources.extend(
-            required
-                .values()
-                .filter_map(|p| p["source"].as_str().map(str::to_string)),
-        );
+        if let Some(required) = root["terraform"]["required_providers"].as_object() {
+            sources.extend(
+                required
+                    .values()
+                    .filter_map(|p| p["source"].as_str().map(str::to_string)),
+            );
+        }
+        for m in root["module"]
+            .as_object()
+            .into_iter()
+            .flat_map(|m| m.values())
+        {
+            if let Some(dir) = m["source"].as_str() {
+                collect(&unit_dir.join(dir), &mut sources);
+            }
+        }
     }
     allow
         .providers

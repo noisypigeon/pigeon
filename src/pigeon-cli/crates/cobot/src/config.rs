@@ -20,6 +20,8 @@ use crate::secrets;
 pub const CONFIG: &str = "config.yaml";
 /// The schema file inside a unit.
 pub const SCHEMA: &str = "schema.json";
+/// The prefix naming a module of `infra/agnostic`.
+const AGNOSTIC_PREFIX: &str = "agnostic/";
 /// The alias of a provider with one instance per zone.
 const ZONE_ALIAS: &str = "zone";
 
@@ -141,6 +143,8 @@ pub fn parse(text: &str) -> Option<Expr> {
 struct Block {
     name: String,
     module: String,
+    /// The property whose items a keyed block iterates: its own, or `x-cobot.each`'s `over`.
+    over: String,
     for_each: Option<String>,
     derived: Option<String>,
     rotate: Option<(Value, Value)>,
@@ -190,6 +194,25 @@ fn module_info(dir: &Path) -> ModuleInfo {
     info
 }
 
+/// Where a unit's own modules live, or `infra/agnostic`'s for an `agnostic/<name>`
+/// reference; see `.claude/decisions/2026-11-03-runtime-infra-agnostic-shared-modules.md` §3.
+fn modules_root(home: &Path, module: &str) -> PathBuf {
+    match module.strip_prefix(AGNOSTIC_PREFIX) {
+        Some(_) => home
+            .parent()
+            .map_or_else(|| home.join(".."), Path::to_path_buf)
+            .join("agnostic")
+            .join("modules"),
+        None => home.join("modules"),
+    }
+}
+
+/// A module's directory: `<modules root>/<name>`.
+fn module_dir(home: &Path, module: &str) -> PathBuf {
+    let name = module.strip_prefix(AGNOSTIC_PREFIX).unwrap_or(module);
+    modules_root(home, module).join(name)
+}
+
 fn x_cobot(schema: &Value) -> &Value {
     &schema["x-cobot"]
 }
@@ -200,6 +223,7 @@ fn blocks(schema: &Value) -> Vec<Block> {
         out.push(Block {
             name: name.to_string(),
             module: x["module"].as_str().unwrap_or_default().to_string(),
+            over: x["over"].as_str().unwrap_or(name).to_string(),
             for_each: from_property
                 .then(|| x["for_each"].as_str().map(str::to_string))
                 .flatten(),
@@ -220,6 +244,11 @@ fn blocks(schema: &Value) -> Vec<Block> {
     if let Some(singles) = x_cobot(schema)["singletons"].as_object() {
         for (name, x) in singles {
             push(name, x, false, false);
+        }
+    }
+    if let Some(each) = x_cobot(schema)["each"].as_object() {
+        for (name, x) in each {
+            push(name, x, true, false);
         }
     }
     if let Some(derived) = x_cobot(schema)["derived"].as_object() {
@@ -467,6 +496,14 @@ fn check_secrets(
     }
 }
 
+/// A module's path for messages: `modules/<name>`, or `infra/agnostic/modules/<name>`.
+fn display_module(module: &str) -> String {
+    match module.strip_prefix(AGNOSTIC_PREFIX) {
+        Some(name) => format!("infra/agnostic/modules/{name}"),
+        None => format!("modules/{module}"),
+    }
+}
+
 /// Checks one block's name and module; the module's info if it exists.
 fn check_module(b: &Block, home: &Path, add: &mut impl FnMut(&str, String)) -> Option<ModuleInfo> {
     if !BLOCK.is_match(&b.name) {
@@ -475,21 +512,22 @@ fn check_module(b: &Block, home: &Path, add: &mut impl FnMut(&str, String)) -> O
             format!("block name `{}` must be lowercase with underscores", b.name),
         );
     }
-    if !MODULE_NAME.is_match(&b.module) {
+    let name = b.module.strip_prefix(AGNOSTIC_PREFIX).unwrap_or(&b.module);
+    if !MODULE_NAME.is_match(name) {
         add(
             SCHEMA,
             format!(
-                "block `{}` names module `{}`, which is not a lowercase-dash name under modules/",
+                "block `{}` names module `{}`, which is not a lowercase-dash name under modules/ or agnostic/",
                 b.name, b.module
             ),
         );
         return None;
     }
-    let mdir = home.join("modules").join(&b.module);
+    let mdir = module_dir(home, &b.module);
     let inside = mdir
         .canonicalize()
         .ok()
-        .zip(home.join("modules").canonicalize().ok())
+        .zip(modules_root(home, &b.module).canonicalize().ok())
         .is_some_and(|(m, root)| m.starts_with(root) && m.is_dir());
     if !inside {
         add(
@@ -502,7 +540,7 @@ fn check_module(b: &Block, home: &Path, add: &mut impl FnMut(&str, String)) -> O
     let manifest = fs::read_to_string(mdir.join("module.yaml")).unwrap_or_default();
     if !MODULE_VERSION.is_match(&manifest) {
         add(
-            &format!("modules/{}/module.yaml", b.module),
+            &format!("{}/module.yaml", display_module(&b.module)),
             "needs `version: X.Y.Z`".into(),
         );
     }
@@ -514,15 +552,54 @@ fn check_module(b: &Block, home: &Path, add: &mut impl FnMut(&str, String)) -> O
     let triggers = info.resources.len() - provider_resources;
     if provider_resources > 1 || triggers > 1 || info.resources.is_empty() {
         add(
-            &format!("modules/{}", b.module),
+            &display_module(&b.module),
             "a module holds one resource, plus at most one terraform_data trigger".into(),
         );
     }
     Some(info)
 }
 
+/// Checks `x-cobot.each`: blocks over another array property's items.
+fn check_each(schema: &Value, add: &mut impl FnMut(&str, String)) {
+    let Some(each) = x_cobot(schema).get("each") else {
+        return;
+    };
+    let Some(each) = each.as_object() else {
+        add(SCHEMA, "`each` must be a map".into());
+        return;
+    };
+    let x = x_cobot(schema);
+    let taken = |name: &str| {
+        schema["properties"].get(name).is_some()
+            || x["singletons"].get(name).is_some()
+            || x["derived"].get(name).is_some()
+    };
+    for (name, b) in each {
+        if taken(name) {
+            add(
+                SCHEMA,
+                format!("each block `{name}` reuses a property's or singleton's name"),
+            );
+        }
+        let over = b["over"].as_str().unwrap_or_default();
+        if schema["properties"][over]["type"] != "array" {
+            add(
+                SCHEMA,
+                format!("each block `{name}`: `over` must name an array property"),
+            );
+        }
+        if b.get("for_each").is_none() {
+            add(SCHEMA, format!("each block `{name}` needs `for_each`"));
+        }
+        if b.get("rotate").is_some() {
+            add(SCHEMA, format!("each block `{name}` cannot rotate"));
+        }
+    }
+}
+
 fn check_blocks(unit: &ConfigUnit, allow: &Allowlist, problems: &mut Vec<(String, String)>) {
     let mut add = |file: &str, m: String| problems.push((file.to_string(), m));
+    check_each(&unit.schema, &mut add);
     let x = x_cobot(&unit.schema);
     let declared = declared_secrets(unit);
     let handoff = has_handoff(unit);
@@ -594,6 +671,7 @@ fn check_blocks(unit: &ConfigUnit, allow: &Allowlist, problems: &mut Vec<(String
             let pseudo = Block {
                 name: format!("provider.{name}"),
                 module: String::new(),
+                over: String::new(),
                 for_each: None,
                 derived: None,
                 rotate: None,
@@ -628,13 +706,14 @@ fn check_outputs(unit: &ConfigUnit, problems: &mut Vec<(String, String)>) {
         .map(|b| {
             (
                 b.name.clone(),
-                module_info(&unit.home.join("modules").join(&b.module)),
+                module_info(&module_dir(&unit.home, &b.module)),
             )
         })
         .collect();
     let pseudo = Block {
         name: "outputs".into(),
         module: String::new(),
+        over: String::new(),
         for_each: None,
         derived: None,
         rotate: None,
@@ -818,8 +897,8 @@ fn item_keys(block: &Block, config: &Value) -> Result<Vec<String>, String> {
             block.name
         ));
     };
-    let Some(items) = config.get(&block.name).and_then(Value::as_array) else {
-        return Err(format!("`{}` must be a list", block.name));
+    let Some(items) = config.get(&block.over).and_then(Value::as_array) else {
+        return Err(format!("`{}` must be a list", block.over));
     };
     let mut keys = Vec::new();
     for item in items {
@@ -972,13 +1051,7 @@ pub fn render(
         let mut block = Map::new();
         block.insert(
             "source".into(),
-            Value::String(
-                unit.home
-                    .join("modules")
-                    .join(&b.module)
-                    .display()
-                    .to_string(),
-            ),
+            Value::String(module_dir(&unit.home, &b.module).display().to_string()),
         );
         if let Some(expander) = &b.derived {
             let items = unit
@@ -1002,7 +1075,7 @@ pub fn render(
         } else if b.for_each.is_some() {
             let mut each = Map::new();
             let keys = item_keys(&b, config).unwrap_or_default();
-            let items = config[&b.name].as_array().cloned().unwrap_or_default();
+            let items = config[&b.over].as_array().cloned().unwrap_or_default();
             for (key, item) in keys.into_iter().zip(items.iter()) {
                 if b.rotate.is_none() {
                     each.insert(key, literal(item));
@@ -1050,7 +1123,10 @@ pub fn render(
     if !required.is_empty() {
         terraform["required_providers"] = Value::Object(required);
     }
-    let mut root = json!({ "terraform": terraform, "module": modules });
+    let mut root = json!({ "terraform": terraform });
+    if !modules.is_empty() {
+        root["module"] = Value::Object(modules);
+    }
     if !provider.is_empty() {
         root["provider"] = Value::Object(provider);
     }
