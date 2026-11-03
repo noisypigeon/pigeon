@@ -386,3 +386,7 @@ The blog PR follows both.
 - off by default: `tags`, `changelog`, `math` and `banner`.
 
 cobot reads them from the pinned tag's `template.yaml`, as §5 says. The theme's own fallbacks sit in `theme.toml`'s `[extra]`, where an unset feature is off, because Zola 0.23.6 rejects a missing field.
+
+### 2026-11-03: The transform rules permission's name
+
+Cloudflare names the zone permission for transform rules `Zone Transform Rules Write`, not `Transform Rules Write`. Wherever this ADR names it (§3's apex token and §9, step 4), the permission is `Zone Transform Rules Write`; the earlier text stays as written. `validate`'s apex-token check uses this name, and `apex-<zone>` holds `DNS Write`, `Dynamic URL Redirects Write` and `Zone Transform Rules Write` on its zone when the zone has a static site.

@@ -975,7 +975,7 @@ fn cloudflare_with_sites() -> String {
     CLOUDFLARE.replace(
         "      - { permission: DNS Write, zones: [noisypigeon.com] }\n",
         "      - { permission: DNS Write, zones: [noisypigeon.com] }
-      - { permission: Transform Rules Write, zones: [noisypigeon.com] }
+      - { permission: Zone Transform Rules Write, zones: [noisypigeon.com] }
       - { permission: Dynamic URL Redirects Write, zones: [noisypigeon.com] }
   - name: site-noisypigeon.com-blog
     capabilities:
@@ -1112,7 +1112,7 @@ fn a_static_site_needs_its_tokens() {
     );
     assert_fails(
         repo.path(),
-        "`apex-noisypigeon.com` holds exactly `DNS Write` on `noisypigeon.com`, `Dynamic URL Redirects Write` on `noisypigeon.com`, `Transform Rules Write` on `noisypigeon.com`, nothing else",
+        "`apex-noisypigeon.com` holds exactly `DNS Write` on `noisypigeon.com`, `Dynamic URL Redirects Write` on `noisypigeon.com`, `Zone Transform Rules Write` on `noisypigeon.com`, nothing else",
     );
     write(
         repo.path(),
