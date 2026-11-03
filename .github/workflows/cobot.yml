@@ -1,7 +1,8 @@
 # Plan on PR, apply on merge and daily; see .claude/decisions/2026-11-02-runtime-cobot-infrastructure-as-code.md
 # .claude/decisions/2026-11-02-runtime-cloudflare-provisioner-unit.md
 # .claude/decisions/2026-11-02-runtime-workloads-zone-apex.md
-# and .claude/decisions/2026-11-03-runtime-cloudflare-static-sites-r2.md.
+# .claude/decisions/2026-11-03-runtime-cloudflare-static-sites-r2.md
+# and .claude/decisions/2026-11-03-release-cobot-image-in-workflows.md.
 name: cobot
 
 on:
@@ -13,9 +14,11 @@ on:
 
 permissions:
   contents: read
+  packages: read
 
 env:
   STATE_REPO: noisypigeon/pigeon-cobot-state
+  IMAGE: ghcr.io/noisypigeon/pigeon-cobot:latest
 
 jobs:
   plan:
@@ -23,9 +26,10 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      packages: read
       pull-requests: write
     steps:
-      - name: Check out main, for the trusted binary
+      - name: Check out main, for the trusted providers
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           ref: main
@@ -43,11 +47,11 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
           path: .pr
           persist-credentials: false
-      - uses: jdx/mise-action@9b200bcecbfd6303e69a4a261b2e09e3757440a7 # v5.2.0
-        with:
-          version: 2026.10.12
-      - name: Build pigeon from main
-        run: cargo build -q --locked -p pigeon --no-default-features --features cobot --manifest-path src/pigeon-cli/Cargo.toml
+      - name: Log in to GHCR
+        env:
+          TOKEN: ${{ github.token }}
+          ACTOR: ${{ github.actor }}
+        run: echo "$TOKEN" | docker login ghcr.io -u "$ACTOR" --password-stdin
       - name: Refuse provider changes
         id: providers
         env:
@@ -71,7 +75,7 @@ jobs:
           fi
       - name: Validate
         if: steps.providers.outputs.changed != 'true'
-        run: src/pigeon-cli/target/debug/pigeon cobot validate --root .pr
+        run: docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/repo" -v "$RUNNER_TEMP:$RUNNER_TEMP" -w /repo "$IMAGE" cobot validate --root .pr
       - name: Plan
         if: steps.providers.outputs.changed != 'true'
         env:
@@ -79,7 +83,8 @@ jobs:
           COBOT_SECRETS_PASSPHRASE: ${{ secrets.COBOT_SECRETS_PASSPHRASE }}
           COBOT_WORKLOAD_SECRETS_PASSPHRASE: ${{ secrets.COBOT_WORKLOAD_SECRETS_PASSPHRASE }}
         run: |
-          src/pigeon-cli/target/debug/pigeon cobot plan --root .pr --state .state --summary "$RUNNER_TEMP/summary.md"
+          docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/repo" -v "$RUNNER_TEMP:$RUNNER_TEMP" -w /repo -e COBOT_STATE_PASSPHRASE -e COBOT_SECRETS_PASSPHRASE -e COBOT_WORKLOAD_SECRETS_PASSPHRASE \
+            "$IMAGE" cobot plan --root .pr --state .state --summary "$RUNNER_TEMP/summary.md"
           cat "$RUNNER_TEMP/summary.md" >>"$GITHUB_STEP_SUMMARY"
       - name: Comment
         env:
@@ -114,11 +119,11 @@ jobs:
           repository: ${{ env.STATE_REPO }}
           token: ${{ secrets.BOT_GITHUB_TOKEN }}
           path: .state
-      - uses: jdx/mise-action@9b200bcecbfd6303e69a4a261b2e09e3757440a7 # v5.2.0
-        with:
-          version: 2026.10.12
-      - name: Build pigeon
-        run: cargo build -q --locked -p pigeon --no-default-features --features cobot --manifest-path src/pigeon-cli/Cargo.toml
+      - name: Log in to GHCR
+        env:
+          TOKEN: ${{ github.token }}
+          ACTOR: ${{ github.actor }}
+        run: echo "$TOKEN" | docker login ghcr.io -u "$ACTOR" --password-stdin
       - name: Apply
         id: apply
         env:
@@ -127,7 +132,8 @@ jobs:
           COBOT_WORKLOAD_SECRETS_PASSPHRASE: ${{ secrets.COBOT_WORKLOAD_SECRETS_PASSPHRASE }}
         run: |
           set -o pipefail
-          src/pigeon-cli/target/debug/pigeon cobot apply --root . --state .state | tee "$RUNNER_TEMP/apply.md"
+          docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/repo" -v "$RUNNER_TEMP:$RUNNER_TEMP" -w /repo -e COBOT_STATE_PASSPHRASE -e COBOT_SECRETS_PASSPHRASE -e COBOT_WORKLOAD_SECRETS_PASSPHRASE \
+            "$IMAGE" cobot apply --root . --state .state | tee "$RUNNER_TEMP/apply.md"
           cat "$RUNNER_TEMP/apply.md" >>"$GITHUB_STEP_SUMMARY"
       - name: Commit state, even after a failed apply
         if: ${{ !cancelled() && steps.apply.outcome != 'skipped' }}
@@ -157,5 +163,6 @@ jobs:
           COBOT_WORKLOAD_SECRETS_PASSPHRASE: ${{ secrets.COBOT_WORKLOAD_SECRETS_PASSPHRASE }}
         run: |
           set -o pipefail
-          src/pigeon-cli/target/debug/pigeon cobot sites publish --root . --state .state | tee "$RUNNER_TEMP/sites.md"
+          docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/repo" -v "$RUNNER_TEMP:$RUNNER_TEMP" -w /repo -e COBOT_STATE_PASSPHRASE -e COBOT_SECRETS_PASSPHRASE -e COBOT_WORKLOAD_SECRETS_PASSPHRASE \
+            "$IMAGE" cobot sites publish --root . --state .state | tee "$RUNNER_TEMP/sites.md"
           cat "$RUNNER_TEMP/sites.md" >>"$GITHUB_STEP_SUMMARY"
