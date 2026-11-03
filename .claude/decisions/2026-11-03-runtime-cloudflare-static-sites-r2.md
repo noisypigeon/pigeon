@@ -355,3 +355,14 @@ Credentials exist only in memory, and join the output scrubber. Output names cou
   - for `workloads/cloudflare/apex`, two `cloudflare_ruleset`s;
   - nothing to destroy.
 - **After the blog PR merges:** `publish` uploads the site, every live check passes, the next plan shows "No changes", and #32 is closed.
+
+## Amendments
+
+### 2026-11-03: The apex is per zone
+
+The workloads ADR's amendment of this date moves each zone's apex to `workloads/<zone>/apex/`. That supersedes every mention of `workloads/cloudflare/apex` here, which stays as written. The noisypigeon.com apex is `workloads/noisypigeon.com/apex/`.
+
+Nothing else changes:
+
+- the apex still renders `<zone>:sites-root` and `<zone>:sites-www`, with the same keys;
+- §10's plan check counts those two rulesets under `workloads/noisypigeon.com/apex`.

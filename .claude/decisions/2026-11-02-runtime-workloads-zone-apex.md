@@ -650,3 +650,87 @@ OpenTofu 1.13, as pinned, supports this. It was checked against cloudflare 5.28.
 - **The apex token.** `apex-<zone>` holds `DNS Write`, plus `Transform Rules Write` and `Dynamic URL Redirects Write` on its zone, and `validate` checks exactly that set.
 
 The steps are that ADR's §9.
+
+### 2026-11-03: One apex per zone, at workloads/<zone>/apex
+
+The 2026-11-02 amendment put every zone's apex in one unit, `workloads/cloudflare/apex/`. The intent was one apex per zone, beside that zone's workloads:
+
+- `workloads/noisypigeon.com/apex/` holds `noisypigeon.com`'s `config.yaml` and `secrets.config.yaml`, and nothing else.
+- Its `apex: blog` names `workloads/noisypigeon.com/blog/`, its own unit, which configures the bucket and the content. That is `.claude/decisions/2026-11-03-runtime-cloudflare-static-sites-r2.md`.
+- `infra/cloudflare/` still defines everything: the schema, the modules and the presets.
+
+This supersedes, each left as written:
+
+- that amendment's §1 (layout);
+- its §2 (the `zones`-keyed config);
+- the part of its §4 that makes one unit hold every zone.
+
+Its §3 (the schema extension), §5 (modules, presets and releases) and §6 (the fixes) stand.
+
+#### 1. Layout
+
+```
+infra/cloudflare/            schema.json ($defs.zone_apex, x-cobot.apex), modules/, presets/
+workloads/
+  README.md
+  <zone>/                    a zone in infra/cloudflare's zones
+    apex/                    that zone's apex unit
+      config.yaml
+      secrets.config.yaml    optional; COBOT_WORKLOAD_SECRETS_PASSPHRASE
+    <workload>/              one unit per workload
+```
+
+- `workloads/cloudflare/` goes away, once its state has moved (§3).
+- A zone directory holds `apex/` and workload units.
+- `apex/` holds no `schema.json`, no `modules/` and no `unit.yaml`.
+- `layout.yaml`'s `workloads` rule allows only zone-shaped directories, and requires `README.md`.
+
+#### 2. The per-zone config is the single-zone case
+
+`workloads/noisypigeon.com/apex/config.yaml`, in full:
+
+```yaml
+# The noisypigeon.com apex; see .claude/decisions/2026-11-02-runtime-workloads-zone-apex.md.
+apex: blog
+services:
+  proton:
+    verification:
+      protonmail: { secret: protonmail_verification }
+      pm: { secret: pm_verification }
+    dmarc: default
+records: {}
+```
+
+- It validates against `infra/cloudflare/schema.json`'s `$defs.zone_apex`.
+- cobot takes the zone from the unit's path. It composes the unit with `x-cobot.apex` exactly as it would compose `{ zones: { <zone>: <config> } }`.
+- So the composition is unchanged:
+  - record keys stay `<zone>:<record>`;
+  - the provider instance stays `cloudflare.zone["<zone>"]`;
+  - the handoff stays a map by zone, with one entry;
+  - `apex-<zone>` is still checked for each apex.
+- Every address in state is therefore the same as under `workloads/cloudflare/apex`. Moving to the new path moves only its state file (§3).
+
+#### 3. Execution
+
+1. **This amendment** lands with the cobot ADR's amendment of the same date, which decides unit moves.
+2. **An engine PR**, `feat(cobot): per-zone apexes and unit moves`:
+   - discovery and composition of `workloads/<zone>/apex`;
+   - unit moves;
+   - the layout checks;
+   - tests.
+
+   It keeps the all-zones form valid, so `main`'s existing `workloads/cloudflare/apex` still plans "No changes". PR plans run `main`'s binary, so the move waits for the next PR.
+3. **A data PR**, `refactor(workloads): move the noisypigeon.com apex to its zone`:
+   - `git mv` of both files to `workloads/noisypigeon.com/apex/`;
+   - `config.yaml` reduced to the zone's object above;
+   - the `.config/moves.yaml` entry;
+   - `layout.yaml`'s rule.
+
+   Its plan shows the move note and no create, update or destroy. After merge, the next plan shows "No changes".
+4. **A cleanup PR** drops the all-zones form and the spent move entry.
+
+#### 4. Verification
+
+- The per-zone apex renders the same `main.tf.json` as the all-zones apex for the same zone, apart from the backend path.
+- `tofu validate` passes on it against cloudflare 5.28.0.
+- The data PR's plan comment creates and destroys nothing, and its apply moves the state file.
