@@ -639,3 +639,14 @@ OpenTofu 1.13, as pinned, supports this. It was checked against cloudflare 5.28.
 - each of step 6's fixes has a failing case;
 - `tofu validate` passes on the rendered unit against cloudflare 5.28.0;
 - PR C′'s plan comment shows one `cloudflare_account_token` for `infra/cloudflare`, and nine `cloudflare_dns_record` creates for `workloads/cloudflare/apex` with the pending note, and nothing to destroy.
+
+### 2026-11-03: Static-site hosts and zone rulesets
+
+`.claude/decisions/2026-11-03-runtime-cloudflare-static-sites-r2.md` lets a workload enable `static_site`, served from R2 through custom domains. This amends §3, §6 and §9, as follows.
+
+- **Hosts.** A static site's hosts keep their `ADDRESS` claims. The apex renders no DNS record for them, because the custom domains create those.
+- **`ingress` beside `static_site`** is rejected.
+- **Zone rulesets.** The apex gains a derived block, `zone_rulesets`, rendering up to two zone rulesets per zone: `sites-root`, which rewrites `/` to `/index.html`, and `sites-www`, a 301 from `www` to the apex.
+- **The apex token.** `apex-<zone>` holds `DNS Write`, plus `Transform Rules Write` and `Dynamic URL Redirects Write` on its zone, and `validate` checks exactly that set.
+
+The steps are that ADR's §9.

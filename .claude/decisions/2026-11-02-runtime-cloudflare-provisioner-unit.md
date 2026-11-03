@@ -379,3 +379,16 @@ The rule that a workload never holds or sees break-glass material is unchanged: 
 - `provisioner_token` must be able to grant `DNS Write` on each zone with an apex, as §4 already requires of every minted permission.
 
 The steps are the apex ADR's §13.
+
+### 2026-11-03: Site tokens and the account-id output
+
+`.claude/decisions/2026-11-03-runtime-cloudflare-static-sites-r2.md` gives a workload a static site on R2, built from modules this unit defines. This amends §1's tokens and §4's handling of the account id, as follows.
+
+- **Site tokens.** `tokens` gains one `site-<zone>-<workload>` per static site, holding exactly `Workers R2 Storage Write` on the account, and `Zone Read` and `DNS Write` on that zone.
+- **The account id is handed off.**
+  - A new sensitive output, `account_id`, carries it in encrypted state, for workload handoffs.
+  - It is an identifier, not a credential, and it still never lands in the repository.
+  - `account_id` stays rejected as a key in any workload's `secrets.config.yaml`.
+- **New modules.** `r2-bucket`, `r2-custom-domain` and `ruleset` join `modules/`. `provisioner_token` gains the permissions they and the site tokens need.
+
+The steps are that ADR's §9.
