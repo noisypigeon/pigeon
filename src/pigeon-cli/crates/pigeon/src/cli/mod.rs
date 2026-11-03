@@ -2,11 +2,15 @@
 
 use clap::{Parser, Subcommand};
 
+#[cfg(feature = "backplane")]
+mod backplane;
 #[cfg(feature = "cobot")]
 mod cobot;
 #[cfg(feature = "sentinel")]
 mod sentinel;
 
+#[cfg(feature = "backplane")]
+pub use backplane::*;
 #[cfg(feature = "cobot")]
 pub use cobot::*;
 #[cfg(feature = "sentinel")]
@@ -36,4 +40,8 @@ pub enum Commands {
     #[cfg(feature = "cobot")]
     #[command(subcommand, version = ::cobot::VERSION)]
     Cobot(CobotCommand),
+    /// Run platform operations against this instance
+    #[cfg(feature = "backplane")]
+    #[command(subcommand, version = ::backplane::VERSION)]
+    Backplane(BackplaneCommand),
 }

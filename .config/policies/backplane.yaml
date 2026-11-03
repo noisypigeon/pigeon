@@ -1,0 +1,6 @@
+description: Backplane composes; it writes no file and starts no process, per 2026-11-03-development-backplane-platform-composition-layer.md.
+target: tree
+rules:
+  - find:
+      match: '^src/pigeon-cli/crates/backplane/src/'
+      forbid_content: 'std::process::Command|Command::new|fs::write'

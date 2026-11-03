@@ -1,6 +1,7 @@
 # Builds `pigeon` with only FEATURES; build with `--target "$FEATURES"`.
-# See .claude/decisions/2026-11-02-release-crate-units-and-images.md
-# and .claude/decisions/2026-11-03-release-cobot-image-in-workflows.md.
+# See .claude/decisions/2026-11-02-release-crate-units-and-images.md,
+# .claude/decisions/2026-11-03-release-cobot-image-in-workflows.md
+# and .claude/decisions/2026-11-03-development-backplane-platform-composition-layer.md.
 FROM docker.io/library/rust:1.99.1-slim-bookworm@sha256:24707e70a4f1e23d9a7b25202ec43126d28a52294b96aad5c670df1fd1f1d400 AS build
 ARG FEATURES
 WORKDIR /src
@@ -45,3 +46,6 @@ RUN tofu version | grep -qF "OpenTofu v${TOFU_VERSION}" \
 ENV HOME=/tmp
 USER 65532:65532
 ENTRYPOINT ["/usr/local/bin/pigeon"]
+
+# Backplane runs cobot, so it needs cobot's tools.
+FROM cobot AS backplane

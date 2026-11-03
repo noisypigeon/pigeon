@@ -33,6 +33,7 @@ run = [
   "cargo clippy -p pigeon --all-targets --locked --no-default-features --features sentinel -- -D warnings",
   "cargo clippy -p pigeon --all-targets --locked --no-default-features --features gantry -- -D warnings",
   "cargo clippy -p pigeon --all-targets --locked --no-default-features --features cobot -- -D warnings",
+  "cargo clippy -p pigeon --all-targets --locked --no-default-features --features backplane -- -D warnings",
 ]
 
 [tasks.rust]
@@ -46,5 +47,9 @@ run = "cargo run -q --locked -p pigeon -- sentinel check --root ../.."
 dir = "src/pigeon-cli"
 run = "cargo run -q --locked -p pigeon -- sentinel check --root ../.. --pull-request"
 
+[tasks.backplane]
+dir = "src/pigeon-cli"
+run = "cargo run -q --locked -p pigeon -- backplane instance --root ../.."
+
 [tasks.ci]
-depends = ["rust", "sentinel"]
+depends = ["rust", "sentinel", "backplane"]

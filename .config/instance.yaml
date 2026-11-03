@@ -1,0 +1,8 @@
+description: This repository as an instance of the pigeon platform.
+schema: v0
+name: noisypigeon
+repository: https://github.com/noisypigeon/pigeon
+paths:
+  policies: .config/policies
+  providers: .config/providers.yaml
+  releases: .config/releases.yaml
