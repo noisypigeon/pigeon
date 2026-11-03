@@ -138,8 +138,8 @@ That lands in its own PR, together with `infra/backblaze`'s provider, before eit
   - inits from a lockfile holding only `scaleway`;
   - plans one project for the empty config;
   - with a sample application, rule and key, plans the application, its policy, and `module.keys["<name>@<from>..<to>"]`.
-- **`validate` rejects:**
-  - `IAMManager` in a rule;
-  - a key naming an unknown application or project.
-- **`plan` fails**, naming the project, when a rule names an unknown project.
+- **`validate` rejects** `IAMManager` in a rule.
+- **`plan` fails:**
+  - naming the project, when a rule names an unknown project;
+  - on an invalid index, when a key names an unknown application or project.
 - **After PR C merges,** the apply commits encrypted state, and the bot tags `infra-scaleway-*/v0.1.0`.
