@@ -68,6 +68,10 @@ units:
     manifest: infra/cloudflare/modules/dns-record/module.yaml
     paths: [infra/cloudflare/modules/dns-record/]
     exclude: ['*.md']
+  static-site-template:
+    manifest: src/static-site-template/template.yaml
+    paths: [src/static-site-template/]
+    exclude: ['*.md']
 settings:
   - { file: src/pigeon-cli/Cargo.toml, tables: '^\[profile\.', keys: '^(edition|rust-version)\s*=' }
   - { file: mise.toml, keys: '^rust\s*=' }
@@ -83,3 +87,4 @@ tiers:
   - { file: infra/cloudflare/modules/api-token/CHANGELOG.md, unit: infra-cloudflare-api-token }
   - { file: infra/cloudflare/CHANGELOG.md, unit: infra-cloudflare-schema }
   - { file: infra/cloudflare/modules/dns-record/CHANGELOG.md, unit: infra-cloudflare-dns-record }
+  - { file: src/static-site-template/CHANGELOG.md, unit: static-site-template }
