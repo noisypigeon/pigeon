@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-11-03
+
+- docs(adr): static sites on Cloudflare R2, and the site template ([#38](https://github.com/noisypigeon/pigeon/pull/38))
+
 ## 2026-11-02
 
 - feat(cobot): apexes from infra/cloudflare, workload secrets and token handoff ([#37](https://github.com/noisypigeon/pigeon/pull/37))
