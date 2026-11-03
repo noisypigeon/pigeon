@@ -26,12 +26,16 @@ belong in the ADR, never in the file.
   govern (releases, changelogs, tags, infrastructure). Sentinel's library
   writes no file and starts no process, per
   [`2026-11-02-development-sentinel-policy-cobot-actions.md`](.claude/decisions/2026-11-02-development-sentinel-policy-cobot-actions.md).
+- Backplane (package `pigeon-backplane`) composes the engines into one
+  platform serving the instance in `.config/instance.yaml`; it judges through
+  sentinel, acts through cobot, and writes and starts nothing itself, per
+  [`2026-11-03-development-backplane-platform-composition-layer.md`](.claude/decisions/2026-11-03-development-backplane-platform-composition-layer.md).
 - Releases and changelogs are machinery, per
   [`2026-11-02-release-crate-units-and-images.md`](.claude/decisions/2026-11-02-release-crate-units-and-images.md):
   - every `CHANGELOG.md` is generated on merge by the release bot, which runs
     `pigeon cobot release` and `pigeon cobot tags`; a PR never edits one, and
     `pull-request.yaml` fails one that does;
-  - `sentinel`, `gantry` and `cobot` are release units in
+  - `sentinel`, `gantry`, `cobot` and `backplane` are release units in
     `.config/releases.yaml`, each with its own version and tag
     `<unit>/vX.Y.Z` and image `ghcr.io/noisypigeon/pigeon-<unit>`, built
     from the Dockerfile stage named for it; the bot bumps them, never a PR;
@@ -99,6 +103,8 @@ belong in the ADR, never in the file.
   live.
 - `pigeon cobot release --dry-run` / `pigeon cobot tags`: preview the bot's
   release JSON.
+- `pigeon backplane instance|engines|operations|run <op>` (`--json` for the
+  wire form); `mise run backplane` validates `.config/instance.yaml`.
 - `mise run sentinel`: `pigeon sentinel check` against `.config/policies/`.
 - `PR_TITLE='…' PR_BODY='…' PR_NUMBER=N PR_FILES="$(git diff --name-only main...)" mise run sentinel-pr`:
   adds the pull-request policy.

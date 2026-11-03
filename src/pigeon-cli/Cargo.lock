@@ -1521,9 +1521,23 @@ dependencies = [
  "clap",
  "cobot",
  "gantry",
+ "pigeon-backplane",
  "predicates",
  "sentinel",
  "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "pigeon-backplane"
+version = "0.1.0"
+dependencies = [
+ "cobot",
+ "gantry",
+ "sentinel",
+ "serde",
+ "serde-saphyr",
  "serde_json",
  "tempfile",
 ]

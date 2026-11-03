@@ -14,6 +14,7 @@ publish = false
 sentinel = { path = "crates/sentinel" }
 gantry = { path = "crates/gantry" }
 cobot = { path = "crates/cobot" }
+backplane = { path = "crates/backplane", package = "pigeon-backplane" }
 age = { version = "0.12.1", default-features = false }
 assert_cmd = "2.2.2"
 jsonschema = { version = "0.59.0", default-features = false }

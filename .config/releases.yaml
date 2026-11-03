@@ -51,6 +51,23 @@ units:
       - src/pigeon-cli/.dockerignore
     exclude: [tests/, benches/, '*.md']
     cargo: { workspace: src/pigeon-cli, package: pigeon }
+  backplane:
+    manifest: src/pigeon-cli/crates/backplane/Cargo.toml
+    features: backplane
+    image: ghcr.io/noisypigeon/pigeon-backplane
+    paths:
+      - src/pigeon-cli/crates/backplane/
+      - src/pigeon-cli/crates/pigeon/src/commands/backplane.rs
+      - src/pigeon-cli/crates/pigeon/src/cli/backplane.rs
+      - src/pigeon-cli/crates/pigeon/src/main.rs
+      - src/pigeon-cli/crates/pigeon/src/lib.rs
+      - src/pigeon-cli/crates/pigeon/src/cli/mod.rs
+      - src/pigeon-cli/crates/pigeon/src/commands/mod.rs
+      - src/pigeon-cli/crates/pigeon/Cargo.toml
+      - src/pigeon-cli/Dockerfile
+      - src/pigeon-cli/.dockerignore
+    exclude: [tests/, benches/, '*.md']
+    cargo: { workspace: src/pigeon-cli, package: pigeon }
   infra-cloudflare-zone:
     manifest: infra/cloudflare/modules/zone/module.yaml
     paths: [infra/cloudflare/modules/zone/]
@@ -105,6 +122,7 @@ tiers:
   - { file: src/pigeon-cli/crates/sentinel/CHANGELOG.md, unit: sentinel }
   - { file: src/pigeon-cli/crates/gantry/CHANGELOG.md, unit: gantry }
   - { file: src/pigeon-cli/crates/cobot/CHANGELOG.md, unit: cobot }
+  - { file: src/pigeon-cli/crates/backplane/CHANGELOG.md, unit: backplane }
   - { file: infra/cloudflare/modules/zone/CHANGELOG.md, unit: infra-cloudflare-zone }
   - { file: infra/cloudflare/modules/permission-groups/CHANGELOG.md, unit: infra-cloudflare-permission-groups }
   - { file: infra/cloudflare/modules/api-token/CHANGELOG.md, unit: infra-cloudflare-api-token }
