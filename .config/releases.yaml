@@ -83,6 +83,30 @@ units:
     manifest: infra/cloudflare/modules/ruleset/module.yaml
     paths: [infra/cloudflare/modules/ruleset/]
     exclude: ['*.md']
+  infra-digitalocean-project:
+    manifest: infra/digitalocean/modules/project/module.yaml
+    paths: [infra/digitalocean/modules/project/]
+    exclude: ['*.md']
+  infra-digitalocean-project-resources:
+    manifest: infra/digitalocean/modules/project-resources/module.yaml
+    paths: [infra/digitalocean/modules/project-resources/]
+    exclude: ['*.md']
+  infra-digitalocean-spaces-bucket:
+    manifest: infra/digitalocean/modules/spaces-bucket/module.yaml
+    paths: [infra/digitalocean/modules/spaces-bucket/]
+    exclude: ['*.md']
+  infra-digitalocean-spaces-key:
+    manifest: infra/digitalocean/modules/spaces-key/module.yaml
+    paths: [infra/digitalocean/modules/spaces-key/]
+    exclude: ['*.md']
+  infra-digitalocean-ssh-key:
+    manifest: infra/digitalocean/modules/ssh-key/module.yaml
+    paths: [infra/digitalocean/modules/ssh-key/]
+    exclude: ['*.md']
+  infra-digitalocean-schema:
+    manifest: infra/digitalocean/schema.json
+    paths: [infra/digitalocean/schema.json, infra/digitalocean/modules/]
+    exclude: ['*.md']
   static-site-template:
     manifest: src/static-site-template/template.yaml
     paths: [src/static-site-template/]
@@ -105,4 +129,10 @@ tiers:
   - { file: infra/cloudflare/modules/r2-bucket/CHANGELOG.md, unit: infra-cloudflare-r2-bucket }
   - { file: infra/cloudflare/modules/r2-custom-domain/CHANGELOG.md, unit: infra-cloudflare-r2-custom-domain }
   - { file: infra/cloudflare/modules/ruleset/CHANGELOG.md, unit: infra-cloudflare-ruleset }
+  - { file: infra/digitalocean/modules/project/CHANGELOG.md, unit: infra-digitalocean-project }
+  - { file: infra/digitalocean/modules/project-resources/CHANGELOG.md, unit: infra-digitalocean-project-resources }
+  - { file: infra/digitalocean/modules/spaces-bucket/CHANGELOG.md, unit: infra-digitalocean-spaces-bucket }
+  - { file: infra/digitalocean/modules/spaces-key/CHANGELOG.md, unit: infra-digitalocean-spaces-key }
+  - { file: infra/digitalocean/modules/ssh-key/CHANGELOG.md, unit: infra-digitalocean-ssh-key }
+  - { file: infra/digitalocean/CHANGELOG.md, unit: infra-digitalocean-schema }
   - { file: src/static-site-template/CHANGELOG.md, unit: static-site-template }

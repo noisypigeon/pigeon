@@ -60,6 +60,10 @@ belong in the ADR, never in the file.
   in `workloads/`. Only `infra/` keys are break-glass, and they are never handed
   to a workload, which gets only its own secrets and minted tokens. Providers
   come only from `main`'s `.config/providers.yaml` and `providers.lock.hcl`.
+- `infra/digitalocean` is the second provisioner unit: a project, private
+  Spaces buckets named `<bucket_prefix>-<name>`, rotated bucket-scoped Spaces
+  keys and SSH keys, per
+  [`2026-11-03-runtime-digitalocean-provisioner-unit.md`](.claude/decisions/2026-11-03-runtime-digitalocean-provisioner-unit.md).
 - Workloads live in `workloads/<zone>/`; each zone's apex (global config and
   DNS) is its own unit, `workloads/<zone>/apex/`, which only enables what
   `infra/cloudflare/` defines (its schema's `$defs.apex`, its `modules/` and
