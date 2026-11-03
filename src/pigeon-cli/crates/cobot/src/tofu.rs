@@ -219,17 +219,17 @@ fn changes(json: &str) -> Vec<Change> {
         let Some(address) = rc["address"].as_str() else {
             continue;
         };
-        let moved = rc["previous_address"].as_str();
-        match (action(&rc["change"]), moved) {
-            (Some(action), _) => out.push(Change {
-                address: mask(address),
-                action,
-            }),
-            (None, Some(from)) => out.push(Change {
+        if let Some(from) = rc["previous_address"].as_str() {
+            out.push(Change {
                 address: mask(&format!("{from} → {address}")),
                 action: Action::Move,
-            }),
-            (None, None) => {}
+            });
+        }
+        if let Some(action) = action(&rc["change"]) {
+            out.push(Change {
+                address: mask(address),
+                action,
+            });
         }
     }
     for (name, change) in plan["output_changes"].as_object().into_iter().flatten() {
@@ -360,6 +360,23 @@ mod tests {
         let got = changes(json);
         assert_eq!(got.len(), 3);
         assert_eq!(got[2].address, "output.tokens");
+
+        let moved = r#"{"resource_changes":[
+            {"address":"b.x","previous_address":"a.x","change":{"actions":["update"]}},
+            {"address":"d.y","previous_address":"c.y","change":{"actions":["no-op"]}}]}"#;
+        let both = changes(moved);
+        let words: Vec<(&str, &str)> = both
+            .iter()
+            .map(|c| (c.action.word(), c.address.as_str()))
+            .collect();
+        assert_eq!(
+            words,
+            [
+                ("move", "a.x → b.x"),
+                ("update", "b.x"),
+                ("move", "c.y → d.y")
+            ]
+        );
         assert_eq!(got[0].address, "module.p.terraform_data.this");
         assert_eq!(got[1].action, Action::Replace);
         assert!(!format!("{got:?}").contains("secret"));
