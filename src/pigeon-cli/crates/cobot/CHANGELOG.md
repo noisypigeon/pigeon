@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.11 (2026-11-03)
+
+- fix(cobot): the apex token's transform rules permission ([#51](https://github.com/noisypigeon/pigeon/pull/51))
+
 ## v0.1.10 (2026-11-03)
 
 - feat(cobot): sites build and publish ([#49](https://github.com/noisypigeon/pigeon/pull/49))
