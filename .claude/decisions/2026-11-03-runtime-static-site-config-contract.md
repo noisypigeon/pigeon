@@ -237,3 +237,11 @@ The release bot bumps only a unit's patch version, and a PR never sets one. The 
 - Wherever this ADR says `1.1.0`, read the first version released with `schema.json`: `1.0.1`.
 - The blog PR pins that version.
 - cobot does not compare versions to choose a build. It applies the contract when the pinned tag has `schema.json` and the workload sets `static_site.site`, as §5 says.
+
+### 2026-11-03: The contract is checked when a site builds
+
+`pigeon cobot validate` runs in `cobot.yml`'s plan job on a checkout without tags, so it cannot read the pinned tag's `schema.json` or `template.yaml`. The template's features are already checked at build time for the same reason. §1 and §4 said `validate` checks the settings and the post names; that text stays as written.
+
+- `pigeon cobot sites build` checks the settings against the tag's `schema.json`, the `site/` layout, and, under `date-slug`, each post's name. Every failure names the setting or the file.
+- `sites.yml` runs that build on every PR that touches a workload's `config.yaml` or `site/`, with tags, so a bad site still fails its PR.
+- `validate` checks only what `infra/cloudflare/schema.json` holds: `static_site.site` is an object.

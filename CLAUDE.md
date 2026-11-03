@@ -70,6 +70,10 @@ belong in the ADR, never in the file.
   custom domain per apex host, built with a released `src/static-site-template/`
   (`static-site-template/vX.Y.Z`) and published by `cobot.yml` after apply, per
   [`2026-11-03-runtime-cloudflare-static-sites-r2.md`](.claude/decisions/2026-11-03-runtime-cloudflare-static-sites-r2.md).
+- A static site's settings are `static_site.site` in its `config.yaml`, checked
+  against the pinned template's `schema.json`; its `site/` holds only
+  `posts/` (named `YYYY-MM-DD-<slug>.md`), `pages/` and `assets/`, per
+  [`2026-11-03-runtime-static-site-config-contract.md`](.claude/decisions/2026-11-03-runtime-static-site-config-contract.md).
 - The repo is public: never push secrets, credentials, key IDs or private
   bucket names, in commits, branch names, PR text or CI logs.
 

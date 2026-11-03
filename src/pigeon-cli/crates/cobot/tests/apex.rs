@@ -1358,3 +1358,130 @@ fn a_static_site_builds_with_its_pinned_template_and_features() {
         Err(cobot::Error::Invalid(_))
     ));
 }
+
+const CONTRACT: &str = "static_site:
+  template: { version: 1.0.0, features: [math] }
+  site:
+    title: Blog
+    short_name: blog
+    description: A blog.
+    intro: Hi, *you*.
+    avatar: /assets/images/a.svg
+    social_preview: /assets/images/a.svg
+    author: { page: /pages/about }
+    nav: [{ title: About, link: /pages/about }]
+    theme_color: { light: \"#eee\", dark: \"#111\" }
+";
+
+/// A repo whose blog is a contract site: one post, one page, one asset.
+fn contract_repo() -> TempDir {
+    let repo = site_repo();
+    let root = repo.path();
+    copy(root, "src/static-site-template");
+    write(root, &format!("{BLOG}/config.yaml"), CONTRACT);
+    write(
+        root,
+        &format!("{BLOG}/site/posts/2015-02-15-hello.md"),
+        "+++\ntitle = \"Hello\"\ndate = 2015-02-15T20:00:00+00:00\naliases = [\"changelog/hello\"]\n+++\nHello.\n",
+    );
+    write(
+        root,
+        &format!("{BLOG}/site/pages/about.md"),
+        "+++\ntitle = \"About\"\n+++\nAbout.\n",
+    );
+    write(root, &format!("{BLOG}/site/assets/images/a.svg"), "<svg/>");
+    git_in(root, &["init", "-q"]);
+    git_in(root, &["add", "-A"]);
+    git_in(root, &["commit", "-q", "-m", "init"]);
+    git_in(root, &["tag", "static-site-template/v1.0.0"]);
+    repo
+}
+
+#[test]
+fn a_contract_site_builds_from_its_config_yaml() {
+    if !zola_available() {
+        eprintln!("skipped: zola is not on PATH");
+        return;
+    }
+    let repo = contract_repo();
+    let root = repo.path();
+    let sites = cobot::sites::find(root, &[]).expect("find");
+    let built = cobot::sites::build(root, &sites).expect("build");
+    let public = &built[0].public;
+    let read =
+        |rel: &str| fs::read_to_string(public.join(rel)).unwrap_or_else(|e| panic!("{rel}: {e}"));
+    let toml = fs::read_to_string(public.with_file_name("config.toml")).expect("config");
+    for want in [
+        "base_url = \"https://noisypigeon.com\"",
+        "title = \"Blog\"",
+        "theme = \"static-site-template\"",
+        "math = true",
+    ] {
+        assert!(toml.contains(want), "{want}: {toml}");
+    }
+    let manifest: Value = serde_json::from_str(&read("manifest.json")).expect("manifest");
+    assert_eq!(
+        (
+            &manifest["name"],
+            &manifest["short_name"],
+            &manifest["theme_color"],
+            &manifest["display"]
+        ),
+        (
+            &json!("Blog"),
+            &json!("blog"),
+            &json!("#eee"),
+            &json!("standalone")
+        )
+    );
+    assert!(read("robots.txt").contains("Sitemap: https://noisypigeon.com/sitemap.xml"));
+    let home = read("index.html");
+    assert!(
+        home.contains("Hi, <em>you</em>.") && home.contains("/posts/hello/"),
+        "{home}"
+    );
+    assert!(read("posts/hello/index.html").contains("Hello."));
+    assert!(read("changelog/hello/index.html").contains("/posts/hello/"));
+    assert!(read("pages/about/index.html").contains("About."));
+    assert_eq!(read("assets/images/a.svg"), "<svg/>");
+    assert!(!public.join("posts/index.html").exists());
+}
+
+#[test]
+fn a_contract_site_rejects_what_breaks_the_contract() {
+    let repo = contract_repo();
+    let root = repo.path();
+    let build = |config: &str| {
+        write(root, &format!("{BLOG}/config.yaml"), config);
+        let sites = cobot::sites::find(root, &[]).expect("find");
+        cobot::sites::build(root, &sites)
+            .expect_err("rejected")
+            .to_string()
+    };
+
+    write(
+        root,
+        &format!("{BLOG}/site/posts/0001-hello.md"),
+        "+++\ndate = 2015-02-15\n+++\n",
+    );
+    let err = build(CONTRACT);
+    assert!(err.contains("posts/0001-hello.md: is not named"), "{err}");
+    fs::remove_file(root.join(BLOG).join("site/posts/0001-hello.md")).expect("rm");
+
+    write(root, &format!("{BLOG}/site/config.toml"), "");
+    let err = build(CONTRACT);
+    assert!(
+        err.contains("`config.toml` does not belong in site/"),
+        "{err}"
+    );
+    fs::remove_file(root.join(BLOG).join("site/config.toml")).expect("rm");
+
+    let err = build(&CONTRACT.replace("short_name: blog", "short_name: 7"));
+    assert!(err.contains("static_site.site.short_name"), "{err}");
+
+    fs::remove_file(root.join("src/static-site-template/schema.json")).expect("rm");
+    git_in(root, &["commit", "-qam", "no contract"]);
+    git_in(root, &["tag", "static-site-template/v0.9.0"]);
+    let err = build(&CONTRACT.replace("1.0.0", "0.9.0"));
+    assert!(err.contains("predates the config contract"), "{err}");
+}
