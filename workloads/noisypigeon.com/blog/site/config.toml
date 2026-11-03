@@ -1,0 +1,45 @@
+title = "Willow Graysen"
+description = "Infra dev, data hoarder, mechanic-ish, photographer."
+theme = "static-site-template"
+
+compile_sass = false
+generate_feeds = false
+feed_filenames = ["posts_feed.xml"]
+build_search_index = false
+
+taxonomies = [
+  { name = "tags", feed = false },
+]
+
+[extra]
+avatar = "/assets/images/site/avatar.png"
+social_preview = "/assets/images/site/social_preview.png"
+
+[extra.author]
+alternate_names = ["Willow Finch", "Kara Finch", "Kara Graysen", "Luna Graysen"]
+page = "/pages/about"
+
+[[extra.nav]]
+title = "About"
+link = "/pages/about"
+order = 1
+
+[[extra.nav]]
+title = "GitHub"
+link = "https://github.com/noisypigeon"
+order = 2
+
+[[extra.nav]]
+title = "Bluesky"
+link = "https://bsky.app/profile/noisypigeon.com"
+order = 3
+
+[[extra.nav]]
+title = "LinkedIn"
+link = "https://www.linkedin.com/in/noisypigeon"
+order = 4
+
+[[extra.nav]]
+title = "Unsplash"
+link = "https://unsplash.com/@noisypigeon"
+order = 5

@@ -1,0 +1,13 @@
+{
+  "name": "Willow Graysen",
+  "short_name": "noisypigeon",
+  "description": "Infra dev, data hoarder, mechanic-ish, photographer.",
+  "start_url": "/",
+  "display": "standalone",
+  "theme_color": "rgb(228, 233, 226)",
+  "background_color": "rgb(228, 233, 226)",
+  "icons": [
+    { "src": "/assets/images/site/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/assets/images/site/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
