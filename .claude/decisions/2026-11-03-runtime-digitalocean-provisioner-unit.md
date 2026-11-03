@@ -242,3 +242,21 @@ Rotating `provisioner_token` or the Spaces key is a manual, documented act, as f
   - the bot tags and publishes `infra-digitalocean-*/v0.1.0`;
   - the next PR plans "No changes" for the unit;
   - the project appears in the control panel, and is not the default project.
+
+## Amendments
+
+### 2026-11-03: Required versioning, and bucket ids and URNs sensitive
+
+Before writing PR C, §3's modules were checked against the provider's schema at 2.106.0, and the unit was rendered and planned locally with placeholder secrets. Every resource, attribute and output matches. Two details of §1 and §3 change.
+
+- **`versioning` is required.**
+  - cobot renders each list item verbatim, so `$item.versioning` on an item without it fails the plan. It does not default.
+  - The schema therefore requires `versioning` on each bucket, rather than defaulting it to `true` as §1 said.
+  - Each later ADR states it explicitly.
+- **A bucket's `id` and `urn` are sensitive**, beside its `name`.
+  - The provider's `id` is the bucket name, and its `urn` is `do:space:<name>`.
+  - So marking all three keeps private bucket names out of everything but encrypted state.
+
+Spaces in `tor1` could not be checked from the implementing session: its network reaches no DigitalOcean host. PR C's plan creates no bucket, so the first ADR that adds one checks the region in its own plan.
+
+§8's steps are unchanged. PR C follows this amendment.
