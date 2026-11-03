@@ -4,6 +4,7 @@
 pub mod apex;
 pub mod config;
 pub mod generations;
+pub mod moves;
 pub mod providers;
 pub mod release;
 pub mod secrets;
@@ -326,6 +327,7 @@ fn prepare(
         ..tofu::Env::default()
     };
     let mut pending = None;
+    let moved = moved_state(&root, &state, unit)?;
     if let Some(c) = &unit.config
         && !config::declared_secrets(c).is_empty()
     {
@@ -405,8 +407,53 @@ fn prepare(
         }
     }
     let mut plan = tofu::plan(&unit.path, &work, &env)?;
-    plan.note = pending;
+    plan.note = match (moved, pending) {
+        (Some(m), Some(p)) => Some(format!("{m} {p}")),
+        (m, p) => m.or(p),
+    };
     Ok((work, env, plan))
+}
+
+/// Copies a moved unit's state into place while it has none; the plan's note, if moving.
+fn moved_state(root: &Path, state: &Path, unit: &Unit) -> Result<Option<String>, Error> {
+    let moves = moves::load(root).map_err(|message| Error::Io {
+        path: root.join(moves::FILE),
+        message,
+    })?;
+    let Some(m) = moves::into(&moves, &unit.path) else {
+        return Ok(None);
+    };
+    let from = state.join(&m.from).join(moves::STATE);
+    let to = state.join(&m.to).join(moves::STATE);
+    if !from.exists() {
+        return Ok(None);
+    }
+    if !to.exists() {
+        let dir = state.join(&m.to);
+        fs::create_dir_all(&dir).map_err(io(&dir))?;
+        fs::copy(&from, &to).map_err(io(&to))?;
+    }
+    Ok(Some(format!(
+        "State moves from `{}`; it is removed after this unit's next successful apply.",
+        m.from
+    )))
+}
+
+/// After a successful apply, removes the state a unit moved from.
+fn finish_move(ctx: &Context, unit: &Unit) -> Result<(), Error> {
+    let root = ctx.root.canonicalize().map_err(io(&ctx.root))?;
+    let moves = moves::load(&root).map_err(|message| Error::Io {
+        path: root.join(moves::FILE),
+        message,
+    })?;
+    if let Some(m) = moves::into(&moves, &unit.path) {
+        let from = absolute(&ctx.state)?.join(&m.from).join(moves::STATE);
+        let to = absolute(&ctx.state)?.join(&m.to).join(moves::STATE);
+        if from.exists() && to.exists() {
+            fs::remove_file(&from).map_err(io(&from))?;
+        }
+    }
+    Ok(())
 }
 
 /// Rejects an apex whose secret-backed records conflict once decrypted.
@@ -497,6 +544,7 @@ pub fn apply(ctx: &Context, units: &[Unit]) -> Result<Vec<UnitPlan>, Error> {
         if p.has_changes() {
             tofu::apply(&u.path, &work, &env)?;
         }
+        finish_move(ctx, u)?;
         plans.push(p);
     }
     Ok(plans)

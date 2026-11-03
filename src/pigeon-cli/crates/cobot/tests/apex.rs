@@ -435,9 +435,9 @@ fn the_layout_follows_the_zones() {
             "a zone holds only workload directories",
         ),
         (
-            "workload named apex",
+            "apex without config",
             Box::new(|r| write(r, "workloads/noisypigeon.com/apex/unit.yaml", "x: 1\n")),
-            "never `apex`",
+            "an apex holds config.yaml",
         ),
         (
             "apex with its own schema",
@@ -783,6 +783,7 @@ fn secret_mail_policies_are_claimed_once_decrypted() {
     let parsed: Value = serde_saphyr::from_str(&config).expect("yaml");
     let site = cobot::apex::Site {
         root: repo.path().to_path_buf(),
+        zone: None,
     };
     let home = repo.path().join("infra/cloudflare");
     let mut secrets = BTreeMap::new();
@@ -802,5 +803,149 @@ fn secret_mail_policies_are_claimed_once_decrypted() {
     assert_eq!(
         cobot::apex::check_decrypted(&parsed, &home, &site, &secrets),
         Vec::<String>::new()
+    );
+}
+
+const PER_ZONE: &str = "workloads/noisypigeon.com/apex";
+
+/// Moves the all-zones apex's `noisypigeon.com` entry to `workloads/noisypigeon.com/apex`.
+fn to_per_zone(root: &Path, body: &str) {
+    let secrets = fs::read(root.join(APEX).join("secrets.config.yaml")).expect("secrets");
+    fs::remove_dir_all(root.join("workloads/cloudflare")).expect("rm");
+    write(root, &format!("{PER_ZONE}/config.yaml"), body);
+    fs::write(root.join(PER_ZONE).join("secrets.config.yaml"), secrets).expect("secrets");
+}
+
+fn render_of(root: &Path, unit: &str) -> Value {
+    let units = cobot::select(root, &root.join(".config"), &[unit.to_string()]).expect("valid");
+    let allow = cobot::providers::Allowlist::load(&root.join(".config")).expect("allowlist");
+    let mut json = cobot::render_json(
+        &units[0],
+        Path::new("/state"),
+        &allow,
+        0,
+        &cobot::config::Existing::new(),
+    );
+    json["terraform"]["backend"] = Value::Null;
+    json
+}
+
+#[test]
+fn a_per_zone_apex_renders_as_its_zone_in_the_all_zones_apex() {
+    let repo = repo(PROTON);
+    let all = render_of(repo.path(), APEX);
+    to_per_zone(repo.path(), PROTON);
+    assert_eq!(problems(repo.path()), Vec::<String>::new());
+    assert_eq!(render_of(repo.path(), PER_ZONE), all);
+}
+
+#[test]
+fn per_zone_apexes_follow_the_layout() {
+    let repo = repo(PROTON);
+    write(repo.path(), &format!("{PER_ZONE}/config.yaml"), PROTON);
+    assert_fails(repo.path(), "`noisypigeon.com` already has an apex");
+
+    let repo = self::repo(PROTON);
+    to_per_zone(repo.path(), PROTON);
+    write(repo.path(), &format!("{PER_ZONE}/schema.json"), "{}\n");
+    assert_fails(repo.path(), "never its own");
+
+    let repo = self::repo(PROTON);
+    to_per_zone(repo.path(), PROTON);
+    write(
+        repo.path(),
+        "infra/cloudflare/config.yaml",
+        &CLOUDFLARE.replace("apex-noisypigeon", "other-noisypigeon"),
+    );
+    assert_fails(repo.path(), "needs a `apex-noisypigeon.com` token");
+}
+
+#[test]
+fn moves_are_validated() {
+    for (moves, want) in [
+        (
+            "{ from: infra/x, to: workloads/noisypigeon.com/apex }",
+            "within infra/ or within workloads/",
+        ),
+        (
+            "{ from: workloads/gone, to: workloads/nowhere }",
+            "`to` must be a unit",
+        ),
+        (
+            "{ from: workloads/noisypigeon.com/apex, to: workloads/noisypigeon.com/apex }",
+            "`from` must no longer be a unit",
+        ),
+        (
+            "{ from: workloads/gone, to: workloads/noisypigeon.com/apex }\n  - { from: workloads/gone, to: workloads/noisypigeon.com/apex }",
+            "is in two moves",
+        ),
+    ] {
+        let repo = repo(PROTON);
+        to_per_zone(repo.path(), PROTON);
+        write(
+            repo.path(),
+            ".config/moves.yaml",
+            &format!("description: Test moves.\nmoves:\n  - {moves}\n"),
+        );
+        assert_fails(repo.path(), want);
+    }
+}
+
+const MOVES: &str = "description: Test moves.\nmoves:\n  - { from: workloads/cloudflare/apex, to: workloads/noisypigeon.com/apex }\n";
+
+#[test]
+fn a_moved_apex_keeps_its_state_and_never_loses_a_retry() {
+    if !tofu_available() {
+        eprintln!("skipped: tofu is not on PATH");
+        return;
+    }
+    let repo = builtin_repo();
+    let root = repo.path();
+    let state = TempDir::new().expect("state");
+    let all = cobot::select(root, &root.join(".config"), &[]).expect("valid");
+    cobot::apply(&ctx(root, state.path()), &all).expect("apply");
+    let from = state.path().join(APEX).join("terraform.tfstate");
+    let to = state.path().join(PER_ZONE).join("terraform.tfstate");
+    let original = fs::read(&from).expect("from state");
+
+    to_per_zone(root, PROTON);
+    write(root, ".config/moves.yaml", MOVES);
+    let units = cobot::select(root, &root.join(".config"), &[]).expect("valid");
+    let plans = cobot::plan(&ctx(root, state.path()), &units).expect("plan");
+    let summary = cobot::summary(&plans);
+    assert!(
+        summary.contains("State moves from `workloads/cloudflare/apex`"),
+        "{summary}"
+    );
+    assert!(plans.iter().all(|p| !p.has_changes()), "{summary}");
+
+    let extra = PROTON.replace(
+        "records: {}",
+        "records:\n  extra: { name: extra, type: TXT, content: x }",
+    );
+    write(root, &format!("{PER_ZONE}/config.yaml"), &extra);
+    let units = cobot::select(root, &root.join(".config"), &[]).expect("valid");
+    let applied = cobot::apply(&ctx(root, state.path()), &units).expect("apply moved");
+    assert_eq!(
+        applied[1].counts(),
+        (1, 0, 0),
+        "{}",
+        cobot::summary(&applied)
+    );
+    assert!(to.exists() && !from.exists());
+
+    fs::write(&from, &original).expect("restore from");
+    write(root, &format!("{PER_ZONE}/config.yaml"), PROTON);
+    let units = cobot::select(root, &root.join(".config"), &[]).expect("valid");
+    let retry = cobot::plan(&ctx(root, state.path()), &units).expect("retry");
+    assert_eq!(retry[1].counts(), (0, 0, 1), "{}", cobot::summary(&retry));
+
+    cobot::apply(&ctx(root, state.path()), &units).expect("apply retry");
+    assert!(!from.exists());
+    let again = cobot::plan(&ctx(root, state.path()), &units).expect("replan");
+    assert!(
+        again.iter().all(|p| !p.has_changes() && p.note.is_none()),
+        "{}",
+        cobot::summary(&again)
     );
 }

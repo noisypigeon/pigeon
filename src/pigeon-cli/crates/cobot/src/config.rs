@@ -274,8 +274,11 @@ pub fn rotating_blocks(schema: &Value) -> Vec<String> {
 /// A message naming the file that failed to read or parse.
 pub fn load(dir: &Path, home: &Path, site: Option<Site>) -> Result<ConfigUnit, String> {
     let config_text = fs::read_to_string(dir.join(CONFIG)).map_err(|e| format!("{CONFIG}: {e}"))?;
-    let config: Value =
+    let mut config: Value =
         serde_saphyr::from_str(&config_text).map_err(|e| format!("{CONFIG}: {e}"))?;
+    if let Some(zone) = site.as_ref().and_then(|s| s.zone.clone()) {
+        config = json!({ "zones": { zone: config } });
+    }
     let schema_text =
         fs::read_to_string(home.join(SCHEMA)).map_err(|e| format!("{SCHEMA}: {e}"))?;
     let mut schema: Value =

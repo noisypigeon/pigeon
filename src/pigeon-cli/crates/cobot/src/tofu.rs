@@ -33,6 +33,8 @@ pub enum Action {
     Replace,
     /// Destroy it.
     Delete,
+    /// Move it to a new address, unchanged.
+    Move,
 }
 
 impl Action {
@@ -44,6 +46,7 @@ impl Action {
             Self::Update => "update",
             Self::Replace => "replace",
             Self::Delete => "delete",
+            Self::Move => "move",
         }
     }
 }
@@ -85,6 +88,7 @@ impl UnitPlan {
                 Action::Update => (a, c + 1, d),
                 Action::Replace => (a + 1, c, d + 1),
                 Action::Delete => (a, c, d + 1),
+                Action::Move => (a, c, d),
             })
     }
 }
@@ -212,7 +216,16 @@ fn changes(json: &str) -> Vec<Change> {
     };
     let mut out = Vec::new();
     for rc in plan["resource_changes"].as_array().into_iter().flatten() {
-        if let (Some(action), Some(address)) = (action(&rc["change"]), rc["address"].as_str()) {
+        let Some(address) = rc["address"].as_str() else {
+            continue;
+        };
+        if let Some(from) = rc["previous_address"].as_str() {
+            out.push(Change {
+                address: mask(&format!("{from} → {address}")),
+                action: Action::Move,
+            });
+        }
+        if let Some(action) = action(&rc["change"]) {
             out.push(Change {
                 address: mask(address),
                 action,
@@ -347,6 +360,23 @@ mod tests {
         let got = changes(json);
         assert_eq!(got.len(), 3);
         assert_eq!(got[2].address, "output.tokens");
+
+        let moved = r#"{"resource_changes":[
+            {"address":"b.x","previous_address":"a.x","change":{"actions":["update"]}},
+            {"address":"d.y","previous_address":"c.y","change":{"actions":["no-op"]}}]}"#;
+        let both = changes(moved);
+        let words: Vec<(&str, &str)> = both
+            .iter()
+            .map(|c| (c.action.word(), c.address.as_str()))
+            .collect();
+        assert_eq!(
+            words,
+            [
+                ("move", "a.x → b.x"),
+                ("update", "b.x"),
+                ("move", "c.y → d.y")
+            ]
+        );
         assert_eq!(got[0].address, "module.p.terraform_data.this");
         assert_eq!(got[1].action, Action::Replace);
         assert!(!format!("{got:?}").contains("secret"));
