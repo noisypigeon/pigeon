@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.4 (2026-11-03)
+
+- feat(infra): the apex's site rulesets and the account outputs ([#48](https://github.com/noisypigeon/pigeon/pull/48))
+
 ## v0.1.3 (2026-11-03)
 
 - feat(cobot): static-site workloads on R2 ([#47](https://github.com/noisypigeon/pigeon/pull/47))

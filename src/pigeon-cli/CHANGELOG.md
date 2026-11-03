@@ -2,6 +2,7 @@
 
 ## 2026-11-03
 
+- feat(infra): the apex's site rulesets and the account outputs ([#48](https://github.com/noisypigeon/pigeon/pull/48))
 - feat(cobot): static-site workloads on R2 ([#47](https://github.com/noisypigeon/pigeon/pull/47))
 - fix(cobot): name the unit and passphrase in decrypt errors ([#45](https://github.com/noisypigeon/pigeon/pull/45))
 - refactor(cobot): drop the all-zones apex ([#43](https://github.com/noisypigeon/pigeon/pull/43))
