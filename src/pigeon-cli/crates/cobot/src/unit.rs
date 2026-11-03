@@ -119,15 +119,26 @@ pub fn discover(root: &Path) -> (Vec<Unit>, Vec<Problem>) {
                 "holds both unit.yaml and config.yaml; a unit is one or the other",
             ));
         } else if config_file.is_file() {
-            let (home, site) = match crate::apex::zone_apex(&rel) {
-                Some(zone) => (
+            let workload = crate::static_site::zone_workload(&rel)
+                .filter(|_| !dir.join(crate::config::SCHEMA).exists());
+            let (home, site) = match (crate::apex::zone_apex(&rel), workload) {
+                (Some(zone), _) => (
                     root.join(crate::apex::CLOUDFLARE),
                     Some(crate::apex::Site {
                         root: root.to_path_buf(),
                         zone: zone.to_string(),
+                        workload: None,
                     }),
                 ),
-                None => (dir.clone(), None),
+                (None, Some((zone, w))) => (
+                    root.join(crate::apex::CLOUDFLARE),
+                    Some(crate::apex::Site {
+                        root: root.to_path_buf(),
+                        zone: zone.to_string(),
+                        workload: Some(w.to_string()),
+                    }),
+                ),
+                (None, None) => (dir.clone(), None),
             };
             let config = match crate::config::load(&dir, &home, site) {
                 Ok(c) => Some(c),
@@ -271,16 +282,19 @@ fn scan(root: &Path, dir: &Path, allow: &Allowlist, problems: &mut Vec<Problem>)
     }
 }
 
-/// A problem when a unit other than `infra/cloudflare` declares `x-cobot.apex`.
+/// A problem when a unit other than `infra/cloudflare` declares `x-cobot.apex` or `x-cobot.workload`.
 fn misplaced_apex(unit: &Unit) -> Option<Problem> {
     let c = unit.config.as_ref()?;
-    (unit.path != crate::apex::CLOUDFLARE
-        && c.site.is_none()
-        && c.schema["x-cobot"].get("apex").is_some())
-    .then(|| {
+    let kind = ["apex", "workload"]
+        .into_iter()
+        .find(|k| c.schema["x-cobot"].get(k).is_some())?;
+    (unit.path != crate::apex::CLOUDFLARE && c.site.is_none()).then(|| {
         problem(
             format!("{}/{}", unit.path, crate::config::SCHEMA),
-            format!("`x-cobot.apex` belongs only in {}", crate::apex::CLOUDFLARE),
+            format!(
+                "`x-cobot.{kind}` belongs only in {}",
+                crate::apex::CLOUDFLARE
+            ),
         )
     })
 }

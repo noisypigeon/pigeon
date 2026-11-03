@@ -8,6 +8,7 @@ pub mod moves;
 pub mod providers;
 pub mod release;
 pub mod secrets;
+pub mod static_site;
 mod tofu;
 pub mod unit;
 
@@ -393,44 +394,10 @@ fn prepare(
     }
     if let Some(c) = &unit.config
         && config::has_handoff(c)
-        && c.site.is_some()
+        && let Some(site) = &c.site
     {
-        let zones = apex::zones(&c.config);
-        let mut values = handoff(ctx, &root, &state, &allow, &zones)?;
-        let waiting: Vec<String> = values
-            .iter()
-            .filter(|(_, v)| !apex::HANDOFF_KEYS.iter().all(|k| v.contains_key(*k)))
-            .map(|(z, _)| apex::token_name(z))
-            .collect();
-        if !waiting.is_empty() {
-            let tokens = waiting.join("`, `");
-            if apply {
-                return Err(Error::Pending {
-                    unit: unit.path.clone(),
-                    token: tokens,
-                });
-            }
-            let existing = state.join(&unit.path).join("terraform.tfstate").exists();
-            env.no_refresh = existing;
-            pending = Some(format!(
-                "Credentials pending: planned with placeholders{} until {} mints `{tokens}`.",
-                if existing { ", refresh skipped," } else { "" },
-                apex::CLOUDFLARE
-            ));
-            for v in values.values_mut() {
-                v.entry("api_token".into())
-                    .or_insert_with(|| apex::PLACEHOLDER_TOKEN.into());
-                v.entry("zone_id".into())
-                    .or_insert_with(|| apex::PLACEHOLDER_ZONE_ID.into());
-            }
-        }
-        env.hidden
-            .extend(values.values().flat_map(|v| v.values().cloned()));
-        let json = serde_json::to_string(&values).map_err(|e| Error::Io {
-            path: unit.dir.clone(),
-            message: e.to_string(),
-        })?;
-        env.vars.push(("TF_VAR_handoff".into(), json));
+        let shown = infra_state(ctx, &root, &state, &allow)?.unwrap_or_else(|| "{}".into());
+        pending = hand_off(ctx, unit, c, site, &shown, &state, apply, &mut env)?;
     }
     let work = root.join(WORK_DIR).join(&unit.path);
     let none = config::Existing::new();
@@ -525,28 +492,116 @@ fn decrypted_records(
     ))
 }
 
-/// Each zone's handed-off values from `infra/cloudflare`'s state; empty where it has none.
-fn handoff(
+/// Sets `TF_VAR_handoff` for an apex or a static site from `infra/cloudflare`'s
+/// state; while a token is missing, plans with placeholders and returns the
+/// note, and an apply refuses.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "one unit's handoff, from prepare"
+)]
+fn hand_off(
+    ctx: &Context,
+    unit: &Unit,
+    c: &config::ConfigUnit,
+    site: &apex::Site,
+    shown: &str,
+    state: &Path,
+    apply: bool,
+    env: &mut tofu::Env,
+) -> Result<Option<String>, Error> {
+    let (json, values, waiting) = if let Some(w) = &site.workload {
+        let mut v = static_site::handoff(shown, &site.zone, w, ctx.today);
+        let waiting: Vec<String> = (!static_site::HANDOFF_KEYS.iter().all(|k| v.contains_key(*k)))
+            .then(|| static_site::token_name(&site.zone, w))
+            .into_iter()
+            .collect();
+        if !waiting.is_empty() {
+            placeholders(&mut v, &static_site::HANDOFF_KEYS);
+        }
+        (
+            serde_json::to_string(&v),
+            v.into_values().collect::<Vec<_>>(),
+            waiting,
+        )
+    } else {
+        let mut values = apex::handoff(shown, &apex::zones(&c.config), ctx.today);
+        let waiting: Vec<String> = values
+            .iter()
+            .filter(|(_, v)| !apex::HANDOFF_KEYS.iter().all(|k| v.contains_key(*k)))
+            .map(|(z, _)| apex::token_name(z))
+            .collect();
+        if !waiting.is_empty() {
+            for v in values.values_mut() {
+                placeholders(v, &apex::HANDOFF_KEYS);
+            }
+        }
+        (
+            serde_json::to_string(&values),
+            values
+                .into_values()
+                .flat_map(BTreeMap::into_values)
+                .collect(),
+            waiting,
+        )
+    };
+    let mut pending = None;
+    if !waiting.is_empty() {
+        let tokens = waiting.join("`, `");
+        if apply {
+            return Err(Error::Pending {
+                unit: unit.path.clone(),
+                token: tokens,
+            });
+        }
+        let existing = state.join(&unit.path).join("terraform.tfstate").exists();
+        env.no_refresh = existing;
+        pending = Some(format!(
+            "Credentials pending: planned with placeholders{} until {} mints `{tokens}`.",
+            if existing { ", refresh skipped," } else { "" },
+            apex::CLOUDFLARE
+        ));
+    }
+    env.hidden.extend(values);
+    let json = json.map_err(|e| Error::Io {
+        path: unit.dir.clone(),
+        message: e.to_string(),
+    })?;
+    env.vars.push(("TF_VAR_handoff".into(), json));
+    Ok(pending)
+}
+
+/// Fills the `keys` a pending plan lacks with inert placeholders.
+fn placeholders(values: &mut BTreeMap<String, String>, keys: &[&str]) {
+    for k in keys {
+        let inert = match *k {
+            "zone_id" => apex::PLACEHOLDER_ZONE_ID,
+            "account_id" => static_site::PLACEHOLDER_ACCOUNT_ID,
+            _ => apex::PLACEHOLDER_TOKEN,
+        };
+        values.entry((*k).into()).or_insert_with(|| inert.into());
+    }
+}
+
+/// `infra/cloudflare`'s state as `tofu show -json`, if it has any.
+fn infra_state(
     ctx: &Context,
     root: &Path,
     state: &Path,
     allow: &providers::Allowlist,
-    zones: &[String],
-) -> Result<std::collections::BTreeMap<String, std::collections::BTreeMap<String, String>>, Error> {
-    let empty = apex::handoff("{}", zones, ctx.today);
+) -> Result<Option<String>, Error> {
     if !state
         .join(apex::CLOUDFLARE)
         .join("terraform.tfstate")
         .exists()
     {
-        return Ok(empty);
+        return Ok(None);
     }
     let Some(source) = unit::discover(root)
         .0
         .into_iter()
         .find(|u| u.path == apex::CLOUDFLARE)
     else {
-        return Ok(empty);
+        return Ok(None);
     };
     let work = root.join(WORK_DIR).join(&source.path);
     let rendered = render_json(&source, state, allow, ctx.today, &config::Existing::new());
@@ -561,8 +616,7 @@ fn handoff(
         .map(str::to_string)
         .collect();
     tofu::init(&source.path, &work, &env)?;
-    let shown = tofu::show_state(&source.path, &work, &env)?;
-    Ok(apex::handoff(&shown, zones, ctx.today))
+    tofu::show_state(&source.path, &work, &env).map(Some)
 }
 
 /// Plans each unit.
