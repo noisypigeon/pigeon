@@ -12,7 +12,7 @@ holds the version, the features and their defaults.
 
 ## Site config
 
-From 1.1.0, a site's settings live in its workload's `config.yaml`, as
+From 1.0.1, a site's settings live in its workload's `config.yaml`, as
 `static_site.site`, per
 [`2026-11-03-runtime-static-site-config-contract.md`](../../.claude/decisions/2026-11-03-runtime-static-site-config-contract.md).
 
