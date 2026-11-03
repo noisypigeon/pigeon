@@ -2,6 +2,7 @@
 
 ## 2026-11-03
 
+- feat(cobot): release a pigeon-cobot image ([#53](https://github.com/noisypigeon/pigeon/pull/53))
 - fix(cobot): the apex token's transform rules permission ([#51](https://github.com/noisypigeon/pigeon/pull/51))
 - feat(cobot): sites build and publish ([#49](https://github.com/noisypigeon/pigeon/pull/49))
 - feat(infra): the apex's site rulesets and the account outputs ([#48](https://github.com/noisypigeon/pigeon/pull/48))

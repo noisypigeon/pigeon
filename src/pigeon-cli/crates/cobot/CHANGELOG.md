@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.12 (2026-11-03)
+
+- feat(cobot): release a pigeon-cobot image ([#53](https://github.com/noisypigeon/pigeon/pull/53))
+
 ## v0.1.11 (2026-11-03)
 
 - fix(cobot): the apex token's transform rules permission ([#51](https://github.com/noisypigeon/pigeon/pull/51))

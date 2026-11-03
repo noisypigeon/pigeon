@@ -2,6 +2,7 @@
 
 ## 2026-11-03
 
+- feat(cobot): release a pigeon-cobot image ([#53](https://github.com/noisypigeon/pigeon/pull/53))
 - docs(adr): no safe.directory in the cobot image ([#54](https://github.com/noisypigeon/pigeon/pull/54))
 - docs(adr): a released cobot image for the cobot workflows ([#52](https://github.com/noisypigeon/pigeon/pull/52))
 - feat(workloads): the blog on R2 ([#50](https://github.com/noisypigeon/pigeon/pull/50))
