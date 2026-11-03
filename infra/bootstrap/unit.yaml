@@ -1,8 +1,0 @@
-schema: 0
-name: bootstrap
-kind: infra
-modules:
-  - name: proof
-    source: ./modules/proof
-    inputs:
-      message: "cobot plans on PR, applies on merge, and keeps encrypted state in git"

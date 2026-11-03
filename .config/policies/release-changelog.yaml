@@ -12,6 +12,8 @@ target:
     - infra/cloudflare/modules/r2-bucket/CHANGELOG.md
     - infra/cloudflare/modules/r2-custom-domain/CHANGELOG.md
     - infra/cloudflare/modules/ruleset/CHANGELOG.md
+    - infra/agnostic/modules/random-string/CHANGELOG.md
+    - infra/agnostic/CHANGELOG.md
     - src/static-site-template/CHANGELOG.md
   optional: true
 rules:

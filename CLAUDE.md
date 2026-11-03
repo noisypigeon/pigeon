@@ -60,6 +60,10 @@ belong in the ADR, never in the file.
   in `workloads/`. Only `infra/` keys are break-glass, and they are never handed
   to a workload, which gets only its own secrets and minted tokens. Providers
   come only from `main`'s `.config/providers.yaml` and `providers.lock.hcl`.
+- `infra/agnostic/modules/` holds provider-agnostic modules (today
+  `random-string`) that any unit composes as `module: agnostic/<name>`, and
+  `x-cobot.each` runs a block over another property's items, per
+  [`2026-11-03-runtime-infra-agnostic-shared-modules.md`](.claude/decisions/2026-11-03-runtime-infra-agnostic-shared-modules.md).
 - Workloads live in `workloads/<zone>/`; each zone's apex (global config and
   DNS) is its own unit, `workloads/<zone>/apex/`, which only enables what
   `infra/cloudflare/` defines (its schema's `$defs.apex`, its `modules/` and

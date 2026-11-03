@@ -83,6 +83,14 @@ units:
     manifest: infra/cloudflare/modules/ruleset/module.yaml
     paths: [infra/cloudflare/modules/ruleset/]
     exclude: ['*.md']
+  infra-agnostic-random-string:
+    manifest: infra/agnostic/modules/random-string/module.yaml
+    paths: [infra/agnostic/modules/random-string/]
+    exclude: ['*.md']
+  infra-agnostic-schema:
+    manifest: infra/agnostic/schema.json
+    paths: [infra/agnostic/schema.json, infra/agnostic/modules/]
+    exclude: ['*.md']
   static-site-template:
     manifest: src/static-site-template/template.yaml
     paths: [src/static-site-template/]
@@ -105,4 +113,6 @@ tiers:
   - { file: infra/cloudflare/modules/r2-bucket/CHANGELOG.md, unit: infra-cloudflare-r2-bucket }
   - { file: infra/cloudflare/modules/r2-custom-domain/CHANGELOG.md, unit: infra-cloudflare-r2-custom-domain }
   - { file: infra/cloudflare/modules/ruleset/CHANGELOG.md, unit: infra-cloudflare-ruleset }
+  - { file: infra/agnostic/modules/random-string/CHANGELOG.md, unit: infra-agnostic-random-string }
+  - { file: infra/agnostic/CHANGELOG.md, unit: infra-agnostic-schema }
   - { file: src/static-site-template/CHANGELOG.md, unit: static-site-template }
