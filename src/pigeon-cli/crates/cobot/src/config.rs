@@ -1123,7 +1123,10 @@ pub fn render(
     if !required.is_empty() {
         terraform["required_providers"] = Value::Object(required);
     }
-    let mut root = json!({ "terraform": terraform, "module": modules });
+    let mut root = json!({ "terraform": terraform });
+    if !modules.is_empty() {
+        root["module"] = Value::Object(modules);
+    }
     if !provider.is_empty() {
         root["provider"] = Value::Object(provider);
     }

@@ -263,3 +263,35 @@ fn a_unit_composing_an_agnostic_module_applies_end_to_end() {
     let again = cobot::plan(&ctx, &units).expect("replan");
     assert!(!again[0].has_changes(), "{}", cobot::summary(&again));
 }
+
+#[test]
+fn a_unit_without_blocks_renders_no_module_and_plans_clean() {
+    let repo = repo();
+    let root = repo.path();
+    let units =
+        cobot::select(root, &root.join(".config"), &["infra/agnostic".into()]).expect("valid");
+    let json = cobot::render_json(
+        &units[0],
+        Path::new("/state"),
+        &cobot::providers::Allowlist::default(),
+        0,
+        &cobot::config::Existing::new(),
+    );
+    assert!(json.get("module").is_none(), "{json}");
+    if !tofu_available() {
+        eprintln!("skipped: tofu is not on PATH");
+        return;
+    }
+    let state = TempDir::new().expect("state");
+    let ctx = cobot::Context {
+        root: root.to_path_buf(),
+        providers: root.join(".config"),
+        state: state.path().to_path_buf(),
+        state_passphrase: STATE_PASS.into(),
+        secrets_passphrase: None,
+        workload_secrets_passphrase: None,
+        today: 0,
+    };
+    let plans = cobot::plan(&ctx, &units).expect("plan");
+    assert!(!plans[0].has_changes(), "{}", cobot::summary(&plans));
+}
