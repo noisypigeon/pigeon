@@ -151,13 +151,12 @@ fn declared(tf: &str) -> Vec<String> {
         .collect()
 }
 
-/// The allowlisted sources a unit declares: in `required_providers` of the
-/// `.tf` files under `unit_dir`, of modules the rendered root `main.tf.json`
-/// sources from elsewhere (`infra/agnostic`), and of that root itself.
+/// The allowlisted sources a unit uses: in `required_providers` of the rendered
+/// root `main.tf.json`, and of the `.tf` files of each module it sources, local
+/// or from `infra/agnostic`; a relative source resolves against `unit_dir`.
 #[must_use]
 pub fn used<'a>(allow: &'a Allowlist, unit_dir: &Path, rendered: &Path) -> Vec<&'a str> {
     let mut sources = Vec::new();
-    collect(unit_dir, &mut sources);
     if let Ok(text) = fs::read_to_string(rendered)
         && let Ok(root) = serde_json::from_str::<serde_json::Value>(&text)
     {
@@ -173,11 +172,8 @@ pub fn used<'a>(allow: &'a Allowlist, unit_dir: &Path, rendered: &Path) -> Vec<&
             .into_iter()
             .flat_map(|m| m.values())
         {
-            if let Some(dir) = m["source"].as_str().map(Path::new)
-                && dir.is_absolute()
-                && !dir.starts_with(unit_dir)
-            {
-                collect(dir, &mut sources);
+            if let Some(dir) = m["source"].as_str() {
+                collect(&unit_dir.join(dir), &mut sources);
             }
         }
     }

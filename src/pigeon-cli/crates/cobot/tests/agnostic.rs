@@ -225,6 +225,22 @@ fn providers_follow_agnostic_modules() {
         cobot::providers::used(&allow, &root.join(UNIT), &root.join("absent.json")),
         Vec::<&str>::new()
     );
+    let units =
+        cobot::select(root, &root.join(".config"), &["infra/agnostic".into()]).expect("valid");
+    let own = root.join("agnostic.tf.json");
+    let json = cobot::render_json(
+        &units[0],
+        Path::new("/state"),
+        &allow,
+        0,
+        &cobot::config::Existing::new(),
+    );
+    fs::write(&own, json.to_string()).expect("write render");
+    assert_eq!(
+        cobot::providers::used(&allow, &root.join("infra/agnostic"), &own),
+        Vec::<&str>::new(),
+        "a module the unit does not compose brings no provider"
+    );
 }
 
 fn tofu_available() -> bool {
