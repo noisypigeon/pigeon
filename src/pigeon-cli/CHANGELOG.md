@@ -2,6 +2,7 @@
 
 ## 2026-11-03
 
+- feat(cobot): agnostic modules and each blocks ([#67](https://github.com/noisypigeon/pigeon/pull/67))
 - refactor(cobot): only the site config contract ([#60](https://github.com/noisypigeon/pigeon/pull/60))
 - feat(cobot): build static sites from config.yaml ([#58](https://github.com/noisypigeon/pigeon/pull/58))
 - feat(static-site-template): a site config contract and dated posts ([#57](https://github.com/noisypigeon/pigeon/pull/57))

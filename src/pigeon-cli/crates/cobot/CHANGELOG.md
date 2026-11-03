@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.15 (2026-11-03)
+
+- feat(cobot): agnostic modules and each blocks ([#67](https://github.com/noisypigeon/pigeon/pull/67))
+
 ## v0.1.14 (2026-11-03)
 
 - refactor(cobot): only the site config contract ([#60](https://github.com/noisypigeon/pigeon/pull/60))
