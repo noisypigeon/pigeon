@@ -4,7 +4,6 @@
 //! and `.claude/decisions/2026-11-03-runtime-static-site-config-contract.md`.
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::fmt::Write as _;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -259,49 +258,8 @@ fn copy_dir(from: &Path, to: &Path) -> Result<(), Error> {
     Ok(())
 }
 
-/// The site's `config.toml` with `base_url` first and `[extra.features]` last.
-///
-/// # Errors
-///
-/// A message when the site sets either itself.
-pub fn site_config(
-    text: &str,
-    base_url: &str,
-    features: &BTreeMap<String, bool>,
-) -> Result<String, String> {
-    let key = |line: &str, k: &str| {
-        line.strip_prefix(k)
-            .is_some_and(|rest| rest.trim_start().starts_with('='))
-    };
-    let mut section = String::new();
-    for line in text.lines().map(str::trim) {
-        if line.starts_with('[') {
-            section = line
-                .trim_matches(|c| c == '[' || c == ']')
-                .trim()
-                .to_string();
-        }
-        if section.is_empty() && key(line, "base_url") {
-            return Err("sets base_url; cobot writes it from the apex's hosts".into());
-        }
-        if section == "extra.features" || (section == "extra" && key(line, "features")) {
-            return Err("sets extra.features; cobot writes them from static_site".into());
-        }
-    }
-    let mut out = format!("base_url = \"{base_url}\"\n");
-    out.push_str(text);
-    if !out.ends_with('\n') {
-        out.push('\n');
-    }
-    out.push_str("\n[extra.features]\n");
-    for (k, v) in features {
-        let _ = writeln!(out, "{k} = {v}");
-    }
-    Ok(out)
-}
-
-/// Builds each site into `.cobot/<unit>/site/public`: from the template's
-/// contract when it sets `static_site.site`, else from its own Zola project.
+/// Builds each site into `.cobot/<unit>/site/public`, from its template's
+/// contract and its `static_site.site`.
 ///
 /// # Errors
 ///
@@ -327,12 +285,11 @@ pub fn build(root: &Path, sites: &[Site]) -> Result<Vec<Built>, Error> {
         if work.exists() {
             fs::remove_dir_all(&work).map_err(io(&work))?;
         }
-        if let Some(settings) = &site.settings {
-            assemble(root, site, settings, &declared, &base, &features, &work)?;
-        } else {
-            legacy(site, &base, &features, &work)?;
-            theme(root, site, &work)?;
-        }
+        let settings = site.settings.as_ref().ok_or_else(|| Error::Io {
+            path: PathBuf::from(&site.unit).join(crate::config::CONFIG),
+            message: "static_site.site is required".into(),
+        })?;
+        assemble(root, site, settings, &declared, &base, &features, &work)?;
         run(
             Command::new("zola")
                 .arg("build")
@@ -347,24 +304,6 @@ pub fn build(root: &Path, sites: &[Site]) -> Result<Vec<Built>, Error> {
         });
     }
     Ok(out)
-}
-
-/// A site with its own Zola project: copied, with `base_url` and features written in.
-fn legacy(
-    site: &Site,
-    base: &str,
-    features: &BTreeMap<String, bool>,
-    work: &Path,
-) -> Result<(), Error> {
-    let src = site.dir.join("site");
-    let config_path = src.join("config.toml");
-    let text = fs::read_to_string(&config_path).map_err(io(&config_path))?;
-    let config = site_config(&text, base, features).map_err(|message| Error::Io {
-        path: PathBuf::from(&site.unit).join("site/config.toml"),
-        message,
-    })?;
-    copy_dir(&src, work)?;
-    fs::write(work.join("config.toml"), config).map_err(io(work))
 }
 
 /// The template at the site's tag, under `themes/`.
@@ -986,7 +925,7 @@ mod tests {
 
     use super::{
         Site, check_layout, check_post, check_settings, content_type, features, set_json, set_toml,
-        site_config, site_targets,
+        site_targets,
     };
 
     fn site(features: &[&str]) -> Site {
@@ -1030,25 +969,7 @@ mod tests {
     }
 
     #[test]
-    fn the_config_gains_base_url_and_features() {
-        let f: BTreeMap<String, bool> = [("feed".to_string(), true)].into();
-        let got =
-            site_config("title = \"T\"\n\n[extra]\na = 1\n", "https://z.com", &f).expect("ok");
-        assert_eq!(
-            got,
-            "base_url = \"https://z.com\"\ntitle = \"T\"\n\n[extra]\na = 1\n\n[extra.features]\nfeed = true\n"
-        );
-        assert!(site_config("base_url = \"x\"\n", "https://z.com", &f).is_err());
-        assert!(
-            site_config(
-                "base_url_label = \"x\"\n[extra]\nfeatures_intro = true\n",
-                "https://z.com",
-                &f
-            )
-            .is_ok()
-        );
-        assert!(site_config("[extra]\nfeatures = { feed = true }\n", "https://z.com", &f).is_err());
-        assert!(site_config("[extra.features]\nfeed = false\n", "https://z.com", &f).is_err());
+    fn content_types_follow_the_extension() {
         assert_eq!(content_type("a/b.CSS"), "text/css; charset=utf-8");
         assert_eq!(content_type("noext"), "application/octet-stream");
     }

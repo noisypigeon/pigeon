@@ -250,7 +250,7 @@
         "static_site": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["template"],
+          "required": ["template", "site"],
           "properties": {
             "template": {
               "type": "object",
