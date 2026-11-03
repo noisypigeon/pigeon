@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.5 (2026-11-03)
+
+- feat(cobot): build static sites from config.yaml ([#58](https://github.com/noisypigeon/pigeon/pull/58))
+
 ## v0.1.4 (2026-11-03)
 
 - feat(infra): the apex's site rulesets and the account outputs ([#48](https://github.com/noisypigeon/pigeon/pull/48))
