@@ -1,0 +1,152 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "infra/backblaze",
+  "description": "The Backblaze B2 provisioner unit; see .claude/decisions/2026-11-03-runtime-backblaze-provisioner-unit.md.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "rotation",
+    "buckets",
+    "keys"
+  ],
+  "x-cobot": {
+    "version": "0.1.0",
+    "secrets": [
+      "application_key_id",
+      "application_key"
+    ],
+    "providers": {
+      "b2": {
+        "application_key_id": "$secret.application_key_id",
+        "application_key": "$secret.application_key"
+      }
+    },
+    "each": {
+      "bucket_suffixes": {
+        "module": "agnostic/random-string",
+        "over": "buckets",
+        "for_each": "$item.name",
+        "inputs": {}
+      }
+    },
+    "outputs": {
+      "bucket_names": "$module.buckets[*].name",
+      "bucket_ids": "$module.buckets[*].id",
+      "key_ids": "$module.keys[*].id",
+      "keys": "$module.keys[*].value"
+    }
+  },
+  "properties": {
+    "rotation": {
+      "description": "How long each key generation lasts, and how long it overlaps its successor.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "period_days",
+        "overlap_days"
+      ],
+      "properties": {
+        "period_days": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "overlap_days": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "buckets": {
+      "description": "Private buckets, each named <name>-<random6>.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "$ref": "#/$defs/key",
+            "maxLength": 56
+          }
+        }
+      },
+      "x-cobot": {
+        "module": "bucket",
+        "for_each": "$item.name",
+        "inputs": {
+          "key": "$item.name",
+          "suffix": "$module.bucket_suffixes[$item.name].result"
+        }
+      }
+    },
+    "keys": {
+      "description": "Application keys to mint, one instance per generation, each scoped to named buckets.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "capabilities",
+          "buckets"
+        ],
+        "properties": {
+          "name": {
+            "$ref": "#/$defs/key",
+            "maxLength": 80
+          },
+          "capabilities": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "enum": [
+                "listBuckets",
+                "readBuckets",
+                "listFiles",
+                "readFiles",
+                "shareFiles",
+                "writeFiles",
+                "deleteFiles"
+              ]
+            }
+          },
+          "buckets": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "$ref": "#/$defs/key"
+            }
+          }
+        }
+      },
+      "x-cobot": {
+        "module": "api-key",
+        "for_each": "$item.name",
+        "rotate": {
+          "period_days": "$config.rotation.period_days",
+          "overlap_days": "$config.rotation.overlap_days"
+        },
+        "inputs": {
+          "name": "$item.name",
+          "capabilities": "$item.capabilities",
+          "buckets": "$item.buckets",
+          "bucket_ids": "$module.buckets[*].id",
+          "period_days": "$config.rotation.period_days",
+          "overlap_days": "$config.rotation.overlap_days",
+          "not_before": "$generation.not_before",
+          "expires_on": "$generation.expires_on"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "key": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+    }
+  }
+}

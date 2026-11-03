@@ -91,6 +91,18 @@ units:
     manifest: infra/agnostic/schema.json
     paths: [infra/agnostic/schema.json, infra/agnostic/modules/]
     exclude: ['*.md']
+  infra-backblaze-bucket:
+    manifest: infra/backblaze/modules/bucket/module.yaml
+    paths: [infra/backblaze/modules/bucket/]
+    exclude: ['*.md']
+  infra-backblaze-api-key:
+    manifest: infra/backblaze/modules/api-key/module.yaml
+    paths: [infra/backblaze/modules/api-key/]
+    exclude: ['*.md']
+  infra-backblaze-schema:
+    manifest: infra/backblaze/schema.json
+    paths: [infra/backblaze/schema.json, infra/backblaze/modules/, infra/agnostic/modules/random-string/]
+    exclude: ['*.md']
   static-site-template:
     manifest: src/static-site-template/template.yaml
     paths: [src/static-site-template/]
@@ -115,4 +127,7 @@ tiers:
   - { file: infra/cloudflare/modules/ruleset/CHANGELOG.md, unit: infra-cloudflare-ruleset }
   - { file: infra/agnostic/modules/random-string/CHANGELOG.md, unit: infra-agnostic-random-string }
   - { file: infra/agnostic/CHANGELOG.md, unit: infra-agnostic-schema }
+  - { file: infra/backblaze/modules/bucket/CHANGELOG.md, unit: infra-backblaze-bucket }
+  - { file: infra/backblaze/modules/api-key/CHANGELOG.md, unit: infra-backblaze-api-key }
+  - { file: infra/backblaze/CHANGELOG.md, unit: infra-backblaze-schema }
   - { file: src/static-site-template/CHANGELOG.md, unit: static-site-template }

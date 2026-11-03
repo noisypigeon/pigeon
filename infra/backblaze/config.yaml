@@ -1,0 +1,4 @@
+# Non-secret settings; see .claude/decisions/2026-11-03-runtime-backblaze-provisioner-unit.md.
+rotation: { period_days: 90, overlap_days: 7 }
+buckets: []
+keys: []

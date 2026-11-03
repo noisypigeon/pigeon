@@ -60,6 +60,9 @@ belong in the ADR, never in the file.
   in `workloads/`. Only `infra/` keys are break-glass, and they are never handed
   to a workload, which gets only its own secrets and minted tokens. Providers
   come only from `main`'s `.config/providers.yaml` and `providers.lock.hcl`.
+- `infra/backblaze` holds private B2 buckets named `<name>-<random6>` and
+  rotated, bucket-scoped application keys, per
+  [`2026-11-03-runtime-backblaze-provisioner-unit.md`](.claude/decisions/2026-11-03-runtime-backblaze-provisioner-unit.md).
 - `infra/agnostic/modules/` holds provider-agnostic modules (today
   `random-string`) that any unit composes as `module: agnostic/<name>`, and
   `x-cobot.each` runs a block over another property's items, per
