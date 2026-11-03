@@ -12,4 +12,5 @@ look = { color = "gameboy", font = "ibm-plex", font_family = "ibm-plex-sans:400,
 labels = { back = "Back to all posts", subscribe = "Subscribe via RSS" }
 author = { name = "", alternate_names = [], page = "" }
 banner = { message = "", link = "", link_text = "" }
+intro = ""
 features = { feed = false, tags = false, changelog = false, math = false, fonts = false, banner = false, commit = false }

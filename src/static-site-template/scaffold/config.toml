@@ -1,0 +1,11 @@
+# The fixed part of a site's config.toml; cobot adds the site's settings, base_url and [extra.features].
+theme = "static-site-template"
+
+compile_sass = false
+generate_feeds = false
+feed_filenames = ["posts_feed.xml"]
+build_search_index = false
+
+taxonomies = [
+  { name = "tags", feed = false },
+]

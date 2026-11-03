@@ -227,3 +227,13 @@ Each step merges, and releases what it changes, before the next one uses it, per
   - `robots.txt` and `manifest.json` equal today's, ignoring whitespace and key order.
   - `cobot.yml`'s plan shows "No changes".
 - **After the blog PR merges:** `publish` deletes the stale `/changelog/` keys, and every live check passes.
+
+## Amendments
+
+### 2026-11-03: The contract's version is the bot's
+
+The release bot bumps only a unit's patch version, and a PR never sets one. The template PR therefore releases `static-site-template/v1.0.1`, not the `1.1.0` that §2, §3, §6 and §8 name; their text stays as written.
+
+- Wherever this ADR says `1.1.0`, read the first version released with `schema.json`: `1.0.1`.
+- The blog PR pins that version.
+- cobot does not compare versions to choose a build. It applies the contract when the pinned tag has `schema.json` and the workload sets `static_site.site`, as §5 says.
