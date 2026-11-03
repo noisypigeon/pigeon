@@ -2,6 +2,7 @@
 
 ## 2026-11-03
 
+- feat(workloads): noisypigeon.com apex with Proton Mail ([#39](https://github.com/noisypigeon/pigeon/pull/39))
 - docs(adr): static sites on Cloudflare R2, and the site template ([#38](https://github.com/noisypigeon/pigeon/pull/38))
 
 ## 2026-11-02
