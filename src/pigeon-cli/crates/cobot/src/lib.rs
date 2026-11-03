@@ -624,10 +624,8 @@ fn infra_state(
 /// One published static site.
 #[derive(Debug, Clone)]
 pub struct Published {
-    /// The unit path.
+    /// The unit path; its bucket is never reported.
     pub unit: String,
-    /// Its bucket.
-    pub bucket: String,
     /// What the sync did.
     pub synced: sites::Synced,
     /// The live checks.
@@ -665,11 +663,16 @@ pub fn publish(ctx: &Context, wanted: &[String], checks: u32) -> Result<Vec<Publ
             creds,
         };
         let expected = sites::expected(&b.public)?;
-        let synced = sites::sync(&bucket, &expected)?;
+        let synced = sites::sync(&bucket, &expected).map_err(|e| match e {
+            Error::Tool { message, .. } => Error::Tool {
+                command: format!("publish {}", b.site.unit),
+                message,
+            },
+            other => other,
+        })?;
         let checks = sites::checks(&b, &expected, checks, std::time::Duration::from_secs(15));
         out.push(Published {
             unit: b.site.unit.clone(),
-            bucket: bucket.name.clone(),
             synced,
             checks,
         });

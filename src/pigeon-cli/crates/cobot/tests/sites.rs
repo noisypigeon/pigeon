@@ -74,6 +74,10 @@ fn serve(store: Store, bucket: &'static str, access: &'static str) -> String {
                         s.insert(k, (body, etag));
                         ("200 OK", String::new())
                     }
+                    ("GET", Some(k)) => match s.get(&k) {
+                        Some((body, _)) => ("200 OK", String::from_utf8_lossy(body).into_owned()),
+                        None => ("404 Not Found", String::new()),
+                    },
                     ("DELETE", Some(k)) => {
                         s.remove(&k);
                         ("204 No Content", String::new())
@@ -176,16 +180,36 @@ fn a_sync_puts_what_changed_writes_index_copies_and_deletes_stale_keys() {
     let done = cobot::sites::sync(&bucket, &expected).expect("sync");
     assert_eq!(
         done.put,
-        ["index.html", "posts/a", "posts/a/", "posts/a/index.html"]
+        [
+            "assets/site.css",
+            "index.html",
+            "posts/a",
+            "posts/a/",
+            "posts/a/index.html"
+        ],
+        "with no record of its type, even an unchanged body is rewritten"
     );
-    assert_eq!(done.unchanged, 1);
     assert_eq!(done.deleted, ["stale & gone.html"]);
     let held: Vec<String> = store.lock().expect("lock").keys().cloned().collect();
-    assert_eq!(held, expected.keys().cloned().collect::<Vec<_>>());
+    let mut want: Vec<String> = expected.keys().cloned().collect();
+    want.insert(0, cobot::sites::TYPES.to_string());
+    assert_eq!(held, want);
 
     let again = cobot::sites::sync(&bucket, &expected).expect("resync");
     assert!(again.put.is_empty() && again.deleted.is_empty());
     assert_eq!(again.unchanged, 5);
+
+    {
+        let mut s = store.lock().expect("lock");
+        let (body, _) = s[cobot::sites::TYPES].clone();
+        let mut types: BTreeMap<String, String> = serde_json::from_slice(&body).expect("json");
+        types.insert("assets/site.css".into(), "application/octet-stream".into());
+        let body = serde_json::to_vec(&types).expect("json");
+        let etag = md5_hex(&body);
+        s.insert(cobot::sites::TYPES.into(), (body, etag));
+    }
+    let retyped = cobot::sites::sync(&bucket, &expected).expect("retype");
+    assert_eq!(retyped.put, ["assets/site.css"]);
 
     let wrong = Bucket {
         creds: Credentials {
@@ -198,7 +222,9 @@ fn a_sync_puts_what_changed_writes_index_copies_and_deletes_stale_keys() {
         .expect_err("refused")
         .to_string();
     assert!(
-        err.contains("status 403") && !err.contains(&sha256_hex(b"token-value")),
+        err.contains("status 403")
+            && !err.contains(&sha256_hex(b"token-value"))
+            && !err.contains("blog-z-com"),
         "{err}"
     );
 }

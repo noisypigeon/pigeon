@@ -87,9 +87,8 @@ fn sites_publish(args: &SitesPublish) -> Result<(), cobot::Error> {
     let mut failed = Vec::new();
     for p in &published {
         println!(
-            "cobot: {} → {}: {} put, {} unchanged, {} deleted",
+            "cobot: published {}: {} put, {} unchanged, {} deleted",
             p.unit,
-            p.bucket,
             p.synced.put.len(),
             p.synced.unchanged,
             p.synced.deleted.len()

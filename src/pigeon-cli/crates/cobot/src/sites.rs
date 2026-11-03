@@ -37,7 +37,7 @@ pub struct Site {
     pub version: String,
     /// The features it lists, `no-<feature>` turning a default off.
     pub features: Vec<String>,
-    /// Its hosts' fully qualified names, the first being its `base_url`.
+    /// Its hosts' fully qualified names, as the apex assigns them.
     pub hosts: Vec<String>,
 }
 
@@ -52,6 +52,17 @@ impl Site {
     #[must_use]
     pub fn bucket(&self) -> String {
         static_site::bucket_name(&self.zone, &self.workload)
+    }
+
+    /// Its canonical host, for `base_url` and the live checks: the zone apex
+    /// when it serves it, since `www` redirects there; else its first host.
+    #[must_use]
+    pub fn canonical(&self) -> Option<&str> {
+        self.hosts
+            .iter()
+            .find(|h| **h == self.zone)
+            .or_else(|| self.hosts.first())
+            .map(String::as_str)
     }
 }
 
@@ -110,7 +121,11 @@ fn git(root: &Path, args: &[&str]) -> Result<Vec<u8>, Error> {
 /// [`Error::UnknownUnit`] for a wanted path that is not a static site.
 pub fn find(root: &Path, wanted: &[String]) -> Result<Vec<Site>, Error> {
     let mut out = Vec::new();
-    for u in unit::discover(root).0 {
+    let (units, problems) = unit::discover(root);
+    if !problems.is_empty() {
+        return Err(Error::Invalid(problems));
+    }
+    for u in units {
         let Some(c) = &u.config else { continue };
         let Some(site) = &c.site else { continue };
         let Some(w) = &site.workload else { continue };
@@ -221,11 +236,22 @@ pub fn site_config(
     base_url: &str,
     features: &BTreeMap<String, bool>,
 ) -> Result<String, String> {
+    let key = |line: &str, k: &str| {
+        line.strip_prefix(k)
+            .is_some_and(|rest| rest.trim_start().starts_with('='))
+    };
+    let mut section = String::new();
     for line in text.lines().map(str::trim) {
-        if line.starts_with("base_url") {
+        if line.starts_with('[') {
+            section = line
+                .trim_matches(|c| c == '[' || c == ']')
+                .trim()
+                .to_string();
+        }
+        if section.is_empty() && key(line, "base_url") {
             return Err("sets base_url; cobot writes it from the apex's hosts".into());
         }
-        if line == "[extra.features]" || line.starts_with("features") {
+        if section == "extra.features" || (section == "extra" && key(line, "features")) {
             return Err("sets extra.features; cobot writes them from static_site".into());
         }
     }
@@ -258,7 +284,7 @@ pub fn build(root: &Path, sites: &[Site]) -> Result<Vec<Built>, Error> {
         let text = fs::read_to_string(&config_path).map_err(io(&config_path))?;
         let declared = declared(root, &site.tag())?;
         let features = features(site, &declared)?;
-        let base = site.hosts.first().ok_or_else(|| Error::Io {
+        let base = site.canonical().ok_or_else(|| Error::Io {
             path: PathBuf::from(&site.unit),
             message: "the apex assigns this static site no host".into(),
         })?;
@@ -415,6 +441,10 @@ pub fn expected(public: &Path) -> Result<BTreeMap<String, Upload>, Error> {
     Ok(out)
 }
 
+/// The key holding each object's `Content-Type` as last written, which an
+/// `ETag` cannot show.
+pub const TYPES: &str = ".cobot/types.json";
+
 /// What a sync did, by key.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Synced {
@@ -440,7 +470,7 @@ fn now() -> u64 {
 /// [`Error::Tool`] naming the failed call; never a credential.
 pub fn sync(bucket: &Bucket, expected: &BTreeMap<String, Upload>) -> Result<Synced, Error> {
     let fail = |e: s3::Failure| Error::Tool {
-        command: format!("s3 {}", bucket.name),
+        command: "s3".into(),
         message: e.0,
     };
     let have: BTreeMap<String, String> = bucket
@@ -449,9 +479,24 @@ pub fn sync(bucket: &Bucket, expected: &BTreeMap<String, Upload>) -> Result<Sync
         .into_iter()
         .map(|o| (o.key, o.etag))
         .collect();
+    let written: BTreeMap<String, String> = if have.contains_key(TYPES) {
+        bucket
+            .get(TYPES, now())
+            .map_err(fail)?
+            .and_then(|b| serde_json::from_slice(&b).ok())
+            .unwrap_or_default()
+    } else {
+        BTreeMap::new()
+    };
+    let types: BTreeMap<String, String> = expected
+        .iter()
+        .map(|(k, u)| (k.clone(), u.content_type.to_string()))
+        .collect();
     let mut done = Synced::default();
     for (key, up) in expected {
-        if have.get(key).is_some_and(|e| *e == s3::md5_hex(&up.body)) {
+        if have.get(key).is_some_and(|e| *e == s3::md5_hex(&up.body))
+            && written.get(key).is_some_and(|t| t == up.content_type)
+        {
             done.unchanged += 1;
             continue;
         }
@@ -460,8 +505,14 @@ pub fn sync(bucket: &Bucket, expected: &BTreeMap<String, Upload>) -> Result<Sync
             .map_err(fail)?;
         done.put.push(key.clone());
     }
-    let keep: BTreeSet<&String> = expected.keys().collect();
-    for key in have.keys().filter(|k| !keep.contains(k)) {
+    if written != types {
+        let body = serde_json::to_vec(&types).unwrap_or_default();
+        bucket
+            .put(TYPES, &body, content_type(TYPES), now())
+            .map_err(fail)?;
+    }
+    let keep: BTreeSet<&str> = expected.keys().map(String::as_str).chain([TYPES]).collect();
+    for key in have.keys().filter(|k| !keep.contains(k.as_str())) {
         bucket.delete(key, now()).map_err(fail)?;
         done.deleted.push(key.clone());
     }
@@ -532,7 +583,7 @@ pub fn checks(
     tries: u32,
     wait: Duration,
 ) -> Vec<Check> {
-    let Some(apex_host) = built.site.hosts.first() else {
+    let Some(apex_host) = built.site.canonical() else {
         return Vec::new();
     };
     let base = format!("https://{apex_host}");
@@ -603,6 +654,15 @@ mod tests {
     }
 
     #[test]
+    fn the_zone_apex_is_canonical_when_served() {
+        let mut s = site(&[]);
+        s.hosts = vec!["www.z.com".into(), "z.com".into()];
+        assert_eq!(s.canonical(), Some("z.com"));
+        s.hosts = vec!["journal.z.com".into(), "j.z.com".into()];
+        assert_eq!(s.canonical(), Some("journal.z.com"));
+    }
+
+    #[test]
     fn features_start_from_the_defaults() {
         let declared: BTreeMap<String, bool> =
             [("feed".to_string(), true), ("math".to_string(), false)].into();
@@ -630,6 +690,15 @@ mod tests {
             "base_url = \"https://z.com\"\ntitle = \"T\"\n\n[extra]\na = 1\n\n[extra.features]\nfeed = true\n"
         );
         assert!(site_config("base_url = \"x\"\n", "https://z.com", &f).is_err());
+        assert!(
+            site_config(
+                "base_url_label = \"x\"\n[extra]\nfeatures_intro = true\n",
+                "https://z.com",
+                &f
+            )
+            .is_ok()
+        );
+        assert!(site_config("[extra]\nfeatures = { feed = true }\n", "https://z.com", &f).is_err());
         assert!(site_config("[extra.features]\nfeed = false\n", "https://z.com", &f).is_err());
         assert_eq!(content_type("a/b.CSS"), "text/css; charset=utf-8");
         assert_eq!(content_type("noext"), "application/octet-stream");

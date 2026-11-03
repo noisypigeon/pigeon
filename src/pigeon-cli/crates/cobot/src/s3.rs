@@ -169,7 +169,19 @@ pub struct Object {
     pub etag: String,
 }
 
-/// Why a call failed; it never holds a credential.
+/// A transport error's kind, never its text, which can carry the URL and its account id.
+fn transport(e: &ureq::Error) -> String {
+    match e {
+        ureq::Error::Timeout(_) => "timed out".into(),
+        ureq::Error::HostNotFound => "host not found".into(),
+        ureq::Error::ConnectionFailed => "connection failed".into(),
+        ureq::Error::Io(io) => format!("I/O error ({:?})", io.kind()),
+        ureq::Error::Tls(_) | ureq::Error::Rustls(_) => "TLS error".into(),
+        _ => "transport error".into(),
+    }
+}
+
+/// Why a call failed; it never holds a credential, the account id or the bucket.
 #[derive(Debug)]
 pub struct Failure(pub String);
 
@@ -294,7 +306,8 @@ impl Bucket {
             .http_status_as_error(false)
             .build()
             .into();
-        let fail = |e: ureq::Error| Failure(format!("{method} {path}: {e}"));
+        let what = key.unwrap_or("the listing");
+        let fail = |e: ureq::Error| Failure(format!("{method} {what}: {}", transport(&e)));
         let mut response = match method {
             "GET" => {
                 let mut r = agent.get(&url);
@@ -338,7 +351,7 @@ impl Bucket {
             }
             let (status, body) = self.send("GET", None, &query, b"", None, now)?;
             if status != 200 {
-                return Err(Failure(format!("listing {}: status {status}", self.name)));
+                return Err(Failure(format!("GET the listing: status {status}")));
             }
             let (objects, next) = parse_listing(&body);
             out.extend(objects);
@@ -346,6 +359,19 @@ impl Bucket {
                 Some(n) => token = Some(n),
                 None => return Ok(out),
             }
+        }
+    }
+
+    /// Reads one object; `None` when it does not exist.
+    ///
+    /// # Errors
+    ///
+    /// A [`Failure`] for a transport error or a status other than 200 or 404.
+    pub fn get(&self, key: &str, now: u64) -> Result<Option<Vec<u8>>, Failure> {
+        match self.send("GET", Some(key), &[], b"", None, now)? {
+            (200, body) => Ok(Some(body.into_bytes())),
+            (404, _) => Ok(None),
+            (status, _) => Err(Failure(format!("GET {key}: status {status}"))),
         }
     }
 

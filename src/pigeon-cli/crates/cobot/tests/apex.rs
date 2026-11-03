@@ -1351,4 +1351,10 @@ fn a_static_site_builds_with_its_pinned_template_and_features() {
     );
     let sites = cobot::sites::find(root, &[]).expect("find");
     assert!(cobot::sites::build(root, &sites).is_err());
+
+    write(root, &format!("{BLOG}/config.yaml"), "static_site: [\n");
+    assert!(matches!(
+        cobot::sites::find(root, &[]),
+        Err(cobot::Error::Invalid(_))
+    ));
 }
