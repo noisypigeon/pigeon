@@ -1,4 +1,4 @@
-# Runs the released pigeon-sentinel image; see .claude/decisions/2026-11-02-release-crate-units-and-images.md.
+# Runs the released pigeon-sentinel and pigeon-backplane images; see .claude/decisions/2026-11-02-release-crate-units-and-images.md and .claude/decisions/2026-11-03-development-backplane-platform-composition-layer.md.
 name: lifecycle
 
 on:
@@ -26,6 +26,20 @@ jobs:
           TOKEN: ${{ github.token }}
           ACTOR: ${{ github.actor }}
       - run: docker run --rm -v "$PWD:/repo:ro" "$IMAGE" sentinel check --root /repo
+
+  backplane:
+    runs-on: ubuntu-latest
+    env:
+      IMAGE: ghcr.io/noisypigeon/pigeon-backplane:latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - run: echo "$TOKEN" | docker login ghcr.io -u "$ACTOR" --password-stdin
+        env:
+          TOKEN: ${{ github.token }}
+          ACTOR: ${{ github.actor }}
+      - run: docker run --rm -v "$PWD:/repo:ro" "$IMAGE" backplane instance --root /repo
 
   sentinel-pr:
     if: github.event_name == 'pull_request'
