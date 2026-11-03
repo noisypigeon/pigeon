@@ -2,6 +2,7 @@
 
 ## 2026-11-03
 
+- feat(cobot): per-zone apexes and unit moves ([#41](https://github.com/noisypigeon/pigeon/pull/41))
 - docs(adr): one apex per zone, and moving a unit's state ([#40](https://github.com/noisypigeon/pigeon/pull/40))
 - feat(workloads): noisypigeon.com apex with Proton Mail ([#39](https://github.com/noisypigeon/pigeon/pull/39))
 - docs(adr): static sites on Cloudflare R2, and the site template ([#38](https://github.com/noisypigeon/pigeon/pull/38))
