@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.14 (2026-11-03)
+
+- refactor(cobot): only the site config contract ([#60](https://github.com/noisypigeon/pigeon/pull/60))
+
 ## v0.1.13 (2026-11-03)
 
 - feat(cobot): build static sites from config.yaml ([#58](https://github.com/noisypigeon/pigeon/pull/58))
