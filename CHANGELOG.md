@@ -2,6 +2,7 @@
 
 ## 2026-11-03
 
+- feat(infra): infra/agnostic and its random-string module ([#68](https://github.com/noisypigeon/pigeon/pull/68))
 - feat(cobot): agnostic modules and each blocks ([#67](https://github.com/noisypigeon/pigeon/pull/67))
 - build(cobot): allow the random provider ([#66](https://github.com/noisypigeon/pigeon/pull/66))
 - docs(adr): infra/agnostic and random resource names ([#65](https://github.com/noisypigeon/pigeon/pull/65))
