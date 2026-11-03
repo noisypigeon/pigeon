@@ -36,6 +36,33 @@
         }
       }
     },
+    "workload": {
+      "handoff": "workload-token",
+      "providers": {
+        "cloudflare": { "api_token": "$handoff.api_token" }
+      },
+      "derived": {
+        "bucket": {
+          "expand": "site-bucket",
+          "module": "r2-bucket",
+          "inputs": {
+            "account_id": "$handoff.account_id",
+            "name": "$item.name",
+            "storage_class": "$item.storage_class"
+          }
+        },
+        "domains": {
+          "expand": "site-domains",
+          "module": "r2-custom-domain",
+          "inputs": {
+            "account_id": "$handoff.account_id",
+            "bucket_name": "$module.bucket[$item.bucket].name",
+            "domain": "$item.domain",
+            "zone_id": "$handoff.zone_id"
+          }
+        }
+      }
+    },
     "outputs": {
       "zone_ids": "$module.zones[*].id",
       "tokens": "$module.tokens[*].value"
@@ -145,13 +172,13 @@
       "properties": {
         "apex": {
           "description": "The workload served at @ and www.",
-          "$ref": "#/$defs/workload"
+          "$ref": "#/$defs/workload_name"
         },
         "hosts": {
           "description": "A workload's names, relative to the zone, replacing its default.",
           "type": "object",
           "propertyNames": {
-            "$ref": "#/$defs/workload"
+            "$ref": "#/$defs/workload_name"
           },
           "additionalProperties": {
             "type": "array",
@@ -195,11 +222,39 @@
       "type": "string",
       "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
     },
-    "workload": {
+    "workload_name": {
       "type": "string",
       "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
       "not": {
         "const": "apex"
+      }
+    },
+    "workload": {
+      "description": "A workload under workloads/<zone>/; see .claude/decisions/2026-11-03-runtime-cloudflare-static-sites-r2.md.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "static_site": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["template"],
+          "properties": {
+            "template": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["version"],
+              "properties": {
+                "version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+                "features": {
+                  "type": "array",
+                  "uniqueItems": true,
+                  "items": { "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$" }
+                }
+              }
+            },
+            "storage_class": { "enum": ["Standard", "InfrequentAccess"] }
+          }
+        }
       }
     },
     "name": {

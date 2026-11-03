@@ -125,7 +125,7 @@ pub fn parse(text: &str) -> Option<Expr> {
             .map(|p| Expr::Secret(p[0].clone()));
     }
     if let Some(key) = text.strip_prefix("$handoff.")
-        && apex::HANDOFF_KEYS.contains(&key)
+        && crate::static_site::HANDOFF_KEYS.contains(&key)
     {
         return Some(Expr::Handoff(key.to_string()));
     }
@@ -276,15 +276,17 @@ pub fn load(dir: &Path, home: &Path, site: Option<Site>) -> Result<ConfigUnit, S
     let config_text = fs::read_to_string(dir.join(CONFIG)).map_err(|e| format!("{CONFIG}: {e}"))?;
     let mut config: Value =
         serde_saphyr::from_str(&config_text).map_err(|e| format!("{CONFIG}: {e}"))?;
-    if let Some(site) = &site {
+    if let Some(site) = site.as_ref().filter(|s| s.workload.is_none()) {
         config = json!({ "zones": { site.zone.clone(): config } });
     }
     let schema_text =
         fs::read_to_string(home.join(SCHEMA)).map_err(|e| format!("{SCHEMA}: {e}"))?;
     let mut schema: Value =
         serde_json::from_str(&schema_text).map_err(|e| format!("{SCHEMA}: {e}"))?;
-    if site.is_some() {
-        schema = apex_schema(&schema);
+    match &site {
+        Some(s) if s.workload.is_some() => schema = composed_schema(&schema, "workload"),
+        Some(_) => schema = composed_schema(&schema, "apex"),
+        None => {}
     }
     Ok(ConfigUnit {
         config,
@@ -294,18 +296,33 @@ pub fn load(dir: &Path, home: &Path, site: Option<Site>) -> Result<ConfigUnit, S
     })
 }
 
-/// The apex unit's schema: `home`'s `$defs.apex`, composed by its `x-cobot.apex`.
-fn apex_schema(root: &Value) -> Value {
-    let mut x = root["x-cobot"]["apex"].clone();
+/// An apex's or a workload's schema: `home`'s `$defs.<kind>`, composed by its `x-cobot.<kind>`.
+fn composed_schema(root: &Value, kind: &str) -> Value {
+    let mut x = root["x-cobot"][kind].clone();
     if let Some(o) = x.as_object_mut() {
         o.insert("version".into(), root["x-cobot"]["version"].clone());
     }
     json!({
         "$schema": root["$schema"],
         "$defs": root["$defs"],
-        "$ref": "#/$defs/apex",
+        "$ref": format!("#/$defs/{kind}"),
         "x-cobot": x,
     })
+}
+
+/// The handoff kind and the expanders a unit at `site` may use.
+fn allowed(site: Option<&Site>) -> (&'static str, [&'static str; 2]) {
+    if site.is_some_and(|s| s.workload.is_some()) {
+        (
+            crate::static_site::HANDOFF,
+            [crate::static_site::BUCKET, crate::static_site::DOMAINS],
+        )
+    } else {
+        (
+            apex::HANDOFF,
+            [apex::EXPANDER, crate::static_site::RULESETS],
+        )
+    }
 }
 
 fn walk_strings<'a>(value: &'a Value, out: &mut Vec<&'a str>) {
@@ -344,38 +361,42 @@ pub fn validate(
 
 fn check_apex(unit: &ConfigUnit, problems: &mut Vec<(String, String)>) {
     let x = x_cobot(&unit.schema);
+    let (kind, expanders) = allowed(unit.site.as_ref());
     let handoff = x.get("handoff");
-    if handoff.is_some_and(|h| h != apex::HANDOFF) {
-        problems.push((
-            SCHEMA.into(),
-            format!("`handoff` must be `{}`", apex::HANDOFF),
-        ));
+    if handoff.is_some_and(|h| h != kind) {
+        problems.push((SCHEMA.into(), format!("`handoff` must be `{kind}`")));
     }
     if handoff.is_some() && unit.site.is_none() {
         problems.push((
             SCHEMA.into(),
-            "only a workloads/<zone>/apex takes a handoff".into(),
+            "only an apex or a schema-less workload under workloads/<zone>/ takes a handoff".into(),
         ));
     }
+    let mut seen = BTreeSet::new();
     for b in blocks(&unit.schema).iter().filter(|b| b.derived.is_some()) {
-        if b.derived.as_deref() != Some(apex::EXPANDER) {
+        let expander = b.derived.as_deref().unwrap_or_default();
+        if !expanders.contains(&expander) {
             problems.push((
                 SCHEMA.into(),
-                format!("block `{}`: `expand` must be `{}`", b.name, apex::EXPANDER),
+                format!(
+                    "block `{}`: `expand` must be one of `{}`",
+                    b.name,
+                    expanders.join("`, `")
+                ),
             ));
-        } else if unit.site.is_none() {
-            problems.push((
-                SCHEMA.into(),
-                "only a workloads/<zone>/apex derives records".into(),
-            ));
+            continue;
         }
-    }
-    if let (Some(site), true) = (
-        &unit.site,
-        blocks(&unit.schema).iter().any(|b| b.derived.is_some()),
-    ) {
-        for p in apex::expand(&unit.config, &unit.home, site).1 {
-            problems.push((CONFIG.into(), p));
+        let Some(site) = &unit.site else {
+            problems.push((
+                SCHEMA.into(),
+                "only an apex or a schema-less workload derives blocks".into(),
+            ));
+            continue;
+        };
+        for p in apex::derive(expander, &unit.config, &unit.home, site).1 {
+            if seen.insert(p.clone()) {
+                problems.push((CONFIG.into(), p));
+            }
         }
     }
 }
@@ -625,11 +646,11 @@ fn check_outputs(unit: &ConfigUnit, problems: &mut Vec<(String, String)>) {
             || !v
                 .as_str()
                 .and_then(parse)
-                .is_some_and(|e| matches!(e, Expr::Module { .. }))
+                .is_some_and(|e| matches!(e, Expr::Module { .. } | Expr::Secret(_)))
         {
             add(
                 SCHEMA,
-                format!("output `{name}` must be a `$module` expression"),
+                format!("output `{name}` must be a `$module` or `$secret` expression"),
             );
             continue;
         }
@@ -638,7 +659,7 @@ fn check_outputs(unit: &ConfigUnit, problems: &mut Vec<(String, String)>) {
             &pseudo,
             &all,
             &infos,
-            &BTreeSet::new(),
+            &declared_secrets(unit),
             false,
             &unit.config,
             &mut add,
@@ -740,6 +761,9 @@ fn render_value(value: &Value, config: &Value, zone: &str) -> Value {
             Some(Expr::Config(p)) => literal(lookup(config, &p).unwrap_or(&Value::Null)),
             Some(Expr::Secret(k)) => Value::String(format!("${{var.secrets[\"{k}\"]}}")),
             Some(Expr::Generation(f)) => Value::String(format!("${{each.value._generation.{f}}}")),
+            Some(Expr::Handoff(k)) if zone.is_empty() => {
+                Value::String(format!("${{var.handoff.{k}}}"))
+            }
             Some(Expr::Handoff(k)) => Value::String(format!("${{var.handoff[{zone}].{k}}}")),
             Some(Expr::Module {
                 block,
@@ -868,12 +892,14 @@ fn extras(unit: &ConfigUnit, root: &mut Value) {
         );
     }
     if has_handoff(unit) {
+        let shape = if unit.site.as_ref().is_some_and(|s| s.workload.is_some()) {
+            "object({ api_token = string, zone_id = string, account_id = string })"
+        } else {
+            "map(object({ api_token = string, zone_id = string }))"
+        };
         variables.insert(
             "handoff".into(),
-            json!({
-                "type": "map(object({ api_token = string, zone_id = string }))",
-                "sensitive": true
-            }),
+            json!({ "type": shape, "sensitive": true }),
         );
     }
     if !variables.is_empty() {
@@ -954,11 +980,11 @@ pub fn render(
                     .to_string(),
             ),
         );
-        if b.derived.is_some() {
+        if let Some(expander) = &b.derived {
             let items = unit
                 .site
                 .as_ref()
-                .map(|site| apex::expand(config, &unit.home, site).0)
+                .map(|site| apex::derive(expander, config, &unit.home, site).0)
                 .unwrap_or_default();
             block.insert("for_each".into(), Value::Object(items));
             if !per_zone.is_empty() {
@@ -1006,7 +1032,8 @@ pub fn render(
             }
             block.insert("for_each".into(), Value::Object(each));
         }
-        let zone = if b.derived.is_some() {
+        let workload = unit.site.as_ref().is_some_and(|s| s.workload.is_some());
+        let zone = if b.derived.is_some() && !workload {
             "each.value.zone"
         } else {
             ""

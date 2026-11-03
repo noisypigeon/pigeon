@@ -9,6 +9,9 @@ target:
     - infra/cloudflare/modules/api-token/CHANGELOG.md
     - infra/cloudflare/CHANGELOG.md
     - infra/cloudflare/modules/dns-record/CHANGELOG.md
+    - infra/cloudflare/modules/r2-bucket/CHANGELOG.md
+    - infra/cloudflare/modules/r2-custom-domain/CHANGELOG.md
+    - infra/cloudflare/modules/ruleset/CHANGELOG.md
     - src/static-site-template/CHANGELOG.md
   optional: true
 rules:

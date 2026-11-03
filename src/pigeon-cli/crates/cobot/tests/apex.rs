@@ -601,6 +601,23 @@ fn builtin_repo() -> TempDir {
     .expect("json");
     let mut apex_x = real["x-cobot"]["apex"].clone();
     apex_x["providers"] = json!({});
+    let mut workload_x = real["x-cobot"]["workload"].clone();
+    workload_x["providers"] = json!({});
+    for (module, vars) in [
+        ("ruleset", &["zone_id", "name", "phase", "rules"][..]),
+        ("r2-bucket", &["account_id", "name", "storage_class"][..]),
+        (
+            "r2-custom-domain",
+            &["account_id", "bucket_name", "domain", "zone_id"][..],
+        ),
+    ] {
+        data_module(
+            root,
+            &format!("infra/cloudflare/modules/{module}"),
+            vars,
+            "output \"name\" {\n  value = terraform_data.this.id\n}\n",
+        );
+    }
     data_module(
         root,
         "infra/cloudflare/modules/dns-record",
@@ -616,7 +633,14 @@ fn builtin_repo() -> TempDir {
         "x-cobot": {
             "version": "0.1.0",
             "apex": apex_x,
-            "outputs": { "zone_ids": "$module.zones[*].id", "tokens": "$module.tokens[*].value" }
+            "workload": workload_x,
+            "secrets": ["account_id"],
+            "outputs": {
+                "zone_ids": "$module.zones[*].id",
+                "tokens": "$module.tokens[*].value",
+                "token_ids": "$module.tokens[*].id",
+                "account_id": "$secret.account_id"
+            }
         },
         "properties": {
             "zones": { "type": "array", "x-cobot": { "module": "zone", "for_each": "$item", "inputs": { "name": "$item" } } },
@@ -634,6 +658,12 @@ fn builtin_repo() -> TempDir {
     });
     write(root, "infra/cloudflare/schema.json", &cf.to_string());
     write(root, "infra/cloudflare/config.yaml", CLOUDFLARE);
+    secrets_file(
+        &root.join("infra/cloudflare/secrets.config.yaml"),
+        &["account_id"],
+        |_| "v".into(),
+        SECRETS_PASS,
+    );
     data_module(root, "infra/cloudflare/modules/zone", &["name"], "");
     data_module(
         root,
@@ -777,6 +807,7 @@ fn secret_mail_policies_are_claimed_once_decrypted() {
     let site = cobot::apex::Site {
         root: repo.path().to_path_buf(),
         zone: ZONE.into(),
+        workload: None,
     };
     let home = repo.path().join("infra/cloudflare");
     let mut secrets = BTreeMap::new();
@@ -933,4 +964,299 @@ fn secrets_under_the_wrong_passphrase_say_so_without_the_value() {
         )) && !err.contains("value-of-"),
         "{err}"
     );
+}
+
+const BLOG: &str = "workloads/noisypigeon.com/blog";
+
+const SITE: &str = "static_site:\n  template: { version: 1.0.0, features: [math] }\n";
+
+/// `CLOUDFLARE` with the blog's site token and the apex token widened for its rulesets.
+fn cloudflare_with_sites() -> String {
+    CLOUDFLARE.replace(
+        "      - { permission: DNS Write, zones: [noisypigeon.com] }\n",
+        "      - { permission: DNS Write, zones: [noisypigeon.com] }
+      - { permission: Transform Rules Write, zones: [noisypigeon.com] }
+      - { permission: Dynamic URL Redirects Write, zones: [noisypigeon.com] }
+  - name: site-noisypigeon.com-blog
+    capabilities:
+      - { permission: Workers R2 Storage Write, account: true }
+      - { permission: Zone Read, zones: [noisypigeon.com] }
+      - { permission: DNS Write, zones: [noisypigeon.com] }
+",
+    )
+}
+
+/// Adds the apex's `zone_rulesets` block and the account outputs to the fixture's schema.
+fn with_rulesets(root: &Path) {
+    let path = root.join("infra/cloudflare/schema.json");
+    let mut schema: Value =
+        serde_json::from_str(&fs::read_to_string(&path).expect("schema")).expect("json");
+    schema["x-cobot"]["apex"]["derived"]["zone_rulesets"] = json!({
+        "expand": "zone-rulesets",
+        "module": "ruleset",
+        "inputs": {
+            "zone_id": "$handoff.zone_id",
+            "name": "$item.name",
+            "phase": "$item.phase",
+            "rules": "$item.rules"
+        }
+    });
+    schema["x-cobot"]["outputs"]["token_ids"] = json!("$module.tokens[*].id");
+    schema["x-cobot"]["outputs"]["account_id"] = json!("$secret.account_id");
+    fs::write(path, schema.to_string()).expect("write");
+}
+
+/// A repository serving the blog as a static site at the apex's `@` and `www`.
+fn site_repo() -> TempDir {
+    let repo = repo(PROTON);
+    let root = repo.path();
+    write(
+        root,
+        "infra/cloudflare/config.yaml",
+        &cloudflare_with_sites(),
+    );
+    write(root, &format!("{BLOG}/config.yaml"), SITE);
+    with_rulesets(root);
+    repo
+}
+
+#[test]
+fn a_static_site_renders_its_bucket_and_a_domain_per_host() {
+    let repo = site_repo();
+    assert_eq!(problems(repo.path()), Vec::<String>::new());
+    let json = render_of(repo.path(), BLOG);
+    assert_eq!(
+        json["provider"]["cloudflare"]["api_token"],
+        "${var.handoff.api_token}"
+    );
+    assert_eq!(
+        json["variable"]["handoff"]["type"],
+        "object({ api_token = string, zone_id = string, account_id = string })"
+    );
+    let bucket = &json["module"]["bucket"];
+    assert_eq!(
+        bucket["for_each"],
+        json!({ "site": { "name": "blog-noisypigeon-com", "storage_class": "Standard" } })
+    );
+    assert_eq!(bucket["account_id"], "${var.handoff.account_id}");
+    let domains = &json["module"]["domains"];
+    assert_eq!(
+        domains["for_each"],
+        json!({
+            "apex": { "bucket": "site", "domain": "noisypigeon.com" },
+            "www": { "bucket": "site", "domain": "www.noisypigeon.com" }
+        })
+    );
+    assert_eq!(
+        domains["bucket_name"],
+        "${module.bucket[each.value.bucket].name}"
+    );
+    assert_eq!(domains["zone_id"], "${var.handoff.zone_id}");
+
+    write(
+        repo.path(),
+        &format!("{BLOG}/config.yaml"),
+        &format!("{SITE}  storage_class: InfrequentAccess\n"),
+    );
+    assert_eq!(
+        render_of(repo.path(), BLOG)["module"]["bucket"]["for_each"]["site"]["storage_class"],
+        "InfrequentAccess"
+    );
+}
+
+#[test]
+fn the_apex_rewrites_and_redirects_for_its_static_sites_and_renders_no_records_for_them() {
+    let repo = site_repo();
+    let json = render(repo.path());
+    let rulesets = &json["module"]["zone_rulesets"]["for_each"];
+    let root = &rulesets["noisypigeon.com:sites-root"];
+    assert_eq!(root["phase"], "http_request_transform");
+    assert_eq!(root["zone"], ZONE);
+    let rules = root["rules"].as_array().expect("rules");
+    assert_eq!(rules.len(), 2);
+    assert_eq!(
+        rules[1]["expression"],
+        "(http.host eq \"www.noisypigeon.com\" and http.request.uri.path eq \"/\")"
+    );
+    assert_eq!(
+        rules[0]["action_parameters"]["uri"]["path"]["value"],
+        "/index.html"
+    );
+    let www = &rulesets["noisypigeon.com:sites-www"];
+    assert_eq!(www["phase"], "http_request_dynamic_redirect");
+    let redirect = &www["rules"][0];
+    assert_eq!(
+        redirect["expression"],
+        "(http.host eq \"www.noisypigeon.com\")"
+    );
+    assert_eq!(
+        redirect["action_parameters"]["from_value"]["status_code"],
+        301
+    );
+    assert_eq!(
+        redirect["action_parameters"]["from_value"]["target_url"]["expression"],
+        "concat(\"https://noisypigeon.com\", http.request.uri.path)"
+    );
+    assert!(
+        !records(repo.path())
+            .keys()
+            .any(|k| k.contains(":host-blog"))
+    );
+
+    write(
+        repo.path(),
+        &format!("{APEX}/config.yaml"),
+        &PROTON.replace("services:", "hosts: { blog: [journal] }\nservices:"),
+    );
+    let rulesets = render(repo.path())["module"]["zone_rulesets"]["for_each"].clone();
+    assert_eq!(
+        rulesets
+            .as_object()
+            .map(|o| o.keys().cloned().collect::<Vec<_>>()),
+        Some(vec!["noisypigeon.com:sites-root".to_string()])
+    );
+
+    let repo = self::repo(PROTON);
+    with_rulesets(repo.path());
+    assert_eq!(
+        render(repo.path())["module"]["zone_rulesets"]["for_each"],
+        json!({})
+    );
+}
+
+#[test]
+fn a_static_site_needs_its_tokens() {
+    let repo = site_repo();
+    write(repo.path(), "infra/cloudflare/config.yaml", CLOUDFLARE);
+    assert_fails(
+        repo.path(),
+        "infra/cloudflare/config.yaml needs a `site-noisypigeon.com-blog` token",
+    );
+    assert_fails(
+        repo.path(),
+        "`apex-noisypigeon.com` holds exactly `DNS Write` on `noisypigeon.com`, `Dynamic URL Redirects Write` on `noisypigeon.com`, `Transform Rules Write` on `noisypigeon.com`, nothing else",
+    );
+    write(
+        repo.path(),
+        "infra/cloudflare/config.yaml",
+        &cloudflare_with_sites().replace(
+            "      - { permission: Zone Read, zones: [noisypigeon.com] }\n",
+            "",
+        ),
+    );
+    assert_fails(
+        repo.path(),
+        "`site-noisypigeon.com-blog` holds exactly `DNS Write` on `noisypigeon.com`, `Workers R2 Storage Write` on the account, `Zone Read` on `noisypigeon.com`, nothing else",
+    );
+}
+
+#[test]
+fn bad_static_sites_fail_for_their_own_reason() {
+    for (config, want) in [
+        ("static_site: {}\n", "\"template\" is a required property"),
+        (
+            "static_site:\n  template: { version: \"1.0\" }\n",
+            "does not match",
+        ),
+        (
+            "static_site:\n  template: { version: 1.0.0 }\n  storage_class: Cold\n",
+            "storage_class",
+        ),
+        (
+            "static_site:\n  template: { version: 1.0.0, features: [Math] }\n",
+            "does not match",
+        ),
+        (
+            "static_site:\n  template: { version: 1.0.0 }\n  extra: 1\n",
+            "Additional properties",
+        ),
+        (
+            "ingress: { type: CNAME, content: b.example }\n",
+            "Additional properties",
+        ),
+    ] {
+        let repo = site_repo();
+        write(repo.path(), &format!("{BLOG}/config.yaml"), config);
+        assert_fails(repo.path(), want);
+    }
+
+    let repo = site_repo();
+    write(
+        repo.path(),
+        &format!("{APEX}/config.yaml"),
+        &PROTON.replace(
+            "services:",
+            "hosts: { blog: [blog.noisypigeon.com] }\nservices:",
+        ),
+    );
+    assert_fails(repo.path(), "a static site needs a host");
+    assert_fails(repo.path(), "assigns this workload no host");
+
+    let repo = site_repo();
+    workload(
+        repo.path(),
+        "shop",
+        &format!("ingress: {{ type: CNAME, content: s.example }}\n{SITE}"),
+    );
+    assert_fails(
+        repo.path(),
+        "workloads/noisypigeon.com/shop: ingress and static_site cannot both serve a workload",
+    );
+    write(
+        repo.path(),
+        "workloads/noisypigeon.com/shop/schema.json",
+        r#"{ "type": "object", "x-cobot": { "version": "0.1.0", "workload": {} } }"#,
+    );
+    write(
+        repo.path(),
+        "workloads/noisypigeon.com/shop/config.yaml",
+        "{}\n",
+    );
+    assert_fails(
+        repo.path(),
+        "`x-cobot.workload` belongs only in infra/cloudflare",
+    );
+}
+
+#[test]
+fn a_site_token_is_handed_off_after_infra_applies() {
+    if !tofu_available() {
+        eprintln!("skipped: tofu is not on PATH");
+        return;
+    }
+    let repo = builtin_repo();
+    let root = repo.path();
+    write(
+        root,
+        "infra/cloudflare/config.yaml",
+        &cloudflare_with_sites(),
+    );
+    write(root, &format!("{BLOG}/config.yaml"), SITE);
+    with_rulesets(root);
+    let state = TempDir::new().expect("state");
+    let blog = cobot::select(root, &root.join(".config"), &[BLOG.into()]).expect("valid");
+
+    let pending = cobot::plan(&ctx(root, state.path()), &blog).expect("plan");
+    let note = pending[0].note.clone().unwrap_or_default();
+    assert!(note.contains("site-noisypigeon.com-blog"), "{note}");
+    assert_eq!(pending[0].counts(), (3, 0, 0));
+    assert!(matches!(
+        cobot::apply(&ctx(root, state.path()), &blog),
+        Err(cobot::Error::Pending { .. })
+    ));
+
+    let infra =
+        cobot::select(root, &root.join(".config"), &["infra/cloudflare".into()]).expect("valid");
+    cobot::apply(&ctx(root, state.path()), &infra).expect("apply infra");
+    let applied = cobot::apply(&ctx(root, state.path()), &blog).expect("apply blog");
+    assert!(applied[0].note.is_none(), "{}", cobot::summary(&applied));
+    assert_eq!(applied[0].counts(), (3, 0, 0));
+    let again = cobot::plan(&ctx(root, state.path()), &blog).expect("replan");
+    assert!(!again[0].has_changes(), "{}", cobot::summary(&again));
+    for dir in [root.join(".cobot"), state.path().to_path_buf()] {
+        assert_eq!(
+            grep(&dir, "tok-site-noisypigeon.com-blog"),
+            Vec::<PathBuf>::new()
+        );
+    }
 }

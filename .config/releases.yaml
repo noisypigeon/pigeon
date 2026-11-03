@@ -68,6 +68,18 @@ units:
     manifest: infra/cloudflare/modules/dns-record/module.yaml
     paths: [infra/cloudflare/modules/dns-record/]
     exclude: ['*.md']
+  infra-cloudflare-r2-bucket:
+    manifest: infra/cloudflare/modules/r2-bucket/module.yaml
+    paths: [infra/cloudflare/modules/r2-bucket/]
+    exclude: ['*.md']
+  infra-cloudflare-r2-custom-domain:
+    manifest: infra/cloudflare/modules/r2-custom-domain/module.yaml
+    paths: [infra/cloudflare/modules/r2-custom-domain/]
+    exclude: ['*.md']
+  infra-cloudflare-ruleset:
+    manifest: infra/cloudflare/modules/ruleset/module.yaml
+    paths: [infra/cloudflare/modules/ruleset/]
+    exclude: ['*.md']
   static-site-template:
     manifest: src/static-site-template/template.yaml
     paths: [src/static-site-template/]
@@ -87,4 +99,7 @@ tiers:
   - { file: infra/cloudflare/modules/api-token/CHANGELOG.md, unit: infra-cloudflare-api-token }
   - { file: infra/cloudflare/CHANGELOG.md, unit: infra-cloudflare-schema }
   - { file: infra/cloudflare/modules/dns-record/CHANGELOG.md, unit: infra-cloudflare-dns-record }
+  - { file: infra/cloudflare/modules/r2-bucket/CHANGELOG.md, unit: infra-cloudflare-r2-bucket }
+  - { file: infra/cloudflare/modules/r2-custom-domain/CHANGELOG.md, unit: infra-cloudflare-r2-custom-domain }
+  - { file: infra/cloudflare/modules/ruleset/CHANGELOG.md, unit: infra-cloudflare-ruleset }
   - { file: src/static-site-template/CHANGELOG.md, unit: static-site-template }

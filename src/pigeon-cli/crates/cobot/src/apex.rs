@@ -22,7 +22,7 @@ pub const DNS_WRITE: &str = "DNS Write";
 pub const HANDOFF: &str = "zone-token";
 /// The only derived-list expander.
 pub const EXPANDER: &str = "zone-records";
-/// The handoff keys.
+/// An apex's handoff keys.
 pub const HANDOFF_KEYS: [&str; 2] = ["api_token", "zone_id"];
 /// Inert values a plan uses while the handoff is pending.
 pub const PLACEHOLDER_TOKEN: &str = "0000000000000000000000000000000000000000";
@@ -49,13 +49,28 @@ static SECRET_KEY: LazyLock<Regex> =
 static INPUT: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^[a-z0-9_]+(\.[a-z0-9_]+)*$").expect("valid regex"));
 
-/// Where an apex unit sits: the repository root and its zone.
+/// Where an apex or a schema-less workload sits: the repository root, its
+/// zone, and the workload's name for a workload.
 #[derive(Debug, Clone)]
 pub struct Site {
     /// The repository root.
     pub root: PathBuf,
-    /// The zone of `workloads/<zone>/apex`.
+    /// The zone of `workloads/<zone>/…`.
     pub zone: String,
+    /// The workload of `workloads/<zone>/<workload>`; `None` for the apex.
+    pub workload: Option<String>,
+}
+
+/// Whether `name` is shaped like a zone.
+#[must_use]
+pub fn is_zone(name: &str) -> bool {
+    ZONE.is_match(name)
+}
+
+/// Whether `name` is a lowercase-dash workload name.
+#[must_use]
+pub fn is_name(name: &str) -> bool {
+    NAME.is_match(name)
 }
 
 /// The zone of an apex path, `workloads/<zone>/apex`.
@@ -461,7 +476,8 @@ fn implied_claim(kind: &str, content: Option<&str>) -> Option<ClaimType> {
     }
 }
 
-fn label(host: &str) -> String {
+/// A host's key part: `apex` for `@`, dashes for dots.
+pub(crate) fn label(host: &str) -> String {
     if host == "@" {
         "apex".into()
     } else {
@@ -495,17 +511,52 @@ pub fn workloads(root: &Path, zone: &str) -> BTreeMap<String, bool> {
     out
 }
 
-/// A workload's `ingress`, if its `config.yaml` has one.
-fn ingress(root: &Path, zone: &str, workload: &str) -> Option<Value> {
+/// A workload's `config.yaml`, if it parses.
+pub(crate) fn workload_config(root: &Path, zone: &str, workload: &str) -> Option<Value> {
     let text = fs::read_to_string(
         root.join("workloads")
             .join(zone)
             .join(workload)
-            .join("config.yaml"),
+            .join(crate::config::CONFIG),
     )
     .ok()?;
-    let v: Value = serde_saphyr::from_str(&text).ok()?;
-    v.get("ingress").cloned()
+    serde_saphyr::from_str(&text).ok()
+}
+
+/// A workload's `ingress`, if its `config.yaml` has one.
+fn ingress(root: &Path, zone: &str, workload: &str) -> Option<Value> {
+    workload_config(root, zone, workload)?
+        .get("ingress")
+        .cloned()
+}
+
+/// Each workload's hosts in one zone's apex config: the apex workload at `@`
+/// and `www`, every other at its name, unless `hosts` replaces them. Hosts
+/// that are not relative host names are left out.
+pub(crate) fn assignments(
+    config: &Value,
+    units: &BTreeMap<String, bool>,
+    zone: &str,
+) -> BTreeMap<String, Vec<String>> {
+    let mut assigned: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    if let Some(a) = config["apex"].as_str() {
+        assigned.insert(a.to_string(), vec!["@".into(), "www".into()]);
+    }
+    for w in units.keys() {
+        assigned.entry(w.clone()).or_insert_with(|| vec![w.clone()]);
+    }
+    let overrides = config["hosts"].as_object().cloned().unwrap_or_default();
+    for (w, hosts) in &mut assigned {
+        if let Some(list) = overrides.get(w).and_then(Value::as_array) {
+            *hosts = list
+                .iter()
+                .filter_map(Value::as_str)
+                .map(str::to_string)
+                .collect();
+        }
+        hosts.retain(|h| HOST.is_match(h) && h != zone && !h.ends_with(&format!(".{zone}")));
+    }
+    assigned
 }
 
 fn check_ingress(v: &Value) -> Result<(String, String, bool), String> {
@@ -595,36 +646,23 @@ impl Expansion {
                     .push(format!("hosts.{w}: no workload at workloads/{zone}/{w}"));
             }
         }
-        let mut assigned: BTreeMap<String, Vec<String>> = BTreeMap::new();
-        if let Some(a) = config["apex"].as_str() {
-            assigned.insert(a.to_string(), vec!["@".into(), "www".into()]);
-        }
-        for w in units.keys() {
-            assigned.entry(w.clone()).or_insert_with(|| vec![w.clone()]);
-        }
-        for (w, hosts) in &mut assigned {
-            if let Some(list) = overrides.get(w).and_then(Value::as_array) {
-                *hosts = list
-                    .iter()
-                    .filter_map(Value::as_str)
-                    .map(str::to_string)
-                    .collect();
-            }
-        }
-        for (w, hosts) in &mut assigned {
-            hosts.retain(|h| {
-                let ok = HOST.is_match(h);
-                if !ok {
+        for (w, list) in &overrides {
+            for h in list
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(Value::as_str)
+            {
+                if !HOST.is_match(h) {
                     self.problems
                         .push(format!("hosts.{w}: `{h}` is not a host name"));
                 } else if h == zone || h.ends_with(&format!(".{zone}")) {
                     self.problems
                         .push(format!("hosts.{w}: `{h}` must be relative to the zone"));
-                    return false;
                 }
-                ok
-            });
+            }
         }
+        let assigned = assignments(config, &units, zone);
         for (w, hosts) in &assigned {
             let mut keys: BTreeMap<String, &str> = BTreeMap::new();
             for h in hosts {
@@ -642,9 +680,22 @@ impl Expansion {
             if units.get(w) != Some(&true) {
                 continue;
             }
+            let own = workload_config(root, zone, w);
+            let site = own.as_ref().is_some_and(crate::static_site::is_static);
+            if site && hosts.is_empty() {
+                self.problems.push(format!(
+                    "workloads/{zone}/{w}: a static site needs a host; the apex assigns it none"
+                ));
+            }
             let Some(ing) = ingress(root, zone, w) else {
                 continue;
             };
+            if site {
+                self.problems.push(format!(
+                    "workloads/{zone}/{w}: ingress and static_site cannot both serve a workload"
+                ));
+                continue;
+            }
             match check_ingress(&ing) {
                 Ok((kind, content, proxied)) => {
                     for h in hosts {
@@ -846,6 +897,25 @@ pub fn expand(config: &Value, home: &Path, site: &Site) -> (Map<String, Value>, 
     expand_with(config, home, site, &BTreeMap::new())
 }
 
+/// A derived block's items and their problems, by its expander.
+#[must_use]
+pub fn derive(
+    expander: &str,
+    config: &Value,
+    home: &Path,
+    site: &Site,
+) -> (Map<String, Value>, Vec<String>) {
+    match expander {
+        EXPANDER => expand(config, home, site),
+        crate::static_site::RULESETS => {
+            (crate::static_site::rulesets(config, &site.root), Vec::new())
+        }
+        crate::static_site::BUCKET => (crate::static_site::bucket(config, site), Vec::new()),
+        crate::static_site::DOMAINS => crate::static_site::domains(config, site),
+        _ => (Map::new(), vec![format!("unknown expander `{expander}`")]),
+    }
+}
+
 /// The problems once secret-backed records are classified by their decrypted
 /// content; messages name records and claims, never values.
 #[must_use]
@@ -877,7 +947,8 @@ fn expand_with(
     (out, problems)
 }
 
-fn fqdn(name: &str, zone: &str) -> String {
+/// A record name's fully qualified form in `zone`.
+pub(crate) fn fqdn(name: &str, zone: &str) -> String {
     if name == "@" {
         zone.to_string()
     } else {
@@ -953,27 +1024,92 @@ fn zone_dir(rel: &str, dir: &Path, out: &mut Vec<(String, String)>) {
     }
 }
 
-/// Checks each apex has exactly its `apex-<zone>` token.
-fn apex_tokens(cf: &Value, apexes: Vec<(String, String)>, out: &mut Vec<(String, String)>) {
-    for (zone, at) in apexes {
-        let token = token_name(&zone);
-        let found = cf["tokens"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .find(|t| t["name"].as_str() == Some(&token));
-        let want = json!([{ "permission": DNS_WRITE, "zones": [zone] }]);
-        match found {
-            None => out.push((
-                at,
-                format!("{CLOUDFLARE}/config.yaml needs a `{token}` token"),
-            )),
-            Some(t) if t["capabilities"] != want => out.push((
+/// A token's capabilities as `(permission, on the account, zones)`, sorted.
+pub(crate) fn capabilities(token: &Value) -> Vec<(String, bool, Vec<String>)> {
+    let mut out: Vec<(String, bool, Vec<String>)> = token["capabilities"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .map(|c| {
+            let mut zones: Vec<String> = c["zones"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(Value::as_str)
+                .map(str::to_string)
+                .collect();
+            zones.sort();
+            (
+                c["permission"].as_str().unwrap_or_default().to_string(),
+                c["account"] == true,
+                zones,
+            )
+        })
+        .collect();
+    out.sort();
+    out
+}
+
+/// Checks that `infra/cloudflare` mints `token` with exactly `want`; `at` is
+/// where a missing token is reported.
+pub(crate) fn check_token(
+    cf: &Value,
+    token: &str,
+    want: &[(String, bool, Vec<String>)],
+    at: String,
+    out: &mut Vec<(String, String)>,
+) {
+    let found = cf["tokens"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .find(|t| t["name"].as_str() == Some(token));
+    let mut want = want.to_vec();
+    want.sort();
+    match found {
+        None => out.push((
+            at,
+            format!("{CLOUDFLARE}/config.yaml needs a `{token}` token"),
+        )),
+        Some(t) if capabilities(t) != want => {
+            let listed: Vec<String> = want
+                .iter()
+                .map(|(p, account, zones)| {
+                    if *account {
+                        format!("`{p}` on the account")
+                    } else {
+                        format!("`{p}` on `{}`", zones.join("`, `"))
+                    }
+                })
+                .collect();
+            out.push((
                 format!("{CLOUDFLARE}/config.yaml"),
-                format!("`{token}` holds exactly `{DNS_WRITE}` on `{zone}`, nothing else"),
-            )),
-            Some(_) => {}
+                format!(
+                    "`{token}` holds exactly {}, nothing else",
+                    listed.join(", ")
+                ),
+            ));
         }
+        Some(_) => {}
+    }
+}
+
+/// Checks each apex has exactly its `apex-<zone>` token: `DNS Write`, plus the
+/// rule permissions where the zone serves a static site.
+fn apex_tokens(
+    root: &Path,
+    cf: &Value,
+    apexes: Vec<(String, String)>,
+    out: &mut Vec<(String, String)>,
+) {
+    for (zone, at) in apexes {
+        let mut want = vec![(DNS_WRITE.to_string(), false, vec![zone.clone()])];
+        if !crate::static_site::sites(root, &zone).is_empty() {
+            for p in crate::static_site::APEX_RULE_PERMISSIONS {
+                want.push((p.to_string(), false, vec![zone.clone()]));
+            }
+        }
+        check_token(cf, &token_name(&zone), &want, at, out);
     }
 }
 
@@ -1024,7 +1160,10 @@ pub fn layout(root: &Path) -> Vec<(String, String)> {
         })
         .map(|name| (name.clone(), format!("workloads/{name}/{APEX}/config.yaml")))
         .collect();
-    apex_tokens(&cf, apexes, &mut out);
+    apex_tokens(root, &cf, apexes, &mut out);
+    for zone in dirs.iter().filter(|n| listed.contains(n.as_str())) {
+        crate::static_site::check_tokens(root, &cf, zone, &mut out);
+    }
     out
 }
 
@@ -1044,23 +1183,31 @@ pub fn handoff(
         if let Some(id) = outputs["zone_ids"]["value"][zone].as_str() {
             values.insert("zone_id".to_string(), id.to_string());
         }
-        let token = token_name(zone);
-        let live = outputs["tokens"]["value"]
-            .as_object()
-            .into_iter()
-            .flatten()
-            .filter_map(|(k, v)| {
-                let (name, g) = Generation::parse(k)?;
-                (name == token && g.not_before <= today && today < g.expires_on)
-                    .then_some((g, v.as_str()?))
-            })
-            .max_by_key(|(g, _)| *g);
-        if let Some((_, v)) = live {
-            values.insert("api_token".to_string(), v.to_string());
+        if let Some((_, v)) = live_token(outputs, "tokens", &token_name(zone), today) {
+            values.insert("api_token".to_string(), v);
         }
         out.insert(zone.clone(), values);
     }
     out
+}
+
+/// The live generation of `token` in an output map keyed by generation, and its value there.
+pub(crate) fn live_token(
+    outputs: &Value,
+    output: &str,
+    token: &str,
+    today: Day,
+) -> Option<(Generation, String)> {
+    outputs[output]["value"]
+        .as_object()
+        .into_iter()
+        .flatten()
+        .filter_map(|(k, v)| {
+            let (name, g) = Generation::parse(k)?;
+            (name == token && g.not_before <= today && today < g.expires_on)
+                .then_some((g, v.as_str()?.to_string()))
+        })
+        .max_by_key(|(g, _)| *g)
 }
 
 #[cfg(test)]
