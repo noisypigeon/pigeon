@@ -2,6 +2,7 @@
 
 ## 2026-11-03
 
+- docs(adr): no safe.directory in the cobot image ([#54](https://github.com/noisypigeon/pigeon/pull/54))
 - docs(adr): a released cobot image for the cobot workflows ([#52](https://github.com/noisypigeon/pigeon/pull/52))
 - feat(workloads): the blog on R2 ([#50](https://github.com/noisypigeon/pigeon/pull/50))
 - fix(cobot): the apex token's transform rules permission ([#51](https://github.com/noisypigeon/pigeon/pull/51))
