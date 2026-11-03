@@ -1,3 +1,4 @@
 description: Providers cobot may load, each pinned to an exact version.
 providers:
   cloudflare/cloudflare: 5.28.0
+  digitalocean/digitalocean: 2.106.0
