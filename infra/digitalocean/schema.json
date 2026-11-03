@@ -1,0 +1,244 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "infra/digitalocean",
+  "description": "The DigitalOcean provisioner unit; see .claude/decisions/2026-11-03-runtime-digitalocean-provisioner-unit.md.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "region",
+    "project",
+    "rotation",
+    "ssh_keys",
+    "buckets",
+    "keys"
+  ],
+  "x-cobot": {
+    "version": "0.1.0",
+    "secrets": [
+      "provisioner_token",
+      "spaces_access_id",
+      "spaces_secret_key"
+    ],
+    "providers": {
+      "digitalocean": {
+        "token": "$secret.provisioner_token",
+        "spaces_access_id": "$secret.spaces_access_id",
+        "spaces_secret_key": "$secret.spaces_secret_key"
+      }
+    },
+    "singletons": {
+      "project": {
+        "module": "project",
+        "inputs": {
+          "name": "$config.project.name",
+          "description": "$config.project.description",
+          "purpose": "$config.project.purpose",
+          "environment": "$config.project.environment"
+        }
+      },
+      "project_resources": {
+        "module": "project-resources",
+        "inputs": {
+          "project_id": "$module.project.id",
+          "urns": "$module.buckets[*].urn"
+        }
+      }
+    },
+    "each": {
+      "bucket_suffixes": {
+        "module": "agnostic/random-string",
+        "over": "buckets",
+        "for_each": "$item.name",
+        "inputs": {}
+      }
+    },
+    "outputs": {
+      "project_id": "$module.project.id",
+      "bucket_names": "$module.buckets[*].name",
+      "spaces_access_keys": "$module.keys[*].access_key",
+      "spaces_secret_keys": "$module.keys[*].secret_key",
+      "ssh_key_ids": "$module.ssh_keys[*].id"
+    }
+  },
+  "properties": {
+    "region": {
+      "description": "The region of every bucket.",
+      "type": "string",
+      "pattern": "^[a-z]+[0-9]$"
+    },
+    "project": {
+      "description": "The one project every resource joins; never the default.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "description",
+        "purpose",
+        "environment"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 175
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 255
+        },
+        "purpose": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
+        },
+        "environment": {
+          "enum": [
+            "Development",
+            "Staging",
+            "Production"
+          ]
+        }
+      }
+    },
+    "rotation": {
+      "description": "How long each Spaces key generation lasts, and how long it overlaps its successor.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "period_days",
+        "overlap_days"
+      ],
+      "properties": {
+        "period_days": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "overlap_days": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "ssh_keys": {
+      "description": "SSH public keys to register; ed25519 only, with no comment.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "public_key"
+        ],
+        "properties": {
+          "name": {
+            "$ref": "#/$defs/key"
+          },
+          "public_key": {
+            "type": "string",
+            "pattern": "^ssh-ed25519 [A-Za-z0-9+/]+={0,2}$"
+          }
+        }
+      },
+      "x-cobot": {
+        "module": "ssh-key",
+        "for_each": "$item.name",
+        "inputs": {
+          "name": "$item.name",
+          "public_key": "$item.public_key"
+        }
+      }
+    },
+    "buckets": {
+      "description": "Private Spaces buckets, each named <name>-<random6>.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "versioning"
+        ],
+        "properties": {
+          "name": {
+            "$ref": "#/$defs/key",
+            "maxLength": 56
+          },
+          "versioning": {
+            "type": "boolean"
+          }
+        }
+      },
+      "x-cobot": {
+        "module": "spaces-bucket",
+        "for_each": "$item.name",
+        "inputs": {
+          "key": "$item.name",
+          "suffix": "$module.bucket_suffixes[$item.name].result",
+          "region": "$config.region",
+          "versioning": "$item.versioning"
+        }
+      }
+    },
+    "keys": {
+      "description": "Spaces keys to mint, one instance per generation, each scoped to named buckets.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "grants"
+        ],
+        "properties": {
+          "name": {
+            "$ref": "#/$defs/key"
+          },
+          "grants": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "bucket",
+                "permission"
+              ],
+              "properties": {
+                "bucket": {
+                  "$ref": "#/$defs/key"
+                },
+                "permission": {
+                  "enum": [
+                    "read",
+                    "readwrite"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "x-cobot": {
+        "module": "spaces-key",
+        "for_each": "$item.name",
+        "rotate": {
+          "period_days": "$config.rotation.period_days",
+          "overlap_days": "$config.rotation.overlap_days"
+        },
+        "inputs": {
+          "name": "$item.name",
+          "grants": "$item.grants",
+          "bucket_names": "$module.buckets[*].name",
+          "not_before": "$generation.not_before",
+          "expires_on": "$generation.expires_on"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "key": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+    }
+  }
+}

@@ -14,6 +14,12 @@ target:
     - infra/cloudflare/modules/ruleset/CHANGELOG.md
     - infra/agnostic/modules/random-string/CHANGELOG.md
     - infra/agnostic/CHANGELOG.md
+    - infra/digitalocean/modules/project/CHANGELOG.md
+    - infra/digitalocean/modules/project-resources/CHANGELOG.md
+    - infra/digitalocean/modules/spaces-bucket/CHANGELOG.md
+    - infra/digitalocean/modules/spaces-key/CHANGELOG.md
+    - infra/digitalocean/modules/ssh-key/CHANGELOG.md
+    - infra/digitalocean/CHANGELOG.md
     - src/static-site-template/CHANGELOG.md
   optional: true
 rules:
