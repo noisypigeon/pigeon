@@ -1266,3 +1266,95 @@ fn a_site_token_is_handed_off_after_infra_applies() {
         );
     }
 }
+
+fn zola_available() -> bool {
+    Command::new("zola")
+        .arg("--version")
+        .output()
+        .is_ok_and(|o| o.status.success())
+}
+
+fn git_in(root: &Path, args: &[&str]) {
+    let ok = Command::new("git")
+        .arg("-C")
+        .arg(root)
+        .args(["-c", "user.name=t", "-c", "user.email=t@example.com"])
+        .args(args)
+        .status()
+        .expect("git")
+        .success();
+    assert!(ok, "git {args:?}");
+}
+
+#[test]
+fn a_static_site_builds_with_its_pinned_template_and_features() {
+    if !zola_available() {
+        eprintln!("skipped: zola is not on PATH");
+        return;
+    }
+    let repo = site_repo();
+    let root = repo.path();
+    copy(root, "src/static-site-template");
+    write(
+        root,
+        &format!("{BLOG}/site/config.toml"),
+        "title = \"Blog\"\ndescription = \"A blog.\"\ntheme = \"static-site-template\"\n\n[extra]\navatar = \"/a.png\"\nsocial_preview = \"/p.png\"\nnav = []\n",
+    );
+    write(
+        root,
+        &format!("{BLOG}/site/content/_index.md"),
+        "+++\ntitle = \"Blog\"\n+++\nHi.\n",
+    );
+    write(
+        root,
+        &format!("{BLOG}/site/content/posts/_index.md"),
+        "+++\ntitle = \"Posts\"\nsort_by = \"date\"\n+++\n",
+    );
+    git_in(root, &["init", "-q"]);
+    git_in(root, &["add", "-A"]);
+    git_in(root, &["commit", "-q", "-m", "init"]);
+    git_in(root, &["tag", "static-site-template/v1.0.0"]);
+
+    let sites = cobot::sites::find(root, &[]).expect("find");
+    assert_eq!(sites.len(), 1);
+    assert_eq!(sites[0].hosts, ["noisypigeon.com", "www.noisypigeon.com"]);
+    let built = cobot::sites::build(root, &sites).expect("build");
+    assert!(built[0].features["math"] && built[0].features["feed"] && !built[0].features["tags"]);
+    let config = fs::read_to_string(built[0].public.with_file_name("config.toml")).expect("config");
+    assert!(
+        config.starts_with("base_url = \"https://noisypigeon.com\"\n"),
+        "{config}"
+    );
+    let home = fs::read_to_string(built[0].public.join("index.html")).expect("index");
+    assert!(
+        home.contains("https://noisypigeon.com/") && home.contains("katex.min.js"),
+        "{home}"
+    );
+
+    write(
+        root,
+        &format!("{BLOG}/config.yaml"),
+        "static_site:\n  template: { version: 1.0.0, features: [typo] }\n",
+    );
+    let sites = cobot::sites::find(root, &[]).expect("find");
+    let err = cobot::sites::build(root, &sites)
+        .expect_err("unknown")
+        .to_string();
+    assert!(
+        err.contains("`typo` is not a feature of static-site-template/v1.0.0"),
+        "{err}"
+    );
+    write(
+        root,
+        &format!("{BLOG}/config.yaml"),
+        "static_site:\n  template: { version: 9.9.9 }\n",
+    );
+    let sites = cobot::sites::find(root, &[]).expect("find");
+    assert!(cobot::sites::build(root, &sites).is_err());
+
+    write(root, &format!("{BLOG}/config.yaml"), "static_site: [\n");
+    assert!(matches!(
+        cobot::sites::find(root, &[]),
+        Err(cobot::Error::Invalid(_))
+    ));
+}

@@ -61,6 +61,11 @@ belong in the ADR, never in the file.
   `infra/cloudflare/` defines (its schema's `$defs.apex`, its `modules/` and
   `presets/`), per
   [`2026-11-02-runtime-workloads-zone-apex.md`](.claude/decisions/2026-11-02-runtime-workloads-zone-apex.md).
+- A workload with only a `config.yaml` enables what `infra/cloudflare/`
+  defines (its `$defs.workload`): today `static_site`, an R2 bucket and a
+  custom domain per apex host, built with a released `src/static-site-template/`
+  (`static-site-template/vX.Y.Z`) and published by `cobot.yml` after apply, per
+  [`2026-11-03-runtime-cloudflare-static-sites-r2.md`](.claude/decisions/2026-11-03-runtime-cloudflare-static-sites-r2.md).
 - The repo is public: never push secrets, credentials, key IDs or private
   bucket names, in commits, branch names, PR text or CI logs.
 
@@ -77,6 +82,9 @@ belong in the ADR, never in the file.
   `pigeon cobot secrets check <unit>`, with `COBOT_SECRETS_PASSPHRASE` (or
   `COBOT_WORKLOAD_SECRETS_PASSPHRASE` under `workloads/`); there is no `get`.
 - `pigeon cobot lock`: rewrite `.config/providers.lock.hcl` from the allowlist.
+- `pigeon cobot sites build [WORKLOAD…]`: build static sites with Zola, no
+  secrets; `sites publish --state DIR` also syncs them to R2 and checks them
+  live.
 - `pigeon cobot release --dry-run` / `pigeon cobot tags`: preview the bot's
   release JSON.
 - `mise run sentinel`: `pigeon sentinel check` against `.config/policies/`.

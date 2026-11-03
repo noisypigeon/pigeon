@@ -4,6 +4,7 @@ min_version = "2026.10.12"
 [tools]
 rust = { version = "1.99.1", profile = "minimal", components = "clippy,rustfmt" }
 opentofu = "1.13.1"
+zola = "0.23.6"
 
 [tasks.build]
 dir = "src/pigeon-cli"

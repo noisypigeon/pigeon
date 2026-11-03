@@ -1,6 +1,7 @@
 # Plan on PR, apply on merge and daily; see .claude/decisions/2026-11-02-runtime-cobot-infrastructure-as-code.md
 # .claude/decisions/2026-11-02-runtime-cloudflare-provisioner-unit.md
-# and .claude/decisions/2026-11-02-runtime-workloads-zone-apex.md.
+# .claude/decisions/2026-11-02-runtime-workloads-zone-apex.md
+# and .claude/decisions/2026-11-03-runtime-cloudflare-static-sites-r2.md.
 name: cobot
 
 on:
@@ -104,6 +105,8 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
+          fetch-depth: 0
+          fetch-tags: true
           persist-credentials: false
       - name: Check out the state repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -146,3 +149,13 @@ jobs:
           if [ "$OUTCOME" != success ]; then suffix=" (apply failed; partial)"; fi
           git commit -q -m "cobot: apply $units from noisypigeon/pigeon@$SHA$suffix"
           git push origin HEAD
+      - name: Publish static sites
+        if: steps.apply.outcome == 'success'
+        env:
+          COBOT_STATE_PASSPHRASE: ${{ secrets.COBOT_STATE_PASSPHRASE }}
+          COBOT_SECRETS_PASSPHRASE: ${{ secrets.COBOT_SECRETS_PASSPHRASE }}
+          COBOT_WORKLOAD_SECRETS_PASSPHRASE: ${{ secrets.COBOT_WORKLOAD_SECRETS_PASSPHRASE }}
+        run: |
+          set -o pipefail
+          src/pigeon-cli/target/debug/pigeon cobot sites publish --root . --state .state | tee "$RUNNER_TEMP/sites.md"
+          cat "$RUNNER_TEMP/sites.md" >>"$GITHUB_STEP_SUMMARY"
