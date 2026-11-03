@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.10 (2026-11-03)
+
+- feat(cobot): sites build and publish ([#49](https://github.com/noisypigeon/pigeon/pull/49))
+
 ## v0.1.9 (2026-11-03)
 
 - feat(cobot): static-site workloads on R2 ([#47](https://github.com/noisypigeon/pigeon/pull/47))

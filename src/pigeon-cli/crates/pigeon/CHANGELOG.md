@@ -2,6 +2,7 @@
 
 ## 2026-11-03
 
+- feat(cobot): sites build and publish ([#49](https://github.com/noisypigeon/pigeon/pull/49))
 - fix(cobot): name the unit and passphrase in decrypt errors ([#45](https://github.com/noisypigeon/pigeon/pull/45))
 
 ## 2026-11-02

@@ -2,6 +2,7 @@
 
 ## 2026-11-03
 
+- feat(cobot): sites build and publish ([#49](https://github.com/noisypigeon/pigeon/pull/49))
 - feat(infra): the apex's site rulesets and the account outputs ([#48](https://github.com/noisypigeon/pigeon/pull/48))
 - feat(cobot): static-site workloads on R2 ([#47](https://github.com/noisypigeon/pigeon/pull/47))
 - docs(adr): two static-site engine PRs, the token's id and the template's defaults ([#46](https://github.com/noisypigeon/pigeon/pull/46))
