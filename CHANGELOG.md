@@ -2,6 +2,7 @@
 
 ## 2026-11-03
 
+- feat(static-site-template): a site config contract and dated posts ([#57](https://github.com/noisypigeon/pigeon/pull/57))
 - ci: run cobot workflows from the pigeon-cobot image ([#56](https://github.com/noisypigeon/pigeon/pull/56))
 - docs(adr): static site config from config.yaml, by a template contract ([#55](https://github.com/noisypigeon/pigeon/pull/55))
 - feat(cobot): release a pigeon-cobot image ([#53](https://github.com/noisypigeon/pigeon/pull/53))
