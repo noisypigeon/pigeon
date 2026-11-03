@@ -60,7 +60,7 @@ The template, `src/static-site-template/`, owns the shape of a site's settings a
 - **`scaffold/`**: the files' fixed parts, which no site sets:
   - `config.toml`: `theme`, `compile_sass`, `generate_feeds`, `feed_filenames`, `build_search_index` and the `tags` taxonomy;
   - `static/manifest.json`: `start_url`, `display`, and `theme_color` and `background_color` from the light theme colour;
-  - `content/posts/_index.md`: `sort_by`, `page_template`, and `generate_feeds = true`;
+  - `content/posts/_index.md`: `render = false`, `sort_by`, `page_template`, and `generate_feeds = true`, as today; the theme has no `section.html`;
   - `content/pages/_index.md`: `render = false`.
 - **`template.yaml`** gains `content: { posts: { filename: date-slug } }`, the rule in §4.
 
