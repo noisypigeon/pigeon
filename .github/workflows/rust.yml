@@ -65,12 +65,12 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        features: [sentinel, gantry]
+        features: [sentinel, gantry, cobot]
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
-      - run: docker build --build-arg FEATURES="$FEATURES" -t "pigeon-$FEATURES:ci" src/pigeon-cli
+      - run: docker build --target "$FEATURES" --build-arg FEATURES="$FEATURES" -t "pigeon-$FEATURES:ci" src/pigeon-cli
         env:
           FEATURES: ${{ matrix.features }}
       - run: docker run --rm "pigeon-$FEATURES:ci" "$FEATURES" --version

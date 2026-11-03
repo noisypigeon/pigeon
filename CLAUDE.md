@@ -33,15 +33,19 @@ belong in the ADR, never in the file.
     `pull-request.yaml` fails one that does;
   - `sentinel`, `gantry` and `cobot` are release units in
     `.config/releases.yaml`, each with its own version and tag
-    `<unit>/vX.Y.Z` (the first two also an image
-    `ghcr.io/noisypigeon/pigeon-<unit>`); the bot bumps them, never a PR;
+    `<unit>/vX.Y.Z` and image `ghcr.io/noisypigeon/pigeon-<unit>`, built
+    from the Dockerfile stage named for it; the bot bumps them, never a PR;
   - a unit releases only when its own build changed: its crate and slice of
     `pigeon` (`commands/<unit>.rs`, `cli/<unit>.rs`), shared `pigeon` code,
     its `cargo tree`, or workspace build settings;
   - `rust.yml` runs only when a Rust input changed;
   - `pigeon` compiles in only the features (subcommands) asked for;
-  - a policy that needs an unreleased sentinel feature waits: merge and
-    release the engine change first, then use it in a later PR.
+  - a policy that needs an unreleased sentinel feature, or a unit or
+    workload that needs an unreleased cobot feature, waits: merge and
+    release the engine change first, then use it in a later PR, per
+    [`2026-11-03-release-cobot-image-in-workflows.md`](.claude/decisions/2026-11-03-release-cobot-image-in-workflows.md);
+  - the cobot image's `tofu` and `zola` versions equal `mise.toml`'s, which
+    a cobot test checks.
 - Infrastructure is cobot's, per
   [`2026-11-02-runtime-cobot-infrastructure-as-code.md`](.claude/decisions/2026-11-02-runtime-cobot-infrastructure-as-code.md):
   units (`unit.yaml`, schema v0) live only under `infra/` and `workloads/`;
