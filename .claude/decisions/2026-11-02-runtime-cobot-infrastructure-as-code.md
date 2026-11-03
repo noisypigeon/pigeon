@@ -267,11 +267,12 @@ moves:
 
 - **Plan.** While `to` has no state and `from` does, cobot plans `to` against a copy of `from`'s state. The summary notes "state moves from `<from>`".
 - **Apply.**
-  1. cobot copies `from`'s state file to `to`, still encrypted, byte for byte.
-  2. It applies `to`.
-  3. Only after that apply succeeds, it deletes `from`'s file.
+  1. While `to` has no state, cobot copies `from`'s state file to `to`, still encrypted, byte for byte.
+  2. Once `to` has state, it is never overwritten: it may hold what a failed apply already changed.
+  3. cobot applies `to`.
+  4. After any successful apply of `to`, including one with no changes, it deletes `from`'s file.
 
-  The workflow's `git add -A` commits both in the run's single state commit. If the apply fails, both files remain, and the next run retries.
+  The workflow's `git add -A` commits the result in the run's single state commit. If the apply fails, `to` keeps whatever partial state it wrote, `from` stays, and the next run retries against `to` alone.
 - **Spent entries.** Once `from` has no state, the entry does nothing, and a later PR removes it.
 - **Address moves.** A resource change with a `previous_address` is listed as `move <from> → <to>`, never hidden as "No changes".
 
@@ -284,5 +285,7 @@ An end-to-end test with built-in fixtures:
 3. plans the note with no changes;
 4. applies, checking that the new state file exists and the old one is gone;
 5. replans "No changes".
+
+A second end-to-end test fails an apply after the copy, and checks that the retry plans against `to`'s partial state, never `from`'s.
 
 Unit tests cover each `validate` rejection.
