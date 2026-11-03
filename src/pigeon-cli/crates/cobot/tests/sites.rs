@@ -211,6 +211,12 @@ fn a_sync_puts_what_changed_writes_index_copies_and_deletes_stale_keys() {
     let retyped = cobot::sites::sync(&bucket, &expected).expect("retype");
     assert_eq!(retyped.put, ["assets/site.css"]);
 
+    write(public.path(), cobot::sites::TYPES, "{}");
+    let err = cobot::sites::expected(public.path())
+        .expect_err("reserved")
+        .to_string();
+    assert!(err.contains("is cobot's own key"), "{err}");
+
     let wrong = Bucket {
         creds: Credentials {
             access_key: "other".into(),

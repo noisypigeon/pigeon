@@ -419,10 +419,18 @@ fn walk(dir: &Path, prefix: &str, out: &mut BTreeMap<String, Upload>) -> Result<
 ///
 /// # Errors
 ///
-/// [`Error::Io`] for an unreadable file.
+/// [`Error::Io`] for an unreadable file, or a file at [`TYPES`].
 pub fn expected(public: &Path) -> Result<BTreeMap<String, Upload>, Error> {
     let mut out = BTreeMap::new();
     walk(public, "", &mut out)?;
+    if out.contains_key(TYPES) {
+        return Err(Error::Io {
+            path: public.join(TYPES),
+            message: format!(
+                "`{TYPES}` is cobot's own key in the bucket; a site cannot publish it"
+            ),
+        });
+    }
     let pages: Vec<(String, Upload)> = out
         .iter()
         .filter_map(|(k, v)| {
@@ -441,8 +449,7 @@ pub fn expected(public: &Path) -> Result<BTreeMap<String, Upload>, Error> {
     Ok(out)
 }
 
-/// The key holding each object's `Content-Type` as last written, which an
-/// `ETag` cannot show.
+/// The key holding each object's last written `Content-Type`; a site may not use it.
 pub const TYPES: &str = ".cobot/types.json";
 
 /// What a sync did, by key.
