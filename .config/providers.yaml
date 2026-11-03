@@ -1,5 +1,7 @@
 description: Providers cobot may load, each pinned to an exact version.
 providers:
+  backblaze/b2: 0.14.0
   cloudflare/cloudflare: 5.28.0
   digitalocean/digitalocean: 2.106.0
   hashicorp/random: 3.9.1
+  scaleway/scaleway: 2.87.0
