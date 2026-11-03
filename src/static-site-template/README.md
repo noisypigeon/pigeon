@@ -40,6 +40,4 @@ post's date prefix equals the date of its `date`, and it sets no `slug`.
 The posts feed is `/posts/posts_feed.xml`, which the scaffold generates and
 `feed` links to.
 
-A site without `static_site.site` supplies its own `config.toml`,
-`content/` and `static/`, as in 1.0.0; its own `robots.txt` wins over the
-template's.
+cobot builds only such sites; `static_site.site` is required.
