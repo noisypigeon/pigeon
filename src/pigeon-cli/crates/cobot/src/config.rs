@@ -276,8 +276,8 @@ pub fn load(dir: &Path, home: &Path, site: Option<Site>) -> Result<ConfigUnit, S
     let config_text = fs::read_to_string(dir.join(CONFIG)).map_err(|e| format!("{CONFIG}: {e}"))?;
     let mut config: Value =
         serde_saphyr::from_str(&config_text).map_err(|e| format!("{CONFIG}: {e}"))?;
-    if let Some(zone) = site.as_ref().and_then(|s| s.zone.clone()) {
-        config = json!({ "zones": { zone: config } });
+    if let Some(site) = &site {
+        config = json!({ "zones": { site.zone.clone(): config } });
     }
     let schema_text =
         fs::read_to_string(home.join(SCHEMA)).map_err(|e| format!("{SCHEMA}: {e}"))?;
@@ -354,7 +354,7 @@ fn check_apex(unit: &ConfigUnit, problems: &mut Vec<(String, String)>) {
     if handoff.is_some() && unit.site.is_none() {
         problems.push((
             SCHEMA.into(),
-            "only workloads/cloudflare/apex takes a handoff".into(),
+            "only a workloads/<zone>/apex takes a handoff".into(),
         ));
     }
     for b in blocks(&unit.schema).iter().filter(|b| b.derived.is_some()) {
@@ -366,7 +366,7 @@ fn check_apex(unit: &ConfigUnit, problems: &mut Vec<(String, String)>) {
         } else if unit.site.is_none() {
             problems.push((
                 SCHEMA.into(),
-                "only workloads/cloudflare/apex derives records".into(),
+                "only a workloads/<zone>/apex derives records".into(),
             ));
         }
     }

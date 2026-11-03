@@ -116,7 +116,7 @@
   },
   "$defs": {
     "apex": {
-      "description": "workloads/cloudflare/apex: every zone's apex; see .claude/decisions/2026-11-02-runtime-workloads-zone-apex.md.",
+      "description": "An apex as composed: workloads/<zone>/apex/config.yaml under zones.<zone>; see .claude/decisions/2026-11-02-runtime-workloads-zone-apex.md.",
       "type": "object",
       "additionalProperties": false,
       "required": [
