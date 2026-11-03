@@ -83,7 +83,8 @@ paths:
   - unknown keys fail;
   - `schema` must be `v0`;
   - `name` is lowercase `[a-z0-9-]+`;
-  - each path is relative, contains no `..`, and must exist under the root.
+  - each path is relative, contains no `..`, and must exist under the root;
+  - `paths.providers` is named `providers.yaml`, because cobot reads its allowlist and lock file from that file's directory.
 - All problems are reported together, as `Error::Invalid`.
 - `infra/` and `workloads/` are fixed by cobot's ADRs, so v0 does not list them. A later schema version may.
 
@@ -108,7 +109,7 @@ paths:
   | --- | --- | --- |
   | `instance.show` | backplane | the loaded manifest |
   | `policy.check` | sentinel | `sentinel::load_dir` on `paths.policies`, then `sentinel::check` on the root |
-  | `infra.validate` | cobot | `cobot::validate(root, paths.providers)`, returning each unit's path |
+  | `infra.validate` | cobot | `cobot::validate(root, <directory of paths.providers>)`, returning each unit's path |
 
 - `backplane::run(&Instance, &Request) -> Result<Response, Error>`:
   - `Request` is `{ operation, args }`. `args` is a JSON object, empty for every v0 operation;
