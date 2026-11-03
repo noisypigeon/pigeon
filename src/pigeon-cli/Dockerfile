@@ -37,8 +37,7 @@ ARG TOFU_VERSION=1.13.1
 ARG ZOLA_VERSION=0.23.6
 RUN apt-get update \
  && apt-get install -y --no-install-recommends ca-certificates git \
- && rm -rf /var/lib/apt/lists/* \
- && git config --system --add safe.directory '*'
+ && rm -rf /var/lib/apt/lists/*
 COPY --from=tools /out/ /usr/local/bin/
 COPY --from=build /src/target/release/pigeon /usr/local/bin/pigeon
 RUN tofu version | grep -qF "OpenTofu v${TOFU_VERSION}" \
