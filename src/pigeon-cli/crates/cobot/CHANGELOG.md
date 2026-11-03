@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.6 (2026-11-03)
+
+- feat(cobot): per-zone apexes and unit moves ([#41](https://github.com/noisypigeon/pigeon/pull/41))
+
 ## v0.1.5 (2026-11-02)
 
 - feat(cobot): apexes from infra/cloudflare, workload secrets and token handoff ([#37](https://github.com/noisypigeon/pigeon/pull/37))
