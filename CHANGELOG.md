@@ -2,6 +2,7 @@
 
 ## 2026-11-03
 
+- build(cobot): allow the scaleway and b2 providers ([#71](https://github.com/noisypigeon/pigeon/pull/71))
 - docs(adr): infra/scaleway and infra/backblaze provisioner units ([#70](https://github.com/noisypigeon/pigeon/pull/70))
 - feat(infra): infra/agnostic and its random-string module ([#68](https://github.com/noisypigeon/pigeon/pull/68))
 - feat(cobot): agnostic modules and each blocks ([#67](https://github.com/noisypigeon/pigeon/pull/67))
