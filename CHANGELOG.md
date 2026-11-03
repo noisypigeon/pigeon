@@ -2,6 +2,7 @@
 
 ## 2026-11-03
 
+- docs(adr): infra/agnostic and random resource names ([#65](https://github.com/noisypigeon/pigeon/pull/65))
 - docs(adr): require bucket versioning in infra/digitalocean ([#63](https://github.com/noisypigeon/pigeon/pull/63))
 - build(cobot): allow the digitalocean provider ([#62](https://github.com/noisypigeon/pigeon/pull/62))
 - docs(adr): infra/digitalocean provisioner unit ([#61](https://github.com/noisypigeon/pigeon/pull/61))
