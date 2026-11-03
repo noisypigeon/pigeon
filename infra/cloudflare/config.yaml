@@ -5,3 +5,10 @@ tokens:
   - name: apex-noisypigeon.com
     capabilities:
       - { permission: DNS Write, zones: [noisypigeon.com] }
+      - { permission: Transform Rules Write, zones: [noisypigeon.com] }
+      - { permission: Dynamic URL Redirects Write, zones: [noisypigeon.com] }
+  - name: site-noisypigeon.com-blog
+    capabilities:
+      - { permission: Workers R2 Storage Write, account: true }
+      - { permission: Zone Read, zones: [noisypigeon.com] }
+      - { permission: DNS Write, zones: [noisypigeon.com] }
