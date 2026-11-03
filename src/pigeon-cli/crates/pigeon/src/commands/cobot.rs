@@ -128,9 +128,12 @@ fn secrets_set(args: &SecretsKey) -> Result<(), cobot::Error> {
 }
 
 fn secrets_check(args: &SecretsUnit) -> Result<(), cobot::Error> {
-    let pass = secrets_pass(args)?;
-    let path = secrets_path(args);
-    let values = cobot::secrets::decrypt_all(&path, &pass)?;
+    let (_, values) = cobot::unit_secrets(
+        &args.unit,
+        &secrets_path(args),
+        env::var(cobot::secrets::PASSPHRASE_VAR).ok(),
+        env::var(cobot::secrets::WORKLOAD_PASSPHRASE_VAR).ok(),
+    )?;
     for key in values.keys() {
         println!("{key}: decrypts");
     }
