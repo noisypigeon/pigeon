@@ -260,3 +260,7 @@ Before writing PR C, §3's modules were checked against the provider's schema at
 Spaces in `tor1` could not be checked from the implementing session: its network reaches no DigitalOcean host. PR C's plan creates no bucket, so the first ADR that adds one checks the region in its own plan.
 
 §8's steps are unchanged. PR C follows this amendment.
+
+### 2026-11-03: Random bucket names from infra/agnostic
+
+`.claude/decisions/2026-11-03-runtime-infra-agnostic-shared-modules.md` supersedes `bucket_prefix`. Buckets are named `<name>-<random6>`, from `infra/agnostic`'s `random-string` module, and the unit holds three secrets. That ADR's §8 gives the steps.
