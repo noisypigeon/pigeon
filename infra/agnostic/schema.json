@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "infra/agnostic",
+  "description": "Provider-agnostic modules any unit composes; see .claude/decisions/2026-11-03-runtime-infra-agnostic-shared-modules.md.",
+  "type": "object",
+  "additionalProperties": false,
+  "x-cobot": {
+    "version": "0.1.0",
+    "secrets": [],
+    "providers": {}
+  },
+  "properties": {}
+}
