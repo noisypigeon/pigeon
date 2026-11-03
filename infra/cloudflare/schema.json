@@ -233,6 +233,7 @@
       "description": "A workload under workloads/<zone>/; see .claude/decisions/2026-11-03-runtime-cloudflare-static-sites-r2.md.",
       "type": "object",
       "additionalProperties": false,
+      "required": ["static_site"],
       "properties": {
         "static_site": {
           "type": "object",

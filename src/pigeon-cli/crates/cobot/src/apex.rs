@@ -1161,9 +1161,15 @@ pub fn layout(root: &Path) -> Vec<(String, String)> {
         .map(|name| (name.clone(), format!("workloads/{name}/{APEX}/config.yaml")))
         .collect();
     apex_tokens(root, &cf, apexes, &mut out);
-    for zone in dirs.iter().filter(|n| listed.contains(n.as_str())) {
+    let zones: Vec<&str> = dirs
+        .iter()
+        .map(String::as_str)
+        .filter(|n| listed.contains(n))
+        .collect();
+    for zone in &zones {
         crate::static_site::check_tokens(root, &cf, zone, &mut out);
     }
+    crate::static_site::check_buckets(root, &zones, &mut out);
     out
 }
 

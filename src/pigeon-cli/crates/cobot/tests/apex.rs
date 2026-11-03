@@ -1174,6 +1174,7 @@ fn bad_static_sites_fail_for_their_own_reason() {
             "ingress: { type: CNAME, content: b.example }\n",
             "Additional properties",
         ),
+        ("{}\n", "\"static_site\" is a required property"),
     ] {
         let repo = site_repo();
         write(repo.path(), &format!("{BLOG}/config.yaml"), config);
@@ -1191,6 +1192,34 @@ fn bad_static_sites_fail_for_their_own_reason() {
     );
     assert_fails(repo.path(), "a static site needs a host");
     assert_fails(repo.path(), "assigns this workload no host");
+
+    let repo = site_repo();
+    write(
+        repo.path(),
+        "infra/cloudflare/config.yaml",
+        &cloudflare_with_sites().replace(
+            "zones: [noisypigeon.com, pigeon.dev]",
+            "zones: [noisypigeon.com, pigeon.dev, noisy-pigeon.com, noisy.pigeon-com]",
+        ),
+    );
+    for zone in ["noisy-pigeon.com", "noisy.pigeon-com"] {
+        write(
+            repo.path(),
+            &format!("workloads/{zone}/blog/config.yaml"),
+            SITE,
+        );
+    }
+    assert_fails(
+        repo.path(),
+        "workloads/noisy.pigeon-com/blog: bucket `blog-noisy-pigeon-com` is also workloads/noisy-pigeon.com/blog's",
+    );
+    let long = "a".repeat(60);
+    write(
+        repo.path(),
+        &format!("workloads/noisypigeon.com/{long}/config.yaml"),
+        SITE,
+    );
+    assert_fails(repo.path(), "is longer than R2's 63 characters");
 
     let repo = site_repo();
     workload(

@@ -187,6 +187,29 @@ pub fn rulesets(config: &Value, root: &Path) -> Map<String, Value> {
     out
 }
 
+/// R2's longest bucket name.
+pub const BUCKET_MAX: usize = 63;
+
+/// Checks that no two static sites share a bucket name, and that each fits R2.
+pub fn check_buckets(root: &Path, zones: &[&str], out: &mut Vec<(String, String)>) {
+    let mut seen: BTreeMap<String, String> = BTreeMap::new();
+    for zone in zones {
+        for w in sites(root, zone) {
+            let name = bucket_name(zone, &w);
+            let at = format!("workloads/{zone}/{w}");
+            if name.len() > BUCKET_MAX {
+                out.push((
+                    at.clone(),
+                    format!("bucket `{name}` is longer than R2's {BUCKET_MAX} characters"),
+                ));
+            }
+            if let Some(first) = seen.insert(name.clone(), at.clone()) {
+                out.push((at, format!("bucket `{name}` is also {first}'s")));
+            }
+        }
+    }
+}
+
 /// Checks that each static site in `zone` has exactly its `site-<zone>-<workload>` token.
 pub fn check_tokens(root: &Path, cf: &Value, zone: &str, out: &mut Vec<(String, String)>) {
     for w in sites(root, zone) {
