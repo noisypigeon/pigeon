@@ -33,6 +33,8 @@ pub enum Action {
     Replace,
     /// Destroy it.
     Delete,
+    /// Move it to a new address, unchanged.
+    Move,
 }
 
 impl Action {
@@ -44,6 +46,7 @@ impl Action {
             Self::Update => "update",
             Self::Replace => "replace",
             Self::Delete => "delete",
+            Self::Move => "move",
         }
     }
 }
@@ -85,6 +88,7 @@ impl UnitPlan {
                 Action::Update => (a, c + 1, d),
                 Action::Replace => (a + 1, c, d + 1),
                 Action::Delete => (a, c, d + 1),
+                Action::Move => (a, c, d),
             })
     }
 }
@@ -212,11 +216,20 @@ fn changes(json: &str) -> Vec<Change> {
     };
     let mut out = Vec::new();
     for rc in plan["resource_changes"].as_array().into_iter().flatten() {
-        if let (Some(action), Some(address)) = (action(&rc["change"]), rc["address"].as_str()) {
-            out.push(Change {
+        let Some(address) = rc["address"].as_str() else {
+            continue;
+        };
+        let moved = rc["previous_address"].as_str();
+        match (action(&rc["change"]), moved) {
+            (Some(action), _) => out.push(Change {
                 address: mask(address),
                 action,
-            });
+            }),
+            (None, Some(from)) => out.push(Change {
+                address: mask(&format!("{from} → {address}")),
+                action: Action::Move,
+            }),
+            (None, None) => {}
         }
     }
     for (name, change) in plan["output_changes"].as_object().into_iter().flatten() {

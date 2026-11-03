@@ -119,11 +119,13 @@ pub fn discover(root: &Path) -> (Vec<Unit>, Vec<Problem>) {
                 "holds both unit.yaml and config.yaml; a unit is one or the other",
             ));
         } else if config_file.is_file() {
-            let (home, site) = if rel == crate::apex::UNIT {
+            let zone = crate::apex::zone_apex(&rel);
+            let (home, site) = if rel == crate::apex::UNIT || zone.is_some() {
                 (
                     root.join(crate::apex::CLOUDFLARE),
                     Some(crate::apex::Site {
                         root: root.to_path_buf(),
+                        zone: zone.map(str::to_string),
                     }),
                 )
             } else {
@@ -291,6 +293,9 @@ pub fn validate(root: &Path, allow: &Allowlist) -> Vec<Problem> {
     let (units, mut problems) = discover(root);
     let name_re = &*NAME;
     for (path, message) in crate::apex::layout(root) {
+        problems.push(problem(path, message));
+    }
+    for (path, message) in crate::moves::validate(root, &units) {
         problems.push(problem(path, message));
     }
     let infra_keys: std::collections::BTreeSet<String> = units
