@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+
+{% block title %}{{ term.name }} - {{ config.title }}{% endblock title %}
+{% block description %}Posts tagged "{{ term.name }}".{% endblock description %}
+{% block canonical %}{{ term.permalink }}{% endblock canonical %}
+{% block og_url %}{{ term.permalink }}{% endblock og_url %}
+{% block og_title %}{{ term.name }} - {{ config.title }}{% endblock og_title %}
+{% block og_description %}Posts tagged "{{ term.name }}".{% endblock og_description %}
+{% block twitter_title %}{{ term.name }} - {{ config.title }}{% endblock twitter_title %}
+{% block twitter_description %}Posts tagged "{{ term.name }}".{% endblock twitter_description %}
+{% block body_class %}site-page-body{% endblock body_class %}
+
+{% block content %}
+<div class="site-page zoomable">
+  <div class="trix-content e-content">
+    <h1>Tag: {{ term.name }}</h1>
+    <ul class="t-list-of-posts site-list-of-posts h-feed">
+      {% set_global current_year = "" %}
+      {% for post in term.pages %}
+        {% set post_year = post.date | date(format="%Y") %}
+        {% if post_year != current_year %}
+          {% set_global current_year = post_year %}
+          <li class="post-list-year-h2">{{ current_year }}</li>
+        {% endif %}
+        <li class="h-entry">
+          <time class="dt-published" datetime="{{ post.date | date(format="%Y-%m-%dT%H:%M:%S%:z") }}" title="{{ post.date | date(format="%Y-%m-%dT%H:%M:%S%:z") }}">
+            {{ post.date | date(format="%b %-d") }}
+          </time>
+          <span class="t-post post-link"><a class="p-name u-url" href="{{ post.permalink }}">{{ post.title }}</a></span>
+        </li>
+      {% endfor %}
+    </ul>
+    <p class="mt-3XS"><a href="/tags/">All tags</a></p>
+  </div>
+</div>
+{% endblock content %}

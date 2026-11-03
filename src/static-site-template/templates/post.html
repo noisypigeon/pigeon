@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+
+{% block title %}{{ page.title }} - {{ config.title }}{% endblock title %}
+{% block description %}{% if page.description %}{{ page.description }}{% else %}{{ config.description }}{% endif %}{% endblock description %}
+{% block canonical %}{{ page.permalink }}{% endblock canonical %}
+{% block og_url %}{{ page.permalink }}{% endblock og_url %}
+{% block og_type %}article{% endblock og_type %}
+{% block og_title %}{{ page.title }} - {{ config.title }}{% endblock og_title %}
+{% block og_description %}{% if page.description %}{{ page.description }}{% else %}{{ config.description }}{% endif %}{% endblock og_description %}
+{% block og_image %}{% if page.extra.og_image %}{{ config.base_url }}{{ page.extra.og_image }}{% else %}{{ config.base_url }}{{ config.extra.social_preview }}{% endif %}{% endblock og_image %}
+{% block og_image_extra %}{% endblock og_image_extra %}
+{% block twitter_title %}{{ page.title }} - {{ config.title }}{% endblock twitter_title %}
+{% block twitter_description %}{% if page.description %}{{ page.description }}{% else %}{{ config.description }}{% endif %}{% endblock twitter_description %}
+{% block twitter_image %}{% if page.extra.og_image %}{{ config.base_url }}{{ page.extra.og_image }}{% else %}{{ config.base_url }}{{ config.extra.social_preview }}{% endif %}{% endblock twitter_image %}
+{% block body_class %}site-post-body{% endblock body_class %}
+
+{% block extra_head %}
+{% if page.updated %}{% set modified_date = page.updated %}{% else %}{% set modified_date = page.date %}{% endif %}
+{% if page.description %}{% set jsonld_description = page.description %}{% else %}{% set jsonld_description = config.description %}{% endif %}
+{% if page.extra.og_image %}{% set jsonld_image = config.base_url ~ page.extra.og_image %}{% else %}{% set jsonld_image = config.base_url ~ config.extra.social_preview %}{% endif %}
+{% if config.extra.author.name %}{% set author = config.extra.author.name %}{% else %}{% set author = config.title %}{% endif %}
+<meta property="article:published_time" content="{{ page.date | date(format="%Y-%m-%dT%H:%M:%S%:z") }}">
+<meta property="article:modified_time" content="{{ modified_date | date(format="%Y-%m-%dT%H:%M:%S%:z") }}">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BlogPosting",
+  "headline": {{ page.title | json_encode() | replace(from="<", to="\\u003c") | safe }},
+  "description": {{ jsonld_description | json_encode() | replace(from="<", to="\\u003c") | safe }},
+  "datePublished": "{{ page.date | date(format="%Y-%m-%dT%H:%M:%S%:z") }}",
+  "dateModified": "{{ modified_date | date(format="%Y-%m-%dT%H:%M:%S%:z") }}",
+  "url": {{ page.permalink | json_encode() | replace(from="<", to="\\u003c") | safe }},
+  "mainEntityOfPage": {{ page.permalink | json_encode() | replace(from="<", to="\\u003c") | safe }},
+  "image": {{ jsonld_image | json_encode() | replace(from="<", to="\\u003c") | safe }},
+  "author": { "@type": "Person", "name": {{ author | json_encode() | replace(from="<", to="\\u003c") | safe }}, "url": {{ (config.base_url ~ "/") | json_encode() | replace(from="<", to="\\u003c") | safe }} },
+  "publisher": { "@type": "Person", "name": {{ author | json_encode() | replace(from="<", to="\\u003c") | safe }}, "url": {{ (config.base_url ~ "/") | json_encode() | replace(from="<", to="\\u003c") | safe }} }
+}
+</script>
+{% endblock extra_head %}
+
+{% block content %}
+<article class="site-post h-entry zoomable">
+  <header class="site-post-header">
+    <h1 class="p-name">{{ page.title }}</h1>
+    <div class="site-post-byline">By {% if config.extra.author.page %}<a class="p-author h-card" href="{{ config.extra.author.page }}">{% if config.extra.author.name %}{{ config.extra.author.name }}{% else %}{{ config.title }}{% endif %}</a>{% else %}<span class="p-author h-card">{% if config.extra.author.name %}{{ config.extra.author.name }}{% else %}{{ config.title }}{% endif %}</span>{% endif %}</div>
+  </header>
+
+  <div class="trix-content e-content">
+    {{ page.content | safe }}
+  </div>
+
+  <footer class="site-meta">
+    <div class="published-at">
+      <time class="dt-published" datetime="{{ page.date | date(format="%Y-%m-%dT%H:%M:%S%:z") }}" title="{{ page.date | date(format="%Y-%m-%dT%H:%M:%S%:z") }}">
+        {{ page.date | date(format="%Y %B %-d") }}
+      </time>
+    </div>
+
+    {%- if config.extra.features.tags and page.taxonomies.tags %}
+    <div class="mt-3XS site-post-tags">
+      {% for tag in page.taxonomies.tags %}<a href="{{ get_taxonomy_url(kind="tags", name=tag) }}">#{{ tag }}</a>{% if not loop.last %} {% endif %}{% endfor %}
+    </div>
+    {%- endif %}
+    {%- if config.extra.features.feed %}
+
+    <div class="mt-3XS link-subscribe-to-feed">
+      <a target="_blank" href="/posts/posts_feed.xml">{{ config.extra.labels.subscribe }}</a>
+    </div>
+    {%- endif %}
+
+    <div class="mt-3XS site-link-back-to-blog-posts">
+      <a href="/">{{ config.extra.labels.back }}</a>
+    </div>
+  </footer>
+</article>
+{% endblock content %}

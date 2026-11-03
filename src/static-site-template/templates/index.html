@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+
+{% block title %}{{ config.title }} — {{ config.description }}{% endblock title %}
+{% block description %}{% if section.description %}{{ section.description }}{% else %}{{ config.description }}{% endif %}{% endblock description %}
+{% block canonical %}{{ section.permalink }}{% endblock canonical %}
+{% block og_url %}{{ section.permalink }}{% endblock og_url %}
+{% block og_title %}{{ config.title }} — {{ config.description }}{% endblock og_title %}
+{% block og_description %}{% if section.description %}{{ section.description }}{% else %}{{ config.description }}{% endif %}{% endblock og_description %}
+{% block twitter_title %}{{ config.title }} — {{ config.description }}{% endblock twitter_title %}
+{% block twitter_description %}{% if section.description %}{{ section.description }}{% else %}{{ config.description }}{% endif %}{% endblock twitter_description %}
+{% block body_class %}site-page-body site-home-page{% endblock body_class %}
+
+{% block extra_head %}
+{%- if config.extra.author.name %}{% set author = config.extra.author.name %}{% else %}{% set author = config.title %}{% endif %}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebSite",
+  "name": {{ config.title | json_encode() | replace(from="<", to="\\u003c") | safe }},
+  "url": {{ (config.base_url ~ "/") | json_encode() | replace(from="<", to="\\u003c") | safe }},
+  "description": {{ config.description | json_encode() | replace(from="<", to="\\u003c") | safe }},
+  "author": { "@id": {{ (config.base_url ~ "/#person") | json_encode() | replace(from="<", to="\\u003c") | safe }} }
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Person",
+  "@id": {{ (config.base_url ~ "/#person") | json_encode() | replace(from="<", to="\\u003c") | safe }},
+  "name": {{ author | json_encode() | replace(from="<", to="\\u003c") | safe }},
+  "url": {{ (config.base_url ~ "/") | json_encode() | replace(from="<", to="\\u003c") | safe }},
+  "image": {{ (config.base_url ~ config.extra.avatar) | json_encode() | replace(from="<", to="\\u003c") | safe }},{% if config.extra.author.alternate_names %}
+  "alternateName": {{ config.extra.author.alternate_names | json_encode() | replace(from="<", to="\\u003c") | safe }},{% endif %}
+  "sameAs": [{% set_global same_as_emitted = false %}{% for item in config.extra.nav %}{% if item.link is starting_with(pat="http") %}{% if same_as_emitted %}, {% endif %}{{ item.link | json_encode() | replace(from="<", to="\\u003c") | safe }}{% set_global same_as_emitted = true %}{% endif %}{% endfor %}]
+}
+</script>
+{% endblock extra_head %}
+
+{% block content %}
+<div class="site-page zoomable">
+  <div class="trix-content e-content">
+    {{ section.content | safe }}
+
+    <ul class="t-list-of-posts site-list-of-posts h-feed">
+      {% set posts_section = get_section(path="posts/_index.md") %}
+      {% set_global current_year = "" %}
+      {% for post in posts_section.pages %}
+        {% set post_year = post.date | date(format="%Y") %}
+        {% if post_year != current_year %}
+          {% set_global current_year = post_year %}
+          <li class="post-list-year-h2">{{ current_year }}</li>
+        {% endif %}
+        <li class="h-entry">
+          <time class="dt-published" datetime="{{ post.date | date(format="%Y-%m-%dT%H:%M:%S%:z") }}" title="{{ post.date | date(format="%Y-%m-%dT%H:%M:%S%:z") }}">
+            {{ post.date | date(format="%b %-d") }}
+          </time>
+          <span class="t-post post-link"><a class="p-name u-url" href="{{ post.path }}">{{ post.title }}</a></span>
+        </li>
+      {% endfor %}
+    </ul>
+  </div>
+</div>
+{% endblock content %}

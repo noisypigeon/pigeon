@@ -1,0 +1,13 @@
+# pigeon's static-site template; see .claude/decisions/2026-11-03-runtime-cloudflare-static-sites-r2.md.
+version: 1.0.0
+description: A Zola theme for static sites on Cloudflare R2.
+license: GPL-3.0-or-later
+zola: 0.23.6
+features:
+  feed: { default: true, description: The Atom posts feed and its links. }
+  tags: { default: false, description: A post's tag links; needs a `tags` taxonomy. }
+  changelog: { default: false, description: The footer's link to /changelog. }
+  math: { default: false, description: "KaTeX, pinned by version and SRI." }
+  fonts: { default: true, description: "Bunny Fonts, for extra.look.font_family." }
+  banner: { default: false, description: "A one-line notice above the header, from extra.banner." }
+  commit: { default: true, description: "The build's commit, from SITE_COMMIT_SHA, in the footer." }

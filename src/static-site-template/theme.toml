@@ -1,0 +1,15 @@
+name = "static-site-template"
+description = "pigeon's Zola theme for static sites on Cloudflare R2."
+license = "GPL-3.0-or-later"
+homepage = "https://github.com/noisypigeon/pigeon/tree/main/src/static-site-template"
+min_version = "0.23.6"
+
+# Defaults Zola merges under a site's [extra]; an unset feature is off.
+[extra]
+og_image_size = { width = 1188, height = 670 }
+theme_color = { light = "rgb(228, 233, 226)", dark = "rgb(25, 28, 26)" }
+look = { color = "gameboy", font = "ibm-plex", font_family = "ibm-plex-sans:400,400i,500,500i,600,600i,700,700i" }
+labels = { back = "Back to all posts", subscribe = "Subscribe via RSS" }
+author = { name = "", alternate_names = [], page = "" }
+banner = { message = "", link = "", link_text = "" }
+features = { feed = false, tags = false, changelog = false, math = false, fonts = false, banner = false, commit = false }
