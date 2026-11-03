@@ -6,7 +6,7 @@
   "additionalProperties": false,
   "required": ["zones", "rotation", "tokens"],
   "x-cobot": {
-    "version": "0.1.1",
+    "version": "0.1.2",
     "secrets": ["account_id", "provisioner_token"],
     "providers": {
       "cloudflare": { "api_token": "$secret.provisioner_token" }

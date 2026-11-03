@@ -2,6 +2,7 @@
 
 ## 2026-11-03
 
+- refactor(cobot): drop the all-zones apex ([#43](https://github.com/noisypigeon/pigeon/pull/43))
 - refactor(workloads): move the noisypigeon.com apex to its zone ([#42](https://github.com/noisypigeon/pigeon/pull/42))
 - feat(cobot): per-zone apexes and unit moves ([#41](https://github.com/noisypigeon/pigeon/pull/41))
 

@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.7 (2026-11-03)
+
+- refactor(cobot): drop the all-zones apex ([#43](https://github.com/noisypigeon/pigeon/pull/43))
+
 ## v0.1.6 (2026-11-03)
 
 - feat(cobot): per-zone apexes and unit moves ([#41](https://github.com/noisypigeon/pigeon/pull/41))
