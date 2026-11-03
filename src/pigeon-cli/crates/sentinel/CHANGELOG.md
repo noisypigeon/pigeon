@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.9 (2026-11-03)
+
+- feat(cobot): release a pigeon-cobot image ([#53](https://github.com/noisypigeon/pigeon/pull/53))
+
 ## v0.1.8 (2026-11-02)
 
 - refactor(cobot): move release machinery from sentinel to cobot ([#33](https://github.com/noisypigeon/pigeon/pull/33))
