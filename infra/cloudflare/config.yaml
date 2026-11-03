@@ -1,4 +1,7 @@
 # Non-secret settings; see .claude/decisions/2026-11-02-runtime-cloudflare-provisioner-unit.md.
 zones: [noisypigeon.com, pigeon.dev, willowgraysen.com, noisypigeon.garden]
 rotation: { period_days: 90, overlap_days: 7 }
-tokens: []
+tokens:
+  - name: apex-noisypigeon.com
+    capabilities:
+      - { permission: DNS Write, zones: [noisypigeon.com] }
