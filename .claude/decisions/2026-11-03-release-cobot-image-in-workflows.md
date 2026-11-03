@@ -145,3 +145,13 @@ Mise and `cargo build` leave both workflows. Each job that ran `src/pigeon-cli/t
 - On PR C, the `cobot` plan comment is posted and `sites` builds, both from the image, with no Rust toolchain installed.
 - After PR C merges, `apply` is green, its state commit pushes, and the next `release.yml` run finds pending units through the image.
 - `sentinel check` passes, including `terraform-actions.yaml`: no workflow but `cobot.yml` names `tofu`.
+
+## Amendments
+
+### 2026-11-03: No safe.directory in the cobot image
+
+A review of #53 flagged §2's `git config --system --add safe.directory '*'`: it turns off git's ownership check for every repository the image reads. It is also not needed. §5 runs the image with `--user "$(id -u):$(id -g)"`, so a mounted checkout's owner already matches the user running git.
+
+- The `cobot` stage sets no `safe.directory`. §2's line, and its bullet explaining it, no longer apply.
+- Running the image without `--user`, against a checkout owned by another user, is unsupported: git refuses the checkout, as it should.
+- Execution: this amendment lands first, then #53 without the line.
