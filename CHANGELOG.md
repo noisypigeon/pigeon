@@ -2,6 +2,7 @@
 
 ## 2026-11-03
 
+- docs(adr): backplane, the platform's composition layer ([#74](https://github.com/noisypigeon/pigeon/pull/74))
 - build(cobot): allow the scaleway and b2 providers ([#71](https://github.com/noisypigeon/pigeon/pull/71))
 - docs(adr): infra/scaleway and infra/backblaze provisioner units ([#70](https://github.com/noisypigeon/pigeon/pull/70))
 - feat(infra): infra/agnostic and its random-string module ([#68](https://github.com/noisypigeon/pigeon/pull/68))
