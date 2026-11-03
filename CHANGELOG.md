@@ -2,6 +2,7 @@
 
 ## 2026-11-03
 
+- ci: check the instance manifest with the pigeon-backplane image ([#76](https://github.com/noisypigeon/pigeon/pull/76))
 - feat(backplane): pigeon-backplane crate, instance manifest and pigeon backplane ([#75](https://github.com/noisypigeon/pigeon/pull/75))
 - docs(adr): backplane, the platform's composition layer ([#74](https://github.com/noisypigeon/pigeon/pull/74))
 - build(cobot): allow the scaleway and b2 providers ([#71](https://github.com/noisypigeon/pigeon/pull/71))
