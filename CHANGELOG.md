@@ -2,6 +2,7 @@
 
 ## 2026-11-03
 
+- feat(workloads): the blog's config from config.yaml ([#59](https://github.com/noisypigeon/pigeon/pull/59))
 - feat(cobot): build static sites from config.yaml ([#58](https://github.com/noisypigeon/pigeon/pull/58))
 - feat(static-site-template): a site config contract and dated posts ([#57](https://github.com/noisypigeon/pigeon/pull/57))
 - ci: run cobot workflows from the pigeon-cobot image ([#56](https://github.com/noisypigeon/pigeon/pull/56))
