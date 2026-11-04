@@ -2,6 +2,7 @@
 
 ## 2026-11-04
 
+- feat(sentinel): a fields rule can forbid extra fields ([#79](https://github.com/noisypigeon/pigeon/pull/79))
 - docs(adr): the control plane is Rust, built from backplane ([#78](https://github.com/noisypigeon/pigeon/pull/78))
 - docs(adr): separate the pigeon platform from its instances ([#77](https://github.com/noisypigeon/pigeon/pull/77))
 
