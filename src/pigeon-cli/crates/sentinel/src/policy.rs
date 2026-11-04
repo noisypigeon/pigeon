@@ -178,6 +178,9 @@ pub struct FieldsRule {
     pub pattern: Pattern,
     /// One entry per field, in order.
     pub expect: Vec<Expect>,
+    /// No non-blank line may follow the expected fields.
+    #[serde(default)]
+    pub only: bool,
 }
 
 /// One expected field. Exactly one condition is set.
