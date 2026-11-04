@@ -42,11 +42,11 @@
         }
       },
       "x-cobot": {
-        "module": "r2-bucket",
+        "module": "cloudflare/r2-bucket",
         "for_each": "$item.name",
         "inputs": {
           "account_id": "$module.account.id",
-          "key": "$item.name",
+          "name": "$item.name",
           "suffix": "$module.bucket_suffixes[$item.name].result"
         }
       }
@@ -61,11 +61,11 @@
     },
     "singletons": {
       "account": {
-        "module": "account",
+        "module": "cloudflare/account",
         "inputs": {}
       },
       "d1": {
-        "module": "d1-database",
+        "module": "cloudflare/d1-database",
         "inputs": {
           "account_id": "$module.account.id",
           "name": "$config.database.name"
