@@ -31,8 +31,8 @@ pub struct ServeArgs {
     #[arg(long)]
     pub state: String,
 
-    /// Allow a non-loopback address; only on the Container's private network, as plain HTTP
-    /// carries the token
+    /// Allow a non-loopback address; requires mutual TLS from `BACKPLANE_TLS_CERT`,
+    /// `BACKPLANE_TLS_KEY` and `BACKPLANE_TLS_CLIENT_CA` (PEM)
     #[arg(long)]
     pub network: bool,
 

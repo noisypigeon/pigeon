@@ -45,9 +45,18 @@ pub fn run(command: BackplaneCommand) -> i32 {
 
 fn serve(args: &ServeArgs) -> i32 {
     let token = std::env::var(backplane::serve::TOKEN_VAR).unwrap_or_default();
-    let server = match Instance::load(&args.root).and_then(|i| {
-        backplane::serve::Server::bind(i, &args.listen, &args.state, &token, args.network)
-    }) {
+    let bound = backplane::serve::Tls::from_vars(|k| std::env::var(k).ok()).and_then(|tls| {
+        let instance = Instance::load(&args.root)?;
+        backplane::serve::Server::bind(
+            instance,
+            &args.listen,
+            &args.state,
+            &token,
+            args.network,
+            tls.as_ref(),
+        )
+    });
+    let server = match bound {
         Ok(s) => s,
         Err(e) => {
             eprintln!("backplane: {e}");
