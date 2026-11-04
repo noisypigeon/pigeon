@@ -432,6 +432,9 @@ fn check_top(unit: &ConfigUnit, problems: &mut Vec<(String, String)>) {
     if !x["version"].as_str().is_some_and(|v| SEMVER.is_match(v)) {
         add(SCHEMA, "`x-cobot.version` must be X.Y.Z".into());
     }
+    if x.get("local").is_some_and(|l| !l.is_boolean()) {
+        add(SCHEMA, "`x-cobot.local` must be true or false".into());
+    }
     match jsonschema::validator_for(&unit.schema) {
         Ok(validator) => {
             for e in validator.iter_errors(&unit.config) {
