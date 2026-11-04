@@ -125,7 +125,8 @@ pub struct Catalog {
     pub capabilities: BTreeMap<String, Capability>,
 }
 
-/// Every provider's capabilities file, from `catalog/` or its `infra/` fallback; problems for invalid ones.
+/// Every provider's capabilities file, from the location [`home`] picks first; problems for
+/// invalid ones and for [`duplicates`].
 #[must_use]
 pub fn capabilities(root: &Path) -> (Vec<Catalog>, Vec<Problem>) {
     let mut providers: Vec<String> = [DIR, FALLBACK]
@@ -144,9 +145,15 @@ pub fn capabilities(root: &Path) -> (Vec<Catalog>, Vec<Problem>) {
     let mut catalogs = Vec::new();
     let mut problems = Vec::new();
     for provider in providers {
-        let Some(file) = [DIR, FALLBACK]
-            .iter()
-            .map(|area| root.join(area).join(&provider).join(CAPABILITIES))
+        let active = home(root, &provider);
+        let other = if active.starts_with(root.join(DIR)) {
+            root.join(FALLBACK).join(&provider)
+        } else {
+            root.join(DIR).join(&provider)
+        };
+        let Some(file) = [active, other]
+            .into_iter()
+            .map(|d| d.join(CAPABILITIES))
             .find(|f| f.is_file())
         else {
             continue;
@@ -204,5 +211,6 @@ pub fn capabilities(root: &Path) -> (Vec<Catalog>, Vec<Problem>) {
             capabilities: parsed.capabilities,
         });
     }
+    problems.extend(duplicates(root));
     (catalogs, problems)
 }

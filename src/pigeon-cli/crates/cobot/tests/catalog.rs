@@ -330,6 +330,27 @@ fn a_local_schema_wins_over_its_catalog_copy() {
         cobot::catalog::home(root, "cloudflare"),
         root.join("infra/cloudflare")
     );
+    write(root, "infra/cloudflare/capabilities.yaml", CAPS);
+    write(
+        root,
+        "catalog/cloudflare/capabilities.yaml",
+        "description: Other.\ncapabilities:\n  zone.read: { permissions: [Zone Read], scope: zone }\n",
+    );
+    let (catalogs, found) = cobot::catalog::capabilities(root);
+    let cf = catalogs
+        .iter()
+        .find(|c| c.provider == "cloudflare")
+        .expect("cloudflare");
+    assert_eq!(
+        cf.path, "infra/cloudflare/capabilities.yaml",
+        "follows home()"
+    );
+    assert!(
+        found
+            .iter()
+            .any(|p| p.path == "catalog/cloudflare/schema.json"),
+        "capabilities reports duplicates: {found:?}"
+    );
     let got = problems(root);
     for p in [
         "catalog/proof/schema.json",
