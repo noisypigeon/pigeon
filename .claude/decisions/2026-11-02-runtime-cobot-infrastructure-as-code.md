@@ -289,3 +289,7 @@ An end-to-end test with built-in fixtures:
 A second end-to-end test fails an apply after the copy, and checks that the retry plans against `to`'s partial state, never `from`'s.
 
 Unit tests cover each `validate` rejection.
+
+### 2026-11-04: Runs move to the platform
+
+[`2026-11-04-development-platform-instance-separation.md`](2026-11-04-development-platform-instance-separation.md) moves plan and apply off GitHub Actions. A Worker on `pigeon.dev` runs them in Cloudflare Containers, and an approved plan, not a merge, gates an apply. Encrypted state moves from the state repository to R2. The CI plan and apply in this ADR, and the state repository, stay until that ADR's phase 6 cut-over. The text above stays as written.

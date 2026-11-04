@@ -127,3 +127,14 @@ rules:
   - a project named outside the pattern;
   - a missing area README.
 - The required checks stay `rust`, `sentinel` and `sentinel-pr`.
+
+## Amendments
+
+### 2026-11-04: catalog/, and infra/ for the platform alone
+
+[`2026-11-04-development-platform-instance-separation.md`](2026-11-04-development-platform-instance-separation.md) adds a `catalog/` area for provider catalogs, which are product.
+- `infra/` holds only the platform's own bootstrap in the pigeon account.
+- `workloads/` leaves this repository for the instance's own repository in phase 7.
+- `.config/policies/layout.yaml` follows each move in the PR that makes it.
+
+The text above stays as written.

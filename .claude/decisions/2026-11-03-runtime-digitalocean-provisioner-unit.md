@@ -264,3 +264,7 @@ Spaces in `tor1` could not be checked from the implementing session: its network
 ### 2026-11-03: Random bucket names from infra/agnostic
 
 `.claude/decisions/2026-11-03-runtime-infra-agnostic-shared-modules.md` supersedes `bucket_prefix`. Buckets are named `<name>-<random6>`, from `infra/agnostic`'s `random-string` module, and the unit holds three secrets. That ADR's §8 gives the steps.
+
+### 2026-11-04: Capabilities, not secrets
+
+[`2026-11-04-development-platform-instance-separation.md`](2026-11-04-development-platform-instance-separation.md) supersedes this unit's secrets. The unit becomes `catalog/digitalocean/`. It declares capabilities in `capabilities.yaml` and defines no `secrets.config.yaml`. Its credentials are minted per run from the instance's DigitalOcean grant, which the pigeon account's Secrets Store holds. The work lands in that ADR's phase 1b, replacing the open implementation PR. The text above stays as written.
