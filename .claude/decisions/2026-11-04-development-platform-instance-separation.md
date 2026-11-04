@@ -478,3 +478,85 @@ Minting, the Worker, the D1 schema, the API and Container dispatch remain phase 
   - a plan that is expired, mismatched or unknown being refused;
   - the wire form round-tripping over HTTP.
 - The spike report gives every check and binding a result from the owner's deploy.
+
+### 2026-11-04: Worker–Container mutual TLS
+
+This amends phase 3's §4 and §6. It records two decisions made in their PRs, and replaces `serve`'s plain HTTP with mutual TLS, for these reasons:
+
+- `serve` carries a bearer token that can run `infra.apply`. On plain HTTP, anyone who observes the Worker–Container link could replay the token.
+- `tiny_http`'s TLS is `rustls` 0.20, an old major version, while the workspace is on 0.23. It also cannot verify client certificates.
+
+#### 1. Decisions recorded from phase 3's PRs
+
+- **Removed state.** A removed state object is overwritten with a tombstone body through the same `If-Match` `PUT` as any update, never `DELETE`d.
+  - A conditional `PUT` is atomic in R2. A read-then-`DELETE` is not, if `If-Match` on `DELETE` is ignored.
+  - A pull treats a tombstone as absent.
+- **`serve`.**
+  - It requires a bearer token of at least 32 characters, from `BACKPLANE_TOKEN`, on every `/v0/` route.
+  - It binds its `state` at startup. A request may name only that `state`.
+  - It binds only loopback unless `--network` is set.
+  - It answers on a fixed pool of 16 workers. A second plan or apply while one runs gets 409.
+
+#### 2. The link
+
+- The Worker and the Container talk over mutual TLS 1.3.
+- The token stays as a second, independent check. A request needs both a valid client certificate and the token.
+
+#### 3. Trust
+
+- **Per instance**, one private CA issues two certificates:
+  - the Container's server certificate;
+  - the Worker's client certificate.
+- **Each side trusts only that CA** for the other side.
+- **Certificates live 90 days at most.**
+  - In phase 3, the owner issues them by runbook with `openssl`, and keeps the CA key offline.
+  - Phase 4 automates issuance and rotation with minting.
+- **Where each piece lives.**
+  - The Container's certificate, key and the client CA are in the Secrets Store. They are injected into the Container's environment as PEM, in `BACKPLANE_TLS_CERT`, `BACKPLANE_TLS_KEY` and `BACKPLANE_TLS_CLIENT_CA`.
+  - The Worker's client certificate is in a Worker mTLS certificate binding.
+  - None of it is ever in the repository.
+
+#### 4. The server
+
+- **The stack.** `serve` drops `tiny_http` for a small synchronous server, built on `std::net::TcpListener`, `rustls` 0.23 with `WebPkiClientVerifier`, and `httparse`.
+- **Connections.**
+  - The same 16 workers pull accepted connections.
+  - Each connection has read and write timeouts, and serves one request.
+  - A stalled body is released by the timeout, not held.
+- **Unchanged:**
+  - the routes, status codes and wire form;
+  - the token check and server-owned `state`;
+  - validation before the busy check.
+- **TLS is required with `--network`.** It needs all three `BACKPLANE_TLS_*` variables, and refuses to start without them.
+  - Loopback without TLS stays allowed for local use.
+  - Backplane reads PEM from the environment, never files, so `.config/policies/backplane.yaml` still holds.
+
+#### 5. What the spike confirms
+
+The spike kit gains two routes:
+
+- `/tls`: an `https://` fetch through the container binding to a probe that serves TLS with a test CA. It reports whether the Worker verified the probe's certificate.
+- `/mtls`: the same fetch with an `mtls_certificates` binding. The probe reports whether it received a client certificate.
+
+If the spike fails part of this, the fallback order is:
+
+1. If the Worker cannot verify a private CA on the container binding, the Container still requires the client certificate, and the token travels inside TLS.
+2. If the Worker cannot present a client certificate either, the decision returns to the owner with the spike's results. This amendment does not pre-decide it.
+
+#### 6. Execution
+
+1. This amendment.
+2. `feat(tooling)`: §5's spike checks, and their runbook.
+3. `feat(backplane)`: §4's server. It does not depend on the spike.
+4. In phase 4: the Worker's mTLS binding, Secrets Store injection, and rotation through minting.
+
+#### 7. Verification
+
+- Tests mint a CA, a server certificate and client certificates at test time, with `rcgen` as a dev-dependency only. They cover:
+  - every existing `serve` test, over TLS;
+  - a missing client certificate, or one from another CA, rejected at the handshake;
+  - a valid certificate without the token, which gets 401;
+  - plain HTTP to the TLS port, which fails;
+  - `--network` without TLS, refused;
+  - a stalled body, released.
+- The spike report gives `/tls` and `/mtls` results from the owner's deploy.
