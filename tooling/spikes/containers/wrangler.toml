@@ -1,0 +1,45 @@
+# The phase 3 spike; deploy a local copy with IDs filled in, per README.md.
+name = "pigeon-spike"
+main = "worker/build/index.js"
+compatibility_date = "2026-10-01"
+workers_dev = true
+
+[build]
+cwd = "worker"
+command = "cargo install -q worker-build@0.8.7 && worker-build --release"
+
+[[containers]]
+class_name = "Runner"
+image = "./probe/Dockerfile"
+image_build_context = "./probe"
+instance_type = "standard-1"
+max_instances = 1
+
+[[durable_objects.bindings]]
+name = "RUNNER"
+class_name = "Runner"
+
+[[durable_objects.bindings]]
+name = "COUNTER"
+class_name = "Counter"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Runner", "Counter"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "pigeon-spike"
+database_id = "SET_LOCALLY"
+
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "SET_LOCALLY"
+
+[[secrets_store_secrets]]
+binding = "SECRET"
+store_id = "SET_LOCALLY"
+secret_name = "pigeon-spike"
+
+[triggers]
+crons = ["*/5 * * * *"]
