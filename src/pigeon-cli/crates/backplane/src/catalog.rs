@@ -65,13 +65,13 @@ const CATALOG: &[Operation] = &[
         name: "infra.plan",
         engine: Engine::Cobot,
         effect: Effect::Plan,
-        summary: "Plan units and store the plan for 24 hours (args: state, units?)",
+        summary: "Plan units and store the plan for 24 hours (args: units?; state, which serve supplies)",
     },
     Operation {
         name: "infra.apply",
         engine: Engine::Cobot,
         effect: Effect::Apply,
-        summary: "Apply a stored, unexpired plan exactly (args: state, plan)",
+        summary: "Apply a stored, unexpired plan exactly (args: plan; state, which serve supplies)",
     },
 ];
 

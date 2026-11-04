@@ -31,6 +31,11 @@ pub struct ServeArgs {
     #[arg(long)]
     pub state: String,
 
+    /// Allow a non-loopback address; only on the Container's private network, as plain HTTP
+    /// carries the token
+    #[arg(long)]
+    pub network: bool,
+
     /// The instance's root, holding `.config/instance.yaml`
     #[arg(long, default_value = ".")]
     pub root: PathBuf,

@@ -189,8 +189,14 @@ fn http(addr: SocketAddr, method: &str, path: &str, body: &str) -> (u16, Value) 
 
 fn serving(root: &Path, state: &Path) -> SocketAddr {
     let instance = Instance::load(root).expect("valid");
-    let server =
-        Server::bind(instance, "127.0.0.1:0", &state.to_string_lossy(), TOKEN).expect("bind");
+    let server = Server::bind(
+        instance,
+        "127.0.0.1:0",
+        &state.to_string_lossy(),
+        TOKEN,
+        false,
+    )
+    .expect("bind");
     let addr = server.local_addr().expect("addr");
     std::thread::spawn(move || server.serve(var));
     addr
@@ -268,6 +274,17 @@ fn the_wire_form_round_trips_over_http() {
         r#"{"operation":"infra.plan","args":{"state":"/elsewhere"}}"#,
     );
     assert_eq!(status, 400, "a request never names the state: {refused}");
+    let (status, own) = http(
+        addr,
+        "POST",
+        "/v0/run",
+        &json!({ "operation": "infra.apply", "args": { "state": state.path(), "plan": "0".repeat(32) } }).to_string(),
+    );
+    assert_eq!(
+        status, 500,
+        "naming the server's own state is accepted: {own}"
+    );
+    assert!(own["error"].to_string().contains("no stored plan"), "{own}");
     assert_eq!(http(addr, "POST", "/v0/run", "not json").0, 400);
     let mut huge = vec![b'a'; 1024 * 1024 + 1];
     huge.push(0xff);
@@ -281,9 +298,23 @@ fn a_short_token_is_refused() {
     let root = fixture();
     let instance = Instance::load(root.path()).expect("valid");
     assert!(matches!(
-        Server::bind(instance, "127.0.0.1:0", "/state", "short"),
+        Server::bind(instance, "127.0.0.1:0", "/state", "short", false),
         Err(Error::Invalid(_))
     ));
+}
+
+#[test]
+fn only_loopback_binds_without_network() {
+    let root = fixture();
+    let instance = || Instance::load(root.path()).expect("valid");
+    let err = Server::bind(instance(), "0.0.0.0:0", "/state", TOKEN, false);
+    assert!(
+        matches!(&err, Err(Error::Invalid(p)) if p[0].contains("--network")),
+        "{:?}",
+        err.as_ref().err()
+    );
+    assert!(Server::bind(instance(), "0.0.0.0:0", "/state", TOKEN, true).is_ok());
+    assert!(Server::bind(instance(), "localhost:0", "/state", TOKEN, false).is_ok());
 }
 
 #[test]
@@ -330,4 +361,36 @@ fn health_answers_while_a_plan_runs() {
     let (status, planned) = planning.join().expect("plan thread");
     assert_eq!(status, 200, "{planned}");
     assert!(planned["result"]["plan"].is_string(), "{planned}");
+}
+
+#[test]
+fn stalled_requests_leave_the_server_answering() {
+    let root = fixture();
+    let state = TempDir::new().expect("state");
+    let addr = serving(root.path(), state.path());
+    let stall = || {
+        let mut s = TcpStream::connect(addr).expect("connect");
+        write!(
+            s,
+            "POST /v0/run HTTP/1.1\r\nhost: test\r\nauthorization: Bearer {TOKEN}\r\ncontent-length: 500000\r\n\r\n"
+        )
+        .expect("send");
+        s
+    };
+    let stalled: Vec<TcpStream> = (1..backplane::serve::WORKERS).map(|_| stall()).collect();
+    std::thread::sleep(std::time::Duration::from_millis(500));
+    assert_eq!(
+        send(addr, "GET", "/healthz", b"", None).0,
+        200,
+        "the last free worker still answers"
+    );
+    drop(stalled);
+    std::thread::sleep(std::time::Duration::from_millis(500));
+    for _ in 0..backplane::serve::WORKERS {
+        assert_eq!(
+            send(addr, "GET", "/healthz", b"", None).0,
+            200,
+            "workers are released"
+        );
+    }
 }
