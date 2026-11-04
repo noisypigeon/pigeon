@@ -166,7 +166,7 @@ fn egress() -> Value {
 }
 
 /// The TLS listener's config from `SPIKE_TLS_CERT`, `SPIKE_TLS_KEY` and `SPIKE_TLS_CLIENT_CA`
-/// (PEM); client certificates are optional so the check can report whether one arrived.
+/// (PEM); client certificates are optional.
 fn tls_config() -> Option<Arc<rustls::ServerConfig>> {
     use rustls::pki_types::pem::PemObject;
     use rustls::pki_types::{CertificateDer, PrivateKeyDer};

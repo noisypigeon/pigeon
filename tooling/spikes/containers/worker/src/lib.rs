@@ -3,6 +3,7 @@
 use std::time::Duration;
 
 use serde_json::{Value, json};
+use worker::wasm_bindgen::JsCast;
 use worker::{
     Container, ContainerStartupOptions, D1Database, Date, Delay, DurableObject, Env, Fetcher,
     Request, Response, Result, ScheduleContext, ScheduledEvent, State, durable_object, event,
@@ -192,11 +193,20 @@ async fn tls(env: &Env, container: &Container, mtls: bool) -> Value {
     if !mtls {
         return json!({ "container_binding": binding });
     }
-    let client_cert = match env.service("MTLS") {
-        Ok(fetcher) => https(&fetcher).await,
-        Err(e) => json!({ "error": format!("no MTLS binding: {e}") }),
+    let client_cert = match mtls_fetcher(env) {
+        Some(fetcher) => https(&fetcher).await,
+        None => json!({ "error": "no MTLS binding" }),
     };
     json!({ "container_binding": binding, "mtls_binding": client_cert })
+}
+
+/// The `[[mtls_certificates]]` binding: a fetcher whose requests carry its
+/// certificate, but which reaches the internet rather than a container port.
+fn mtls_fetcher(env: &Env) -> Option<Fetcher> {
+    let binding = worker::js_sys::Reflect::get(env.as_ref(), &"MTLS".into()).ok()?;
+    let has_fetch =
+        worker::js_sys::Reflect::get(&binding, &"fetch".into()).is_ok_and(|f| f.is_function());
+    has_fetch.then(|| binding.unchecked_into())
 }
 
 /// One `https://container/` fetch: the probe's answer, or why it failed.
