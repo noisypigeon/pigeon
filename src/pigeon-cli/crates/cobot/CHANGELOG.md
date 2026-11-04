@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.21 (2026-11-04)
+
+- feat(cobot): credentials requested by capability ([#99](https://github.com/noisypigeon/pigeon/pull/99))
+
 ## v0.1.20 (2026-11-04)
 
 - feat(cobot): catalog module references and retired changelogs ([#94](https://github.com/noisypigeon/pigeon/pull/94))

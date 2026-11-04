@@ -2,6 +2,7 @@
 
 ## 2026-11-04
 
+- feat(cobot): credentials requested by capability ([#99](https://github.com/noisypigeon/pigeon/pull/99))
 - feat(cobot): catalog module references and retired changelogs ([#94](https://github.com/noisypigeon/pigeon/pull/94))
 - feat(cobot): local units run only when named ([#91](https://github.com/noisypigeon/pigeon/pull/91))
 - refactor(infra): move the cloudflare and agnostic catalogs to catalog/ ([#86](https://github.com/noisypigeon/pigeon/pull/86))

@@ -2,6 +2,7 @@
 
 ## 2026-11-04
 
+- feat(cobot): credentials requested by capability ([#99](https://github.com/noisypigeon/pigeon/pull/99))
 - feat(cobot): catalog/ resolution with an infra/ fallback, and capabilities ([#80](https://github.com/noisypigeon/pigeon/pull/80))
 
 ## 2026-11-03
