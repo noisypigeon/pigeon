@@ -11,6 +11,7 @@ pub mod release;
 pub mod s3;
 pub mod secrets;
 pub mod sites;
+pub mod state;
 pub mod static_site;
 mod tofu;
 pub mod unit;
@@ -73,6 +74,8 @@ pub enum Error {
         /// The step and its diagnostic summaries, redacted.
         message: String,
     },
+    /// The R2 state store failed, or another writer changed state since it was read.
+    State(String),
     /// A git command failed.
     Git {
         /// The arguments.
@@ -127,6 +130,7 @@ impl fmt::Display for Error {
             ),
             Self::Io { path, message } => write!(f, "{}: {message}", path.display()),
             Self::Tofu { unit, message } => write!(f, "{unit}: {message}"),
+            Self::State(message) => write!(f, "state: {message}"),
             Self::Git { args, message } => write!(f, "git {args}: {message}"),
             Self::Tool { command, message } => write!(f, "{command}: {message}"),
         }
