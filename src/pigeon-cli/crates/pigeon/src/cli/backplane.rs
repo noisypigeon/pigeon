@@ -15,6 +15,30 @@ pub enum BackplaneCommand {
     Operations(JsonArgs),
     /// Run an operation; exit 1 on a violation, 2 on an error
     Run(RunArgs),
+    /// Answer operations over HTTP (GET /healthz, GET /v0/operations, POST /v0/run); needs
+    /// `BACKPLANE_TOKEN`
+    Serve(ServeArgs),
+}
+
+/// `pigeon backplane serve` arguments.
+#[derive(Args, Debug)]
+pub struct ServeArgs {
+    /// The address to listen on, e.g. 127.0.0.1:8787; there is no default
+    #[arg(long)]
+    pub listen: String,
+
+    /// The state every plan and apply uses: a directory, or `r2://<bucket>/<prefix>`
+    #[arg(long)]
+    pub state: String,
+
+    /// Allow a non-loopback address; only on the Container's private network, as plain HTTP
+    /// carries the token
+    #[arg(long)]
+    pub network: bool,
+
+    /// The instance's root, holding `.config/instance.yaml`
+    #[arg(long, default_value = ".")]
+    pub root: PathBuf,
 }
 
 /// `--json` alone.
@@ -42,6 +66,10 @@ pub struct RootArgs {
 pub struct RunArgs {
     /// The operation, as `pigeon backplane operations` lists it
     pub operation: String,
+
+    /// An argument as `name=value`; a value that parses as JSON is JSON, else a string
+    #[arg(long = "arg", value_name = "NAME=VALUE")]
+    pub args: Vec<String>,
 
     /// The instance root and output format
     #[command(flatten)]

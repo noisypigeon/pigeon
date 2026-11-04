@@ -121,7 +121,16 @@ fn catalog_names_are_unique_and_dotted() {
     names.sort_unstable();
     names.dedup();
     assert_eq!(names.len(), catalog().len());
-    assert!(catalog().iter().all(|o| o.effect == Effect::Read));
+    let changing: Vec<(&str, Effect)> = catalog()
+        .iter()
+        .filter(|o| o.effect != Effect::Read)
+        .map(|o| (o.name, o.effect))
+        .collect();
+    assert_eq!(
+        changing,
+        [("infra.plan", Effect::Plan), ("infra.apply", Effect::Apply)],
+        "only these change anything"
+    );
 }
 
 #[test]
