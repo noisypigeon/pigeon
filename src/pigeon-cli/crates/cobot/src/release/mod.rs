@@ -147,9 +147,12 @@ impl Config {
             }
         }
         for path in &config.retired {
-            if path.file_name().is_none_or(|n| n != "CHANGELOG.md") {
+            let relative = path
+                .components()
+                .all(|c| matches!(c, std::path::Component::Normal(_)));
+            if !relative || path.file_name().is_none_or(|n| n != "CHANGELOG.md") {
                 return Err(invalid(format!(
-                    "retired `{}` is not a CHANGELOG.md",
+                    "retired `{}` is not a CHANGELOG.md under the root",
                     path.display()
                 )));
             }

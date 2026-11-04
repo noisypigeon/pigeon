@@ -505,6 +505,9 @@ fn bad_retired_entries_are_rejected() {
     let path = dir.path().join("r.yaml");
     for bad in [
         format!("{CONFIG}retired: [b/NOTES.md]\n"),
+        format!("{CONFIG}retired: [../x/CHANGELOG.md]\n"),
+        format!("{CONFIG}retired: [/tmp/x/CHANGELOG.md]\n"),
+        format!("{CONFIG}retired: [./x/CHANGELOG.md]\n"),
         format!("{CONFIG}retired: [b/CHANGELOG.md]\n"),
         retire_b(CONFIG).replace("[b/CHANGELOG.md]", "[x/CHANGELOG.md, x/CHANGELOG.md]"),
     ] {
