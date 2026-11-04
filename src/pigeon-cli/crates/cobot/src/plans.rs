@@ -54,30 +54,76 @@ fn io(path: &Path) -> impl Fn(std::io::Error) -> Error + '_ {
     }
 }
 
-/// The SHA-256 of a unit's desired state: its `config.yaml`, and its `schema.json` or
-/// `unit.yaml`.
+/// The SHA-256 of a unit's desired state, from its rendered `work` directory: its
+/// `config.yaml`, its `schema.json` or `unit.yaml`, and every file of each module it renders.
 ///
 /// # Errors
 ///
 /// [`Error::Io`] if a file cannot be read.
-pub fn digest(unit: &Unit) -> Result<String, Error> {
-    let mut files: Vec<PathBuf> = vec![unit.dir.join(crate::config::CONFIG)];
-    match &unit.config {
-        Some(c) => files.push(c.home.join(crate::config::SCHEMA)),
-        None => files.push(unit.dir.join(crate::unit::UNIT_FILE)),
-    }
+pub fn digest(unit: &Unit, work: &Path) -> Result<String, Error> {
     let mut h = Sha256::new();
-    for f in files.iter().filter(|f| f.is_file()) {
-        let bytes = fs::read(f).map_err(io(f))?;
-        h.update(
-            f.file_name()
-                .map(std::ffi::OsStr::as_encoded_bytes)
-                .unwrap_or_default(),
-        );
+    let mut add = |label: &str, path: &Path| -> Result<(), Error> {
+        let bytes = fs::read(path).map_err(io(path))?;
+        h.update((label.len() as u64).to_be_bytes());
+        h.update(label.as_bytes());
         h.update((bytes.len() as u64).to_be_bytes());
         h.update(&bytes);
+        Ok(())
+    };
+    let config = unit.dir.join(crate::config::CONFIG);
+    if config.is_file() {
+        add("config", &config)?;
+    }
+    match &unit.config {
+        Some(c) => add("schema", &c.home.join(crate::config::SCHEMA))?,
+        None => add("unit", &unit.dir.join(crate::unit::UNIT_FILE))?,
+    }
+    let rendered = work.join("main.tf.json");
+    let text = fs::read_to_string(&rendered).map_err(io(&rendered))?;
+    let root: serde_json::Value = serde_json::from_str(&text).map_err(|e| Error::Io {
+        path: rendered.clone(),
+        message: e.to_string(),
+    })?;
+    let mut sources: Vec<(String, PathBuf)> = root["module"]
+        .as_object()
+        .into_iter()
+        .flatten()
+        .filter_map(|(name, m)| {
+            let source = Path::new(m["source"].as_str()?);
+            let dir = if source.is_absolute() {
+                source.to_path_buf()
+            } else {
+                unit.dir.join(source)
+            };
+            Some((name.clone(), dir))
+        })
+        .collect();
+    sources.sort();
+    for (name, dir) in sources {
+        let mut files = Vec::new();
+        module_files(&dir, &dir, &mut files)?;
+        files.sort();
+        for rel in files {
+            add(&format!("module {name} {rel}"), &dir.join(&rel))?;
+        }
     }
     Ok(hex(&h.finalize()))
+}
+
+/// The files under a module directory, relative to it, skipping `.terraform`.
+fn module_files(root: &Path, dir: &Path, out: &mut Vec<String>) -> Result<(), Error> {
+    for entry in fs::read_dir(dir).map_err(io(dir))? {
+        let path = entry.map_err(io(dir))?.path();
+        if path.file_name().is_some_and(|n| n == ".terraform") {
+            continue;
+        }
+        if path.is_dir() {
+            module_files(root, &path, out)?;
+        } else if let Ok(rel) = path.strip_prefix(root) {
+            out.push(rel.to_string_lossy().replace('\\', "/"));
+        }
+    }
+    Ok(())
 }
 
 fn valid_id(id: &str) -> bool {
@@ -94,22 +140,21 @@ fn valid_id(id: &str) -> bool {
 /// [`Error::Io`] if a file cannot be read or written.
 pub fn store(
     state: &Path,
-    planned: &[(&Unit, PathBuf, Vec<Change>)],
+    planned: &[(&Unit, PathBuf, Vec<Change>, String)],
     now: u64,
 ) -> Result<Stored, Error> {
     let mut h = Sha256::new();
     h.update(now.to_be_bytes());
     let mut units = Vec::new();
     let mut bodies = Vec::new();
-    for (unit, file, changes) in planned {
+    for (unit, file, changes, d) in planned {
         let body = fs::read(file).map_err(io(file))?;
-        let d = digest(unit)?;
         h.update(unit.path.as_bytes());
         h.update(d.as_bytes());
         h.update(&body);
         units.push(StoredUnit {
             unit: unit.path.clone(),
-            digest: d,
+            digest: d.clone(),
             changes: changes.clone(),
         });
         bodies.push(body);
@@ -173,6 +218,36 @@ pub fn restore(state: &Path, id: &str, unit: &str, to: &Path) -> Result<(), Erro
     }
     fs::copy(&from, to).map_err(io(&from))?;
     Ok(())
+}
+
+/// The marker of a unit already applied from a plan.
+const APPLIED: &str = "applied";
+
+/// Records that `unit` was applied from plan `id`, so a retry skips it.
+///
+/// # Errors
+///
+/// [`Error::Io`] if the marker cannot be written.
+pub fn mark_applied(state: &Path, id: &str, unit: &str) -> Result<(), Error> {
+    let path = state.join(DIR).join(id).join(unit).join(APPLIED);
+    fs::write(&path, b"").map_err(io(&path))
+}
+
+/// The units of plan `id` already applied.
+#[must_use]
+pub fn applied(state: &Path, id: &str) -> std::collections::BTreeSet<String> {
+    let dir = state.join(DIR).join(id);
+    fs::read_to_string(dir.join(MANIFEST))
+        .ok()
+        .and_then(|t| serde_json::from_str::<Stored>(&t).ok())
+        .map(|s| {
+            s.units
+                .into_iter()
+                .map(|u| u.unit)
+                .filter(|u| dir.join(u).join(APPLIED).is_file())
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 /// Removes plan `id`, so it is applied once.

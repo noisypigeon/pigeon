@@ -824,7 +824,8 @@ pub fn plan_stored(
     let mut files = Vec::new();
     for u in units {
         let (work, _, p) = prepare(ctx, u, true)?;
-        files.push((u, tofu::plan_file(&work), p.changes.clone()));
+        let digest = plans::digest(u, &work)?;
+        files.push((u, tofu::plan_file(&work), p.changes.clone(), digest));
         planned.push(p);
     }
     let stored = plans::store(&absolute(&ctx.state)?, &files, now)?;
@@ -840,21 +841,43 @@ pub fn plan_stored(
 pub fn apply_stored(ctx: &Context, id: &str, now: u64) -> Result<Vec<UnitPlan>, Error> {
     let state = absolute(&ctx.state)?;
     let stored = plans::load(&state, id, now)?;
-    let names: Vec<String> = stored.units.iter().map(|u| u.unit.clone()).collect();
-    let units = select(&ctx.root, &ctx.providers, &names)?;
-    for (u, s) in units.iter().zip(&stored.units) {
-        if plans::digest(u)? != s.digest {
+    let done = plans::applied(&state, id);
+    let pending: Vec<&plans::StoredUnit> = stored
+        .units
+        .iter()
+        .filter(|s| !done.contains(&s.unit))
+        .collect();
+    let names: Vec<String> = pending.iter().map(|s| s.unit.clone()).collect();
+    let units = if names.is_empty() {
+        Vec::new()
+    } else {
+        select(&ctx.root, &ctx.providers, &names)?
+    };
+    let mut ready_units = Vec::new();
+    for (u, s) in units.iter().zip(&pending) {
+        let (work, env, note) = ready(ctx, u, true)?;
+        if plans::digest(u, &work)? != s.digest {
             return Err(Error::Plan(format!(
                 "{}'s desired state changed since plan {id}; plan again",
                 u.path
             )));
         }
+        ready_units.push((u, s, work, env, note));
     }
-    let mut applied = Vec::new();
-    for (u, s) in units.iter().zip(&stored.units) {
-        let (work, env, note) = ready(ctx, u, true)?;
+    let mut applied: Vec<UnitPlan> = stored
+        .units
+        .iter()
+        .filter(|s| done.contains(&s.unit))
+        .map(|s| UnitPlan {
+            unit: s.unit.clone(),
+            changes: s.changes.clone(),
+            note: Some("Already applied from this plan.".into()),
+        })
+        .collect();
+    for (u, s, work, env, note) in ready_units {
         plans::restore(&state, id, &s.unit, &tofu::plan_file(&work))?;
         tofu::apply(&u.path, &work, &env)?;
+        plans::mark_applied(&state, id, &s.unit)?;
         finish_move(ctx, u)?;
         applied.push(UnitPlan {
             unit: u.path.clone(),

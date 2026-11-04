@@ -149,3 +149,82 @@ fn expired_changed_unknown_and_stale_plans_are_refused() {
         "tofu refuses a plan whose state moved on: {outdated}"
     );
 }
+
+#[test]
+fn a_module_edit_invalidates_a_stored_plan() {
+    if !tofu_available() {
+        eprintln!("skipped: tofu is not on PATH");
+        return;
+    }
+    let repo = repo();
+    let state = TempDir::new().expect("tempdir");
+    let c = ctx(repo.path(), state.path());
+    let (stored, _) = cobot::plan_stored(&c, &units(repo.path()), NOW).expect("plan");
+    write(
+        repo.path(),
+        "infra/bootstrap/modules/proof/main.tf",
+        &format!("{PROOF}\n# edited\n"),
+    );
+    let err = cobot::apply_stored(&c, &stored.id, NOW + 60).expect_err("module changed");
+    assert!(err.to_string().contains("desired state changed"), "{err}");
+    assert!(
+        !state
+            .path()
+            .join("infra/bootstrap/terraform.tfstate")
+            .exists(),
+        "nothing applied"
+    );
+}
+
+#[test]
+fn a_retry_skips_units_already_applied() {
+    if !tofu_available() {
+        eprintln!("skipped: tofu is not on PATH");
+        return;
+    }
+    let dir = TempDir::new().expect("tempdir");
+    let root = dir.path();
+    for name in ["a", "b"] {
+        write(
+            root,
+            &format!("infra/{name}/unit.yaml"),
+            &format!(
+                "schema: 0\nname: {name}\nkind: infra\nmodules:\n  - name: proof\n    source: ./modules/proof\n    inputs: {{ message: hello }}\n"
+            ),
+        );
+        write(root, &format!("infra/{name}/modules/proof/main.tf"), PROOF);
+    }
+    let state = TempDir::new().expect("tempdir");
+    let c = ctx(root, state.path());
+    let (stored, _) = cobot::plan_stored(&c, &units(root), NOW).expect("plan");
+    assert_eq!(stored.units.len(), 2);
+
+    let b_plan = state
+        .path()
+        .join("plans")
+        .join(&stored.id)
+        .join("infra/b/plan.tfplan");
+    let saved = fs::read(&b_plan).expect("b's plan");
+    fs::remove_file(&b_plan).expect("make b fail");
+    cobot::apply_stored(&c, &stored.id, NOW + 60).expect_err("b fails");
+    assert!(
+        state.path().join("infra/a/terraform.tfstate").exists(),
+        "a applied"
+    );
+    assert!(
+        !state.path().join("infra/b/terraform.tfstate").exists(),
+        "b did not"
+    );
+
+    fs::write(&b_plan, saved).expect("restore b's plan");
+    let applied = cobot::apply_stored(&c, &stored.id, NOW + 120).expect("retry");
+    assert_eq!(applied.len(), 2);
+    assert_eq!(applied[0].unit, "infra/a");
+    assert_eq!(
+        applied[0].note.as_deref(),
+        Some("Already applied from this plan.")
+    );
+    assert_eq!(applied[1].unit, "infra/b");
+    assert!(state.path().join("infra/b/terraform.tfstate").exists());
+    assert!(!state.path().join("plans").join(&stored.id).exists());
+}
