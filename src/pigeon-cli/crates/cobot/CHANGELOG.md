@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.23 (2026-11-04)
+
+- feat(cobot): stored plans ([#101](https://github.com/noisypigeon/pigeon/pull/101))
+
 ## v0.1.22 (2026-11-04)
 
 - feat(cobot): state in R2 ([#100](https://github.com/noisypigeon/pigeon/pull/100))

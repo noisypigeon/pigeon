@@ -2,6 +2,7 @@
 
 ## 2026-11-04
 
+- feat(cobot): stored plans ([#101](https://github.com/noisypigeon/pigeon/pull/101))
 - feat(cobot): state in R2 ([#100](https://github.com/noisypigeon/pigeon/pull/100))
 - feat(cobot): credentials requested by capability ([#99](https://github.com/noisypigeon/pigeon/pull/99))
 - feat(cobot): catalog module references and retired changelogs ([#94](https://github.com/noisypigeon/pigeon/pull/94))
