@@ -27,7 +27,9 @@ belong in the ADR, never in the file.
   writes no file and starts no process, per
   [`2026-11-02-development-sentinel-policy-cobot-actions.md`](.claude/decisions/2026-11-02-development-sentinel-policy-cobot-actions.md).
 - Provider catalogs (`schema.json`, `modules/`, `presets/`, `capabilities.yaml`)
-  live in `catalog/<provider>/`; units stay in `infra/` and `workloads/`, and an
+  live in `catalog/<provider>/` (today `cloudflare`, `digitalocean`, `scaleway`,
+  `backblaze` and `agnostic`); a catalog declares capabilities and never mints
+  keys or holds secrets; units stay in `infra/` and `workloads/`, and an
   `infra/<provider>/` that still holds its own `schema.json` wins over its
   catalog, per
   [`2026-11-04-development-platform-instance-separation.md`](.claude/decisions/2026-11-04-development-platform-instance-separation.md).

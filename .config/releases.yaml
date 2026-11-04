@@ -108,6 +108,50 @@ units:
     manifest: catalog/agnostic/schema.json
     paths: [catalog/agnostic/schema.json, catalog/agnostic/modules/]
     exclude: ['*.md']
+  infra-digitalocean-project-resources:
+    manifest: catalog/digitalocean/modules/project-resources/module.yaml
+    paths: [catalog/digitalocean/modules/project-resources/]
+    exclude: ['*.md']
+  infra-digitalocean-project:
+    manifest: catalog/digitalocean/modules/project/module.yaml
+    paths: [catalog/digitalocean/modules/project/]
+    exclude: ['*.md']
+  infra-digitalocean-spaces-bucket:
+    manifest: catalog/digitalocean/modules/spaces-bucket/module.yaml
+    paths: [catalog/digitalocean/modules/spaces-bucket/]
+    exclude: ['*.md']
+  infra-digitalocean-ssh-key:
+    manifest: catalog/digitalocean/modules/ssh-key/module.yaml
+    paths: [catalog/digitalocean/modules/ssh-key/]
+    exclude: ['*.md']
+  infra-digitalocean-schema:
+    manifest: catalog/digitalocean/schema.json
+    paths: [catalog/digitalocean/schema.json, catalog/digitalocean/capabilities.yaml, catalog/digitalocean/modules/, catalog/agnostic/modules/random-string/]
+    exclude: ['*.md']
+  infra-scaleway-iam-application:
+    manifest: catalog/scaleway/modules/iam-application/module.yaml
+    paths: [catalog/scaleway/modules/iam-application/]
+    exclude: ['*.md']
+  infra-scaleway-iam-policy:
+    manifest: catalog/scaleway/modules/iam-policy/module.yaml
+    paths: [catalog/scaleway/modules/iam-policy/]
+    exclude: ['*.md']
+  infra-scaleway-project:
+    manifest: catalog/scaleway/modules/project/module.yaml
+    paths: [catalog/scaleway/modules/project/]
+    exclude: ['*.md']
+  infra-scaleway-schema:
+    manifest: catalog/scaleway/schema.json
+    paths: [catalog/scaleway/schema.json, catalog/scaleway/capabilities.yaml, catalog/scaleway/modules/]
+    exclude: ['*.md']
+  infra-backblaze-bucket:
+    manifest: catalog/backblaze/modules/bucket/module.yaml
+    paths: [catalog/backblaze/modules/bucket/]
+    exclude: ['*.md']
+  infra-backblaze-schema:
+    manifest: catalog/backblaze/schema.json
+    paths: [catalog/backblaze/schema.json, catalog/backblaze/capabilities.yaml, catalog/backblaze/modules/, catalog/agnostic/modules/random-string/]
+    exclude: ['*.md']
   static-site-template:
     manifest: src/static-site-template/template.yaml
     paths: [src/static-site-template/]
@@ -133,4 +177,15 @@ tiers:
   - { file: catalog/cloudflare/modules/ruleset/CHANGELOG.md, unit: infra-cloudflare-ruleset, from: infra/cloudflare/modules/ruleset/CHANGELOG.md }
   - { file: catalog/agnostic/modules/random-string/CHANGELOG.md, unit: infra-agnostic-random-string, from: infra/agnostic/modules/random-string/CHANGELOG.md }
   - { file: catalog/agnostic/CHANGELOG.md, unit: infra-agnostic-schema, from: infra/agnostic/CHANGELOG.md }
+  - { file: catalog/digitalocean/modules/project-resources/CHANGELOG.md, unit: infra-digitalocean-project-resources }
+  - { file: catalog/digitalocean/modules/project/CHANGELOG.md, unit: infra-digitalocean-project }
+  - { file: catalog/digitalocean/modules/spaces-bucket/CHANGELOG.md, unit: infra-digitalocean-spaces-bucket }
+  - { file: catalog/digitalocean/modules/ssh-key/CHANGELOG.md, unit: infra-digitalocean-ssh-key }
+  - { file: catalog/digitalocean/CHANGELOG.md, unit: infra-digitalocean-schema }
+  - { file: catalog/scaleway/modules/iam-application/CHANGELOG.md, unit: infra-scaleway-iam-application }
+  - { file: catalog/scaleway/modules/iam-policy/CHANGELOG.md, unit: infra-scaleway-iam-policy }
+  - { file: catalog/scaleway/modules/project/CHANGELOG.md, unit: infra-scaleway-project }
+  - { file: catalog/scaleway/CHANGELOG.md, unit: infra-scaleway-schema }
+  - { file: catalog/backblaze/modules/bucket/CHANGELOG.md, unit: infra-backblaze-bucket }
+  - { file: catalog/backblaze/CHANGELOG.md, unit: infra-backblaze-schema }
   - { file: src/static-site-template/CHANGELOG.md, unit: static-site-template }
