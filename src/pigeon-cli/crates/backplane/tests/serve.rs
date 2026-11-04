@@ -358,6 +358,16 @@ fn health_answers_while_a_plan_runs() {
         "healthz waited {:?} behind the plan",
         started.elapsed()
     );
+    let (status, busy) = http(
+        addr,
+        "POST",
+        "/v0/run",
+        r#"{"operation":"infra.plan","args":{}}"#,
+    );
+    assert_eq!(
+        status, 409,
+        "a second plan is turned away, not queued: {busy}"
+    );
     let (status, planned) = planning.join().expect("plan thread");
     assert_eq!(status, 200, "{planned}");
     assert!(planned["result"]["plan"].is_string(), "{planned}");

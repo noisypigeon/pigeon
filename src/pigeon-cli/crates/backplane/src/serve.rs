@@ -28,7 +28,7 @@ pub struct Server {
     instance: Instance,
     state: String,
     token: String,
-    /// Held by `plan` and `apply`, which share the state's mirror.
+    /// Held by `plan` or `apply`, which share the state's mirror; a second gets 409, never waits.
     changing: Mutex<()>,
 }
 
@@ -161,11 +161,20 @@ impl Server {
         if matches!(effect, Some(Effect::Plan | Effect::Apply)) {
             request.args.insert("state".into(), json!(self.state));
         }
-        let _guard = matches!(effect, Some(Effect::Plan | Effect::Apply)).then(|| {
-            self.changing
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner)
-        });
+        let _guard = if matches!(effect, Some(Effect::Plan | Effect::Apply)) {
+            match self.changing.try_lock() {
+                Ok(g) => Some(g),
+                Err(std::sync::TryLockError::Poisoned(p)) => Some(p.into_inner()),
+                Err(std::sync::TryLockError::WouldBlock) => {
+                    return (
+                        409,
+                        json!({ "error": "a plan or apply is already running; retry when it ends" }),
+                    );
+                }
+            }
+        } else {
+            None
+        };
         match run_with(&self.instance, &request, var) {
             Ok(response) => (200, json!(response)),
             Err(Error::Invalid(problems)) => {
