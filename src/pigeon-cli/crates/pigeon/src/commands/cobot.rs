@@ -142,6 +142,7 @@ fn context(args: &CobotRun) -> Result<cobot::Context, cobot::Error> {
         secrets_passphrase: env::var(cobot::secrets::PASSPHRASE_VAR).ok(),
         workload_secrets_passphrase: env::var(cobot::secrets::WORKLOAD_PASSPHRASE_VAR).ok(),
         today: cobot::generations::today(),
+        credentials: env::var(cobot::CREDENTIALS_VAR).ok(),
     })
 }
 

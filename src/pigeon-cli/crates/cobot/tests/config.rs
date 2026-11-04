@@ -140,6 +140,7 @@ fn ctx(root: &Path, state: &Path, today: i64) -> cobot::Context {
         secrets_passphrase: Some(SECRETS_PASS.into()),
         workload_secrets_passphrase: Some(WORKLOAD_PASS.into()),
         today,
+        credentials: None,
     }
 }
 

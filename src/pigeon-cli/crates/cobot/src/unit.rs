@@ -322,6 +322,7 @@ pub fn validate(root: &Path, allow: &Allowlist) -> Vec<Problem> {
     for (path, message) in crate::moves::validate(root, &units) {
         problems.push(problem(path, message));
     }
+    let catalogs = crate::catalog::capabilities(root).0;
     let infra_keys: std::collections::BTreeSet<String> = units
         .iter()
         .filter(|u| u.path.starts_with("infra/"))
@@ -344,7 +345,7 @@ pub fn validate(root: &Path, allow: &Allowlist) -> Vec<Problem> {
         if unit.is_config() {
             if let Some(config) = &unit.config {
                 for (file, message) in
-                    crate::config::validate(config, &unit.dir, area, allow, &infra_keys)
+                    crate::config::validate(config, &unit.dir, area, allow, &infra_keys, &catalogs)
                 {
                     problems.push(problem(format!("{}/{file}", unit.path), message));
                 }

@@ -206,6 +206,7 @@ fn ctx(root: &Path, state: &Path, passphrase: &str) -> cobot::Context {
         secrets_passphrase: None,
         workload_secrets_passphrase: None,
         today: 0,
+        credentials: None,
     }
 }
 
