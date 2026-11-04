@@ -82,7 +82,7 @@ units:
     exclude: ['*.md']
   infra-cloudflare-schema:
     manifest: catalog/cloudflare/schema.json
-    paths: [catalog/cloudflare/schema.json, catalog/cloudflare/modules/, catalog/cloudflare/presets/]
+    paths: [catalog/cloudflare/schema.json, catalog/cloudflare/capabilities.yaml, catalog/cloudflare/modules/, catalog/cloudflare/presets/]
     exclude: ['*.md']
   infra-cloudflare-dns-record:
     manifest: catalog/cloudflare/modules/dns-record/module.yaml
