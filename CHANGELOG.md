@@ -2,6 +2,7 @@
 
 ## 2026-11-04
 
+- feat(catalog): cloudflare capabilities ([#88](https://github.com/noisypigeon/pigeon/pull/88))
 - refactor(infra): pigeon.dev leaves the cloudflare zones ([#87](https://github.com/noisypigeon/pigeon/pull/87))
 - refactor(infra): move the cloudflare and agnostic catalogs to catalog/ ([#86](https://github.com/noisypigeon/pigeon/pull/86))
 - docs(adr): a moved tier waits for the cobot image ([#85](https://github.com/noisypigeon/pigeon/pull/85))

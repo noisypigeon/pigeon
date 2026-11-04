@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.8 (2026-11-04)
+
+- feat(catalog): cloudflare capabilities ([#88](https://github.com/noisypigeon/pigeon/pull/88))
+
 ## v0.1.7 (2026-11-04)
 
 - refactor(infra): move the cloudflare and agnostic catalogs to catalog/ ([#86](https://github.com/noisypigeon/pigeon/pull/86))
