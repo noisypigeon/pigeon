@@ -8,8 +8,11 @@ terraform {
   }
 }
 
-data "cloudflare_accounts" "this" {}
+# Two items are enough to tell one account from several.
+data "cloudflare_accounts" "this" {
+  max_items = 2
+}
 
 locals {
-  ids = [for a in data.cloudflare_accounts.this.result : a.id]
+  ids = distinct([for a in data.cloudflare_accounts.this.result : a.id])
 }
