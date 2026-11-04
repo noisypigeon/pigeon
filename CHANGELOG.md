@@ -2,6 +2,7 @@
 
 ## 2026-11-04
 
+- feat(sentinel): freeze repository secrets ([#82](https://github.com/noisypigeon/pigeon/pull/82))
 - fix(sentinel): never echo an unexpected line's text ([#81](https://github.com/noisypigeon/pigeon/pull/81))
 - feat(cobot): catalog/ resolution with an infra/ fallback, and capabilities ([#80](https://github.com/noisypigeon/pigeon/pull/80))
 - feat(sentinel): a fields rule can forbid extra fields ([#79](https://github.com/noisypigeon/pigeon/pull/79))
