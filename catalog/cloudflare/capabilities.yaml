@@ -1,0 +1,7 @@
+description: Cloudflare capabilities a unit may request; minted per run, per 2026-11-04-development-platform-instance-separation.md.
+capabilities:
+  dns.write: { permissions: [DNS Write], scope: zone }
+  zone.read: { permissions: [Zone Read], scope: zone }
+  transform.write: { permissions: [Zone Transform Rules Write], scope: zone }
+  redirects.write: { permissions: [Dynamic URL Redirects Write], scope: zone }
+  r2.write: { permissions: [Workers R2 Storage Write], scope: account }
