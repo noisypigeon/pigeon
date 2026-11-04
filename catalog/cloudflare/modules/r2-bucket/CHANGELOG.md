@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.2 (2026-11-04)
+
+- feat(catalog): account and d1-database modules, and an optional r2-bucket suffix ([#95](https://github.com/noisypigeon/pigeon/pull/95))
+
 ## v0.1.1 (2026-11-04)
 
 - refactor(infra): move the cloudflare and agnostic catalogs to catalog/ ([#86](https://github.com/noisypigeon/pigeon/pull/86))
