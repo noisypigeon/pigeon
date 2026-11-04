@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.1.11 (2026-11-04)
+
+- feat(backplane): mutual TLS for serve ([#105](https://github.com/noisypigeon/pigeon/pull/105))
+- feat(tooling): spike TLS checks (dependencies) ([#104](https://github.com/noisypigeon/pigeon/pull/104))
+
 ## v0.1.10 (2026-11-04)
 
 - feat(backplane): plan, apply and serve ([#102](https://github.com/noisypigeon/pigeon/pull/102))

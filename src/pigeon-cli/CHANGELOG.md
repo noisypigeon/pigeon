@@ -2,6 +2,7 @@
 
 ## 2026-11-04
 
+- feat(backplane): mutual TLS for serve ([#105](https://github.com/noisypigeon/pigeon/pull/105))
 - feat(backplane): plan, apply and serve ([#102](https://github.com/noisypigeon/pigeon/pull/102))
 - feat(cobot): stored plans ([#101](https://github.com/noisypigeon/pigeon/pull/101))
 - feat(cobot): state in R2 ([#100](https://github.com/noisypigeon/pigeon/pull/100))
