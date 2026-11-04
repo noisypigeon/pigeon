@@ -1,5 +1,5 @@
 # Non-secret settings; see .claude/decisions/2026-11-02-runtime-cloudflare-provisioner-unit.md.
-zones: [noisypigeon.com, pigeon.dev, willowgraysen.com, noisypigeon.garden]
+zones: [noisypigeon.com, willowgraysen.com, noisypigeon.garden]
 rotation: { period_days: 90, overlap_days: 7 }
 tokens:
   - name: apex-noisypigeon.com
