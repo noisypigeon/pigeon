@@ -437,3 +437,30 @@ fn bad_froms_are_rejected() {
         assert!(Config::load(&path).is_err());
     }
 }
+
+#[test]
+fn an_unreadable_tier_to_move_fails_and_keeps_it() {
+    let (dir, _) = repo();
+    let root = dir.path();
+    land(root, &run(root, None), "2026-01-01");
+    fs::write(root.join("a/CHANGELOG.md"), [0xff, 0xfe, 0x00]).expect("write");
+    let err = run_with(root, &moved(CONFIG), false).expect_err("unreadable");
+    assert!(err.contains("cannot read the tier to move"), "{err}");
+    assert!(root.join("a/CHANGELOG.md").exists());
+    assert!(!root.join("moved/a/CHANGELOG.md").exists());
+}
+
+#[test]
+fn tags_carry_a_moved_tiers_previous_path() {
+    let (dir, _) = repo();
+    let root = dir.path();
+    land(root, &run(root, None), "2026-01-01");
+    let p = root.join("releases.yaml");
+    fs::write(&p, moved(CONFIG)).expect("write");
+    let rows = release::tags(root, &Config::load(&p).expect("config")).expect("tags");
+    let a = rows.iter().find(|r| r.unit == "a").expect("a");
+    assert_eq!(a.changelog.as_deref(), Some("moved/a/CHANGELOG.md"));
+    assert_eq!(a.changelog_from.as_deref(), Some("a/CHANGELOG.md"));
+    let b = rows.iter().find(|r| r.unit == "b").expect("b");
+    assert_eq!(b.changelog_from, None);
+}

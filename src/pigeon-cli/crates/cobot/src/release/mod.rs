@@ -513,8 +513,13 @@ fn render_tiers(
             Some(old) if at(old) => Some(old.clone()),
             _ => None,
         };
-        let source = moved.as_ref().unwrap_or(&tier.file);
-        let existing = fs::read_to_string(root.join(source)).ok();
+        let existing = match &moved {
+            Some(old) => Some(fs::read_to_string(root.join(old)).map_err(|e| Error::Io {
+                path: root.join(old),
+                message: format!("cannot read the tier to move: {e}"),
+            })?),
+            None => fs::read_to_string(root.join(&tier.file)).ok(),
+        };
         let mut log = existing
             .as_deref()
             .map(Changelog::parse)
@@ -564,6 +569,8 @@ pub struct TagStatus {
     pub newest: bool,
     /// The unit's release changelog tier, if it has one.
     pub changelog: Option<String>,
+    /// That tier's previous path, for a tag cut before it moved.
+    pub changelog_from: Option<String>,
 }
 
 /// Every release tag of every unit, each unit's newest version first.
@@ -575,6 +582,10 @@ pub fn tags(root: &Path, config: &Config) -> Result<Vec<TagStatus>, Error> {
     let mut rows = Vec::new();
     for (name, unit) in &config.units {
         let prefix = format!("{name}/v");
+        let tier = config
+            .tiers
+            .iter()
+            .find(|t| t.unit.as_deref() == Some(name.as_str()));
         for (i, tag) in git::tags(root, name)?.into_iter().enumerate() {
             let Some(version) = tag.strip_prefix(&prefix).map(str::to_string) else {
                 continue;
@@ -586,11 +597,10 @@ pub fn tags(root: &Path, config: &Config) -> Result<Vec<TagStatus>, Error> {
                 tag,
                 version,
                 newest: i == 0,
-                changelog: config
-                    .tiers
-                    .iter()
-                    .find(|t| t.unit.as_deref() == Some(name.as_str()))
-                    .map(|t| t.file.display().to_string()),
+                changelog: tier.map(|t| t.file.display().to_string()),
+                changelog_from: tier
+                    .and_then(|t| t.from.as_ref())
+                    .map(|p| p.display().to_string()),
             });
         }
     }
