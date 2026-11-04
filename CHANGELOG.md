@@ -2,6 +2,7 @@
 
 ## 2026-11-04
 
+- feat(catalog): digitalocean, scaleway and backblaze catalogs ([#89](https://github.com/noisypigeon/pigeon/pull/89))
 - feat(catalog): cloudflare capabilities ([#88](https://github.com/noisypigeon/pigeon/pull/88))
 - refactor(infra): pigeon.dev leaves the cloudflare zones ([#87](https://github.com/noisypigeon/pigeon/pull/87))
 - refactor(infra): move the cloudflare and agnostic catalogs to catalog/ ([#86](https://github.com/noisypigeon/pigeon/pull/86))
