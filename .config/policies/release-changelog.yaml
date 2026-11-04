@@ -26,6 +26,10 @@ target:
     - catalog/scaleway/CHANGELOG.md
     - catalog/backblaze/modules/bucket/CHANGELOG.md
     - catalog/backblaze/CHANGELOG.md
+    - infra/pigeon/modules/account/CHANGELOG.md
+    - infra/pigeon/modules/d1-database/CHANGELOG.md
+    - infra/pigeon/modules/r2-bucket/CHANGELOG.md
+    - infra/pigeon/CHANGELOG.md
     - src/static-site-template/CHANGELOG.md
   optional: true
 rules:

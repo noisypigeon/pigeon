@@ -1,0 +1,5 @@
+# Non-secret settings; see .claude/decisions/2026-11-04-development-platform-instance-separation.md.
+database: { name: pigeon }
+buckets:
+  - { name: pigeon-state }
+  - { name: pigeon-plans }

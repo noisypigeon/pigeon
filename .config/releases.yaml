@@ -152,6 +152,22 @@ units:
     manifest: catalog/backblaze/schema.json
     paths: [catalog/backblaze/schema.json, catalog/backblaze/capabilities.yaml, catalog/backblaze/modules/, catalog/agnostic/modules/random-string/]
     exclude: ['*.md']
+  infra-pigeon-account:
+    manifest: infra/pigeon/modules/account/module.yaml
+    paths: [infra/pigeon/modules/account/]
+    exclude: ['*.md']
+  infra-pigeon-d1-database:
+    manifest: infra/pigeon/modules/d1-database/module.yaml
+    paths: [infra/pigeon/modules/d1-database/]
+    exclude: ['*.md']
+  infra-pigeon-r2-bucket:
+    manifest: infra/pigeon/modules/r2-bucket/module.yaml
+    paths: [infra/pigeon/modules/r2-bucket/]
+    exclude: ['*.md']
+  infra-pigeon-schema:
+    manifest: infra/pigeon/schema.json
+    paths: [infra/pigeon/schema.json, infra/pigeon/modules/, catalog/agnostic/modules/random-string/]
+    exclude: ['*.md']
   static-site-template:
     manifest: src/static-site-template/template.yaml
     paths: [src/static-site-template/]
@@ -188,4 +204,8 @@ tiers:
   - { file: catalog/scaleway/CHANGELOG.md, unit: infra-scaleway-schema }
   - { file: catalog/backblaze/modules/bucket/CHANGELOG.md, unit: infra-backblaze-bucket }
   - { file: catalog/backblaze/CHANGELOG.md, unit: infra-backblaze-schema }
+  - { file: infra/pigeon/modules/account/CHANGELOG.md, unit: infra-pigeon-account }
+  - { file: infra/pigeon/modules/d1-database/CHANGELOG.md, unit: infra-pigeon-d1-database }
+  - { file: infra/pigeon/modules/r2-bucket/CHANGELOG.md, unit: infra-pigeon-r2-bucket }
+  - { file: infra/pigeon/CHANGELOG.md, unit: infra-pigeon-schema }
   - { file: src/static-site-template/CHANGELOG.md, unit: static-site-template }
