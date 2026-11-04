@@ -52,13 +52,17 @@ impl Action {
     }
 }
 
-/// One resource change: an address and an action, never values.
+/// One resource change: an address, an action and, for an update, the names of the attributes
+/// it changes; never values.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Change {
     /// The resource address.
     pub address: String,
     /// The action.
     pub action: Action,
+    /// For an update, the top-level attributes that change or become unknown.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub attributes: Vec<String>,
 }
 
 /// A unit's plan.
@@ -219,6 +223,35 @@ fn action(change: &Value) -> Option<Action> {
     }
 }
 
+/// The top-level attribute names whose value differs between `before` and `after`, or which
+/// become unknown; sorted, masked, never values.
+fn changed(change: &Value) -> Vec<String> {
+    let empty = serde_json::Map::new();
+    let before = change["before"].as_object().unwrap_or(&empty);
+    let after = change["after"].as_object().unwrap_or(&empty);
+    let unknown = change["after_unknown"].as_object().unwrap_or(&empty);
+    let mut names: Vec<String> = before
+        .keys()
+        .chain(after.keys())
+        .chain(unknown.keys())
+        .filter(|k| before.get(*k) != after.get(*k) || unknown.get(*k).is_some_and(any_true))
+        .map(|k| mask(k))
+        .collect();
+    names.sort();
+    names.dedup();
+    names
+}
+
+/// Whether an `after_unknown` value marks anything unknown.
+fn any_true(value: &Value) -> bool {
+    match value {
+        Value::Bool(b) => *b,
+        Value::Array(items) => items.iter().any(any_true),
+        Value::Object(map) => map.values().any(any_true),
+        _ => false,
+    }
+}
+
 /// Parses `tofu show -json` output into resource changes, then root output changes.
 fn changes(json: &str) -> Vec<Change> {
     let Ok(plan) = serde_json::from_str::<Value>(json) else {
@@ -233,12 +266,19 @@ fn changes(json: &str) -> Vec<Change> {
             out.push(Change {
                 address: mask(&format!("{from} → {address}")),
                 action: Action::Move,
+                attributes: Vec::new(),
             });
         }
         if let Some(action) = action(&rc["change"]) {
+            let attributes = if action == Action::Update {
+                changed(&rc["change"])
+            } else {
+                Vec::new()
+            };
             out.push(Change {
                 address: mask(address),
                 action,
+                attributes,
             });
         }
     }
@@ -247,6 +287,7 @@ fn changes(json: &str) -> Vec<Change> {
             out.push(Change {
                 address: mask(&format!("output.{name}")),
                 action,
+                attributes: Vec::new(),
             });
         }
     }
@@ -395,6 +436,24 @@ mod tests {
         assert_eq!(got[0].address, "module.p.terraform_data.this");
         assert_eq!(got[1].action, Action::Replace);
         assert!(!format!("{got:?}").contains("secret"));
+        assert!(got.iter().all(|c| c.attributes.is_empty()), "{got:?}");
+    }
+
+    #[test]
+    fn an_update_names_its_changed_attributes_never_their_values() {
+        let json = r#"{"resource_changes":[{"address":"module.d1.x.this","change":{
+            "actions":["update"],
+            "before":{"name":"db","hint":"weur","replication":null,"token":"old-secret"},
+            "after":{"name":"db","hint":"weur","replication":null,"token":"new-secret"},
+            "after_unknown":{"replication":{"mode":true},"version":true,"name":false}}}]}"#;
+        let got = changes(json);
+        assert_eq!(got.len(), 1);
+        assert_eq!(got[0].attributes, ["replication", "token", "version"]);
+        let printed = format!("{got:?}");
+        assert!(
+            !printed.contains("secret") && !printed.contains("weur"),
+            "{printed}"
+        );
     }
 
     #[test]
