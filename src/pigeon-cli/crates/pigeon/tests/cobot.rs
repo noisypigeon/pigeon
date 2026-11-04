@@ -122,3 +122,49 @@ fn render_with_relative_root_and_state_writes_absolute_paths() {
     assert!(std::path::Path::new(state).is_absolute(), "{state}");
     assert!(std::path::Path::new(source).is_dir(), "{source}");
 }
+
+#[test]
+fn plan_names_each_tofu_step_on_stderr() {
+    if !std::process::Command::new("tofu")
+        .arg("version")
+        .output()
+        .is_ok_and(|o| o.status.success())
+    {
+        eprintln!("skipped: tofu is not on PATH");
+        return;
+    }
+    let repo = TempDir::new().expect("tempdir");
+    let unit = repo.path().join("infra/bootstrap");
+    std::fs::create_dir_all(unit.join("modules/proof")).expect("mkdir");
+    std::fs::write(
+        unit.join("unit.yaml"),
+        "schema: 0\nname: bootstrap\nkind: infra\nmodules:\n  - { name: proof, source: ./modules/proof }\n",
+    )
+    .expect("write");
+    std::fs::write(
+        unit.join("modules/proof/main.tf"),
+        "resource \"terraform_data\" \"this\" {}\n",
+    )
+    .expect("write");
+    let passphrase = "progress-passphrase-0123456789";
+    let output = cobot()
+        .current_dir(repo.path())
+        .env("COBOT_STATE_PASSPHRASE", passphrase)
+        .args(["plan", "--state", "./state"])
+        .output()
+        .expect("run");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(output.status.success(), "{stderr}");
+    for line in [
+        "cobot: infra/bootstrap: tofu init…",
+        "cobot: infra/bootstrap: tofu plan…",
+    ] {
+        assert!(stderr.contains(line), "missing {line:?} in {stderr}");
+    }
+    assert!(stderr.contains("took"), "{stderr}");
+    assert!(!stderr.contains(passphrase), "{stderr}");
+    assert!(
+        !String::from_utf8_lossy(&output.stdout).contains("cobot: infra/bootstrap: tofu"),
+        "progress stays off stdout"
+    );
+}
