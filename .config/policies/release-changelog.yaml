@@ -5,16 +5,16 @@ target:
     - src/pigeon-cli/crates/gantry/CHANGELOG.md
     - src/pigeon-cli/crates/cobot/CHANGELOG.md
     - src/pigeon-cli/crates/backplane/CHANGELOG.md
-    - infra/cloudflare/modules/zone/CHANGELOG.md
-    - infra/cloudflare/modules/permission-groups/CHANGELOG.md
-    - infra/cloudflare/modules/api-token/CHANGELOG.md
-    - infra/cloudflare/CHANGELOG.md
-    - infra/cloudflare/modules/dns-record/CHANGELOG.md
-    - infra/cloudflare/modules/r2-bucket/CHANGELOG.md
-    - infra/cloudflare/modules/r2-custom-domain/CHANGELOG.md
-    - infra/cloudflare/modules/ruleset/CHANGELOG.md
-    - infra/agnostic/modules/random-string/CHANGELOG.md
-    - infra/agnostic/CHANGELOG.md
+    - catalog/cloudflare/modules/zone/CHANGELOG.md
+    - catalog/cloudflare/modules/permission-groups/CHANGELOG.md
+    - catalog/cloudflare/modules/api-token/CHANGELOG.md
+    - catalog/cloudflare/CHANGELOG.md
+    - catalog/cloudflare/modules/dns-record/CHANGELOG.md
+    - catalog/cloudflare/modules/r2-bucket/CHANGELOG.md
+    - catalog/cloudflare/modules/r2-custom-domain/CHANGELOG.md
+    - catalog/cloudflare/modules/ruleset/CHANGELOG.md
+    - catalog/agnostic/modules/random-string/CHANGELOG.md
+    - catalog/agnostic/CHANGELOG.md
     - src/static-site-template/CHANGELOG.md
   optional: true
 rules:

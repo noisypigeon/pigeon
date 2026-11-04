@@ -202,7 +202,7 @@
           }
         },
         "services": {
-          "description": "Presets by name, each infra/cloudflare/presets/<name>.yaml; cobot checks their inputs.",
+          "description": "Presets by name, each catalog/cloudflare/presets/<name>.yaml; cobot checks their inputs.",
           "type": "object",
           "propertyNames": {
             "$ref": "#/$defs/key"

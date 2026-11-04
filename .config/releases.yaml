@@ -69,44 +69,44 @@ units:
     exclude: [tests/, benches/, '*.md']
     cargo: { workspace: src/pigeon-cli, package: pigeon }
   infra-cloudflare-zone:
-    manifest: infra/cloudflare/modules/zone/module.yaml
-    paths: [infra/cloudflare/modules/zone/]
+    manifest: catalog/cloudflare/modules/zone/module.yaml
+    paths: [catalog/cloudflare/modules/zone/]
     exclude: ['*.md']
   infra-cloudflare-permission-groups:
-    manifest: infra/cloudflare/modules/permission-groups/module.yaml
-    paths: [infra/cloudflare/modules/permission-groups/]
+    manifest: catalog/cloudflare/modules/permission-groups/module.yaml
+    paths: [catalog/cloudflare/modules/permission-groups/]
     exclude: ['*.md']
   infra-cloudflare-api-token:
-    manifest: infra/cloudflare/modules/api-token/module.yaml
-    paths: [infra/cloudflare/modules/api-token/]
+    manifest: catalog/cloudflare/modules/api-token/module.yaml
+    paths: [catalog/cloudflare/modules/api-token/]
     exclude: ['*.md']
   infra-cloudflare-schema:
-    manifest: infra/cloudflare/schema.json
-    paths: [infra/cloudflare/schema.json, infra/cloudflare/modules/, infra/cloudflare/presets/]
+    manifest: catalog/cloudflare/schema.json
+    paths: [catalog/cloudflare/schema.json, catalog/cloudflare/modules/, catalog/cloudflare/presets/]
     exclude: ['*.md']
   infra-cloudflare-dns-record:
-    manifest: infra/cloudflare/modules/dns-record/module.yaml
-    paths: [infra/cloudflare/modules/dns-record/]
+    manifest: catalog/cloudflare/modules/dns-record/module.yaml
+    paths: [catalog/cloudflare/modules/dns-record/]
     exclude: ['*.md']
   infra-cloudflare-r2-bucket:
-    manifest: infra/cloudflare/modules/r2-bucket/module.yaml
-    paths: [infra/cloudflare/modules/r2-bucket/]
+    manifest: catalog/cloudflare/modules/r2-bucket/module.yaml
+    paths: [catalog/cloudflare/modules/r2-bucket/]
     exclude: ['*.md']
   infra-cloudflare-r2-custom-domain:
-    manifest: infra/cloudflare/modules/r2-custom-domain/module.yaml
-    paths: [infra/cloudflare/modules/r2-custom-domain/]
+    manifest: catalog/cloudflare/modules/r2-custom-domain/module.yaml
+    paths: [catalog/cloudflare/modules/r2-custom-domain/]
     exclude: ['*.md']
   infra-cloudflare-ruleset:
-    manifest: infra/cloudflare/modules/ruleset/module.yaml
-    paths: [infra/cloudflare/modules/ruleset/]
+    manifest: catalog/cloudflare/modules/ruleset/module.yaml
+    paths: [catalog/cloudflare/modules/ruleset/]
     exclude: ['*.md']
   infra-agnostic-random-string:
-    manifest: infra/agnostic/modules/random-string/module.yaml
-    paths: [infra/agnostic/modules/random-string/]
+    manifest: catalog/agnostic/modules/random-string/module.yaml
+    paths: [catalog/agnostic/modules/random-string/]
     exclude: ['*.md']
   infra-agnostic-schema:
-    manifest: infra/agnostic/schema.json
-    paths: [infra/agnostic/schema.json, infra/agnostic/modules/]
+    manifest: catalog/agnostic/schema.json
+    paths: [catalog/agnostic/schema.json, catalog/agnostic/modules/]
     exclude: ['*.md']
   static-site-template:
     manifest: src/static-site-template/template.yaml
@@ -123,14 +123,14 @@ tiers:
   - { file: src/pigeon-cli/crates/gantry/CHANGELOG.md, unit: gantry }
   - { file: src/pigeon-cli/crates/cobot/CHANGELOG.md, unit: cobot }
   - { file: src/pigeon-cli/crates/backplane/CHANGELOG.md, unit: backplane }
-  - { file: infra/cloudflare/modules/zone/CHANGELOG.md, unit: infra-cloudflare-zone }
-  - { file: infra/cloudflare/modules/permission-groups/CHANGELOG.md, unit: infra-cloudflare-permission-groups }
-  - { file: infra/cloudflare/modules/api-token/CHANGELOG.md, unit: infra-cloudflare-api-token }
-  - { file: infra/cloudflare/CHANGELOG.md, unit: infra-cloudflare-schema }
-  - { file: infra/cloudflare/modules/dns-record/CHANGELOG.md, unit: infra-cloudflare-dns-record }
-  - { file: infra/cloudflare/modules/r2-bucket/CHANGELOG.md, unit: infra-cloudflare-r2-bucket }
-  - { file: infra/cloudflare/modules/r2-custom-domain/CHANGELOG.md, unit: infra-cloudflare-r2-custom-domain }
-  - { file: infra/cloudflare/modules/ruleset/CHANGELOG.md, unit: infra-cloudflare-ruleset }
-  - { file: infra/agnostic/modules/random-string/CHANGELOG.md, unit: infra-agnostic-random-string }
-  - { file: infra/agnostic/CHANGELOG.md, unit: infra-agnostic-schema }
+  - { file: catalog/cloudflare/modules/zone/CHANGELOG.md, unit: infra-cloudflare-zone, from: infra/cloudflare/modules/zone/CHANGELOG.md }
+  - { file: catalog/cloudflare/modules/permission-groups/CHANGELOG.md, unit: infra-cloudflare-permission-groups, from: infra/cloudflare/modules/permission-groups/CHANGELOG.md }
+  - { file: catalog/cloudflare/modules/api-token/CHANGELOG.md, unit: infra-cloudflare-api-token, from: infra/cloudflare/modules/api-token/CHANGELOG.md }
+  - { file: catalog/cloudflare/CHANGELOG.md, unit: infra-cloudflare-schema, from: infra/cloudflare/CHANGELOG.md }
+  - { file: catalog/cloudflare/modules/dns-record/CHANGELOG.md, unit: infra-cloudflare-dns-record, from: infra/cloudflare/modules/dns-record/CHANGELOG.md }
+  - { file: catalog/cloudflare/modules/r2-bucket/CHANGELOG.md, unit: infra-cloudflare-r2-bucket, from: infra/cloudflare/modules/r2-bucket/CHANGELOG.md }
+  - { file: catalog/cloudflare/modules/r2-custom-domain/CHANGELOG.md, unit: infra-cloudflare-r2-custom-domain, from: infra/cloudflare/modules/r2-custom-domain/CHANGELOG.md }
+  - { file: catalog/cloudflare/modules/ruleset/CHANGELOG.md, unit: infra-cloudflare-ruleset, from: infra/cloudflare/modules/ruleset/CHANGELOG.md }
+  - { file: catalog/agnostic/modules/random-string/CHANGELOG.md, unit: infra-agnostic-random-string, from: infra/agnostic/modules/random-string/CHANGELOG.md }
+  - { file: catalog/agnostic/CHANGELOG.md, unit: infra-agnostic-schema, from: infra/agnostic/CHANGELOG.md }
   - { file: src/static-site-template/CHANGELOG.md, unit: static-site-template }

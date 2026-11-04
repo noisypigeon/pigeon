@@ -67,14 +67,15 @@ fn copy(root: &Path, rel: &str) {
     }
 }
 
-/// A repository with the real `infra/cloudflare` and `body` as `noisypigeon.com`'s apex.
+/// A repository with the real Cloudflare catalog and `body` as `noisypigeon.com`'s apex.
 fn repo(body: &str) -> TempDir {
     let dir = TempDir::new().expect("tempdir");
     let root = dir.path();
     for rel in [
         ".config/providers.yaml",
         ".config/providers.lock.hcl",
-        "infra/cloudflare",
+        "catalog/cloudflare",
+        "catalog/agnostic",
     ] {
         copy(root, rel);
     }
@@ -287,7 +288,7 @@ fn claims_conflict_naming_both_owners() {
     let repo = self::repo(&PROTON.replace("services:", "services:\n  other: {}"));
     write(
         repo.path(),
-        "infra/cloudflare/presets/other.yaml",
+        "catalog/cloudflare/presets/other.yaml",
         "description: Another mail service.\nclaims:\n  - { name: \"@\", type: MX }\nrecords:\n  mx: { name: \"@\", type: MX, content: m.example, priority: 5 }\n",
     );
     assert_fails(repo.path(), "@ MX is claimed by other and proton");
@@ -509,7 +510,7 @@ fn optional_booleans_unset_on_false() {
     let repo = repo(&PROTON.replace("services:", "services:\n  flag: { enable: false }"));
     write(
         repo.path(),
-        "infra/cloudflare/presets/flag.yaml",
+        "catalog/cloudflare/presets/flag.yaml",
         "description: A flag.\ninputs:\n  enable: { type: boolean, optional: true }\nclaims:\n  - { name: flag, type: ADDRESS, when: enable }\nrecords:\n  on: { name: flag, type: TXT, content: \"on=${enable}\" }\n",
     );
     assert_eq!(problems(repo.path()), Vec::<String>::new());
@@ -594,9 +595,14 @@ fn data_module(root: &Path, rel: &str, vars: &[&str], output: &str) {
 fn builtin_repo() -> TempDir {
     let dir = TempDir::new().expect("tempdir");
     let root = dir.path();
-    copy(root, "infra/cloudflare/presets/proton.yaml");
+    write(
+        root,
+        "infra/cloudflare/presets/proton.yaml",
+        &fs::read_to_string(repo_root().join("catalog/cloudflare/presets/proton.yaml"))
+            .expect("preset"),
+    );
     let real: Value = serde_json::from_str(
-        &fs::read_to_string(repo_root().join("infra/cloudflare/schema.json")).expect("schema"),
+        &fs::read_to_string(repo_root().join("catalog/cloudflare/schema.json")).expect("schema"),
     )
     .expect("json");
     let mut apex_x = real["x-cobot"]["apex"].clone();
@@ -809,7 +815,7 @@ fn secret_mail_policies_are_claimed_once_decrypted() {
         zone: ZONE.into(),
         workload: None,
     };
-    let home = repo.path().join("infra/cloudflare");
+    let home = cobot::catalog::home(repo.path(), "cloudflare");
     let mut secrets = BTreeMap::new();
     secrets.insert("extra_spf".to_string(), "v=spf1 -all".to_string());
     let found = cobot::apex::check_decrypted(&parsed, &home, &site, &secrets);

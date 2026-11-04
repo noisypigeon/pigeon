@@ -300,6 +300,7 @@ fn layout_root(skip: &[&str], extra: &[&str]) -> TempDir {
         ".git",
         "src/pigeon-cli",
         "tooling",
+        "catalog",
         "infra",
         "workloads",
     ];
@@ -309,6 +310,7 @@ fn layout_root(skip: &[&str], extra: &[&str]) -> TempDir {
         "CLAUDE.md",
         "mise.toml",
         "tooling/README.md",
+        "catalog/README.md",
         "infra/README.md",
         "workloads/README.md",
     ];
@@ -339,6 +341,7 @@ fn layout_rules() {
             "infra/notes.md",
             "src/second-project/",
             "workloads/noisypigeon.com/",
+            "catalog/cloudflare/",
         ],
     ));
     for (skip, extra) in [
@@ -352,6 +355,10 @@ fn layout_rules() {
         (&[], &["workloads/notes.md"]),
         (&[], &["workloads/Not_A_Zone/"]),
         (&[], &["workloads/cloudflare/"]),
+        (&["catalog", "catalog/README.md"], &[]),
+        (&["catalog/README.md"], &[]),
+        (&[], &["catalog/notes.md"]),
+        (&[], &["catalog/Not_A_Provider/"]),
     ] {
         fails(&layout(skip, extra));
     }
@@ -399,6 +406,7 @@ fn terraform_rules() {
     let ok = [
         ("infra/a/unit.yaml", ""),
         ("infra/a/modules/m/main.tf", ""),
+        ("catalog/c/modules/m/main.tf", ""),
         ("workloads/w/unit.yaml", ""),
         ("src/x/target/debug/build.tf", ""),
         (".cobot/infra/a/main.tf.json", ""),
@@ -411,6 +419,10 @@ fn terraform_rules() {
         "src/vars.tfvars",
         ".terraform.lock.hcl",
         "src/unit.yaml",
+        "catalog/c/unit.yaml",
+        "catalog/c/vars.tfvars",
+        "catalog/c/.terraform.lock.hcl",
+        "catalog/c/secrets.config.yaml",
         "infra/a/terraform.tfstate",
         "workloads/w/terraform.tfstate.backup",
         "infra/a/.terraform/providers/x",
