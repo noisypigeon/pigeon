@@ -58,7 +58,7 @@ pub struct CobotRun {
     /// The repository root and providers
     #[command(flatten)]
     pub at: CobotRoot,
-    /// The state repository's checkout
+    /// The state repository's checkout, or `r2://<bucket>/<prefix>` with `COBOT_STATE_R2_*` set
     #[arg(long)]
     pub state: PathBuf,
     /// Unit paths, e.g. infra/bootstrap [default: every unit]

@@ -191,6 +191,18 @@ impl std::fmt::Display for Failure {
     }
 }
 
+/// The largest body a call reads: 64 MiB.
+const MAX_BODY: u64 = 64 * 1024 * 1024;
+
+/// When a conditional write may proceed.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Precondition {
+    /// Only if no object exists at the key (`If-None-Match: *`).
+    Absent,
+    /// Only if the object's `ETag` is still this one (`If-Match`).
+    Matches(String),
+}
+
 /// A bucket, reached path-style at `endpoint/bucket`.
 #[derive(Debug, Clone)]
 pub struct Bucket {
@@ -259,7 +271,8 @@ impl Bucket {
             .to_string()
     }
 
-    /// Sends one signed request; the response's status and body.
+    /// Sends one signed request with `extra` signed headers; the response's status, body and `ETag`.
+    #[expect(clippy::too_many_arguments, reason = "one signed S3 request")]
     fn send(
         &self,
         method: &str,
@@ -267,8 +280,9 @@ impl Bucket {
         query: &[(&str, &str)],
         body: &[u8],
         content_type: Option<&str>,
+        extra: &[(&str, &str)],
         now: u64,
-    ) -> Result<(u16, String), Failure> {
+    ) -> Result<(u16, Vec<u8>, Option<String>), Failure> {
         let path = match key {
             Some(k) => format!("/{}/{}", uri_encode(&self.name, false), uri_encode(k, true)),
             None => format!("/{}", uri_encode(&self.name, false)),
@@ -284,6 +298,8 @@ impl Bucket {
         if let Some(t) = content_type {
             headers.push(("content-type", t));
         }
+        headers.extend_from_slice(extra);
+        headers.sort_by(|a, b| a.0.cmp(b.0));
         let auth = authorization(
             &Request {
                 method,
@@ -332,8 +348,23 @@ impl Bucket {
             }
         };
         let status = response.status().as_u16();
-        let text = response.body_mut().read_to_string().unwrap_or_default();
-        Ok((status, text))
+        let etag = response
+            .headers()
+            .get("etag")
+            .and_then(|v| v.to_str().ok())
+            .map(|v| v.trim_matches('"').to_string());
+        let bytes = response
+            .body_mut()
+            .with_config()
+            .limit(MAX_BODY)
+            .read_to_vec()
+            .map_err(|e| {
+                Failure(format!(
+                    "{method} {what}: reading the body: {}",
+                    transport(&e)
+                ))
+            })?;
+        Ok((status, bytes, etag))
     }
 
     /// Every object in the bucket, through as many pages as it takes.
@@ -349,11 +380,11 @@ impl Bucket {
             if let Some(t) = &token {
                 query.push(("continuation-token", t.as_str()));
             }
-            let (status, body) = self.send("GET", None, &query, b"", None, now)?;
+            let (status, body, _) = self.send("GET", None, &query, b"", None, &[], now)?;
             if status != 200 {
                 return Err(Failure(format!("GET the listing: status {status}")));
             }
-            let (objects, next) = parse_listing(&body);
+            let (objects, next) = parse_listing(&String::from_utf8_lossy(&body));
             out.extend(objects);
             match next {
                 Some(n) => token = Some(n),
@@ -368,10 +399,52 @@ impl Bucket {
     ///
     /// A [`Failure`] for a transport error or a status other than 200 or 404.
     pub fn get(&self, key: &str, now: u64) -> Result<Option<Vec<u8>>, Failure> {
-        match self.send("GET", Some(key), &[], b"", None, now)? {
-            (200, body) => Ok(Some(body.into_bytes())),
-            (404, _) => Ok(None),
-            (status, _) => Err(Failure(format!("GET {key}: status {status}"))),
+        match self.send("GET", Some(key), &[], b"", None, &[], now)? {
+            (200, body, _) => Ok(Some(body)),
+            (404, _, _) => Ok(None),
+            (status, _, _) => Err(Failure(format!("GET {key}: status {status}"))),
+        }
+    }
+
+    /// Reads one object's bytes and `ETag`; `None` when it does not exist.
+    ///
+    /// # Errors
+    ///
+    /// A [`Failure`] for a transport error, a status other than 200 or 404, or no `ETag`.
+    pub fn get_tagged(&self, key: &str, now: u64) -> Result<Option<(Vec<u8>, String)>, Failure> {
+        match self.send("GET", Some(key), &[], b"", None, &[], now)? {
+            (200, body, Some(etag)) => Ok(Some((body, etag))),
+            (200, _, None) => Err(Failure(format!("GET {key}: no ETag"))),
+            (404, _, _) => Ok(None),
+            (status, _, _) => Err(Failure(format!("GET {key}: status {status}"))),
+        }
+    }
+
+    /// Writes one object only if `when` holds; `false` when the store refused it (412).
+    ///
+    /// # Errors
+    ///
+    /// A [`Failure`] for a transport error or a status other than 200 or 412.
+    pub fn put_if(
+        &self,
+        key: &str,
+        body: &[u8],
+        content_type: &str,
+        when: &Precondition,
+        now: u64,
+    ) -> Result<bool, Failure> {
+        let quoted;
+        let extra: Vec<(&str, &str)> = match when {
+            Precondition::Absent => vec![("if-none-match", "*")],
+            Precondition::Matches(etag) => {
+                quoted = format!("\"{etag}\"");
+                vec![("if-match", quoted.as_str())]
+            }
+        };
+        match self.send("PUT", Some(key), &[], body, Some(content_type), &extra, now)? {
+            (200, _, _) => Ok(true),
+            (412, _, _) => Ok(false),
+            (status, _, _) => Err(Failure(format!("PUT {key}: status {status}"))),
         }
     }
 
@@ -381,9 +454,9 @@ impl Bucket {
     ///
     /// A [`Failure`] for a transport error or a status other than 200.
     pub fn put(&self, key: &str, body: &[u8], content_type: &str, now: u64) -> Result<(), Failure> {
-        match self.send("PUT", Some(key), &[], body, Some(content_type), now)? {
-            (200, _) => Ok(()),
-            (status, _) => Err(Failure(format!("PUT {key}: status {status}"))),
+        match self.send("PUT", Some(key), &[], body, Some(content_type), &[], now)? {
+            (200, _, _) => Ok(()),
+            (status, _, _) => Err(Failure(format!("PUT {key}: status {status}"))),
         }
     }
 
@@ -393,9 +466,9 @@ impl Bucket {
     ///
     /// A [`Failure`] for a transport error or a status other than 200 or 204.
     pub fn delete(&self, key: &str, now: u64) -> Result<(), Failure> {
-        match self.send("DELETE", Some(key), &[], b"", None, now)? {
-            (200 | 204, _) => Ok(()),
-            (status, _) => Err(Failure(format!("DELETE {key}: status {status}"))),
+        match self.send("DELETE", Some(key), &[], b"", None, &[], now)? {
+            (200 | 204 | 404, _, _) => Ok(()),
+            (status, _, _) => Err(Failure(format!("DELETE {key}: status {status}"))),
         }
     }
 }
