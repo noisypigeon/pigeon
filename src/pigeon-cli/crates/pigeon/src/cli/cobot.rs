@@ -17,6 +17,8 @@ pub enum CobotCommand {
     Apply(CobotRun),
     /// Write <PROVIDERS>/providers.lock.hcl for the allowlist
     Lock(CobotRoot),
+    /// Print each catalog's capabilities as JSON; exit 1 on an invalid one
+    Capabilities(CobotRoot),
     /// Manage a unit's encrypted secrets.config.yaml
     #[command(subcommand)]
     Secrets(SecretsCommand),

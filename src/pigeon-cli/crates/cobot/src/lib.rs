@@ -2,6 +2,7 @@
 //! `.claude/decisions/2026-11-02-runtime-cobot-infrastructure-as-code.md`.
 
 pub mod apex;
+pub mod catalog;
 pub mod config;
 pub mod generations;
 pub mod moves;

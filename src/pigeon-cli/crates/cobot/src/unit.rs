@@ -123,7 +123,7 @@ pub fn discover(root: &Path) -> (Vec<Unit>, Vec<Problem>) {
                 .filter(|_| !dir.join(crate::config::SCHEMA).exists());
             let (home, site) = match (crate::apex::zone_apex(&rel), workload) {
                 (Some(zone), _) => (
-                    root.join(crate::apex::CLOUDFLARE),
+                    crate::catalog::home(root, "cloudflare"),
                     Some(crate::apex::Site {
                         root: root.to_path_buf(),
                         zone: zone.to_string(),
@@ -131,14 +131,17 @@ pub fn discover(root: &Path) -> (Vec<Unit>, Vec<Problem>) {
                     }),
                 ),
                 (None, Some((zone, w))) => (
-                    root.join(crate::apex::CLOUDFLARE),
+                    crate::catalog::home(root, "cloudflare"),
                     Some(crate::apex::Site {
                         root: root.to_path_buf(),
                         zone: zone.to_string(),
                         workload: Some(w.to_string()),
                     }),
                 ),
-                (None, None) => (dir.clone(), None),
+                (None, None) => (
+                    crate::catalog::for_unit(root, &rel).unwrap_or_else(|| dir.clone()),
+                    None,
+                ),
             };
             let config = match crate::config::load(&dir, &home, site) {
                 Ok(c) => Some(c),
@@ -396,6 +399,10 @@ pub fn validate(root: &Path, allow: &Allowlist) -> Vec<Problem> {
         }
         scan(root, &unit.dir, allow, &mut problems);
     }
+    for dir in crate::catalog::dirs(root) {
+        scan(root, &dir, allow, &mut problems);
+    }
+    problems.extend(crate::catalog::capabilities(root).1);
     problems
 }
 
