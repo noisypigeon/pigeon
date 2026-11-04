@@ -34,6 +34,9 @@ pub struct Config {
     /// Workspace-wide build settings whose change releases every unit.
     #[serde(default)]
     pub settings: Vec<Setting>,
+    /// Retired units' changelogs, which the bot removes.
+    #[serde(default)]
+    pub retired: Vec<PathBuf>,
 }
 
 /// Lines of a file that are build settings: whole tables, and single keys.
@@ -141,6 +144,23 @@ impl Config {
                         tier.file.display()
                     )));
                 }
+            }
+        }
+        for path in &config.retired {
+            let relative = path
+                .components()
+                .all(|c| matches!(c, std::path::Component::Normal(_)));
+            if !relative || path.file_name().is_none_or(|n| n != "CHANGELOG.md") {
+                return Err(invalid(format!(
+                    "retired `{}` is not a CHANGELOG.md under the root",
+                    path.display()
+                )));
+            }
+            if !seen.insert(path.clone()) {
+                return Err(invalid(format!(
+                    "`{}` is both retired and a tier, or retired twice",
+                    path.display()
+                )));
             }
         }
         Ok(config)
@@ -636,6 +656,13 @@ pub fn run(
     }
     let mut removed = Vec::new();
     render_tiers(root, config, from, to, &releases, &mut files, &mut removed)?;
+    removed.extend(
+        config
+            .retired
+            .iter()
+            .filter(|p| root.join(p).is_file())
+            .cloned(),
+    );
     if !dry_run {
         for (rel, content) in &files {
             let path = root.join(rel);

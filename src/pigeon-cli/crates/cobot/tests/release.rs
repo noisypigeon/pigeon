@@ -464,3 +464,54 @@ fn tags_carry_a_moved_tiers_previous_path() {
     let b = rows.iter().find(|r| r.unit == "b").expect("b");
     assert_eq!(b.changelog_from, None);
 }
+
+fn retire_b(config: &str) -> String {
+    let start = config.find("  b:\n").expect("unit b");
+    let end = config.find("tiers:").expect("tiers");
+    let mut out = format!("{}{}", &config[..start], &config[end..]);
+    out = out.replace("  - { file: b/CHANGELOG.md, unit: b }\n", "");
+    out + "retired: [b/CHANGELOG.md]\n"
+}
+
+#[test]
+fn the_bot_removes_a_retired_changelog_once() {
+    let (dir, _) = repo();
+    let root = dir.path();
+    land(root, &run(root, None), "2026-01-01");
+    assert!(root.join("b/CHANGELOG.md").exists());
+
+    let dry = run_with(root, &retire_b(CONFIG), true).expect("dry run");
+    assert!(dry.written.iter().any(|p| p.ends_with("b/CHANGELOG.md")));
+    assert!(
+        root.join("b/CHANGELOG.md").exists(),
+        "a dry run removes nothing"
+    );
+
+    let out = run_with(root, &retire_b(CONFIG), false).expect("release");
+    assert!(out.written.iter().any(|p| p.ends_with("b/CHANGELOG.md")));
+    assert!(!root.join("b/CHANGELOG.md").exists());
+    land(root, &out, "2026-01-02");
+    let again = run_with(root, &retire_b(CONFIG), false).expect("rerun");
+    assert!(
+        !again.written.iter().any(|p| p.ends_with("b/CHANGELOG.md")),
+        "a gone retired file is ignored: {:?}",
+        again.written
+    );
+}
+
+#[test]
+fn bad_retired_entries_are_rejected() {
+    let dir = TempDir::new().expect("tempdir");
+    let path = dir.path().join("r.yaml");
+    for bad in [
+        format!("{CONFIG}retired: [b/NOTES.md]\n"),
+        format!("{CONFIG}retired: [../x/CHANGELOG.md]\n"),
+        format!("{CONFIG}retired: [/tmp/x/CHANGELOG.md]\n"),
+        format!("{CONFIG}retired: [./x/CHANGELOG.md]\n"),
+        format!("{CONFIG}retired: [b/CHANGELOG.md]\n"),
+        retire_b(CONFIG).replace("[b/CHANGELOG.md]", "[x/CHANGELOG.md, x/CHANGELOG.md]"),
+    ] {
+        fs::write(&path, bad).expect("write");
+        assert!(Config::load(&path).is_err());
+    }
+}
