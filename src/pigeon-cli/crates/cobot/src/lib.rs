@@ -236,7 +236,7 @@ pub fn validate(root: &Path, providers: &Path) -> Result<Vec<Unit>, Error> {
     Ok(unit::discover(root).0)
 }
 
-/// The selected units, or all of them.
+/// The selected units, or all but the local ones.
 ///
 /// # Errors
 ///
@@ -245,7 +245,7 @@ pub fn validate(root: &Path, providers: &Path) -> Result<Vec<Unit>, Error> {
 pub fn select(root: &Path, providers: &Path, wanted: &[String]) -> Result<Vec<Unit>, Error> {
     let units = validate(root, providers)?;
     let mut chosen: Vec<Unit> = if wanted.is_empty() {
-        units
+        units.into_iter().filter(|u| !u.is_local()).collect()
     } else {
         wanted
             .iter()

@@ -81,6 +81,15 @@ impl Unit {
     pub fn is_config(&self) -> bool {
         self.dir.join(crate::config::CONFIG).is_file()
     }
+
+    /// Whether its schema sets `x-cobot.local`: it runs only when named; see
+    /// `.claude/decisions/2026-11-04-development-platform-instance-separation.md`.
+    #[must_use]
+    pub fn is_local(&self) -> bool {
+        self.config
+            .as_ref()
+            .is_some_and(|c| c.schema["x-cobot"]["local"] == serde_json::Value::Bool(true))
+    }
 }
 
 /// A validation problem.
