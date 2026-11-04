@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.3 (2026-11-04)
+
+- fix(catalog): ignore the D1 location hint after creation ([#107](https://github.com/noisypigeon/pigeon/pull/107))
+
 ## v0.1.2 (2026-11-04)
 
 - fix(catalog): one Cloudflare account lookup, and cobot step progress ([#106](https://github.com/noisypigeon/pigeon/pull/106))

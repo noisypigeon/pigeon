@@ -2,6 +2,7 @@
 
 ## 2026-11-04
 
+- fix(catalog): ignore the D1 location hint after creation ([#107](https://github.com/noisypigeon/pigeon/pull/107))
 - fix(catalog): one Cloudflare account lookup, and cobot step progress ([#106](https://github.com/noisypigeon/pigeon/pull/106))
 - feat(backplane): mutual TLS for serve ([#105](https://github.com/noisypigeon/pigeon/pull/105))
 - feat(tooling): spike TLS checks ([#104](https://github.com/noisypigeon/pigeon/pull/104))
