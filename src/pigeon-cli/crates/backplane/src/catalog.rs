@@ -124,17 +124,12 @@ pub fn run(instance: &Instance, request: &Request) -> Result<Response, Error> {
     run_with(instance, request, |k| std::env::var(k).ok())
 }
 
-/// Runs a request against an instance, reading passphrases and credentials through `var`.
+/// Checks a request's operation, argument names and argument types without running it.
 ///
 /// # Errors
 ///
-/// [`Error::Invalid`] for an unknown operation or bad arguments; [`Error::Engine`] if an
-/// engine fails.
-pub fn run_with(
-    instance: &Instance,
-    request: &Request,
-    var: impl Fn(&str) -> Option<String>,
-) -> Result<Response, Error> {
+/// [`Error::Invalid`] naming every problem.
+pub fn validate(request: &Request) -> Result<&'static Operation, Error> {
     let Some(op) = CATALOG.iter().find(|o| o.name == request.operation) else {
         return Err(Error::Invalid(vec![format!(
             "no operation `{}`",
@@ -154,9 +149,44 @@ pub fn run_with(
             .filter(|(a, required)| *required && !request.args.contains_key(*a))
             .map(|(a, _)| format!("`{}` needs argument `{a}`", op.name)),
     );
-    if !problems.is_empty() {
-        return Err(Error::Invalid(problems));
+    for (name, value) in &request.args {
+        let ok = match name.as_str() {
+            "state" | "plan" => value.is_string(),
+            "units" => value
+                .as_array()
+                .is_some_and(|a| a.iter().all(Value::is_string)),
+            _ => true,
+        };
+        if !ok {
+            problems.push(format!(
+                "argument `{name}` must be {}",
+                if name == "units" {
+                    "a list of strings"
+                } else {
+                    "a string"
+                }
+            ));
+        }
     }
+    if problems.is_empty() {
+        Ok(op)
+    } else {
+        Err(Error::Invalid(problems))
+    }
+}
+
+/// Runs a request against an instance, reading passphrases and credentials through `var`.
+///
+/// # Errors
+///
+/// [`Error::Invalid`] for an unknown operation or bad arguments; [`Error::Engine`] if an
+/// engine fails.
+pub fn run_with(
+    instance: &Instance,
+    request: &Request,
+    var: impl Fn(&str) -> Option<String>,
+) -> Result<Response, Error> {
+    let op = validate(request)?;
     let respond = |result, violations: Vec<String>| Response {
         operation: op.name.to_string(),
         ok: violations.is_empty(),

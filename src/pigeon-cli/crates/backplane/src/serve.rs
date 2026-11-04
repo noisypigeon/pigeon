@@ -154,13 +154,23 @@ impl Server {
                 json!({ "error": "invalid", "problems": ["`state` is the server's; omit it, or name the server's own"] }),
             );
         }
-        let effect = catalog()
-            .iter()
-            .find(|o| o.name == request.operation)
-            .map(|o| o.effect);
-        if matches!(effect, Some(Effect::Plan | Effect::Apply)) {
+        if matches!(
+            catalog()
+                .iter()
+                .find(|o| o.name == request.operation)
+                .map(|o| o.effect),
+            Some(Effect::Plan | Effect::Apply)
+        ) && !request.args.contains_key("state")
+        {
             request.args.insert("state".into(), json!(self.state));
         }
+        let effect = match crate::catalog::validate(&request) {
+            Ok(op) => Some(op.effect),
+            Err(Error::Invalid(problems)) => {
+                return (400, json!({ "error": "invalid", "problems": problems }));
+            }
+            Err(e) => return (500, json!({ "error": e.to_string() })),
+        };
         let _guard = if matches!(effect, Some(Effect::Plan | Effect::Apply)) {
             match self.changing.try_lock() {
                 Ok(g) => Some(g),

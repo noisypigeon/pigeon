@@ -8,7 +8,7 @@ pub mod serve;
 use std::fmt;
 use std::path::PathBuf;
 
-pub use catalog::{Effect, Operation, Request, Response, catalog, run, run_with};
+pub use catalog::{Effect, Operation, Request, Response, catalog, run, run_with, validate};
 pub use engine::{Engine, EngineInfo, engines};
 pub use instance::Instance;
 
