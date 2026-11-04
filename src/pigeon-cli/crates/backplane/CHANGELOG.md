@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.13 (2026-11-04)
+
+- feat(cobot): name the attributes an update changes ([#108](https://github.com/noisypigeon/pigeon/pull/108))
+
 ## v0.1.12 (2026-11-04)
 
 - fix(catalog): one Cloudflare account lookup, and cobot step progress ([#106](https://github.com/noisypigeon/pigeon/pull/106))
