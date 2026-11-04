@@ -191,3 +191,75 @@ Each phase is one or more PRs. A phase starts only once the one before it is mer
 - **Phase 5:** the platform's plan is empty, the same as `cobot.yml`'s last plan.
 - **Phase 6:** every old credential is revoked, and a plan that uses one fails.
 - **Phase 7:** no `ENC[` remains anywhere in the repository, and sentinel enforces that.
+
+## Amendments
+
+### 2026-11-04: The control plane is Rust, built from backplane
+
+The control plane is written in Rust and is part of backplane, not a separate TypeScript project. This supersedes:
+
+- §5's "The Worker's language is TypeScript. Backplane stays Rust inside the Container.";
+- §6's first paragraph, which made `src/pigeon-control/` a TypeScript Worker and its own release unit;
+- `src/pigeon-control/` in phase 4.
+
+That text stays as written.
+
+#### 1. One crate, two builds
+
+`src/pigeon-cli/crates/backplane/` (`pigeon-backplane`) builds two ways, chosen by cargo feature:
+
+- **`worker`**: built for `wasm32-unknown-unknown` with `workers-rs` (the `worker` crate). It is §6's control plane:
+  - the HTTP API;
+  - the MCP server, which speaks JSON-RPC over streamable HTTP and maps each tool onto a catalog operation;
+  - the per-instance Durable Object;
+  - D1, R2 and Secrets Store access;
+  - the Cron Trigger for the daily drift plan;
+  - Container dispatch;
+  - grant minting, which is plain HTTPS to each provider's API (§4).
+- **`engines`** (default, native): today's composition of `sentinel`, `cobot` and `gantry`. It runs in the Container as `pigeon backplane serve`.
+- **Shared, with no feature and wasm-safe:**
+  - the operation catalog (`Operation` and `Effect`);
+  - the wire form (`Request` and `Response`);
+  - the instance and plan types;
+  - capability checks.
+
+  The Worker and the Container compile one definition of the API from the same source.
+
+`sentinel`, `cobot` and `gantry` become optional dependencies, enabled only by `engines`, so the `worker` build carries none of them. `.config/policies/backplane.yaml` keeps covering all of backplane's source.
+
+#### 2. Release and deploy
+
+- The `backplane` release unit gains a second artifact: the Worker bundle, built with `worker-build` and attached to its GitHub Release. The image is unchanged.
+- Deploying is an action, so it is cobot's, per [`2026-11-02-development-sentinel-policy-cobot-actions.md`](2026-11-02-development-sentinel-policy-cobot-actions.md).
+  - The platform's `infra/` bootstrap unit deploys the released bundle with the Cloudflare provider's Worker script resource.
+  - It also deploys the bundle's bindings to Durable Objects, D1, R2, the Secrets Store and Containers.
+  - No PR deploys the Worker by hand.
+
+#### 3. Toolchain
+
+- `mise.toml`'s pinned Rust adds the `wasm32-unknown-unknown` target.
+- `mise run features` gains `cargo clippy -p pigeon-backplane --no-default-features --features worker --target wasm32-unknown-unknown -- -D warnings`.
+- `rust.yml` builds the Worker bundle on every PR that changes Rust, without deploying it.
+
+#### 4. No TypeScript unless the spike forces it
+
+Phase 3's spike also checks that each binding the Worker needs works from `workers-rs`:
+
+- Durable Objects;
+- D1;
+- R2;
+- the Secrets Store;
+- Containers;
+- Cron Triggers.
+
+If one doesn't work, the spike's report names it, and a further amendment adds the smallest TypeScript shim that exposes only that binding to the Rust Worker. Such a shim is its own release unit and holds no API or MCP logic.
+
+#### 5. Phase 4, restated
+
+Phase 4 is backplane's `worker` build: Durable Objects, the D1 schema, the API, the MCP server, plan-then-approve, grant entry and minting for each provider in §4.
+
+#### 6. Verification
+
+- The `worker` build passes clippy for wasm32, and its bundle builds in CI.
+- A test shows that a `Response` serialized by the `engines` build deserializes in the `worker` build.
+- The phase 3 spike report lists each binding in step 4 as working from Rust, or names its shim.
