@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.12 (2026-11-04)
+
+- fix(sentinel): never echo an unexpected line's text ([#81](https://github.com/noisypigeon/pigeon/pull/81))
+
 ## v0.1.11 (2026-11-04)
 
 - feat(sentinel): a fields rule can forbid extra fields ([#79](https://github.com/noisypigeon/pigeon/pull/79))
