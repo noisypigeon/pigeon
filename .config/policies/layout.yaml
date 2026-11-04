@@ -3,15 +3,16 @@ target: tree
 rules:
   - entries:
       path: .
-      dirs: ['^\.claude$', '^\.config$', '^\.github$', '^src$', '^tooling$', '^infra$', '^workloads$']
+      dirs: ['^\.claude$', '^\.config$', '^\.github$', '^src$', '^tooling$', '^catalog$', '^infra$', '^workloads$']
       files: ['^\.gitignore$', '^CHANGELOG\.md$', '^CLAUDE\.md$', '^mise\.toml$']
-      require: [src, tooling, infra, workloads]
+      require: [src, tooling, catalog, infra, workloads]
       ignore: ['^\.git$', '^\.cobot$']
   - entries:
       path: src
       dirs: ['^[a-z0-9]+(-[a-z0-9]+)*$']
       require: [pigeon-cli]
   - entries: { path: tooling, dirs: ['.'], files: ['.'], require: [README.md] }
+  - entries: { path: catalog, dirs: ['^[a-z0-9]+(-[a-z0-9]+)*$'], files: ['^README\.md$'], require: [README.md] }
   - entries: { path: infra, dirs: ['.'], files: ['.'], require: [README.md] }
   - entries:
       path: workloads

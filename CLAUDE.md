@@ -26,6 +26,13 @@ belong in the ADR, never in the file.
   govern (releases, changelogs, tags, infrastructure). Sentinel's library
   writes no file and starts no process, per
   [`2026-11-02-development-sentinel-policy-cobot-actions.md`](.claude/decisions/2026-11-02-development-sentinel-policy-cobot-actions.md).
+- Provider catalogs (`schema.json`, `modules/`, `presets/`, `capabilities.yaml`)
+  live in `catalog/<provider>/`; units stay in `infra/` and `workloads/`, and an
+  `infra/<provider>/` that still holds its own `schema.json` wins over its
+  catalog, per
+  [`2026-11-04-development-platform-instance-separation.md`](.claude/decisions/2026-11-04-development-platform-instance-separation.md).
+  No new secret enters the repository; `.config/policies/secrets*.yaml` pin the
+  two `secrets.config.yaml` files to their current keys.
 - Backplane (package `pigeon-backplane`) composes the engines into one
   platform serving the instance in `.config/instance.yaml`; it judges through
   sentinel, acts through cobot, and writes and starts nothing itself, per
@@ -64,16 +71,16 @@ belong in the ADR, never in the file.
   in `workloads/`. Only `infra/` keys are break-glass, and they are never handed
   to a workload, which gets only its own secrets and minted tokens. Providers
   come only from `main`'s `.config/providers.yaml` and `providers.lock.hcl`.
-- `infra/agnostic/modules/` holds provider-agnostic modules (today
+- `catalog/agnostic/modules/` holds provider-agnostic modules (today
   `random-string`) that any unit composes as `module: agnostic/<name>`, and
   `x-cobot.each` runs a block over another property's items, per
   [`2026-11-03-runtime-infra-agnostic-shared-modules.md`](.claude/decisions/2026-11-03-runtime-infra-agnostic-shared-modules.md).
 - Workloads live in `workloads/<zone>/`; each zone's apex (global config and
   DNS) is its own unit, `workloads/<zone>/apex/`, which only enables what
-  `infra/cloudflare/` defines (its schema's `$defs.apex`, its `modules/` and
-  `presets/`), per
+  the Cloudflare catalog, `catalog/cloudflare/`, defines (its schema's
+  `$defs.apex`, its `modules/` and `presets/`), per
   [`2026-11-02-runtime-workloads-zone-apex.md`](.claude/decisions/2026-11-02-runtime-workloads-zone-apex.md).
-- A workload with only a `config.yaml` enables what `infra/cloudflare/`
+- A workload with only a `config.yaml` enables what `catalog/cloudflare/`
   defines (its `$defs.workload`): today `static_site`, an R2 bucket and a
   custom domain per apex host, built with a released `src/static-site-template/`
   (`static-site-template/vX.Y.Z`) and published by `cobot.yml` after apply, per
