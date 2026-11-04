@@ -78,6 +78,7 @@ This supersedes parts of [`2026-11-02-development-repository-area-layout.md`](20
   - a new `capabilities.yaml` (§3).
 
   The catalog's release units keep their `<unit>/vX.Y.Z` tags. `infra/agnostic/` moves to `catalog/agnostic/`.
+- **cobot learns the new location first.** It resolves schemas, modules and presets from `catalog/<provider>/`, falling back to `infra/<provider>/`. That support is released before any file moves, because `cobot.yml` runs the released image until phase 6. Every move PR must show a clean PR plan, and its merge a green apply.
 - **`infra/`** holds only the platform's own bootstrap: the pigeon account's D1, R2, Durable Object namespaces, Secrets Store, Access applications and DNS for `pigeon.dev`.
   - It is applied locally, as break-glass, until phase 6. After that the platform applies its own bootstrap as a reserved instance named `pigeon`.
 - **`workloads/`**, every instance `config.yaml` and `.config/instance.yaml` leave this repository in phase 7.
@@ -171,7 +172,8 @@ Each phase is one or more PRs. A phase starts only once the one before it is mer
 | Phase | Work | Needs the owner to |
 | --- | --- | --- |
 | 0 | This ADR, and the amendments it adds to the ADRs it supersedes. | — |
-| 1 | Freeze and catalog:<br>• the no-new-secrets policy;<br>• `capabilities.yaml` and `pigeon cobot capabilities`;<br>• `infra/<provider>/` catalog files move to `catalog/`;<br>• `pigeon.dev` leaves `infra/cloudflare`'s zones.<br>The DigitalOcean, Scaleway and Backblaze units are redone as catalogs that declare capabilities and no secrets, replacing #69, #72 and #73. | close #69, #72 and #73 |
+| 1a | Freeze and catalog support, as released engine changes:<br>• the no-new-secrets policy;<br>• `capabilities.yaml` and `pigeon cobot capabilities`;<br>• cobot's `catalog/` resolution with its `infra/` fallback (§2). | close #69, #72 and #73 |
+| 1b | Once 1a is released:<br>• `infra/<provider>/` catalog files move to `catalog/`;<br>• `pigeon.dev` leaves `infra/cloudflare`'s zones;<br>• the DigitalOcean, Scaleway and Backblaze units are redone as catalogs that declare capabilities and no secrets, replacing #69, #72 and #73.<br>Each move is shown by an unchanged PR plan and a green apply on merge. | — |
 | 2 | The pigeon account's bootstrap units in `infra/`, applied locally. | create a bootstrap token for the pigeon account and apply locally |
 | 3 | Runner spike (Context), then: cobot's `Credentials` resolver and R2 state; `backplane serve`, `plan` and `apply`. | — |
 | 4 | `src/pigeon-control/`: Durable Objects, D1 schema, API, plan-then-approve, grant entry and minting for each provider in §4. | enter each provider's grant |
@@ -182,7 +184,8 @@ Each phase is one or more PRs. A phase starts only once the one before it is mer
 ### 8. Verification
 
 - Every phase passes `mise run ci`, and follows the release-first loop for each engine feature it needs.
-- **Phase 1:** a PR that adds a `secrets.config.yaml` key fails `sentinel`.
+- **Phase 1a:** a PR that adds a `secrets.config.yaml` key fails `sentinel`.
+- **Phase 1b:** every catalog move leaves `cobot.yml`'s PR plan unchanged, and its merge applies green.
 - **Phase 3:** the spike's report shows each limit in Context met, or this ADR is amended before phase 4 begins.
 - **Phase 4:** an apply naming an expired or unknown plan is refused, and a minted credential works only on its run's scopes.
 - **Phase 5:** the platform's plan is empty, the same as `cobot.yml`'s last plan.
