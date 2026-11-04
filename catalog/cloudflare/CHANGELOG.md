@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.7 (2026-11-04)
+
+- refactor(infra): move the cloudflare and agnostic catalogs to catalog/ ([#86](https://github.com/noisypigeon/pigeon/pull/86))
+
 ## v0.1.6 (2026-11-03)
 
 - refactor(cobot): only the site config contract ([#60](https://github.com/noisypigeon/pigeon/pull/60))

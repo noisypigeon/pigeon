@@ -2,6 +2,7 @@
 
 ## 2026-11-04
 
+- refactor(infra): move the cloudflare and agnostic catalogs to catalog/ ([#86](https://github.com/noisypigeon/pigeon/pull/86))
 - docs(adr): a moved tier waits for the cobot image ([#85](https://github.com/noisypigeon/pigeon/pull/85))
 - feat(cobot): a release tier can move with from ([#84](https://github.com/noisypigeon/pigeon/pull/84))
 - docs(adr): a release tier can move, and the bot moves its file ([#83](https://github.com/noisypigeon/pigeon/pull/83))
