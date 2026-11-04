@@ -106,7 +106,14 @@ impl DurableObject for Runner {
             let mut options = ContainerStartupOptions::new();
             options.enable_internet(true);
             container.start(Some(options))?;
-            probe(&container, "/uptime").await?;
+            if let Err(e) = probe(&container, "/uptime", READY_TRIES).await {
+                return Response::from_json(&json!({
+                    "cold_start": true,
+                    "ready": false,
+                    "waited_ms": Date::now().as_millis() - started_ms,
+                    "error": e,
+                }));
+            }
             startup_ms = Some(Date::now().as_millis() - started_ms);
         }
         let url = req.url()?;
@@ -115,7 +122,10 @@ impl DurableObject for Runner {
             None => url.path().to_string(),
         };
         let probed_ms = Date::now().as_millis();
-        let mut body = probe(&container, &path).await?;
+        let mut body = match probe(&container, &path, CALL_TRIES).await {
+            Ok(body) => body,
+            Err(e) => json!({ "error": e }),
+        };
         body["cold_start"] = json!(cold);
         body["startup_ms"] = json!(startup_ms);
         body["probe_ms"] = json!(Date::now().as_millis() - probed_ms);
@@ -123,19 +133,35 @@ impl DurableObject for Runner {
     }
 }
 
-/// Asks the probe, retrying while the Container boots.
-async fn probe(container: &Container, path: &str) -> Result<Value> {
-    let port = container.get_tcp_port(PROBE_PORT)?;
+/// Half-second attempts while a cold Container boots: two minutes.
+const READY_TRIES: u32 = 240;
+
+/// Half-second attempts for a check once the Container is ready.
+const CALL_TRIES: u32 = 10;
+
+/// Asks the probe, retrying up to `tries` times; an error once they run out.
+async fn probe(
+    container: &Container,
+    path: &str,
+    tries: u32,
+) -> std::result::Result<Value, String> {
+    let port = container
+        .get_tcp_port(PROBE_PORT)
+        .map_err(|e| e.to_string())?;
     let mut last = String::new();
-    for _ in 0..60 {
+    for _ in 0..tries {
         match port.fetch(format!("http://container{path}"), None).await {
-            Ok(mut r) if r.status_code() == 200 => return r.json().await,
+            Ok(mut r) if r.status_code() == 200 => {
+                return r.json().await.map_err(|e| e.to_string());
+            }
             Ok(r) => last = format!("status {}", r.status_code()),
             Err(e) => last = e.to_string(),
         }
         Delay::from(Duration::from_millis(500)).await;
     }
-    Ok(json!({ "error": format!("probe never answered: {last}") }))
+    Err(format!(
+        "probe never answered {path} after {tries} tries: {last}"
+    ))
 }
 
 /// A Durable Object with storage, counting its own fetches.
