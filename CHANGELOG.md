@@ -2,6 +2,7 @@
 
 ## 2026-11-04
 
+- feat(tooling): spike TLS checks ([#104](https://github.com/noisypigeon/pigeon/pull/104))
 - docs(adr): Worker–Container mutual TLS ([#103](https://github.com/noisypigeon/pigeon/pull/103))
 - feat(backplane): plan, apply and serve ([#102](https://github.com/noisypigeon/pigeon/pull/102))
 - feat(cobot): stored plans ([#101](https://github.com/noisypigeon/pigeon/pull/101))
