@@ -67,19 +67,19 @@ pub fn duplicates(root: &Path) -> Vec<Problem> {
         .collect()
 }
 
-/// The `agnostic/` modules root beside `home`, under `catalog/` or `infra/`.
+/// The `modules/` root of catalog `name`, beside `home`, under `catalog/` or `infra/`.
 #[must_use]
-pub fn agnostic_modules(home: &Path) -> PathBuf {
+pub fn catalog_modules(home: &Path, name: &str) -> PathBuf {
     let area = home.parent().unwrap_or(home);
     let root = area.parent().unwrap_or(area);
     [
-        area.join("agnostic"),
-        root.join(DIR).join("agnostic"),
-        root.join(FALLBACK).join("agnostic"),
+        area.join(name),
+        root.join(DIR).join(name),
+        root.join(FALLBACK).join(name),
     ]
     .into_iter()
     .find(|d| d.join("modules").is_dir())
-    .unwrap_or_else(|| area.join("agnostic"))
+    .unwrap_or_else(|| root.join(DIR).join(name))
     .join("modules")
 }
 

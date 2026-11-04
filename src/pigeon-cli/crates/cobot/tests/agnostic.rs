@@ -311,3 +311,45 @@ fn a_unit_without_blocks_renders_no_module_and_plans_clean() {
     let plans = cobot::plan(&ctx, &units).expect("plan");
     assert!(!plans[0].has_changes(), "{}", cobot::summary(&plans));
 }
+
+/// Points `items` at `module`; see the separation ADR's catalog-composition amendment.
+fn set_item_module(root: &Path, module: &str) {
+    let mut s = schema(&suffixes());
+    s["properties"]["items"]["x-cobot"]["module"] = json!(module);
+    write(
+        root,
+        &format!("{UNIT}/schema.json"),
+        &serde_json::to_string_pretty(&s).expect("json"),
+    );
+}
+
+#[test]
+fn any_catalogs_modules_are_reachable() {
+    let repo = repo();
+    let root = repo.path();
+    module(root, "catalog/shop/modules/item", &["name", "suffix"], "");
+    set_item_module(root, "shop/item");
+    assert_eq!(problems(root), Vec::<String>::new());
+    let json = render(root);
+    let source = json["module"]["items"]["source"].as_str().expect("source");
+    assert!(
+        Path::new(source).ends_with("catalog/shop/modules/item"),
+        "{source}"
+    );
+}
+
+#[test]
+fn unknown_catalogs_and_modules_fail() {
+    let repo = repo();
+    let root = repo.path();
+    module(root, "catalog/shop/modules/item", &["name", "suffix"], "");
+    for (module, want) in [
+        ("nope/item", "looked for catalog/nope/modules/item"),
+        ("shop/gone", "looked for catalog/shop/modules/gone"),
+        ("Shop/item", "not a lowercase-dash name"),
+        ("shop/a/b", "not a lowercase-dash name"),
+    ] {
+        set_item_module(root, module);
+        assert_fails(root, want);
+    }
+}

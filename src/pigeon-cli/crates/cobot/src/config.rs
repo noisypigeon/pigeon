@@ -20,8 +20,6 @@ use crate::secrets;
 pub const CONFIG: &str = "config.yaml";
 /// The schema file inside a unit.
 pub const SCHEMA: &str = "schema.json";
-/// The prefix naming a module of `infra/agnostic`.
-const AGNOSTIC_PREFIX: &str = "agnostic/";
 /// The alias of a provider with one instance per zone.
 const ZONE_ALIAS: &str = "zone";
 
@@ -194,19 +192,26 @@ fn module_info(dir: &Path) -> ModuleInfo {
     info
 }
 
-/// Where a unit's own modules live, or `infra/agnostic`'s for an `agnostic/<name>`
-/// reference; see `.claude/decisions/2026-11-03-runtime-infra-agnostic-shared-modules.md` §3.
+/// A module reference split into its catalog, if any, and its name.
+fn split_module(module: &str) -> (Option<&str>, &str) {
+    match module.split_once('/') {
+        Some((catalog, name)) => (Some(catalog), name),
+        None => (None, module),
+    }
+}
+
+/// Where a unit's own modules live, or catalog `<c>`'s for a `<c>/<name>` reference;
+/// see `.claude/decisions/2026-11-04-development-platform-instance-separation.md`.
 fn modules_root(home: &Path, module: &str) -> PathBuf {
-    match module.strip_prefix(AGNOSTIC_PREFIX) {
-        Some(_) => crate::catalog::agnostic_modules(home),
-        None => home.join("modules"),
+    match split_module(module) {
+        (Some(catalog), _) => crate::catalog::catalog_modules(home, catalog),
+        (None, _) => home.join("modules"),
     }
 }
 
 /// A module's directory: `<modules root>/<name>`.
 fn module_dir(home: &Path, module: &str) -> PathBuf {
-    let name = module.strip_prefix(AGNOSTIC_PREFIX).unwrap_or(module);
-    modules_root(home, module).join(name)
+    modules_root(home, module).join(split_module(module).1)
 }
 
 fn x_cobot(schema: &Value) -> &Value {
@@ -495,11 +500,15 @@ fn check_secrets(
     }
 }
 
-/// A module's path for messages: `modules/<name>`, or `infra/agnostic/modules/<name>`.
-fn display_module(module: &str) -> String {
-    match module.strip_prefix(AGNOSTIC_PREFIX) {
-        Some(name) => format!("infra/agnostic/modules/{name}"),
-        None => format!("modules/{module}"),
+/// A module's path for messages: `modules/<name>`, or `<area>/<catalog>/modules/<name>`.
+fn display_module(home: &Path, module: &str) -> String {
+    match split_module(module) {
+        (Some(_), _) => {
+            let dir = module_dir(home, module);
+            let root = home.parent().and_then(Path::parent).unwrap_or(home);
+            dir.strip_prefix(root).unwrap_or(&dir).display().to_string()
+        }
+        (None, _) => format!("modules/{module}"),
     }
 }
 
@@ -511,12 +520,12 @@ fn check_module(b: &Block, home: &Path, add: &mut impl FnMut(&str, String)) -> O
             format!("block name `{}` must be lowercase with underscores", b.name),
         );
     }
-    let name = b.module.strip_prefix(AGNOSTIC_PREFIX).unwrap_or(&b.module);
-    if !MODULE_NAME.is_match(name) {
+    let (catalog, name) = split_module(&b.module);
+    if !MODULE_NAME.is_match(name) || catalog.is_some_and(|c| !MODULE_NAME.is_match(c)) {
         add(
             SCHEMA,
             format!(
-                "block `{}` names module `{}`, which is not a lowercase-dash name under modules/ or agnostic/",
+                "block `{}` names module `{}`, which is not a lowercase-dash name under modules/ or <catalog>/",
                 b.name, b.module
             ),
         );
@@ -531,7 +540,12 @@ fn check_module(b: &Block, home: &Path, add: &mut impl FnMut(&str, String)) -> O
     if !inside {
         add(
             SCHEMA,
-            format!("block `{}` names missing module `{}`", b.name, b.module),
+            format!(
+                "block `{}` names missing module `{}`, looked for {}",
+                b.name,
+                b.module,
+                display_module(home, &b.module)
+            ),
         );
         return None;
     }
@@ -539,7 +553,7 @@ fn check_module(b: &Block, home: &Path, add: &mut impl FnMut(&str, String)) -> O
     let manifest = fs::read_to_string(mdir.join("module.yaml")).unwrap_or_default();
     if !MODULE_VERSION.is_match(&manifest) {
         add(
-            &format!("{}/module.yaml", display_module(&b.module)),
+            &format!("{}/module.yaml", display_module(home, &b.module)),
             "needs `version: X.Y.Z`".into(),
         );
     }
@@ -551,7 +565,7 @@ fn check_module(b: &Block, home: &Path, add: &mut impl FnMut(&str, String)) -> O
     let triggers = info.resources.len() - provider_resources;
     if provider_resources > 1 || triggers > 1 || info.resources.is_empty() {
         add(
-            &display_module(&b.module),
+            &display_module(home, &b.module),
             "a module holds one resource, plus at most one terraform_data trigger".into(),
         );
     }
