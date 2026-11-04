@@ -33,6 +33,7 @@ jobs:
           for attempt in 1 2 3; do
             git fetch -q --tags origin main
             git reset -q --hard origin/main
+            git clean -fdq
             out=$(cd src/pigeon-cli && cargo run -q --locked -p pigeon -- cobot release --root ../..)
             echo "$out"
             (cd src/pigeon-cli && cargo update -w --offline)
@@ -108,6 +109,7 @@ jobs:
           VERSION: ${{ matrix.version }}
           FEATURES: ${{ matrix.features }}
           CHANGELOG: ${{ matrix.changelog }}
+          CHANGELOG_FROM: ${{ matrix.changelog_from }}
           TAG: ${{ matrix.tag }}
           NEWEST: ${{ matrix.newest }}
           GH_TOKEN: ${{ github.token }}
@@ -125,9 +127,12 @@ jobs:
             fi
           fi
           notes="$RUNNER_TEMP/notes.md"
-          if [ -n "$CHANGELOG" ] && [ "$CHANGELOG" != null ] && [ -f "$CHANGELOG" ]; then
-            awk -v h="## v$VERSION " 'index($0, h) == 1 { on = 1; next } on && /^## / { exit } on && NF' \
-              "$CHANGELOG" >"$notes"
-          fi
+          for file in "$CHANGELOG" "$CHANGELOG_FROM"; do
+            if [ -n "$file" ] && [ "$file" != null ] && [ -f "$file" ]; then
+              awk -v h="## v$VERSION " 'index($0, h) == 1 { on = 1; next } on && /^## / { exit } on && NF' \
+                "$file" >"$notes"
+              break
+            fi
+          done
           [ -s "$notes" ] || echo "Release $TAG" >"$notes"
           gh release create "$TAG" --verify-tag --title "$TAG" --notes-file "$notes" --latest="$NEWEST"

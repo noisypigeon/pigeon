@@ -92,6 +92,9 @@ pub struct Tier {
     pub paths: Option<Vec<String>>,
     /// A unit; one section per release.
     pub unit: Option<String>,
+    /// The file's previous path; the bot moves it to `file`.
+    #[serde(default)]
+    pub from: Option<PathBuf>,
 }
 
 impl Config {
@@ -115,7 +118,19 @@ impl Config {
                 Regex::new(re).map_err(|e| invalid(format!("setting `{re}`: {e}")))?;
             }
         }
+        let mut seen = std::collections::BTreeSet::new();
         for tier in &config.tiers {
+            if tier.from.as_ref() == Some(&tier.file) {
+                return Err(invalid(format!(
+                    "tier `{}`: `from` equals `file`",
+                    tier.file.display()
+                )));
+            }
+            for p in std::iter::once(&tier.file).chain(&tier.from) {
+                if !seen.insert(p.clone()) {
+                    return Err(invalid(format!("`{}` names two tiers", p.display())));
+                }
+            }
             match (&tier.paths, &tier.unit) {
                 (Some(_), None) => {}
                 (None, Some(u)) if config.units.contains_key(u) => {}
@@ -152,7 +167,7 @@ pub struct Released {
 pub struct Outcome {
     /// Releases cut.
     pub released: Vec<Released>,
-    /// Files written, relative to the root.
+    /// Files written or removed, relative to the root.
     pub written: Vec<PathBuf>,
 }
 
@@ -477,12 +492,34 @@ fn render_tiers(
     to: &str,
     releases: &[(Released, Vec<String>)],
     files: &mut BTreeMap<PathBuf, String>,
+    removed: &mut Vec<PathBuf>,
 ) -> Result<(), Error> {
     let today = git::date(root, to)?;
     let range = user_commits(root, from, to)?;
     let mut history: Option<Vec<Commit>> = None;
     for tier in &config.tiers {
-        let existing = fs::read_to_string(root.join(&tier.file)).ok();
+        let at = |p: &Path| root.join(p).is_file();
+        let moved = match &tier.from {
+            Some(old) if at(old) && at(&tier.file) => {
+                return Err(Error::Io {
+                    path: root.join(old),
+                    message: format!(
+                        "both `{}` and `{}` exist; a tier lives in one place",
+                        old.display(),
+                        tier.file.display()
+                    ),
+                });
+            }
+            Some(old) if at(old) => Some(old.clone()),
+            _ => None,
+        };
+        let existing = match &moved {
+            Some(old) => Some(fs::read_to_string(root.join(old)).map_err(|e| Error::Io {
+                path: root.join(old),
+                message: format!("cannot read the tier to move: {e}"),
+            })?),
+            None => fs::read_to_string(root.join(&tier.file)).ok(),
+        };
         let mut log = existing
             .as_deref()
             .map(Changelog::parse)
@@ -505,7 +542,10 @@ fn render_tiers(
             log.prepend(format!("v{} ({today})", released.version), lines.clone());
         }
         let rendered = log.render();
-        if existing.as_deref() != Some(rendered.as_str()) {
+        if let Some(old) = moved {
+            files.insert(tier.file.clone(), rendered);
+            removed.push(old);
+        } else if existing.as_deref() != Some(rendered.as_str()) {
             files.insert(tier.file.clone(), rendered);
         }
     }
@@ -529,6 +569,8 @@ pub struct TagStatus {
     pub newest: bool,
     /// The unit's release changelog tier, if it has one.
     pub changelog: Option<String>,
+    /// That tier's previous path, for a tag cut before it moved.
+    pub changelog_from: Option<String>,
 }
 
 /// Every release tag of every unit, each unit's newest version first.
@@ -540,6 +582,10 @@ pub fn tags(root: &Path, config: &Config) -> Result<Vec<TagStatus>, Error> {
     let mut rows = Vec::new();
     for (name, unit) in &config.units {
         let prefix = format!("{name}/v");
+        let tier = config
+            .tiers
+            .iter()
+            .find(|t| t.unit.as_deref() == Some(name.as_str()));
         for (i, tag) in git::tags(root, name)?.into_iter().enumerate() {
             let Some(version) = tag.strip_prefix(&prefix).map(str::to_string) else {
                 continue;
@@ -551,11 +597,10 @@ pub fn tags(root: &Path, config: &Config) -> Result<Vec<TagStatus>, Error> {
                 tag,
                 version,
                 newest: i == 0,
-                changelog: config
-                    .tiers
-                    .iter()
-                    .find(|t| t.unit.as_deref() == Some(name.as_str()))
-                    .map(|t| t.file.display().to_string()),
+                changelog: tier.map(|t| t.file.display().to_string()),
+                changelog_from: tier
+                    .and_then(|t| t.from.as_ref())
+                    .map(|p| p.display().to_string()),
             });
         }
     }
@@ -589,11 +634,25 @@ pub fn run(
             releases.push(r);
         }
     }
-    render_tiers(root, config, from, to, &releases, &mut files)?;
+    let mut removed = Vec::new();
+    render_tiers(root, config, from, to, &releases, &mut files, &mut removed)?;
     if !dry_run {
         for (rel, content) in &files {
             let path = root.join(rel);
+            if let Some(dir) = path.parent() {
+                fs::create_dir_all(dir).map_err(|source| Error::Io {
+                    path: dir.to_path_buf(),
+                    message: source.to_string(),
+                })?;
+            }
             fs::write(&path, content).map_err(|source| Error::Io {
+                path,
+                message: source.to_string(),
+            })?;
+        }
+        for rel in &removed {
+            let path = root.join(rel);
+            fs::remove_file(&path).map_err(|source| Error::Io {
                 path,
                 message: source.to_string(),
             })?;
@@ -614,7 +673,7 @@ pub fn run(
     }
     Ok(Outcome {
         released: releases.into_iter().map(|(r, _)| r).collect(),
-        written: files.into_keys().collect(),
+        written: files.into_keys().chain(removed).collect(),
     })
 }
 
