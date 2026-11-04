@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.4 (2026-11-04)
+
+- feat(cobot): a release tier can move with from ([#84](https://github.com/noisypigeon/pigeon/pull/84))
+
 ## v0.1.3 (2026-11-04)
 
 - fix(sentinel): never echo an unexpected line's text ([#81](https://github.com/noisypigeon/pigeon/pull/81))

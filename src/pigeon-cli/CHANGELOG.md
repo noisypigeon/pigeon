@@ -2,6 +2,7 @@
 
 ## 2026-11-04
 
+- feat(cobot): a release tier can move with from ([#84](https://github.com/noisypigeon/pigeon/pull/84))
 - feat(sentinel): freeze repository secrets ([#82](https://github.com/noisypigeon/pigeon/pull/82))
 - fix(sentinel): never echo an unexpected line's text ([#81](https://github.com/noisypigeon/pigeon/pull/81))
 - feat(cobot): catalog/ resolution with an infra/ fallback, and capabilities ([#80](https://github.com/noisypigeon/pigeon/pull/80))

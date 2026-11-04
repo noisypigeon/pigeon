@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.18 (2026-11-04)
+
+- feat(cobot): a release tier can move with from ([#84](https://github.com/noisypigeon/pigeon/pull/84))
+
 ## v0.1.17 (2026-11-04)
 
 - feat(cobot): catalog/ resolution with an infra/ fallback, and capabilities ([#80](https://github.com/noisypigeon/pigeon/pull/80))
