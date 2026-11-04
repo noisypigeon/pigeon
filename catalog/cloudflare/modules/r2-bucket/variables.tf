@@ -7,6 +7,11 @@ variable "name" {
   type = string
 }
 
+variable "suffix" {
+  type    = string
+  default = null
+}
+
 variable "jurisdiction" {
   type    = string
   default = "eu"
