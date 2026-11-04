@@ -6,9 +6,18 @@ use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpStream};
 use std::path::Path;
 use std::process::Command;
+use std::sync::Arc;
+use std::time::{Duration, Instant};
 
-use backplane::serve::Server;
+use backplane::serve::{Server, Tls, WORKERS};
 use backplane::{Error, Instance, Request, run_with};
+use rcgen::{
+    BasicConstraints, CertificateParams, DnType, ExtendedKeyUsagePurpose, IsCa, Issuer, KeyPair,
+    KeyUsagePurpose,
+};
+use rustls::pki_types::pem::PemObject;
+use rustls::pki_types::{CertificateDer, PrivateKeyDer, ServerName};
+use rustls::{ClientConfig, ClientConnection, RootCertStore, StreamOwned};
 use serde_json::{Value, json};
 use tempfile::TempDir;
 
@@ -154,40 +163,162 @@ fn a_plan_is_applied_by_its_id() {
     );
 }
 
-fn send(
+/// A CA, as PEM, and its issuer.
+fn ca(name: &str) -> (String, Issuer<'static, KeyPair>) {
+    let mut params = CertificateParams::new(Vec::<String>::new()).expect("params");
+    params.is_ca = IsCa::Ca(BasicConstraints::Unconstrained);
+    params.distinguished_name.push(DnType::CommonName, name);
+    params.key_usages = vec![
+        KeyUsagePurpose::KeyCertSign,
+        KeyUsagePurpose::DigitalSignature,
+    ];
+    let key = KeyPair::generate().expect("key");
+    let cert = params.self_signed(&key).expect("ca");
+    (cert.pem(), Issuer::new(params, key))
+}
+
+/// A certificate for `name` that `issuer` signed, and its key, as PEM.
+fn leaf(
+    issuer: &Issuer<'_, KeyPair>,
+    name: &str,
+    usage: ExtendedKeyUsagePurpose,
+) -> (String, String) {
+    let mut params = CertificateParams::new(vec![name.to_string()]).expect("params");
+    params.extended_key_usages = vec![usage];
+    let key = KeyPair::generate().expect("key");
+    let cert = params.signed_by(&key, issuer).expect("leaf");
+    (cert.pem(), key.serialize_pem())
+}
+
+/// The server's TLS material, and clients with and without a certificate it trusts.
+struct Pki {
+    server: Tls,
+    client: Arc<ClientConfig>,
+    stranger: Arc<ClientConfig>,
+    anonymous: Arc<ClientConfig>,
+}
+
+fn pki() -> Pki {
+    let (ca_pem, issuer) = ca("instance-ca");
+    let (_, other) = ca("other-ca");
+    let (cert, key) = leaf(&issuer, "localhost", ExtendedKeyUsagePurpose::ServerAuth);
+    let mut roots = RootCertStore::empty();
+    roots
+        .add(CertificateDer::from_pem_slice(ca_pem.as_bytes()).expect("ca der"))
+        .expect("root");
+    let roots = Arc::new(roots);
+    let builder = || {
+        ClientConfig::builder_with_provider(Arc::new(rustls::crypto::ring::default_provider()))
+            .with_protocol_versions(&[&rustls::version::TLS13])
+            .expect("tls13")
+            .with_root_certificates(Arc::clone(&roots))
+    };
+    let with_cert = |(cert, key): (String, String)| {
+        let chain = vec![CertificateDer::from_pem_slice(cert.as_bytes()).expect("cert")];
+        let key = PrivateKeyDer::from_pem_slice(key.as_bytes()).expect("key");
+        Arc::new(builder().with_client_auth_cert(chain, key).expect("client"))
+    };
+    Pki {
+        server: Tls {
+            cert,
+            key,
+            client_ca: ca_pem,
+        },
+        client: with_cert(leaf(&issuer, "worker", ExtendedKeyUsagePurpose::ClientAuth)),
+        stranger: with_cert(leaf(&other, "worker", ExtendedKeyUsagePurpose::ClientAuth)),
+        anonymous: Arc::new(builder().with_no_client_auth()),
+    }
+}
+
+/// A server's address, reached in plain HTTP or with a TLS client config.
+#[derive(Clone)]
+struct Client {
     addr: SocketAddr,
-    method: &str,
-    path: &str,
-    body: &[u8],
-    token: Option<&str>,
-) -> (u16, Value) {
-    let mut s = TcpStream::connect(addr).expect("connect");
-    let auth = token
-        .map(|t| format!("authorization: Bearer {t}\r\n"))
-        .unwrap_or_default();
-    write!(
-        s,
-        "{method} {path} HTTP/1.1\r\nhost: test\r\n{auth}content-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n",
-        body.len()
-    )
-    .expect("send");
-    let _ = s.write_all(body);
-    let mut out = String::new();
-    let _ = s.read_to_string(&mut out);
-    let status = out
-        .split_whitespace()
-        .nth(1)
-        .and_then(|c| c.parse().ok())
-        .expect("status");
-    let json = out.split("\r\n\r\n").nth(1).unwrap_or("null");
-    (status, serde_json::from_str(json).expect("json body"))
+    tls: Option<Arc<ClientConfig>>,
 }
 
-fn http(addr: SocketAddr, method: &str, path: &str, body: &str) -> (u16, Value) {
-    send(addr, method, path, body.as_bytes(), Some(TOKEN))
+impl Client {
+    fn with(&self, tls: &Arc<ClientConfig>) -> Self {
+        Self {
+            addr: self.addr,
+            tls: Some(Arc::clone(tls)),
+        }
+    }
+
+    /// Everything the server answers to `raw`, until it closes or fails.
+    fn exchange(&self, raw: &[u8]) -> String {
+        let tcp = TcpStream::connect(self.addr).expect("connect");
+        tcp.set_read_timeout(Some(Duration::from_secs(20)))
+            .expect("timeout");
+        let mut out = Vec::new();
+        let mut chunk = [0u8; 4096];
+        let mut drain = |s: &mut dyn Read| {
+            while let Ok(n) = s.read(&mut chunk) {
+                if n == 0 {
+                    break;
+                }
+                out.extend_from_slice(&chunk[..n]);
+            }
+        };
+        match &self.tls {
+            None => {
+                let mut s = tcp;
+                let _ = s.write_all(raw);
+                drain(&mut s);
+            }
+            Some(config) => {
+                let name = ServerName::try_from("localhost").expect("name");
+                let conn = ClientConnection::new(Arc::clone(config), name).expect("client");
+                let mut s = StreamOwned::new(conn, tcp);
+                let _ = s.write_all(raw).and_then(|()| s.flush());
+                drain(&mut s);
+            }
+        }
+        String::from_utf8_lossy(&out).into_owned()
+    }
+
+    fn send(&self, method: &str, path: &str, body: &[u8], token: Option<&str>) -> (u16, Value) {
+        let auth = token
+            .map(|t| format!("authorization: Bearer {t}\r\n"))
+            .unwrap_or_default();
+        let mut raw = format!(
+            "{method} {path} HTTP/1.1\r\nhost: test\r\n{auth}content-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n",
+            body.len()
+        )
+        .into_bytes();
+        raw.extend_from_slice(body);
+        let out = self.exchange(&raw);
+        let status = out
+            .split_whitespace()
+            .nth(1)
+            .and_then(|c| c.parse().ok())
+            .unwrap_or_else(|| panic!("no status in {out:?}"));
+        let json = out.split("\r\n\r\n").nth(1).unwrap_or("null");
+        (status, serde_json::from_str(json).expect("json body"))
+    }
+
+    fn http(&self, method: &str, path: &str, body: &str) -> (u16, Value) {
+        self.send(method, path, body.as_bytes(), Some(TOKEN))
+    }
+
+    /// Whether `/healthz` gets no HTTP answer at all.
+    fn refused(&self) -> bool {
+        !self
+            .exchange(b"GET /healthz HTTP/1.1\r\nhost: test\r\n\r\n")
+            .starts_with("HTTP/")
+    }
 }
 
-fn serving(root: &Path, state: &Path) -> SocketAddr {
+fn start(server: Server, tls: Option<&Pki>) -> Client {
+    let addr = server.local_addr().expect("addr");
+    std::thread::spawn(move || server.serve(var));
+    Client {
+        addr,
+        tls: tls.map(|p| Arc::clone(&p.client)),
+    }
+}
+
+fn serving(root: &Path, state: &Path, tls: Option<&Pki>) -> Client {
     let instance = Instance::load(root).expect("valid");
     let server = Server::bind(
         instance,
@@ -195,27 +326,24 @@ fn serving(root: &Path, state: &Path) -> SocketAddr {
         &state.to_string_lossy(),
         TOKEN,
         false,
+        tls.map(|p| &p.server),
     )
     .expect("bind");
-    let addr = server.local_addr().expect("addr");
-    std::thread::spawn(move || server.serve(var));
-    addr
+    start(server, tls)
 }
 
-#[test]
-fn the_wire_form_round_trips_over_http() {
+fn the_wire_form_round_trips(tls: Option<&Pki>) {
     let root = fixture();
     let state = TempDir::new().expect("state");
-    let addr = serving(root.path(), state.path());
+    let c = serving(root.path(), state.path(), tls);
 
     assert_eq!(
-        send(addr, "GET", "/healthz", b"", None),
+        c.send("GET", "/healthz", b"", None),
         (200, json!({ "ok": true }))
     );
-    assert_eq!(send(addr, "GET", "/v0/operations", b"", None).0, 401);
+    assert_eq!(c.send("GET", "/v0/operations", b"", None).0, 401);
     assert_eq!(
-        send(
-            addr,
+        c.send(
             "GET",
             "/v0/operations",
             b"",
@@ -224,7 +352,7 @@ fn the_wire_form_round_trips_over_http() {
         .0,
         401
     );
-    let (status, ops) = http(addr, "GET", "/v0/operations", "");
+    let (status, ops) = c.http("GET", "/v0/operations", "");
     assert_eq!(status, 200);
     let names: Vec<&str> = ops
         .as_array()
@@ -237,8 +365,7 @@ fn the_wire_form_round_trips_over_http() {
         "{names:?}"
     );
 
-    let (status, shown) = http(
-        addr,
+    let (status, shown) = c.http(
         "POST",
         "/v0/run",
         r#"{"operation":"instance.show","args":{}}"#,
@@ -254,8 +381,7 @@ fn the_wire_form_round_trips_over_http() {
     .expect("local");
     assert_eq!(shown, serde_json::to_value(local).expect("json"));
 
-    let (status, refused) = http(
-        addr,
+    let (status, refused) = c.http(
         "POST",
         "/v0/run",
         r#"{"operation":"infra.apply","args":{}}"#,
@@ -267,15 +393,13 @@ fn the_wire_form_round_trips_over_http() {
             .contains("needs argument `plan`"),
         "{refused}"
     );
-    let (status, refused) = http(
-        addr,
+    let (status, refused) = c.http(
         "POST",
         "/v0/run",
         r#"{"operation":"infra.plan","args":{"state":"/elsewhere"}}"#,
     );
     assert_eq!(status, 400, "a request never names the state: {refused}");
-    let (status, own) = http(
-        addr,
+    let (status, own) = c.http(
         "POST",
         "/v0/run",
         &json!({ "operation": "infra.apply", "args": { "state": state.path(), "plan": "0".repeat(32) } }).to_string(),
@@ -285,12 +409,46 @@ fn the_wire_form_round_trips_over_http() {
         "naming the server's own state is accepted: {own}"
     );
     assert!(own["error"].to_string().contains("no stored plan"), "{own}");
-    assert_eq!(http(addr, "POST", "/v0/run", "not json").0, 400);
+    assert_eq!(c.http("POST", "/v0/run", "not json").0, 400);
     let mut huge = vec![b'a'; 1024 * 1024 + 1];
     huge.push(0xff);
-    assert_eq!(send(addr, "POST", "/v0/run", &huge, Some(TOKEN)).0, 413);
-    assert_eq!(http(addr, "GET", "/v0/run", "").0, 405);
-    assert_eq!(http(addr, "GET", "/nope", "").0, 404);
+    assert_eq!(c.send("POST", "/v0/run", &huge, Some(TOKEN)).0, 413);
+    assert_eq!(c.http("GET", "/v0/run", "").0, 405);
+    assert_eq!(c.http("GET", "/nope", "").0, 404);
+}
+
+#[test]
+fn the_wire_form_round_trips_over_http() {
+    the_wire_form_round_trips(None);
+}
+
+#[test]
+fn the_wire_form_round_trips_over_mutual_tls() {
+    the_wire_form_round_trips(Some(&pki()));
+}
+
+#[test]
+fn mutual_tls_refuses_clients_without_a_trusted_certificate() {
+    let root = fixture();
+    let state = TempDir::new().expect("state");
+    let pki = pki();
+    let c = serving(root.path(), state.path(), Some(&pki));
+    assert_eq!(c.send("GET", "/healthz", b"", None).0, 200);
+    assert!(c.with(&pki.anonymous).refused(), "no client certificate");
+    assert!(c.with(&pki.stranger).refused(), "another CA's certificate");
+    assert!(
+        Client {
+            addr: c.addr,
+            tls: None
+        }
+        .refused(),
+        "plain HTTP"
+    );
+    assert_eq!(
+        c.send("GET", "/v0/operations", b"", None).0,
+        401,
+        "a certificate does not replace the token"
+    );
 }
 
 #[test]
@@ -298,23 +456,85 @@ fn a_short_token_is_refused() {
     let root = fixture();
     let instance = Instance::load(root.path()).expect("valid");
     assert!(matches!(
-        Server::bind(instance, "127.0.0.1:0", "/state", "short", false),
+        Server::bind(instance, "127.0.0.1:0", "/state", "short", false, None),
         Err(Error::Invalid(_))
     ));
 }
 
 #[test]
-fn only_loopback_binds_without_network() {
+fn only_loopback_binds_without_network_and_network_needs_tls() {
     let root = fixture();
     let instance = || Instance::load(root.path()).expect("valid");
-    let err = Server::bind(instance(), "0.0.0.0:0", "/state", TOKEN, false);
+    let pki = pki();
+    let err = Server::bind(instance(), "0.0.0.0:0", "/state", TOKEN, false, None);
     assert!(
         matches!(&err, Err(Error::Invalid(p)) if p[0].contains("--network")),
         "{:?}",
         err.as_ref().err()
     );
-    assert!(Server::bind(instance(), "0.0.0.0:0", "/state", TOKEN, true).is_ok());
-    assert!(Server::bind(instance(), "localhost:0", "/state", TOKEN, false).is_ok());
+    let err = Server::bind(instance(), "0.0.0.0:0", "/state", TOKEN, true, None);
+    assert!(
+        matches!(&err, Err(Error::Invalid(p)) if p[0].contains("BACKPLANE_TLS_CERT")),
+        "{:?}",
+        err.as_ref().err()
+    );
+    assert!(
+        Server::bind(
+            instance(),
+            "0.0.0.0:0",
+            "/state",
+            TOKEN,
+            true,
+            Some(&pki.server)
+        )
+        .is_ok()
+    );
+    assert!(Server::bind(instance(), "localhost:0", "/state", TOKEN, false, None).is_ok());
+}
+
+#[test]
+fn tls_material_is_all_or_nothing_and_must_parse() {
+    let pki = pki();
+    let vars = |set: &'static [(&'static str, &'static str)]| {
+        move |k: &str| {
+            set.iter()
+                .find(|(n, _)| *n == k)
+                .map(|(_, v)| (*v).to_string())
+        }
+    };
+    assert!(matches!(Tls::from_vars(vars(&[])), Ok(None)));
+    assert!(matches!(
+        Tls::from_vars(vars(&[("BACKPLANE_TLS_CERT", "x")])),
+        Err(Error::Invalid(_))
+    ));
+    assert!(matches!(
+        Tls::from_vars(vars(&[
+            ("BACKPLANE_TLS_CERT", "a"),
+            ("BACKPLANE_TLS_KEY", "b"),
+            ("BACKPLANE_TLS_CLIENT_CA", "c"),
+        ])),
+        Ok(Some(_))
+    ));
+    let root = fixture();
+    let bad = Tls {
+        key: "not a key".into(),
+        ..pki.server.clone()
+    };
+    let err = Server::bind(
+        Instance::load(root.path()).expect("valid"),
+        "127.0.0.1:0",
+        "/state",
+        TOKEN,
+        false,
+        Some(&bad),
+    );
+    match err {
+        Err(Error::Invalid(p)) => {
+            assert!(p[0].starts_with("BACKPLANE_TLS_KEY"), "{p:?}");
+            assert!(!p[0].contains("not a key"), "the key never appears: {p:?}");
+        }
+        other => panic!("expected Invalid, got {:?}", other.err()),
+    }
 }
 
 #[test]
@@ -341,35 +561,26 @@ fn health_answers_while_a_plan_runs() {
     }
     let root = fixture();
     let state = TempDir::new().expect("state");
-    let addr = serving(root.path(), state.path());
+    let pki = pki();
+    let c = serving(root.path(), state.path(), Some(&pki));
+    let other = c.clone();
     let planning = std::thread::spawn(move || {
-        http(
-            addr,
-            "POST",
-            "/v0/run",
-            r#"{"operation":"infra.plan","args":{}}"#,
-        )
+        other.http("POST", "/v0/run", r#"{"operation":"infra.plan","args":{}}"#)
     });
-    std::thread::sleep(std::time::Duration::from_millis(300));
-    let started = std::time::Instant::now();
-    assert_eq!(send(addr, "GET", "/healthz", b"", None).0, 200);
+    std::thread::sleep(Duration::from_millis(300));
+    let started = Instant::now();
+    assert_eq!(c.send("GET", "/healthz", b"", None).0, 200);
     assert!(
-        started.elapsed() < std::time::Duration::from_secs(1),
+        started.elapsed() < Duration::from_secs(1),
         "healthz waited {:?} behind the plan",
         started.elapsed()
     );
-    let (status, busy) = http(
-        addr,
-        "POST",
-        "/v0/run",
-        r#"{"operation":"infra.plan","args":{}}"#,
-    );
+    let (status, busy) = c.http("POST", "/v0/run", r#"{"operation":"infra.plan","args":{}}"#);
     assert_eq!(
         status, 409,
         "a second plan is turned away, not queued: {busy}"
     );
-    let (status, invalid) = http(
-        addr,
+    let (status, invalid) = c.http(
         "POST",
         "/v0/run",
         r#"{"operation":"infra.apply","args":{}}"#,
@@ -387,9 +598,9 @@ fn health_answers_while_a_plan_runs() {
 fn stalled_requests_leave_the_server_answering() {
     let root = fixture();
     let state = TempDir::new().expect("state");
-    let addr = serving(root.path(), state.path());
+    let c = serving(root.path(), state.path(), None);
     let stall = || {
-        let mut s = TcpStream::connect(addr).expect("connect");
+        let mut s = TcpStream::connect(c.addr).expect("connect");
         write!(
             s,
             "POST /v0/run HTTP/1.1\r\nhost: test\r\nauthorization: Bearer {TOKEN}\r\ncontent-length: 500000\r\n\r\n"
@@ -397,20 +608,68 @@ fn stalled_requests_leave_the_server_answering() {
         .expect("send");
         s
     };
-    let stalled: Vec<TcpStream> = (1..backplane::serve::WORKERS).map(|_| stall()).collect();
-    std::thread::sleep(std::time::Duration::from_millis(500));
+    let stalled: Vec<TcpStream> = (1..WORKERS).map(|_| stall()).collect();
+    std::thread::sleep(Duration::from_millis(500));
     assert_eq!(
-        send(addr, "GET", "/healthz", b"", None).0,
+        c.send("GET", "/healthz", b"", None).0,
         200,
         "the last free worker still answers"
     );
     drop(stalled);
-    std::thread::sleep(std::time::Duration::from_millis(500));
-    for _ in 0..backplane::serve::WORKERS {
+    std::thread::sleep(Duration::from_millis(500));
+    for _ in 0..WORKERS {
         assert_eq!(
-            send(addr, "GET", "/healthz", b"", None).0,
+            c.send("GET", "/healthz", b"", None).0,
             200,
             "workers are released"
         );
     }
+}
+
+#[test]
+fn the_deadline_releases_every_stalled_worker() {
+    let root = fixture();
+    let state = TempDir::new().expect("state");
+    let pki = pki();
+    let bind = |tls: Option<&Pki>| {
+        let server = Server::bind(
+            Instance::load(root.path()).expect("valid"),
+            "127.0.0.1:0",
+            &state.path().to_string_lossy(),
+            TOKEN,
+            false,
+            tls.map(|p| &p.server),
+        )
+        .expect("bind")
+        .with_deadline(Duration::from_secs(1));
+        start(server, tls)
+    };
+    let plain = bind(None);
+    let mutual = bind(Some(&pki));
+    let body_stalls: Vec<TcpStream> = (0..WORKERS)
+        .map(|_| {
+            let mut s = TcpStream::connect(plain.addr).expect("connect");
+            write!(
+                s,
+                "POST /v0/run HTTP/1.1\r\nhost: test\r\nauthorization: Bearer {TOKEN}\r\ncontent-length: 500000\r\n\r\n{{"
+            )
+            .expect("send");
+            s
+        })
+        .collect();
+    let handshake_stalls: Vec<TcpStream> = (0..WORKERS)
+        .map(|_| TcpStream::connect(mutual.addr).expect("connect"))
+        .collect();
+    std::thread::sleep(Duration::from_millis(1500));
+    assert_eq!(
+        plain.send("GET", "/healthz", b"", None).0,
+        200,
+        "a stalled body"
+    );
+    assert_eq!(
+        mutual.send("GET", "/healthz", b"", None).0,
+        200,
+        "a stalled handshake"
+    );
+    drop((body_stalls, handshake_stalls));
 }

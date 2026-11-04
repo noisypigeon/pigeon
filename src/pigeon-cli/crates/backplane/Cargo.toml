@@ -18,9 +18,11 @@ sentinel.workspace = true
 serde.workspace = true
 serde-saphyr.workspace = true
 serde_json.workspace = true
-tiny_http.workspace = true
+httparse.workspace = true
+rustls.workspace = true
 
 [dev-dependencies]
+rcgen.workspace = true
 tempfile.workspace = true
 
 [lints]
