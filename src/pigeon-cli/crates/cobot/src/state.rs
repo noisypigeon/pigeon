@@ -62,9 +62,15 @@ impl Store {
                 .filter(|v| !v.is_empty())
                 .ok_or(format!("{k} is not set"))
         };
+        let endpoint = need(ENDPOINT_VAR)?;
+        if !secure(&endpoint) {
+            return Err(format!(
+                "{ENDPOINT_VAR} must be https://, or http:// only to a loopback test server"
+            ));
+        }
         Ok(Self::R2 {
             bucket: Bucket {
-                endpoint: need(ENDPOINT_VAR)?,
+                endpoint,
                 name: name.to_string(),
                 creds: Credentials {
                     access_key: need(ACCESS_KEY_VAR)?,
@@ -172,22 +178,47 @@ impl Mirror {
             }
             changed.push(key);
         }
-        for rel in self.read.keys().filter(|r| !local.contains_key(*r)) {
+        for (rel, (etag, _)) in self.read.iter().filter(|(r, _)| !local.contains_key(*r)) {
             let key = format!("{}/{rel}", self.prefix);
-            self.bucket.delete(&key, now).map_err(|e| fail(&e))?;
+            if !self
+                .bucket
+                .delete_if(&key, etag, now)
+                .map_err(|e| fail(&e))?
+            {
+                return Err(Error::State(format!(
+                    "`{key}` changed in R2 since it was read; not deleting it"
+                )));
+            }
             changed.push(key);
         }
         Ok(changed)
     }
 }
 
-/// Whether an object key's relative part stays inside the mirror.
+/// Whether an object key's relative part stays inside the mirror on any platform: `/`-separated
+/// segments of `[A-Za-z0-9._-]`, none `.` or `..`, so never a backslash, drive letter or root.
 fn safe(rel: &str) -> bool {
     !rel.is_empty()
-        && !rel.starts_with('/')
-        && rel
-            .split('/')
-            .all(|p| !p.is_empty() && p != "." && p != "..")
+        && rel.split('/').all(|p| {
+            !p.is_empty()
+                && p != "."
+                && p != ".."
+                && p.chars()
+                    .all(|c| c.is_ascii_alphanumeric() || "._-".contains(c))
+        })
+}
+
+/// Whether `endpoint` is TLS, or plain HTTP only to a loopback host (tests).
+fn secure(endpoint: &str) -> bool {
+    if endpoint.starts_with("https://") {
+        return true;
+    }
+    let Some(rest) = endpoint.strip_prefix("http://") else {
+        return false;
+    };
+    let authority = rest.split('/').next().unwrap_or_default();
+    let host = authority.rsplit_once(':').map_or(authority, |(h, _)| h);
+    !authority.contains('@') && matches!(host, "localhost" | "127.0.0.1" | "[::1]")
 }
 
 fn files(root: &Path, dir: &Path, out: &mut BTreeMap<String, Vec<u8>>) -> Result<(), Error> {

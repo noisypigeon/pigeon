@@ -104,8 +104,16 @@ fn serve() -> (String, Objects) {
                         }
                     }
                     "DELETE" => {
-                        objects.remove(&key);
-                        (204, Vec::new(), None)
+                        let current = objects.get(&key).map(|v| etag(v));
+                        match headers.get("if-match") {
+                            Some(want) if current.as_deref() != Some(want.trim_matches('"')) => {
+                                (412, Vec::new(), None)
+                            }
+                            _ => {
+                                objects.remove(&key);
+                                (204, Vec::new(), None)
+                            }
+                        }
                     }
                     _ => (400, Vec::new(), None),
                 };
@@ -152,13 +160,34 @@ fn get(objects: &Objects, key: &str) -> Option<Vec<u8>> {
 fn stores_parse_without_echoing_values() {
     let none = |_: &str| None;
     assert!(matches!(Store::parse("../state", none), Ok(Store::Dir(_))));
-    let vars = |k: &str| Some(format!("value-of-{k}"));
+    let vars = |k: &str| {
+        Some(if k == cobot::state::ENDPOINT_VAR {
+            "https://r2.example".into()
+        } else {
+            format!("value-of-{k}")
+        })
+    };
     match Store::parse("r2://pigeon-state-x1/instances/noisypigeon/", vars).expect("r2") {
         Store::R2 { bucket, prefix } => {
             assert_eq!(bucket.name, "pigeon-state-x1");
             assert_eq!(prefix, "instances/noisypigeon");
         }
         Store::Dir(_) => panic!("not a dir"),
+    }
+    for insecure in [
+        "http://example.com",
+        "http://user@127.0.0.1",
+        "ftp://127.0.0.1",
+    ] {
+        let err = Store::parse("r2://b/p", |k: &str| {
+            Some(if k == cobot::state::ENDPOINT_VAR {
+                insecure.into()
+            } else {
+                "v".into()
+            })
+        })
+        .expect_err(insecure);
+        assert!(err.contains("https://"), "{err}");
     }
     let missing = Store::parse("r2://b/p", none).expect_err("no endpoint");
     assert!(missing.contains(cobot::state::ENDPOINT_VAR), "{missing}");
@@ -249,9 +278,33 @@ fn another_writer_wins_and_the_push_fails() {
 
 #[test]
 fn a_key_leaving_the_mirror_is_refused() {
+    for bad in [
+        "p/../escape",
+        "p/a\\..\\..\\escape",
+        "p/C:/escape",
+        "p/a//b",
+        "p/./a",
+    ] {
+        let (endpoint, objects) = serve();
+        put(&objects, bad, b"x");
+        let dir = TempDir::new().expect("tempdir");
+        let err = Mirror::pull(bucket(&endpoint), "p", &dir.path().join("m"), 0).expect_err(bad);
+        assert!(err.to_string().contains("refusing"), "{bad}: {err}");
+    }
+}
+
+#[test]
+fn a_delete_never_erases_another_writers_update() {
     let (endpoint, objects) = serve();
-    put(&objects, "p/../escape", b"x");
+    put(&objects, "p/old/terraform.tfstate", b"base");
     let dir = TempDir::new().expect("tempdir");
-    let err = Mirror::pull(bucket(&endpoint), "p", &dir.path().join("m"), 0).expect_err("unsafe");
-    assert!(err.to_string().contains("refusing"), "{err}");
+    let mirror = Mirror::pull(bucket(&endpoint), "p", &dir.path().join("m"), 0).expect("pull");
+    put(&objects, "p/old/terraform.tfstate", b"theirs");
+    fs::remove_file(mirror.dir().join("old/terraform.tfstate")).expect("rm");
+    let err = mirror.push(0).expect_err("conflict").to_string();
+    assert!(err.contains("not deleting"), "{err}");
+    assert_eq!(
+        get(&objects, "p/old/terraform.tfstate").as_deref(),
+        Some(&b"theirs"[..])
+    );
 }

@@ -460,6 +460,34 @@ impl Bucket {
         }
     }
 
+    /// Deletes one object only if its `ETag` is still `etag`: it re-reads the `ETag` first, and
+    /// sends `If-Match` for stores that honour it. `false` when the object changed (or 412).
+    ///
+    /// # Errors
+    ///
+    /// A [`Failure`] for a transport error or an unexpected status.
+    pub fn delete_if(&self, key: &str, etag: &str, now: u64) -> Result<bool, Failure> {
+        match self.get_tagged(key, now)? {
+            None => return Ok(true),
+            Some((_, current)) if current != etag => return Ok(false),
+            Some(_) => {}
+        }
+        let quoted = format!("\"{etag}\"");
+        match self.send(
+            "DELETE",
+            Some(key),
+            &[],
+            b"",
+            None,
+            &[("if-match", &quoted)],
+            now,
+        )? {
+            (200 | 204 | 404, _, _) => Ok(true),
+            (412, _, _) => Ok(false),
+            (status, _, _) => Err(Failure(format!("DELETE {key}: status {status}"))),
+        }
+    }
+
     /// Deletes one object.
     ///
     /// # Errors
