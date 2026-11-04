@@ -2,6 +2,7 @@
 
 ## 2026-11-04
 
+- refactor(infra): infra/pigeon composes the Cloudflare catalog; infra/agnostic retires ([#96](https://github.com/noisypigeon/pigeon/pull/96))
 - feat(catalog): account and d1-database modules, and an optional r2-bucket suffix ([#95](https://github.com/noisypigeon/pigeon/pull/95))
 - feat(cobot): catalog module references and retired changelogs ([#94](https://github.com/noisypigeon/pigeon/pull/94))
 - docs(adr): the bootstrap composes the Cloudflare catalog ([#93](https://github.com/noisypigeon/pigeon/pull/93))
