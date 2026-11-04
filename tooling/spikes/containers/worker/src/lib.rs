@@ -19,7 +19,7 @@ async fn fetch(req: Request, env: Env, _ctx: worker::Context) -> Result<Response
         return Response::error("unauthorized", 401);
     }
     match req.path().as_str() {
-        "/image" | "/run" | "/uptime" | "/egress" => {
+        "/image" | "/run" | "/status" | "/uptime" | "/egress" => {
             env.durable_object("RUNNER")?
                 .get_by_name("spike")?
                 .fetch_with_request(req)
@@ -99,20 +99,26 @@ impl DurableObject for Runner {
             .state
             .container()
             .ok_or_else(|| worker::Error::RustError("no container binding".into()))?;
-        let started_ms = Date::now().as_millis();
         let cold = !container.running();
+        let mut startup_ms = None;
         if cold {
+            let started_ms = Date::now().as_millis();
             let mut options = ContainerStartupOptions::new();
             options.enable_internet(true);
             container.start(Some(options))?;
+            probe(&container, "/uptime").await?;
+            startup_ms = Some(Date::now().as_millis() - started_ms);
         }
-        let path = match req.path().as_str() {
-            "/run" => "/uptime".to_string(),
-            other => other.to_string(),
+        let url = req.url()?;
+        let path = match url.query() {
+            Some(q) => format!("{}?{q}", url.path()),
+            None => url.path().to_string(),
         };
+        let probed_ms = Date::now().as_millis();
         let mut body = probe(&container, &path).await?;
         body["cold_start"] = json!(cold);
-        body["startup_ms"] = json!(Date::now().as_millis() - started_ms);
+        body["startup_ms"] = json!(startup_ms);
+        body["probe_ms"] = json!(Date::now().as_millis() - probed_ms);
         Response::from_json(&body)
     }
 }

@@ -51,9 +51,10 @@ s /egress     # every provider should report an HTTP status, not an error
 s /secrets    # {"present":true,"length":N}
 s /do; s /do  # count increments
 s /r2         # read_back: true
-s /run        # starts the long run; note uptime_s
-#   wait 20 minutes, calling nothing, then:
-s /uptime     # survived if uptime_s >= 1200 and cold_start is false
+s "/run?minutes=20"   # starts a 20-minute busy job with a heartbeat every 30 s
+#   wait about 22 minutes, calling nothing, then:
+s /status     # survived if job.done, beats == expected_beats, longest_gap_s near 30,
+              # and cold_start is false
 s /d1         # cron_ticks > 0 once 5 minutes have passed
 ```
 
