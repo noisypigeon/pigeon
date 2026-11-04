@@ -400,3 +400,47 @@ The entries the old rule wrote are corrected once, by the bot, so no pull reques
 - Wherever this ADR says sentinel generates, bumps or tags, read cobot. Sentinel still enforces the changelog policies of §6 and §7.
 
 The steps are in that ADR's implementation plan.
+
+### 2026-11-04: A tier can move, and the bot moves its file
+
+[`2026-11-04-development-platform-instance-separation.md`](2026-11-04-development-platform-instance-separation.md) phase 1b moves `infra/cloudflare/` and `infra/agnostic/` to `catalog/`. Ten generated `CHANGELOG.md` files live inside those directories. §6's rule, `pull-request.yaml`'s `files` check, fails any PR that moves or deletes one. Only the bot writes changelogs, so only the bot moves them.
+
+#### 1. `from`
+
+- A tier in `.config/releases.yaml` gains an optional `from: <path>`, which is the file's previous location.
+- On each run, `pigeon cobot release` treats it as follows:
+  - **`file` is missing and `from` exists.** The tier is rendered from `from`'s content, as if it were already at `file`. Its history is kept, and a date tier is not re-backfilled. The bot writes `file` and deletes `from`.
+  - **Both exist.** The release fails with `Error::Io` naming both, because a tier lives in one place.
+  - **`from` is missing.** It is ignored, so a later PR may drop the key at any time.
+- `written` lists both paths. The bot's existing `git add -- <written>` stages the move as a rename, so `release.yml` does not change.
+- A dry run reports the same `written` and changes nothing.
+- `from` must differ from `file`, and no two tiers may share a `file` or a `from`. Config validation rejects anything else, with exit `2`.
+
+#### 2. Moving a unit
+
+A PR that moves a release unit's files edits only:
+
+- `.config/releases.yaml`: the unit's `manifest` and `paths`, and its tier's `file`, with `from` set to the old path;
+- the moved non-changelog files;
+- the changelog policies' `target.files` lists.
+
+It never touches a `CHANGELOG.md`. The bot's commit after the merge carries each changelog to its new path.
+
+The move touches the unit's new paths, so each moved unit releases once, with the move as its changelog line. Its version history and tags continue unchanged.
+
+#### 3. Tests
+
+The tests run against temporary repositories:
+
+- a moved unit tier keeps every section and lands at `file`, with `from` gone and both paths in `written`;
+- a moved date tier keeps its lines and adds only the range's new ones;
+- both paths existing fails;
+- a missing `from` is ignored;
+- a dry run writes and removes nothing;
+- a duplicate `from`, or `from` equal to `file`, is rejected.
+
+#### 4. Execution
+
+1. This amendment lands first.
+2. Then `feat(cobot): a release tier can move with from`, holding steps 1 and 3. `release.yml` builds `cobot release` from the merged commit, so this needs only to merge, not to be released, before step 3 uses it.
+3. Then phase 1b's move PR, which uses `from`.
