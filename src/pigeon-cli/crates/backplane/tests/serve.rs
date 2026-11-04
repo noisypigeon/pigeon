@@ -673,3 +673,55 @@ fn the_deadline_releases_every_stalled_worker() {
     );
     drop((body_stalls, handshake_stalls));
 }
+
+#[test]
+fn request_framing_is_strict() {
+    let root = fixture();
+    let state = TempDir::new().expect("state");
+    let c = serving(root.path(), state.path(), None);
+    let status = |raw: &str| -> String {
+        c.exchange(raw.as_bytes())
+            .split_whitespace()
+            .nth(1)
+            .unwrap_or_default()
+            .to_string()
+    };
+    let auth = format!("authorization: Bearer {TOKEN}\r\n");
+    assert_eq!(
+        status(&format!(
+            "POST /v0/run HTTP/1.1\r\n{auth}content-length: 2\r\ncontent-length: 40\r\n\r\n{{}}"
+        )),
+        "400",
+        "two content-lengths"
+    );
+    assert_eq!(
+        status(&format!(
+            "POST /v0/run HTTP/1.1\r\n{auth}expect: something\r\ncontent-length: 2\r\n\r\n{{}}"
+        )),
+        "417"
+    );
+    let big = "a".repeat(17 * 1024);
+    assert_eq!(
+        status(&format!("GET /healthz HTTP/1.1\r\nx-big: {big}\r\n\r\n")),
+        "431",
+        "headers over 16 KiB"
+    );
+
+    let body = r#"{"operation":"instance.show","args":{}}"#;
+    let mut s = TcpStream::connect(c.addr).expect("connect");
+    s.set_read_timeout(Some(Duration::from_secs(5)))
+        .expect("timeout");
+    write!(
+        s,
+        "POST /v0/run HTTP/1.1\r\n{auth}expect: 100-continue\r\ncontent-length: {}\r\n\r\n",
+        body.len()
+    )
+    .expect("head");
+    let mut interim = [0u8; 25];
+    s.read_exact(&mut interim).expect("100 Continue");
+    assert_eq!(&interim, b"HTTP/1.1 100 Continue\r\n\r\n");
+    s.write_all(body.as_bytes()).expect("body");
+    let mut out = String::new();
+    let _ = s.read_to_string(&mut out);
+    assert!(out.starts_with("HTTP/1.1 200 "), "{out}");
+}

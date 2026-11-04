@@ -152,9 +152,12 @@ impl Server {
                 "{TOKEN_VAR} must be at least {MIN_TOKEN} characters"
             )]));
         }
-        let loopback = listen
-            .to_socket_addrs()
-            .is_ok_and(|mut a| a.all(|a| a.ip().is_loopback()));
+        let io = |e: io::Error| Error::Io {
+            path: listen.into(),
+            message: e.to_string(),
+        };
+        let addrs: Vec<SocketAddr> = listen.to_socket_addrs().map_err(io)?.collect();
+        let loopback = !addrs.is_empty() && addrs.iter().all(|a| a.ip().is_loopback());
         if !loopback && !network {
             return Err(Error::Invalid(vec![format!(
                 "`{listen}` is not a loopback address; bind beyond loopback only with --network"
@@ -166,10 +169,7 @@ impl Server {
             )]));
         }
         let tls = tls.map(Tls::config).transpose()?;
-        let listener = TcpListener::bind(listen).map_err(|e| Error::Io {
-            path: listen.into(),
-            message: e.to_string(),
-        })?;
+        let listener = TcpListener::bind(&addrs[..]).map_err(io)?;
         Ok(Self {
             listener,
             tls,
@@ -261,7 +261,7 @@ impl Server {
 
     /// The status and body for `head`, and how much of its body is left unread; `read` is
     /// what arrived after the headers.
-    fn answer<S: Read>(
+    fn answer<S: Read + Write>(
         &self,
         head: &Head,
         mut read: Vec<u8>,
@@ -280,11 +280,34 @@ impl Server {
                 411,
                 json!({ "error": "the request body needs a content-length" }),
             ),
+            ("POST", "/v0/run")
+                if head
+                    .expect
+                    .as_ref()
+                    .is_some_and(|e| !e.eq_ignore_ascii_case("100-continue")) =>
+            {
+                (
+                    417,
+                    json!({ "error": "only `expect: 100-continue` is supported" }),
+                )
+            }
             ("POST", "/v0/run") if length > MAX_BODY => {
                 (413, json!({ "error": "the request body is over 1 MiB" }))
             }
             ("POST", "/v0/run") => {
                 read.truncate(usize::try_from(length).unwrap_or(usize::MAX));
+                if head.expect.is_some()
+                    && unread > 0
+                    && s.write_all(b"HTTP/1.1 100 Continue\r\n\r\n")
+                        .and_then(|()| s.flush())
+                        .is_err()
+                {
+                    return (
+                        400,
+                        json!({ "error": "the request body could not be read" }),
+                        0,
+                    );
+                }
                 let body = match s.take(unread).read_to_end(&mut read) {
                     Ok(n) if n as u64 == unread => match String::from_utf8(read) {
                         Ok(text) => self.run(&text, var),
@@ -368,6 +391,7 @@ struct Head {
     authorization: Option<String>,
     length: Option<u64>,
     chunked: bool,
+    expect: Option<String>,
 }
 
 /// The answer to a request that was not read: a status and body, or `None` for nothing.
@@ -386,6 +410,12 @@ fn read_head<S: Read>(s: &mut S) -> Result<(Head, Vec<u8>), Refusal> {
         let mut headers = [httparse::EMPTY_HEADER; MAX_HEADERS];
         let mut request = httparse::Request::new(&mut headers);
         match request.parse(&buf) {
+            Ok(httparse::Status::Complete(end)) if end > MAX_HEAD => {
+                return Err(Some((
+                    431,
+                    json!({ "error": "the request headers are too large" }),
+                )));
+            }
             Ok(httparse::Status::Complete(end)) => {
                 let header = |name: &str| {
                     request
@@ -395,12 +425,22 @@ fn read_head<S: Read>(s: &mut S) -> Result<(Head, Vec<u8>), Refusal> {
                         .and_then(|h| std::str::from_utf8(h.value).ok())
                         .map(str::trim)
                 };
-                let length = match header("content-length") {
-                    None => None,
-                    Some(v) => match v.parse() {
-                        Ok(n) => Some(n),
-                        Err(_) => return Err(Some(bad("the content-length is not a number"))),
+                let lengths: Vec<&[u8]> = request
+                    .headers
+                    .iter()
+                    .filter(|h| h.name.eq_ignore_ascii_case("content-length"))
+                    .map(|h| h.value)
+                    .collect();
+                let length = match lengths.as_slice() {
+                    [] => None,
+                    [v] => match std::str::from_utf8(v)
+                        .ok()
+                        .and_then(|v| v.trim().parse().ok())
+                    {
+                        Some(n) => Some(n),
+                        None => return Err(Some(bad("the content-length is not a number"))),
                     },
+                    _ => return Err(Some(bad("more than one content-length"))),
                 };
                 let head = Head {
                     method: request.method.unwrap_or_default().to_string(),
@@ -408,6 +448,7 @@ fn read_head<S: Read>(s: &mut S) -> Result<(Head, Vec<u8>), Refusal> {
                     authorization: header("authorization").map(str::to_string),
                     length,
                     chunked: header("transfer-encoding").is_some(),
+                    expect: header("expect").map(str::to_string),
                 };
                 return Ok((head, buf.split_off(end)));
             }
@@ -438,6 +479,7 @@ fn respond(s: &mut impl Write, status: u16, body: &Value) -> io::Result<()> {
         409 => "Conflict",
         411 => "Length Required",
         413 => "Content Too Large",
+        417 => "Expectation Failed",
         431 => "Request Header Fields Too Large",
         _ => "Internal Server Error",
     };
