@@ -138,3 +138,10 @@ rules:
 - `.config/policies/layout.yaml` follows each move in the PR that makes it.
 
 The text above stays as written.
+
+### 2026-11-04: tooling/spikes/
+
+- `tooling/spikes/<name>/` holds a throwaway spike kit: code and a runbook that an owner deploys by hand to confirm what a design relies on.
+- A spike is never a release unit, is outside the Cargo workspace, and holds no credential or account ID.
+- Its results are recorded in the ADR that ordered it, and a later PR removes the kit.
+- The first is `containers`, per the phase 3 amendment of [`2026-11-04-development-platform-instance-separation.md`](2026-11-04-development-platform-instance-separation.md).
