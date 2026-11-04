@@ -41,5 +41,9 @@ binding = "SECRET"
 store_id = "SET_LOCALLY"
 secret_name = "pigeon-spike"
 
+[[mtls_certificates]]
+binding = "MTLS"
+certificate_id = "SET_LOCALLY"
+
 [triggers]
 crons = ["*/5 * * * *"]
