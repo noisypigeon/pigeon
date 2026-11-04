@@ -10,8 +10,8 @@ use cobot::release::{self, Config};
 
 use super::{INVALID, SUCCESS, VIOLATION};
 use crate::cli::{
-    CobotCommand, CobotPlan, CobotRun, ReleaseArgs, SecretsCommand, SecretsKey, SecretsUnit,
-    SitesBuild, SitesCommand, SitesPublish, TagsArgs,
+    CobotApply, CobotCommand, CobotPlan, CobotRun, ReleaseArgs, SecretsCommand, SecretsKey,
+    SecretsUnit, SitesBuild, SitesCommand, SitesPublish, TagsArgs,
 };
 
 /// Runs a `pigeon cobot` command and returns its exit code.
@@ -178,9 +178,24 @@ fn context(
 }
 
 fn plan(args: &CobotPlan) -> Result<(), cobot::Error> {
-    let (ctx, _) = context(&args.run)?;
+    let (ctx, mirror) = context(&args.run)?;
     let units = cobot::select(&ctx.root, &ctx.providers, &args.run.units)?;
-    let summary = cobot::summary(&cobot::plan(&ctx, &units)?);
+    let plans = if args.store {
+        let (stored, plans) = cobot::plan_stored(&ctx, &units, now())?;
+        if let Some(m) = &mirror {
+            m.push(now())?;
+        }
+        println!(
+            "cobot: stored plan {} for {} unit(s); apply it with --plan {} within 24 hours",
+            stored.id,
+            stored.units.len(),
+            stored.id
+        );
+        plans
+    } else {
+        cobot::plan(&ctx, &units)?
+    };
+    let summary = cobot::summary(&plans);
     print!("{summary}");
     if let Some(path) = &args.summary {
         fs::write(path, &summary).map_err(|e| cobot::Error::Io {
@@ -191,10 +206,13 @@ fn plan(args: &CobotPlan) -> Result<(), cobot::Error> {
     Ok(())
 }
 
-fn apply(args: &CobotRun) -> Result<(), cobot::Error> {
-    let (ctx, mirror) = context(args)?;
-    let units = cobot::select(&ctx.root, &ctx.providers, &args.units)?;
-    let applied = cobot::apply(&ctx, &units);
+fn apply(args: &CobotApply) -> Result<(), cobot::Error> {
+    let (ctx, mirror) = context(&args.run)?;
+    let applied = match &args.plan {
+        Some(id) => cobot::apply_stored(&ctx, id, now()),
+        None => cobot::select(&ctx.root, &ctx.providers, &args.run.units)
+            .and_then(|units| cobot::apply(&ctx, &units)),
+    };
     if let Some(m) = &mirror {
         let written = m.push(now())?;
         println!("cobot: wrote {} state object(s) to R2", written.len());
