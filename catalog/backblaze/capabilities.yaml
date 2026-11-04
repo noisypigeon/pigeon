@@ -1,0 +1,4 @@
+description: Backblaze B2 capabilities a unit may request; minted per run, per 2026-11-04-development-platform-instance-separation.md.
+capabilities:
+  files.read: { permissions: [listBuckets, listFiles, readFiles], scope: bucket }
+  files.write: { permissions: [listBuckets, listFiles, readFiles, writeFiles, deleteFiles], scope: bucket }

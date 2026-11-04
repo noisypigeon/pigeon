@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "catalog/backblaze",
+  "description": "The Backblaze B2 provisioner unit; see .claude/decisions/2026-11-03-runtime-backblaze-provisioner-unit.md.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "buckets"
+  ],
+  "x-cobot": {
+    "version": "0.1.0",
+    "secrets": [],
+    "providers": {
+      "b2": {}
+    },
+    "each": {
+      "bucket_suffixes": {
+        "module": "agnostic/random-string",
+        "over": "buckets",
+        "for_each": "$item.name",
+        "inputs": {}
+      }
+    },
+    "outputs": {
+      "bucket_names": "$module.buckets[*].name",
+      "bucket_ids": "$module.buckets[*].id"
+    }
+  },
+  "properties": {
+    "buckets": {
+      "description": "Private buckets, each named <name>-<random6>.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "$ref": "#/$defs/key",
+            "maxLength": 56
+          }
+        }
+      },
+      "x-cobot": {
+        "module": "bucket",
+        "for_each": "$item.name",
+        "inputs": {
+          "key": "$item.name",
+          "suffix": "$module.bucket_suffixes[$item.name].result"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "key": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+    }
+  }
+}

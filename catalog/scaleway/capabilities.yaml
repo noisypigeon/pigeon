@@ -1,0 +1,4 @@
+description: Scaleway capabilities a unit may request; minted per run, per 2026-11-04-development-platform-instance-separation.md.
+capabilities:
+  object-storage.read: { permissions: [ObjectStorageReadOnly], scope: project }
+  object-storage.write: { permissions: [ObjectStorageFullAccess], scope: project }

@@ -15,6 +15,17 @@ target:
     - catalog/cloudflare/modules/ruleset/CHANGELOG.md
     - catalog/agnostic/modules/random-string/CHANGELOG.md
     - catalog/agnostic/CHANGELOG.md
+    - catalog/digitalocean/modules/project-resources/CHANGELOG.md
+    - catalog/digitalocean/modules/project/CHANGELOG.md
+    - catalog/digitalocean/modules/spaces-bucket/CHANGELOG.md
+    - catalog/digitalocean/modules/ssh-key/CHANGELOG.md
+    - catalog/digitalocean/CHANGELOG.md
+    - catalog/scaleway/modules/iam-application/CHANGELOG.md
+    - catalog/scaleway/modules/iam-policy/CHANGELOG.md
+    - catalog/scaleway/modules/project/CHANGELOG.md
+    - catalog/scaleway/CHANGELOG.md
+    - catalog/backblaze/modules/bucket/CHANGELOG.md
+    - catalog/backblaze/CHANGELOG.md
     - src/static-site-template/CHANGELOG.md
   optional: true
 rules:

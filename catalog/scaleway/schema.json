@@ -1,0 +1,172 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "catalog/scaleway",
+  "description": "The Scaleway provisioner unit; see .claude/decisions/2026-11-03-runtime-scaleway-provisioner-unit.md.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "region",
+    "projects",
+    "applications",
+    "organization_id"
+  ],
+  "x-cobot": {
+    "version": "0.1.0",
+    "secrets": [],
+    "providers": {
+      "scaleway": {
+        "region": "$config.region"
+      }
+    },
+    "each": {
+      "policies": {
+        "module": "iam-policy",
+        "over": "applications",
+        "for_each": "$item.name",
+        "inputs": {
+          "name": "$item.name",
+          "application_id": "$module.applications[$item.name].id",
+          "rules": "$item.rules",
+          "project_ids": "$module.projects[*].id",
+          "organization_id": "$config.organization_id"
+        }
+      }
+    },
+    "outputs": {
+      "project_ids": "$module.projects[*].id",
+      "application_ids": "$module.applications[*].id"
+    }
+  },
+  "properties": {
+    "region": {
+      "description": "The provider's region.",
+      "type": "string",
+      "pattern": "^[a-z]{2}-[a-z]{3}$"
+    },
+    "projects": {
+      "description": "Projects to create; never the organization's default.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "description"
+        ],
+        "properties": {
+          "name": {
+            "$ref": "#/$defs/key"
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 200
+          }
+        }
+      },
+      "x-cobot": {
+        "module": "project",
+        "for_each": "$item.name",
+        "inputs": {
+          "name": "$item.name",
+          "description": "$item.description"
+        }
+      }
+    },
+    "applications": {
+      "description": "IAM applications, each with one policy of the given rules.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "description",
+          "rules"
+        ],
+        "properties": {
+          "name": {
+            "$ref": "#/$defs/key"
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "rules": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "$ref": "#/$defs/rule"
+            }
+          }
+        }
+      },
+      "x-cobot": {
+        "module": "iam-application",
+        "for_each": "$item.name",
+        "inputs": {
+          "name": "$item.name",
+          "description": "$item.description"
+        }
+      }
+    },
+    "organization_id": {
+      "description": "The organization the policies are scoped to; instance metadata, never published.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    }
+  },
+  "$defs": {
+    "key": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+    },
+    "rule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "permission_sets"
+      ],
+      "properties": {
+        "permission_sets": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9]+$",
+            "not": {
+              "enum": [
+                "IAMManager",
+                "OrganizationManager",
+                "ProjectManager"
+              ]
+            }
+          }
+        },
+        "projects": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/key"
+          }
+        },
+        "organization": {
+          "const": true
+        }
+      },
+      "oneOf": [
+        {
+          "required": [
+            "projects"
+          ]
+        },
+        {
+          "required": [
+            "organization"
+          ]
+        }
+      ]
+    }
+  }
+}

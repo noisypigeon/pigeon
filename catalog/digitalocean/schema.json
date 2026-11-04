@@ -1,0 +1,158 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "catalog/digitalocean",
+  "description": "The DigitalOcean provisioner unit; see .claude/decisions/2026-11-03-runtime-digitalocean-provisioner-unit.md.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "region",
+    "project",
+    "ssh_keys",
+    "buckets"
+  ],
+  "x-cobot": {
+    "version": "0.1.0",
+    "secrets": [],
+    "providers": {
+      "digitalocean": {}
+    },
+    "singletons": {
+      "project": {
+        "module": "project",
+        "inputs": {
+          "name": "$config.project.name",
+          "description": "$config.project.description",
+          "purpose": "$config.project.purpose",
+          "environment": "$config.project.environment"
+        }
+      },
+      "project_resources": {
+        "module": "project-resources",
+        "inputs": {
+          "project_id": "$module.project.id",
+          "urns": "$module.buckets[*].urn"
+        }
+      }
+    },
+    "each": {
+      "bucket_suffixes": {
+        "module": "agnostic/random-string",
+        "over": "buckets",
+        "for_each": "$item.name",
+        "inputs": {}
+      }
+    },
+    "outputs": {
+      "project_id": "$module.project.id",
+      "bucket_names": "$module.buckets[*].name",
+      "ssh_key_ids": "$module.ssh_keys[*].id"
+    }
+  },
+  "properties": {
+    "region": {
+      "description": "The region of every bucket.",
+      "type": "string",
+      "pattern": "^[a-z]+[0-9]$"
+    },
+    "project": {
+      "description": "The one project every resource joins; never the default.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "description",
+        "purpose",
+        "environment"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 175
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 255
+        },
+        "purpose": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
+        },
+        "environment": {
+          "enum": [
+            "Development",
+            "Staging",
+            "Production"
+          ]
+        }
+      }
+    },
+    "ssh_keys": {
+      "description": "SSH public keys to register; ed25519 only, with no comment.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "public_key"
+        ],
+        "properties": {
+          "name": {
+            "$ref": "#/$defs/key"
+          },
+          "public_key": {
+            "type": "string",
+            "pattern": "^ssh-ed25519 [A-Za-z0-9+/]+={0,2}$"
+          }
+        }
+      },
+      "x-cobot": {
+        "module": "ssh-key",
+        "for_each": "$item.name",
+        "inputs": {
+          "name": "$item.name",
+          "public_key": "$item.public_key"
+        }
+      }
+    },
+    "buckets": {
+      "description": "Private Spaces buckets, each named <name>-<random6>.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "versioning"
+        ],
+        "properties": {
+          "name": {
+            "$ref": "#/$defs/key",
+            "maxLength": 56
+          },
+          "versioning": {
+            "type": "boolean"
+          }
+        }
+      },
+      "x-cobot": {
+        "module": "spaces-bucket",
+        "for_each": "$item.name",
+        "inputs": {
+          "key": "$item.name",
+          "suffix": "$module.bucket_suffixes[$item.name].result",
+          "region": "$config.region",
+          "versioning": "$item.versioning"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "key": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+    }
+  }
+}
