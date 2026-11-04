@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.5 (2026-11-04)
+
+- feat(cobot): local units run only when named ([#91](https://github.com/noisypigeon/pigeon/pull/91))
+
 ## v0.1.4 (2026-11-04)
 
 - feat(cobot): a release tier can move with from ([#84](https://github.com/noisypigeon/pigeon/pull/84))

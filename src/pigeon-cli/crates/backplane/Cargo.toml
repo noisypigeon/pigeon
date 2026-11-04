@@ -1,7 +1,7 @@
 [package]
 name = "pigeon-backplane"
 description = "Composes pigeon's engines into one platform, serving one instance."
-version = "0.1.4"
+version = "0.1.5"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true

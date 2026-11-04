@@ -2,6 +2,7 @@
 
 ## 2026-11-04
 
+- feat(cobot): local units run only when named ([#91](https://github.com/noisypigeon/pigeon/pull/91))
 - refactor(infra): move the cloudflare and agnostic catalogs to catalog/ ([#86](https://github.com/noisypigeon/pigeon/pull/86))
 - feat(cobot): a release tier can move with from ([#84](https://github.com/noisypigeon/pigeon/pull/84))
 - feat(sentinel): freeze repository secrets ([#82](https://github.com/noisypigeon/pigeon/pull/82))
