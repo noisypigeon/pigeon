@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "infra/pigeon",
+  "description": "The pigeon account's bootstrap, applied locally by its owner; see .claude/decisions/2026-11-04-development-platform-instance-separation.md.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "database",
+    "buckets"
+  ],
+  "properties": {
+    "database": {
+      "description": "The platform's D1 database.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+        }
+      }
+    },
+    "buckets": {
+      "description": "Private R2 buckets, each named <name>-<random suffix>.",
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+            "maxLength": 56
+          }
+        }
+      },
+      "x-cobot": {
+        "module": "r2-bucket",
+        "for_each": "$item.name",
+        "inputs": {
+          "account_id": "$module.account.id",
+          "key": "$item.name",
+          "suffix": "$module.bucket_suffixes[$item.name].result"
+        }
+      }
+    }
+  },
+  "x-cobot": {
+    "version": "0.1.0",
+    "local": true,
+    "secrets": [],
+    "providers": {
+      "cloudflare": {}
+    },
+    "singletons": {
+      "account": {
+        "module": "account",
+        "inputs": {}
+      },
+      "d1": {
+        "module": "d1-database",
+        "inputs": {
+          "account_id": "$module.account.id",
+          "name": "$config.database.name"
+        }
+      }
+    },
+    "each": {
+      "bucket_suffixes": {
+        "module": "agnostic/random-string",
+        "over": "buckets",
+        "for_each": "$item.name",
+        "inputs": {}
+      }
+    },
+    "outputs": {
+      "account_id": "$module.account.id",
+      "database_id": "$module.d1.id",
+      "bucket_names": "$module.buckets[*].name"
+    }
+  }
+}

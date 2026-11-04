@@ -35,6 +35,11 @@ belong in the ADR, never in the file.
   [`2026-11-04-development-platform-instance-separation.md`](.claude/decisions/2026-11-04-development-platform-instance-separation.md).
   No new secret enters the repository; `.config/policies/secrets*.yaml` pin the
   two `secrets.config.yaml` files to their current keys.
+- `infra/pigeon/` bootstraps the platform's own Cloudflare account. It is a
+  local unit (`x-cobot.local: true`): CI validates it but plans and applies
+  only unnamed units, so its owner applies it by hand with a scoped token in
+  the environment and state in the private `noisypigeon/pigeon-platform-state`,
+  per its README and the separation ADR's phase 2 amendment.
 - Backplane (package `pigeon-backplane`) composes the engines into one
   platform serving the instance in `.config/instance.yaml`; it judges through
   sentinel, acts through cobot, and writes and starts nothing itself, per
