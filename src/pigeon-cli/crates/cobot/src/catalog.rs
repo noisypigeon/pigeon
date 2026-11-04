@@ -27,24 +27,44 @@ static NAME: LazyLock<Regex> = LazyLock::new(|| {
 static SCOPE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^[a-z]+(-[a-z]+)*$").expect("valid regex"));
 
-/// A provider's catalog directory: `catalog/<provider>` when it holds a
-/// `schema.json`, else `infra/<provider>`.
+/// A provider's catalog directory: `infra/<provider>` while it still holds a
+/// `schema.json`, else `catalog/<provider>` when that does, else `infra/<provider>`.
 #[must_use]
 pub fn home(root: &Path, provider: &str) -> PathBuf {
+    let local = root.join(FALLBACK).join(provider);
     let moved = root.join(DIR).join(provider);
-    if moved.join(crate::config::SCHEMA).is_file() {
+    if !local.join(crate::config::SCHEMA).is_file() && moved.join(crate::config::SCHEMA).is_file() {
         moved
     } else {
-        root.join(FALLBACK).join(provider)
+        local
     }
 }
 
-/// The catalog an `infra/<provider>` unit at `rel` uses, once it lives under `catalog/`.
+/// The catalog an `infra/<provider>` unit at `rel` uses, once its own `schema.json` has
+/// moved to `catalog/`.
 #[must_use]
 pub fn for_unit(root: &Path, rel: &str) -> Option<PathBuf> {
     let provider = rel.strip_prefix("infra/").filter(|p| !p.contains('/'))?;
-    let moved = root.join(DIR).join(provider);
-    moved.join(crate::config::SCHEMA).is_file().then_some(moved)
+    let moved = home(root, provider);
+    moved.starts_with(root.join(DIR)).then_some(moved)
+}
+
+/// A problem for each provider whose `schema.json` is in both `infra/` and `catalog/`.
+#[must_use]
+pub fn duplicates(root: &Path) -> Vec<Problem> {
+    dirs(root)
+        .into_iter()
+        .filter_map(|d| {
+            let provider = d.file_name()?.to_string_lossy().into_owned();
+            let local = root.join(FALLBACK).join(&provider).join(crate::config::SCHEMA);
+            (d.join(crate::config::SCHEMA).is_file() && local.is_file()).then(|| Problem {
+                path: format!("{DIR}/{provider}/{}", crate::config::SCHEMA),
+                message: format!(
+                    "also in {FALLBACK}/{provider}/; a catalog lives in one place, and {FALLBACK}/ wins until it moves"
+                ),
+            })
+        })
+        .collect()
 }
 
 /// The `agnostic/` modules root beside `home`, under `catalog/` or `infra/`.

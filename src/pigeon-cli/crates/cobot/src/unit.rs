@@ -402,6 +402,7 @@ pub fn validate(root: &Path, allow: &Allowlist) -> Vec<Problem> {
     for dir in crate::catalog::dirs(root) {
         scan(root, &dir, allow, &mut problems);
     }
+    problems.extend(crate::catalog::duplicates(root));
     problems.extend(crate::catalog::capabilities(root).1);
     problems
 }

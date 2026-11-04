@@ -286,3 +286,60 @@ fn home_prefers_a_catalog_with_a_schema() {
     assert_eq!(cobot::catalog::for_unit(root, "infra/cloudflare/x"), None);
     assert_eq!(cobot::catalog::for_unit(root, "workloads/cloudflare"), None);
 }
+
+#[test]
+fn a_local_schema_wins_over_its_catalog_copy() {
+    let repo = repo("infra");
+    let root = repo.path();
+    for f in ["proof/schema.json", "agnostic/schema.json"] {
+        write(
+            root,
+            &format!("catalog/{f}"),
+            &fs::read_to_string(root.join("infra").join(f)).expect("read"),
+        );
+    }
+    module(root, "catalog/proof/modules/item", &["name"], "");
+    let (units, _) = cobot::unit::discover(root);
+    let unit = units.iter().find(|u| u.path == UNIT).expect("unit");
+    let json = cobot::render_json(
+        unit,
+        Path::new("/state"),
+        &cobot::providers::Allowlist::default(),
+        0,
+        &cobot::config::Existing::new(),
+    );
+    let get = |k: &str| {
+        json["module"][k]["source"]
+            .as_str()
+            .expect("source")
+            .to_string()
+    };
+    let (agnostic, own) = (get("suffixes"), get("items"));
+    assert!(
+        Path::new(&agnostic).ends_with("infra/agnostic/modules/suffix"),
+        "{agnostic}"
+    );
+    assert!(
+        Path::new(&own).ends_with("infra/proof/modules/item"),
+        "{own}"
+    );
+    assert_eq!(cobot::catalog::for_unit(root, UNIT), None);
+    write(root, "infra/cloudflare/schema.json", "{}");
+    write(root, "catalog/cloudflare/schema.json", "{}");
+    assert_eq!(
+        cobot::catalog::home(root, "cloudflare"),
+        root.join("infra/cloudflare")
+    );
+    let got = problems(root);
+    for p in [
+        "catalog/proof/schema.json",
+        "catalog/agnostic/schema.json",
+        "catalog/cloudflare/schema.json",
+    ] {
+        assert!(
+            got.iter()
+                .any(|g| g.starts_with(p) && g.contains("a catalog lives in one place")),
+            "want `{p}` in {got:?}"
+        );
+    }
+}
