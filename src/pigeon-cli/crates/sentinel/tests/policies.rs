@@ -406,6 +406,7 @@ fn terraform_rules() {
     let ok = [
         ("infra/a/unit.yaml", ""),
         ("infra/a/modules/m/main.tf", ""),
+        ("catalog/c/modules/m/main.tf", ""),
         ("workloads/w/unit.yaml", ""),
         ("src/x/target/debug/build.tf", ""),
         (".cobot/infra/a/main.tf.json", ""),
@@ -418,6 +419,10 @@ fn terraform_rules() {
         "src/vars.tfvars",
         ".terraform.lock.hcl",
         "src/unit.yaml",
+        "catalog/c/unit.yaml",
+        "catalog/c/vars.tfvars",
+        "catalog/c/.terraform.lock.hcl",
+        "catalog/c/secrets.config.yaml",
         "infra/a/terraform.tfstate",
         "workloads/w/terraform.tfstate.backup",
         "infra/a/.terraform/providers/x",

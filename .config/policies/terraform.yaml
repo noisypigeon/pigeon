@@ -1,9 +1,13 @@
-description: Terraform lives only in catalog/, infra/ and workloads/, encrypted secrets only in infra/ and workloads/, and state never in this repository.
+description: Terraform modules live only in catalog/, infra/ and workloads/; units, variables, lock files and encrypted secrets only in infra/ and workloads/; state never in this repository.
 target: tree
 rules:
   - find:
-      match: '(\.tf|\.tf\.json|\.tofu|\.tofu\.json|\.tfvars|\.tfvars\.json|(^|/)\.terraform\.lock\.hcl|(^|/)unit\.yaml)$'
+      match: '(\.tf|\.tf\.json|\.tofu|\.tofu\.json)$'
       allow_under: [catalog/, infra/, workloads/]
+      ignore: ['^\.git$', '(^|/)target$', '(^|/)\.cobot$']
+  - find:
+      match: '(\.tfvars|\.tfvars\.json|(^|/)\.terraform\.lock\.hcl|(^|/)unit\.yaml)$'
+      allow_under: [infra/, workloads/]
       ignore: ['^\.git$', '(^|/)target$', '(^|/)\.cobot$']
   - find:
       match: '(\.tfstate(\.backup)?$|(^|/)\.terraform/)'
