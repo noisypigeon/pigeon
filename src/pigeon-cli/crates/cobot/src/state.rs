@@ -20,8 +20,7 @@ pub const SECRET_KEY_VAR: &str = "COBOT_STATE_R2_SECRET_ACCESS_KEY";
 /// The objects' content type; state is encrypted JSON.
 const CONTENT_TYPE: &str = "application/octet-stream";
 
-/// The body that marks removed state. Removal is a conditional overwrite with this, never a
-/// `DELETE`, so it is as safe against another writer as any update; a pull skips it.
+/// The body marking removed state; a pull skips it.
 pub const TOMBSTONE: &[u8] = b"cobot:removed\n";
 
 /// A state store named by `--state`.
