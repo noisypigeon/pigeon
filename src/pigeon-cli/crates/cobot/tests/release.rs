@@ -318,3 +318,122 @@ fn yaml_manifests_bump_in_place() {
         "version: 0.1.1\ndescription: A module.\n"
     );
 }
+
+/// Runs `release` with `config`; `Err` carries the error text.
+fn run_with(root: &Path, config: &str, dry_run: bool) -> Result<Outcome, String> {
+    let p = root.join("releases.yaml");
+    fs::write(&p, config).expect("write");
+    let config = Config::load(&p).map_err(|e| e.to_string())?;
+    release::run(root, &config, None, "HEAD", None, dry_run).map_err(|e| e.to_string())
+}
+
+fn moved(config: &str) -> String {
+    config
+        .replace(
+            "{ file: a/CHANGELOG.md, unit: a }",
+            "{ file: moved/a/CHANGELOG.md, unit: a, from: a/CHANGELOG.md }",
+        )
+        .replace(
+            "{ file: CHANGELOG.md, paths: [''] }",
+            "{ file: docs/CHANGELOG.md, paths: [''], from: CHANGELOG.md }",
+        )
+}
+
+#[test]
+fn a_moved_tier_keeps_its_history_and_the_bot_moves_its_file() {
+    let (dir, _) = repo();
+    let root = dir.path();
+    let first = run(root, None);
+    land(root, &first, "2026-01-01");
+    commit(root, "feat: a change (#2)", &["a/x"], "2026-01-02");
+    let second = run(root, None);
+    land(root, &second, "2026-01-02");
+    let unit_before = read(root, "a/CHANGELOG.md");
+    let date_before = read(root, "CHANGELOG.md");
+
+    commit(root, "chore: unrelated (#3)", &["shared/t"], "2026-01-03");
+    let out = run_with(root, &moved(CONFIG), false).expect("release");
+    let written: Vec<String> = out
+        .written
+        .iter()
+        .map(|p| p.display().to_string())
+        .collect();
+    for p in [
+        "a/CHANGELOG.md",
+        "moved/a/CHANGELOG.md",
+        "CHANGELOG.md",
+        "docs/CHANGELOG.md",
+    ] {
+        assert!(written.contains(&p.to_string()), "{p} in {written:?}");
+    }
+    assert!(!root.join("a/CHANGELOG.md").exists());
+    assert!(!root.join("CHANGELOG.md").exists());
+    let unit_after = read(root, "moved/a/CHANGELOG.md");
+    assert!(
+        unit_after.ends_with(&unit_before["# Changelog\n".len()..]),
+        "{unit_after}"
+    );
+    assert!(
+        unit_after.contains("v0.1.2"),
+        "the shared change releases a once more: {unit_after}"
+    );
+    let date_after = read(root, "docs/CHANGELOG.md");
+    for l in date_before.lines().filter(|l| l.starts_with("- ")) {
+        assert!(date_after.contains(l), "kept `{l}` in {date_after}");
+    }
+    assert!(date_after.contains("unrelated"), "{date_after}");
+    assert_eq!(
+        date_after.matches("chore: init").count(),
+        1,
+        "not re-backfilled"
+    );
+
+    land(root, &out, "2026-01-03");
+    let again = run_with(root, &moved(CONFIG), false).expect("rerun");
+    assert_eq!(
+        again.written,
+        Vec::<std::path::PathBuf>::new(),
+        "a gone `from` is ignored"
+    );
+}
+
+#[test]
+fn a_tier_in_both_places_fails() {
+    let (dir, _) = repo();
+    let root = dir.path();
+    land(root, &run(root, None), "2026-01-01");
+    write(root, "moved/a/CHANGELOG.md", "# Changelog\n");
+    let err = run_with(root, &moved(CONFIG), false).expect_err("both exist");
+    assert!(err.contains("a tier lives in one place"), "{err}");
+}
+
+#[test]
+fn a_dry_run_moves_nothing() {
+    let (dir, _) = repo();
+    let root = dir.path();
+    land(root, &run(root, None), "2026-01-01");
+    let out = run_with(root, &moved(CONFIG), true).expect("dry run");
+    assert!(
+        out.written
+            .iter()
+            .any(|p| p.ends_with("moved/a/CHANGELOG.md"))
+    );
+    assert!(root.join("a/CHANGELOG.md").exists());
+    assert!(!root.join("moved/a/CHANGELOG.md").exists());
+}
+
+#[test]
+fn bad_froms_are_rejected() {
+    let dir = TempDir::new().expect("tempdir");
+    let path = dir.path().join("r.yaml");
+    for bad in [
+        CONFIG.replace("unit: a }", "unit: a, from: a/CHANGELOG.md }"),
+        CONFIG.replace("unit: b }", "unit: b, from: a/CHANGELOG.md }"),
+        CONFIG
+            .replace("unit: b }", "unit: b, from: x/CHANGELOG.md }")
+            .replace("unit: a }", "unit: a, from: x/CHANGELOG.md }"),
+    ] {
+        fs::write(&path, bad).expect("write");
+        assert!(Config::load(&path).is_err());
+    }
+}
