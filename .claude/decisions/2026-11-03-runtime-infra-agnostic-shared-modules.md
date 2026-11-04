@@ -150,3 +150,9 @@ Each property's `x-cobot` drives exactly one block. A random suffix per bucket n
   - `module.bucket_suffixes["backups"].random_string.this`;
   - the bucket's `suffix` wired to it;
   - an empty config planning only the project.
+
+## Amendments
+
+### 2026-11-04: Modules from any catalog
+
+`agnostic/<name>` becomes one case of `<catalog>/<name>`, which reaches any catalog's modules, and `infra/agnostic` retires, per the amendment "The bootstrap composes the Cloudflare catalog" in [`2026-11-04-development-platform-instance-separation.md`](2026-11-04-development-platform-instance-separation.md).

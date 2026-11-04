@@ -342,3 +342,52 @@ This amendment decides how phase 2 meets them. It details phase 2's row of §7; 
 - After step 3, the CI plan comment lists exactly the four existing units.
 - `pigeon cobot render infra/pigeon` renders with no credentials.
 - No account ID, token or private bucket name appears in the repository.
+
+### 2026-11-04: The bootstrap composes the Cloudflare catalog
+
+The phase 2 amendment gave `infra/pigeon/` its own `modules/`, because "it uses no provider catalog". That made `r2-bucket` a copy of the catalog's, and it left `account` and `d1-database` where no other unit can use them. Catalogs are the platform's product, so the platform's own bootstrap consumes them like any unit. This amendment supersedes that line of §1, and retires `infra/agnostic`.
+
+#### 1. Catalog module references
+
+- A block's `module` may be `<catalog>/<name>`. It resolves to `<catalog home>/modules/<name>`, where the home is `catalog/<catalog>/`, falling back to `infra/<catalog>/` as in §2.
+- `agnostic/<name>` becomes one case of that form. This extends §3 of [`2026-11-03-runtime-infra-agnostic-shared-modules.md`](2026-11-03-runtime-infra-agnostic-shared-modules.md), whose out-of-scope list named "modules shared from anywhere but `infra/agnostic`".
+- A bare `<name>` still names the unit's own `modules/`, or its catalog's.
+- An unknown catalog or module fails validation, naming the path it looked for.
+
+#### 2. The Cloudflare catalog
+
+- `account` and `d1-database` move from `infra/pigeon/modules/` to `catalog/cloudflare/modules/`, as release units `infra-cloudflare-account` and `infra-cloudflare-d1-database`, starting at v0.1.0.
+- `r2-bucket` gains an optional `suffix`, defaulting to `null`. With a suffix, the bucket is named `<name>-<suffix>`; without one, `<name>`, so existing buckets plan no changes.
+
+#### 3. `infra/pigeon/`
+
+- It holds only `schema.json`, `config.yaml` and its README.
+- Its blocks name `cloudflare/account`, `cloudflare/d1-database`, `cloudflare/r2-bucket` and `agnostic/random-string`. Block names don't change, so neither do state addresses.
+- Release unit `infra-pigeon-schema` follows the catalog modules it composes. `infra-pigeon-account`, `infra-pigeon-d1-database` and `infra-pigeon-r2-bucket` are retired; their tags stay.
+
+#### 4. Retired changelogs
+
+- A PR never edits a changelog, so a retired unit's `CHANGELOG.md` is removed by the release bot.
+- `.config/releases.yaml` gains `retired`, a list of changelog paths that no tier names. The bot deletes each one it finds. A later PR drops the spent entries, as with `moves.yaml`.
+
+#### 5. `infra/agnostic` retires
+
+- It is a unit with no resources. `catalog/agnostic/` holds the modules, and is reached through §1.
+- `infra/agnostic/` is deleted, and so is the spent `infra/bootstrap → infra/agnostic` entry in `.config/moves.yaml`.
+- Its empty state stays in `pigeon-cobot-state`, unread, until phase 7 archives that repository.
+- `infra/cloudflare` is unchanged. It is the instance's provisioner, and it retires at phase 6.
+
+#### 6. Execution
+
+1. This amendment.
+2. `feat(cobot)`: §1, and §4's `retired`. Merged and released before step 4, because `cobot.yml` validates with the released image.
+3. `feat(catalog)`: §2. It needs no engine change.
+4. `refactor(infra)`: §3 and §5.
+
+The owner's first apply of `infra/pigeon` waits for step 4.
+
+#### 7. Verification
+
+- Tests cover `<catalog>/<name>` resolution, an unknown catalog or module, and the bot deleting a `retired` changelog.
+- Every PR's CI plan lists the instance's units with no resource changes, and step 4's list no longer includes `infra/agnostic`.
+- After step 4, `cobot render infra/pigeon` sources every module from `catalog/`, and `infra/pigeon/modules/` is gone.
