@@ -2,6 +2,7 @@
 
 ## 2026-11-04
 
+- feat(backplane): plan, apply and serve ([#102](https://github.com/noisypigeon/pigeon/pull/102))
 - feat(cobot): stored plans ([#101](https://github.com/noisypigeon/pigeon/pull/101))
 - feat(cobot): state in R2 ([#100](https://github.com/noisypigeon/pigeon/pull/100))
 - feat(cobot): credentials requested by capability ([#99](https://github.com/noisypigeon/pigeon/pull/99))

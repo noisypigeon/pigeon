@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.10 (2026-11-04)
+
+- feat(backplane): plan, apply and serve ([#102](https://github.com/noisypigeon/pigeon/pull/102))
+
 ## v0.1.9 (2026-11-04)
 
 - feat(cobot): stored plans ([#101](https://github.com/noisypigeon/pigeon/pull/101))
