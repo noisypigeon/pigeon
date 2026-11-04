@@ -2,6 +2,7 @@
 
 ## 2026-11-04
 
+- docs(adr): phase 2, the pigeon-account bootstrap ([#90](https://github.com/noisypigeon/pigeon/pull/90))
 - feat(catalog): digitalocean, scaleway and backblaze catalogs ([#89](https://github.com/noisypigeon/pigeon/pull/89))
 - feat(catalog): cloudflare capabilities ([#88](https://github.com/noisypigeon/pigeon/pull/88))
 - refactor(infra): pigeon.dev leaves the cloudflare zones ([#87](https://github.com/noisypigeon/pigeon/pull/87))
