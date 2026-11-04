@@ -278,3 +278,67 @@ Phase 4 is:
 - `.config/policies/backplane.yaml` still holds: no Container dispatch or minting code in backplane's source.
 - A test shows that a `Response` serialized by the `engines` build deserializes in the `worker` build.
 - The phase 3 spike report lists each binding in step 4 as working from Rust, or names its shim.
+
+### 2026-11-04: Phase 2, the pigeon-account bootstrap
+
+Phase 2 applies `infra/`'s bootstrap of the pigeon account locally, as break-glass. That runs into four constraints:
+
+- the repository may hold no new secret, because of the freeze in `.config/policies/secrets*.yaml`;
+- it may publish no account ID;
+- `cobot.yml` plans and applies every unit in CI, which has no credentials for the pigeon account;
+- the state repository is CI's, and is never applied against by hand.
+
+This amendment decides how phase 2 meets them. It details phase 2's row of §7; the text above stays as written.
+
+#### 1. The unit
+
+- `infra/pigeon/` is a self-contained config unit with its own `schema.json` and `modules/`. It is the platform's bootstrap, not an instance's, so it uses no provider catalog. A unit's own `schema.json` already wins over a catalog.
+- **Its first resources:**
+  - a D1 database, for §6's desired state, plans, runs and audit;
+  - two R2 buckets, one for state and one for plans. They are named `<key>-<suffix>` with `agnostic/random-string`, so no private bucket name is published.
+- **Deferred to phase 4, which deploys the Worker:**
+  - Durable Object namespaces, which come from the Worker's deploy;
+  - Cloudflare Access, which needs the API hostname;
+  - the Secrets Store, which joins once its resource is confirmed in the pinned provider.
+
+#### 2. Credentials come from the operator's environment
+
+- `x-cobot.providers.cloudflare` is `{}`, and `x-cobot.secrets` is `[]`. The provider reads `CLOUDFLARE_API_TOKEN` from the environment of the person running the apply.
+- The account ID is looked up through that token: an `account` module reads `data "cloudflare_accounts"` and requires exactly one account. A token scoped to the pigeon account therefore names it, and the ID is never written down.
+- **The bootstrap token's permissions** are Account Settings Read, D1 Edit and Workers R2 Storage Edit, on the pigeon account only. The token lives only in the operator's shell.
+
+#### 3. Local units
+
+- A schema may set `x-cobot.local: true`.
+- A local unit is validated everywhere, CI included.
+- Unit selection includes it only when it is named. So `cobot plan` and `cobot apply` with no unit named, which is how CI runs them, skip it, and `pigeon cobot plan infra/pigeon --state …` reaches it.
+- This is an engine change, released before the unit lands, per the release-first loop.
+
+#### 4. State
+
+- **Where it lives.** The bootstrap's encrypted state lives in a new private repository, `noisypigeon/pigeon-platform-state`, cloned locally and passed as `--state`.
+- **Its passphrase** is a `COBOT_STATE_PASSPHRASE` of its own, different from the instance's.
+- **Later.** Phase 3 moves the state into the R2 state bucket this unit creates.
+- **The rule.** `pigeon-cobot-state` is never used for it.
+
+#### 5. Execution
+
+1. This amendment lands first.
+2. `feat(cobot): local units run only when named`, holding §3. It must be merged and released before step 3.
+3. `feat(infra): the pigeon-account bootstrap unit`. It adds:
+   - `infra/pigeon/` with `local: true`, and modules `account`, `d1-database` and `r2-bucket`;
+   - a runbook in `infra/pigeon/README.md`;
+   - release units and tiers for the new modules.
+
+   Its CI plan must not list `infra/pigeon`.
+4. **The owner:**
+   - creates `noisypigeon/pigeon-platform-state` and the scoped token;
+   - plans and applies `infra/pigeon` locally, following the runbook;
+   - pushes the encrypted state.
+
+#### 6. Verification
+
+- A local unit is absent from `cobot plan` with no units named, and present when named. Tests cover both, and a non-boolean `local`.
+- After step 3, the CI plan comment lists exactly the four existing units.
+- `pigeon cobot render infra/pigeon` renders with no credentials.
+- No account ID, token or private bucket name appears in the repository.
