@@ -353,6 +353,14 @@ fn fields(ctx: &mut Ctx, lines: &[Line], r: &FieldsRule) {
             );
         }
     }
+    if r.only
+        && let Some(l) = rest.next()
+    {
+        let key = captures(&r.pattern.0, l.text)
+            .and_then(|c| c.get("key").cloned())
+            .unwrap_or_else(|| l.text.trim().to_string());
+        ctx.push(Some(l.number), format!("unexpected field `{key}`"));
+    }
 }
 
 fn headings(ctx: &mut Ctx, lines: &[Line], r: &HeadingsRule) {
@@ -680,6 +688,17 @@ mod tests {
         let rules = "  - fields: { after: 0, pattern: '^(?<key>\\w+)=(?<value>.*)$', expect: [{ key: n, matches: '^[0-9]+$' }] }\n";
         assert_eq!(run(rules, "f", "n=12\n"), Vec::<String>::new());
         assert_eq!(run(rules, "f", "\n\nn=x\n").len(), 1);
+    }
+
+    #[test]
+    fn fields_only_rejects_extra_fields() {
+        let rules = "  - fields: { after: 0, pattern: '^(?<key>\\w+)=(?<value>.*)$', only: true, expect: [{ key: a, nonempty: true }, { key: b, nonempty: true }] }\n";
+        assert_eq!(run(rules, "f", "a=1\nb=2\n\n"), Vec::<String>::new());
+        let extra = run(rules, "f", "a=1\nb=2\nc=3\n");
+        assert_eq!(extra.len(), 1);
+        assert!(extra[0].contains("unexpected field `c`"), "{extra:?}");
+        let loose = "  - fields: { after: 0, pattern: '^(?<key>\\w+)=(?<value>.*)$', expect: [{ key: a, nonempty: true }] }\n";
+        assert_eq!(run(loose, "f", "a=1\nb=2\n"), Vec::<String>::new());
     }
 
     #[test]
