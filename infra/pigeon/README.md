@@ -40,3 +40,6 @@ downloads the Cloudflare provider; both can take minutes. `cobot` names each
 
 The unit must be named: `cobot plan` and `cobot apply` with no unit skip it.
 The `account` module fails unless the token sees exactly one account.
+Every plan shows `update module.d1.cloudflare_d1_database.this (file_size,
+num_tables, version)`: provider 5.28.0 marks those computed attributes unknown on
+each plan. Applying it changes nothing.

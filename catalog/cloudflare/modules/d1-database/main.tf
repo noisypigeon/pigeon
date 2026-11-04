@@ -12,9 +12,4 @@ resource "cloudflare_d1_database" "this" {
   account_id            = var.account_id
   name                  = var.name
   primary_location_hint = var.location
-
-  # A creation-only hint the API never returns.
-  lifecycle {
-    ignore_changes = [primary_location_hint]
-  }
 }
