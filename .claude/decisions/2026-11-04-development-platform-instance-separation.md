@@ -213,9 +213,9 @@ That text stays as written.
   - the MCP server, which speaks JSON-RPC over streamable HTTP and maps each tool onto a catalog operation;
   - the per-instance Durable Object;
   - D1, R2 and Secrets Store access;
-  - the Cron Trigger for the daily drift plan;
-  - Container dispatch;
-  - grant minting, which is plain HTTPS to each provider's API (§4).
+  - the Cron Trigger for the daily drift plan.
+
+  It coordinates, and acts only through cobot. It calls cobot's `worker` build (below) to start a run's Container and to mint that run's credentials.
 - **`engines`** (default, native): today's composition of `sentinel`, `cobot` and `gantry`. It runs in the Container as `pigeon backplane serve`.
 - **Shared, with no feature and wasm-safe:**
   - the operation catalog (`Operation` and `Effect`);
@@ -225,7 +225,18 @@ That text stays as written.
 
   The Worker and the Container compile one definition of the API from the same source.
 
-`sentinel`, `cobot` and `gantry` become optional dependencies, enabled only by `engines`, so the `worker` build carries none of them. `.config/policies/backplane.yaml` keeps covering all of backplane's source.
+**The actions stay cobot's**, per [`2026-11-02-development-sentinel-policy-cobot-actions.md`](2026-11-02-development-sentinel-policy-cobot-actions.md) and backplane's own ADR:
+
+- `cobot` gains a wasm-safe `worker` feature, holding:
+  - Container dispatch, which starts a run's Container through its binding with only that run's credentials and the state key;
+  - grant minting and revocation, which are plain HTTPS to each provider's API (§4).
+- That feature carries none of cobot's process-starting code (`tofu`, `zola`, `git`).
+
+**Dependencies.**
+
+- In backplane, `sentinel` and `gantry` are optional and enabled only by `engines`.
+- `cobot` is required by both builds: with its default features under `engines`, and with only `worker` under backplane's `worker` build.
+- `.config/policies/backplane.yaml` keeps covering all of backplane's source unchanged, so backplane still starts nothing and writes nothing itself.
 
 #### 2. Release and deploy
 
@@ -238,7 +249,7 @@ That text stays as written.
 #### 3. Toolchain
 
 - `mise.toml`'s pinned Rust adds the `wasm32-unknown-unknown` target.
-- `mise run features` gains `cargo clippy -p pigeon-backplane --no-default-features --features worker --target wasm32-unknown-unknown -- -D warnings`.
+- `mise run features` gains two clippy lines, each with `--no-default-features --features worker --target wasm32-unknown-unknown -- -D warnings`: one for `pigeon-backplane`, one for `cobot`.
 - `rust.yml` builds the Worker bundle on every PR that changes Rust, without deploying it.
 
 #### 4. No TypeScript unless the spike forces it
@@ -256,10 +267,14 @@ If one doesn't work, the spike's report names it, and a further amendment adds t
 
 #### 5. Phase 4, restated
 
-Phase 4 is backplane's `worker` build: Durable Objects, the D1 schema, the API, the MCP server, plan-then-approve, grant entry and minting for each provider in §4.
+Phase 4 is:
+
+- backplane's `worker` build: Durable Objects, the D1 schema, the API, the MCP server, plan-then-approve and grant entry;
+- cobot's `worker` build: Container dispatch, and minting for each provider in §4.
 
 #### 6. Verification
 
-- The `worker` build passes clippy for wasm32, and its bundle builds in CI.
+- Backplane's and cobot's `worker` builds pass clippy for wasm32, and the bundle builds in CI.
+- `.config/policies/backplane.yaml` still holds: no Container dispatch or minting code in backplane's source.
 - A test shows that a `Response` serialized by the `engines` build deserializes in the `worker` build.
 - The phase 3 spike report lists each binding in step 4 as working from Rust, or names its shim.
