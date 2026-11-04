@@ -13,6 +13,8 @@ target:
     - catalog/cloudflare/modules/r2-bucket/CHANGELOG.md
     - catalog/cloudflare/modules/r2-custom-domain/CHANGELOG.md
     - catalog/cloudflare/modules/ruleset/CHANGELOG.md
+    - catalog/cloudflare/modules/account/CHANGELOG.md
+    - catalog/cloudflare/modules/d1-database/CHANGELOG.md
     - catalog/agnostic/modules/random-string/CHANGELOG.md
     - catalog/agnostic/CHANGELOG.md
     - catalog/digitalocean/modules/project-resources/CHANGELOG.md
