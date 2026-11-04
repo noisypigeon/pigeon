@@ -20,6 +20,10 @@ pub const SECRET_KEY_VAR: &str = "COBOT_STATE_R2_SECRET_ACCESS_KEY";
 /// The objects' content type; state is encrypted JSON.
 const CONTENT_TYPE: &str = "application/octet-stream";
 
+/// The body that marks removed state. Removal is a conditional overwrite with this, never a
+/// `DELETE`, so it is as safe against another writer as any update; a pull skips it.
+pub const TOMBSTONE: &[u8] = b"cobot:removed\n";
+
 /// A state store named by `--state`.
 #[derive(Debug, Clone)]
 pub enum Store {
@@ -88,7 +92,9 @@ pub struct Mirror {
     bucket: Bucket,
     prefix: String,
     dir: PathBuf,
-    read: BTreeMap<String, (String, String)>,
+    /// Each object read, by relative path: its `ETag`, and its body's SHA-256 (`None` for a
+    /// tombstone).
+    read: BTreeMap<String, (String, Option<String>)>,
 }
 
 fn fail(e: &s3::Failure) -> Error {
@@ -129,12 +135,16 @@ impl Mirror {
             else {
                 continue;
             };
+            if body == TOMBSTONE {
+                read.insert(rel.to_string(), (etag, None));
+                continue;
+            }
             let path = dir.join(rel);
             if let Some(parent) = path.parent() {
                 fs::create_dir_all(parent).map_err(io(parent))?;
             }
             fs::write(&path, &body).map_err(io(&path))?;
-            read.insert(rel.to_string(), (etag, s3::sha256_hex(&body)));
+            read.insert(rel.to_string(), (etag, Some(s3::sha256_hex(&body))));
         }
         Ok(Self {
             bucket,
@@ -151,7 +161,8 @@ impl Mirror {
     }
 
     /// Writes back what changed: each changed object only if its `ETag` is unchanged, each new
-    /// one only if none appeared, and deletes what was removed. The keys written or deleted.
+    /// one only if none appeared, and a [`TOMBSTONE`] over each removed one only if its `ETag`
+    /// is unchanged. The keys written.
     ///
     /// # Errors
     ///
@@ -163,7 +174,7 @@ impl Mirror {
         for (rel, body) in &local {
             let key = format!("{}/{rel}", self.prefix);
             let when = match self.read.get(rel) {
-                Some((_, sha)) if *sha == s3::sha256_hex(body) => continue,
+                Some((_, Some(sha))) if *sha == s3::sha256_hex(body) => continue,
                 Some((etag, _)) => Precondition::Matches(etag.clone()),
                 None => Precondition::Absent,
             };
@@ -178,15 +189,20 @@ impl Mirror {
             }
             changed.push(key);
         }
-        for (rel, (etag, _)) in self.read.iter().filter(|(r, _)| !local.contains_key(*r)) {
+        let removed = self
+            .read
+            .iter()
+            .filter(|(r, (_, sha))| sha.is_some() && !local.contains_key(*r));
+        for (rel, (etag, _)) in removed {
             let key = format!("{}/{rel}", self.prefix);
+            let when = Precondition::Matches(etag.clone());
             if !self
                 .bucket
-                .delete_if(&key, etag, now)
+                .put_if(&key, TOMBSTONE, CONTENT_TYPE, &when, now)
                 .map_err(|e| fail(&e))?
             {
                 return Err(Error::State(format!(
-                    "`{key}` changed in R2 since it was read; not deleting it"
+                    "`{key}` changed in R2 since it was read; not removing it"
                 )));
             }
             changed.push(key);

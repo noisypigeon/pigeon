@@ -238,13 +238,31 @@ fn a_mirror_round_trips_changes_and_skips_other_prefixes() {
         get(&objects, "p/workloads/w/terraform.tfstate").as_deref(),
         Some(&[0_u8, 159, 146, 150][..])
     );
-    assert_eq!(get(&objects, "p/infra/old/terraform.tfstate"), None);
+    assert_eq!(
+        get(&objects, "p/infra/old/terraform.tfstate").as_deref(),
+        Some(cobot::state::TOMBSTONE),
+        "removal overwrites with a tombstone, never a DELETE"
+    );
     assert_eq!(
         get(&objects, "other/x/terraform.tfstate").as_deref(),
         Some(&b"not mine"[..])
     );
 
     let again = Mirror::pull(bucket(&endpoint), "p", &dir.path().join("m"), 0).expect("re-pull");
+    assert!(
+        !again.dir().join("infra/old").exists(),
+        "a tombstone pulls as absent"
+    );
+    fs::create_dir_all(again.dir().join("infra/old")).expect("mkdir");
+    fs::write(again.dir().join("infra/old/terraform.tfstate"), b"back").expect("write");
+    assert_eq!(
+        again.push(0).expect("re-create over a tombstone"),
+        ["p/infra/old/terraform.tfstate"]
+    );
+    assert_eq!(
+        get(&objects, "p/infra/old/terraform.tfstate").as_deref(),
+        Some(&b"back"[..])
+    );
     assert_eq!(
         fs::read(again.dir().join("workloads/w/terraform.tfstate")).expect("binary"),
         [0_u8, 159, 146, 150]
@@ -302,7 +320,7 @@ fn a_delete_never_erases_another_writers_update() {
     put(&objects, "p/old/terraform.tfstate", b"theirs");
     fs::remove_file(mirror.dir().join("old/terraform.tfstate")).expect("rm");
     let err = mirror.push(0).expect_err("conflict").to_string();
-    assert!(err.contains("not deleting"), "{err}");
+    assert!(err.contains("not removing"), "{err}");
     assert_eq!(
         get(&objects, "p/old/terraform.tfstate").as_deref(),
         Some(&b"theirs"[..])
