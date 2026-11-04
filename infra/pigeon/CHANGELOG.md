@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.2 (2026-11-04)
+
+- fix(catalog): one Cloudflare account lookup, and cobot step progress ([#106](https://github.com/noisypigeon/pigeon/pull/106))
+
 ## v0.1.1 (2026-11-04)
 
 - refactor(infra): infra/pigeon composes the Cloudflare catalog; infra/agnostic retires ([#96](https://github.com/noisypigeon/pigeon/pull/96))
