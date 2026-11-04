@@ -543,7 +543,7 @@ If the spike fails part of this, the fallback order is:
 1. If the Worker cannot verify a private CA on the container binding, the Container still requires the client certificate, and the bearer token never travels.
    - **Requests are signed.** Each request carries an HMAC-SHA-256 under the shared `BACKPLANE_TOKEN`, over its method, path, body digest, a timestamp and a random nonce.
    - **The Container checks each signature.** It refuses a timestamp more than 60 seconds old, and a nonce it has already seen within that window.
-   - **Responses are signed too.** The Container signs each response over the request's nonce and the response body's digest, and the Worker verifies it.
+   - **Responses are signed too.** The Container signs each response over the request's nonce, the response's status code and its body's digest, and the Worker verifies it. A changed status (a 409 made 200, say) fails like a changed body.
    - **Both sides are authenticated.** An unverified server learns nothing it can replay, and cannot answer as the Container.
 2. If the Worker cannot present a client certificate either, the decision returns to the owner with the spike's results. This amendment does not pre-decide it.
 
@@ -567,5 +567,5 @@ If the spike fails part of this, the fallback order is:
   - a bad signature;
   - a stale timestamp;
   - a reused nonce;
-  - a tampered response.
+  - a tampered response body or status.
 - The spike report gives `/tls` and `/mtls` results from the owner's deploy.
