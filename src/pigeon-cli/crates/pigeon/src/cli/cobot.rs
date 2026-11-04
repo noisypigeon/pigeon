@@ -14,7 +14,7 @@ pub enum CobotCommand {
     /// Plan units against the state repository; print a summary
     Plan(CobotPlan),
     /// Plan, then apply units with changes
-    Apply(CobotRun),
+    Apply(CobotApply),
     /// Write <PROVIDERS>/providers.lock.hcl for the allowlist
     Lock(CobotRoot),
     /// Print each catalog's capabilities as JSON; exit 1 on an invalid one
@@ -74,6 +74,20 @@ pub struct CobotPlan {
     /// Also write the Markdown summary here
     #[arg(long)]
     pub summary: Option<PathBuf>,
+    /// Store the plan in the state for `apply --plan`, valid for 24 hours
+    #[arg(long)]
+    pub store: bool,
+}
+
+/// `pigeon cobot apply` arguments.
+#[derive(Args, Debug)]
+pub struct CobotApply {
+    /// Units and their state
+    #[command(flatten)]
+    pub run: CobotRun,
+    /// Apply exactly this stored plan, from `plan --store`, instead of planning again
+    #[arg(long, conflicts_with = "units")]
+    pub plan: Option<String>,
 }
 
 /// `pigeon cobot secrets` commands; there is deliberately no `get`.

@@ -13,7 +13,7 @@ use serde::Deserialize;
 /// The areas that may hold units.
 pub const AREAS: [&str; 2] = ["infra", "workloads"];
 
-const UNIT_FILE: &str = "unit.yaml";
+pub(crate) const UNIT_FILE: &str = "unit.yaml";
 
 /// Functions that read the runner's files or environment during a plan.
 const FORBIDDEN_FUNCTIONS: &str = r"\b(file|fileexists|fileset|filebase64|filebase64sha256|filebase64sha512|filemd5|filesha1|filesha256|filesha512|templatefile|abspath|pathexpand)\s*\(";

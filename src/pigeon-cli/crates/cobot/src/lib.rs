@@ -6,6 +6,7 @@ pub mod catalog;
 pub mod config;
 pub mod generations;
 pub mod moves;
+pub mod plans;
 pub mod providers;
 pub mod release;
 pub mod s3;
@@ -76,6 +77,8 @@ pub enum Error {
     },
     /// The R2 state store failed, or another writer changed state since it was read.
     State(String),
+    /// A stored plan is unknown, expired, or no longer matches its units.
+    Plan(String),
     /// A git command failed.
     Git {
         /// The arguments.
@@ -131,6 +134,7 @@ impl fmt::Display for Error {
             Self::Io { path, message } => write!(f, "{}: {message}", path.display()),
             Self::Tofu { unit, message } => write!(f, "{unit}: {message}"),
             Self::State(message) => write!(f, "state: {message}"),
+            Self::Plan(message) => write!(f, "plan: {message}"),
             Self::Git { args, message } => write!(f, "git {args}: {message}"),
             Self::Tool { command, message } => write!(f, "{command}: {message}"),
         }
@@ -376,6 +380,19 @@ fn prepare(
     unit: &Unit,
     apply: bool,
 ) -> Result<(PathBuf, tofu::Env, UnitPlan), Error> {
+    let (work, env, note) = ready(ctx, unit, apply)?;
+    let mut plan = tofu::plan(&unit.path, &work, &env)?;
+    plan.note = note;
+    Ok((work, env, plan))
+}
+
+/// Renders and initializes one unit, retaining live generations from state; its work
+/// directory, environment, and the plan's note.
+fn ready(
+    ctx: &Context,
+    unit: &Unit,
+    apply: bool,
+) -> Result<(PathBuf, tofu::Env, Option<String>), Error> {
     let root = ctx.root.canonicalize().map_err(io(&ctx.root))?;
     let state = absolute(&ctx.state)?;
     let allow = providers::Allowlist::load(&ctx.providers)?;
@@ -433,12 +450,11 @@ fn prepare(
             )?;
         }
     }
-    let mut plan = tofu::plan(&unit.path, &work, &env)?;
-    plan.note = match (moved, pending) {
+    let remark = match (moved, pending) {
         (Some(m), Some(p)) => Some(format!("{m} {p}")),
         (m, p) => m.or(p),
     };
-    Ok((work, env, plan))
+    Ok((work, env, remark))
 }
 
 /// Feeds the runner's credentials for the ones `unit` requests into `TF_VAR_credentials`;
@@ -790,6 +806,87 @@ pub fn apply(ctx: &Context, units: &[Unit]) -> Result<Vec<UnitPlan>, Error> {
         plans.push(p);
     }
     Ok(plans)
+}
+
+/// Plans each unit as for an apply, and stores the plans under the state's `plans/<id>/` for
+/// [`apply_stored`]; see the phase 3 amendment §5 of
+/// `.claude/decisions/2026-11-04-development-platform-instance-separation.md`.
+///
+/// # Errors
+///
+/// Any [`Error`]; a unit still waiting for a handoff is [`Error::Pending`].
+pub fn plan_stored(
+    ctx: &Context,
+    units: &[Unit],
+    now: u64,
+) -> Result<(plans::Stored, Vec<UnitPlan>), Error> {
+    let mut planned = Vec::new();
+    let mut files = Vec::new();
+    for u in units {
+        let (work, _, p) = prepare(ctx, u, true)?;
+        let digest = plans::digest(u, &work)?;
+        files.push((u, tofu::plan_file(&work), p.changes.clone(), digest));
+        planned.push(p);
+    }
+    let stored = plans::store(&absolute(&ctx.state)?, &files, now)?;
+    Ok((stored, planned))
+}
+
+/// Applies the plans stored as `id`, exactly as planned, then removes them.
+///
+/// # Errors
+///
+/// [`Error::Plan`] for an unknown or expired plan, or a unit whose desired state changed;
+/// any other [`Error`] from `tofu`, which also refuses a plan whose state moved on.
+pub fn apply_stored(ctx: &Context, id: &str, now: u64) -> Result<Vec<UnitPlan>, Error> {
+    let state = absolute(&ctx.state)?;
+    let stored = plans::load(&state, id, now)?;
+    let done = plans::applied(&state, id);
+    let pending: Vec<&plans::StoredUnit> = stored
+        .units
+        .iter()
+        .filter(|s| !done.contains(&s.unit))
+        .collect();
+    let names: Vec<String> = pending.iter().map(|s| s.unit.clone()).collect();
+    let units = if names.is_empty() {
+        Vec::new()
+    } else {
+        select(&ctx.root, &ctx.providers, &names)?
+    };
+    let mut ready_units = Vec::new();
+    for (u, s) in units.iter().zip(&pending) {
+        let (work, env, note) = ready(ctx, u, true)?;
+        if plans::digest(u, &work)? != s.digest {
+            return Err(Error::Plan(format!(
+                "{}'s desired state changed since plan {id}; plan again",
+                u.path
+            )));
+        }
+        ready_units.push((u, s, work, env, note));
+    }
+    let mut applied: Vec<UnitPlan> = stored
+        .units
+        .iter()
+        .filter(|s| done.contains(&s.unit))
+        .map(|s| UnitPlan {
+            unit: s.unit.clone(),
+            changes: s.changes.clone(),
+            note: Some("Already applied from this plan.".into()),
+        })
+        .collect();
+    for (u, s, work, env, note) in ready_units {
+        plans::restore(&state, id, &s.unit, &tofu::plan_file(&work))?;
+        tofu::apply(&u.path, &work, &env)?;
+        plans::mark_applied(&state, id, &s.unit)?;
+        finish_move(ctx, u)?;
+        applied.push(UnitPlan {
+            unit: u.path.clone(),
+            changes: s.changes.clone(),
+            note,
+        });
+    }
+    plans::remove(&state, id)?;
+    Ok(applied)
 }
 
 /// Writes `<providers>/providers.lock.hcl` for every allowlisted provider,

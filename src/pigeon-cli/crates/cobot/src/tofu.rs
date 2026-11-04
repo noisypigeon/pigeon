@@ -23,7 +23,8 @@ fn mask(text: &str) -> String {
 }
 
 /// What `tofu` will do to a resource.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum Action {
     /// Create it.
     Create,
@@ -52,7 +53,7 @@ impl Action {
 }
 
 /// One resource change: an address and an action, never values.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Change {
     /// The resource address.
     pub address: String,
@@ -298,6 +299,11 @@ pub fn init(unit: &str, work: &Path, env: &Env) -> Result<(), Error> {
 pub fn show_state(unit: &str, work: &Path, env: &Env) -> Result<String, Error> {
     let shown = step(unit, work, env, &["show", "-json", "-no-color"], &[0])?;
     Ok(String::from_utf8_lossy(&shown.stdout).into_owned())
+}
+
+/// The plan file in a unit's work directory.
+pub fn plan_file(work: &Path) -> std::path::PathBuf {
+    work.join(PLAN_FILE)
 }
 
 /// Plans to `plan.tfplan`; the work directory must already be initialized.
