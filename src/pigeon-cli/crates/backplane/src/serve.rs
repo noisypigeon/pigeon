@@ -3,33 +3,57 @@
 
 use std::io::Read;
 use std::net::SocketAddr;
+use std::sync::Mutex;
 
 use serde_json::{Value, json};
 use tiny_http::{Header, Method, Response as HttpResponse, Server as Http};
 
-use crate::{Error, Instance, Request, catalog, run_with};
+use crate::{Effect, Error, Instance, Request, catalog, run_with};
 
 /// The largest request body read: 1 MiB.
 const MAX_BODY: u64 = 1024 * 1024;
 
-/// A bound server answering one instance's operations.
+/// The environment variable holding the bearer token every `/v0/` request must carry.
+pub const TOKEN_VAR: &str = "BACKPLANE_TOKEN";
+
+/// The shortest token accepted.
+const MIN_TOKEN: usize = 32;
+
+/// A bound server answering one instance's operations against one state.
 pub struct Server {
     http: Http,
     instance: Instance,
+    state: String,
+    token: String,
+    /// Held by `plan` and `apply`, which share the state's mirror.
+    changing: Mutex<()>,
 }
 
 impl Server {
-    /// Binds `listen`, such as `127.0.0.1:8787` or `0.0.0.0:8080` inside the Container.
+    /// Binds `listen` for `instance`, whose operations use `state`; requests must carry
+    /// `token` as a bearer token.
     ///
     /// # Errors
     ///
-    /// [`Error::Io`] if the address cannot be bound.
-    pub fn bind(instance: Instance, listen: &str) -> Result<Self, Error> {
+    /// [`Error::Invalid`] for a token shorter than 32 characters; [`Error::Io`] if the
+    /// address cannot be bound.
+    pub fn bind(instance: Instance, listen: &str, state: &str, token: &str) -> Result<Self, Error> {
+        if token.chars().count() < MIN_TOKEN {
+            return Err(Error::Invalid(vec![format!(
+                "{TOKEN_VAR} must be at least {MIN_TOKEN} characters"
+            )]));
+        }
         let http = Http::http(listen).map_err(|e| Error::Io {
             path: listen.into(),
             message: e.to_string(),
         })?;
-        Ok(Self { http, instance })
+        Ok(Self {
+            http,
+            instance,
+            state: state.to_string(),
+            token: token.to_string(),
+            changing: Mutex::new(()),
+        })
     }
 
     /// The bound address.
@@ -38,30 +62,52 @@ impl Server {
         self.http.server_addr().to_ip()
     }
 
-    /// Answers requests until the process ends, reading passphrases and credentials through
-    /// `var`.
-    pub fn serve(&self, var: impl Fn(&str) -> Option<String>) {
-        for request in self.http.incoming_requests() {
-            self.answer(request, &var);
-        }
+    /// Answers requests, each on its own thread, until the process ends; passphrases and
+    /// credentials are read through `var`.
+    pub fn serve(&self, var: impl Fn(&str) -> Option<String> + Sync) {
+        std::thread::scope(|scope| {
+            for request in self.http.incoming_requests() {
+                let var = &var;
+                scope.spawn(move || self.answer(request, var));
+            }
+        });
+    }
+
+    fn authorized(&self, request: &tiny_http::Request) -> bool {
+        let want = format!("Bearer {}", self.token);
+        request
+            .headers()
+            .iter()
+            .find(|h| h.field.equiv("authorization"))
+            .is_some_and(|h| constant_eq(h.value.as_str().as_bytes(), want.as_bytes()))
     }
 
     fn answer(&self, mut request: tiny_http::Request, var: &impl Fn(&str) -> Option<String>) {
-        let (status, body) = match (request.method(), request.url()) {
+        let url = request.url().to_string();
+        let (status, body) = match (request.method(), url.as_str()) {
             (Method::Get, "/healthz") => (200, json!({ "ok": true })),
+            (_, "/v0/operations" | "/v0/run") if !self.authorized(&request) => {
+                (401, json!({ "error": "unauthorized" }))
+            }
             (Method::Get, "/v0/operations") => (200, json!(catalog())),
             (Method::Post, "/v0/run") => {
-                let mut text = String::new();
+                let mut bytes = Vec::new();
                 match request
                     .as_reader()
                     .take(MAX_BODY + 1)
-                    .read_to_string(&mut text)
+                    .read_to_end(&mut bytes)
                 {
                     Ok(n) if n as u64 > MAX_BODY => {
                         (413, json!({ "error": "the request body is over 1 MiB" }))
                     }
-                    Ok(_) => self.run(&text, var),
-                    Err(_) => (400, json!({ "error": "the request body is not UTF-8" })),
+                    Ok(_) => match String::from_utf8(bytes) {
+                        Ok(text) => self.run(&text, var),
+                        Err(_) => (400, json!({ "error": "the request body is not UTF-8" })),
+                    },
+                    Err(_) => (
+                        400,
+                        json!({ "error": "the request body could not be read" }),
+                    ),
                 }
             }
             (_, "/healthz" | "/v0/operations" | "/v0/run") => {
@@ -78,10 +124,28 @@ impl Server {
     }
 
     fn run(&self, text: &str, var: &impl Fn(&str) -> Option<String>) -> (u16, Value) {
-        let request: Request = match serde_json::from_str(text) {
+        let mut request: Request = match serde_json::from_str(text) {
             Ok(r) => r,
             Err(e) => return (400, json!({ "error": format!("not a request: {e}") })),
         };
+        if request.args.contains_key("state") {
+            return (
+                400,
+                json!({ "error": "invalid", "problems": ["`state` is the server's; a request never names it"] }),
+            );
+        }
+        let effect = catalog()
+            .iter()
+            .find(|o| o.name == request.operation)
+            .map(|o| o.effect);
+        if matches!(effect, Some(Effect::Plan | Effect::Apply)) {
+            request.args.insert("state".into(), json!(self.state));
+        }
+        let _guard = matches!(effect, Some(Effect::Plan | Effect::Apply)).then(|| {
+            self.changing
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+        });
         match run_with(&self.instance, &request, var) {
             Ok(response) => (200, json!(response)),
             Err(Error::Invalid(problems)) => {
@@ -90,4 +154,9 @@ impl Server {
             Err(e) => (500, json!({ "error": e.to_string() })),
         }
     }
+}
+
+/// Compares in time independent of where the inputs first differ.
+fn constant_eq(a: &[u8], b: &[u8]) -> bool {
+    a.len() == b.len() && a.iter().zip(b).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
 }

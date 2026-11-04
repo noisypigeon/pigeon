@@ -821,6 +821,11 @@ pub fn plan_stored(
     units: &[Unit],
     now: u64,
 ) -> Result<(plans::Stored, Vec<UnitPlan>), Error> {
+    if units.is_empty() {
+        return Err(Error::Plan(
+            "no units to plan; name a local unit to plan it".into(),
+        ));
+    }
     let mut planned = Vec::new();
     let mut files = Vec::new();
     for u in units {

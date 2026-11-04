@@ -18,6 +18,8 @@ const PROOF: &str = "variable \"message\" {\n  type = string\n}\n\nresource \"te
 
 const PASSPHRASE: &str = "test-passphrase-0123456789";
 
+const TOKEN: &str = "test-token-0123456789abcdef0123456789";
+
 fn write(root: &Path, rel: &str, content: &str) {
     let path = root.join(rel);
     fs::create_dir_all(path.parent().expect("parent")).expect("mkdir");
@@ -152,16 +154,26 @@ fn a_plan_is_applied_by_its_id() {
     );
 }
 
-fn http(addr: SocketAddr, method: &str, path: &str, body: &str) -> (u16, Value) {
+fn send(
+    addr: SocketAddr,
+    method: &str,
+    path: &str,
+    body: &[u8],
+    token: Option<&str>,
+) -> (u16, Value) {
     let mut s = TcpStream::connect(addr).expect("connect");
+    let auth = token
+        .map(|t| format!("authorization: Bearer {t}\r\n"))
+        .unwrap_or_default();
     write!(
         s,
-        "{method} {path} HTTP/1.1\r\nhost: test\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
+        "{method} {path} HTTP/1.1\r\nhost: test\r\n{auth}content-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n",
         body.len()
     )
     .expect("send");
+    let _ = s.write_all(body);
     let mut out = String::new();
-    s.read_to_string(&mut out).expect("read");
+    let _ = s.read_to_string(&mut out);
     let status = out
         .split_whitespace()
         .nth(1)
@@ -171,17 +183,40 @@ fn http(addr: SocketAddr, method: &str, path: &str, body: &str) -> (u16, Value) 
     (status, serde_json::from_str(json).expect("json body"))
 }
 
+fn http(addr: SocketAddr, method: &str, path: &str, body: &str) -> (u16, Value) {
+    send(addr, method, path, body.as_bytes(), Some(TOKEN))
+}
+
+fn serving(root: &Path, state: &Path) -> SocketAddr {
+    let instance = Instance::load(root).expect("valid");
+    let server =
+        Server::bind(instance, "127.0.0.1:0", &state.to_string_lossy(), TOKEN).expect("bind");
+    let addr = server.local_addr().expect("addr");
+    std::thread::spawn(move || server.serve(var));
+    addr
+}
+
 #[test]
 fn the_wire_form_round_trips_over_http() {
     let root = fixture();
-    let instance = Instance::load(root.path()).expect("valid");
-    let server = Server::bind(instance, "127.0.0.1:0").expect("bind");
-    let addr = server.local_addr().expect("addr");
-    std::thread::spawn(move || server.serve(var));
+    let state = TempDir::new().expect("state");
+    let addr = serving(root.path(), state.path());
 
     assert_eq!(
-        http(addr, "GET", "/healthz", ""),
+        send(addr, "GET", "/healthz", b"", None),
         (200, json!({ "ok": true }))
+    );
+    assert_eq!(send(addr, "GET", "/v0/operations", b"", None).0, 401);
+    assert_eq!(
+        send(
+            addr,
+            "GET",
+            "/v0/operations",
+            b"",
+            Some("wrong-token-0123456789abcdef0123456")
+        )
+        .0,
+        401
     );
     let (status, ops) = http(addr, "GET", "/v0/operations", "");
     assert_eq!(status, 200);
@@ -217,7 +252,7 @@ fn the_wire_form_round_trips_over_http() {
         addr,
         "POST",
         "/v0/run",
-        r#"{"operation":"infra.apply","args":{"state":"s"}}"#,
+        r#"{"operation":"infra.apply","args":{}}"#,
     );
     assert_eq!(status, 400);
     assert!(
@@ -226,7 +261,73 @@ fn the_wire_form_round_trips_over_http() {
             .contains("needs argument `plan`"),
         "{refused}"
     );
+    let (status, refused) = http(
+        addr,
+        "POST",
+        "/v0/run",
+        r#"{"operation":"infra.plan","args":{"state":"/elsewhere"}}"#,
+    );
+    assert_eq!(status, 400, "a request never names the state: {refused}");
     assert_eq!(http(addr, "POST", "/v0/run", "not json").0, 400);
+    let mut huge = vec![b'a'; 1024 * 1024 + 1];
+    huge.push(0xff);
+    assert_eq!(send(addr, "POST", "/v0/run", &huge, Some(TOKEN)).0, 413);
     assert_eq!(http(addr, "GET", "/v0/run", "").0, 405);
     assert_eq!(http(addr, "GET", "/nope", "").0, 404);
+}
+
+#[test]
+fn a_short_token_is_refused() {
+    let root = fixture();
+    let instance = Instance::load(root.path()).expect("valid");
+    assert!(matches!(
+        Server::bind(instance, "127.0.0.1:0", "/state", "short"),
+        Err(Error::Invalid(_))
+    ));
+}
+
+#[test]
+fn an_empty_selection_plans_nothing() {
+    let root = fixture();
+    fs::remove_dir_all(root.path().join("infra")).expect("no units");
+    let instance = Instance::load(root.path()).expect("valid");
+    let state = TempDir::new().expect("state");
+    let err = run_with(
+        &instance,
+        &request("infra.plan", &json!({ "state": state.path() })),
+        var,
+    )
+    .expect_err("nothing to plan");
+    assert!(err.to_string().contains("no units to plan"), "{err}");
+    assert!(!state.path().join("plans").exists(), "no plan stored");
+}
+
+#[test]
+fn health_answers_while_a_plan_runs() {
+    if !tofu_available() {
+        eprintln!("skipped: tofu is not on PATH");
+        return;
+    }
+    let root = fixture();
+    let state = TempDir::new().expect("state");
+    let addr = serving(root.path(), state.path());
+    let planning = std::thread::spawn(move || {
+        http(
+            addr,
+            "POST",
+            "/v0/run",
+            r#"{"operation":"infra.plan","args":{}}"#,
+        )
+    });
+    std::thread::sleep(std::time::Duration::from_millis(300));
+    let started = std::time::Instant::now();
+    assert_eq!(send(addr, "GET", "/healthz", b"", None).0, 200);
+    assert!(
+        started.elapsed() < std::time::Duration::from_secs(1),
+        "healthz waited {:?} behind the plan",
+        started.elapsed()
+    );
+    let (status, planned) = planning.join().expect("plan thread");
+    assert_eq!(status, 200, "{planned}");
+    assert!(planned["result"]["plan"].is_string(), "{planned}");
 }

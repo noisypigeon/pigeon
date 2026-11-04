@@ -44,8 +44,9 @@ pub fn run(command: BackplaneCommand) -> i32 {
 }
 
 fn serve(args: &ServeArgs) -> i32 {
+    let token = std::env::var(backplane::serve::TOKEN_VAR).unwrap_or_default();
     let server = match Instance::load(&args.root)
-        .and_then(|i| backplane::serve::Server::bind(i, &args.listen))
+        .and_then(|i| backplane::serve::Server::bind(i, &args.listen, &args.state, &token))
     {
         Ok(s) => s,
         Err(e) => {

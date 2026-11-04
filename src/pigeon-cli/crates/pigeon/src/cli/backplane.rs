@@ -15,7 +15,8 @@ pub enum BackplaneCommand {
     Operations(JsonArgs),
     /// Run an operation; exit 1 on a violation, 2 on an error
     Run(RunArgs),
-    /// Answer operations over HTTP: GET /healthz, GET /v0/operations, POST /v0/run
+    /// Answer operations over HTTP (GET /healthz, GET /v0/operations, POST /v0/run); needs
+    /// `BACKPLANE_TOKEN`
     Serve(ServeArgs),
 }
 
@@ -25,6 +26,10 @@ pub struct ServeArgs {
     /// The address to listen on, e.g. 127.0.0.1:8787; there is no default
     #[arg(long)]
     pub listen: String,
+
+    /// The state every plan and apply uses: a directory, or `r2://<bucket>/<prefix>`
+    #[arg(long)]
+    pub state: String,
 
     /// The instance's root, holding `.config/instance.yaml`
     #[arg(long, default_value = ".")]
