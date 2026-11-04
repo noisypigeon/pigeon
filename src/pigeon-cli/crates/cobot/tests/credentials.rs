@@ -167,6 +167,18 @@ fn the_runner_supplies_only_the_fields_a_unit_references() {
         assert!(!err.contains("t0ken"), "never echoes a value: {err}");
     }
     assert!(cobot::pick_credentials(None, &wanted, UNIT).is_err());
+
+    let unreferenced = BTreeMap::from([("dns".to_string(), BTreeSet::new())]);
+    for json in [r#"{ "dns": null }"#, r#"{ "dns": "t0ken" }"#] {
+        let err = cobot::pick_credentials(Some(json), &unreferenced, UNIT).expect_err(json);
+        assert!(
+            err.contains("as an object") && !err.contains("t0ken"),
+            "{err}"
+        );
+    }
+    let empty =
+        cobot::pick_credentials(Some(r#"{ "dns": {} }"#), &unreferenced, UNIT).expect("object");
+    assert!(empty["dns"].is_empty());
 }
 
 #[test]

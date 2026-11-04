@@ -484,8 +484,10 @@ pub fn pick_credentials(
             .map_err(|_| "must be a JSON object mapping credential names to fields".to_string())?;
     let mut out = BTreeMap::new();
     for (name, fields) in wanted {
-        let entry = all.get(name).ok_or_else(|| {
-            format!("{unit} requests credential `{name}`, which the runner did not supply")
+        let entry = all.get(name).filter(|e| e.is_object()).ok_or_else(|| {
+            format!(
+                "{unit} requests credential `{name}`, which the runner did not supply as an object"
+            )
         })?;
         let mut picked = BTreeMap::new();
         for field in fields {
