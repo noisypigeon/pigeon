@@ -214,3 +214,14 @@ paths:
     - the `--json` `Response` has `operation`, `ok`, `result` and `violations`.
 - Temporarily adding `Command::new` to a backplane source file makes `mise run sentinel` fail.
 - After PR B merges, the release run tags `backplane/v0.1.0`, creates its GitHub Release, and pushes `ghcr.io/noisypigeon/pigeon-backplane`.
+
+## Amendments
+
+### 2026-11-04: Plan and apply, served from a Container
+
+[`2026-11-04-development-platform-instance-separation.md`](2026-11-04-development-platform-instance-separation.md) extends this ADR:
+- `plan` and `apply` operations join the catalog, and `apply` takes only a stored, unexpired plan ID;
+- `pigeon backplane serve` answers the control plane inside a Cloudflare Container, in this ADR's JSON wire form;
+- in phase 7, the platform's D1 instance records replace `.config/instance.yaml`.
+
+The text above stays as written.

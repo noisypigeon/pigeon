@@ -136,3 +136,9 @@ That lands in its own PR, together with `infra/scaleway`'s provider, before eith
 - **`validate` rejects** `writeKeys` in a key, and a key with no `buckets`.
 - **`plan` fails**, naming the bucket, when a key names an unknown bucket.
 - **After PR C merges,** the apply commits encrypted state, and the bot tags `infra-backblaze-*/v0.1.0`.
+
+## Amendments
+
+### 2026-11-04: Capabilities, not secrets
+
+[`2026-11-04-development-platform-instance-separation.md`](2026-11-04-development-platform-instance-separation.md) supersedes this unit's secrets. The unit becomes `catalog/backblaze/`. It declares capabilities in `capabilities.yaml` and defines no `secrets.config.yaml`. Its credentials are minted per run from the instance's Backblaze grant, which the pigeon account's Secrets Store holds. The work lands in that ADR's phase 1, replacing the open implementation PR. The text above stays as written.

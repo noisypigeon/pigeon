@@ -734,3 +734,12 @@ records: {}
 - The per-zone apex renders the same `main.tf.json` as the all-zones apex for the same zone, apart from the backend path.
 - `tofu validate` passes on it against cloudflare 5.28.0.
 - The data PR's plan comment creates and destroys nothing, and its apply moves the state file.
+
+### 2026-11-04: No workload secrets; no handoff through state
+
+[`2026-11-04-development-platform-instance-separation.md`](2026-11-04-development-platform-instance-separation.md) supersedes this ADR's workload secrets (§10) and the token handoff through state (§9).
+- A workload's credentials are minted per run from the capabilities it requests.
+- Values that are published anyway, such as Proton's verification TXT records, become ordinary desired state.
+- Workloads move to the platform's desired state, and their site content to the instance's repository.
+
+The text above stays as written.

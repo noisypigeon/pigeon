@@ -392,3 +392,11 @@ The steps are the apex ADR's §13.
 - **New modules.** `r2-bucket`, `r2-custom-domain` and `ruleset` join `modules/`. `provisioner_token` gains the permissions they and the site tokens need.
 
 The steps are that ADR's §9.
+
+### 2026-11-04: Grants and capabilities replace repository secrets
+
+[`2026-11-04-development-platform-instance-separation.md`](2026-11-04-development-platform-instance-separation.md) supersedes:
+- `secrets.config.yaml`, `COBOT_SECRETS_PASSPHRASE` and `COBOT_WORKLOAD_SECRETS_PASSPHRASE`;
+- the hand-made `provisioner_token` kept in the repository.
+
+The instance's Cloudflare grant lives in the pigeon account's Secrets Store. Tokens are minted per run, from capabilities declared in `catalog/cloudflare/capabilities.yaml`. `infra/cloudflare`'s schema, modules and presets move to `catalog/cloudflare/`. `pigeon.dev` leaves its zones. All of this happens in that ADR's phases 1 to 7. The text above stays as written.
