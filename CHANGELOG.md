@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-11-04
+
+- docs(adr): separate the pigeon platform from its instances ([#77](https://github.com/noisypigeon/pigeon/pull/77))
+
 ## 2026-11-03
 
 - ci: check the instance manifest with the pigeon-backplane image ([#76](https://github.com/noisypigeon/pigeon/pull/76))
