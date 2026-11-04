@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-11-04
+
+- feat(cobot): catalog/ resolution with an infra/ fallback, and capabilities ([#80](https://github.com/noisypigeon/pigeon/pull/80))
+
 ## 2026-11-03
 
 - feat(backplane): pigeon-backplane crate, instance manifest and pigeon backplane ([#75](https://github.com/noisypigeon/pigeon/pull/75))
