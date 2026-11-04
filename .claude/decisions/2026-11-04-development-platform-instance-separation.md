@@ -391,3 +391,90 @@ The owner's first apply of `infra/pigeon` waits for step 4.
 - Tests cover `<catalog>/<name>` resolution, an unknown catalog or module, and the bot deleting a `retired` changelog.
 - Every PR's CI plan lists the instance's units with no resource changes, and step 4's list no longer includes `infra/agnostic`.
 - After step 4, `cobot render infra/pigeon` sources every module from `catalog/`, and `infra/pigeon/modules/` is gone.
+
+### 2026-11-04: Phase 3, the runner spike and engine changes
+
+This details phase 3's row of §7. The phase starts with a spike, and its engine changes don't wait on the spike's result, which gates only phase 4's reliance on Containers.
+
+#### 1. The spike kit
+
+- It lives in `tooling/spikes/containers/`, outside the Cargo workspace, and is never a release unit.
+- **The Worker** uses Rust and `workers-rs`. It exposes one route per check, and every route needs a bearer key set as a Worker secret.
+- **The Container image** is built `FROM` a pinned, released `ghcr.io/noisypigeon/pigeon-cobot` image, plus a small check server.
+- **`wrangler.toml`** holds no account ID. It comes from `CLOUDFLARE_ACCOUNT_ID` in the operator's shell.
+- **Its README is the runbook**, teardown included. The owner deploys it with a short-lived token, and pastes each route's JSON into the report.
+
+#### 2. What the spike checks
+
+| Route | Confirms |
+| --- | --- |
+| `/image` | The Container starts the cobot-sized image and reports its `tofu` and `zola` versions. |
+| `/run?minutes=N` | A run of N minutes (default 20) survives. |
+| `/egress` | Outbound HTTPS reaches the Cloudflare, Scaleway, Backblaze and DigitalOcean APIs. |
+| `/secrets` | A Secrets Store binding is readable. It reports presence and length only, never the value. |
+| `/do`, `/d1`, `/r2` | Durable Objects, D1 and R2 work from Rust. |
+| `scheduled` | A Cron Trigger fires in Rust and writes a D1 row, which `/d1` reports. |
+
+Containers' binding from Rust is confirmed by `/image` itself. A later amendment, the spike report, records each result, and names any binding that needs amendment 1 §4's TypeScript shim.
+
+#### 3. Credentials
+
+- **Requesting.** `x-cobot.credentials` maps a name to `{ provider, capabilities, scope }`. Each capability must exist in that provider's `capabilities.yaml`, at the scope it is minted at (§3).
+- **Using.** A provider setting references one as `$credential.<name>.<field>`. Every reference renders into one sensitive variable, `var.credentials`.
+- **Sources.**
+  - `runner`: JSON in `COBOT_CREDENTIALS`, which the Container supplies. Phase 4 mints the values.
+  - `files`: today's `ENC` secrets and `infra/cloudflare` handoff, re-expressed as credentials.
+- `$secret` and `$handoff` keep working through `files` until phase 7. Existing units render unchanged.
+- Credential values only ever reach the run's environment, never a log, plan summary or response.
+
+#### 4. State in R2
+
+- `--state` takes a directory, as today, or `r2://<bucket>/<prefix>`. The R2 endpoint and keys come from `COBOT_STATE_R2_*`.
+- cobot downloads a unit's encrypted state into its work directory, and runs tofu on the local backend unchanged. It then uploads the result with `If-Match` on the ETag it read, or `If-None-Match: *` for a first apply.
+- An ETag that changed in between fails the run. The Durable Object already serializes an instance's runs, so this guards only against a second writer.
+- `TF_ENCRYPTION` is unchanged. Its passphrase comes from the Secrets Store at run time.
+- `s3.rs` gains binary-safe reads that return the ETag, and conditional writes. Tests use an in-process fake S3 server.
+
+#### 5. Stored plans
+
+- `cobot plan --store` saves the encrypted `.tfplan` under the state store's `plans/<id>/`, beside its metadata:
+  - the unit;
+  - a digest of the unit's desired state, meaning its `config.yaml` and `schema.json`;
+  - when it was created;
+  - when it expires, 24 hours later.
+- `cobot apply --plan <id>` applies exactly that file. It refuses a plan that is unknown, expired, or whose digest no longer matches.
+
+#### 6. backplane
+
+- **Operations.** `infra.plan` (effect `plan`, optional arg `units`) and `infra.apply` (effect `apply`, arg `plan`) join the catalog, and act only through cobot.
+- **`run`** accepts these operations' arguments. `pigeon backplane run` gains `--arg k=v`.
+- **`pigeon backplane serve --listen <addr>`** answers:
+  - `GET /healthz`;
+  - `GET /v0/operations`;
+  - `POST /v0/run`, which takes a `Request` and returns a `Response`.
+- **The listen address is required**, with no default. In the Container, only the Worker reaches that port.
+- **The server is `tiny_http`**: small and synchronous, with no async runtime. `.config/policies/backplane.yaml` still holds, because serving starts no process and writes no file.
+
+#### 7. Execution
+
+1. This amendment.
+2. `feat(tooling)`: the spike kit (§1, §2). It also drops the spent `retired` entries from `.config/releases.yaml`.
+3. The owner deploys the spike, and `docs(adr)` records its report. If a result breaks an assumption, that report amends the affected design before steps 4 to 7 rely on it.
+4. `feat(cobot)`: credentials (§3).
+5. `feat(cobot)`: state in R2 (§4).
+6. `feat(cobot)`: stored plans (§5).
+7. `feat(backplane)`: plan, apply and serve (§6).
+
+Minting, the Worker, the D1 schema, the API and Container dispatch remain phase 4. `cobot.yml` keeps today's flow until phase 6.
+
+#### 8. Verification
+
+- Steps 4 to 7 each leave CI's cobot plan unchanged for the instance's units.
+- Tests cover:
+  - existing units rendering byte-identically;
+  - an unknown capability failing;
+  - runner credentials reaching only `TF_VAR_credentials`;
+  - R2 state round-tripping, and an ETag conflict;
+  - a plan that is expired, mismatched or unknown being refused;
+  - the wire form round-tripping over HTTP.
+- The spike report gives every check and binding a result from the owner's deploy.
