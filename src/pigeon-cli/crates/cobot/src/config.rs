@@ -73,6 +73,13 @@ pub enum Expr {
     Generation(String),
     /// `$handoff.api_token` or `$handoff.zone_id`.
     Handoff(String),
+    /// `$credential.<name>.<field>`, a field of a credential the runner supplies.
+    Credential {
+        /// The credential, named in `x-cobot.credentials`.
+        name: String,
+        /// Its field, such as `api_token`.
+        field: String,
+    },
     /// `$module.<block>.<out>`, `$module.<block>[*].<out>` or `$module.<block>[$item.<path>].<out>`.
     Module {
         /// The referenced block.
@@ -123,6 +130,14 @@ pub fn parse(text: &str) -> Option<Expr> {
         return path(&format!(".{key}"))
             .filter(|p| p.len() == 1)
             .map(|p| Expr::Secret(p[0].clone()));
+    }
+    if let Some(rest) = text.strip_prefix("$credential") {
+        return path(rest)
+            .filter(|p| p.len() == 2)
+            .map(|p| Expr::Credential {
+                name: p[0].clone(),
+                field: p[1].clone(),
+            });
     }
     if let Some(key) = text.strip_prefix("$handoff.")
         && crate::static_site::HANDOFF_KEYS.contains(&key)
@@ -269,6 +284,16 @@ pub fn declared_secrets(unit: &ConfigUnit) -> BTreeSet<String> {
     secret_keys(&unit.schema)
 }
 
+/// The credentials a unit requests, by name; see the phase 3 amendment of
+/// `.claude/decisions/2026-11-04-development-platform-instance-separation.md`.
+#[must_use]
+pub fn declared_credentials(unit: &ConfigUnit) -> BTreeSet<String> {
+    x_cobot(&unit.schema)["credentials"]
+        .as_object()
+        .map(|o| o.keys().cloned().collect())
+        .unwrap_or_default()
+}
+
 /// Whether the unit takes a handoff.
 #[must_use]
 pub fn has_handoff(unit: &ConfigUnit) -> bool {
@@ -379,14 +404,121 @@ pub fn validate(
     area: &str,
     allow: &Allowlist,
     infra_keys: &BTreeSet<String>,
+    catalogs: &[crate::catalog::Catalog],
 ) -> Vec<(String, String)> {
     let mut problems = Vec::new();
     check_top(unit, &mut problems);
+    check_credentials(unit, catalogs, &mut problems);
     check_secrets(unit, dir, area, infra_keys, &mut problems);
     check_blocks(unit, allow, &mut problems);
     check_outputs(unit, &mut problems);
     check_apex(unit, &mut problems);
     problems
+}
+
+/// Checks `x-cobot.credentials` against the catalogs' capabilities, and each
+/// `$credential` reference against it.
+fn check_credentials(
+    unit: &ConfigUnit,
+    catalogs: &[crate::catalog::Catalog],
+    problems: &mut Vec<(String, String)>,
+) {
+    let mut add = |m: String| problems.push((SCHEMA.into(), m));
+    let x = x_cobot(&unit.schema);
+    if let Some(c) = x.get("credentials") {
+        let Some(entries) = c.as_object() else {
+            add("`x-cobot.credentials` must map names to requests".into());
+            return;
+        };
+        for (name, req) in entries {
+            if !BLOCK.is_match(name) {
+                add(format!(
+                    "credential `{name}` must be lowercase with underscores"
+                ));
+            }
+            let keys: BTreeSet<&str> = req
+                .as_object()
+                .map(|o| o.keys().map(String::as_str).collect())
+                .unwrap_or_default();
+            let (provider, scope) = (req["provider"].as_str(), req["scope"].as_str());
+            let caps: Option<Vec<&str>> = req["capabilities"]
+                .as_array()
+                .filter(|a| !a.is_empty())
+                .and_then(|a| a.iter().map(Value::as_str).collect());
+            let (Some(provider), Some(scope), Some(caps)) = (provider, scope, caps) else {
+                add(format!(
+                    "credential `{name}` needs `provider`, `scope` and a non-empty `capabilities` list"
+                ));
+                continue;
+            };
+            if keys != BTreeSet::from(["capabilities", "provider", "scope"]) {
+                add(format!(
+                    "credential `{name}` takes only `provider`, `capabilities` and `scope`"
+                ));
+            }
+            let Some(catalog) = catalogs.iter().find(|c| c.provider == provider) else {
+                add(format!(
+                    "credential `{name}`: no catalog declares capabilities for `{provider}`"
+                ));
+                continue;
+            };
+            for cap in caps {
+                match catalog.capabilities.get(cap) {
+                    None => add(format!(
+                        "credential `{name}`: `{cap}` is not in {}",
+                        catalog.path
+                    )),
+                    Some(c) if c.scope != scope => add(format!(
+                        "credential `{name}`: `{cap}` is minted on `{}`, not `{scope}`",
+                        c.scope
+                    )),
+                    Some(_) => {}
+                }
+            }
+        }
+    }
+    let declared = declared_credentials(unit);
+    for (text, name, field) in credential_refs(unit) {
+        if !declared.contains(&name) {
+            add(format!("`{text}` is not in x-cobot.credentials"));
+        } else if !BLOCK.is_match(&field) {
+            add(format!(
+                "`{text}`: the field must be lowercase with underscores"
+            ));
+        }
+    }
+}
+
+/// Every `$credential.<name>.<field>` in a unit's providers and block inputs.
+fn credential_refs(unit: &ConfigUnit) -> Vec<(String, String, String)> {
+    let inputs: Vec<Value> = blocks(&unit.schema)
+        .into_iter()
+        .flat_map(|b| b.inputs.into_values())
+        .collect();
+    std::iter::once(&x_cobot(&unit.schema)["providers"])
+        .chain(&inputs)
+        .flat_map(exprs_in)
+        .filter_map(|text| match parse(text) {
+            Some(Expr::Credential { name, field }) => Some((text.to_string(), name, field)),
+            _ => None,
+        })
+        .collect()
+}
+
+/// The fields a unit references of each credential it requests; one requested but never
+/// referenced has none.
+#[must_use]
+pub fn credential_fields(unit: &ConfigUnit) -> BTreeMap<String, BTreeSet<String>> {
+    let mut out: BTreeMap<String, BTreeSet<String>> = declared_credentials(unit)
+        .into_iter()
+        .map(|n| (n, BTreeSet::new()))
+        .collect();
+    for (_, name, field) in credential_refs(unit) {
+        if let Some(fields) = out.get_mut(&name) {
+            fields.insert(field);
+        }
+    }
+    out
 }
 
 fn check_apex(unit: &ConfigUnit, problems: &mut Vec<(String, String)>) {
@@ -852,6 +984,9 @@ fn render_value(value: &Value, config: &Value, zone: &str) -> Value {
             Some(Expr::Item(p)) => Value::String(format!("${{each.value{}}}", dotted(&p))),
             Some(Expr::Config(p)) => literal(lookup(config, &p).unwrap_or(&Value::Null)),
             Some(Expr::Secret(k)) => Value::String(format!("${{var.secrets[\"{k}\"]}}")),
+            Some(Expr::Credential { name, field }) => {
+                Value::String(format!("${{var.credentials[\"{name}\"].{field}}}"))
+            }
             Some(Expr::Generation(f)) => Value::String(format!("${{each.value._generation.{f}}}")),
             Some(Expr::Handoff(k)) if zone.is_empty() => {
                 Value::String(format!("${{var.handoff.{k}}}"))
@@ -981,6 +1116,12 @@ fn extras(unit: &ConfigUnit, root: &mut Value) {
         variables.insert(
             "secrets".into(),
             json!({ "type": "map(string)", "sensitive": true }),
+        );
+    }
+    if !declared_credentials(unit).is_empty() {
+        variables.insert(
+            "credentials".into(),
+            json!({ "type": "map(map(string))", "sensitive": true }),
         );
     }
     if has_handoff(unit) {

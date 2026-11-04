@@ -695,6 +695,7 @@ fn ctx_on(root: &Path, state: &Path, day: &str) -> cobot::Context {
         secrets_passphrase: Some(SECRETS_PASS.into()),
         workload_secrets_passphrase: Some(WORKLOAD_PASS.into()),
         today: cobot::generations::day(day).expect("day"),
+        credentials: None,
     }
 }
 

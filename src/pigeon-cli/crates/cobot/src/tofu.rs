@@ -162,6 +162,7 @@ fn run(unit: &str, work: &Path, env: &Env, args: &[&str]) -> Result<Output, Erro
         .args(args)
         .current_dir(work)
         .env_remove(crate::PASSPHRASE_VAR)
+        .env_remove(crate::CREDENTIALS_VAR)
         .env_remove(crate::secrets::PASSPHRASE_VAR)
         .env_remove(crate::secrets::WORKLOAD_PASSPHRASE_VAR)
         .env("TF_ENCRYPTION", encryption(&env.passphrase))

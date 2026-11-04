@@ -34,6 +34,9 @@ pub const WORK_DIR: &str = ".cobot";
 /// The environment variable holding the state passphrase.
 pub const PASSPHRASE_VAR: &str = "COBOT_STATE_PASSPHRASE";
 
+/// The runner-supplied credentials, as JSON `{ name: { field: value } }`.
+pub const CREDENTIALS_VAR: &str = "COBOT_CREDENTIALS";
+
 /// Why a command could not run.
 #[derive(Debug)]
 pub enum Error {
@@ -287,6 +290,8 @@ pub struct Context {
     pub workload_secrets_passphrase: Option<String>,
     /// Today, for token generations.
     pub today: generations::Day,
+    /// The runner-supplied credentials, as JSON; needed only by units requesting some.
+    pub credentials: Option<String>,
 }
 
 /// The rendered `main.tf.json` for `unit`.
@@ -395,6 +400,9 @@ fn prepare(
         })?;
         env.vars.push(("TF_VAR_secrets".into(), json));
     }
+    if let Some(c) = &unit.config {
+        runner_credentials(ctx, unit, c, &mut env)?;
+    }
     if let Some(c) = &unit.config
         && config::has_handoff(c)
         && let Some(site) = &c.site
@@ -427,6 +435,75 @@ fn prepare(
         (m, p) => m.or(p),
     };
     Ok((work, env, plan))
+}
+
+/// Feeds the runner's credentials for the ones `unit` requests into `TF_VAR_credentials`;
+/// see the phase 3 amendment of
+/// `.claude/decisions/2026-11-04-development-platform-instance-separation.md`.
+fn runner_credentials(
+    ctx: &Context,
+    unit: &Unit,
+    c: &config::ConfigUnit,
+    env: &mut tofu::Env,
+) -> Result<(), Error> {
+    let wanted = config::credential_fields(c);
+    if wanted.is_empty() {
+        return Ok(());
+    }
+    let mine =
+        pick_credentials(ctx.credentials.as_deref(), &wanted, &unit.path).map_err(|message| {
+            Error::Io {
+                path: PathBuf::from(CREDENTIALS_VAR),
+                message,
+            }
+        })?;
+    env.hidden
+        .extend(mine.values().flat_map(|f| f.values().cloned()));
+    let json = serde_json::to_string(&mine).map_err(|e| Error::Io {
+        path: PathBuf::from(CREDENTIALS_VAR),
+        message: e.to_string(),
+    })?;
+    env.vars.push(("TF_VAR_credentials".into(), json));
+    Ok(())
+}
+
+/// From the runner's `json`, exactly the fields `unit` references of each credential it
+/// requests (`wanted`); other credentials and fields are never read. Never echoes a value.
+///
+/// # Errors
+///
+/// A message when `json` is not an object, or a wanted credential or field is missing or not
+/// a string.
+pub fn pick_credentials(
+    json: Option<&str>,
+    wanted: &BTreeMap<String, std::collections::BTreeSet<String>>,
+    unit: &str,
+) -> Result<BTreeMap<String, BTreeMap<String, String>>, String> {
+    let all: serde_json::Map<String, serde_json::Value> =
+        serde_json::from_str(json.unwrap_or("{}"))
+            .map_err(|_| "must be a JSON object mapping credential names to fields".to_string())?;
+    let mut out = BTreeMap::new();
+    for (name, fields) in wanted {
+        let entry = all.get(name).filter(|e| e.is_object()).ok_or_else(|| {
+            format!(
+                "{unit} requests credential `{name}`, which the runner did not supply as an object"
+            )
+        })?;
+        let mut picked = BTreeMap::new();
+        for field in fields {
+            let value = entry
+                .get(field)
+                .and_then(serde_json::Value::as_str)
+                .ok_or_else(|| {
+                    format!(
+                        "{unit} needs `{name}.{field}`, which the runner did not supply as a string"
+                    )
+                })?;
+            picked.insert(field.clone(), value.to_string());
+        }
+        out.insert(name.clone(), picked);
+    }
+    Ok(out)
 }
 
 /// Copies a moved unit's state into place while it has none; the plan's note, if moving.
