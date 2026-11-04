@@ -33,5 +33,10 @@ cd ../pigeon-platform-state && git add -A && git commit -m "cobot: apply infra/p
 unset CLOUDFLARE_API_TOKEN COBOT_STATE_PASSPHRASE
 ```
 
+The first run after a pull compiles `pigeon` quietly, and each plan's `tofu init`
+downloads the Cloudflare provider; both can take minutes. `cobot` names each
+`tofu` step on stderr as it runs. To download the provider once, set
+`TF_PLUGIN_CACHE_DIR` (for example `~/.terraform.d/plugin-cache`, created first).
+
 The unit must be named: `cobot plan` and `cobot apply` with no unit skip it.
 The `account` module fails unless the token sees exactly one account.

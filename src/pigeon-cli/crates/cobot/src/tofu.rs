@@ -177,8 +177,16 @@ fn run(unit: &str, work: &Path, env: &Env, args: &[&str]) -> Result<Output, Erro
         })
 }
 
+/// Runs one `tofu` step, naming it and its duration on stderr as it goes.
 fn step(unit: &str, work: &Path, env: &Env, args: &[&str], ok: &[i32]) -> Result<Output, Error> {
+    let started = std::time::Instant::now();
+    eprintln!("cobot: {unit}: tofu {}…", args[0]);
     let output = run(unit, work, env, args)?;
+    eprintln!(
+        "cobot: {unit}: tofu {} took {:.1}s",
+        args[0],
+        started.elapsed().as_secs_f64()
+    );
     let code = output.status.code().unwrap_or(-1);
     if ok.contains(&code) {
         Ok(output)
