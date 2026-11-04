@@ -2,6 +2,7 @@
 
 ## 2026-11-04
 
+- feat(cobot): catalog module references and retired changelogs ([#94](https://github.com/noisypigeon/pigeon/pull/94))
 - docs(adr): the bootstrap composes the Cloudflare catalog ([#93](https://github.com/noisypigeon/pigeon/pull/93))
 - feat(infra): the pigeon-account bootstrap unit ([#92](https://github.com/noisypigeon/pigeon/pull/92))
 - feat(cobot): local units run only when named ([#91](https://github.com/noisypigeon/pigeon/pull/91))

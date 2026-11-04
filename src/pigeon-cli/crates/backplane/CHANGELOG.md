@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.6 (2026-11-04)
+
+- feat(cobot): catalog module references and retired changelogs ([#94](https://github.com/noisypigeon/pigeon/pull/94))
+
 ## v0.1.5 (2026-11-04)
 
 - feat(cobot): local units run only when named ([#91](https://github.com/noisypigeon/pigeon/pull/91))
