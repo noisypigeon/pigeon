@@ -356,10 +356,13 @@ fn fields(ctx: &mut Ctx, lines: &[Line], r: &FieldsRule) {
     if r.only
         && let Some(l) = rest.next()
     {
-        let key = captures(&r.pattern.0, l.text)
+        let message = captures(&r.pattern.0, l.text)
             .and_then(|c| c.get("key").cloned())
-            .unwrap_or_else(|| l.text.trim().to_string());
-        ctx.push(Some(l.number), format!("unexpected field `{key}`"));
+            .map_or_else(
+                || "unexpected line".into(),
+                |key| format!("unexpected field `{key}`"),
+            );
+        ctx.push(Some(l.number), message);
     }
 }
 
@@ -697,6 +700,12 @@ mod tests {
         let extra = run(rules, "f", "a=1\nb=2\nc=3\n");
         assert_eq!(extra.len(), 1);
         assert!(extra[0].contains("unexpected field `c`"), "{extra:?}");
+        let raw = run(rules, "f", "a=1\nb=2\nnot-a-field-s3cr3t\n");
+        assert_eq!(
+            raw,
+            ["unexpected line"],
+            "a line that is not a field is never echoed"
+        );
         let loose = "  - fields: { after: 0, pattern: '^(?<key>\\w+)=(?<value>.*)$', expect: [{ key: a, nonempty: true }] }\n";
         assert_eq!(run(loose, "f", "a=1\nb=2\n"), Vec::<String>::new());
     }
