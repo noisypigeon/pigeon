@@ -3,11 +3,12 @@
 pub mod catalog;
 pub mod engine;
 pub mod instance;
+pub mod serve;
 
 use std::fmt;
 use std::path::PathBuf;
 
-pub use catalog::{Effect, Operation, Request, Response, catalog, run};
+pub use catalog::{Effect, Operation, Request, Response, catalog, run, run_with};
 pub use engine::{Engine, EngineInfo, engines};
 pub use instance::Instance;
 

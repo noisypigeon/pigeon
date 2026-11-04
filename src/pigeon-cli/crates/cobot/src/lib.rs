@@ -11,6 +11,7 @@ pub mod providers;
 pub mod release;
 pub mod s3;
 pub mod secrets;
+pub mod session;
 pub mod sites;
 pub mod state;
 pub mod static_site;

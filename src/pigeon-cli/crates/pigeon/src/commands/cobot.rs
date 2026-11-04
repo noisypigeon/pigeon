@@ -62,10 +62,10 @@ fn capabilities(root: &std::path::Path) -> Result<(), cobot::Error> {
 fn render(args: &CobotRun) -> Result<(), cobot::Error> {
     let providers = args.at.providers_dir();
     for unit in cobot::select(&args.at.root, &providers, &args.units)? {
-        let state = match store(args)? {
-            cobot::state::Store::Dir(dir) => dir,
-            cobot::state::Store::R2 { .. } => mirror_dir(args),
-        };
+        let state =
+            cobot::session::render_dir(&args.at.root, &args.state.to_string_lossy(), |k| {
+                env::var(k).ok()
+            })?;
         let work = cobot::render(&args.at.root, &providers, &unit, &state)?;
         println!("{}", work.display());
     }
@@ -100,8 +100,8 @@ fn sites_build(args: &SitesBuild) -> Result<(), cobot::Error> {
 }
 
 fn sites_publish(args: &SitesPublish) -> Result<(), cobot::Error> {
-    let (ctx, _) = context(&args.run)?;
-    let published = cobot::publish(&ctx, &args.run.units, args.checks)?;
+    let session = context(&args.run)?;
+    let published = cobot::publish(&session.ctx, &args.run.units, args.checks)?;
     let mut failed = Vec::new();
     for p in &published {
         println!(
@@ -137,54 +137,27 @@ fn sites_publish(args: &SitesPublish) -> Result<(), cobot::Error> {
     }
 }
 
-fn store(args: &CobotRun) -> Result<cobot::state::Store, cobot::Error> {
-    cobot::state::Store::parse(&args.state.to_string_lossy(), |k| env::var(k).ok())
-        .map_err(cobot::Error::State)
-}
-
-/// Where an R2 store's state is mirrored for a run.
-fn mirror_dir(args: &CobotRun) -> std::path::PathBuf {
-    args.at.root.join(".cobot").join("state-r2")
+/// The run's context, with its state pulled; see [`cobot::session`].
+fn context(args: &CobotRun) -> Result<cobot::session::Session, cobot::Error> {
+    cobot::session::open(
+        &args.at.root,
+        &args.at.providers_dir(),
+        &args.state.to_string_lossy(),
+        |k| env::var(k).ok(),
+    )
 }
 
 fn now() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |d| d.as_secs())
-}
-
-/// The run's context, and the R2 mirror its state was pulled into, if any.
-fn context(
-    args: &CobotRun,
-) -> Result<(cobot::Context, Option<cobot::state::Mirror>), cobot::Error> {
-    let (state, mirror) = match store(args)? {
-        cobot::state::Store::Dir(dir) => (dir, None),
-        cobot::state::Store::R2 { bucket, prefix } => {
-            let m = cobot::state::Mirror::pull(bucket, &prefix, &mirror_dir(args), now())?;
-            (m.dir().to_path_buf(), Some(m))
-        }
-    };
-    let ctx = cobot::Context {
-        root: args.at.root.clone(),
-        providers: args.at.providers_dir(),
-        state,
-        state_passphrase: cobot::passphrase(env::var(cobot::PASSPHRASE_VAR).ok())?,
-        secrets_passphrase: env::var(cobot::secrets::PASSPHRASE_VAR).ok(),
-        workload_secrets_passphrase: env::var(cobot::secrets::WORKLOAD_PASSPHRASE_VAR).ok(),
-        today: cobot::generations::today(),
-        credentials: env::var(cobot::CREDENTIALS_VAR).ok(),
-    };
-    Ok((ctx, mirror))
+    cobot::session::now()
 }
 
 fn plan(args: &CobotPlan) -> Result<(), cobot::Error> {
-    let (ctx, mirror) = context(&args.run)?;
+    let session = context(&args.run)?;
+    let ctx = &session.ctx;
     let units = cobot::select(&ctx.root, &ctx.providers, &args.run.units)?;
     let plans = if args.store {
-        let (stored, plans) = cobot::plan_stored(&ctx, &units, now())?;
-        if let Some(m) = &mirror {
-            m.push(now())?;
-        }
+        let (stored, plans) = cobot::plan_stored(ctx, &units, now())?;
+        session.push()?;
         println!(
             "cobot: stored plan {} for {} unit(s); apply it with --plan {} within 24 hours",
             stored.id,
@@ -193,7 +166,7 @@ fn plan(args: &CobotPlan) -> Result<(), cobot::Error> {
         );
         plans
     } else {
-        cobot::plan(&ctx, &units)?
+        cobot::plan(ctx, &units)?
     };
     let summary = cobot::summary(&plans);
     print!("{summary}");
@@ -207,15 +180,15 @@ fn plan(args: &CobotPlan) -> Result<(), cobot::Error> {
 }
 
 fn apply(args: &CobotApply) -> Result<(), cobot::Error> {
-    let (ctx, mirror) = context(&args.run)?;
+    let session = context(&args.run)?;
+    let ctx = &session.ctx;
     let applied = match &args.plan {
-        Some(id) => cobot::apply_stored(&ctx, id, now()),
+        Some(id) => cobot::apply_stored(ctx, id, now()),
         None => cobot::select(&ctx.root, &ctx.providers, &args.run.units)
-            .and_then(|units| cobot::apply(&ctx, &units)),
+            .and_then(|units| cobot::apply(ctx, &units)),
     };
-    if let Some(m) = &mirror {
-        let written = m.push(now())?;
-        println!("cobot: wrote {} state object(s) to R2", written.len());
+    if let Some(written) = session.push()? {
+        println!("cobot: wrote {written} state object(s) to R2");
     }
     let plans = applied?;
     print!("{}", cobot::summary(&plans));
