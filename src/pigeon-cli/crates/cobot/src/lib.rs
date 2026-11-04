@@ -942,7 +942,7 @@ pub fn lock(root: &Path, providers: &Path) -> Result<PathBuf, Error> {
     Ok(target)
 }
 
-/// A Markdown summary of `plans`: addresses and actions only.
+/// A Markdown summary of `plans`: addresses, actions and changed attribute names only.
 #[must_use]
 pub fn summary(plans: &[UnitPlan]) -> String {
     let mut out = String::from("<!-- cobot-plan -->\n## cobot plan\n");
@@ -953,7 +953,12 @@ pub fn summary(plans: &[UnitPlan]) -> String {
         }
         if p.has_changes() {
             for c in &p.changes {
-                let _ = writeln!(out, "- {} `{}`", c.action.word(), c.address);
+                let _ = write!(out, "- {} `{}`", c.action.word(), c.address);
+                if c.attributes.is_empty() {
+                    out.push('\n');
+                } else {
+                    let _ = writeln!(out, " ({})", c.attributes.join(", "));
+                }
             }
             let (add, change, destroy) = p.counts();
             let _ = write!(
