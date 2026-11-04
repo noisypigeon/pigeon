@@ -159,7 +159,7 @@ fn the_runner_supplies_only_the_fields_a_unit_references() {
         ("{}", "credential `dns`"),
         (r#"{ "dns": {} }"#, "`dns.api_token`"),
         (r#"{ "dns": { "api_token": 7 } }"#, "`dns.api_token`"),
-        (r#"{ "dns": "t0ken" }"#, "`dns.api_token`"),
+        (r#"{ "dns": "t0ken" }"#, "credential `dns`"),
         ("[\"t0ken\"]", "JSON object"),
     ] {
         let err = cobot::pick_credentials(Some(json), &wanted, UNIT).expect_err(json);
