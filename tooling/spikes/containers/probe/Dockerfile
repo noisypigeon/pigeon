@@ -7,5 +7,5 @@ RUN cargo build --release --locked
 
 FROM ghcr.io/noisypigeon/pigeon-cobot:0.1.20
 COPY --from=build /src/target/release/pigeon-spike-probe /usr/local/bin/pigeon-spike-probe
-EXPOSE 8080
+EXPOSE 8080 8443
 ENTRYPOINT ["/usr/local/bin/pigeon-spike-probe"]

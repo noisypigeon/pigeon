@@ -3,13 +3,20 @@
 use std::time::Duration;
 
 use serde_json::{Value, json};
+use worker::wasm_bindgen::JsCast;
 use worker::{
-    Container, ContainerStartupOptions, D1Database, Date, Delay, DurableObject, Env, Request,
-    Response, Result, ScheduleContext, ScheduledEvent, State, durable_object, event,
+    Container, ContainerStartupOptions, D1Database, Date, Delay, DurableObject, Env, Fetcher,
+    Request, Response, Result, ScheduleContext, ScheduledEvent, State, durable_object, event,
 };
 
 /// The Container port the probe listens on.
 const PROBE_PORT: u16 = 8080;
+
+/// The Container port the probe's TLS listener uses.
+const TLS_PORT: u16 = 8443;
+
+/// Worker secrets passed into the Container's environment, as PEM.
+const TLS_SECRETS: [&str; 3] = ["SPIKE_TLS_CERT", "SPIKE_TLS_KEY", "SPIKE_TLS_CLIENT_CA"];
 
 #[event(fetch)]
 async fn fetch(req: Request, env: Env, _ctx: worker::Context) -> Result<Response> {
@@ -19,7 +26,7 @@ async fn fetch(req: Request, env: Env, _ctx: worker::Context) -> Result<Response
         return Response::error("unauthorized", 401);
     }
     match req.path().as_str() {
-        "/image" | "/run" | "/status" | "/uptime" | "/egress" => {
+        "/image" | "/run" | "/status" | "/uptime" | "/egress" | "/tls" | "/mtls" => {
             env.durable_object("RUNNER")?
                 .get_by_name("spike")?
                 .fetch_with_request(req)
@@ -87,11 +94,12 @@ async fn d1(db: &D1Database) -> Result<Value> {
 #[durable_object]
 pub struct Runner {
     state: State,
+    env: Env,
 }
 
 impl DurableObject for Runner {
-    fn new(state: State, _env: Env) -> Self {
-        Self { state }
+    fn new(state: State, env: Env) -> Self {
+        Self { state, env }
     }
 
     async fn fetch(&self, req: Request) -> Result<Response> {
@@ -105,6 +113,11 @@ impl DurableObject for Runner {
             let started_ms = Date::now().as_millis();
             let mut options = ContainerStartupOptions::new();
             options.enable_internet(true);
+            for name in TLS_SECRETS {
+                if let Ok(value) = self.env.secret(name) {
+                    options.add_env(name, &value.to_string());
+                }
+            }
             container.start(Some(options))?;
             if let Err(e) = probe(&container, "/uptime", READY_TRIES).await {
                 return Response::from_json(&json!({
@@ -117,6 +130,12 @@ impl DurableObject for Runner {
             startup_ms = Some(Date::now().as_millis() - started_ms);
         }
         let url = req.url()?;
+        if url.path() == "/tls" || url.path() == "/mtls" {
+            let mut body = tls(&self.env, &container, url.path() == "/mtls").await;
+            body["cold_start"] = json!(cold);
+            body["startup_ms"] = json!(startup_ms);
+            return Response::from_json(&body);
+        }
         let path = match url.query() {
             Some(q) => format!("{}?{q}", url.path()),
             None => url.path().to_string(),
@@ -162,6 +181,45 @@ async fn probe(
     Err(format!(
         "probe never answered {path} after {tries} tries: {last}"
     ))
+}
+
+/// Fetches the probe's TLS listener through the container binding and, for
+/// `/mtls`, through the `MTLS` client-certificate binding too.
+async fn tls(env: &Env, container: &Container, mtls: bool) -> Value {
+    let binding = match container.get_tcp_port(TLS_PORT) {
+        Ok(port) => https(&port).await,
+        Err(e) => json!({ "error": e.to_string() }),
+    };
+    if !mtls {
+        return json!({ "container_binding": binding });
+    }
+    let client_cert = match mtls_fetcher(env) {
+        Some(fetcher) => https(&fetcher).await,
+        None => json!({ "error": "no MTLS binding" }),
+    };
+    json!({ "container_binding": binding, "mtls_binding": client_cert })
+}
+
+/// The `[[mtls_certificates]]` binding: a fetcher whose requests carry its
+/// certificate, but which reaches the internet rather than a container port.
+fn mtls_fetcher(env: &Env) -> Option<Fetcher> {
+    let binding = worker::js_sys::Reflect::get(env.as_ref(), &"MTLS".into()).ok()?;
+    let has_fetch =
+        worker::js_sys::Reflect::get(&binding, &"fetch".into()).is_ok_and(|f| f.is_function());
+    has_fetch.then(|| binding.unchecked_into())
+}
+
+/// One `https://container/` fetch: the probe's answer, or why it failed.
+async fn https(fetcher: &Fetcher) -> Value {
+    match fetcher.fetch("https://container/", None).await {
+        Ok(mut r) => {
+            let status = r.status_code();
+            let text = r.text().await.unwrap_or_default();
+            let probe = serde_json::from_str::<Value>(&text).unwrap_or(Value::String(text));
+            json!({ "status": status, "probe": probe })
+        }
+        Err(e) => json!({ "error": e.to_string() }),
+    }
 }
 
 /// A Durable Object with storage, counting its own fetches.

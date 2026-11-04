@@ -1,4 +1,4 @@
-//! Answers the spike's Container checks on port 8080; see ../README.md.
+//! Answers the spike's Container checks on port 8080, and a TLS check on 8443; see ../README.md.
 
 use std::io::{BufRead, BufReader, Write};
 use std::net::{TcpListener, TcpStream};
@@ -34,6 +34,11 @@ struct Job {
 
 fn main() {
     let started = Instant::now();
+    if let Some(config) = tls_config() {
+        std::thread::spawn(move || serve_tls(&config));
+    } else if std::env::var_os("SPIKE_TLS_CERT").is_some() {
+        eprintln!("spike-probe: SPIKE_TLS_* set but unusable; no TLS listener");
+    }
     let job = Arc::new(Mutex::new(Job::default()));
     let listener = TcpListener::bind("0.0.0.0:8080").expect("bind 0.0.0.0:8080");
     for stream in listener.incoming().flatten() {
@@ -158,4 +163,75 @@ fn egress() -> Value {
         out.insert(name.into(), result);
     }
     Value::Object(out)
+}
+
+/// The TLS listener's config from `SPIKE_TLS_CERT`, `SPIKE_TLS_KEY` and `SPIKE_TLS_CLIENT_CA`
+/// (PEM); client certificates are optional.
+fn tls_config() -> Option<Arc<rustls::ServerConfig>> {
+    use rustls::pki_types::pem::PemObject;
+    use rustls::pki_types::{CertificateDer, PrivateKeyDer};
+    let var = |k: &str| std::env::var(k).ok().filter(|v| !v.is_empty());
+    let (cert, key, ca) = (
+        var("SPIKE_TLS_CERT")?,
+        var("SPIKE_TLS_KEY")?,
+        var("SPIKE_TLS_CLIENT_CA")?,
+    );
+    let provider = Arc::new(rustls::crypto::ring::default_provider());
+    let certs: Vec<CertificateDer<'static>> = CertificateDer::pem_slice_iter(cert.as_bytes())
+        .collect::<Result<_, _>>()
+        .ok()?;
+    let key = PrivateKeyDer::from_pem_slice(key.as_bytes()).ok()?;
+    let mut roots = rustls::RootCertStore::empty();
+    for c in CertificateDer::pem_slice_iter(ca.as_bytes()) {
+        roots.add(c.ok()?).ok()?;
+    }
+    let verifier = rustls::server::WebPkiClientVerifier::builder_with_provider(
+        Arc::new(roots),
+        Arc::clone(&provider),
+    )
+    .allow_unauthenticated()
+    .build()
+    .ok()?;
+    let config = rustls::ServerConfig::builder_with_provider(provider)
+        .with_protocol_versions(&[&rustls::version::TLS13])
+        .ok()?
+        .with_client_cert_verifier(verifier)
+        .with_single_cert(certs, key)
+        .ok()?;
+    Some(Arc::new(config))
+}
+
+/// Answers every TLS request on 8443 with whether the handshake carried a client certificate.
+fn serve_tls(config: &Arc<rustls::ServerConfig>) {
+    let Ok(listener) = TcpListener::bind("0.0.0.0:8443") else {
+        return;
+    };
+    for stream in listener.incoming().flatten() {
+        let config = Arc::clone(config);
+        std::thread::spawn(move || {
+            let _ = stream.set_read_timeout(Some(Duration::from_secs(10)));
+            let Ok(conn) = rustls::ServerConnection::new(config) else {
+                return;
+            };
+            let mut tls = rustls::StreamOwned::new(conn, stream);
+            let mut line = String::new();
+            if BufReader::new(&mut tls).read_line(&mut line).is_err() {
+                return;
+            }
+            let client = tls.conn.peer_certificates().is_some_and(|c| !c.is_empty());
+            let text = json!({
+                "tls": true,
+                "version": format!("{:?}", tls.conn.protocol_version()),
+                "client_certificate": client,
+            })
+            .to_string();
+            let _ = write!(
+                tls,
+                "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{text}",
+                text.len()
+            );
+            tls.conn.send_close_notify();
+            let _ = tls.flush();
+        });
+    }
 }
