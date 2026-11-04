@@ -444,3 +444,13 @@ The tests run against temporary repositories:
 1. This amendment lands first.
 2. Then `feat(cobot): a release tier can move with from`, holding steps 1 and 3. `release.yml` builds `cobot release` from the merged commit, so this needs only to merge, not to be released, before step 3 uses it.
 3. Then phase 1b's move PR, which uses `from`.
+
+### 2026-11-04: A moved tier waits for the cobot image
+
+The previous amendment's §4 says the move PR needs `from` support only merged, because `release.yml` builds `cobot release` from the merged commit. That holds for the `release` job, but not for `pending`.
+
+- **Why `pending` matters.** `pending` runs `cobot tags` from the released `ghcr.io/noisypigeon/pigeon-cobot:latest`. An image older than `from` rejects the new key in `.config/releases.yaml`, which stops every later publication.
+- **The rule.** A PR that adds `from` to a tier waits until the cobot release carrying `from` is published, meaning its GitHub Release exists. That release is `cobot/v0.1.18`, from #84.
+- **Older tags.** `cobot tags` rows also carry `changelog_from`. The `image` job falls back to it in a tag's checkout, so a tag cut before a move keeps its release notes.
+
+This supersedes step 2 of that §4. The earlier text stays as written.
