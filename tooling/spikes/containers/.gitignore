@@ -1,0 +1,5 @@
+# Local deploy config and build output; see README.md.
+wrangler.local.toml
+.wrangler/
+worker/build/
+target/

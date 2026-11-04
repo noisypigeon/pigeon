@@ -1,0 +1,10 @@
+# The spike Container's check server; see .claude/decisions/2026-11-04-development-platform-instance-separation.md (phase 3 amendment).
+[package]
+name = "pigeon-spike-probe"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+serde_json = "1.0.154"
+ureq = { version = "3.5.1", default-features = false, features = ["rustls"] }
