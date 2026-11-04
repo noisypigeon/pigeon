@@ -198,11 +198,7 @@ fn module_info(dir: &Path) -> ModuleInfo {
 /// reference; see `.claude/decisions/2026-11-03-runtime-infra-agnostic-shared-modules.md` §3.
 fn modules_root(home: &Path, module: &str) -> PathBuf {
     match module.strip_prefix(AGNOSTIC_PREFIX) {
-        Some(_) => home
-            .parent()
-            .map_or_else(|| home.join(".."), Path::to_path_buf)
-            .join("agnostic")
-            .join("modules"),
+        Some(_) => crate::catalog::agnostic_modules(home),
         None => home.join("modules"),
     }
 }

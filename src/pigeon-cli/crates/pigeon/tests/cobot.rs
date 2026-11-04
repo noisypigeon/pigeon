@@ -40,6 +40,33 @@ fn validate_fails_with_exit_1() {
 }
 
 #[test]
+fn capabilities_print_json_and_reject_invalid_files() {
+    let root = TempDir::new().expect("tempdir");
+    let caps = root.path().join("catalog/x/capabilities.yaml");
+    std::fs::create_dir_all(caps.parent().expect("parent")).expect("mkdir");
+    std::fs::write(
+        &caps,
+        "description: X.\ncapabilities:\n  dns.write: { permissions: [DNS Write], scope: zone }\n",
+    )
+    .expect("write");
+    let out = cobot()
+        .args(["capabilities", "--root"])
+        .arg(root.path())
+        .assert()
+        .code(0);
+    let json: serde_json::Value = serde_json::from_slice(&out.get_output().stdout).expect("json");
+    assert_eq!(json[0]["provider"], "x");
+    assert_eq!(json[0]["capabilities"]["dns.write"]["scope"], "zone");
+    std::fs::write(&caps, "description: X.\ncapabilities: {}\n").expect("write");
+    cobot()
+        .args(["capabilities", "--root"])
+        .arg(root.path())
+        .assert()
+        .code(1)
+        .stderr(predicate::str::contains("declares no capabilities"));
+}
+
+#[test]
 fn plan_refuses_without_a_passphrase() {
     let root = TempDir::new().expect("tempdir");
     cobot()

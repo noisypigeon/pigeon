@@ -25,6 +25,7 @@ pub fn run(command: CobotCommand) -> i32 {
         CobotCommand::Apply(args) => apply(&args),
         CobotCommand::Lock(args) => cobot::lock(&args.root, &args.providers_dir())
             .map(|path| println!("cobot: wrote {}", path.display())),
+        CobotCommand::Capabilities(args) => capabilities(&args.root),
         CobotCommand::Secrets(SecretsCommand::Set(args)) => secrets_set(&args),
         CobotCommand::Secrets(SecretsCommand::Check(args)) => secrets_check(&args),
         CobotCommand::Sites(SitesCommand::Build(args)) => sites_build(&args),
@@ -43,6 +44,19 @@ pub fn run(command: CobotCommand) -> i32 {
             INVALID
         }
     }
+}
+
+fn capabilities(root: &std::path::Path) -> Result<(), cobot::Error> {
+    let (catalogs, problems) = cobot::catalog::capabilities(root);
+    if !problems.is_empty() {
+        return Err(cobot::Error::Invalid(problems));
+    }
+    let json = serde_json::to_string_pretty(&catalogs).map_err(|e| cobot::Error::Io {
+        path: root.to_path_buf(),
+        message: e.to_string(),
+    })?;
+    println!("{json}");
+    Ok(())
 }
 
 fn render(args: &CobotRun) -> Result<(), cobot::Error> {
