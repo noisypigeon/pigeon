@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.22 (2026-11-04)
+
+- feat(cobot): state in R2 ([#100](https://github.com/noisypigeon/pigeon/pull/100))
+
 ## v0.1.21 (2026-11-04)
 
 - feat(cobot): credentials requested by capability ([#99](https://github.com/noisypigeon/pigeon/pull/99))
