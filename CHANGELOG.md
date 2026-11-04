@@ -2,6 +2,7 @@
 
 ## 2026-11-04
 
+- feat(tooling): the Cloudflare Containers spike kit ([#98](https://github.com/noisypigeon/pigeon/pull/98))
 - docs(adr): phase 3, the runner spike and engine changes ([#97](https://github.com/noisypigeon/pigeon/pull/97))
 - refactor(infra): infra/pigeon composes the Cloudflare catalog; infra/agnostic retires ([#96](https://github.com/noisypigeon/pigeon/pull/96))
 - feat(catalog): account and d1-database modules, and an optional r2-bucket suffix ([#95](https://github.com/noisypigeon/pigeon/pull/95))
