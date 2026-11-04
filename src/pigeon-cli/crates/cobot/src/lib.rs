@@ -446,7 +446,7 @@ fn runner_credentials(
     c: &config::ConfigUnit,
     env: &mut tofu::Env,
 ) -> Result<(), Error> {
-    let wanted = config::declared_credentials(c);
+    let wanted = config::credential_fields(c);
     if wanted.is_empty() {
         return Ok(());
     }
@@ -467,29 +467,41 @@ fn runner_credentials(
     Ok(())
 }
 
-/// The runner's credentials, from `json`, that `unit` requests as `wanted`; never echoes a value.
+/// From the runner's `json`, exactly the fields `unit` references of each credential it
+/// requests (`wanted`); other credentials and fields are never read. Never echoes a value.
 ///
 /// # Errors
 ///
-/// A message when `json` does not parse or lacks a wanted credential.
+/// A message when `json` is not an object, or a wanted credential or field is missing or not
+/// a string.
 pub fn pick_credentials(
     json: Option<&str>,
-    wanted: &std::collections::BTreeSet<String>,
+    wanted: &BTreeMap<String, std::collections::BTreeSet<String>>,
     unit: &str,
 ) -> Result<BTreeMap<String, BTreeMap<String, String>>, String> {
-    let all: BTreeMap<String, BTreeMap<String, String>> =
+    let all: serde_json::Map<String, serde_json::Value> =
         serde_json::from_str(json.unwrap_or("{}"))
-            .map_err(|_| "must be JSON mapping names to fields of string values".to_string())?;
-    wanted
-        .iter()
-        .map(|name| {
-            all.get(name)
-                .map(|f| (name.clone(), f.clone()))
+            .map_err(|_| "must be a JSON object mapping credential names to fields".to_string())?;
+    let mut out = BTreeMap::new();
+    for (name, fields) in wanted {
+        let entry = all.get(name).ok_or_else(|| {
+            format!("{unit} requests credential `{name}`, which the runner did not supply")
+        })?;
+        let mut picked = BTreeMap::new();
+        for field in fields {
+            let value = entry
+                .get(field)
+                .and_then(serde_json::Value::as_str)
                 .ok_or_else(|| {
-                    format!("{unit} requests credential `{name}`, which the runner did not supply")
-                })
-        })
-        .collect()
+                    format!(
+                        "{unit} needs `{name}.{field}`, which the runner did not supply as a string"
+                    )
+                })?;
+            picked.insert(field.clone(), value.to_string());
+        }
+        out.insert(name.clone(), picked);
+    }
+    Ok(out)
 }
 
 /// Copies a moved unit's state into place while it has none; the plan's note, if moving.

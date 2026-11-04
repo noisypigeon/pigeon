@@ -478,24 +478,47 @@ fn check_credentials(
         }
     }
     let declared = declared_credentials(unit);
+    for (text, name, field) in credential_refs(unit) {
+        if !declared.contains(&name) {
+            add(format!("`{text}` is not in x-cobot.credentials"));
+        } else if !BLOCK.is_match(&field) {
+            add(format!(
+                "`{text}`: the field must be lowercase with underscores"
+            ));
+        }
+    }
+}
+
+/// Every `$credential.<name>.<field>` in a unit's providers and block inputs.
+fn credential_refs(unit: &ConfigUnit) -> Vec<(String, String, String)> {
     let inputs: Vec<Value> = blocks(&unit.schema)
         .into_iter()
         .flat_map(|b| b.inputs.into_values())
         .collect();
-    for text in std::iter::once(&x["providers"])
+    std::iter::once(&x_cobot(&unit.schema)["providers"])
         .chain(&inputs)
         .flat_map(exprs_in)
-    {
-        if let Some(Expr::Credential { name, field }) = parse(text) {
-            if !declared.contains(&name) {
-                add(format!("`{text}` is not in x-cobot.credentials"));
-            } else if !BLOCK.is_match(&field) {
-                add(format!(
-                    "`{text}`: the field must be lowercase with underscores"
-                ));
-            }
+        .filter_map(|text| match parse(text) {
+            Some(Expr::Credential { name, field }) => Some((text.to_string(), name, field)),
+            _ => None,
+        })
+        .collect()
+}
+
+/// The fields a unit references of each credential it requests; one requested but never
+/// referenced has none.
+#[must_use]
+pub fn credential_fields(unit: &ConfigUnit) -> BTreeMap<String, BTreeSet<String>> {
+    let mut out: BTreeMap<String, BTreeSet<String>> = declared_credentials(unit)
+        .into_iter()
+        .map(|n| (n, BTreeSet::new()))
+        .collect();
+    for (_, name, field) in credential_refs(unit) {
+        if let Some(fields) = out.get_mut(&name) {
+            fields.insert(field);
         }
     }
+    out
 }
 
 fn check_apex(unit: &ConfigUnit, problems: &mut Vec<(String, String)>) {

@@ -1,7 +1,7 @@
 //! Credentials requested by capability; see the phase 3 amendment of
 //! `.claude/decisions/2026-11-04-development-platform-instance-separation.md`.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::Path;
 
@@ -138,19 +138,47 @@ fn bad_requests_and_references_fail() {
 }
 
 #[test]
-fn the_runner_supplies_only_what_a_unit_requests() {
-    let wanted = BTreeSet::from(["dns".to_string()]);
-    let json = r#"{ "dns": { "api_token": "t0ken" }, "other": { "api_token": "n0pe" } }"#;
+fn the_runner_supplies_only_the_fields_a_unit_references() {
+    let wanted = BTreeMap::from([("dns".to_string(), BTreeSet::from(["api_token".to_string()]))]);
+    let json =
+        r#"{ "dns": { "api_token": "t0ken", "extra": "n0t-needed" }, "other": { "key": 42 } }"#;
     let got = cobot::pick_credentials(Some(json), &wanted, UNIT).expect("picked");
-    assert_eq!(got.len(), 1);
+    assert_eq!(
+        got.len(),
+        1,
+        "another unit's malformed credential is never read"
+    );
+    assert_eq!(
+        got["dns"].len(),
+        1,
+        "an unreferenced field is never forwarded"
+    );
     assert_eq!(got["dns"]["api_token"], "t0ken");
 
-    let missing = cobot::pick_credentials(Some("{}"), &wanted, UNIT).expect_err("missing");
-    assert!(missing.contains("credential `dns`"), "{missing}");
-    let bad = cobot::pick_credentials(Some("{ \"dns\": \"t0ken\" }"), &wanted, UNIT)
-        .expect_err("bad shape");
-    assert!(!bad.contains("t0ken"), "never echoes a value: {bad}");
+    for (json, want) in [
+        ("{}", "credential `dns`"),
+        (r#"{ "dns": {} }"#, "`dns.api_token`"),
+        (r#"{ "dns": { "api_token": 7 } }"#, "`dns.api_token`"),
+        (r#"{ "dns": "t0ken" }"#, "`dns.api_token`"),
+        ("[\"t0ken\"]", "JSON object"),
+    ] {
+        let err = cobot::pick_credentials(Some(json), &wanted, UNIT).expect_err(json);
+        assert!(err.contains(want), "want `{want}` in {err}");
+        assert!(!err.contains("t0ken"), "never echoes a value: {err}");
+    }
     assert!(cobot::pick_credentials(None, &wanted, UNIT).is_err());
+}
+
+#[test]
+fn the_fields_a_unit_references_are_collected() {
+    let repo = repo();
+    let root = repo.path();
+    let units = cobot::select(root, &root.join(".config"), &[UNIT.into()]).expect("valid");
+    let c = units[0].config.as_ref().expect("config unit");
+    assert_eq!(
+        cobot::config::credential_fields(c),
+        BTreeMap::from([("dns".to_string(), BTreeSet::from(["api_token".to_string()]))])
+    );
 }
 
 #[test]
