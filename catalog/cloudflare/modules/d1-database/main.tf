@@ -13,7 +13,7 @@ resource "cloudflare_d1_database" "this" {
   name                  = var.name
   primary_location_hint = var.location
 
-  # A creation-only hint the API never returns.
+  # The hint only places a new database; a later change never replaces it.
   lifecycle {
     ignore_changes = [primary_location_hint]
   }
