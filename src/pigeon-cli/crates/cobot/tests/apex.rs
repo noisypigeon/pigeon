@@ -1336,7 +1336,7 @@ fn a_static_site_takes_its_template_features_and_needs_its_settings() {
     write(
         root,
         &format!("{BLOG}/config.yaml"),
-        "static_site:\n  template: { version: 1.0.0 }\n",
+        "static_site:\n  template: { name: blog, version: 1.0.0 }\n",
     );
     let sites = cobot::sites::find(root, &[]).expect("find");
     let err = cobot::sites::build(root, &sites)
