@@ -1,0 +1,31 @@
+# The platform's control plane; see .claude/decisions/2026-11-05-runtime-control-plane-worker.md
+# and .claude/decisions/2026-11-05-development-changes-through-pigeon-mcp.md.
+description: pigeon's control plane, its MCP server, and CI for changes.
+name: pigeon-control
+entry: { crate: src/pigeon-cli/crates/backplane, features: [worker] }
+compatibility_date: "2026-10-01"
+# Until it has a custom domain; Access protects the workers.dev hostname.
+workers_dev: true
+durable_objects:
+  classes: [Instance, ChangeRun, Checker]
+  migrations:
+    - { tag: v1, new_sqlite_classes: [Instance, ChangeRun, Checker] }
+containers:
+  - class: Checker
+    image: { dockerfile: src/pigeon-cli/Dockerfile, target: ci, args: { FEATURES: backplane } }
+    instance_type: standard-4
+    max_instances: 4
+bindings:
+  d1:
+    DB: { name: pigeon, id: $output.infra/pigeon.database_id, migrations: src/pigeon-cli/crates/backplane/migrations }
+  r2:
+    CI_LOGS: "$output.infra/pigeon.bucket_names[pigeon-ci]"
+  queues:
+    consumers: [ { queue: pigeon-ci-events, max_batch_size: 10 } ]
+  vars:
+    INSTANCE: pigeon
+    NAMESPACE: pigeon
+    REPO: pigeon
+    # change/1 to change/11 were pushed by hand, before the control plane numbered changes.
+    CHANGE_FLOOR: "12"
+secrets: [BACKPLANE_TOKEN, ARTIFACTS_TOKEN, ACCESS_TEAM, ACCESS_AUD]

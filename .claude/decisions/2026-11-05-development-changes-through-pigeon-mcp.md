@@ -134,3 +134,32 @@ Each step is pushed to Artifacts `main` and mirrored. Until step 3 lands, the ow
 - `.config/policies/change.yaml` (§3) is merged on Artifacts without waiting for GitHub to release a sentinel that knows `target: change`. Checks before a merge run sentinel from source, so nothing here depends on the released image. Until the owner mirrors, nothing runs on GitHub at all. On the first mirror after it, `lifecycle.yml`'s `sentinel` job, which runs the released image, is red once. The same push releases the new sentinel, and the next mirror is green. The policy holds the branch, scope and size rules; the title, ADR and changelog rules stay in `pull-request.yaml`, which runs on every change too, because `mise run sentinel-change` passes its fields.
 - `change.scope` (§4) finds a crate's dependants from the workspace's `Cargo.toml` files instead of `cargo tree`, so scoping a change needs no build and no toolchain.
 - A change to `.config/policies/` also runs the tests that check this repository's own policies (the `sentinel`, `pigeon` and `pigeon-backplane` crates' tests), not `policy.check` alone. The first scoped run of the change policy found that gap: its new policy changed counts those tests pin.
+
+### 2026-11-05: CI runs in a Durable Object per change and Container jobs, not Workflows and Sandbox
+
+Built as phase E, in Rust: workers-rs 0.8.7 has no Workflows API, and the phase 3 spike showed every other binding works from Rust.
+
+- **The pieces (§4, §5):**
+  - `ChangeRun`, a Durable Object per change, holds `backplane::changes` in its storage, in place of the `ci` Workflow. Requests apply events and return at once. Its alarm does the slow work: minting a read token, starting and stopping job Containers, polling running jobs every 20 s, and mirroring the change to D1's `changes` and `jobs`.
+  - `Checker` is one job's Container, from the Dockerfile's `ci` stage, in place of Sandbox. It holds only the signing key; each job's read token arrives with its request over the signed link. `pigeon backplane jobs` serves it.
+  - A queue consumer takes the Artifacts push events, through an event subscription delivering to the queue. `change.pushed` is the backstop: it takes the SHA, and the bound job refuses one that isn't the branch's head.
+  - The MCP server is on `/mcp`, behind Access, for every catalog operation. An apply-effect operation (approving a plan or a head, closing a change) needs a person: a service token proposes and pushes, and never approves.
+- **The bound job is §3's check, and the only one that counts.** It runs this repository's own policies on the pushed tree: the change policy with the *approved* scope (no longer the commit trailers) and the pull-request policy, with the plan as the body. So a plan cites its ADR. It then runs `change.scope` on the changed paths. The jobs it names run concurrently, one Container each.
+- **`change.approve-plan` is `change.authorize`**, since catalog names are lowercase letters only.
+- **Caching, for now, is the `ci` image's pre-built dependencies only.** Sandbox snapshots and an sccache bucket are deferred: either would put a writable cache inside change code.
+- **Logs.** Each finished job's log tail is in R2 under `ci/<job id>.log`. A failed job's last 8 KiB and its violations show in `change.status`.
+- **Change numbers start at `CHANGE_FLOOR`.** The changes pushed by hand used 1 to 11.
+- **The owner's first deploy**, from pigeon with a token holding `pigeon cobot workers permissions`:
+  1. Apply `infra/pigeon` for the new `pigeon-ci` bucket (`infra.plan`, then `infra.apply`).
+  2. `wrangler queues create pigeon-ci-events`, then subscribe it to the `pigeon` namespace's `cf.artifacts.repo.pushed` events (dashboard or API: wrangler can't filter by namespace yet).
+  3. `pigeon cobot workers plan --root . --state <state>`, then `deploy --plan ID`. That migrates D1, builds the `ci` image (all the workspace's dependencies, so it takes a while) and deploys `pigeon-control`.
+  4. `pigeon cobot workers secrets put pigeon-control KEY` for each secret:
+     - `BACKPLANE_TOKEN`: 32 or more random characters;
+     - `ARTIFACTS_TOKEN`: an API token with only Artifacts Read and Edit on the account;
+     - `ACCESS_TEAM` and `ACCESS_AUD`: the Access team's name, and the application's audience tag.
+  5. Put an Access application on the Worker's `workers.dev` hostname, allowing the owner and a service token for the agent. Add `https://<that host>/mcp` to the agent session as an MCP server, with the service token's headers.
+- **The first changes through it:**
+  - a docs-only change reaches `checked` with no job but the bound one;
+  - a `catalog/` change runs only `infra.validate` and the catalog tests;
+  - a push outside the scope ends `refused`;
+  - the agent's `change.approve` is refused, and the owner's merges.

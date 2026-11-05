@@ -4,7 +4,7 @@
 use cobot::worker::{DispatchError, JobsLaunch};
 use worker::{DurableObject, Env, Method, Request, Response, Result, State, durable_object};
 
-use super::platform::store_secret;
+use super::platform::secret;
 
 /// One job's Container (its name is the job's ID); reached only by `Change`.
 #[durable_object]
@@ -31,7 +31,7 @@ impl DurableObject for Checker {
         match (req.method(), segments.as_slice()) {
             (Method::Post, ["start"]) => {
                 let body = req.bytes().await?;
-                let token = store_secret(&self.env, cobot::worker::TOKEN_VAR).await?;
+                let token = secret(&self.env, cobot::worker::TOKEN_VAR)?;
                 if let Err(e) = cobot::worker::start_jobs(
                     &container,
                     &JobsLaunch {
@@ -52,7 +52,7 @@ impl DurableObject for Checker {
                 if !container.running() {
                     return Response::error("the job's Container is not running", 404);
                 }
-                let token = store_secret(&self.env, cobot::worker::TOKEN_VAR).await?;
+                let token = secret(&self.env, cobot::worker::TOKEN_VAR)?;
                 match cobot::worker::call(
                     &container,
                     &token,

@@ -70,6 +70,9 @@ pub struct Spec {
     /// Worker secrets, by name only; `secrets put` sets each.
     #[serde(default)]
     pub secrets: Vec<String>,
+    /// Whether it also serves its `workers.dev` hostname, e.g. until it has a route.
+    #[serde(default)]
+    pub workers_dev: bool,
 }
 
 /// The crate a Worker is built from, with `worker-build`.
@@ -220,15 +223,24 @@ pub struct Found {
     pub spec: Spec,
 }
 
-/// A `$output.<unit>.<name>[<index>]` reference.
+/// An item of a list output.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Item {
+    /// By position.
+    At(usize),
+    /// The one equal to this, or this, `-` and one more segment, as a suffixed name is.
+    Named(String),
+}
+
+/// A `$output.<unit>.<name>[<item>]` reference.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Reference {
     /// The unit.
     pub unit: String,
     /// The output.
     pub output: String,
-    /// An index into a list output.
-    pub index: Option<usize>,
+    /// An item of a list output.
+    pub index: Option<Item>,
 }
 
 /// Parses a `$output` reference.
@@ -237,7 +249,21 @@ pub fn reference(s: &str) -> Option<Reference> {
     let rest = s.strip_prefix("$output.")?;
     let (unit, last) = rest.rsplit_once('.')?;
     let (output, index) = match last.split_once('[') {
-        Some((o, i)) => (o, Some(i.strip_suffix(']')?.parse().ok()?)),
+        Some((o, i)) => {
+            let i = i.strip_suffix(']')?;
+            let item = match i.parse() {
+                Ok(n) => Item::At(n),
+                Err(_)
+                    if !i.is_empty()
+                        && i.bytes()
+                            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-') =>
+                {
+                    Item::Named(i.to_string())
+                }
+                Err(_) => return None,
+            };
+            (o, Some(item))
+        }
         None => (last, None),
     };
     let word = |w: &str| {
@@ -480,6 +506,15 @@ pub fn referenced_units(spec: &Spec) -> BTreeSet<String> {
         .collect()
 }
 
+/// Whether `s` is `name`, or `name-<suffix>` with a suffix of one segment, as a bucket's
+/// random suffix is.
+fn named(s: &str, name: &str) -> bool {
+    s == name
+        || s.strip_prefix(name)
+            .and_then(|t| t.strip_prefix('-'))
+            .is_some_and(|t| !t.is_empty() && !t.contains('-'))
+}
+
 /// Resolves a reference against `outputs`, each unit's outputs by name.
 ///
 /// # Errors
@@ -493,7 +528,20 @@ pub fn resolve(r: &str, outputs: &BTreeMap<String, Map<String, Value>>) -> Resul
         .and_then(|o| o.get(&x.output))
         .ok_or_else(|| format!("`{r}`: `{}` has no output `{}` yet", x.unit, x.output))?;
     let v = match x.index {
-        Some(i) => v.get(i).ok_or_else(|| format!("`{r}`: no item {i}"))?,
+        Some(Item::At(i)) => v.get(i).ok_or_else(|| format!("`{r}`: no item {i}"))?,
+        Some(Item::Named(n)) => {
+            let found: Vec<&Value> = v
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter(|x| x.as_str().is_some_and(|s| named(s, &n)))
+                .collect();
+            match found.as_slice() {
+                [one] => *one,
+                [] => return Err(format!("`{r}`: no item named `{n}`")),
+                _ => return Err(format!("`{r}`: more than one item named `{n}`")),
+            }
+        }
         None => v,
     };
     v.as_str()
@@ -555,7 +603,7 @@ fn render_script(spec: &Spec) -> Value {
         "compatibility_date": spec.compatibility_date,
         "build": { "command": build, "cwd": format!("{UP}/{}", spec.entry.krate) },
         "observability": { "enabled": true },
-        "workers_dev": false,
+        "workers_dev": spec.workers_dev,
     });
     if !spec.routes.is_empty() {
         out["routes"] = spec

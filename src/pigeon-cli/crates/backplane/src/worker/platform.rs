@@ -42,8 +42,8 @@ impl Settings {
                 .ok()
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(1),
-            team: var("ACCESS_TEAM")?,
-            aud: env.secret("ACCESS_AUD")?.to_string(),
+            team: secret(env, "ACCESS_TEAM")?,
+            aud: secret(env, "ACCESS_AUD")?,
         })
     }
 }
@@ -54,16 +54,17 @@ pub fn now() -> u64 {
     Date::now().as_millis() / 1000
 }
 
-/// A Secrets Store secret's value.
+/// A Worker secret's value.
 ///
 /// # Errors
 ///
-/// When the binding is missing or empty.
-pub async fn store_secret(env: &Env, binding: &str) -> Result<String> {
-    env.secret_store(binding)?
-        .get()
-        .await?
-        .ok_or_else(|| format!("secret `{binding}` is empty").into())
+/// When the secret is missing or empty.
+pub fn secret(env: &Env, name: &str) -> Result<String> {
+    let v = env.secret(name)?.to_string();
+    if v.is_empty() {
+        return Err(format!("secret `{name}` is empty").into());
+    }
+    Ok(v)
 }
 
 /// A JSON request.

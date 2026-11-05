@@ -3,3 +3,4 @@ database: { name: pigeon }
 buckets:
   - { name: pigeon-state }
   - { name: pigeon-plans }
+  - { name: pigeon-ci }

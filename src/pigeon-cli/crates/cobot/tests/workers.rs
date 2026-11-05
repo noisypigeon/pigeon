@@ -115,9 +115,27 @@ fn references_resolve_and_a_missing_output_is_named() {
     assert_eq!(
         workers::reference("$output.infra/pigeon.bucket_names[1]")
             .map(|r| (r.unit, r.output, r.index)),
-        Some(("infra/pigeon".into(), "bucket_names".into(), Some(1)))
+        Some((
+            "infra/pigeon".into(),
+            "bucket_names".into(),
+            Some(workers::Item::At(1))
+        ))
     );
     assert_eq!(workers::reference("$output.pigeon.x"), None);
+    let mut suffixed = outputs();
+    suffixed.get_mut("infra/pigeon").expect("unit").insert(
+        "bucket_names".into(),
+        json!(["pigeon-ci-x1", "pigeon-ci-extra-y2", "pigeon-state-z3"]),
+    );
+    assert_eq!(
+        workers::resolve("$output.infra/pigeon.bucket_names[pigeon-ci]", &suffixed).as_deref(),
+        Ok("pigeon-ci-x1"),
+        "a name picks its suffixed item, not a longer name's"
+    );
+    assert!(
+        workers::resolve("$output.infra/pigeon.bucket_names[pigeon-plans]", &suffixed).is_err()
+    );
+    assert_eq!(workers::reference("$output.infra/pigeon.x[Bad]"), None);
     assert_eq!(
         workers::resolve("$output.infra/pigeon.bucket_names[1]", &outputs()).as_deref(),
         Ok("pigeon-plans")

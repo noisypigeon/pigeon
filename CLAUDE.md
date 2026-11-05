@@ -175,6 +175,13 @@ belong in the ADR, never in the file.
   it's pushed (`.config/policies/change.yaml`). Git reads trailers from the
   message's last paragraph only, so they share it with `Co-Authored-By`, with
   no blank line between.
+- `pigeon backplane jobs --listen ADDR`: a job Container's server, signed under
+  `BACKPLANE_TOKEN`; the control plane's `Checker` runs it. The Worker
+  (`infra/pigeon/workers/control/`) serves MCP on `/mcp` behind Access: tools
+  `change_propose`, `change_status`, `change_pushed`, `ci_rerun`, and the
+  owner's `change_authorize`, `change_approve` and `change_close`. A plan
+  cites its ADR, because the bound job checks the pull-request policy with
+  the plan as the body.
 - `pigeon cobot workers validate|permissions|render|plan|deploy|status|secrets put|teardown`:
   the platform's Workers, from `infra/<unit>/workers/<name>/worker.yaml`, with
   wrangler; `deploy --plan ID` only, from `plan --state …`.

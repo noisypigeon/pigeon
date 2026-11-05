@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 use worker::{DurableObject, Env, Method, Request, Response, Result, State, durable_object};
 
-use super::platform::{self, Settings, json_request, now, store_secret};
+use super::platform::{self, Settings, json_request, now, secret};
 use crate::changes::{Change, Effect, Event, JobStatus};
 use crate::control::{self, Outcome, Report};
 
@@ -104,7 +104,7 @@ impl ChangeRun {
     /// A read token and the remote, for one job.
     async fn credentials(&self) -> Result<(String, String)> {
         let s = Settings::from(&self.env)?;
-        let api = store_secret(&self.env, "ARTIFACTS_TOKEN").await?;
+        let api = secret(&self.env, "ARTIFACTS_TOKEN")?;
         let account = platform::account(&api).await?;
         let base = format!("/accounts/{account}/artifacts/namespaces/{}", s.namespace);
         let mut remote: Option<String> = self.state.storage().get(REMOTE).await?;
