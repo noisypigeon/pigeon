@@ -36,7 +36,8 @@ pub fn run_with(
     match op.name {
         "instance.show" => Ok(respond(json!(instance), Vec::new())),
         "architecture.describe" => architecture_describe(instance).map(|(r, v)| respond(r, v)),
-        "policy.check" => policy_check(instance).map(|(r, v)| respond(r, v)),
+        "policy.check" => policy_check(instance, &request.args).map(|(r, v)| respond(r, v)),
+        "sites.build" => sites_build(instance, &request.args).map(|r| respond(r, Vec::new())),
         "infra.validate" => infra_validate(instance).map(|(r, v)| respond(r, v)),
         "infra.plan" => infra_plan(instance, &request.args, &var).map(|r| respond(r, Vec::new())),
         "infra.apply" => infra_apply(instance, &request.args, &var).map(|r| respond(r, Vec::new())),
@@ -59,19 +60,75 @@ fn architecture_describe(instance: &Instance) -> Result<(Value, Vec<String>), Er
     ))
 }
 
-fn policy_check(instance: &Instance) -> Result<(Value, Vec<String>), Error> {
+/// The pull request `args` describe, if they name any of its fields.
+fn pull_request(args: &Map<String, Value>) -> Option<sentinel::PullRequest> {
+    let field = |k: &str| match args.get(k)? {
+        Value::String(s) => Some(s.clone()),
+        other => Some(other.to_string()),
+    };
+    let pr = sentinel::PullRequest {
+        title: field("title"),
+        body: field("body"),
+        number: field("number"),
+        files: field("files"),
+    };
+    (pr.title.is_some() || pr.body.is_some() || pr.number.is_some() || pr.files.is_some())
+        .then_some(pr)
+}
+
+fn policy_check(
+    instance: &Instance,
+    args: &Map<String, Value>,
+) -> Result<(Value, Vec<String>), Error> {
     let engine = |e: sentinel::Error| Error::Engine {
         engine: Engine::Sentinel,
         message: e.to_string(),
     };
     let policies =
         sentinel::load_dir(&instance.resolve(&instance.paths.policies)).map_err(engine)?;
-    let report = sentinel::check(&policies, &instance.root, None).map_err(engine)?;
+    let pr = pull_request(args);
+    let report = sentinel::check(&policies, &instance.root, pr.as_ref()).map_err(engine)?;
     let violations = report.violations.iter().map(ToString::to_string).collect();
     Ok((
         json!({ "ran": report.ran, "skipped": report.skipped }),
         violations,
     ))
+}
+
+/// Builds the named sites, or every site, with `architecture.describe`'s result as their
+/// `data/architecture.json`, per the architecture-site ADR §3.
+fn sites_build(instance: &Instance, args: &Map<String, Value>) -> Result<Value, Error> {
+    let cobot = |e: cobot::Error| Error::Engine {
+        engine: Engine::Cobot,
+        message: e.to_string(),
+    };
+    let wanted: Vec<String> = args
+        .get("sites")
+        .and_then(Value::as_array)
+        .map(|a| {
+            a.iter()
+                .filter_map(Value::as_str)
+                .map(str::to_string)
+                .collect()
+        })
+        .unwrap_or_default();
+    let sites = cobot::sites::find(&instance.root, &wanted).map_err(cobot)?;
+    if sites.is_empty() {
+        return Ok(json!({ "sites": [] }));
+    }
+    let (architecture, _) = architecture_describe(instance)?;
+    let data = std::collections::BTreeMap::from([("architecture".to_string(), architecture)]);
+    let built = cobot::sites::build_with(&instance.root, &sites, &data).map_err(cobot)?;
+    Ok(json!({
+        "sites": built
+            .iter()
+            .map(|b| json!({
+                "unit": b.site.unit,
+                "template": b.site.tag(),
+                "features": b.features,
+            }))
+            .collect::<Vec<_>>(),
+    }))
 }
 
 fn infra_validate(instance: &Instance) -> Result<(Value, Vec<String>), Error> {

@@ -142,6 +142,8 @@ belong in the ADR, never in the file.
   release JSON.
 - `pigeon backplane instance|engines|operations|run <op>` (`--json` for the
   wire form); `mise run backplane` validates `.config/instance.yaml`.
-- `mise run sentinel`: `pigeon sentinel check` against `.config/policies/`.
+- `mise run sentinel`: `pigeon backplane run policy.check` against
+  `.config/policies/`; `pigeon backplane run sites.build` builds every site.
 - `PR_TITLE='…' PR_BODY='…' PR_NUMBER=N PR_FILES="$(git diff --name-only main...)" mise run sentinel-pr`:
-  adds the pull-request policy.
+  adds the pull-request policy, through `policy.check`'s `title`, `body`,
+  `number` and `files` arguments.

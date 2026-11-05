@@ -190,3 +190,82 @@ fn the_response_has_its_wire_shape() {
     assert_eq!(keys, ["ok", "operation", "result", "violations"]);
     assert_eq!(value["result"]["name"], "test");
 }
+
+const PR_POLICY: &str = "description: Titles start with feat.\ntarget: pull-request\nrules:\n  - field: { name: title, matches: '^feat' }\n";
+
+fn with(operation: &str, args: serde_json::Value) -> Request {
+    let serde_json::Value::Object(args) = args else {
+        panic!("args are an object");
+    };
+    Request {
+        operation: operation.into(),
+        args,
+    }
+}
+
+#[test]
+fn policy_check_runs_the_pull_request_policy_only_when_given_its_fields() {
+    let root = fixture(MANIFEST, "ok\n");
+    fs::write(root.path().join(".config/policies/pr.yaml"), PR_POLICY).expect("write");
+    let instance = Instance::load(root.path()).expect("valid");
+
+    let plain = run(&instance, &request("policy.check")).expect("runs");
+    assert!(plain.ok, "{:?}", plain.violations);
+    assert_eq!(
+        plain.result["skipped"], 1,
+        "no pull request, no pull-request policy"
+    );
+
+    let good = run(
+        &instance,
+        &with(
+            "policy.check",
+            serde_json::json!({ "title": "feat: x", "body": "b", "number": 7, "files": "f.md" }),
+        ),
+    )
+    .expect("runs");
+    assert!(good.ok, "{:?}", good.violations);
+    assert_eq!(good.result["skipped"], 0);
+
+    let bad = run(
+        &instance,
+        &with(
+            "policy.check",
+            serde_json::json!({ "title": "chore: x", "body": "b", "number": "7", "files": "f.md" }),
+        ),
+    )
+    .expect("runs");
+    assert!(!bad.ok);
+    assert!(
+        bad.violations.iter().any(|v| v.contains("pr")),
+        "{:?}",
+        bad.violations
+    );
+
+    assert!(matches!(
+        run(
+            &instance,
+            &with(
+                "policy.check",
+                serde_json::json!({ "body": { "not": "text" } })
+            )
+        ),
+        Err(Error::Invalid(_))
+    ));
+}
+
+#[test]
+fn sites_build_with_no_sites_builds_nothing() {
+    let root = fixture(MANIFEST, "ok\n");
+    let instance = Instance::load(root.path()).expect("valid");
+    let response = run(&instance, &request("sites.build")).expect("runs");
+    assert!(response.ok, "{:?}", response.violations);
+    assert_eq!(response.result["sites"], serde_json::json!([]));
+    assert!(matches!(
+        run(
+            &instance,
+            &with("sites.build", serde_json::json!({ "sites": "blog" }))
+        ),
+        Err(Error::Invalid(_))
+    ));
+}

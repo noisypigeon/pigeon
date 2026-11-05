@@ -87,13 +87,19 @@ const CATALOG: &[Operation] = &[
         name: "policy.check",
         engine: Engine::Sentinel,
         effect: Effect::Read,
-        summary: "Check the instance against its policies",
+        summary: "Check the instance against its policies (args: title?, body?, number?, files?, which add the pull-request policy)",
     },
     Operation {
         name: "infra.validate",
         engine: Engine::Cobot,
         effect: Effect::Read,
         summary: "Validate every infrastructure and workload unit",
+    },
+    Operation {
+        name: "sites.build",
+        engine: Engine::Cobot,
+        effect: Effect::Read,
+        summary: "Build static sites into the work directory with the instance's architecture as data; publishes nothing (args: sites?)",
     },
     Operation {
         name: "infra.plan",
@@ -112,6 +118,13 @@ const CATALOG: &[Operation] = &[
 /// The arguments an operation takes: each name, and whether it is required.
 fn arguments(name: &str) -> &'static [(&'static str, bool)] {
     match name {
+        "policy.check" => &[
+            ("title", false),
+            ("body", false),
+            ("number", false),
+            ("files", false),
+        ],
+        "sites.build" => &[("sites", false)],
         "infra.plan" => &[("state", true), ("units", false)],
         "infra.apply" => &[("state", true), ("plan", true)],
         _ => &[],
@@ -176,7 +189,10 @@ pub fn validate(request: &Request) -> Result<&'static Operation, Error> {
     for (name, value) in &request.args {
         let ok = match name.as_str() {
             "state" | "plan" => value.is_string(),
-            "units" => value
+            "title" | "body" | "number" | "files" => {
+                value.is_string() || value.is_number() || value.is_boolean()
+            }
+            "units" | "sites" => value
                 .as_array()
                 .is_some_and(|a| a.iter().all(Value::is_string)),
             _ => true,
@@ -184,10 +200,10 @@ pub fn validate(request: &Request) -> Result<&'static Operation, Error> {
         if !ok {
             problems.push(format!(
                 "argument `{name}` must be {}",
-                if name == "units" {
-                    "a list of strings"
-                } else {
-                    "a string"
+                match name.as_str() {
+                    "units" | "sites" => "a list of strings",
+                    "state" | "plan" => "a string",
+                    _ => "text",
                 }
             ));
         }
