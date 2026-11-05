@@ -12,4 +12,9 @@ resource "cloudflare_d1_database" "this" {
   account_id            = var.account_id
   name                  = var.name
   primary_location_hint = var.location
+
+  # The hint only places a new database; a later change never replaces it.
+  lifecycle {
+    ignore_changes = [primary_location_hint]
+  }
 }
