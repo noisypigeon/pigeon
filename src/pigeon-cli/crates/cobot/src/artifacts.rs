@@ -101,7 +101,7 @@ impl<'a> Client<'a> {
             return Ok(false);
         }
         self.api
-            .post(&self.namespaces(), &json!({ "name": ns }))
+            .post(&self.namespaces(), &json!({ "namespace": ns }))
             .map(|_| true)
     }
 
@@ -122,8 +122,14 @@ impl<'a> Client<'a> {
     /// # Errors
     ///
     /// A message naming the call that failed.
-    pub fn create(&self, ns: &str, name: &str, description: Option<&str>) -> Result<Repo, String> {
-        let mut body = json!({ "name": name });
+    pub fn create(
+        &self,
+        ns: &str,
+        name: &str,
+        branch: &str,
+        description: Option<&str>,
+    ) -> Result<Repo, String> {
+        let mut body = json!({ "name": name, "default_branch": branch });
         if let Some(d) = description {
             body["description"] = json!(d);
         }
@@ -137,9 +143,13 @@ impl<'a> Client<'a> {
     ///
     /// A message naming the call that failed.
     pub fn import(&self, ns: &str, name: &str, url: &str, branch: &str) -> Result<Repo, String> {
-        let v = self.api.post(
+        let v = self.api.post_first(
             &format!("{}/{name}/import", self.repos(ns)),
-            &json!({ "url": url, "branch": branch }),
+            &[
+                json!({ "source": { "url": url, "branch": branch } }),
+                json!({ "source": { "url": url } }),
+                json!({ "url": url }),
+            ],
         )?;
         self.repo(ns, name)?.map_or_else(|| repo_of(&v, name), Ok)
     }
@@ -150,9 +160,12 @@ impl<'a> Client<'a> {
     ///
     /// A message naming the call that failed; never the token.
     pub fn token(&self, ns: &str, name: &str, scope: Scope) -> Result<String, String> {
-        let v = self.api.post(
+        let v = self.api.post_first(
             &format!("{}/{name}/tokens", self.repos(ns)),
-            &json!({ "scope": scope.word(), "ttl": TOKEN_TTL }),
+            &[
+                json!({ "scope": scope.word(), "ttl": TOKEN_TTL }),
+                json!({ "scope": scope.word() }),
+            ],
         )?;
         v.as_str()
             .or_else(|| v["token"].as_str())

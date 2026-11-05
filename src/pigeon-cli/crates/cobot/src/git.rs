@@ -130,7 +130,7 @@ pub fn apply(client: &Client<'_>, instance: &Instance) -> Result<Vec<Applied>, E
             None => (
                 Outcome::Created,
                 client
-                    .create(ns, &d.name, d.description.as_deref())
+                    .create(ns, &d.name, &d.branch, d.description.as_deref())
                     .map_err(api_error)?,
             ),
         };

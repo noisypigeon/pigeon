@@ -76,6 +76,19 @@ impl Api {
             .and_then(|(status, b)| ok(status, &b, "POST", path))
     }
 
+    /// `POST path` with the first of `bodies` the API accepts, trying the next only on a 400;
+    /// for request shapes an API in beta has not settled.
+    pub(crate) fn post_first(&self, path: &str, bodies: &[Value]) -> Result<Value, String> {
+        let mut last = format!("POST {}: no request body to send", shown(path));
+        for b in bodies {
+            match self.call("POST", path, Some(b))? {
+                (400, body) => last = ok(400, &body, "POST", path).unwrap_err(),
+                (status, body) => return ok(status, &body, "POST", path),
+            }
+        }
+        Err(last)
+    }
+
     /// One call: its status and JSON body. Messages name the method and path, never the token.
     fn call(&self, method: &str, path: &str, body: Option<&Value>) -> Result<(u16, Value), String> {
         let agent: ureq::Agent = ureq::Agent::config_builder()
@@ -83,7 +96,7 @@ impl Api {
             .timeout_global(Some(Duration::from_secs(30)))
             .build()
             .into();
-        let what = path.split('?').next().unwrap_or(path);
+        let what = shown(path);
         let url = format!("{}{path}", self.base);
         let auth = format!("Bearer {}", self.token);
         let sent = match body {
@@ -157,9 +170,21 @@ impl Api {
     }
 }
 
+/// `path` as messages show it: no query, and no account ID.
+fn shown(path: &str) -> String {
+    let path = path.split('?').next().unwrap_or(path);
+    match path.strip_prefix("/accounts/") {
+        Some(rest) => match rest.split_once('/') {
+            Some((_, tail)) => format!("/accounts/…/{tail}"),
+            None => "/accounts/…".into(),
+        },
+        None => path.to_string(),
+    }
+}
+
 /// A successful call's `result`, else a message naming the call and the API's own error messages.
 fn ok(status: u16, body: &Value, method: &str, path: &str) -> Result<Value, String> {
-    let what = path.split('?').next().unwrap_or(path);
+    let what = shown(path);
     if (200..300).contains(&status) && body["success"] == true {
         return Ok(body["result"].clone());
     }
@@ -181,7 +206,18 @@ fn ok(status: u16, body: &Value, method: &str, path: &str) -> Result<Value, Stri
 
 #[cfg(test)]
 mod tests {
-    use super::token;
+    use super::{shown, token};
+
+    #[test]
+    fn messages_never_show_an_account_id() {
+        assert_eq!(
+            shown("/accounts/0123456789abcdef0123456789abcdef/artifacts/namespaces?x=1"),
+            "/accounts/…/artifacts/namespaces"
+        );
+        assert_eq!(shown("/accounts/0123456789abcdef"), "/accounts/…");
+        assert_eq!(shown("/accounts?per_page=2"), "/accounts");
+        assert_eq!(shown("/zones?name=a.com"), "/zones");
+    }
 
     #[test]
     fn the_runner_credential_wins_over_the_environment() {

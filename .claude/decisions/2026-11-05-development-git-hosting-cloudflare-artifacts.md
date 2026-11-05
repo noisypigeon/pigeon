@@ -115,7 +115,7 @@ These take effect from phase 3.
    - `pigeon cobot git apply|status|push|fetch|clone|mirror`.
 
    pigeon's own root `config.yaml` waits for step 2. Until a cobot release knows API kinds, the released image in CI's `plan` and `apply` would treat `repos/pigeon` as an OpenTofu unit, per [`2026-11-03-release-cobot-image-in-workflows.md`](2026-11-03-release-cobot-image-in-workflows.md).
-2. **The owner, locally, from a pigeon checkout,** with `CLOUDFLARE_API_TOKEN` scoped to the platform's account and holding Artifacts Write. First, write the root `config.yaml`:
+2. **The owner, locally, from a pigeon checkout,** with `CLOUDFLARE_API_TOKEN` scoped to the platform's account and holding Artifacts Read and Edit. First, write the root `config.yaml`:
 
    ```yaml
    # pigeon as an instance: its units by kind; see .claude/decisions/2026-11-05-runtime-instance-config-kind-units.md.

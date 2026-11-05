@@ -104,9 +104,11 @@ fn route(f: &mut Fake, method: &str, path: &str, body: &Value) -> (u16, Value) {
         .collect();
     match (method, parts.as_slice()) {
         ("POST", []) => {
-            f.namespaces
-                .push(body["name"].as_str().unwrap_or_default().into());
-            (200, json!({ "name": body["name"] }))
+            let Some(ns) = body["namespace"].as_str() else {
+                return (400, Value::Null);
+            };
+            f.namespaces.push(ns.into());
+            (200, json!({ "namespace": ns }))
         }
         ("GET", [ns]) if f.namespaces.iter().any(|n| n == ns) => (200, json!({ "name": ns })),
         ("POST", [ns, "repos"]) => {
@@ -121,6 +123,9 @@ fn route(f: &mut Fake, method: &str, path: &str, body: &Value) -> (u16, Value) {
             .map_or((404, Value::Null), |r| (200, r.clone())),
         ("POST", [ns, "repos", name, "import"]) => {
             let key = format!("{ns}/{name}");
+            if body.get("source").is_some() {
+                return (400, Value::Null);
+            }
             let Some(repo) = f.repos.get_mut(&key) else {
                 return (404, Value::Null);
             };
