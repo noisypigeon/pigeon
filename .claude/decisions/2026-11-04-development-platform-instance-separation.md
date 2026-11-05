@@ -620,16 +620,33 @@ The mutual TLS amendment's §3, a private CA per instance, applies only where mu
 - `wrangler secrets-store` commands need `--remote`.
 - `wrangler delete` asks before deleting the Container application. Answering no leaves it running and billed.
 
-#### 4. Before phase 4 relies on Containers
+#### 4. Run length, from Cloudflare's documentation
 
-The run length and the Cron Trigger are limits from this ADR's Context, and neither was measured. A short redeploy of the spike measures `/run?minutes=20` and `/d1` after one tick. Their results are appended here before phase 4 dispatches runs to a Container. The spike kit stays until then.
+The run length and the Cron Trigger were not measured. Cloudflare's Containers documentation answers the run length instead, and a single surviving run would not have proven it.
+
+- **No fixed maximum runtime, and no guarantee.**
+  - An instance stops on an inactivity timeout, a rollout, or a host restart "on an irregular cadence".
+  - The Container class's `sleepAfter` defaults to 10 minutes.
+- **A stop sends SIGTERM**, then SIGKILL up to 15 minutes later.
+- **Pending I/O keeps a Durable Object from eviction.** A `monitor()` call holds it for up to 15 minutes, by default from compatibility date 2026-10-01.
+
+So phase 4 designs every run to survive a stop, rather than relying on a run's length:
+
+1. **The dispatching Durable Object holds pending I/O** for the whole run, and sets `sleepAfter` above the longest run.
+2. **On SIGTERM, `serve` takes no new request**, and lets a running `tofu` step finish within the 15-minute grace.
+3. **An interrupted run resumes.**
+   - Stored plans already mark each applied unit (phase 3 §5), so a re-dispatched apply applies only the rest.
+   - A plan is re-run.
+4. **Phase 4's first dispatch PR proves it** before any apply is dispatched:
+   - a run longer than 20 minutes;
+   - a run stopped midway and resumed;
+   - a Cron Trigger's tick.
 
 #### 5. Execution
 
 1. This amendment. It also corrects the runbook's token permissions and teardown.
 2. `feat(backplane)`: signed mode for `serve` (§2).
-3. The owner's short redeploy (§4), and its results appended here.
-4. `chore(tooling)`: remove `tooling/spikes/containers/`.
+3. `chore(tooling)`: remove `tooling/spikes/containers/`.
 
 #### 6. Verification
 
