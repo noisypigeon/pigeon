@@ -24,7 +24,7 @@ engines = [
   "dep:httparse",
   "dep:rustls",
 ]
-worker = ["dep:cobot", "cobot/worker"]
+worker = ["dep:cobot", "cobot/worker", "dep:wasm-bindgen", "dep:worker"]
 
 [dependencies]
 cobot = { workspace = true, optional = true }
@@ -37,8 +37,11 @@ sha2 = { workspace = true, optional = true }
 hmac = { workspace = true, optional = true }
 httparse = { workspace = true, optional = true }
 rustls = { workspace = true, optional = true }
+wasm-bindgen = { workspace = true, optional = true }
+worker = { workspace = true, optional = true }
 
 [dev-dependencies]
+rusqlite.workspace = true
 rcgen.workspace = true
 tempfile.workspace = true
 
