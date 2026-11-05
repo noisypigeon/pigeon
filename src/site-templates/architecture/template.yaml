@@ -1,0 +1,11 @@
+# pigeon's architecture template; see .claude/decisions/2026-11-05-runtime-architecture-site-through-backplane.md §3.
+version: 0.1.0
+description: One diagram of the platform, drawn from architecture.describe.
+license: GPL-3.0-or-later
+zola: 0.23.6
+features:
+  fonts: { default: true, description: "Bunny Fonts, for extra.look.font_family." }
+  commit: { default: true, description: "The build's commit, from SITE_COMMIT_SHA, in the footer." }
+  motion: { default: true, description: "Animated dashes along moving edges; off under prefers-reduced-motion." }
+# A site has no site/; its page is drawn from data/architecture.json.
+content: none

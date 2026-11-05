@@ -1,5 +1,6 @@
-//! The static-site template's config contract holds together; see
-//! `.claude/decisions/2026-11-03-runtime-static-site-config-contract.md`.
+//! Each site template's config contract holds together; see
+//! `.claude/decisions/2026-11-03-runtime-static-site-config-contract.md` and
+//! `.claude/decisions/2026-11-05-runtime-architecture-site-through-backplane.md` §1.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -8,12 +9,32 @@ use serde_json::{Value, json};
 
 const FILES: [&str; 2] = ["config.toml", "static/manifest.json"];
 
+fn templates_dir() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../site-templates")
+}
+
 fn template() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../site-templates/blog")
+    templates_dir().join("blog")
+}
+
+/// Every template: each directory in `src/site-templates/`.
+fn templates() -> Vec<PathBuf> {
+    let mut out: Vec<PathBuf> = fs::read_dir(templates_dir())
+        .expect("src/site-templates")
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.is_dir())
+        .collect();
+    out.sort();
+    out
 }
 
 fn schema() -> Value {
-    let path = template().join("schema.json");
+    schema_of(&template())
+}
+
+fn schema_of(dir: &Path) -> Value {
+    let path = dir.join("schema.json");
     let text = fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
     serde_json::from_str(&text).unwrap_or_else(|e| panic!("{}: {e}", path.display()))
 }
@@ -43,27 +64,88 @@ fn targets(schema: &Value, at: &str, out: &mut Vec<(String, Value)>) {
 
 #[test]
 fn every_setting_has_a_target() {
-    let schema = schema();
-    let props = schema["properties"].as_object().expect("properties");
-    for (name, prop) in props {
-        let list = prop.get("x-site").and_then(Value::as_array);
+    for dir in templates() {
+        let schema = schema_of(&dir);
+        let props = schema["properties"].as_object().expect("properties");
+        for (name, prop) in props {
+            let list = prop.get("x-site").and_then(Value::as_array);
+            assert!(
+                list.is_some_and(|l| !l.is_empty()),
+                "{}/schema.json: `{name}` has no x-site target",
+                dir.display()
+            );
+        }
+    }
+}
+
+#[test]
+fn every_template_names_its_theme_and_scaffold() {
+    let names: Vec<String> = templates()
+        .iter()
+        .map(|d| d.file_name().expect("name").to_string_lossy().into_owned())
+        .collect();
+    assert!(names.contains(&"blog".to_string()) && names.contains(&"architecture".to_string()));
+    for dir in templates() {
+        let name = dir
+            .file_name()
+            .expect("name")
+            .to_string_lossy()
+            .into_owned();
+        let theme = fs::read_to_string(dir.join("theme.toml")).expect("theme.toml");
         assert!(
-            list.is_some_and(|l| !l.is_empty()),
-            "schema.json: `{name}` has no x-site target"
+            theme.contains(&format!("name = \"site-template-{name}\"")),
+            "{name}: theme.toml names another theme"
+        );
+        for f in ["config.toml", "static/manifest.json"] {
+            assert!(
+                dir.join("scaffold").join(f).is_file(),
+                "{name}: scaffold/{f} is missing"
+            );
+        }
+        let manifest: Value = serde_saphyr::from_str(
+            &fs::read_to_string(dir.join("template.yaml")).expect("template.yaml"),
+        )
+        .expect("template.yaml");
+        assert!(
+            manifest["version"].is_string() && manifest["features"].is_object(),
+            "{name}"
         );
     }
 }
 
 #[test]
+fn the_architecture_template_has_no_content_and_no_script() {
+    let dir = templates_dir().join("architecture");
+    let manifest: Value = serde_saphyr::from_str(
+        &fs::read_to_string(dir.join("template.yaml")).expect("template.yaml"),
+    )
+    .expect("template.yaml");
+    assert_eq!(manifest["content"], "none");
+    let index = fs::read_to_string(dir.join("templates/index.html")).expect("index.html");
+    assert!(index.contains("load_data(path=\"data/architecture.json\""));
+    assert!(!index.contains("<script"), "the page needs no JavaScript");
+}
+
+#[test]
 fn targets_name_a_scaffold_file_and_a_key() {
+    for dir in templates() {
+        targets_hold(&dir);
+    }
+}
+
+fn targets_hold(dir: &Path) {
     let mut all = Vec::new();
-    targets(&schema(), "", &mut all);
-    assert!(all.len() > 1, "schema.json has no x-site targets");
+    targets(&schema_of(dir), "", &mut all);
+    assert!(
+        all.len() > 1,
+        "{}/schema.json has no x-site targets",
+        dir.display()
+    );
     for (path, t) in &all {
         let file = t["file"].as_str().unwrap_or_default();
         assert!(FILES.contains(&file), "`{path}`: unknown file `{file}`");
         assert!(
-            template().join("scaffold").join(file).is_file(),
+            dir.join("scaffold").join(file).is_file(),
             "`{path}`: scaffold/{file} is missing"
         );
         let key = t["key"].as_str().unwrap_or_default();

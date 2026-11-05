@@ -1,0 +1,10 @@
+name = "site-template-architecture"
+description = "pigeon's architecture diagram, drawn from architecture.describe."
+license = "GPL-3.0-or-later"
+homepage = "https://github.com/noisypigeon/pigeon/tree/main/src/site-templates/architecture"
+min_version = "0.23.6"
+
+# Defaults Zola merges under a site's [extra]; an unset feature is off.
+[extra]
+look = { font_family = "archivo:800|ibm-plex-mono:400,500" }
+features = { fonts = false, commit = false, motion = false }

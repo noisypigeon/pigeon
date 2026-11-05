@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/noisypigeon/pigeon/tree/main/src/site-templates/architecture/schema.json",
+  "description": "An architecture site's static_site.site; each x-site target names where cobot writes the value. See .claude/decisions/2026-11-05-runtime-architecture-site-through-backplane.md §3.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["title", "description"],
+  "properties": {
+    "title": {
+      "description": "The site's name: the page title and the manifest's name.",
+      "type": "string",
+      "minLength": 1,
+      "x-site": [
+        { "file": "config.toml", "key": "title" },
+        { "file": "static/manifest.json", "key": "name" }
+      ]
+    },
+    "description": {
+      "description": "One line under the title, and the page's meta description.",
+      "type": "string",
+      "minLength": 1,
+      "x-site": [{ "file": "config.toml", "key": "description" }]
+    }
+  }
+}

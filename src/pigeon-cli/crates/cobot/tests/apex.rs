@@ -1629,6 +1629,52 @@ fn a_data_name_must_be_lowercase() {
 }
 
 #[test]
+fn the_architecture_template_draws_its_data() {
+    if !zola_available() {
+        eprintln!("skipped: zola is not on PATH");
+        return;
+    }
+    let repo = site_repo();
+    let root = repo.path();
+    copy(root, "src/site-templates/architecture");
+    write(
+        root,
+        &format!("{BLOG}/config.yaml"),
+        "static_site:\n  template: { name: architecture, version: 0.1.0 }\n  site: { title: Architecture, description: The platform. }\n",
+    );
+    git_in(root, &["init", "-q"]);
+    git_in(root, &["add", "-A"]);
+    git_in(root, &["commit", "-q", "-m", "init"]);
+    git_in(root, &["tag", "site-template-architecture/v0.1.0"]);
+    let node = |id: &str, lane: &str| json!({ "id": id, "kind": "unit", "lane": lane, "label": id, "source": "test" });
+    let placed = |id: &str, x: i64| json!({ "id": id, "x": x, "y": 104, "w": 112, "h": 40 });
+    let data = json!({
+        "nodes": [node("a", "units"), node("b", "providers")],
+        "edges": [{ "from": "a", "to": "b", "carries": "apply", "source": "test" }],
+        "groups": [{ "id": "g", "kind": "local", "label": "local unit", "members": ["a"] }],
+        "layout": {
+            "width": 400, "height": 200,
+            "lanes": [{ "lane": "units", "x": 32, "w": 112 }, { "lane": "providers", "x": 208, "w": 112 }],
+            "nodes": [placed("a", 32), placed("b", 208)],
+            "groups": [{ "id": "g", "x": 10, "y": 68, "w": 156, "h": 98 }],
+            "edges": [{ "from": "a", "to": "b", "carries": "apply", "d": "M144 124C176 124 176 124 206 124", "start": [144, 124], "end": [208, 124] }]
+        }
+    });
+    let sites = cobot::sites::find(root, &[]).expect("find");
+    let data = BTreeMap::from([("architecture".to_string(), data)]);
+    let built = cobot::sites::build_with(root, &sites, &data).expect("build");
+    let page = fs::read_to_string(built[0].public.join("index.html")).expect("index");
+    assert_eq!(page.matches("<rect class=\"n\"").count(), 2, "{page}");
+    assert_eq!(page.matches("<path class=\"e apply\"").count(), 1);
+    assert!(page.contains("local unit") && page.contains("<title>Architecture</title>"));
+    assert!(!page.contains("<script"), "no JavaScript");
+
+    let plain = cobot::sites::build(root, &sites).expect("build");
+    let empty = fs::read_to_string(plain[0].public.join("index.html")).expect("index");
+    assert!(!empty.contains("<svg xmlns") && empty.contains("architecture.describe"));
+}
+
+#[test]
 fn a_contract_site_builds_from_its_config_yaml() {
     if !zola_available() {
         eprintln!("skipped: zola is not on PATH");

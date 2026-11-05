@@ -113,8 +113,8 @@ belong in the ADR, never in the file.
   against the pinned template's `schema.json`; its `site/` holds only
   `posts/` (named `YYYY-MM-DD-<slug>.md`), `pages/` and `assets/`, per
   [`2026-11-03-runtime-static-site-config-contract.md`](.claude/decisions/2026-11-03-runtime-static-site-config-contract.md).
-- Site templates are a family in `src/site-templates/<name>/` (`blog`, and
-  `architecture` to come), named by `static_site.template.name`; a template
+- Site templates are a family in `src/site-templates/<name>/` (`blog` and
+  `architecture`), named by `static_site.template.name`; a template
   with `content: none` takes no `site/`. The architecture site is `infra/pigeon/sites/docs/` on
   `docs.pigeon.dev`, a diagram regenerated from the code by backplane's
   `architecture.describe` and published through the control plane, per
