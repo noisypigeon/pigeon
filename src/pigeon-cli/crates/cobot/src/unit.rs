@@ -117,6 +117,10 @@ pub fn discover(root: &Path) -> (Vec<Unit>, Vec<Problem>) {
 /// [`discover`]'s units under the instance at `root`, composing catalogs from `platform`.
 #[must_use]
 pub fn discover_in(root: &Path, platform: &Path) -> (Vec<Unit>, Vec<Problem>) {
+    // Both roots absolute, so catalog homes and module sources are too, from any caller.
+    let absolute = |p: &Path| p.canonicalize().unwrap_or_else(|_| p.to_path_buf());
+    let (root, platform) = (absolute(root), absolute(platform));
+    let (root, platform) = (root.as_path(), platform.as_path());
     let mut units = Vec::new();
     let mut problems = Vec::new();
     let mut stack: Vec<String> = AREAS

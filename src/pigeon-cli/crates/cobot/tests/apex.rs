@@ -597,6 +597,44 @@ fn a_published_input_may_hold_a_long_code_but_a_record_may_not() {
 }
 
 #[test]
+fn a_relative_platform_root_still_gives_absolute_catalog_homes() {
+    let dir = TempDir::new_in(".").expect("tempdir here");
+    let root = dir.path();
+    for rel in [
+        ".config/providers.yaml",
+        ".config/providers.lock.hcl",
+        "catalog/cloudflare",
+        "catalog/agnostic",
+    ] {
+        copy(root, rel);
+    }
+    let plain = PROTON
+        .replace("{ secret: protonmail_verification }", "plain-1")
+        .replace("{ secret: pm_verification }", "plain-2");
+    write(root, &format!("{APEX}/config.yaml"), &plain);
+    let relative = Path::new(dir.path().file_name().expect("name"));
+    assert!(relative.is_relative());
+
+    let canonical = root.canonicalize().expect("canonical");
+    let (units, problems) = cobot::unit::discover_in(&canonical, relative);
+    assert!(problems.is_empty(), "{problems:?}");
+    let home = &units[0].config.as_ref().expect("config").home;
+    assert!(home.is_absolute(), "{}", home.display());
+    let allow = cobot::providers::Allowlist::load(&root.join(".config")).expect("allowlist");
+    let rendered = cobot::render_json(
+        &units[0],
+        Path::new("/state"),
+        &allow,
+        0,
+        &cobot::config::Existing::new(),
+    );
+    for (name, block) in rendered["module"].as_object().expect("modules") {
+        let source = block["source"].as_str().expect("source");
+        assert!(Path::new(source).is_absolute(), "{name}: {source}");
+    }
+}
+
+#[test]
 fn each_zone_is_its_own_apex_with_its_own_provider_and_keys() {
     let repo = repo(PROTON);
     write(
