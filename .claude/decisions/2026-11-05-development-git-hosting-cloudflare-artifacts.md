@@ -112,14 +112,34 @@ These take effect from phase 3.
    - the `cloudflare/git-repo` kind;
    - API units in the manifest;
    - the Artifacts client;
-   - `pigeon cobot git apply|status|push|fetch|clone|mirror`;
-   - pigeon's own root `config.yaml`, declaring `repos/pigeon`.
-2. **The owner, locally, from a pigeon checkout,** with `CLOUDFLARE_API_TOKEN` scoped to the platform's account and holding Artifacts Write:
+   - `pigeon cobot git apply|status|push|fetch|clone|mirror`.
+
+   pigeon's own root `config.yaml` waits for step 2. Until a cobot release knows API kinds, the released image in CI's `plan` and `apply` would treat `repos/pigeon` as an OpenTofu unit, per [`2026-11-03-release-cobot-image-in-workflows.md`](2026-11-03-release-cobot-image-in-workflows.md).
+2. **The owner, locally, from a pigeon checkout,** with `CLOUDFLARE_API_TOKEN` scoped to the platform's account and holding Artifacts Write. First, write the root `config.yaml`:
+
+   ```yaml
+   # pigeon as an instance: its units by kind; see .claude/decisions/2026-11-05-runtime-instance-config-kind-units.md.
+   schema: v1
+   name: pigeon
+   description: The pigeon platform, as its own instance.
+   repository: https://github.com/noisypigeon/pigeon
+   units:
+     repos/pigeon:
+       kind: cloudflare/git-repo
+       mirror: https://github.com/noisypigeon/pigeon
+   ```
+
+   Then:
 
    ```
    cargo run -q -p pigeon -- cobot git apply     # namespace pigeon, repo pigeon, imported from GitHub
    cargo run -q -p pigeon -- cobot git status    # Artifacts main equals GitHub main
+   git add config.yaml && git commit -m "chore: pigeon declares its repository"
+   cargo run -q -p pigeon -- cobot git push pigeon HEAD:main
+   cargo run -q -p pigeon -- cobot git mirror
    ```
+
+   That commit is the first to reach `main` through Artifacts, not GitHub. Run step 2 only after the release bot has released cobot from step 1: the mirror's push to GitHub still triggers its `cobot.yml` until the cutover, and that needs a cobot that knows API kinds.
 
    From then on, every change follows the same routine:
    1. Commit locally.
