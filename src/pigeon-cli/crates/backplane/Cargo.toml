@@ -11,17 +11,32 @@ publish.workspace = true
 [lib]
 name = "backplane"
 
+[features]
+default = ["engines"]
+engines = [
+  "dep:cobot",
+  "cobot/engines",
+  "dep:gantry",
+  "dep:sentinel",
+  "dep:serde-saphyr",
+  "dep:sha2",
+  "dep:hmac",
+  "dep:httparse",
+  "dep:rustls",
+]
+worker = ["dep:cobot", "cobot/worker"]
+
 [dependencies]
-cobot.workspace = true
-gantry.workspace = true
-sentinel.workspace = true
+cobot = { workspace = true, optional = true }
+gantry = { workspace = true, optional = true }
+sentinel = { workspace = true, optional = true }
 serde.workspace = true
-serde-saphyr.workspace = true
+serde-saphyr = { workspace = true, optional = true }
 serde_json.workspace = true
-sha2.workspace = true
-hmac.workspace = true
-httparse.workspace = true
-rustls.workspace = true
+sha2 = { workspace = true, optional = true }
+hmac = { workspace = true, optional = true }
+httparse = { workspace = true, optional = true }
+rustls = { workspace = true, optional = true }
 
 [dev-dependencies]
 rcgen.workspace = true

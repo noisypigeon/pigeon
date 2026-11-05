@@ -2,7 +2,7 @@
 min_version = "2026.10.12"
 
 [tools]
-rust = { version = "1.99.1", profile = "minimal", components = "clippy,rustfmt" }
+rust = { version = "1.99.1", profile = "minimal", components = "clippy,rustfmt", targets = "wasm32-unknown-unknown" }
 opentofu = "1.13.1"
 zola = "0.23.6"
 
@@ -34,6 +34,8 @@ run = [
   "cargo clippy -p pigeon --all-targets --locked --no-default-features --features gantry -- -D warnings",
   "cargo clippy -p pigeon --all-targets --locked --no-default-features --features cobot -- -D warnings",
   "cargo clippy -p pigeon --all-targets --locked --no-default-features --features backplane -- -D warnings",
+  "cargo clippy -p cobot --lib --locked --no-default-features --features worker --target wasm32-unknown-unknown -- -D warnings",
+  "cargo clippy -p pigeon-backplane --lib --locked --no-default-features --features worker --target wasm32-unknown-unknown -- -D warnings",
 ]
 
 [tasks.rust]
