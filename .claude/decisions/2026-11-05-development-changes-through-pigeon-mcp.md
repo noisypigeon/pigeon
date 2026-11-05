@@ -126,3 +126,11 @@ Each step is pushed to Artifacts `main` and mirrored. Until step 3 lands, the ow
 - A second push with no input changes reuses the snapshot: its wall time is under a minute for a docs-only change, and a few minutes for one crate.
 - A new push after approval returns the change to `bounded`, and merging needs a fresh approval for the new SHA.
 - No token appears in a change row, a job log, the repository or the mirror.
+
+## Amendments
+
+### 2026-11-05: The change policy lands before GitHub has a sentinel that reads it, and scoping reads the crates' manifests
+
+- `.config/policies/change.yaml` (§3) is merged on Artifacts without waiting for GitHub to release a sentinel that knows `target: change`. Checks before a merge run sentinel from source, so nothing here depends on the released image. Until the owner mirrors, nothing runs on GitHub at all. On the first mirror after it, `lifecycle.yml`'s `sentinel` job, which runs the released image, is red once. The same push releases the new sentinel, and the next mirror is green. The policy holds the branch, scope and size rules; the title, ADR and changelog rules stay in `pull-request.yaml`, which runs on every change too, because `mise run sentinel-change` passes its fields.
+- `change.scope` (§4) finds a crate's dependants from the workspace's `Cargo.toml` files instead of `cargo tree`, so scoping a change needs no build and no toolchain.
+- A change to `.config/policies/` also runs the tests that check this repository's own policies (the `sentinel`, `pigeon` and `pigeon-backplane` crates' tests), not `policy.check` alone. The first scoped run of the change policy found that gap: its new policy changed counts those tests pin.

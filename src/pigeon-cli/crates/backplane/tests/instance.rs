@@ -171,6 +171,39 @@ fn infra_validate_holds_for_this_repository() {
 }
 
 #[test]
+fn this_repositorys_change_policy_bounds_a_change() {
+    let instance = Instance::load(&repo_root()).expect("valid");
+    let change = |branch: &str, files: &str| {
+        let mut r = request("policy.check");
+        for (k, v) in [
+            ("title", "feat(x): y"),
+            (
+                "body",
+                "See .claude/decisions/2026-11-05-development-changes-through-pigeon-mcp.md.",
+            ),
+            ("number", "5"),
+            ("branch", branch),
+            ("scope", ".config/policies/\nCLAUDE.md"),
+            ("files", files),
+        ] {
+            r.args.insert(k.into(), v.into());
+        }
+        run(&instance, &r).expect("runs").violations
+    };
+    let ok = change(
+        "change/5-change-policy",
+        ".config/policies/change.yaml\nCLAUDE.md",
+    );
+    assert!(ok.is_empty(), "{ok:?}");
+    let bad = change("main", ".config/policies/change.yaml\nmise.toml");
+    assert!(bad.iter().any(|v| v.contains("`branch` `main`")), "{bad:?}");
+    assert!(
+        bad.iter().any(|v| v.contains("outside `scope`: mise.toml")),
+        "{bad:?}"
+    );
+}
+
+#[test]
 fn change_scope_names_the_checks_and_needs_files() {
     let instance = Instance::load(&repo_root()).expect("valid");
     let mut r = request("change.scope");

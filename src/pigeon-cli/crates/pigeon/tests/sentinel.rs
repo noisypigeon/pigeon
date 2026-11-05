@@ -15,7 +15,14 @@ fn repo_root() -> PathBuf {
 fn check(root: &std::path::Path) -> Command {
     let mut cmd = Command::cargo_bin("pigeon").expect("binary");
     cmd.args(["sentinel", "check", "--root"]).arg(root);
-    for var in ["PR_TITLE", "PR_BODY", "PR_NUMBER", "PR_FILES"] {
+    for var in [
+        "PR_TITLE",
+        "PR_BODY",
+        "PR_NUMBER",
+        "PR_FILES",
+        "PR_BRANCH",
+        "PR_SCOPE",
+    ] {
         cmd.env_remove(var);
     }
     cmd
@@ -38,7 +45,7 @@ fn this_repository_holds() {
     check(&repo_root())
         .assert()
         .code(0)
-        .stdout(predicate::str::contains("policies hold, 1 skipped"));
+        .stdout(predicate::str::is_match(r"policies hold, 2 skipped").expect("regex"));
 }
 
 #[test]

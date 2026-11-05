@@ -35,6 +35,9 @@ const INFRA: [&str; 6] = [
     ".config/instance.yaml",
 ];
 
+/// Paths whose change can break the tests that read this repository's own policies.
+const POLICIES: [&str; 1] = [".config/policies/"];
+
 /// Paths whose change rebuilds the sites.
 const SITES: [&str; 3] = ["src/site-templates/", "workloads/", "sites/"];
 
@@ -327,6 +330,15 @@ fn rust_jobs(crates: &Crates, config: &Config, files: &[&str]) -> Vec<Job> {
     out
 }
 
+/// Whether `out` already tests `package`, alone or as the whole workspace.
+fn ran_tests_of(out: &[Job], package: &str) -> bool {
+    out.iter().any(|j| {
+        j.argv.get(1).is_some_and(|v| v == "test")
+            && (j.argv.iter().any(|a| a == "--workspace")
+                || j.argv.windows(2).any(|w| w[0] == "-p" && w[1] == package))
+    })
+}
+
 /// The checks a change touching `files` needs, in the order to run them; `policy.check`
 /// always runs, and a workspace-wide setting runs everything.
 ///
@@ -353,12 +365,7 @@ pub fn jobs(root: &Path, files: &[String]) -> Result<Vec<Job>, Error> {
     } else {
         out.extend(rust_jobs(&crates, &config, &files));
     }
-    let ran_cobot = out
-        .iter()
-        .any(|j| j.argv.iter().any(|a| a == "--workspace"))
-        || out.iter().any(|j| {
-            j.name.starts_with("test ") && j.argv.windows(2).any(|w| w == ["-p", "cobot"])
-        });
+    let ran_cobot = ran_tests_of(&out, "cobot");
     if files.iter().any(|f| under(f, &INFRA)) {
         out.push(Job {
             name: "infra.validate".into(),
@@ -373,6 +380,25 @@ pub fn jobs(root: &Path, files: &[String]) -> Result<Vec<Job>, Error> {
                 ],
             ));
         }
+    }
+    let policy_tests = ["sentinel", "pigeon", "pigeon-backplane"];
+    if files.iter().any(|f| under(f, &POLICIES))
+        && !policy_tests.iter().all(|p| ran_tests_of(&out, p))
+    {
+        out.push(job(
+            "test this repository's policies",
+            &[
+                "cargo",
+                "test",
+                "-p",
+                "sentinel",
+                "-p",
+                "pigeon",
+                "-p",
+                "pigeon-backplane",
+                "--locked",
+            ],
+        ));
     }
     if files.iter().any(|f| under(f, &SITES)) {
         out.push(Job {

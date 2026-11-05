@@ -21,12 +21,24 @@ fn names(files: &[&str]) -> Vec<String> {
 #[test]
 fn docs_only_runs_the_policies_only() {
     assert_eq!(
-        names(&[
-            ".claude/decisions/x.md",
-            "CLAUDE.md",
-            ".config/policies/layout.yaml"
-        ]),
+        names(&[".claude/decisions/x.md", "CLAUDE.md"]),
         ["policy.check"]
+    );
+    assert_eq!(
+        names(&[".config/policies/layout.yaml"]),
+        ["test this repository's policies", "policy.check"],
+        "the tests that read this repository's policies run too"
+    );
+    assert_eq!(
+        names(&[
+            ".config/policies/layout.yaml",
+            "src/pigeon-cli/crates/sentinel/src/rules.rs"
+        ])
+        .iter()
+        .filter(|n| n.starts_with("test "))
+        .count(),
+        1,
+        "once, when sentinel's and its dependants' tests already run"
     );
     assert_eq!(names(&[]), ["policy.check"]);
 }

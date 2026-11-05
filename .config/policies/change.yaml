@@ -1,0 +1,12 @@
+description: A change stays on its own change/<n>-<slug> branch, inside its approved scope, and small; title, ADR and changelog rules come from pull-request.yaml. See .claude/decisions/2026-11-05-development-changes-through-pigeon-mcp.md §3.
+target: change
+rules:
+  - field:
+      name: branch
+      matches: '^change/[1-9][0-9]*-[a-z0-9]+(-[a-z0-9]+)*$'
+  - field:
+      name: files
+      within: scope
+  - field:
+      name: files
+      max_lines: 200
