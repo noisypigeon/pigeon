@@ -67,7 +67,15 @@ fn serve(args: &ServeArgs) -> i32 {
     if let Some(addr) = server.local_addr() {
         eprintln!("backplane: serving on {addr}");
     }
-    server.serve(|k| std::env::var(k).ok());
+    let stop = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    for signal in [signal_hook::consts::SIGTERM, signal_hook::consts::SIGINT] {
+        if let Err(e) = signal_hook::flag::register(signal, std::sync::Arc::clone(&stop)) {
+            eprintln!("backplane: cannot handle signal {signal}: {e}");
+            return INVALID;
+        }
+    }
+    server.serve_until(|k| std::env::var(k).ok(), &stop);
+    eprintln!("backplane: stopped after finishing its requests");
     SUCCESS
 }
 

@@ -13,7 +13,7 @@ default = ["sentinel", "gantry", "cobot", "backplane"]
 sentinel = ["dep:sentinel"]
 gantry = ["dep:gantry"]
 cobot = ["dep:cobot", "dep:serde", "dep:serde_json"]
-backplane = ["dep:backplane", "dep:serde", "dep:serde_json"]
+backplane = ["dep:backplane", "dep:serde", "dep:serde_json", "dep:signal-hook"]
 
 [dependencies]
 backplane = { workspace = true, optional = true }
@@ -23,6 +23,7 @@ gantry = { workspace = true, optional = true }
 sentinel = { workspace = true, optional = true }
 serde = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
+signal-hook = { workspace = true, optional = true }
 
 [dev-dependencies]
 assert_cmd.workspace = true

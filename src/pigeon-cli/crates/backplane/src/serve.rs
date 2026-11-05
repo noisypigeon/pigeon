@@ -7,6 +7,7 @@ use std::collections::HashMap;
 use std::fmt::Write as _;
 use std::io::{self, Read, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream, ToSocketAddrs};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -59,6 +60,9 @@ pub const SIGNATURE_HEADER: &str = "x-pigeon-signature";
 
 /// How far a signed request's timestamp may be from the server's clock, in seconds.
 pub const SKEW: u64 = 60;
+
+/// How long an idle worker waits before checking for a connection or a stop again.
+const POLL: Duration = Duration::from_millis(50);
 
 /// The shortest token accepted.
 const MIN_TOKEN: usize = 32;
@@ -223,13 +227,28 @@ impl Server {
     /// Answers one request per connection on [`WORKERS`] threads until the process ends;
     /// passphrases and credentials are read through `var`.
     pub fn serve(&self, var: impl Fn(&str) -> Option<String> + Sync) {
+        self.serve_until(var, &AtomicBool::new(false));
+    }
+
+    /// As [`Server::serve`], until `stop` is set: then it accepts no new connection, finishes
+    /// those in hand, and returns (control-plane ADR §7).
+    ///
+    /// # Panics
+    ///
+    /// If the listener cannot be made non-blocking.
+    pub fn serve_until(&self, var: impl Fn(&str) -> Option<String> + Sync, stop: &AtomicBool) {
+        self.listener
+            .set_nonblocking(true)
+            .expect("a bound listener can be made non-blocking");
         std::thread::scope(|scope| {
             for _ in 0..WORKERS {
                 scope.spawn(|| {
-                    loop {
+                    while !stop.load(Ordering::SeqCst) {
                         match self.listener.accept() {
-                            Ok((stream, _)) => self.connection(stream, &var),
-                            Err(_) => std::thread::sleep(Duration::from_millis(50)),
+                            Ok((stream, _)) if stream.set_nonblocking(false).is_ok() => {
+                                self.connection(stream, &var);
+                            }
+                            Ok(_) | Err(_) => std::thread::sleep(POLL),
                         }
                     }
                 });
