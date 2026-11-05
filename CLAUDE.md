@@ -142,7 +142,9 @@ belong in the ADR, never in the file.
 - `pigeon cobot release --dry-run` / `pigeon cobot tags`: preview the bot's
   release JSON.
 - `pigeon backplane instance|engines|operations|run <op>` (`--json` for the
-  wire form); `mise run backplane` validates `.config/instance.yaml`.
+  wire form); `mise run backplane` validates `.config/instance.yaml`; from
+  pigeon, `--instance DIR` runs them, and `pigeon cobot`, against another
+  instance.
 - `mise run sentinel`: `pigeon backplane run policy.check` against
   `.config/policies/`; `pigeon backplane run sites.build` builds every site.
 - `PR_TITLE='…' PR_BODY='…' PR_NUMBER=N PR_FILES="$(git diff --name-only main...)" mise run sentinel-pr`:

@@ -40,9 +40,19 @@ pub struct CobotRoot {
     /// The directory holding providers.yaml and providers.lock.hcl [default: ./.config]
     #[arg(long)]
     pub providers: Option<PathBuf>,
+    /// The instance whose units to use, when not the repository root; catalogs, providers and
+    /// templates still come from the root
+    #[arg(long)]
+    pub instance: Option<PathBuf>,
 }
 
 impl CobotRoot {
+    /// The instance's root: `--instance`, else the repository root.
+    #[must_use]
+    pub fn instance_root(&self) -> &std::path::Path {
+        self.instance.as_deref().unwrap_or(&self.root)
+    }
+
     /// The providers directory.
     #[must_use]
     pub fn providers_dir(&self) -> PathBuf {
@@ -114,6 +124,10 @@ pub struct SitesBuild {
     /// The repository root
     #[arg(long, default_value = ".")]
     pub root: PathBuf,
+    /// The instance whose sites to build, when not the repository root; templates still
+    /// come from the root
+    #[arg(long)]
+    pub instance: Option<PathBuf>,
     /// Workload paths, e.g. workloads/noisypigeon.com/blog [default: every static site]
     pub workloads: Vec<String>,
     /// A JSON file each site's template reads as `data/<NAME>.json`, as NAME=FILE; repeatable

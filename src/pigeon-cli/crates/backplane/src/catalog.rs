@@ -84,8 +84,10 @@ fn policy_check(
         engine: Engine::Sentinel,
         message: e.to_string(),
     };
-    let policies =
-        sentinel::load_dir(&instance.resolve(&instance.paths.policies)).map_err(engine)?;
+    let Some(dir) = instance.policies_dir() else {
+        return Ok((json!({ "ran": 0, "skipped": 0 }), Vec::new()));
+    };
+    let policies = sentinel::load_dir(&dir).map_err(engine)?;
     let pr = pull_request(args);
     let report = sentinel::check(&policies, &instance.root, pr.as_ref()).map_err(engine)?;
     let violations = report.violations.iter().map(ToString::to_string).collect();
@@ -112,13 +114,15 @@ fn sites_build(instance: &Instance, args: &Map<String, Value>) -> Result<Value, 
                 .collect()
         })
         .unwrap_or_default();
-    let sites = cobot::sites::find(&instance.root, &wanted).map_err(cobot)?;
+    let sites =
+        cobot::sites::find_in(&instance.root, instance.platform_root(), &wanted).map_err(cobot)?;
     if sites.is_empty() {
         return Ok(json!({ "sites": [] }));
     }
     let (architecture, _) = architecture_describe(instance)?;
     let data = std::collections::BTreeMap::from([("architecture".to_string(), architecture)]);
-    let built = cobot::sites::build_with(&instance.root, &sites, &data).map_err(cobot)?;
+    let built = cobot::sites::build_in(&instance.root, instance.platform_root(), &sites, &data)
+        .map_err(cobot)?;
     Ok(json!({
         "sites": built
             .iter()
@@ -132,9 +136,8 @@ fn sites_build(instance: &Instance, args: &Map<String, Value>) -> Result<Value, 
 }
 
 fn infra_validate(instance: &Instance) -> Result<(Value, Vec<String>), Error> {
-    let allowlist = instance.resolve(&instance.paths.providers);
-    let dir = allowlist.parent().unwrap_or(&instance.root);
-    match cobot::validate(&instance.root, dir) {
+    let dir = instance.providers_dir();
+    match cobot::validate_in(&instance.root, instance.platform_root(), &dir) {
         Ok(units) => Ok((
             json!({ "units": units.iter().map(|u| u.path.as_str()).collect::<Vec<_>>() }),
             Vec::new(),
@@ -171,9 +174,12 @@ fn session(
     args: &Map<String, Value>,
     var: &impl Fn(&str) -> Option<String>,
 ) -> Result<cobot::session::Session, Error> {
-    let allowlist = instance.resolve(&instance.paths.providers);
-    let providers = allowlist.parent().unwrap_or(&instance.root);
-    cobot::session::open(&instance.root, providers, text(args, "state")?, var)
+    let providers = instance.providers_dir();
+    cobot::session::open(&instance.root, &providers, text(args, "state")?, var)
+        .map(|mut s| {
+            s.ctx.platform.clone_from(&instance.platform);
+            s
+        })
         .map_err(|e| cobot_failed(&e))
 }
 
@@ -202,8 +208,8 @@ fn infra_plan(
             })?,
     };
     let mut s = session(instance, args, var)?;
-    let selected =
-        cobot::select(&s.ctx.root, &s.ctx.providers, &units).map_err(|e| cobot_failed(&e))?;
+    let selected = cobot::select_in(&s.ctx.root, s.ctx.platform_root(), &s.ctx.providers, &units)
+        .map_err(|e| cobot_failed(&e))?;
     let (stored, _) = cobot::plan_stored(&s.ctx, &selected, cobot::session::now())
         .map_err(|e| cobot_failed(&e))?;
     s.push().map_err(|e| cobot_failed(&e))?;

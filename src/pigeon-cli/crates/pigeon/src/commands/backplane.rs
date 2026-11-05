@@ -48,7 +48,7 @@ pub fn run(command: BackplaneCommand) -> i32 {
 fn serve(args: &ServeArgs) -> i32 {
     let token = std::env::var(backplane::serve::TOKEN_VAR).unwrap_or_default();
     let bound = backplane::serve::Tls::from_vars(|k| std::env::var(k).ok()).and_then(|tls| {
-        let instance = Instance::load(&args.root)?;
+        let instance = load(&args.root, args.instance.as_deref())?;
         backplane::serve::Server::bind(
             instance,
             &args.listen,
@@ -114,7 +114,7 @@ fn operation(name: &str, raw: &[String], text: &[String], args: &RootArgs) -> i3
         operation: name.to_string(),
         args: parsed,
     };
-    match Instance::load(&args.root).and_then(|i| backplane::run(&i, &request)) {
+    match load(&args.root, args.instance.as_deref()).and_then(|i| backplane::run(&i, &request)) {
         Ok(response) => {
             if args.json {
                 print_json(&response);
@@ -145,5 +145,16 @@ fn print_json<T: serde::Serialize + ?Sized>(value: &T) {
     match serde_json::to_string_pretty(value) {
         Ok(s) => println!("{s}"),
         Err(e) => eprintln!("backplane: {e}"),
+    }
+}
+
+/// The instance at `instance`, on the platform at `root`; or the one at `root`.
+fn load(
+    root: &std::path::Path,
+    instance: Option<&std::path::Path>,
+) -> Result<Instance, backplane::Error> {
+    match instance {
+        Some(dir) => Instance::load_on(dir, Some(root)),
+        None => Instance::load(root),
     }
 }

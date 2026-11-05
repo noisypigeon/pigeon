@@ -41,9 +41,13 @@ pub struct ServeArgs {
     #[arg(long)]
     pub signed: bool,
 
-    /// The instance's root, holding `.config/instance.yaml`
+    /// The platform's root; also the instance's, unless --instance names another
     #[arg(long, default_value = ".")]
     pub root: PathBuf,
+
+    /// Another instance's root, holding its `.config/instance.yaml`
+    #[arg(long)]
+    pub instance: Option<PathBuf>,
 }
 
 /// `--json` alone.
@@ -57,9 +61,14 @@ pub struct JsonArgs {
 /// An instance root and `--json`.
 #[derive(Args, Debug)]
 pub struct RootArgs {
-    /// The instance's root, holding `.config/instance.yaml`
+    /// The platform's root; also the instance's, unless --instance names another
     #[arg(long, default_value = ".")]
     pub root: PathBuf,
+
+    /// Another instance's root, holding its `.config/instance.yaml`; catalogs, providers and
+    /// templates still come from --root
+    #[arg(long)]
+    pub instance: Option<PathBuf>,
 
     /// Print the JSON response
     #[arg(long)]

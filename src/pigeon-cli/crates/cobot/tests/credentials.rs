@@ -212,3 +212,67 @@ fn the_repositorys_units_request_no_credentials() {
         );
     }
 }
+
+#[test]
+fn an_instance_unit_apart_from_its_platform_finds_platform_modules_and_its_own_capabilities() {
+    let repo_root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../..");
+    let platform = TempDir::new().expect("platform");
+    for rel in [".config/providers.yaml", ".config/providers.lock.hcl"] {
+        write(
+            platform.path(),
+            rel,
+            &fs::read_to_string(repo_root.join(rel)).expect("read"),
+        );
+    }
+    let module = "catalog/agnostic/modules/random-string";
+    for entry in fs::read_dir(repo_root.join(module)).expect("module") {
+        let name = entry
+            .expect("entry")
+            .file_name()
+            .to_string_lossy()
+            .into_owned();
+        let rel = format!("{module}/{name}");
+        write(
+            platform.path(),
+            &rel,
+            &fs::read_to_string(repo_root.join(&rel)).expect("read"),
+        );
+    }
+
+    let instance = TempDir::new().expect("instance");
+    let schema = json!({
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "additionalProperties": false,
+        "properties": { "name": { "type": "string" } },
+        "x-cobot": {
+            "version": "0.1.0",
+            "secrets": [],
+            "credentials": { "store": { "provider": "custom", "capabilities": ["custom.write"], "scope": "bucket" } },
+            "singletons": { "suffix": { "module": "agnostic/random-string", "inputs": { "length": 6 } } }
+        }
+    });
+    write(
+        instance.path(),
+        "infra/custom/schema.json",
+        &schema.to_string(),
+    );
+    write(
+        instance.path(),
+        "infra/custom/config.yaml",
+        "name: custom\n",
+    );
+    write(
+        instance.path(),
+        "infra/custom/capabilities.yaml",
+        "description: An instance's own capabilities.\ncapabilities:\n  custom.write: { permissions: [Write], scope: bucket }\n",
+    );
+
+    let config = platform.path().join(".config");
+    let units = cobot::validate_in(instance.path(), platform.path(), &config)
+        .unwrap_or_else(|e| panic!("valid: {e}"));
+    assert_eq!(
+        units.iter().map(|u| u.path.as_str()).collect::<Vec<_>>(),
+        ["infra/custom"]
+    );
+}

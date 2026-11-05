@@ -291,3 +291,42 @@ fn sites_build_with_no_sites_builds_nothing() {
         Err(Error::Invalid(_))
     ));
 }
+
+#[test]
+fn an_instance_apart_from_its_platform_needs_no_paths_of_its_own() {
+    let platform = fixture(MANIFEST, "ok\n");
+    let instance = TempDir::new().expect("instance");
+    fs::create_dir_all(instance.path().join(".config")).expect("mkdir");
+    fs::write(
+        instance.path().join(".config/instance.yaml"),
+        "description: Another instance.\nschema: v0\nname: other\nrepository: https://example.invalid/other\n",
+    )
+    .expect("write");
+
+    assert!(
+        matches!(Instance::load(instance.path()), Err(Error::Invalid(_))),
+        "alone, it has no providers"
+    );
+    let loaded = Instance::load_on(instance.path(), Some(platform.path())).expect("valid");
+    assert_eq!(loaded.name, "other");
+    assert_eq!(
+        loaded.providers_file(),
+        platform.path().join(".config/providers.yaml"),
+        "the platform's providers"
+    );
+    let checked = run(&loaded, &request("policy.check")).expect("runs");
+    assert!(checked.ok);
+    assert_eq!(
+        checked.result,
+        serde_json::json!({ "ran": 0, "skipped": 0 }),
+        "the platform's policies never judge another instance"
+    );
+    let described = run(&loaded, &request("architecture.describe")).expect("describes");
+    assert!(
+        !described.result["nodes"]
+            .as_array()
+            .expect("nodes")
+            .iter()
+            .any(|n| n["kind"] == "policy")
+    );
+}

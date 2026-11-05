@@ -52,7 +52,12 @@ pub fn describe(instance: &Instance) -> Result<(Graph, Vec<String>), Error> {
     let mut problems = Vec::new();
     engines_and_operations(&mut g);
     let units = units(instance, &mut g, &mut problems);
-    sites(&instance.root, &mut g, &mut problems);
+    sites(
+        &instance.root,
+        instance.platform_root(),
+        &mut g,
+        &mut problems,
+    );
     policies(instance, &units, &mut g)?;
     g.normalize();
     Ok((g, problems))
@@ -103,15 +108,14 @@ fn units(instance: &Instance, g: &mut Graph, problems: &mut Vec<String>) -> Vec<
         .push(node(REPOSITORY, "source", Lane::Source, "repository", "."));
     // Every problem `infra.validate` reports, discovery's included; the graph keeps the
     // units discovery could read.
-    let allowlist = instance.resolve(&instance.paths.providers);
-    match cobot::validate(root, allowlist.parent().unwrap_or(root)) {
+    match cobot::validate_in(root, instance.platform_root(), &instance.providers_dir()) {
         Ok(_) => {}
         Err(cobot::Error::Invalid(found)) => {
             problems.extend(found.iter().map(|p| format!("{}: {}", p.path, p.message)));
         }
         Err(e) => problems.push(format!("{}: {e}", Engine::Cobot.name())),
     }
-    let (units, _) = cobot::unit::discover(root);
+    let (units, _) = cobot::unit::discover_in(root, instance.platform_root());
     let paths: Vec<String> = units.iter().map(|u| u.path.clone()).collect();
     for u in &units {
         let id = format!("unit:{}", u.path);
@@ -190,8 +194,8 @@ fn units(instance: &Instance, g: &mut Graph, problems: &mut Vec<String>) -> Vec<
 }
 
 /// Every static site's bucket, named by its unit, and the hosts it serves.
-fn sites(root: &Path, g: &mut Graph, problems: &mut Vec<String>) {
-    match cobot::sites::find(root, &[]) {
+fn sites(root: &Path, platform: &Path, g: &mut Graph, problems: &mut Vec<String>) {
+    match cobot::sites::find_in(root, platform, &[]) {
         Ok(sites) => {
             for s in sites {
                 let store = format!("store:{}", s.unit);
@@ -223,8 +227,10 @@ fn sites(root: &Path, g: &mut Graph, problems: &mut Vec<String>) {
 
 /// Every policy, and what it governs.
 fn policies(instance: &Instance, units: &[String], g: &mut Graph) -> Result<(), Error> {
-    let policies_dir = instance.paths.policies.display().to_string();
-    let dir = instance.resolve(&instance.paths.policies);
+    let (Some(rel), Some(dir)) = (&instance.paths.policies, instance.policies_dir()) else {
+        return Ok(());
+    };
+    let policies_dir = rel.display().to_string();
     let unreadable = |e: std::io::Error| Error::Engine {
         engine: Engine::Sentinel,
         message: format!("{policies_dir}: {e}"),
