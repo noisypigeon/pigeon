@@ -52,6 +52,16 @@ pub fn is_static(config: &Value) -> bool {
     config.get("static_site").is_some()
 }
 
+/// A site's settings: a site unit's own config, or a workload's `static_site`.
+#[must_use]
+pub fn settings<'a>(config: &'a Value, site: &Site) -> Option<&'a Value> {
+    if site.manifest.is_some() {
+        site.workload.as_ref().map(|_| config)
+    } else {
+        config.get("static_site")
+    }
+}
+
 /// The token `infra/cloudflare` mints for a static site.
 #[must_use]
 pub fn token_name(zone: &str, workload: &str) -> String {
@@ -67,38 +77,56 @@ pub fn bucket_name(zone: &str, workload: &str) -> String {
 /// The static-site workloads in a zone, by name.
 #[must_use]
 pub fn sites(root: &Path, zone: &str) -> Vec<String> {
-    apex::workloads(root, zone)
+    sites_of(&on_disk(root, zone), zone)
+}
+
+/// A [`Site`] reading `workloads/` under `root`.
+fn on_disk(root: &Path, zone: &str) -> Site {
+    Site {
+        root: root.to_path_buf(),
+        zone: zone.to_string(),
+        workload: None,
+        manifest: None,
+    }
+}
+
+/// The static-site workloads `site` sees in a zone, by name.
+fn sites_of(site: &Site, zone: &str) -> Vec<String> {
+    site.workloads(zone)
         .into_iter()
-        .filter(|(w, config)| {
-            *config && apex::workload_config(root, zone, w).is_some_and(|c| is_static(&c))
-        })
+        .filter(|(w, config)| *config && site.config_of(zone, w).is_some_and(|c| is_static(&c)))
         .map(|(w, _)| w)
         .collect()
 }
 
-/// One zone's apex config, as written in `workloads/<zone>/apex/config.yaml`.
-fn apex_config(root: &Path, zone: &str) -> Value {
-    apex::workload_config(root, zone, apex::APEX).unwrap_or(Value::Null)
-}
-
 /// The hosts the apex assigns to each static site in a zone.
-fn site_hosts(config: &Value, root: &Path, zone: &str) -> BTreeMap<String, Vec<String>> {
-    let units = apex::workloads(root, zone);
-    let wanted = sites(root, zone);
+fn site_hosts(config: &Value, site: &Site, zone: &str) -> BTreeMap<String, Vec<String>> {
+    let units = site.workloads(zone);
+    let wanted = sites_of(site, zone);
     apex::assignments(config, &units, zone)
         .into_iter()
         .filter(|(w, _)| wanted.contains(w))
         .collect()
 }
 
+/// The hosts `site`'s zone assigns workload `w`.
+#[must_use]
+pub fn hosts(site: &Site, w: &str) -> Vec<String> {
+    apex::assignments(
+        &site.apex_config(&site.zone),
+        &site.workloads(&site.zone),
+        &site.zone,
+    )
+    .remove(w)
+    .unwrap_or_default()
+}
+
 /// `site-bucket`: one item, keyed [`BUCKET_KEY`], when the workload is a static site.
 #[must_use]
 pub fn bucket(config: &Value, site: &Site) -> Map<String, Value> {
     let mut out = Map::new();
-    if let (Some(w), true) = (&site.workload, is_static(config)) {
-        let class = config["static_site"]["storage_class"]
-            .as_str()
-            .unwrap_or("Standard");
+    if let (Some(w), Some(s)) = (&site.workload, settings(config, site)) {
+        let class = s["storage_class"].as_str().unwrap_or("Standard");
         out.insert(
             BUCKET_KEY.into(),
             json!({ "name": bucket_name(&site.zone, w), "storage_class": class }),
@@ -111,25 +139,21 @@ pub fn bucket(config: &Value, site: &Site) -> Map<String, Value> {
 #[must_use]
 pub fn domains(config: &Value, site: &Site) -> (Map<String, Value>, Vec<String>) {
     let mut out = Map::new();
-    let (Some(w), true) = (&site.workload, is_static(config)) else {
+    let (Some(w), Some(_)) = (&site.workload, settings(config, site)) else {
         return (out, Vec::new());
     };
-    let hosts = apex::assignments(
-        &apex_config(&site.root, &site.zone),
-        &apex::workloads(&site.root, &site.zone),
-        &site.zone,
-    )
-    .remove(w)
-    .unwrap_or_default();
+    let hosts = hosts(site, w);
     if hosts.is_empty() {
-        return (
-            out,
-            vec![format!(
+        let why = if site.manifest.is_some() {
+            "hosts: a static site needs a host".to_string()
+        } else {
+            format!(
                 "static_site: workloads/{}/{} assigns this workload no host",
                 site.zone,
                 apex::APEX
-            )],
-        );
+            )
+        };
+        return (out, vec![why]);
     }
     for h in hosts {
         out.insert(
@@ -141,12 +165,12 @@ pub fn domains(config: &Value, site: &Site) -> (Map<String, Value>, Vec<String>)
 }
 
 /// `zone-rulesets`: each zone's `sites-root` and `sites-www`, keyed
-/// `<zone>:<name>`, for its static sites; none in a zone without one.
+/// `<zone>:<name>`, for its static sites; none in a zone without one. `config` is composed.
 #[must_use]
-pub fn rulesets(config: &Value, root: &Path) -> Map<String, Value> {
+pub fn rulesets(config: &Value, site: &Site) -> Map<String, Value> {
     let mut out = Map::new();
     for zone in apex::zones(config) {
-        let hosts = site_hosts(&config["zones"][&zone], root, &zone);
+        let hosts = site_hosts(&config["zones"][&zone], site, &zone);
         let mut rewrites = Vec::new();
         let mut redirects = Vec::new();
         for (w, list) in &hosts {

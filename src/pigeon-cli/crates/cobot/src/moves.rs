@@ -34,12 +34,19 @@ pub struct Move {
     pub to: String,
 }
 
-/// The moves in `<root>/.config/moves.yaml`; none when it is absent.
+/// The moves in `<root>/.config/moves.yaml`, then the instance manifest's; none when both
+/// are absent.
 ///
 /// # Errors
 ///
 /// A message if the file exists but does not parse.
 pub fn load(root: &Path) -> Result<Vec<Move>, String> {
+    let mut moves = file_moves(root)?;
+    moves.extend(crate::manifest::moves(root));
+    Ok(moves)
+}
+
+fn file_moves(root: &Path) -> Result<Vec<Move>, String> {
     let path = root.join(FILE);
     if !path.exists() {
         return Ok(Vec::new());
@@ -59,16 +66,24 @@ pub fn into<'a>(moves: &'a [Move], unit: &str) -> Option<&'a Move> {
 /// Problems with the moves, as `(path, message)`.
 #[must_use]
 pub fn validate(root: &Path, units: &[Unit]) -> Vec<(String, String)> {
-    let moves = match load(root) {
+    let file = match file_moves(root) {
         Ok(m) => m,
         Err(e) => return vec![(FILE.into(), e)],
     };
+    let declared = crate::manifest::moves(root);
     let mut out = Vec::new();
     let mut seen = BTreeSet::new();
     let area = |p: &str| p.split('/').next().unwrap_or_default().to_string();
-    for m in &moves {
-        let at = format!("{FILE}: {} -> {}", m.from, m.to);
-        if area(&m.from) != area(&m.to) || !crate::unit::AREAS.contains(&area(&m.to).as_str()) {
+    let all = file
+        .iter()
+        .map(|m| (m, FILE))
+        .chain(declared.iter().map(|m| (m, crate::manifest::FILE)));
+    for (m, from_file) in all {
+        let at = format!("{from_file}: {} -> {}", m.from, m.to);
+        // A manifest's move may leave the areas: its units are named by ID, not directory.
+        if from_file == FILE
+            && (area(&m.from) != area(&m.to) || !crate::unit::AREAS.contains(&area(&m.to).as_str()))
+        {
             out.push((
                 at.clone(),
                 "a move stays within infra/ or within workloads/".into(),

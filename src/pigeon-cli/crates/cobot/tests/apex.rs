@@ -1045,6 +1045,7 @@ fn secret_mail_policies_are_claimed_once_decrypted() {
         root: repo.path().to_path_buf(),
         zone: ZONE.into(),
         workload: None,
+        manifest: None,
     };
     let home = cobot::catalog::home(repo.path(), "cloudflare");
     let mut secrets = BTreeMap::new();
