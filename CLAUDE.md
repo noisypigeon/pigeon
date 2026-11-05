@@ -47,7 +47,8 @@ belong in the ADR, never in the file.
 - The control plane is backplane's `worker` build on `pigeon.dev`: a Durable
   Object per instance, D1, plan-then-approve, Access, MCP and drift; cobot's
   `worker` build dispatches signed runs to Containers and mints credentials;
-  runs survive a stop, per
+  runs survive a stop; a run's root is a D1 bundle; the platform defines rules
+  in `catalog/policies/` and an instance invokes them, per
   [`2026-11-05-runtime-control-plane-worker.md`](.claude/decisions/2026-11-05-runtime-control-plane-worker.md).
 - Releases and changelogs are machinery, per
   [`2026-11-02-release-crate-units-and-images.md`](.claude/decisions/2026-11-02-release-crate-units-and-images.md):
