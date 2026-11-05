@@ -368,7 +368,7 @@ impl Policy {
         Ok(policy)
     }
 
-    fn validate(&self) -> Result<(), String> {
+    pub(crate) fn validate(&self) -> Result<(), String> {
         if self.description.trim().is_empty() || self.description.contains('\n') {
             return Err("description must be one non-empty line".into());
         }
