@@ -2,6 +2,7 @@
 
 ## 2026-11-05
 
+- docs(adr): the control plane, phase 4 ([#115](https://github.com/noisypigeon/pigeon/pull/115))
 - docs(adr): pigeon cobot workers, Workers and Containers through wrangler ([#114](https://github.com/noisypigeon/pigeon/pull/114))
 - chore(tooling): remove the containers spike kit ([#113](https://github.com/noisypigeon/pigeon/pull/113))
 - feat(backplane): signed requests for serve ([#112](https://github.com/noisypigeon/pigeon/pull/112))
