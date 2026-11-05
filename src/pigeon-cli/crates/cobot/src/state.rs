@@ -159,12 +159,9 @@ impl Mirror {
         &self.dir
     }
 
-    /// Writes back what changed: each changed object only if its `ETag` is unchanged, each new
-    /// one only if none appeared, and a [`TOMBSTONE`] over each removed one only if its `ETag`
-    /// is unchanged. State is written first, its writes then its removals; stored plans'
-    /// bookkeeping under [`crate::plans::DIR`] only after, so a marker never reaches R2 before
-    /// its unit's state. The keys written. What it writes becomes what was read, so a run may
-    /// push again.
+    /// Writes back what changed, conditionally on each `ETag`, with a [`TOMBSTONE`] over each
+    /// removed object: state first, then [`crate::plans::DIR`] (control-plane ADR §7). The keys
+    /// written; each write becomes what was read.
     ///
     /// # Errors
     ///

@@ -85,8 +85,7 @@ impl Session {
         push(&mut self.mirror)
     }
 
-    /// Applies stored plan `id`, writing R2 state back after each unit and before the plan is
-    /// removed, so a stopped run loses nothing it applied; see the control-plane ADR §7.
+    /// Applies stored plan `id`, writing R2 state back at each checkpoint (control-plane ADR §7).
     ///
     /// # Errors
     ///

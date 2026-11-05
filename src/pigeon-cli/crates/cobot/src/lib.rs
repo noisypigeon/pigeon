@@ -852,10 +852,8 @@ pub fn apply_stored(ctx: &Context, id: &str, now: u64) -> Result<Vec<UnitPlan>, 
 
 /// Applies the plans stored as `id`, exactly as planned, then removes them.
 ///
-/// `checkpoint` runs after each unit is applied and marked, and after the completion record is
-/// written but before the plan is removed, so a caller can write state back as it goes. A plan
-/// already completed returns its recorded result and applies nothing, removing what is left of
-/// it.
+/// `checkpoint` runs after each unit is applied and marked, and after the completion record,
+/// before the plan is removed. A completed plan returns its recorded result (control-plane ADR §7).
 ///
 /// # Errors
 ///
