@@ -571,3 +571,73 @@ If the spike fails part of this, the fallback order is:
   - a tampered response body or status;
   - a signed request that carries no bearer header, which is accepted, while an unsigned one is refused.
 - The spike report gives `/tls` and `/mtls` results from the owner's deploy.
+
+### 2026-11-05: Phase 3 spike report
+
+This is the report that phase 3's amendment, step 3, calls for. The owner deployed `tooling/spikes/containers` in the pigeon account, on Workers Paid, with instance type `standard-1`.
+
+#### 1. Results
+
+| Check | Result |
+| --- | --- |
+| `/image` | Met. A cold start took 414 ms to the Container's start, and about 2.5 s to its first answer. It runs `tofu` 1.13.1, `zola` 0.23.6 and `pigeon`. |
+| Image | Met. The image is 123 MB, `linux/amd64`. The first local build took about 5 minutes. |
+| `/egress` | Met. Cloudflare answers 200; Backblaze, DigitalOcean and Scaleway answer 401 without credentials. Every one is reachable. |
+| `/secrets` | Met. The Secrets Store binding is readable from Rust. |
+| `/do`, `/r2` | Met from Rust. |
+| `/run?minutes=20` | Not measured. The Container was deleted before the run ended. |
+| `scheduled`, `/d1` | Not measured. `/d1` was read once, before the first cron tick. |
+| `/tls` | Refused. The container binding rejects `https://`: "Connecting to a container using HTTPS is not currently supported; use HTTP instead. TLS is unnecessary anyway, as the connection is already secure by default." |
+| `/mtls` | Refused. An `mtls_certificates` binding fetches through the internet, not the container binding, and got 403 (error 1003). |
+
+Every binding works from Rust, so no part of amendment 1 §4's TypeScript shim is needed.
+
+#### 2. The Worker–Container link
+
+The Worker can neither verify a certificate on the container binding nor present one. That is case 2 of the mutual TLS amendment's §5 fallback order, which returns the decision to the owner. **The owner chose signed requests.**
+
+- **The link is plain HTTP** on the container binding. Cloudflare describes it as private and secure by default; pigeon does not rely on that alone.
+- **Every `/v0/` request is signed.** It carries an HMAC-SHA-256 under `BACKPLANE_TOKEN`, over its method, path, body digest, a timestamp and a random nonce.
+  - The Container refuses a timestamp more than 60 seconds from its clock, and a nonce already seen within that window.
+  - The verified signature replaces the bearer check; the token itself never travels.
+- **Every response is signed** over the request's nonce, its status code and its body's digest. The Worker verifies it, so a changed status or body fails.
+- **`serve --network` requires one of two modes:**
+  - mutual TLS, from the three `BACKPLANE_TLS_*` variables, kept for any host where TLS works;
+  - signed mode, from `--signed`.
+  - With neither it refuses to start. Loopback without either stays allowed for local use.
+- **Unchanged:** the routes, status codes and wire form, server-owned `state`, validation before the busy check, and the timeouts.
+
+The mutual TLS amendment's §3, a private CA per instance, applies only where mutual TLS is used. Phase 4's Worker uses signed mode, and holds `BACKPLANE_TOKEN` in the Secrets Store.
+
+#### 3. Operating notes
+
+- Containers need the Workers Paid plan.
+- The deploy token needs, on the account:
+  - Workers Admin, because Workers Editor cannot upload a script;
+  - Workers Containers, Secrets Store, D1, Workers R2 Storage and SSL and Certificates, each at Read and Write;
+  - Account Settings Read;
+  - Workers KV Storage Read, which `wrangler delete` needs.
+- `wrangler secrets-store` commands need `--remote`.
+- `wrangler delete` asks before deleting the Container application. Answering no leaves it running and billed.
+
+#### 4. Before phase 4 relies on Containers
+
+The run length and the Cron Trigger are limits from this ADR's Context, and neither was measured. A short redeploy of the spike measures `/run?minutes=20` and `/d1` after one tick. Their results are appended here before phase 4 dispatches runs to a Container. The spike kit stays until then.
+
+#### 5. Execution
+
+1. This amendment. It also corrects the runbook's token permissions and teardown.
+2. `feat(backplane)`: signed mode for `serve` (§2).
+3. The owner's short redeploy (§4), and its results appended here.
+4. `chore(tooling)`: remove `tooling/spikes/containers/`.
+
+#### 6. Verification
+
+- Step 2's tests sign requests and responses and refuse:
+  - a bad signature;
+  - a stale or future timestamp;
+  - a reused nonce;
+  - a tampered response body or status.
+- A signed request without a bearer header is accepted, and an unsigned one is refused.
+- `--network` with neither mode is refused.
+- Every existing `serve` test still passes in plain, TLS and signed modes.
