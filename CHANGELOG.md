@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-11-05
+
+- docs(infra): note the D1 provider update; keep the location guard ([#109](https://github.com/noisypigeon/pigeon/pull/109))
+
 ## 2026-11-04
 
 - feat(cobot): name the attributes an update changes ([#108](https://github.com/noisypigeon/pigeon/pull/108))
