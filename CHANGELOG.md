@@ -2,6 +2,7 @@
 
 ## 2026-11-05
 
+- feat(cobot): the CLI runs from pigeon with --instance naming the instance ([#135](https://github.com/noisypigeon/pigeon/pull/135))
 - docs(adr): the CLI runs from pigeon; --instance names the instance ([#134](https://github.com/noisypigeon/pigeon/pull/134))
 - feat(backplane): policy.check takes the pull request; sites.build ([#132](https://github.com/noisypigeon/pigeon/pull/132))
 - feat(site-templates): the architecture template ([#133](https://github.com/noisypigeon/pigeon/pull/133))

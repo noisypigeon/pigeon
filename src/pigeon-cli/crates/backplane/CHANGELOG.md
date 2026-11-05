@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.26 (2026-11-05)
+
+- feat(cobot): the CLI runs from pigeon with --instance naming the instance ([#135](https://github.com/noisypigeon/pigeon/pull/135))
+
 ## v0.1.25 (2026-11-05)
 
 - feat(backplane): policy.check takes the pull request; sites.build ([#132](https://github.com/noisypigeon/pigeon/pull/132))

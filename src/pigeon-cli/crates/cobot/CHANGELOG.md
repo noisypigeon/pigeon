@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.34 (2026-11-05)
+
+- feat(cobot): the CLI runs from pigeon with --instance naming the instance ([#135](https://github.com/noisypigeon/pigeon/pull/135))
+
 ## v0.1.33 (2026-11-05)
 
 - feat(cobot): workloads take the run's own Cloudflare token ([#131](https://github.com/noisypigeon/pigeon/pull/131))
