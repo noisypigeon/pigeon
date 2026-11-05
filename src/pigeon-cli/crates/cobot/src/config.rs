@@ -582,7 +582,16 @@ fn check_top(unit: &ConfigUnit, problems: &mut Vec<(String, String)>) {
     }
     let mut strings = Vec::new();
     walk_strings(&unit.config, &mut strings);
-    if strings.iter().any(|s| CREDENTIAL.is_match(s)) {
+    let published = unit
+        .site
+        .as_ref()
+        .filter(|s| s.workload.is_none())
+        .map(|_| crate::apex::published_values(&unit.config, &unit.home))
+        .unwrap_or_default();
+    if strings
+        .iter()
+        .any(|s| CREDENTIAL.is_match(s) && !published.contains(*s))
+    {
         add(
             CONFIG,
             "holds a value that looks like a credential; secrets belong in secrets.config.yaml"

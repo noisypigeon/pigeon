@@ -117,6 +117,7 @@ fn a_context_never_prints_its_secrets() {
         credentials: Some(r#"{"cloudflare":{"api_token":"runner-secret"}}"#.into()),
         cloudflare_token: Some("token-secret".into()),
         cloudflare_api: None,
+        platform: None,
     };
     let shown = format!("{ctx:?}");
     for secret in [

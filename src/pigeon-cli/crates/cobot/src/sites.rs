@@ -179,8 +179,17 @@ fn git(root: &Path, args: &[&str]) -> Result<Vec<u8>, Error> {
 ///
 /// [`Error::UnknownUnit`] for a wanted path that is not a static site.
 pub fn find(root: &Path, wanted: &[String]) -> Result<Vec<Site>, Error> {
+    find_in(root, root, wanted)
+}
+
+/// [`find`] for the instance at `root` on the platform at `platform`.
+///
+/// # Errors
+///
+/// As [`find`].
+pub fn find_in(root: &Path, platform: &Path, wanted: &[String]) -> Result<Vec<Site>, Error> {
     let mut out = Vec::new();
-    let (units, problems) = unit::discover(root);
+    let (units, problems) = unit::discover_in(root, platform);
     if !problems.is_empty() {
         return Err(Error::Invalid(problems));
     }
@@ -326,18 +335,33 @@ pub fn build_with(
     sites: &[Site],
     data: &BTreeMap<String, Value>,
 ) -> Result<Vec<Built>, Error> {
+    build_in(root, root, sites, data)
+}
+
+/// [`build_with`] for the instance at `root`, with templates and their tags from the
+/// platform at `platform`; work goes under the instance.
+///
+/// # Errors
+///
+/// As [`build_with`].
+pub fn build_in(
+    root: &Path,
+    platform: &Path,
+    sites: &[Site],
+    data: &BTreeMap<String, Value>,
+) -> Result<Vec<Built>, Error> {
     if let Some(bad) = data.keys().find(|k| !is_data_name(k)) {
         return Err(Error::Io {
             path: PathBuf::from(format!("data/{bad}.json")),
             message: "a data name is lowercase letters, digits and dashes".into(),
         });
     }
-    let commit = String::from_utf8_lossy(&git(root, &["rev-parse", "--short", "HEAD"])?)
-        .trim()
-        .to_string();
+    let head = git(root, &["rev-parse", "--short", "HEAD"])
+        .or_else(|_| git(platform, &["rev-parse", "--short", "HEAD"]))?;
+    let commit = String::from_utf8_lossy(&head).trim().to_string();
     let mut out = Vec::new();
     for site in sites {
-        let declared = declared(root, site)?;
+        let declared = declared(platform, site)?;
         let features = features(site, &declared.features)?;
         let base = format!(
             "https://{}",
@@ -354,7 +378,7 @@ pub fn build_with(
             path: PathBuf::from(&site.unit).join(crate::config::CONFIG),
             message: "static_site.site is required".into(),
         })?;
-        assemble(root, site, settings, &declared, &base, &features, &work)?;
+        assemble(platform, site, settings, &declared, &base, &features, &work)?;
         for (name, value) in data {
             let path = work.join("data").join(format!("{name}.json"));
             fs::create_dir_all(work.join("data")).map_err(io(&path))?;

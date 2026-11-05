@@ -31,8 +31,17 @@ static SCOPE: LazyLock<Regex> =
 /// `schema.json`, else `catalog/<provider>` when that does, else `infra/<provider>`.
 #[must_use]
 pub fn home(root: &Path, provider: &str) -> PathBuf {
+    home_in(root, root, provider)
+}
+
+/// [`home`] for an instance at `root` on the platform at `platform`: the instance's own
+/// `infra/<provider>` while it holds a `schema.json`, else the platform's `catalog/<provider>`;
+/// see `.claude/decisions/2026-11-05-development-pigeon-its-own-instance.md` (2026-11-05
+/// amendment).
+#[must_use]
+pub fn home_in(root: &Path, platform: &Path, provider: &str) -> PathBuf {
     let local = root.join(FALLBACK).join(provider);
-    let moved = root.join(DIR).join(provider);
+    let moved = platform.join(DIR).join(provider);
     if !local.join(crate::config::SCHEMA).is_file() && moved.join(crate::config::SCHEMA).is_file() {
         moved
     } else {
@@ -44,9 +53,15 @@ pub fn home(root: &Path, provider: &str) -> PathBuf {
 /// moved to `catalog/`.
 #[must_use]
 pub fn for_unit(root: &Path, rel: &str) -> Option<PathBuf> {
+    for_unit_in(root, root, rel)
+}
+
+/// [`for_unit`] for an instance at `root` on the platform at `platform`.
+#[must_use]
+pub fn for_unit_in(root: &Path, platform: &Path, rel: &str) -> Option<PathBuf> {
     let provider = rel.strip_prefix("infra/").filter(|p| !p.contains('/'))?;
-    let moved = home(root, provider);
-    moved.starts_with(root.join(DIR)).then_some(moved)
+    let moved = home_in(root, platform, provider);
+    moved.starts_with(platform.join(DIR)).then_some(moved)
 }
 
 /// A problem for each provider whose `schema.json` is in both `infra/` and `catalog/`.

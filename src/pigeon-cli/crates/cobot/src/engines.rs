@@ -224,13 +224,23 @@ pub fn unit_secrets(
 ///
 /// [`Error::Invalid`] listing every problem; [`Error::Io`] for an unreadable allowlist.
 pub fn validate(root: &Path, providers: &Path) -> Result<Vec<Unit>, Error> {
+    validate_in(root, root, providers)
+}
+
+/// [`validate`] for the instance at `root` on the platform at `platform`.
+///
+/// # Errors
+///
+/// As [`validate`].
+pub fn validate_in(root: &Path, platform: &Path, providers: &Path) -> Result<Vec<Unit>, Error> {
     let root = &root.canonicalize().map_err(io(root))?;
+    let platform = &platform.canonicalize().map_err(io(platform))?;
     let allow = providers::Allowlist::load(providers)?;
-    let problems = unit::validate(root, &allow);
+    let problems = unit::validate_in(root, platform, &allow);
     if !problems.is_empty() {
         return Err(Error::Invalid(problems));
     }
-    Ok(unit::discover(root).0)
+    Ok(unit::discover_in(root, platform).0)
 }
 
 /// The selected units, or all but the local ones.
@@ -240,7 +250,21 @@ pub fn validate(root: &Path, providers: &Path) -> Result<Vec<Unit>, Error> {
 /// [`Error::Invalid`] if any unit is invalid, [`Error::UnknownUnit`] for an
 /// unknown selection.
 pub fn select(root: &Path, providers: &Path, wanted: &[String]) -> Result<Vec<Unit>, Error> {
-    let units = validate(root, providers)?;
+    select_in(root, root, providers, wanted)
+}
+
+/// [`select`] for the instance at `root` on the platform at `platform`.
+///
+/// # Errors
+///
+/// As [`select`].
+pub fn select_in(
+    root: &Path,
+    platform: &Path,
+    providers: &Path,
+    wanted: &[String],
+) -> Result<Vec<Unit>, Error> {
+    let units = validate_in(root, platform, providers)?;
     let mut chosen: Vec<Unit> = if wanted.is_empty() {
         units.into_iter().filter(|u| !u.is_local()).collect()
     } else {
@@ -291,6 +315,10 @@ pub struct Context {
     pub cloudflare_token: Option<String>,
     /// The Cloudflare API's base URL; `None` is [`cloudflare::API`].
     pub cloudflare_api: Option<String>,
+    /// The platform's root, for catalogs and site templates, when the instance at `root` is
+    /// elsewhere; see `.claude/decisions/2026-11-05-development-pigeon-its-own-instance.md`
+    /// (2026-11-05 amendment).
+    pub platform: Option<PathBuf>,
 }
 
 /// Shows which secrets are set, never their values.
@@ -311,11 +339,18 @@ impl fmt::Debug for Context {
             .field("credentials", &set(&self.credentials))
             .field("cloudflare_token", &set(&self.cloudflare_token))
             .field("cloudflare_api", &self.cloudflare_api)
+            .field("platform", &self.platform)
             .finish()
     }
 }
 
 impl Context {
+    /// The platform's root: [`Context::platform`]'s, else the instance's.
+    #[must_use]
+    pub fn platform_root(&self) -> &Path {
+        self.platform.as_deref().unwrap_or(&self.root)
+    }
+
     /// The API with the run's own token, if it has one.
     #[must_use]
     pub fn cloudflare(&self) -> Option<cloudflare::Api> {
@@ -759,7 +794,7 @@ fn infra_state(
     {
         return Ok(None);
     }
-    let Some(source) = unit::discover(root)
+    let Some(source) = unit::discover_in(root, ctx.platform_root())
         .0
         .into_iter()
         .find(|u| u.path == apex::CLOUDFLARE)
@@ -810,11 +845,15 @@ pub fn publish(
     let root = ctx.root.canonicalize().map_err(io(&ctx.root))?;
     let state = absolute(&ctx.state)?;
     let allow = providers::Allowlist::load(&ctx.providers)?;
-    let found = sites::find(&root, wanted)?;
+    let platform = ctx
+        .platform_root()
+        .canonicalize()
+        .map_err(io(ctx.platform_root()))?;
+    let found = sites::find_in(&root, &platform, wanted)?;
     if found.is_empty() {
         return Ok(Vec::new());
     }
-    let built = sites::build_with(&root, &found, data)?;
+    let built = sites::build_in(&root, &platform, &found, data)?;
     let run = match ctx.cloudflare() {
         Some(api) => Some(run_credentials(&api)?),
         None => None,
@@ -990,7 +1029,7 @@ pub fn apply_stored_with(
     let units = if names.is_empty() {
         Vec::new()
     } else {
-        select(&ctx.root, &ctx.providers, &names)?
+        select_in(&ctx.root, ctx.platform_root(), &ctx.providers, &names)?
     };
     let mut ready_units = Vec::new();
     for (u, s) in units.iter().zip(&pending) {

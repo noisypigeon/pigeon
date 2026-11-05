@@ -111,6 +111,12 @@ fn problem(path: impl Into<String>, message: impl Into<String>) -> Problem {
 /// Every unit under the areas, sorted by path; problems for unreadable files.
 #[must_use]
 pub fn discover(root: &Path) -> (Vec<Unit>, Vec<Problem>) {
+    discover_in(root, root)
+}
+
+/// [`discover`]'s units under the instance at `root`, composing catalogs from `platform`.
+#[must_use]
+pub fn discover_in(root: &Path, platform: &Path) -> (Vec<Unit>, Vec<Problem>) {
     let mut units = Vec::new();
     let mut problems = Vec::new();
     let mut stack: Vec<String> = AREAS
@@ -132,7 +138,7 @@ pub fn discover(root: &Path) -> (Vec<Unit>, Vec<Problem>) {
                 .filter(|_| !dir.join(crate::config::SCHEMA).exists());
             let (home, site) = match (crate::apex::zone_apex(&rel), workload) {
                 (Some(zone), _) => (
-                    crate::catalog::home(root, "cloudflare"),
+                    crate::catalog::home_in(root, platform, "cloudflare"),
                     Some(crate::apex::Site {
                         root: root.to_path_buf(),
                         zone: zone.to_string(),
@@ -140,7 +146,7 @@ pub fn discover(root: &Path) -> (Vec<Unit>, Vec<Problem>) {
                     }),
                 ),
                 (None, Some((zone, w))) => (
-                    crate::catalog::home(root, "cloudflare"),
+                    crate::catalog::home_in(root, platform, "cloudflare"),
                     Some(crate::apex::Site {
                         root: root.to_path_buf(),
                         zone: zone.to_string(),
@@ -148,7 +154,8 @@ pub fn discover(root: &Path) -> (Vec<Unit>, Vec<Problem>) {
                     }),
                 ),
                 (None, None) => (
-                    crate::catalog::for_unit(root, &rel).unwrap_or_else(|| dir.clone()),
+                    crate::catalog::for_unit_in(root, platform, &rel)
+                        .unwrap_or_else(|| dir.clone()),
                     None,
                 ),
             };
@@ -314,7 +321,13 @@ fn misplaced_apex(unit: &Unit) -> Option<Problem> {
 /// Checks every unit; empty means valid.
 #[must_use]
 pub fn validate(root: &Path, allow: &Allowlist) -> Vec<Problem> {
-    let (units, mut problems) = discover(root);
+    validate_in(root, root, allow)
+}
+
+/// [`validate`] for the instance at `root` on the platform at `platform`.
+#[must_use]
+pub fn validate_in(root: &Path, platform: &Path, allow: &Allowlist) -> Vec<Problem> {
+    let (units, mut problems) = discover_in(root, platform);
     let name_re = &*NAME;
     for (path, message) in crate::apex::layout(root) {
         problems.push(problem(path, message));
@@ -322,7 +335,7 @@ pub fn validate(root: &Path, allow: &Allowlist) -> Vec<Problem> {
     for (path, message) in crate::moves::validate(root, &units) {
         problems.push(problem(path, message));
     }
-    let catalogs = crate::catalog::capabilities(root).0;
+    let catalogs = crate::catalog::capabilities(platform).0;
     let infra_keys: std::collections::BTreeSet<String> = units
         .iter()
         .filter(|u| u.path.starts_with("infra/"))
@@ -409,10 +422,10 @@ pub fn validate(root: &Path, allow: &Allowlist) -> Vec<Problem> {
         }
         scan(root, &unit.dir, allow, &mut problems);
     }
-    for dir in crate::catalog::dirs(root) {
-        scan(root, &dir, allow, &mut problems);
+    for dir in crate::catalog::dirs(platform) {
+        scan(platform, &dir, allow, &mut problems);
     }
-    problems.extend(crate::catalog::capabilities(root).1);
+    problems.extend(crate::catalog::capabilities(platform).1);
     problems
 }
 

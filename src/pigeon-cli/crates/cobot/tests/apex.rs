@@ -509,6 +509,94 @@ fn without_infra_cloudflare_a_zone_needs_only_its_name() {
 }
 
 #[test]
+fn an_instance_apart_from_its_platform_uses_the_platforms_catalogs() {
+    let platform = TempDir::new().expect("platform");
+    for rel in [
+        ".config/providers.yaml",
+        ".config/providers.lock.hcl",
+        "catalog/cloudflare",
+        "catalog/agnostic",
+    ] {
+        copy(platform.path(), rel);
+    }
+    let instance = TempDir::new().expect("instance");
+    let plain = PROTON
+        .replace("{ secret: protonmail_verification }", "plain-1")
+        .replace("{ secret: pm_verification }", "plain-2");
+    write(instance.path(), &format!("{APEX}/config.yaml"), &plain);
+    let config = platform.path().join(".config");
+
+    let units = cobot::validate_in(instance.path(), platform.path(), &config).expect("valid");
+    assert_eq!(
+        units.iter().map(|u| u.path.as_str()).collect::<Vec<_>>(),
+        [APEX],
+        "units come from the instance, by their path in it"
+    );
+    let home = &units[0].config.as_ref().expect("config unit").home;
+    assert!(
+        home.starts_with(platform.path().canonicalize().expect("canonical")),
+        "the catalog is the platform's: {}",
+        home.display()
+    );
+    assert!(
+        cobot::validate(instance.path(), &config).is_err(),
+        "alone, the instance has no catalog"
+    );
+
+    let selected =
+        cobot::select_in(instance.path(), platform.path(), &config, &[]).expect("selects");
+    let allow = cobot::providers::Allowlist::load(&config).expect("allowlist");
+    let rendered = cobot::render_json(
+        &selected[0],
+        Path::new("/state"),
+        &allow,
+        0,
+        &cobot::config::Existing::new(),
+    );
+    let source = rendered["module"]
+        .as_object()
+        .and_then(|m| m.values().next())
+        .and_then(|b| b["source"].as_str())
+        .expect("a module source")
+        .to_string();
+    assert!(
+        source.contains(
+            &platform
+                .path()
+                .canonicalize()
+                .expect("c")
+                .display()
+                .to_string()
+        ),
+        "{source}"
+    );
+}
+
+#[test]
+fn a_published_input_may_hold_a_long_code_but_a_record_may_not() {
+    let code = "e9457a054010bbbb12cc4abfce39d67198e9abd1";
+    let plain = PROTON
+        .replace("{ secret: protonmail_verification }", code)
+        .replace("{ secret: pm_verification }", "short");
+    let repo = repo(&plain);
+    let root = repo.path();
+    fs::remove_dir_all(root.join("infra/cloudflare")).expect("no infra/cloudflare");
+    fs::remove_file(root.join(APEX).join("secrets.config.yaml")).expect("no secrets");
+    assert_eq!(
+        problems(root),
+        Vec::<String>::new(),
+        "a published code is not a credential"
+    );
+
+    let leaked = plain.replace(
+        "records: {}",
+        &format!("records:\n  token: {{ name: \"@\", type: TXT, content: {code}x }}"),
+    );
+    write(root, &format!("{APEX}/config.yaml"), &leaked);
+    assert_fails(root, "looks like a credential");
+}
+
+#[test]
 fn each_zone_is_its_own_apex_with_its_own_provider_and_keys() {
     let repo = repo(PROTON);
     write(
@@ -726,6 +814,7 @@ fn ctx_on(root: &Path, state: &Path, day: &str) -> cobot::Context {
         credentials: None,
         cloudflare_token: None,
         cloudflare_api: None,
+        platform: None,
     }
 }
 

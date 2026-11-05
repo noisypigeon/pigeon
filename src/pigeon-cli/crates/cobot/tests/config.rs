@@ -143,6 +143,7 @@ fn ctx(root: &Path, state: &Path, today: i64) -> cobot::Context {
         credentials: None,
         cloudflare_token: None,
         cloudflare_api: None,
+        platform: None,
     }
 }
 

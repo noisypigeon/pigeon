@@ -18,8 +18,10 @@ use crate::cli::{
 #[must_use]
 pub fn run(command: CobotCommand) -> i32 {
     let result = match command {
-        CobotCommand::Validate(args) => cobot::validate(&args.root, &args.providers_dir())
-            .map(|units| println!("cobot: {} unit(s) valid", units.len())),
+        CobotCommand::Validate(args) => {
+            { cobot::validate_in(args.instance_root(), &args.root, &args.providers_dir()) }
+                .map(|units| println!("cobot: {} unit(s) valid", units.len()))
+        }
         CobotCommand::Render(args) => render(&args),
         CobotCommand::Plan(args) => plan(&args),
         CobotCommand::Apply(args) => apply(&args),
@@ -61,12 +63,12 @@ fn capabilities(root: &std::path::Path) -> Result<(), cobot::Error> {
 
 fn render(args: &CobotRun) -> Result<(), cobot::Error> {
     let providers = args.at.providers_dir();
-    for unit in cobot::select(&args.at.root, &providers, &args.units)? {
-        let state =
-            cobot::session::render_dir(&args.at.root, &args.state.to_string_lossy(), |k| {
-                env::var(k).ok()
-            })?;
-        let work = cobot::render(&args.at.root, &providers, &unit, &state)?;
+    let instance = args.at.instance_root();
+    for unit in cobot::select_in(instance, &args.at.root, &providers, &args.units)? {
+        let state = cobot::session::render_dir(instance, &args.state.to_string_lossy(), |k| {
+            env::var(k).ok()
+        })?;
+        let work = cobot::render(instance, &providers, &unit, &state)?;
         println!("{}", work.display());
     }
     Ok(())
@@ -98,13 +100,17 @@ fn data_files(
 }
 
 fn sites_build(args: &SitesBuild) -> Result<(), cobot::Error> {
-    let root = args.root.canonicalize().map_err(|e| cobot::Error::Io {
-        path: args.root.clone(),
-        message: e.to_string(),
-    })?;
+    let canonical = |p: &std::path::Path| {
+        p.canonicalize().map_err(|e| cobot::Error::Io {
+            path: p.to_path_buf(),
+            message: e.to_string(),
+        })
+    };
+    let platform = canonical(&args.root)?;
+    let root = canonical(args.instance.as_deref().unwrap_or(&args.root))?;
     let data = data_files(&args.data)?;
-    let sites = cobot::sites::find(&root, &args.workloads)?;
-    for b in cobot::sites::build_with(&root, &sites, &data)? {
+    let sites = cobot::sites::find_in(&root, &platform, &args.workloads)?;
+    for b in cobot::sites::build_in(&root, &platform, &sites, &data)? {
         let on: Vec<&str> = b
             .features
             .iter()
@@ -166,12 +172,16 @@ fn sites_publish(args: &SitesPublish) -> Result<(), cobot::Error> {
 
 /// The run's context, with its state pulled; see [`cobot::session`].
 fn context(args: &CobotRun) -> Result<cobot::session::Session, cobot::Error> {
-    cobot::session::open(
-        &args.at.root,
+    let mut session = cobot::session::open(
+        args.at.instance_root(),
         &args.at.providers_dir(),
         &args.state.to_string_lossy(),
         |k| env::var(k).ok(),
-    )
+    )?;
+    if args.at.instance.is_some() {
+        session.ctx.platform = Some(args.at.root.clone());
+    }
+    Ok(session)
 }
 
 fn now() -> u64 {
@@ -181,7 +191,12 @@ fn now() -> u64 {
 fn plan(args: &CobotPlan) -> Result<(), cobot::Error> {
     let mut session = context(&args.run)?;
     let ctx = &session.ctx;
-    let units = cobot::select(&ctx.root, &ctx.providers, &args.run.units)?;
+    let units = cobot::select_in(
+        &ctx.root,
+        ctx.platform_root(),
+        &ctx.providers,
+        &args.run.units,
+    )?;
     let plans = if args.store {
         let (stored, plans) = cobot::plan_stored(ctx, &units, now())?;
         session.push()?;
@@ -212,8 +227,13 @@ fn apply(args: &CobotApply) -> Result<(), cobot::Error> {
         session.apply_stored(id, now())
     } else {
         let ctx = &session.ctx;
-        cobot::select(&ctx.root, &ctx.providers, &args.run.units)
-            .and_then(|units| cobot::apply(ctx, &units))
+        cobot::select_in(
+            &ctx.root,
+            ctx.platform_root(),
+            &ctx.providers,
+            &args.run.units,
+        )
+        .and_then(|units| cobot::apply(ctx, &units))
     };
     if let Some(written) = session.push()? {
         println!("cobot: wrote {written} state object(s) to R2");

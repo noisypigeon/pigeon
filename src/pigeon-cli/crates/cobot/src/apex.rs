@@ -177,6 +177,10 @@ pub struct InputSpec {
     /// Whether it may be unset.
     #[serde(default)]
     pub optional: bool,
+    /// Whether its value is public by design, such as a DNS verification code: a literal is
+    /// expected, never mistaken for a credential.
+    #[serde(default)]
+    pub published: bool,
     /// The value when absent or `default`.
     pub default: Option<Value>,
 }
@@ -293,6 +297,34 @@ pub fn load_preset(home: &Path, service: &str) -> Result<Preset, String> {
     let text = fs::read_to_string(&path)
         .map_err(|_| format!("service `{service}` has no preset at presets/{service}.yaml"))?;
     serde_saphyr::from_str(&text).map_err(|e| format!("presets/{service}.yaml: {e}"))
+}
+
+/// The literal values an apex's `config`, as composed under `zones.<zone>`, gives its
+/// presets' published inputs.
+#[must_use]
+pub fn published_values(config: &Value, home: &Path) -> std::collections::BTreeSet<String> {
+    let mut out = std::collections::BTreeSet::new();
+    let services = config["zones"]
+        .as_object()
+        .into_iter()
+        .flatten()
+        .filter_map(|(_, zone)| zone["services"].as_object())
+        .flatten();
+    for (service, cfg) in services {
+        let Ok(preset) = load_preset(home, service) else {
+            continue;
+        };
+        for (path, spec) in &preset.inputs {
+            if !spec.published {
+                continue;
+            }
+            let value = path.split('.').try_fold(cfg, |v, k| v.get(k));
+            if let Some(Value::String(s)) = value {
+                out.insert(s.clone());
+            }
+        }
+    }
+    out
 }
 
 /// Checks a preset on its own; problems are messages.
