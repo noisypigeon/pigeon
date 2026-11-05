@@ -89,25 +89,7 @@ fn copy_from(from: &Path, root: &Path, rel: &str) {
     }
 }
 
-/// The kinds this test defines until the catalog ships them.
-fn kinds(platform: &Path) {
-    let here = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests");
-    for kind in ["zone", "static-site"] {
-        copy_from(
-            &here,
-            platform,
-            &format!("kinds/cloudflare/{kind}/schema.json"),
-        );
-        fs::create_dir_all(platform.join("catalog/cloudflare/kinds")).expect("mkdir");
-        fs::rename(
-            platform.join(format!("kinds/cloudflare/{kind}")),
-            platform.join(format!("catalog/cloudflare/kinds/{kind}")),
-        )
-        .expect("move kind");
-    }
-}
-
-/// The real Cloudflare catalog and providers, with the kinds.
+/// The real Cloudflare catalog, with its kinds, and providers.
 fn platform() -> TempDir {
     let dir = TempDir::new().expect("tempdir");
     for rel in [
@@ -118,7 +100,6 @@ fn platform() -> TempDir {
     ] {
         copy_from(&repo_root(), dir.path(), rel);
     }
-    kinds(dir.path());
     dir
 }
 
