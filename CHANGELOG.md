@@ -2,6 +2,7 @@
 
 ## 2026-11-05
 
+- fix(cobot): discovery makes both roots absolute; Proton's verification inputs are published ([#137](https://github.com/noisypigeon/pigeon/pull/137))
 - docs(adr): an instance is one config.yaml of kind-typed units ([#136](https://github.com/noisypigeon/pigeon/pull/136))
 - feat(cobot): the CLI runs from pigeon with --instance naming the instance ([#135](https://github.com/noisypigeon/pigeon/pull/135))
 - docs(adr): the CLI runs from pigeon; --instance names the instance ([#134](https://github.com/noisypigeon/pigeon/pull/134))

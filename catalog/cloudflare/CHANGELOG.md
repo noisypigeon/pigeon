@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.16 (2026-11-05)
+
+- fix(cobot): discovery makes both roots absolute; Proton's verification inputs are published ([#137](https://github.com/noisypigeon/pigeon/pull/137))
+
 ## v0.1.15 (2026-11-05)
 
 - refactor(cobot): every site names its template ([#125](https://github.com/noisypigeon/pigeon/pull/125))

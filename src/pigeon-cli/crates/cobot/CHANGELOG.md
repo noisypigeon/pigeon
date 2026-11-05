@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.35 (2026-11-05)
+
+- fix(cobot): discovery makes both roots absolute; Proton's verification inputs are published ([#137](https://github.com/noisypigeon/pigeon/pull/137))
+
 ## v0.1.34 (2026-11-05)
 
 - feat(cobot): the CLI runs from pigeon with --instance naming the instance ([#135](https://github.com/noisypigeon/pigeon/pull/135))
