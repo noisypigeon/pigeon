@@ -2,6 +2,7 @@
 
 ## 2026-11-05
 
+- feat(cobot): named site templates, and sites without content ([#121](https://github.com/noisypigeon/pigeon/pull/121))
 - feat(backplane): the Instance Durable Object, its run queue, and D1 schema v0 ([#119](https://github.com/noisypigeon/pigeon/pull/119))
 - refactor(backplane): shared wire types, and both worker builds compiling ([#118](https://github.com/noisypigeon/pigeon/pull/118))
 - feat(backplane): serve drains on SIGTERM ([#117](https://github.com/noisypigeon/pigeon/pull/117))

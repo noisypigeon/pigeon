@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.19 (2026-11-05)
+
+- feat(cobot): named site templates, and sites without content ([#121](https://github.com/noisypigeon/pigeon/pull/121))
+
 ## v0.1.18 (2026-11-05)
 
 - feat(backplane): the Instance Durable Object, its run queue, and D1 schema v0 ([#119](https://github.com/noisypigeon/pigeon/pull/119))

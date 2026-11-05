@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.30 (2026-11-05)
+
+- feat(cobot): named site templates, and sites without content ([#121](https://github.com/noisypigeon/pigeon/pull/121))
+
 ## v0.1.29 (2026-11-05)
 
 - refactor(backplane): shared wire types, and both worker builds compiling ([#118](https://github.com/noisypigeon/pigeon/pull/118))
