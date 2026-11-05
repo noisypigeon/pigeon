@@ -1,11 +1,17 @@
-//! `pigeon backplane serve`: the wire form over HTTP, in mutual TLS beyond loopback; see the
-//! phase 3 amendment §6 and the "Worker–Container mutual TLS" amendment of
+//! `pigeon backplane serve`: the wire form over HTTP, in mutual TLS or signed mode beyond
+//! loopback; see the phase 3 amendment §6, the "Worker–Container mutual TLS" amendment and the
+//! "Phase 3 spike report" amendment §2 of
 //! `.claude/decisions/2026-11-04-development-platform-instance-separation.md`.
 
+use std::collections::HashMap;
+use std::fmt::Write as _;
 use std::io::{self, Read, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream, ToSocketAddrs};
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+
+use hmac::{Hmac, Mac};
+use sha2::{Digest, Sha256};
 
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
@@ -41,6 +47,18 @@ pub const TLS_KEY_VAR: &str = "BACKPLANE_TLS_KEY";
 
 /// The environment variable holding the CA that issues client certificates, as PEM.
 pub const TLS_CLIENT_CA_VAR: &str = "BACKPLANE_TLS_CLIENT_CA";
+
+/// A signed request's Unix time in seconds.
+pub const TIMESTAMP_HEADER: &str = "x-pigeon-timestamp";
+
+/// A signed request's nonce: 32 to 64 hex digits, never reused.
+pub const NONCE_HEADER: &str = "x-pigeon-nonce";
+
+/// A request's or response's HMAC-SHA-256, in hex.
+pub const SIGNATURE_HEADER: &str = "x-pigeon-signature";
+
+/// How far a signed request's timestamp may be from the server's clock, in seconds.
+pub const SKEW: u64 = 60;
 
 /// The shortest token accepted.
 const MIN_TOKEN: usize = 32;
@@ -125,20 +143,25 @@ pub struct Server {
     instance: Instance,
     state: String,
     token: String,
+    /// Whether `/v0/` routes take signed requests instead of the bearer token.
+    signed: bool,
+    /// Nonces of verified requests, by the time they were seen; pruned past twice [`SKEW`].
+    seen: Mutex<HashMap<String, u64>>,
     /// Held by `plan` or `apply`, which share the state's mirror; a second gets 409, never waits.
     changing: Mutex<()>,
 }
 
 impl Server {
-    /// Binds `listen` for `instance`, whose operations use `state`; requests must carry
-    /// `token` as a bearer token, and with `tls`, a client certificate its CA issued. Only a
-    /// loopback address binds unless `network` is set, which requires `tls`.
+    /// Binds `listen` for `instance`, whose operations use `state`. Requests must carry `token`
+    /// as a bearer token or, when `signed`, a signature under it; with `tls`, also a client
+    /// certificate its CA issued. Only a loopback address binds unless `network` is set, which
+    /// requires `tls` or `signed`.
     ///
     /// # Errors
     ///
     /// [`Error::Invalid`] for a token shorter than 32 characters, a non-loopback address
-    /// without `network`, `network` without `tls`, or unusable TLS material; [`Error::Io`] if
-    /// the address cannot be bound.
+    /// without `network`, `network` without `tls` or `signed`, or unusable TLS material;
+    /// [`Error::Io`] if the address cannot be bound.
     pub fn bind(
         instance: Instance,
         listen: &str,
@@ -146,6 +169,7 @@ impl Server {
         token: &str,
         network: bool,
         tls: Option<&Tls>,
+        signed: bool,
     ) -> Result<Self, Error> {
         if token.chars().count() < MIN_TOKEN {
             return Err(Error::Invalid(vec![format!(
@@ -163,9 +187,9 @@ impl Server {
                 "`{listen}` is not a loopback address; bind beyond loopback only with --network"
             )]));
         }
-        if network && tls.is_none() {
+        if network && tls.is_none() && !signed {
             return Err(Error::Invalid(vec![format!(
-                "--network requires {TLS_CERT_VAR}, {TLS_KEY_VAR} and {TLS_CLIENT_CA_VAR}"
+                "--network requires mutual TLS ({TLS_CERT_VAR}, {TLS_KEY_VAR} and {TLS_CLIENT_CA_VAR}) or --signed"
             )]));
         }
         let tls = tls.map(Tls::config).transpose()?;
@@ -177,6 +201,8 @@ impl Server {
             instance,
             state: state.to_string(),
             token: token.to_string(),
+            signed,
+            seen: Mutex::new(HashMap::new()),
             changing: Mutex::new(()),
         })
     }
@@ -241,14 +267,19 @@ impl Server {
         let (head, read) = match read_head(s) {
             Ok(h) => h,
             Err(Some((status, body))) => {
-                let _ = respond(s, status, &body);
+                let _ = write_response(s, status, &body.to_string(), None);
                 return;
             }
             Err(None) => return,
         };
-        let (status, body, unread) = self.answer(&head, read, s, var);
-        if respond(s, status, &body).is_ok() && unread > 0 {
-            let _ = io::copy(&mut s.take(unread.min(2 * MAX_BODY)), &mut io::sink());
+        let reply = self.answer(&head, read, s, var);
+        let text = reply.body.to_string();
+        let signature = reply
+            .nonce
+            .map(|n| sign_response(&self.token, &n, reply.status, text.as_bytes()));
+        if write_response(s, reply.status, &text, signature.as_deref()).is_ok() && reply.unread > 0
+        {
+            let _ = io::copy(&mut s.take(reply.unread.min(2 * MAX_BODY)), &mut io::sink());
         }
     }
 
@@ -259,73 +290,123 @@ impl Server {
             .is_some_and(|a| constant_eq(a.as_bytes(), want.as_bytes()))
     }
 
-    /// The status and body for `head`, and how much of its body is left unread; `read` is
-    /// what arrived after the headers.
+    /// The reply to `head`; `read` is what arrived after the headers.
     fn answer<S: Read + Write>(
         &self,
         head: &Head,
-        mut read: Vec<u8>,
+        read: Vec<u8>,
         s: &mut S,
         var: &impl Fn(&str) -> Option<String>,
-    ) -> (u16, Value, u64) {
-        let length = head.length.unwrap_or(0);
-        let unread = length.saturating_sub(read.len() as u64);
-        let (status, body) = match (head.method.as_str(), head.path.as_str()) {
-            ("GET", "/healthz") => (200, json!({ "ok": true })),
-            (_, "/v0/operations" | "/v0/run") if !self.authorized(head) => {
-                (401, json!({ "error": "unauthorized" }))
-            }
-            ("GET", "/v0/operations") => (200, json!(catalog())),
-            ("POST", "/v0/run") if head.chunked => (
-                411,
-                json!({ "error": "the request body needs a content-length" }),
-            ),
-            ("POST", "/v0/run")
-                if head
-                    .expect
-                    .as_ref()
-                    .is_some_and(|e| !e.eq_ignore_ascii_case("100-continue")) =>
-            {
-                (
-                    417,
-                    json!({ "error": "only `expect: 100-continue` is supported" }),
-                )
-            }
-            ("POST", "/v0/run") if length > MAX_BODY => {
-                (413, json!({ "error": "the request body is over 1 MiB" }))
-            }
-            ("POST", "/v0/run") => {
-                read.truncate(usize::try_from(length).unwrap_or(usize::MAX));
-                if head.expect.is_some()
-                    && unread > 0
-                    && s.write_all(b"HTTP/1.1 100 Continue\r\n\r\n")
-                        .and_then(|()| s.flush())
-                        .is_err()
-                {
-                    return (
-                        400,
-                        json!({ "error": "the request body could not be read" }),
-                        0,
-                    );
-                }
-                let body = match s.take(unread).read_to_end(&mut read) {
-                    Ok(n) if n as u64 == unread => match String::from_utf8(read) {
-                        Ok(text) => self.run(&text, var),
-                        Err(_) => (400, json!({ "error": "the request body is not UTF-8" })),
-                    },
-                    _ => (
-                        400,
-                        json!({ "error": "the request body could not be read" }),
-                    ),
-                };
-                return (body.0, body.1, 0);
-            }
-            (_, "/healthz" | "/v0/operations" | "/v0/run") => {
-                (405, json!({ "error": "method not allowed" }))
-            }
-            _ => (404, json!({ "error": "not found" })),
+    ) -> Reply {
+        let unread = head.length.unwrap_or(0).saturating_sub(read.len() as u64);
+        let reply = |status, body| Reply {
+            status,
+            body,
+            unread,
+            nonce: None,
         };
-        (status, body, unread)
+        match (head.method.as_str(), head.path.as_str()) {
+            ("GET", "/healthz") => return reply(200, json!({ "ok": true })),
+            (_, "/healthz") => return reply(405, json!({ "error": "method not allowed" })),
+            (_, "/v0/operations" | "/v0/run") => {}
+            _ => return reply(404, json!({ "error": "not found" })),
+        }
+        if self.signed {
+            return self.signed_answer(head, read, s, var);
+        }
+        if !self.authorized(head) {
+            return reply(401, json!({ "error": "unauthorized" }));
+        }
+        match (head.method.as_str(), head.path.as_str()) {
+            ("GET", "/v0/operations") => reply(200, json!(catalog())),
+            ("POST", "/v0/run") => match read_body(head, read, s) {
+                Ok(body) => {
+                    let (status, body) = self.run_bytes(body, var);
+                    Reply {
+                        status,
+                        body,
+                        unread: 0,
+                        nonce: None,
+                    }
+                }
+                Err(refused) => refused,
+            },
+            _ => reply(405, json!({ "error": "method not allowed" })),
+        }
+    }
+
+    /// A `/v0/` reply in signed mode: the body is read first, since the signature covers it.
+    fn signed_answer<S: Read + Write>(
+        &self,
+        head: &Head,
+        read: Vec<u8>,
+        s: &mut S,
+        var: &impl Fn(&str) -> Option<String>,
+    ) -> Reply {
+        let body = match read_body(head, read, s) {
+            Ok(body) => body,
+            Err(refused) => return refused,
+        };
+        let Some(nonce) = self.verify(head, &body) else {
+            return Reply {
+                status: 401,
+                body: json!({ "error": "unauthorized" }),
+                unread: 0,
+                nonce: None,
+            };
+        };
+        let (status, body) = match (head.method.as_str(), head.path.as_str()) {
+            ("GET", "/v0/operations") => (200, json!(catalog())),
+            ("POST", "/v0/run") => self.run_bytes(body, var),
+            _ => (405, json!({ "error": "method not allowed" })),
+        };
+        Reply {
+            status,
+            body,
+            unread: 0,
+            nonce: Some(nonce),
+        }
+    }
+
+    /// The request's nonce when its signature, timestamp and nonce all hold; the nonce is then
+    /// spent.
+    fn verify(&self, head: &Head, body: &[u8]) -> Option<String> {
+        let timestamp: u64 = head.timestamp.as_deref()?.parse().ok()?;
+        let nonce = head.nonce.as_deref()?;
+        if !(32..=64).contains(&nonce.len()) || !nonce.bytes().all(|b| b.is_ascii_hexdigit()) {
+            return None;
+        }
+        let now = unix_now();
+        if now.abs_diff(timestamp) > SKEW {
+            return None;
+        }
+        let want = sign_request(
+            &self.token,
+            &head.method,
+            &head.path,
+            timestamp,
+            nonce,
+            body,
+        );
+        if !constant_eq(head.signature.as_deref()?.as_bytes(), want.as_bytes()) {
+            return None;
+        }
+        let mut seen = self
+            .seen
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        seen.retain(|_, at| now.saturating_sub(*at) <= 2 * SKEW);
+        if seen.insert(nonce.to_ascii_lowercase(), now).is_some() {
+            return None;
+        }
+        Some(nonce.to_string())
+    }
+
+    fn run_bytes(&self, body: Vec<u8>, var: &impl Fn(&str) -> Option<String>) -> (u16, Value) {
+        match String::from_utf8(body) {
+            Ok(text) => self.run(&text, var),
+            Err(_) => (400, json!({ "error": "the request body is not UTF-8" })),
+        }
     }
 
     fn run(&self, text: &str, var: &impl Fn(&str) -> Option<String>) -> (u16, Value) {
@@ -392,6 +473,132 @@ struct Head {
     length: Option<u64>,
     chunked: bool,
     expect: Option<String>,
+    timestamp: Option<String>,
+    nonce: Option<String>,
+    signature: Option<String>,
+}
+
+/// A status and body, how much of the request's body is left unread, and the nonce to sign
+/// the response over, for a verified signed request.
+struct Reply {
+    status: u16,
+    body: Value,
+    unread: u64,
+    nonce: Option<String>,
+}
+
+/// The request's whole body, after `expect: 100-continue` if asked; or the reply refusing it.
+fn read_body<S: Read + Write>(head: &Head, mut read: Vec<u8>, s: &mut S) -> Result<Vec<u8>, Reply> {
+    let length = head.length.unwrap_or(0);
+    let unread = length.saturating_sub(read.len() as u64);
+    let refuse = |status, body, unread| Reply {
+        status,
+        body,
+        unread,
+        nonce: None,
+    };
+    if head.chunked {
+        return Err(refuse(
+            411,
+            json!({ "error": "the request body needs a content-length" }),
+            unread,
+        ));
+    }
+    if head
+        .expect
+        .as_ref()
+        .is_some_and(|e| !e.eq_ignore_ascii_case("100-continue"))
+    {
+        return Err(refuse(
+            417,
+            json!({ "error": "only `expect: 100-continue` is supported" }),
+            unread,
+        ));
+    }
+    if length > MAX_BODY {
+        return Err(refuse(
+            413,
+            json!({ "error": "the request body is over 1 MiB" }),
+            unread,
+        ));
+    }
+    read.truncate(usize::try_from(length).unwrap_or(usize::MAX));
+    let unreadable = || {
+        refuse(
+            400,
+            json!({ "error": "the request body could not be read" }),
+            0,
+        )
+    };
+    if head.expect.is_some()
+        && unread > 0
+        && s.write_all(b"HTTP/1.1 100 Continue\r\n\r\n")
+            .and_then(|()| s.flush())
+            .is_err()
+    {
+        return Err(unreadable());
+    }
+    match s.take(unread).read_to_end(&mut read) {
+        Ok(n) if n as u64 == unread => Ok(read),
+        _ => Err(unreadable()),
+    }
+}
+
+/// The signature a client sends for a request: HMAC-SHA-256 under `token` over the method, path,
+/// timestamp, nonce and the body's SHA-256, in hex.
+#[must_use]
+pub fn sign_request(
+    token: &str,
+    method: &str,
+    path: &str,
+    timestamp: u64,
+    nonce: &str,
+    body: &[u8],
+) -> String {
+    hmac_hex(
+        token,
+        &format!(
+            "pigeon-v0-request\n{method}\n{path}\n{timestamp}\n{}\n{}",
+            nonce.to_ascii_lowercase(),
+            hex(&Sha256::digest(body))
+        ),
+    )
+}
+
+/// The signature `serve` sends with the response to a signed request: HMAC-SHA-256 under `token`
+/// over the request's nonce, the status and the body's SHA-256, in hex.
+#[must_use]
+pub fn sign_response(token: &str, nonce: &str, status: u16, body: &[u8]) -> String {
+    hmac_hex(
+        token,
+        &format!(
+            "pigeon-v0-response\n{}\n{status}\n{}",
+            nonce.to_ascii_lowercase(),
+            hex(&Sha256::digest(body))
+        ),
+    )
+}
+
+fn hmac_hex(token: &str, message: &str) -> String {
+    let mut mac =
+        Hmac::<Sha256>::new_from_slice(token.as_bytes()).expect("HMAC takes a key of any length");
+    mac.update(message.as_bytes());
+    hex(&mac.finalize().into_bytes())
+}
+
+fn hex(bytes: &[u8]) -> String {
+    bytes
+        .iter()
+        .fold(String::with_capacity(bytes.len() * 2), |mut out, b| {
+            let _ = write!(out, "{b:02x}");
+            out
+        })
+}
+
+fn unix_now() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs())
 }
 
 /// The answer to a request that was not read: a status and body, or `None` for nothing.
@@ -449,6 +656,9 @@ fn read_head<S: Read>(s: &mut S) -> Result<(Head, Vec<u8>), Refusal> {
                     length,
                     chunked: header("transfer-encoding").is_some(),
                     expect: header("expect").map(str::to_string),
+                    timestamp: header(TIMESTAMP_HEADER).map(str::to_string),
+                    nonce: header(NONCE_HEADER).map(str::to_string),
+                    signature: header(SIGNATURE_HEADER).map(str::to_string),
                 };
                 return Ok((head, buf.split_off(end)));
             }
@@ -468,8 +678,12 @@ fn bad(why: &str) -> (u16, Value) {
     (400, json!({ "error": why }))
 }
 
-fn respond(s: &mut impl Write, status: u16, body: &Value) -> io::Result<()> {
-    let text = body.to_string();
+fn write_response(
+    s: &mut impl Write,
+    status: u16,
+    text: &str,
+    signature: Option<&str>,
+) -> io::Result<()> {
     let reason = match status {
         200 => "OK",
         400 => "Bad Request",
@@ -483,8 +697,11 @@ fn respond(s: &mut impl Write, status: u16, body: &Value) -> io::Result<()> {
         431 => "Request Header Fields Too Large",
         _ => "Internal Server Error",
     };
+    let signed = signature
+        .map(|sig| format!("{SIGNATURE_HEADER}: {sig}\r\n"))
+        .unwrap_or_default();
     let response = format!(
-        "HTTP/1.1 {status} {reason}\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{text}",
+        "HTTP/1.1 {status} {reason}\r\ncontent-type: application/json\r\ncontent-length: {}\r\n{signed}connection: close\r\n\r\n{text}",
         text.len()
     );
     s.write_all(response.as_bytes())?;

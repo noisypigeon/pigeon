@@ -54,6 +54,7 @@ fn serve(args: &ServeArgs) -> i32 {
             &token,
             args.network,
             tls.as_ref(),
+            args.signed,
         )
     });
     let server = match bound {

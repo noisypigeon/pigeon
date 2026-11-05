@@ -7,9 +7,13 @@ use std::net::{SocketAddr, TcpStream};
 use std::path::Path;
 use std::process::Command;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
-use backplane::serve::{Server, Tls, WORKERS};
+use backplane::serve::{
+    NONCE_HEADER, SIGNATURE_HEADER, Server, TIMESTAMP_HEADER, Tls, WORKERS, sign_request,
+    sign_response,
+};
 use backplane::{Error, Instance, Request, run_with};
 use rcgen::{
     BasicConstraints, CertificateParams, DnType, ExtendedKeyUsagePurpose, IsCa, Issuer, KeyPair,
@@ -230,18 +234,79 @@ fn pki() -> Pki {
     }
 }
 
-/// A server's address, reached in plain HTTP or with a TLS client config.
+fn unix_now() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("clock")
+        .as_secs()
+}
+
+/// A nonce no test has used.
+fn fresh_nonce() -> String {
+    static NEXT: AtomicU64 = AtomicU64::new(0);
+    format!(
+        "{:016x}{:016x}",
+        unix_now(),
+        NEXT.fetch_add(1, Ordering::Relaxed)
+    )
+}
+
+/// A request carrying `extra` header lines.
+fn raw_request(method: &str, path: &str, body: &[u8], extra: &str) -> Vec<u8> {
+    let mut raw = format!(
+        "{method} {path} HTTP/1.1\r\nhost: test\r\n{extra}content-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n",
+        body.len()
+    )
+    .into_bytes();
+    raw.extend_from_slice(body);
+    raw
+}
+
+/// The header lines of a request signed under `token`.
+fn signature_headers(
+    token: &str,
+    method: &str,
+    path: &str,
+    body: &[u8],
+    timestamp: u64,
+    nonce: &str,
+) -> String {
+    let sig = sign_request(token, method, path, timestamp, nonce, body);
+    format!(
+        "{TIMESTAMP_HEADER}: {timestamp}\r\n{NONCE_HEADER}: {nonce}\r\n{SIGNATURE_HEADER}: {sig}\r\n"
+    )
+}
+
+/// A response's status, its JSON body's text, and its signature header, if any.
+fn parse(out: &str) -> (u16, String, Option<String>) {
+    let (head, body) = out.split_once("\r\n\r\n").unwrap_or((out, "null"));
+    let status = head
+        .split_whitespace()
+        .nth(1)
+        .and_then(|c| c.parse().ok())
+        .unwrap_or_else(|| panic!("no status in {out:?}"));
+    let signature = head.lines().find_map(|l| {
+        l.split_once(':')
+            .filter(|(k, _)| k.eq_ignore_ascii_case(SIGNATURE_HEADER))
+            .map(|(_, v)| v.trim().to_string())
+    });
+    (status, body.to_string(), signature)
+}
+
+/// A server's address, reached in plain HTTP or with a TLS client config, by bearer token or
+/// by signed requests.
 #[derive(Clone)]
 struct Client {
     addr: SocketAddr,
     tls: Option<Arc<ClientConfig>>,
+    signed: bool,
 }
 
 impl Client {
     fn with(&self, tls: &Arc<ClientConfig>) -> Self {
         Self {
-            addr: self.addr,
             tls: Some(Arc::clone(tls)),
+            ..self.clone()
         }
     }
 
@@ -277,24 +342,25 @@ impl Client {
         String::from_utf8_lossy(&out).into_owned()
     }
 
+    /// Sends with `token` as the bearer or, for a signed client, as the signing key; a signed
+    /// response must verify under the server's token.
     fn send(&self, method: &str, path: &str, body: &[u8], token: Option<&str>) -> (u16, Value) {
-        let auth = token
-            .map(|t| format!("authorization: Bearer {t}\r\n"))
-            .unwrap_or_default();
-        let mut raw = format!(
-            "{method} {path} HTTP/1.1\r\nhost: test\r\n{auth}content-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n",
-            body.len()
-        )
-        .into_bytes();
-        raw.extend_from_slice(body);
-        let out = self.exchange(&raw);
-        let status = out
-            .split_whitespace()
-            .nth(1)
-            .and_then(|c| c.parse().ok())
-            .unwrap_or_else(|| panic!("no status in {out:?}"));
-        let json = out.split("\r\n\r\n").nth(1).unwrap_or("null");
-        (status, serde_json::from_str(json).expect("json body"))
+        let nonce = fresh_nonce();
+        let extra = match (token, self.signed) {
+            (None, _) => String::new(),
+            (Some(t), false) => format!("authorization: Bearer {t}\r\n"),
+            (Some(t), true) => signature_headers(t, method, path, body, unix_now(), &nonce),
+        };
+        let out = self.exchange(&raw_request(method, path, body, &extra));
+        let (status, text, signature) = parse(&out);
+        if let Some(sig) = signature {
+            assert_eq!(
+                sig,
+                sign_response(TOKEN, &nonce, status, text.as_bytes()),
+                "the response verifies"
+            );
+        }
+        (status, serde_json::from_str(&text).expect("json body"))
     }
 
     fn http(&self, method: &str, path: &str, body: &str) -> (u16, Value) {
@@ -309,16 +375,17 @@ impl Client {
     }
 }
 
-fn start(server: Server, tls: Option<&Pki>) -> Client {
+fn start(server: Server, tls: Option<&Pki>, signed: bool) -> Client {
     let addr = server.local_addr().expect("addr");
     std::thread::spawn(move || server.serve(var));
     Client {
         addr,
         tls: tls.map(|p| Arc::clone(&p.client)),
+        signed,
     }
 }
 
-fn serving(root: &Path, state: &Path, tls: Option<&Pki>) -> Client {
+fn serving_as(root: &Path, state: &Path, tls: Option<&Pki>, signed: bool) -> Client {
     let instance = Instance::load(root).expect("valid");
     let server = Server::bind(
         instance,
@@ -327,15 +394,20 @@ fn serving(root: &Path, state: &Path, tls: Option<&Pki>) -> Client {
         TOKEN,
         false,
         tls.map(|p| &p.server),
+        signed,
     )
     .expect("bind");
-    start(server, tls)
+    start(server, tls, signed)
 }
 
-fn the_wire_form_round_trips(tls: Option<&Pki>) {
+fn serving(root: &Path, state: &Path, tls: Option<&Pki>) -> Client {
+    serving_as(root, state, tls, false)
+}
+
+fn the_wire_form_round_trips(tls: Option<&Pki>, signed: bool) {
     let root = fixture();
     let state = TempDir::new().expect("state");
-    let c = serving(root.path(), state.path(), tls);
+    let c = serving_as(root.path(), state.path(), tls, signed);
 
     assert_eq!(
         c.send("GET", "/healthz", b"", None),
@@ -419,12 +491,90 @@ fn the_wire_form_round_trips(tls: Option<&Pki>) {
 
 #[test]
 fn the_wire_form_round_trips_over_http() {
-    the_wire_form_round_trips(None);
+    the_wire_form_round_trips(None, false);
 }
 
 #[test]
 fn the_wire_form_round_trips_over_mutual_tls() {
-    the_wire_form_round_trips(Some(&pki()));
+    the_wire_form_round_trips(Some(&pki()), false);
+}
+
+#[test]
+fn the_wire_form_round_trips_signed() {
+    the_wire_form_round_trips(None, true);
+}
+
+#[test]
+fn signed_mode_verifies_every_request_and_signs_every_answer() {
+    let root = fixture();
+    let state = TempDir::new().expect("state");
+    let c = serving_as(root.path(), state.path(), None, true);
+    let ops = |extra: &str| parse(&c.exchange(&raw_request("GET", "/v0/operations", b"", extra)));
+
+    let nonce = fresh_nonce();
+    let good = signature_headers(TOKEN, "GET", "/v0/operations", b"", unix_now(), &nonce);
+    let (status, text, sig) = ops(&good);
+    assert_eq!(status, 200, "a signed request needs no bearer header");
+    assert_eq!(
+        sig.as_deref(),
+        Some(sign_response(TOKEN, &nonce, 200, text.as_bytes()).as_str()),
+        "the answer is signed"
+    );
+    assert_eq!(ops(&good).0, 401, "a nonce is spent once");
+
+    assert_eq!(
+        ops(&format!("authorization: Bearer {TOKEN}\r\n")).0,
+        401,
+        "an unsigned request is refused, bearer or not"
+    );
+    let at = |t: u64| signature_headers(TOKEN, "GET", "/v0/operations", b"", t, &fresh_nonce());
+    assert_eq!(ops(&at(unix_now() - 120)).0, 401, "a stale timestamp");
+    assert_eq!(ops(&at(unix_now() + 120)).0, 401, "a future timestamp");
+    let other_path = signature_headers(TOKEN, "GET", "/v0/run", b"", unix_now(), &fresh_nonce());
+    assert_eq!(ops(&other_path).0, 401, "a signature over another request");
+    let wrong_key = signature_headers(
+        "another-token-0123456789abcdef0123",
+        "GET",
+        "/v0/operations",
+        b"",
+        unix_now(),
+        &fresh_nonce(),
+    );
+    let (status, _, sig) = ops(&wrong_key);
+    assert_eq!(status, 401, "a bad signature");
+    assert!(sig.is_none(), "a refusal is not signed");
+
+    let body = br#"{"operation":"instance.show","args":{}}"#;
+    let signed_for_other_body =
+        signature_headers(TOKEN, "POST", "/v0/run", b"{}", unix_now(), &fresh_nonce());
+    let (status, ..) = parse(&c.exchange(&raw_request(
+        "POST",
+        "/v0/run",
+        body,
+        &signed_for_other_body,
+    )));
+    assert_eq!(status, 401, "a tampered body");
+}
+
+#[test]
+fn a_response_signature_covers_status_and_body() {
+    let nonce = fresh_nonce();
+    let sig = sign_response(TOKEN, &nonce, 409, b"{}");
+    assert_ne!(
+        sig,
+        sign_response(TOKEN, &nonce, 200, b"{}"),
+        "a changed status"
+    );
+    assert_ne!(
+        sig,
+        sign_response(TOKEN, &nonce, 409, b"[]"),
+        "a changed body"
+    );
+    assert_ne!(
+        sig,
+        sign_response(TOKEN, &fresh_nonce(), 409, b"{}"),
+        "another request"
+    );
 }
 
 #[test]
@@ -438,8 +588,8 @@ fn mutual_tls_refuses_clients_without_a_trusted_certificate() {
     assert!(c.with(&pki.stranger).refused(), "another CA's certificate");
     assert!(
         Client {
-            addr: c.addr,
-            tls: None
+            tls: None,
+            ..c.clone()
         }
         .refused(),
         "plain HTTP"
@@ -456,27 +606,39 @@ fn a_short_token_is_refused() {
     let root = fixture();
     let instance = Instance::load(root.path()).expect("valid");
     assert!(matches!(
-        Server::bind(instance, "127.0.0.1:0", "/state", "short", false, None),
+        Server::bind(
+            instance,
+            "127.0.0.1:0",
+            "/state",
+            "short",
+            false,
+            None,
+            false
+        ),
         Err(Error::Invalid(_))
     ));
 }
 
 #[test]
-fn only_loopback_binds_without_network_and_network_needs_tls() {
+fn only_loopback_binds_without_network_and_network_needs_tls_or_signing() {
     let root = fixture();
     let instance = || Instance::load(root.path()).expect("valid");
     let pki = pki();
-    let err = Server::bind(instance(), "0.0.0.0:0", "/state", TOKEN, false, None);
+    let err = Server::bind(instance(), "0.0.0.0:0", "/state", TOKEN, false, None, false);
     assert!(
         matches!(&err, Err(Error::Invalid(p)) if p[0].contains("--network")),
         "{:?}",
         err.as_ref().err()
     );
-    let err = Server::bind(instance(), "0.0.0.0:0", "/state", TOKEN, true, None);
+    let err = Server::bind(instance(), "0.0.0.0:0", "/state", TOKEN, true, None, false);
     assert!(
-        matches!(&err, Err(Error::Invalid(p)) if p[0].contains("BACKPLANE_TLS_CERT")),
+        matches!(&err, Err(Error::Invalid(p)) if p[0].contains("BACKPLANE_TLS_CERT") && p[0].contains("--signed")),
         "{:?}",
         err.as_ref().err()
+    );
+    assert!(
+        Server::bind(instance(), "0.0.0.0:0", "/state", TOKEN, true, None, true).is_ok(),
+        "--network with --signed"
     );
     assert!(
         Server::bind(
@@ -485,11 +647,23 @@ fn only_loopback_binds_without_network_and_network_needs_tls() {
             "/state",
             TOKEN,
             true,
-            Some(&pki.server)
+            Some(&pki.server),
+            false
         )
         .is_ok()
     );
-    assert!(Server::bind(instance(), "localhost:0", "/state", TOKEN, false, None).is_ok());
+    assert!(
+        Server::bind(
+            instance(),
+            "localhost:0",
+            "/state",
+            TOKEN,
+            false,
+            None,
+            false
+        )
+        .is_ok()
+    );
 }
 
 #[test]
@@ -527,6 +701,7 @@ fn tls_material_is_all_or_nothing_and_must_parse() {
         TOKEN,
         false,
         Some(&bad),
+        false,
     );
     match err {
         Err(Error::Invalid(p)) => {
@@ -639,10 +814,11 @@ fn the_deadline_releases_every_stalled_worker() {
             TOKEN,
             false,
             tls.map(|p| &p.server),
+            false,
         )
         .expect("bind")
         .with_deadline(Duration::from_secs(1));
-        start(server, tls)
+        start(server, tls, false)
     };
     let plain = bind(None);
     let mutual = bind(Some(&pki));
