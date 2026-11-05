@@ -70,6 +70,12 @@ impl Api {
         }
     }
 
+    /// `DELETE path`; its result.
+    pub(crate) fn delete(&self, path: &str) -> Result<Value, String> {
+        self.call("DELETE", path, None)
+            .and_then(|(status, b)| ok(status, &b, "DELETE", path))
+    }
+
     /// `POST path` with a JSON `body`; its result.
     pub(crate) fn post(&self, path: &str, body: &Value) -> Result<Value, String> {
         self.call("POST", path, Some(body))
@@ -112,9 +118,10 @@ impl Api {
         let what = shown(path);
         let url = format!("{}{path}", self.base);
         let auth = format!("Bearer {}", self.token);
-        let sent = match body {
-            None => agent.get(&url).header("authorization", &auth).call(),
-            Some(b) => agent
+        let sent = match (method, body) {
+            ("DELETE", _) => agent.delete(&url).header("authorization", &auth).call(),
+            (_, None) => agent.get(&url).header("authorization", &auth).call(),
+            (_, Some(b)) => agent
                 .post(&url)
                 .header("authorization", &auth)
                 .header("content-type", "application/json")

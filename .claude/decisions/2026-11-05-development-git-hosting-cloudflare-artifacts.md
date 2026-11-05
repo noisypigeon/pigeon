@@ -60,7 +60,7 @@ These facts were gathered when this ADR was written, and are checked against Clo
   - `default_branch` defaults to `main`.
 - **An API kind.** The kind declares `x-cobot.api: artifacts`. cobot applies it through the Cloudflare API, not OpenTofu, and it never appears in a plan.
 - **Its credential.** It requests `artifacts.write` on the account, which a run fills from its own token.
-- **Creation.** `pigeon cobot git apply` creates the namespace and the repository. It imports the repository once from `mirror` while the repository is empty, and is idempotent after that.
+- **Creation.** `pigeon cobot git apply` creates the namespace. A repository with a `mirror` is created by importing it, and one that exists with no ref at all is replaced by that import. A repository without a mirror is created empty. After that, `apply` changes nothing.
 - **Artifacts is the source of truth.** No recurring sync ever flows from GitHub back to it.
 - **The state repositories stay out of scope.** They move to R2 under the separation ADR's phase 5.
 

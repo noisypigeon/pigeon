@@ -117,6 +117,10 @@ fn route(f: &mut Fake, method: &str, path: &str, body: &Value) -> (u16, Value) {
             f.repos.insert(format!("{ns}/{name}"), repo.clone());
             (200, repo)
         }
+        ("DELETE", [ns, "repos", name]) => f
+            .repos
+            .remove(&format!("{ns}/{name}"))
+            .map_or((404, Value::Null), |_| (200, Value::Null)),
         ("GET", [ns, "repos", name]) => f
             .repos
             .get(&format!("{ns}/{name}"))
@@ -126,11 +130,11 @@ fn route(f: &mut Fake, method: &str, path: &str, body: &Value) -> (u16, Value) {
             if body.get("source").is_some() {
                 return (400, Value::Null);
             }
-            let Some(repo) = f.repos.get_mut(&key) else {
-                return (404, Value::Null);
-            };
-            repo["imported_from"] = body["url"].clone();
-            let repo = repo.clone();
+            if f.repos.contains_key(&key) {
+                return (409, Value::Null);
+            }
+            let repo = json!({ "name": name, "remote": f.remote, "imported_from": body["url"] });
+            f.repos.insert(key, repo.clone());
             if let Some(src) = &f.source {
                 let into = f.remote.trim_start_matches("file://");
                 run_git(src, &["push", "-q", "--mirror", into]);
@@ -290,17 +294,14 @@ fn apply_creates_imports_and_then_changes_nothing() {
             f.repos["pigeon/pigeon"]["imported_from"],
             "https://github.com/noisypigeon/pigeon"
         );
-        let create = f
+        let creates = f
             .calls
             .iter()
-            .position(|c| c.ends_with("/namespaces/pigeon/repos") && c.starts_with("POST"));
-        let import = f
-            .calls
-            .iter()
-            .position(|c| c.ends_with("/repos/pigeon/import"));
-        assert!(
-            create < import && create.is_some(),
-            "a repository is created before its import: {:?}",
+            .filter(|c| c.starts_with("POST") && c.ends_with("/namespaces/pigeon/repos"))
+            .count();
+        assert_eq!(
+            creates, 1,
+            "only `scratch` is created; `pigeon` is created by its import: {:?}",
             f.calls
         );
         assert!(f.calls.iter().all(|c| c.starts_with("GET /accounts?")
@@ -346,7 +347,15 @@ fn an_import_that_never_landed_is_retried() {
     assert_eq!(
         got[0].outcome,
         Outcome::Imported,
-        "an empty repository with a mirror is imported"
+        "an empty repository with a mirror is replaced by its import"
+    );
+    assert!(
+        fake.lock()
+            .expect("lock")
+            .calls
+            .iter()
+            .any(|c| c.starts_with("DELETE") && c.ends_with("/repos/pigeon")),
+        "the empty repository is deleted first"
     );
 
     let tags_only = TempDir::new().expect("t");

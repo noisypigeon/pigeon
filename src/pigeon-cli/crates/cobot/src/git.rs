@@ -114,8 +114,8 @@ fn api_error(message: String) -> Error {
     }
 }
 
-/// Ensures the namespace and each repository exist, and imports a repository with a mirror
-/// while it has no ref at all, so a failed import is retried; idempotent.
+/// Ensures the namespace and each repository exist: one with a mirror is imported, which creates
+/// it, and an existing one with no ref at all is replaced by an import; idempotent.
 ///
 /// # Errors
 ///
@@ -125,24 +125,36 @@ pub fn apply(client: &Client<'_>, instance: &Instance) -> Result<Vec<Applied>, E
     client.namespace(ns).map_err(api_error)?;
     let mut out = Vec::new();
     for d in &instance.repos {
-        let (mut outcome, repo) = match client.repo(ns, &d.name).map_err(api_error)? {
-            Some(r) => (Outcome::Unchanged, r),
-            None => (
+        let existing = client.repo(ns, &d.name).map_err(api_error)?;
+        let (outcome, repo) = match (existing, &d.mirror) {
+            (Some(r), Some(url)) => {
+                let token = client.token(ns, &d.name, Scope::Read).map_err(api_error)?;
+                if no_refs(&r.remote, &token)? {
+                    client.delete(ns, &d.name).map_err(api_error)?;
+                    (
+                        Outcome::Imported,
+                        client
+                            .import(ns, &d.name, url, &d.branch)
+                            .map_err(api_error)?,
+                    )
+                } else {
+                    (Outcome::Unchanged, r)
+                }
+            }
+            (Some(r), None) => (Outcome::Unchanged, r),
+            (None, Some(url)) => (
+                Outcome::Imported,
+                client
+                    .import(ns, &d.name, url, &d.branch)
+                    .map_err(api_error)?,
+            ),
+            (None, None) => (
                 Outcome::Created,
                 client
                     .create(ns, &d.name, &d.branch, d.description.as_deref())
                     .map_err(api_error)?,
             ),
         };
-        if let Some(url) = &d.mirror {
-            let token = client.token(ns, &d.name, Scope::Read).map_err(api_error)?;
-            if no_refs(&repo.remote, &token)? {
-                client
-                    .import(ns, &d.name, url, &d.branch)
-                    .map_err(api_error)?;
-                outcome = Outcome::Imported;
-            }
-        }
         out.push(Applied {
             name: d.name.clone(),
             outcome,

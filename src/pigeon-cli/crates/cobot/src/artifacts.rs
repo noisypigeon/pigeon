@@ -137,7 +137,19 @@ impl<'a> Client<'a> {
         repo_of(&v, name)
     }
 
-    /// Imports `url`, a public HTTPS remote, into repository `name` in `ns`.
+    /// Deletes repository `name` in `ns`.
+    ///
+    /// # Errors
+    ///
+    /// A message naming the call that failed.
+    pub fn delete(&self, ns: &str, name: &str) -> Result<(), String> {
+        self.api
+            .delete(&format!("{}/{name}", self.repos(ns)))
+            .map(|_| ())
+    }
+
+    /// Creates repository `name` in `ns` from `url`, a public HTTPS remote; the repository must
+    /// not exist yet.
     ///
     /// # Errors
     ///
