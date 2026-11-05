@@ -36,7 +36,7 @@ fn owner(units: &[String], path: &Path) -> String {
     let path = path.to_string_lossy();
     units
         .iter()
-        .filter(|u| path.starts_with(&format!("{u}/")))
+        .filter(|u| path == u.as_str() || path.starts_with(&format!("{u}/")))
         .max_by_key(|u| u.len())
         .map_or_else(|| REPOSITORY.to_string(), |u| format!("unit:{u}"))
 }
@@ -51,7 +51,7 @@ pub fn describe(instance: &Instance) -> Result<(Graph, Vec<String>), Error> {
     let mut g = Graph::default();
     let mut problems = Vec::new();
     engines_and_operations(&mut g);
-    let units = units(&instance.root, &mut g, &mut problems);
+    let units = units(instance, &mut g, &mut problems);
     sites(&instance.root, &mut g, &mut problems);
     policies(instance, &units, &mut g)?;
     g.normalize();
@@ -97,15 +97,21 @@ fn engines_and_operations(g: &mut Graph) {
 
 /// Every unit, its providers, the capabilities it requests, and a group per local unit; the
 /// units' paths.
-fn units(root: &Path, g: &mut Graph, problems: &mut Vec<String>) -> Vec<String> {
+fn units(instance: &Instance, g: &mut Graph, problems: &mut Vec<String>) -> Vec<String> {
+    let root = &instance.root;
     g.nodes
         .push(node(REPOSITORY, "source", Lane::Source, "repository", "."));
-    let (units, unit_problems) = cobot::unit::discover(root);
-    problems.extend(
-        unit_problems
-            .iter()
-            .map(|p| format!("{}: {}", p.path, p.message)),
-    );
+    // Every problem `infra.validate` reports, discovery's included; the graph keeps the
+    // units discovery could read.
+    let allowlist = instance.resolve(&instance.paths.providers);
+    match cobot::validate(root, allowlist.parent().unwrap_or(root)) {
+        Ok(_) => {}
+        Err(cobot::Error::Invalid(found)) => {
+            problems.extend(found.iter().map(|p| format!("{}: {}", p.path, p.message)));
+        }
+        Err(e) => problems.push(format!("{}: {e}", Engine::Cobot.name())),
+    }
+    let (units, _) = cobot::unit::discover(root);
     let paths: Vec<String> = units.iter().map(|u| u.path.clone()).collect();
     for u in &units {
         let id = format!("unit:{}", u.path);
@@ -147,21 +153,27 @@ fn units(root: &Path, g: &mut Graph, problems: &mut Vec<String>) -> Vec<String> 
                 &format!("{schema}/schema.json x-cobot.providers"),
             ));
         }
-        for credential in cobot::config::declared_credentials(c) {
-            let cid = format!("capability:{credential}");
-            g.nodes.push(node(
-                &cid,
-                "capability",
-                Lane::Providers,
-                &credential,
-                &format!("{schema}/schema.json x-cobot.credentials"),
-            ));
-            g.edges.push(edge(
-                &id,
-                &cid,
-                "credential",
-                &format!("{schema}/schema.json x-cobot.credentials"),
-            ));
+        for (name, request) in x["credentials"].as_object().into_iter().flatten() {
+            let Some(provider) = request["provider"].as_str() else {
+                continue;
+            };
+            let source = format!("{schema}/schema.json x-cobot.credentials.{name}");
+            for cap in request["capabilities"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(serde_json::Value::as_str)
+            {
+                let cid = format!("capability:{provider}.{cap}");
+                g.nodes.push(node(
+                    &cid,
+                    "capability",
+                    Lane::Providers,
+                    &format!("{provider} {cap}"),
+                    &source,
+                ));
+                g.edges.push(edge(&id, &cid, "credential", &source));
+            }
         }
         if x["local"].as_bool() == Some(true) {
             g.groups.push(Group {

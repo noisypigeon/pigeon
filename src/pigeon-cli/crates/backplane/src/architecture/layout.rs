@@ -347,12 +347,15 @@ pub fn layout(graph: &Graph) -> Layout {
         cursor += w + GAP;
     }
 
-    // Each top-level group's band; the rest of its lanes start below it.
-    let mut band_end = vec![0_i64; lanes.len()];
+    // Top-level groups stack: each band starts below every earlier band in its lanes, and
+    // the rest of a lane starts below every band that spans it.
+    let mut fill = vec![0_i64; lanes.len()];
+    let mut band_start: BTreeMap<&str, i64> = BTreeMap::new();
     for gr in &tops {
         let (Some(lo), Some(hi)) = span(gr) else {
             continue;
         };
+        let start = fill[lo..=hi].iter().copied().max().unwrap_or(0);
         let height = lanes
             .iter()
             .map(|lane| {
@@ -363,26 +366,29 @@ pub fn layout(graph: &Graph) -> Layout {
             })
             .max()
             .unwrap_or(0);
-        let members = graph
-            .groups
-            .iter()
-            .find(|x| x.id == *gr)
-            .map_or(0, |x| x.members.len());
-        let pad = if members > 1 { ROW / 2 } else { 0 };
-        for end in &mut band_end[lo..=hi] {
-            *end = (*end).max(height + pad);
+        for f in &mut fill[lo..=hi] {
+            *f = start + height + ROW;
         }
+        band_start.insert(gr, start);
     }
     let mut pos: Vec<(i64, i64, i64, i64)> = vec![(0, 0, 0, 0); slots.len()];
     for (i, lane) in lanes.iter().enumerate() {
         let (cx, cw) = cols[i];
         let mut y = 0;
+        let mut current: Option<&str> = None;
         let mut below = false;
         for &s in lane {
             let slot = &slots[s];
-            if slot.grp.is_none() && !slot.way && !below {
-                y = y.max(band_end[i]);
-                below = true;
+            match slot.grp.as_deref() {
+                Some(gr) if current != Some(gr) => {
+                    y = y.max(band_start.get(gr).copied().unwrap_or(0));
+                    current = Some(gr);
+                }
+                None if !slot.way && !below => {
+                    y = y.max(fill[i]);
+                    below = true;
+                }
+                _ => {}
             }
             pos[s] = (cx, TOP + y, cw, if slot.way { 0 } else { NODE_H });
             y += if slot.way { WAY_ROW } else { ROW };
@@ -420,31 +426,39 @@ pub fn layout(graph: &Graph) -> Layout {
         Ordering::Less => (Side::Right, Side::Left),
         Ordering::Greater => (Side::Left, Side::Right),
     };
-    let mut ports: BTreeMap<(usize, bool), Vec<usize>> = BTreeMap::new();
-    for chain in chains.iter().filter(|c| c.len() >= 2) {
+    // Each side's ports hold (the slot at the other end, the edge), so parallel edges part.
+    let mut ports: BTreeMap<(usize, bool), Vec<(usize, usize)>> = BTreeMap::new();
+    for (k, chain) in chains.iter().enumerate().filter(|(_, c)| c.len() >= 2) {
         let n = chain.len();
         let (s, _) = sides(chain[0], chain[1]);
         let (_, t) = sides(chain[n - 2], chain[n - 1]);
         ports
             .entry((chain[0], s == Side::Right))
             .or_default()
-            .push(chain[1]);
+            .push((chain[1], k));
         ports
             .entry((chain[n - 1], t == Side::Right))
             .or_default()
-            .push(chain[n - 2]);
+            .push((chain[n - 2], k));
     }
     for others in ports.values_mut() {
-        others.sort_by(|&a, &b| pos[a].1.cmp(&pos[b].1).then(slots[a].id.cmp(&slots[b].id)));
+        others.sort_by(|&(a, ka), &(b, kb)| {
+            pos[a]
+                .1
+                .cmp(&pos[b].1)
+                .then(slots[a].id.cmp(&slots[b].id))
+                .then(ka.cmp(&kb))
+        });
     }
-    let port_y = |s: usize, side: Side, other: usize| {
+    let port_y = |s: usize, side: Side, edge: usize| {
         let p = pos[s];
         if slots[s].way {
             return p.1;
         }
         let list = &ports[&(s, side == Side::Right)];
         let n = i64::try_from(list.len()).unwrap_or(1) + 1;
-        let k = i64::try_from(list.iter().position(|&o| o == other).unwrap_or(0)).unwrap_or(0) + 1;
+        let at = list.iter().position(|&(_, k)| k == edge).unwrap_or(0);
+        let k = i64::try_from(at).unwrap_or(0) + 1;
         p.1 + (p.3 * k + n / 2) / n
     };
     let side_x = |s: usize, side: Side| {
@@ -456,16 +470,17 @@ pub fn layout(graph: &Graph) -> Layout {
         .edges
         .iter()
         .zip(&chains)
-        .filter(|(_, c)| c.len() >= 2)
-        .map(|(e, chain)| {
+        .enumerate()
+        .filter(|(_, (_, c))| c.len() >= 2)
+        .map(|(k, (e, chain))| {
             let mut path = String::new();
             let mut start = (0, 0);
             let mut end = (0, 0);
             for (i, pair) in chain.windows(2).enumerate() {
                 let (here, next) = (pair[0], pair[1]);
                 let (out_side, in_side) = sides(here, next);
-                let (x1, y1) = (side_x(here, out_side), port_y(here, out_side, next));
-                let (x2, y2) = (side_x(next, in_side), port_y(next, in_side, here));
+                let (x1, y1) = (side_x(here, out_side), port_y(here, out_side, k));
+                let (x2, y2) = (side_x(next, in_side), port_y(next, in_side, k));
                 if i == 0 {
                     start = (x1, y1);
                     let _ = write!(path, "M{x1} {y1}");
@@ -600,7 +615,7 @@ mod tests {
             g.edges.push(Edge {
                 from: format!("n{:02}", r.next(n)),
                 to: format!("n{:02}", r.next(n)),
-                carries: "request".into(),
+                carries: ["request", "binds"][r.next(2)].into(),
                 source: "test".into(),
             });
         }
@@ -621,6 +636,17 @@ mod tests {
                 label: "inner".into(),
                 members: members[..1].to_vec(),
                 parent: Some("g".into()),
+            });
+            let others: Vec<String> = (0..=r.next(3))
+                .map(|_| format!("n{:02}", r.next(n)))
+                .filter(|m| !members.contains(m))
+                .collect();
+            g.groups.push(Group {
+                id: "k".into(),
+                kind: "local".into(),
+                label: "other".into(),
+                members: others,
+                parent: None,
             });
         }
         g.normalize();
@@ -659,12 +685,28 @@ mod tests {
                 );
             }
         }
-        for b in l.groups.iter().filter(|b| b.id == "g") {
-            let members = &g.groups.iter().find(|x| x.id == "g").expect("g").members;
+        for b in l.groups.iter().filter(|b| b.id != "h") {
+            let members = &g
+                .groups
+                .iter()
+                .find(|x| x.id == b.id)
+                .expect("group")
+                .members;
             for p in l.nodes.iter().filter(|p| !members.contains(&p.id)) {
                 let inside =
                     b.x < p.x && p.x + p.w < b.x + b.w && b.y < p.y && p.y + p.h < b.y + b.h;
-                assert!(!inside, "{} is not a member of g but sits inside it", p.id);
+                assert!(
+                    !inside,
+                    "{} is not a member of {} but sits inside it",
+                    p.id, b.id
+                );
+            }
+        }
+        for (i, a) in l.edges.iter().enumerate() {
+            for b in &l.edges[i + 1..] {
+                if a.from == b.from && a.to == b.to {
+                    assert_ne!(a.d, b.d, "parallel edges {} → {} coincide", a.from, a.to);
+                }
             }
         }
     }

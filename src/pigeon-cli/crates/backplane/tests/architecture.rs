@@ -118,3 +118,75 @@ fn a_new_policy_adds_one_node_and_one_edge() {
         "removing it restores the output byte for byte"
     );
 }
+
+/// Copies this repository's configuration and units, without sites' content, into a tempdir.
+fn units_fixture() -> TempDir {
+    fn copy(from: &std::path::Path, to: &std::path::Path) {
+        fs::create_dir_all(to).expect("mkdir");
+        for e in fs::read_dir(from).expect("list").flatten() {
+            let name = e.file_name();
+            if e.path().is_dir() {
+                if name != "site" {
+                    copy(&e.path(), &to.join(&name));
+                }
+            } else {
+                fs::copy(e.path(), to.join(&name)).expect("copy");
+            }
+        }
+    }
+    let root = TempDir::new().expect("tempdir");
+    for dir in [".config", "catalog", "infra", "workloads"] {
+        copy(&repo_root().join(dir), &root.path().join(dir));
+    }
+    root
+}
+
+#[test]
+fn an_invalid_unit_is_a_violation() {
+    let root = units_fixture();
+    assert!(describe(root.path()).ok, "the copy describes cleanly");
+    let blog = root
+        .path()
+        .join("workloads/noisypigeon.com/blog/config.yaml");
+    let text = fs::read_to_string(&blog).expect("read");
+    let cut = text.find("  site:").expect("a site block");
+    fs::write(&blog, &text[..cut]).expect("write");
+    let r = describe(root.path());
+    assert!(!r.ok);
+    assert!(
+        r.violations
+            .iter()
+            .any(|v| v.contains("workloads/noisypigeon.com/blog")),
+        "{:?}",
+        r.violations
+    );
+}
+
+#[test]
+fn a_credential_draws_its_capabilities_and_a_unit_dir_policy_its_unit() {
+    let root = units_fixture();
+    let schema = root.path().join("infra/pigeon/schema.json");
+    let mut s: Value =
+        serde_json::from_str(&fs::read_to_string(&schema).expect("read")).expect("json");
+    s["x-cobot"]["credentials"] = serde_json::json!({
+        "deploy": { "provider": "cloudflare", "scope": "account", "capabilities": ["r2.write"] }
+    });
+    fs::write(&schema, serde_json::to_string_pretty(&s).expect("json")).expect("write");
+    fs::write(
+        root.path().join(".config/policies/pigeon-dir.yaml"),
+        "description: d.\ntarget: { dir: infra/pigeon }\nrules:\n  - line: { at: 1, matches: '.' }\n",
+    )
+    .expect("write");
+    let r = describe(root.path());
+    let nodes = ids(&r, "nodes");
+    assert!(
+        nodes.contains(&"capability:cloudflare.r2.write".to_string()),
+        "{nodes:?}"
+    );
+    assert!(!nodes.iter().any(|n| n == "capability:deploy"), "{nodes:?}");
+    let edges = r.result["edges"].as_array().expect("edges");
+    let has = |from: &str, to: &str| edges.iter().any(|e| e["from"] == from && e["to"] == to);
+    assert!(has("unit:infra/pigeon", "capability:cloudflare.r2.write"));
+    assert!(has("policy:pigeon-dir", "unit:infra/pigeon"));
+    assert!(!has("policy:pigeon-dir", "repository"));
+}
