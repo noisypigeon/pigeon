@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.21 (2026-11-05)
+
+- feat(backplane): architecture.describe and its layout ([#126](https://github.com/noisypigeon/pigeon/pull/126))
+
 ## v0.1.20 (2026-11-05)
 
 - refactor(cobot): every site names its template ([#125](https://github.com/noisypigeon/pigeon/pull/125))
