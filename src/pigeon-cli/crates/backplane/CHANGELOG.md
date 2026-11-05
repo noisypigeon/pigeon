@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.23 (2026-11-05)
+
+- feat(cobot): sites build takes data files ([#129](https://github.com/noisypigeon/pigeon/pull/129))
+
 ## v0.1.22 (2026-11-05)
 
 - feat(sentinel): platform-defined policies an instance invokes with parameters ([#128](https://github.com/noisypigeon/pigeon/pull/128))

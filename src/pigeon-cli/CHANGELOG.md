@@ -2,6 +2,7 @@
 
 ## 2026-11-05
 
+- feat(cobot): sites build takes data files ([#129](https://github.com/noisypigeon/pigeon/pull/129))
 - feat(sentinel): platform-defined policies an instance invokes with parameters ([#128](https://github.com/noisypigeon/pigeon/pull/128))
 - feat(backplane): architecture.describe and its layout ([#126](https://github.com/noisypigeon/pigeon/pull/126))
 - refactor(cobot): every site names its template ([#125](https://github.com/noisypigeon/pigeon/pull/125))

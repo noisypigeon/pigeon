@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.32 (2026-11-05)
+
+- feat(cobot): sites build takes data files ([#129](https://github.com/noisypigeon/pigeon/pull/129))
+
 ## v0.1.31 (2026-11-05)
 
 - refactor(cobot): every site names its template ([#125](https://github.com/noisypigeon/pigeon/pull/125))
