@@ -2,6 +2,7 @@
 
 ## 2026-11-05
 
+- docs(tooling): spike runbook needs Workers Paid, --remote and its own token ([#110](https://github.com/noisypigeon/pigeon/pull/110))
 - docs(infra): note the D1 provider update; keep the location guard ([#109](https://github.com/noisypigeon/pigeon/pull/109))
 
 ## 2026-11-04
