@@ -634,12 +634,14 @@ So phase 4 designs every run to survive a stop, rather than relying on a run's l
 
 1. **The dispatching Durable Object holds pending I/O** for the whole run, and sets `sleepAfter` above the longest run.
 2. **On SIGTERM, `serve` takes no new request**, and lets a running `tofu` step finish within the 15-minute grace.
-3. **An interrupted run resumes.**
-   - Stored plans already mark each applied unit (phase 3 §5), so a re-dispatched apply applies only the rest.
+3. **An interrupted run resumes from R2.**
+   - Today `apply_stored` marks each applied unit only in the local mirror, and backplane pushes the mirror after the whole apply. A stopped Container loses every marker and state change of that apply.
+   - Phase 4 pushes each unit's state and applied marker to R2 before the next unit starts. A re-dispatched apply then applies only the remaining units.
+   - A unit cut off by SIGKILL mid-`tofu` may leave resources its state does not record. Its run is re-planned from R2 state and reported to the owner, never retried blindly.
    - A plan is re-run.
 4. **Phase 4's first dispatch PR proves it** before any apply is dispatched:
    - a run longer than 20 minutes;
-   - a run stopped midway and resumed;
+   - a Container killed mid-apply, and the retry against the same R2 store applying only the remaining units;
    - a Cron Trigger's tick.
 
 #### 5. Execution
