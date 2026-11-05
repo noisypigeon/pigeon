@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.36 (2026-11-05)
+
+- feat(cobot): an instance's config.yaml declares units by kind ([#138](https://github.com/noisypigeon/pigeon/pull/138))
+
 ## v0.1.35 (2026-11-05)
 
 - fix(cobot): discovery makes both roots absolute; Proton's verification inputs are published ([#137](https://github.com/noisypigeon/pigeon/pull/137))
