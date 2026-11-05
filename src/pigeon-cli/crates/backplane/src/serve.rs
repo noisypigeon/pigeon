@@ -462,20 +462,21 @@ impl Server {
             }
             Err(e) => return (500, json!({ "error": e.to_string() })),
         };
-        if matches!(effect, Some(Effect::Plan | Effect::Apply)) && self.stopping() {
+        let exclusive = matches!(effect, Some(Effect::Plan | Effect::Apply | Effect::Build));
+        if exclusive && self.stopping() {
             return (
                 503,
-                json!({ "error": "draining: no new plan or apply starts; retry on a new server" }),
+                json!({ "error": "draining: no new plan, apply or build starts; retry on a new server" }),
             );
         }
-        let _guard = if matches!(effect, Some(Effect::Plan | Effect::Apply)) {
+        let _guard = if exclusive {
             match self.changing.try_lock() {
                 Ok(g) => Some(g),
                 Err(std::sync::TryLockError::Poisoned(p)) => Some(p.into_inner()),
                 Err(std::sync::TryLockError::WouldBlock) => {
                     return (
                         409,
-                        json!({ "error": "a plan or apply is already running; retry when it ends" }),
+                        json!({ "error": "a plan, apply or build is already running; retry when it ends" }),
                     );
                 }
             }

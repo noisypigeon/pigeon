@@ -76,6 +76,10 @@ pub struct RunArgs {
     #[arg(long = "arg", value_name = "NAME=VALUE")]
     pub args: Vec<String>,
 
+    /// An argument as `name=value`, always a string, never parsed as JSON
+    #[arg(long = "text", value_name = "NAME=VALUE")]
+    pub text: Vec<String>,
+
     /// The instance root and output format
     #[command(flatten)]
     pub root: RootArgs,

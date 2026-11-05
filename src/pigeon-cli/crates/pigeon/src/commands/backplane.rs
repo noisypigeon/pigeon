@@ -9,7 +9,7 @@ use crate::cli::{BackplaneCommand, RootArgs, ServeArgs};
 #[must_use]
 pub fn run(command: BackplaneCommand) -> i32 {
     match command {
-        BackplaneCommand::Instance(args) => operation("instance.show", &[], &args),
+        BackplaneCommand::Instance(args) => operation("instance.show", &[], &[], &args),
         BackplaneCommand::Engines(args) => {
             let engines = backplane::engines();
             if args.json {
@@ -38,7 +38,9 @@ pub fn run(command: BackplaneCommand) -> i32 {
             }
             SUCCESS
         }
-        BackplaneCommand::Run(args) => operation(&args.operation, &args.args, &args.root),
+        BackplaneCommand::Run(args) => {
+            operation(&args.operation, &args.args, &args.text, &args.root)
+        }
         BackplaneCommand::Serve(args) => serve(&args),
     }
 }
@@ -92,8 +94,16 @@ fn parse_args(raw: &[String]) -> Result<serde_json::Map<String, serde_json::Valu
         .collect()
 }
 
-fn operation(name: &str, raw: &[String], args: &RootArgs) -> i32 {
-    let parsed = match parse_args(raw) {
+fn operation(name: &str, raw: &[String], text: &[String], args: &RootArgs) -> i32 {
+    let parsed = match parse_args(raw).and_then(|mut p| {
+        for t in text {
+            let (k, v) = t
+                .split_once('=')
+                .ok_or_else(|| format!("`--text {t}` must be name=value"))?;
+            p.insert(k.to_string(), serde_json::Value::String(v.to_string()));
+        }
+        Ok(p)
+    }) {
         Ok(p) => p,
         Err(e) => {
             eprintln!("backplane: {e}");
