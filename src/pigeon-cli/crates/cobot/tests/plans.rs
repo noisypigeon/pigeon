@@ -250,7 +250,36 @@ fn checkpoints_follow_each_unit_and_precede_the_plans_removal() {
         cobot::plan_stored(&c, &units(root), NOW + 300).expect("plan again")
     };
     let mut calls = 0;
-    let err = cobot::apply_stored_with(&c, &stored.id, NOW + 360, &mut || {
+    let stopped = cobot::apply_stored_with(&c, &stored.id, NOW + 360, &mut || {
+        calls += 1;
+        if calls == 3 {
+            return Err(cobot::Error::State(
+                "stopped before the plan's removal".into(),
+            ));
+        }
+        Ok(())
+    });
+    assert!(stopped.is_err(), "stopped after the record");
+    let plan = s.join("plans").join(&stored.id);
+    assert!(plan.exists(), "the plan's files remain");
+    let late = NOW + 300 + cobot::plans::LIFETIME_SECS + 60;
+    let reported =
+        cobot::apply_stored(&c, &stored.id, late).expect("a completed plan, past its expiry");
+    assert_eq!(reported.len(), 2);
+    assert!(
+        reported
+            .iter()
+            .all(|u| u.note.as_deref().is_some_and(|n| n.contains("earlier"))),
+        "{reported:?}"
+    );
+    assert!(!plan.exists(), "what was left of the plan is removed");
+
+    let (stored, _) = {
+        fs::write(root.join("infra/b/modules/proof/extra.tf"), "# changed\n").expect("change");
+        cobot::plan_stored(&c, &units(root), NOW + 600).expect("plan a third time")
+    };
+    let mut calls = 0;
+    let err = cobot::apply_stored_with(&c, &stored.id, NOW + 660, &mut || {
         calls += 1;
         Err(cobot::Error::State("R2 refused the write".into()))
     })

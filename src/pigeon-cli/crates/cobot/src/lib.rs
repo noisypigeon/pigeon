@@ -854,7 +854,8 @@ pub fn apply_stored(ctx: &Context, id: &str, now: u64) -> Result<Vec<UnitPlan>, 
 ///
 /// `checkpoint` runs after each unit is applied and marked, and after the completion record is
 /// written but before the plan is removed, so a caller can write state back as it goes. A plan
-/// already completed returns its recorded result and applies nothing.
+/// already completed returns its recorded result and applies nothing, removing what is left of
+/// it.
 ///
 /// # Errors
 ///
@@ -868,9 +869,8 @@ pub fn apply_stored_with(
     checkpoint: &mut dyn FnMut() -> Result<(), Error>,
 ) -> Result<Vec<UnitPlan>, Error> {
     let state = absolute(&ctx.state)?;
-    if !state.join(plans::DIR).join(id).exists()
-        && let Some(done) = plans::completed(&state, id, now)
-    {
+    if let Some(done) = plans::completed(&state, id, now) {
+        plans::remove(&state, id)?;
         return Ok(done
             .units
             .into_iter()

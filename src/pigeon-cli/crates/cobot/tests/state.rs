@@ -318,6 +318,25 @@ fn a_mirror_pushes_again_after_its_own_writes() {
 }
 
 #[test]
+fn a_plan_marker_never_reaches_r2_before_its_units_state() {
+    let (endpoint, objects) = serve();
+    put(&objects, "p/workloads/w/terraform.tfstate", b"base");
+    let dir = TempDir::new().expect("tempdir");
+    let mut mirror = Mirror::pull(bucket(&endpoint), "p", &dir.path().join("m"), 0).expect("pull");
+    let m = mirror.dir().to_path_buf();
+    fs::write(m.join("workloads/w/terraform.tfstate"), b"applied").expect("write");
+    fs::create_dir_all(m.join("plans/abc/workloads/w")).expect("mkdir");
+    fs::write(m.join("plans/abc/workloads/w/applied"), b"").expect("marker");
+    put(&objects, "p/workloads/w/terraform.tfstate", b"theirs");
+    let err = mirror.push(0).expect_err("the state write is refused");
+    assert!(err.to_string().contains("changed in R2"), "{err}");
+    assert!(
+        get(&objects, "p/plans/abc/workloads/w/applied").is_none(),
+        "the marker waits for its state, though `plans/` sorts first"
+    );
+}
+
+#[test]
 fn another_writer_wins_and_the_push_fails() {
     let (endpoint, objects) = serve();
     put(&objects, "p/u/terraform.tfstate", b"base");
