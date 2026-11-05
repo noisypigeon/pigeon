@@ -3,7 +3,7 @@
 use backplane::{Instance, Request, Response};
 
 use super::{INVALID, SUCCESS, VIOLATION};
-use crate::cli::{BackplaneCommand, RootArgs, ServeArgs};
+use crate::cli::{BackplaneCommand, JobsArgs, RootArgs, ServeArgs};
 
 /// Runs a `pigeon backplane` command and returns its exit code.
 #[must_use]
@@ -42,6 +42,7 @@ pub fn run(command: BackplaneCommand) -> i32 {
             operation(&args.operation, &args.args, &args.text, &args.root)
         }
         BackplaneCommand::Serve(args) => serve(&args),
+        BackplaneCommand::Jobs(args) => jobs(&args),
     }
 }
 
@@ -77,6 +78,29 @@ fn serve(args: &ServeArgs) -> i32 {
     }
     server.serve(|k| std::env::var(k).ok());
     eprintln!("backplane: stopped after finishing its requests");
+    SUCCESS
+}
+
+fn jobs(args: &JobsArgs) -> i32 {
+    let token = std::env::var(backplane::serve::TOKEN_VAR).unwrap_or_default();
+    let board = std::sync::Arc::new(backplane::jobs::Board::new(args.work.clone()));
+    let server = match backplane::serve::Server::bind_jobs(&args.listen, &token, board) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("backplane: {e}");
+            return INVALID;
+        }
+    };
+    if let Some(addr) = server.local_addr() {
+        eprintln!("backplane: taking jobs on {addr}");
+    }
+    for signal in [signal_hook::consts::SIGTERM, signal_hook::consts::SIGINT] {
+        if let Err(e) = signal_hook::flag::register(signal, server.stopper()) {
+            eprintln!("backplane: cannot handle signal {signal}: {e}");
+            return INVALID;
+        }
+    }
+    server.serve(|_| None);
     SUCCESS
 }
 

@@ -134,7 +134,10 @@ pub struct Server {
     listener: TcpListener,
     tls: Option<Arc<ServerConfig>>,
     deadline: Duration,
-    instance: Instance,
+    /// The instance whose operations `/v0/run` serves; none for a jobs server.
+    instance: Option<Instance>,
+    /// The jobs `/v0/jobs` takes; only a jobs server has them.
+    jobs: Option<Arc<crate::jobs::Board>>,
     state: String,
     token: String,
     /// Whether `/v0/` routes take signed requests instead of the bearer token.
@@ -194,10 +197,48 @@ impl Server {
             listener,
             tls,
             deadline: DEADLINE,
-            instance,
+            instance: Some(instance),
+            jobs: None,
             state: state.to_string(),
             token: token.to_string(),
             signed,
+            seen: Mutex::new(HashMap::new()),
+            changing: Mutex::new(()),
+            stop: Arc::new(AtomicBool::new(false)),
+        })
+    }
+
+    /// Binds `listen` to take jobs, each signed under `token`: a job Container's server, which
+    /// serves no operation (lifecycle ADR §4).
+    ///
+    /// # Errors
+    ///
+    /// As [`Server::bind`].
+    pub fn bind_jobs(
+        listen: &str,
+        token: &str,
+        board: Arc<crate::jobs::Board>,
+    ) -> Result<Self, Error> {
+        if token.chars().count() < MIN_TOKEN {
+            return Err(Error::Invalid(vec![format!(
+                "{TOKEN_VAR} must be at least {MIN_TOKEN} characters"
+            )]));
+        }
+        let io = |e: io::Error| Error::Io {
+            path: listen.into(),
+            message: e.to_string(),
+        };
+        let addrs: Vec<SocketAddr> = listen.to_socket_addrs().map_err(io)?.collect();
+        let listener = TcpListener::bind(&addrs[..]).map_err(io)?;
+        Ok(Self {
+            listener,
+            tls: None,
+            deadline: DEADLINE,
+            instance: None,
+            jobs: Some(board),
+            state: String::new(),
+            token: token.to_string(),
+            signed: true,
             seen: Mutex::new(HashMap::new()),
             changing: Mutex::new(()),
             stop: Arc::new(AtomicBool::new(false)),
@@ -330,6 +371,7 @@ impl Server {
             ("GET", "/healthz") => return reply(200, json!({ "ok": true })),
             (_, "/healthz") => return reply(405, json!({ "error": "method not allowed" })),
             (_, "/v0/operations" | "/v0/run") => {}
+            (_, p) if self.jobs.is_some() && (p == "/v0/jobs" || p.starts_with("/v0/jobs/")) => {}
             _ => return reply(404, json!({ "error": "not found" })),
         }
         if self.signed {
@@ -376,9 +418,14 @@ impl Server {
                 nonce: None,
             };
         };
-        let (status, body) = match (head.method.as_str(), head.path.as_str()) {
-            ("GET", "/v0/operations") => (200, json!(catalog())),
-            ("POST", "/v0/run") => self.run_bytes(body, var),
+        let (status, body) = match (&self.jobs, head.method.as_str(), head.path.as_str()) {
+            (Some(board), "POST", "/v0/jobs") => crate::jobs::submit(board, &body),
+            (Some(board), "GET", path) if path.starts_with("/v0/jobs/") => {
+                crate::jobs::status(board, &path["/v0/jobs/".len()..])
+            }
+            (Some(_), _, _) => (404, json!({ "error": "a jobs server takes only jobs" })),
+            (None, "GET", "/v0/operations") => (200, json!(catalog())),
+            (None, "POST", "/v0/run") => self.run_bytes(body, var),
             _ => (405, json!({ "error": "method not allowed" })),
         };
         Reply {
@@ -483,7 +530,10 @@ impl Server {
         } else {
             None
         };
-        match run_with(&self.instance, &request, var) {
+        let Some(instance) = &self.instance else {
+            return (404, json!({ "error": "this server takes only jobs" }));
+        };
+        match run_with(instance, &request, var) {
             Ok(response) => (200, json!(response)),
             Err(Error::Invalid(problems)) => {
                 (400, json!({ "error": "invalid", "problems": problems }))

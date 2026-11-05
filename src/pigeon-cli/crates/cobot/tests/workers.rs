@@ -23,7 +23,7 @@ durable_objects:
   classes: [Instance, Runner]
   migrations: [ { tag: v1, new_sqlite_classes: [Instance, Runner] } ]
 containers:
-  - { class: Runner, image: { dockerfile: Dockerfile, target: backplane }, instance_type: standard-1, max_instances: 4 }
+  - { class: Runner, image: { dockerfile: Dockerfile, target: backplane, args: { FEATURES: backplane } }, instance_type: standard-1, max_instances: 4 }
 bindings:
   d1: { DB: { name: pigeon, id: $output.infra/pigeon.database_id, migrations: crates/backplane/migrations } }
   r2: { STATE: "$output.infra/pigeon.bucket_names[0]" }
@@ -271,7 +271,7 @@ fn deploy_migrates_builds_then_deploys_and_shows_no_id() {
     );
     assert!(
         calls[1]
-            .starts_with("docker build --target backplane -t pigeon-local/pigeon-control-runner:"),
+            .starts_with("docker build --target backplane --build-arg FEATURES=backplane -t pigeon-local/pigeon-control-runner:"),
         "{calls:?}"
     );
     assert!(

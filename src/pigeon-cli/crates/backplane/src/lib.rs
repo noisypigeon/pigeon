@@ -10,6 +10,8 @@ pub mod control;
 pub mod engine;
 #[cfg(feature = "engines")]
 pub mod instance;
+#[cfg(feature = "engines")]
+pub mod jobs;
 pub mod mcp;
 pub mod runs;
 #[cfg(feature = "engines")]

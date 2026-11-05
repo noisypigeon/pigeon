@@ -49,3 +49,27 @@ ENTRYPOINT ["/usr/local/bin/pigeon"]
 
 # Backplane runs cobot, so it needs cobot's tools.
 FROM cobot AS backplane
+
+# A change's jobs run here (lifecycle ADR §4): the toolchain mise.toml pins, git, cobot's
+# tools, and the workspace's dependencies already compiled, so a job builds only the crates
+# it touches. Build with `--build-arg FEATURES=backplane`.
+FROM docker.io/library/rust:1.99.1-slim-bookworm@sha256:24707e70a4f1e23d9a7b25202ec43126d28a52294b96aad5c670df1fd1f1d400 AS ci
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends ca-certificates git \
+ && rm -rf /var/lib/apt/lists/* \
+ && rustup component add clippy rustfmt \
+ && rustup target add wasm32-unknown-unknown
+COPY --from=tools /out/ /usr/local/bin/
+COPY --from=build /src/target/release/pigeon /usr/local/bin/pigeon
+ENV CARGO_HOME=/cache/cargo CARGO_TARGET_DIR=/cache/target HOME=/tmp
+WORKDIR /warm
+COPY . src/pigeon-cli
+RUN cd src/pigeon-cli \
+ && cargo fetch --locked \
+ && cargo clippy --workspace --all-targets --locked \
+ && cargo test --workspace --locked --no-run \
+ && cargo clippy -p cobot -p pigeon-backplane --lib --locked --no-default-features --features worker --target wasm32-unknown-unknown \
+ && cd / && rm -rf /warm \
+ && chown -R 65532:65532 /cache
+USER 65532:65532
+ENTRYPOINT ["/usr/local/bin/pigeon"]

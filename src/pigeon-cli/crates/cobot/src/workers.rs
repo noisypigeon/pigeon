@@ -137,6 +137,9 @@ pub struct Image {
     pub dockerfile: String,
     /// The stage.
     pub target: String,
+    /// Build arguments, e.g. `FEATURES`.
+    #[serde(default)]
+    pub args: BTreeMap<String, String>,
 }
 
 /// A Worker's bindings, by binding name.
@@ -995,21 +998,18 @@ pub fn deploy(
     for c in &found.spec.containers {
         let file = root.join(&c.image.dockerfile);
         let context = file.parent().unwrap_or(root);
-        tools.run(
-            &tools.docker,
-            &[
-                "build".into(),
-                "--target".into(),
-                c.image.target.clone(),
-                "-t".into(),
-                image_tag(&found.spec, &c.class, plan),
-                "-f".into(),
-                file.to_string_lossy().into_owned(),
-                context.to_string_lossy().into_owned(),
-            ],
-            root,
-            None,
-        )?;
+        let mut args: Vec<String> = vec!["build".into(), "--target".into(), c.image.target.clone()];
+        for (k, v) in &c.image.args {
+            args.extend(["--build-arg".into(), format!("{k}={v}")]);
+        }
+        args.extend([
+            "-t".into(),
+            image_tag(&found.spec, &c.class, plan),
+            "-f".into(),
+            file.to_string_lossy().into_owned(),
+            context.to_string_lossy().into_owned(),
+        ]);
+        tools.run(&tools.docker, &args, root, None)?;
         done.push(format!("image {} built from {}", c.class, c.image.target));
     }
     tools.run(

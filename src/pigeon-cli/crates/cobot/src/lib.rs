@@ -10,6 +10,8 @@ pub mod artifacts_wire;
 #[cfg(feature = "engines")]
 pub mod catalog;
 #[cfg(feature = "engines")]
+pub mod ci;
+#[cfg(feature = "engines")]
 pub mod cloudflare;
 #[cfg(feature = "engines")]
 pub mod config;
