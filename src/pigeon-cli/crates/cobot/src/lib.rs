@@ -6,6 +6,8 @@ pub mod apex;
 #[cfg(feature = "engines")]
 pub mod catalog;
 #[cfg(feature = "engines")]
+pub mod cloudflare;
+#[cfg(feature = "engines")]
 pub mod config;
 #[cfg(feature = "engines")]
 mod engines;

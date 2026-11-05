@@ -481,6 +481,34 @@ fn the_layout_follows_the_zones() {
 }
 
 #[test]
+fn without_infra_cloudflare_a_zone_needs_only_its_name() {
+    let plain = PROTON
+        .replace("{ secret: protonmail_verification }", "plain-value-1")
+        .replace("{ secret: pm_verification }", "plain-value-2");
+    let repo = repo(&plain);
+    let root = repo.path();
+    fs::remove_dir_all(root.join("infra/cloudflare")).expect("no infra/cloudflare");
+    fs::remove_file(root.join(APEX).join("secrets.config.yaml")).expect("no secrets");
+    assert_eq!(problems(root), Vec::<String>::new());
+    let txt: Vec<String> = records(root)
+        .values()
+        .filter(|r| r["type"] == "TXT")
+        .filter_map(|r| r["content"].as_str().map(str::to_string))
+        .collect();
+    assert!(
+        txt.contains(&"protonmail-verification=plain-value-1".to_string()),
+        "{txt:?}"
+    );
+
+    write(
+        root,
+        "workloads/Not_A_Zone/apex/config.yaml",
+        "services: {}\nrecords: {}\n",
+    );
+    assert_fails(root, "`Not_A_Zone` is not a zone name");
+}
+
+#[test]
 fn each_zone_is_its_own_apex_with_its_own_provider_and_keys() {
     let repo = repo(PROTON);
     write(
@@ -696,6 +724,8 @@ fn ctx_on(root: &Path, state: &Path, day: &str) -> cobot::Context {
         workload_secrets_passphrase: Some(WORKLOAD_PASS.into()),
         today: cobot::generations::day(day).expect("day"),
         credentials: None,
+        cloudflare_token: None,
+        cloudflare_api: None,
     }
 }
 
@@ -773,6 +803,70 @@ fn the_apex_token_is_handed_off_after_infra_applies() {
             "{secret}"
         );
     }
+}
+
+/// A fake Cloudflare API that sees `noisypigeon.com`, for a run's own token.
+fn fake_api() -> String {
+    use std::io::{BufRead, BufReader, Write as _};
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind");
+    let addr = listener.local_addr().expect("addr");
+    std::thread::spawn(move || {
+        for stream in listener.incoming().flatten() {
+            let mut reader = BufReader::new(stream.try_clone().expect("clone"));
+            let mut line = String::new();
+            reader.read_line(&mut line).expect("request line");
+            loop {
+                let mut h = String::new();
+                if reader.read_line(&mut h).is_err() || h.trim_end().is_empty() {
+                    break;
+                }
+            }
+            let body = if line.contains("/zones?name=noisypigeon.com") {
+                json!({ "success": true, "result": [{ "id": "zone-np", "name": ZONE }] })
+            } else {
+                json!({ "success": false })
+            };
+            let text = body.to_string();
+            let mut out = stream;
+            let _ = write!(
+                out,
+                "HTTP/1.1 200 OK\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{text}",
+                text.len()
+            );
+        }
+    });
+    format!("http://{addr}")
+}
+
+#[test]
+fn the_runs_own_token_hands_off_without_infra_cloudflare_state() {
+    if !tofu_available() {
+        eprintln!("skipped: tofu is not on PATH");
+        return;
+    }
+    let repo = builtin_repo();
+    let root = repo.path();
+    let state = TempDir::new().expect("state");
+    let apex_only = cobot::select(root, &root.join(".config"), &[APEX.into()]).expect("valid");
+    let mut run = ctx(root, state.path());
+    run.cloudflare_token = Some("run-token-not-in-any-file".into());
+    run.cloudflare_api = Some(fake_api());
+
+    let applied = cobot::apply(&run, &apex_only).expect("apply needs no infra/cloudflare state");
+    assert!(applied[0].note.is_none(), "{}", cobot::summary(&applied));
+    assert_eq!(applied[0].counts(), (9, 0, 0));
+    assert!(
+        !state.path().join("infra/cloudflare").exists(),
+        "infra/cloudflare is never planned or read"
+    );
+    assert_eq!(
+        grep(&root.join(".cobot"), "run-token-not-in-any-file"),
+        Vec::<PathBuf>::new()
+    );
+    assert_eq!(
+        grep(state.path(), "run-token-not-in-any-file"),
+        Vec::<PathBuf>::new()
+    );
 }
 
 #[test]
