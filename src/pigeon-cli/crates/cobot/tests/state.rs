@@ -203,8 +203,8 @@ fn a_mirror_round_trips_changes_and_skips_other_prefixes() {
     put(&objects, "p/infra/old/terraform.tfstate", b"old");
     put(&objects, "other/x/terraform.tfstate", b"not mine");
     let dir = TempDir::new().expect("tempdir");
-    let mirror = Mirror::pull(bucket(&endpoint), "p", &dir.path().join("m"), 0).expect("pull");
-    let m = mirror.dir();
+    let mut mirror = Mirror::pull(bucket(&endpoint), "p", &dir.path().join("m"), 0).expect("pull");
+    let m = mirror.dir().to_path_buf();
     assert_eq!(
         fs::read(m.join("infra/cloudflare/terraform.tfstate")).expect("read"),
         b"one"
@@ -248,7 +248,8 @@ fn a_mirror_round_trips_changes_and_skips_other_prefixes() {
         Some(&b"not mine"[..])
     );
 
-    let again = Mirror::pull(bucket(&endpoint), "p", &dir.path().join("m"), 0).expect("re-pull");
+    let mut again =
+        Mirror::pull(bucket(&endpoint), "p", &dir.path().join("m"), 0).expect("re-pull");
     assert!(
         !again.dir().join("infra/old").exists(),
         "a tombstone pulls as absent"
@@ -270,11 +271,77 @@ fn a_mirror_round_trips_changes_and_skips_other_prefixes() {
 }
 
 #[test]
+fn a_mirror_pushes_again_after_its_own_writes() {
+    let (endpoint, objects) = serve();
+    put(&objects, "p/u/terraform.tfstate", b"one");
+    let dir = TempDir::new().expect("tempdir");
+    let mut mirror = Mirror::pull(bucket(&endpoint), "p", &dir.path().join("m"), 0).expect("pull");
+    let m = mirror.dir().to_path_buf();
+    let state = m.join("u/terraform.tfstate");
+    let fresh = m.join("n/terraform.tfstate");
+
+    fs::write(&state, b"two").expect("write");
+    assert_eq!(mirror.push(0).expect("first"), ["p/u/terraform.tfstate"]);
+    fs::create_dir_all(m.join("n")).expect("mkdir");
+    fs::write(&fresh, b"new").expect("write");
+    fs::write(&state, b"three").expect("write");
+    let mut written = mirror.push(0).expect("second, over its own write");
+    written.sort();
+    assert_eq!(written, ["p/n/terraform.tfstate", "p/u/terraform.tfstate"]);
+    fs::remove_file(&fresh).expect("rm");
+    assert_eq!(
+        mirror.push(0).expect("a removal"),
+        ["p/n/terraform.tfstate"]
+    );
+    fs::write(&fresh, b"again").expect("write");
+    assert_eq!(
+        mirror.push(0).expect("over its own tombstone"),
+        ["p/n/terraform.tfstate"]
+    );
+    assert_eq!(
+        get(&objects, "p/u/terraform.tfstate").as_deref(),
+        Some(&b"three"[..])
+    );
+    assert_eq!(
+        get(&objects, "p/n/terraform.tfstate").as_deref(),
+        Some(&b"again"[..])
+    );
+
+    put(&objects, "p/u/terraform.tfstate", b"theirs");
+    fs::write(&state, b"four").expect("write");
+    let err = mirror.push(0).expect_err("another writer still wins");
+    assert!(err.to_string().contains("changed in R2"), "{err}");
+    assert_eq!(
+        get(&objects, "p/u/terraform.tfstate").as_deref(),
+        Some(&b"theirs"[..])
+    );
+}
+
+#[test]
+fn a_plan_marker_never_reaches_r2_before_its_units_state() {
+    let (endpoint, objects) = serve();
+    put(&objects, "p/workloads/w/terraform.tfstate", b"base");
+    let dir = TempDir::new().expect("tempdir");
+    let mut mirror = Mirror::pull(bucket(&endpoint), "p", &dir.path().join("m"), 0).expect("pull");
+    let m = mirror.dir().to_path_buf();
+    fs::write(m.join("workloads/w/terraform.tfstate"), b"applied").expect("write");
+    fs::create_dir_all(m.join("plans/abc/workloads/w")).expect("mkdir");
+    fs::write(m.join("plans/abc/workloads/w/applied"), b"").expect("marker");
+    put(&objects, "p/workloads/w/terraform.tfstate", b"theirs");
+    let err = mirror.push(0).expect_err("the state write is refused");
+    assert!(err.to_string().contains("changed in R2"), "{err}");
+    assert!(
+        get(&objects, "p/plans/abc/workloads/w/applied").is_none(),
+        "the marker waits for its state, though `plans/` sorts first"
+    );
+}
+
+#[test]
 fn another_writer_wins_and_the_push_fails() {
     let (endpoint, objects) = serve();
     put(&objects, "p/u/terraform.tfstate", b"base");
     let dir = TempDir::new().expect("tempdir");
-    let mirror = Mirror::pull(bucket(&endpoint), "p", &dir.path().join("m"), 0).expect("pull");
+    let mut mirror = Mirror::pull(bucket(&endpoint), "p", &dir.path().join("m"), 0).expect("pull");
     put(&objects, "p/u/terraform.tfstate", b"theirs");
     fs::write(mirror.dir().join("u/terraform.tfstate"), b"mine").expect("write");
     let err = mirror.push(0).expect_err("conflict").to_string();
@@ -284,7 +351,7 @@ fn another_writer_wins_and_the_push_fails() {
         Some(&b"theirs"[..])
     );
 
-    let mirror = Mirror::pull(bucket(&endpoint), "p", &dir.path().join("m"), 0).expect("pull");
+    let mut mirror = Mirror::pull(bucket(&endpoint), "p", &dir.path().join("m"), 0).expect("pull");
     put(&objects, "p/new/terraform.tfstate", b"theirs");
     fs::create_dir_all(mirror.dir().join("new")).expect("mkdir");
     fs::write(mirror.dir().join("new/terraform.tfstate"), b"mine").expect("write");
@@ -316,7 +383,7 @@ fn a_delete_never_erases_another_writers_update() {
     let (endpoint, objects) = serve();
     put(&objects, "p/old/terraform.tfstate", b"base");
     let dir = TempDir::new().expect("tempdir");
-    let mirror = Mirror::pull(bucket(&endpoint), "p", &dir.path().join("m"), 0).expect("pull");
+    let mut mirror = Mirror::pull(bucket(&endpoint), "p", &dir.path().join("m"), 0).expect("pull");
     put(&objects, "p/old/terraform.tfstate", b"theirs");
     fs::remove_file(mirror.dir().join("old/terraform.tfstate")).expect("rm");
     let err = mirror.push(0).expect_err("conflict").to_string();

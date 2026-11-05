@@ -288,7 +288,7 @@ fn infra_plan(
                 Error::Invalid(vec!["argument `units` must be a list of strings".into()])
             })?,
     };
-    let s = session(instance, args, var)?;
+    let mut s = session(instance, args, var)?;
     let selected =
         cobot::select(&s.ctx.root, &s.ctx.providers, &units).map_err(|e| cobot_failed(&e))?;
     let (stored, _) = cobot::plan_stored(&s.ctx, &selected, cobot::session::now())
@@ -304,16 +304,16 @@ fn infra_plan(
     }))
 }
 
-/// Applies a stored plan exactly; each unit's changes. R2 state is written back even when the
-/// apply fails.
+/// Applies a stored plan exactly; each unit's changes. R2 state is written back after each unit,
+/// and again even when the apply fails.
 fn infra_apply(
     instance: &Instance,
     args: &Map<String, Value>,
     var: &impl Fn(&str) -> Option<String>,
 ) -> Result<Value, Error> {
     let plan = text(args, "plan")?;
-    let s = session(instance, args, var)?;
-    let applied = cobot::apply_stored(&s.ctx, plan, cobot::session::now());
+    let mut s = session(instance, args, var)?;
+    let applied = s.apply_stored(plan, cobot::session::now());
     s.push().map_err(|e| cobot_failed(&e))?;
     let applied = applied.map_err(|e| cobot_failed(&e))?;
     Ok(json!({

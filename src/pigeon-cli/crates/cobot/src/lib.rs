@@ -834,18 +834,54 @@ pub fn plan_stored(
         files.push((u, tofu::plan_file(&work), p.changes.clone(), digest));
         planned.push(p);
     }
-    let stored = plans::store(&absolute(&ctx.state)?, &files, now)?;
+    let state = absolute(&ctx.state)?;
+    plans::prune_completed(&state, now)?;
+    let stored = plans::store(&state, &files, now)?;
     Ok((stored, planned))
+}
+
+/// Applies the plans stored as `id`, exactly as planned, then removes them; see
+/// [`apply_stored_with`].
+///
+/// # Errors
+///
+/// As [`apply_stored_with`].
+pub fn apply_stored(ctx: &Context, id: &str, now: u64) -> Result<Vec<UnitPlan>, Error> {
+    apply_stored_with(ctx, id, now, &mut || Ok(()))
 }
 
 /// Applies the plans stored as `id`, exactly as planned, then removes them.
 ///
+/// `checkpoint` runs after each unit is applied and marked, and after the completion record,
+/// before the plan is removed. A completed plan returns its recorded result (control-plane ADR §7).
+///
 /// # Errors
 ///
 /// [`Error::Plan`] for an unknown or expired plan, or a unit whose desired state changed;
-/// any other [`Error`] from `tofu`, which also refuses a plan whose state moved on.
-pub fn apply_stored(ctx: &Context, id: &str, now: u64) -> Result<Vec<UnitPlan>, Error> {
+/// any other [`Error`] from `tofu`, which also refuses a plan whose state moved on; and any
+/// error `checkpoint` returns.
+pub fn apply_stored_with(
+    ctx: &Context,
+    id: &str,
+    now: u64,
+    checkpoint: &mut dyn FnMut() -> Result<(), Error>,
+) -> Result<Vec<UnitPlan>, Error> {
     let state = absolute(&ctx.state)?;
+    if let Some(done) = plans::completed(&state, id, now) {
+        plans::remove(&state, id)?;
+        return Ok(done
+            .units
+            .into_iter()
+            .map(|u| UnitPlan {
+                unit: u.unit,
+                changes: u.changes,
+                note: Some(match u.note {
+                    Some(n) => format!("{n} Applied from this plan earlier."),
+                    None => "Applied from this plan earlier.".into(),
+                }),
+            })
+            .collect());
+    }
     let stored = plans::load(&state, id, now)?;
     let done = plans::applied(&state, id);
     let pending: Vec<&plans::StoredUnit> = stored
@@ -885,12 +921,29 @@ pub fn apply_stored(ctx: &Context, id: &str, now: u64) -> Result<Vec<UnitPlan>, 
         tofu::apply(&u.path, &work, &env)?;
         plans::mark_applied(&state, id, &s.unit)?;
         finish_move(ctx, u)?;
+        checkpoint()?;
         applied.push(UnitPlan {
             unit: u.path.clone(),
             changes: s.changes.clone(),
             note,
         });
     }
+    plans::complete(
+        &state,
+        &plans::Completed {
+            id: id.to_string(),
+            completed: now,
+            units: applied
+                .iter()
+                .map(|u| plans::CompletedUnit {
+                    unit: u.unit.clone(),
+                    changes: u.changes.clone(),
+                    note: u.note.clone(),
+                })
+                .collect(),
+        },
+    )?;
+    checkpoint()?;
     plans::remove(&state, id)?;
     Ok(applied)
 }
