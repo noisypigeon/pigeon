@@ -132,11 +132,11 @@ These take effect from phase 3.
    Then:
 
    ```
-   cargo run -q -p pigeon -- cobot git apply     # namespace pigeon, repo pigeon, imported from GitHub
-   cargo run -q -p pigeon -- cobot git status    # Artifacts main equals GitHub main
+   cargo run -q --manifest-path src/pigeon-cli/Cargo.toml -p pigeon -- cobot git apply     # namespace pigeon, repo pigeon, imported from GitHub
+   cargo run -q --manifest-path src/pigeon-cli/Cargo.toml -p pigeon -- cobot git status    # Artifacts main equals GitHub main
    git add config.yaml && git commit -m "chore: pigeon declares its repository"
-   cargo run -q -p pigeon -- cobot git push pigeon HEAD:main
-   cargo run -q -p pigeon -- cobot git mirror
+   cargo run -q --manifest-path src/pigeon-cli/Cargo.toml -p pigeon -- cobot git push pigeon HEAD:main
+   cargo run -q --manifest-path src/pigeon-cli/Cargo.toml -p pigeon -- cobot git mirror
    ```
 
    That commit is the first to reach `main` through Artifacts, not GitHub. Run step 2 only after the release bot has released cobot from step 1: the mirror's push to GitHub still triggers its `cobot.yml` until the cutover, and that needs a cobot that knows API kinds.

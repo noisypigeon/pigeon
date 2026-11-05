@@ -114,8 +114,8 @@ fn api_error(message: String) -> Error {
     }
 }
 
-/// Ensures the namespace and each repository exist, importing a new one from its mirror;
-/// idempotent.
+/// Ensures the namespace and each repository exist, and imports a repository with a mirror
+/// while it has no branch, so a failed import is retried; idempotent.
 ///
 /// # Errors
 ///
@@ -125,23 +125,24 @@ pub fn apply(client: &Client<'_>, instance: &Instance) -> Result<Vec<Applied>, E
     client.namespace(ns).map_err(api_error)?;
     let mut out = Vec::new();
     for d in &instance.repos {
-        let (outcome, repo) = match client.repo(ns, &d.name).map_err(api_error)? {
+        let (mut outcome, repo) = match client.repo(ns, &d.name).map_err(api_error)? {
             Some(r) => (Outcome::Unchanged, r),
-            None => match &d.mirror {
-                Some(url) => (
-                    Outcome::Imported,
-                    client
-                        .import(ns, &d.name, url, &d.branch)
-                        .map_err(api_error)?,
-                ),
-                None => (
-                    Outcome::Created,
-                    client
-                        .create(ns, &d.name, d.description.as_deref())
-                        .map_err(api_error)?,
-                ),
-            },
+            None => (
+                Outcome::Created,
+                client
+                    .create(ns, &d.name, d.description.as_deref())
+                    .map_err(api_error)?,
+            ),
         };
+        if let Some(url) = &d.mirror {
+            let token = client.token(ns, &d.name, Scope::Read).map_err(api_error)?;
+            if no_branches(&repo.remote, &token)? {
+                client
+                    .import(ns, &d.name, url, &d.branch)
+                    .map_err(api_error)?;
+                outcome = Outcome::Imported;
+            }
+        }
         out.push(Applied {
             name: d.name.clone(),
             outcome,
@@ -238,6 +239,17 @@ fn checked(output: std::io::Result<Output>, what: &str) -> Result<String, Error>
     }
 }
 
+/// Whether `remote` has no branch yet.
+fn no_branches(remote: &str, token: &str) -> Result<bool, Error> {
+    let out = checked(
+        command(remote, token)
+            .args(["ls-remote", "--heads", remote])
+            .output(),
+        "git ls-remote",
+    )?;
+    Ok(out.trim().is_empty())
+}
+
 /// The SHA of `refs/heads/<branch>` at `remote`, if it has one.
 fn head(cmd: &mut Command, remote: &str, branch: &str) -> Result<Option<String>, Error> {
     let out = checked(
@@ -315,7 +327,7 @@ pub struct Mirrored {
 }
 
 /// Mirrors repository `name`'s default branch and tags, and nothing else, to `to`, forcing it
-/// to follow Artifacts; staged in `<root>/.cobot/git/<name>.git`. The push uses the user's own
+/// to follow Artifacts and deleting tags Artifacts no longer has; staged in `<root>/.cobot/git/<name>.git`. The push uses the user's own
 /// git credentials, never the Artifacts token.
 ///
 /// # Errors
@@ -383,12 +395,35 @@ pub fn mirror_from(
             .output(),
         "git fetch",
     )?;
+    let tags = |listing: &str| -> std::collections::BTreeSet<String> {
+        listing
+            .lines()
+            .filter_map(|l| l.split_whitespace().last())
+            .filter(|r| r.starts_with("refs/tags/"))
+            .map(str::to_string)
+            .collect()
+    };
+    let mut plain = Command::new("git");
+    plain.env("GIT_TERMINAL_PROMPT", "0");
+    let theirs = tags(&checked(
+        plain.args(["ls-remote", "--tags", "--refs", to]).output(),
+        "git ls-remote",
+    )?);
+    let ours = tags(&checked(
+        Command::new("git")
+            .arg("--git-dir")
+            .arg(dir)
+            .args(["for-each-ref", "--format=%(refname)", "refs/tags"])
+            .output(),
+        "git for-each-ref",
+    )?);
     let mut push = Command::new("git");
     push.env("GIT_TERMINAL_PROMPT", "0")
         .arg("--git-dir")
         .arg(dir)
         .args(["push", "--quiet", "--atomic", to, &heads])
-        .arg("+refs/tags/*:refs/tags/*");
+        .arg("+refs/tags/*:refs/tags/*")
+        .args(theirs.difference(&ours).map(|t| format!(":{t}")));
     checked(push.output(), "git push")?;
     let listed = checked(
         Command::new("git")

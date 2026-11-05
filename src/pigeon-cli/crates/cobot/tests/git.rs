@@ -23,16 +23,19 @@ const GIT_TOKEN: &str = "git-token-abcdef0123";
 struct Fake {
     account: String,
     remote: String,
+    source: Option<PathBuf>,
     namespaces: Vec<String>,
     repos: BTreeMap<String, Value>,
     calls: Vec<String>,
 }
 
-/// A fake Cloudflare API for one account; every repository's remote is `remote`.
-fn serve(account: &str, remote: &Path) -> (String, Arc<Mutex<Fake>>) {
+/// A fake Cloudflare API for one account. Every repository's remote is the bare repository
+/// `remote`, and an import fills it from `source`.
+fn serve(account: &str, remote: &Path, source: Option<&Path>) -> (String, Arc<Mutex<Fake>>) {
     let fake = Arc::new(Mutex::new(Fake {
         account: account.into(),
         remote: format!("file://{}", remote.display()),
+        source: source.map(Path::to_path_buf),
         ..Fake::default()
     }));
     let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
@@ -117,8 +120,16 @@ fn route(f: &mut Fake, method: &str, path: &str, body: &Value) -> (u16, Value) {
             .get(&format!("{ns}/{name}"))
             .map_or((404, Value::Null), |r| (200, r.clone())),
         ("POST", [ns, "repos", name, "import"]) => {
-            let repo = json!({ "name": name, "remote": f.remote, "imported_from": body["url"] });
-            f.repos.insert(format!("{ns}/{name}"), repo.clone());
+            let key = format!("{ns}/{name}");
+            let Some(repo) = f.repos.get_mut(&key) else {
+                return (404, Value::Null);
+            };
+            repo["imported_from"] = body["url"].clone();
+            let repo = repo.clone();
+            if let Some(src) = &f.source {
+                let into = f.remote.trim_start_matches("file://");
+                run_git(src, &["push", "-q", "--mirror", into]);
+            }
             (200, repo)
         }
         ("POST", [ns, "repos", name, "tokens"])
@@ -237,14 +248,23 @@ fn source(dir: &Path) -> (PathBuf, String) {
     (bare, main)
 }
 
+/// An empty bare repository standing in for Artifacts, and a source to import from.
+fn remotes() -> (TempDir, PathBuf, PathBuf) {
+    let dir = TempDir::new().expect("tempdir");
+    let (src, _) = source(dir.path());
+    let remote = dir.path().join("artifacts-empty.git");
+    run_git(
+        dir.path(),
+        &["init", "-q", "--bare", remote.to_str().expect("utf8")],
+    );
+    (dir, remote, src)
+}
+
 #[test]
 fn apply_creates_imports_and_then_changes_nothing() {
-    let (platform, inst, remotes) = (
-        platform(),
-        instance("pigeon", PIGEON_UNITS),
-        TempDir::new().expect("t"),
-    );
-    let (base, fake) = serve("acct-platform-1234", remotes.path());
+    let (platform, inst) = (platform(), instance("pigeon", PIGEON_UNITS));
+    let (_dir, remote, src) = remotes();
+    let (base, fake) = serve("acct-platform-1234", &remote, Some(&src));
     let api = Api::new(Some(&base), TOKEN.into());
     let client = Client::new(&api).expect("one account");
     assert_eq!(client.account_hint(), "…1234");
@@ -265,10 +285,28 @@ fn apply_creates_imports_and_then_changes_nothing() {
             f.repos["pigeon/pigeon"]["imported_from"],
             "https://github.com/noisypigeon/pigeon"
         );
+        let create = f
+            .calls
+            .iter()
+            .position(|c| c.ends_with("/namespaces/pigeon/repos") && c.starts_with("POST"));
+        let import = f
+            .calls
+            .iter()
+            .position(|c| c.ends_with("/repos/pigeon/import"));
+        assert!(
+            create < import && create.is_some(),
+            "a repository is created before its import: {:?}",
+            f.calls
+        );
         assert!(f.calls.iter().all(|c| c.starts_with("GET /accounts?")
             || c.contains("/accounts/acct-platform-1234/artifacts/namespaces")));
     }
-    let posts = |f: &Fake| f.calls.iter().filter(|c| c.starts_with("POST")).count();
+    let posts = |f: &Fake| {
+        f.calls
+            .iter()
+            .filter(|c| c.starts_with("POST") && !c.ends_with("/tokens"))
+            .count()
+    };
     let before = posts(&fake.lock().expect("lock"));
     let second = git::apply(&client, &declared).expect("apply again");
     assert!(
@@ -283,13 +321,39 @@ fn apply_creates_imports_and_then_changes_nothing() {
 }
 
 #[test]
+fn an_import_that_never_landed_is_retried() {
+    let (platform, inst) = (platform(), instance("pigeon", PIGEON_UNITS));
+    let (_dir, remote, src) = remotes();
+    let (base, fake) = serve("acct-platform-1234", &remote, Some(&src));
+    {
+        let mut f = fake.lock().expect("lock");
+        f.namespaces.push("pigeon".into());
+        let r = f.remote.clone();
+        f.repos.insert(
+            "pigeon/pigeon".into(),
+            json!({ "name": "pigeon", "remote": r }),
+        );
+    }
+    let api = Api::new(Some(&base), TOKEN.into());
+    let client = Client::new(&api).expect("account");
+    let declared = git::declared(inst.path(), platform.path()).expect("declared");
+    let got = git::apply(&client, &declared).expect("apply");
+    assert_eq!(
+        got[0].outcome,
+        Outcome::Imported,
+        "an empty repository with a mirror is imported"
+    );
+}
+
+#[test]
 fn each_instance_uses_its_own_namespace_in_the_account_its_token_sees() {
-    let (platform, remotes) = (platform(), TempDir::new().expect("t"));
+    let platform = platform();
+    let (_dir, remote, src) = remotes();
     let np = instance(
         "noisypigeon",
         "  repos/noisypigeon:\n    kind: cloudflare/git-repo\n    mirror: https://github.com/noisypigeon/noisypigeon\n",
     );
-    let (base, fake) = serve("acct-other-9876", remotes.path());
+    let (base, fake) = serve("acct-other-9876", &remote, Some(&src));
     let api = Api::new(Some(&base), TOKEN.into());
     let client = Client::new(&api).expect("account");
     let declared = git::declared(np.path(), platform.path()).expect("declared");
@@ -365,7 +429,7 @@ fn the_git_token_travels_only_in_the_environment() {
         TempDir::new().expect("t"),
     );
     let (artifacts, _) = source(remotes.path());
-    let (url, _) = serve("acct-platform-1234", &artifacts);
+    let (url, _) = serve("acct-platform-1234", &artifacts, None);
     let api = Api::new(Some(&url), TOKEN.into());
     let client = Client::new(&api).expect("account");
     let declared = git::declared(inst.path(), platform.path()).expect("declared");
@@ -410,9 +474,18 @@ fn a_mirror_follows_main_and_tags_and_never_changes() {
     fs::write(other.join("z.txt"), "z").expect("write");
     run_git(&other, &["add", "."]);
     run_git(&other, &["commit", "-q", "-m", "diverged"]);
+    run_git(&other, &["tag", "old"]);
+    run_git(&other, &["branch", "keep"]);
     run_git(
         &other,
-        &["push", "-q", github.to_str().expect("utf8"), "main"],
+        &[
+            "push",
+            "-q",
+            github.to_str().expect("utf8"),
+            "main",
+            "keep",
+            "old",
+        ],
     );
 
     let stage = dir.path().join("stage.git");
@@ -444,7 +517,15 @@ fn a_mirror_follows_main_and_tags_and_never_changes() {
         &["for-each-ref", "--format=%(refname)", "refs/heads"],
     );
     assert_eq!(
-        branches, "refs/heads/main",
-        "change/* never reaches the mirror"
+        branches, "refs/heads/keep\nrefs/heads/main",
+        "change/* never reaches the mirror, and unrelated branches stay"
+    );
+    let tags = run_git(
+        &github,
+        &["for-each-ref", "--format=%(refname)", "refs/tags"],
+    );
+    assert_eq!(
+        tags, "refs/tags/v1",
+        "a tag Artifacts lacks is deleted from the mirror"
     );
 }

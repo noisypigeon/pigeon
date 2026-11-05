@@ -312,6 +312,18 @@ fn git_mirror(
     m: &GitMirror,
     root: &std::path::Path,
 ) -> Result<(), cobot::Error> {
+    for name in &m.repos {
+        match instance.repos.iter().find(|d| &d.name == name) {
+            None => return Err(cobot::Error::UnknownUnit(format!("repos/{name}"))),
+            Some(d) if d.mirror.is_none() => {
+                return Err(cobot::Error::Tool {
+                    command: "git mirror".into(),
+                    message: format!("repos/{name} declares no mirror"),
+                });
+            }
+            Some(_) => {}
+        }
+    }
     for d in &instance.repos {
         if !m.repos.is_empty() && !m.repos.contains(&d.name) {
             continue;
