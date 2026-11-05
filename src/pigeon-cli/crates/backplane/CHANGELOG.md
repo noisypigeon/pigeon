@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.18 (2026-11-05)
+
+- feat(backplane): the Instance Durable Object, its run queue, and D1 schema v0 ([#119](https://github.com/noisypigeon/pigeon/pull/119))
+
 ## v0.1.17 (2026-11-05)
 
 - refactor(backplane): shared wire types, and both worker builds compiling ([#118](https://github.com/noisypigeon/pigeon/pull/118))
