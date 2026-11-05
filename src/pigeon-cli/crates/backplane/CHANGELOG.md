@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.14 (2026-11-05)
+
+- feat(backplane): signed requests for serve ([#112](https://github.com/noisypigeon/pigeon/pull/112))
+
 ## v0.1.13 (2026-11-04)
 
 - feat(cobot): name the attributes an update changes ([#108](https://github.com/noisypigeon/pigeon/pull/108))

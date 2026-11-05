@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-11-05
+
+- feat(backplane): signed requests for serve ([#112](https://github.com/noisypigeon/pigeon/pull/112))
+
 ## 2026-11-04
 
 - fix(catalog): one Cloudflare account lookup, and cobot step progress ([#106](https://github.com/noisypigeon/pigeon/pull/106))
