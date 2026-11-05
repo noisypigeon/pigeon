@@ -10,13 +10,55 @@ pub const PORT: u16 = 8080;
 /// The environment variable `serve` reads its signing key from.
 pub const TOKEN_VAR: &str = "BACKPLANE_TOKEN";
 
-/// How a run's Container starts: `serve` in signed mode, against `state`.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// The variables cobot reads an `r2://` state's access from; equal to `state.rs`'s and
+/// `engines.rs`'s, which a test checks.
+pub const STATE_VARS: [&str; 4] = [
+    "COBOT_STATE_R2_ENDPOINT",
+    "COBOT_STATE_R2_ACCESS_KEY_ID",
+    "COBOT_STATE_R2_SECRET_ACCESS_KEY",
+    "COBOT_STATE_PASSPHRASE",
+];
+
+/// What a run's Container needs to read and write its `r2://` state.
+#[derive(Clone, PartialEq, Eq)]
+pub struct StateAccess {
+    /// The R2 S3 endpoint.
+    pub endpoint: String,
+    /// The R2 access key ID.
+    pub access_key_id: String,
+    /// The R2 secret access key.
+    pub secret_access_key: String,
+    /// The state's encryption passphrase.
+    pub passphrase: String,
+}
+
+impl std::fmt::Debug for StateAccess {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("StateAccess { .. }")
+    }
+}
+
+/// How a run's Container starts: `serve` in signed mode, for the instance at `root`, against
+/// `state`.
+#[derive(Clone, PartialEq, Eq)]
 pub struct Launch {
+    /// The instance's root inside the Container, holding `.config/instance.yaml`.
+    pub root: String,
     /// The state every plan and apply uses, e.g. `r2://<bucket>/<prefix>`.
     pub state: String,
+    /// Access to that state.
+    pub access: StateAccess,
     /// The signing key, `BACKPLANE_TOKEN`.
     pub token: String,
+}
+
+impl std::fmt::Debug for Launch {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Launch")
+            .field("root", &self.root)
+            .field("state", &self.state)
+            .finish_non_exhaustive()
+    }
 }
 
 impl Launch {
@@ -31,6 +73,8 @@ impl Launch {
             &format!("0.0.0.0:{PORT}"),
             "--network",
             "--signed",
+            "--root",
+            &self.root,
             "--state",
             &self.state,
         ]
@@ -38,10 +82,18 @@ impl Launch {
         .to_vec()
     }
 
-    /// The Container's environment.
+    /// The Container's environment: the signing key and the state's access.
     #[must_use]
     pub fn env(&self) -> Vec<(&'static str, &str)> {
-        vec![(TOKEN_VAR, self.token.as_str())]
+        let a = &self.access;
+        let [endpoint, key_id, secret, passphrase] = STATE_VARS;
+        vec![
+            (TOKEN_VAR, self.token.as_str()),
+            (endpoint, a.endpoint.as_str()),
+            (key_id, a.access_key_id.as_str()),
+            (secret, a.secret_access_key.as_str()),
+            (passphrase, a.passphrase.as_str()),
+        ]
     }
 }
 
@@ -235,18 +287,29 @@ mod wasm {
 
 #[cfg(test)]
 mod tests {
-    use super::{DispatchError, Launch, accept};
+    use super::{DispatchError, Launch, StateAccess, accept};
     use crate::link::sign_response;
 
     const TOKEN: &str = "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk";
     const NONCE: &str = "0123456789abcdef0123456789abcdef";
 
-    #[test]
-    fn a_run_launches_serve_signed_with_only_its_token() {
-        let launch = Launch {
+    fn launch() -> Launch {
+        Launch {
+            root: "/instance".into(),
             state: "r2://state/i1".into(),
+            access: StateAccess {
+                endpoint: "https://r2.example".into(),
+                access_key_id: "key-id".into(),
+                secret_access_key: "secret".into(),
+                passphrase: "passphrase".into(),
+            },
             token: TOKEN.into(),
-        };
+        }
+    }
+
+    #[test]
+    fn a_run_launches_serve_signed_for_its_instance_and_state() {
+        let launch = launch();
         assert_eq!(
             launch.entrypoint(),
             [
@@ -257,11 +320,44 @@ mod tests {
                 "0.0.0.0:8080",
                 "--network",
                 "--signed",
+                "--root",
+                "/instance",
                 "--state",
                 "r2://state/i1",
             ]
         );
-        assert_eq!(launch.env(), [("BACKPLANE_TOKEN", TOKEN)]);
+        assert_eq!(
+            launch.env(),
+            [
+                ("BACKPLANE_TOKEN", TOKEN),
+                ("COBOT_STATE_R2_ENDPOINT", "https://r2.example"),
+                ("COBOT_STATE_R2_ACCESS_KEY_ID", "key-id"),
+                ("COBOT_STATE_R2_SECRET_ACCESS_KEY", "secret"),
+                ("COBOT_STATE_PASSPHRASE", "passphrase"),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_launch_never_prints_a_secret() {
+        let shown = format!("{:?}", launch());
+        for secret in [TOKEN, "key-id", "secret", "passphrase"] {
+            assert!(!shown.contains(secret), "{shown}");
+        }
+    }
+
+    #[cfg(feature = "engines")]
+    #[test]
+    fn the_state_variables_are_cobots() {
+        assert_eq!(
+            super::STATE_VARS,
+            [
+                crate::state::ENDPOINT_VAR,
+                crate::state::ACCESS_KEY_VAR,
+                crate::state::SECRET_KEY_VAR,
+                crate::PASSPHRASE_VAR,
+            ]
+        );
     }
 
     #[test]
