@@ -32,9 +32,14 @@ pub struct ServeArgs {
     pub state: String,
 
     /// Allow a non-loopback address; requires mutual TLS from `BACKPLANE_TLS_CERT`,
-    /// `BACKPLANE_TLS_KEY` and `BACKPLANE_TLS_CLIENT_CA` (PEM)
+    /// `BACKPLANE_TLS_KEY` and `BACKPLANE_TLS_CLIENT_CA` (PEM), or --signed
     #[arg(long)]
     pub network: bool,
+
+    /// Take signed requests on `/v0/` routes instead of the bearer token, and sign each
+    /// response; the token is the signing key
+    #[arg(long)]
+    pub signed: bool,
 
     /// The instance's root, holding `.config/instance.yaml`
     #[arg(long, default_value = ".")]
