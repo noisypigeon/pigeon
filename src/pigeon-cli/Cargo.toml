@@ -25,6 +25,7 @@ httparse = "1.10.1"
 predicates = "3.1.4"
 rcgen = { version = "0.14.10", default-features = false, features = ["crypto", "ring", "pem"] }
 regex = "1.13.1"
+rusqlite = { version = "0.37.0", features = ["bundled"] }
 rustls = { version = "0.23.46", default-features = false, features = ["ring", "std"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde-saphyr = "2.0.0"
@@ -34,6 +35,8 @@ sha2 = "0.10.9"
 tempfile = "3.27.0"
 toml = "0.5.11"
 ureq = { version = "3.5.1", default-features = false, features = ["rustls"] }
+wasm-bindgen = "=0.2.130"
+worker = { version = "0.8.7", default-features = false }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

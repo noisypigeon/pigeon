@@ -6,9 +6,12 @@ pub mod catalog;
 pub mod engine;
 #[cfg(feature = "engines")]
 pub mod instance;
+pub mod runs;
 #[cfg(feature = "engines")]
 pub mod serve;
 pub mod wire;
+#[cfg(feature = "worker")]
+pub mod worker;
 
 use std::fmt;
 use std::path::PathBuf;
