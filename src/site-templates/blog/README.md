@@ -1,12 +1,17 @@
-# static-site-template
+# site-template-blog
 
 pigeon's [Zola](https://www.getzola.org/) theme for static sites on
 Cloudflare R2, ported from runway's theme at 1.3.2. Its design is
-[`2026-11-03-runtime-cloudflare-static-sites-r2.md`](../../.claude/decisions/2026-11-03-runtime-cloudflare-static-sites-r2.md).
+[`2026-11-03-runtime-cloudflare-static-sites-r2.md`](../../../.claude/decisions/2026-11-03-runtime-cloudflare-static-sites-r2.md).
+
+It is the `blog` member of the site templates in `src/site-templates/`, per
+[`2026-11-05-runtime-architecture-site-through-backplane.md`](../../../.claude/decisions/2026-11-05-runtime-architecture-site-through-backplane.md),
+and is tagged `site-template-blog/vX.Y.Z`; releases before the move are
+tagged `static-site-template/vX.Y.Z`.
 
 A workload's `config.yaml` selects a released version and its features, as
-`static_site.template: { version, features }`. When cobot builds the site, it
-puts that tag's tree at `themes/static-site-template` and writes
+`static_site.template: { name: blog, version, features }`. When cobot builds the site, it
+puts that tag's tree at `themes/site-template-blog` and writes
 `[extra.features]`. Features left unset are off. [`template.yaml`](template.yaml)
 holds the version, the features and their defaults.
 
@@ -14,7 +19,7 @@ holds the version, the features and their defaults.
 
 From 1.0.1, a site's settings live in its workload's `config.yaml`, as
 `static_site.site`, per
-[`2026-11-03-runtime-static-site-config-contract.md`](../../.claude/decisions/2026-11-03-runtime-static-site-config-contract.md).
+[`2026-11-03-runtime-static-site-config-contract.md`](../../../.claude/decisions/2026-11-03-runtime-static-site-config-contract.md).
 
 - [`schema.json`](schema.json) is the contract: each setting, its
   description and default, and its `x-site` targets, the files and keys

@@ -9,7 +9,7 @@ use serde_json::{Value, json};
 const FILES: [&str; 2] = ["config.toml", "static/manifest.json"];
 
 fn template() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../static-site-template")
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../site-templates/blog")
 }
 
 fn schema() -> Value {

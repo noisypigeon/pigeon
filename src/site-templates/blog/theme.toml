@@ -1,7 +1,7 @@
-name = "static-site-template"
+name = "site-template-blog"
 description = "pigeon's Zola theme for static sites on Cloudflare R2."
 license = "GPL-3.0-or-later"
-homepage = "https://github.com/noisypigeon/pigeon/tree/main/src/static-site-template"
+homepage = "https://github.com/noisypigeon/pigeon/tree/main/src/site-templates/blog"
 min_version = "0.23.6"
 
 # Defaults Zola merges under a site's [extra]; an unset feature is off.

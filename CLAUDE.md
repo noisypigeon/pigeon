@@ -99,15 +99,18 @@ belong in the ADR, never in the file.
   [`2026-11-02-runtime-workloads-zone-apex.md`](.claude/decisions/2026-11-02-runtime-workloads-zone-apex.md).
 - A workload with only a `config.yaml` enables what `catalog/cloudflare/`
   defines (its `$defs.workload`): today `static_site`, an R2 bucket and a
-  custom domain per apex host, built with a released `src/static-site-template/`
-  (`static-site-template/vX.Y.Z`) and published by `cobot.yml` after apply, per
+  custom domain per apex host, built with a released template from
+  `src/site-templates/<name>/` (`site-template-<name>/vX.Y.Z`; the blog's
+  older tags are `static-site-template/vX.Y.Z`) and published by `cobot.yml`
+  after apply, per
   [`2026-11-03-runtime-cloudflare-static-sites-r2.md`](.claude/decisions/2026-11-03-runtime-cloudflare-static-sites-r2.md).
 - A static site's settings are `static_site.site` in its `config.yaml`, checked
   against the pinned template's `schema.json`; its `site/` holds only
   `posts/` (named `YYYY-MM-DD-<slug>.md`), `pages/` and `assets/`, per
   [`2026-11-03-runtime-static-site-config-contract.md`](.claude/decisions/2026-11-03-runtime-static-site-config-contract.md).
-- Site templates become a family in `src/site-templates/<name>/` (`blog`,
-  `architecture`); the architecture site is `infra/pigeon/sites/docs/` on
+- Site templates are a family in `src/site-templates/<name>/` (`blog`, and
+  `architecture` to come), named by `static_site.template.name`; a template
+  with `content: none` takes no `site/`. The architecture site is `infra/pigeon/sites/docs/` on
   `docs.pigeon.dev`, a diagram regenerated from the code by backplane's
   `architecture.describe` and published through the control plane, per
   [`2026-11-05-runtime-architecture-site-through-backplane.md`](.claude/decisions/2026-11-05-runtime-architecture-site-through-backplane.md).

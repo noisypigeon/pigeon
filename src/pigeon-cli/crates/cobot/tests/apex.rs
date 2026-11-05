@@ -1322,7 +1322,7 @@ fn a_static_site_takes_its_template_features_and_needs_its_settings() {
         .expect_err("unknown")
         .to_string();
     assert!(
-        err.contains("`typo` is not a feature of static-site-template/v1.0.0"),
+        err.contains("`typo` is not a feature of site-template-blog/v1.0.0"),
         "{err}"
     );
     write(
@@ -1336,7 +1336,7 @@ fn a_static_site_takes_its_template_features_and_needs_its_settings() {
     write(
         root,
         &format!("{BLOG}/config.yaml"),
-        "static_site:\n  template: { version: 1.0.0 }\n",
+        "static_site:\n  template: { name: blog, version: 1.0.0 }\n",
     );
     let sites = cobot::sites::find(root, &[]).expect("find");
     let err = cobot::sites::build(root, &sites)
@@ -1352,7 +1352,7 @@ fn a_static_site_takes_its_template_features_and_needs_its_settings() {
 }
 
 const CONTRACT: &str = "static_site:
-  template: { version: 1.0.0, features: [math] }
+  template: { name: blog, version: 1.0.0, features: [math] }
   site:
     title: Blog
     short_name: blog
@@ -1369,7 +1369,7 @@ const CONTRACT: &str = "static_site:
 fn contract_repo() -> TempDir {
     let repo = site_repo();
     let root = repo.path();
-    copy(root, "src/static-site-template");
+    copy(root, "src/site-templates/blog");
     write(root, &format!("{BLOG}/config.yaml"), CONTRACT);
     write(
         root,
@@ -1385,7 +1385,7 @@ fn contract_repo() -> TempDir {
     git_in(root, &["init", "-q"]);
     git_in(root, &["add", "-A"]);
     git_in(root, &["commit", "-q", "-m", "init"]);
-    git_in(root, &["tag", "static-site-template/v1.0.0"]);
+    git_in(root, &["tag", "site-template-blog/v1.0.0"]);
     repo
 }
 
@@ -1511,7 +1511,7 @@ fn a_contract_site_builds_from_its_config_yaml() {
     for want in [
         "base_url = \"https://noisypigeon.com\"",
         "title = \"Blog\"",
-        "theme = \"static-site-template\"",
+        "theme = \"site-template-blog\"",
         "math = true",
     ] {
         assert!(toml.contains(want), "{want}: {toml}");
@@ -1576,9 +1576,9 @@ fn a_contract_site_rejects_what_breaks_the_contract() {
     let err = build(&CONTRACT.replace("short_name: blog", "short_name: 7"));
     assert!(err.contains("static_site.site.short_name"), "{err}");
 
-    fs::remove_file(root.join("src/static-site-template/schema.json")).expect("rm");
+    fs::remove_file(root.join("src/site-templates/blog/schema.json")).expect("rm");
     git_in(root, &["commit", "-qam", "no contract"]);
-    git_in(root, &["tag", "static-site-template/v0.9.0"]);
+    git_in(root, &["tag", "site-template-blog/v0.9.0"]);
     let err = build(&CONTRACT.replace("1.0.0", "0.9.0"));
     assert!(err.contains("predates the config contract"), "{err}");
 }

@@ -7,7 +7,7 @@ on:
     paths:
       - "workloads/**/site/**"
       - "workloads/**/config.yaml"
-      - "src/static-site-template/**"
+      - "src/site-templates/**"
 
 permissions:
   contents: read

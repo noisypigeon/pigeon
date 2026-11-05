@@ -1,5 +1,5 @@
 # The fixed part of a site's config.toml; cobot adds the site's settings, base_url and [extra.features].
-theme = "static-site-template"
+theme = "site-template-blog"
 
 compile_sass = false
 generate_feeds = false

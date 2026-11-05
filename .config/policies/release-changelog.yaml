@@ -29,7 +29,7 @@ target:
     - catalog/backblaze/modules/bucket/CHANGELOG.md
     - catalog/backblaze/CHANGELOG.md
     - infra/pigeon/CHANGELOG.md
-    - src/static-site-template/CHANGELOG.md
+    - src/site-templates/blog/CHANGELOG.md
   optional: true
 rules:
   - line:
