@@ -911,3 +911,81 @@ fn request_framing_is_strict() {
     let _ = s.read_to_string(&mut out);
     assert!(out.starts_with("HTTP/1.1 200 "), "{out}");
 }
+
+#[test]
+fn a_stop_drains_requests_in_hand_then_returns() {
+    let root = fixture();
+    let state = TempDir::new().expect("state");
+    let server = Server::bind(
+        Instance::load(root.path()).expect("valid"),
+        "127.0.0.1:0",
+        &state.path().to_string_lossy(),
+        TOKEN,
+        false,
+        None,
+        false,
+    )
+    .expect("bind");
+    let addr = server.local_addr().expect("addr");
+    let stop = server.stopper();
+    let serving = std::thread::spawn(move || server.serve(var));
+
+    let half_sent = |body: &[u8]| {
+        let mut s = TcpStream::connect(addr).expect("connect");
+        s.set_read_timeout(Some(Duration::from_secs(10)))
+            .expect("timeout");
+        write!(
+            s,
+            "POST /v0/run HTTP/1.1\r\nhost: test\r\nauthorization: Bearer {TOKEN}\r\ncontent-length: {}\r\n\r\n",
+            body.len()
+        )
+        .expect("head");
+        s.write_all(&body[..5]).expect("half the body");
+        s
+    };
+    let body = br#"{"operation":"instance.show","args":{}}"#;
+    let apply =
+        br#"{"operation":"infra.apply","args":{"plan":"00000000000000000000000000000000"}}"#;
+    let mut s = half_sent(body);
+    let mut late_apply = half_sent(apply);
+    std::thread::sleep(Duration::from_millis(300));
+
+    stop.store(true, std::sync::atomic::Ordering::SeqCst);
+    std::thread::sleep(Duration::from_millis(300));
+    assert!(!serving.is_finished(), "a request in hand holds the drain");
+    s.write_all(&body[5..]).expect("the rest");
+    let mut out = String::new();
+    let _ = s.read_to_string(&mut out);
+    assert!(
+        out.starts_with("HTTP/1.1 200 "),
+        "answered while draining: {out}"
+    );
+    late_apply.write_all(&apply[5..]).expect("the rest");
+    let mut out = String::new();
+    let _ = late_apply.read_to_string(&mut out);
+    assert!(
+        out.starts_with("HTTP/1.1 503 "),
+        "no apply starts while draining: {out}"
+    );
+
+    let started = Instant::now();
+    while !serving.is_finished() {
+        assert!(
+            started.elapsed() < Duration::from_secs(5),
+            "serve returns once drained"
+        );
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    serving.join().expect("serve");
+    let late = TcpStream::connect(addr).map(|mut s| {
+        let _ = s.set_read_timeout(Some(Duration::from_secs(2)));
+        let _ = s.write_all(b"GET /healthz HTTP/1.1\r\nhost: test\r\n\r\n");
+        let mut out = String::new();
+        let _ = s.read_to_string(&mut out);
+        out
+    });
+    assert!(
+        late.map_or(true, |out| !out.starts_with("HTTP/")),
+        "nothing is accepted after the stop"
+    );
+}
