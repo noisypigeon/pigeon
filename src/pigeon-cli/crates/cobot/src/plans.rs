@@ -20,6 +20,35 @@ pub const MANIFEST: &str = "plan.json";
 pub const FILE: &str = "plan.tfplan";
 /// How long a stored plan may be applied: 24 hours.
 pub const LIFETIME_SECS: u64 = 24 * 60 * 60;
+/// The directory under [`DIR`] holding completed plans' records.
+pub const COMPLETED: &str = "completed";
+/// How long a completed plan's record is kept: 7 days.
+pub const COMPLETED_SECS: u64 = 7 * 24 * 60 * 60;
+
+/// A completed apply: what each unit applied, kept after its plan is removed so a retry can
+/// report it.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct Completed {
+    /// The plan's ID.
+    pub id: String,
+    /// When the apply completed, in Unix seconds.
+    pub completed: u64,
+    /// Each unit's changes and note, in apply order.
+    pub units: Vec<CompletedUnit>,
+}
+
+/// One unit of a completed apply.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct CompletedUnit {
+    /// The unit's path.
+    pub unit: String,
+    /// Its changes: addresses, actions and attribute names only.
+    pub changes: Vec<Change>,
+    /// Its note, if any.
+    pub note: Option<String>,
+}
 
 /// A stored plan's manifest.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -248,6 +277,59 @@ pub fn applied(state: &Path, id: &str) -> std::collections::BTreeSet<String> {
                 .collect()
         })
         .unwrap_or_default()
+}
+
+fn completed_path(state: &Path, id: &str) -> PathBuf {
+    state.join(DIR).join(COMPLETED).join(format!("{id}.json"))
+}
+
+/// Records that plan `id` completed, before it is removed.
+///
+/// # Errors
+///
+/// [`Error::Io`] if the record cannot be written.
+pub fn complete(state: &Path, record: &Completed) -> Result<(), Error> {
+    let path = completed_path(state, &record.id);
+    fs::create_dir_all(path.parent().unwrap_or(state)).map_err(io(&path))?;
+    let json = serde_json::to_string_pretty(record).map_err(|e| Error::Io {
+        path: path.clone(),
+        message: e.to_string(),
+    })?;
+    fs::write(&path, json + "\n").map_err(io(&path))
+}
+
+/// The record of plan `id`'s completed apply, if it completed within [`COMPLETED_SECS`].
+#[must_use]
+pub fn completed(state: &Path, id: &str, now: u64) -> Option<Completed> {
+    if !valid_id(id) {
+        return None;
+    }
+    let record: Completed =
+        serde_json::from_str(&fs::read_to_string(completed_path(state, id)).ok()?).ok()?;
+    (record.id == id && now < record.completed + COMPLETED_SECS).then_some(record)
+}
+
+/// Removes completed plans' records older than [`COMPLETED_SECS`].
+///
+/// # Errors
+///
+/// [`Error::Io`] if one cannot be removed.
+pub fn prune_completed(state: &Path, now: u64) -> Result<(), Error> {
+    let dir = state.join(DIR).join(COMPLETED);
+    let Ok(entries) = fs::read_dir(&dir) else {
+        return Ok(());
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let expired = fs::read_to_string(&path)
+            .ok()
+            .and_then(|t| serde_json::from_str::<Completed>(&t).ok())
+            .is_none_or(|r| now >= r.completed + COMPLETED_SECS);
+        if expired {
+            fs::remove_file(&path).map_err(io(&path))?;
+        }
+    }
+    Ok(())
 }
 
 /// Removes plan `id`, so it is applied once.

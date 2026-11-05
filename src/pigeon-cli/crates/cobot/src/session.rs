@@ -81,10 +81,25 @@ impl Session {
     /// # Errors
     ///
     /// [`Error::State`] if another writer changed state, or R2 fails.
-    pub fn push(&self) -> Result<Option<usize>, Error> {
-        self.mirror
-            .as_ref()
-            .map(|m| m.push(now()).map(|w| w.len()))
-            .transpose()
+    pub fn push(&mut self) -> Result<Option<usize>, Error> {
+        push(&mut self.mirror)
     }
+
+    /// Applies stored plan `id`, writing R2 state back after each unit and before the plan is
+    /// removed, so a stopped run loses nothing it applied; see the control-plane ADR §7.
+    ///
+    /// # Errors
+    ///
+    /// As [`crate::apply_stored`], and [`Error::State`] if a write back fails.
+    pub fn apply_stored(&mut self, id: &str, now: u64) -> Result<Vec<crate::UnitPlan>, Error> {
+        let mirror = &mut self.mirror;
+        crate::apply_stored_with(&self.ctx, id, now, &mut || push(mirror).map(|_| ()))
+    }
+}
+
+fn push(mirror: &mut Option<Mirror>) -> Result<Option<usize>, Error> {
+    mirror
+        .as_mut()
+        .map(|m| m.push(now()).map(|w| w.len()))
+        .transpose()
 }

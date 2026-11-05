@@ -92,15 +92,26 @@ fn a_stored_plan_applies_exactly_once() {
 
     let applied = cobot::apply_stored(&c, &stored.id, NOW + 60).expect("apply");
     assert_eq!(applied[0].changes, planned[0].changes);
-    assert!(
-        state
-            .path()
-            .join("infra/bootstrap/terraform.tfstate")
-            .exists()
-    );
+    let tfstate = state.path().join("infra/bootstrap/terraform.tfstate");
+    let after = fs::read(&tfstate).expect("applied");
     assert!(!state.path().join("plans").join(&stored.id).exists());
-    let again = cobot::apply_stored(&c, &stored.id, NOW + 60).expect_err("applied once");
-    assert!(again.to_string().contains("no stored plan"), "{again}");
+    let again = cobot::apply_stored(&c, &stored.id, NOW + 120).expect("a completed plan's result");
+    assert_eq!(again[0].changes, planned[0].changes);
+    assert!(
+        again[0]
+            .note
+            .as_deref()
+            .is_some_and(|n| n.contains("Applied from this plan earlier.")),
+        "{again:?}"
+    );
+    assert_eq!(
+        fs::read(&tfstate).expect("state"),
+        after,
+        "nothing applied twice"
+    );
+    let gone = cobot::apply_stored(&c, &stored.id, NOW + 60 + cobot::plans::COMPLETED_SECS)
+        .expect_err("the record expires");
+    assert!(gone.to_string().contains("no stored plan"), "{gone}");
     assert!(!cobot::plan(&c, &units(repo.path())).expect("replan")[0].has_changes());
 }
 
@@ -176,24 +187,86 @@ fn a_module_edit_invalidates_a_stored_plan() {
     );
 }
 
+/// A repository with units `infra/a` and `infra/b`.
+fn two_units() -> TempDir {
+    let dir = TempDir::new().expect("tempdir");
+    for name in ["a", "b"] {
+        write(
+            dir.path(),
+            &format!("infra/{name}/unit.yaml"),
+            &format!(
+                "schema: 0\nname: {name}\nkind: infra\nmodules:\n  - name: proof\n    source: ./modules/proof\n    inputs: {{ message: hello }}\n"
+            ),
+        );
+        write(
+            dir.path(),
+            &format!("infra/{name}/modules/proof/main.tf"),
+            PROOF,
+        );
+    }
+    dir
+}
+
+#[test]
+fn checkpoints_follow_each_unit_and_precede_the_plans_removal() {
+    if !tofu_available() {
+        eprintln!("skipped: tofu is not on PATH");
+        return;
+    }
+    let dir = two_units();
+    let root = dir.path();
+    let state = TempDir::new().expect("tempdir");
+    let s = state.path();
+    let c = ctx(root, s);
+    let (stored, _) = cobot::plan_stored(&c, &units(root), NOW).expect("plan");
+    let plan = s.join("plans").join(&stored.id);
+    let record = s
+        .join("plans/completed")
+        .join(format!("{}.json", stored.id));
+    let mut seen = Vec::new();
+    cobot::apply_stored_with(&c, &stored.id, NOW + 60, &mut || {
+        seen.push((
+            plan.join("infra/a/applied").is_file(),
+            plan.join("infra/b/applied").is_file(),
+            record.is_file(),
+            plan.exists(),
+        ));
+        Ok(())
+    })
+    .expect("apply");
+    assert_eq!(
+        seen,
+        [
+            (true, false, false, true),
+            (true, true, false, true),
+            (true, true, true, true),
+        ],
+        "after a, after b, then after the record and before the plan's removal"
+    );
+    assert!(!plan.exists() && record.is_file());
+
+    let (stored, _) = {
+        fs::write(root.join("infra/a/modules/proof/extra.tf"), "# changed\n").expect("change");
+        cobot::plan_stored(&c, &units(root), NOW + 300).expect("plan again")
+    };
+    let mut calls = 0;
+    let err = cobot::apply_stored_with(&c, &stored.id, NOW + 360, &mut || {
+        calls += 1;
+        Err(cobot::Error::State("R2 refused the write".into()))
+    })
+    .expect_err("a failed write back stops the run");
+    assert!(err.to_string().contains("R2 refused"), "{err}");
+    assert_eq!(calls, 1, "nothing runs after a failed write back");
+}
+
 #[test]
 fn a_retry_skips_units_already_applied() {
     if !tofu_available() {
         eprintln!("skipped: tofu is not on PATH");
         return;
     }
-    let dir = TempDir::new().expect("tempdir");
+    let dir = two_units();
     let root = dir.path();
-    for name in ["a", "b"] {
-        write(
-            root,
-            &format!("infra/{name}/unit.yaml"),
-            &format!(
-                "schema: 0\nname: {name}\nkind: infra\nmodules:\n  - name: proof\n    source: ./modules/proof\n    inputs: {{ message: hello }}\n"
-            ),
-        );
-        write(root, &format!("infra/{name}/modules/proof/main.tf"), PROOF);
-    }
     let state = TempDir::new().expect("tempdir");
     let c = ctx(root, state.path());
     let (stored, _) = cobot::plan_stored(&c, &units(root), NOW).expect("plan");

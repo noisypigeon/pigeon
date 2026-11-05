@@ -420,7 +420,8 @@ impl Bucket {
         }
     }
 
-    /// Writes one object only if `when` holds; `false` when the store refused it (412).
+    /// Writes one object only if `when` holds; the new object's `ETag`, or `None` when the store
+    /// refused it (412).
     ///
     /// # Errors
     ///
@@ -432,7 +433,7 @@ impl Bucket {
         content_type: &str,
         when: &Precondition,
         now: u64,
-    ) -> Result<bool, Failure> {
+    ) -> Result<Option<String>, Failure> {
         let quoted;
         let extra: Vec<(&str, &str)> = match when {
             Precondition::Absent => vec![("if-none-match", "*")],
@@ -442,8 +443,10 @@ impl Bucket {
             }
         };
         match self.send("PUT", Some(key), &[], body, Some(content_type), &extra, now)? {
-            (200, _, _) => Ok(true),
-            (412, _, _) => Ok(false),
+            (200, _, etag) => Ok(Some(
+                etag.map_or_else(|| md5_hex(body), |e| e.trim_matches('"').to_string()),
+            )),
+            (412, _, _) => Ok(None),
             (status, _, _) => Err(Failure(format!("PUT {key}: status {status}"))),
         }
     }

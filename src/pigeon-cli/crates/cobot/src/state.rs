@@ -161,12 +161,14 @@ impl Mirror {
 
     /// Writes back what changed: each changed object only if its `ETag` is unchanged, each new
     /// one only if none appeared, and a [`TOMBSTONE`] over each removed one only if its `ETag`
-    /// is unchanged. The keys written.
+    /// is unchanged. The keys written. What it writes becomes what was read, so a run may push
+    /// again.
     ///
     /// # Errors
     ///
-    /// [`Error::State`] if another writer changed an object since [`Mirror::pull`], or R2 fails.
-    pub fn push(&self, now: u64) -> Result<Vec<String>, Error> {
+    /// [`Error::State`] if another writer changed an object since it was last read or written,
+    /// or R2 fails.
+    pub fn push(&mut self, now: u64) -> Result<Vec<String>, Error> {
         let mut local = BTreeMap::new();
         files(&self.dir, &self.dir, &mut local)?;
         let mut changed = Vec::new();
@@ -177,33 +179,38 @@ impl Mirror {
                 Some((etag, _)) => Precondition::Matches(etag.clone()),
                 None => Precondition::Absent,
             };
-            if !self
+            let Some(etag) = self
                 .bucket
                 .put_if(&key, body, CONTENT_TYPE, &when, now)
                 .map_err(|e| fail(&e))?
-            {
+            else {
                 return Err(Error::State(format!(
                     "`{key}` changed in R2 since it was read; not overwriting it"
                 )));
-            }
+            };
+            self.read
+                .insert(rel.clone(), (etag, Some(s3::sha256_hex(body))));
             changed.push(key);
         }
-        let removed = self
+        let removed: Vec<(String, String)> = self
             .read
             .iter()
-            .filter(|(r, (_, sha))| sha.is_some() && !local.contains_key(*r));
-        for (rel, (etag, _)) in removed {
+            .filter(|(r, (_, sha))| sha.is_some() && !local.contains_key(*r))
+            .map(|(r, (etag, _))| (r.clone(), etag.clone()))
+            .collect();
+        for (rel, etag) in removed {
             let key = format!("{}/{rel}", self.prefix);
-            let when = Precondition::Matches(etag.clone());
-            if !self
+            let when = Precondition::Matches(etag);
+            let Some(etag) = self
                 .bucket
                 .put_if(&key, TOMBSTONE, CONTENT_TYPE, &when, now)
                 .map_err(|e| fail(&e))?
-            {
+            else {
                 return Err(Error::State(format!(
                     "`{key}` changed in R2 since it was read; not removing it"
                 )));
-            }
+            };
+            self.read.insert(rel, (etag, None));
             changed.push(key);
         }
         Ok(changed)

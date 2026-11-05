@@ -156,14 +156,24 @@ fn a_plan_is_applied_by_its_id() {
             .exists()
     );
 
+    let tfstate = state.path().join("infra/bootstrap/terraform.tfstate");
+    let after = fs::read(&tfstate).expect("applied");
     let again = run_with(
         &instance,
         &request("infra.apply", &json!({ "state": state.path(), "plan": id })),
         var,
-    );
+    )
+    .expect("a completed plan reports its recorded result");
     assert!(
-        matches!(again, Err(Error::Engine { .. })),
-        "applied once: {again:?}"
+        again.result["units"][0]["note"]
+            .as_str()
+            .is_some_and(|n| n.contains("Applied from this plan earlier.")),
+        "{again:?}"
+    );
+    assert_eq!(
+        fs::read(&tfstate).expect("state"),
+        after,
+        "nothing applied twice"
     );
 }
 

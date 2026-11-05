@@ -152,7 +152,7 @@ fn now() -> u64 {
 }
 
 fn plan(args: &CobotPlan) -> Result<(), cobot::Error> {
-    let session = context(&args.run)?;
+    let mut session = context(&args.run)?;
     let ctx = &session.ctx;
     let units = cobot::select(&ctx.root, &ctx.providers, &args.run.units)?;
     let plans = if args.store {
@@ -180,12 +180,13 @@ fn plan(args: &CobotPlan) -> Result<(), cobot::Error> {
 }
 
 fn apply(args: &CobotApply) -> Result<(), cobot::Error> {
-    let session = context(&args.run)?;
-    let ctx = &session.ctx;
-    let applied = match &args.plan {
-        Some(id) => cobot::apply_stored(ctx, id, now()),
-        None => cobot::select(&ctx.root, &ctx.providers, &args.run.units)
-            .and_then(|units| cobot::apply(ctx, &units)),
+    let mut session = context(&args.run)?;
+    let applied = if let Some(id) = &args.plan {
+        session.apply_stored(id, now())
+    } else {
+        let ctx = &session.ctx;
+        cobot::select(&ctx.root, &ctx.providers, &args.run.units)
+            .and_then(|units| cobot::apply(ctx, &units))
     };
     if let Some(written) = session.push()? {
         println!("cobot: wrote {written} state object(s) to R2");
