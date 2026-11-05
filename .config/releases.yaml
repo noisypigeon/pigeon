@@ -164,9 +164,9 @@ units:
     manifest: infra/pigeon/schema.json
     paths: [infra/pigeon/schema.json, catalog/cloudflare/modules/account/, catalog/cloudflare/modules/d1-database/, catalog/cloudflare/modules/r2-bucket/, catalog/agnostic/modules/random-string/]
     exclude: ['*.md']
-  static-site-template:
-    manifest: src/static-site-template/template.yaml
-    paths: [src/static-site-template/]
+  site-template-blog:
+    manifest: src/site-templates/blog/template.yaml
+    paths: [src/site-templates/blog/]
     exclude: ['*.md']
 settings:
   - { file: src/pigeon-cli/Cargo.toml, tables: '^\[profile\.', keys: '^(edition|rust-version)\s*=' }
@@ -203,4 +203,7 @@ tiers:
   - { file: catalog/backblaze/modules/bucket/CHANGELOG.md, unit: infra-backblaze-bucket }
   - { file: catalog/backblaze/CHANGELOG.md, unit: infra-backblaze-schema }
   - { file: infra/pigeon/CHANGELOG.md, unit: infra-pigeon-schema }
-  - { file: src/static-site-template/CHANGELOG.md, unit: static-site-template }
+  - { file: src/site-templates/blog/CHANGELOG.md, unit: site-template-blog }
+# Changelogs the bot removes; see .claude/decisions/2026-11-04-development-platform-instance-separation.md.
+retired:
+  - src/static-site-template/CHANGELOG.md

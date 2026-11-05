@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/noisypigeon/pigeon/tree/main/src/static-site-template/schema.json",
+  "$id": "https://github.com/noisypigeon/pigeon/tree/main/src/site-templates/blog/schema.json",
   "description": "A workload's static_site.site; each x-site target names where cobot writes the value. See .claude/decisions/2026-11-03-runtime-static-site-config-contract.md.",
   "type": "object",
   "additionalProperties": false,
