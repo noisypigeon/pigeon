@@ -2,6 +2,8 @@
 
 ## 2026-11-05
 
+- refactor(cobot): every site names its template ([#125](https://github.com/noisypigeon/pigeon/pull/125))
+- feat(cobot): signed Container dispatch ([#123](https://github.com/noisypigeon/pigeon/pull/123))
 - refactor(site-templates): the blog template moves to src/site-templates/blog ([#122](https://github.com/noisypigeon/pigeon/pull/122))
 - feat(cobot): named site templates, and sites without content ([#121](https://github.com/noisypigeon/pigeon/pull/121))
 - feat(backplane): the Instance Durable Object, its run queue, and D1 schema v0 ([#119](https://github.com/noisypigeon/pigeon/pull/119))

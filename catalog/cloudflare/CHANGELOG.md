@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.15 (2026-11-05)
+
+- refactor(cobot): every site names its template ([#125](https://github.com/noisypigeon/pigeon/pull/125))
+
 ## v0.1.14 (2026-11-05)
 
 - feat(cobot): named site templates, and sites without content ([#121](https://github.com/noisypigeon/pigeon/pull/121))
