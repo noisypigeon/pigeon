@@ -22,7 +22,7 @@ Docker running, `wrangler` 4, and the pinned Rust from `mise` (with the
 `wasm32-unknown-unknown` target). Use a short-lived account API token, not the
 `infra/pigeon` bootstrap token, with Account Settings Read, Workers Scripts
 Edit, Containers Edit, D1 Edit, Workers R2 Storage Edit, Secrets Store Read|Write
-and SSL and Certificates Edit (for the mTLS certificate), and revoke it after
+and SSL and Certificates Read|Write (for the mTLS certificate), and revoke it after
 teardown.
 
 ```sh
