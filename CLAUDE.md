@@ -70,6 +70,10 @@ belong in the ADR, never in the file.
   `cobot.yml` plans on PR and applies on merge, committing encrypted state to
   the private `noisypigeon/pigeon-cobot-state`. Never run `tofu apply` or
   `pigeon cobot apply` by hand against that repository.
+- OpenTofu owns declarative resources; Workers, Containers and their images,
+  migrations, crons and secrets deploy through `pigeon cobot workers` (wrangler,
+  only via cobot) from `workers/<name>/worker.yaml` specs that hold no IDs, per
+  [`2026-11-05-development-cobot-workers-area.md`](.claude/decisions/2026-11-05-development-cobot-workers-area.md).
 - Config units (`config.yaml` validated by `schema.json`, composed from its
   `x-cobot` annotations into single-resource `modules/`) are per
   [`2026-11-02-runtime-cloudflare-provisioner-unit.md`](.claude/decisions/2026-11-02-runtime-cloudflare-provisioner-unit.md).
