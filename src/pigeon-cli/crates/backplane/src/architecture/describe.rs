@@ -225,11 +225,26 @@ fn sites(root: &Path, g: &mut Graph, problems: &mut Vec<String>) {
 fn policies(instance: &Instance, units: &[String], g: &mut Graph) -> Result<(), Error> {
     let policies_dir = instance.paths.policies.display().to_string();
     let dir = instance.resolve(&instance.paths.policies);
-    let any = std::fs::read_dir(&dir).is_ok_and(|entries| {
-        entries
-            .flatten()
-            .any(|e| e.path().extension().is_some_and(|x| x == "yaml"))
-    });
+    let unreadable = |e: std::io::Error| Error::Engine {
+        engine: Engine::Sentinel,
+        message: format!("{policies_dir}: {e}"),
+    };
+    let entries = match std::fs::read_dir(&dir) {
+        Ok(entries) => entries,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(e) => return Err(unreadable(e)),
+    };
+    let mut any = false;
+    for entry in entries {
+        if entry
+            .map_err(unreadable)?
+            .path()
+            .extension()
+            .is_some_and(|x| x == "yaml")
+        {
+            any = true;
+        }
+    }
     if !any {
         return Ok(());
     }
