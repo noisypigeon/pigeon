@@ -35,12 +35,28 @@ pub fn run_with(
     };
     match op.name {
         "instance.show" => Ok(respond(json!(instance), Vec::new())),
+        "architecture.describe" => architecture_describe(instance).map(|(r, v)| respond(r, v)),
         "policy.check" => policy_check(instance).map(|(r, v)| respond(r, v)),
         "infra.validate" => infra_validate(instance).map(|(r, v)| respond(r, v)),
         "infra.plan" => infra_plan(instance, &request.args, &var).map(|r| respond(r, Vec::new())),
         "infra.apply" => infra_apply(instance, &request.args, &var).map(|r| respond(r, Vec::new())),
         _ => unreachable!("every catalog entry is dispatched"),
     }
+}
+
+/// The graph and its layout, with any problem found on the way as a violation.
+fn architecture_describe(instance: &Instance) -> Result<(Value, Vec<String>), Error> {
+    let (graph, problems) = crate::architecture::describe(instance)?;
+    let layout = crate::architecture::layout(&graph);
+    Ok((
+        json!({
+            "nodes": graph.nodes,
+            "edges": graph.edges,
+            "groups": graph.groups,
+            "layout": layout,
+        }),
+        problems,
+    ))
 }
 
 fn policy_check(instance: &Instance) -> Result<(Value, Vec<String>), Error> {
