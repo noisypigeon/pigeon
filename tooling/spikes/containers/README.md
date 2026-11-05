@@ -49,9 +49,11 @@ openssl req -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -subj /CN=pigeon-
 openssl x509 -req -in client.csr -CA ca.pem -CAkey ca.key -days 7 -out client.pem \
   -extfile <(printf 'extendedKeyUsage=clientAuth')
 openssl pkcs8 -topk8 -nocrypt -in server.key -out server.pk8
-npx wrangler mtls-certificate upload --cert client.pem --key client.key --name pigeon-spike
-#   note the certificate id
 cd -
+
+npx wrangler mtls-certificate upload --name pigeon-spike \
+  --cert ~/pigeon-spike-tls/client.pem --key ~/pigeon-spike-tls/client.key
+#   note the certificate id
 
 cp wrangler.toml wrangler.local.toml
 #   replace the four SET_LOCALLY values in wrangler.local.toml
