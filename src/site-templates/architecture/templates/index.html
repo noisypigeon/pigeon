@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en-US" dir="auto">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>{{ config.title }}</title>
+  <meta name="color-scheme" content="dark light">
+  <meta name="description" content="{{ config.description }}">
+  <link rel="canonical" href="{{ config.base_url }}/">
+  <link rel="manifest" href="/manifest.json">
+  <link rel="stylesheet" href="/assets/css/main.css">
+  {%- if config.extra.features.fonts %}
+  <link rel="preconnect" href="https://fonts.bunny.net" crossorigin>
+  <link rel="stylesheet" href="https://fonts.bunny.net/css?family={{ config.extra.look.font_family }}&display=swap">
+  {%- endif %}
+</head>
+{%- set data = load_data(path="data/architecture.json", required=false) %}
+<body class="{% if config.extra.features.motion %}motion{% endif %}">
+  <div class="wrap">
+    <header class="top">
+      <div class="brand">{{ config.title }}</div>
+      <p class="lede">{{ config.description }}</p>
+    </header>
+
+    <main id="main">
+    {%- if data %}
+      {%- set l = data.layout %}
+      <div class="frame">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {{ l.width }} {{ l.height }}" width="{{ l.width }}" height="{{ l.height }}" role="img" aria-labelledby="diagram-title">
+          <title id="diagram-title">{{ config.title }}: {{ data.nodes | length }} parts and {{ data.edges | length }} connections</title>
+          <defs>
+            {%- for m in ["fg", "mu", "ed", "fl", "cr", "sg"] %}
+            <marker id="m-{{ m }}" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L8 4L0 8z" class="mk-{{ m }}"/></marker>
+            {%- endfor %}
+          </defs>
+          {%- for lane in l.lanes %}
+          <text class="lane-h" x="{{ lane.x }}" y="44">{{ lane.lane }}</text>
+          {%- endfor %}
+          {%- for b in l.groups %}
+          {%- set gr = data.groups | nth(n=loop.index0) %}
+          <g class="g {{ gr.kind }}"><rect x="{{ b.x }}" y="{{ b.y }}" width="{{ b.w }}" height="{{ b.h }}" rx="10"/><text x="{{ b.x + 12 }}" y="{{ b.y + 16 }}">{{ gr.label }}</text></g>
+          {%- endfor %}
+          {%- for e in l.edges %}
+          {%- if e.carries in ["request", "binds"] %}{% set m = "fg" %}{% elif e.carries in ["runs", "governs"] %}{% set m = "mu" %}{% elif e.carries == "apply" %}{% set m = "ed" %}{% elif e.carries in ["state", "artifact"] %}{% set m = "fl" %}{% elif e.carries == "credential" %}{% set m = "cr" %}{% else %}{% set m = "sg" %}{% endif %}
+          <path class="e {{ e.carries }}" d="{{ e.d }}" marker-end="url(#m-{{ m }})"><title>{{ e.from }} → {{ e.to }} · {{ e.carries }}</title></path>
+          {%- if e.carries == "signed-request" %}<path class="e signed-in" d="{{ e.d }}"/>{% endif %}
+          {%- endfor %}
+          {%- for p in l.nodes %}
+          {%- set n = data.nodes | nth(n=loop.index0) %}
+          <g class="n lane-{{ n.lane }}"><title>{{ n.id }} · {{ n.source }}</title><rect class="n" x="{{ p.x }}" y="{{ p.y }}" width="{{ p.w }}" height="{{ p.h }}" rx="6"/><text x="{{ p.x + 14 }}" y="{{ p.y + 25 }}">{{ n.label }}</text></g>
+          {%- endfor %}
+        </svg>
+      </div>
+
+      <ul class="legend" aria-label="What each line carries">
+        {%- for c in [["request", "request · binds"], ["signed-request", "signed request"], ["apply", "apply"], ["state", "state"], ["artifact", "site files"], ["credential", "credential"], ["runs", "runs"], ["governs", "governs"]] %}
+        <li><svg viewBox="0 0 34 10" aria-hidden="true"><path d="M0 5H34" class="e {{ c[0] }}"/>{% if c[0] == "signed-request" %}<path d="M0 5H34" class="e signed-in"/>{% endif %}</svg>{{ c[1] }}</li>
+        {%- endfor %}
+      </ul>
+
+      <details>
+        <summary>Every part and connection, with the file it was derived from</summary>
+        <div class="tables">
+          <div class="tw"><table>
+            <thead><tr><th>Part</th><th>Lane</th><th>Source</th></tr></thead>
+            <tbody>
+            {%- for n in data.nodes %}
+              <tr><td>{{ n.label }}</td><td>{{ n.lane }}</td><td class="src">{{ n.source }}</td></tr>
+            {%- endfor %}
+            </tbody>
+          </table></div>
+          <div class="tw"><table>
+            <thead><tr><th>From</th><th>To</th><th>Carries</th><th>Source</th></tr></thead>
+            <tbody>
+            {%- for e in data.edges %}
+              <tr><td>{{ e.from }}</td><td>{{ e.to }}</td><td>{{ e.carries }}</td><td class="src">{{ e.source }}</td></tr>
+            {%- endfor %}
+            </tbody>
+          </table></div>
+        </div>
+      </details>
+    {%- else %}
+      <p class="empty">This site draws <code>pigeon backplane run architecture.describe</code>; build it with <code>--data architecture=FILE</code>.</p>
+    {%- endif %}
+    </main>
+
+    <footer>
+      <span>Drawn from architecture.describe; nothing in this diagram is stored or placed by hand.</span>
+      {%- if config.extra.features.commit %}{% set sha = get_env(name="SITE_COMMIT_SHA", default="") %}{% if sha %}
+      <span>commit {{ sha }}</span>{% endif %}{% endif %}
+    </footer>
+  </div>
+</body>
+</html>

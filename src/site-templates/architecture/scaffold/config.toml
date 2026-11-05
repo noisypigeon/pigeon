@@ -1,0 +1,6 @@
+# The fixed part of a site's config.toml; cobot adds the site's settings, base_url and [extra.features].
+theme = "site-template-architecture"
+
+compile_sass = false
+generate_feeds = false
+build_search_index = false
