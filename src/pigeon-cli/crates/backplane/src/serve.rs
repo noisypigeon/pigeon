@@ -465,7 +465,7 @@ impl Server {
         {
             request.args.insert("state".into(), json!(self.state));
         }
-        let effect = match crate::catalog::validate(&request) {
+        let effect = match crate::wire::validate(&request) {
             Ok(op) => Some(op.effect),
             Err(Error::Invalid(problems)) => {
                 return (400, json!({ "error": "invalid", "problems": problems }));

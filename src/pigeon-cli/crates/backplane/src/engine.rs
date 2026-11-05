@@ -2,32 +2,7 @@
 
 use serde::Serialize;
 
-/// Who runs an operation.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "lowercase")]
-pub enum Engine {
-    /// Backplane itself.
-    Backplane,
-    /// Policy and its enforcement.
-    Sentinel,
-    /// Actions: infrastructure, releases.
-    Cobot,
-    /// Planned: scheduling and data operations.
-    Gantry,
-}
-
-impl Engine {
-    /// Its name.
-    #[must_use]
-    pub fn name(self) -> &'static str {
-        match self {
-            Self::Backplane => "backplane",
-            Self::Sentinel => "sentinel",
-            Self::Cobot => "cobot",
-            Self::Gantry => "gantry",
-        }
-    }
-}
+use crate::wire::Engine;
 
 /// An engine's name, version and role.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]

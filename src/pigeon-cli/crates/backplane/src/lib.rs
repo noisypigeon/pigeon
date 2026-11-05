@@ -1,16 +1,25 @@
 //! Composes the engines into one platform; see `.claude/decisions/2026-11-03-development-backplane-platform-composition-layer.md`.
 
+#[cfg(feature = "engines")]
 pub mod catalog;
+#[cfg(feature = "engines")]
 pub mod engine;
+#[cfg(feature = "engines")]
 pub mod instance;
+#[cfg(feature = "engines")]
 pub mod serve;
+pub mod wire;
 
 use std::fmt;
 use std::path::PathBuf;
 
-pub use catalog::{Effect, Operation, Request, Response, catalog, run, run_with, validate};
-pub use engine::{Engine, EngineInfo, engines};
+#[cfg(feature = "engines")]
+pub use catalog::{run, run_with};
+#[cfg(feature = "engines")]
+pub use engine::{EngineInfo, engines};
+#[cfg(feature = "engines")]
 pub use instance::Instance;
+pub use wire::{Effect, Engine, Operation, Request, Response, catalog, validate};
 
 /// This crate's version.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
