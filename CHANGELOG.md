@@ -2,6 +2,7 @@
 
 ## 2026-11-05
 
+- feat(sentinel): platform-defined policies an instance invokes with parameters ([#128](https://github.com/noisypigeon/pigeon/pull/128))
 - feat(backplane): architecture.describe and its layout ([#126](https://github.com/noisypigeon/pigeon/pull/126))
 - docs(adr): a run's instance root from D1; the platform defines rules, an instance invokes them ([#127](https://github.com/noisypigeon/pigeon/pull/127))
 - refactor(cobot): every site names its template ([#125](https://github.com/noisypigeon/pigeon/pull/125))

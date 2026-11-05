@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.1.15 (2026-11-05)
+
+- feat(sentinel): platform-defined policies an instance invokes with parameters ([#128](https://github.com/noisypigeon/pigeon/pull/128))
+- feat(backplane): the Instance Durable Object, its run queue, and D1 schema v0 (dependencies) ([#119](https://github.com/noisypigeon/pigeon/pull/119))
+
 ## v0.1.14 (2026-11-05)
 
 - refactor(backplane): shared wire types, and both worker builds compiling ([#118](https://github.com/noisypigeon/pigeon/pull/118))

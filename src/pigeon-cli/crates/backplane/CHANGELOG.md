@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.22 (2026-11-05)
+
+- feat(sentinel): platform-defined policies an instance invokes with parameters ([#128](https://github.com/noisypigeon/pigeon/pull/128))
+
 ## v0.1.21 (2026-11-05)
 
 - feat(backplane): architecture.describe and its layout ([#126](https://github.com/noisypigeon/pigeon/pull/126))

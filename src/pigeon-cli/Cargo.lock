@@ -1847,7 +1847,7 @@ dependencies = [
 
 [[package]]
 name = "pigeon-backplane"
-version = "0.1.21"
+version = "0.1.22"
 dependencies = [
  "cobot",
  "gantry",
@@ -2371,7 +2371,7 @@ checksum = "8a7852d02fc848982e0c167ef163aaff9cd91dc640ba85e263cb1ce46fae51cd"
 
 [[package]]
 name = "sentinel"
-version = "0.1.14"
+version = "0.1.15"
 dependencies = [
  "regex",
  "serde",
