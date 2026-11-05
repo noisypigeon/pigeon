@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.29 (2026-11-05)
+
+- feat: git is hosted on Cloudflare Artifacts; GitHub is a mirror ([#140](https://github.com/noisypigeon/pigeon/pull/140))
+
 ## v0.1.28 (2026-11-05)
 
 - feat(cobot): an instance's config.yaml declares units by kind ([#138](https://github.com/noisypigeon/pigeon/pull/138))
