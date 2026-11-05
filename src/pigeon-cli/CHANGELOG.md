@@ -2,6 +2,7 @@
 
 ## 2026-11-05
 
+- feat(catalog): cloudflare/zone and cloudflare/static-site kinds; the zone lookup's id is sensitive ([#139](https://github.com/noisypigeon/pigeon/pull/139))
 - feat(cobot): an instance's config.yaml declares units by kind ([#138](https://github.com/noisypigeon/pigeon/pull/138))
 - fix(cobot): discovery makes both roots absolute; Proton's verification inputs are published ([#137](https://github.com/noisypigeon/pigeon/pull/137))
 - feat(cobot): the CLI runs from pigeon with --instance naming the instance ([#135](https://github.com/noisypigeon/pigeon/pull/135))

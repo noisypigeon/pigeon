@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.17 (2026-11-05)
+
+- feat(catalog): cloudflare/zone and cloudflare/static-site kinds; the zone lookup's id is sensitive ([#139](https://github.com/noisypigeon/pigeon/pull/139))
+
 ## v0.1.16 (2026-11-05)
 
 - fix(cobot): discovery makes both roots absolute; Proton's verification inputs are published ([#137](https://github.com/noisypigeon/pigeon/pull/137))
