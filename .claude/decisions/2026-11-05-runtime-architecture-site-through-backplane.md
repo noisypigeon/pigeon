@@ -7,13 +7,13 @@
 
 ## Context
 
-pigeon's architecture is spread across its ADRs, and nothing draws it. The site should answer three questions:
+pigeon's architecture is spread across its ADRs, and nothing draws it. One diagram should answer three questions:
 
 - what the parts are: the engines, the control plane, the units and the providers;
 - how they connect;
 - where data flows: plans, state, credentials, signed requests and sites.
 
-It must stay true as the code changes. The picture should come mostly from the code, not be drawn by hand.
+**The diagram is stateless.** No node, edge, coordinate or flow is stored or drawn by hand. Each build regenerates it from the facts the engines already read, so it changes as the architecture does: a part appears when its spec lands, and disappears when it is removed.
 
 The pieces this needs already exist or are decided:
 
@@ -46,6 +46,8 @@ No logo, name, artwork, copy or font file is taken from either.
 **Out of scope:**
 
 - a live, request-time renderer;
+- hand-written flows, notes or positions;
+- pages beyond the diagram;
 - the console UI;
 - search;
 - versioned docs per release;
@@ -77,73 +79,109 @@ No logo, name, artwork, copy or font file is taken from either.
   - `sites build` and `publish` find them there.
   - Their bucket and domain belong to the enclosing unit's `config.yaml`.
 
-### 2. The architecture as data: `architecture.describe`
+### 2. The architecture, derived: `architecture.describe`
 
-- **The operation.** Backplane's catalog gains `architecture.describe`, with engine `backplane` and effect `read`. Its `result` is a graph, built only from loaded files and the engines' own functions.
-- **Nodes.** Each is `{ id, kind, role, label, source }`, where `source` is the repository path it came from:
+- **The operation.** Backplane's catalog gains `architecture.describe`, with engine `backplane` and effect `read`.
+  - Its `result` is `{ nodes, edges, groups, layout }`.
+  - It is computed from the tree on every call.
+  - Nothing is cached, stored or committed.
+- **Nodes.** Each is `{ id, kind, lane, label, source }`.
+  - `source` is the file and key the node came from.
+  - `kind` is one of `engine`, `operation`, `policy`, `unit`, `provider`, `capability`, `worker`, `route`, `resource`, `container`, `store` or `site`, and `lane` follows from it (see the layout).
+- **Edges.** Each is `{ from, to, carries, source }`. Every edge comes from one fact the engines already read:
 
-  | Kind | From |
-  | --- | --- |
-  | `engine` | `backplane::engines()`, with each engine's role |
-  | `operation` | `backplane::catalog()`, with each operation's effect |
-  | `unit` | `cobot::validate`: each unit's path, provider and modules |
-  | `worker` | each `workers/*/worker.yaml`: classes, containers, crons and binding names |
-  | `resource` | each binding's kind (`d1`, `r2`, `secrets`, `durable_object`, `container`), named by the binding, never by its value |
-  | `capability` | each `catalog/*/capabilities.yaml` entry |
-  | `policy` | each `.config/policies/*.yaml`, with its target |
+  | Edge | `carries` | Derived from |
+  | --- | --- | --- |
+  | operation → engine | `runs` | `backplane::catalog()` |
+  | policy → target | `governs` | each `.config/policies/*.yaml` `target`: a unit when the target is inside one, the pull request for `pull-request`, otherwise the repository |
+  | route → worker | `request` | a `worker.yaml`'s `routes`; it passes through Access when the enclosing unit composes an Access application |
+  | worker → resource | `binds` | a `worker.yaml`'s `bindings`, `durable_objects` and `crons` |
+  | worker → container | `signed-request` | a `worker.yaml`'s `containers` |
+  | container → engine | `runs` | the released image's unit in `.config/releases.yaml` |
+  | unit → provider | `apply` | `cobot::validate`: each unit's providers |
+  | unit → capability | `credential` | the `capabilities.yaml` entries a unit requests |
+  | engine → store | `state` | cobot's state backend: the state repository, or R2 under the control plane |
+  | store → site | `artifact` | each `static_site`, and each `<unit>/sites/<name>/`, with its custom domain |
 
-- **Edges.** Each is `{ from, to, kind }`, where `kind` is one of:
-  - `runs` (operation → engine);
-  - `binds` (worker → resource);
-  - `provisions` (unit → provider);
-  - `requests` (unit → capability);
-  - `governs` (policy → target).
-- **Hand-written flows.** Flows the code cannot derive are written by hand. Examples: a pull request's plan and apply; plan, approve, apply; minting; drift; and this site's own build.
-  - Each flow is `{ id, title, steps: [{ from, to, carries, note }] }`.
-  - `carries` is one of `request`, `signed-request`, `plan`, `state`, `credential`, `artifact`, `audit` or `read`.
-  - Flows live in the site's `static_site.site.flows`, and the architecture template's `schema.json` checks their shape.
-  - Every `from` and `to` must be a node `describe` returns. `sites build` fails on an unknown one and names it.
-- **What it never holds:** an ID, an account, a bucket name, a secret name's value or any `$output` value. Only binding and output names appear.
-- **Stability.** The output is sorted, and is byte-stable for a given tree.
+- **Groups.** These are the boxes drawn around nodes, and they are derived too:
+  - the Cloudflare account a worker spec deploys to;
+  - each container class;
+  - each local unit (`x-cobot.local`).
+- **Only what is derived appears.** A part with no row in the table above does not appear. No setting adds, removes, renames or annotates a node or an edge.
+- **What it never holds:** an ID, an account, a bucket name, a secret's value or any `$output` value. Only binding and output names appear.
 - **The CLI.** `pigeon backplane run architecture.describe --json` prints it. This is how CI and a Runner Container get it.
+
+#### The layout
+
+`backplane::architecture::layout(&Graph) -> Layout` is pure. It does no I/O, and `describe` returns its result as `layout`.
+
+- **Lanes.** Each node kind has a lane, and the lanes are in a fixed order, left to right:
+
+  | Lane | Holds |
+  | --- | --- |
+  | `policy` | policies |
+  | `source` | the repository and pull requests |
+  | `edge` | routes and Access |
+  | `control` | workers, Durable Objects and crons |
+  | `data` | D1, R2, secrets and stores |
+  | `operations` | backplane's operations |
+  | `run` | containers and engines |
+  | `units` | units |
+  | `providers` | providers |
+  | `sites` | sites |
+
+  An empty lane takes no width.
+- **Long edges.** An edge that crosses lanes gets a waypoint in each lane it crosses. A waypoint takes a narrow row and holds no label, so the edge passes between nodes, never through one.
+- **Order within a lane.**
+  - Nodes and waypoints are sorted by `id`.
+  - Four barycentre sweeps, each left then right, reduce crossings. Barycentres are measured by relative position within each lane.
+  - Ties break by `id`.
+- **Group bands.**
+  - A top-level group's members come first in each lane it spans, and form one band across those lanes.
+  - In those lanes, waypoints of edges that only pass through come next, inside the band.
+  - The lanes' other nodes come below the band, so no group box contains a node that is not its member.
+- **Size.** On an 8px grid, a node's width comes from its label's length, and its height is fixed.
+- **Groups.** A group's box is the bounding box of its members, plus one grid unit of padding.
+- **Edges.**
+  - Each is a chain of cubic segments, from the source's right port, through its waypoints, to the target's left port. An edge that runs leftward uses the opposite sides.
+  - Edges within one lane route along that lane's gutter.
+  - Ports on a side are spread evenly, in the order of the nodes at the other end.
+- **The output** is integer coordinates and SVG path strings, sorted. `describe` is therefore byte-stable for a given tree.
 
 ### 3. The architecture template
 
-- **Data in.** `sites build` writes `describe`'s result to the assembled project's `data/architecture.json`, which is never committed. The template reads it with Zola's `load_data`.
-- **Diagrams.**
-  - They are inline SVG, laid out at build time by Tera macros: fixed lanes by kind, and nodes placed in their lane's order.
-  - No client JavaScript is needed to read the site.
-  - Every diagram has a text equivalent: a table of nodes and a numbered list of steps.
-- **Pages:**
+- **Data in.**
+  - `sites build` writes `describe`'s result to the assembled project's `data/architecture.json`, which is never committed.
+  - The template reads it with Zola's `load_data`.
+- **It draws; it never places.** The page is one inline SVG, drawn from `layout`:
+  - a rect and label per node;
+  - a path per edge;
+  - a box per group;
+  - a style per `carries`.
 
-  | Page | Shows |
-  | --- | --- |
-  | `/` | One system diagram: the repository, CI, the control plane, Runner Containers, providers and sites. Below it, a card per engine. |
-  | `/engines/<name>/` | The engine's role, its operations and effects, and the policies that govern what it produces. |
-  | `/control-plane/` | The `pigeon.dev` Worker: Access, the API and MCP, the `Instance` Durable Object, D1's tables, R2, the Secrets Store and the Runner. |
-  | `/units/` | Each unit, its provider, its modules and the capabilities it requests. |
-  | `/flows/<id>/` | One flow as a pipeline diagram, with its numbered steps beside it. |
-  | `/decisions/` | The ADR index, linking each ADR on GitHub, grouped by category. |
-
+  No position, label or edge is written in the template, and no client JavaScript is needed.
+- **One page.**
+  - `/` is the diagram and its legend.
+  - Under them, a `<table>` lists every node and edge, with its `source`, for screen readers and for linking to the repository.
 - **Features**, with their defaults:
   - `fonts` (on);
   - `commit` (on): the build's commit in the footer;
-  - `motion` (on): animated edges;
-  - `decisions` (on): the ADR index.
+  - `motion` (on): animated edges.
 - **The design tokens** are CSS custom properties on `:root`, and every color comes from them:
   - **canvas:** near-black `#0b0d10` with a faint 24px grid, and a light theme (`#f7f7f5`) under `prefers-color-scheme` and `data-theme`;
-  - **accent:** one orange of its own, `#ff7a1a`. It marks the Cloudflare boundary and anything with effect `apply`, and nothing else;
-  - **flow:** one cool cyan, `#38d6c4`, for data in motion;
-  - **roles:** one fill each for policy, action, composition, resource and provider. They are checked for contrast in both themes;
-  - **edges:** a style per `carries` (for example, `signed-request` is a double line, `credential` is dotted, and `state` is solid).
+  - **accent:** one orange of its own, `#ff7a1a`. It marks Cloudflare groups and `apply` edges, and nothing else;
+  - **flow:** one cool cyan, `#38d6c4`, for `state` and `artifact`;
+  - **lanes:** one fill per lane, checked for contrast in both themes;
+  - **edges:** one style per `carries`:
+    - `signed-request` is a double line;
+    - `credential` is dotted;
+    - `state`, `apply` and `artifact` are animated dashes.
 - **Type, through the `fonts` feature (Bunny Fonts):**
   - a bold geometric sans for headings;
-  - a neutral sans for body text;
-  - a monospace for operation names, paths and labels.
-- **Layout and motion.**
-  - Cards for engines and products.
-  - Wide diagrams scroll inside their own frame, never the page, from 360px up.
-  - Animated dashes run along edges in the direction of flow. They are off under `prefers-reduced-motion`, and off with `motion`.
+  - a monospace for labels.
+- **Motion and width.**
+  - The diagram scrolls inside its own frame, never the page, from 360px up.
+  - Animation is off under `prefers-reduced-motion`, and off without `motion`.
 
 ### 4. The site: `docs.pigeon.dev`
 
@@ -154,9 +192,8 @@ No logo, name, artwork, copy or font file is taken from either.
 
   `infra/pigeon` stays a local unit, which its owner applies. The bucket's name is a setting in `config.yaml`, as `pigeon-state`'s is, and never appears in output.
 - **The site** is `infra/pigeon/sites/docs/`:
-  - its `config.yaml` pins `site-template-architecture` and holds `static_site.site`: the title, the nav, and the flows (§2);
-  - its `site/pages/` holds prose for each page;
-  - it has no posts.
+  - its `config.yaml` pins `site-template-architecture`, and its `static_site.site` holds only the title and description;
+  - its `site/` is empty: no posts and no pages.
 - **Access does not cover it.** `docs.pigeon.dev` is public. Access keeps covering `pigeon.dev`'s API and `/mcp`.
 
 ### 5. The job, through the control plane
@@ -195,7 +232,7 @@ No logo, name, artwork, copy or font file is taken from either.
 `CLAUDE.md` gains a pointer bullet:
 
 - site templates are `src/site-templates/<name>/`;
-- the architecture site is `infra/pigeon/sites/docs/` on `docs.pigeon.dev`, built from `architecture.describe` and published through the control plane.
+- the architecture site is `infra/pigeon/sites/docs/` on `docs.pigeon.dev`: a diagram regenerated from the code by `architecture.describe`, and published through the control plane.
 
 Its static-site bullets name `src/site-templates/` once the move lands.
 
@@ -206,9 +243,9 @@ Each step is released before the next relies on it, and each passes `mise run ci
 1. This ADR, the amendments it adds to the two static-site ADRs, and the `CLAUDE.md` pointer. A design mock is reviewed outside the repository.
 2. `refactor(cobot)`: templates under `src/site-templates/<name>/`; `static_site.template.name`, with the unnamed fallback; the `site-template-blog` unit and tier; and sites in `<unit>/sites/<name>/`.
 3. `chore(workloads)`: the blog pins `name: blog` and `site-template-blog`'s first release. Then `refactor(cobot)` drops the fallback.
-4. `feat(backplane)`: `architecture.describe` (§2), with its tests.
+4. `feat(backplane)`: `architecture.describe` and its layout (§2), with their tests.
 5. `feat(site-templates)`: the architecture template (§3), released as `site-template-architecture`.
-6. `feat(cobot)`: `sites build` writes `data/architecture.json` and checks the flows' node names.
+6. `feat(cobot)`: `sites build` writes `data/architecture.json` from `describe`.
 7. `feat(infra)`: §4's bucket, domain and rulesets, and `infra/pigeon/sites/docs/`. The owner applies `infra/pigeon` locally, then publishes the site.
 8. After phase 4's step 11:
    - `feat(catalog)`: the `bucket` scope;
@@ -216,11 +253,13 @@ Each step is released before the next relies on it, and each passes `mise run ci
 
 ### 8. Verification
 
-- `architecture.describe` is byte-stable for a given tree.
+- `architecture.describe`, layout included, is byte-stable for a given tree.
+- Adding a binding to a `worker.yaml` fixture adds exactly one node and one edge. Removing it restores the earlier output byte for byte.
+- Over generated graphs, no two node rects overlap, every edge ends on its nodes' borders, and every group box contains its members.
+- No file under `src/site-templates/architecture/` holds a node id, label or coordinate.
 - Its output, with tokens and IDs in the environment and every unit's state at hand, contains no ID, account, bucket name or secret.
-- A flow naming an unknown node fails `sites build`, and the error names the node.
 - The blog builds identically from `site-template-blog` and from its last `static-site-template` tag, ignoring the footer's commit.
-- The site renders at 360px and 1440px, in both themes, with no horizontal page scroll. Every diagram has its text equivalent.
+- The site renders at 360px and 1440px, in both themes, with no horizontal page scroll. Every node and edge is in the table.
 - With `prefers-reduced-motion`, nothing animates.
 - `docs.publish` without an approved, unexpired plan is refused.
 - Its minted token cannot write any other bucket, and stops working once the run ends.
