@@ -632,6 +632,15 @@ fn a_relative_platform_root_still_gives_absolute_catalog_homes() {
         let source = block["source"].as_str().expect("source");
         assert!(Path::new(source).is_absolute(), "{name}: {source}");
     }
+
+    write(root, &format!("{APEX}/stray.tf.json"), "{}\n");
+    let problems = cobot::unit::validate_in(relative, relative, &allow);
+    assert!(
+        problems
+            .iter()
+            .any(|p| p.path.starts_with("workloads/") && !Path::new(&p.path).is_absolute()),
+        "problem paths stay repository-relative: {problems:?}"
+    );
 }
 
 #[test]

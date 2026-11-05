@@ -114,11 +114,15 @@ pub fn discover(root: &Path) -> (Vec<Unit>, Vec<Problem>) {
     discover_in(root, root)
 }
 
+/// `p` made absolute, so catalog homes, module sources and problem paths agree for every
+/// caller; `p` itself when it cannot be.
+fn absolute(p: &Path) -> std::path::PathBuf {
+    p.canonicalize().unwrap_or_else(|_| p.to_path_buf())
+}
+
 /// [`discover`]'s units under the instance at `root`, composing catalogs from `platform`.
 #[must_use]
 pub fn discover_in(root: &Path, platform: &Path) -> (Vec<Unit>, Vec<Problem>) {
-    // Both roots absolute, so catalog homes and module sources are too, from any caller.
-    let absolute = |p: &Path| p.canonicalize().unwrap_or_else(|_| p.to_path_buf());
     let (root, platform) = (absolute(root), absolute(platform));
     let (root, platform) = (root.as_path(), platform.as_path());
     let mut units = Vec::new();
@@ -336,6 +340,11 @@ pub fn validate(root: &Path, allow: &Allowlist) -> Vec<Problem> {
 /// [`validate`] for the instance at `root` on the platform at `platform`.
 #[must_use]
 pub fn validate_in(root: &Path, platform: &Path, allow: &Allowlist) -> Vec<Problem> {
+    validate_absolute(&absolute(root), &absolute(platform), allow)
+}
+
+/// [`validate_in`] once both roots are absolute.
+fn validate_absolute(root: &Path, platform: &Path, allow: &Allowlist) -> Vec<Problem> {
     let (units, mut problems) = discover_in(root, platform);
     let name_re = &*NAME;
     for (path, message) in crate::apex::layout(root) {
