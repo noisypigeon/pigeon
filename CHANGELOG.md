@@ -2,6 +2,7 @@
 
 ## 2026-11-05
 
+- feat(site-templates): the architecture template ([#133](https://github.com/noisypigeon/pigeon/pull/133))
 - feat(cobot): workloads take the run's own Cloudflare token ([#131](https://github.com/noisypigeon/pigeon/pull/131))
 - docs(adr): pigeon is its own instance; noisypigeon moves to its own repository ([#130](https://github.com/noisypigeon/pigeon/pull/130))
 - feat(cobot): sites build takes data files ([#129](https://github.com/noisypigeon/pigeon/pull/129))
