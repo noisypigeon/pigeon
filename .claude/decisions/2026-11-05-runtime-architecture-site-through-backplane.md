@@ -69,7 +69,7 @@ No logo, name, artwork, copy or font file is taken from either.
   - it builds and publishes through `pigeon cobot sites build|publish`.
 - **Release units.**
   - Each template is its own release unit in `.config/releases.yaml`, named `site-template-<name>` and tagged `site-template-<name>/vX.Y.Z`, with its own `CHANGELOG.md` tier, which the bot writes.
-  - `site-template-blog` keeps `template.yaml`'s `version: 1.0.1`, so its first release is `1.0.2`.
+  - `site-template-blog` keeps `template.yaml`'s version, so its first release is the next patch after the last `static-site-template` tag.
   - Past `static-site-template/v*` tags stay.
 - **A site names its template.**
   - `static_site.template` becomes `{ name, version, features }`, and `name` is one of the templates.
