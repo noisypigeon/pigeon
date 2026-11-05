@@ -79,11 +79,24 @@ impl Api {
     /// `POST path` with the first of `bodies` the API accepts, trying the next only on a 400;
     /// for request shapes an API in beta has not settled.
     pub(crate) fn post_first(&self, path: &str, bodies: &[Value]) -> Result<Value, String> {
-        let mut last = format!("POST {}: no request body to send", shown(path));
-        for b in bodies {
-            match self.call("POST", path, Some(b))? {
-                (400, body) => last = ok(400, &body, "POST", path).unwrap_err(),
-                (status, body) => return ok(status, &body, "POST", path),
+        let tries: Vec<(String, Value)> = bodies
+            .iter()
+            .map(|b| (path.to_string(), b.clone()))
+            .collect();
+        self.post_any(&tries)
+    }
+
+    /// `POST` of the first `(path, body)` the API accepts, trying the next on a 400 or 404; the
+    /// last failure when none does.
+    pub(crate) fn post_any(&self, tries: &[(String, Value)]) -> Result<Value, String> {
+        let mut last = "POST: nothing to send".to_string();
+        for (path, b) in tries {
+            match self.call("POST", path, Some(b)) {
+                Ok((status @ (400 | 404), body)) => {
+                    last = ok(status, &body, "POST", path).err().unwrap_or_default();
+                }
+                Ok((status, body)) => return ok(status, &body, "POST", path),
+                Err(e) => return Err(e),
             }
         }
         Err(last)
@@ -114,7 +127,7 @@ impl Api {
             .read_to_string()
             .ok()
             .and_then(|t| serde_json::from_str(&t).ok())
-            .ok_or_else(|| format!("{method} {what}: status {status}, not JSON"))?;
+            .unwrap_or(Value::Null);
         Ok((status, body))
     }
 

@@ -160,13 +160,28 @@ impl<'a> Client<'a> {
     ///
     /// A message naming the call that failed; never the token.
     pub fn token(&self, ns: &str, name: &str, scope: Scope) -> Result<String, String> {
-        let v = self.api.post_first(
-            &format!("{}/{name}/tokens", self.repos(ns)),
-            &[
-                json!({ "scope": scope.word(), "ttl": TOKEN_TTL }),
-                json!({ "scope": scope.word() }),
-            ],
-        )?;
+        let (scope, at_ns, at_repo) = (
+            scope.word(),
+            format!("{}/{ns}/tokens", self.namespaces()),
+            format!("{}/{name}/tokens", self.repos(ns)),
+        );
+        let v = self.api.post_any(&[
+            (
+                at_ns.clone(),
+                json!({ "repo": name, "scope": scope, "ttl": TOKEN_TTL }),
+            ),
+            (at_ns.clone(), json!({ "repo": name, "scope": scope })),
+            (
+                at_ns.clone(),
+                json!({ "name": name, "scope": scope, "ttl": TOKEN_TTL }),
+            ),
+            (
+                at_ns,
+                json!({ "repository": name, "scope": scope, "ttl": TOKEN_TTL }),
+            ),
+            (at_repo.clone(), json!({ "scope": scope, "ttl": TOKEN_TTL })),
+            (at_repo, json!({ "scope": scope })),
+        ])?;
         v.as_str()
             .or_else(|| v["token"].as_str())
             .or_else(|| v["value"].as_str())
