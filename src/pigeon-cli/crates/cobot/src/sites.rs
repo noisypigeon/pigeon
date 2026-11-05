@@ -304,7 +304,14 @@ fn copy_dir(from: &Path, to: &Path) -> Result<(), Error> {
     fs::create_dir_all(to).map_err(io(to))?;
     for e in fs::read_dir(from).map_err(io(from))?.flatten() {
         let target = to.join(e.file_name());
-        if e.file_type().map_err(io(&e.path()))?.is_dir() {
+        let kind = e.file_type().map_err(io(&e.path()))?;
+        if kind.is_symlink() {
+            return Err(Error::Io {
+                path: e.path(),
+                message: "a site holds no symlinks".into(),
+            });
+        }
+        if kind.is_dir() {
             copy_dir(&e.path(), &target)?;
         } else {
             fs::copy(e.path(), &target).map_err(io(&target))?;
@@ -1079,6 +1086,24 @@ mod tests {
             hosts: vec!["z.com".into(), "www.z.com".into()],
             settings: None,
         }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_copy_refuses_a_symlink_anywhere_in_the_tree() {
+        let outside = tempfile::TempDir::new().expect("outside");
+        fs::write(outside.path().join("secret"), "not for the site").expect("write");
+        let src = tempfile::TempDir::new().expect("src");
+        fs::create_dir_all(src.path().join("posts")).expect("mkdir");
+        std::os::unix::fs::symlink(
+            outside.path().join("secret"),
+            src.path().join("posts/linked.md"),
+        )
+        .expect("link");
+        let to = tempfile::TempDir::new().expect("to");
+        let err = super::copy_dir(src.path(), to.path()).expect_err("refused");
+        assert!(err.to_string().contains("no symlinks"), "{err}");
+        assert!(!to.path().join("posts/linked.md").exists());
     }
 
     #[test]
