@@ -255,6 +255,9 @@ fn manifest_units(
             ));
             continue;
         }
+        if e.api.is_some() {
+            continue;
+        }
         let zone = e.zone(id).map(str::to_string);
         let site = match (e.role, zone) {
             (Role::Plain, _) | (_, None) => None,

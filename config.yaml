@@ -1,0 +1,11 @@
+# pigeon as an instance: its units by kind; see .claude/decisions/2026-11-05-runtime-instance-config-kind-units.md.
+schema: v1
+name: pigeon
+description: The pigeon platform, as its own instance.
+repository: https://github.com/noisypigeon/pigeon
+
+units:
+  # Applied by `pigeon cobot git apply`; see .claude/decisions/2026-11-05-development-git-hosting-cloudflare-artifacts.md.
+  repos/pigeon:
+    kind: cloudflare/git-repo
+    mirror: https://github.com/noisypigeon/pigeon

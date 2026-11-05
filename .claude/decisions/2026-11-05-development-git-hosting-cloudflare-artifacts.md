@@ -42,7 +42,10 @@ These facts were gathered when this ADR was written, and are checked against Clo
 
 ### 1. Repositories
 
-- **Each instance has an Artifacts namespace named after it:** `pigeon` and `noisypigeon`.
+- **Each instance has an Artifacts namespace named after it,** in **that instance's own Cloudflare account**:
+  - `pigeon`'s is in the platform's account, the one `infra/pigeon` bootstraps;
+  - `noisypigeon`'s is in noisypigeon's own account.
+- **The run's token picks the account.** It must see exactly one account (`cloudflare::Api::account`), and no account ID is ever written. Before acting, the CLI prints the account's last four characters and the namespace, so a token for the wrong account shows.
 - **A repository is a unit of kind `cloudflare/git-repo`** in its instance's `config.yaml`, per [`2026-11-05-runtime-instance-config-kind-units.md`](2026-11-05-runtime-instance-config-kind-units.md):
 
   ```yaml
@@ -64,7 +67,8 @@ These facts were gathered when this ADR was written, and are checked against Clo
 ### 2. Access
 
 - **No token is stored.** `pigeon cobot git push|fetch|clone <repo> [git args…]` runs the user's `git` with a repository-scoped token minted for that call: read for fetch and clone, write for push. The token reaches git only through `GIT_CONFIG_COUNT`/`KEY`/`VALUE` (`http.<remote>.extraHeader`), never through argv or `.git/config`.
-- **A front door, from phase 3.** backplane's Worker serves `git.pigeon.dev/<repo>`, with Access in front, and proxies smart HTTP with a token minted per request.
+- **A front door, from phase 3.** backplane's Worker, in the platform's account, serves `git.pigeon.dev/<repo>`, with Access in front, and proxies smart HTTP with a token minted per request.
+  - **Other accounts.** Reaching another instance's account needs a credential for it, which waits for the control plane to mint per-instance credentials (control-plane ADR §8). Until then, such an instance is reached through `pigeon cobot git … --instance DIR`, with its own token.
   - Pushes are accepted only to `change/*`.
   - `main` and the tags are written only by the control plane.
 
@@ -110,7 +114,7 @@ These take effect from phase 3.
    - the Artifacts client;
    - `pigeon cobot git apply|status|push|fetch|clone|mirror`;
    - pigeon's own root `config.yaml`, declaring `repos/pigeon`.
-2. **The owner, locally, from a pigeon checkout,** with `CLOUDFLARE_API_TOKEN` holding Artifacts Write:
+2. **The owner, locally, from a pigeon checkout,** with `CLOUDFLARE_API_TOKEN` scoped to the platform's account and holding Artifacts Write:
 
    ```
    cargo run -q -p pigeon -- cobot git apply     # namespace pigeon, repo pigeon, imported from GitHub
@@ -131,7 +135,7 @@ These take effect from phase 3.
    - `.github/workflows/` and `BOT_GITHUB_TOKEN` are removed;
    - Devin's GitHub integration is retired;
    - `.config/policies/sentinel-actions.yaml` is retargeted at the job specifications.
-6. **noisypigeon** declares `repos/noisypigeon` in its `config.yaml` and follows step 2.
+6. **noisypigeon** declares `repos/noisypigeon` in its `config.yaml`. It then follows step 2 from pigeon, with `--instance ../noisypigeon` and a token scoped to noisypigeon's own account.
 
 ### 8. Supersedes
 

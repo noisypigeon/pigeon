@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "cloudflare/git-repo",
+  "description": "A git repository on Cloudflare Artifacts, in its instance's namespace and account; see .claude/decisions/2026-11-05-development-git-hosting-cloudflare-artifacts.md \u00a71.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "mirror": {
+      "description": "Its GitHub backup: imported from once while empty, then mirrored to.",
+      "type": "string",
+      "pattern": "^https://[A-Za-z0-9.-]+/[A-Za-z0-9._/-]+$"
+    },
+    "default_branch": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*$",
+      "default": "main"
+    },
+    "description": {
+      "type": "string",
+      "maxLength": 200
+    }
+  },
+  "x-cobot": {
+    "version": "0.1.0",
+    "api": "artifacts",
+    "credentials": {
+      "cloudflare": {
+        "provider": "cloudflare",
+        "capabilities": [
+          "artifacts.write"
+        ],
+        "scope": "account"
+      }
+    }
+  }
+}

@@ -25,6 +25,9 @@ pub enum CobotCommand {
     /// Build static sites, or publish them to their R2 buckets
     #[command(subcommand)]
     Sites(SitesCommand),
+    /// Host the instance's git repositories on Cloudflare Artifacts, mirrored to GitHub
+    #[command(subcommand)]
+    Git(GitCommand),
     /// Bump changed release units and generate changelogs; print JSON
     Release(ReleaseArgs),
     /// Print every release tag as JSON, flagging each unit's newest
@@ -116,6 +119,47 @@ pub enum SitesCommand {
     Build(SitesBuild),
     /// Build, sync each site to its bucket, then check it live
     Publish(SitesPublish),
+}
+
+/// `pigeon cobot git` commands; each uses `CLOUDFLARE_API_TOKEN`, scoped to the instance's own
+/// account.
+#[derive(Subcommand, Debug)]
+pub enum GitCommand {
+    /// Create the instance's namespace and repositories, importing new ones from their mirror
+    Apply(CobotRoot),
+    /// Print each repository's remote and its head on Artifacts and on its mirror
+    Status(CobotRoot),
+    /// `git push <remote> [ARGS…]` with a short-lived write token
+    Push(GitRun),
+    /// `git fetch <remote> [ARGS…]` with a short-lived read token
+    Fetch(GitRun),
+    /// `git clone <remote> [ARGS…]` with a short-lived read token
+    Clone(GitRun),
+    /// Push each repository's default branch and tags to its mirror, with your own git credentials
+    Mirror(GitMirror),
+}
+
+/// A repository and the git arguments after its remote.
+#[derive(Args, Debug)]
+pub struct GitRun {
+    /// The repository root and instance
+    #[command(flatten)]
+    pub at: CobotRoot,
+    /// The repository, e.g. pigeon
+    pub repo: String,
+    /// Arguments after the remote, e.g. HEAD:main
+    #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+    pub args: Vec<String>,
+}
+
+/// `pigeon cobot git mirror` arguments.
+#[derive(Args, Debug)]
+pub struct GitMirror {
+    /// The repository root and instance
+    #[command(flatten)]
+    pub at: CobotRoot,
+    /// Repositories [default: every one with a mirror]
+    pub repos: Vec<String>,
 }
 
 /// `pigeon cobot sites build` arguments.

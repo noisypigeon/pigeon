@@ -45,6 +45,12 @@ belong in the ADR, never in the file.
   `catalog/<catalog>/kinds/`; credentials are declared and filled by the run,
   IDs are looked up, and `moves` carries state, per
   [`2026-11-05-runtime-instance-config-kind-units.md`](.claude/decisions/2026-11-05-runtime-instance-config-kind-units.md).
+- Git is hosted on Cloudflare Artifacts and GitHub is only a mirror: a
+  repository is a `kind: cloudflare/git-repo` unit (an API kind, never planned)
+  in its instance's namespace and own account, created by
+  `pigeon cobot git apply`; work is pushed with `pigeon cobot git push` and
+  mirrored with `pigeon cobot git mirror`, per
+  [`2026-11-05-development-git-hosting-cloudflare-artifacts.md`](.claude/decisions/2026-11-05-development-git-hosting-cloudflare-artifacts.md).
 - `infra/pigeon/` bootstraps the platform's own Cloudflare account. It is a
   local unit (`x-cobot.local: true`): CI validates it but plans and applies
   only unnamed units, so its owner applies it by hand with a scoped token in
@@ -144,6 +150,9 @@ belong in the ADR, never in the file.
 - `pigeon cobot sites build [WORKLOAD…]`: build static sites with Zola, no
   secrets; `sites publish --state DIR` also syncs them to R2 and checks them
   live; `--data NAME=FILE` hands each template a JSON file as `data/NAME.json`.
+- `pigeon cobot git apply|status|push|fetch|clone|mirror [--instance DIR]`,
+  with `CLOUDFLARE_API_TOKEN` scoped to the instance's account: its Artifacts
+  repositories; a token is minted per call and never stored.
 - `pigeon cobot release --dry-run` / `pigeon cobot tags`: preview the bot's
   release JSON.
 - `pigeon backplane instance|engines|operations|run <op>` (`--json` for the

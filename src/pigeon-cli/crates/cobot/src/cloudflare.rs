@@ -56,30 +56,53 @@ impl Api {
         &self.token
     }
 
-    fn get(&self, path: &str) -> Result<Value, String> {
+    /// `GET path`'s result.
+    pub(crate) fn get(&self, path: &str) -> Result<Value, String> {
+        self.call("GET", path, None)
+            .and_then(|(status, body)| ok(status, &body, "GET", path))
+    }
+
+    /// `GET path`'s result, or `None` when it is 404.
+    pub(crate) fn find(&self, path: &str) -> Result<Option<Value>, String> {
+        match self.call("GET", path, None)? {
+            (404, _) => Ok(None),
+            (status, body) => ok(status, &body, "GET", path).map(Some),
+        }
+    }
+
+    /// `POST path` with a JSON `body`; its result.
+    pub(crate) fn post(&self, path: &str, body: &Value) -> Result<Value, String> {
+        self.call("POST", path, Some(body))
+            .and_then(|(status, b)| ok(status, &b, "POST", path))
+    }
+
+    /// One call: its status and JSON body. Messages name the method and path, never the token.
+    fn call(&self, method: &str, path: &str, body: Option<&Value>) -> Result<(u16, Value), String> {
         let agent: ureq::Agent = ureq::Agent::config_builder()
             .http_status_as_error(false)
             .timeout_global(Some(Duration::from_secs(30)))
             .build()
             .into();
         let what = path.split('?').next().unwrap_or(path);
-        let mut r = agent
-            .get(format!("{}{path}", self.base))
-            .header("authorization", format!("Bearer {}", self.token))
-            .call()
-            .map_err(|_| format!("GET {what}: the request failed"))?;
+        let url = format!("{}{path}", self.base);
+        let auth = format!("Bearer {}", self.token);
+        let sent = match body {
+            None => agent.get(&url).header("authorization", &auth).call(),
+            Some(b) => agent
+                .post(&url)
+                .header("authorization", &auth)
+                .header("content-type", "application/json")
+                .send(b.to_string().as_bytes()),
+        };
+        let mut r = sent.map_err(|_| format!("{method} {what}: the request failed"))?;
         let status = r.status().as_u16();
         let body: Value = r
             .body_mut()
             .read_to_string()
             .ok()
             .and_then(|t| serde_json::from_str(&t).ok())
-            .ok_or_else(|| format!("GET {what}: status {status}, not JSON"))?;
-        if status == 200 && body["success"] == true {
-            Ok(body["result"].clone())
-        } else {
-            Err(format!("GET {what}: status {status}"))
-        }
+            .ok_or_else(|| format!("{method} {what}: status {status}, not JSON"))?;
+        Ok((status, body))
     }
 
     /// The one account the token sees.
@@ -131,6 +154,28 @@ impl Api {
                     .and_then(id)
             })
             .ok_or_else(|| "the token could not be verified".into())
+    }
+}
+
+/// A successful call's `result`, else a message naming the call and the API's own error messages.
+fn ok(status: u16, body: &Value, method: &str, path: &str) -> Result<Value, String> {
+    let what = path.split('?').next().unwrap_or(path);
+    if (200..300).contains(&status) && body["success"] == true {
+        return Ok(body["result"].clone());
+    }
+    let errors: Vec<&str> = body["errors"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|e| e["message"].as_str())
+        .collect();
+    if errors.is_empty() {
+        Err(format!("{method} {what}: status {status}"))
+    } else {
+        Err(format!(
+            "{method} {what}: status {status}: {}",
+            errors.join("; ")
+        ))
     }
 }
 

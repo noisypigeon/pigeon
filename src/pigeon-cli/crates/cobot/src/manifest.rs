@@ -67,6 +67,8 @@ pub struct Entry {
     pub role: Role,
     /// Its settings: the entry without `kind`.
     pub settings: Value,
+    /// The API that applies it, `x-cobot.api`, for a kind cobot applies without `OpenTofu`.
+    pub api: Option<String>,
 }
 
 impl Entry {
@@ -204,12 +206,32 @@ fn entry(id: &str, value: &Value, platform: &Path) -> Result<Entry, String> {
         .filter(|(k, _)| k.as_str() != "kind")
         .map(|(k, v)| (k.clone(), v.clone()))
         .collect();
+    let settings = Value::Object(settings);
+    let api = schema["x-cobot"]["api"].as_str().map(str::to_string);
+    if api.is_some() {
+        check_settings(&schema, &settings)?;
+    }
     Ok(Entry {
         kind: kind.to_string(),
         role: role(&schema),
         schema,
-        settings: Value::Object(settings),
+        settings,
+        api,
     })
+}
+
+/// An API unit's settings against its kind's schema; `OpenTofu` units are checked as config units.
+fn check_settings(schema: &Value, settings: &Value) -> Result<(), String> {
+    let validator = jsonschema::validator_for(schema).map_err(|e| format!("kind schema: {e}"))?;
+    let errors: Vec<String> = validator
+        .iter_errors(settings)
+        .map(|e| format!("{e} at `{}`", e.instance_path()))
+        .collect();
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(errors.join("; "))
+    }
 }
 
 /// The manifest at `root`, its kinds read from `platform`; `None` when `root` has no
@@ -325,6 +347,16 @@ impl Manifest {
     pub fn content(&self, id: &str) -> Option<PathBuf> {
         let rel = self.units.get(id)?.settings["content"].as_str()?;
         inside(&self.root, rel).then(|| self.root.join(rel))
+    }
+
+    /// The units applied by `api`, by ID.
+    #[must_use]
+    pub fn api_units(&self, api: &str) -> Vec<(&str, &Entry)> {
+        self.units
+            .iter()
+            .filter(|(_, e)| e.api.as_deref() == Some(api))
+            .map(|(id, e)| (id.as_str(), e))
+            .collect()
     }
 
     fn problems(&self) -> Vec<(String, String)> {

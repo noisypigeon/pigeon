@@ -5,3 +5,4 @@ capabilities:
   transform.write: { permissions: [Zone Transform Rules Write], scope: zone }
   redirects.write: { permissions: [Dynamic URL Redirects Write], scope: zone }
   r2.write: { permissions: [Workers R2 Storage Write], scope: account }
+  artifacts.write: { permissions: [Artifacts Write], scope: account }
