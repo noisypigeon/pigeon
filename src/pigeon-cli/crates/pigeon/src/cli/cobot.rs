@@ -28,6 +28,8 @@ pub enum CobotCommand {
     /// Host the instance's git repositories on Cloudflare Artifacts, mirrored to GitHub
     #[command(subcommand)]
     Git(GitCommand),
+    /// Print the checks a change needs, from the paths it touches; with --run, run them
+    Scope(ScopeArgs),
     /// Bump changed release units and generate changelogs; print JSON
     Release(ReleaseArgs),
     /// Print every release tag as JSON, flagging each unit's newest
@@ -152,6 +154,26 @@ pub struct GitRun {
     /// Arguments after the remote, e.g. HEAD:main
     #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
     pub args: Vec<String>,
+}
+
+/// `pigeon cobot scope` arguments.
+#[derive(Args, Debug)]
+pub struct ScopeArgs {
+    /// The repository root
+    #[arg(long, default_value = ".")]
+    pub root: PathBuf,
+    /// The change's base; its paths are those changed since, plus uncommitted ones
+    #[arg(long, default_value = "origin/main")]
+    pub base: String,
+    /// The paths instead, one per --file; the base is then not read
+    #[arg(long = "file")]
+    pub files: Vec<String>,
+    /// Run the checks, in order, and exit 1 if one fails
+    #[arg(long)]
+    pub run: bool,
+    /// Print the checks as JSON
+    #[arg(long, conflicts_with = "run")]
+    pub json: bool,
 }
 
 /// `pigeon cobot git mirror` arguments.

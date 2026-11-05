@@ -37,6 +37,7 @@ pub fn run_with(
         "instance.show" => Ok(respond(json!(instance), Vec::new())),
         "architecture.describe" => architecture_describe(instance).map(|(r, v)| respond(r, v)),
         "policy.check" => policy_check(instance, &request.args).map(|(r, v)| respond(r, v)),
+        "change.scope" => change_scope(instance, &request.args).map(|r| respond(r, Vec::new())),
         "sites.build" => sites_build(instance, &request.args).map(|r| respond(r, Vec::new())),
         "infra.validate" => infra_validate(instance).map(|(r, v)| respond(r, v)),
         "infra.plan" => infra_plan(instance, &request.args, &var).map(|r| respond(r, Vec::new())),
@@ -101,6 +102,23 @@ fn policy_check(
         json!({ "ran": report.ran, "skipped": report.skipped }),
         violations,
     ))
+}
+
+/// The checks a change touching `files` needs, from the platform's workspace and release
+/// configuration; runs nothing, per the lifecycle ADR §4.
+fn change_scope(instance: &Instance, args: &Map<String, Value>) -> Result<Value, Error> {
+    let files: Vec<String> = args
+        .get("files")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .lines()
+        .map(str::to_string)
+        .collect();
+    let jobs = cobot::scope::jobs(instance.platform_root(), &files).map_err(|e| Error::Engine {
+        engine: Engine::Cobot,
+        message: e.to_string(),
+    })?;
+    Ok(json!({ "jobs": jobs }))
 }
 
 /// Builds the named sites, or every site, with `architecture.describe`'s result as their

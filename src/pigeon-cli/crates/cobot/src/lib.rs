@@ -32,6 +32,8 @@ pub mod release;
 #[cfg(feature = "engines")]
 pub mod s3;
 #[cfg(feature = "engines")]
+pub mod scope;
+#[cfg(feature = "engines")]
 pub mod secrets;
 #[cfg(feature = "engines")]
 pub mod session;

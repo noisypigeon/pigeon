@@ -171,6 +171,10 @@ belong in the ADR, never in the file.
   `.config/policies/`; `pigeon backplane run sites.build` builds every site.
 - `CHANGE_BASE=origin/main mise run sentinel-change`: `policy.check` on this
   branch as a change, its scope from the first commit's `Change-Scope:` trailers.
+- `CHANGE_BASE=origin/main mise run ci-scoped`: only the checks this branch's
+  paths need (`pigeon cobot scope`; `--file P` to name paths, `--json` to list
+  them; backplane's `change.scope` answers the same); `mise run ci` stays the
+  full set.
 - `PR_TITLE='…' PR_BODY='…' PR_NUMBER=N PR_FILES="$(git diff --name-only main...)" mise run sentinel-pr`:
   adds the pull-request policy, through `policy.check`'s `title`, `body`,
   `number` and `files` arguments.

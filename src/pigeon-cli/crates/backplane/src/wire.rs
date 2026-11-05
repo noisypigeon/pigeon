@@ -99,6 +99,12 @@ const CATALOG: &[Operation] = &[
         summary: "Validate every infrastructure and workload unit",
     },
     Operation {
+        name: "change.scope",
+        engine: Engine::Cobot,
+        effect: Effect::Read,
+        summary: "The checks a change needs, from the paths it touches, in the order to run them (args: files, one path per line)",
+    },
+    Operation {
         name: "sites.build",
         engine: Engine::Cobot,
         effect: Effect::Build,
@@ -129,6 +135,7 @@ fn arguments(name: &str) -> &'static [(&'static str, bool)] {
             ("branch", false),
             ("scope", false),
         ],
+        "change.scope" => &[("files", true)],
         "sites.build" => &[("sites", false)],
         "infra.plan" => &[("state", true), ("units", false)],
         "infra.apply" => &[("state", true), ("plan", true)],

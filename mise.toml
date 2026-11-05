@@ -76,3 +76,8 @@ run = "cargo run -q --locked -p pigeon -- backplane instance --root ../.."
 
 [tasks.ci]
 depends = ["rust", "sentinel", "backplane"]
+
+[tasks.ci-scoped]
+description = "Only the checks this branch's paths need, against CHANGE_BASE (default origin/main); see the lifecycle ADR §4"
+dir = "src/pigeon-cli"
+run = 'cargo run -q --locked -p pigeon -- cobot scope --root ../.. --base "${CHANGE_BASE:-origin/main}" --run'

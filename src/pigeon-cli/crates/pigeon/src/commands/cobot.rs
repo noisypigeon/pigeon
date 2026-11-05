@@ -11,8 +11,8 @@ use cobot::release::{self, Config};
 use super::{INVALID, SUCCESS, VIOLATION};
 use crate::cli::{
     CobotApply, CobotCommand, CobotPlan, CobotRoot, CobotRun, GitCommand, GitMirror, GitRun,
-    ReleaseArgs, SecretsCommand, SecretsKey, SecretsUnit, SitesBuild, SitesCommand, SitesPublish,
-    TagsArgs,
+    ReleaseArgs, ScopeArgs, SecretsCommand, SecretsKey, SecretsUnit, SitesBuild, SitesCommand,
+    SitesPublish, TagsArgs,
 };
 
 /// Runs a `pigeon cobot` command and returns its exit code.
@@ -34,6 +34,7 @@ pub fn run(command: CobotCommand) -> i32 {
         CobotCommand::Sites(SitesCommand::Build(args)) => sites_build(&args),
         CobotCommand::Sites(SitesCommand::Publish(args)) => sites_publish(&args),
         CobotCommand::Git(command) => git(command),
+        CobotCommand::Scope(args) => return scope(&args),
         CobotCommand::Release(args) => return release(&args),
         CobotCommand::Tags(args) => return tags(&args),
     };
@@ -309,6 +310,51 @@ fn git_run(
             command: format!("git {verb}"),
             message: format!("exited {status}"),
         })
+    }
+}
+
+/// `pigeon cobot scope`: the checks a change needs; see
+/// `.claude/decisions/2026-11-05-development-changes-through-pigeon-mcp.md` §4.
+fn scope(args: &ScopeArgs) -> i32 {
+    let jobs = if args.files.is_empty() {
+        cobot::scope::changed(&args.root, &args.base)
+    } else {
+        Ok(args.files.clone())
+    }
+    .and_then(|files| cobot::scope::jobs(&args.root, &files));
+    let jobs = match jobs {
+        Ok(jobs) => jobs,
+        Err(e) => {
+            eprintln!("cobot: {e}");
+            return INVALID;
+        }
+    };
+    if args.json {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&jobs).unwrap_or_default()
+        );
+        return SUCCESS;
+    }
+    if !args.run {
+        for j in &jobs {
+            println!("{}: {}", j.name, j.argv.join(" "));
+        }
+        return SUCCESS;
+    }
+    match cobot::scope::run(&args.root, &jobs) {
+        Ok(failed) if failed.is_empty() => {
+            println!("cobot: scope: {} check(s) passed", jobs.len());
+            SUCCESS
+        }
+        Ok(failed) => {
+            eprintln!("cobot: scope: failed: {}", failed.join(", "));
+            VIOLATION
+        }
+        Err(e) => {
+            eprintln!("cobot: {e}");
+            INVALID
+        }
     }
 }
 

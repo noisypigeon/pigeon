@@ -171,6 +171,36 @@ fn infra_validate_holds_for_this_repository() {
 }
 
 #[test]
+fn change_scope_names_the_checks_and_needs_files() {
+    let instance = Instance::load(&repo_root()).expect("valid");
+    let mut r = request("change.scope");
+    r.args.insert(
+        "files".into(),
+        ".claude/decisions/x.md\ncatalog/cloudflare/capabilities.yaml".into(),
+    );
+    let response = run(&instance, &r).expect("runs");
+    assert!(response.ok);
+    let names: Vec<&str> = response.result["jobs"]
+        .as_array()
+        .expect("jobs")
+        .iter()
+        .filter_map(|j| j["name"].as_str())
+        .collect();
+    assert_eq!(
+        names,
+        [
+            "infra.validate",
+            "test cobot (catalog, manifest, apex, git)",
+            "policy.check"
+        ]
+    );
+    assert!(matches!(
+        run(&instance, &request("change.scope")),
+        Err(Error::Invalid(p)) if p.iter().any(|m| m.contains("needs argument `files`"))
+    ));
+}
+
+#[test]
 fn unknown_operations_and_arguments_are_invalid() {
     let root = fixture(MANIFEST, "ok\n");
     let instance = Instance::load(root.path()).expect("valid");
