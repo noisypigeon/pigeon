@@ -5,6 +5,8 @@
 pub mod apex;
 #[cfg(feature = "engines")]
 pub mod artifacts;
+#[cfg(any(feature = "engines", feature = "worker"))]
+pub mod artifacts_wire;
 #[cfg(feature = "engines")]
 pub mod catalog;
 #[cfg(feature = "engines")]

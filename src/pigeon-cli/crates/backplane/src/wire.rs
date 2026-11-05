@@ -234,8 +234,8 @@ const CATALOG: &[Operation] = &[
         name: "change.pushed",
         engine: Engine::Backplane,
         effect: Effect::Build,
-        summary: "Report a push of a change's branch, when its push event may be missed; the control plane reads the head itself (args: number)",
-        args: &[NUMBER],
+        summary: "Report a push of a change's branch, naming its head, when the push event may be missed; the bound job refuses a SHA that isn't the branch's head",
+        args: &[NUMBER, arg("sha", true, Kind::String)],
     },
     Operation {
         name: "change.status",

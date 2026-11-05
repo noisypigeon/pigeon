@@ -8,8 +8,7 @@ use crate::cloudflare::Api;
 /// The `x-cobot.api` of a kind this module applies.
 pub const API: &str = "artifacts";
 
-/// How long a minted git token lives, in seconds.
-pub const TOKEN_TTL: u64 = 900;
+pub use crate::artifacts_wire::TOKEN_TTL;
 
 /// `remote` as messages show it: an account ID in its host cut to its last four characters.
 #[must_use]
@@ -64,13 +63,11 @@ pub struct Client<'a> {
 }
 
 fn repo_of(v: &Value, name: &str) -> Result<Repo, String> {
-    let remote = ["remote", "url", "git_url"]
-        .iter()
-        .find_map(|k| v[*k].as_str())
+    let remote = crate::artifacts_wire::remote_in(v)
         .ok_or_else(|| format!("repository `{name}`: the API gave no remote"))?;
     Ok(Repo {
         name: v["name"].as_str().unwrap_or(name).to_string(),
-        remote: remote.to_string(),
+        remote,
         default_branch: v["default_branch"].as_str().map(str::to_string),
     })
 }
@@ -219,58 +216,11 @@ impl<'a> Client<'a> {
     }
 }
 
-/// Where a token may sit in an answer, by field name.
-const TOKEN_FIELDS: [&str; 6] = [
-    "token",
-    "plaintext",
-    "value",
-    "secret",
-    "access_token",
-    "password",
-];
-
-/// The token in an answer: the answer itself, a token field, or one inside `token` or `data`.
-fn token_in(v: &Value) -> Option<String> {
-    if let Some(s) = v.as_str() {
-        return Some(s.to_string());
-    }
-    TOKEN_FIELDS
-        .iter()
-        .find_map(|k| v[*k].as_str())
-        .map(str::to_string)
-        .or_else(|| {
-            ["token", "data", "result"]
-                .iter()
-                .find_map(|k| v.get(*k).filter(|n| n.is_object()).and_then(token_in))
-        })
-}
-
-/// An answer's field names and types, never its values.
-fn shape(v: &Value) -> String {
-    match v {
-        Value::Object(o) => {
-            let fields: Vec<String> = o
-                .iter()
-                .map(|(k, x)| match x {
-                    Value::Object(_) => format!("{k}: {}", shape(x)),
-                    Value::Array(_) => format!("{k}: array"),
-                    Value::String(_) => format!("{k}: string"),
-                    Value::Number(_) => format!("{k}: number"),
-                    Value::Bool(_) => format!("{k}: bool"),
-                    Value::Null => format!("{k}: null"),
-                })
-                .collect();
-            format!("{{ {} }}", fields.join(", "))
-        }
-        Value::Array(_) => "an array".into(),
-        Value::Null => "empty".into(),
-        _ => "a scalar".into(),
-    }
-}
+pub use crate::artifacts_wire::{shape, token_in};
 
 #[cfg(test)]
 mod tests {
-    use super::{shape, token_in};
+    use crate::artifacts_wire::{shape, token_in};
     use serde_json::json;
 
     #[test]

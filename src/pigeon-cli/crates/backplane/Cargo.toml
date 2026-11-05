@@ -22,7 +22,7 @@ engines = [
   "dep:httparse",
   "dep:rustls",
 ]
-worker = ["dep:cobot", "cobot/worker", "dep:wasm-bindgen", "dep:worker"]
+worker = ["dep:cobot", "cobot/worker", "dep:wasm-bindgen", "dep:worker", "worker/d1", "worker/queue"]
 
 [dependencies]
 cobot = { workspace = true, optional = true }

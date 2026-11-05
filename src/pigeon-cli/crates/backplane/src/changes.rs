@@ -165,7 +165,8 @@ pub struct Change {
 }
 
 /// Something that happened to a change.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Event {
     /// The owner approved its plan.
     ApprovePlan {
@@ -235,7 +236,8 @@ pub enum Event {
 }
 
 /// What the Durable Object must do after an event.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum Effect {
     /// Dispatch this job on the head.
     Start(String),

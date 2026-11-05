@@ -97,6 +97,42 @@ impl Launch {
     }
 }
 
+/// What a job's Container needs: only the signing key. A job's read token comes with its
+/// request, so nothing else lives in the Container's environment.
+#[derive(Clone, PartialEq, Eq)]
+pub struct JobsLaunch {
+    /// The signing key.
+    pub token: String,
+}
+
+impl std::fmt::Debug for JobsLaunch {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("JobsLaunch").finish_non_exhaustive()
+    }
+}
+
+impl JobsLaunch {
+    /// The Container's command line: `pigeon backplane jobs`, signed.
+    #[must_use]
+    pub fn entrypoint(&self) -> Vec<String> {
+        [
+            "/usr/local/bin/pigeon",
+            "backplane",
+            "jobs",
+            "--listen",
+            &format!("0.0.0.0:{PORT}"),
+        ]
+        .map(str::to_string)
+        .to_vec()
+    }
+
+    /// The Container's environment: the signing key only.
+    #[must_use]
+    pub fn env(&self) -> Vec<(&'static str, &str)> {
+        vec![(TOKEN_VAR, self.token.as_str())]
+    }
+}
+
 /// Why a dispatch failed. An unverified answer is never success.
 #[derive(Debug, Clone, PartialEq)]
 pub enum DispatchError {
@@ -149,7 +185,7 @@ pub fn accept(
 }
 
 #[cfg(target_arch = "wasm32")]
-pub use wasm::{call, monitor, start};
+pub use wasm::{call, monitor, start, start_jobs};
 
 #[cfg(target_arch = "wasm32")]
 mod wasm {
@@ -161,7 +197,7 @@ mod wasm {
         js_sys,
     };
 
-    use super::{DispatchError, Launch, PORT, accept};
+    use super::{DispatchError, JobsLaunch, Launch, PORT, accept};
     use crate::link;
 
     /// Half-second checks of `/healthz` while a cold Container boots: two minutes.
@@ -174,12 +210,31 @@ mod wasm {
     /// [`DispatchError::Start`] if it does not start, and [`DispatchError::Unreachable`] if
     /// `serve` never answers.
     pub async fn start(container: &Container, launch: &Launch) -> Result<(), DispatchError> {
+        boot(container, &launch.entrypoint(), &launch.env()).await
+    }
+
+    /// As [`start`], for a job's Container.
+    ///
+    /// # Errors
+    ///
+    /// As [`start`].
+    pub async fn start_jobs(
+        container: &Container,
+        launch: &JobsLaunch,
+    ) -> Result<(), DispatchError> {
+        boot(container, &launch.entrypoint(), &launch.env()).await
+    }
+
+    async fn boot(
+        container: &Container,
+        entrypoint: &[String],
+        env: &[(&str, &str)],
+    ) -> Result<(), DispatchError> {
         if !container.running() {
             let mut options = ContainerStartupOptions::new();
-            let entrypoint = launch.entrypoint();
             options.set_entrypoint(&entrypoint.iter().map(String::as_str).collect::<Vec<_>>());
             options.enable_internet(true);
-            for (k, v) in launch.env() {
+            for (k, v) in env {
                 options.add_env(k, v);
             }
             container

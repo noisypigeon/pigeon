@@ -5,6 +5,7 @@ pub mod architecture;
 #[cfg(feature = "engines")]
 pub mod catalog;
 pub mod changes;
+pub mod control;
 #[cfg(feature = "engines")]
 pub mod engine;
 #[cfg(feature = "engines")]

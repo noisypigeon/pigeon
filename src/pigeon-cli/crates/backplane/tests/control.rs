@@ -1,0 +1,362 @@
+//! The control plane's routing, push events and job reports; see
+//! `.claude/decisions/2026-11-05-development-changes-through-pigeon-mcp.md` §1, §4.
+
+use backplane::changes::{BOUND, Change, Check, Event};
+use backplane::control::{self, Outcome, Push, Report, Routed};
+use backplane::wire::Request;
+use serde_json::json;
+
+const A: &str = "0123456789abcdef0123456789abcdef01234567";
+
+fn request(op: &str, args: &serde_json::Value) -> Request {
+    Request {
+        operation: op.into(),
+        args: args.as_object().cloned().unwrap_or_default(),
+    }
+}
+
+#[test]
+fn operations_route_to_events_with_the_access_identity() {
+    let got = control::route(
+        &request("change.approve", &json!({ "number": "7", "sha": A })),
+        "owner@x",
+        5,
+    );
+    assert_eq!(
+        got,
+        Ok(Routed::Event {
+            number: 7,
+            event: Event::Approve {
+                by: "owner@x".into(),
+                sha: A.into(),
+                at: 5
+            }
+        })
+    );
+    assert_eq!(
+        control::route(
+            &request("change.authorize", &json!({ "number": 7 })),
+            "owner@x",
+            5
+        ),
+        Ok(Routed::Event {
+            number: 7,
+            event: Event::ApprovePlan {
+                by: "owner@x".into(),
+                at: 5
+            }
+        })
+    );
+    assert_eq!(
+        control::route(&request("change.status", &json!({ "number": "0" })), "a", 1),
+        Err("argument `number` must be a change's number".into())
+    );
+    let p = control::route(
+        &request(
+            "change.propose",
+            &json!({ "slug": "worker-control", "title": "feat(x): y", "plan": "p", "scope": "a/**\n\n b/ \n" }),
+        ),
+        "agent",
+        1,
+    );
+    assert_eq!(
+        p,
+        Ok(Routed::Propose {
+            slug: "worker-control".into(),
+            title: "feat(x): y".into(),
+            plan: "p".into(),
+            scope: vec!["a/**".into(), "b/".into()]
+        })
+    );
+    assert!(
+        control::route(
+            &request(
+                "change.propose",
+                &json!({ "slug": "Bad Slug", "title": "t", "plan": "p", "scope": "a" })
+            ),
+            "a",
+            1
+        )
+        .is_err()
+    );
+    assert!(control::route(&request("infra.plan", &json!({})), "a", 1).is_err());
+}
+
+#[test]
+fn a_push_to_a_change_branch_is_found_and_others_are_not() {
+    let event = json!({ "type": "cf.artifacts.repo.pushed", "payload": { "repo": "pigeon", "ref": "refs/heads/change/9-worker-control", "after": A } });
+    assert_eq!(
+        control::push(&event),
+        Some(Push {
+            repo: Some("pigeon".into()),
+            number: 9,
+            sha: A.into()
+        })
+    );
+    assert_eq!(
+        control::push(&json!({ "ref": "refs/heads/change/9-x", "after": A })).map(|p| p.number),
+        Some(9),
+        "a payload without its envelope"
+    );
+    for other in [
+        json!({ "ref": "refs/heads/main", "after": A }),
+        json!({ "ref": "refs/tags/v1", "after": A }),
+        json!({ "ref": "refs/heads/change/9-x", "after": "0".repeat(40) }),
+        json!({ "ref": "refs/heads/change/9-x", "after": "abc" }),
+        json!({ "ref": "refs/heads/change/9-x" }),
+    ] {
+        assert_eq!(control::push(&other), None, "{other}");
+    }
+}
+
+fn pushed() -> Change {
+    let mut c = Change::propose(
+        9,
+        "worker-control",
+        "feat(x): y",
+        "the plan",
+        vec!["a/**".into()],
+        "agent",
+    );
+    c.apply(Event::ApprovePlan {
+        by: "owner".into(),
+        at: 1,
+    })
+    .expect("approves");
+    c.apply(Event::Pushed { sha: A.into() }).expect("pushed");
+    c
+}
+
+#[test]
+fn a_job_spec_carries_the_approved_scope_and_never_shows_its_token() {
+    let s = control::spec(
+        &pushed(),
+        BOUND,
+        "https://git.example/pigeon.git",
+        "tok-secret",
+    )
+    .expect("spec");
+    assert_eq!(s.id, "9-0123456789ab-bound");
+    assert_eq!(s.branch, "change/9-worker-control");
+    assert_eq!(s.scope, ["a/**"]);
+    assert_eq!(s.base, "main");
+    assert!(!format!("{s:?}").contains("tok-secret"));
+    assert!(!format!("{s:?}").contains("git.example"));
+    assert!(control::spec(&pushed(), "fmt", "r", "t").is_err());
+    assert_eq!(
+        control::job_id(3, A, "clippy pigeon --features cobot"),
+        "3-0123456789ab-clippy-pigeon---features-cobot"
+    );
+}
+
+#[test]
+fn reports_become_events() {
+    let report = |outcome, violations: Vec<&str>| Report {
+        id: "x".into(),
+        outcome,
+        log: String::new(),
+        violations: violations.into_iter().map(Into::into).collect(),
+        checks: vec![Check {
+            name: "fmt".into(),
+            argv: vec!["cargo".into()],
+        }],
+    };
+    assert_eq!(
+        control::event_of("fmt", A, &report(Outcome::Running, vec![])),
+        None
+    );
+    assert_eq!(
+        control::event_of("fmt", A, &report(Outcome::Failed, vec![])),
+        Some(Event::Finished {
+            job: "fmt".into(),
+            sha: A.into(),
+            ok: false
+        })
+    );
+    let Some(Event::Bounded {
+        violations, checks, ..
+    }) = control::event_of(BOUND, A, &report(Outcome::Failed, vec![]))
+    else {
+        panic!("bounded");
+    };
+    assert_eq!(
+        violations,
+        ["the bound job failed; see its log"],
+        "a failed bound job always refuses"
+    );
+    assert_eq!(checks.len(), 1);
+    let Some(Event::Bounded { violations, .. }) =
+        control::event_of(BOUND, A, &report(Outcome::Passed, vec![]))
+    else {
+        panic!("bounded");
+    };
+    assert_eq!(violations, Vec::<String>::new());
+}
+
+#[test]
+fn a_log_keeps_its_tail_on_a_character_boundary() {
+    let long = format!("{}é{}", "x".repeat(10), "y".repeat(control::LOG_TAIL - 1));
+    let t = control::tail(&long);
+    assert!(t.len() <= control::LOG_TAIL);
+    assert!(t.ends_with('y'));
+    assert_eq!(control::tail("short"), "short");
+    assert_eq!(control::last("aé", 1), "", "never half a character");
+    assert_eq!(control::last("aé", 2), "é");
+}
+
+#[test]
+fn events_round_trip_their_wire_form() {
+    let e = Event::Bounded {
+        sha: A.into(),
+        violations: vec![],
+        checks: vec![],
+    };
+    let text = serde_json::to_string(&e).expect("serialize");
+    assert!(text.contains("\"type\":\"bounded\""), "{text}");
+    assert_eq!(
+        serde_json::from_str::<Event>(&text).expect("deserialize"),
+        e
+    );
+}
+
+const SCHEMA: [&str; 2] = [
+    include_str!("../migrations/0001_schema_v0.sql"),
+    include_str!("../migrations/0002_changes.sql"),
+];
+
+fn db() -> rusqlite::Connection {
+    let db = rusqlite::Connection::open_in_memory().expect("sqlite");
+    db.execute_batch("PRAGMA foreign_keys = ON;").expect("fk");
+    for s in SCHEMA {
+        db.execute_batch(s).expect("migrates");
+    }
+    db
+}
+
+fn run(db: &rusqlite::Connection, s: &control::Statement) {
+    let params: Vec<rusqlite::types::Value> = s
+        .params
+        .iter()
+        .map(|v| match v {
+            serde_json::Value::Null => rusqlite::types::Value::Null,
+            serde_json::Value::Number(n) => {
+                rusqlite::types::Value::Integer(n.as_i64().expect("int"))
+            }
+            serde_json::Value::String(t) => rusqlite::types::Value::Text(t.clone()),
+            other => panic!("{other}"),
+        })
+        .collect();
+    db.execute(s.sql, rusqlite::params_from_iter(params))
+        .unwrap_or_else(|e| panic!("{}: {e}", s.sql));
+}
+
+fn number(db: &rusqlite::Connection, s: &control::Statement) -> i64 {
+    let params: Vec<rusqlite::types::Value> = s
+        .params
+        .iter()
+        .map(|v| match v {
+            serde_json::Value::Number(n) => {
+                rusqlite::types::Value::Integer(n.as_i64().expect("int"))
+            }
+            serde_json::Value::String(t) => rusqlite::types::Value::Text(t.clone()),
+            _ => rusqlite::types::Value::Null,
+        })
+        .collect();
+    db.query_row(s.sql, rusqlite::params_from_iter(params), |r| r.get(0))
+        .expect("row")
+}
+
+#[test]
+fn the_mirror_writes_every_state_the_migration_allows() {
+    let db = db();
+    let logs = serde_json::Map::new();
+    assert_eq!(
+        number(&db, &control::next_number("pigeon", "pigeon", 10)),
+        10,
+        "the floor"
+    );
+    let mut c = Change::propose(10, "x", "feat(x): y", "p", vec!["a/**".into()], "agent");
+    for s in control::mirror("pigeon", "pigeon", &c, &logs, 1) {
+        run(&db, &s);
+    }
+    c.apply(Event::ApprovePlan {
+        by: "owner".into(),
+        at: 2,
+    })
+    .expect("approves");
+    c.apply(Event::Pushed { sha: A.into() }).expect("pushed");
+    c.apply(Event::Bounded {
+        sha: A.into(),
+        violations: vec![],
+        checks: vec![Check {
+            name: "fmt".into(),
+            argv: vec![],
+        }],
+    })
+    .expect("bounded");
+    c.apply(Event::Started {
+        job: "fmt".into(),
+        sha: A.into(),
+    })
+    .expect("starts");
+    c.apply(Event::Finished {
+        job: "fmt".into(),
+        sha: A.into(),
+        ok: true,
+    })
+    .expect("passes");
+    c.apply(Event::Approve {
+        by: "owner".into(),
+        sha: A.into(),
+        at: 3,
+    })
+    .expect("approves");
+    let mut logs = serde_json::Map::new();
+    logs.insert("fmt".into(), "ci/10-0123456789ab-fmt.log".into());
+    for s in control::mirror("pigeon", "pigeon", &c, &logs, 3) {
+        run(&db, &s);
+    }
+    let state: String = db
+        .query_row("SELECT state FROM changes WHERE number = 10", [], |r| {
+            r.get(0)
+        })
+        .expect("row");
+    assert_eq!(state, "approved");
+    let jobs: i64 = db
+        .query_row(
+            "SELECT count(*) FROM jobs WHERE change = 10 AND log IS NOT NULL",
+            [],
+            |r| r.get(0),
+        )
+        .expect("row");
+    assert_eq!(jobs, 1);
+    assert_eq!(
+        number(&db, &control::next_number("pigeon", "pigeon", 1)),
+        11
+    );
+    run(
+        &db,
+        &control::audit(4, "owner", "change.approve", "pigeon", Some("10"), "ok"),
+    );
+    let listed: i64 = db
+        .query_row(
+            "SELECT count(*) FROM changes WHERE state = 'approved'",
+            [],
+            |r| r.get(0),
+        )
+        .expect("row");
+    assert_eq!(listed, 1);
+    let s = control::list("pigeon", "pigeon", Some("approved"));
+    let params: Vec<rusqlite::types::Value> = s
+        .params
+        .iter()
+        .map(|v| match v {
+            serde_json::Value::String(t) => rusqlite::types::Value::Text(t.clone()),
+            _ => rusqlite::types::Value::Null,
+        })
+        .collect();
+    let n: i64 = db
+        .query_row(s.sql, rusqlite::params_from_iter(params), |r| r.get(0))
+        .expect("row");
+    assert_eq!(n, 10);
+}
