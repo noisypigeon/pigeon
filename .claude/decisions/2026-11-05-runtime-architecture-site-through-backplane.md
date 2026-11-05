@@ -193,7 +193,7 @@ No logo, name, artwork, copy or font file is taken from either.
   `infra/pigeon` stays a local unit, which its owner applies. The bucket's name is a setting in `config.yaml`, as `pigeon-state`'s is, and never appears in output.
 - **The site** is `infra/pigeon/sites/docs/`:
   - its `config.yaml` pins `site-template-architecture`, and its `static_site.site` holds only the title and description;
-  - its `site/` is empty: no posts and no pages.
+  - it has no `site/`. Git keeps no empty directory, and `check_layout` rejects a placeholder file. A template whose `template.yaml` sets `content: none` therefore builds without `site/`, and `sites build` fails such a site if `site/` exists. A clean-checkout test covers both cases.
 - **Access does not cover it.** `docs.pigeon.dev` is public. Access keeps covering `pigeon.dev`'s API and `/mcp`.
 
 ### 5. The job, through the control plane
@@ -205,6 +205,12 @@ No logo, name, artwork, copy or font file is taken from either.
   | `docs.plan` | cobot | `plan` | `architecture.describe`, then `sites build` of `infra/pigeon/sites/docs/`. It stores the built site as a plan in R2: its file digests, and a file-level diff against what is live. It expires after 24 hours. |
   | `docs.publish` | cobot | `apply` | Syncs exactly that plan's files to the site's bucket, deletes stale keys, and checks the site live. It takes a plan ID. |
 
+- **The tree the run reads.**
+  - The image holds no checkout, and D1's `desired_state` holds only units, so `describe` and `sites build` read a source checkout instead.
+  - `docs.plan` takes `{ revision }`: the commit of `main` it describes. A trigger resolves it with `git ls-remote` on the instance's `repository`, and the plan records it.
+  - Before `describe`, cobot fetches that commit in the Runner, depth 1, into a fresh directory. It also fetches the site's pinned template tag. The repository is public, so this needs no credential.
+  - backplane runs `describe` on that directory, which stays stateless. Nothing is kept after the run.
+  - A Container test builds the site with no host mount.
 - **The path through the Worker:**
   1. The control-plane Worker's `Instance` Durable Object queues the run, per phase 4 §3.
   2. cobot `worker` starts a Runner Container and signs every request to it, per §5.
@@ -218,8 +224,9 @@ No logo, name, artwork, copy or font file is taken from either.
 
   A plan with no changed files is recorded and dropped, and asks for no approval.
 - **Credentials.**
-  - The run requests Cloudflare's existing `r2.write`.
-  - The capability schema gains a `bucket` scope beside `zone` and `account`, so the minted token can write only the site's bucket.
+  - Cloudflare's `capabilities.yaml` gains `r2.bucket.write`: `Workers R2 Storage Bucket Item Write`, with `scope: bucket`. The run requests it, and never the account-wide `r2.write`.
+  - The capability schema gains the `bucket` scope beside `zone` and `account`. Minting names the bucket in the token's resources, so the token can write that bucket's objects and nothing else.
+  - A test mints the token and shows a write to another bucket is refused.
   - It is minted at dispatch, reaches only that Container as `COBOT_CREDENTIALS`, and is revoked when the run ends, per §8.
 - **Roles.**
   - Backplane decides and records.
@@ -241,15 +248,16 @@ Its static-site bullets name `src/site-templates/` once the move lands.
 Each step is released before the next relies on it, and each passes `mise run ci`.
 
 1. This ADR, the amendments it adds to the two static-site ADRs, and the `CLAUDE.md` pointer. A design mock is reviewed outside the repository.
-2. `refactor(cobot)`: templates under `src/site-templates/<name>/`; `static_site.template.name`, with the unnamed fallback; the `site-template-blog` unit and tier; and sites in `<unit>/sites/<name>/`.
+2. `refactor(cobot)`: templates under `src/site-templates/<name>/`; `static_site.template.name`, with the unnamed fallback; the `site-template-blog` unit and tier; sites in `<unit>/sites/<name>/`; and `content: none`.
 3. `chore(workloads)`: the blog pins `name: blog` and `site-template-blog`'s first release. Then `refactor(cobot)` drops the fallback.
 4. `feat(backplane)`: `architecture.describe` and its layout (§2), with their tests.
 5. `feat(site-templates)`: the architecture template (§3), released as `site-template-architecture`.
 6. `feat(cobot)`: `sites build` writes `data/architecture.json` from `describe`.
 7. `feat(infra)`: §4's bucket, domain and rulesets, and `infra/pigeon/sites/docs/`. The owner applies `infra/pigeon` locally, then publishes the site.
 8. After phase 4's step 11:
-   - `feat(catalog)`: the `bucket` scope;
-   - `feat(backplane)`: `docs.plan` and `docs.publish`, and their triggers (§5).
+   - `feat(catalog)`: the `bucket` scope and `r2.bucket.write`;
+   - `feat(cobot)`: the revision checkout in the Runner (§5);
+  - `feat(backplane)`: `docs.plan` and `docs.publish`, and their triggers (§5).
 
 ### 8. Verification
 
