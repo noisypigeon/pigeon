@@ -42,6 +42,10 @@ pub fn run_with(
         "infra.validate" => infra_validate(instance).map(|(r, v)| respond(r, v)),
         "infra.plan" => infra_plan(instance, &request.args, &var).map(|r| respond(r, Vec::new())),
         "infra.apply" => infra_apply(instance, &request.args, &var).map(|r| respond(r, Vec::new())),
+        _ if op.control_plane() => Err(Error::Invalid(vec![format!(
+            "`{}` runs in the control plane, which holds every change",
+            op.name
+        )])),
         _ => unreachable!("every catalog entry is dispatched"),
     }
 }

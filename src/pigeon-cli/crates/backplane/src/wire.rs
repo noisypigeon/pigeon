@@ -2,7 +2,7 @@
 //! (control-plane ADR §1).
 
 use serde::{Deserialize, Serialize};
-use serde_json::{Map, Value};
+use serde_json::{Map, Value, json};
 
 use crate::Error;
 
@@ -60,6 +60,65 @@ impl Effect {
     }
 }
 
+/// An argument's type.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Kind {
+    /// A string.
+    String,
+    /// A string, number or boolean, read as text.
+    Text,
+    /// A list of strings.
+    Strings,
+}
+
+impl Kind {
+    fn accepts(self, v: &Value) -> bool {
+        match self {
+            Self::String => v.is_string(),
+            Self::Text => v.is_string() || v.is_number() || v.is_boolean(),
+            Self::Strings => v.as_array().is_some_and(|a| a.iter().all(Value::is_string)),
+        }
+    }
+
+    fn noun(self) -> &'static str {
+        match self {
+            Self::String => "a string",
+            Self::Text => "text",
+            Self::Strings => "a list of strings",
+        }
+    }
+
+    /// Its JSON Schema.
+    #[must_use]
+    pub fn schema(self) -> Value {
+        match self {
+            Self::String => json!({ "type": "string" }),
+            Self::Text => json!({ "type": ["string", "number", "boolean"] }),
+            Self::Strings => json!({ "type": "array", "items": { "type": "string" } }),
+        }
+    }
+}
+
+/// One argument an operation takes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct Arg {
+    /// Its name.
+    pub name: &'static str,
+    /// Whether every request names it.
+    pub required: bool,
+    /// Its type.
+    pub kind: Kind,
+}
+
+const fn arg(name: &'static str, required: bool, kind: Kind) -> Arg {
+    Arg {
+        name,
+        required,
+        kind,
+    }
+}
+
 /// One operation a surface may request.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Operation {
@@ -71,7 +130,50 @@ pub struct Operation {
     pub effect: Effect,
     /// What it does.
     pub summary: &'static str,
+    /// The arguments it takes.
+    pub args: &'static [Arg],
 }
+
+impl Operation {
+    /// Its arguments as a JSON Schema object, for MCP's `inputSchema`.
+    #[must_use]
+    pub fn input_schema(&self) -> Value {
+        let properties: Map<String, Value> = self
+            .args
+            .iter()
+            .map(|a| (a.name.to_string(), a.kind.schema()))
+            .collect();
+        let required: Vec<&str> = self
+            .args
+            .iter()
+            .filter(|a| a.required)
+            .map(|a| a.name)
+            .collect();
+        json!({
+            "type": "object",
+            "properties": properties,
+            "required": required,
+            "additionalProperties": false,
+        })
+    }
+
+    /// Whether only the control plane runs it, from its Durable Objects and D1.
+    #[must_use]
+    pub fn control_plane(&self) -> bool {
+        self.name.starts_with("change.") || self.name.starts_with("ci.")
+    }
+}
+
+const PR_FIELDS: &[Arg] = &[
+    arg("title", false, Kind::Text),
+    arg("body", false, Kind::Text),
+    arg("number", false, Kind::Text),
+    arg("files", false, Kind::Text),
+    arg("branch", false, Kind::Text),
+    arg("scope", false, Kind::Text),
+];
+
+const NUMBER: Arg = arg("number", true, Kind::Text);
 
 const CATALOG: &[Operation] = &[
     Operation {
@@ -79,69 +181,125 @@ const CATALOG: &[Operation] = &[
         engine: Engine::Backplane,
         effect: Effect::Read,
         summary: "Show the instance manifest",
+        args: &[],
     },
     Operation {
         name: "architecture.describe",
         engine: Engine::Backplane,
         effect: Effect::Read,
         summary: "Describe the instance's architecture as a graph and its layout",
+        args: &[],
     },
     Operation {
         name: "policy.check",
         engine: Engine::Sentinel,
         effect: Effect::Read,
         summary: "Check the instance against its policies (args: title?, body?, number?, files?, which add the pull-request policy; branch? and scope? add the change policy)",
+        args: PR_FIELDS,
     },
     Operation {
         name: "infra.validate",
         engine: Engine::Cobot,
         effect: Effect::Read,
         summary: "Validate every infrastructure and workload unit",
+        args: &[],
     },
     Operation {
         name: "change.scope",
         engine: Engine::Cobot,
         effect: Effect::Read,
         summary: "The checks a change needs, from the paths it touches, in the order to run them (args: files, one path per line)",
+        args: &[arg("files", true, Kind::Text)],
+    },
+    Operation {
+        name: "change.propose",
+        engine: Engine::Backplane,
+        effect: Effect::Plan,
+        summary: "Propose a change: its slug, Conventional Commit title, plan and scope (globs, one per line); returns its number and branch, change/<number>-<slug>",
+        args: &[
+            arg("slug", true, Kind::String),
+            arg("title", true, Kind::String),
+            arg("plan", true, Kind::String),
+            arg("scope", true, Kind::String),
+        ],
+    },
+    Operation {
+        name: "change.authorize",
+        engine: Engine::Backplane,
+        effect: Effect::Apply,
+        summary: "Approve a proposed change's plan, so its branch may be pushed; never by its proposer",
+        args: &[NUMBER],
+    },
+    Operation {
+        name: "change.pushed",
+        engine: Engine::Backplane,
+        effect: Effect::Build,
+        summary: "Report a push of a change's branch, when its push event may be missed; the control plane reads the head itself (args: number)",
+        args: &[NUMBER],
+    },
+    Operation {
+        name: "change.status",
+        engine: Engine::Backplane,
+        effect: Effect::Read,
+        summary: "A change's state, head, approvals, violations and each job's result",
+        args: &[NUMBER],
+    },
+    Operation {
+        name: "change.list",
+        engine: Engine::Backplane,
+        effect: Effect::Read,
+        summary: "Every change, newest first (args: state?)",
+        args: &[arg("state", false, Kind::String)],
+    },
+    Operation {
+        name: "change.approve",
+        engine: Engine::Backplane,
+        effect: Effect::Apply,
+        summary: "Approve a checked change's head for merge, naming that head's SHA; never by its proposer",
+        args: &[NUMBER, arg("sha", true, Kind::String)],
+    },
+    Operation {
+        name: "change.close",
+        engine: Engine::Backplane,
+        effect: Effect::Apply,
+        summary: "Close a change unmerged, stopping its jobs",
+        args: &[NUMBER],
+    },
+    Operation {
+        name: "ci.rerun",
+        engine: Engine::Backplane,
+        effect: Effect::Build,
+        summary: "Run one of a finished head's jobs again, and those its failure cancelled",
+        args: &[NUMBER, arg("job", true, Kind::String)],
     },
     Operation {
         name: "sites.build",
         engine: Engine::Cobot,
         effect: Effect::Build,
         summary: "Build static sites into the work directory with the instance's architecture as data; publishes nothing (args: sites?)",
+        args: &[arg("sites", false, Kind::Strings)],
     },
     Operation {
         name: "infra.plan",
         engine: Engine::Cobot,
         effect: Effect::Plan,
         summary: "Plan units and store the plan for 24 hours (args: units?; state, which serve supplies)",
+        args: &[
+            arg("state", true, Kind::String),
+            arg("units", false, Kind::Strings),
+        ],
     },
     Operation {
         name: "infra.apply",
         engine: Engine::Cobot,
         effect: Effect::Apply,
         summary: "Apply a stored, unexpired plan exactly (args: plan; state, which serve supplies)",
+        args: &[
+            arg("state", true, Kind::String),
+            arg("plan", true, Kind::String),
+        ],
     },
 ];
-
-/// The arguments an operation takes: each name, and whether it is required.
-fn arguments(name: &str) -> &'static [(&'static str, bool)] {
-    match name {
-        "policy.check" => &[
-            ("title", false),
-            ("body", false),
-            ("number", false),
-            ("files", false),
-            ("branch", false),
-            ("scope", false),
-        ],
-        "change.scope" => &[("files", true)],
-        "sites.build" => &[("sites", false)],
-        "infra.plan" => &[("state", true), ("units", false)],
-        "infra.apply" => &[("state", true), ("plan", true)],
-        _ => &[],
-    }
-}
 
 /// Every operation.
 #[must_use]
@@ -185,39 +343,23 @@ pub fn validate(request: &Request) -> Result<&'static Operation, Error> {
             request.operation
         )]));
     };
-    let allowed = arguments(op.name);
     let mut problems: Vec<String> = request
         .args
         .keys()
-        .filter(|k| !allowed.iter().any(|(a, _)| a == k))
+        .filter(|k| !op.args.iter().any(|a| a.name == k.as_str()))
         .map(|k| format!("`{}` takes no argument `{k}`", op.name))
         .collect();
     problems.extend(
-        allowed
+        op.args
             .iter()
-            .filter(|(a, required)| *required && !request.args.contains_key(*a))
-            .map(|(a, _)| format!("`{}` needs argument `{a}`", op.name)),
+            .filter(|a| a.required && !request.args.contains_key(a.name))
+            .map(|a| format!("`{}` needs argument `{}`", op.name, a.name)),
     );
-    for (name, value) in &request.args {
-        let ok = match name.as_str() {
-            "state" | "plan" => value.is_string(),
-            "title" | "body" | "number" | "files" | "branch" | "scope" => {
-                value.is_string() || value.is_number() || value.is_boolean()
-            }
-            "units" | "sites" => value
-                .as_array()
-                .is_some_and(|a| a.iter().all(Value::is_string)),
-            _ => true,
-        };
-        if !ok {
-            problems.push(format!(
-                "argument `{name}` must be {}",
-                match name.as_str() {
-                    "units" | "sites" => "a list of strings",
-                    "state" | "plan" => "a string",
-                    _ => "text",
-                }
-            ));
+    for a in op.args {
+        if let Some(v) = request.args.get(a.name)
+            && !a.kind.accepts(v)
+        {
+            problems.push(format!("argument `{}` must be {}", a.name, a.kind.noun()));
         }
     }
     if problems.is_empty() {

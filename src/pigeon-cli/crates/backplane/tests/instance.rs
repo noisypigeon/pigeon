@@ -129,6 +129,12 @@ fn catalog_names_are_unique_and_dotted() {
     assert_eq!(
         changing,
         [
+            ("change.propose", Effect::Plan),
+            ("change.authorize", Effect::Apply),
+            ("change.pushed", Effect::Build),
+            ("change.approve", Effect::Apply),
+            ("change.close", Effect::Apply),
+            ("ci.rerun", Effect::Build),
             ("sites.build", Effect::Build),
             ("infra.plan", Effect::Plan),
             ("infra.apply", Effect::Apply)
