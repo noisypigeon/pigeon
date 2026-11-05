@@ -1,2 +1,2 @@
-version: 0.1.1
+version: 0.1.2
 description: An account API token for one generation, with one policy per capability.

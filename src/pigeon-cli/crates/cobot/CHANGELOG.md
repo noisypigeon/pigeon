@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.29 (2026-11-05)
+
+- refactor(backplane): shared wire types, and both worker builds compiling ([#118](https://github.com/noisypigeon/pigeon/pull/118))
+
 ## v0.1.28 (2026-11-05)
 
 - feat(backplane): serve drains on SIGTERM ([#117](https://github.com/noisypigeon/pigeon/pull/117))

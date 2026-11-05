@@ -2,6 +2,7 @@
 
 ## 2026-11-05
 
+- refactor(backplane): shared wire types, and both worker builds compiling ([#118](https://github.com/noisypigeon/pigeon/pull/118))
 - feat(backplane): serve drains on SIGTERM ([#117](https://github.com/noisypigeon/pigeon/pull/117))
 - feat(cobot): write state back per unit, and record a completed apply ([#116](https://github.com/noisypigeon/pigeon/pull/116))
 - docs(adr): the control plane, phase 4 ([#115](https://github.com/noisypigeon/pigeon/pull/115))

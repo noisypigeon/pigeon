@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.13 (2026-11-05)
+
+- refactor(backplane): shared wire types, and both worker builds compiling ([#118](https://github.com/noisypigeon/pigeon/pull/118))
+
 ## v0.1.12 (2026-11-05)
 
 - docs(infra): note the D1 provider update; keep the location guard ([#109](https://github.com/noisypigeon/pigeon/pull/109))

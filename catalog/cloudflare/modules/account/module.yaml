@@ -1,2 +1,2 @@
-version: 0.1.1
+version: 0.1.2
 description: The one account the provider's token sees, looked up and never written down.
