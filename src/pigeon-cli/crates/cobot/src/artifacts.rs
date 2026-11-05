@@ -182,10 +182,88 @@ impl<'a> Client<'a> {
             (at_repo.clone(), json!({ "scope": scope, "ttl": TOKEN_TTL })),
             (at_repo, json!({ "scope": scope })),
         ])?;
-        v.as_str()
-            .or_else(|| v["token"].as_str())
-            .or_else(|| v["value"].as_str())
-            .map(str::to_string)
-            .ok_or_else(|| format!("repository `{name}`: the API gave no token"))
+        token_in(&v).ok_or_else(|| {
+            format!(
+                "repository `{name}`: no token in the API's answer, whose fields are {}",
+                shape(&v)
+            )
+        })
+    }
+}
+
+/// Where a token may sit in an answer, by field name.
+const TOKEN_FIELDS: [&str; 6] = [
+    "token",
+    "plaintext",
+    "value",
+    "secret",
+    "access_token",
+    "password",
+];
+
+/// The token in an answer: the answer itself, a token field, or one inside `token` or `data`.
+fn token_in(v: &Value) -> Option<String> {
+    if let Some(s) = v.as_str() {
+        return Some(s.to_string());
+    }
+    TOKEN_FIELDS
+        .iter()
+        .find_map(|k| v[*k].as_str())
+        .map(str::to_string)
+        .or_else(|| {
+            ["token", "data", "result"]
+                .iter()
+                .find_map(|k| v.get(*k).filter(|n| n.is_object()).and_then(token_in))
+        })
+}
+
+/// An answer's field names and types, never its values.
+fn shape(v: &Value) -> String {
+    match v {
+        Value::Object(o) => {
+            let fields: Vec<String> = o
+                .iter()
+                .map(|(k, x)| match x {
+                    Value::Object(_) => format!("{k}: {}", shape(x)),
+                    Value::Array(_) => format!("{k}: array"),
+                    Value::String(_) => format!("{k}: string"),
+                    Value::Number(_) => format!("{k}: number"),
+                    Value::Bool(_) => format!("{k}: bool"),
+                    Value::Null => format!("{k}: null"),
+                })
+                .collect();
+            format!("{{ {} }}", fields.join(", "))
+        }
+        Value::Array(_) => "an array".into(),
+        Value::Null => "empty".into(),
+        _ => "a scalar".into(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{shape, token_in};
+    use serde_json::json;
+
+    #[test]
+    fn a_token_is_found_where_the_api_puts_it_and_never_shown() {
+        assert_eq!(token_in(&json!("t1")).as_deref(), Some("t1"));
+        assert_eq!(
+            token_in(&json!({ "plaintext": "t2" })).as_deref(),
+            Some("t2")
+        );
+        assert_eq!(
+            token_in(&json!({ "token": { "value": "t3" } })).as_deref(),
+            Some("t3")
+        );
+        assert_eq!(
+            token_in(&json!({ "data": { "access_token": "t4" } })).as_deref(),
+            Some("t4")
+        );
+        assert_eq!(token_in(&json!({ "id": "x" })), None);
+        let shown =
+            shape(&json!({ "id": "secret-id", "nested": { "key": "secret-value" }, "n": 1 }));
+        assert_eq!(shown, "{ id: string, n: number, nested: { key: string } }");
+        assert!(!shown.contains("secret"));
     }
 }
