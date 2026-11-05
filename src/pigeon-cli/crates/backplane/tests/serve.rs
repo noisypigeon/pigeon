@@ -927,23 +927,27 @@ fn a_stop_drains_requests_in_hand_then_returns() {
     )
     .expect("bind");
     let addr = server.local_addr().expect("addr");
-    let stop = Arc::new(std::sync::atomic::AtomicBool::new(false));
-    let serving = {
-        let stop = Arc::clone(&stop);
-        std::thread::spawn(move || server.serve_until(var, &stop))
-    };
+    let stop = server.stopper();
+    let serving = std::thread::spawn(move || server.serve(var));
 
+    let half_sent = |body: &[u8]| {
+        let mut s = TcpStream::connect(addr).expect("connect");
+        s.set_read_timeout(Some(Duration::from_secs(10)))
+            .expect("timeout");
+        write!(
+            s,
+            "POST /v0/run HTTP/1.1\r\nhost: test\r\nauthorization: Bearer {TOKEN}\r\ncontent-length: {}\r\n\r\n",
+            body.len()
+        )
+        .expect("head");
+        s.write_all(&body[..5]).expect("half the body");
+        s
+    };
     let body = br#"{"operation":"instance.show","args":{}}"#;
-    let mut s = TcpStream::connect(addr).expect("connect");
-    s.set_read_timeout(Some(Duration::from_secs(10)))
-        .expect("timeout");
-    write!(
-        s,
-        "POST /v0/run HTTP/1.1\r\nhost: test\r\nauthorization: Bearer {TOKEN}\r\ncontent-length: {}\r\n\r\n",
-        body.len()
-    )
-    .expect("head");
-    s.write_all(&body[..5]).expect("half the body");
+    let apply =
+        br#"{"operation":"infra.apply","args":{"plan":"00000000000000000000000000000000"}}"#;
+    let mut s = half_sent(body);
+    let mut late_apply = half_sent(apply);
     std::thread::sleep(Duration::from_millis(300));
 
     stop.store(true, std::sync::atomic::Ordering::SeqCst);
@@ -955,6 +959,13 @@ fn a_stop_drains_requests_in_hand_then_returns() {
     assert!(
         out.starts_with("HTTP/1.1 200 "),
         "answered while draining: {out}"
+    );
+    late_apply.write_all(&apply[5..]).expect("the rest");
+    let mut out = String::new();
+    let _ = late_apply.read_to_string(&mut out);
+    assert!(
+        out.starts_with("HTTP/1.1 503 "),
+        "no apply starts while draining: {out}"
     );
 
     let started = Instant::now();

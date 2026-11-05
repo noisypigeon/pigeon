@@ -153,6 +153,8 @@ pub struct Server {
     seen: Mutex<HashMap<String, u64>>,
     /// Held by `plan` or `apply`, which share the state's mirror; a second gets 409, never waits.
     changing: Mutex<()>,
+    /// Set to drain: no new connection is taken, and no new plan or apply starts.
+    stop: Arc<AtomicBool>,
 }
 
 impl Server {
@@ -208,6 +210,7 @@ impl Server {
             signed,
             seen: Mutex::new(HashMap::new()),
             changing: Mutex::new(()),
+            stop: Arc::new(AtomicBool::new(false)),
         })
     }
 
@@ -226,26 +229,25 @@ impl Server {
 
     /// Answers one request per connection on [`WORKERS`] threads until the process ends;
     /// passphrases and credentials are read through `var`.
-    pub fn serve(&self, var: impl Fn(&str) -> Option<String> + Sync) {
-        self.serve_until(var, &AtomicBool::new(false));
-    }
-
-    /// As [`Server::serve`], until `stop` is set: then it accepts no new connection, finishes
-    /// those in hand, and returns (control-plane ADR §7).
+    ///
+    /// When [`Server::stopper`] is set it drains: it takes no new connection, refuses a new plan or
+    /// apply with 503, finishes the requests in hand, and returns (control-plane ADR §7).
     ///
     /// # Panics
     ///
     /// If the listener cannot be made non-blocking.
-    pub fn serve_until(&self, var: impl Fn(&str) -> Option<String> + Sync, stop: &AtomicBool) {
+    pub fn serve(&self, var: impl Fn(&str) -> Option<String> + Sync) {
         self.listener
             .set_nonblocking(true)
             .expect("a bound listener can be made non-blocking");
         std::thread::scope(|scope| {
             for _ in 0..WORKERS {
                 scope.spawn(|| {
-                    while !stop.load(Ordering::SeqCst) {
+                    while !self.stopping() {
                         match self.listener.accept() {
-                            Ok((stream, _)) if stream.set_nonblocking(false).is_ok() => {
+                            Ok((stream, _))
+                                if !self.stopping() && stream.set_nonblocking(false).is_ok() =>
+                            {
                                 self.connection(stream, &var);
                             }
                             Ok(_) | Err(_) => std::thread::sleep(POLL),
@@ -254,6 +256,16 @@ impl Server {
                 });
             }
         });
+    }
+
+    /// The flag that drains [`Server::serve`].
+    #[must_use]
+    pub fn stopper(&self) -> Arc<AtomicBool> {
+        Arc::clone(&self.stop)
+    }
+
+    fn stopping(&self) -> bool {
+        self.stop.load(Ordering::SeqCst)
     }
 
     fn connection(&self, stream: TcpStream, var: &impl Fn(&str) -> Option<String>) {
@@ -460,6 +472,12 @@ impl Server {
             }
             Err(e) => return (500, json!({ "error": e.to_string() })),
         };
+        if matches!(effect, Some(Effect::Plan | Effect::Apply)) && self.stopping() {
+            return (
+                503,
+                json!({ "error": "draining: no new plan or apply starts; retry on a new server" }),
+            );
+        }
         let _guard = if matches!(effect, Some(Effect::Plan | Effect::Apply)) {
             match self.changing.try_lock() {
                 Ok(g) => Some(g),
@@ -714,6 +732,7 @@ fn write_response(
         413 => "Content Too Large",
         417 => "Expectation Failed",
         431 => "Request Header Fields Too Large",
+        503 => "Service Unavailable",
         _ => "Internal Server Error",
     };
     let signed = signature
