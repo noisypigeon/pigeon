@@ -72,13 +72,39 @@ fn render(args: &CobotRun) -> Result<(), cobot::Error> {
     Ok(())
 }
 
+/// Each `NAME=FILE`, read as JSON.
+fn data_files(
+    args: &[String],
+) -> Result<std::collections::BTreeMap<String, serde_json::Value>, cobot::Error> {
+    let mut out = std::collections::BTreeMap::new();
+    for arg in args {
+        let fail = |message: String| cobot::Error::Io {
+            path: arg.into(),
+            message,
+        };
+        let (name, file) = arg
+            .split_once('=')
+            .ok_or_else(|| fail("--data takes NAME=FILE".into()))?;
+        if !cobot::sites::is_data_name(name) {
+            return Err(fail(
+                "a data name is lowercase letters, digits and dashes".into(),
+            ));
+        }
+        let text = fs::read_to_string(file).map_err(|e| fail(e.to_string()))?;
+        let value = serde_json::from_str(&text).map_err(|e| fail(e.to_string()))?;
+        out.insert(name.to_string(), value);
+    }
+    Ok(out)
+}
+
 fn sites_build(args: &SitesBuild) -> Result<(), cobot::Error> {
     let root = args.root.canonicalize().map_err(|e| cobot::Error::Io {
         path: args.root.clone(),
         message: e.to_string(),
     })?;
+    let data = data_files(&args.data)?;
     let sites = cobot::sites::find(&root, &args.workloads)?;
-    for b in cobot::sites::build(&root, &sites)? {
+    for b in cobot::sites::build_with(&root, &sites, &data)? {
         let on: Vec<&str> = b
             .features
             .iter()
@@ -101,7 +127,8 @@ fn sites_build(args: &SitesBuild) -> Result<(), cobot::Error> {
 
 fn sites_publish(args: &SitesPublish) -> Result<(), cobot::Error> {
     let session = context(&args.run)?;
-    let published = cobot::publish(&session.ctx, &args.run.units, args.checks)?;
+    let data = data_files(&args.data)?;
+    let published = cobot::publish(&session.ctx, &args.run.units, args.checks, &data)?;
     let mut failed = Vec::new();
     for p in &published {
         println!(

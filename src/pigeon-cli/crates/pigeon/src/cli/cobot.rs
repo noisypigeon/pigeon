@@ -116,6 +116,9 @@ pub struct SitesBuild {
     pub root: PathBuf,
     /// Workload paths, e.g. workloads/noisypigeon.com/blog [default: every static site]
     pub workloads: Vec<String>,
+    /// A JSON file each site's template reads as `data/<NAME>.json`, as NAME=FILE; repeatable
+    #[arg(long = "data", value_name = "NAME=FILE")]
+    pub data: Vec<String>,
 }
 
 /// `pigeon cobot sites publish` arguments.
@@ -127,6 +130,9 @@ pub struct SitesPublish {
     /// How many times each live check is tried, 15 seconds apart; 0 skips them
     #[arg(long, default_value_t = 12)]
     pub checks: u32,
+    /// A JSON file each site's template reads as `data/<NAME>.json`, as NAME=FILE; repeatable
+    #[arg(long = "data", value_name = "NAME=FILE")]
+    pub data: Vec<String>,
 }
 
 /// A unit's secrets file.

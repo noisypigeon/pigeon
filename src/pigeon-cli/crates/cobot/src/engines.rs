@@ -716,13 +716,19 @@ pub struct Published {
 }
 
 /// Builds each static site, syncs it to its bucket with its site token, then
-/// runs the live checks; `checks` of 0 skips them.
+/// runs the live checks; `checks` of 0 skips them, and `data` is as for
+/// [`sites::build_with`].
 ///
 /// # Errors
 ///
 /// [`Error::Pending`] while `infra/cloudflare`'s state lacks a site's token,
 /// or any [`Error`] from building or syncing; never a credential.
-pub fn publish(ctx: &Context, wanted: &[String], checks: u32) -> Result<Vec<Published>, Error> {
+pub fn publish(
+    ctx: &Context,
+    wanted: &[String],
+    checks: u32,
+    data: &BTreeMap<String, Value>,
+) -> Result<Vec<Published>, Error> {
     let root = ctx.root.canonicalize().map_err(io(&ctx.root))?;
     let state = absolute(&ctx.state)?;
     let allow = providers::Allowlist::load(&ctx.providers)?;
@@ -730,7 +736,7 @@ pub fn publish(ctx: &Context, wanted: &[String], checks: u32) -> Result<Vec<Publ
     if found.is_empty() {
         return Ok(Vec::new());
     }
-    let built = sites::build(&root, &found)?;
+    let built = sites::build_with(&root, &found, data)?;
     let shown = infra_state(ctx, &root, &state, &allow)?.unwrap_or_else(|| "{}".into());
     let mut out = Vec::new();
     for b in built {

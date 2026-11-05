@@ -312,6 +312,26 @@ fn copy_dir(from: &Path, to: &Path) -> Result<(), Error> {
 /// an unknown feature, settings the contract rejects, a misnamed post or an
 /// unreadable site, [`Error::Tool`] if Zola fails.
 pub fn build(root: &Path, sites: &[Site]) -> Result<Vec<Built>, Error> {
+    build_with(root, sites, &BTreeMap::new())
+}
+
+/// [`build`], with each of `data` written to every site's `data/<name>.json` for its
+/// template's `load_data`; see the architecture-site ADR §3.
+///
+/// # Errors
+///
+/// As [`build`], and [`Error::Io`] for a data name that is not `[a-z0-9-]+`.
+pub fn build_with(
+    root: &Path,
+    sites: &[Site],
+    data: &BTreeMap<String, Value>,
+) -> Result<Vec<Built>, Error> {
+    if let Some(bad) = data.keys().find(|k| !is_data_name(k)) {
+        return Err(Error::Io {
+            path: PathBuf::from(format!("data/{bad}.json")),
+            message: "a data name is lowercase letters, digits and dashes".into(),
+        });
+    }
     let commit = String::from_utf8_lossy(&git(root, &["rev-parse", "--short", "HEAD"])?)
         .trim()
         .to_string();
@@ -335,6 +355,15 @@ pub fn build(root: &Path, sites: &[Site]) -> Result<Vec<Built>, Error> {
             message: "static_site.site is required".into(),
         })?;
         assemble(root, site, settings, &declared, &base, &features, &work)?;
+        for (name, value) in data {
+            let path = work.join("data").join(format!("{name}.json"));
+            fs::create_dir_all(work.join("data")).map_err(io(&path))?;
+            let text = serde_json::to_string(value).map_err(|e| Error::Io {
+                path: path.clone(),
+                message: e.to_string(),
+            })?;
+            fs::write(&path, text).map_err(io(&path))?;
+        }
         run(
             Command::new("zola")
                 .arg("build")
@@ -561,6 +590,15 @@ fn set_json(doc: &mut Value, key: &str, value: Value) -> Result<(), String> {
             .or_insert_with(|| Value::Object(serde_json::Map::new()));
     }
     Ok(())
+}
+
+/// Whether `name` may name a data file: `[a-z0-9-]+`.
+#[must_use]
+pub fn is_data_name(name: &str) -> bool {
+    !name.is_empty()
+        && name
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
 }
 
 /// A site whose template has no content must have no `site/`.

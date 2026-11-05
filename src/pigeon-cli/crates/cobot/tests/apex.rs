@@ -1430,7 +1430,7 @@ fn named_repo() -> TempDir {
     write(
         root,
         &format!("{t}/templates/index.html"),
-        "<title>{{ config.title }}</title>{% if config.extra.features.motion %}moving{% endif %}\n",
+        "<title>{{ config.title }}</title>{% if config.extra.features.motion %}moving{% endif %}{% set d = load_data(path=\"data/x.json\", required=false) %}{% if d %}[{{ d.value }}]{% endif %}\n",
     );
     write(root, &format!("{BLOG}/config.yaml"), NAMED);
     git_in(root, &["init", "-q"]);
@@ -1496,6 +1496,42 @@ fn a_named_template_with_no_content_builds_from_a_clean_checkout() {
         index.contains("<title>Diagram</title>") && index.contains("moving"),
         "{index}"
     );
+}
+
+#[test]
+fn a_site_reads_the_data_it_is_given() {
+    if !zola_available() {
+        eprintln!("skipped: zola is not on PATH");
+        return;
+    }
+    let repo = named_repo();
+    let root = repo.path();
+    let sites = cobot::sites::find(root, &[]).expect("find");
+    let index = |built: &[cobot::sites::Built]| {
+        fs::read_to_string(built[0].public.join("index.html")).expect("index")
+    };
+    let plain = cobot::sites::build(root, &sites).expect("build");
+    assert!(!index(&plain).contains('['), "no data, nothing drawn");
+    let data = BTreeMap::from([("x".to_string(), json!({ "value": "from-data" }))]);
+    let built = cobot::sites::build_with(root, &sites, &data).expect("build");
+    assert!(index(&built).contains("[from-data]"), "{}", index(&built));
+    assert!(
+        built[0]
+            .public
+            .with_file_name("data")
+            .join("x.json")
+            .is_file()
+    );
+}
+
+#[test]
+fn a_data_name_must_be_lowercase() {
+    let repo = named_repo();
+    let root = repo.path();
+    let sites = cobot::sites::find(root, &[]).expect("find");
+    let data = BTreeMap::from([("Bad_Name".to_string(), json!({}))]);
+    let err = cobot::sites::build_with(root, &sites, &data).expect_err("refused");
+    assert!(err.to_string().contains("data name"), "{err}");
 }
 
 #[test]
