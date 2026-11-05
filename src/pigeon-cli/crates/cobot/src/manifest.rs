@@ -106,6 +106,23 @@ pub fn is_content(p: &str) -> bool {
     CONTENT.is_match(p) && !p.split('/').any(|s| s == "." || s == "..")
 }
 
+/// Whether `rel` is a content path under `root` whose existing components are no symlinks.
+fn inside(root: &Path, rel: &str) -> bool {
+    if !is_content(rel) {
+        return false;
+    }
+    let mut at = root.to_path_buf();
+    for part in rel.split('/') {
+        at.push(part);
+        match fs::symlink_metadata(&at) {
+            Ok(m) if m.file_type().is_symlink() => return false,
+            Ok(_) => {}
+            Err(_) => return true,
+        }
+    }
+    true
+}
+
 /// The manifest's `moves` at `root`, read without its kinds; empty without a v1 manifest.
 #[must_use]
 pub fn moves(root: &Path) -> Vec<Move> {
@@ -166,23 +183,64 @@ fn role(schema: &Value) -> Role {
     }
 }
 
-/// The manifest at `root`, its kinds read from `platform`; `None` when `root` has no v1
+/// One `units.<id>` entry, its kind read from `platform`; a message when it is not one.
+fn entry(id: &str, value: &Value, platform: &Path) -> Result<Entry, String> {
+    if !is_id(id) {
+        return Err("is not a unit ID (`<area>/<name>`, lowercase, no `.` or `..` segment)".into());
+    }
+    let fields = value.as_object().ok_or("must be a map with `kind`")?;
+    let kind = fields
+        .get("kind")
+        .and_then(Value::as_str)
+        .ok_or("needs `kind: <catalog>/<kind>`")?;
+    if !KIND.is_match(kind) {
+        return Err(format!("kind `{kind}` is not `<catalog>/<kind>`"));
+    }
+    let schema: Value = fs::read_to_string(kind_schema(platform, kind))
+        .map_err(|_| format!("no kind `{kind}` on the platform"))
+        .and_then(|t| serde_json::from_str(&t).map_err(|e| format!("kind `{kind}`: {e}")))?;
+    let settings: Map<String, Value> = fields
+        .iter()
+        .filter(|(k, _)| k.as_str() != "kind")
+        .map(|(k, v)| (k.clone(), v.clone()))
+        .collect();
+    Ok(Entry {
+        kind: kind.to_string(),
+        role: role(&schema),
+        schema,
+        settings: Value::Object(settings),
+    })
+}
+
+/// The manifest at `root`, its kinds read from `platform`; `None` when `root` has no
 /// `config.yaml`. Problems are `(path, message)`.
 #[must_use]
 pub fn load(root: &Path, platform: &Path) -> Option<(Manifest, Vec<(String, String)>)> {
-    let text = fs::read_to_string(root.join(FILE)).ok()?;
+    let path = root.join(FILE);
+    if !path.exists() {
+        return None;
+    }
     let empty = || Manifest {
         root: root.to_path_buf(),
         name: String::new(),
         units: BTreeMap::new(),
         moves: Vec::new(),
     };
-    let value: Value = match serde_saphyr::from_str(&text) {
+    let value: Value = match fs::read_to_string(&path)
+        .map_err(|e| e.to_string())
+        .and_then(|t| serde_saphyr::from_str(&t).map_err(|e| e.to_string()))
+    {
         Ok(v) => v,
-        Err(e) => return Some((empty(), vec![(FILE.into(), e.to_string())])),
+        Err(e) => return Some((empty(), vec![(FILE.into(), e)])),
     };
     if value["schema"] != SCHEMA {
-        return None;
+        return Some((
+            empty(),
+            vec![(
+                FILE.into(),
+                format!("an instance's root {FILE} is manifest `schema: {SCHEMA}`"),
+            )],
+        ));
     }
     let mut problems = Vec::new();
     let raw: Raw = match serde_json::from_value(value) {
@@ -199,53 +257,13 @@ pub fn load(root: &Path, platform: &Path) -> Option<(Manifest, Vec<(String, Stri
         }
     }
     let mut units = BTreeMap::new();
-    for (id, entry) in raw.units {
-        let at = format!("{FILE}: units.{id}");
-        if !is_id(&id) {
-            problems.push((
-                at,
-                "is not a unit ID (`<area>/<name>`, lowercase, no `.` or `..` segment)".into(),
-            ));
-            continue;
-        }
-        let Some(fields) = entry.as_object() else {
-            problems.push((at, "must be a map with `kind`".into()));
-            continue;
-        };
-        let Some(kind) = fields.get("kind").and_then(Value::as_str) else {
-            problems.push((at, "needs `kind: <catalog>/<kind>`".into()));
-            continue;
-        };
-        if !KIND.is_match(kind) {
-            problems.push((at, format!("kind `{kind}` is not `<catalog>/<kind>`")));
-            continue;
-        }
-        let path = kind_schema(platform, kind);
-        let schema = match fs::read_to_string(&path)
-            .map_err(|_| format!("no kind `{kind}` on the platform"))
-            .and_then(|t| {
-                serde_json::from_str::<Value>(&t).map_err(|e| format!("kind `{kind}`: {e}"))
-            }) {
-            Ok(s) => s,
-            Err(e) => {
-                problems.push((at, e));
-                continue;
+    for (id, value) in raw.units {
+        match entry(&id, &value, platform) {
+            Ok(e) => {
+                units.insert(id, e);
             }
-        };
-        let settings: Map<String, Value> = fields
-            .iter()
-            .filter(|(k, _)| k.as_str() != "kind")
-            .map(|(k, v)| (k.clone(), v.clone()))
-            .collect();
-        units.insert(
-            id,
-            Entry {
-                kind: kind.to_string(),
-                role: role(&schema),
-                schema,
-                settings: Value::Object(settings),
-            },
-        );
+            Err(e) => problems.push((format!("{FILE}: units.{id}"), e)),
+        }
     }
     for m in &raw.moves {
         for p in [&m.from, &m.to] {
@@ -301,24 +319,35 @@ impl Manifest {
         config
     }
 
-    /// A unit's content directory under the root, from its `content` setting.
+    /// A unit's content directory under the root, from its `content` setting; `None` unless it
+    /// is a content path that reaches no symlink and stays inside the root.
     #[must_use]
     pub fn content(&self, id: &str) -> Option<PathBuf> {
         let rel = self.units.get(id)?.settings["content"].as_str()?;
-        is_content(rel).then(|| self.root.join(rel))
+        inside(&self.root, rel).then(|| self.root.join(rel))
     }
 
     fn problems(&self) -> Vec<(String, String)> {
         let mut out = Vec::new();
         let mut names: BTreeMap<(String, String), &str> = BTreeMap::new();
+        let mut zones: BTreeMap<&str, &str> = BTreeMap::new();
+        let mut buckets: BTreeMap<String, &str> = BTreeMap::new();
         for (id, e) in &self.units {
             let at = format!("{FILE}: units.{id}");
             if let Some(c) = e.settings.get("content")
-                && !c.as_str().is_some_and(is_content)
+                && !c.as_str().is_some_and(|c| inside(&self.root, c))
             {
                 out.push((
                     at.clone(),
-                    "`content` is a relative path inside the instance".into(),
+                    "`content` is a relative path inside the instance, through no symlink".into(),
+                ));
+            }
+            if e.role == Role::Zone
+                && let Some(first) = zones.insert(name(id), id)
+            {
+                out.push((
+                    at.clone(),
+                    format!("declares zone {} again, after {first}", name(id)),
                 ));
             }
             if e.role == Role::Zone
@@ -342,9 +371,22 @@ impl Manifest {
             }
             if let Some(first) = names.insert((zone.to_string(), name(id).to_string()), id) {
                 out.push((
-                    format!("{FILE}: units.{id}"),
+                    at.clone(),
                     format!("serves {zone} under the same name as {first}"),
                 ));
+            }
+            let bucket = crate::static_site::bucket_name(zone, name(id));
+            if bucket.len() > crate::static_site::BUCKET_MAX {
+                out.push((
+                    at.clone(),
+                    format!(
+                        "bucket `{bucket}` is longer than R2's {} characters",
+                        crate::static_site::BUCKET_MAX
+                    ),
+                ));
+            }
+            if let Some(first) = buckets.insert(bucket.clone(), id) {
+                out.push((at, format!("bucket `{bucket}` is also {first}'s")));
             }
         }
         out

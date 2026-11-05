@@ -218,6 +218,17 @@ fn a_bad_manifest_names_what_is_wrong() {
             "description: \"\"",
             "`description` must not be empty",
         ),
+        ("schema: v1", "schema: v2", "is manifest `schema: v1`"),
+        (
+            "  sites/blog:\n",
+            "  zones/again/noisypigeon.com:\n    kind: cloudflare/zone\n    services: {}\n    records: {}\n  sites/blog:\n",
+            "declares zone noisypigeon.com again",
+        ),
+        (
+            "sites/blog:\n",
+            "sites/a-very-long-site-name-that-with-its-zone-overflows-r2:\n",
+            "longer than R2's 63 characters",
+        ),
     ] {
         let text = manifest().replace(from, to);
         assert_ne!(text, manifest(), "{from}");
@@ -228,6 +239,88 @@ fn a_bad_manifest_names_what_is_wrong() {
             "want {want:?}: {got:?}"
         );
     }
+}
+
+#[test]
+fn two_sites_on_one_bucket_are_refused() {
+    let platform = platform();
+    let text = manifest().replace(
+        "moves:",
+        "  zones/a-b.example:
+    kind: cloudflare/zone
+    services: {}
+    records: {}
+  zones/a.b-example:
+    kind: cloudflare/zone
+    services: {}
+    records: {}
+  sites/one/blog:
+    kind: cloudflare/static-site
+    zone: a-b.example
+    hosts: [\"@\"]
+    template: { name: blog, version: 1.0.2 }
+    site: {}
+  sites/two/blog:
+    kind: cloudflare/static-site
+    zone: a.b-example
+    hosts: [\"@\"]
+    template: { name: blog, version: 1.0.2 }
+    site: {}
+moves:",
+    );
+    let inst = instance(&text);
+    let got = problems(inst.path(), platform.path());
+    assert!(
+        got.iter()
+            .any(|p| p.contains("bucket `blog-a-b-example` is also sites/one/blog's")),
+        "{got:?}"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn content_through_a_symlink_is_refused() {
+    let platform = platform();
+    let outside = TempDir::new().expect("outside");
+    write(outside.path(), "posts/secret.md", "not for the site");
+    let inst = instance(&manifest().replace("content: sites/blog", "content: sites/linked"));
+    std::os::unix::fs::symlink(outside.path(), inst.path().join("sites/linked")).expect("link");
+    let got = problems(inst.path(), platform.path());
+    assert!(
+        got.iter().any(|p| p.contains("through no symlink")),
+        "{got:?}"
+    );
+    assert!(
+        cobot::sites::find_in(inst.path(), platform.path(), &[]).is_err(),
+        "an invalid instance builds nothing"
+    );
+}
+
+#[test]
+fn a_stored_plan_sees_a_change_to_its_units_settings() {
+    let platform = platform();
+    let inst = instance(&manifest());
+    let state = TempDir::new().expect("state");
+    let digest = |root: &Path| {
+        let (units, _) = cobot::unit::discover_in(root, platform.path());
+        units
+            .iter()
+            .map(|u| {
+                let work = cobot::render(root, &platform.path().join(".config"), u, state.path())
+                    .expect("render");
+                cobot::plans::digest(u, &work).expect("digest")
+            })
+            .collect::<Vec<_>>()
+    };
+    let before = digest(inst.path());
+    write(
+        inst.path(),
+        "config.yaml",
+        &manifest().replace("hosts: [\"@\", www]", "hosts: [\"@\"]"),
+    );
+    let after = digest(inst.path());
+    assert_ne!(before[0], after[0], "the site's own hosts changed");
+    assert_ne!(before[1], after[1], "the zone's rules follow its sites");
 }
 
 #[test]
