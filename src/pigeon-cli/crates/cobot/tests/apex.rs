@@ -1389,6 +1389,111 @@ fn contract_repo() -> TempDir {
     repo
 }
 
+const NAMED: &str = "static_site:
+  template: { name: diagram, version: 0.1.0 }
+  site: { title: Diagram, description: A diagram. }
+";
+
+/// A repo whose blog names a template with no content, `src/site-templates/diagram`.
+fn named_repo() -> TempDir {
+    let repo = site_repo();
+    let root = repo.path();
+    let t = "src/site-templates/diagram";
+    write(
+        root,
+        &format!("{t}/template.yaml"),
+        "version: 0.1.0\nzola: 0.23.6\nfeatures:\n  motion: { default: true, description: Moving edges. }\ncontent: none\n",
+    );
+    write(
+        root,
+        &format!("{t}/schema.json"),
+        r#"{"type": "object", "additionalProperties": false, "required": ["title", "description"],
+  "properties": {
+    "title": {"type": "string", "x-site": [{"file": "config.toml", "key": "title"}, {"file": "static/manifest.json", "key": "name"}]},
+    "description": {"type": "string", "x-site": [{"file": "config.toml", "key": "description"}]}}}"#,
+    );
+    write(
+        root,
+        &format!("{t}/theme.toml"),
+        "name = \"site-template-diagram\"\n",
+    );
+    write(
+        root,
+        &format!("{t}/scaffold/config.toml"),
+        "theme = \"placeholder\"\ncompile_sass = false\nbuild_search_index = false\n",
+    );
+    write(root, &format!("{t}/scaffold/static/manifest.json"), "{}\n");
+    write(
+        root,
+        &format!("{t}/templates/index.html"),
+        "<title>{{ config.title }}</title>{% if config.extra.features.motion %}moving{% endif %}\n",
+    );
+    write(root, &format!("{BLOG}/config.yaml"), NAMED);
+    git_in(root, &["init", "-q"]);
+    git_in(root, &["add", "-A"]);
+    git_in(root, &["commit", "-q", "-m", "init"]);
+    git_in(root, &["tag", "site-template-diagram/v0.1.0"]);
+    repo
+}
+
+#[test]
+fn a_named_template_resolves_its_own_project_and_tag() {
+    let repo = named_repo();
+    let sites = cobot::sites::find(repo.path(), &[]).expect("find");
+    assert_eq!(
+        (
+            sites[0].template.as_deref(),
+            sites[0].tag(),
+            sites[0].project()
+        ),
+        (
+            Some("diagram"),
+            "site-template-diagram/v0.1.0".to_string(),
+            "src/site-templates/diagram".to_string()
+        )
+    );
+}
+
+#[test]
+fn a_site_whose_template_has_no_content_refuses_a_site_dir() {
+    let repo = named_repo();
+    let root = repo.path();
+    write(
+        root,
+        &format!("{BLOG}/site/pages/about.md"),
+        "+++\ntitle = \"A\"\n+++\n",
+    );
+    let sites = cobot::sites::find(root, &[]).expect("find");
+    let err = cobot::sites::build(root, &sites).expect_err("site/ is refused");
+    assert!(err.to_string().contains("must not exist"), "{err}");
+}
+
+#[test]
+fn a_named_template_with_no_content_builds_from_a_clean_checkout() {
+    if !zola_available() {
+        eprintln!("skipped: zola is not on PATH");
+        return;
+    }
+    let repo = named_repo();
+    let root = repo.path();
+    assert!(!root.join(BLOG).join("site").exists());
+    let sites = cobot::sites::find(root, &[]).expect("find");
+    let built = cobot::sites::build(root, &sites).expect("build");
+    let toml = fs::read_to_string(built[0].public.with_file_name("config.toml")).expect("config");
+    for want in [
+        "theme = \"site-template-diagram\"",
+        "title = \"Diagram\"",
+        "motion = true",
+    ] {
+        assert!(toml.contains(want), "{want}: {toml}");
+    }
+    let index = fs::read_to_string(built[0].public.join("index.html")).expect("index");
+    assert!(
+        index.contains("<title>Diagram</title>") && index.contains("moving"),
+        "{index}"
+    );
+}
+
 #[test]
 fn a_contract_site_builds_from_its_config_yaml() {
     if !zola_available() {
