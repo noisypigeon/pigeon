@@ -17,9 +17,13 @@ pub const API: &str = "https://api.cloudflare.com/client/v4";
 pub fn token(credentials: Option<&str>, env: Option<String>) -> Option<String> {
     credentials
         .and_then(|c| serde_json::from_str::<Value>(c).ok())
-        .and_then(|c| c["cloudflare"]["api_token"].as_str().map(str::to_string))
-        .or(env)
-        .filter(|t| !t.is_empty())
+        .and_then(|c| {
+            c["cloudflare"]["api_token"]
+                .as_str()
+                .filter(|t| !t.is_empty())
+                .map(str::to_string)
+        })
+        .or(env.filter(|t| !t.is_empty()))
 }
 
 /// The API, called with one token.
@@ -144,6 +148,15 @@ mod tests {
         assert_eq!(
             token(Some("{}"), Some("from-env".into())).as_deref(),
             Some("from-env")
+        );
+        assert_eq!(
+            token(
+                Some(r#"{"cloudflare":{"api_token":""}}"#),
+                Some("from-env".into())
+            )
+            .as_deref(),
+            Some("from-env"),
+            "an empty runner token falls back"
         );
         assert_eq!(token(None, Some(String::new())), None);
         assert_eq!(token(None, None), None);

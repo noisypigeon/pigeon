@@ -103,3 +103,29 @@ fn errors_name_the_call_never_the_token() {
     let err = wrong.token_id("acct-1").expect_err("refused");
     assert!(!err.contains("wrong-token"), "{err}");
 }
+
+#[test]
+fn a_context_never_prints_its_secrets() {
+    let ctx = cobot::Context {
+        root: "/r".into(),
+        providers: "/r/.config".into(),
+        state: "/s".into(),
+        state_passphrase: "state-pass-secret".into(),
+        secrets_passphrase: Some("secrets-pass-secret".into()),
+        workload_secrets_passphrase: None,
+        today: 0,
+        credentials: Some(r#"{"cloudflare":{"api_token":"runner-secret"}}"#.into()),
+        cloudflare_token: Some("token-secret".into()),
+        cloudflare_api: None,
+    };
+    let shown = format!("{ctx:?}");
+    for secret in [
+        "state-pass",
+        "secrets-pass",
+        "runner-secret",
+        "token-secret",
+    ] {
+        assert!(!shown.contains(secret), "{shown}");
+    }
+    assert!(shown.contains("cloudflare_token: \"set\""), "{shown}");
+}

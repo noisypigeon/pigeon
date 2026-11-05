@@ -268,7 +268,7 @@ fn io(path: &Path) -> impl Fn(std::io::Error) -> Error + '_ {
 }
 
 /// Everything a render, plan or apply needs beyond the units.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Context {
     /// The repository root.
     pub root: PathBuf,
@@ -291,6 +291,28 @@ pub struct Context {
     pub cloudflare_token: Option<String>,
     /// The Cloudflare API's base URL; `None` is [`cloudflare::API`].
     pub cloudflare_api: Option<String>,
+}
+
+/// Shows which secrets are set, never their values.
+impl fmt::Debug for Context {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let set = |v: &Option<String>| if v.is_some() { "set" } else { "unset" };
+        f.debug_struct("Context")
+            .field("root", &self.root)
+            .field("providers", &self.providers)
+            .field("state", &self.state)
+            .field("state_passphrase", &"set")
+            .field("secrets_passphrase", &set(&self.secrets_passphrase))
+            .field(
+                "workload_secrets_passphrase",
+                &set(&self.workload_secrets_passphrase),
+            )
+            .field("today", &self.today)
+            .field("credentials", &set(&self.credentials))
+            .field("cloudflare_token", &set(&self.cloudflare_token))
+            .field("cloudflare_api", &self.cloudflare_api)
+            .finish()
+    }
 }
 
 impl Context {
