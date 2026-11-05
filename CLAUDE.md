@@ -106,6 +106,11 @@ belong in the ADR, never in the file.
   against the pinned template's `schema.json`; its `site/` holds only
   `posts/` (named `YYYY-MM-DD-<slug>.md`), `pages/` and `assets/`, per
   [`2026-11-03-runtime-static-site-config-contract.md`](.claude/decisions/2026-11-03-runtime-static-site-config-contract.md).
+- Site templates become a family in `src/site-templates/<name>/` (`blog`,
+  `architecture`); the architecture site is `infra/pigeon/sites/docs/` on
+  `docs.pigeon.dev`, built from backplane's `architecture.describe` and
+  published through the control plane, per
+  [`2026-11-05-runtime-architecture-site-through-backplane.md`](.claude/decisions/2026-11-05-runtime-architecture-site-through-backplane.md).
 - The repo is public: never push secrets, credentials, key IDs or private
   bucket names, in commits, branch names, PR text or CI logs.
 

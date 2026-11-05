@@ -245,3 +245,13 @@ The release bot bumps only a unit's patch version, and a PR never sets one. The 
 - `pigeon cobot sites build` checks the settings against the tag's `schema.json`, the `site/` layout, and, under `date-slug`, each post's name. Every failure names the setting or the file.
 - `sites.yml` runs that build on every PR that touches a workload's `config.yaml` or `site/`, with tags, so a bad site still fails its PR.
 - `validate` checks only what `infra/cloudflare/schema.json` holds: `static_site.site` is an object.
+
+### 2026-11-05: Each template owns its contract
+
+[`2026-11-05-runtime-architecture-site-through-backplane.md`](2026-11-05-runtime-architecture-site-through-backplane.md) makes the template one of a family under `src/site-templates/<name>/`. Wherever this ADR says "the template", read "the template the site names":
+
+- `static_site.template` is `{ name, version, features }`;
+- `static_site.site` is checked against the named template's `schema.json`, and turned into Zola's files by its `scaffold/`;
+- §4's `date-slug` posts apply only to a template whose `template.yaml` sets it. The architecture template has no posts.
+
+The earlier text stays as written.
