@@ -76,8 +76,8 @@ impl Api {
             .and_then(|(status, b)| ok(status, &b, "POST", path))
     }
 
-    /// `POST path` with the first of `bodies` the API accepts, trying the next only on a 400;
-    /// for request shapes an API in beta has not settled.
+    /// `POST path` with the first of `bodies` the API accepts, trying the next on a 400 or 404;
+    /// see `.claude/decisions/2026-11-05-development-git-hosting-cloudflare-artifacts.md`.
     pub(crate) fn post_first(&self, path: &str, bodies: &[Value]) -> Result<Value, String> {
         let tries: Vec<(String, Value)> = bodies
             .iter()
