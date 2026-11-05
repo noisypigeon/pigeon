@@ -58,6 +58,9 @@ pub struct ConfigUnit {
     pub home: PathBuf,
     /// Set for an apex: its root and zone.
     pub site: Option<Site>,
+    /// The platform root whose `catalog/` serves `<catalog>/<name>` modules the unit's own
+    /// tree lacks, when the instance lives apart from it.
+    pub platform: Option<PathBuf>,
 }
 
 /// One `x-cobot` expression.
@@ -217,16 +220,24 @@ fn split_module(module: &str) -> (Option<&str>, &str) {
 
 /// Where a unit's own modules live, or catalog `<c>`'s for a `<c>/<name>` reference;
 /// see `.claude/decisions/2026-11-04-development-platform-instance-separation.md`.
-fn modules_root(home: &Path, module: &str) -> PathBuf {
+fn modules_root(home: &Path, platform: Option<&Path>, module: &str) -> PathBuf {
     match split_module(module) {
-        (Some(catalog), _) => crate::catalog::catalog_modules(home, catalog),
+        (Some(catalog), _) => {
+            let local = crate::catalog::catalog_modules(home, catalog);
+            match platform {
+                Some(p) if !local.is_dir() => {
+                    p.join(crate::catalog::DIR).join(catalog).join("modules")
+                }
+                _ => local,
+            }
+        }
         (None, _) => home.join("modules"),
     }
 }
 
 /// A module's directory: `<modules root>/<name>`.
-fn module_dir(home: &Path, module: &str) -> PathBuf {
-    modules_root(home, module).join(split_module(module).1)
+fn module_dir(home: &Path, platform: Option<&Path>, module: &str) -> PathBuf {
+    modules_root(home, platform, module).join(split_module(module).1)
 }
 
 fn x_cobot(schema: &Value) -> &Value {
@@ -348,6 +359,7 @@ pub fn load(dir: &Path, home: &Path, site: Option<Site>) -> Result<ConfigUnit, S
         schema,
         home: home.to_path_buf(),
         site,
+        platform: None,
     })
 }
 
@@ -642,10 +654,10 @@ fn check_secrets(
 }
 
 /// A module's path for messages: `modules/<name>`, or `<area>/<catalog>/modules/<name>`.
-fn display_module(home: &Path, module: &str) -> String {
+fn display_module(home: &Path, platform: Option<&Path>, module: &str) -> String {
     match split_module(module) {
         (Some(_), _) => {
-            let dir = module_dir(home, module);
+            let dir = module_dir(home, platform, module);
             let root = home.parent().and_then(Path::parent).unwrap_or(home);
             dir.strip_prefix(root).unwrap_or(&dir).display().to_string()
         }
@@ -654,7 +666,12 @@ fn display_module(home: &Path, module: &str) -> String {
 }
 
 /// Checks one block's name and module; the module's info if it exists.
-fn check_module(b: &Block, home: &Path, add: &mut impl FnMut(&str, String)) -> Option<ModuleInfo> {
+fn check_module(
+    b: &Block,
+    home: &Path,
+    platform: Option<&Path>,
+    add: &mut impl FnMut(&str, String),
+) -> Option<ModuleInfo> {
     if !BLOCK.is_match(&b.name) {
         add(
             SCHEMA,
@@ -672,11 +689,11 @@ fn check_module(b: &Block, home: &Path, add: &mut impl FnMut(&str, String)) -> O
         );
         return None;
     }
-    let mdir = module_dir(home, &b.module);
+    let mdir = module_dir(home, platform, &b.module);
     let inside = mdir
         .canonicalize()
         .ok()
-        .zip(modules_root(home, &b.module).canonicalize().ok())
+        .zip(modules_root(home, platform, &b.module).canonicalize().ok())
         .is_some_and(|(m, root)| m.starts_with(root) && m.is_dir());
     if !inside {
         add(
@@ -685,7 +702,7 @@ fn check_module(b: &Block, home: &Path, add: &mut impl FnMut(&str, String)) -> O
                 "block `{}` names missing module `{}`, looked for {}",
                 b.name,
                 b.module,
-                display_module(home, &b.module)
+                display_module(home, platform, &b.module)
             ),
         );
         return None;
@@ -694,7 +711,7 @@ fn check_module(b: &Block, home: &Path, add: &mut impl FnMut(&str, String)) -> O
     let manifest = fs::read_to_string(mdir.join("module.yaml")).unwrap_or_default();
     if !MODULE_VERSION.is_match(&manifest) {
         add(
-            &format!("{}/module.yaml", display_module(home, &b.module)),
+            &format!("{}/module.yaml", display_module(home, platform, &b.module)),
             "needs `version: X.Y.Z`".into(),
         );
     }
@@ -706,7 +723,7 @@ fn check_module(b: &Block, home: &Path, add: &mut impl FnMut(&str, String)) -> O
     let triggers = info.resources.len() - provider_resources;
     if provider_resources > 1 || triggers > 1 || info.resources.is_empty() {
         add(
-            &display_module(home, &b.module),
+            &display_module(home, platform, &b.module),
             "a module holds one resource, plus at most one terraform_data trigger".into(),
         );
     }
@@ -760,7 +777,7 @@ fn check_blocks(unit: &ConfigUnit, allow: &Allowlist, problems: &mut Vec<(String
     let all = blocks(&unit.schema);
     let mut infos: BTreeMap<String, ModuleInfo> = BTreeMap::new();
     for b in &all {
-        if let Some(info) = check_module(b, &unit.home, &mut add) {
+        if let Some(info) = check_module(b, &unit.home, unit.platform.as_deref(), &mut add) {
             infos.insert(b.name.clone(), info);
         }
     }
@@ -860,7 +877,7 @@ fn check_outputs(unit: &ConfigUnit, problems: &mut Vec<(String, String)>) {
         .map(|b| {
             (
                 b.name.clone(),
-                module_info(&module_dir(&unit.home, &b.module)),
+                module_info(&module_dir(&unit.home, unit.platform.as_deref(), &b.module)),
             )
         })
         .collect();
@@ -1214,7 +1231,11 @@ pub fn render(
         let mut block = Map::new();
         block.insert(
             "source".into(),
-            Value::String(module_dir(&unit.home, &b.module).display().to_string()),
+            Value::String(
+                module_dir(&unit.home, unit.platform.as_deref(), &b.module)
+                    .display()
+                    .to_string(),
+            ),
         );
         if let Some(expander) = &b.derived {
             let items = unit

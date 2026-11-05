@@ -160,7 +160,12 @@ pub fn discover_in(root: &Path, platform: &Path) -> (Vec<Unit>, Vec<Problem>) {
                 ),
             };
             let config = match crate::config::load(&dir, &home, site) {
-                Ok(c) => Some(c),
+                Ok(mut c) => {
+                    if platform != root {
+                        c.platform = Some(platform.to_path_buf());
+                    }
+                    Some(c)
+                }
                 Err(e) => {
                     problems.push(problem(format!("{rel}/{e}"), "cannot be loaded"));
                     None
@@ -335,7 +340,7 @@ pub fn validate_in(root: &Path, platform: &Path, allow: &Allowlist) -> Vec<Probl
     for (path, message) in crate::moves::validate(root, &units) {
         problems.push(problem(path, message));
     }
-    let catalogs = crate::catalog::capabilities(platform).0;
+    let catalogs = crate::catalog::capabilities_in(root, platform).0;
     let infra_keys: std::collections::BTreeSet<String> = units
         .iter()
         .filter(|u| u.path.starts_with("infra/"))
@@ -425,7 +430,7 @@ pub fn validate_in(root: &Path, platform: &Path, allow: &Allowlist) -> Vec<Probl
     for dir in crate::catalog::dirs(platform) {
         scan(platform, &dir, allow, &mut problems);
     }
-    problems.extend(crate::catalog::capabilities(platform).1);
+    problems.extend(crate::catalog::capabilities_in(root, platform).1);
     problems
 }
 

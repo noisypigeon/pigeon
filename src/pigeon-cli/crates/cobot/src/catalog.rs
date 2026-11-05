@@ -140,6 +140,24 @@ pub struct Catalog {
     pub capabilities: BTreeMap<String, Capability>,
 }
 
+/// [`capabilities`] for the instance at `root` on the platform at `platform`: the platform's,
+/// with each provider the instance overrides in its own `infra/<provider>/` taken from there.
+#[must_use]
+pub fn capabilities_in(root: &Path, platform: &Path) -> (Vec<Catalog>, Vec<Problem>) {
+    let (mut catalogs, mut problems) = capabilities(platform);
+    if root == platform {
+        return (catalogs, problems);
+    }
+    let (local, local_problems) = capabilities(root);
+    problems.extend(local_problems);
+    for c in local {
+        catalogs.retain(|p| p.provider != c.provider);
+        catalogs.push(c);
+    }
+    catalogs.sort_by(|a, b| a.provider.cmp(&b.provider));
+    (catalogs, problems)
+}
+
 /// Every provider's capabilities file, from the location [`home`] picks first; problems for
 /// invalid ones and for [`duplicates`].
 #[must_use]
