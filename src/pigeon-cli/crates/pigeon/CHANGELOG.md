@@ -2,6 +2,7 @@
 
 ## 2026-11-05
 
+- feat(backplane): policy.check takes the pull request; sites.build ([#132](https://github.com/noisypigeon/pigeon/pull/132))
 - feat(cobot): sites build takes data files ([#129](https://github.com/noisypigeon/pigeon/pull/129))
 - refactor(backplane): shared wire types, and both worker builds compiling ([#118](https://github.com/noisypigeon/pigeon/pull/118))
 - feat(backplane): serve drains on SIGTERM ([#117](https://github.com/noisypigeon/pigeon/pull/117))

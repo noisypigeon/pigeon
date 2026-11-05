@@ -2,6 +2,7 @@
 
 ## 2026-11-05
 
+- feat(backplane): policy.check takes the pull request; sites.build ([#132](https://github.com/noisypigeon/pigeon/pull/132))
 - feat(site-templates): the architecture template ([#133](https://github.com/noisypigeon/pigeon/pull/133))
 - feat(cobot): workloads take the run's own Cloudflare token ([#131](https://github.com/noisypigeon/pigeon/pull/131))
 - feat(cobot): sites build takes data files ([#129](https://github.com/noisypigeon/pigeon/pull/129))

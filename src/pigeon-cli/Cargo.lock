@@ -1847,7 +1847,7 @@ dependencies = [
 
 [[package]]
 name = "pigeon-backplane"
-version = "0.1.24"
+version = "0.1.25"
 dependencies = [
  "cobot",
  "gantry",
