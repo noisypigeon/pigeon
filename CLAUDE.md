@@ -44,6 +44,11 @@ belong in the ADR, never in the file.
   platform serving the instance in `.config/instance.yaml`; it judges through
   sentinel, acts through cobot, and writes and starts nothing itself, per
   [`2026-11-03-development-backplane-platform-composition-layer.md`](.claude/decisions/2026-11-03-development-backplane-platform-composition-layer.md).
+- The control plane is backplane's `worker` build on `pigeon.dev`: a Durable
+  Object per instance, D1, plan-then-approve, Access, MCP and drift; cobot's
+  `worker` build dispatches signed runs to Containers and mints credentials;
+  runs survive a stop, per
+  [`2026-11-05-runtime-control-plane-worker.md`](.claude/decisions/2026-11-05-runtime-control-plane-worker.md).
 - Releases and changelogs are machinery, per
   [`2026-11-02-release-crate-units-and-images.md`](.claude/decisions/2026-11-02-release-crate-units-and-images.md):
   - every `CHANGELOG.md` is generated on merge by the release bot, which runs
