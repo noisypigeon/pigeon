@@ -182,3 +182,96 @@ Each step is released before the next relies on it, and each passes `mise run ci
 - A `Response` serialized by the `engines` build deserializes in the `worker` build.
 - `.config/policies/backplane.yaml` still holds: no dispatch or minting code in backplane's source.
 - No grant, minted credential or ID appears in a response, a log or the repository.
+
+## Amendments
+
+### 2026-11-05: A run's instance root, built from D1
+
+`serve` loads `.config/instance.yaml`, and the files it names, from `--root` before it answers. The backplane image holds only the binary and its tools. This amendment decides where a run's root comes from.
+
+The separation ADR has already decided the direction:
+- the platform holds each instance's desired state (decision 2);
+- credentials live only in the Secrets Store (decision 4);
+- an instance repository holds site content and a read-only export (its §1).
+
+So a run never clones an instance repository, and no instance file is baked into an image.
+
+#### 1. Two sources
+
+| Part of the root | Owner | Source |
+| --- | --- | --- |
+| `.config/instance.yaml`; each unit's `config.yaml` (and `schema.json` where the unit holds its own); each `<unit>/sites/<name>/config.yaml` and `<unit>/workers/<name>/worker.yaml` | The instance | D1 `desired_state`, at the version the run names |
+| `catalog/`, including its policies (2 below), `.config/providers.yaml` and `providers.lock.hcl` | The platform | The released backplane image |
+
+- Nothing personal to noisypigeon is in the image. Nothing of the platform's is in an instance's desired state.
+- No secret is in either. A unit names capabilities, and a run gets minted credentials in `COBOT_CREDENTIALS` (§8).
+- A site's `site/` content is not desired state; 5 below leaves it open.
+
+#### 2. Rules: the platform defines them, an instance invokes them
+
+- **Definitions.** Every rule an instance can apply is a sentinel policy that the platform defines, in `catalog/policies/<name>.yaml`. It is released in the backplane image with the rest of the catalog.
+- **Invocation.** An instance's `.config/instance.yaml` replaces `paths.policies` with `policies`, a list of invocations. For example, with illustrative names:
+
+  ```yaml
+  policies:
+    - use: static-site-names
+    - use: dns-zones
+      with: { zones: [noisypigeon.com] }
+  ```
+
+  - An unknown name fails validation.
+  - A parameter is checked against the schema the policy declares.
+  - An instance cannot add, change or skip a rule beyond what its invocations say.
+- **sentinel** gains parameterized policies (`with`) and checks invocations. It is released before any instance relies on it.
+- **This repository's own `.config/policies/`** stay. They are the platform's rules for its own development (ADRs, pull requests, layout, engine boundaries), not an instance's.
+  - The noisypigeon-specific ones, `secrets.yaml`, `secrets-apex.yaml` and `secrets-cloudflare.yaml`, leave in phase 7 with the `ENC` backend.
+  - Any rule about noisypigeon's units that remains moves into the catalog as a definition, which noisypigeon's manifest then invokes.
+- **The architecture site.** Per [`2026-11-05-runtime-architecture-site-through-backplane.md`](2026-11-05-runtime-architecture-site-through-backplane.md), `architecture.describe` draws `policy → target` edges from two sources:
+  - this repository's own `.config/policies/`;
+  - an instance's invocations, each pointing at the catalog policy it uses.
+
+#### 3. The bundle
+
+- **Writing it.** Before dispatch, the backplane `worker` build writes the instance's part of the root, at one desired-state version, as a bundle:
+  - its format is a sorted tar;
+  - it goes to the instance's state store, at `bundles/<sha256>`, which is content-addressed;
+  - writing an existing digest is a no-op.
+- **Recording it.** The plan records the bundle's digest, beside its desired-state version, in D1 `plans` and in the stored plan's metadata.
+- **In the Container.** `Launch` names the bundle, not a bare root. Before `serve` starts, cobot fetches the bundle and checks its digest.
+  - It unpacks the bundle into a fresh directory, and lays the image's platform part over it.
+  - It then runs `serve --root` on that directory.
+  - A bundle whose digest does not match refuses to start.
+- **An apply** uses its plan's bundle digest, so it runs against exactly the files that were planned and approved.
+- **Lifetime.** A bundle is kept while a plan or run references it, and is swept 7 days after the last of them ends.
+
+#### 4. How desired state gets in
+
+- **API.** `PUT /v0/instances/:id/desired-state` writes a new `desired_state` version.
+  - The CLI calls it, as `pigeon instance push`; the MCP tool and the UI call it too.
+  - Access verifies the caller (§9), and the call is audited.
+- **Phase 5's import** is the first such write, from today's `.config/` and `workloads/`.
+- **Who edits.** After phase 7, the owner may keep editing in the instance repository and push from the CLI. D1 stays the platform's record, and the repository receives the read-only export.
+
+#### 5. Open: static site content
+
+Phase 7 says "the platform builds sites from the instance repository", which would put a Git read credential back into a run. The alternative is for the CLI to upload site content as content-addressed bundles too. This is decided before phase 7, not here.
+
+#### 6. Execution
+
+Step 8 of §12 gains:
+- the bundle writer;
+- `PUT /v0/instances/:id/desired-state`;
+- the plan's bundle digest.
+
+Before step 8, each released first:
+1. `feat(sentinel)`: parameterized policies and instance invocations.
+2. `feat(backplane)`: `instance.yaml`'s `policies` invocations, which replace `paths.policies`. noisypigeon's manifest moves to them, with its rules moved into `catalog/policies/`.
+3. `feat(cobot)`: the Launch step, which fetches, verifies and unpacks the bundle, then runs `serve`.
+
+#### 7. Verification
+
+- A bundle's digest is stable for a given desired-state version.
+- A Container refuses a bundle with a wrong digest.
+- An apply runs against its plan's bundle, even after a newer version is pushed.
+- No bundle contains `ENC[`, a credential, an ID or a policy definition.
+- An instance invoking an unknown policy, or passing a parameter its schema refuses, fails validation.
