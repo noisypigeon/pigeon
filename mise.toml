@@ -5,6 +5,10 @@ min_version = "2026.10.12"
 rust = { version = "1.99.1", profile = "minimal", components = "clippy,rustfmt", targets = "wasm32-unknown-unknown" }
 opentofu = "1.13.1"
 zola = "0.23.6"
+# `pigeon cobot workers` deploys with these; see .claude/decisions/2026-11-05-development-cobot-workers-area.md §5.
+node = "24.22.0"
+"npm:wrangler" = "4.151.3"
+"cargo:worker-build" = "0.8.7"
 
 [tasks.build]
 dir = "src/pigeon-cli"

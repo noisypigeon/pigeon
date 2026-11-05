@@ -34,6 +34,7 @@ pub fn run(command: CobotCommand) -> i32 {
         CobotCommand::Sites(SitesCommand::Build(args)) => sites_build(&args),
         CobotCommand::Sites(SitesCommand::Publish(args)) => sites_publish(&args),
         CobotCommand::Git(command) => git(command),
+        CobotCommand::Workers(command) => super::workers::run(command),
         CobotCommand::Scope(args) => return scope(&args),
         CobotCommand::Release(args) => return release(&args),
         CobotCommand::Tags(args) => return tags(&args),

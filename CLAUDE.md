@@ -175,6 +175,9 @@ belong in the ADR, never in the file.
   it's pushed (`.config/policies/change.yaml`). Git reads trailers from the
   message's last paragraph only, so they share it with `Co-Authored-By`, with
   no blank line between.
+- `pigeon cobot workers validate|permissions|render|plan|deploy|status|secrets put|teardown`:
+  the platform's Workers, from `infra/<unit>/workers/<name>/worker.yaml`, with
+  wrangler; `deploy --plan ID` only, from `plan --state …`.
 - `CHANGE_BASE=origin/main mise run ci-scoped`: only the checks this branch's
   paths need (`pigeon cobot scope`; `--file P` to name paths, `--json` to list
   them; backplane's `change.scope` answers the same); `mise run ci` stays the

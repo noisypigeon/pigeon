@@ -28,6 +28,9 @@ pub enum CobotCommand {
     /// Host the instance's git repositories on Cloudflare Artifacts, mirrored to GitHub
     #[command(subcommand)]
     Git(GitCommand),
+    /// Render, plan and deploy the platform's Workers with wrangler
+    #[command(subcommand)]
+    Workers(WorkersCommand),
     /// Print the checks a change needs, from the paths it touches; with --run, run them
     Scope(ScopeArgs),
     /// Bump changed release units and generate changelogs; print JSON
@@ -154,6 +157,91 @@ pub struct GitRun {
     /// Arguments after the remote, e.g. HEAD:main
     #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
     pub args: Vec<String>,
+}
+
+/// `pigeon cobot workers` commands; see
+/// `.claude/decisions/2026-11-05-development-cobot-workers-area.md`.
+#[derive(Subcommand, Debug)]
+pub enum WorkersCommand {
+    /// Check every spec; exit 1 on a problem
+    Validate(WorkersAt),
+    /// Print the token permissions the specs need, on the account
+    Permissions(WorkersAt),
+    /// Write each Worker's wrangler.jsonc under .cobot/workers/, its references resolved from state
+    Render(WorkersState),
+    /// Render, and store a plan for `deploy --plan`, valid for 24 hours
+    Plan(WorkersState),
+    /// Deploy a stored, unexpired plan: D1 migrations, images, then each Worker
+    Deploy(WorkersDeploy),
+    /// Print each deployed Worker's status
+    Status(WorkersAt),
+    /// Set a Worker secret its spec declares, from stdin
+    #[command(subcommand)]
+    Secrets(WorkersSecrets),
+    /// Delete a Worker and its Container applications
+    Teardown(WorkersOne),
+}
+
+/// The repository root, and Workers by name [default: every one].
+#[derive(Args, Debug)]
+pub struct WorkersAt {
+    /// The repository root
+    #[arg(long, default_value = ".")]
+    pub root: PathBuf,
+    /// Workers, by name
+    pub names: Vec<String>,
+}
+
+/// [`WorkersAt`] and the state the specs' references resolve from.
+#[derive(Args, Debug)]
+pub struct WorkersState {
+    /// Workers, and the root
+    #[command(flatten)]
+    pub at: WorkersAt,
+    /// The state, as for `pigeon cobot plan`
+    #[arg(long)]
+    pub state: PathBuf,
+    /// The directory holding providers.yaml and providers.lock.hcl [default: ./.config]
+    #[arg(long)]
+    pub providers: Option<PathBuf>,
+}
+
+/// `pigeon cobot workers deploy` arguments.
+#[derive(Args, Debug)]
+pub struct WorkersDeploy {
+    /// The state, and the root
+    #[command(flatten)]
+    pub run: WorkersState,
+    /// The stored plan
+    #[arg(long)]
+    pub plan: String,
+}
+
+/// One Worker.
+#[derive(Args, Debug)]
+pub struct WorkersOne {
+    /// The repository root
+    #[arg(long, default_value = ".")]
+    pub root: PathBuf,
+    /// The Worker
+    pub name: String,
+}
+
+/// `pigeon cobot workers secrets` commands; there is deliberately no `get`.
+#[derive(Subcommand, Debug)]
+pub enum WorkersSecrets {
+    /// Set KEY on a Worker from stdin
+    Put(WorkersSecret),
+}
+
+/// `pigeon cobot workers secrets put` arguments.
+#[derive(Args, Debug)]
+pub struct WorkersSecret {
+    /// The Worker
+    #[command(flatten)]
+    pub worker: WorkersOne,
+    /// The secret's name, as its spec declares it
+    pub key: String,
 }
 
 /// `pigeon cobot scope` arguments.

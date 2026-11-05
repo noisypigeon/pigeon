@@ -114,3 +114,24 @@ Each step is released before the next relies on it, per [`2026-11-03-release-cob
 - `deploy` without a stored, unexpired plan is refused.
 - The version test covers `node` and `wrangler`.
 - Every command's output, with a token and IDs in the environment, contains neither.
+
+## Amendments
+
+### 2026-11-05: Images are built at deploy, the spec gains queues and Secrets Store bindings, and node and wrangler stay off the cobot image for now
+
+Built as phase E1 of [`2026-11-05-development-changes-through-pigeon-mcp.md`](2026-11-05-development-changes-through-pigeon-mcp.md).
+
+- **Images are built at deploy, from a Dockerfile stage.** A container's `image` is `{ dockerfile, target }`. `deploy` runs `docker build --target` into a local tag named after the plan, and `render` writes a one-line `<Class>.Dockerfile` (`FROM` that tag) that wrangler builds and pushes. §5's "no build at deploy" assumed releases on GitHub, which are leaving it, and wrangler can't select a stage itself. A released image (`{ release }`) returns with the release job (hosting ADR phase 4).
+- **`entry` is `{ crate, features }` only**, built by `worker-build` with default features off. `{ release, artifact }` waits for the same release job.
+- **Binding shapes, as built:**
+  - `d1: { NAME: { name, id: $output…, migrations? } }`: wrangler needs the database's name (already public in `infra/pigeon/config.yaml`) beside its ID;
+  - `r2: { NAME: $output… }`, with `[n]` to index a list output such as `bucket_names`;
+  - `secrets_store: { NAME: { store: $output…, secret } }`, replacing `secrets:` under bindings;
+  - `queues: { producers: { NAME: queue }, consumers: [{ queue, max_batch_size? }] }`;
+  - `vars`, which refuses a value that looks like an ID.
+  Each Durable Object binding is its class's name in `SCREAMING_SNAKE_CASE`, and every container class must also be a Durable Object class.
+- **The spec is checked by serde** (`deny_unknown_fields`) and `workers::validate`, not a JSON Schema file: every rule needs code anyway (existing paths, references, class membership).
+- **Plans** are stored at `<state>/workers-plans/<id>.json`, each Worker's rendered configuration's digest, and expire with infra plans (`plans::LIFETIME_SECS`). `deploy` re-renders and refuses a Worker whose digest changed since the plan.
+- **`deploy` checks secrets but doesn't set them:** it names each declared secret the deployed Worker lacks, and `secrets put` sets it from stdin.
+- **node and wrangler** are pinned in `mise.toml` with `worker-build`, but not added to the cobot image yet: until phase 4, deploys run on the owner's machine. They join the image, and §5's version test, with the `workers.*` operations.
+- **`teardown`** runs `wrangler delete --force`, then deletes each Container application named after the Worker. wrangler's listing holds IDs, so it's read but never printed.

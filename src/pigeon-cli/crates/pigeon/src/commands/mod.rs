@@ -8,6 +8,8 @@ pub mod cobot;
 pub mod gantry;
 #[cfg(feature = "sentinel")]
 pub mod sentinel;
+#[cfg(feature = "cobot")]
+pub mod workers;
 
 use crate::cli::Commands;
 

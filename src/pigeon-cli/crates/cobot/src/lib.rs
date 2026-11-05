@@ -49,6 +49,8 @@ mod tofu;
 pub mod unit;
 #[cfg(feature = "worker")]
 pub mod worker;
+#[cfg(feature = "engines")]
+pub mod workers;
 
 #[cfg(feature = "engines")]
 pub use engines::*;

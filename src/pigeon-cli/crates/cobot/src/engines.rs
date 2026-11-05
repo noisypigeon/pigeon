@@ -816,17 +816,24 @@ fn infra_state(
     state: &Path,
     allow: &providers::Allowlist,
 ) -> Result<Option<String>, Error> {
-    if !state
-        .join(apex::CLOUDFLARE)
-        .join("terraform.tfstate")
-        .exists()
-    {
+    unit_state(ctx, root, state, allow, apex::CLOUDFLARE)
+}
+
+/// Unit `path`'s state as `tofu show -json`, if it has any.
+fn unit_state(
+    ctx: &Context,
+    root: &Path,
+    state: &Path,
+    allow: &providers::Allowlist,
+    path: &str,
+) -> Result<Option<String>, Error> {
+    if !state.join(path).join("terraform.tfstate").exists() {
         return Ok(None);
     }
     let Some(source) = unit::discover_in(root, ctx.platform_root())
         .0
         .into_iter()
-        .find(|u| u.path == apex::CLOUDFLARE)
+        .find(|u| u.path == path)
     else {
         return Ok(None);
     };
@@ -844,6 +851,27 @@ fn infra_state(
         .collect();
     tofu::init(&source.path, &work, &env)?;
     tofu::show_state(&source.path, &work, &env).map(Some)
+}
+
+/// Unit `path`'s outputs, each name to its value, from its state; empty until it has state.
+///
+/// # Errors
+///
+/// [`Error::Tool`] or [`Error::Io`] if its state can't be read.
+pub fn outputs(ctx: &Context, path: &str) -> Result<serde_json::Map<String, Value>, Error> {
+    let root = ctx.root.canonicalize().map_err(io(&ctx.root))?;
+    let state = absolute(&ctx.state)?;
+    let allow = providers::Allowlist::load(&ctx.providers)?;
+    let shown = unit_state(ctx, &root, &state, &allow, path)?.unwrap_or_default();
+    let v: Value = serde_json::from_str(&shown).unwrap_or(Value::Null);
+    Ok(v["values"]["outputs"]
+        .as_object()
+        .map(|o| {
+            o.iter()
+                .map(|(k, x)| (k.clone(), x["value"].clone()))
+                .collect()
+        })
+        .unwrap_or_default())
 }
 
 /// One published static site.
