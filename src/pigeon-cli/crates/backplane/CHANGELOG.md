@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.15 (2026-11-05)
+
+- feat(cobot): write state back per unit, and record a completed apply ([#116](https://github.com/noisypigeon/pigeon/pull/116))
+
 ## v0.1.14 (2026-11-05)
 
 - feat(backplane): signed requests for serve ([#112](https://github.com/noisypigeon/pigeon/pull/112))

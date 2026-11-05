@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.27 (2026-11-05)
+
+- feat(cobot): write state back per unit, and record a completed apply ([#116](https://github.com/noisypigeon/pigeon/pull/116))
+
 ## v0.1.26 (2026-11-04)
 
 - feat(cobot): name the attributes an update changes ([#108](https://github.com/noisypigeon/pigeon/pull/108))
