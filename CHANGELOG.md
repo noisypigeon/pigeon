@@ -2,6 +2,7 @@
 
 ## 2026-11-05
 
+- docs(adr): a run's instance root from D1; the platform defines rules, an instance invokes them ([#127](https://github.com/noisypigeon/pigeon/pull/127))
 - refactor(cobot): every site names its template ([#125](https://github.com/noisypigeon/pigeon/pull/125))
 - feat(cobot): signed Container dispatch ([#123](https://github.com/noisypigeon/pigeon/pull/123))
 - chore(workloads): the blog names its template ([#124](https://github.com/noisypigeon/pigeon/pull/124))
