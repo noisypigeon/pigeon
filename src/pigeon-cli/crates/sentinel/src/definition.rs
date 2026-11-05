@@ -30,7 +30,13 @@ pub struct Param {
     /// One line saying what it is.
     pub description: String,
     /// Its value when an invocation omits it; without one, it is required.
+    #[serde(default, deserialize_with = "present")]
     pub default: Option<Value>,
+}
+
+/// Keeps a given `default: null` as `Some(Null)`, so its type check refuses it.
+fn present<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<Value>, D::Error> {
+    Value::deserialize(d).map(Some)
 }
 
 /// A policy with `params`, instantiated only through an [`Invocation`].
@@ -274,6 +280,10 @@ mod tests {
             ),
             (
                 "description: x\nparams:\n  s: { type: string, description: S., default: [a] }\ntarget: { file: f }\nrules: []\n",
+                "must be a string",
+            ),
+            (
+                "description: x\nparams:\n  s: { type: string, description: S., default: null }\ntarget: { file: f }\nrules: []\n",
                 "must be a string",
             ),
             (
