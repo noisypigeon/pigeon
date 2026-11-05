@@ -103,6 +103,10 @@ These are engine changes, released before the Worker relies on them:
   - Today `apply_stored` writes them to the local mirror, and backplane pushes the mirror only after the whole apply.
 - **`serve` drains on SIGTERM.** It takes no new request, and lets a running `tofu` step finish within the 15-minute grace.
 - **A re-dispatched apply** applies only the units without an applied marker.
+- **A completed apply is recorded before its plan is removed.**
+  - cobot writes a `complete` record to R2, holding the plan ID and its result summary, before deleting the plan's files.
+  - A re-dispatched apply of a completed plan returns that recorded result as success, and applies nothing.
+  - The record is kept until the Durable Object has recorded the run as finished.
 - **A unit cut off by SIGKILL** mid-`tofu` may have changed resources its state does not record.
   - Its run stops and is reported to the owner, with a fresh plan of that unit.
   - It is never retried blindly.
@@ -129,6 +133,7 @@ These are engine changes, released before the Worker relies on them:
 
 ### 9. Access and audit
 
+- **No route answers without a verified Access identity**, from the first deploy on. The Worker verifies the Access JWT on every request, besides Access's own edge check.
 - **Cloudflare Access** protects every API and MCP route.
   - People sign in.
   - The CLI and MCP clients use Access service tokens.
@@ -156,13 +161,14 @@ Each step is released before the next relies on it, and each passes `mise run ci
 4. `refactor(backplane)`: the shared types, and both `worker` builds compiling in CI (§1).
 5. `feat(backplane)`: the `Instance` Durable Object and the D1 migrations (§3, §4).
 6. `feat(cobot)`: signed Container dispatch (§5).
-7. `feat(backplane)`: the API for plans, approvals and applies (§6).
-8. `feat(cobot)` and `feat(backplane)`: grant entry, and Cloudflare minting (§8).
-9. `feat(infra)`: Access, DNS and the Secrets Store secrets in `infra/pigeon`, and the control-plane spec (§2).
-10. The owner deploys with `pigeon cobot workers deploy`, and enters the Cloudflare grant.
-11. `feat(backplane)`: Access and audit (§9), then MCP (§10), then drift (§11).
-12. `feat(cobot)`: minting for Scaleway, Backblaze and DigitalOcean, one PR each.
-13. The proofs in §13, recorded as an amendment here.
+7. `feat(backplane)`: Access verification and audit on every route (§9).
+8. `feat(backplane)`: the API for plans, approvals and applies (§6).
+9. `feat(cobot)` and `feat(backplane)`: grant entry, and Cloudflare minting (§8).
+10. `feat(infra)`: the Access application, DNS and the Secrets Store secrets in `infra/pigeon`, and the control-plane spec (§2).
+11. The owner applies `infra/pigeon`, so Access is in place, then deploys with `pigeon cobot workers deploy`, and enters the Cloudflare grant.
+12. `feat(backplane)`: MCP (§10), then drift (§11).
+13. `feat(cobot)`: minting for Scaleway, Backblaze and DigitalOcean, one PR each.
+14. The proofs in §13, recorded as an amendment here.
 
 ### 13. Verification
 
@@ -170,6 +176,8 @@ Each step is released before the next relies on it, and each passes `mise run ci
 - A minted credential works only on its run's scopes, and stops working once the run ends.
 - A run longer than 20 minutes completes.
 - A Container killed mid-apply resumes, applying only its remaining units, against the same R2 store.
+- A Container stopped between its final apply and its reply leaves a run recorded as succeeded, and nothing is applied twice.
+- A request without a verified Access identity is refused on every route, including the first deploy's.
 - A drift cron tick dispatches a plan.
 - A `Response` serialized by the `engines` build deserializes in the `worker` build.
 - `.config/policies/backplane.yaml` still holds: no dispatch or minting code in backplane's source.
