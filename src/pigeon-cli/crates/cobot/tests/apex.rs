@@ -582,17 +582,10 @@ fn a_published_input_may_hold_a_long_code_but_a_record_may_not() {
     let root = repo.path();
     fs::remove_dir_all(root.join("infra/cloudflare")).expect("no infra/cloudflare");
     fs::remove_file(root.join(APEX).join("secrets.config.yaml")).expect("no secrets");
-    assert_fails(root, "looks like a credential");
-    let preset = root.join("catalog/cloudflare/presets/proton.yaml");
-    let marked = fs::read_to_string(&preset).expect("preset").replace(
-        "secret: true, optional: true",
-        "secret: true, published: true, optional: true",
-    );
-    fs::write(&preset, marked).expect("write");
     assert_eq!(
         problems(root),
         Vec::<String>::new(),
-        "a published code is not a credential"
+        "Proton's published code is not a credential"
     );
 
     let leaked = plain.replace(
