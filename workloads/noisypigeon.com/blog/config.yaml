@@ -1,7 +1,8 @@
 # The blog, a static site on R2; see .claude/decisions/2026-11-03-runtime-static-site-config-contract.md.
 static_site:
   template:
-    version: 1.0.1
+    name: blog
+    version: 1.0.2
     features: [math]
   site:
     title: Willow Graysen
