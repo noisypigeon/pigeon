@@ -539,58 +539,73 @@ fn the_git_token_travels_only_in_the_environment() {
     assert!(!format!("{client:?}{api:?}").contains(TOKEN));
 }
 
-#[test]
-fn a_mirror_follows_main_and_tags_and_never_changes() {
-    let dir = TempDir::new().expect("tempdir");
-    let (bare, main) = source(dir.path());
-    let github = dir.path().join("github.git");
+/// A source as Artifacts, and a mirror cloned from it as GitHub, with the work tree that made
+/// them; the mirror holds `main` and `v1`, plus a branch `keep` of its own.
+fn pair(dir: &Path) -> (PathBuf, PathBuf, PathBuf) {
+    let (artifacts, _) = source(dir);
+    let github = dir.join("github.git");
     run_git(
-        dir.path(),
-        &["init", "-q", "--bare", github.to_str().expect("utf8")],
-    );
-    let other = dir.path().join("other");
-    fs::create_dir_all(&other).expect("mkdir");
-    run_git(&other, &["init", "-q"]);
-    fs::write(other.join("z.txt"), "z").expect("write");
-    run_git(&other, &["add", "."]);
-    run_git(&other, &["commit", "-q", "-m", "diverged"]);
-    run_git(&other, &["tag", "old"]);
-    run_git(&other, &["branch", "keep"]);
-    run_git(
-        &other,
+        dir,
         &[
-            "push",
+            "clone",
             "-q",
+            "--bare",
+            artifacts.to_str().expect("utf8"),
             github.to_str().expect("utf8"),
-            "main",
-            "keep",
-            "old",
         ],
     );
+    run_git(&github, &["branch", "-q", "keep", "main"]);
+    run_git(&github, &["branch", "-q", "-D", "change/wip"]);
+    (artifacts, github, dir.join("work"))
+}
 
-    let stage = dir.path().join("stage.git");
+fn stage(dir: &Path, name: &str) -> PathBuf {
+    let s = dir.join(name);
+    run_git(dir, &["init", "-q", "--bare", s.to_str().expect("utf8")]);
+    s
+}
+
+fn url(p: &Path) -> String {
+    format!("file://{}", p.display())
+}
+
+/// Commits on the work tree's `main` and pushes it, with a tag, to `to`.
+fn commit_to(work: &Path, to: &Path, file: &str, tag: &str) -> String {
+    fs::write(work.join(file), file).expect("write");
+    run_git(work, &["add", "."]);
+    run_git(work, &["commit", "-q", "-m", file]);
+    run_git(work, &["tag", tag]);
     run_git(
-        dir.path(),
-        &["init", "-q", "--bare", stage.to_str().expect("utf8")],
+        work,
+        &["push", "-q", to.to_str().expect("utf8"), "main", tag],
     );
-    let remote = format!("file://{}", bare.display());
-    let to = format!("file://{}", github.display());
-    let done = git::mirror_from(&remote, GIT_TOKEN, "main", "pigeon", &to, &stage).expect("mirror");
-    assert_eq!(
-        done.refs
-            .iter()
-            .map(|(r, _)| r.as_str())
-            .collect::<Vec<_>>(),
-        ["refs/heads/main", "refs/tags/v1"]
+    run_git(work, &["rev-parse", "HEAD"])
+}
+
+#[test]
+fn a_mirror_fast_forwards_adds_tags_and_never_pushes_changes() {
+    let dir = TempDir::new().expect("tempdir");
+    let (artifacts, github, work) = pair(dir.path());
+    run_git(&github, &["tag", "release-only", "main"]);
+    let head = commit_to(&work, &artifacts, "next.txt", "v2");
+    let done = git::mirror_from(
+        &url(&artifacts),
+        GIT_TOKEN,
+        "main",
+        "pigeon",
+        &url(&github),
+        &stage(dir.path(), "m.git"),
+    )
+    .expect("mirror");
+    assert!(done.refs.iter().any(|(r, _)| r == "refs/tags/v2"));
+    assert_eq!(run_git(&github, &["rev-parse", "refs/heads/main"]), head);
+    let tags = run_git(
+        &github,
+        &["for-each-ref", "--format=%(refname)", "refs/tags"],
     );
     assert_eq!(
-        run_git(&github, &["rev-parse", "refs/heads/main"]),
-        main,
-        "a diverged mirror is overwritten"
-    );
-    assert_eq!(
-        run_git(&github, &["rev-parse", "refs/tags/v1^{commit}"]),
-        main
+        tags, "refs/tags/release-only\nrefs/tags/v1\nrefs/tags/v2",
+        "tags are only added; a tag Artifacts lacks stays on the mirror"
     );
     let branches = run_git(
         &github,
@@ -598,14 +613,112 @@ fn a_mirror_follows_main_and_tags_and_never_changes() {
     );
     assert_eq!(
         branches, "refs/heads/keep\nrefs/heads/main",
-        "change/* never reaches the mirror, and unrelated branches stay"
+        "change/* never reaches the mirror"
     );
-    let tags = run_git(
-        &github,
-        &["for-each-ref", "--format=%(refname)", "refs/tags"],
+}
+
+#[test]
+fn a_mirror_that_moved_ahead_is_refused_until_synced() {
+    let dir = TempDir::new().expect("tempdir");
+    let (artifacts, github, _) = pair(dir.path());
+    let release = dir.path().join("release");
+    run_git(
+        dir.path(),
+        &[
+            "clone",
+            "-q",
+            github.to_str().expect("utf8"),
+            release.to_str().expect("utf8"),
+        ],
+    );
+    let released = commit_to(&release, &github, "CHANGELOG.md", "cobot/v9.9.9");
+    let stage_m = stage(dir.path(), "m.git");
+    let err = git::mirror_from(
+        &url(&artifacts),
+        GIT_TOKEN,
+        "main",
+        "pigeon",
+        &url(&github),
+        &stage_m,
+    )
+    .expect_err("refused")
+    .to_string();
+    assert!(
+        err.contains("run `pigeon cobot git sync pigeon` first"),
+        "{err}"
     );
     assert_eq!(
-        tags, "refs/tags/v1",
-        "a tag Artifacts lacks is deleted from the mirror"
+        run_git(&github, &["rev-parse", "refs/heads/main"]),
+        released,
+        "the mirror is untouched"
+    );
+
+    let synced = git::sync_from(
+        &url(&artifacts),
+        GIT_TOKEN,
+        "main",
+        "pigeon",
+        &url(&github),
+        &stage(dir.path(), "s.git"),
+    )
+    .expect("sync");
+    assert_eq!(
+        synced.advanced.as_ref().map(|(_, to)| to.as_str()),
+        Some(released.as_str())
+    );
+    assert_eq!(synced.tags, 1);
+    assert_eq!(
+        run_git(&artifacts, &["rev-parse", "refs/heads/main"]),
+        released
+    );
+    assert_eq!(
+        run_git(
+            &artifacts,
+            &["rev-parse", "refs/tags/cobot/v9.9.9^{commit}"]
+        ),
+        released
+    );
+    git::mirror_from(
+        &url(&artifacts),
+        GIT_TOKEN,
+        "main",
+        "pigeon",
+        &url(&github),
+        &stage_m,
+    )
+    .expect("a synced mirror takes the next push");
+}
+
+#[test]
+fn a_sync_refuses_histories_that_diverged() {
+    let dir = TempDir::new().expect("tempdir");
+    let (artifacts, github, work) = pair(dir.path());
+    let release = dir.path().join("release");
+    run_git(
+        dir.path(),
+        &[
+            "clone",
+            "-q",
+            github.to_str().expect("utf8"),
+            release.to_str().expect("utf8"),
+        ],
+    );
+    commit_to(&release, &github, "released.txt", "r1");
+    let ours = commit_to(&work, &artifacts, "ours.txt", "o1");
+    let err = git::sync_from(
+        &url(&artifacts),
+        GIT_TOKEN,
+        "main",
+        "pigeon",
+        &url(&github),
+        &stage(dir.path(), "s.git"),
+    )
+    .expect_err("diverged")
+    .to_string();
+    assert!(err.contains("has diverged"), "{err}");
+    assert_eq!(
+        run_git(&artifacts, &["rev-parse", "refs/heads/main"]),
+        ours,
+        "Artifacts is untouched"
     );
 }

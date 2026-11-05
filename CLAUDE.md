@@ -156,9 +156,11 @@ belong in the ADR, never in the file.
 - `pigeon cobot sites build [WORKLOAD…]`: build static sites with Zola, no
   secrets; `sites publish --state DIR` also syncs them to R2 and checks them
   live; `--data NAME=FILE` hands each template a JSON file as `data/NAME.json`.
-- `pigeon cobot git apply|status|push|fetch|clone|mirror [--instance DIR]`,
+- `pigeon cobot git apply|status|push|fetch|clone|mirror|sync [--instance DIR]`,
   with `CLOUDFLARE_API_TOKEN` scoped to the instance's account: its Artifacts
-  repositories; a token is minted per call and never stored.
+  repositories; a token is minted per call and never stored. Until releases
+  leave GitHub, `mirror` only fast-forwards and adds tags, and `sync` brings the
+  release bot's commits and tags back.
 - `pigeon cobot release --dry-run` / `pigeon cobot tags`: preview the bot's
   release JSON.
 - `pigeon backplane instance|engines|operations|run <op>` (`--json` for the

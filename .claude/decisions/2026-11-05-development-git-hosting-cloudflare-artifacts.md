@@ -181,3 +181,22 @@ The superseded texts stay as written:
 - After step 2, `pigeon cobot git status` shows Artifacts and GitHub at the same `main`.
 - From phase 3, a change is merged while GitHub is unreachable.
 - A failback drill on a scratch repository succeeds.
+
+## Amendments
+
+### 2026-11-05: Until releases leave GitHub, the mirror only fast-forwards and adds tags; `sync` brings releases back
+
+GitHub isn't a pure mirror yet. Until §5's release job runs on the control plane (§7 step 4), GitHub's release bot still commits `chore(release)` and pushes tags on GitHub `main`. The first import also carried only `main`, not the tags. Mirroring as §6 first described would have forced GitHub `main` back past a release commit, and deleted every release tag.
+
+1. **`pigeon cobot git mirror`** pushes the default branch without force, and tags add-only, never moving or deleting one. A mirror that holds commits or tags Artifacts lacks is refused, with "run `pigeon cobot git sync <repo>` first".
+2. **`pigeon cobot git sync [repo…]`** fetches the mirror's default branch and tags:
+   - it fast-forwards Artifacts when Artifacts is behind;
+   - it adds the tags Artifacts lacks;
+   - it stops, naming both SHAs, when the two have diverged.
+3. **The loop until §7 step 4:**
+   1. merge on Artifacts;
+   2. `mirror`;
+   3. GitHub's release bot releases;
+   4. `sync`.
+4. **Reconciliation, once.** The agent added GitHub's 185 tags to Artifacts, and merged GitHub's release of #140 (`247b31b`) into Artifacts `main` alongside the owner's `config.yaml` commit, with nothing forced. This is the only time the agent writes tags, an exception to [`2026-11-05-development-changes-through-pigeon-mcp.md`](2026-11-05-development-changes-through-pigeon-mcp.md) §1.
+5. **When the release job moves** to the control plane, GitHub becomes a pure mirror again. `mirror` may then follow §6 as written.

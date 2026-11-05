@@ -206,7 +206,7 @@ fn git(command: GitCommand) -> Result<(), cobot::Error> {
     let at: &CobotRoot = match &command {
         GitCommand::Apply(a) | GitCommand::Status(a) => a,
         GitCommand::Push(r) | GitCommand::Fetch(r) | GitCommand::Clone(r) => &r.at,
-        GitCommand::Mirror(m) => &m.at,
+        GitCommand::Mirror(m) | GitCommand::Sync(m) => &m.at,
     };
     let root = at.instance_root().to_path_buf();
     let instance = cobot::git::declared(&root, &at.root)?;
@@ -283,7 +283,8 @@ fn git(command: GitCommand) -> Result<(), cobot::Error> {
             "clone",
             cobot::artifacts::Scope::Read,
         ),
-        GitCommand::Mirror(m) => git_mirror(&client, &instance, &m, &root),
+        GitCommand::Mirror(m) => git_mirror(&client, &instance, &m, &root, false),
+        GitCommand::Sync(m) => git_mirror(&client, &instance, &m, &root, true),
     }
 }
 
@@ -316,6 +317,7 @@ fn git_mirror(
     instance: &cobot::git::Instance,
     m: &GitMirror,
     root: &std::path::Path,
+    sync: bool,
 ) -> Result<(), cobot::Error> {
     for name in &m.repos {
         match instance.repos.iter().find(|d| &d.name == name) {
@@ -336,13 +338,25 @@ fn git_mirror(
         let Some(to) = &d.mirror else {
             continue;
         };
-        let done = cobot::git::mirror(client, instance, &d.name, to, root)?;
-        println!(
-            "cobot: mirrored {} to {}: {} ref(s)",
-            done.name,
-            done.to,
-            done.refs.len()
-        );
+        if sync {
+            let done = cobot::git::sync(client, instance, &d.name, to, root)?;
+            let moved = done.advanced.as_ref().map_or_else(
+                || "unchanged".to_string(),
+                |(a, b)| format!("{}..{}", &a[..12.min(a.len())], &b[..12.min(b.len())]),
+            );
+            println!(
+                "cobot: synced {} from {to}: main {moved}, {} tag(s) added",
+                done.name, done.tags
+            );
+        } else {
+            let done = cobot::git::mirror(client, instance, &d.name, to, root)?;
+            println!(
+                "cobot: mirrored {} to {}: {} ref(s)",
+                done.name,
+                done.to,
+                done.refs.len()
+            );
+        }
     }
     Ok(())
 }

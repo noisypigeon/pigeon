@@ -345,9 +345,10 @@ pub struct Mirrored {
     pub refs: Vec<(String, String)>,
 }
 
-/// Mirrors repository `name`'s default branch and tags, and nothing else, to `to`, forcing it
-/// to follow Artifacts and deleting tags Artifacts no longer has; staged in `<root>/.cobot/git/<name>.git`. The push uses the user's own
-/// git credentials, never the Artifacts token.
+/// Mirrors repository `name`'s default branch and tags, and nothing else, to `to`: the branch
+/// only fast-forwards and tags are only added, while GitHub's release bot still writes there.
+/// Staged in `<root>/.cobot/git/<name>.git`; the push uses the user's own git credentials,
+/// never the Artifacts token.
 ///
 /// # Errors
 ///
@@ -391,11 +392,12 @@ fn stage(root: &Path, name: &str) -> Result<PathBuf, Error> {
     Ok(dir)
 }
 
-/// [`mirror`] from `remote` with `token`, through the bare repository `dir`.
+/// [`mirror`] from `remote` with `token`, through the bare repository `dir`: the mirror's
+/// branch only fast-forwards and its tags are only added; a mirror that moved ahead is refused.
 ///
 /// # Errors
 ///
-/// [`Error::Tool`] when git fails.
+/// [`Error::Tool`] when git fails, or the mirror is ahead of or diverged from Artifacts.
 pub fn mirror_from(
     remote: &str,
     token: &str,
@@ -404,65 +406,185 @@ pub fn mirror_from(
     to: &str,
     dir: &Path,
 ) -> Result<Mirrored, Error> {
-    let heads = format!("+refs/heads/{branch}:refs/heads/{branch}");
+    let heads = format!("refs/heads/{branch}:refs/heads/{branch}");
     checked(
         command(remote, token)
             .arg("--git-dir")
             .arg(dir)
-            .args(["fetch", "--quiet", "--prune", "--force", remote, &heads])
-            .arg("+refs/tags/*:refs/tags/*")
+            .args(["fetch", "--quiet", "--force", remote, &format!("+{heads}")])
+            .arg("refs/tags/*:refs/tags/*")
             .output(),
         "git fetch",
     )?;
-    let tags = |listing: &str| -> std::collections::BTreeSet<String> {
-        listing
-            .lines()
-            .filter_map(|l| l.split_whitespace().last())
-            .filter(|r| r.starts_with("refs/tags/"))
-            .map(str::to_string)
-            .collect()
-    };
-    let mut plain = Command::new("git");
-    plain.env("GIT_TERMINAL_PROMPT", "0");
-    let theirs = tags(&checked(
-        plain.args(["ls-remote", "--tags", "--refs", to]).output(),
-        "git ls-remote",
-    )?);
-    let ours = tags(&checked(
-        Command::new("git")
-            .arg("--git-dir")
-            .arg(dir)
-            .args(["for-each-ref", "--format=%(refname)", "refs/tags"])
-            .output(),
-        "git for-each-ref",
-    )?);
-    let mut push = Command::new("git");
-    push.env("GIT_TERMINAL_PROMPT", "0")
-        .arg("--git-dir")
-        .arg(dir)
-        .args(["push", "--quiet", "--atomic", to, &heads])
-        .arg("+refs/tags/*:refs/tags/*")
-        .args(theirs.difference(&ours).map(|t| format!(":{t}")));
-    checked(push.output(), "git push")?;
+    let mut push = plain(dir);
+    push.args(["push", "--quiet", "--atomic", to, &heads])
+        .arg("refs/tags/*:refs/tags/*");
+    checked(push.output(), "git push").map_err(|e| match e {
+        Error::Tool { message, .. } if message.contains("rejected") => Error::Tool {
+            command: "git mirror".into(),
+            message: format!(
+                "{to} has commits or tags Artifacts lacks; run `pigeon cobot git sync {name}` first"
+            ),
+        },
+        other => other,
+    })?;
+    Ok(Mirrored {
+        name: name.to_string(),
+        to: to.to_string(),
+        refs: refs(dir, branch)?,
+    })
+}
+
+/// `git --git-dir dir`, never prompting.
+fn plain(dir: &Path) -> Command {
+    let mut c = Command::new("git");
+    c.env("GIT_TERMINAL_PROMPT", "0").arg("--git-dir").arg(dir);
+    c
+}
+
+/// The default branch and tags in `dir`, sorted.
+fn refs(dir: &Path, branch: &str) -> Result<Vec<(String, String)>, Error> {
     let listed = checked(
-        Command::new("git")
-            .arg("--git-dir")
-            .arg(dir)
+        plain(dir)
             .args(["for-each-ref", "--format=%(refname) %(objectname)"])
             .arg(format!("refs/heads/{branch}"))
             .arg("refs/tags")
             .output(),
         "git for-each-ref",
     )?;
-    let mut refs: Vec<(String, String)> = listed
+    let mut out: Vec<(String, String)> = listed
         .lines()
         .filter_map(|l| l.split_once(' '))
         .map(|(r, s)| (r.to_string(), s.to_string()))
         .collect();
-    refs.sort();
-    Ok(Mirrored {
+    out.sort();
+    Ok(out)
+}
+
+/// What a sync brought back from the mirror.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Synced {
+    /// The repository.
+    pub name: String,
+    /// The default branch's move on Artifacts, `(from, to)`, when the mirror was ahead.
+    pub advanced: Option<(String, String)>,
+    /// Tags added to Artifacts.
+    pub tags: usize,
+}
+
+/// Brings repository `name` up to its mirror `to`, where GitHub's release bot still commits and
+/// tags: fast-forwards the default branch when Artifacts is behind, and adds the tags it lacks.
+/// Staged in `<root>/.cobot/git/<name>.git`.
+///
+/// # Errors
+///
+/// [`Error::Tool`] when a call or git fails, or the two have diverged.
+pub fn sync(
+    client: &Client<'_>,
+    instance: &Instance,
+    name: &str,
+    to: &str,
+    root: &Path,
+) -> Result<Synced, Error> {
+    let (d, repo) = live(client, instance, name)?;
+    let token = client
+        .token(&instance.namespace, name, Scope::Write)
+        .map_err(api_error)?;
+    sync_from(
+        &repo.remote,
+        &token,
+        &d.branch,
+        name,
+        to,
+        &stage(root, name)?,
+    )
+}
+
+/// [`sync`] from mirror `to` into `remote` with write `token`, through the bare repository `dir`.
+///
+/// # Errors
+///
+/// [`Error::Tool`] when git fails, or the two branches have diverged.
+pub fn sync_from(
+    remote: &str,
+    token: &str,
+    branch: &str,
+    name: &str,
+    to: &str,
+    dir: &Path,
+) -> Result<Synced, Error> {
+    let ours = format!("refs/heads/{branch}");
+    let theirs = format!("refs/mirror/{branch}");
+    checked(
+        command(remote, token)
+            .arg("--git-dir")
+            .arg(dir)
+            .args([
+                "fetch",
+                "--quiet",
+                "--force",
+                remote,
+                &format!("+{ours}:{ours}"),
+            ])
+            .output(),
+        "git fetch",
+    )?;
+    let before: std::collections::BTreeSet<String> = checked(
+        command(remote, token)
+            .args(["ls-remote", "--tags", "--refs", remote])
+            .output(),
+        "git ls-remote",
+    )?
+    .lines()
+    .filter_map(|l| l.split_whitespace().last())
+    .map(str::to_string)
+    .collect();
+    checked(
+        plain(dir)
+            .args(["fetch", "--quiet", to, &format!("+{ours}:{theirs}")])
+            .arg("refs/tags/*:refs/tags/*")
+            .output(),
+        "git fetch",
+    )?;
+    let sha = |r: &str| {
+        checked(plain(dir).args(["rev-parse", r]).output(), "git rev-parse")
+            .map(|s| s.trim().to_string())
+    };
+    let is_ancestor = |a: &str, b: &str| {
+        plain(dir)
+            .args(["merge-base", "--is-ancestor", a, b])
+            .status()
+            .is_ok_and(|s| s.success())
+    };
+    let (here, there) = (sha(&ours)?, sha(&theirs)?);
+    let advanced = if here == there || is_ancestor(&there, &here) {
+        None
+    } else if is_ancestor(&here, &there) {
+        Some((here.clone(), there.clone()))
+    } else {
+        return Err(Error::Tool {
+            command: "git sync".into(),
+            message: format!(
+                "{name} has diverged: Artifacts {branch} is {here}, {to} is {there}; merge them by hand"
+            ),
+        });
+    };
+    let added = refs(dir, branch)?
+        .into_iter()
+        .filter(|(r, _)| r.starts_with("refs/tags/") && !before.contains(r))
+        .count();
+    let mut push = command(remote, token);
+    push.arg("--git-dir")
+        .arg(dir)
+        .args(["push", "--quiet", "--atomic", remote])
+        .arg("refs/tags/*:refs/tags/*");
+    if advanced.is_some() {
+        push.arg(format!("{theirs}:{ours}"));
+    }
+    checked(push.output(), "git push")?;
+    Ok(Synced {
         name: name.to_string(),
-        to: to.to_string(),
-        refs,
+        advanced,
+        tags: added,
     })
 }

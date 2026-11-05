@@ -137,6 +137,8 @@ pub enum GitCommand {
     Clone(GitRun),
     /// Push each repository's default branch and tags to its mirror, with your own git credentials
     Mirror(GitMirror),
+    /// Bring each repository up to its mirror's release commits and tags
+    Sync(GitMirror),
 }
 
 /// A repository and the git arguments after its remote.
