@@ -4,6 +4,7 @@
 use rusqlite::Connection;
 
 const SCHEMA_V0: &str = include_str!("../migrations/0001_schema_v0.sql");
+const CHANGES: &str = include_str!("../migrations/0002_changes.sql");
 
 fn applied() -> Connection {
     let db = Connection::open_in_memory().expect("sqlite");
@@ -126,4 +127,88 @@ fn schema_v0_refuses_bad_rows() {
         ),
         "one approval per approver"
     );
+}
+
+const SHA: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+
+fn with_changes() -> Connection {
+    let db = applied();
+    db.execute_batch(CHANGES).expect("0002 applies");
+    db.execute_batch(&format!(
+        "INSERT INTO changes (instance, repo, number, slug, title, plan, scope, proposer, state,
+           head, plan_approver, created, updated)
+         VALUES ('i1', 'pigeon/pigeon', 7, 'x', 't', 'p', '[]', 'agent', 'bounded', '{SHA}',
+           'owner', 1, 1);"
+    ))
+    .expect("seed");
+    db
+}
+
+#[test]
+fn changes_refuse_impossible_rows() {
+    let db = with_changes();
+    let insert = |state: &str, head: &str, plan_approver: &str, approver: &str, sha: &str| {
+        format!(
+            "INSERT INTO changes (instance, repo, number, slug, title, plan, scope, proposer, state,
+               head, plan_approver, approver, approved_sha, created, updated)
+             VALUES ('i1', 'pigeon/pigeon', 8, 'y', 't', 'p', '[]', 'agent', '{state}', {head},
+               {plan_approver}, {approver}, {sha}, 1, 1);"
+        )
+    };
+    let sha = format!("'{SHA}'");
+    for (why, sql) in [
+        (
+            "unknown state",
+            insert("done", "NULL", "'owner'", "NULL", "NULL"),
+        ),
+        (
+            "pushed without a head",
+            insert("pushed", "NULL", "'owner'", "NULL", "NULL"),
+        ),
+        (
+            "planned without a plan approver",
+            insert("planned", "NULL", "NULL", "NULL", "NULL"),
+        ),
+        (
+            "self-approved plan",
+            insert("planned", "NULL", "'agent'", "NULL", "NULL"),
+        ),
+        (
+            "approved without an approver",
+            insert("approved", &sha, "'owner'", "NULL", "NULL"),
+        ),
+        (
+            "approved another SHA",
+            insert(
+                "approved",
+                &sha,
+                "'owner'",
+                "'owner'",
+                "'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'",
+            ),
+        ),
+        (
+            "self-approved change",
+            insert("approved", &sha, "'owner'", "'agent'", &sha),
+        ),
+        (
+            "short head",
+            insert("pushed", "'abc'", "'owner'", "NULL", "NULL"),
+        ),
+    ] {
+        assert!(refused(&db, &sql), "{why}");
+    }
+    assert!(!refused(
+        &db,
+        &insert("approved", &sha, "'owner'", "'owner'", &sha)
+    ));
+    let job = |change: u32, status: &str| {
+        format!(
+            "INSERT INTO jobs (instance, repo, change, sha, name, status, updated)
+             VALUES ('i1', 'pigeon/pigeon', {change}, '{SHA}', 'fmt', '{status}', 1);"
+        )
+    };
+    assert!(refused(&db, &job(99, "queued")), "a job needs its change");
+    assert!(refused(&db, &job(7, "lost")), "unknown job status");
+    assert!(!refused(&db, &job(7, "running")));
 }
