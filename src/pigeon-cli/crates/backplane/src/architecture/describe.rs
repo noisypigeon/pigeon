@@ -264,7 +264,7 @@ fn policies(instance: &Instance, units: &[String], g: &mut Graph) -> Result<(), 
         g.nodes
             .push(node(&id, "policy", Lane::Policy, &p.name, &source));
         let targets: BTreeSet<String> = match &p.policy.target {
-            Target::Named(NamedTarget::PullRequest) => {
+            Target::Named(NamedTarget::PullRequest | NamedTarget::Change) => {
                 g.nodes.push(node(
                     PULL_REQUEST,
                     "source",

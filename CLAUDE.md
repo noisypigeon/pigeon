@@ -169,6 +169,8 @@ belong in the ADR, never in the file.
   instance.
 - `mise run sentinel`: `pigeon backplane run policy.check` against
   `.config/policies/`; `pigeon backplane run sites.build` builds every site.
+- `CHANGE_BASE=origin/main mise run sentinel-change`: `policy.check` on this
+  branch as a change, its scope from the first commit's `Change-Scope:` trailers.
 - `PR_TITLE='…' PR_BODY='…' PR_NUMBER=N PR_FILES="$(git diff --name-only main...)" mise run sentinel-pr`:
   adds the pull-request policy, through `policy.check`'s `title`, `body`,
   `number` and `files` arguments.

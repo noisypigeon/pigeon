@@ -71,6 +71,10 @@ pub struct PullRequest {
     pub number: Option<String>,
     /// The changed paths, one per line.
     pub files: Option<String>,
+    /// A change's branch, `change/<n>-<slug>`.
+    pub branch: Option<String>,
+    /// A change's approved scope: path globs, one per line.
+    pub scope: Option<String>,
 }
 
 /// Loads and validates one policy file.

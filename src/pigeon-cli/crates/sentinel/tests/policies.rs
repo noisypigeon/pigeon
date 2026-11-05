@@ -183,6 +183,7 @@ fn pr_files(title: &str, body: &str, number: Option<&str>, files: Option<&str>) 
         body: Some(body.into()),
         number: number.map(Into::into),
         files: files.map(Into::into),
+        ..PullRequest::default()
     };
     violations("pull-request", root.path(), Some(&pr))
 }

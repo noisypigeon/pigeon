@@ -53,6 +53,23 @@ run = "cargo run -q --locked -p pigeon -- backplane run policy.check --root ../.
 dir = "src/pigeon-cli"
 run = 'cargo run -q --locked -p pigeon -- backplane run policy.check --root ../.. --text "title=$PR_TITLE" --text "body=$PR_BODY" --text "number=$PR_NUMBER" --text "files=$PR_FILES"'
 
+[tasks.sentinel-change]
+description = "policy.check on this branch as a change: its branch, files against CHANGE_BASE (default origin/main), and its first commit's title, body and Change-Scope trailers"
+dir = "src/pigeon-cli"
+run = '''
+base="${CHANGE_BASE:-origin/main}"
+branch="$(git rev-parse --abbrev-ref HEAD)"
+first="$(git rev-list --reverse "$base"..HEAD | head -n 1)"
+number="$(printf '%s' "$branch" | sed -n 's#^change/\([0-9]*\)-.*#\1#p')"
+cargo run -q --locked -p pigeon -- backplane run policy.check --root ../.. \
+  --text "branch=$branch" \
+  --text "number=${number:-0}" \
+  --text "title=$(git log -1 --format=%s "$first")" \
+  --text "body=$(git log -1 --format=%b "$first")" \
+  --text "scope=$(git log -1 --format='%(trailers:key=Change-Scope,valueonly)' "$first")" \
+  --text "files=$(git diff --name-only "$base"...HEAD)"
+'''
+
 [tasks.backplane]
 dir = "src/pigeon-cli"
 run = "cargo run -q --locked -p pigeon -- backplane instance --root ../.."

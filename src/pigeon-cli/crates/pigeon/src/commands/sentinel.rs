@@ -32,6 +32,8 @@ fn check(args: &CheckArgs) -> i32 {
         body: env::var("PR_BODY").ok(),
         number: env::var("PR_NUMBER").ok(),
         files: env::var("PR_FILES").ok(),
+        branch: env::var("PR_BRANCH").ok(),
+        scope: env::var("PR_SCOPE").ok(),
     });
     match sentinel::check(&policies, &args.root, pull_request.as_ref()) {
         Ok(report) => {

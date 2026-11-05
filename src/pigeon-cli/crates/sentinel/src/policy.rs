@@ -37,6 +37,9 @@ pub enum Target {
 pub enum NamedTarget {
     /// A pull request's title, body and number.
     PullRequest,
+    /// A change: a pull request's fields, plus its branch and scope; see
+    /// `.claude/decisions/2026-11-05-development-changes-through-pigeon-mcp.md` §3.
+    Change,
     /// The repository's directories, for `entries` rules.
     Tree,
 }
@@ -330,6 +333,10 @@ pub struct FieldRule {
     /// The fewest references.
     #[serde(default)]
     pub min: usize,
+    /// Every line matches a glob in this other field's lines.
+    pub within: Option<PrField>,
+    /// The most non-empty lines.
+    pub max_lines: Option<usize>,
 }
 
 /// A pull-request field.
@@ -344,6 +351,10 @@ pub enum PrField {
     Number,
     /// The changed paths, one per line.
     Files,
+    /// A change's branch.
+    Branch,
+    /// A change's scope: path globs, one per line.
+    Scope,
 }
 
 /// See [`Rule::Contains`].
@@ -372,7 +383,11 @@ impl Policy {
         if self.description.trim().is_empty() || self.description.contains('\n') {
             return Err("description must be one non-empty line".into());
         }
-        let pr = matches!(self.target, Target::Named(NamedTarget::PullRequest));
+        let pr = matches!(
+            self.target,
+            Target::Named(NamedTarget::PullRequest | NamedTarget::Change)
+        );
+        let change = matches!(self.target, Target::Named(NamedTarget::Change));
         let tree = matches!(self.target, Target::Named(NamedTarget::Tree));
         for (i, rule) in self.rules.iter().enumerate() {
             let at = |m: &str| Err(format!("rule {}: {m}", i + 1));
@@ -384,14 +399,29 @@ impl Policy {
                 _ if tree => return at("only `entries` and `find` apply to `tree`"),
                 Rule::Field(r) => {
                     if !pr {
-                        return at("`field` needs the `pull-request` target");
+                        return at("`field` needs the `pull-request` or `change` target");
                     }
-                    if (r.matches.is_some() || r.not.is_some()) == r.references.is_some() {
-                        return at("`field` takes `references`, or `matches` and/or `not`");
+                    let kinds = usize::from(r.matches.is_some() || r.not.is_some())
+                        + usize::from(r.references.is_some())
+                        + usize::from(r.within.is_some())
+                        + usize::from(r.max_lines.is_some());
+                    if kinds != 1 {
+                        return at(
+                            "`field` takes one of `references`, `within`, `max_lines`, or `matches` and/or `not`",
+                        );
+                    }
+                    if !change
+                        && (matches!(r.name, PrField::Branch | PrField::Scope)
+                            || r.within
+                                .is_some_and(|w| matches!(w, PrField::Branch | PrField::Scope)))
+                    {
+                        return at("`branch` and `scope` need the `change` target");
                     }
                 }
                 Rule::Contains(_) => {}
-                _ if pr => return at("only `field` and `contains` apply to `pull-request`"),
+                _ if pr => {
+                    return at("only `field` and `contains` apply to `pull-request` and `change`");
+                }
                 Rule::Fields(r) => {
                     for e in &r.expect {
                         let set = usize::from(e.equals.is_some())

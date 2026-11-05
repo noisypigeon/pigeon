@@ -90,7 +90,7 @@ const CATALOG: &[Operation] = &[
         name: "policy.check",
         engine: Engine::Sentinel,
         effect: Effect::Read,
-        summary: "Check the instance against its policies (args: title?, body?, number?, files?, which add the pull-request policy)",
+        summary: "Check the instance against its policies (args: title?, body?, number?, files?, which add the pull-request policy; branch? and scope? add the change policy)",
     },
     Operation {
         name: "infra.validate",
@@ -126,6 +126,8 @@ fn arguments(name: &str) -> &'static [(&'static str, bool)] {
             ("body", false),
             ("number", false),
             ("files", false),
+            ("branch", false),
+            ("scope", false),
         ],
         "sites.build" => &[("sites", false)],
         "infra.plan" => &[("state", true), ("units", false)],
@@ -192,7 +194,7 @@ pub fn validate(request: &Request) -> Result<&'static Operation, Error> {
     for (name, value) in &request.args {
         let ok = match name.as_str() {
             "state" | "plan" => value.is_string(),
-            "title" | "body" | "number" | "files" => {
+            "title" | "body" | "number" | "files" | "branch" | "scope" => {
                 value.is_string() || value.is_number() || value.is_boolean()
             }
             "units" | "sites" => value

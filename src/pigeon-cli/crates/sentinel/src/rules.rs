@@ -117,20 +117,25 @@ pub fn run_pull_request(
     loaded: &LoadedPolicy,
     pr: &PullRequest,
     root: &Path,
+    change: bool,
     out: &mut Vec<Violation>,
 ) {
     let mut ctx = Ctx {
         policy: &loaded.name,
-        path: "pull request".into(),
+        path: if change { "change" } else { "pull request" }.into(),
         vars: Vars::new(),
         out,
     };
+    let extra = [("branch", &pr.branch), ("scope", &pr.scope)];
     for (name, value) in [
         ("title", &pr.title),
         ("body", &pr.body),
         ("number", &pr.number),
         ("files", &pr.files),
-    ] {
+    ]
+    .into_iter()
+    .chain(extra.into_iter().filter(|_| change))
+    {
         match value {
             Some(v) => {
                 ctx.vars.insert(name.into(), v.clone());
@@ -589,13 +594,42 @@ fn constraints(
     }
 }
 
-fn field(ctx: &mut Ctx, root: &Path, r: &FieldRule) {
-    let name = match r.name {
+fn field_name(f: PrField) -> &'static str {
+    match f {
         PrField::Title => "title",
         PrField::Body => "body",
         PrField::Number => "number",
         PrField::Files => "files",
-    };
+        PrField::Branch => "branch",
+        PrField::Scope => "scope",
+    }
+}
+
+/// `glob` as a regex over a `/`-separated path: `**` spans directories, `*` stays within one,
+/// and a trailing `/` matches everything under it.
+fn glob(glob: &str) -> Option<Regex> {
+    let mut re = String::from("^");
+    let mut chars = glob.trim().chars().peekable();
+    while let Some(c) = chars.next() {
+        match c {
+            '*' if chars.peek() == Some(&'*') => {
+                chars.next();
+                re.push_str(".*");
+            }
+            '*' => re.push_str("[^/]*"),
+            '?' => re.push_str("[^/]"),
+            c => re.push_str(&regex::escape(&c.to_string())),
+        }
+    }
+    if glob.trim().ends_with('/') {
+        re.push_str(".*");
+    }
+    re.push('$');
+    Regex::new(&re).ok()
+}
+
+fn field(ctx: &mut Ctx, root: &Path, r: &FieldRule) {
+    let name = field_name(r.name);
     let Some(value) = ctx.vars.get(name).cloned() else {
         return;
     };
@@ -620,6 +654,39 @@ fn field(ctx: &mut Ctx, root: &Path, r: &FieldRule) {
                 n.0
             ),
         );
+    }
+    if let Some(max) = r.max_lines {
+        let n = value.lines().filter(|l| !l.trim().is_empty()).count();
+        if n > max {
+            ctx.push(None, format!("`{name}` has {n} lines; at most {max}"));
+        }
+    }
+    if let Some(other) = r.within {
+        let globs: Vec<Regex> = ctx
+            .vars
+            .get(field_name(other))
+            .map(|s| {
+                s.lines()
+                    .filter(|l| !l.trim().is_empty())
+                    .filter_map(glob)
+                    .collect()
+            })
+            .unwrap_or_default();
+        let outside: Vec<&str> = value
+            .lines()
+            .map(str::trim)
+            .filter(|l| !l.is_empty() && !globs.iter().any(|g| g.is_match(l)))
+            .collect();
+        if !outside.is_empty() {
+            ctx.push(
+                None,
+                format!(
+                    "`{name}` holds paths outside `{}`: {}",
+                    field_name(other),
+                    outside.join(", ")
+                ),
+            );
+        }
     }
     if let Some(re) = &r.references {
         let mut cited: Vec<&str> = Vec::new();

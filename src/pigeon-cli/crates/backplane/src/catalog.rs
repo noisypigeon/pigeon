@@ -71,9 +71,15 @@ fn pull_request(args: &Map<String, Value>) -> Option<sentinel::PullRequest> {
         body: field("body"),
         number: field("number"),
         files: field("files"),
+        branch: field("branch"),
+        scope: field("scope"),
     };
-    (pr.title.is_some() || pr.body.is_some() || pr.number.is_some() || pr.files.is_some())
-        .then_some(pr)
+    (pr.title.is_some()
+        || pr.body.is_some()
+        || pr.number.is_some()
+        || pr.files.is_some()
+        || pr.branch.is_some())
+    .then_some(pr)
 }
 
 fn policy_check(

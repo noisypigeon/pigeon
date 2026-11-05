@@ -29,7 +29,13 @@ pub fn run(
             let Some(pr) = pull_request else {
                 return Ok(false);
             };
-            rules::run_pull_request(loaded, pr, root, &mut report.violations);
+            rules::run_pull_request(loaded, pr, root, false, &mut report.violations);
+        }
+        Target::Named(NamedTarget::Change) => {
+            let Some(pr) = pull_request.filter(|pr| pr.branch.is_some()) else {
+                return Ok(false);
+            };
+            rules::run_pull_request(loaded, pr, root, true, &mut report.violations);
         }
         Target::File(t) => match fs::read_to_string(root.join(&t.file)) {
             Ok(content) => {
