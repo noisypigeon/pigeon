@@ -128,7 +128,11 @@ fn catalog_names_are_unique_and_dotted() {
         .collect();
     assert_eq!(
         changing,
-        [("infra.plan", Effect::Plan), ("infra.apply", Effect::Apply)],
+        [
+            ("sites.build", Effect::Build),
+            ("infra.plan", Effect::Plan),
+            ("infra.apply", Effect::Apply)
+        ],
         "only these change anything"
     );
 }
@@ -252,6 +256,24 @@ fn policy_check_runs_the_pull_request_policy_only_when_given_its_fields() {
         ),
         Err(Error::Invalid(_))
     ));
+}
+
+#[test]
+fn an_instance_without_policies_describes_and_builds() {
+    let root = fixture(MANIFEST, "ok\n");
+    fs::remove_file(root.path().join(".config/policies/p.yaml")).expect("no policies");
+    let instance = Instance::load(root.path()).expect("valid");
+    let described = run(&instance, &request("architecture.describe")).expect("describes");
+    assert!(
+        !described.result["nodes"]
+            .as_array()
+            .expect("nodes")
+            .iter()
+            .any(|n| n["kind"] == "policy"),
+        "{}",
+        described.result
+    );
+    assert!(run(&instance, &request("sites.build")).expect("builds").ok);
 }
 
 #[test]

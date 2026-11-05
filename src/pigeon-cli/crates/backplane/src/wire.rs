@@ -43,6 +43,8 @@ pub enum Effect {
     Plan,
     /// Makes changes.
     Apply,
+    /// Writes only its own work directory; changes nothing deployed.
+    Build,
 }
 
 impl Effect {
@@ -53,6 +55,7 @@ impl Effect {
             Self::Read => "read",
             Self::Plan => "plan",
             Self::Apply => "apply",
+            Self::Build => "build",
         }
     }
 }
@@ -98,7 +101,7 @@ const CATALOG: &[Operation] = &[
     Operation {
         name: "sites.build",
         engine: Engine::Cobot,
-        effect: Effect::Read,
+        effect: Effect::Build,
         summary: "Build static sites into the work directory with the instance's architecture as data; publishes nothing (args: sites?)",
     },
     Operation {

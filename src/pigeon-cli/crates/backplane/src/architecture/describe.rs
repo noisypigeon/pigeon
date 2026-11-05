@@ -224,13 +224,19 @@ fn sites(root: &Path, g: &mut Graph, problems: &mut Vec<String>) {
 /// Every policy, and what it governs.
 fn policies(instance: &Instance, units: &[String], g: &mut Graph) -> Result<(), Error> {
     let policies_dir = instance.paths.policies.display().to_string();
-    let policies =
-        sentinel::load_dir(&instance.resolve(&instance.paths.policies)).map_err(|e| {
-            Error::Engine {
-                engine: Engine::Sentinel,
-                message: e.to_string(),
-            }
-        })?;
+    let dir = instance.resolve(&instance.paths.policies);
+    let any = std::fs::read_dir(&dir).is_ok_and(|entries| {
+        entries
+            .flatten()
+            .any(|e| e.path().extension().is_some_and(|x| x == "yaml"))
+    });
+    if !any {
+        return Ok(());
+    }
+    let policies = sentinel::load_dir(&dir).map_err(|e| Error::Engine {
+        engine: Engine::Sentinel,
+        message: e.to_string(),
+    })?;
     for p in &policies {
         let id = format!("policy:{}", p.name);
         let source = format!("{policies_dir}/{}.yaml", p.name);

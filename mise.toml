@@ -51,7 +51,7 @@ run = "cargo run -q --locked -p pigeon -- backplane run policy.check --root ../.
 
 [tasks.sentinel-pr]
 dir = "src/pigeon-cli"
-run = 'cargo run -q --locked -p pigeon -- backplane run policy.check --root ../.. --arg "title=$PR_TITLE" --arg "body=$PR_BODY" --arg "number=$PR_NUMBER" --arg "files=$PR_FILES"'
+run = 'cargo run -q --locked -p pigeon -- backplane run policy.check --root ../.. --text "title=$PR_TITLE" --text "body=$PR_BODY" --text "number=$PR_NUMBER" --text "files=$PR_FILES"'
 
 [tasks.backplane]
 dir = "src/pigeon-cli"
