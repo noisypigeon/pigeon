@@ -40,6 +40,11 @@ belong in the ADR, never in the file.
   CI holds no credentials, and the owner plans and applies from the CLI, run
   from pigeon with `--instance DIR` naming the instance, per
   [`2026-11-05-development-pigeon-its-own-instance.md`](.claude/decisions/2026-11-05-development-pigeon-its-own-instance.md).
+- An instance is one root `config.yaml` (manifest `v1`) of kind-typed units:
+  `units.<id>` names a platform-defined `kind: <catalog>/<kind>` from
+  `catalog/<catalog>/kinds/`; credentials are declared and filled by the run,
+  IDs are looked up, and `moves` carries state, per
+  [`2026-11-05-runtime-instance-config-kind-units.md`](.claude/decisions/2026-11-05-runtime-instance-config-kind-units.md).
 - `infra/pigeon/` bootstraps the platform's own Cloudflare account. It is a
   local unit (`x-cobot.local: true`): CI validates it but plans and applies
   only unnamed units, so its owner applies it by hand with a scoped token in
