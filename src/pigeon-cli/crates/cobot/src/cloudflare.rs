@@ -56,30 +56,86 @@ impl Api {
         &self.token
     }
 
-    fn get(&self, path: &str) -> Result<Value, String> {
+    /// `GET path`'s result.
+    pub(crate) fn get(&self, path: &str) -> Result<Value, String> {
+        self.call("GET", path, None)
+            .and_then(|(status, body)| ok(status, &body, "GET", path))
+    }
+
+    /// `GET path`'s result, or `None` when it is 404.
+    pub(crate) fn find(&self, path: &str) -> Result<Option<Value>, String> {
+        match self.call("GET", path, None)? {
+            (404, _) => Ok(None),
+            (status, body) => ok(status, &body, "GET", path).map(Some),
+        }
+    }
+
+    /// `DELETE path`; its result.
+    pub(crate) fn delete(&self, path: &str) -> Result<Value, String> {
+        self.call("DELETE", path, None)
+            .and_then(|(status, b)| ok(status, &b, "DELETE", path))
+    }
+
+    /// `POST path` with a JSON `body`; its result.
+    pub(crate) fn post(&self, path: &str, body: &Value) -> Result<Value, String> {
+        self.call("POST", path, Some(body))
+            .and_then(|(status, b)| ok(status, &b, "POST", path))
+    }
+
+    /// `POST path` with the first of `bodies` the API accepts, trying the next on a 400 or 404;
+    /// see `.claude/decisions/2026-11-05-development-git-hosting-cloudflare-artifacts.md`.
+    pub(crate) fn post_first(&self, path: &str, bodies: &[Value]) -> Result<Value, String> {
+        let tries: Vec<(String, Value)> = bodies
+            .iter()
+            .map(|b| (path.to_string(), b.clone()))
+            .collect();
+        self.post_any(&tries)
+    }
+
+    /// `POST` of the first `(path, body)` the API accepts, trying the next on a 400 or 404; the
+    /// last failure when none does.
+    pub(crate) fn post_any(&self, tries: &[(String, Value)]) -> Result<Value, String> {
+        let mut last = "POST: nothing to send".to_string();
+        for (path, b) in tries {
+            match self.call("POST", path, Some(b)) {
+                Ok((status @ (400 | 404), body)) => {
+                    last = ok(status, &body, "POST", path).err().unwrap_or_default();
+                }
+                Ok((status, body)) => return ok(status, &body, "POST", path),
+                Err(e) => return Err(e),
+            }
+        }
+        Err(last)
+    }
+
+    /// One call: its status and JSON body. Messages name the method and path, never the token.
+    fn call(&self, method: &str, path: &str, body: Option<&Value>) -> Result<(u16, Value), String> {
         let agent: ureq::Agent = ureq::Agent::config_builder()
             .http_status_as_error(false)
             .timeout_global(Some(Duration::from_secs(30)))
             .build()
             .into();
-        let what = path.split('?').next().unwrap_or(path);
-        let mut r = agent
-            .get(format!("{}{path}", self.base))
-            .header("authorization", format!("Bearer {}", self.token))
-            .call()
-            .map_err(|_| format!("GET {what}: the request failed"))?;
+        let what = shown(path);
+        let url = format!("{}{path}", self.base);
+        let auth = format!("Bearer {}", self.token);
+        let sent = match (method, body) {
+            ("DELETE", _) => agent.delete(&url).header("authorization", &auth).call(),
+            (_, None) => agent.get(&url).header("authorization", &auth).call(),
+            (_, Some(b)) => agent
+                .post(&url)
+                .header("authorization", &auth)
+                .header("content-type", "application/json")
+                .send(b.to_string().as_bytes()),
+        };
+        let mut r = sent.map_err(|_| format!("{method} {what}: the request failed"))?;
         let status = r.status().as_u16();
         let body: Value = r
             .body_mut()
             .read_to_string()
             .ok()
             .and_then(|t| serde_json::from_str(&t).ok())
-            .ok_or_else(|| format!("GET {what}: status {status}, not JSON"))?;
-        if status == 200 && body["success"] == true {
-            Ok(body["result"].clone())
-        } else {
-            Err(format!("GET {what}: status {status}"))
-        }
+            .unwrap_or(Value::Null);
+        Ok((status, body))
     }
 
     /// The one account the token sees.
@@ -134,9 +190,54 @@ impl Api {
     }
 }
 
+/// `path` as messages show it: no query, and no account ID.
+fn shown(path: &str) -> String {
+    let path = path.split('?').next().unwrap_or(path);
+    match path.strip_prefix("/accounts/") {
+        Some(rest) => match rest.split_once('/') {
+            Some((_, tail)) => format!("/accounts/…/{tail}"),
+            None => "/accounts/…".into(),
+        },
+        None => path.to_string(),
+    }
+}
+
+/// A successful call's `result`, else a message naming the call and the API's own error messages.
+fn ok(status: u16, body: &Value, method: &str, path: &str) -> Result<Value, String> {
+    let what = shown(path);
+    if (200..300).contains(&status) && body["success"] == true {
+        return Ok(body["result"].clone());
+    }
+    let errors: Vec<&str> = body["errors"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|e| e["message"].as_str())
+        .collect();
+    if errors.is_empty() {
+        Err(format!("{method} {what}: status {status}"))
+    } else {
+        Err(format!(
+            "{method} {what}: status {status}: {}",
+            errors.join("; ")
+        ))
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::token;
+    use super::{shown, token};
+
+    #[test]
+    fn messages_never_show_an_account_id() {
+        assert_eq!(
+            shown("/accounts/0123456789abcdef0123456789abcdef/artifacts/namespaces?x=1"),
+            "/accounts/…/artifacts/namespaces"
+        );
+        assert_eq!(shown("/accounts/0123456789abcdef"), "/accounts/…");
+        assert_eq!(shown("/accounts?per_page=2"), "/accounts");
+        assert_eq!(shown("/zones?name=a.com"), "/zones");
+    }
 
     #[test]
     fn the_runner_credential_wins_over_the_environment() {

@@ -4,6 +4,8 @@
 #[cfg(feature = "engines")]
 pub mod apex;
 #[cfg(feature = "engines")]
+pub mod artifacts;
+#[cfg(feature = "engines")]
 pub mod catalog;
 #[cfg(feature = "engines")]
 pub mod cloudflare;
@@ -13,6 +15,8 @@ pub mod config;
 mod engines;
 #[cfg(feature = "engines")]
 pub mod generations;
+#[cfg(feature = "engines")]
+pub mod git;
 #[cfg(any(feature = "engines", feature = "worker"))]
 pub mod link;
 #[cfg(feature = "engines")]

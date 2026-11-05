@@ -10,8 +10,9 @@ use cobot::release::{self, Config};
 
 use super::{INVALID, SUCCESS, VIOLATION};
 use crate::cli::{
-    CobotApply, CobotCommand, CobotPlan, CobotRun, ReleaseArgs, SecretsCommand, SecretsKey,
-    SecretsUnit, SitesBuild, SitesCommand, SitesPublish, TagsArgs,
+    CobotApply, CobotCommand, CobotPlan, CobotRoot, CobotRun, GitCommand, GitMirror, GitRun,
+    ReleaseArgs, SecretsCommand, SecretsKey, SecretsUnit, SitesBuild, SitesCommand, SitesPublish,
+    TagsArgs,
 };
 
 /// Runs a `pigeon cobot` command and returns its exit code.
@@ -32,6 +33,7 @@ pub fn run(command: CobotCommand) -> i32 {
         CobotCommand::Secrets(SecretsCommand::Check(args)) => secrets_check(&args),
         CobotCommand::Sites(SitesCommand::Build(args)) => sites_build(&args),
         CobotCommand::Sites(SitesCommand::Publish(args)) => sites_publish(&args),
+        CobotCommand::Git(command) => git(command),
         CobotCommand::Release(args) => return release(&args),
         CobotCommand::Tags(args) => return tags(&args),
     };
@@ -182,6 +184,167 @@ fn context(args: &CobotRun) -> Result<cobot::session::Session, cobot::Error> {
         session.ctx.platform = Some(args.at.root.clone());
     }
     Ok(session)
+}
+
+/// The run's Cloudflare API, from `CLOUDFLARE_API_TOKEN` or the runner's credentials.
+fn cloudflare() -> Result<cobot::cloudflare::Api, cobot::Error> {
+    cobot::cloudflare::token(
+        env::var(cobot::CREDENTIALS_VAR).ok().as_deref(),
+        env::var(cobot::cloudflare::TOKEN_VAR).ok(),
+    )
+    .map(|t| cobot::cloudflare::Api::new(None, t))
+    .ok_or_else(|| cobot::Error::Tool {
+        command: "artifacts".into(),
+        message: format!(
+            "set {} to a token scoped to this instance's account",
+            cobot::cloudflare::TOKEN_VAR
+        ),
+    })
+}
+
+fn git(command: GitCommand) -> Result<(), cobot::Error> {
+    let at: &CobotRoot = match &command {
+        GitCommand::Apply(a) | GitCommand::Status(a) => a,
+        GitCommand::Push(r) | GitCommand::Fetch(r) | GitCommand::Clone(r) => &r.at,
+        GitCommand::Mirror(m) => &m.at,
+    };
+    let root = at.instance_root().to_path_buf();
+    let instance = cobot::git::declared(&root, &at.root)?;
+    let api = cloudflare()?;
+    let client = cobot::artifacts::Client::new(&api).map_err(|message| cobot::Error::Tool {
+        command: "artifacts".into(),
+        message,
+    })?;
+    eprintln!(
+        "cobot: account {}, namespace {}",
+        client.account_hint(),
+        instance.namespace
+    );
+    match command {
+        GitCommand::Apply(_) => {
+            for a in cobot::git::apply(&client, &instance)? {
+                println!(
+                    "cobot: {} {:?}: {}",
+                    a.name,
+                    a.outcome,
+                    cobot::artifacts::shown_remote(&a.remote)
+                );
+            }
+            Ok(())
+        }
+        GitCommand::Status(_) => {
+            let mut out_of_sync = Vec::new();
+            for s in cobot::git::status(&client, &instance)? {
+                let short = |h: &Option<String>| {
+                    h.as_deref()
+                        .map_or("none".to_string(), |h| h.chars().take(12).collect())
+                };
+                let mirror = s.mirror.as_ref().map_or("no mirror".to_string(), short);
+                println!(
+                    "cobot: {} {} artifacts {} mirror {mirror}",
+                    s.name,
+                    cobot::artifacts::shown_remote(&s.remote),
+                    short(&s.head)
+                );
+                if !s.in_sync() {
+                    out_of_sync.push(s.name);
+                }
+            }
+            if out_of_sync.is_empty() {
+                Ok(())
+            } else {
+                Err(cobot::Error::Tool {
+                    command: "git status".into(),
+                    message: format!(
+                        "{} differ from their mirror; run `pigeon cobot git mirror`",
+                        out_of_sync.join(", ")
+                    ),
+                })
+            }
+        }
+        GitCommand::Push(r) => git_run(
+            &client,
+            &instance,
+            &r,
+            "push",
+            cobot::artifacts::Scope::Write,
+        ),
+        GitCommand::Fetch(r) => git_run(
+            &client,
+            &instance,
+            &r,
+            "fetch",
+            cobot::artifacts::Scope::Read,
+        ),
+        GitCommand::Clone(r) => git_run(
+            &client,
+            &instance,
+            &r,
+            "clone",
+            cobot::artifacts::Scope::Read,
+        ),
+        GitCommand::Mirror(m) => git_mirror(&client, &instance, &m, &root),
+    }
+}
+
+fn git_run(
+    client: &cobot::artifacts::Client<'_>,
+    instance: &cobot::git::Instance,
+    r: &GitRun,
+    verb: &str,
+    scope: cobot::artifacts::Scope,
+) -> Result<(), cobot::Error> {
+    let mut args = vec![verb.to_string(), "{remote}".to_string()];
+    args.extend(r.args.iter().cloned());
+    let cwd = env::current_dir().map_err(|e| cobot::Error::Io {
+        path: ".".into(),
+        message: e.to_string(),
+    })?;
+    let status = cobot::git::run(client, instance, &r.repo, scope, &args, &cwd)?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(cobot::Error::Tool {
+            command: format!("git {verb}"),
+            message: format!("exited {status}"),
+        })
+    }
+}
+
+fn git_mirror(
+    client: &cobot::artifacts::Client<'_>,
+    instance: &cobot::git::Instance,
+    m: &GitMirror,
+    root: &std::path::Path,
+) -> Result<(), cobot::Error> {
+    for name in &m.repos {
+        match instance.repos.iter().find(|d| &d.name == name) {
+            None => return Err(cobot::Error::UnknownUnit(format!("repos/{name}"))),
+            Some(d) if d.mirror.is_none() => {
+                return Err(cobot::Error::Tool {
+                    command: "git mirror".into(),
+                    message: format!("repos/{name} declares no mirror"),
+                });
+            }
+            Some(_) => {}
+        }
+    }
+    for d in &instance.repos {
+        if !m.repos.is_empty() && !m.repos.contains(&d.name) {
+            continue;
+        }
+        let Some(to) = &d.mirror else {
+            continue;
+        };
+        let done = cobot::git::mirror(client, instance, &d.name, to, root)?;
+        println!(
+            "cobot: mirrored {} to {}: {} ref(s)",
+            done.name,
+            done.to,
+            done.refs.len()
+        );
+    }
+    Ok(())
 }
 
 fn now() -> u64 {
