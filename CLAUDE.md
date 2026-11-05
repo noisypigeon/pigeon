@@ -37,7 +37,8 @@ belong in the ADR, never in the file.
   two `secrets.config.yaml` files to their current keys.
 - This repository is pigeon's own instance; noisypigeon's workloads move to
   `noisypigeon/noisypigeon`; `pigeon backplane run` is the single entry point,
-  CI holds no credentials, and the owner plans and applies from the CLI, per
+  CI holds no credentials, and the owner plans and applies from the CLI, run
+  from pigeon with `--instance DIR` naming the instance, per
   [`2026-11-05-development-pigeon-its-own-instance.md`](.claude/decisions/2026-11-05-development-pigeon-its-own-instance.md).
 - `infra/pigeon/` bootstraps the platform's own Cloudflare account. It is a
   local unit (`x-cobot.local: true`): CI validates it but plans and applies
