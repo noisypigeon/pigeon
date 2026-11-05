@@ -78,6 +78,12 @@ const CATALOG: &[Operation] = &[
         summary: "Show the instance manifest",
     },
     Operation {
+        name: "architecture.describe",
+        engine: Engine::Backplane,
+        effect: Effect::Read,
+        summary: "Describe the instance's architecture as a graph and its layout",
+    },
+    Operation {
         name: "policy.check",
         engine: Engine::Sentinel,
         effect: Effect::Read,
