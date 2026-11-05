@@ -2,6 +2,7 @@
 
 ## 2026-11-05
 
+- chore(tooling): remove the containers spike kit ([#113](https://github.com/noisypigeon/pigeon/pull/113))
 - feat(backplane): signed requests for serve ([#112](https://github.com/noisypigeon/pigeon/pull/112))
 - docs(adr): phase 3 spike report ([#111](https://github.com/noisypigeon/pigeon/pull/111))
 - docs(tooling): spike runbook needs Workers Paid, --remote and its own token ([#110](https://github.com/noisypigeon/pigeon/pull/110))
