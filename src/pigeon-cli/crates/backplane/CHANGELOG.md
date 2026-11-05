@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.24 (2026-11-05)
+
+- feat(cobot): workloads take the run's own Cloudflare token ([#131](https://github.com/noisypigeon/pigeon/pull/131))
+
 ## v0.1.23 (2026-11-05)
 
 - feat(cobot): sites build takes data files ([#129](https://github.com/noisypigeon/pigeon/pull/129))
