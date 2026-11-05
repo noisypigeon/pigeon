@@ -2,6 +2,7 @@
 
 ## 2026-11-05
 
+- feat: git is hosted on Cloudflare Artifacts; GitHub is a mirror ([#140](https://github.com/noisypigeon/pigeon/pull/140))
 - feat(cobot): the CLI runs from pigeon with --instance naming the instance ([#135](https://github.com/noisypigeon/pigeon/pull/135))
 - feat(backplane): policy.check takes the pull request; sites.build ([#132](https://github.com/noisypigeon/pigeon/pull/132))
 - feat(cobot): sites build takes data files ([#129](https://github.com/noisypigeon/pigeon/pull/129))

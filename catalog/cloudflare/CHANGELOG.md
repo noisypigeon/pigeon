@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.18 (2026-11-05)
+
+- feat: git is hosted on Cloudflare Artifacts; GitHub is a mirror ([#140](https://github.com/noisypigeon/pigeon/pull/140))
+
 ## v0.1.17 (2026-11-05)
 
 - feat(catalog): cloudflare/zone and cloudflare/static-site kinds; the zone lookup's id is sensitive ([#139](https://github.com/noisypigeon/pigeon/pull/139))
