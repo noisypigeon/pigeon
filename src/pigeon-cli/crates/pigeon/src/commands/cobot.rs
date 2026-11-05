@@ -223,7 +223,12 @@ fn git(command: GitCommand) -> Result<(), cobot::Error> {
     match command {
         GitCommand::Apply(_) => {
             for a in cobot::git::apply(&client, &instance)? {
-                println!("cobot: {} {:?}: {}", a.name, a.outcome, a.remote);
+                println!(
+                    "cobot: {} {:?}: {}",
+                    a.name,
+                    a.outcome,
+                    cobot::artifacts::shown_remote(&a.remote)
+                );
             }
             Ok(())
         }
@@ -238,7 +243,7 @@ fn git(command: GitCommand) -> Result<(), cobot::Error> {
                 println!(
                     "cobot: {} {} artifacts {} mirror {mirror}",
                     s.name,
-                    s.remote,
+                    cobot::artifacts::shown_remote(&s.remote),
                     short(&s.head)
                 );
                 if !s.in_sync() {

@@ -131,12 +131,19 @@ pub fn apply(client: &Client<'_>, instance: &Instance) -> Result<Vec<Applied>, E
                 let token = client.token(ns, &d.name, Scope::Read).map_err(api_error)?;
                 if no_refs(&r.remote, &token)? {
                     client.delete(ns, &d.name).map_err(api_error)?;
-                    (
-                        Outcome::Imported,
-                        client
-                            .import(ns, &d.name, url, &d.branch)
-                            .map_err(api_error)?,
-                    )
+                    match client.import(ns, &d.name, url, &d.branch) {
+                        Ok(imported) => (Outcome::Imported, imported),
+                        Err(e) => {
+                            let restored = client
+                                .create(ns, &d.name, &d.branch, d.description.as_deref())
+                                .is_ok();
+                            return Err(api_error(if restored {
+                                format!("{e}; the empty repository is restored")
+                            } else {
+                                format!("{e}; the empty repository could not be restored")
+                            }));
+                        }
+                    }
                 } else {
                     (Outcome::Unchanged, r)
                 }

@@ -11,6 +11,22 @@ pub const API: &str = "artifacts";
 /// How long a minted git token lives, in seconds.
 pub const TOKEN_TTL: u64 = 900;
 
+/// `remote` as messages show it: an account ID in its host cut to its last four characters.
+#[must_use]
+pub fn shown_remote(remote: &str) -> String {
+    let Some((scheme, rest)) = remote.split_once("://") else {
+        return remote.to_string();
+    };
+    let (host, path) = rest.split_once('/').unwrap_or((rest, ""));
+    let (first, domain) = host.split_once('.').unwrap_or((host, ""));
+    if first.len() >= 16 && first.chars().all(|c| c.is_ascii_hexdigit()) {
+        let n = first.len();
+        format!("{scheme}://…{}.{domain}/{path}", &first[n - 4..])
+    } else {
+        remote.to_string()
+    }
+}
+
 /// A repository, as the API describes it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Repo {
@@ -256,6 +272,20 @@ fn shape(v: &Value) -> String {
 mod tests {
     use super::{shape, token_in};
     use serde_json::json;
+
+    #[test]
+    fn a_remote_never_shows_its_account_id() {
+        assert_eq!(
+            super::shown_remote(
+                "https://0123456789abcdef0123456789ab305a.artifacts.cloudflare.net/git/pigeon/pigeon.git"
+            ),
+            "https://…305a.artifacts.cloudflare.net/git/pigeon/pigeon.git"
+        );
+        assert_eq!(
+            super::shown_remote("file:///tmp/r.git"),
+            "file:///tmp/r.git"
+        );
+    }
 
     #[test]
     fn a_token_is_found_where_the_api_puts_it_and_never_shown() {

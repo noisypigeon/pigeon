@@ -133,6 +133,9 @@ fn route(f: &mut Fake, method: &str, path: &str, body: &Value) -> (u16, Value) {
             if f.repos.contains_key(&key) {
                 return (409, Value::Null);
             }
+            if body["url"].as_str().is_some_and(|u| u.contains("broken")) {
+                return (502, Value::Null);
+            }
             let repo = json!({ "name": name, "remote": f.remote, "imported_from": body["url"] });
             f.repos.insert(key, repo.clone());
             if let Some(src) = &f.source {
@@ -386,6 +389,39 @@ fn an_import_that_never_landed_is_retried() {
         got[0].outcome,
         Outcome::Unchanged,
         "a repository holding only tags is never re-imported"
+    );
+}
+
+#[test]
+fn a_failed_replacement_import_restores_the_empty_repository() {
+    let platform = platform();
+    let inst = instance(
+        "pigeon",
+        "  repos/pigeon:\n    kind: cloudflare/git-repo\n    mirror: https://github.com/noisypigeon/broken\n",
+    );
+    let (_dir, remote, src) = remotes();
+    let (base, fake) = serve("acct-platform-1234", &remote, Some(&src));
+    {
+        let mut f = fake.lock().expect("lock");
+        f.namespaces.push("pigeon".into());
+        let r = f.remote.clone();
+        f.repos.insert(
+            "pigeon/pigeon".into(),
+            json!({ "name": "pigeon", "remote": r }),
+        );
+    }
+    let api = Api::new(Some(&base), TOKEN.into());
+    let client = Client::new(&api).expect("account");
+    let declared = git::declared(inst.path(), platform.path()).expect("declared");
+    let err = git::apply(&client, &declared)
+        .expect_err("the import fails")
+        .to_string();
+    assert!(err.contains("the empty repository is restored"), "{err}");
+    assert!(
+        fake.lock()
+            .expect("lock")
+            .repos
+            .contains_key("pigeon/pigeon")
     );
 }
 
