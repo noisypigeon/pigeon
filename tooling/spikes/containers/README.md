@@ -17,10 +17,12 @@ Nothing here is a release unit, and it is removed once the report is in the ADR.
 
 ## Deploy
 
-In the **pigeon** account, with Docker running, `wrangler` 4, and the pinned
-Rust from `mise` (with the `wasm32-unknown-unknown` target). Use a short-lived
-token with Workers Scripts Edit, Containers Edit, D1 Edit, Workers R2 Storage
-Edit and Secrets Store Edit, scoped to the pigeon account, and revoke it after
+In the **pigeon** account, on the Workers Paid plan (Containers need it), with
+Docker running, `wrangler` 4, and the pinned Rust from `mise` (with the
+`wasm32-unknown-unknown` target). Use a short-lived account API token, not the
+`infra/pigeon` bootstrap token, with Account Settings Read, Workers Scripts
+Edit, Containers Edit, D1 Edit, Workers R2 Storage Edit, Secrets Store Edit and
+SSL and Certificates Edit (for the mTLS certificate), and revoke it after
 teardown.
 
 ```sh
@@ -30,8 +32,8 @@ export CLOUDFLARE_ACCOUNT_ID=…       # never written to a tracked file
 
 npx wrangler d1 create pigeon-spike                       # note the database_id
 npx wrangler r2 bucket create "pigeon-spike-$(openssl rand -hex 4)"   # note the name
-npx wrangler secrets-store store list                     # or `store create`; note its id
-npx wrangler secrets-store secret create <store-id> --name pigeon-spike --scopes workers
+npx wrangler secrets-store store list --remote            # or `store create --remote`; note its id
+npx wrangler secrets-store secret create <store-id> --name pigeon-spike --scopes workers --remote
 #   (enter any test value; the spike reports only its length)
 
 # A throwaway test CA, outside this checkout; nothing here is ever committed.
@@ -100,7 +102,7 @@ the spike report.
 npx wrangler delete -c wrangler.local.toml
 npx wrangler d1 delete pigeon-spike
 npx wrangler r2 object delete "<bucket>/spike/probe" --remote && npx wrangler r2 bucket delete <bucket>
-npx wrangler secrets-store secret delete <store-id> --secret-id <secret-id>
+npx wrangler secrets-store secret delete <store-id> --secret-id <secret-id> --remote
 npx wrangler mtls-certificate delete --name pigeon-spike
 rm -r wrangler.local.toml ~/pigeon-spike-tls
 ```
