@@ -51,6 +51,12 @@ belong in the ADR, never in the file.
   `pigeon cobot git apply`; work is pushed with `pigeon cobot git push` and
   mirrored with `pigeon cobot git mirror`, per
   [`2026-11-05-development-git-hosting-cloudflare-artifacts.md`](.claude/decisions/2026-11-05-development-git-hosting-cloudflare-artifacts.md).
+- A change is planned, approved, bounded by sentinel, checked by targeted CI in
+  Sandbox on Artifacts push events, approved again and merged and rolled out by
+  the control plane, through pigeon's MCP; until that is served, the agent pushes
+  only `change/<n>-<slug>` branches with a repository-scoped token and the owner
+  merges, per
+  [`2026-11-05-development-changes-through-pigeon-mcp.md`](.claude/decisions/2026-11-05-development-changes-through-pigeon-mcp.md).
 - `infra/pigeon/` bootstraps the platform's own Cloudflare account. It is a
   local unit (`x-cobot.local: true`): CI validates it but plans and applies
   only unnamed units, so its owner applies it by hand with a scoped token in
