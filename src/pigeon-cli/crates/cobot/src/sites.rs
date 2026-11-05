@@ -18,13 +18,9 @@ use crate::s3::{self, Bucket, Credentials};
 use crate::static_site;
 use crate::{Error, WORK_DIR, unit};
 
-/// The unnamed template's project, inside a tag's tree.
-pub const TEMPLATE: &str = "src/static-site-template";
-/// The unnamed template's theme and tag name.
-pub const THEME: &str = "static-site-template";
-/// Where named templates live, as `<TEMPLATES>/<name>`.
+/// Where templates live, as `<TEMPLATES>/<name>`.
 pub const TEMPLATES: &str = "src/site-templates";
-/// A named template's theme and tag prefix, as `<PREFIX>-<name>`.
+/// A template's theme and tag prefix, as `<PREFIX>-<name>`.
 pub const PREFIX: &str = "site-template";
 /// The post naming rule `YYYY-MM-DD-<slug>.md`.
 pub const DATE_SLUG: &str = "date-slug";
@@ -42,8 +38,8 @@ pub struct Site {
     pub zone: String,
     /// The workload.
     pub workload: String,
-    /// The template it names, `static_site.template.name`; none is the unnamed one.
-    pub template: Option<String>,
+    /// The template it names, `static_site.template.name`.
+    pub template: String,
     /// The pinned template version.
     pub version: String,
     /// The features it lists, `no-<feature>` turning a default off.
@@ -64,17 +60,13 @@ impl Site {
     /// Its template's theme name, which also names the template's tags.
     #[must_use]
     pub fn theme(&self) -> String {
-        self.template
-            .as_ref()
-            .map_or_else(|| THEME.to_string(), |n| format!("{PREFIX}-{n}"))
+        format!("{PREFIX}-{}", self.template)
     }
 
     /// Its template's project, inside a tag's tree.
     #[must_use]
     pub fn project(&self) -> String {
-        self.template
-            .as_ref()
-            .map_or_else(|| TEMPLATE.to_string(), |n| format!("{TEMPLATES}/{n}"))
+        format!("{TEMPLATES}/{}", self.template)
     }
 
     /// Its bucket.
@@ -200,6 +192,12 @@ pub fn find(root: &Path, wanted: &[String]) -> Result<Vec<Site>, Error> {
             continue;
         }
         let template = &c.config["static_site"]["template"];
+        let Some(name) = template["name"].as_str() else {
+            return Err(Error::Io {
+                path: PathBuf::from(&u.path).join(crate::config::CONFIG),
+                message: "static_site.template.name is required".into(),
+            });
+        };
         let hosts = apex::assignments(
             &apex::workload_config(root, &site.zone, apex::APEX).unwrap_or(Value::Null),
             &apex::workloads(root, &site.zone),
@@ -215,7 +213,7 @@ pub fn find(root: &Path, wanted: &[String]) -> Result<Vec<Site>, Error> {
             dir: u.dir.clone(),
             zone: site.zone.clone(),
             workload: w.clone(),
-            template: template["name"].as_str().map(str::to_string),
+            template: name.to_string(),
             version: template["version"].as_str().unwrap_or_default().to_string(),
             features: template["features"]
                 .as_array()
@@ -1011,7 +1009,7 @@ mod tests {
             dir: "workloads/z.com/blog".into(),
             zone: "z.com".into(),
             workload: "blog".into(),
-            template: None,
+            template: "blog".into(),
             version: "1.0.0".into(),
             features: features.iter().map(|f| (*f).to_string()).collect(),
             hosts: vec!["z.com".into(), "www.z.com".into()],
@@ -1021,17 +1019,8 @@ mod tests {
 
     #[test]
     fn a_named_template_has_its_own_project_theme_and_tag() {
-        let unnamed = site(&[]);
-        assert_eq!(
-            (unnamed.project(), unnamed.theme(), unnamed.tag()),
-            (
-                "src/static-site-template".to_string(),
-                "static-site-template".to_string(),
-                "static-site-template/v1.0.0".to_string()
-            )
-        );
         let mut named = site(&[]);
-        named.template = Some("architecture".into());
+        named.template = "architecture".into();
         assert_eq!(
             (named.project(), named.theme(), named.tag()),
             (
@@ -1085,7 +1074,7 @@ mod tests {
             .expect_err("unknown")
             .to_string();
         assert!(
-            err.contains("`typo` is not a feature of static-site-template/v1.0.0"),
+            err.contains("`typo` is not a feature of site-template-blog/v1.0.0"),
             "{err}"
         );
     }
