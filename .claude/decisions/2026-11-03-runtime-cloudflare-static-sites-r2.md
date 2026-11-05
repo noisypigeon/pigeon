@@ -399,3 +399,13 @@ Cloudflare names the zone permission for transform rules `Zone Transform Rules W
 - §7's `build` steps 1 and 3. cobot assembles the project from the tag's scaffold, the site's settings and `site/`, and then writes `base_url` and `[extra.features]` as before.
 
 The earlier text stays as written. Workloads without `static_site.site` build as before until that ADR's cleanup step.
+
+### 2026-11-05: The template is one of a family
+
+[`2026-11-05-runtime-architecture-site-through-backplane.md`](2026-11-05-runtime-architecture-site-through-backplane.md) moves §5's `src/static-site-template/` to `src/site-templates/blog/`, beside a second template, `src/site-templates/architecture/`. That supersedes §5's path and its `static-site-template/vX.Y.Z` tags, which stay as written:
+
+- each template is a release unit `site-template-<name>`, tagged `site-template-<name>/vX.Y.Z`;
+- a site names its template in `static_site.template.name`;
+- a unit may hold sites in `<unit>/sites/<name>/`, which `sites build` and `publish` find.
+
+Past `static-site-template/v*` tags stay, and the blog builds from them until it re-pins.
