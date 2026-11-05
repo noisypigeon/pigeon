@@ -343,6 +343,36 @@ fn an_import_that_never_landed_is_retried() {
         Outcome::Imported,
         "an empty repository with a mirror is imported"
     );
+
+    let tags_only = TempDir::new().expect("t");
+    let (full, _) = source(tags_only.path());
+    let tagged = tags_only.path().join("tags-only.git");
+    run_git(
+        tags_only.path(),
+        &["init", "-q", "--bare", tagged.to_str().expect("utf8")],
+    );
+    run_git(
+        &full,
+        &["push", "-q", tagged.to_str().expect("utf8"), "refs/tags/v1"],
+    );
+    let (base, fake) = serve("acct-platform-1234", &tagged, Some(&src));
+    {
+        let mut f = fake.lock().expect("lock");
+        f.namespaces.push("pigeon".into());
+        let r = f.remote.clone();
+        f.repos.insert(
+            "pigeon/pigeon".into(),
+            json!({ "name": "pigeon", "remote": r }),
+        );
+    }
+    let api = Api::new(Some(&base), TOKEN.into());
+    let client = Client::new(&api).expect("account");
+    let got = git::apply(&client, &declared).expect("apply");
+    assert_eq!(
+        got[0].outcome,
+        Outcome::Unchanged,
+        "a repository holding only tags is never re-imported"
+    );
 }
 
 #[test]
