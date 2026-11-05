@@ -113,3 +113,54 @@ Each step is released before the next relies on it.
 - On a fresh clone, `policy.check` and `infra.validate` run with no environment at all.
 - `noisypigeon/noisypigeon` holds no `ENC[`, ID or bucket name.
 - The first plan from `noisypigeon/noisypigeon` shows no destroy or replace, and the blog serves after its apply.
+
+## Amendments
+
+### 2026-11-05: The CLI runs from pigeon; `--instance` names the instance
+
+§3 has the owner run the CLI from a `noisypigeon/noisypigeon` checkout. That checkout holds none of the platform's parts, and cobot today resolves everything from one root: units, catalogs, providers, and the site templates with their tags. The owner chose the reverse of copying those parts in: **the CLI runs from pigeon, and `--instance DIR` overrides the instance.**
+
+#### 1. Two roots
+
+| Root | Where | Holds |
+| --- | --- | --- |
+| Platform | Where the CLI runs: a pigeon checkout. | `catalog/`; `.config/providers.yaml` and `providers.lock.hcl`; `src/site-templates/` and their tags. |
+| Instance | `--instance DIR`, defaulting to the platform root. | `.config/instance.yaml`; its `infra/` and `workloads/` units; each site's `site/`; `.config/moves.yaml`. |
+
+- **pigeon is unchanged.** Without `--instance`, the two roots are the same directory, so pigeon stays its own instance with every current command.
+- **State paths stay each unit's path relative to the instance root.** `workloads/noisypigeon.com/apex` and `…/blog` keep their state in `noisypigeon/pigeon-cobot-state`.
+
+#### 2. Commands
+
+```
+cd pigeon
+pigeon backplane run infra.plan  --instance ../noisypigeon --arg state=<pigeon-cobot-state checkout>
+pigeon backplane run infra.apply --instance ../noisypigeon --arg state=<…> --arg plan=<id>
+```
+
+- `pigeon cobot validate|render|plan|apply|sites build|sites publish` and `pigeon backplane instance|run|serve` all take `--instance DIR`.
+- A scoped `CLOUDFLARE_API_TOKEN` stays in the environment, as §3 has it.
+
+#### 3. The instance's manifest
+
+- **Optional paths.** `paths.providers` and `paths.releases` become optional. Without them, the platform's are used.
+- **Policies.** `paths.policies` becomes optional too. An instance without it runs no policies.
+- **The platform's rules stay the platform's.** With `--instance`, `policy.check` and `architecture.describe` read only the instance's own policies. This repository's `.config/policies/` are its development rules, and they never judge another instance.
+
+#### 4. Supersedes
+
+§3's command lines, which ran from a `noisypigeon/noisypigeon` checkout, and §6 step 4's README there. That README goes to `workloads/README.md`, because the repository's own `README.md` is the owner's GitHub profile.
+
+#### 5. Execution
+
+1. This amendment.
+2. `feat(cobot)` and `feat(backplane)`: the two roots, and `--instance` across `pigeon cobot` and `pigeon backplane`, released before step 3.
+3. §6 steps 4 to 7, run from pigeon with `--instance`.
+
+#### 6. Verification
+
+- Across a separate platform and instance:
+  - `infra.validate`, `sites.build` and a plan with a run token hold;
+  - each state path is relative to the instance.
+- Without `--instance`, every existing test holds unchanged.
+- `policy.check --instance` runs none of the platform's `.config/policies/`.
