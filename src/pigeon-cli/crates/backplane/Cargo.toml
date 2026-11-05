@@ -19,8 +19,6 @@ engines = [
   "dep:gantry",
   "dep:sentinel",
   "dep:serde-saphyr",
-  "dep:sha2",
-  "dep:hmac",
   "dep:httparse",
   "dep:rustls",
 ]
@@ -33,8 +31,6 @@ sentinel = { workspace = true, optional = true }
 serde.workspace = true
 serde-saphyr = { workspace = true, optional = true }
 serde_json.workspace = true
-sha2 = { workspace = true, optional = true }
-hmac = { workspace = true, optional = true }
 httparse = { workspace = true, optional = true }
 rustls = { workspace = true, optional = true }
 wasm-bindgen = { workspace = true, optional = true }

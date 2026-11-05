@@ -12,7 +12,10 @@ run = "cargo build --workspace --locked"
 
 [tasks.test]
 dir = "src/pigeon-cli"
-run = "cargo test --workspace --locked"
+run = [
+  "cargo test --workspace --locked",
+  "cargo test -p cobot --lib --locked --features worker",
+]
 
 [tasks.fmt]
 dir = "src/pigeon-cli"
@@ -34,6 +37,7 @@ run = [
   "cargo clippy -p pigeon --all-targets --locked --no-default-features --features gantry -- -D warnings",
   "cargo clippy -p pigeon --all-targets --locked --no-default-features --features cobot -- -D warnings",
   "cargo clippy -p pigeon --all-targets --locked --no-default-features --features backplane -- -D warnings",
+  "cargo clippy -p cobot --lib --locked --no-default-features --features worker -- -D warnings",
   "cargo clippy -p cobot --lib --locked --no-default-features --features worker --target wasm32-unknown-unknown -- -D warnings",
   "cargo clippy -p pigeon-backplane --lib --locked --no-default-features --features worker --target wasm32-unknown-unknown -- -D warnings",
 ]

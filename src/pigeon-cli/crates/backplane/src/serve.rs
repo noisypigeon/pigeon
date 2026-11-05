@@ -4,21 +4,19 @@
 //! `.claude/decisions/2026-11-04-development-platform-instance-separation.md`.
 
 use std::collections::HashMap;
-use std::fmt::Write as _;
 use std::io::{self, Read, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream, ToSocketAddrs};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use hmac::{Hmac, Mac};
-use sha2::{Digest, Sha256};
-
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use rustls::server::WebPkiClientVerifier;
 use rustls::{RootCertStore, ServerConfig, ServerConnection, StreamOwned};
 use serde_json::{Value, json};
+
+use cobot::link::constant_eq;
 
 use crate::{Effect, Error, Instance, Request, catalog, run_with};
 
@@ -49,17 +47,9 @@ pub const TLS_KEY_VAR: &str = "BACKPLANE_TLS_KEY";
 /// The environment variable holding the CA that issues client certificates, as PEM.
 pub const TLS_CLIENT_CA_VAR: &str = "BACKPLANE_TLS_CLIENT_CA";
 
-/// A signed request's Unix time in seconds.
-pub const TIMESTAMP_HEADER: &str = "x-pigeon-timestamp";
-
-/// A signed request's nonce: 32 to 64 hex digits, never reused.
-pub const NONCE_HEADER: &str = "x-pigeon-nonce";
-
-/// A request's or response's HMAC-SHA-256, in hex.
-pub const SIGNATURE_HEADER: &str = "x-pigeon-signature";
-
-/// How far a signed request's timestamp may be from the server's clock, in seconds.
-pub const SKEW: u64 = 60;
+pub use cobot::link::{
+    NONCE_HEADER, SIGNATURE_HEADER, SKEW, TIMESTAMP_HEADER, sign_request, sign_response,
+};
 
 /// How long an idle worker waits before checking for a connection or a stop again.
 const POLL: Duration = Duration::from_millis(50);
@@ -581,57 +571,6 @@ fn read_body<S: Read + Write>(head: &Head, mut read: Vec<u8>, s: &mut S) -> Resu
     }
 }
 
-/// The signature a client sends for a request: HMAC-SHA-256 under `token` over the method, path,
-/// timestamp, nonce and the body's SHA-256, in hex.
-#[must_use]
-pub fn sign_request(
-    token: &str,
-    method: &str,
-    path: &str,
-    timestamp: u64,
-    nonce: &str,
-    body: &[u8],
-) -> String {
-    hmac_hex(
-        token,
-        &format!(
-            "pigeon-v0-request\n{method}\n{path}\n{timestamp}\n{}\n{}",
-            nonce.to_ascii_lowercase(),
-            hex(&Sha256::digest(body))
-        ),
-    )
-}
-
-/// The signature `serve` sends with the response to a signed request: HMAC-SHA-256 under `token`
-/// over the request's nonce, the status and the body's SHA-256, in hex.
-#[must_use]
-pub fn sign_response(token: &str, nonce: &str, status: u16, body: &[u8]) -> String {
-    hmac_hex(
-        token,
-        &format!(
-            "pigeon-v0-response\n{}\n{status}\n{}",
-            nonce.to_ascii_lowercase(),
-            hex(&Sha256::digest(body))
-        ),
-    )
-}
-
-fn hmac_hex(token: &str, message: &str) -> String {
-    let mut mac =
-        Hmac::<Sha256>::new_from_slice(token.as_bytes()).expect("HMAC takes a key of any length");
-    mac.update(message.as_bytes());
-    hex(&mac.finalize().into_bytes())
-}
-
-fn hex(bytes: &[u8]) -> String {
-    bytes
-        .iter()
-        .fold(String::with_capacity(bytes.len() * 2), |mut out, b| {
-            let _ = write!(out, "{b:02x}");
-            out
-        })
-}
-
 fn unix_now() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -782,9 +721,4 @@ impl Write for Timed {
     fn flush(&mut self) -> io::Result<()> {
         self.stream.flush()
     }
-}
-
-/// Compares in time independent of where the inputs first differ.
-fn constant_eq(a: &[u8], b: &[u8]) -> bool {
-    a.len() == b.len() && a.iter().zip(b).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
 }
