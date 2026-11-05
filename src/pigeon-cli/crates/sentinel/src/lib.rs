@@ -2,16 +2,19 @@
 //!
 //! See `.claude/decisions/2026-11-02-development-cargo-workspace-mise-toolchain.md`.
 
+pub mod definition;
 mod markdown;
 pub mod policy;
 pub mod report;
 mod rules;
 mod target;
 
+use std::collections::BTreeMap;
 use std::fmt;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+pub use definition::{Definition, Invocation};
 pub use policy::Policy;
 pub use report::{Report, Violation};
 
@@ -116,6 +119,65 @@ pub fn load_dir(dir: &Path) -> Result<Vec<LoadedPolicy>, Error> {
         });
     }
     paths.iter().map(|p| load_file(p)).collect()
+}
+
+/// Every `*.yaml` definition in `dir`, by name (its file stem), per the control-plane ADR's
+/// "A run's instance root, built from D1" amendment §2.
+///
+/// # Errors
+///
+/// [`Error::Io`] if `dir` or a file cannot be read, [`Error::Policy`] if a definition is
+/// invalid.
+pub fn load_definitions(dir: &Path) -> Result<BTreeMap<String, Definition>, Error> {
+    let io = |path: &Path| {
+        let path = path.to_path_buf();
+        move |source| Error::Io { path, source }
+    };
+    let mut definitions = BTreeMap::new();
+    for entry in fs::read_dir(dir).map_err(io(dir))? {
+        let path = entry.map_err(io(dir))?.path();
+        if !(path.extension().is_some_and(|e| e == "yaml") && path.is_file()) {
+            continue;
+        }
+        let text = fs::read_to_string(&path).map_err(io(&path))?;
+        let definition = Definition::parse(&text).map_err(|message| Error::Policy {
+            path: path.clone(),
+            message,
+        })?;
+        let name = path
+            .file_stem()
+            .map_or_else(String::new, |s| s.to_string_lossy().into_owned());
+        definitions.insert(name, definition);
+    }
+    Ok(definitions)
+}
+
+/// The policies `invocations` ask of `definitions`, each reporting under its definition's name.
+///
+/// # Errors
+///
+/// [`Error::Policy`], at `source`, for an unknown name or an invocation its definition refuses.
+pub fn invoke(
+    definitions: &BTreeMap<String, Definition>,
+    invocations: &[Invocation],
+    source: &Path,
+) -> Result<Vec<LoadedPolicy>, Error> {
+    invocations
+        .iter()
+        .map(|invocation| {
+            let refused = |message: String| Error::Policy {
+                path: source.to_path_buf(),
+                message: format!("policy `{}`: {message}", invocation.name),
+            };
+            let definition = definitions
+                .get(&invocation.name)
+                .ok_or_else(|| refused("no such definition".into()))?;
+            Ok(LoadedPolicy {
+                name: invocation.name.clone(),
+                policy: definition.invoke(invocation).map_err(refused)?,
+            })
+        })
+        .collect()
 }
 
 /// Runs `policies` against `root`. Pull-request policies run only when
