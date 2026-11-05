@@ -1,8 +1,8 @@
 # Proton Mail; see .claude/decisions/2026-11-02-runtime-workloads-zone-apex.md.
 description: Proton Mail at the zone apex.
 inputs:
-  verification.protonmail: { type: string, secret: true, published: true, optional: true }
-  verification.pm: { type: string, secret: true, published: true, optional: true }
+  verification.protonmail: { type: string, secret: true, optional: true }
+  verification.pm: { type: string, secret: true, optional: true }
   dmarc:
     type: string
     optional: true
