@@ -25,7 +25,8 @@ CREATE TABLE plans (
   summary   TEXT NOT NULL CHECK (json_valid(summary)),
   requester TEXT NOT NULL,
   created   INTEGER NOT NULL,
-  expires   INTEGER NOT NULL CHECK (expires > created)
+  expires   INTEGER NOT NULL CHECK (expires > created),
+  UNIQUE (id, instance)
 );
 
 CREATE TABLE approvals (
@@ -39,13 +40,14 @@ CREATE TABLE runs (
   id       TEXT PRIMARY KEY,
   instance TEXT NOT NULL REFERENCES instances (id),
   kind     TEXT NOT NULL CHECK (kind IN ('plan', 'apply')),
-  plan     TEXT REFERENCES plans (id),
+  plan     TEXT,
   status   TEXT NOT NULL DEFAULT 'queued'
            CHECK (status IN ('queued', 'running', 'succeeded', 'failed')),
   attempts INTEGER NOT NULL DEFAULT 0 CHECK (attempts >= 0),
   started  INTEGER,
   finished INTEGER,
-  CHECK ((kind = 'apply') = (plan IS NOT NULL))
+  CHECK ((kind = 'apply') = (plan IS NOT NULL)),
+  FOREIGN KEY (plan, instance) REFERENCES plans (id, instance)
 );
 
 CREATE TABLE grants (

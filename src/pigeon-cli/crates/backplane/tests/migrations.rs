@@ -12,8 +12,11 @@ fn applied() -> Connection {
     db.execute_batch(SCHEMA_V0).expect("schema v0 applies");
     db.execute_batch(
         "INSERT INTO instances (id, name, created) VALUES ('i1', 'noisypigeon', 1);
+         INSERT INTO instances (id, name, created) VALUES ('i9', 'another', 1);
          INSERT INTO plans (id, instance, version, digest, summary, requester, created, expires)
-           VALUES ('p1', 'i1', 1, 'd', '{\"units\":[]}', 'owner', 1, 86401);",
+           VALUES ('p1', 'i1', 1, 'd', '{\"units\":[]}', 'owner', 1, 86401);
+         INSERT INTO plans (id, instance, version, digest, summary, requester, created, expires)
+           VALUES ('p9', 'i9', 1, 'd', '{}', 'owner', 1, 86401);",
     )
     .expect("seed");
     db
@@ -78,6 +81,13 @@ fn schema_v0_refuses_bad_rows() {
             "INSERT INTO runs (id, instance, kind, plan) VALUES ('r4', 'nobody', 'apply', 'p1')"
         ),
         "an unknown instance"
+    );
+    assert!(
+        refused(
+            &db,
+            "INSERT INTO runs (id, instance, kind, plan) VALUES ('r7', 'i1', 'apply', 'p9')"
+        ),
+        "an apply names its own instance's plan"
     );
     assert!(
         refused(

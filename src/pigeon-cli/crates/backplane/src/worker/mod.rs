@@ -29,25 +29,28 @@ impl DurableObject for Instance {
     }
 
     async fn fetch(&self, mut req: Request) -> Result<Response> {
-        let storage = self.state.storage();
-        let mut queue: Queue = storage.get(QUEUE).await?.unwrap_or_default();
         let path = req.path();
         let segments: Vec<&str> = path.trim_matches('/').split('/').collect();
-        let answer = match (req.method(), segments.as_slice()) {
-            (Method::Get, ["runs"]) => return Response::from_json(&queue),
-            (Method::Post, ["runs"]) => {
-                let run: Run = req.json().await?;
-                match queue.enqueue(run) {
-                    Ok(()) => Response::from_json(&queue),
-                    Err(e) => return Response::error(e.to_string(), 409),
-                }
-            }
-            (Method::Post, ["runs", "start"]) => Response::from_json(&queue.start().cloned()),
-            (Method::Post, ["runs", id, "finish"]) => match queue.finish(id) {
+        let method = req.method();
+        // Only storage is awaited between the queue's read and write (ADR §3).
+        let submitted: Option<Run> = match (&method, segments.as_slice()) {
+            (Method::Post, ["runs"]) => Some(req.json().await?),
+            _ => None,
+        };
+        let storage = self.state.storage();
+        let mut queue: Queue = storage.get(QUEUE).await?.unwrap_or_default();
+        let answer = match (method, segments.as_slice(), submitted) {
+            (Method::Get, ["runs"], _) => return Response::from_json(&queue),
+            (Method::Post, ["runs"], Some(run)) => match queue.enqueue(run) {
+                Ok(()) => Response::from_json(&queue),
+                Err(e) => return Response::error(e.to_string(), 409),
+            },
+            (Method::Post, ["runs", "start"], _) => Response::from_json(&queue.start().cloned()),
+            (Method::Post, ["runs", id, "finish"], _) => match queue.finish(id) {
                 Ok(run) => Response::from_json(&run),
                 Err(e) => return Response::error(e.to_string(), 409),
             },
-            (Method::Post, ["runs", id, "lost"]) => match queue.lost(id) {
+            (Method::Post, ["runs", id, "lost"], _) => match queue.lost(id) {
                 Ok(Lost::Retry(run)) => Response::from_json(&serde_json::json!({ "retry": run })),
                 Ok(Lost::Failed(run)) => Response::from_json(&serde_json::json!({ "failed": run })),
                 Err(e) => return Response::error(e.to_string(), 409),
