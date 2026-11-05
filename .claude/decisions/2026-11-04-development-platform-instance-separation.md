@@ -571,3 +571,92 @@ If the spike fails part of this, the fallback order is:
   - a tampered response body or status;
   - a signed request that carries no bearer header, which is accepted, while an unsigned one is refused.
 - The spike report gives `/tls` and `/mtls` results from the owner's deploy.
+
+### 2026-11-05: Phase 3 spike report
+
+This is the report that phase 3's amendment, step 3, calls for. The owner deployed `tooling/spikes/containers` in the pigeon account, on Workers Paid, with instance type `standard-1`.
+
+#### 1. Results
+
+| Check | Result |
+| --- | --- |
+| `/image` | Met. A cold start took 414 ms to the Container's start, and about 2.5 s to its first answer. It runs `tofu` 1.13.1, `zola` 0.23.6 and `pigeon`. |
+| Image | Met. The image is 123 MB, `linux/amd64`. The first local build took about 5 minutes. |
+| `/egress` | Met. Cloudflare answers 200; Backblaze, DigitalOcean and Scaleway answer 401 without credentials. Every one is reachable. |
+| `/secrets` | Met. The Secrets Store binding is readable from Rust. |
+| `/do`, `/r2` | Met from Rust. |
+| `/run?minutes=20` | Not measured. The Container was deleted before the run ended. |
+| `scheduled`, `/d1` | Not measured. `/d1` was read once, before the first cron tick. |
+| `/tls` | Refused. The container binding rejects `https://`: "Connecting to a container using HTTPS is not currently supported; use HTTP instead. TLS is unnecessary anyway, as the connection is already secure by default." |
+| `/mtls` | Refused. An `mtls_certificates` binding fetches through the internet, not the container binding, and got 403 (error 1003). |
+
+Every binding works from Rust, so no part of amendment 1 §4's TypeScript shim is needed.
+
+#### 2. The Worker–Container link
+
+The Worker can neither verify a certificate on the container binding nor present one. That is case 2 of the mutual TLS amendment's §5 fallback order, which returns the decision to the owner. **The owner chose signed requests.**
+
+- **The link is plain HTTP** on the container binding. Cloudflare describes it as private and secure by default; pigeon does not rely on that alone.
+- **Every `/v0/` request is signed.** It carries an HMAC-SHA-256 under `BACKPLANE_TOKEN`, over its method, path, body digest, a timestamp and a random nonce.
+  - The Container refuses a timestamp more than 60 seconds from its clock, and a nonce already seen within that window.
+  - The verified signature replaces the bearer check; the token itself never travels.
+- **Every response is signed** over the request's nonce, its status code and its body's digest. The Worker verifies it, so a changed status or body fails.
+- **`serve --network` requires one of two modes:**
+  - mutual TLS, from the three `BACKPLANE_TLS_*` variables, kept for any host where TLS works;
+  - signed mode, from `--signed`.
+  - With neither it refuses to start. Loopback without either stays allowed for local use.
+- **Unchanged:** the routes, status codes and wire form, server-owned `state`, validation before the busy check, and the timeouts.
+
+The mutual TLS amendment's §3, a private CA per instance, applies only where mutual TLS is used. Phase 4's Worker uses signed mode, and holds `BACKPLANE_TOKEN` in the Secrets Store.
+
+#### 3. Operating notes
+
+- Containers need the Workers Paid plan.
+- The deploy token needs, on the account:
+  - Workers Admin, because Workers Editor cannot upload a script;
+  - Workers Containers, Secrets Store, D1, Workers R2 Storage and SSL and Certificates, each at Read and Write;
+  - Account Settings Read;
+  - Workers KV Storage Read, which `wrangler delete` needs.
+- `wrangler secrets-store` commands need `--remote`.
+- `wrangler delete` asks before deleting the Container application. Answering no leaves it running and billed.
+
+#### 4. Run length, from Cloudflare's documentation
+
+The run length and the Cron Trigger were not measured. Cloudflare's Containers documentation answers the run length instead, and a single surviving run would not have proven it.
+
+- **No fixed maximum runtime, and no guarantee.**
+  - An instance stops on an inactivity timeout, a rollout, or a host restart "on an irregular cadence".
+  - The Container class's `sleepAfter` defaults to 10 minutes.
+- **A stop sends SIGTERM**, then SIGKILL up to 15 minutes later.
+- **Pending I/O keeps a Durable Object from eviction.** A `monitor()` call holds it for up to 15 minutes, by default from compatibility date 2026-10-01.
+
+So phase 4 designs every run to survive a stop, rather than relying on a run's length:
+
+1. **The dispatching Durable Object holds pending I/O** for the whole run, and sets `sleepAfter` above the longest run.
+2. **On SIGTERM, `serve` takes no new request**, and lets a running `tofu` step finish within the 15-minute grace.
+3. **An interrupted run resumes from R2.**
+   - Today `apply_stored` marks each applied unit only in the local mirror, and backplane pushes the mirror after the whole apply. A stopped Container loses every marker and state change of that apply.
+   - Phase 4 pushes each unit's state and applied marker to R2 before the next unit starts. A re-dispatched apply then applies only the remaining units.
+   - A unit cut off by SIGKILL mid-`tofu` may leave resources its state does not record. Its run is re-planned from R2 state and reported to the owner, never retried blindly.
+   - A plan is re-run.
+4. **Phase 4's first dispatch PR proves it** before any apply is dispatched:
+   - a run longer than 20 minutes;
+   - a Container killed mid-apply, and the retry against the same R2 store applying only the remaining units;
+   - a Cron Trigger's tick.
+
+#### 5. Execution
+
+1. This amendment. It also corrects the runbook's token permissions and teardown.
+2. `feat(backplane)`: signed mode for `serve` (§2).
+3. `chore(tooling)`: remove `tooling/spikes/containers/`.
+
+#### 6. Verification
+
+- Step 2's tests sign requests and responses and refuse:
+  - a bad signature;
+  - a stale or future timestamp;
+  - a reused nonce;
+  - a tampered response body or status.
+- A signed request without a bearer header is accepted, and an unsigned one is refused.
+- `--network` with neither mode is refused.
+- Every existing `serve` test still passes in plain, TLS and signed modes.

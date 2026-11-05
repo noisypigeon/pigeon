@@ -20,10 +20,10 @@ Nothing here is a release unit, and it is removed once the report is in the ADR.
 In the **pigeon** account, on the Workers Paid plan (Containers need it), with
 Docker running, `wrangler` 4, and the pinned Rust from `mise` (with the
 `wasm32-unknown-unknown` target). Use a short-lived account API token, not the
-`infra/pigeon` bootstrap token, with Account Settings Read, Workers Scripts
-Edit, Containers Edit, D1 Edit, Workers R2 Storage Edit, Secrets Store Edit and
-SSL and Certificates Edit (for the mTLS certificate), and revoke it after
-teardown.
+`infra/pigeon` bootstrap token, and revoke it after teardown. It needs, on the
+account: Workers Admin (Editor cannot upload a script); Workers Containers,
+Secrets Store, D1, Workers R2 Storage and SSL and Certificates, each Read and
+Write; Account Settings Read; and Workers KV Storage Read, for `wrangler delete`.
 
 ```sh
 cd tooling/spikes/containers
@@ -32,7 +32,7 @@ export CLOUDFLARE_ACCOUNT_ID=…       # never written to a tracked file
 
 npx wrangler d1 create pigeon-spike                       # note the database_id
 npx wrangler r2 bucket create "pigeon-spike-$(openssl rand -hex 4)"   # note the name
-npx wrangler secrets-store store list --remote            # or `store create --remote`; note its id
+npx wrangler secrets-store store list --remote            # the account's one store; note its id
 npx wrangler secrets-store secret create <store-id> --name pigeon-spike --scopes workers --remote
 #   (enter any test value; the spike reports only its length)
 
@@ -49,9 +49,11 @@ openssl req -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -subj /CN=pigeon-
 openssl x509 -req -in client.csr -CA ca.pem -CAkey ca.key -days 7 -out client.pem \
   -extfile <(printf 'extendedKeyUsage=clientAuth')
 openssl pkcs8 -topk8 -nocrypt -in server.key -out server.pk8
-npx wrangler mtls-certificate upload --cert client.pem --key client.key --name pigeon-spike
-#   note the certificate id
 cd -
+
+npx wrangler mtls-certificate upload --name pigeon-spike \
+  --cert ~/pigeon-spike-tls/client.pem --key ~/pigeon-spike-tls/client.key
+#   note the certificate id
 
 cp wrangler.toml wrangler.local.toml
 #   replace the four SET_LOCALLY values in wrangler.local.toml
@@ -99,12 +101,17 @@ the spike report.
 ## Tear down
 
 ```sh
-npx wrangler delete -c wrangler.local.toml
-npx wrangler d1 delete pigeon-spike
-npx wrangler r2 object delete "<bucket>/spike/probe" --remote && npx wrangler r2 bucket delete <bucket>
-npx wrangler secrets-store secret delete <store-id> --secret-id <secret-id> --remote
-npx wrangler mtls-certificate delete --name pigeon-spike
+npx wrangler delete -c wrangler.local.toml     # answer yes to deleting the Container application
+npx wrangler d1 delete pigeon-spike -c wrangler.local.toml
+npx wrangler r2 object delete "<bucket>/spike/probe" --remote -c wrangler.local.toml
+npx wrangler r2 bucket delete <bucket> -c wrangler.local.toml
+npx wrangler secrets-store secret delete <store-id> --secret-id <secret-id> --remote -c wrangler.local.toml
+npx wrangler mtls-certificate delete --name pigeon-spike -c wrangler.local.toml
 rm -r wrangler.local.toml ~/pigeon-spike-tls
 ```
+
+Every command passes `-c wrangler.local.toml`: in this directory `wrangler.toml`
+holds only placeholders. A Container application left running is billed;
+`npx wrangler containers delete <id> -c wrangler.local.toml` removes it.
 
 Then revoke the token.
