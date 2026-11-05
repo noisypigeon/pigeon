@@ -975,7 +975,7 @@ fn secrets_under_the_wrong_passphrase_say_so_without_the_value() {
 
 const BLOG: &str = "workloads/noisypigeon.com/blog";
 
-const SITE: &str = "static_site:\n  template: { version: 1.0.0, features: [math] }\n  site: { title: Blog, description: A blog. }\n";
+const SITE: &str = "static_site:\n  template: { name: blog, version: 1.0.0, features: [math] }\n  site: { title: Blog, description: A blog. }\n";
 
 /// `CLOUDFLARE` with the blog's site token and the apex token widened for its rulesets.
 fn cloudflare_with_sites() -> String {
@@ -1140,19 +1140,23 @@ fn bad_static_sites_fail_for_their_own_reason() {
     for (config, want) in [
         ("static_site: {}\n", "\"template\" is a required property"),
         (
-            "static_site:\n  template: { version: \"1.0\" }\n",
+            "static_site:\n  template: { version: 1.0.0 }\n",
+            "\"name\" is a required property",
+        ),
+        (
+            "static_site:\n  template: { name: blog, version: \"1.0\" }\n",
             "does not match",
         ),
         (
-            "static_site:\n  template: { version: 1.0.0 }\n  storage_class: Cold\n",
+            "static_site:\n  template: { name: blog, version: 1.0.0 }\n  storage_class: Cold\n",
             "storage_class",
         ),
         (
-            "static_site:\n  template: { version: 1.0.0, features: [Math] }\n",
+            "static_site:\n  template: { name: blog, version: 1.0.0, features: [Math] }\n",
             "does not match",
         ),
         (
-            "static_site:\n  template: { version: 1.0.0 }\n  extra: 1\n",
+            "static_site:\n  template: { name: blog, version: 1.0.0 }\n  extra: 1\n",
             "Additional properties",
         ),
         (
@@ -1442,12 +1446,12 @@ fn a_named_template_resolves_its_own_project_and_tag() {
     let sites = cobot::sites::find(repo.path(), &[]).expect("find");
     assert_eq!(
         (
-            sites[0].template.as_deref(),
+            sites[0].template.as_str(),
             sites[0].tag(),
             sites[0].project()
         ),
         (
-            Some("diagram"),
+            "diagram",
             "site-template-diagram/v0.1.0".to_string(),
             "src/site-templates/diagram".to_string()
         )
