@@ -1,1 +1,290 @@
-//! The wasm-safe `worker` build: Container dispatch and minting, per the control-plane ADR §1.
+//! The wasm-safe `worker` build: Container dispatch and minting, per the control-plane ADR §1
+//! and §5 (`.claude/decisions/2026-11-05-runtime-control-plane-worker.md`). Every request to a
+//! run's Container is signed, and every answer is verified before it is read.
+
+use crate::link;
+
+/// The Container port `serve` listens on.
+pub const PORT: u16 = 8080;
+
+/// The environment variable `serve` reads its signing key from.
+pub const TOKEN_VAR: &str = "BACKPLANE_TOKEN";
+
+/// How a run's Container starts: `serve` in signed mode, against `state`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Launch {
+    /// The state every plan and apply uses, e.g. `r2://<bucket>/<prefix>`.
+    pub state: String,
+    /// The signing key, `BACKPLANE_TOKEN`.
+    pub token: String,
+}
+
+impl Launch {
+    /// The Container's command line.
+    #[must_use]
+    pub fn entrypoint(&self) -> Vec<String> {
+        [
+            "/usr/local/bin/pigeon",
+            "backplane",
+            "serve",
+            "--listen",
+            &format!("0.0.0.0:{PORT}"),
+            "--network",
+            "--signed",
+            "--state",
+            &self.state,
+        ]
+        .map(str::to_string)
+        .to_vec()
+    }
+
+    /// The Container's environment.
+    #[must_use]
+    pub fn env(&self) -> Vec<(&'static str, &str)> {
+        vec![(TOKEN_VAR, self.token.as_str())]
+    }
+}
+
+/// Why a dispatch failed. An unverified answer is never success.
+#[derive(Debug, Clone, PartialEq)]
+pub enum DispatchError {
+    /// The Container did not start.
+    Start(String),
+    /// The Container never answered, or the request failed in transit.
+    Unreachable(String),
+    /// The answer's signature is missing or wrong.
+    Unverified,
+    /// A verified answer whose body is not JSON.
+    Malformed(String),
+}
+
+impl std::fmt::Display for DispatchError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Start(e) => write!(f, "the Container did not start: {e}"),
+            Self::Unreachable(e) => write!(f, "the Container did not answer: {e}"),
+            Self::Unverified => f.write_str(&link::Unverified.to_string()),
+            Self::Malformed(e) => write!(f, "the Container's answer is not JSON: {e}"),
+        }
+    }
+}
+
+impl std::error::Error for DispatchError {}
+
+impl From<link::Unverified> for DispatchError {
+    fn from(_: link::Unverified) -> Self {
+        Self::Unverified
+    }
+}
+
+/// Checks a signed answer, then parses its body; `nonce` is the request's.
+///
+/// # Errors
+///
+/// [`DispatchError::Unverified`] before anything is parsed, and [`DispatchError::Malformed`] for
+/// a verified body that is not JSON.
+pub fn accept(
+    token: &str,
+    nonce: &str,
+    status: u16,
+    body: &[u8],
+    signature: Option<&str>,
+) -> Result<(u16, serde_json::Value), DispatchError> {
+    link::verify_response(token, nonce, status, body, signature)?;
+    serde_json::from_slice(body)
+        .map(|v| (status, v))
+        .map_err(|e| DispatchError::Malformed(e.to_string()))
+}
+
+#[cfg(target_arch = "wasm32")]
+pub use wasm::{call, monitor, start};
+
+#[cfg(target_arch = "wasm32")]
+mod wasm {
+    use std::time::Duration;
+
+    use worker::wasm_bindgen::JsCast;
+    use worker::{
+        Container, ContainerStartupOptions, Date, Delay, Fetcher, Headers, Method, RequestInit,
+        js_sys,
+    };
+
+    use super::{DispatchError, Launch, PORT, accept};
+    use crate::link;
+
+    /// Half-second checks of `/healthz` while a cold Container boots: two minutes.
+    const READY_TRIES: u32 = 240;
+
+    /// Starts the run's Container unless it is running, and waits until `serve` answers.
+    ///
+    /// # Errors
+    ///
+    /// [`DispatchError::Start`] if it does not start, and [`DispatchError::Unreachable`] if
+    /// `serve` never answers.
+    pub async fn start(container: &Container, launch: &Launch) -> Result<(), DispatchError> {
+        if !container.running() {
+            let mut options = ContainerStartupOptions::new();
+            let entrypoint = launch.entrypoint();
+            options.set_entrypoint(&entrypoint.iter().map(String::as_str).collect::<Vec<_>>());
+            options.enable_internet(true);
+            for (k, v) in launch.env() {
+                options.add_env(k, v);
+            }
+            container
+                .start(Some(options))
+                .map_err(|e| DispatchError::Start(e.to_string()))?;
+        }
+        let port = port(container)?;
+        let mut last = String::new();
+        for _ in 0..READY_TRIES {
+            match port.fetch(url("/healthz"), None).await {
+                Ok(r) if r.status_code() == 200 => return Ok(()),
+                Ok(r) => last = format!("status {}", r.status_code()),
+                Err(e) => last = e.to_string(),
+            }
+            Delay::from(Duration::from_millis(500)).await;
+        }
+        Err(DispatchError::Unreachable(last))
+    }
+
+    /// Sends one signed request to `serve`, and returns its verified answer.
+    ///
+    /// # Errors
+    ///
+    /// [`DispatchError::Unreachable`] in transit, [`DispatchError::Unverified`] for an answer
+    /// not signed for this request, and [`DispatchError::Malformed`] for one that is not JSON.
+    pub async fn call(
+        container: &Container,
+        token: &str,
+        method: Method,
+        path: &str,
+        body: &[u8],
+    ) -> Result<(u16, serde_json::Value), DispatchError> {
+        let unreachable = |e: worker::Error| DispatchError::Unreachable(e.to_string());
+        let signed = link::sign(
+            token,
+            method.as_ref(),
+            path,
+            Date::now().as_millis() / 1000,
+            nonce().map_err(unreachable)?,
+            body,
+        );
+        let headers = Headers::new();
+        headers
+            .set(link::TIMESTAMP_HEADER, &signed.timestamp.to_string())
+            .map_err(unreachable)?;
+        headers
+            .set(link::NONCE_HEADER, &signed.nonce)
+            .map_err(unreachable)?;
+        headers
+            .set(link::SIGNATURE_HEADER, &signed.signature)
+            .map_err(unreachable)?;
+        let mut init = RequestInit::new();
+        if !body.is_empty() {
+            headers
+                .set("content-type", "application/json")
+                .map_err(unreachable)?;
+            init.with_body(Some(js_sys::Uint8Array::from(body).into()));
+        }
+        init.with_method(method).with_headers(headers);
+        let mut response = port(container)?
+            .fetch(url(path), Some(init))
+            .await
+            .map_err(unreachable)?;
+        let status = response.status_code();
+        let signature = response
+            .headers()
+            .get(link::SIGNATURE_HEADER)
+            .map_err(unreachable)?;
+        let bytes = response.bytes().await.map_err(unreachable)?;
+        accept(token, &signed.nonce, status, &bytes, signature.as_deref())
+    }
+
+    /// Resolves when the run's Container stops: held for a run's whole length, it keeps the
+    /// Durable Object alive (ADR §3), and its end before the run's marks the Container lost.
+    ///
+    /// # Errors
+    ///
+    /// The runtime's error if the Container exited with one.
+    pub async fn monitor(container: &Container) -> worker::Result<()> {
+        container.wait_for_exit().await
+    }
+
+    fn port(container: &Container) -> Result<Fetcher, DispatchError> {
+        container
+            .get_tcp_port(PORT)
+            .map_err(|e| DispatchError::Unreachable(e.to_string()))
+    }
+
+    fn url(path: &str) -> String {
+        format!("http://container{path}")
+    }
+
+    /// 32 bytes from the runtime's `crypto.getRandomValues`.
+    fn nonce() -> worker::Result<[u8; 32]> {
+        let crypto = js_sys::Reflect::get(&js_sys::global(), &"crypto".into())?;
+        let fill: js_sys::Function =
+            js_sys::Reflect::get(&crypto, &"getRandomValues".into())?.dyn_into()?;
+        let array = js_sys::Uint8Array::new_with_length(32);
+        fill.call1(&crypto, &array)?;
+        let mut out = [0u8; 32];
+        array.copy_to(&mut out);
+        Ok(out)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{DispatchError, Launch, accept};
+    use crate::link::sign_response;
+
+    const TOKEN: &str = "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk";
+    const NONCE: &str = "0123456789abcdef0123456789abcdef";
+
+    #[test]
+    fn a_run_launches_serve_signed_with_only_its_token() {
+        let launch = Launch {
+            state: "r2://state/i1".into(),
+            token: TOKEN.into(),
+        };
+        assert_eq!(
+            launch.entrypoint(),
+            [
+                "/usr/local/bin/pigeon",
+                "backplane",
+                "serve",
+                "--listen",
+                "0.0.0.0:8080",
+                "--network",
+                "--signed",
+                "--state",
+                "r2://state/i1",
+            ]
+        );
+        assert_eq!(launch.env(), [("BACKPLANE_TOKEN", TOKEN)]);
+    }
+
+    #[test]
+    fn only_a_signed_answer_is_read() {
+        let body = br#"{"ok":true}"#;
+        let sig = sign_response(TOKEN, NONCE, 200, body);
+        assert_eq!(
+            accept(TOKEN, NONCE, 200, body, Some(&sig)),
+            Ok((200, serde_json::json!({ "ok": true })))
+        );
+        assert_eq!(
+            accept(TOKEN, NONCE, 200, body, None),
+            Err(DispatchError::Unverified)
+        );
+        assert_eq!(
+            accept(TOKEN, NONCE, 409, body, Some(&sig)),
+            Err(DispatchError::Unverified),
+            "a changed status"
+        );
+        let bad = sign_response(TOKEN, NONCE, 200, b"not json");
+        assert!(matches!(
+            accept(TOKEN, NONCE, 200, b"not json", Some(&bad)),
+            Err(DispatchError::Malformed(_))
+        ));
+    }
+}

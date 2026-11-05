@@ -567,6 +567,37 @@ fn signed_mode_verifies_every_request_and_signs_every_answer() {
 }
 
 #[test]
+fn the_workers_client_signing_agrees_with_serve() {
+    let root = fixture();
+    let state = TempDir::new().expect("state");
+    let c = serving_as(root.path(), state.path(), None, true);
+    let body = br#"{"operation":"instance.show","args":{}}"#;
+    let signed = cobot::link::sign(TOKEN, "POST", "/v0/run", unix_now(), [0x5a; 32], body);
+    let extra = format!(
+        "{TIMESTAMP_HEADER}: {}\r\n{NONCE_HEADER}: {}\r\n{SIGNATURE_HEADER}: {}\r\n",
+        signed.timestamp, signed.nonce, signed.signature
+    );
+    let (status, text, sig) = parse(&c.exchange(&raw_request("POST", "/v0/run", body, &extra)));
+    assert_eq!(status, 200, "{text}");
+    assert_eq!(
+        cobot::link::verify_response(
+            TOKEN,
+            &signed.nonce,
+            status,
+            text.as_bytes(),
+            sig.as_deref()
+        ),
+        Ok(()),
+        "the Worker verifies serve's answer"
+    );
+    assert!(
+        cobot::link::verify_response(TOKEN, &signed.nonce, 500, text.as_bytes(), sig.as_deref())
+            .is_err(),
+        "and refuses it with another status"
+    );
+}
+
+#[test]
 fn a_response_signature_covers_status_and_body() {
     let nonce = fresh_nonce();
     let sig = sign_response(TOKEN, &nonce, 409, b"{}");

@@ -498,6 +498,7 @@ dependencies = [
  "tempfile",
  "toml",
  "ureq",
+ "worker",
 ]
 
 [[package]]
@@ -1850,7 +1851,6 @@ version = "0.1.18"
 dependencies = [
  "cobot",
  "gantry",
- "hmac",
  "httparse",
  "rcgen",
  "rusqlite",
@@ -1859,7 +1859,6 @@ dependencies = [
  "serde",
  "serde-saphyr",
  "serde_json",
- "sha2 0.10.9",
  "tempfile",
  "wasm-bindgen",
  "worker",
