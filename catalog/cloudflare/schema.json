@@ -257,6 +257,11 @@
               "additionalProperties": false,
               "required": ["version"],
               "properties": {
+                "name": {
+                  "description": "The template in src/site-templates/<name>/; absent is src/static-site-template/. See .claude/decisions/2026-11-05-runtime-architecture-site-through-backplane.md §1.",
+                  "type": "string",
+                  "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+                },
                 "version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
                 "features": {
                   "type": "array",

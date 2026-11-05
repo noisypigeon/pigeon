@@ -1,7 +1,8 @@
 //! `pigeon cobot sites`: build each static site with its pinned template, and
 //! publish it to its R2 bucket; see
 //! `.claude/decisions/2026-11-03-runtime-cloudflare-static-sites-r2.md` §5 and §7,
-//! and `.claude/decisions/2026-11-03-runtime-static-site-config-contract.md`.
+//! `.claude/decisions/2026-11-03-runtime-static-site-config-contract.md`, and
+//! `.claude/decisions/2026-11-05-runtime-architecture-site-through-backplane.md` §1.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
@@ -17,10 +18,14 @@ use crate::s3::{self, Bucket, Credentials};
 use crate::static_site;
 use crate::{Error, WORK_DIR, unit};
 
-/// The template project, inside a tag's tree.
+/// The unnamed template's project, inside a tag's tree.
 pub const TEMPLATE: &str = "src/static-site-template";
-/// The template's theme name, under a build's `themes/`.
+/// The unnamed template's theme and tag name.
 pub const THEME: &str = "static-site-template";
+/// Where named templates live, as `<TEMPLATES>/<name>`.
+pub const TEMPLATES: &str = "src/site-templates";
+/// A named template's theme and tag prefix, as `<PREFIX>-<name>`.
+pub const PREFIX: &str = "site-template";
 /// The post naming rule `YYYY-MM-DD-<slug>.md`.
 pub const DATE_SLUG: &str = "date-slug";
 /// What a contract site's `site/` may hold.
@@ -37,6 +42,8 @@ pub struct Site {
     pub zone: String,
     /// The workload.
     pub workload: String,
+    /// The template it names, `static_site.template.name`; none is the unnamed one.
+    pub template: Option<String>,
     /// The pinned template version.
     pub version: String,
     /// The features it lists, `no-<feature>` turning a default off.
@@ -51,7 +58,23 @@ impl Site {
     /// The template tag it pins.
     #[must_use]
     pub fn tag(&self) -> String {
-        format!("{THEME}/v{}", self.version)
+        format!("{}/v{}", self.theme(), self.version)
+    }
+
+    /// Its template's theme name, which also names the template's tags.
+    #[must_use]
+    pub fn theme(&self) -> String {
+        self.template
+            .as_ref()
+            .map_or_else(|| THEME.to_string(), |n| format!("{PREFIX}-{n}"))
+    }
+
+    /// Its template's project, inside a tag's tree.
+    #[must_use]
+    pub fn project(&self) -> String {
+        self.template
+            .as_ref()
+            .map_or_else(|| TEMPLATE.to_string(), |n| format!("{TEMPLATES}/{n}"))
     }
 
     /// Its bucket.
@@ -95,10 +118,27 @@ struct Manifest {
     content: Content,
 }
 
-#[derive(Debug, Default, Deserialize)]
-struct Content {
-    #[serde(default)]
-    posts: Option<Posts>,
+/// `content`: what a site's `site/` holds, or `none` for a template with no content.
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+enum Content {
+    None(NoContent),
+    Some {
+        #[serde(default)]
+        posts: Option<Posts>,
+    },
+}
+
+impl Default for Content {
+    fn default() -> Self {
+        Self::Some { posts: None }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "lowercase")]
+enum NoContent {
+    None,
 }
 
 #[derive(Debug, Deserialize)]
@@ -106,10 +146,12 @@ struct Posts {
     filename: String,
 }
 
-/// What a tag declares: its features' defaults, and whether posts are named by date.
+/// What a tag declares: its features' defaults, whether posts are named by
+/// date, and whether its sites have no `site/`.
 struct Declared {
     features: BTreeMap<String, bool>,
     date_slug: bool,
+    no_content: bool,
 }
 
 fn io(path: &Path) -> impl Fn(std::io::Error) -> Error + '_ {
@@ -173,6 +215,7 @@ pub fn find(root: &Path, wanted: &[String]) -> Result<Vec<Site>, Error> {
             dir: u.dir.clone(),
             zone: site.zone.clone(),
             workload: w.clone(),
+            template: template["name"].as_str().map(str::to_string),
             version: template["version"].as_str().unwrap_or_default().to_string(),
             features: template["features"]
                 .as_array()
@@ -224,24 +267,28 @@ pub fn features(
     Ok(out)
 }
 
-/// The tag's features, their defaults, and its post naming, from its `template.yaml`.
-fn declared(root: &Path, tag: &str) -> Result<Declared, Error> {
-    let text = git(root, &["show", &format!("{tag}:{TEMPLATE}/template.yaml")])?;
+/// The site's tag's features, their defaults, its post naming and whether it
+/// has content, from its `template.yaml`.
+fn declared(root: &Path, site: &Site) -> Result<Declared, Error> {
+    let at = format!("{}:{}/template.yaml", site.tag(), site.project());
+    let text = git(root, &["show", &at])?;
     let manifest: Manifest =
         serde_saphyr::from_str(&String::from_utf8_lossy(&text)).map_err(|e| Error::Io {
-            path: PathBuf::from(format!("{tag}:{TEMPLATE}/template.yaml")),
+            path: PathBuf::from(&at),
             message: e.to_string(),
         })?;
+    let (date_slug, no_content) = match manifest.content {
+        Content::None(_) => (false, true),
+        Content::Some { posts } => (posts.is_some_and(|p| p.filename == DATE_SLUG), false),
+    };
     Ok(Declared {
         features: manifest
             .features
             .into_iter()
             .map(|(k, f)| (k, f.default))
             .collect(),
-        date_slug: manifest
-            .content
-            .posts
-            .is_some_and(|p| p.filename == DATE_SLUG),
+        date_slug,
+        no_content,
     })
 }
 
@@ -272,7 +319,7 @@ pub fn build(root: &Path, sites: &[Site]) -> Result<Vec<Built>, Error> {
         .to_string();
     let mut out = Vec::new();
     for site in sites {
-        let declared = declared(root, &site.tag())?;
+        let declared = declared(root, site)?;
         let features = features(site, &declared.features)?;
         let base = format!(
             "https://{}",
@@ -308,17 +355,17 @@ pub fn build(root: &Path, sites: &[Site]) -> Result<Vec<Built>, Error> {
 
 /// The template at the site's tag, under `themes/`.
 fn theme(root: &Path, site: &Site, work: &Path) -> Result<(), Error> {
-    let theme = work.join("themes").join(THEME);
+    let theme = work.join("themes").join(site.theme());
     fs::create_dir_all(&theme).map_err(io(&theme))?;
     let tar = git(
         root,
         &[
             "archive",
             "--format=tar",
-            &format!("{}:{TEMPLATE}", site.tag()),
+            &format!("{}:{}", site.tag(), site.project()),
         ],
     )?;
-    let archive = work.join("themes").join(format!("{THEME}.tar"));
+    let archive = work.join("themes").join(format!("{}.tar", site.theme()));
     fs::write(&archive, tar).map_err(io(&archive))?;
     run(
         Command::new("tar")
@@ -348,7 +395,10 @@ fn assemble(
     };
     let schema_text = git(
         root,
-        &["show", &format!("{}:{TEMPLATE}/schema.json", site.tag())],
+        &[
+            "show",
+            &format!("{}:{}/schema.json", site.tag(), site.project()),
+        ],
     )
     .map_err(|_| {
         fail(format!(
@@ -356,11 +406,20 @@ fn assemble(
             site.tag()
         ))
     })?;
-    let schema: Value = serde_json::from_slice(&schema_text)
-        .map_err(|e| fail(format!("{}:{TEMPLATE}/schema.json: {e}", site.tag())))?;
+    let schema: Value = serde_json::from_slice(&schema_text).map_err(|e| {
+        fail(format!(
+            "{}:{}/schema.json: {e}",
+            site.tag(),
+            site.project()
+        ))
+    })?;
     check_settings(&schema, settings).map_err(fail)?;
     let src = site.dir.join("site");
-    let problems = check_layout(&src, declared.date_slug);
+    let problems = if declared.no_content {
+        check_no_content(&src)
+    } else {
+        check_layout(&src, declared.date_slug)
+    };
     if !problems.is_empty() {
         return Err(Error::Io {
             path: PathBuf::from(&site.unit).join("site"),
@@ -369,7 +428,10 @@ fn assemble(
     }
 
     theme(root, site, work)?;
-    copy_dir(&work.join("themes").join(THEME).join("scaffold"), work)?;
+    copy_dir(
+        &work.join("themes").join(site.theme()).join("scaffold"),
+        work,
+    )?;
     let config_path = work.join("config.toml");
     let manifest_path = work.join("static/manifest.json");
     let mut config: toml::Value =
@@ -390,6 +452,7 @@ fn assemble(
             other => return Err(fail(format!("x-site: unknown file `{other}`"))),
         }
     }
+    set_toml(&mut config, "theme", toml::Value::String(site.theme())).map_err(fail)?;
     set_toml(
         &mut config,
         "base_url",
@@ -500,6 +563,19 @@ fn set_json(doc: &mut Value, key: &str, value: Value) -> Result<(), String> {
             .or_insert_with(|| Value::Object(serde_json::Map::new()));
     }
     Ok(())
+}
+
+/// A site whose template has no content must have no `site/`.
+#[must_use]
+pub fn check_no_content(src: &Path) -> Vec<String> {
+    if src.exists() {
+        vec![format!(
+            "{} must not exist: the site's template has no content",
+            src.display()
+        )]
+    } else {
+        Vec::new()
+    }
 }
 
 /// Every way a contract site's `site/` breaks the layout: anything but
@@ -920,12 +996,13 @@ pub fn checks(
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;
+    use std::fs;
 
     use serde_json::json;
 
     use super::{
-        Site, check_layout, check_post, check_settings, content_type, features, set_json, set_toml,
-        site_targets,
+        Content, Manifest, Site, check_layout, check_no_content, check_post, check_settings,
+        content_type, features, set_json, set_toml, site_targets,
     };
 
     fn site(features: &[&str]) -> Site {
@@ -934,11 +1011,56 @@ mod tests {
             dir: "workloads/z.com/blog".into(),
             zone: "z.com".into(),
             workload: "blog".into(),
+            template: None,
             version: "1.0.0".into(),
             features: features.iter().map(|f| (*f).to_string()).collect(),
             hosts: vec!["z.com".into(), "www.z.com".into()],
             settings: None,
         }
+    }
+
+    #[test]
+    fn a_named_template_has_its_own_project_theme_and_tag() {
+        let unnamed = site(&[]);
+        assert_eq!(
+            (unnamed.project(), unnamed.theme(), unnamed.tag()),
+            (
+                "src/static-site-template".to_string(),
+                "static-site-template".to_string(),
+                "static-site-template/v1.0.0".to_string()
+            )
+        );
+        let mut named = site(&[]);
+        named.template = Some("architecture".into());
+        assert_eq!(
+            (named.project(), named.theme(), named.tag()),
+            (
+                "src/site-templates/architecture".to_string(),
+                "site-template-architecture".to_string(),
+                "site-template-architecture/v1.0.0".to_string()
+            )
+        );
+    }
+
+    #[test]
+    fn content_none_parses_beside_a_posts_rule() {
+        let none: Manifest = serde_saphyr::from_str("features: {}\ncontent: none\n").expect("none");
+        assert!(matches!(none.content, Content::None(_)));
+        let posts: Manifest =
+            serde_saphyr::from_str("features: {}\ncontent:\n  posts: { filename: date-slug }\n")
+                .expect("posts");
+        assert!(matches!(posts.content, Content::Some { posts: Some(_) }));
+        let absent: Manifest = serde_saphyr::from_str("features: {}\n").expect("absent");
+        assert!(matches!(absent.content, Content::Some { posts: None }));
+    }
+
+    #[test]
+    fn a_site_with_no_content_has_no_site_dir() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let src = dir.path().join("site");
+        assert_eq!(check_no_content(&src), Vec::<String>::new());
+        fs::create_dir_all(&src).expect("mkdir");
+        assert!(check_no_content(&src)[0].contains("must not exist"));
     }
 
     #[test]
