@@ -141,6 +141,8 @@ fn ctx(root: &Path, state: &Path, today: i64) -> cobot::Context {
         workload_secrets_passphrase: Some(WORKLOAD_PASS.into()),
         today,
         credentials: None,
+        cloudflare_token: None,
+        cloudflare_api: None,
     }
 }
 

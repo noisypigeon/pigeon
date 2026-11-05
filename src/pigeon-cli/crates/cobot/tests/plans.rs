@@ -45,6 +45,8 @@ fn ctx(root: &Path, state: &Path) -> cobot::Context {
         workload_secrets_passphrase: None,
         today: 0,
         credentials: None,
+        cloudflare_token: None,
+        cloudflare_api: None,
     }
 }
 

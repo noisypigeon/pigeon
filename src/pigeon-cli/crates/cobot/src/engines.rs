@@ -2,7 +2,8 @@
 //! (control-plane ADR §1).
 
 use crate::{
-    apex, config, generations, moves, plans, providers, s3, secrets, sites, static_site, tofu, unit,
+    apex, cloudflare, config, generations, moves, plans, providers, s3, secrets, sites,
+    static_site, tofu, unit,
 };
 
 use std::collections::BTreeMap;
@@ -285,6 +286,21 @@ pub struct Context {
     pub today: generations::Day,
     /// The runner-supplied credentials, as JSON; needed only by units requesting some.
     pub credentials: Option<String>,
+    /// The run's own Cloudflare token, for workloads that use the catalogs directly; see
+    /// `.claude/decisions/2026-11-05-development-pigeon-its-own-instance.md` §4.
+    pub cloudflare_token: Option<String>,
+    /// The Cloudflare API's base URL; `None` is [`cloudflare::API`].
+    pub cloudflare_api: Option<String>,
+}
+
+impl Context {
+    /// The API with the run's own token, if it has one.
+    #[must_use]
+    pub fn cloudflare(&self) -> Option<cloudflare::Api> {
+        self.cloudflare_token
+            .clone()
+            .map(|t| cloudflare::Api::new(self.cloudflare_api.as_deref(), t))
+    }
 }
 
 /// The rendered `main.tf.json` for `unit`.
@@ -413,8 +429,12 @@ fn ready(
         && config::has_handoff(c)
         && let Some(site) = &c.site
     {
-        let shown = infra_state(ctx, &root, &state, &allow)?.unwrap_or_else(|| "{}".into());
-        pending = hand_off(ctx, unit, c, site, &shown, &state, apply, &mut env)?;
+        if let Some(api) = ctx.cloudflare() {
+            run_hand_off(&api, c, site, &mut env)?;
+        } else {
+            let shown = infra_state(ctx, &root, &state, &allow)?.unwrap_or_else(|| "{}".into());
+            pending = hand_off(ctx, unit, c, site, &shown, &state, apply, &mut env)?;
+        }
     }
     let work = root.join(WORK_DIR).join(&unit.path);
     let none = config::Existing::new();
@@ -577,6 +597,42 @@ fn decrypted_records(
     ))
 }
 
+/// Sets `TF_VAR_handoff` for an apex or a static site from the run's own token: the zone IDs
+/// and account it sees, and the token itself.
+fn run_hand_off(
+    api: &cloudflare::Api,
+    c: &config::ConfigUnit,
+    site: &apex::Site,
+    env: &mut tofu::Env,
+) -> Result<(), Error> {
+    let fail = |message: String| Error::Tool {
+        command: "cloudflare".into(),
+        message,
+    };
+    let json = if site.workload.is_some() {
+        let v = BTreeMap::from([
+            ("zone_id", api.zone_id(&site.zone).map_err(fail)?),
+            ("account_id", api.account().map_err(fail)?),
+            ("api_token", api.token().to_string()),
+        ]);
+        serde_json::to_string(&v)
+    } else {
+        let mut values = BTreeMap::new();
+        for zone in apex::zones(&c.config) {
+            let v = BTreeMap::from([
+                ("zone_id", api.zone_id(&zone).map_err(fail)?),
+                ("api_token", api.token().to_string()),
+            ]);
+            values.insert(zone, v);
+        }
+        serde_json::to_string(&values)
+    };
+    env.hidden.push(api.token().to_string());
+    let json = json.map_err(|e| fail(e.to_string()))?;
+    env.vars.push(("TF_VAR_handoff".into(), json));
+    Ok(())
+}
+
 /// Sets `TF_VAR_handoff` for an apex or a static site from `infra/cloudflare`'s
 /// state; while a token is missing, plans with placeholders and returns the
 /// note, and an apply refuses.
@@ -737,10 +793,21 @@ pub fn publish(
         return Ok(Vec::new());
     }
     let built = sites::build_with(&root, &found, data)?;
-    let shown = infra_state(ctx, &root, &state, &allow)?.unwrap_or_else(|| "{}".into());
+    let run = match ctx.cloudflare() {
+        Some(api) => Some(run_credentials(&api)?),
+        None => None,
+    };
+    let shown = if run.is_some() {
+        "{}".to_string()
+    } else {
+        infra_state(ctx, &root, &state, &allow)?.unwrap_or_else(|| "{}".into())
+    };
     let mut out = Vec::new();
     for b in built {
-        let Some((creds, account)) = sites::credentials(&shown, &b.site, ctx.today) else {
+        let found = run
+            .clone()
+            .or_else(|| sites::credentials(&shown, &b.site, ctx.today));
+        let Some((creds, account)) = found else {
             return Err(Error::Pending {
                 unit: b.site.unit.clone(),
                 token: static_site::token_name(&b.site.zone, &b.site.workload),
@@ -767,6 +834,24 @@ pub fn publish(
         });
     }
     Ok(out)
+}
+
+/// R2's S3 credentials from the run's own token: its ID as the access key, and the SHA-256 of
+/// its value as the secret; and the account it sees.
+fn run_credentials(api: &cloudflare::Api) -> Result<(s3::Credentials, String), Error> {
+    let fail = |message: String| Error::Tool {
+        command: "cloudflare".into(),
+        message,
+    };
+    let account = api.account().map_err(fail)?;
+    let id = api.token_id(&account).map_err(fail)?;
+    Ok((
+        s3::Credentials {
+            access_key: id,
+            secret_key: s3::sha256_hex(api.token().as_bytes()),
+        },
+        account,
+    ))
 }
 
 /// Plans each unit.

@@ -1120,22 +1120,40 @@ pub fn layout(root: &Path) -> Vec<(String, String)> {
     let Ok(listing) = fs::read_dir(root.join("workloads")) else {
         return out;
     };
-    let cf: Value = fs::read_to_string(root.join(CLOUDFLARE).join(crate::config::CONFIG))
+    let cf: Option<Value> = fs::read_to_string(root.join(CLOUDFLARE).join(crate::config::CONFIG))
         .ok()
-        .and_then(|t| serde_saphyr::from_str(&t).ok())
-        .unwrap_or(Value::Null);
-    let listed: BTreeSet<&str> = cf["zones"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .filter_map(Value::as_str)
-        .collect();
+        .map(|t| serde_saphyr::from_str(&t).unwrap_or(Value::Null));
     let mut dirs: Vec<String> = listing
         .flatten()
         .filter(|e| e.path().is_dir())
         .map(|e| e.file_name().to_string_lossy().into_owned())
         .collect();
     dirs.sort();
+    let Some(cf) = cf else {
+        // Without `infra/cloudflare`, a zone directory needs only a zone's name; the run's own
+        // token covers its units (2026-11-05-development-pigeon-its-own-instance.md §4).
+        for name in &dirs {
+            let rel = format!("workloads/{name}");
+            if ZONE.is_match(name) {
+                zone_dir(&rel, &root.join(&rel), &mut out);
+            } else {
+                out.push((rel, format!("`{name}` is not a zone name")));
+            }
+        }
+        let zones: Vec<&str> = dirs
+            .iter()
+            .map(String::as_str)
+            .filter(|n| ZONE.is_match(n))
+            .collect();
+        crate::static_site::check_buckets(root, &zones, &mut out);
+        return out;
+    };
+    let listed: BTreeSet<&str> = cf["zones"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .collect();
     for name in &dirs {
         let rel = format!("workloads/{name}");
         let dir = root.join(&rel);

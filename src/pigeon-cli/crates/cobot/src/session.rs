@@ -54,6 +54,11 @@ pub fn open(
         secrets_passphrase: var(crate::secrets::PASSPHRASE_VAR),
         workload_secrets_passphrase: var(crate::secrets::WORKLOAD_PASSPHRASE_VAR),
         today: crate::generations::today(),
+        cloudflare_token: crate::cloudflare::token(
+            var(crate::CREDENTIALS_VAR).as_deref(),
+            var(crate::cloudflare::TOKEN_VAR),
+        ),
+        cloudflare_api: None,
         credentials: var(crate::CREDENTIALS_VAR),
     };
     Ok(Session { ctx, mirror })
