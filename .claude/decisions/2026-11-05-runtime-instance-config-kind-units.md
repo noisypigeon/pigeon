@@ -51,10 +51,12 @@ units:
 
 moves:
   - { from: workloads/noisypigeon.com/apex, to: zones/noisypigeon.com }
+  - { from: workloads/noisypigeon.com/blog, to: sites/blog }
 ```
 
 - **Unit IDs.**
-  - Each key under `units` is a unit's ID, conventionally `<area>/<name>`, matching `^[a-z0-9]+(/[a-z0-9.-]+)+$`.
+  - Each key under `units` is a unit's ID, conventionally `<area>/<name>`, matching `^[a-z0-9]+(-[a-z0-9]+)*(/[a-z0-9]+([.-][a-z0-9]+)*)+$`: no segment is empty, starts or ends with `.` or `-`, or is `.` or `..`.
+  - A `moves` entry's `from` and `to` follow the same pattern. A unit's state path, joined under the state root, must stay inside it, or the unit is refused.
   - The ID is the unit's state path, and its row in D1 `desired_state` ([`2026-11-05-runtime-control-plane-worker.md`](2026-11-05-runtime-control-plane-worker.md) §4).
 - **A unit's entry** is its `kind` plus its settings, validated by the kind's schema.
 - **`moves`** moves a unit's state from one ID to another, through the existing moves machinery. It is removed once applied.
@@ -133,6 +135,7 @@ Each step is released before the next relies on it.
 
 - **Address preservation.** A test renders today's apex and blog units and the new zone and site units, and finds the same module addresses and inputs.
 - **The moved plan.** A `tofu` plan of moved state, with a fake Cloudflare API, shows 0 to destroy and 0 to replace.
+- **IDs.** A unit ID or move with a `.` or `..` segment, or one whose state path leaves the state root, is refused.
 - **Hosts.** A host claimed by two sites, or by a site and a zone record, is refused.
 - **Credentials.** A run token fills every declared `cloudflare` credential, and appears in no rendered or state file.
 - **The repository.** `noisypigeon/noisypigeon` holds no `ENC[`, ID or bucket name.
