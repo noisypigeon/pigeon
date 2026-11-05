@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.13 (2026-11-05)
+
+- feat(backplane): serve drains on SIGTERM ([#117](https://github.com/noisypigeon/pigeon/pull/117))
+
 ## v0.1.12 (2026-11-04)
 
 - fix(sentinel): never echo an unexpected line's text ([#81](https://github.com/noisypigeon/pigeon/pull/81))

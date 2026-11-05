@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.8 (2026-11-05)
+
+- feat(backplane): serve drains on SIGTERM ([#117](https://github.com/noisypigeon/pigeon/pull/117))
+
 ## v0.1.7 (2026-11-03)
 
 - feat(backplane): pigeon-backplane crate, instance manifest and pigeon backplane ([#75](https://github.com/noisypigeon/pigeon/pull/75))

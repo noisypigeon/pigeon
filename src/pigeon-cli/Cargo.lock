@@ -462,7 +462,7 @@ checksum = "1c133bc6a41be0d194c306b5506d15e6feeea7b1d6604bd3f8310dfb2ca96486"
 
 [[package]]
 name = "cobot"
-version = "0.1.27"
+version = "0.1.28"
 dependencies = [
  "age",
  "hmac",
@@ -957,7 +957,7 @@ dependencies = [
 
 [[package]]
 name = "gantry"
-version = "0.1.7"
+version = "0.1.8"
 
 [[package]]
 name = "generic-array"
@@ -1641,7 +1641,7 @@ dependencies = [
 
 [[package]]
 name = "pigeon-backplane"
-version = "0.1.15"
+version = "0.1.16"
 dependencies = [
  "cobot",
  "gantry",
@@ -2129,7 +2129,7 @@ checksum = "8a7852d02fc848982e0c167ef163aaff9cd91dc640ba85e263cb1ce46fae51cd"
 
 [[package]]
 name = "sentinel"
-version = "0.1.12"
+version = "0.1.13"
 dependencies = [
  "regex",
  "serde",

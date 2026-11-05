@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.28 (2026-11-05)
+
+- feat(backplane): serve drains on SIGTERM ([#117](https://github.com/noisypigeon/pigeon/pull/117))
+
 ## v0.1.27 (2026-11-05)
 
 - feat(cobot): write state back per unit, and record a completed apply ([#116](https://github.com/noisypigeon/pigeon/pull/116))
