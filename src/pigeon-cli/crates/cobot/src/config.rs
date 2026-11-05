@@ -363,6 +363,18 @@ pub fn load(dir: &Path, home: &Path, site: Option<Site>) -> Result<ConfigUnit, S
     })
 }
 
+/// A manifest unit: its settings, validated by its kind's `schema`, its modules from `home`.
+#[must_use]
+pub fn from_kind(config: Value, schema: Value, home: &Path, site: Option<Site>) -> ConfigUnit {
+    ConfigUnit {
+        config,
+        schema,
+        home: home.to_path_buf(),
+        site,
+        platform: None,
+    }
+}
+
 /// An apex's or a workload's schema: `home`'s `$defs.<kind>`, composed by its `x-cobot.<kind>`.
 fn composed_schema(root: &Value, kind: &str) -> Value {
     let mut x = root["x-cobot"][kind].clone();
@@ -463,9 +475,19 @@ fn check_credentials(
                 ));
                 continue;
             };
-            if keys != BTreeSet::from(["capabilities", "provider", "scope"]) {
+            let known = BTreeSet::from(["capabilities", "provider", "scope", "target"]);
+            if !keys.is_superset(&BTreeSet::from(["capabilities", "provider", "scope"]))
+                || !keys.is_subset(&known)
+            {
                 add(format!(
-                    "credential `{name}` takes only `provider`, `capabilities` and `scope`"
+                    "credential `{name}` takes only `provider`, `capabilities`, `scope` and `target`"
+                ));
+            }
+            if let Some(t) = req.get("target")
+                && !target_ok(t)
+            {
+                add(format!(
+                    "credential `{name}`: `target` is a name or `$config.<path>`"
                 ));
             }
             let Some(catalog) = catalogs.iter().find(|c| c.provider == provider) else {
@@ -499,6 +521,24 @@ fn check_credentials(
             ));
         }
     }
+}
+
+/// Whether a credential's `target` is a literal name or a `$config` reference.
+fn target_ok(t: &Value) -> bool {
+    t.as_str().is_some_and(|t| {
+        !t.is_empty() && (!t.starts_with('$') || matches!(parse(t), Some(Expr::Config(_))))
+    })
+}
+
+/// The provider of each credential a unit requests, by name.
+#[must_use]
+pub fn credential_providers(unit: &ConfigUnit) -> BTreeMap<String, String> {
+    x_cobot(&unit.schema)["credentials"]
+        .as_object()
+        .into_iter()
+        .flatten()
+        .filter_map(|(n, r)| Some((n.clone(), r["provider"].as_str()?.to_string())))
+        .collect()
 }
 
 /// Every `$credential.<name>.<field>` in a unit's providers and block inputs.
@@ -598,7 +638,7 @@ fn check_top(unit: &ConfigUnit, problems: &mut Vec<(String, String)>) {
         .site
         .as_ref()
         .filter(|s| s.workload.is_none())
-        .map(|_| crate::apex::published_values(&unit.config, &unit.home))
+        .map(|s| crate::apex::published_values(&s.composed(&unit.config), &unit.home))
         .unwrap_or_default();
     if strings
         .iter()

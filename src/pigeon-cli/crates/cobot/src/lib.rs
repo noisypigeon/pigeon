@@ -16,6 +16,8 @@ pub mod generations;
 #[cfg(any(feature = "engines", feature = "worker"))]
 pub mod link;
 #[cfg(feature = "engines")]
+pub mod manifest;
+#[cfg(feature = "engines")]
 pub mod moves;
 #[cfg(feature = "engines")]
 pub mod plans;

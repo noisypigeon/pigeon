@@ -4,7 +4,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::LazyLock;
+use std::sync::{Arc, LazyLock};
 
 use regex::Regex;
 use serde::Deserialize;
@@ -55,10 +55,54 @@ static INPUT: LazyLock<Regex> =
 pub struct Site {
     /// The repository root.
     pub root: PathBuf,
-    /// The zone of `workloads/<zone>/…`.
+    /// The zone of `workloads/<zone>/…`, or a manifest unit's zone.
     pub zone: String,
-    /// The workload of `workloads/<zone>/<workload>`; `None` for the apex.
+    /// The workload of `workloads/<zone>/<workload>`, or a site unit's name; `None` for a zone.
     pub workload: Option<String>,
+    /// The instance manifest, for a unit it declares: its zone and sites come from it, never
+    /// from another unit's file.
+    pub manifest: Option<Arc<crate::manifest::Manifest>>,
+}
+
+impl Site {
+    /// The workload units in `zone`, by name; `true` for config units.
+    #[must_use]
+    pub fn workloads(&self, zone: &str) -> BTreeMap<String, bool> {
+        match &self.manifest {
+            Some(m) => m.sites(zone).into_keys().map(|w| (w, true)).collect(),
+            None => workloads(&self.root, zone),
+        }
+    }
+
+    /// A workload's config, as a `workloads/<zone>/<w>/config.yaml` would hold it.
+    #[must_use]
+    pub fn config_of(&self, zone: &str, workload: &str) -> Option<Value> {
+        match &self.manifest {
+            Some(m) => m
+                .sites(zone)
+                .remove(workload)
+                .map(|e| json!({ "static_site": e.settings })),
+            None => workload_config(&self.root, zone, workload),
+        }
+    }
+
+    /// `zone`'s apex config: the manifest's zone unit with its sites' hosts, or the apex's file.
+    #[must_use]
+    pub fn apex_config(&self, zone: &str) -> Value {
+        match &self.manifest {
+            Some(m) => m.apex_config(zone),
+            None => workload_config(&self.root, zone, APEX).unwrap_or(Value::Null),
+        }
+    }
+
+    /// A zone unit's config as an apex composes it, under `zones.<zone>`; any other config as is.
+    #[must_use]
+    pub fn composed(&self, config: &Value) -> Value {
+        match (&self.manifest, &self.workload) {
+            (Some(m), None) => json!({ "zones": { self.zone.clone(): m.apex_config(&self.zone) } }),
+            _ => config.clone(),
+        }
+    }
 }
 
 /// Whether `name` is shaped like a zone.
@@ -555,11 +599,9 @@ pub(crate) fn workload_config(root: &Path, zone: &str, workload: &str) -> Option
     serde_saphyr::from_str(&text).ok()
 }
 
-/// A workload's `ingress`, if its `config.yaml` has one.
-fn ingress(root: &Path, zone: &str, workload: &str) -> Option<Value> {
-    workload_config(root, zone, workload)?
-        .get("ingress")
-        .cloned()
+/// A workload's `ingress`, if its config has one.
+fn ingress(site: &Site, zone: &str, workload: &str) -> Option<Value> {
+    site.config_of(zone, workload)?.get("ingress").cloned()
 }
 
 /// Each workload's hosts in one zone's apex config: the apex workload at `@`
@@ -668,9 +710,9 @@ impl Expansion {
     }
 
     /// Each workload's hosts: claimed always, rendered from its `ingress`.
-    fn hosts(&mut self, config: &Value, root: &Path, zone: &str) {
+    fn hosts(&mut self, config: &Value, site: &Site, zone: &str) {
         self.prefixes.push("host-".into());
-        let units = workloads(root, zone);
+        let units = site.workloads(zone);
         let overrides = config["hosts"].as_object().cloned().unwrap_or_default();
         for w in overrides.keys() {
             if !units.contains_key(w) && config["apex"].as_str() != Some(w) {
@@ -712,17 +754,17 @@ impl Expansion {
             if units.get(w) != Some(&true) {
                 continue;
             }
-            let own = workload_config(root, zone, w);
-            let site = own.as_ref().is_some_and(crate::static_site::is_static);
-            if site && hosts.is_empty() {
+            let own = site.config_of(zone, w);
+            let is_site = own.as_ref().is_some_and(crate::static_site::is_static);
+            if is_site && hosts.is_empty() {
                 self.problems.push(format!(
                     "workloads/{zone}/{w}: a static site needs a host; the apex assigns it none"
                 ));
             }
-            let Some(ing) = ingress(root, zone, w) else {
+            let Some(ing) = ingress(site, zone, w) else {
                 continue;
             };
-            if site {
+            if is_site {
                 self.problems.push(format!(
                     "workloads/{zone}/{w}: ingress and static_site cannot both serve a workload"
                 ));
@@ -908,7 +950,7 @@ fn content_of(c: &Value) -> String {
 fn expand_zone(
     config: &Value,
     home: &Path,
-    root: &Path,
+    site: &Site,
     zone: &str,
     secrets: &BTreeMap<String, String>,
 ) -> (Map<String, Value>, Vec<String>) {
@@ -918,7 +960,7 @@ fn expand_zone(
     };
     bad_secrets(config, "config", &mut e.problems);
     e.services(config, home);
-    e.hosts(config, root, zone);
+    e.hosts(config, site, zone);
     e.records(config);
     e.finish(zone)
 }
@@ -939,9 +981,10 @@ pub fn derive(
 ) -> (Map<String, Value>, Vec<String>) {
     match expander {
         EXPANDER => expand(config, home, site),
-        crate::static_site::RULESETS => {
-            (crate::static_site::rulesets(config, &site.root), Vec::new())
-        }
+        crate::static_site::RULESETS => (
+            crate::static_site::rulesets(&site.composed(config), site),
+            Vec::new(),
+        ),
         crate::static_site::BUCKET => (crate::static_site::bucket(config, site), Vec::new()),
         crate::static_site::DOMAINS => crate::static_site::domains(config, site),
         _ => (Map::new(), vec![format!("unknown expander `{expander}`")]),
@@ -968,8 +1011,9 @@ fn expand_with(
 ) -> (Map<String, Value>, Vec<String>) {
     let mut out = Map::new();
     let mut problems = Vec::new();
+    let config = &site.composed(config);
     for zone in zones(config) {
-        let (recs, ps) = expand_zone(&config["zones"][&zone], home, &site.root, &zone, secrets);
+        let (recs, ps) = expand_zone(&config["zones"][&zone], home, site, &zone, secrets);
         problems.extend(ps.into_iter().map(|p| format!("zones.{zone}: {p}")));
         for (key, mut item) in recs {
             item["zone"] = Value::String(zone.clone());

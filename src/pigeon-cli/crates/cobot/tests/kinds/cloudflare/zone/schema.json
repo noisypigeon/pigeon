@@ -1,0 +1,158 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "cloudflare/zone",
+  "description": "A zone: its presets, records, and the rules its sites need; see .claude/decisions/2026-11-05-runtime-instance-config-kind-units.md §2.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "services",
+    "records"
+  ],
+  "properties": {
+    "zone": {
+      "description": "The unit's name; set by cobot.",
+      "type": "string",
+      "pattern": "^[a-z0-9-]+(\\.[a-z0-9-]+)+$"
+    },
+    "services": {
+      "description": "Presets by name, each catalog/cloudflare/presets/<name>.yaml.",
+      "type": "object",
+      "propertyNames": {
+        "$ref": "#/$defs/key"
+      },
+      "additionalProperties": {
+        "type": "object"
+      }
+    },
+    "records": {
+      "description": "Explicit records by key; a preset or host record's key overrides it field by field, and false drops it.",
+      "type": "object",
+      "propertyNames": {
+        "$ref": "#/$defs/key"
+      },
+      "additionalProperties": {
+        "oneOf": [
+          {
+            "const": false
+          },
+          {
+            "$ref": "#/$defs/record"
+          }
+        ]
+      }
+    }
+  },
+  "$defs": {
+    "key": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+    },
+    "name": {
+      "type": "string",
+      "pattern": "^(@|(\\*\\.)?[a-z0-9_]([a-z0-9_-]*[a-z0-9_])?(\\.[a-z0-9_]([a-z0-9_-]*[a-z0-9_])?)*)$"
+    },
+    "record": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/name"
+        },
+        "type": {
+          "enum": [
+            "A",
+            "AAAA",
+            "CNAME",
+            "MX",
+            "TXT"
+          ]
+        },
+        "content": {
+          "type": "string",
+          "minLength": 1
+        },
+        "ttl": {
+          "type": "integer",
+          "anyOf": [
+            {
+              "const": 1
+            },
+            {
+              "minimum": 60,
+              "maximum": 86400
+            }
+          ]
+        },
+        "priority": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 65535
+        },
+        "proxied": {
+          "type": "boolean"
+        }
+      }
+    }
+  },
+  "x-cobot": {
+    "version": "0.1.0",
+    "providers": {
+      "cloudflare": {
+        "api_token": "$credential.cloudflare.api_token"
+      }
+    },
+    "credentials": {
+      "cloudflare": {
+        "provider": "cloudflare",
+        "capabilities": [
+          "dns.write",
+          "transform.write",
+          "redirects.write"
+        ],
+        "scope": "zone",
+        "target": "$config.zone"
+      }
+    },
+    "singletons": {
+      "account": {
+        "module": "account",
+        "inputs": {}
+      },
+      "zone": {
+        "module": "zone",
+        "inputs": {
+          "name": "$config.zone",
+          "account_id": "$module.account.id"
+        }
+      }
+    },
+    "derived": {
+      "dns_records": {
+        "expand": "zone-records",
+        "module": "dns-record",
+        "inputs": {
+          "zone_id": "$module.zone.id",
+          "name": "$item.name",
+          "type": "$item.type",
+          "content": "$item.content",
+          "ttl": "$item.ttl",
+          "priority": "$item.priority",
+          "proxied": "$item.proxied"
+        }
+      },
+      "zone_rulesets": {
+        "expand": "zone-rulesets",
+        "module": "ruleset",
+        "inputs": {
+          "zone_id": "$module.zone.id",
+          "name": "$item.name",
+          "phase": "$item.phase",
+          "rules": "$item.rules"
+        }
+      }
+    }
+  }
+}

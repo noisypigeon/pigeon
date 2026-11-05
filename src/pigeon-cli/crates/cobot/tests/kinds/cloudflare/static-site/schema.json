@@ -1,0 +1,136 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "cloudflare/static-site",
+  "description": "A static site on R2, served at the hosts it claims in its zone; see .claude/decisions/2026-11-05-runtime-instance-config-kind-units.md §2.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "zone",
+    "hosts",
+    "template",
+    "site"
+  ],
+  "properties": {
+    "zone": {
+      "description": "The zone it serves, a cloudflare/zone unit's name.",
+      "type": "string",
+      "pattern": "^[a-z0-9-]+(\\.[a-z0-9-]+)+$"
+    },
+    "hosts": {
+      "description": "The names it claims, relative to the zone.",
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/name"
+      }
+    },
+    "template": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "version"
+      ],
+      "properties": {
+        "name": {
+          "description": "The template in src/site-templates/<name>/.",
+          "type": "string",
+          "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+        },
+        "features": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+          }
+        }
+      }
+    },
+    "content": {
+      "description": "Its posts/, pages/ and assets/, relative to the instance.",
+      "type": "string"
+    },
+    "storage_class": {
+      "enum": [
+        "Standard",
+        "InfrequentAccess"
+      ]
+    },
+    "site": {
+      "description": "Its settings, validated against the pinned template's schema.json.",
+      "type": "object"
+    }
+  },
+  "$defs": {
+    "name": {
+      "type": "string",
+      "pattern": "^(@|(\\*\\.)?[a-z0-9_]([a-z0-9_-]*[a-z0-9_])?(\\.[a-z0-9_]([a-z0-9_-]*[a-z0-9_])?)*)$"
+    }
+  },
+  "x-cobot": {
+    "version": "0.1.0",
+    "providers": {
+      "cloudflare": {
+        "api_token": "$credential.cloudflare.api_token"
+      }
+    },
+    "credentials": {
+      "cloudflare": {
+        "provider": "cloudflare",
+        "capabilities": [
+          "r2.write"
+        ],
+        "scope": "account"
+      },
+      "cloudflare_zone": {
+        "provider": "cloudflare",
+        "capabilities": [
+          "zone.read",
+          "dns.write"
+        ],
+        "scope": "zone",
+        "target": "$config.zone"
+      }
+    },
+    "singletons": {
+      "account": {
+        "module": "account",
+        "inputs": {}
+      },
+      "zone": {
+        "module": "zone",
+        "inputs": {
+          "name": "$config.zone",
+          "account_id": "$module.account.id"
+        }
+      }
+    },
+    "derived": {
+      "bucket": {
+        "expand": "site-bucket",
+        "module": "r2-bucket",
+        "inputs": {
+          "account_id": "$module.account.id",
+          "name": "$item.name",
+          "storage_class": "$item.storage_class"
+        }
+      },
+      "domains": {
+        "expand": "site-domains",
+        "module": "r2-custom-domain",
+        "inputs": {
+          "account_id": "$module.account.id",
+          "bucket_name": "$module.bucket[$item.bucket].name",
+          "domain": "$item.domain",
+          "zone_id": "$module.zone.id"
+        }
+      }
+    }
+  }
+}

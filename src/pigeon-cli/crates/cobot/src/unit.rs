@@ -73,13 +73,15 @@ pub struct Unit {
     pub spec: Option<Spec>,
     /// Its parsed `config.yaml` and `schema.json`, if it is a config unit and parsed.
     pub config: Option<crate::config::ConfigUnit>,
+    /// Its kind, `<catalog>/<kind>`, for a unit the instance manifest declares.
+    pub kind: Option<String>,
 }
 
 impl Unit {
     /// Whether this is a config unit.
     #[must_use]
     pub fn is_config(&self) -> bool {
-        self.dir.join(crate::config::CONFIG).is_file()
+        self.kind.is_some() || self.dir.join(crate::config::CONFIG).is_file()
     }
 
     /// Whether its schema sets `x-cobot.local`: it runs only when named; see
@@ -142,38 +144,8 @@ pub fn discover_in(root: &Path, platform: &Path) -> (Vec<Unit>, Vec<Problem>) {
                 "holds both unit.yaml and config.yaml; a unit is one or the other",
             ));
         } else if config_file.is_file() {
-            let workload = crate::static_site::zone_workload(&rel)
-                .filter(|_| !dir.join(crate::config::SCHEMA).exists());
-            let (home, site) = match (crate::apex::zone_apex(&rel), workload) {
-                (Some(zone), _) => (
-                    crate::catalog::home_in(root, platform, "cloudflare"),
-                    Some(crate::apex::Site {
-                        root: root.to_path_buf(),
-                        zone: zone.to_string(),
-                        workload: None,
-                    }),
-                ),
-                (None, Some((zone, w))) => (
-                    crate::catalog::home_in(root, platform, "cloudflare"),
-                    Some(crate::apex::Site {
-                        root: root.to_path_buf(),
-                        zone: zone.to_string(),
-                        workload: Some(w.to_string()),
-                    }),
-                ),
-                (None, None) => (
-                    crate::catalog::for_unit_in(root, platform, &rel)
-                        .unwrap_or_else(|| dir.clone()),
-                    None,
-                ),
-            };
-            let config = match crate::config::load(&dir, &home, site) {
-                Ok(mut c) => {
-                    if platform != root {
-                        c.platform = Some(platform.to_path_buf());
-                    }
-                    Some(c)
-                }
+            let config = match dir_config(root, platform, &rel, &dir) {
+                Ok(c) => Some(c),
                 Err(e) => {
                     problems.push(problem(format!("{rel}/{e}"), "cannot be loaded"));
                     None
@@ -184,6 +156,7 @@ pub fn discover_in(root: &Path, platform: &Path) -> (Vec<Unit>, Vec<Problem>) {
                 dir: dir.clone(),
                 spec: None,
                 config,
+                kind: None,
             });
         } else if unit_file.is_file() {
             let spec = match fs::read_to_string(&unit_file) {
@@ -204,6 +177,7 @@ pub fn discover_in(root: &Path, platform: &Path) -> (Vec<Unit>, Vec<Problem>) {
                 dir: dir.clone(),
                 spec,
                 config: None,
+                kind: None,
             });
         }
         match fs::read_dir(&dir) {
@@ -217,8 +191,101 @@ pub fn discover_in(root: &Path, platform: &Path) -> (Vec<Unit>, Vec<Problem>) {
             Err(e) => problems.push(problem(rel.clone(), format!("cannot list: {e}"))),
         }
     }
+    manifest_units(root, platform, &mut units, &mut problems);
     units.sort_by(|a, b| a.path.cmp(&b.path));
     (units, problems)
+}
+
+/// The config unit in `dir`, at `rel` under the instance `root`: an apex, a schema-less workload,
+/// or a unit with its own or its catalog's schema.
+fn dir_config(
+    root: &Path,
+    platform: &Path,
+    rel: &str,
+    dir: &Path,
+) -> Result<crate::config::ConfigUnit, String> {
+    let workload = crate::static_site::zone_workload(rel)
+        .filter(|_| !dir.join(crate::config::SCHEMA).exists());
+    let site = |zone: &str, workload: Option<&str>| crate::apex::Site {
+        root: root.to_path_buf(),
+        zone: zone.to_string(),
+        workload: workload.map(str::to_string),
+        manifest: None,
+    };
+    let (home, site) = match (crate::apex::zone_apex(rel), workload) {
+        (Some(zone), _) => (
+            crate::catalog::home_in(root, platform, "cloudflare"),
+            Some(site(zone, None)),
+        ),
+        (None, Some((zone, w))) => (
+            crate::catalog::home_in(root, platform, "cloudflare"),
+            Some(site(zone, Some(w))),
+        ),
+        (None, None) => (
+            crate::catalog::for_unit_in(root, platform, rel).unwrap_or_else(|| dir.to_path_buf()),
+            None,
+        ),
+    };
+    let mut c = crate::config::load(dir, &home, site)?;
+    if platform != root {
+        c.platform = Some(platform.to_path_buf());
+    }
+    Ok(c)
+}
+
+/// The instance manifest's units, per
+/// `.claude/decisions/2026-11-05-runtime-instance-config-kind-units.md` §1.
+fn manifest_units(
+    root: &Path,
+    platform: &Path,
+    units: &mut Vec<Unit>,
+    problems: &mut Vec<Problem>,
+) {
+    use crate::manifest::{self, Role};
+    let Some((m, found)) = manifest::load(root, platform) else {
+        return;
+    };
+    problems.extend(found.into_iter().map(|(p, m)| problem(p, m)));
+    let m = std::sync::Arc::new(m);
+    for (id, e) in &m.units {
+        if units.iter().any(|u| &u.path == id) {
+            problems.push(problem(
+                format!("{}: units.{id}", manifest::FILE),
+                "is also a directory unit",
+            ));
+            continue;
+        }
+        let zone = e.zone(id).map(str::to_string);
+        let site = match (e.role, zone) {
+            (Role::Plain, _) | (_, None) => None,
+            (role, Some(zone)) => Some(crate::apex::Site {
+                root: root.to_path_buf(),
+                zone,
+                workload: (role == Role::Site).then(|| manifest::name(id).to_string()),
+                manifest: Some(m.clone()),
+            }),
+        };
+        let mut config = e.settings.clone();
+        if e.role == Role::Zone
+            && let Some(o) = config.as_object_mut()
+        {
+            o.entry("zone").or_insert_with(|| manifest::name(id).into());
+        }
+        let mut c = crate::config::from_kind(
+            config,
+            e.schema.clone(),
+            &manifest::kind_home(platform, &e.kind),
+            site,
+        );
+        c.platform = Some(platform.to_path_buf());
+        units.push(Unit {
+            path: id.clone(),
+            dir: root.join(id),
+            spec: None,
+            config: Some(c),
+            kind: Some(e.kind.clone()),
+        });
+    }
 }
 
 /// Whether `name` ends with `suffix`, ignoring ASCII case.
@@ -331,6 +398,66 @@ fn misplaced_apex(unit: &Unit) -> Option<Problem> {
     })
 }
 
+/// Checks a schema v0 unit's `unit.yaml`.
+fn check_spec(unit: &Unit, spec: &Spec, area: &str, problems: &mut Vec<Problem>) {
+    let file = format!("{}/{UNIT_FILE}", unit.path);
+    let name_re = &*NAME;
+    if spec.schema != 0 {
+        problems.push(problem(
+            &file,
+            format!("schema {} is unknown; only 0", spec.schema),
+        ));
+    }
+    if !name_re.is_match(&spec.name) {
+        problems.push(problem(
+            &file,
+            format!("name `{}` is not lowercase-dash", spec.name),
+        ));
+    }
+    let expected = if area == "infra" {
+        Kind::Infra
+    } else {
+        Kind::Workload
+    };
+    if spec.kind != expected {
+        problems.push(problem(
+            &file,
+            format!("kind does not match its area `{area}/`"),
+        ));
+    }
+    if spec.modules.is_empty() {
+        problems.push(problem(&file, "declares no modules"));
+    }
+    let mut names = HashSet::new();
+    for m in &spec.modules {
+        if !name_re.is_match(&m.name) {
+            problems.push(problem(
+                &file,
+                format!("module name `{}` is not lowercase-dash", m.name),
+            ));
+        }
+        if !names.insert(m.name.as_str()) {
+            problems.push(problem(&file, format!("module name `{}` repeats", m.name)));
+        }
+        if !stays_inside(&m.source) {
+            problems.push(problem(
+                &file,
+                format!("module `{}` source leaves the unit", m.name),
+            ));
+        } else if !unit
+            .dir
+            .join(&m.source)
+            .canonicalize()
+            .is_ok_and(|p| p.is_dir() && unit.dir.canonicalize().is_ok_and(|u| p.starts_with(u)))
+        {
+            problems.push(problem(
+                &file,
+                format!("module `{}` source is not a directory", m.name),
+            ));
+        }
+    }
+}
+
 /// Checks every unit; empty means valid.
 #[must_use]
 pub fn validate(root: &Path, allow: &Allowlist) -> Vec<Problem> {
@@ -346,7 +473,6 @@ pub fn validate_in(root: &Path, platform: &Path, allow: &Allowlist) -> Vec<Probl
 /// [`validate_in`] once both roots are absolute.
 fn validate_absolute(root: &Path, platform: &Path, allow: &Allowlist) -> Vec<Problem> {
     let (units, mut problems) = discover_in(root, platform);
-    let name_re = &*NAME;
     for (path, message) in crate::apex::layout(root) {
         problems.push(problem(path, message));
     }
@@ -378,65 +504,23 @@ fn validate_absolute(root: &Path, platform: &Path, allow: &Allowlist) -> Vec<Pro
                 for (file, message) in
                     crate::config::validate(config, &unit.dir, area, allow, &infra_keys, &catalogs)
                 {
-                    problems.push(problem(format!("{}/{file}", unit.path), message));
+                    let at = if unit.kind.is_some() {
+                        format!("{}: units.{}", crate::manifest::FILE, unit.path)
+                    } else {
+                        format!("{}/{file}", unit.path)
+                    };
+                    problems.push(problem(at, message));
                 }
             }
-            scan(root, &unit.dir, allow, &mut problems);
+            if unit.kind.is_none() {
+                scan(root, &unit.dir, allow, &mut problems);
+            }
             continue;
         }
-        let Some(spec) = &unit.spec else {
-            continue;
-        };
-        if spec.schema != 0 {
-            problems.push(problem(
-                &file,
-                format!("schema {} is unknown; only 0", spec.schema),
-            ));
-        }
-        if !name_re.is_match(&spec.name) {
-            problems.push(problem(
-                &file,
-                format!("name `{}` is not lowercase-dash", spec.name),
-            ));
-        }
-        let expected = if area == "infra" {
-            Kind::Infra
+        if let Some(spec) = &unit.spec {
+            check_spec(unit, spec, area, &mut problems);
         } else {
-            Kind::Workload
-        };
-        if spec.kind != expected {
-            problems.push(problem(
-                &file,
-                format!("kind does not match its area `{area}/`"),
-            ));
-        }
-        if spec.modules.is_empty() {
-            problems.push(problem(&file, "declares no modules"));
-        }
-        let mut names = HashSet::new();
-        for m in &spec.modules {
-            if !name_re.is_match(&m.name) {
-                problems.push(problem(
-                    &file,
-                    format!("module name `{}` is not lowercase-dash", m.name),
-                ));
-            }
-            if !names.insert(m.name.as_str()) {
-                problems.push(problem(&file, format!("module name `{}` repeats", m.name)));
-            }
-            if !stays_inside(&m.source) {
-                problems.push(problem(
-                    &file,
-                    format!("module `{}` source leaves the unit", m.name),
-                ));
-            } else if !unit.dir.join(&m.source).canonicalize().is_ok_and(|p| {
-                p.is_dir() && unit.dir.canonicalize().is_ok_and(|u| p.starts_with(u))
-            }) {
-                problems.push(problem(
-                    &file,
-                    format!("module `{}` source is not a directory", m.name),
-                ));
-            }
+            continue;
         }
         scan(root, &unit.dir, allow, &mut problems);
     }

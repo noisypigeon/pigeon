@@ -91,6 +91,7 @@ fn io(path: &Path) -> impl Fn(std::io::Error) -> Error + '_ {
 /// [`Error::Io`] if a file cannot be read.
 pub fn digest(unit: &Unit, work: &Path) -> Result<String, Error> {
     let mut h = Sha256::new();
+    let mut declared = None;
     let mut add = |label: &str, path: &Path| -> Result<(), Error> {
         let bytes = fs::read(path).map_err(io(path))?;
         h.update((label.len() as u64).to_be_bytes());
@@ -99,13 +100,26 @@ pub fn digest(unit: &Unit, work: &Path) -> Result<String, Error> {
         h.update(&bytes);
         Ok(())
     };
-    let config = unit.dir.join(crate::config::CONFIG);
-    if config.is_file() {
-        add("config", &config)?;
-    }
-    match &unit.config {
-        Some(c) => add("schema", &c.home.join(crate::config::SCHEMA))?,
-        None => add("unit", &unit.dir.join(crate::unit::UNIT_FILE))?,
+    match (&unit.kind, &unit.config) {
+        (Some(kind), Some(c)) => {
+            declared = Some(serde_json::json!({
+                "kind": kind,
+                "config": c.config,
+                "schema": c.schema,
+                "composed": c.site.as_ref().map(|s| s.composed(&c.config)),
+                "hosts": c.site.as_ref().and_then(|s| {
+                    s.workload.as_ref().map(|w| crate::static_site::hosts(s, w))
+                }),
+            }));
+        }
+        (_, Some(c)) => {
+            let config = unit.dir.join(crate::config::CONFIG);
+            if config.is_file() {
+                add("config", &config)?;
+            }
+            add("schema", &c.home.join(crate::config::SCHEMA))?;
+        }
+        (_, None) => add("unit", &unit.dir.join(crate::unit::UNIT_FILE))?,
     }
     let rendered = work.join("main.tf.json");
     let text = fs::read_to_string(&rendered).map_err(io(&rendered))?;
@@ -135,6 +149,13 @@ pub fn digest(unit: &Unit, work: &Path) -> Result<String, Error> {
         for rel in files {
             add(&format!("module {name} {rel}"), &dir.join(&rel))?;
         }
+    }
+    if let Some(d) = declared {
+        let bytes = d.to_string();
+        h.update(8u64.to_be_bytes());
+        h.update(b"manifest");
+        h.update((bytes.len() as u64).to_be_bytes());
+        h.update(bytes.as_bytes());
     }
     Ok(hex(&h.finalize()))
 }

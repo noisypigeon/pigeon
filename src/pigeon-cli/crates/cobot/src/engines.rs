@@ -532,12 +532,15 @@ fn runner_credentials(
     if wanted.is_empty() {
         return Ok(());
     }
+    let filled = fill_credentials(
+        ctx.credentials.as_deref(),
+        &config::credential_providers(c),
+        ctx.cloudflare_token.as_deref(),
+    );
     let mine =
-        pick_credentials(ctx.credentials.as_deref(), &wanted, &unit.path).map_err(|message| {
-            Error::Io {
-                path: PathBuf::from(CREDENTIALS_VAR),
-                message,
-            }
+        pick_credentials(filled.as_deref(), &wanted, &unit.path).map_err(|message| Error::Io {
+            path: PathBuf::from(CREDENTIALS_VAR),
+            message,
         })?;
     env.hidden
         .extend(mine.values().flat_map(|f| f.values().cloned()));
@@ -547,6 +550,32 @@ fn runner_credentials(
     })?;
     env.vars.push(("TF_VAR_credentials".into(), json));
     Ok(())
+}
+
+/// The runner's `json` with each requested `cloudflare` credential it does not name filled
+/// from the run's own `token`, per
+/// `.claude/decisions/2026-11-05-runtime-instance-config-kind-units.md` §3; `json` itself when
+/// there is nothing to fill or it is not an object.
+#[must_use]
+pub fn fill_credentials(
+    json: Option<&str>,
+    providers: &BTreeMap<String, String>,
+    token: Option<&str>,
+) -> Option<String> {
+    let Some(token) = token.filter(|t| !t.is_empty()) else {
+        return json.map(str::to_string);
+    };
+    let Ok(mut all) =
+        serde_json::from_str::<serde_json::Map<String, serde_json::Value>>(json.unwrap_or("{}"))
+    else {
+        return json.map(str::to_string);
+    };
+    for (name, provider) in providers {
+        if provider == "cloudflare" && !all.contains_key(name) {
+            all.insert(name.clone(), json!({ "api_token": token }));
+        }
+    }
+    Some(serde_json::Value::Object(all).to_string())
 }
 
 /// From the runner's `json`, exactly the fields `unit` references of each credential it
