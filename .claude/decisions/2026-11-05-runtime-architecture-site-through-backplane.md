@@ -286,3 +286,13 @@ Each step is released before the next relies on it, and each passes `mise run ci
   - the control plane publishes every site whose inputs changed (`sites.publish`).
   - For this site, those inputs are everything `architecture.describe` reads.
   - `r2.bucket.write` and its `bucket` scope stay deferred: the publish uses a deploy token with R2 write on the account.
+
+### 2026-11-06: The two units applied, with a token of their own
+
+- **The owner applied `zones/pigeon.dev` and `sites/docs`** with `pigeon cobot plan --store` and `apply --plan` against pigeon's state. That created the zone's URL-rewrite ruleset, the site's bucket and its custom domain on `docs.pigeon.dev`.
+- **They take their own account API token, not `infra/pigeon`'s bootstrap one.** That token sees no zones, so the zone lookup finds nothing and the ruleset call fails as an authentication error. The units' token holds:
+  - Account Settings Read and Workers R2 Storage Edit, on the pigeon account;
+  - Zone Read, DNS Edit, Transform Rules Edit and Dynamic URL Redirects Edit, on `pigeon.dev` only.
+
+  These are the capabilities the `cloudflare/zone` and `cloudflare/static-site` kinds declare, plus the account lookup.
+- **The first deploys failed** with `GET the listing: status 404`: the pipeline published before the bucket existed. A deploy with no successful one before it publishes every site, so the first merge after the apply publishes `sites/docs`.
