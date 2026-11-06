@@ -369,3 +369,29 @@ fn this_repositorys_specs_validate() {
         assert!(problems.is_empty(), "{}: {problems:?}", f.dir);
     }
 }
+
+#[test]
+fn a_for_each_output_is_a_map_picked_by_key_and_a_miss_names_only_keys() {
+    let mut m = Map::new();
+    m.insert(
+        "bucket_names".into(),
+        json!({ "pigeon-ci": "pigeon-ci-x1", "pigeon-state": "pigeon-state-z3" }),
+    );
+    let mapped = BTreeMap::from([("infra/pigeon".to_string(), m)]);
+    assert_eq!(
+        workers::resolve("$output.infra/pigeon.bucket_names[pigeon-ci]", &mapped).as_deref(),
+        Ok("pigeon-ci-x1")
+    );
+    let missing =
+        workers::resolve("$output.infra/pigeon.bucket_names[pigeon-x]", &mapped).unwrap_err();
+    assert!(
+        missing.contains("its keys are pigeon-ci, pigeon-state"),
+        "{missing}"
+    );
+    assert!(
+        !missing.contains("x1") && !missing.contains("z3"),
+        "never a value: {missing}"
+    );
+    let at = workers::resolve("$output.infra/pigeon.bucket_names[0]", &mapped).unwrap_err();
+    assert!(at.contains("a map of 2"), "{at}");
+}
