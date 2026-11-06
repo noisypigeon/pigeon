@@ -8,6 +8,7 @@ pub mod changes;
 pub mod control;
 #[cfg(feature = "engines")]
 pub mod engine;
+pub mod gitdoor;
 #[cfg(feature = "engines")]
 pub mod instance;
 #[cfg(feature = "engines")]

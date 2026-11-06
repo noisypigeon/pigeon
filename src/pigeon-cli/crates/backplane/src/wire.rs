@@ -163,6 +163,7 @@ impl Operation {
         self.name.starts_with("change.")
             || self.name.starts_with("ci.")
             || self.name.starts_with("deploy.")
+            || self.name.starts_with("git.")
     }
 }
 
@@ -280,6 +281,13 @@ const CATALOG: &[Operation] = &[
         effect: Effect::Build,
         summary: "Run one of a finished head's jobs again, and those its failure cancelled",
         args: &[NUMBER, arg("job", true, Kind::String)],
+    },
+    Operation {
+        name: "git.tokens",
+        engine: Engine::Backplane,
+        effect: Effect::Read,
+        summary: "The repository's git tokens: each one's ID, scope, state and expiry, never its value",
+        args: &[],
     },
     Operation {
         name: "sites.build",
