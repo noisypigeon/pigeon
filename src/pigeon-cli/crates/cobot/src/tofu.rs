@@ -350,6 +350,19 @@ pub fn show_state(unit: &str, work: &Path, env: &Env) -> Result<String, Error> {
     Ok(String::from_utf8_lossy(&shown.stdout).into_owned())
 }
 
+/// The plan file in the work directory as `tofu show -json`; it is decrypted with the state
+/// passphrase, so its values are shown only after [`crate::plan_diff`] redacts them.
+pub fn show_plan(unit: &str, work: &Path, env: &Env) -> Result<String, Error> {
+    let shown = step(
+        unit,
+        work,
+        env,
+        &["show", "-json", "-no-color", PLAN_FILE],
+        &[0],
+    )?;
+    Ok(String::from_utf8_lossy(&shown.stdout).into_owned())
+}
+
 /// The plan file in a unit's work directory.
 pub fn plan_file(work: &Path) -> std::path::PathBuf {
     work.join(PLAN_FILE)

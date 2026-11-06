@@ -10,9 +10,9 @@ use cobot::release::{self, Config};
 
 use super::{INVALID, SUCCESS, VIOLATION};
 use crate::cli::{
-    CobotApply, CobotCommand, CobotPlan, CobotRoot, CobotRun, GitCommand, GitMirror, GitRun,
-    ReleaseArgs, ScopeArgs, SecretsCommand, SecretsKey, SecretsUnit, SitesBuild, SitesCommand,
-    SitesPublish, TagsArgs,
+    CobotApply, CobotCommand, CobotPlan, CobotRoot, CobotRun, CobotShow, GitCommand, GitMirror,
+    GitRun, ReleaseArgs, ScopeArgs, SecretsCommand, SecretsKey, SecretsUnit, SitesBuild,
+    SitesCommand, SitesPublish, TagsArgs,
 };
 
 /// Runs a `pigeon cobot` command and returns its exit code.
@@ -26,6 +26,7 @@ pub fn run(command: CobotCommand) -> i32 {
         CobotCommand::Render(args) => render(&args),
         CobotCommand::Plan(args) => plan(&args),
         CobotCommand::Apply(args) => apply(&args),
+        CobotCommand::Show(args) => show(&args),
         CobotCommand::Lock(args) => cobot::lock(&args.root, &args.providers_dir())
             .map(|path| println!("cobot: wrote {}", path.display())),
         CobotCommand::Capabilities(args) => capabilities(&args.root),
@@ -441,6 +442,23 @@ fn plan(args: &CobotPlan) -> Result<(), cobot::Error> {
             path: path.clone(),
             message: e.to_string(),
         })?;
+    }
+    Ok(())
+}
+
+fn show(args: &CobotShow) -> Result<(), cobot::Error> {
+    let session = context(&args.run)?;
+    for (unit, diff) in cobot::show_stored(&session.ctx, &args.plan, now())? {
+        println!("{unit}: {} attribute change(s)", diff.len());
+        for d in diff {
+            let forces = if d.replaces {
+                "  (forces replacement)"
+            } else {
+                ""
+            };
+            println!("  {} {}", d.action, d.address);
+            println!("    {}: {} -> {}{forces}", d.attribute, d.before, d.after);
+        }
     }
     Ok(())
 }

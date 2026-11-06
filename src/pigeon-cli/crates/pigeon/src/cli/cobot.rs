@@ -15,6 +15,8 @@ pub enum CobotCommand {
     Plan(CobotPlan),
     /// Plan, then apply units with changes
     Apply(CobotApply),
+    /// Print a stored plan's changes attribute by attribute; sensitive values stay hidden
+    Show(CobotShow),
     /// Write <PROVIDERS>/providers.lock.hcl for the allowlist
     Lock(CobotRoot),
     /// Print each catalog's capabilities as JSON; exit 1 on an invalid one
@@ -95,6 +97,17 @@ pub struct CobotPlan {
     /// Store the plan in the state for `apply --plan`, valid for 24 hours
     #[arg(long)]
     pub store: bool,
+}
+
+/// `pigeon cobot show` arguments.
+#[derive(Args, Debug)]
+pub struct CobotShow {
+    /// The state holding the plan
+    #[command(flatten)]
+    pub run: CobotRun,
+    /// The stored plan, from `plan --store`
+    #[arg(long)]
+    pub plan: String,
 }
 
 /// `pigeon cobot apply` arguments.

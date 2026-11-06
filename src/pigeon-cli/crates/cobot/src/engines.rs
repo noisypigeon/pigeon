@@ -1043,6 +1043,129 @@ pub fn apply_stored(ctx: &Context, id: &str, now: u64) -> Result<Vec<UnitPlan>, 
     apply_stored_with(ctx, id, now, &mut || Ok(()))
 }
 
+/// One attribute a planned resource change sets, as `show` prints it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AttrChange {
+    /// The resource's address.
+    pub address: String,
+    /// What happens to it: `update`, `create`, `delete`, `replace` or `read`.
+    pub action: String,
+    /// The attribute, top-level.
+    pub attribute: String,
+    /// Its value before, or `(sensitive)`, or `null`.
+    pub before: String,
+    /// Its value after, `(known after apply)`, or `(sensitive)`.
+    pub after: String,
+    /// Whether changing it forces a replacement.
+    pub replaces: bool,
+}
+
+/// Whether a `*_sensitive` or `after_unknown` mask marks anything at or under it.
+fn masked(mask: &Value) -> bool {
+    match mask {
+        Value::Bool(b) => *b,
+        Value::Array(a) => a.iter().any(masked),
+        Value::Object(o) => o.values().any(masked),
+        _ => false,
+    }
+}
+
+/// Each attribute a plan's resource changes set, from `tofu show -json` of the plan; sensitive
+/// values are never shown, at any depth.
+#[must_use]
+pub fn plan_diff(shown: &str) -> Vec<AttrChange> {
+    let v: Value = serde_json::from_str(shown).unwrap_or(Value::Null);
+    let mut out = Vec::new();
+    for rc in v["resource_changes"].as_array().into_iter().flatten() {
+        let c = &rc["change"];
+        let actions: Vec<&str> = c["actions"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_str)
+            .collect();
+        let action = match actions.as_slice() {
+            ["no-op"] | [] => continue,
+            ["update"] => "update",
+            ["create"] => "create",
+            ["delete"] => "delete",
+            ["read"] => "read",
+            _ => "replace",
+        };
+        let empty = Map::new();
+        let before = c["before"].as_object().unwrap_or(&empty);
+        let after = c["after"].as_object().unwrap_or(&empty);
+        let replace_paths: Vec<String> = c["replace_paths"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|p| p.get(0).and_then(Value::as_str).map(str::to_string))
+            .collect();
+        let mut keys: Vec<&String> = before.keys().chain(after.keys()).collect();
+        keys.sort();
+        keys.dedup();
+        for k in keys {
+            let b = before.get(k).unwrap_or(&Value::Null);
+            let a = after.get(k).unwrap_or(&Value::Null);
+            let unknown = masked(&c["after_unknown"][k.as_str()]);
+            if b == a && !unknown {
+                continue;
+            }
+            let show = |val: &Value, sensitive: &Value| {
+                if masked(sensitive) {
+                    "(sensitive)".to_string()
+                } else {
+                    val.to_string()
+                }
+            };
+            out.push(AttrChange {
+                address: rc["address"].as_str().unwrap_or_default().to_string(),
+                action: action.to_string(),
+                attribute: k.clone(),
+                before: show(b, &c["before_sensitive"][k.as_str()]),
+                after: if unknown {
+                    "(known after apply)".to_string()
+                } else {
+                    show(a, &c["after_sensitive"][k.as_str()])
+                },
+                replaces: replace_paths.iter().any(|p| p == k),
+            });
+        }
+    }
+    out
+}
+
+/// The attribute-level changes of the plans stored as `id`, by unit, without applying them.
+///
+/// # Errors
+///
+/// [`Error::Plan`] for an unknown or expired plan; any [`Error`] from `tofu`.
+pub fn show_stored(
+    ctx: &Context,
+    id: &str,
+    now: u64,
+) -> Result<Vec<(String, Vec<AttrChange>)>, Error> {
+    let state = absolute(&ctx.state)?;
+    let stored = plans::load(&state, id, now)?;
+    let names: Vec<String> = stored.units.iter().map(|s| s.unit.clone()).collect();
+    let units = select_in(&ctx.root, ctx.platform_root(), &ctx.providers, &names)?;
+    let mut out = Vec::new();
+    for (u, s) in units.iter().zip(&stored.units) {
+        let (work, env, _) = ready(ctx, u, true)?;
+        plans::restore(&state, id, &s.unit, &tofu::plan_file(&work))?;
+        let shown = tofu::show_plan(&u.path, &work, &env)?;
+        let mut diff = plan_diff(&shown);
+        for d in &mut diff {
+            for h in env.hidden.iter().filter(|h| h.len() >= 4) {
+                d.before = d.before.replace(h.as_str(), "(hidden)");
+                d.after = d.after.replace(h.as_str(), "(hidden)");
+            }
+        }
+        out.push((s.unit.clone(), diff));
+    }
+    Ok(out)
+}
+
 /// Applies the plans stored as `id`, exactly as planned, then removes them.
 ///
 /// `checkpoint` runs after each unit is applied and marked, and after the completion record,

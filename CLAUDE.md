@@ -192,6 +192,8 @@ belong in the ADR, never in the file.
   shows it. A plan
   cites its ADR, because the bound job checks the pull-request policy with
   the plan as the body.
+- `pigeon cobot show --plan ID --state DIR`: a stored plan's changes attribute by
+  attribute, decrypted with the state passphrase; sensitive values stay hidden.
 - `pigeon cobot workers validate|permissions|render|plan|deploy|status|secrets put|teardown`:
   the platform's Workers, from `infra/<unit>/workers/<name>/worker.yaml`, with
   wrangler; `deploy --plan ID` only, from `plan --state …`.
