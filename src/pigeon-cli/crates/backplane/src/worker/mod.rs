@@ -9,6 +9,7 @@
 
 mod change;
 mod checker;
+mod gitdoor;
 mod main_run;
 mod platform;
 
@@ -40,6 +41,9 @@ async fn fetch(mut req: Request, env: Env, _ctx: worker::Context) -> Result<Resp
         Ok(who) => who,
         Err(why) => return Response::error(format!("unauthorized: {why}"), 401),
     };
+    if req.path().starts_with("/git/") {
+        return gitdoor::serve(req, &env, &settings, &who).await;
+    }
     match (req.method(), req.path().as_str()) {
         (Method::Post, "/mcp") => {
             let message: Value = match req.json().await {
@@ -228,6 +232,17 @@ async fn dispatch(
                 .await?;
             let v: Value = r.json().await?;
             Ok((None, respond(operation, r.status_code(), v)))
+        }
+        Routed::GitTokens => {
+            let api = platform::secret(env, "ARTIFACTS_TOKEN")?;
+            let account = platform::account(&api).await?;
+            let path = format!(
+                "/accounts/{account}/artifacts/namespaces/{}/repos/{}/tokens?state=all&per_page=100",
+                s.namespace, s.repo
+            );
+            let v = platform::cloudflare(&api, Method::Get, &path, None).await?;
+            let tokens = control::token_rows(&v);
+            Ok((None, respond(operation, 200, json!({ "tokens": tokens }))))
         }
         Routed::List { state } => {
             let rows =

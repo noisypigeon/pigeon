@@ -484,3 +484,30 @@ fn a_change_runs_at_most_six_jobs_at_once() {
     assert!(!control::may_start(control::MAX_RUNNING));
     assert_eq!(control::MAX_RUNNING, 6);
 }
+
+#[test]
+fn git_tokens_show_metadata_and_never_a_value() {
+    assert_eq!(
+        control::route(&request("git.tokens", &json!({})), "agent", 1),
+        Ok(Routed::GitTokens)
+    );
+    let api = json!([
+        { "id": "t1", "scope": "write", "state": "expired", "created_at": "a", "expires_at": "b",
+          "token": "art_v1_x", "plaintext": "art_v1_y", "value": "z", "secret": "s" },
+        { "id": "t2", "scope": "read", "state": "active" }
+    ]);
+    let rows = control::token_rows(&api);
+    assert_eq!(
+        rows,
+        json!([
+            { "id": "t1", "scope": "write", "state": "expired", "created_at": "a", "expires_at": "b" },
+            { "id": "t2", "scope": "read", "state": "active" }
+        ])
+    );
+    assert!(!rows.to_string().contains("art_v1"));
+    assert_eq!(
+        control::token_rows(&json!({ "tokens": [{ "id": "t3", "token": "v" }] })),
+        json!([{ "id": "t3" }])
+    );
+    assert_eq!(control::token_rows(&json!(null)), json!([]));
+}

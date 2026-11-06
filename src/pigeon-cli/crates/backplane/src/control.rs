@@ -37,6 +37,8 @@ pub enum Routed {
     },
     /// What `main`'s pipeline last published.
     DeployStatus,
+    /// The repository's git tokens, without their values.
+    GitTokens,
     /// Every change, optionally in one state.
     List {
         /// The state.
@@ -121,11 +123,37 @@ pub fn route(request: &Request, by: &str, at: u64) -> Result<Routed, String> {
         }),
         "change.status" => Ok(Routed::Status { number: number(a)? }),
         "deploy.status" => Ok(Routed::DeployStatus),
+        "git.tokens" => Ok(Routed::GitTokens),
         "change.list" => Ok(Routed::List {
             state: text(a, "state"),
         }),
         other => Err(format!("`{other}` is not a control-plane operation")),
     }
+}
+
+/// The fields of a git token `git.tokens` shows; never its value.
+pub const TOKEN_FIELDS: [&str; 5] = ["id", "scope", "state", "created_at", "expires_at"];
+
+/// The Artifacts API's token list, `v`, as `git.tokens` shows it: each token's
+/// [`TOKEN_FIELDS`] only.
+#[must_use]
+pub fn token_rows(v: &Value) -> Value {
+    let list = v
+        .as_array()
+        .or_else(|| v["tokens"].as_array())
+        .or_else(|| v["items"].as_array());
+    Value::Array(
+        list.into_iter()
+            .flatten()
+            .map(|t| {
+                TOKEN_FIELDS
+                    .iter()
+                    .filter_map(|k| t.get(*k).map(|x| ((*k).to_string(), x.clone())))
+                    .collect::<Map<String, Value>>()
+                    .into()
+            })
+            .collect(),
+    )
 }
 
 /// A push, from an Artifacts `cf.artifacts.repo.pushed` event.

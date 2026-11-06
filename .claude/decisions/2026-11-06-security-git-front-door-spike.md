@@ -178,3 +178,27 @@ Access application as `/mcp`:
 - **`git.tokens`** over MCP lists tokens with no value.
 - **Retirement.** After the network secret is deleted, the agent still fetches
   and pushes its change branches.
+
+## Amendments
+
+### 2026-11-06: The spike clears the token; the value the session's proxy sends is what fails
+
+- **The token is good.** It answers `ls-remote` from the owner's machine as
+  `Authorization: Bearer <whole string>`. Its `?expires=` is a month away, and
+  it has no whitespace or quotes. That rules out hypotheses 1 to 3.
+- **The documented format doesn't hold.** The token doesn't start `art_v1_`;
+  only its `?expires=<n>` suffix matches the docs. A check of a token's shape
+  reads only that suffix.
+- **The session still gets 401** with the same token saved. The environment
+  holds one secret for the host, so no other rule wins. What reaches Artifacts
+  therefore differs from what works locally:
+  - either the saved value isn't the tested one;
+  - or the injection alters a value containing `?`.
+- **The bare secret, the part before `?expires=`,** is the next value to save,
+  since it holds no `?`.
+- **The first re-mint failed** because the answer's token field wasn't where
+  the spike's `jq` looked. `cobot::artifacts_wire::token_in` searches every
+  known field, so a mint goes through cobot or reads the field names first.
+- **The front door makes the question moot.** The session then holds no
+  Artifacts secret, only the Access headers for the control plane's host,
+  which work today.
