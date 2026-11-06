@@ -7,15 +7,22 @@ compatibility_date: "2026-10-01"
 # Until it has a custom domain; Access protects the workers.dev hostname.
 workers_dev: true
 durable_objects:
-  classes: [Instance, ChangeRun, Checker, MainRun]
+  classes: [Instance, ChangeRun, Checker, Runner, MainRun]
   migrations:
     - { tag: v1, new_sqlite_classes: [Instance, ChangeRun, Checker] }
     - { tag: v2, new_sqlite_classes: [MainRun] }
+    - { tag: v3, new_sqlite_classes: [Runner] }
+# Checks run on Checker, the bound job, merges and deploys on Runner; see
+# .claude/decisions/2026-11-06-development-control-plane-approvals-images-state.md §4.
 containers:
   - class: Checker
     image: { dockerfile: src/pigeon-cli/Dockerfile, target: ci, args: { FEATURES: backplane } }
     instance_type: standard-4
-    max_instances: 4
+    max_instances: 12
+  - class: Runner
+    image: { dockerfile: src/pigeon-cli/Dockerfile, target: ci, args: { FEATURES: backplane } }
+    instance_type: standard-1
+    max_instances: 8
 bindings:
   d1:
     DB: { name: pigeon, id: $output.infra/pigeon.database_id, migrations: src/pigeon-cli/crates/backplane/migrations }

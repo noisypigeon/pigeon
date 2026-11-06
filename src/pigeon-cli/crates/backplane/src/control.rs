@@ -663,3 +663,44 @@ pub fn no_capacity(why: &str) -> bool {
     why.contains("Maximum number of running container instances")
         || why.contains("no container instance that can be provided")
 }
+
+/// The Container class a job runs in (approvals-images-state ADR §4): Rust checks and builds
+/// need `standard-4`; the bound job, merges and deploys only run git and small tools.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Class {
+    /// `standard-4`: the change's checks.
+    Checker,
+    /// `standard-1`: the bound job, merges and deploys.
+    Runner,
+}
+
+impl Class {
+    /// The Durable Object binding of the class's namespace.
+    #[must_use]
+    pub fn binding(self) -> &'static str {
+        match self {
+            Self::Checker => "CHECKER",
+            Self::Runner => "RUNNER",
+        }
+    }
+}
+
+/// The class `job` runs in.
+#[must_use]
+pub fn class_of(job: &str) -> Class {
+    if job == BOUND || job == MERGE || job == DEPLOY {
+        Class::Runner
+    } else {
+        Class::Checker
+    }
+}
+
+/// The most jobs of one change that run at once, so one large change can't take the fleet.
+pub const MAX_RUNNING: usize = 6;
+
+/// Whether a change with `running` jobs may start another.
+#[must_use]
+pub fn may_start(running: usize) -> bool {
+    running < MAX_RUNNING
+}

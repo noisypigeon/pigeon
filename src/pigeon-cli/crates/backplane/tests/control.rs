@@ -460,3 +460,27 @@ fn no_free_container_is_waiting_not_a_lost_job() {
         "the Container did not answer: connection refused"
     ));
 }
+
+#[test]
+fn checks_run_on_checker_and_git_jobs_on_runner() {
+    use backplane::changes::MERGE;
+    use backplane::control::Class;
+    assert_eq!(control::class_of(BOUND), Class::Runner);
+    assert_eq!(control::class_of(MERGE), Class::Runner);
+    assert_eq!(control::class_of(control::DEPLOY), Class::Runner);
+    assert_eq!(control::class_of("fmt"), Class::Checker);
+    assert_eq!(
+        control::class_of("clippy backplane worker (wasm)"),
+        Class::Checker
+    );
+    assert_eq!(Class::Checker.binding(), "CHECKER");
+    assert_eq!(Class::Runner.binding(), "RUNNER");
+}
+
+#[test]
+fn a_change_runs_at_most_six_jobs_at_once() {
+    assert!(control::may_start(0));
+    assert!(control::may_start(control::MAX_RUNNING - 1));
+    assert!(!control::may_start(control::MAX_RUNNING));
+    assert_eq!(control::MAX_RUNNING, 6);
+}

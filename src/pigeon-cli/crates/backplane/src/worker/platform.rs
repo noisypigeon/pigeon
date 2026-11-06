@@ -271,11 +271,13 @@ pub async fn credentials(env: &Env, write: bool) -> Result<(String, String)> {
     Ok((remote, token))
 }
 
-/// The stub of a job's `Checker`, by job ID.
+/// The stub of a job's Container Durable Object, in `class`'s namespace, by job ID.
 ///
 /// # Errors
 ///
 /// When the binding is missing.
-pub fn checker(env: &Env, id: &str) -> Result<worker::Stub> {
-    env.durable_object("CHECKER")?.id_from_name(id)?.get_stub()
+pub fn job_stub(env: &Env, class: crate::control::Class, id: &str) -> Result<worker::Stub> {
+    env.durable_object(class.binding())?
+        .id_from_name(id)?
+        .get_stub()
 }

@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 use worker::{DurableObject, Env, Method, Request, Response, Result, State, durable_object};
 
-use super::platform::{self, Settings, checker, json_request, now};
+use super::platform::{self, Settings, job_stub, json_request, now};
 use crate::changes::{Change, Effect, Event, JobStatus};
 use crate::control::{self, Outcome, Report};
 
@@ -29,8 +29,10 @@ const SHOWN: usize = 8 * 1024;
 enum Pending {
     /// Start this job on the head.
     Start(String),
-    /// Stop the Container of this job ID.
+    /// Stop the `Checker` Container of this job ID; queued before jobs had classes.
     Stop(String),
+    /// Stop the Container of this job ID, in its class.
+    StopIn(control::Class, String),
 }
 
 /// One change; its name is `<repo>#<number>`.
@@ -85,10 +87,12 @@ impl ChangeRun {
                 Effect::Start(job) => pending.push(Pending::Start(job)),
                 Effect::Cancel(jobs) => {
                     if let Some(sha) = &head {
-                        pending.extend(
-                            jobs.iter()
-                                .map(|j| Pending::Stop(control::job_id(change.number, sha, j))),
-                        );
+                        pending.extend(jobs.iter().map(|j| {
+                            Pending::StopIn(
+                                control::class_of(j),
+                                control::job_id(change.number, sha, j),
+                            )
+                        }));
                     }
                 }
             }
@@ -127,7 +131,7 @@ impl ChangeRun {
         let body = serde_json::to_value(&spec).map_err(|e| e.to_string())?;
         let req = json_request("https://checker/start", Method::Post, Some(&body), None)
             .map_err(|e| e.to_string())?;
-        let mut r = checker(&self.env, &spec.id)
+        let mut r = job_stub(&self.env, control::class_of(job), &spec.id)
             .map_err(|e| e.to_string())?
             .fetch_with_request(req)
             .await
@@ -139,12 +143,27 @@ impl ChangeRun {
         }
     }
 
+    /// Stops job `id`'s Container in `class`, if it still runs.
+    async fn stop(&self, class: control::Class, id: &str) -> Result<()> {
+        if let Ok(stub) = job_stub(&self.env, class, id) {
+            let _ = stub
+                .fetch_with_request(json_request(
+                    "https://checker/stop",
+                    Method::Post,
+                    None,
+                    None,
+                )?)
+                .await;
+        }
+        Ok(())
+    }
+
     async fn poll(&self, change: &Change, job: &str) -> Result<Option<Event>> {
         let Some(sha) = change.head.clone() else {
             return Ok(None);
         };
         let id = control::job_id(change.number, &sha, job);
-        let mut r = checker(&self.env, &id)?
+        let mut r = job_stub(&self.env, control::class_of(job), &id)?
             .fetch_with_str(&format!("https://checker/status/{id}"))
             .await?;
         match r.status_code() {
@@ -241,20 +260,20 @@ impl DurableObject for ChangeRun {
         let mut wait = false;
         for p in std::mem::take(&mut pending) {
             match p {
-                Pending::Stop(id) => {
-                    if let Ok(stub) = checker(&self.env, &id) {
-                        let _ = stub
-                            .fetch_with_request(json_request(
-                                "https://checker/stop",
-                                Method::Post,
-                                None,
-                                None,
-                            )?)
-                            .await;
-                    }
-                }
+                Pending::Stop(id) => self.stop(control::Class::Checker, &id).await?,
+                Pending::StopIn(class, id) => self.stop(class, &id).await?,
                 Pending::Start(job) => {
                     let sha = change.head.clone().unwrap_or_default();
+                    let running = change
+                        .jobs
+                        .iter()
+                        .filter(|j| j.status == JobStatus::Running)
+                        .count();
+                    if !control::may_start(running) {
+                        next.push(Pending::Start(job));
+                        wait = true;
+                        continue;
+                    }
                     let started = self.start(&change, &job).await;
                     if let Err(why) = &started
                         && control::no_capacity(why)
