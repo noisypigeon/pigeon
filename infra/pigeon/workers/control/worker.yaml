@@ -24,7 +24,7 @@ bindings:
   queues:
     consumers: [ { queue: pigeon-ci-events, max_batch_size: 10 } ]
   vars:
-    INSTANCE: pigeon
+    INSTANCE_NAME: pigeon
     NAMESPACE: pigeon
     REPO: pigeon
     # change/1 to change/11 were pushed by hand, before the control plane numbered changes.

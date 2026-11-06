@@ -35,7 +35,7 @@ impl Settings {
     pub fn from(env: &Env) -> Result<Self> {
         let var = |k: &str| env.var(k).map(|v| v.to_string());
         Ok(Self {
-            instance: var("INSTANCE")?,
+            instance: var("INSTANCE_NAME")?,
             namespace: var("NAMESPACE")?,
             repo: var("REPO")?,
             floor: var("CHANGE_FLOOR")

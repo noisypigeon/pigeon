@@ -395,3 +395,17 @@ fn a_for_each_output_is_a_map_picked_by_key_and_a_miss_names_only_keys() {
     let at = workers::resolve("$output.infra/pigeon.bucket_names[0]", &mapped).unwrap_err();
     assert!(at.contains("a map of 2"), "{at}");
 }
+
+#[test]
+fn a_binding_named_like_a_durable_object_is_refused() {
+    let root = fixture(&SPEC.replace("TEAM: pigeon", "RUNNER: x"));
+    let got: Vec<String> = workers::validate(root.path(), &found(root.path()))
+        .into_iter()
+        .map(|p| p.message)
+        .collect();
+    assert!(
+        got.iter()
+            .any(|m| m.contains("`RUNNER` is also Durable Object `Runner`'s binding")),
+        "{got:?}"
+    );
+}

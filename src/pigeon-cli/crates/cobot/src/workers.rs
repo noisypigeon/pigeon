@@ -463,8 +463,17 @@ fn validate_bindings(s: &Spec, root: &Path, add: &mut impl FnMut(String)) {
         if !screaming(n) {
             add(format!("binding `{n}` must be SCREAMING_SNAKE_CASE"));
         }
-        if !seen.insert(n) {
+        if !seen.insert(n.clone()) {
             add(format!("binding `{n}` is declared twice"));
+        }
+    }
+    // Each Durable Object class is bound as its name in SCREAMING_SNAKE_CASE, beside the others.
+    for c in &s.durable_objects.classes {
+        let b = binding_of(c);
+        if seen.contains(&b) {
+            add(format!(
+                "binding `{b}` is also Durable Object `{c}`'s binding; rename it"
+            ));
         }
     }
     let mut refs: Vec<&String> = b.d1.values().map(|d| &d.id).collect();
