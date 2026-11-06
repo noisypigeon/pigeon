@@ -655,3 +655,11 @@ impl Pipeline {
         self.history.truncate(HISTORY);
     }
 }
+
+/// Whether a job's start failed only for want of a Container, which is no fault of the job:
+/// it waits for a free one, and uses no attempt.
+#[must_use]
+pub fn no_capacity(why: &str) -> bool {
+    why.contains("Maximum number of running container instances")
+        || why.contains("no container instance that can be provided")
+}

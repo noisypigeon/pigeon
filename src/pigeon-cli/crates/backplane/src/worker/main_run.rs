@@ -35,6 +35,12 @@ impl MainRun {
     }
 
     async fn save(&self, p: &Pipeline, starting: Option<&str>) -> Result<()> {
+        self.save_after(p, starting, false).await
+    }
+
+    /// As [`Self::save`]; with `wait`, a deploy that is starting waits for the next poll, as
+    /// when no Container is free.
+    async fn save_after(&self, p: &Pipeline, starting: Option<&str>, wait: bool) -> Result<()> {
         let storage = self.state.storage();
         storage.put(PIPELINE, p).await?;
         // `None` would reach the runtime as `undefined`, which `put` refuses.
@@ -44,9 +50,9 @@ impl MainRun {
                 storage.delete(STARTING).await?;
             }
         }
-        if starting.is_some() {
+        if starting.is_some() && !wait {
             storage.set_alarm(Duration::from_millis(0)).await?;
-        } else if p.running.is_some() {
+        } else if starting.is_some() || p.running.is_some() {
             storage.set_alarm(POLL).await?;
         }
         Ok(())
@@ -134,10 +140,19 @@ impl DurableObject for MainRun {
         let mut p = self.pipeline().await?;
         let starting: Option<String> = self.state.storage().get(STARTING).await?;
         let mut next: Option<String> = None;
+        let mut wait = false;
         if let Some(sha) = starting {
-            if let Err(why) = self.start(&p, &sha).await {
-                worker::console_warn!("the deploy of {sha} did not start: {why}");
-                next = p.lost(now());
+            match self.start(&p, &sha).await {
+                Ok(()) => {}
+                Err(why) if control::no_capacity(&why) => {
+                    worker::console_log!("the deploy of {sha} waits for a free Container");
+                    next = Some(sha);
+                    wait = true;
+                }
+                Err(why) => {
+                    worker::console_warn!("the deploy of {sha} did not start: {why}");
+                    next = p.lost(now());
+                }
             }
         } else if let Some((sha, _)) = p.running.clone() {
             match self.poll(&sha).await? {
@@ -151,7 +166,7 @@ impl DurableObject for MainRun {
         } else {
             next = p.start();
         }
-        self.save(&p, next.as_deref()).await?;
+        self.save_after(&p, next.as_deref(), wait).await?;
         Response::ok("ok")
     }
 }
