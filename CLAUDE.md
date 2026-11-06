@@ -72,6 +72,10 @@ belong in the ADR, never in the file.
   runs survive a stop; a run's root is a D1 bundle; the platform defines rules
   in `catalog/policies/` and an instance invokes them, per
   [`2026-11-05-runtime-control-plane-worker.md`](.claude/decisions/2026-11-05-runtime-control-plane-worker.md).
+- Approvals are to come as permission prompts in Claude (MCP elicitation, the
+  head SHA the server's), images and the Worker to be built on Cloudflare,
+  platform state to live in R2, and jobs to run on two Container classes, per
+  [`2026-11-06-development-control-plane-approvals-images-state.md`](.claude/decisions/2026-11-06-development-control-plane-approvals-images-state.md).
 - GitHub is a source mirror only: no workflows run there (`mirror.yaml`
   forbids them), checks and delivery are Cloudflare's, and releases pause until
   the release job runs on Cloudflare, per the hosting ADR's 2026-11-06
