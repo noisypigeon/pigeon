@@ -279,3 +279,46 @@ pub fn changed_since(dir: &Path, from: &str, to: &str) -> Result<Vec<String>, Er
         .filter(|l| !l.is_empty())
         .collect())
 }
+
+/// The commit on `remote`'s `base` that merged `sha`, if one did: the newest whose message
+/// has the trailer `Change-Head: <sha>`, which only the merge job writes.
+///
+/// # Errors
+///
+/// [`Error::Git`] when git fails.
+pub fn merged_already(
+    dir: &Path,
+    remote: &str,
+    token: &str,
+    base: &str,
+    sha: &str,
+) -> Result<Option<String>, Error> {
+    std::fs::create_dir_all(dir).map_err(|e| Error::Io {
+        path: dir.to_path_buf(),
+        message: e.to_string(),
+    })?;
+    git(dir, remote, token, &["init", "-q"])?;
+    let base_ref = format!("+refs/heads/{base}:refs/remotes/origin/{base}");
+    git(
+        dir,
+        remote,
+        token,
+        &["fetch", "-q", "--no-tags", remote, &base_ref],
+    )?;
+    let grep = format!("^Change-Head: {sha}$");
+    let found = git(
+        dir,
+        "",
+        "",
+        &[
+            "log",
+            "-n",
+            "1",
+            "--format=%H",
+            "--grep",
+            &grep,
+            &format!("refs/remotes/origin/{base}"),
+        ],
+    )?;
+    Ok(Some(found).filter(|f| !f.is_empty()))
+}

@@ -43,6 +43,14 @@ impl DurableObject for Checker {
                 {
                     return failed(&e);
                 }
+                // Pending I/O keeps this Durable Object, and so its Container, alive for the
+                // whole job (control-plane ADR §3); without it the runtime stops both about
+                // twenty seconds after the last request, and the job's report is lost.
+                if let Some(held) = self.state.container() {
+                    self.state.wait_until(async move {
+                        let _ = cobot::worker::monitor(&held).await;
+                    });
+                }
                 match cobot::worker::call(&container, &token, Method::Post, "/v0/jobs", &body).await
                 {
                     Ok((status, v)) => Ok(Response::from_json(&v)?.with_status(status)),

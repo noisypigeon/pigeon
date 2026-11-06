@@ -37,7 +37,13 @@ impl MainRun {
     async fn save(&self, p: &Pipeline, starting: Option<&str>) -> Result<()> {
         let storage = self.state.storage();
         storage.put(PIPELINE, p).await?;
-        storage.put(STARTING, starting).await?;
+        // `None` would reach the runtime as `undefined`, which `put` refuses.
+        match starting {
+            Some(sha) => storage.put(STARTING, sha).await?,
+            None => {
+                storage.delete(STARTING).await?;
+            }
+        }
         if starting.is_some() {
             storage.set_alarm(Duration::from_millis(0)).await?;
         } else if p.running.is_some() {
@@ -126,7 +132,7 @@ impl DurableObject for MainRun {
 
     async fn alarm(&self) -> Result<Response> {
         let mut p = self.pipeline().await?;
-        let starting: Option<String> = self.state.storage().get(STARTING).await?.flatten();
+        let starting: Option<String> = self.state.storage().get(STARTING).await?;
         let mut next: Option<String> = None;
         if let Some(sha) = starting {
             if let Err(why) = self.start(&p, &sha).await {
