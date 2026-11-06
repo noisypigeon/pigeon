@@ -274,3 +274,15 @@ Each step is released before the next relies on it, and each passes `mise run ci
 - A Container stopped mid-publish is re-dispatched, and the live site ends up equal to the plan's digests.
 - A plan with no changed files asks for no approval.
 - `.config/policies/backplane.yaml` still holds.
+
+## Amendments
+
+### 2026-11-06: The site is a v1-manifest unit, published by the control plane's pipeline on merge
+
+- **The site is `sites/docs` in pigeon's root `config.yaml`,** `kind: cloudflare/static-site`, with `zone: pigeon.dev`, `hosts: [docs]`, the `architecture` template at 0.1.0, and only a title and description. It has no `content`. `zones/pigeon.dev` (`kind: cloudflare/zone`) looks the zone up. This follows [`2026-11-05-runtime-instance-config-kind-units.md`](2026-11-05-runtime-instance-config-kind-units.md), and replaces §4's `infra/pigeon/sites/docs/` and its bucket, domain and rulesets in `infra/pigeon/config.yaml`. The kinds compose the same catalog modules, and their bucket is named `docs-pigeon-dev`.
+- **The owner applies the two units once,** with `infra.plan` and `infra.apply` against pigeon's state. `pigeon.dev` must be a zone in the pigeon account.
+- **§5's `docs.plan` and `docs.publish` are replaced** by the lifecycle ADR's pipeline:
+  - a merge to `main` (`change.merge`) is a push event;
+  - the control plane publishes every site whose inputs changed (`sites.publish`).
+  - For this site, those inputs are everything `architecture.describe` reads.
+  - `r2.bucket.write` and its `bucket` scope stay deferred: the publish uses a deploy token with R2 write on the account.
