@@ -2,7 +2,7 @@
 //! `.claude/decisions/2026-11-05-development-changes-through-pigeon-mcp.md` §1, §4.
 
 use backplane::changes::{BOUND, Change, Check, Event};
-use backplane::control::{self, Outcome, Push, Report, Routed};
+use backplane::control::{self, Outcome, Pipeline, Push, Report, Routed, Target};
 use backplane::wire::Request;
 use serde_json::json;
 
@@ -89,17 +89,22 @@ fn a_push_to_a_change_branch_is_found_and_others_are_not() {
         control::push(&event),
         Some(Push {
             repo: Some("pigeon".into()),
-            number: 9,
+            target: Target::Change(9),
             sha: A.into()
         })
     );
     assert_eq!(
-        control::push(&json!({ "ref": "refs/heads/change/9-x", "after": A })).map(|p| p.number),
-        Some(9),
+        control::push(&json!({ "ref": "refs/heads/change/9-x", "after": A })).map(|p| p.target),
+        Some(Target::Change(9)),
         "a payload without its envelope"
     );
+    assert_eq!(
+        control::push(&json!({ "ref": "refs/heads/main", "after": A })).map(|p| p.target),
+        Some(Target::Main),
+        "main goes to its pipeline"
+    );
     for other in [
-        json!({ "ref": "refs/heads/main", "after": A }),
+        json!({ "ref": "refs/heads/other", "after": A }),
         json!({ "ref": "refs/tags/v1", "after": A }),
         json!({ "ref": "refs/heads/change/9-x", "after": "0".repeat(40) }),
         json!({ "ref": "refs/heads/change/9-x", "after": "abc" }),
@@ -161,6 +166,7 @@ fn reports_become_events() {
             argv: vec!["cargo".into()],
         }],
         merged: None,
+        published: vec![],
     };
     assert_eq!(
         control::event_of("fmt", A, &report(Outcome::Running, vec![])),
@@ -360,4 +366,84 @@ fn the_mirror_writes_every_state_the_migration_allows() {
         .query_row(s.sql, rusqlite::params_from_iter(params), |r| r.get(0))
         .expect("row");
     assert_eq!(n, 10);
+}
+
+const B: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+const C: &str = "cccccccccccccccccccccccccccccccccccccccc";
+
+fn deploy_report(outcome: Outcome) -> Report {
+    Report {
+        id: "x".into(),
+        outcome,
+        log: String::new(),
+        violations: vec![],
+        checks: vec![],
+        merged: None,
+        published: vec!["sites/docs".into()],
+    }
+}
+
+#[test]
+fn main_deploys_one_at_a_time_and_always_the_newest_push() {
+    let mut p = Pipeline::default();
+    p.pushed(A);
+    assert_eq!(p.start().as_deref(), Some(A));
+    p.pushed(B);
+    p.pushed(C);
+    assert_eq!(p.start(), None, "one deploy at a time");
+    p.finished(&deploy_report(Outcome::Passed), 10);
+    assert_eq!(p.deployed.as_deref(), Some(A));
+    assert_eq!(
+        p.start().as_deref(),
+        Some(C),
+        "B is skipped; C publishes what changed since A"
+    );
+    p.finished(&deploy_report(Outcome::Failed), 11);
+    assert_eq!(
+        p.deployed.as_deref(),
+        Some(A),
+        "a failed deploy isn't the last deployed"
+    );
+    assert_eq!(p.start(), None, "nothing new to deploy until the next push");
+    assert_eq!(p.history.len(), 2);
+    assert_eq!(p.history[0].sha, C);
+    assert_eq!(p.history[0].outcome, Outcome::Failed);
+    assert_eq!(p.target, None, "a finished deploy clears its target");
+    p.pushed("not a sha");
+    assert_eq!(p.target, None, "only a SHA is a push");
+}
+
+#[test]
+fn a_lost_deploy_retries_then_fails() {
+    let mut p = Pipeline::default();
+    p.pushed(A);
+    p.start();
+    for _ in 1..backplane::runs::MAX_ATTEMPTS {
+        assert_eq!(p.lost(1).as_deref(), Some(A));
+    }
+    assert_eq!(p.lost(1), None);
+    assert_eq!(p.history[0].outcome, Outcome::Failed);
+    assert!(p.running.is_none());
+}
+
+#[test]
+fn a_deploy_spec_never_shows_its_credentials() {
+    let env = std::collections::BTreeMap::from([(
+        "CLOUDFLARE_API_TOKEN".to_string(),
+        "deploy-secret-value".to_string(),
+    )]);
+    let s = control::deploy_spec(
+        "https://git.example/p.git",
+        "read-token-value",
+        A,
+        Some(B),
+        env,
+    );
+    assert_eq!(s.id, control::deploy_id(A));
+    assert_eq!(s.branch, "main");
+    let shown = format!("{s:?}");
+    assert!(
+        !shown.contains("deploy-secret-value") && !shown.contains("read-token-value"),
+        "{shown}"
+    );
 }

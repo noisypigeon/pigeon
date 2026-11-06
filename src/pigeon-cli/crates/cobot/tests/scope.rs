@@ -50,7 +50,7 @@ fn the_catalog_runs_infra_checks_and_no_rust_build() {
         got,
         [
             "infra.validate",
-            "test cobot (catalog, manifest, apex, git)",
+            "test cobot (catalog, manifest, apex, git, credentials)",
             "policy.check"
         ]
     );
@@ -144,5 +144,48 @@ fn site_templates_build_the_sites() {
     assert_eq!(
         names(&["src/site-templates/blog/index.html"]),
         ["sites.build", "policy.check"]
+    );
+}
+
+#[test]
+fn deploys_name_the_sites_a_change_to_main_publishes() {
+    let root = repo_root();
+    let files = |f: &[&str]| f.iter().map(|s| (*s).to_string()).collect::<Vec<_>>();
+    let all = cobot::scope::deploys(&root, None).expect("finds");
+    assert_eq!(all, ["sites/docs"], "only the instance's manifest sites");
+    let got = cobot::scope::deploys(
+        &root,
+        Some(&files(&["catalog/cloudflare/capabilities.yaml"])),
+    )
+    .expect("finds");
+    assert_eq!(
+        got,
+        ["sites/docs"],
+        "the architecture site draws the catalog"
+    );
+    let got = cobot::scope::deploys(&root, Some(&files(&["config.yaml"]))).expect("finds");
+    assert!(got.contains(&"sites/docs".to_string()), "{got:?}");
+    let got = cobot::scope::deploys(
+        &root,
+        Some(&files(&["workloads/noisypigeon.com/blog/site/posts/x.md"])),
+    )
+    .expect("finds");
+    assert_eq!(
+        got,
+        ["sites/docs"],
+        "the architecture draws workloads too; the legacy blog publishes from its own instance"
+    );
+    let got = cobot::scope::deploys(
+        &root,
+        Some(&files(&[
+            "src/pigeon-cli/crates/cobot/src/git.rs",
+            "CLAUDE.md",
+        ])),
+    )
+    .expect("finds");
+    assert_eq!(
+        got,
+        Vec::<String>::new(),
+        "code and docs publish nothing; a template reaches a site by its pinned tag"
     );
 }

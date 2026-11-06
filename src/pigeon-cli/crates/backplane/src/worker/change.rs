@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 use worker::{DurableObject, Env, Method, Request, Response, Result, State, durable_object};
 
-use super::platform::{self, Settings, json_request, now, secret};
+use super::platform::{self, Settings, checker, json_request, now};
 use crate::changes::{Change, Effect, Event, JobStatus};
 use crate::control::{self, Outcome, Report};
 
@@ -16,7 +16,6 @@ const CHANGE: &str = "change";
 const PENDING: &str = "pending";
 const LOGS: &str = "logs";
 const FAILURES: &str = "failures";
-const REMOTE: &str = "remote";
 
 /// How often a running job is asked how it went.
 const POLL: Duration = Duration::from_secs(20);
@@ -39,10 +38,6 @@ enum Pending {
 pub struct ChangeRun {
     state: State,
     env: Env,
-}
-
-fn checker(env: &Env, id: &str) -> Result<worker::Stub> {
-    env.durable_object("CHECKER")?.id_from_name(id)?.get_stub()
 }
 
 impl ChangeRun {
@@ -101,40 +96,11 @@ impl ChangeRun {
         self.mirror(change).await
     }
 
-    /// The remote, and a token for one job: write only for the merge job.
-    async fn credentials(&self, write: bool) -> Result<(String, String)> {
-        let s = Settings::from(&self.env)?;
-        let api = secret(&self.env, "ARTIFACTS_TOKEN")?;
-        let account = platform::account(&api).await?;
-        let base = format!("/accounts/{account}/artifacts/namespaces/{}", s.namespace);
-        let mut remote: Option<String> = self.state.storage().get(REMOTE).await?;
-        if remote.is_none() {
-            let repo =
-                platform::cloudflare(&api, Method::Get, &format!("{base}/repos/{}", s.repo), None)
-                    .await?;
-            remote = cobot::artifacts_wire::remote_in(&repo);
-            if let Some(r) = &remote {
-                self.state.storage().put(REMOTE, r).await?;
-            }
-        }
-        let remote = remote.ok_or("the repository's answer has no remote")?;
-        let body =
-            cobot::artifacts_wire::token_body(&s.repo, write, cobot::artifacts_wire::TOKEN_TTL);
-        let minted =
-            platform::cloudflare(&api, Method::Post, &format!("{base}/tokens"), Some(&body))
-                .await?;
-        let token = cobot::artifacts_wire::token_in(&minted).ok_or_else(|| {
-            format!(
-                "no token in the answer, whose fields are {}",
-                cobot::artifacts_wire::shape(&minted)
-            )
-        })?;
-        Ok((remote, token))
-    }
-
     async fn start(&self, change: &Change, job: &str) -> std::result::Result<(), String> {
         let write = job == crate::changes::MERGE;
-        let (remote, token) = self.credentials(write).await.map_err(|e| e.to_string())?;
+        let (remote, token) = platform::credentials(&self.env, write)
+            .await
+            .map_err(|e| e.to_string())?;
         let spec = control::spec(change, job, &remote, &token)?;
         let body = serde_json::to_value(&spec).map_err(|e| e.to_string())?;
         let req = json_request("https://checker/start", Method::Post, Some(&body), None)

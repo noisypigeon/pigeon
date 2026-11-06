@@ -160,7 +160,9 @@ impl Operation {
     /// Whether only the control plane runs it, from its Durable Objects and D1.
     #[must_use]
     pub fn control_plane(&self) -> bool {
-        self.name.starts_with("change.") || self.name.starts_with("ci.")
+        self.name.starts_with("change.")
+            || self.name.starts_with("ci.")
+            || self.name.starts_with("deploy.")
     }
 }
 
@@ -285,6 +287,20 @@ const CATALOG: &[Operation] = &[
         effect: Effect::Build,
         summary: "Build static sites into the work directory with the instance's architecture as data; publishes nothing (args: sites?)",
         args: &[arg("sites", false, Kind::Strings)],
+    },
+    Operation {
+        name: "sites.publish",
+        engine: Engine::Cobot,
+        effect: Effect::Apply,
+        summary: "Build the named sites, or every site, with the architecture as data, sync each to its bucket and check it live, with the run's CLOUDFLARE_API_TOKEN (args: sites?)",
+        args: &[arg("sites", false, Kind::Strings)],
+    },
+    Operation {
+        name: "deploy.status",
+        engine: Engine::Backplane,
+        effect: Effect::Read,
+        summary: "What main's pipeline last published: the SHA deployed, the one in progress, and recent deploys with their logs",
+        args: &[],
     },
     Operation {
         name: "infra.plan",

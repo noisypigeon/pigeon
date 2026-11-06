@@ -194,10 +194,15 @@ fn the_fields_a_unit_references_are_collected() {
 }
 
 #[test]
-fn the_repositorys_units_request_no_credentials() {
+fn the_repositorys_directory_units_request_no_credentials() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../..");
     let allow = cobot::providers::Allowlist::load(&root.join(".config")).expect("allowlist");
-    for unit in cobot::validate(&root, &root.join(".config")).expect("valid") {
+    // A manifest unit's kind requests credentials by design, filled from the run's token.
+    for unit in cobot::validate(&root, &root.join(".config"))
+        .expect("valid")
+        .into_iter()
+        .filter(|u| u.path.starts_with("infra/") || u.path.starts_with("workloads/"))
+    {
         let json = cobot::render_json(
             &unit,
             Path::new("/state"),

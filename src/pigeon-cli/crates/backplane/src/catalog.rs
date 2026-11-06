@@ -38,6 +38,7 @@ pub fn run_with(
         "architecture.describe" => architecture_describe(instance).map(|(r, v)| respond(r, v)),
         "policy.check" => policy_check(instance, &request.args).map(|(r, v)| respond(r, v)),
         "change.scope" => change_scope(instance, &request.args).map(|r| respond(r, Vec::new())),
+        "sites.publish" => sites_publish(instance, &request.args, &var).map(|(r, v)| respond(r, v)),
         "sites.build" => sites_build(instance, &request.args).map(|r| respond(r, Vec::new())),
         "infra.validate" => infra_validate(instance).map(|(r, v)| respond(r, v)),
         "infra.plan" => infra_plan(instance, &request.args, &var).map(|r| respond(r, Vec::new())),
@@ -123,6 +124,71 @@ fn change_scope(instance: &Instance, args: &Map<String, Value>) -> Result<Value,
         message: e.to_string(),
     })?;
     Ok(json!({ "jobs": jobs }))
+}
+
+/// Publishes the named sites, or every site, with the run's Cloudflare token: built with
+/// `architecture.describe`'s result as data, synced to each bucket, then checked live. A failed
+/// live check is a violation.
+fn sites_publish(
+    instance: &Instance,
+    args: &Map<String, Value>,
+    var: &impl Fn(&str) -> Option<String>,
+) -> Result<(Value, Vec<String>), Error> {
+    let token = var(cobot::cloudflare::TOKEN_VAR).ok_or_else(|| {
+        Error::Invalid(vec![format!(
+            "`sites.publish` needs {} with R2 write on the account",
+            cobot::cloudflare::TOKEN_VAR
+        )])
+    })?;
+    let wanted = strings(args, "sites");
+    let ctx = cobot::Context {
+        root: instance.root.clone(),
+        providers: instance.providers_dir(),
+        state: std::env::temp_dir(),
+        state_passphrase: String::new(),
+        secrets_passphrase: None,
+        workload_secrets_passphrase: None,
+        today: cobot::generations::today(),
+        credentials: var(cobot::CREDENTIALS_VAR),
+        cloudflare_token: Some(token),
+        cloudflare_api: None,
+        platform: instance.platform.clone(),
+    };
+    let (architecture, _) = architecture_describe(instance)?;
+    let data = std::collections::BTreeMap::from([("architecture".to_string(), architecture)]);
+    let published = cobot::publish(&ctx, &wanted, 5, &data).map_err(|e| cobot_failed(&e))?;
+    let violations = published
+        .iter()
+        .flat_map(|p| {
+            p.checks
+                .iter()
+                .filter(|c| !c.passed)
+                .map(move |c| format!("{}: {} failed", p.unit, c.what))
+        })
+        .collect();
+    Ok((
+        json!({
+            "sites": published.iter().map(|p| json!({
+                "unit": p.unit,
+                "put": p.synced.put.len(),
+                "unchanged": p.synced.unchanged,
+                "deleted": p.synced.deleted.len(),
+            })).collect::<Vec<_>>(),
+        }),
+        violations,
+    ))
+}
+
+fn strings(args: &Map<String, Value>, k: &str) -> Vec<String> {
+    args.get(k)
+        .and_then(Value::as_array)
+        .map(|a| {
+            a.iter()
+                .filter_map(Value::as_str)
+                .map(str::to_string)
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 /// Builds the named sites, or every site, with `architecture.describe`'s result as their

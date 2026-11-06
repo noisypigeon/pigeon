@@ -7,9 +7,10 @@ compatibility_date: "2026-10-01"
 # Until it has a custom domain; Access protects the workers.dev hostname.
 workers_dev: true
 durable_objects:
-  classes: [Instance, ChangeRun, Checker]
+  classes: [Instance, ChangeRun, Checker, MainRun]
   migrations:
     - { tag: v1, new_sqlite_classes: [Instance, ChangeRun, Checker] }
+    - { tag: v2, new_sqlite_classes: [MainRun] }
 containers:
   - class: Checker
     image: { dockerfile: src/pigeon-cli/Dockerfile, target: ci, args: { FEATURES: backplane } }
@@ -28,4 +29,5 @@ bindings:
     REPO: pigeon
     # change/1 to change/11 were pushed by hand, before the control plane numbered changes.
     CHANGE_FLOOR: "12"
-secrets: [BACKPLANE_TOKEN, ARTIFACTS_TOKEN, ACCESS_TEAM, ACCESS_AUD]
+# DEPLOY_TOKEN: an account token with Workers R2 Storage Edit and Zone Read, for publishing sites.
+secrets: [BACKPLANE_TOKEN, ARTIFACTS_TOKEN, ACCESS_TEAM, ACCESS_AUD, DEPLOY_TOKEN]

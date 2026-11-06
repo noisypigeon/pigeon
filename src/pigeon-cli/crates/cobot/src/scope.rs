@@ -39,7 +39,7 @@ const INFRA: [&str; 6] = [
 const POLICIES: [&str; 1] = [".config/policies/"];
 
 /// Paths whose change rebuilds the sites.
-const SITES: [&str; 3] = ["src/site-templates/", "workloads/", "sites/"];
+const SITES: [&str; 4] = ["src/site-templates/", "workloads/", "sites/", "config.yaml"];
 
 /// The crates whose `worker` build compiles to wasm.
 const WORKER: [&str; 2] = ["cobot", "pigeon-backplane"];
@@ -373,10 +373,23 @@ pub fn jobs(root: &Path, files: &[String]) -> Result<Vec<Job>, Error> {
         });
         if !ran_cobot {
             out.push(job(
-                "test cobot (catalog, manifest, apex, git)",
+                "test cobot (catalog, manifest, apex, git, credentials)",
                 &[
-                    "cargo", "test", "-p", "cobot", "--locked", "--test", "catalog", "--test",
-                    "manifest", "--test", "apex", "--test", "git",
+                    "cargo",
+                    "test",
+                    "-p",
+                    "cobot",
+                    "--locked",
+                    "--test",
+                    "catalog",
+                    "--test",
+                    "manifest",
+                    "--test",
+                    "apex",
+                    "--test",
+                    "git",
+                    "--test",
+                    "credentials",
                 ],
             ));
         }
@@ -480,4 +493,63 @@ pub fn run(root: &Path, jobs: &[Job]) -> Result<Vec<String>, Error> {
         }
     }
     Ok(failed)
+}
+
+/// What an `architecture` site draws from, besides its own unit: everything
+/// `architecture.describe` reads.
+const DESCRIBED: [&str; 5] = [
+    "config.yaml",
+    "infra/",
+    "catalog/",
+    "workloads/",
+    ".config/",
+];
+
+fn relative(root: &Path, p: &Path) -> String {
+    let root = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
+    let p = p.canonicalize().unwrap_or_else(|_| p.to_path_buf());
+    p.strip_prefix(&root)
+        .map(|r| r.to_string_lossy().into_owned())
+        .unwrap_or_default()
+}
+
+/// The instance's manifest sites a change to `main` touching `files` must publish, by unit; `files` of `None`
+/// means every site, as on a first deploy. A site's inputs are its unit (the instance's
+/// `config.yaml` for a manifest unit, else its directory), its content, and, on the
+/// `architecture` template, everything that template draws.
+///
+/// # Errors
+///
+/// As [`crate::sites::find_in`].
+pub fn deploys(root: &Path, files: Option<&[String]>) -> Result<Vec<String>, Error> {
+    // `workloads/` is the legacy layout, published from its own instance's account.
+    let sites: Vec<_> = crate::sites::find_in(root, root, &[])?
+        .into_iter()
+        .filter(|s| !s.unit.starts_with("workloads/"))
+        .collect();
+    let Some(files) = files else {
+        return Ok(sites.into_iter().map(|s| s.unit).collect());
+    };
+    Ok(sites
+        .into_iter()
+        .filter(|s| {
+            let dir = relative(root, &s.dir);
+            let unit = if dir.is_empty() {
+                "config.yaml".to_string()
+            } else {
+                format!("{dir}/")
+            };
+            let content = format!("{}/", relative(root, &s.content));
+            let mut inputs = vec![unit, content];
+            if s.template == "architecture" {
+                inputs.extend(DESCRIBED.iter().map(|p| (*p).to_string()));
+            }
+            files.iter().any(|f| {
+                inputs.iter().any(|i| {
+                    i != "/" && (f == i || (i.ends_with('/') && f.starts_with(i.as_str())))
+                })
+            })
+        })
+        .map(|s| s.unit)
+        .collect())
 }

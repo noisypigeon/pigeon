@@ -185,7 +185,11 @@ belong in the ADR, never in the file.
   (`infra/pigeon/workers/control/`) serves MCP on `/mcp` behind Access: tools
   `change_propose`, `change_status`, `change_pushed`, `ci_rerun`, and the
   owner's `change_authorize`, `change_approve`, `change_merge` (squashes the
-  approved head onto `main` as `<title> (!n)`) and `change_close`. A plan
+  approved head onto `main` as `<title> (!n)`) and `change_close`.
+  Each push to `main` runs `MainRun`'s pipeline: one deploy at a time, of the
+  newest push, publishing the instance's sites whose inputs changed since the
+  last deploy (`cobot::scope::deploys`, `sites.publish`); `deploy_status`
+  shows it. A plan
   cites its ADR, because the bound job checks the pull-request policy with
   the plan as the body.
 - `pigeon cobot workers validate|permissions|render|plan|deploy|status|secrets put|teardown`:

@@ -137,6 +137,7 @@ fn catalog_names_are_unique_and_dotted() {
             ("change.close", Effect::Apply),
             ("ci.rerun", Effect::Build),
             ("sites.build", Effect::Build),
+            ("sites.publish", Effect::Apply),
             ("infra.plan", Effect::Plan),
             ("infra.apply", Effect::Apply)
         ],
@@ -230,7 +231,7 @@ fn change_scope_names_the_checks_and_needs_files() {
         names,
         [
             "infra.validate",
-            "test cobot (catalog, manifest, apex, git)",
+            "test cobot (catalog, manifest, apex, git, credentials)",
             "policy.check"
         ]
     );

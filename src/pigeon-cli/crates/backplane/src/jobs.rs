@@ -13,7 +13,7 @@ use std::sync::{Arc, Mutex};
 use serde_json::{Map, Value, json};
 
 use crate::changes::{BOUND, Check, MERGE};
-use crate::control::{JobSpec, Outcome, Report, tail};
+use crate::control::{DEPLOY, JobSpec, Outcome, Report, tail};
 use crate::{Instance, Request, run_with};
 
 /// Where jobs check out, under the Container's temporary directory.
@@ -65,6 +65,7 @@ impl Board {
             violations: Vec::new(),
             checks: Vec::new(),
             merged: None,
+            published: Vec::new(),
         };
         self.set(running.clone());
         let board = Arc::clone(self);
@@ -91,6 +92,7 @@ fn report(spec: &JobSpec, outcome: Outcome, log: &str) -> Report {
         violations: Vec::new(),
         checks: Vec::new(),
         merged: None,
+        published: Vec::new(),
     }
 }
 
@@ -117,6 +119,9 @@ pub fn run(spec: &JobSpec, dir: &Path) -> Report {
     if spec.job == MERGE {
         return merge(spec, dir);
     }
+    if spec.job == DEPLOY {
+        return deploy(spec, dir);
+    }
     let workspace = dir.join(cobot::scope::WORKSPACE);
     let (ok, log) = cobot::ci::exec(&workspace, &spec.argv, cobot::ci::TIMEOUT, &spec.token);
     report(
@@ -124,6 +129,76 @@ pub fn run(spec: &JobSpec, dir: &Path) -> Report {
         if ok { Outcome::Passed } else { Outcome::Failed },
         &log,
     )
+}
+
+/// The deploy job: the instance's sites whose inputs changed since the last deploy, built and
+/// published with the job's credentials.
+fn deploy(spec: &JobSpec, dir: &Path) -> Report {
+    let failed = |why: String, log: &str| Report {
+        violations: vec![why],
+        ..report(spec, Outcome::Failed, log)
+    };
+    if let Err(e) = cobot::ci::fetch_tags(dir, &spec.remote, &spec.token) {
+        return failed(e.to_string(), "");
+    }
+    let files = match &spec.since {
+        Some(since) => cobot::ci::changed_since(dir, since, &spec.sha).ok(),
+        None => None,
+    };
+    let mut log = match &files {
+        Some(f) => format!("{} file(s) changed since the last deploy\n", f.len()),
+        None => "first deploy, or the last one is unknown: every site\n".to_string(),
+    };
+    let sites = match cobot::scope::deploys(dir, files.as_deref()) {
+        Ok(s) => s,
+        Err(e) => return failed(e.to_string(), &log),
+    };
+    if sites.is_empty() {
+        log.push_str("nothing to publish\n");
+        return report(spec, Outcome::Passed, &log);
+    }
+    let instance = match Instance::load(dir) {
+        Ok(i) => i,
+        Err(e) => return failed(e.to_string(), &log),
+    };
+    let mut args = Map::new();
+    args.insert("sites".into(), json!(sites));
+    let request = Request {
+        operation: "sites.publish".into(),
+        args,
+    };
+    let secrets: Vec<&str> = spec.env.values().map(String::as_str).collect();
+    let scrub = |t: &str| {
+        secrets
+            .iter()
+            .filter(|s| s.len() >= 8)
+            .fold(t.to_string(), |acc, s| acc.replace(s, "…"))
+    };
+    match run_with(&instance, &request, |k| spec.env.get(k).cloned()) {
+        Ok(r) => {
+            let _ = writeln!(log, "{}", scrub(&r.result.to_string()));
+            for v in &r.violations {
+                let _ = writeln!(log, "violation: {}", scrub(v));
+            }
+            Report {
+                published: if r.ok { sites } else { Vec::new() },
+                violations: r.violations.iter().map(|v| scrub(v)).collect(),
+                ..report(
+                    spec,
+                    if r.ok {
+                        Outcome::Passed
+                    } else {
+                        Outcome::Failed
+                    },
+                    &log,
+                )
+            }
+        }
+        Err(e) => {
+            let why = scrub(&e.to_string());
+            failed(why.clone(), &format!("{log}{why}\n"))
+        }
+    }
 }
 
 /// The merge job: the approved head's tree, squashed onto the base as `<title> (!<number>)`.
@@ -211,6 +286,7 @@ fn bound(spec: &JobSpec, dir: &Path) -> Report {
         violations,
         checks,
         merged: None,
+        published: Vec::new(),
     }
 }
 
