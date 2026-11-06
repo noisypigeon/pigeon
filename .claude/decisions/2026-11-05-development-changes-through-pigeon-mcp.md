@@ -163,3 +163,20 @@ Built as phase E, in Rust: workers-rs 0.8.7 has no Workflows API, and the phase 
   - a `catalog/` change runs only `infra.validate` and the catalog tests;
   - a push outside the scope ends `refused`;
   - the agent's `change.approve` is refused, and the owner's merges.
+
+### 2026-11-06: The control plane merges an approved head, and each push to `main` publishes the sites it changed
+
+Steps 8 and 10 of §1, for sites. Infrastructure applies stay the owner's.
+
+- **`change.merge`** (effect apply, so a person runs it) queues a merge job on an approved change. The job runs in a `Checker` Container with a write token minted for it alone. It:
+  - refuses unless `main` is an ancestor of the approved head, so `main` gets exactly the checked tree;
+  - commits that tree onto `main` as `<title> (!<number>)`, with the plan, a `Change-Approved-By:` trailer and a `Change-Head:` trailer;
+  - pushes without force, then deletes the branch.
+
+  A failed merge keeps the change approved, with the reason.
+- **`MainRun`, a Durable Object, is `main`'s pipeline.** The queue sends it each push to `main`.
+  - It runs one deploy job at a time, always of the newest push.
+  - That job publishes the instance's manifest sites whose inputs changed since the last successful deploy (`cobot::scope::deploys`): a site's unit and content, and, for the architecture template, everything `architecture.describe` reads. It publishes through `sites.publish`, with `DEPLOY_TOKEN`, an account token holding Workers R2 Storage Edit and Zone Read.
+  - A failed deploy waits for the next push, which covers its changes too.
+  - `deploy.status` shows the last deployed commit and the twenty most recent deploys.
+- **Legacy `workloads/` sites are skipped.** They publish from their own instance's account.

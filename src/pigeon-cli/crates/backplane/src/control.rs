@@ -35,6 +35,8 @@ pub enum Routed {
         /// The change.
         number: u32,
     },
+    /// What `main`'s pipeline last published.
+    DeployStatus,
     /// Every change, optionally in one state.
     List {
         /// The state.
@@ -118,6 +120,7 @@ pub fn route(request: &Request, by: &str, at: u64) -> Result<Routed, String> {
             job: need(a, "job")?,
         }),
         "change.status" => Ok(Routed::Status { number: number(a)? }),
+        "deploy.status" => Ok(Routed::DeployStatus),
         "change.list" => Ok(Routed::List {
             state: text(a, "state"),
         }),
@@ -130,13 +133,22 @@ pub fn route(request: &Request, by: &str, at: u64) -> Result<Routed, String> {
 pub struct Push {
     /// The repository, when the event names it.
     pub repo: Option<String>,
-    /// The change the branch is for.
-    pub number: u32,
+    /// What was pushed.
+    pub target: Target,
     /// The new head.
     pub sha: String,
 }
 
-/// The change push `event` is for, if it pushed a change's branch to a commit; a push to any
+/// What a push moved.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Target {
+    /// A change's branch, by number.
+    Change(u32),
+    /// `main`: the pipeline publishes what it changed.
+    Main,
+}
+
+/// What push `event` moved, if it pushed `main` or a change's branch to a commit; a push to any
 /// other ref, or a deletion, is none.
 #[must_use]
 pub fn push(event: &Value) -> Option<Push> {
@@ -146,14 +158,18 @@ pub fn push(event: &Value) -> Option<Push> {
     if !changes::is_sha(sha) || sha.bytes().all(|b| b == b'0') {
         return None;
     }
-    let (number, _) = changes::branch(r#ref)?;
+    let target = if r#ref == "refs/heads/main" {
+        Target::Main
+    } else {
+        Target::Change(changes::branch(r#ref)?.0)
+    };
     let repo = ["repo", "repoName", "repo_name", "repository"]
         .iter()
         .find_map(|k| p[*k].as_str().or_else(|| p[*k]["name"].as_str()))
         .map(str::to_string);
     Some(Push {
         repo,
-        number,
+        target,
         sha: sha.to_string(),
     })
 }
@@ -190,6 +206,13 @@ pub struct JobSpec {
     /// For the merge job: who approved the head.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub approver: Option<String>,
+    /// For a deploy: the last commit deployed, whose changes since it are published; none
+    /// publishes every site.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub since: Option<String>,
+    /// For a deploy: its credentials, as environment; never logged or shown.
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub env: std::collections::BTreeMap<String, String>,
 }
 
 /// Shows no token and no remote.
@@ -245,6 +268,8 @@ pub fn spec(change: &Change, job: &str, remote: &str, token: &str) -> Result<Job
         job: job.to_string(),
         argv: j.argv.clone(),
         approver: change.approval.as_ref().map(|a| a.by.clone()),
+        since: None,
+        env: std::collections::BTreeMap::new(),
     })
 }
 
@@ -280,6 +305,9 @@ pub struct Report {
     /// For the merge job: the commit `main` now holds.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub merged: Option<String>,
+    /// For a deploy: the sites it published.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub published: Vec<String>,
 }
 
 /// The event a finished report is, for `job` on head `sha`; none while it runs.
@@ -476,5 +504,154 @@ pub fn audit(
             target.map_or(Value::Null, Into::into),
             outcome.into(),
         ],
+    }
+}
+
+/// The job that publishes what a push to `main` changed.
+pub const DEPLOY: &str = "deploy";
+
+/// A deploy job's ID: `main-<sha, 12>-deploy`.
+#[must_use]
+pub fn deploy_id(sha: &str) -> String {
+    format!("main-{}-{DEPLOY}", &sha[..12.min(sha.len())])
+}
+
+/// The spec for deploying `sha`, publishing what changed since `since`.
+#[must_use]
+pub fn deploy_spec(
+    remote: &str,
+    token: &str,
+    sha: &str,
+    since: Option<&str>,
+    env: std::collections::BTreeMap<String, String>,
+) -> JobSpec {
+    JobSpec {
+        id: deploy_id(sha),
+        remote: remote.to_string(),
+        token: token.to_string(),
+        base: "main".into(),
+        branch: "main".into(),
+        sha: sha.to_string(),
+        number: 0,
+        title: String::new(),
+        plan: String::new(),
+        scope: Vec::new(),
+        job: DEPLOY.into(),
+        argv: Vec::new(),
+        approver: None,
+        since: since.map(str::to_string),
+        env,
+    }
+}
+
+/// One deploy, as `deploy.status` shows it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Deployed {
+    /// The commit of `main`.
+    pub sha: String,
+    /// How it went.
+    pub outcome: Outcome,
+    /// When it finished, in Unix seconds.
+    pub at: u64,
+    /// The sites it published.
+    #[serde(default)]
+    pub published: Vec<String>,
+    /// Its violations, or why it failed.
+    #[serde(default)]
+    pub violations: Vec<String>,
+}
+
+/// `main`'s pipeline: at most one deploy at a time, always of the newest push, and only after
+/// the last one ended; the `MainRun` Durable Object keeps it.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Pipeline {
+    /// The last commit deployed without a failure.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub deployed: Option<String>,
+    /// The newest push to `main`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target: Option<String>,
+    /// The deploy in progress, and its attempts.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub running: Option<(String, u32)>,
+    /// The last deploys, newest first.
+    #[serde(default)]
+    pub history: Vec<Deployed>,
+}
+
+/// How many deploys `deploy.status` keeps.
+pub const HISTORY: usize = 20;
+
+impl Pipeline {
+    /// `main` moved to `sha`.
+    pub fn pushed(&mut self, sha: &str) {
+        if changes::is_sha(sha) {
+            self.target = Some(sha.to_string());
+        }
+    }
+
+    /// The deploy to start now, if none runs and the newest push isn't deployed.
+    pub fn start(&mut self) -> Option<String> {
+        if self.running.is_some() {
+            return None;
+        }
+        let target = self.target.clone()?;
+        if self.deployed.as_deref() == Some(target.as_str()) {
+            return None;
+        }
+        self.running = Some((target.clone(), 1));
+        Some(target)
+    }
+
+    /// The running deploy's report arrived, at `at`.
+    pub fn finished(&mut self, report: &Report, at: u64) {
+        let Some((sha, _)) = self.running.take() else {
+            return;
+        };
+        if report.outcome == Outcome::Passed {
+            self.deployed = Some(sha.clone());
+        }
+        // A failure waits for the next push, which publishes everything since the last deploy.
+        if self.target.as_deref() == Some(sha.as_str()) {
+            self.target = None;
+        }
+        self.record(Deployed {
+            sha,
+            outcome: report.outcome,
+            at,
+            published: report.published.clone(),
+            violations: report.violations.clone(),
+        });
+    }
+
+    /// The running deploy's Container was lost: the same deploy, again, until its attempts are
+    /// used.
+    pub fn lost(&mut self, at: u64) -> Option<String> {
+        let (sha, attempts) = self.running.take()?;
+        if attempts < crate::runs::MAX_ATTEMPTS {
+            self.running = Some((sha.clone(), attempts + 1));
+            return Some(sha);
+        }
+        if self.target.as_deref() == Some(sha.as_str()) {
+            self.target = None;
+        }
+        self.record(Deployed {
+            sha,
+            outcome: Outcome::Failed,
+            at,
+            published: Vec::new(),
+            violations: vec![format!(
+                "the deploy's Container was lost {} times",
+                crate::runs::MAX_ATTEMPTS
+            )],
+        });
+        None
+    }
+
+    fn record(&mut self, d: Deployed) {
+        self.history.insert(0, d);
+        self.history.truncate(HISTORY);
     }
 }

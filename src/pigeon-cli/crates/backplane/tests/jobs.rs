@@ -82,6 +82,8 @@ fn spec(remote: &Path, sha: &str, job: &str, scope: &[&str], argv: &[&str]) -> J
         job: job.into(),
         argv: argv.iter().map(|s| (*s).to_string()).collect(),
         approver: None,
+        since: None,
+        env: std::collections::BTreeMap::new(),
     }
 }
 
@@ -100,7 +102,7 @@ fn the_bound_job_passes_a_change_inside_its_scope_and_names_its_checks() {
         names,
         [
             "infra.validate",
-            "test cobot (catalog, manifest, apex, git)"
+            "test cobot (catalog, manifest, apex, git, credentials)"
         ],
         "policy.check is the bound job's own"
     );
@@ -257,5 +259,52 @@ fn the_merge_job_refuses_when_main_has_moved_past_the_branch() {
         git(&bare, &["branch", "--list", "change/1-x"]),
         "",
         "the branch stays"
+    );
+}
+
+#[test]
+fn a_deploy_publishes_only_the_sites_whose_inputs_changed() {
+    let tmp = TempDir::new().expect("tempdir");
+    let (bare, _) = remote(tmp.path(), &["CLAUDE.md"]);
+    let work = tmp.path().join("work");
+    git(&work, &["checkout", "-q", "main"]);
+    let before = git(&work, &["rev-parse", "HEAD"]);
+    std::fs::write(work.join("CLAUDE.md"), "docs only\n").expect("write");
+    git(&work, &["commit", "-q", "-am", "docs: only"]);
+    git(&work, &["push", "-q", "origin", "main"]);
+    let docs_only = git(&work, &["rev-parse", "HEAD"]);
+    let deploy = |sha: &str, since: Option<&str>, dir: &str| {
+        let s = backplane::control::deploy_spec(
+            &format!("file://{}", bare.display()),
+            "a-token-never-shown",
+            sha,
+            since,
+            std::collections::BTreeMap::new(),
+        );
+        jobs::run(&s, &tmp.path().join(dir))
+    };
+    let r = deploy(&docs_only, Some(&before), "a");
+    assert_eq!(r.outcome, Outcome::Passed, "{}", r.log);
+    assert!(r.log.contains("nothing to publish"), "{}", r.log);
+    let mut config = std::fs::read_to_string(work.join("config.yaml")).expect("read");
+    config.push_str("# a change the architecture site draws\n");
+    std::fs::write(work.join("config.yaml"), config).expect("write");
+    git(&work, &["commit", "-q", "-am", "chore: config"]);
+    git(&work, &["push", "-q", "origin", "main"]);
+    let changed = git(&work, &["rev-parse", "HEAD"]);
+    let r = deploy(&changed, Some(&docs_only), "b");
+    assert_eq!(r.outcome, Outcome::Failed, "{}", r.log);
+    assert!(
+        r.violations
+            .iter()
+            .any(|v| v.contains("CLOUDFLARE_API_TOKEN")),
+        "sites/docs is published, which needs the deploy token: {:?}",
+        r.violations
+    );
+    let r = deploy(&docs_only, Some(&before), "c");
+    assert_eq!(
+        r.outcome,
+        Outcome::Failed,
+        "a SHA that isn't main's head is refused"
     );
 }

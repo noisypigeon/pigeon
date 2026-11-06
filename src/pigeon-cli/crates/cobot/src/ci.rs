@@ -63,12 +63,11 @@ pub fn checkout(
     git(dir, remote, token, &["init", "-q"])?;
     let base_ref = format!("+refs/heads/{base}:refs/remotes/origin/{base}");
     let branch_ref = format!("+refs/heads/{branch}:refs/remotes/origin/{branch}");
-    git(
-        dir,
-        remote,
-        token,
-        &["fetch", "-q", "--no-tags", remote, &base_ref, &branch_ref],
-    )?;
+    let mut args = vec!["fetch", "-q", "--no-tags", remote, base_ref.as_str()];
+    if branch != base {
+        args.push(branch_ref.as_str());
+    }
+    git(dir, remote, token, &args)?;
     let head = git(
         dir,
         remote,
@@ -250,4 +249,33 @@ pub fn squash_onto(
         &["push", "-q", remote, &format!(":refs/heads/{branch}")],
     )?;
     Ok(new)
+}
+
+/// Fetches every tag from `remote` into `dir`, as a site's template is read from its tag.
+///
+/// # Errors
+///
+/// [`Error::Git`] when git fails.
+pub fn fetch_tags(dir: &Path, remote: &str, token: &str) -> Result<(), Error> {
+    git(
+        dir,
+        remote,
+        token,
+        &["fetch", "-q", remote, "+refs/tags/*:refs/tags/*"],
+    )
+    .map(|_| ())
+}
+
+/// The paths changed from `from` to `to`, both in `dir`.
+///
+/// # Errors
+///
+/// [`Error::Git`] when either is unknown there.
+pub fn changed_since(dir: &Path, from: &str, to: &str) -> Result<Vec<String>, Error> {
+    let out = git(dir, "", "", &["diff", "--name-only", from, to])?;
+    Ok(out
+        .lines()
+        .map(str::to_string)
+        .filter(|l| !l.is_empty())
+        .collect())
 }

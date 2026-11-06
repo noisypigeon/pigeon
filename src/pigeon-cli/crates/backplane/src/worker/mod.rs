@@ -9,6 +9,7 @@
 
 mod change;
 mod checker;
+mod main_run;
 mod platform;
 
 use serde_json::{Value, json};
@@ -19,6 +20,7 @@ use worker::{
 
 pub use change::ChangeRun;
 pub use checker::Checker;
+pub use main_run::MainRun;
 use platform::{Settings, json_request, now};
 
 use crate::access::{self, Identity};
@@ -220,6 +222,13 @@ async fn dispatch(
             let (status, v) = to_change(env, &s.repo, number, Method::Get, "/status", None).await?;
             Ok((Some(number.to_string()), respond(operation, status, v)))
         }
+        Routed::DeployStatus => {
+            let mut r = main_stub(env, &s.repo)?
+                .fetch_with_str("https://main/status")
+                .await?;
+            let v: Value = r.json().await?;
+            Ok((None, respond(operation, r.status_code(), v)))
+        }
         Routed::List { state } => {
             let rows =
                 platform::d1_rows(env, &control::list(&s.instance, &s.repo, state.as_deref()))
@@ -229,7 +238,14 @@ async fn dispatch(
     }
 }
 
-/// Artifacts push events: each push to a change's branch is that change's `Pushed`.
+fn main_stub(env: &Env, repo: &str) -> Result<worker::Stub> {
+    env.durable_object("MAIN_RUN")?
+        .id_from_name(&format!("{repo}#main"))?
+        .get_stub()
+}
+
+/// Artifacts push events: a push to a change's branch is that change's `Pushed`; a push to
+/// `main` goes to its pipeline.
 #[event(queue)]
 async fn queue(batch: MessageBatch<Value>, env: Env, _ctx: worker::Context) -> Result<()> {
     let s = Settings::from(&env)?;
@@ -242,22 +258,25 @@ async fn queue(batch: MessageBatch<Value>, env: Env, _ctx: worker::Context) -> R
             message.ack();
             continue;
         }
+        let number = match push.target {
+            control::Target::Main => {
+                let body = json!({ "sha": push.sha });
+                let req = json_request("https://main/pushed", Method::Post, Some(&body), None)?;
+                match main_stub(&env, &s.repo)?.fetch_with_request(req).await {
+                    Ok(r) if (200..300).contains(&r.status_code()) => message.ack(),
+                    _ => message.retry(),
+                }
+                continue;
+            }
+            control::Target::Change(n) => n,
+        };
         let body = serde_json::to_value(Event::Pushed {
             sha: push.sha.clone(),
         })?;
-        match to_change(
-            &env,
-            &s.repo,
-            push.number,
-            Method::Post,
-            "/event",
-            Some(&body),
-        )
-        .await
-        {
+        match to_change(&env, &s.repo, number, Method::Post, "/event", Some(&body)).await {
             Ok((status, v)) if (200..300).contains(&status) || status == 409 || status == 404 => {
                 if status != 200 {
-                    worker::console_warn!("push to change {} refused: {v}", push.number);
+                    worker::console_warn!("push to change {number} refused: {v}");
                 }
                 message.ack();
             }
