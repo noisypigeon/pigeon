@@ -160,6 +160,7 @@ fn reports_become_events() {
             name: "fmt".into(),
             argv: vec!["cargo".into()],
         }],
+        merged: None,
     };
     assert_eq!(
         control::event_of("fmt", A, &report(Outcome::Running, vec![])),

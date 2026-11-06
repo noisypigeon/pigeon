@@ -6,7 +6,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
-use crate::changes::{self, BOUND, Change, Check, Event, Job};
+use crate::changes::{self, BOUND, Change, Check, Event, Job, MERGE};
 use crate::wire::Request;
 
 /// A request for the control plane, as the Worker routes it.
@@ -113,6 +113,7 @@ pub fn route(request: &Request, by: &str, at: u64) -> Result<Routed, String> {
             at,
         }),
         "change.close" => event(Event::Close),
+        "change.merge" => event(Event::Merge { by: by.into() }),
         "ci.rerun" => event(Event::Rerun {
             job: need(a, "job")?,
         }),
@@ -186,6 +187,9 @@ pub struct JobSpec {
     /// Its command; empty for the bound job.
     #[serde(default)]
     pub argv: Vec<String>,
+    /// For the merge job: who approved the head.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub approver: Option<String>,
 }
 
 /// Shows no token and no remote.
@@ -240,6 +244,7 @@ pub fn spec(change: &Change, job: &str, remote: &str, token: &str) -> Result<Job
         scope: change.scope.clone(),
         job: job.to_string(),
         argv: j.argv.clone(),
+        approver: change.approval.as_ref().map(|a| a.by.clone()),
     })
 }
 
@@ -272,6 +277,9 @@ pub struct Report {
     /// For the bound job: the checks `change.scope` named.
     #[serde(default)]
     pub checks: Vec<Check>,
+    /// For the merge job: the commit `main` now holds.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub merged: Option<String>,
 }
 
 /// The event a finished report is, for `job` on head `sha`; none while it runs.
@@ -279,6 +287,22 @@ pub struct Report {
 pub fn event_of(job: &str, sha: &str, report: &Report) -> Option<Event> {
     if report.outcome == Outcome::Running {
         return None;
+    }
+    if job == MERGE {
+        return Some(match (report.outcome, &report.merged) {
+            (Outcome::Passed, Some(commit)) => Event::Merged {
+                sha: sha.to_string(),
+                commit: Some(commit.clone()),
+            },
+            _ => Event::MergeFailed {
+                sha: sha.to_string(),
+                reason: report
+                    .violations
+                    .first()
+                    .cloned()
+                    .unwrap_or_else(|| "the merge job failed; see its log".into()),
+            },
+        });
     }
     if job == BOUND {
         let mut violations = report.violations.clone();

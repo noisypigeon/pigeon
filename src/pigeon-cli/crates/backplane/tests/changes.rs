@@ -1,7 +1,9 @@
 //! A change's lifecycle; see
 //! `.claude/decisions/2026-11-05-development-changes-through-pigeon-mcp.md` §1.
 
-use backplane::changes::{BOUND, Change, Check, Effect, Event, JobStatus, State, branch, is_sha};
+use backplane::changes::{
+    BOUND, Change, Check, Effect, Event, JobStatus, MERGE, State, branch, is_sha,
+};
 use backplane::runs::MAX_ATTEMPTS;
 
 const A: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -83,7 +85,11 @@ fn a_change_goes_from_proposal_to_merge() {
     })
     .expect("approves");
     assert_eq!(c.state, State::Approved);
-    c.apply(Event::Merged { sha: A.into() }).expect("merges");
+    c.apply(Event::Merged {
+        sha: A.into(),
+        commit: None,
+    })
+    .expect("merges");
     assert_eq!(c.state, State::Merged);
     assert!(
         c.apply(Event::Pushed { sha: B.into() }).is_err(),
@@ -192,7 +198,11 @@ fn an_approval_covers_only_the_checked_head() {
         .unwrap_err();
     assert!(own.0.contains("other than its proposer"), "{own}");
     assert!(
-        c.apply(Event::Merged { sha: A.into() }).is_err(),
+        c.apply(Event::Merged {
+            sha: A.into(),
+            commit: None
+        })
+        .is_err(),
         "unapproved"
     );
 }
@@ -324,4 +334,62 @@ fn a_change_round_trips_its_storage_form() {
     let text = serde_json::to_string(&c).expect("serialize");
     let back: Change = serde_json::from_str(&text).expect("deserialize");
     assert_eq!(back, c);
+}
+
+#[test]
+fn a_merge_is_asked_for_once_approved_and_a_failure_keeps_it_approved() {
+    let mut c = checking(A);
+    assert!(
+        c.apply(Event::Merge { by: "owner".into() }).is_err(),
+        "not approved yet"
+    );
+    pass(&mut c, "fmt", A);
+    pass(&mut c, "test", A);
+    c.apply(Event::Approve {
+        by: "owner".into(),
+        sha: A.into(),
+        at: 9,
+    })
+    .expect("approves");
+    assert_eq!(
+        c.apply(Event::Merge { by: "owner".into() })
+            .expect("merges"),
+        [Effect::Start(MERGE.into())]
+    );
+    assert!(
+        c.apply(Event::Merge { by: "owner".into() }).is_err(),
+        "one merge at a time"
+    );
+    c.apply(Event::Started {
+        job: MERGE.into(),
+        sha: A.into(),
+    })
+    .expect("starts");
+    c.apply(Event::MergeFailed {
+        sha: A.into(),
+        reason: "main has moved".into(),
+    })
+    .expect("fails");
+    assert_eq!(c.state, State::Approved);
+    assert_eq!(c.violations, ["main has moved"]);
+    assert_eq!(
+        c.apply(Event::Merge { by: "owner".into() }).expect("again"),
+        [Effect::Start(MERGE.into())]
+    );
+    c.apply(Event::Started {
+        job: MERGE.into(),
+        sha: A.into(),
+    })
+    .expect("starts");
+    c.apply(Event::Merged {
+        sha: A.into(),
+        commit: Some(B.into()),
+    })
+    .expect("merged");
+    assert_eq!(c.state, State::Merged);
+    assert_eq!(c.merged_as.as_deref(), Some(B));
+    assert_eq!(
+        c.jobs.iter().find(|j| j.name == MERGE).map(|j| j.status),
+        Some(JobStatus::Passed)
+    );
 }

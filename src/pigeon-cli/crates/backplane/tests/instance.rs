@@ -133,6 +133,7 @@ fn catalog_names_are_unique_and_dotted() {
             ("change.authorize", Effect::Apply),
             ("change.pushed", Effect::Build),
             ("change.approve", Effect::Apply),
+            ("change.merge", Effect::Apply),
             ("change.close", Effect::Apply),
             ("ci.rerun", Effect::Build),
             ("sites.build", Effect::Build),

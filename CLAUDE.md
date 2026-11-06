@@ -184,7 +184,8 @@ belong in the ADR, never in the file.
   `BACKPLANE_TOKEN`; the control plane's `Checker` runs it. The Worker
   (`infra/pigeon/workers/control/`) serves MCP on `/mcp` behind Access: tools
   `change_propose`, `change_status`, `change_pushed`, `ci_rerun`, and the
-  owner's `change_authorize`, `change_approve` and `change_close`. A plan
+  owner's `change_authorize`, `change_approve`, `change_merge` (squashes the
+  approved head onto `main` as `<title> (!n)`) and `change_close`. A plan
   cites its ADR, because the bound job checks the pull-request policy with
   the plan as the body.
 - `pigeon cobot workers validate|permissions|render|plan|deploy|status|secrets put|teardown`:

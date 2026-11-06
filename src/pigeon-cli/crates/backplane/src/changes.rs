@@ -10,6 +10,9 @@ use crate::runs::MAX_ATTEMPTS;
 /// The job that bounds a push: sentinel's change policy and `change.scope`, on the pushed tree.
 pub const BOUND: &str = "bound";
 
+/// The job that merges an approved head onto `main`, with a write token.
+pub const MERGE: &str = "merge";
+
 /// Where a change is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -159,9 +162,12 @@ pub struct Change {
     /// The head's jobs, [`BOUND`] first.
     #[serde(default)]
     pub jobs: Vec<Job>,
-    /// The bound job's violations, when it refused the head.
+    /// The bound job's violations, when it refused the head, or why a merge failed.
     #[serde(default)]
     pub violations: Vec<String>,
+    /// The commit on `main` it was merged as.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub merged_as: Option<String>,
 }
 
 /// Something that happened to a change.
@@ -226,10 +232,25 @@ pub enum Event {
         /// When.
         at: u64,
     },
+    /// A person asked for the approved head to be merged.
+    Merge {
+        /// Who.
+        by: String,
+    },
     /// Its approved head reached `main`.
     Merged {
         /// That head.
         sha: String,
+        /// The commit on `main` it became.
+        #[serde(default)]
+        commit: Option<String>,
+    },
+    /// The merge job couldn't merge it; it stays approved.
+    MergeFailed {
+        /// The head it tried.
+        sha: String,
+        /// Why.
+        reason: String,
     },
     /// It was closed unmerged.
     Close,
@@ -313,6 +334,7 @@ impl Change {
             approval: None,
             jobs: Vec::new(),
             violations: Vec::new(),
+            merged_as: None,
         }
     }
 
@@ -348,7 +370,17 @@ impl Change {
             Event::Lost { job, sha } => self.lost(&job, &sha),
             Event::Rerun { job } => self.rerun(&job),
             Event::Approve { by, sha, at } => self.approve(by, sha, at),
-            Event::Merged { sha } => self.merged(&sha),
+            Event::Merge { by } => self.merge(&by),
+            Event::Merged { sha, commit } => self.merged(&sha, commit),
+            Event::MergeFailed { sha, reason } => {
+                if self.on_head(&sha) && self.state == State::Approved {
+                    if let Some(j) = self.job(MERGE) {
+                        j.status = JobStatus::Failed;
+                    }
+                    self.violations = vec![reason];
+                }
+                Ok(Vec::new())
+            }
             Event::Close => {
                 if self.state == State::Merged {
                     return refuse(format!("{} is merged", self.branch()));
@@ -501,6 +533,12 @@ impl Change {
             return Ok(vec![Effect::Start(name.to_string())]);
         }
         j.status = JobStatus::Failed;
+        if name == MERGE {
+            self.violations = vec![format!(
+                "the merge job's Container was lost {MAX_ATTEMPTS} times; merge again"
+            )];
+            return Ok(Vec::new());
+        }
         if name == BOUND {
             self.violations = vec![format!(
                 "the bound job's Container was lost {MAX_ATTEMPTS} times"
@@ -571,7 +609,27 @@ impl Change {
         Ok(Vec::new())
     }
 
-    fn merged(&mut self, sha: &str) -> Result<Vec<Effect>, Refusal> {
+    fn merge(&mut self, by: &str) -> Result<Vec<Effect>, Refusal> {
+        if self.state != State::Approved {
+            return refuse(format!(
+                "{} is {}; only an approved head is merged",
+                self.branch(),
+                self.state.name()
+            ));
+        }
+        if self.job(MERGE).is_some_and(|j| j.open()) {
+            return refuse(format!("{} is already being merged", self.branch()));
+        }
+        if by.is_empty() {
+            return refuse("a merge names who asked for it");
+        }
+        self.jobs.retain(|j| j.name != MERGE);
+        self.jobs.push(Job::queued(MERGE, Vec::new()));
+        self.violations.clear();
+        Ok(vec![Effect::Start(MERGE.into())])
+    }
+
+    fn merged(&mut self, sha: &str, commit: Option<String>) -> Result<Vec<Effect>, Refusal> {
         let approved = self
             .approval
             .as_ref()
@@ -580,6 +638,10 @@ impl Change {
         if self.state != State::Approved || !self.on_head(sha) || !approved {
             return refuse(format!("{sha} is not {}'s approved head", self.branch()));
         }
+        if let Some(j) = self.job(MERGE) {
+            j.status = JobStatus::Passed;
+        }
+        self.merged_as = commit;
         self.state = State::Merged;
         Ok(Vec::new())
     }

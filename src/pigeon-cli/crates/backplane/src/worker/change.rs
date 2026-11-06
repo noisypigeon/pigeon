@@ -101,8 +101,8 @@ impl ChangeRun {
         self.mirror(change).await
     }
 
-    /// A read token and the remote, for one job.
-    async fn credentials(&self) -> Result<(String, String)> {
+    /// The remote, and a token for one job: write only for the merge job.
+    async fn credentials(&self, write: bool) -> Result<(String, String)> {
         let s = Settings::from(&self.env)?;
         let api = secret(&self.env, "ARTIFACTS_TOKEN")?;
         let account = platform::account(&api).await?;
@@ -119,7 +119,7 @@ impl ChangeRun {
         }
         let remote = remote.ok_or("the repository's answer has no remote")?;
         let body =
-            cobot::artifacts_wire::read_token_body(&s.repo, cobot::artifacts_wire::TOKEN_TTL);
+            cobot::artifacts_wire::token_body(&s.repo, write, cobot::artifacts_wire::TOKEN_TTL);
         let minted =
             platform::cloudflare(&api, Method::Post, &format!("{base}/tokens"), Some(&body))
                 .await?;
@@ -133,7 +133,8 @@ impl ChangeRun {
     }
 
     async fn start(&self, change: &Change, job: &str) -> std::result::Result<(), String> {
-        let (remote, token) = self.credentials().await.map_err(|e| e.to_string())?;
+        let write = job == crate::changes::MERGE;
+        let (remote, token) = self.credentials(write).await.map_err(|e| e.to_string())?;
         let spec = control::spec(change, job, &remote, &token)?;
         let body = serde_json::to_value(&spec).map_err(|e| e.to_string())?;
         let req = json_request("https://checker/start", Method::Post, Some(&body), None)
