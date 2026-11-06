@@ -25,6 +25,18 @@ pub struct MainRun {
 }
 
 impl MainRun {
+    /// Sets an alarm now if a deploy is in flight but none is set: the runtime drops an alarm
+    /// that keeps failing, and only an alarm moves a deploy on.
+    async fn rearm(&self) -> Result<()> {
+        let storage = self.state.storage();
+        let busy = self.pipeline().await?.running.is_some()
+            || storage.get::<String>(STARTING).await?.is_some();
+        if busy && storage.get_alarm().await?.is_none() {
+            storage.set_alarm(Duration::from_millis(0)).await?;
+        }
+        Ok(())
+    }
+
     async fn pipeline(&self) -> Result<Pipeline> {
         Ok(self
             .state
@@ -115,6 +127,7 @@ impl DurableObject for MainRun {
     }
 
     async fn fetch(&self, mut req: Request) -> Result<Response> {
+        self.rearm().await?;
         let path = req.path();
         match (req.method(), path.trim_matches('/')) {
             (Method::Post, "pushed") => {
