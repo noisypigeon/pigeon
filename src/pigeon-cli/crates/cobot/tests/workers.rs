@@ -274,7 +274,10 @@ fn deploy_migrates_builds_then_deploys_and_shows_no_id() {
             .expect("read")
             .lines()
             .last(),
-        Some(format!("FROM pigeon-local/pigeon-control-runner:{plan}").as_str())
+        Some(
+            format!("FROM --platform=linux/amd64 pigeon-local/pigeon-control-runner:{plan}")
+                .as_str()
+        )
     );
     let done = workers::deploy(root.path(), &f, &dir, plan, &t).expect("deploys");
     assert_eq!(done.len(), 3, "{done:?}");
@@ -289,7 +292,7 @@ fn deploy_migrates_builds_then_deploys_and_shows_no_id() {
     );
     assert!(
         calls[1]
-            .starts_with("docker build --target backplane --build-arg FEATURES=backplane -t pigeon-local/pigeon-control-runner:"),
+            .starts_with("docker build --platform linux/amd64 --target backplane --build-arg FEATURES=backplane -t pigeon-local/pigeon-control-runner:"),
         "{calls:?}"
     );
     assert!(

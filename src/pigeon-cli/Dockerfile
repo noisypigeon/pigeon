@@ -61,10 +61,16 @@ RUN apt-get update \
  && rustup target add wasm32-unknown-unknown
 COPY --from=tools /out/ /usr/local/bin/
 COPY --from=build /src/target/release/pigeon /usr/local/bin/pigeon
-ENV CARGO_HOME=/cache/cargo CARGO_TARGET_DIR=/cache/target HOME=/tmp
+# No debug info: a job needs pass or fail, not a debugger, and debug info makes linking the
+# test binaries need far more memory and the cache far more space.
+ENV CARGO_HOME=/cache/cargo CARGO_TARGET_DIR=/cache/target HOME=/tmp \
+    CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0
+# How many crates the warm-up compiles and links at once; lower it if a builder runs out of memory.
+ARG WARM_JOBS=2
 WORKDIR /warm
 COPY . src/pigeon-cli
-RUN cd src/pigeon-cli \
+RUN export CARGO_BUILD_JOBS="$WARM_JOBS" \
+ && cd src/pigeon-cli \
  && cargo fetch --locked \
  && cargo clippy --workspace --all-targets --locked \
  && cargo test --workspace --locked --no-run \

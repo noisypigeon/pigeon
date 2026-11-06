@@ -30,6 +30,10 @@ pub const WRANGLER_VAR: &str = "COBOT_WRANGLER";
 /// See [`WRANGLER_VAR`].
 pub const DOCKER_VAR: &str = "COBOT_DOCKER";
 
+/// The only platform Cloudflare Containers run; every image is built for it, whatever the
+/// machine deploying.
+pub const PLATFORM: &str = "linux/amd64";
+
 /// Container instance types Cloudflare offers.
 const INSTANCE_TYPES: [&str; 6] = [
     "lite",
@@ -764,7 +768,7 @@ pub fn text(value: &Value) -> String {
 #[must_use]
 pub fn container_dockerfile(spec: &Spec, class: &str, plan: &str) -> String {
     format!(
-        "# Built by `pigeon cobot workers deploy` from its spec's stage; never committed.\nFROM {}\n",
+        "# Built by `pigeon cobot workers deploy` from its spec's stage; never committed.\nFROM --platform={PLATFORM} {}\n",
         image_tag(spec, class, plan)
     )
 }
@@ -1087,7 +1091,13 @@ pub fn deploy(
     for c in &found.spec.containers {
         let file = root.join(&c.image.dockerfile);
         let context = file.parent().unwrap_or(root);
-        let mut args: Vec<String> = vec!["build".into(), "--target".into(), c.image.target.clone()];
+        let mut args: Vec<String> = vec![
+            "build".into(),
+            "--platform".into(),
+            PLATFORM.into(),
+            "--target".into(),
+            c.image.target.clone(),
+        ];
         for (k, v) in &c.image.args {
             args.extend(["--build-arg".into(), format!("{k}={v}")]);
         }
