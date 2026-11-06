@@ -44,8 +44,8 @@ fn shell(title: &str, body: &str) -> String {
 <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\
 <title>{}</title><style>\
 body{{font:16px/1.5 system-ui,sans-serif;max-width:46rem;margin:2rem auto;padding:0 1rem;color:#1b1b1b;background:#fff}}\
+code,pre{{background:#f2f2f2;color:inherit;border-radius:4px;padding:.1rem .3rem;font-size:.9em}}\
 @media (prefers-color-scheme:dark){{body{{color:#e8e8e8;background:#141414}}code,pre{{background:#262626}}}}\
-code,pre{{background:#f2f2f2;border-radius:4px;padding:.1rem .3rem;font-size:.9em}}\
 pre{{padding:.75rem;white-space:pre-wrap;overflow-wrap:anywhere}}\
 dt{{font-weight:600;margin-top:.5rem}}dd{{margin:0}}\
 button{{font:inherit;padding:.6rem 1.2rem;border-radius:6px;border:0;background:#2b59c3;color:#fff;cursor:pointer}}\
@@ -174,8 +174,12 @@ pub fn field(form: &str, name: &str) -> Option<String> {
     })
 }
 
-/// Whether a POST's `Origin` is this Worker's own `host`.
+/// Whether a POST comes from this Worker's own pages: its `Origin` is `https://<host>`, or, when
+/// the browser sends `Origin: null`, its `Sec-Fetch-Site` is `same-origin`.
 #[must_use]
-pub fn same_origin(origin: Option<&str>, host: &str) -> bool {
-    origin.is_some_and(|o| o == format!("https://{host}"))
+pub fn same_origin(origin: Option<&str>, fetch_site: Option<&str>, host: &str) -> bool {
+    match origin {
+        Some("null") | None => fetch_site == Some("same-origin"),
+        Some(o) => o == format!("https://{host}"),
+    }
 }

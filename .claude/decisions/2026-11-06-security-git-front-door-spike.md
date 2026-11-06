@@ -202,3 +202,16 @@ Access application as `/mcp`:
 - **The front door makes the question moot.** The session then holds no
   Artifacts secret, only the Access headers for the control plane's host,
   which work today.
+
+### 2026-11-06: The front door's tokens live two minutes
+
+- **The front door mints too many long-lived tokens.** It mints a token for
+  every request, and with job Containers' 15-minute TTL a few fetches filled
+  `git.tokens`' first page with live tokens.
+- **Its tokens now live 120 s.** A front-door token serves only the request
+  that minted it, which Artifacts authenticates when it starts. 60 s is the
+  minimum Artifacts allows; 120 s leaves room for a slow mint.
+- **Job Containers keep 900 s** (`artifacts_wire::TOKEN_TTL`): a job fetches
+  and pushes over minutes.
+- **The change.** `worker/platform.rs` `credentials` takes the TTL from its
+  caller.

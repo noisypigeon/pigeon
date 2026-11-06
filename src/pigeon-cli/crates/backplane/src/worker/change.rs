@@ -126,9 +126,10 @@ impl ChangeRun {
 
     async fn start(&self, change: &Change, job: &str) -> std::result::Result<(), String> {
         let write = job == crate::changes::MERGE;
-        let (remote, token) = platform::credentials(&self.env, write)
-            .await
-            .map_err(|e| e.to_string())?;
+        let (remote, token) =
+            platform::credentials(&self.env, write, cobot::artifacts_wire::TOKEN_TTL)
+                .await
+                .map_err(|e| e.to_string())?;
         let spec = control::spec(change, job, &remote, &token)?;
         let body = serde_json::to_value(&spec).map_err(|e| e.to_string())?;
         let req = json_request("https://checker/start", Method::Post, Some(&body), None)

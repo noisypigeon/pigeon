@@ -72,9 +72,10 @@ impl MainRun {
 
     /// Starts the deploy of `sha` in a job Container.
     async fn start(&self, p: &Pipeline, sha: &str) -> std::result::Result<(), String> {
-        let (remote, token) = platform::credentials(&self.env, false)
-            .await
-            .map_err(|e| e.to_string())?;
+        let (remote, token) =
+            platform::credentials(&self.env, false, cobot::artifacts_wire::TOKEN_TTL)
+                .await
+                .map_err(|e| e.to_string())?;
         let deploy = secret(&self.env, "DEPLOY_TOKEN").map_err(|e| e.to_string())?;
         let env = BTreeMap::from([("CLOUDFLARE_API_TOKEN".to_string(), deploy)]);
         let spec = control::deploy_spec(&remote, &token, sha, p.deployed.as_deref(), env);

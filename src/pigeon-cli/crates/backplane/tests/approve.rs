@@ -58,13 +58,39 @@ fn form_fields_decode_and_origins_match_exactly() {
     assert_eq!(approve::field(form, "x").as_deref(), Some(""));
     assert_eq!(approve::field(form, "missing"), None);
     assert_eq!(approve::decode("%zz%4"), "%zz%4");
-    assert!(approve::same_origin(Some("https://h.example"), "h.example"));
-    for bad in [
-        None,
-        Some("http://h.example"),
-        Some("https://h.example.evil"),
-        Some("null"),
+    let host = "h.example";
+    assert!(approve::same_origin(Some("https://h.example"), None, host));
+    assert!(approve::same_origin(
+        Some("https://h.example"),
+        Some("same-origin"),
+        host
+    ));
+    assert!(
+        approve::same_origin(Some("null"), Some("same-origin"), host),
+        "a browser sends Origin: null under some referrer policies"
+    );
+    assert!(approve::same_origin(None, Some("same-origin"), host));
+    for (origin, site) in [
+        (None, None),
+        (Some("null"), None),
+        (Some("null"), Some("cross-site")),
+        (None, Some("same-site")),
+        (Some("http://h.example"), Some("same-origin")),
+        (Some("https://h.example.evil"), Some("same-origin")),
     ] {
-        assert!(!approve::same_origin(bad, "h.example"), "{bad:?}");
+        assert!(
+            !approve::same_origin(origin, site, host),
+            "{origin:?} {site:?}"
+        );
     }
+}
+
+#[test]
+fn dark_mode_comes_after_the_light_rules_it_overrides() {
+    let html = approve::outcome("t", "m");
+    let light = html.find("code,pre{background:#f2f2f2").expect("light");
+    let dark = html
+        .find("@media (prefers-color-scheme:dark)")
+        .expect("dark");
+    assert!(dark > light, "the later rule wins, so dark mode comes last");
 }

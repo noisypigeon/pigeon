@@ -19,7 +19,7 @@ fn html(status: u16, body: &str) -> Result<Response> {
     let h = r.headers_mut();
     h.set("content-security-policy", approve::CSP)?;
     h.set("cache-control", "no-store")?;
-    h.set("referrer-policy", "no-referrer")?;
+    h.set("referrer-policy", "same-origin")?;
     h.set("x-content-type-options", "nosniff")?;
     Ok(r)
 }
@@ -106,7 +106,8 @@ pub async fn serve(mut req: Request, env: &Env, s: &Settings, who: &Identity) ->
         }
         Method::Post => {
             let origin = req.headers().get("origin")?;
-            if !approve::same_origin(origin.as_deref(), &host) {
+            let site = req.headers().get("sec-fetch-site")?;
+            if !approve::same_origin(origin.as_deref(), site.as_deref(), &host) {
                 return refused(403, "this form is posted only from its own page");
             }
             let form = req.text().await?;

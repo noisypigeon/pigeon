@@ -14,6 +14,9 @@ use crate::changes::Change;
 use crate::control;
 use crate::gitdoor::{self, Service};
 
+/// How long a front-door token lives, in seconds; one request's worth.
+const TTL: u64 = 120;
+
 /// git's headers a request keeps on its way to Artifacts.
 const FORWARDED: [&str; 4] = ["content-type", "accept", "git-protocol", "content-encoding"];
 
@@ -119,7 +122,7 @@ async fn forward(
     body: Option<Vec<u8>>,
     write: bool,
 ) -> Result<Response> {
-    let (remote, token) = platform::credentials(env, write).await?;
+    let (remote, token) = platform::credentials(env, write, TTL).await?;
     let endpoint = path.split_once(".git/").map_or("", |(_, e)| e);
     let mut url = format!("{}/{endpoint}", remote.trim_end_matches('/'));
     if let Some(q) = query {

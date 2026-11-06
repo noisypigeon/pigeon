@@ -246,13 +246,12 @@ pub async fn d1_rows(env: &Env, statement: &Statement) -> Result<Vec<Value>> {
         .results::<Value>()
 }
 
-/// The repository's remote, and a token for it minted for one job, valid for
-/// [`cobot::artifacts_wire::TOKEN_TTL`]: write only when `write`.
+/// The repository's remote, and a token for it valid for `ttl` seconds: write only when `write`.
 ///
 /// # Errors
 ///
 /// When the Artifacts API refuses, or its answers lack a remote or token.
-pub async fn credentials(env: &Env, write: bool) -> Result<(String, String)> {
+pub async fn credentials(env: &Env, write: bool, ttl: u64) -> Result<(String, String)> {
     let s = Settings::from(env)?;
     let api = secret(env, "ARTIFACTS_TOKEN")?;
     let account = account(&api).await?;
@@ -260,7 +259,7 @@ pub async fn credentials(env: &Env, write: bool) -> Result<(String, String)> {
     let repo = cloudflare(&api, Method::Get, &format!("{base}/repos/{}", s.repo), None).await?;
     let remote =
         cobot::artifacts_wire::remote_in(&repo).ok_or("the repository's answer has no remote")?;
-    let body = cobot::artifacts_wire::token_body(&s.repo, write, cobot::artifacts_wire::TOKEN_TTL);
+    let body = cobot::artifacts_wire::token_body(&s.repo, write, ttl);
     let minted = cloudflare(&api, Method::Post, &format!("{base}/tokens"), Some(&body)).await?;
     let token = cobot::artifacts_wire::token_in(&minted).ok_or_else(|| {
         format!(
