@@ -180,3 +180,29 @@ Steps 8 and 10 of §1, for sites. Infrastructure applies stay the owner's.
   - A failed deploy waits for the next push, which covers its changes too.
   - `deploy.status` shows the last deployed commit and the twenty most recent deploys.
 - **Legacy `workloads/` sites are skipped.** They publish from their own instance's account.
+
+### 2026-11-06: The first deploy's runbook, as it ran
+
+`pigeon-control` was first deployed from the owner's machine, and its first change (this one) was proposed through `/mcp`. What the earlier runbook didn't say:
+
+- **Access is enabled from the Worker.** Open Workers & Pages → `pigeon-control` → Domains, then **Enable Access** on the production `workers.dev` row.
+  - Choose scope **All traffic**: "Previews only" leaves the production URL open.
+  - Use a **Cloudflare account** Allow policy, or an exact **Emails** rule. Never an **Email domain** rule for a public mail provider: it would admit everyone with an address there.
+  - Turn off the preview URL; nothing uses it.
+  - The application this creates holds the AUD tag (`ACCESS_AUD`). The team domain `<team>.cloudflareaccess.com` gives `ACCESS_TEAM`.
+- **The agent's service token** comes from Zero Trust → Access controls → Service credentials.
+  - Its secret is shown only once, on the page after **Generate token**. **Refresh** only extends the expiry.
+  - It gets its own policy on the application, with action **Service Auth**, never Allow.
+  - The agent session reaches `/mcp` through its environment's network secrets: two custom headers on the Worker's host, `CF-Access-Client-Id` and `CF-Access-Client-Secret`, both with no prefix. The session never sees them.
+  - The Worker names a service token by its client ID (`<id>.access`). It can propose and push, and is refused every apply-effect operation.
+- **Images build for `linux/amd64`,** the only platform Containers run. On Apple Silicon:
+  - Docker Desktop needs Rosetta for amd64, or the build runs under QEMU and takes hours;
+  - it needs about 8 GB of memory. The `ci` stage builds without debug info, two jobs at a time (`WARM_JOBS`).
+- **Checks before deploying:**
+  - `pigeon cobot workers validate` refuses a binding that shares a Durable Object's name;
+  - `plan` resolves `bucket_names[<name>]` from a `for_each` output, which is a map keyed by item.
+- **The smoke tests:**
+  - `cloudflared access curl https://<host>/v0/operations` lists the catalog as the owner;
+  - `initialize` on `/mcp` answers as the agent.
+
+  A plain `curl` gets Access's 302 to its login page.
