@@ -7,3 +7,18 @@ units:
   repos/pigeon:
     kind: cloudflare/git-repo
     mirror: https://github.com/noisypigeon/pigeon
+  # pigeon's own zone; its ID is looked up, never written.
+  zones/pigeon.dev:
+    kind: cloudflare/zone
+    services: {}
+    records: {}
+  # The architecture site, built from architecture.describe; see
+  # .claude/decisions/2026-11-05-runtime-architecture-site-through-backplane.md.
+  sites/docs:
+    kind: cloudflare/static-site
+    zone: pigeon.dev
+    hosts: [docs]
+    template: { name: architecture, version: 0.1.0 }
+    site:
+      title: pigeon
+      description: The pigeon platform's architecture, drawn from its own configuration.
