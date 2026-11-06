@@ -76,6 +76,11 @@ belong in the ADR, never in the file.
   head SHA the server's), images and the Worker to be built on Cloudflare,
   platform state to live in R2, and jobs to run on two Container classes, per
   [`2026-11-06-development-control-plane-approvals-images-state.md`](.claude/decisions/2026-11-06-development-control-plane-approvals-images-state.md).
+- The agent's git goes through the control plane's front door,
+  `/git/<namespace>/<repo>.git`: a token minted per request, pushes only to an
+  authorized change's branch, all or nothing, and `git.tokens` lists tokens
+  without values; the session's Artifacts token is retired, per
+  [`2026-11-06-security-git-front-door-spike.md`](.claude/decisions/2026-11-06-security-git-front-door-spike.md).
 - GitHub is a source mirror only: no workflows run there (`mirror.yaml`
   forbids them), checks and delivery are Cloudflare's, and releases pause until
   the release job runs on Cloudflare, per the hosting ADR's 2026-11-06
