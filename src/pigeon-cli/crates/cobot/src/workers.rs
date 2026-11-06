@@ -515,6 +515,17 @@ fn named(s: &str, name: &str) -> bool {
             .is_some_and(|t| !t.is_empty() && !t.contains('-'))
 }
 
+/// An output's shape for messages: its type and size, never a value.
+fn shape(v: &Value) -> String {
+    match v {
+        Value::Array(a) => format!("a list of {}", a.len()),
+        Value::Object(o) => format!("a map of {}", o.len()),
+        Value::String(_) => "a string".into(),
+        Value::Null => "nothing".into(),
+        _ => "a scalar".into(),
+    }
+}
+
 /// Resolves a reference against `outputs`, each unit's outputs by name.
 ///
 /// # Errors
@@ -528,7 +539,26 @@ pub fn resolve(r: &str, outputs: &BTreeMap<String, Map<String, Value>>) -> Resul
         .and_then(|o| o.get(&x.output))
         .ok_or_else(|| format!("`{r}`: `{}` has no output `{}` yet", x.unit, x.output))?;
     let v = match x.index {
-        Some(Item::At(i)) => v.get(i).ok_or_else(|| format!("`{r}`: no item {i}"))?,
+        Some(Item::At(i)) => v
+            .as_array()
+            .and_then(|a| a.get(i))
+            .ok_or_else(|| format!("`{r}`: no item {i} in {}", shape(v)))?,
+        // `$module.<block>[*].<out>` over a `for_each` renders a map, keyed by each item.
+        Some(Item::Named(n)) if v.is_object() => {
+            let Some(x) = v.get(&n) else {
+                let keys: Vec<&str> = v
+                    .as_object()
+                    .into_iter()
+                    .flat_map(|o| o.keys())
+                    .map(String::as_str)
+                    .collect();
+                return Err(format!(
+                    "`{r}`: no key `{n}`; its keys are {}",
+                    keys.join(", ")
+                ));
+            };
+            x
+        }
         Some(Item::Named(n)) => {
             let found: Vec<&Value> = v
                 .as_array()
@@ -538,7 +568,9 @@ pub fn resolve(r: &str, outputs: &BTreeMap<String, Map<String, Value>>) -> Resul
                 .collect();
             match found.as_slice() {
                 [one] => *one,
-                [] => return Err(format!("`{r}`: no item named `{n}`")),
+                [] => {
+                    return Err(format!("`{r}`: no item named `{n}` in {}", shape(v)));
+                }
                 _ => return Err(format!("`{r}`: more than one item named `{n}`")),
             }
         }
