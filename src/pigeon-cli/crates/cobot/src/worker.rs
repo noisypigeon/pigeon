@@ -192,10 +192,8 @@ mod wasm {
     use std::time::Duration;
 
     use worker::wasm_bindgen::JsCast;
-    use worker::{
-        Container, ContainerStartupOptions, Date, Delay, Fetcher, Headers, Method, RequestInit,
-        js_sys,
-    };
+    use worker::wasm_bindgen::JsValue;
+    use worker::{Container, Date, Delay, Fetcher, Headers, Method, RequestInit, State, js_sys};
 
     use super::{DispatchError, JobsLaunch, Launch, PORT, accept};
     use crate::link;
@@ -209,8 +207,12 @@ mod wasm {
     ///
     /// [`DispatchError::Start`] if it does not start, and [`DispatchError::Unreachable`] if
     /// `serve` never answers.
-    pub async fn start(container: &Container, launch: &Launch) -> Result<(), DispatchError> {
-        boot(container, &launch.entrypoint(), &launch.env()).await
+    pub async fn start(
+        state: &State,
+        container: &Container,
+        launch: &Launch,
+    ) -> Result<(), DispatchError> {
+        boot(state, container, &launch.entrypoint(), &launch.env()).await
     }
 
     /// As [`start`], for a job's Container.
@@ -219,27 +221,45 @@ mod wasm {
     ///
     /// As [`start`].
     pub async fn start_jobs(
+        state: &State,
         container: &Container,
         launch: &JobsLaunch,
     ) -> Result<(), DispatchError> {
-        boot(container, &launch.entrypoint(), &launch.env()).await
+        boot(state, container, &launch.entrypoint(), &launch.env()).await
+    }
+
+    /// Starts the Container through the runtime's own `ctx.container.start`, with `env` as a
+    /// plain object. workers-rs 0.8.7's `ContainerStartupOptions` passes `env` as a JavaScript
+    /// `Map`, which the runtime reads as no variables at all.
+    fn start_raw(state: &State, entrypoint: &[String], env: &[(&str, &str)]) -> worker::Result<()> {
+        let raw: &JsValue = state.as_raw().as_ref();
+        let container = js_sys::Reflect::get(raw, &"container".into())?;
+        let start: js_sys::Function =
+            js_sys::Reflect::get(&container, &"start".into())?.dyn_into()?;
+        let options = js_sys::Object::new();
+        let argv = js_sys::Array::new();
+        for a in entrypoint {
+            argv.push(&JsValue::from_str(a));
+        }
+        js_sys::Reflect::set(&options, &"entrypoint".into(), &argv)?;
+        js_sys::Reflect::set(&options, &"enableInternet".into(), &JsValue::TRUE)?;
+        let vars = js_sys::Object::new();
+        for (k, v) in env {
+            js_sys::Reflect::set(&vars, &JsValue::from_str(k), &JsValue::from_str(v))?;
+        }
+        js_sys::Reflect::set(&options, &"env".into(), &vars)?;
+        start.call1(&container, &options)?;
+        Ok(())
     }
 
     async fn boot(
+        state: &State,
         container: &Container,
         entrypoint: &[String],
         env: &[(&str, &str)],
     ) -> Result<(), DispatchError> {
         if !container.running() {
-            let mut options = ContainerStartupOptions::new();
-            options.set_entrypoint(&entrypoint.iter().map(String::as_str).collect::<Vec<_>>());
-            options.enable_internet(true);
-            for (k, v) in env {
-                options.add_env(k, v);
-            }
-            container
-                .start(Some(options))
-                .map_err(|e| DispatchError::Start(e.to_string()))?;
+            start_raw(state, entrypoint, env).map_err(|e| DispatchError::Start(e.to_string()))?;
         }
         let port = port(container)?;
         let mut last = String::new();

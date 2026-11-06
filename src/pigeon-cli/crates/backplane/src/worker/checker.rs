@@ -33,6 +33,7 @@ impl DurableObject for Checker {
                 let body = req.bytes().await?;
                 let token = secret(&self.env, cobot::worker::TOKEN_VAR)?;
                 if let Err(e) = cobot::worker::start_jobs(
+                    &self.state,
                     &container,
                     &JobsLaunch {
                         token: token.clone(),
