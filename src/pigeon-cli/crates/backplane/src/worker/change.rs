@@ -81,6 +81,12 @@ impl ChangeRun {
     }
 
     async fn save(&self, change: &Change, pending: &[Pending]) -> Result<()> {
+        self.save_after(change, pending, false).await
+    }
+
+    /// As [`Self::save`]; with `wait`, pending work waits for the next poll instead of running
+    /// at once, as when no Container is free.
+    async fn save_after(&self, change: &Change, pending: &[Pending], wait: bool) -> Result<()> {
         let storage = self.state.storage();
         storage.put(CHANGE, change).await?;
         storage.put(PENDING, pending).await?;
@@ -88,9 +94,9 @@ impl ChangeRun {
             .jobs
             .iter()
             .any(|j| matches!(j.status, JobStatus::Queued | JobStatus::Running));
-        if !pending.is_empty() {
+        if !pending.is_empty() && !wait {
             storage.set_alarm(Duration::from_millis(0)).await?;
-        } else if open {
+        } else if open || !pending.is_empty() {
             storage.set_alarm(POLL).await?;
         }
         self.mirror(change).await
@@ -215,6 +221,7 @@ impl DurableObject for ChangeRun {
         };
         let mut pending: Vec<Pending> = self.load(PENDING).await?;
         let mut next = Vec::new();
+        let mut wait = false;
         for p in std::mem::take(&mut pending) {
             match p {
                 Pending::Stop(id) => {
@@ -232,6 +239,14 @@ impl DurableObject for ChangeRun {
                 Pending::Start(job) => {
                     let sha = change.head.clone().unwrap_or_default();
                     let started = self.start(&change, &job).await;
+                    if let Err(why) = &started
+                        && control::no_capacity(why)
+                    {
+                        worker::console_log!("job {job} waits for a free Container");
+                        next.push(Pending::Start(job));
+                        wait = true;
+                        continue;
+                    }
                     let _ = Self::apply(
                         &mut change,
                         Event::Started {
@@ -258,7 +273,7 @@ impl DurableObject for ChangeRun {
                 let _ = Self::apply(&mut change, event, &mut next);
             }
         }
-        self.save(&change, &next).await?;
+        self.save_after(&change, &next, wait).await?;
         Response::ok("ok")
     }
 }

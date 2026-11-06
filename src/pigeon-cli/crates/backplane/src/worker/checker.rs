@@ -71,7 +71,17 @@ impl DurableObject for Checker {
                 )
                 .await
                 {
-                    Ok((status, v)) => Ok(Response::from_json(&v)?.with_status(status)),
+                    Ok((status, v)) => {
+                        // A finished job's report is read once: then its Container is freed,
+                        // as the fleet holds only `max_instances` at a time.
+                        let done = v["outcome"]
+                            .as_str()
+                            .is_some_and(|o| o == "passed" || o == "failed");
+                        if done {
+                            let _ = container.destroy(Some("its job finished")).await;
+                        }
+                        Ok(Response::from_json(&v)?.with_status(status))
+                    }
                     Err(DispatchError::Unreachable(_)) => {
                         Response::error("the job's Container is gone", 404)
                     }

@@ -447,3 +447,16 @@ fn a_deploy_spec_never_shows_its_credentials() {
         "{shown}"
     );
 }
+
+#[test]
+fn no_free_container_is_waiting_not_a_lost_job() {
+    assert!(control::no_capacity(
+        "Maximum number of running container instances exceeded. Try again later"
+    ));
+    assert!(control::no_capacity(
+        "the Container did not answer: Error: There is no container instance that can be provided to this Durable Object, try again later"
+    ));
+    assert!(!control::no_capacity(
+        "the Container did not answer: connection refused"
+    ));
+}
