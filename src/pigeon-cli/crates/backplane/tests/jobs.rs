@@ -308,3 +308,23 @@ fn a_deploy_publishes_only_the_sites_whose_inputs_changed() {
         "a SHA that isn't main's head is refused"
     );
 }
+
+#[test]
+fn a_merge_whose_report_was_lost_is_found_on_main_when_run_again() {
+    let tmp = TempDir::new().expect("tempdir");
+    let (bare, sha) = remote(tmp.path(), &["CLAUDE.md"]);
+    let mut s = spec(&bare, &sha, MERGE, &["CLAUDE.md"], &[]);
+    s.approver = Some("owner@example.com".into());
+    let first = jobs::run(&s, &tmp.path().join("m1"));
+    assert_eq!(first.outcome, Outcome::Passed, "{}", first.log);
+    let commit = first.merged.expect("merged");
+    let again = jobs::run(&s, &tmp.path().join("m2"));
+    assert_eq!(again.outcome, Outcome::Passed, "{}", again.log);
+    assert_eq!(again.merged.as_deref(), Some(commit.as_str()));
+    assert!(again.log.contains("already on main"), "{}", again.log);
+    assert_eq!(
+        git(&bare, &["rev-list", "--count", "refs/heads/main"]),
+        "2",
+        "merged once"
+    );
+}

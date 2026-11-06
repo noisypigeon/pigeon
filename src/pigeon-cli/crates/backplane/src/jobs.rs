@@ -99,6 +99,18 @@ fn report(spec: &JobSpec, outcome: Outcome, log: &str) -> Report {
 /// Runs `spec` in `dir`: checks out its head, then the bound job or its command.
 #[must_use]
 pub fn run(spec: &JobSpec, dir: &Path) -> Report {
+    // A merge whose report was lost may already be on the base; finding it there is the merge.
+    if spec.job == MERGE
+        && let Ok(Some(commit)) =
+            cobot::ci::merged_already(dir, &spec.remote, &spec.token, &spec.base, &spec.sha)
+    {
+        return Report {
+            log: format!("{} is already on {} as {commit}\n", spec.sha, spec.base),
+            merged: Some(commit),
+            ..report(spec, Outcome::Passed, "")
+        };
+    }
+    let _ = std::fs::remove_dir_all(dir);
     if let Err(e) = cobot::ci::checkout(
         dir,
         &spec.remote,
