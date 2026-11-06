@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.1.10 (2026-11-05)
+
+- feat(backplane): a change's jobs run in a job Container, from a pre-built CI image ([47f922a](https://github.com/noisypigeon/pigeon/commit/47f922aa8d479fcd2213bdd4c11b9b30bd6fe922))
+- feat(cobot): pigeon cobot workers, specs rendered to wrangler and deployed from a plan ([c9c12c1](https://github.com/noisypigeon/pigeon/commit/c9c12c1379981879dacf361f84e73a08bbe42a0b))
+
 ## v0.1.9 (2026-11-05)
 
 - refactor(backplane): shared wire types, and both worker builds compiling ([#118](https://github.com/noisypigeon/pigeon/pull/118))

@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.19 (2026-11-05)
+
+- chore: bring GitHub's release of #140 into Artifacts ([32a3ada](https://github.com/noisypigeon/pigeon/commit/32a3ada04e8c6265a3350f73d2b9778bf1ffb011))
+
 ## v0.1.18 (2026-11-05)
 
 - feat: git is hosted on Cloudflare Artifacts; GitHub is a mirror ([#140](https://github.com/noisypigeon/pigeon/pull/140))

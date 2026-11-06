@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.1.38 (2026-11-05)
+
+- feat(infra): the control plane's Worker spec, ready for the owner's deploy ([7d013aa](https://github.com/noisypigeon/pigeon/commit/7d013aabcf2d545536400b5a2a189a2602c356ca))
+- feat(backplane): a change's jobs run in a job Container, from a pre-built CI image ([47f922a](https://github.com/noisypigeon/pigeon/commit/47f922aa8d479fcd2213bdd4c11b9b30bd6fe922))
+- feat(backplane): the Worker serves changes over MCP, behind Access ([49f9dc5](https://github.com/noisypigeon/pigeon/commit/49f9dc507835a4cf03c9d96ac54fe788b1336f6b))
+- feat(cobot): pigeon cobot workers, specs rendered to wrangler and deployed from a plan ([c9c12c1](https://github.com/noisypigeon/pigeon/commit/c9c12c1379981879dacf361f84e73a08bbe42a0b))
+- feat(sentinel): the change policy, branch, scope and size ([6b99841](https://github.com/noisypigeon/pigeon/commit/6b998411722d651a313405edba69951a66561321))
+- feat(backplane): targeted checks, change.scope ([d9f0a81](https://github.com/noisypigeon/pigeon/commit/d9f0a81cb72b5e5ed1f9be18663427a20cf5fe22))
+- fix(cobot): the mirror only fast-forwards and adds tags; git sync brings releases back ([6d46cc1](https://github.com/noisypigeon/pigeon/commit/6d46cc1ad046d4364b66243e85ab0ee71880f72d))
+- chore: bring GitHub's release of #140 into Artifacts ([32a3ada](https://github.com/noisypigeon/pigeon/commit/32a3ada04e8c6265a3350f73d2b9778bf1ffb011))
+
 ## v0.1.37 (2026-11-05)
 
 - feat: git is hosted on Cloudflare Artifacts; GitHub is a mirror ([#140](https://github.com/noisypigeon/pigeon/pull/140))
