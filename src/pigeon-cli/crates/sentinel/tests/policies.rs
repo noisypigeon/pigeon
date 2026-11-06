@@ -436,28 +436,13 @@ fn terraform_rules() {
 }
 
 #[test]
-fn terraform_actions_rules() {
-    let ok = [
-        (".github/workflows/cobot.yml", "run: tofu apply\n"),
-        (".github/workflows/rust.yml", "run: mise run rust\n"),
-    ];
-    passes(&violations(
-        "terraform-actions",
-        tree_root(&ok).path(),
-        None,
-    ));
-    for (file, content) in [
-        (".github/workflows/rust.yml", "run: tofu plan\n"),
-        (
-            ".github/workflows/x.yml",
-            "uses: hashicorp/setup-terraform@v3\n",
-        ),
-        (".github/workflows/y.yml", "run: pigeon cobot apply\n"),
-    ] {
+fn mirror_forbids_github_workflows() {
+    let ok = [(".github/pull_request_template.md", "# Summary\n")];
+    passes(&violations("mirror", tree_root(&ok).path(), None));
+    for file in [".github/workflows/rust.yml", ".github/workflows/x.yaml"] {
         let mut files = ok.to_vec();
-        files.retain(|(f, _)| *f != file);
-        files.push((file, content));
-        let v = violations("terraform-actions", tree_root(&files).path(), None);
+        files.push((file, "on: push\n"));
+        let v = violations("mirror", tree_root(&files).path(), None);
         assert!(
             v.iter().any(|m| m.starts_with(&format!("{file}:1:"))),
             "{file}: {v:?}"
@@ -480,18 +465,6 @@ fn sentinel_actions_keeps_sentinel_read_only() {
             "src/pigeon-cli/crates/cobot/src/release/git.rs",
             "Command::new(\"git\");\n",
         ),
-        (
-            ".github/workflows/lifecycle.yml",
-            "run: docker run \"$IMAGE\" sentinel check --root /repo\n",
-        ),
-        (
-            ".github/workflows/release.yml",
-            "run: cargo run -p pigeon -- cobot release\n",
-        ),
-        (
-            ".github/workflows/a.yml",
-            "# runs the pigeon-sentinel image\n",
-        ),
     ];
     passes(&violations("sentinel-actions", tree_root(&ok).path(), None));
     for (file, content) in [
@@ -506,18 +479,6 @@ fn sentinel_actions_keeps_sentinel_read_only() {
         (
             "src/pigeon-cli/crates/sentinel/src/y.rs",
             "fs::write(p, c)?;\n",
-        ),
-        (
-            ".github/workflows/release.yml",
-            "run: cargo run -p pigeon -- sentinel release\n",
-        ),
-        (
-            ".github/workflows/lifecycle.yml",
-            "run: docker run \"$IMAGE\" sentinel tags\n",
-        ),
-        (
-            ".github/workflows/b.yml",
-            "run: pigeon sentinel release --dry-run\n",
         ),
     ] {
         let mut files = ok.to_vec();

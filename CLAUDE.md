@@ -72,6 +72,11 @@ belong in the ADR, never in the file.
   runs survive a stop; a run's root is a D1 bundle; the platform defines rules
   in `catalog/policies/` and an instance invokes them, per
   [`2026-11-05-runtime-control-plane-worker.md`](.claude/decisions/2026-11-05-runtime-control-plane-worker.md).
+- GitHub is a source mirror only: no workflows run there (`mirror.yaml`
+  forbids them), checks and delivery are Cloudflare's, and releases pause until
+  the release job runs on Cloudflare, per the hosting ADR's 2026-11-06
+  amendment. The release-bot and `cobot.yml` notes below describe that paused
+  path.
 - Releases and changelogs are machinery, per
   [`2026-11-02-release-crate-units-and-images.md`](.claude/decisions/2026-11-02-release-crate-units-and-images.md):
   - every `CHANGELOG.md` is generated on merge by the release bot, which runs

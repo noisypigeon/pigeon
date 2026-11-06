@@ -200,3 +200,17 @@ GitHub isn't a pure mirror yet. Until §5's release job runs on the control plan
    4. `sync`.
 4. **Reconciliation, once.** The agent added GitHub's 185 tags to Artifacts, and merged GitHub's release of #140 (`247b31b`) into Artifacts `main` alongside the owner's `config.yaml` commit, with nothing forced. This is the only time the agent writes tags, an exception to [`2026-11-05-development-changes-through-pigeon-mcp.md`](2026-11-05-development-changes-through-pigeon-mcp.md) §1.
 5. **When the release job moves** to the control plane, GitHub becomes a pure mirror again. `mirror` may then follow §6 as written.
+
+### 2026-11-06: GitHub is a source mirror only; its workflows are removed, and releases pause until they run on Cloudflare
+
+The owner's direction: GitHub is a backup of the source, in case the Artifacts repository is lost. Work, CI and delivery are Cloudflare's.
+
+- **Step 5's removal of the GitHub Actions workflows is pulled forward.** `cobot.yml`, `lifecycle.yml`, `release.yml`, `rust.yml` and `sites.yml` are deleted. `.config/policies/mirror.yaml` forbids any file under `.github/workflows/`. `terraform-actions.yaml` is deleted, and `sentinel-actions.yaml` keeps only its rule on sentinel's source.
+- **A mirror push runs nothing on GitHub,** so GitHub never moves ahead of Artifacts. `mirror` needs no `sync`. `sync` stays, for the release commit and tags made before this amendment, and for a failback.
+- **Checks are the control plane's** (`2026-11-05-development-changes-through-pigeon-mcp.md`). Until it is deployed, the owner and agents run `mise run ci-scoped` or `mise run ci` before merging on Artifacts.
+- **Releases pause.** No version bump, changelog, tag or GHCR image is made until step 4's release job runs on Cloudflare. The last release is `196e593` (backplane v0.1.30, cobot v0.1.38, gantry v0.1.10, sentinel v0.1.16). Site templates keep being read from their existing tags. A new template version waits for the release job.
+- **What `cobot.yml` did stops:**
+  - its plans and applies of `infra/cloudflare` and `workloads/`;
+  - its site publish of noisypigeon's blog.
+
+  The blog stays live as published. Its next publish comes from noisypigeon's own instance, per the kind-units ADR. Platform infrastructure stays a local apply by the owner. A publish runs in the control plane's pipeline once it is deployed.

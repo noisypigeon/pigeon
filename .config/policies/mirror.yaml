@@ -1,0 +1,6 @@
+description: GitHub is a source mirror only, so nothing runs there; CI and delivery are Cloudflare's, per 2026-11-05-development-git-hosting-cloudflare-artifacts.md (2026-11-06 amendment).
+target: tree
+rules:
+  - find:
+      match: '^\.github/workflows/'
+      forbid_content: '[\s\S]'
