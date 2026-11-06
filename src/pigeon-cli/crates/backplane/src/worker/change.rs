@@ -41,6 +41,22 @@ pub struct ChangeRun {
 }
 
 impl ChangeRun {
+    /// Sets an alarm now if work is pending or a job is open but none is set: the runtime
+    /// drops an alarm that keeps failing, and only an alarm moves a job on.
+    async fn rearm(&self) -> Result<()> {
+        let storage = self.state.storage();
+        let pending: Vec<Pending> = self.load(PENDING).await?;
+        let open = storage.get::<Change>(CHANGE).await?.is_some_and(|c| {
+            c.jobs
+                .iter()
+                .any(|j| matches!(j.status, JobStatus::Queued | JobStatus::Running))
+        });
+        if (open || !pending.is_empty()) && storage.get_alarm().await?.is_none() {
+            storage.set_alarm(Duration::from_millis(0)).await?;
+        }
+        Ok(())
+    }
+
     async fn load<T: for<'de> Deserialize<'de> + Default>(&self, key: &str) -> Result<T> {
         Ok(self.state.storage().get(key).await?.unwrap_or_default())
     }
@@ -179,6 +195,7 @@ impl DurableObject for ChangeRun {
     }
 
     async fn fetch(&self, mut req: Request) -> Result<Response> {
+        self.rearm().await?;
         let path = req.path();
         let existing: Option<Change> = self.state.storage().get(CHANGE).await?;
         match (req.method(), path.trim_matches('/')) {
