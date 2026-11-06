@@ -7,6 +7,7 @@
     reason = "`durable_object` generates undocumented wasm-bindgen items"
 )]
 
+mod approve;
 mod change;
 mod checker;
 mod gitdoor;
@@ -27,6 +28,7 @@ use platform::{Settings, json_request, now};
 use crate::access::{self, Identity};
 use crate::changes::{Change, Event};
 use crate::control::{self, Routed};
+use crate::grants;
 use crate::mcp::{self, Action};
 use crate::runs::{Lost, Queue, Run};
 use crate::wire::{self, Response as WireResponse};
@@ -44,8 +46,19 @@ async fn fetch(mut req: Request, env: Env, _ctx: worker::Context) -> Result<Resp
     if req.path().starts_with("/git/") {
         return gitdoor::serve(req, &env, &settings, &who).await;
     }
+    if req.path().starts_with("/approve/") {
+        return approve::serve(req, &env, &settings, &who).await;
+    }
     match (req.method(), req.path().as_str()) {
         (Method::Post, "/mcp") => {
+            let key = platform::secret(&env, "SESSION_KEY").ok();
+            let session = req
+                .headers()
+                .get(mcp::SESSION_HEADER)?
+                .zip(key.as_deref())
+                .and_then(|(id, k)| mcp::session(&id, k.as_bytes()))
+                .unwrap_or_default();
+            let host = req.url()?.host_str().unwrap_or_default().to_string();
             let message: Value = match req.json().await {
                 Ok(v) => v,
                 Err(_) => {
@@ -58,8 +71,49 @@ async fn fetch(mut req: Request, env: Env, _ctx: worker::Context) -> Result<Resp
             };
             match mcp::parse(&message, crate::VERSION) {
                 Action::Reply(v) => Response::from_json(&v),
+                Action::Initialize { reply, session } => {
+                    let mut r = Response::from_json(&reply)?;
+                    if let Some(k) = key {
+                        r.headers_mut().set(
+                            mcp::SESSION_HEADER,
+                            &mcp::session_id(&session, k.as_bytes()),
+                        )?;
+                    }
+                    Ok(r)
+                }
                 Action::Accept => Ok(Response::empty()?.with_status(202)),
                 Action::Call { id, request } => {
+                    if !who.human && grants::OPERATIONS.contains(&request.operation.as_str()) {
+                        let number = request.args.get("number").and_then(|v| match v {
+                            Value::String(s) => s.parse().ok(),
+                            other => other.as_u64().and_then(|n| u32::try_from(n).ok()),
+                        });
+                        let Some(number) = number else {
+                            return Response::from_json(&mcp::answer(
+                                &id,
+                                Err(crate::Error::Invalid(vec![
+                                    "`number` must be a change number".into(),
+                                ])),
+                            ));
+                        };
+                        return match approve::offer(
+                            &env,
+                            &settings,
+                            &host,
+                            number,
+                            &request.operation,
+                        )
+                        .await
+                        {
+                            Ok(link) => {
+                                Response::from_json(&mcp::url_required(&id, &link, &session))
+                            }
+                            Err(why) => Response::from_json(&mcp::answer(
+                                &id,
+                                Err(crate::Error::Invalid(vec![why])),
+                            )),
+                        };
+                    }
                     let outcome = run(&env, &settings, &who, &request).await;
                     Response::from_json(&mcp::answer(&id, outcome))
                 }
@@ -147,6 +201,31 @@ async fn run(
             op.name
         )]));
     }
+    let mut request = request.clone();
+    if op.name == "change.approve" && !request.args.contains_key("sha") {
+        let number = control::route(
+            &wire::Request {
+                operation: "change.status".into(),
+                args: request.args.clone(),
+            },
+            &who.subject,
+            now(),
+        )
+        .ok()
+        .and_then(|r| match r {
+            Routed::Status { number } => Some(number),
+            _ => None,
+        })
+        .ok_or_else(|| crate::Error::Invalid(vec!["`number` must be a change number".into()]))?;
+        let (_, v) = to_change(env, &s.repo, number, Method::Get, "/status", None)
+            .await
+            .map_err(|e| crate::Error::Invalid(vec![e.to_string()]))?;
+        let head = v["change"]["head"]
+            .as_str()
+            .ok_or_else(|| crate::Error::Invalid(vec![format!("change {number} has no head")]))?;
+        request.args.insert("sha".into(), Value::from(head));
+    }
+    let request = &request;
     let routed =
         control::route(request, &who.subject, now()).map_err(|m| crate::Error::Invalid(vec![m]))?;
     let outcome = dispatch(env, s, who, op.name, routed).await;

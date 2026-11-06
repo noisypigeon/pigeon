@@ -147,6 +147,7 @@ fn only_a_person_applies() {
     for n in [
         "change.authorize",
         "change.approve",
+        "change.merge",
         "change.close",
         "infra.apply",
     ] {

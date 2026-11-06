@@ -37,4 +37,5 @@ bindings:
     # change/1 to change/11 were pushed by hand, before the control plane numbered changes.
     CHANGE_FLOOR: "12"
 # DEPLOY_TOKEN: an account token with Workers R2 Storage Edit and Zone Read, for publishing sites.
-secrets: [BACKPLANE_TOKEN, ARTIFACTS_TOKEN, ACCESS_TEAM, ACCESS_AUD, DEPLOY_TOKEN]
+# SESSION_KEY: 32 random bytes, hex; signs MCP session IDs.
+secrets: [BACKPLANE_TOKEN, ARTIFACTS_TOKEN, ACCESS_TEAM, ACCESS_AUD, DEPLOY_TOKEN, SESSION_KEY]

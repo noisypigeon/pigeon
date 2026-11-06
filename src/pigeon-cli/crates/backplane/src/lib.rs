@@ -1,6 +1,7 @@
 //! Composes the engines into one platform; see `.claude/decisions/2026-11-03-development-backplane-platform-composition-layer.md`.
 
 pub mod access;
+pub mod approve;
 pub mod architecture;
 #[cfg(feature = "engines")]
 pub mod catalog;
@@ -9,6 +10,7 @@ pub mod control;
 #[cfg(feature = "engines")]
 pub mod engine;
 pub mod gitdoor;
+pub mod grants;
 #[cfg(feature = "engines")]
 pub mod instance;
 #[cfg(feature = "engines")]

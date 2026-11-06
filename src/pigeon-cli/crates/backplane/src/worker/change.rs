@@ -11,11 +11,13 @@ use worker::{DurableObject, Env, Method, Request, Response, Result, State, durab
 use super::platform::{self, Settings, job_stub, json_request, now};
 use crate::changes::{Change, Effect, Event, JobStatus};
 use crate::control::{self, Outcome, Report};
+use crate::grants::Grants;
 
 const CHANGE: &str = "change";
 const PENDING: &str = "pending";
 const LOGS: &str = "logs";
 const FAILURES: &str = "failures";
+const GRANTS: &str = "grants";
 
 /// How often a running job is asked how it went.
 const POLL: Duration = Duration::from_secs(20);
@@ -234,6 +236,51 @@ impl DurableObject for ChangeRun {
                 Response::from_json(
                     &json!({ "change": change, "branch": change.branch(), "failures": failures }),
                 )
+            }
+            (Method::Post, "grant") => {
+                let Some(change) = existing else {
+                    return Response::error("no such change", 404);
+                };
+                let body: Value = req.json().await?;
+                let operation = body["operation"].as_str().unwrap_or_default();
+                let token = platform::random_hex(32)?;
+                let mut grants: Grants = self.load(GRANTS).await?;
+                match grants.mint(&change, operation, &token, now()) {
+                    Ok(grant) => {
+                        self.state.storage().put(GRANTS, &grants).await?;
+                        Response::from_json(
+                            &json!({ "token": token, "grant": grant, "title": change.title }),
+                        )
+                    }
+                    Err(why) => Response::error(why, 409),
+                }
+            }
+            (Method::Post, "peek") => {
+                let Some(change) = existing else {
+                    return Response::error("no such change", 404);
+                };
+                let body: Value = req.json().await?;
+                let token = body["token"].as_str().unwrap_or_default();
+                let grants: Grants = self.load(GRANTS).await?;
+                match grants.peek(token, change.number, now()) {
+                    Ok(grant) => Response::from_json(&json!({ "grant": grant, "change": change })),
+                    Err(why) => Response::error(why, 403),
+                }
+            }
+            (Method::Post, "redeem") => {
+                let Some(change) = existing else {
+                    return Response::error("no such change", 404);
+                };
+                let body: Value = req.json().await?;
+                let token = body["token"].as_str().unwrap_or_default();
+                let operation = body["operation"].as_str().unwrap_or_default();
+                let mut grants: Grants = self.load(GRANTS).await?;
+                let redeemed = grants.redeem(token, operation, &change, now());
+                self.state.storage().put(GRANTS, &grants).await?;
+                match redeemed {
+                    Ok(grant) => Response::from_json(&grant),
+                    Err(why) => Response::error(why, 403),
+                }
             }
             (Method::Post, "event") => {
                 let Some(mut change) = existing else {

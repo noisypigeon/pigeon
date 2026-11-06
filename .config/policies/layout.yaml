@@ -4,7 +4,7 @@ rules:
   - entries:
       path: .
       dirs: ['^\.claude$', '^\.config$', '^\.github$', '^src$', '^tooling$', '^catalog$', '^infra$', '^workloads$']
-      files: ['^\.gitignore$', '^CHANGELOG\.md$', '^CLAUDE\.md$', '^config\.yaml$', '^mise\.toml$']
+      files: ['^\.gitignore$', '^\.mcp\.json$', '^CHANGELOG\.md$', '^CLAUDE\.md$', '^config\.yaml$', '^mise\.toml$']
       require: [src, tooling, catalog, infra, workloads]
       ignore: ['^\.git$', '^\.cobot$']
   - entries:

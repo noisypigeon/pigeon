@@ -160,3 +160,67 @@ Each step is a change through the pipeline, in this order:
   `r2://`.
 - **Capacity:** a change with eight jobs runs them at once, with no capacity
   wait.
+
+## Amendments
+
+### 2026-11-06: Approvals are URL elicitations to an Access-protected page, not form prompts, and need no OAuth connector
+
+§1's form-mode prompts can't count as a person. Claude Code lets an
+`Elicitation` hook accept a form. In a cloud session, hooks come from the
+committed `.claude/settings.json`, which the agent can edit, so an accepted form
+may be the agent's own answer. A URL-mode elicitation only opens a link: a hook
+that accepts it merely skips the link. The approval then happens on a page
+behind Access, as the person signed in there. No Access OAuth connector is
+needed, and §1's SSE round trip and pending calls go.
+
+- **The offer.**
+  - When a service token calls `change.authorize`, `change.approve`,
+    `change.merge` or `change.close`, the Worker no longer refuses it. It
+    asks the change's `ChangeRun` for a **grant**:
+    - a random one-time token, stored in that Durable Object by its SHA-256;
+    - bound to the operation, the change's current head, and 15 minutes.
+  - The answer is a link, `https://<host>/approve/<n>?grant=<token>`:
+    - when the client's MCP session declared `capabilities.elicitation.url`,
+      it is the URL-elicitation-required error `-32042` (protocol
+      `2025-11-25`), with `data.elicitations: [{ mode: "url", elicitationId,
+      url, message }]`;
+    - otherwise it is a tool result whose text carries the link.
+- **The session.**
+  - `initialize` negotiates `2025-11-25` when the client offers it, and
+    `2025-06-18` otherwise.
+  - It answers with an `Mcp-Session-Id` that encodes the protocol and whether
+    URL elicitation was declared. The ID is HMAC-SHA256-signed with a new
+    Worker secret, `SESSION_KEY`, so the server stays stateless.
+  - An unsigned or tampered ID, or a missing key, means no URL elicitation:
+    the link comes as text.
+- **The page.**
+  - `GET /approve/<n>` shows the operation, title, plan, scope, head SHA,
+    proposer, checks and violations. It is server-rendered with no script,
+    every value escaped, and a Content-Security-Policy of
+    `default-src 'none'`. It has one button.
+  - Only a person's Access identity opens it.
+- **The approval.**
+  - `POST /approve/<n>` must come from the Worker's own origin and from a
+    person.
+  - It redeems the grant once, refused if expired or for another operation.
+  - If the head moved, the grant is spent and refused.
+  - It then runs the operation as that person through `control::route`, so
+    `change.approve` records the grant's head.
+  - `changes.rs` still refuses the proposer, a wrong state or a moved head.
+- **`change.approve`'s `sha` becomes optional.** With it, `cloudflared` calls
+  work as before. Without it:
+  - a person's call approves the change's current head;
+  - a service token's call gets the link.
+- **Claude Code reads servers from `.mcp.json`.** A project `.mcp.json` names
+  the control plane's `/mcp` with no headers; the session's network secrets
+  add Access's. The repository root's layout
+  ([`2026-11-02-development-repository-area-layout.md`](2026-11-02-development-repository-area-layout.md),
+  `.config/policies/layout.yaml`) gains that one file.
+- **Checked live, after the deploy.**
+  - Whether this cloud session shows a card for `-32042` from a project
+    `.mcp.json` server. Claude Code declares URL elicitation for HTTP servers
+    from the user's own MCP configuration; project scope is unconfirmed.
+  - Where no card shows, the link in the tool result is the path.
+- **The owner sets the key** once, with its value from
+  `openssl rand -hex 32` on stdin:
+  `pigeon cobot workers secrets put --root . pigeon-control SESSION_KEY`.

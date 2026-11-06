@@ -281,3 +281,15 @@ pub fn job_stub(env: &Env, class: crate::control::Class, id: &str) -> Result<wor
         .id_from_name(id)?
         .get_stub()
 }
+
+/// `n` random bytes from `WebCrypto`, as hex.
+///
+/// # Errors
+///
+/// When `crypto.getRandomValues` is missing or refuses.
+pub fn random_hex(n: u32) -> Result<String> {
+    let crypto = Reflect::get(&js_sys::global(), &"crypto".into())?;
+    let bytes = Uint8Array::new_with_length(n);
+    method(&crypto, "getRandomValues")?.call1(&crypto, &bytes)?;
+    Ok(crate::grants::hex(&bytes.to_vec()))
+}

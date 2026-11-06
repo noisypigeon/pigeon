@@ -72,8 +72,10 @@ belong in the ADR, never in the file.
   runs survive a stop; a run's root is a D1 bundle; the platform defines rules
   in `catalog/policies/` and an instance invokes them, per
   [`2026-11-05-runtime-control-plane-worker.md`](.claude/decisions/2026-11-05-runtime-control-plane-worker.md).
-- Approvals are to come as permission prompts in Claude (MCP elicitation, the
-  head SHA the server's), images and the Worker to be built on Cloudflare,
+- Approvals are URL elicitations (or a link in the tool result) to an
+  Access-protected `/approve/<n>` page, a one-time grant bound to the
+  operation and head, approved by the signed-in person; images and the Worker
+  to be built on Cloudflare,
   platform state to live in R2, and jobs to run on two Container classes, per
   [`2026-11-06-development-control-plane-approvals-images-state.md`](.claude/decisions/2026-11-06-development-control-plane-approvals-images-state.md).
 - The agent's git goes through the control plane's front door,
