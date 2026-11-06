@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::Arc;
 
-use backplane::changes::BOUND;
+use backplane::changes::{BOUND, MERGE};
 use backplane::control::{JobSpec, Outcome};
 use backplane::jobs::{self, Board};
 use tempfile::TempDir;
@@ -81,6 +81,7 @@ fn spec(remote: &Path, sha: &str, job: &str, scope: &[&str], argv: &[&str]) -> J
         scope: scope.iter().map(|s| (*s).to_string()).collect(),
         job: job.into(),
         argv: argv.iter().map(|s| (*s).to_string()).collect(),
+        approver: None,
     }
 }
 
@@ -186,5 +187,75 @@ fn the_board_runs_a_job_once_and_reports_it() {
     assert_eq!(
         jobs::submit(&board, &serde_json::to_vec(&bad).expect("json")).0,
         400
+    );
+}
+
+#[test]
+fn the_merge_job_squashes_the_checked_tree_onto_main_and_deletes_the_branch() {
+    let tmp = TempDir::new().expect("tempdir");
+    let (bare, sha) = remote(tmp.path(), &["CLAUDE.md"]);
+    let mut s = spec(&bare, &sha, MERGE, &["CLAUDE.md"], &[]);
+    s.approver = Some("owner@example.com".into());
+    let r = jobs::run(&s, &tmp.path().join("m"));
+    assert_eq!(r.outcome, Outcome::Passed, "{}", r.log);
+    let commit = r.merged.expect("merged");
+    assert_eq!(git(&bare, &["rev-parse", "refs/heads/main"]), commit);
+    assert_eq!(
+        git(&bare, &["rev-parse", &format!("{commit}^{{tree}}")]),
+        git(&bare, &["rev-parse", &format!("{sha}^{{tree}}")]),
+        "main holds exactly the checked tree"
+    );
+    let message = git(&bare, &["log", "-1", "--format=%B", &commit]);
+    assert!(message.starts_with("docs: x (!1)\n"), "{message}");
+    assert!(
+        message.contains("Change-Approved-By: owner@example.com"),
+        "{message}"
+    );
+    assert!(
+        message.contains(&format!("Change-Head: {sha}")),
+        "{message}"
+    );
+    assert_eq!(
+        git(&bare, &["rev-list", "--count", "refs/heads/main"]),
+        "2",
+        "one commit on main"
+    );
+    assert_eq!(
+        git(&bare, &["branch", "--list", "change/1-x"]),
+        "",
+        "the branch is gone"
+    );
+}
+
+#[test]
+fn the_merge_job_refuses_when_main_has_moved_past_the_branch() {
+    let tmp = TempDir::new().expect("tempdir");
+    let (bare, sha) = remote(tmp.path(), &["CLAUDE.md"]);
+    let work = tmp.path().join("work");
+    git(&work, &["checkout", "-q", "main"]);
+    std::fs::write(work.join("README.md"), "moved\n").expect("write");
+    git(&work, &["add", "README.md"]);
+    git(&work, &["commit", "-q", "-m", "docs: moved"]);
+    git(&work, &["push", "-q", "origin", "main"]);
+    let main = git(&bare, &["rev-parse", "refs/heads/main"]);
+    let r = jobs::run(
+        &spec(&bare, &sha, MERGE, &["CLAUDE.md"], &[]),
+        &tmp.path().join("m"),
+    );
+    assert_eq!(r.outcome, Outcome::Failed);
+    assert!(
+        r.violations[0].contains("rebase onto main"),
+        "{:?}",
+        r.violations
+    );
+    assert_eq!(
+        git(&bare, &["rev-parse", "refs/heads/main"]),
+        main,
+        "main is untouched"
+    );
+    assert_ne!(
+        git(&bare, &["branch", "--list", "change/1-x"]),
+        "",
+        "the branch stays"
     );
 }

@@ -169,3 +169,85 @@ killed after {} minutes",
     }
     (ok, scrub(&log, secret))
 }
+
+/// Commits `sha`'s tree onto `base`'s head as one commit with `message`, and pushes it to
+/// `remote`'s `base`, then deletes `branch` there; the commit pushed. `base`'s head must be an
+/// ancestor of `sha`, so the commit's tree is exactly the checked one; the push is never
+/// forced, so a `base` that moved since the fetch is refused.
+///
+/// # Errors
+///
+/// [`Error::Git`] when `base` isn't an ancestor of `sha`, or git fails.
+pub fn squash_onto(
+    dir: &Path,
+    remote: &str,
+    token: &str,
+    base: &str,
+    branch: &str,
+    sha: &str,
+    message: &str,
+) -> Result<String, Error> {
+    let on = format!("refs/remotes/origin/{base}");
+    let ancestor = command("", "")
+        .arg("-C")
+        .arg(dir)
+        .args(["merge-base", "--is-ancestor", &on, sha])
+        .status()
+        .map_err(|e| Error::Git {
+            args: "merge-base".into(),
+            message: e.to_string(),
+        })?;
+    if !ancestor.success() {
+        return Err(Error::Git {
+            args: "merge-base --is-ancestor".into(),
+            message: format!("{base} has moved past {branch}'s base; rebase onto {base} and push"),
+        });
+    }
+    let parent = git(dir, "", "", &["rev-parse", &on])?;
+    let tree = format!("{sha}^{{tree}}");
+    let commit = command("", "")
+        .arg("-C")
+        .arg(dir)
+        .args([
+            "-c",
+            "user.name=pigeon",
+            "-c",
+            "user.email=pigeon@users.noreply.pigeon.dev",
+        ])
+        .args(["commit-tree", &tree, "-p", &parent, "-F", "-"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .and_then(|mut c| {
+            if let Some(mut i) = c.stdin.take() {
+                use std::io::Write as _;
+                i.write_all(message.as_bytes())?;
+            }
+            c.wait_with_output()
+        })
+        .map_err(|e| Error::Git {
+            args: "commit-tree".into(),
+            message: e.to_string(),
+        })?;
+    if !commit.status.success() {
+        return Err(Error::Git {
+            args: "commit-tree".into(),
+            message: String::from_utf8_lossy(&commit.stderr).trim().to_string(),
+        });
+    }
+    let new = String::from_utf8_lossy(&commit.stdout).trim().to_string();
+    git(
+        dir,
+        remote,
+        token,
+        &["push", "-q", remote, &format!("{new}:refs/heads/{base}")],
+    )?;
+    git(
+        dir,
+        remote,
+        token,
+        &["push", "-q", remote, &format!(":refs/heads/{branch}")],
+    )?;
+    Ok(new)
+}

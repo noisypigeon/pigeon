@@ -18,7 +18,15 @@ pub fn remote_in(v: &Value) -> Option<String> {
 /// The token-minting body for repository `repo`, read-only, valid for `ttl` seconds.
 #[must_use]
 pub fn read_token_body(repo: &str, ttl: u64) -> Value {
-    serde_json::json!({ "repo": repo, "scope": "read", "ttl": ttl })
+    token_body(repo, false, ttl)
+}
+
+/// The token-minting body for repository `repo`, read-only unless `write`, valid for `ttl`
+/// seconds.
+#[must_use]
+pub fn token_body(repo: &str, write: bool, ttl: u64) -> Value {
+    let scope = if write { "write" } else { "read" };
+    serde_json::json!({ "repo": repo, "scope": scope, "ttl": ttl })
 }
 
 /// Where a token may sit in an answer, by field name.

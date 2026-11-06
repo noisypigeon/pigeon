@@ -12,7 +12,7 @@ use std::sync::{Arc, Mutex};
 
 use serde_json::{Map, Value, json};
 
-use crate::changes::{BOUND, Check};
+use crate::changes::{BOUND, Check, MERGE};
 use crate::control::{JobSpec, Outcome, Report, tail};
 use crate::{Instance, Request, run_with};
 
@@ -64,6 +64,7 @@ impl Board {
             log: String::new(),
             violations: Vec::new(),
             checks: Vec::new(),
+            merged: None,
         };
         self.set(running.clone());
         let board = Arc::clone(self);
@@ -89,6 +90,7 @@ fn report(spec: &JobSpec, outcome: Outcome, log: &str) -> Report {
         log: tail(log).to_string(),
         violations: Vec::new(),
         checks: Vec::new(),
+        merged: None,
     }
 }
 
@@ -112,6 +114,9 @@ pub fn run(spec: &JobSpec, dir: &Path) -> Report {
     if spec.job == BOUND {
         return bound(spec, dir);
     }
+    if spec.job == MERGE {
+        return merge(spec, dir);
+    }
     let workspace = dir.join(cobot::scope::WORKSPACE);
     let (ok, log) = cobot::ci::exec(&workspace, &spec.argv, cobot::ci::TIMEOUT, &spec.token);
     report(
@@ -119,6 +124,39 @@ pub fn run(spec: &JobSpec, dir: &Path) -> Report {
         if ok { Outcome::Passed } else { Outcome::Failed },
         &log,
     )
+}
+
+/// The merge job: the approved head's tree, squashed onto the base as `<title> (!<number>)`.
+fn merge(spec: &JobSpec, dir: &Path) -> Report {
+    let mut message = format!(
+        "{} (!{})\n\n{}\n\n",
+        spec.title,
+        spec.number,
+        spec.plan.trim()
+    );
+    if let Some(by) = &spec.approver {
+        let _ = writeln!(message, "Change-Approved-By: {by}");
+    }
+    let _ = writeln!(message, "Change-Head: {}", spec.sha);
+    match cobot::ci::squash_onto(
+        dir,
+        &spec.remote,
+        &spec.token,
+        &spec.base,
+        &spec.branch,
+        &spec.sha,
+        &message,
+    ) {
+        Ok(commit) => Report {
+            log: format!("merged {} as {commit}\n", spec.sha),
+            merged: Some(commit),
+            ..report(spec, Outcome::Passed, "")
+        },
+        Err(e) => Report {
+            violations: vec![e.to_string()],
+            ..report(spec, Outcome::Failed, &e.to_string())
+        },
+    }
 }
 
 /// The bound job: the change and pull-request policies, with the change's approved scope and
@@ -172,6 +210,7 @@ fn bound(spec: &JobSpec, dir: &Path) -> Report {
         log: tail(&log).to_string(),
         violations,
         checks,
+        merged: None,
     }
 }
 

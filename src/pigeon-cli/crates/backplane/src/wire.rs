@@ -259,6 +259,13 @@ const CATALOG: &[Operation] = &[
         args: &[NUMBER, arg("sha", true, Kind::String)],
     },
     Operation {
+        name: "change.merge",
+        engine: Engine::Backplane,
+        effect: Effect::Apply,
+        summary: "Merge an approved change: its head is squashed onto main as `<title> (!<number>)` and its branch deleted; main must be an ancestor of the head",
+        args: &[NUMBER],
+    },
+    Operation {
         name: "change.close",
         engine: Engine::Backplane,
         effect: Effect::Apply,
