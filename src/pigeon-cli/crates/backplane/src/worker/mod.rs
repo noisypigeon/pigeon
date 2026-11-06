@@ -1,6 +1,6 @@
 //! The control plane's Worker (control-plane ADR §1, §3, §9, §10): every request is verified
 //! with Access, then served as MCP on `/mcp` or the wire form on `/v0/`; changes live in the
-//! `ChangeRun` Durable Object, their jobs in `Checker` Containers, and Artifacts push events
+//! `ChangeRun` Durable Object, their jobs in `Checker` and `Runner` Containers, and Artifacts push events
 //! arrive on a queue; see `.claude/decisions/2026-11-05-development-changes-through-pigeon-mcp.md`.
 #![allow(
     missing_docs,
@@ -19,7 +19,7 @@ use worker::{
 };
 
 pub use change::ChangeRun;
-pub use checker::Checker;
+pub use checker::{Checker, Runner};
 pub use main_run::MainRun;
 use platform::{Settings, json_request, now};
 

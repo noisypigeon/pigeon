@@ -8,7 +8,7 @@ use std::time::Duration;
 use serde_json::{Value, json};
 use worker::{DurableObject, Env, Method, Request, Response, Result, State, durable_object};
 
-use super::platform::{self, checker, json_request, now, secret};
+use super::platform::{self, job_stub, json_request, now, secret};
 use crate::control::{self, Outcome, Pipeline, Report};
 
 const PIPELINE: &str = "pipeline";
@@ -81,7 +81,7 @@ impl MainRun {
         let body = serde_json::to_value(&spec).map_err(|e| e.to_string())?;
         let req = json_request("https://checker/start", Method::Post, Some(&body), None)
             .map_err(|e| e.to_string())?;
-        let mut r = checker(&self.env, &spec.id)
+        let mut r = job_stub(&self.env, control::class_of(control::DEPLOY), &spec.id)
             .map_err(|e| e.to_string())?
             .fetch_with_request(req)
             .await
@@ -97,7 +97,7 @@ impl MainRun {
     /// gone, `None` while it runs or can't be asked.
     async fn poll(&self, sha: &str) -> Result<std::result::Result<Option<Report>, ()>> {
         let id = control::deploy_id(sha);
-        let mut r = checker(&self.env, &id)?
+        let mut r = job_stub(&self.env, control::class_of(control::DEPLOY), &id)?
             .fetch_with_str(&format!("https://checker/status/{id}"))
             .await?;
         Ok(match r.status_code() {
