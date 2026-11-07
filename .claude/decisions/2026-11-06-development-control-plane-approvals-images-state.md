@@ -291,3 +291,16 @@ What it is:
   another pending one; one card at a time narrows that to what the server
   sent. The page, drawn by the Worker, was stronger here. The owner accepts
   the card for its convenience.
+
+### 2026-11-07: The code card works, and the approval website is removed
+
+- **Change 24's plan was approved in the card.** The owner typed their
+  authenticator code into the form, and the call ended with the change
+  `planned` and its approval recorded as `APPROVER`. The form card renders in
+  Claude Code for the project `.mcp.json` server.
+- **The website is removed:** `/approve/<n>`, its page and its grant lookup,
+  together with the URL card that led there.
+- **A client that doesn't declare form elicitation** gets a tool error naming
+  the two ways left: `cloudflared` with a person's Access identity, or a
+  client that shows forms.
+- **Grants stay.** They bind a card's code to one operation, change and head.

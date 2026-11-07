@@ -256,18 +256,6 @@ impl DurableObject for ChangeRun {
                     Err(why) => Response::error(why, 409),
                 }
             }
-            (Method::Post, "peek") => {
-                let Some(change) = existing else {
-                    return Response::error("no such change", 404);
-                };
-                let body: Value = req.json().await?;
-                let token = body["token"].as_str().unwrap_or_default();
-                let grants: Grants = self.load(GRANTS).await?;
-                match grants.peek(token, change.number, now()) {
-                    Ok(grant) => Response::from_json(&json!({ "grant": grant, "change": change })),
-                    Err(why) => Response::error(why, 403),
-                }
-            }
             (Method::Post, "redeem") => {
                 let Some(change) = existing else {
                     return Response::error("no such change", 404);

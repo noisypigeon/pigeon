@@ -1,7 +1,7 @@
 //! pigeon's MCP server: its tools are the catalog's operations (control-plane ADR §10).
 
 use backplane::Error;
-use backplane::mcp::{self, Action, Link, PROTOCOL, PROTOCOL_URL, Session, code};
+use backplane::mcp::{self, Action, PROTOCOL, PROTOCOL_URL, Session, code};
 use backplane::wire::{Response, catalog};
 use serde_json::{Value, json};
 
@@ -85,39 +85,6 @@ fn a_session_id_round_trips_under_its_key_and_nothing_else() {
     for bad in ["", "v1", "v1.x.u", "v1.x.u.zz", "v2.x.u.00"] {
         assert_eq!(mcp::session(bad, key), None, "{bad}");
     }
-}
-
-#[test]
-fn a_link_is_a_url_elicitation_error_or_a_tool_result() {
-    let link = Link {
-        url: "https://host/approve/7?grant=abc".into(),
-        message: "approve change 7".into(),
-        id: "e1".into(),
-    };
-    let url = Session {
-        protocol: PROTOCOL_URL.into(),
-        url_elicitation: true,
-        ..Session::default()
-    };
-    let e = mcp::url_required(&json!(9), &link, &url);
-    assert_eq!(e["id"], 9);
-    assert!(e.get("result").is_none());
-    assert_eq!(e["error"]["code"], -32042);
-    assert_eq!(e["error"]["code"], code::URL_ELICITATION_REQUIRED);
-    assert_eq!(
-        e["error"]["data"]["elicitations"],
-        json!([{ "mode": "url", "elicitationId": "e1", "url": link.url, "message": link.message }])
-    );
-    let r = mcp::url_required(&json!(9), &link, &Session::default());
-    assert!(r.get("error").is_none());
-    assert_eq!(r["result"]["isError"], false);
-    assert!(
-        r["result"]["content"][0]["text"]
-            .as_str()
-            .expect("text")
-            .contains(&link.url)
-    );
-    assert_eq!(r["result"]["structuredContent"]["approval_url"], link.url);
 }
 
 #[test]

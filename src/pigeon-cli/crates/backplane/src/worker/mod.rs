@@ -7,7 +7,6 @@
     reason = "`durable_object` generates undocumented wasm-bindgen items"
 )]
 
-mod approve;
 mod change;
 mod checker;
 mod elicit;
@@ -47,9 +46,6 @@ async fn fetch(mut req: Request, env: Env, _ctx: worker::Context) -> Result<Resp
     if req.path().starts_with("/git/") {
         return gitdoor::serve(req, &env, &settings, &who).await;
     }
-    if req.path().starts_with("/approve/") {
-        return approve::serve(req, &env, &settings, &who).await;
-    }
     match (req.method(), req.path().as_str()) {
         (Method::Post, "/mcp") => {
             let key = platform::secret(&env, "SESSION_KEY").ok();
@@ -59,7 +55,6 @@ async fn fetch(mut req: Request, env: Env, _ctx: worker::Context) -> Result<Resp
                 .zip(key.as_deref())
                 .and_then(|(id, k)| mcp::session(&id, k.as_bytes()))
                 .unwrap_or_default();
-            let host = req.url()?.host_str().unwrap_or_default().to_string();
             let message: Value = match req.json().await {
                 Ok(v) => v,
                 Err(_) => {
@@ -86,7 +81,7 @@ async fn fetch(mut req: Request, env: Env, _ctx: worker::Context) -> Result<Resp
                 Action::Answer { id, result } => elicit::answer(&env, &id, &result).await,
                 Action::Call { id, request } => {
                     if !who.human && grants::OPERATIONS.contains(&request.operation.as_str()) {
-                        return offer(&env, &settings, &host, &session, &id, &request).await;
+                        return offer(&env, &session, &id, &request).await;
                     }
                     let outcome = run(&env, &settings, &who, &request).await;
                     Response::from_json(&mcp::answer(&id, outcome))
@@ -105,12 +100,10 @@ async fn fetch(mut req: Request, env: Env, _ctx: worker::Context) -> Result<Resp
     }
 }
 
-/// A service token's call of an owner's operation: a card asking for the owner's code when
-/// the client shows forms, else a link to the approval page.
+/// A service token's call of an owner's operation: a card asking for the owner's code, when
+/// the client shows forms.
 async fn offer(
     env: &Env,
-    settings: &Settings,
-    host: &str,
     session: &mcp::Session,
     id: &Value,
     request: &wire::Request,
@@ -131,10 +124,9 @@ async fn offer(
             Err(why) => refused(why),
         };
     }
-    match approve::offer(env, settings, host, number, &request.operation).await {
-        Ok(link) => Response::from_json(&mcp::url_required(id, &link, session)),
-        Err(why) => refused(why),
-    }
+    refused(
+        "this client doesn't show forms, so it can't ask for the owner's code; approve with cloudflared, or reconnect a client that shows forms".into(),
+    )
 }
 
 fn change_stub(env: &Env, repo: &str, number: u32) -> Result<worker::Stub> {

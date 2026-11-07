@@ -31,8 +31,6 @@ pub mod code {
     pub const METHOD_NOT_FOUND: i64 = -32601;
     /// Bad parameters, or an unknown tool.
     pub const INVALID_PARAMS: i64 = -32602;
-    /// The call needs the user to open a URL first.
-    pub const URL_ELICITATION_REQUIRED: i64 = -32042;
 }
 
 /// What a client declared at `initialize`, carried in its session ID.
@@ -240,7 +238,7 @@ pub fn parse(message: &Value, version: &str) -> Action {
                         "protocolVersion": session.protocol,
                         "capabilities": { "tools": { "listChanged": false } },
                         "serverInfo": { "name": "pigeon", "version": version },
-                        "instructions": "pigeon's control plane. Propose a change, push its branch, read its status; the owner approves, from a link this server offers.",
+                        "instructions": "pigeon's control plane. Propose a change, push its branch, read its status; the owner approves in the card this server shows, with their authenticator code.",
                     }),
                 ),
                 session,
@@ -310,51 +308,6 @@ pub fn answer(id: &Value, outcome: Result<Response, Error>) -> Value {
             }),
         ),
     }
-}
-
-/// A link a person opens to approve: its URL, what it asks, and an ID for the elicitation.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Link {
-    /// The page.
-    pub url: String,
-    /// What the person is asked.
-    pub message: String,
-    /// The elicitation's ID.
-    pub id: String,
-}
-
-/// The answer to a call that needs `link` opened: the `-32042` URL-elicitation-required error
-/// when the session shows URL elicitations, or else a tool result whose text carries the link.
-#[must_use]
-pub fn url_required(id: &Value, link: &Link, session: &Session) -> Value {
-    if session.url_elicitation {
-        return json!({
-            "jsonrpc": "2.0",
-            "id": id,
-            "error": {
-                "code": code::URL_ELICITATION_REQUIRED,
-                "message": "This needs the owner's approval, on the page linked.",
-                "data": { "elicitations": [{
-                    "mode": "url",
-                    "elicitationId": link.id,
-                    "url": link.url,
-                    "message": link.message,
-                }] },
-            },
-        });
-    }
-    let text = format!(
-        "{}\nOnly a person signed in to Access approves. Open this link to review and approve:\n{}",
-        link.message, link.url
-    );
-    result(
-        id,
-        &json!({
-            "content": [{ "type": "text", "text": text }],
-            "structuredContent": { "approval_url": link.url, "message": link.message },
-            "isError": false,
-        }),
-    )
 }
 
 /// The `elicitation/create` request asking for a form: `message` above `schema`'s fields.

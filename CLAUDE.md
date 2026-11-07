@@ -74,8 +74,8 @@ belong in the ADR, never in the file.
   [`2026-11-05-runtime-control-plane-worker.md`](.claude/decisions/2026-11-05-runtime-control-plane-worker.md).
 - Approvals are made in the Claude card: a form asking for the owner's
   authenticator code (TOTP, `pigeon backplane totp-secret`), bound to one
-  grant of the operation and head; clients without forms get a URL card to an
-  Access-protected `/approve/<n>` page; images and the Worker
+  grant of the operation and head; there is no approval website, and a client
+  without forms approves with `cloudflared`; images and the Worker
   to be built on Cloudflare,
   platform state to live in R2, and jobs to run on two Container classes, per
   [`2026-11-06-development-control-plane-approvals-images-state.md`](.claude/decisions/2026-11-06-development-control-plane-approvals-images-state.md).

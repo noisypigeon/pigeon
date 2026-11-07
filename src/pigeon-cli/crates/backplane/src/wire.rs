@@ -258,7 +258,7 @@ const CATALOG: &[Operation] = &[
         name: "change.approve",
         engine: Engine::Backplane,
         effect: Effect::Apply,
-        summary: "Approve a checked change's head for merge (sha?: the head; a person's call without it approves the current head, and a service token's call offers the owner a link); never by its proposer",
+        summary: "Approve a checked change's head for merge (sha?: the head; a person's call without it approves the current head, and a service token's call asks the owner for their code in the card); never by its proposer",
         args: &[NUMBER, arg("sha", false, Kind::String)],
     },
     Operation {
