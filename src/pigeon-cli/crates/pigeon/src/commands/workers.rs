@@ -9,7 +9,7 @@ use cobot::session::Session;
 use cobot::workers::{self, Found, Tools};
 use serde_json::{Map, Value};
 
-use crate::cli::{WorkersAt, WorkersCommand, WorkersImages, WorkersSecrets, WorkersState};
+use crate::cli::{ImagesPush, WorkersCommand, WorkersImages, WorkersSecrets, WorkersState};
 
 /// Runs a `pigeon cobot workers` command.
 ///
@@ -89,7 +89,7 @@ pub fn run(command: WorkersCommand) -> Result<(), cobot::Error> {
             );
             Ok(())
         }
-        WorkersCommand::Images(WorkersImages::Push(at)) => images_push(&at),
+        WorkersCommand::Images(WorkersImages::Push(p)) => images_push(&p),
         WorkersCommand::Teardown(o) => {
             let f = one(&o.root, &o.name)?;
             for d in workers::teardown(&f, &tools()?, &o.root)? {
@@ -109,6 +109,11 @@ fn one(root: &Path, name: &str) -> Result<Found, cobot::Error> {
 
 /// wrangler and docker, with the run's account; the token and account are scrubbed from output.
 fn tools() -> Result<Tools, cobot::Error> {
+    Ok(account_tools()?.0)
+}
+
+/// As [`tools`], with the API and the account they run against.
+fn account_tools() -> Result<(Tools, cobot::cloudflare::Api, String), cobot::Error> {
     let token = cobot::cloudflare::token(
         env::var(cobot::CREDENTIALS_VAR).ok().as_deref(),
         env::var(cobot::cloudflare::TOKEN_VAR).ok(),
@@ -131,11 +136,11 @@ fn tools() -> Result<Tools, cobot::Error> {
     );
     let mut t = Tools::from(|k| env::var(k).ok());
     t.env = vec![
-        ("CLOUDFLARE_ACCOUNT_ID".into(), account),
+        ("CLOUDFLARE_ACCOUNT_ID".into(), account.clone()),
         (cobot::cloudflare::TOKEN_VAR.into(), token.clone()),
     ];
     t.secrets.push(token);
-    Ok(t)
+    Ok((t, api, account))
 }
 
 /// Each selected Worker, checked, the state's session, and the outputs their references name.
@@ -191,34 +196,55 @@ fn rendered(s: &WorkersState) -> Result<(Session, Vec<(Found, Value)>), cobot::E
     Ok((session, all))
 }
 
-/// Builds and pushes each selected Worker's images, tagged with the checkout's commit; prints
-/// the references as JSON.
-fn images_push(at: &WorkersAt) -> Result<(), cobot::Error> {
-    let source = std::process::Command::new("git")
-        .args(["rev-parse", "HEAD"])
-        .current_dir(&at.root)
+/// `git <args>` in `root`; its trimmed output, or none when it fails.
+fn git(root: &Path, args: &[&str]) -> Option<String> {
+    std::process::Command::new("git")
+        .args(args)
+        .current_dir(root)
         .output()
         .ok()
         .filter(|o| o.status.success())
         .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
-        .ok_or_else(|| cobot::Error::Tool {
-            command: "git rev-parse HEAD".into(),
-            message: "the root is not a git checkout".into(),
-        })?;
-    let tools = tools()?;
-    let account = tools
-        .env
-        .iter()
-        .find(|(k, _)| k == "CLOUDFLARE_ACCOUNT_ID")
-        .map(|(_, v)| v.clone())
-        .unwrap_or_default();
+}
+
+/// Builds and pushes each selected Worker's images, tagged with the checkout's commit, which
+/// must be clean; prints the references as JSON. See
+/// `.claude/decisions/2026-11-07-development-job-images-on-cloudflare.md` §1.
+fn images_push(p: &ImagesPush) -> Result<(), cobot::Error> {
+    let root = &p.at.root;
+    let refused = |message: String| cobot::Error::Tool {
+        command: "images push".into(),
+        message,
+    };
+    let source = git(root, &["rev-parse", "HEAD"])
+        .ok_or_else(|| refused("the root is not a git checkout".into()))?;
+    let dirty = git(root, &["status", "--porcelain", "--untracked-files=no"]).unwrap_or_default();
+    if !dirty.is_empty() {
+        return Err(refused(format!(
+            "the checkout has uncommitted changes, so the images wouldn't match commit {}:\n{dirty}",
+            &source[..12]
+        )));
+    }
+    let on_main = git(root, &["branch", "-r", "--contains", "HEAD"])
+        .unwrap_or_default()
+        .lines()
+        .any(|l| l.trim().ends_with("/main"));
+    if !on_main {
+        eprintln!(
+            "cobot: warning: {} is on no fetched main; a deploy can't diff from a commit outside main's history, so push from a fetched main",
+            &source[..12]
+        );
+    }
+    let (tools, api, account) = account_tools()?;
     let tag = source.chars().take(12).collect::<String>();
     let mut images = cobot::ship::Images {
         source,
         images: BTreeMap::new(),
     };
-    for f in workers::select(&at.root, &at.names)? {
-        for (k, v) in workers::push_images(&at.root, &f, &tag, &account, &tools)? {
+    for f in workers::select(root, &p.at.names)? {
+        let pushed =
+            workers::push_images(root, &f, &tag, &account, &api, p.expiration_minutes, &tools)?;
+        for (k, v) in pushed {
             eprintln!("cobot: pushed {k}");
             images.images.insert(k, v);
         }

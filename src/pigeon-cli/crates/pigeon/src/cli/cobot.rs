@@ -204,9 +204,21 @@ pub enum WorkersCommand {
 /// `pigeon cobot workers images` commands.
 #[derive(Subcommand, Debug)]
 pub enum WorkersImages {
-    /// Build each container's image with Docker and push it to Cloudflare's registry; print
-    /// their references as JSON, for `secrets put <worker> DEPLOY_IMAGES`
-    Push(WorkersAt),
+    /// Build each container's image with Docker and push it to Cloudflare's registry, logged in
+    /// for as long as the push takes; print their references as JSON, for
+    /// `secrets put <worker> DEPLOY_IMAGES`
+    Push(ImagesPush),
+}
+
+/// `pigeon cobot workers images push` arguments.
+#[derive(Args, Debug)]
+pub struct ImagesPush {
+    /// Workers, and the root
+    #[command(flatten)]
+    pub at: WorkersAt,
+    /// How long the registry login lasts, in minutes
+    #[arg(long, default_value_t = cobot::workers::LOGIN_MINUTES)]
+    pub expiration_minutes: u32,
 }
 
 /// The repository root, and Workers by name [default: every one].

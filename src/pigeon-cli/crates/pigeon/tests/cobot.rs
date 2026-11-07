@@ -184,3 +184,30 @@ fn a_worker_secret_is_never_set_empty() {
             "no value on stdin; DEPLOY_IMAGES is unchanged",
         ));
 }
+
+#[test]
+fn images_push_refuses_uncommitted_changes() {
+    let root = TempDir::new().expect("tempdir");
+    let git = |args: &[&str]| {
+        let ok = std::process::Command::new("git")
+            .args(["-c", "user.email=t@example.com", "-c", "user.name=t"])
+            .args(args)
+            .current_dir(root.path())
+            .status()
+            .expect("git")
+            .success();
+        assert!(ok, "git {args:?}");
+    };
+    git(&["init", "-q"]);
+    std::fs::write(root.path().join("Dockerfile"), "FROM scratch\n").expect("write");
+    git(&["add", "Dockerfile"]);
+    git(&["commit", "-q", "-m", "init"]);
+    std::fs::write(root.path().join("Dockerfile"), "FROM scratch AS ci\n").expect("write");
+    cobot()
+        .args(["workers", "images", "push", "--root"])
+        .arg(root.path())
+        .env_remove("CLOUDFLARE_API_TOKEN")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("uncommitted changes"));
+}

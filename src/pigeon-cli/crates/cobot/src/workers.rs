@@ -1211,34 +1211,83 @@ pub fn wrangler_deploy(found: &Found, dir: &Path, tools: &Tools) -> Result<Strin
     Ok(format!("{} deployed", found.spec.name))
 }
 
-/// Builds each of `found`'s container images and pushes it to Cloudflare's registry as
-/// `<worker>-<class>:<tag>`; each image's registry reference, keyed as [`image_key`].
+/// Cloudflare's container registry.
+pub const REGISTRY: &str = "registry.cloudflare.com";
+
+/// How long `images push` logs in to the registry for, by default: longer than a slow upload
+/// of a large image; see `.claude/decisions/2026-11-07-development-job-images-on-cloudflare.md` §1.
+pub const LOGIN_MINUTES: u32 = 240;
+
+/// Registry credentials with push and pull, valid `minutes`, minted with `api`'s token: the
+/// username and password `docker login` takes.
 ///
 /// # Errors
 ///
-/// [`Error::Tool`] when Docker or wrangler fails.
+/// A message naming the call that failed, never the password.
+pub fn registry_credentials(
+    api: &crate::cloudflare::Api,
+    account: &str,
+    minutes: u32,
+) -> Result<(String, String), String> {
+    let v = api.post(
+        &format!("/accounts/{account}/containers/registries/{REGISTRY}/credentials"),
+        &json!({ "expiration_minutes": minutes, "permissions": ["push", "pull"] }),
+    )?;
+    match (v["username"].as_str(), v["password"].as_str()) {
+        (Some(u), Some(p)) if !p.is_empty() => Ok((u.to_string(), p.to_string())),
+        _ => Err("the registry's credentials answer has no username and password".into()),
+    }
+}
+
+/// Builds each of `found`'s container images, logs Docker in to Cloudflare's registry for
+/// `minutes`, and pushes each as `<worker>-<class>:<tag>`; each image's registry reference,
+/// keyed as [`image_key`]. The password reaches Docker on stdin only and is scrubbed from every
+/// output; Docker is logged out after, whatever happened.
+///
+/// # Errors
+///
+/// [`Error::Tool`] when Docker or the registry's API fails.
 pub fn push_images(
     root: &Path,
     found: &Found,
     tag: &str,
     account: &str,
+    api: &crate::cloudflare::Api,
+    minutes: u32,
     tools: &Tools,
 ) -> Result<BTreeMap<String, String>, Error> {
     let local = |class: &str| format!("{}-{}:{tag}", found.spec.name, class.to_ascii_lowercase());
     build_images(root, found, &local, tools)?;
-    let mut out = BTreeMap::new();
-    for c in &found.spec.containers {
-        // wrangler's output is scrubbed of the account, so the reference is built, not read.
-        tools.run(
-            &tools.wrangler,
-            &strings(&["containers", "push", &local(&c.class)]),
-            root,
-            None,
-        )?;
-        let pushed = format!("registry.cloudflare.com/{account}/{}", local(&c.class));
-        out.insert(image_key(&found.spec, &c.class), pushed);
-    }
-    Ok(out)
+    let (user, password) =
+        registry_credentials(api, account, minutes).map_err(|message| Error::Tool {
+            command: "registry credentials".into(),
+            message,
+        })?;
+    let mut tools = tools.clone();
+    tools.secrets.push(password.clone());
+    tools.run(
+        &tools.docker,
+        &strings(&["login", REGISTRY, "--username", &user, "--password-stdin"]),
+        root,
+        Some(&password),
+    )?;
+    let pushed = (|| {
+        let mut out = BTreeMap::new();
+        for c in &found.spec.containers {
+            let remote = format!("{REGISTRY}/{account}/{}", local(&c.class));
+            tools.run(
+                &tools.docker,
+                &strings(&["tag", &local(&c.class), &remote]),
+                root,
+                None,
+            )?;
+            tools.run(&tools.docker, &strings(&["push", &remote]), root, None)?;
+            out.insert(image_key(&found.spec, &c.class), remote);
+        }
+        Ok::<_, Error>(out)
+    })();
+    let _ = tools.run(&tools.docker, &strings(&["logout", REGISTRY]), root, None);
+    pushed
 }
 
 /// The spec's secrets that the deployed Worker lacks.

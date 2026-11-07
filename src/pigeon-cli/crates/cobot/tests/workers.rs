@@ -412,3 +412,128 @@ fn a_binding_named_like_a_durable_object_is_refused() {
         "{got:?}"
     );
 }
+
+/// A Cloudflare API that answers every request with registry credentials.
+fn registry_api() -> String {
+    use std::io::{BufRead, BufReader, Write};
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind");
+    let addr = listener.local_addr().expect("addr");
+    std::thread::spawn(move || {
+        for stream in listener.incoming().flatten() {
+            let mut reader = BufReader::new(stream.try_clone().expect("clone"));
+            let mut line = String::new();
+            reader.read_line(&mut line).expect("request line");
+            let mut length = 0;
+            loop {
+                let mut h = String::new();
+                reader.read_line(&mut h).expect("header");
+                let h = h.trim_end().to_ascii_lowercase();
+                if h.is_empty() {
+                    break;
+                }
+                if let Some(v) = h.strip_prefix("content-length:") {
+                    length = v.trim().parse().unwrap_or(0);
+                }
+            }
+            let mut body = vec![0; length];
+            std::io::Read::read_exact(&mut reader, &mut body).expect("body");
+            let body: Value = serde_json::from_slice(&body).unwrap_or(Value::Null);
+            let ok = line.starts_with("POST ")
+                && line.contains("/containers/registries/registry.cloudflare.com/credentials")
+                && body["expiration_minutes"] == 240
+                && body["permissions"] == json!(["push", "pull"]);
+            let answer = if ok {
+                json!({ "success": true, "result": { "username": "v1", "password": "registry-password-0123" } })
+            } else {
+                json!({ "success": false, "errors": [{ "message": "unexpected request" }] })
+            };
+            let text = answer.to_string();
+            let mut s = stream;
+            let _ = write!(
+                s,
+                "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{text}",
+                text.len()
+            );
+        }
+    });
+    format!("http://{addr}")
+}
+
+#[test]
+fn images_push_logs_in_with_minted_credentials_on_stdin_and_logs_out() {
+    let root = fixture(SPEC);
+    let f = found(root.path());
+    let log = root.path().join("log");
+    let mut t = tools(root.path(), &log);
+    let docker = root.path().join("docker");
+    fs::write(
+        &docker,
+        format!(
+            "#!/bin/sh\necho \"docker $*\" >> \"{log}\"\ncase \"$1\" in login) echo \"stdin: $(cat)\" >> \"{log}\";; esac\ncase \"$*\" in *fail*) exit 1;; esac\n",
+            log = log.display()
+        ),
+    )
+    .expect("write");
+    fs::set_permissions(&docker, fs::Permissions::from_mode(0o755)).expect("chmod");
+    t.docker = docker;
+    let api = cobot::cloudflare::Api::new(Some(&registry_api()), "token-0123456789".into());
+    let images =
+        workers::push_images(root.path(), &f, "abc123", ACCOUNT, &api, 240, &t).expect("pushes");
+    let remote = format!("registry.cloudflare.com/{ACCOUNT}/pigeon-control-runner:abc123");
+    assert_eq!(images["pigeon-control/Runner"], remote);
+    let log = fs::read_to_string(&log).expect("log");
+    let lines: Vec<&str> = log.lines().collect();
+    let at = |prefix: &str| {
+        lines
+            .iter()
+            .position(|l| l.starts_with(prefix))
+            .unwrap_or_else(|| panic!("no `{prefix}` in {log}"))
+    };
+    assert!(
+        at("docker build")
+            < at("docker login registry.cloudflare.com --username v1 --password-stdin")
+    );
+    assert_eq!(
+        lines[at("docker login") + 1],
+        "stdin: registry-password-0123"
+    );
+    assert!(at("docker login") < at(&format!("docker tag pigeon-control-runner:abc123 {remote}")));
+    assert!(at("docker tag") < at(&format!("docker push {remote}")));
+    assert!(at("docker push") < at("docker logout registry.cloudflare.com"));
+    assert!(
+        !log.lines()
+            .filter(|l| l.starts_with("docker "))
+            .any(|l| l.contains("registry-password")),
+        "the password is never in argv"
+    );
+}
+
+#[test]
+fn a_failed_push_still_logs_out_and_never_shows_the_password() {
+    let root = fixture(SPEC);
+    let f = found(root.path());
+    let log = root.path().join("log");
+    let mut t = tools(root.path(), &log);
+    let docker = root.path().join("docker");
+    fs::write(
+        &docker,
+        format!(
+            "#!/bin/sh\necho \"docker $*\" >> \"{log}\"\ncase \"$1\" in login) cat >/dev/null;; push) echo \"denied for registry-password-0123\" >&2; exit 1;; esac\n",
+            log = log.display()
+        ),
+    )
+    .expect("write");
+    fs::set_permissions(&docker, fs::Permissions::from_mode(0o755)).expect("chmod");
+    t.docker = docker;
+    let api = cobot::cloudflare::Api::new(Some(&registry_api()), "token-0123456789".into());
+    let e = workers::push_images(root.path(), &f, "abc123", ACCOUNT, &api, 240, &t)
+        .expect_err("the push fails");
+    assert!(!e.to_string().contains("registry-password"), "{e}");
+    let log = fs::read_to_string(&log).expect("log");
+    assert!(
+        log.lines()
+            .last()
+            .is_some_and(|l| l == "docker logout registry.cloudflare.com"),
+        "{log}"
+    );
+}
