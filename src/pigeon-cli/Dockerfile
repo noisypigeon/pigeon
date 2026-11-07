@@ -50,6 +50,20 @@ ENTRYPOINT ["/usr/local/bin/pigeon"]
 # Backplane runs cobot, so it needs cobot's tools.
 FROM cobot AS backplane
 
+# The workspace's manifests and lockfile with empty sources: the input of the ci stage's warm
+# layer, unchanged unless a manifest or Cargo.lock is
+# (.claude/decisions/2026-11-07-development-job-images-on-cloudflare.md §2).
+FROM docker.io/library/debian:bookworm-20261005-slim@sha256:7c7b2c966bc9ee8cedfeef67e0e279108992c77681fa595db4a9d65c06ccc587 AS recipe
+WORKDIR /src
+COPY . .
+RUN mkdir /recipe \
+ && cp Cargo.toml Cargo.lock /recipe/ \
+ && for m in crates/*/Cargo.toml; do \
+      d="$(dirname "$m")"; mkdir -p "/recipe/$d/src"; cp "$m" "/recipe/$d/"; \
+      if [ -f "$d/src/lib.rs" ]; then : > "/recipe/$d/src/lib.rs"; fi; \
+      if [ -f "$d/src/main.rs" ]; then echo 'fn main() {}' > "/recipe/$d/src/main.rs"; fi; \
+    done
+
 # A change's jobs run here (lifecycle ADR §4): the toolchain mise.toml pins, git, cobot's
 # tools, and the workspace's dependencies already compiled, so a job builds only the crates
 # it touches. Build with `--build-arg FEATURES=backplane`.
@@ -77,17 +91,24 @@ COPY --from=build /src/target/release/pigeon /usr/local/bin/pigeon
 # test binaries need far more memory and the cache far more space.
 ENV CARGO_HOME=/cache/cargo CARGO_TARGET_DIR=/cache/target HOME=/tmp \
     CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0
-# How many crates the warm-up compiles and links at once; lower it if a builder runs out of memory.
+# How many crates the warm-up compiles at once; lower it if a builder runs out of memory.
 ARG WARM_JOBS=2
+COPY pigeon-start /usr/local/bin/pigeon-start
+# Only third-party dependencies are warmed, from the recipe, so this layer changes only with
+# them; the stubs' own artifacts are removed (job images ADR §2).
 WORKDIR /warm
-COPY . src/pigeon-cli
+COPY --from=recipe /recipe src/pigeon-cli
 RUN export CARGO_BUILD_JOBS="$WARM_JOBS" \
  && cd src/pigeon-cli \
+ && members="$(awk '/^\[package\]/{p=1;next} /^\[/{p=0} p && /^name = /{gsub(/"/,"",$3); printf "-p %s ", $3}' crates/*/Cargo.toml)" \
  && cargo fetch --locked \
+ && cargo build --workspace --all-targets --locked \
  && cargo clippy --workspace --all-targets --locked \
- && cargo test --workspace --locked --no-run \
- && cargo clippy -p cobot -p pigeon-backplane --lib --locked --no-default-features --features worker --target wasm32-unknown-unknown \
- && (cd crates/backplane && worker-build --release --no-default-features --features worker) \
+ && cargo build --release --locked -p pigeon --no-default-features --features backplane \
+ && cargo build --release --locked -p pigeon-backplane --lib --no-default-features --features worker --target wasm32-unknown-unknown \
+ && cargo clean $members \
+ && cargo clean --release $members \
+ && cargo clean --release --target wasm32-unknown-unknown $members \
  && cd / && rm -rf /warm \
  && mkdir -p /tmp/.cache \
  && chown -R 65532:65532 /cache /tmp/.cache

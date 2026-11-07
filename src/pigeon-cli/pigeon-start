@@ -1,0 +1,20 @@
+#!/bin/sh
+# A job Container's entrypoint: runs main's newest pigeon build when the Worker names one and
+# its SHA-256 matches, else the image's own; see
+# .claude/decisions/2026-11-07-development-job-images-on-cloudflare.md §3.
+set -u
+baked=/usr/local/bin/pigeon
+if [ -n "${PIGEON_BUILD_URL:-}" ] && [ -n "${PIGEON_BUILD_SHA256:-}" ]; then
+  build="${TMPDIR:-/tmp}/pigeon-build"
+  if curl -fsSL --retry 3 --max-time 120 -o "$build" "$PIGEON_BUILD_URL" \
+    && printf '%s  %s\n' "$PIGEON_BUILD_SHA256" "$build" | sha256sum -c - >/dev/null 2>&1; then
+    chmod +x "$build"
+    echo "pigeon-start: running build $PIGEON_BUILD_SHA256" >&2
+    exec "$build" "$@"
+  fi
+  echo "pigeon-start: the build at $PIGEON_BUILD_URL is missing or its checksum differs; running the image's pigeon" >&2
+  rm -f "$build"
+else
+  echo "pigeon-start: no build named; running the image's pigeon" >&2
+fi
+exec "$baked" "$@"
