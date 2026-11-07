@@ -239,3 +239,26 @@ Each step is its own change, in this order:
   and `control.rs`, which still block a deploy until it is deployed. Its deploy
   then runs the image's older `pigeon`, which builds nothing, so the first build
   comes with the next merge that changes `src/pigeon-cli/`.
+
+### 2026-11-07: The BuildKit spike runs as a check
+
+- **A spike is a check, not a new operation.** `cobot::scope` runs
+  `tooling/spikes/<name>/run.sh` as the check `spike <name>` for a change
+  touching it. It runs on `Checker`, from the workspace, with no credentials,
+  like any check.
+- **A spike change is read, then closed, never merged.** Its script prints a
+  report and exits non-zero, so the report shows in `change_status`. An
+  amendment records the result.
+- **The first spike only builds, and doesn't push.** It answers the questions
+  a push depends on:
+  - whether a Container can run BuildKit at all (its user, user namespaces,
+    `newuidmap`, overlay);
+  - whether the `ci` target builds;
+  - how long that takes, and the disk it needs.
+
+  Pushing waits for a build that works, and then needs registry credentials
+  a check never gets.
+- **BuildKit and RootlessKit come from their GitHub releases,** pinned by
+  version and SHA-256. RootlessKit's matches its published `SHA256SUMS`;
+  BuildKit publishes none, so its pin is the checksum measured when it was
+  pinned.

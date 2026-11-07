@@ -217,3 +217,32 @@ fn workers_deploy_when_their_spec_crates_or_migrations_change() {
     }
     assert_eq!(workers(None), control);
 }
+
+#[test]
+fn a_spike_runs_as_its_own_check() {
+    let files: Vec<String> = [
+        "tooling/spikes/buildkit/run.sh",
+        "tooling/spikes/buildkit/README.md",
+        "tooling/spikes/Bad_Name/run.sh",
+        "tooling/README.md",
+    ]
+    .iter()
+    .map(|f| (*f).to_string())
+    .collect();
+    let jobs = jobs(&repo_root(), &files).expect("scopes");
+    let spikes: Vec<&Job> = jobs
+        .iter()
+        .filter(|j| j.name.starts_with("spike "))
+        .collect();
+    assert_eq!(spikes.len(), 1, "one check per well-named spike");
+    assert_eq!(spikes[0].name, "spike buildkit");
+    assert_eq!(
+        spikes[0].argv,
+        ["sh", "../../tooling/spikes/buildkit/run.sh"]
+    );
+    assert_eq!(
+        names(&["tooling/README.md"]),
+        ["policy.check"],
+        "other tooling runs no spike"
+    );
+}

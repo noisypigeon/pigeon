@@ -419,11 +419,37 @@ pub fn jobs(root: &Path, files: &[String]) -> Result<Vec<Job>, Error> {
             argv: pigeon(&["backplane", "run", "sites.build", "--root", "../.."]),
         });
     }
+    out.extend(spikes(&files));
     out.push(Job {
         name: "policy.check".into(),
         argv: pigeon(&["backplane", "run", "policy.check", "--root", "../.."]),
     });
     Ok(out)
+}
+
+/// Where spikes live: `tooling/spikes/<name>/run.sh`, run as a check with no credentials; see
+/// `.claude/decisions/2026-11-07-development-job-images-on-cloudflare.md` §4.
+pub const SPIKES: &str = "tooling/spikes/";
+
+/// One `spike <name>` check per spike a change touches, running its `run.sh` from the workspace.
+fn spikes(files: &[&str]) -> Vec<Job> {
+    let names: BTreeSet<&str> = files
+        .iter()
+        .filter_map(|f| f.strip_prefix(SPIKES)?.split_once('/'))
+        .map(|(name, _)| name)
+        .filter(|n| {
+            !n.is_empty()
+                && n.bytes()
+                    .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+        })
+        .collect();
+    names
+        .into_iter()
+        .map(|n| Job {
+            name: format!("spike {n}"),
+            argv: vec!["sh".into(), format!("../../{SPIKES}{n}/run.sh")],
+        })
+        .collect()
 }
 
 fn git_lines(root: &Path, args: &[&str]) -> Result<Vec<String>, Error> {
