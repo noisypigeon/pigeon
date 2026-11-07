@@ -1239,10 +1239,18 @@ pub fn registry_credentials(
     }
 }
 
+/// The waits before each retry of a failed `docker push`; a retry skips the layers already
+/// pushed.
+pub const PUSH_WAITS: [std::time::Duration; 2] = [
+    std::time::Duration::from_secs(10),
+    std::time::Duration::from_secs(30),
+];
+
 /// Builds each of `found`'s container images, logs Docker in to Cloudflare's registry for
-/// `minutes`, and pushes each as `<worker>-<class>:<tag>`; each image's registry reference,
-/// keyed as [`image_key`]. The password reaches Docker on stdin only and is scrubbed from every
-/// output; Docker is logged out after, whatever happened.
+/// `minutes`, and pushes each as `<worker>-<class>:<tag>`, retrying a failed push after each of
+/// [`PUSH_WAITS`]; each image's registry reference, keyed as [`image_key`]. The password reaches
+/// Docker on stdin only and is scrubbed from every output; Docker is logged out after, whatever
+/// happened.
 ///
 /// # Errors
 ///
@@ -1255,6 +1263,25 @@ pub fn push_images(
     api: &crate::cloudflare::Api,
     minutes: u32,
     tools: &Tools,
+) -> Result<BTreeMap<String, String>, Error> {
+    push_images_waiting(root, found, tag, account, api, minutes, tools, &PUSH_WAITS)
+}
+
+/// [`push_images`], waiting `waits` before each retry of a failed push.
+///
+/// # Errors
+///
+/// As [`push_images`].
+#[allow(clippy::too_many_arguments)]
+pub fn push_images_waiting(
+    root: &Path,
+    found: &Found,
+    tag: &str,
+    account: &str,
+    api: &crate::cloudflare::Api,
+    minutes: u32,
+    tools: &Tools,
+    waits: &[std::time::Duration],
 ) -> Result<BTreeMap<String, String>, Error> {
     let local = |class: &str| format!("{}-{}:{tag}", found.spec.name, class.to_ascii_lowercase());
     build_images(root, found, &local, tools)?;
@@ -1281,7 +1308,23 @@ pub fn push_images(
                 root,
                 None,
             )?;
-            tools.run(&tools.docker, &strings(&["push", &remote]), root, None)?;
+            let mut waits = waits.iter();
+            loop {
+                match tools.run(&tools.docker, &strings(&["push", &remote]), root, None) {
+                    Ok(_) => break,
+                    Err(e) => {
+                        let Some(wait) = waits.next() else {
+                            return Err(e);
+                        };
+                        eprintln!(
+                            "cobot: the push of {} failed; retrying in {}s: {e}",
+                            local(&c.class),
+                            wait.as_secs()
+                        );
+                        std::thread::sleep(*wait);
+                    }
+                }
+            }
             out.insert(image_key(&found.spec, &c.class), remote);
         }
         Ok::<_, Error>(out)

@@ -526,14 +526,69 @@ fn a_failed_push_still_logs_out_and_never_shows_the_password() {
     fs::set_permissions(&docker, fs::Permissions::from_mode(0o755)).expect("chmod");
     t.docker = docker;
     let api = cobot::cloudflare::Api::new(Some(&registry_api()), "token-0123456789".into());
-    let e = workers::push_images(root.path(), &f, "abc123", ACCOUNT, &api, 240, &t)
+    let waits = [std::time::Duration::ZERO; 2];
+    let e = workers::push_images_waiting(root.path(), &f, "abc123", ACCOUNT, &api, 240, &t, &waits)
         .expect_err("the push fails");
     assert!(!e.to_string().contains("registry-password"), "{e}");
     let log = fs::read_to_string(&log).expect("log");
+    assert_eq!(
+        log.lines().filter(|l| l.starts_with("docker push")).count(),
+        3,
+        "tried three times: {log}"
+    );
     assert!(
         log.lines()
             .last()
             .is_some_and(|l| l == "docker logout registry.cloudflare.com"),
         "{log}"
     );
+}
+
+#[test]
+fn a_dropped_push_is_retried_and_succeeds() {
+    let root = fixture(SPEC);
+    let f = found(root.path());
+    let log = root.path().join("log");
+    let mut t = tools(root.path(), &log);
+    let docker = root.path().join("docker");
+    let dropped = root.path().join("dropped");
+    fs::write(
+        &docker,
+        format!(
+            "#!/bin/sh\necho \"docker $*\" >> \"{log}\"\ncase \"$1\" in login) cat >/dev/null;; push) if [ ! -e \"{dropped}\" ]; then touch \"{dropped}\"; echo \"use of closed network connection\" >&2; exit 1; fi;; esac\n",
+            log = log.display(),
+            dropped = dropped.display()
+        ),
+    )
+    .expect("write");
+    fs::set_permissions(&docker, fs::Permissions::from_mode(0o755)).expect("chmod");
+    t.docker = docker;
+    let api = cobot::cloudflare::Api::new(Some(&registry_api()), "token-0123456789".into());
+    let waits = [std::time::Duration::ZERO; 2];
+    let images =
+        workers::push_images_waiting(root.path(), &f, "abc123", ACCOUNT, &api, 240, &t, &waits)
+            .expect("the retry pushes");
+    assert_eq!(
+        images["pigeon-control/Runner"],
+        format!("registry.cloudflare.com/{ACCOUNT}/pigeon-control-runner:abc123")
+    );
+    let log = fs::read_to_string(&log).expect("log");
+    let lines: Vec<&str> = log.lines().collect();
+    assert_eq!(
+        lines
+            .iter()
+            .filter(|l| l.starts_with("docker push"))
+            .count(),
+        2,
+        "{log}"
+    );
+    assert_eq!(
+        lines
+            .iter()
+            .filter(|l| l.starts_with("docker logout"))
+            .count(),
+        1,
+        "{log}"
+    );
+    assert_eq!(lines.last(), Some(&"docker logout registry.cloudflare.com"));
 }

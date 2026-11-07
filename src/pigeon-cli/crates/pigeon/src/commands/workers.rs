@@ -225,13 +225,18 @@ fn images_push(p: &ImagesPush) -> Result<(), cobot::Error> {
             &source[..12]
         )));
     }
-    let on_main = git(root, &["branch", "-r", "--contains", "HEAD"])
-        .unwrap_or_default()
+    let mains = git(
+        root,
+        &["for-each-ref", "--format=%(refname)", "refs/remotes/*/main"],
+    )
+    .unwrap_or_default();
+    let on_main = mains
         .lines()
-        .any(|l| l.trim().ends_with("/main"));
+        .chain(std::iter::once("FETCH_HEAD"))
+        .any(|r| git(root, &["merge-base", "--is-ancestor", "HEAD", r]).is_some());
     if !on_main {
         eprintln!(
-            "cobot: warning: {} is on no fetched main; a deploy can't diff from a commit outside main's history, so push from a fetched main",
+            "cobot: warning: {} is on no fetched main; a deploy can't diff from a commit outside main's history, so push from main after `pigeon cobot git fetch <repo> main`",
             &source[..12]
         );
     }
