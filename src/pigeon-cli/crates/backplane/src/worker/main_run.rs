@@ -158,7 +158,7 @@ impl DurableObject for MainRun {
                 self.save(&p, starting.as_deref()).await?;
                 if starting.is_none() {
                     return Response::error(
-                        "nothing to retry: a deploy runs, or main's newest push is deployed or hasn't failed",
+                        "nothing to retry: a deploy runs or waits, or main has had no deploy",
                         409,
                     );
                 }

@@ -314,7 +314,7 @@ const CATALOG: &[Operation] = &[
         name: "deploy.retry",
         engine: Engine::Backplane,
         effect: Effect::Build,
-        summary: "Deploy main's newest push again after its deploy failed, as when its image was missing",
+        summary: "Deploy main's newest push again: after a failed deploy, as when its image was missing, or after a passed one, everything, as when new images must roll out",
         args: &[],
     },
     Operation {

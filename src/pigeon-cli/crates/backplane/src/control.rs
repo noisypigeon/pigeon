@@ -689,17 +689,19 @@ impl Pipeline {
         });
     }
 
-    /// Deploy the newest push again after it failed, as when its image was missing; none while
-    /// a deploy runs, or when the newest push is deployed.
+    /// Deploy the newest push again: after it failed, as when its image was missing, from the
+    /// last deploy that passed; or after it passed, everything, as when new images or a change
+    /// to rendering take effect only on a deploy. None while a deploy runs or waits.
     pub fn retry(&mut self) -> Option<String> {
         if self.running.is_some() || self.target.is_some() {
             return None;
         }
-        let last = self.history.first()?;
-        if last.outcome != Outcome::Failed || self.deployed.as_deref() == Some(last.sha.as_str()) {
-            return None;
+        let last = self.history.first()?.sha.clone();
+        if self.deployed.as_deref() == Some(last.as_str()) {
+            // Nothing changed since itself, so only a deploy of everything redeploys its Workers.
+            self.deployed = None;
         }
-        self.target = Some(last.sha.clone());
+        self.target = Some(last);
         self.start()
     }
 

@@ -277,3 +277,15 @@ Each step is its own change, in this order:
   (`R2_JURISDICTION`), the `cloudflare/r2-bucket` module's default.
 - **The auto-created twin keeps only the old logs.** Deleting it is the
   owner's call.
+
+### 2026-11-07: A rendering fix needs the image that carries it; `deploy.retry` redeploys
+
+- **`!38` deployed, and still rendered the old binding.** Rendering runs in
+  the deploy job, in whatever `pigeon` its Container started with. Builds
+  weren't served yet, so that was the image's `pigeon`, from before the fix.
+  A fix that makes builds reachable can't arrive through a build.
+- **The loop is broken by one image push** carrying the fix, then a deploy.
+- **`deploy.retry` redeploys a passed push.** When the newest push's deploy
+  passed, a retry deploys it again from nothing: every site, and every Worker
+  with its current images. A deploy since itself would change nothing. A
+  failed push is retried from the last deploy that passed, as before.

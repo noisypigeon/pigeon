@@ -573,7 +573,7 @@ fn git_tokens_show_metadata_and_never_a_value() {
 }
 
 #[test]
-fn a_failed_deploy_is_retried_on_request_and_only_then() {
+fn a_deploy_is_retried_on_request_and_only_then() {
     let mut p = Pipeline::default();
     assert_eq!(p.retry(), None, "nothing deployed or failed yet");
     p.pushed(A);
@@ -584,7 +584,15 @@ fn a_failed_deploy_is_retried_on_request_and_only_then() {
         p.history[0].workers,
         vec!["pigeon-control: v1 → v2".to_string()]
     );
-    assert_eq!(p.retry(), None, "the newest push is deployed");
+    assert_eq!(
+        p.retry().as_deref(),
+        Some(A),
+        "a passed push is deployed again"
+    );
+    assert_eq!(p.deployed, None, "from nothing: everything is deployed");
+    assert_eq!(p.retry(), None, "a deploy runs");
+    p.finished(&deploy_report(Outcome::Passed), 1);
+    assert_eq!(p.deployed.as_deref(), Some(A));
     p.pushed(B);
     assert_eq!(p.start().as_deref(), Some(B));
     p.finished(&deploy_report(Outcome::Failed), 2);
