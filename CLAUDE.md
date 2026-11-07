@@ -79,6 +79,11 @@ belong in the ADR, never in the file.
   to be built on Cloudflare,
   platform state to live in R2, and jobs to run on two Container classes, per
   [`2026-11-06-development-control-plane-approvals-images-state.md`](.claude/decisions/2026-11-06-development-control-plane-approvals-images-state.md).
+- The control plane deploys itself: on each push to `main`, `MainRun`'s
+  deploy job deploys the Workers whose inputs changed, with outputs from
+  `DEPLOY_OUTPUTS`, images by registry reference, a health check and
+  rollback; the local deploy is break-glass, per
+  [`2026-11-07-development-control-plane-deploys-itself.md`](.claude/decisions/2026-11-07-development-control-plane-deploys-itself.md).
 - The agent's git goes through the control plane's front door,
   `/git/<namespace>/<repo>.git`: a token minted per request, pushes only to an
   authorized change's branch, all or nothing, and `git.tokens` lists tokens
