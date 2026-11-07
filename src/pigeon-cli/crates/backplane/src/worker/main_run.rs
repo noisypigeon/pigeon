@@ -70,8 +70,13 @@ impl MainRun {
         Ok(())
     }
 
-    /// Starts the deploy of `sha` in a job Container.
-    async fn start(&self, p: &Pipeline, sha: &str) -> std::result::Result<(), String> {
+    /// Starts the deploy of `sha` in a job Container, referencing `images`.
+    async fn start(
+        &self,
+        p: &Pipeline,
+        sha: &str,
+        images: Option<&control::Images>,
+    ) -> std::result::Result<(), String> {
         let (remote, token) =
             platform::credentials(&self.env, false, cobot::artifacts_wire::TOKEN_TTL)
                 .await
@@ -84,6 +89,11 @@ impl MainRun {
             if let Ok(v) = secret(&self.env, k) {
                 env.insert(k.to_string(), v);
             }
+        }
+        // The newest images, which a deploy may have built since the secret was set; see
+        // .claude/decisions/2026-11-07-development-job-images-on-cloudflare.md §4.
+        if let Some(i) = images.and_then(|i| serde_json::to_string(i).ok()) {
+            env.insert(cobot::ship_wire::IMAGES_VAR.to_string(), i);
         }
         if let Ok(host) = self.env.var(cobot::ship_wire::HOST_VAR) {
             env.insert(cobot::ship_wire::HOST_VAR.to_string(), host.to_string());
@@ -150,7 +160,7 @@ impl DurableObject for MainRun {
                 p.pushed(sha);
                 let starting = p.start();
                 self.save(&p, starting.as_deref()).await?;
-                Response::from_json(&p)
+                Response::from_json(&p.shown())
             }
             (Method::Post, "retry") => {
                 let mut p = self.pipeline().await?;
@@ -162,11 +172,11 @@ impl DurableObject for MainRun {
                         409,
                     );
                 }
-                Response::from_json(&json!({ "pipeline": p }))
+                Response::from_json(&json!({ "pipeline": p.shown() }))
             }
             (Method::Get, "status") => {
                 let p = self.pipeline().await?;
-                Response::from_json(&json!({ "pipeline": p }))
+                Response::from_json(&json!({ "pipeline": p.shown() }))
             }
             _ => Response::error("not found", 404),
         }
@@ -178,7 +188,11 @@ impl DurableObject for MainRun {
         let mut next: Option<String> = None;
         let mut wait = false;
         if let Some(sha) = starting {
-            match self.start(&p, &sha).await {
+            let secret = secret(&self.env, cobot::ship_wire::IMAGES_VAR)
+                .ok()
+                .and_then(|v| serde_json::from_str(&v).ok());
+            let images = p.images_for_deploy(secret);
+            match self.start(&p, &sha, images.as_ref()).await {
                 Ok(()) => {}
                 Err(why) if control::no_capacity(&why) => {
                     worker::console_log!("the deploy of {sha} waits for a free Container");

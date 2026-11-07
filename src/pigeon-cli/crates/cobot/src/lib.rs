@@ -21,6 +21,8 @@ mod engines;
 pub mod generations;
 #[cfg(feature = "engines")]
 pub mod git;
+#[cfg(feature = "engines")]
+pub mod imagebuild;
 #[cfg(any(feature = "engines", feature = "worker"))]
 pub mod link;
 #[cfg(feature = "engines")]

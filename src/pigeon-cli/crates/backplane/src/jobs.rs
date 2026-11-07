@@ -68,6 +68,7 @@ impl Board {
             published: Vec::new(),
             workers: Vec::new(),
             build: None,
+            images: None,
         };
         self.set(running.clone());
         let board = Arc::clone(self);
@@ -97,6 +98,7 @@ fn report(spec: &JobSpec, outcome: Outcome, log: &str) -> Report {
         published: Vec::new(),
         workers: Vec::new(),
         build: None,
+        images: None,
     }
 }
 
@@ -182,7 +184,8 @@ fn deploy(spec: &JobSpec, dir: &Path) -> Report {
             Vec::new()
         }
     };
-    let workers = match crate::ship::workers(spec, dir, files.as_deref(), &mut log) {
+    let mut images = None;
+    let workers = match crate::ship::workers(spec, dir, files.as_deref(), &mut log, &mut images) {
         Ok(w) => w,
         Err(why) => {
             violations.push(why);
@@ -204,6 +207,7 @@ fn deploy(spec: &JobSpec, dir: &Path) -> Report {
         published,
         workers,
         build,
+        images,
         violations: violations.clone(),
         ..report(
             spec,
@@ -334,6 +338,7 @@ fn bound(spec: &JobSpec, dir: &Path) -> Report {
         published: Vec::new(),
         workers: Vec::new(),
         build: None,
+        images: None,
     }
 }
 

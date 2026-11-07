@@ -596,3 +596,115 @@ fn a_dropped_push_is_retried_and_succeeds() {
     );
     assert_eq!(lines.last(), Some(&"docker logout registry.cloudflare.com"));
 }
+
+#[test]
+fn an_image_is_built_once_and_pushed_under_each_class_that_uses_it() {
+    let spec = SPEC.replace(
+        "containers:\n",
+        "containers:\n  - { class: Checker, image: { dockerfile: Dockerfile, target: backplane, args: { FEATURES: backplane } }, instance_type: standard-4, max_instances: 4 }\n",
+    );
+    let root = fixture(&spec);
+    let f = found(root.path());
+    let work = root.path().join("work");
+    fs::create_dir_all(&work).expect("mkdir");
+    let log = root.path().join("log");
+    let script = |name: &str, body: &str| -> PathBuf {
+        let p = root.path().join(name);
+        fs::write(&p, format!("#!/bin/sh\n{body}\n")).expect("write");
+        fs::set_permissions(&p, fs::Permissions::from_mode(0o755)).expect("chmod");
+        p
+    };
+    let builder = cobot::imagebuild::Builder {
+        rootlesskit: script(
+            "rootlesskit",
+            &format!(
+                "echo \"rootlesskit $*\" >> \"{}\"\nexec sleep 30",
+                log.display()
+            ),
+        ),
+        buildkitd: root.path().join("buildkitd"),
+        buildctl: script(
+            "buildctl",
+            &format!(
+                "echo \"buildctl $*\" >> \"{log}\"\ncase \"$*\" in *build*) echo \"config: $(cat \"$DOCKER_CONFIG/config.json\")\" >> \"{log}\";; esac",
+                log = log.display()
+            ),
+        ),
+    };
+    let api = cobot::cloudflare::Api::new(Some(&registry_api()), "token-0123456789".into());
+    let t = tools(root.path(), &root.path().join("tools.log"));
+    let mut said = String::new();
+    let images = cobot::imagebuild::build_and_push(
+        root.path(),
+        &f,
+        "abc123",
+        ACCOUNT,
+        &api,
+        240,
+        &builder,
+        &t,
+        &work,
+        &mut said,
+    )
+    .expect("builds and pushes");
+    let at =
+        |class: &str| format!("registry.cloudflare.com/{ACCOUNT}/pigeon-control-{class}:abc123");
+    assert_eq!(images["pigeon-control/Checker"], at("checker"));
+    assert_eq!(images["pigeon-control/Runner"], at("runner"));
+    let log = fs::read_to_string(&log).expect("log");
+    let builds: Vec<&str> = log.lines().filter(|l| l.contains(" build ")).collect();
+    assert_eq!(builds.len(), 1, "one build for the shared image: {log}");
+    assert!(builds[0].contains("--opt target=backplane"), "{log}");
+    assert!(builds[0].contains("--opt platform=linux/amd64"), "{log}");
+    assert!(
+        builds[0].contains("--opt build-arg:FEATURES=backplane"),
+        "{log}"
+    );
+    assert!(
+        builds[0].contains(&format!(
+            "type=image,\"name={},{}\",push=true",
+            at("checker"),
+            at("runner")
+        )),
+        "{log}"
+    );
+    assert!(log.contains("rootlesskit --state-dir="), "{log}");
+    assert!(
+        log.contains("--rootless") && log.contains("--oci-worker-no-process-sandbox"),
+        "{log}"
+    );
+    let auth = cobot::imagebuild::base64(b"v1:registry-password-0123");
+    assert!(
+        log.contains(&auth),
+        "the credentials reach BuildKit in its Docker config: {log}"
+    );
+    assert!(
+        !log.lines()
+            .filter(|l| l.starts_with("buildctl"))
+            .any(|l| l.contains("registry-password") || l.contains(&auth)),
+        "never in argv: {log}"
+    );
+    assert!(
+        said.contains("built and pushed Checker, Runner (backplane)"),
+        "{said}"
+    );
+    assert!(
+        !work.join("docker/config.json").exists(),
+        "the credentials are removed after the build"
+    );
+}
+
+#[test]
+fn base64_and_checksums_are_exact() {
+    assert_eq!(cobot::imagebuild::base64(b"v1:pass"), "djE6cGFzcw==");
+    assert_eq!(cobot::imagebuild::base64(b"ab"), "YWI=");
+    assert_eq!(cobot::imagebuild::base64(b"abc"), "YWJj");
+    let dir = TempDir::new().expect("tempdir");
+    let f = dir.path().join("x");
+    fs::write(&f, b"abc").expect("write");
+    assert!(cobot::imagebuild::verified(
+        &f,
+        "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+    ));
+    assert!(!cobot::imagebuild::verified(&f, &"0".repeat(64)));
+}

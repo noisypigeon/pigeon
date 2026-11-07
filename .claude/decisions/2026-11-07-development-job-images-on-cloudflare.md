@@ -311,3 +311,36 @@ Each step is its own change, in this order:
   - `nonroot:100000:65536` in `/etc/subuid` and `/etc/subgid`.
 
   The spike then runs again under RootlessKit, for the build's time and disk.
+
+### 2026-11-07: The spike worked; images are built in the deploy job
+
+- **The spike built the `ci` target in a `Checker` Container,** with the
+  image from `!41`:
+  - `buildkitd` under RootlessKit, with the overlayfs snapshotter;
+  - 497 s in all, 245 s of it the dependency warm-up;
+  - BuildKit's store at 6.1 GB, leaving 7.9 GB of the 18 GB free.
+
+  It didn't push, because a check holds no credentials.
+- **The build runs inside the deploy job, not in a job of its own** (amends
+  §4).
+  - The deploy job already runs on `Checker` and holds `WORKERS_DEPLOY_TOKEN`.
+    When `scope::image_inputs` names a change since the images' commit, it
+    builds and pushes before it deploys, then deploys with the new
+    references. Needs image is no longer a wait.
+  - BuildKit and RootlessKit are fetched per build, pinned by SHA-256
+    (`cobot::imagebuild`).
+  - Each distinct image is built once and pushed under every class that
+    uses it, as `<worker>-<class>:<sha, 12>`.
+  - Registry credentials are minted for that build alone. They reach
+    BuildKit only through a Docker config that is removed afterwards, and are
+    scrubbed from every output.
+- **`MainRun` keeps the newest images,** as `images`, from any deploy's
+  report whose images are of its own commit, and passes them to each deploy.
+  - `DEPLOY_IMAGES` stays the seed and the break-glass value. A secret that
+    differs from the one last seen (`images_seed`) is the owner's push, and
+    wins.
+  - `deploy_status` shows the images' commit, and not their references,
+    which name the account.
+- **A rollout lags.** Cloudflare moves Container instances to a new image
+  over several minutes, so the jobs started just after a deploy may still run
+  the previous image.

@@ -345,6 +345,21 @@ pub struct Report {
     /// For a deploy: the `pigeon` it built and stored, if it built one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub build: Option<Build>,
+    /// For a deploy: the job images it built and pushed, if their inputs changed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub images: Option<Images>,
+}
+
+/// The job images a deploy references, as the `DEPLOY_IMAGES` secret holds them: the commit
+/// they were built from, and each container's registry reference by `<worker>/<Class>`; see
+/// `.claude/decisions/2026-11-07-development-job-images-on-cloudflare.md` §4.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Images {
+    /// The commit they were built from.
+    pub source: String,
+    /// Each container's registry reference.
+    pub images: std::collections::BTreeMap<String, String>,
 }
 
 /// `main`'s `pigeon` built at a commit and stored at `builds/<sha>/pigeon`; see
@@ -633,6 +648,12 @@ pub struct Pipeline {
     /// The newest `pigeon` a deploy built, which job Containers run.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub latest_build: Option<Build>,
+    /// The newest job images, which deploys reference.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub images: Option<Images>,
+    /// The `DEPLOY_IMAGES` secret as last seen; a different one is the owner's push, and wins.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub images_seed: Option<Images>,
 }
 
 /// How many deploys `deploy.status` keeps.
@@ -659,6 +680,37 @@ impl Pipeline {
         Some(target)
     }
 
+    /// The images a deploy is to reference, given the `DEPLOY_IMAGES` secret: the secret when
+    /// it changed since last seen, as after the owner's push, else the newest a deploy built.
+    pub fn images_for_deploy(&mut self, secret: Option<Images>) -> Option<Images> {
+        if secret.is_some() && secret != self.images_seed {
+            self.images.clone_from(&secret);
+            self.images_seed = secret;
+        }
+        self.images.clone().or_else(|| self.images_seed.clone())
+    }
+
+    /// The pipeline as `deploy.status` shows it: images by their commit only, since their
+    /// references name the account.
+    #[must_use]
+    pub fn shown(&self) -> Self {
+        let hide = |i: &Option<Images>| {
+            i.as_ref().map(|i| Images {
+                source: i.source.clone(),
+                images: i
+                    .images
+                    .keys()
+                    .map(|k| (k.clone(), "…".to_string()))
+                    .collect(),
+            })
+        };
+        Self {
+            images: hide(&self.images),
+            images_seed: hide(&self.images_seed),
+            ..self.clone()
+        }
+    }
+
     /// The running deploy's report arrived, at `at`.
     pub fn finished(&mut self, report: &Report, at: u64) {
         let Some((sha, _)) = self.running.take() else {
@@ -674,6 +726,10 @@ impl Pipeline {
             .filter(|b| b.sha == sha && b.sha256.len() == 64)
         {
             self.latest_build = Some(b);
+        }
+        // Images pushed from `main` are good for deploys whatever else the deploy did.
+        if let Some(i) = report.images.clone().filter(|i| i.source == sha) {
+            self.images = Some(i);
         }
         // A failure waits for the next push, which publishes everything since the last deploy.
         if self.target.as_deref() == Some(sha.as_str()) {

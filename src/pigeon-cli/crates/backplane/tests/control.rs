@@ -169,6 +169,7 @@ fn reports_become_events() {
         published: vec![],
         workers: vec![],
         build: None,
+        images: None,
     };
     assert_eq!(
         control::event_of("fmt", A, &report(Outcome::Running, vec![])),
@@ -384,6 +385,7 @@ fn deploy_report(outcome: Outcome) -> Report {
         published: vec!["sites/docs".into()],
         workers: vec!["pigeon-control: v1 → v2".into()],
         build: None,
+        images: None,
     }
 }
 
@@ -601,4 +603,63 @@ fn a_deploy_is_retried_on_request_and_only_then() {
     assert_eq!(p.retry(), None, "once at a time");
     p.finished(&deploy_report(Outcome::Passed), 3);
     assert_eq!(p.deployed.as_deref(), Some(B));
+}
+
+#[test]
+fn deploys_reference_the_newest_images_and_the_owners_push_wins() {
+    let imgs = |source: &str| backplane::control::Images {
+        source: source.into(),
+        images: [(
+            "pigeon-control/Checker".to_string(),
+            format!("registry/x:{source}"),
+        )]
+        .into_iter()
+        .collect(),
+    };
+    let mut p = Pipeline::default();
+    assert_eq!(p.images_for_deploy(None), None, "nothing yet");
+    assert_eq!(
+        p.images_for_deploy(Some(imgs(A))),
+        Some(imgs(A)),
+        "the secret seeds the pipeline"
+    );
+    p.pushed(B);
+    p.start();
+    p.finished(
+        &Report {
+            images: Some(imgs(B)),
+            ..deploy_report(Outcome::Failed)
+        },
+        1,
+    );
+    assert_eq!(
+        p.images_for_deploy(Some(imgs(A))),
+        Some(imgs(B)),
+        "images a deploy built win over an unchanged secret"
+    );
+    p.pushed(C);
+    p.start();
+    p.finished(
+        &Report {
+            images: Some(imgs(A)),
+            ..deploy_report(Outcome::Passed)
+        },
+        2,
+    );
+    assert_eq!(
+        p.images_for_deploy(Some(imgs(A))),
+        Some(imgs(B)),
+        "images of another commit than the deploy's are refused"
+    );
+    assert_eq!(
+        p.images_for_deploy(Some(imgs(C))),
+        Some(imgs(C)),
+        "a changed secret is the owner's push, and wins"
+    );
+    let shown = serde_json::to_string(&p.shown()).expect("json");
+    assert!(
+        !shown.contains("registry/x"),
+        "references stay hidden: {shown}"
+    );
+    assert!(shown.contains(C), "{shown}");
 }
