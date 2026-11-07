@@ -9,7 +9,7 @@ use cobot::session::Session;
 use cobot::workers::{self, Found, Tools};
 use serde_json::{Map, Value};
 
-use crate::cli::{WorkersCommand, WorkersSecrets, WorkersState};
+use crate::cli::{WorkersAt, WorkersCommand, WorkersImages, WorkersSecrets, WorkersState};
 
 /// Runs a `pigeon cobot workers` command.
 ///
@@ -70,6 +70,19 @@ pub fn run(command: WorkersCommand) -> Result<(), cobot::Error> {
             println!("cobot: set {} on {}", p.key, f.spec.name);
             Ok(())
         }
+        WorkersCommand::Outputs(s) => {
+            let (_, found, outputs) = state_outputs(&s)?;
+            let specs: Vec<_> = found.into_iter().map(|f| f.spec).collect();
+            let snapshot = cobot::ship::snapshot(&specs, &outputs);
+            println!("{}", serde_json::to_string(&snapshot).unwrap_or_default());
+            eprintln!(
+                "cobot: {} unit(s) of outputs; pipe this to `pigeon cobot workers secrets put --root . <worker> {}`",
+                snapshot.len(),
+                cobot::ship::OUTPUTS_VAR
+            );
+            Ok(())
+        }
+        WorkersCommand::Images(WorkersImages::Push(at)) => images_push(&at),
         WorkersCommand::Teardown(o) => {
             let f = one(&o.root, &o.name)?;
             for d in workers::teardown(&f, &tools()?, &o.root)? {
@@ -118,9 +131,10 @@ fn tools() -> Result<Tools, cobot::Error> {
     Ok(t)
 }
 
-/// Each selected Worker and its configuration, references resolved from the state, and the
-/// state's session.
-fn rendered(s: &WorkersState) -> Result<(Session, Vec<(Found, Value)>), cobot::Error> {
+/// Each selected Worker, checked, the state's session, and the outputs their references name.
+fn state_outputs(
+    s: &WorkersState,
+) -> Result<(Session, Vec<Found>, cobot::ship::Outputs), cobot::Error> {
     let found = workers::select(&s.at.root, &s.at.names)?;
     let problems: Vec<_> = found
         .iter()
@@ -145,6 +159,13 @@ fn rendered(s: &WorkersState) -> Result<(Session, Vec<(Found, Value)>), cobot::E
             }
         }
     }
+    Ok((session, found, outputs))
+}
+
+/// Each selected Worker and its configuration, references resolved from the state, and the
+/// state's session.
+fn rendered(s: &WorkersState) -> Result<(Session, Vec<(Found, Value)>), cobot::Error> {
+    let (session, found, outputs) = state_outputs(s)?;
     let all = found
         .into_iter()
         .map(|f| match workers::render(&f, &outputs) {
@@ -161,6 +182,46 @@ fn rendered(s: &WorkersState) -> Result<(Session, Vec<(Found, Value)>), cobot::E
         })
         .collect::<Result<Vec<_>, _>>()?;
     Ok((session, all))
+}
+
+/// Builds and pushes each selected Worker's images, tagged with the checkout's commit; prints
+/// the references as JSON.
+fn images_push(at: &WorkersAt) -> Result<(), cobot::Error> {
+    let source = std::process::Command::new("git")
+        .args(["rev-parse", "HEAD"])
+        .current_dir(&at.root)
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+        .ok_or_else(|| cobot::Error::Tool {
+            command: "git rev-parse HEAD".into(),
+            message: "the root is not a git checkout".into(),
+        })?;
+    let tools = tools()?;
+    let account = tools
+        .env
+        .iter()
+        .find(|(k, _)| k == "CLOUDFLARE_ACCOUNT_ID")
+        .map(|(_, v)| v.clone())
+        .unwrap_or_default();
+    let tag = source.chars().take(12).collect::<String>();
+    let mut images = cobot::ship::Images {
+        source,
+        images: BTreeMap::new(),
+    };
+    for f in workers::select(&at.root, &at.names)? {
+        for (k, v) in workers::push_images(&at.root, &f, &tag, &account, &tools)? {
+            eprintln!("cobot: pushed {k}");
+            images.images.insert(k, v);
+        }
+    }
+    println!("{}", serde_json::to_string(&images).unwrap_or_default());
+    eprintln!(
+        "cobot: pipe this to `pigeon cobot workers secrets put --root . <worker> {}`",
+        cobot::ship::IMAGES_VAR
+    );
+    Ok(())
 }
 
 fn plan(s: &WorkersState) -> Result<(), cobot::Error> {

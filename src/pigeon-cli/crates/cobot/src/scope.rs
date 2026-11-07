@@ -553,3 +553,101 @@ pub fn deploys(root: &Path, files: Option<&[String]>) -> Result<Vec<String>, Err
         .map(|s| s.unit)
         .collect())
 }
+
+/// Paths whose change makes the job image too old for the Worker: the image's tools, and the
+/// job protocol the Worker and the job server share. A Worker deploy waits for a new image;
+/// see `.claude/decisions/2026-11-07-development-control-plane-deploys-itself.md` §4.
+pub const IMAGE_BLOCKS: [&str; 8] = [
+    "src/pigeon-cli/Dockerfile",
+    "mise.toml",
+    "src/pigeon-cli/rust-toolchain.toml",
+    "src/pigeon-cli/crates/backplane/src/control.rs",
+    "src/pigeon-cli/crates/backplane/src/jobs.rs",
+    "src/pigeon-cli/crates/backplane/src/changes.rs",
+    "src/pigeon-cli/crates/backplane/src/runs.rs",
+    "src/pigeon-cli/crates/backplane/src/serve.rs",
+];
+
+/// Paths whose change leaves the job image behind without breaking it: `pigeon`'s other code,
+/// and its dependencies. A Worker deploy goes out and says so.
+pub const IMAGE_LAGS: [&str; 2] = ["src/pigeon-cli/crates/", "src/pigeon-cli/Cargo.lock"];
+
+/// The files among `files` that make the job image block a Worker deploy, and those that only
+/// leave it behind.
+#[must_use]
+pub fn image_inputs(files: &[String]) -> (Vec<String>, Vec<String>) {
+    let blocks: Vec<String> = files
+        .iter()
+        .filter(|f| IMAGE_BLOCKS.contains(&f.as_str()))
+        .cloned()
+        .collect();
+    let lags = files
+        .iter()
+        .filter(|f| !blocks.contains(f) && under(f, &IMAGE_LAGS))
+        .cloned()
+        .collect();
+    (blocks, lags)
+}
+
+/// The Workers a change to `main` touching `files` must deploy, by name; `files` of `None`
+/// means every Worker. A Worker's inputs are its spec's directory, its migrations, its
+/// Dockerfile, the workspace's build settings, and the crates its entry crate builds from.
+///
+/// # Errors
+///
+/// As [`crate::workers::discover`], or a workspace manifest that can't be read.
+pub fn workers(root: &Path, files: Option<&[String]>) -> Result<Vec<String>, Error> {
+    let found = crate::workers::discover(root)?;
+    let Some(files) = files else {
+        return Ok(found.into_iter().map(|f| f.spec.name).collect());
+    };
+    let crates = crates(root)?;
+    let mut out = Vec::new();
+    for f in found {
+        let mut inputs: Vec<String> = vec![format!("{}/", f.dir.trim_end_matches('/'))];
+        inputs.extend(
+            f.spec
+                .bindings
+                .d1
+                .values()
+                .filter_map(|d| d.migrations.as_ref())
+                .map(|m| format!("{}/", m.trim_end_matches('/'))),
+        );
+        inputs.extend(f.spec.containers.iter().map(|c| c.image.dockerfile.clone()));
+        inputs.extend(EVERYTHING.iter().map(|p| (*p).to_string()));
+        let entry = format!("{}/", f.spec.entry.krate.trim_end_matches('/'));
+        if let Some(package) = crates.by_dir.get(&entry) {
+            let mut wanted = BTreeSet::from([package.clone()]);
+            loop {
+                let more: Vec<String> = wanted
+                    .iter()
+                    .flat_map(|p| crates.deps.get(p).into_iter().flatten())
+                    .filter(|d| !wanted.contains(*d))
+                    .cloned()
+                    .collect();
+                if more.is_empty() {
+                    break;
+                }
+                wanted.extend(more);
+            }
+            inputs.extend(
+                crates
+                    .by_dir
+                    .iter()
+                    .filter(|(_, p)| wanted.contains(*p))
+                    .map(|(d, _)| d.clone()),
+            );
+        } else {
+            inputs.push(entry);
+        }
+        let hit = files.iter().any(|file| {
+            inputs
+                .iter()
+                .any(|i| file == i || (i.ends_with('/') && file.starts_with(i.as_str())))
+        });
+        if hit {
+            out.push(f.spec.name);
+        }
+    }
+    Ok(out)
+}

@@ -54,11 +54,23 @@ FROM cobot AS backplane
 # tools, and the workspace's dependencies already compiled, so a job builds only the crates
 # it touches. Build with `--build-arg FEATURES=backplane`.
 FROM docker.io/library/rust:1.99.1-slim-bookworm@sha256:24707e70a4f1e23d9a7b25202ec43126d28a52294b96aad5c670df1fd1f1d400 AS ci
+# Node, wrangler and worker-build deploy Workers from the pipeline; versions equal mise.toml's
+# (.claude/decisions/2026-11-07-development-control-plane-deploys-itself.md §2).
+ARG NODE_VERSION=24.22.0
+ARG NODE_SHA256=cc2f601cee82d9a5a233302fe307abc600727035fd7d2c3a3571755989e95008
+ARG WRANGLER_VERSION=4.151.3
+ARG WORKER_BUILD_VERSION=0.8.7
 RUN apt-get update \
- && apt-get install -y --no-install-recommends ca-certificates git \
+ && apt-get install -y --no-install-recommends ca-certificates curl git xz-utils \
  && rm -rf /var/lib/apt/lists/* \
  && rustup component add clippy rustfmt \
- && rustup target add wasm32-unknown-unknown
+ && rustup target add wasm32-unknown-unknown \
+ && curl -fsSLo /tmp/node.tar.xz "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz" \
+ && printf '%s  /tmp/node.tar.xz\n' "$NODE_SHA256" | sha256sum -c - \
+ && tar -xJf /tmp/node.tar.xz -C /usr/local --strip-components=1 --exclude='*.md' --exclude=LICENSE \
+ && rm /tmp/node.tar.xz \
+ && npm install -g "wrangler@${WRANGLER_VERSION}" \
+ && cargo install --locked --root /usr/local "worker-build@${WORKER_BUILD_VERSION}"
 COPY --from=tools /out/ /usr/local/bin/
 COPY --from=build /src/target/release/pigeon /usr/local/bin/pigeon
 # No debug info: a job needs pass or fail, not a debugger, and debug info makes linking the
@@ -75,7 +87,9 @@ RUN export CARGO_BUILD_JOBS="$WARM_JOBS" \
  && cargo clippy --workspace --all-targets --locked \
  && cargo test --workspace --locked --no-run \
  && cargo clippy -p cobot -p pigeon-backplane --lib --locked --no-default-features --features worker --target wasm32-unknown-unknown \
+ && (cd crates/backplane && worker-build --release --no-default-features --features worker) \
  && cd / && rm -rf /warm \
- && chown -R 65532:65532 /cache
+ && mkdir -p /tmp/.cache \
+ && chown -R 65532:65532 /cache /tmp/.cache
 USER 65532:65532
 ENTRYPOINT ["/usr/local/bin/pigeon"]

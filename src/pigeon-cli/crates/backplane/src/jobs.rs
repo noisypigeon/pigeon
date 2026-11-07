@@ -66,6 +66,7 @@ impl Board {
             checks: Vec::new(),
             merged: None,
             published: Vec::new(),
+            workers: Vec::new(),
         };
         self.set(running.clone());
         let board = Arc::clone(self);
@@ -93,6 +94,7 @@ fn report(spec: &JobSpec, outcome: Outcome, log: &str) -> Report {
         checks: Vec::new(),
         merged: None,
         published: Vec::new(),
+        workers: Vec::new(),
     }
 }
 
@@ -144,7 +146,8 @@ pub fn run(spec: &JobSpec, dir: &Path) -> Report {
 }
 
 /// The deploy job: the instance's sites whose inputs changed since the last deploy, built and
-/// published with the job's credentials.
+/// published with the job's credentials, then the Workers whose inputs changed; see
+/// `.claude/decisions/2026-11-07-development-control-plane-deploys-itself.md`.
 fn deploy(spec: &JobSpec, dir: &Path) -> Report {
     let failed = |why: String, log: &str| Report {
         violations: vec![why],
@@ -159,57 +162,76 @@ fn deploy(spec: &JobSpec, dir: &Path) -> Report {
     };
     let mut log = match &files {
         Some(f) => format!("{} file(s) changed since the last deploy\n", f.len()),
-        None => "first deploy, or the last one is unknown: every site\n".to_string(),
+        None => "first deploy, or the last one is unknown: everything\n".to_string(),
     };
-    let sites = match cobot::scope::deploys(dir, files.as_deref()) {
-        Ok(s) => s,
-        Err(e) => return failed(e.to_string(), &log),
+    let secrets: Vec<String> = spec.env.values().cloned().collect();
+    let scrub = |t: &str| {
+        secrets
+            .iter()
+            .filter(|s| s.len() >= 8)
+            .fold(t.to_string(), |acc, s| acc.replace(s.as_str(), "…"))
     };
-    if sites.is_empty() {
-        log.push_str("nothing to publish\n");
-        return report(spec, Outcome::Passed, &log);
+    let mut violations = Vec::new();
+    let published = match publish_sites(spec, dir, files.as_deref(), &mut log) {
+        Ok(p) => p,
+        Err(why) => {
+            violations.push(why);
+            Vec::new()
+        }
+    };
+    let workers = match crate::ship::workers(spec, dir, files.as_deref(), &mut log) {
+        Ok(w) => w,
+        Err(why) => {
+            violations.push(why);
+            Vec::new()
+        }
+    };
+    let violations: Vec<String> = violations.iter().map(|v| scrub(v)).collect();
+    for v in &violations {
+        let _ = writeln!(log, "violation: {v}");
     }
-    let instance = match Instance::load(dir) {
-        Ok(i) => i,
-        Err(e) => return failed(e.to_string(), &log),
-    };
+    Report {
+        published,
+        workers,
+        violations: violations.clone(),
+        ..report(
+            spec,
+            if violations.is_empty() {
+                Outcome::Passed
+            } else {
+                Outcome::Failed
+            },
+            &scrub(&log),
+        )
+    }
+}
+
+/// The instance's sites whose inputs changed among `files`, published; their units.
+fn publish_sites(
+    spec: &JobSpec,
+    dir: &Path,
+    files: Option<&[String]>,
+    log: &mut String,
+) -> Result<Vec<String>, String> {
+    let sites = cobot::scope::deploys(dir, files).map_err(|e| e.to_string())?;
+    if sites.is_empty() {
+        log.push_str("no site to publish\n");
+        return Ok(Vec::new());
+    }
+    let instance = Instance::load(dir).map_err(|e| e.to_string())?;
     let mut args = Map::new();
     args.insert("sites".into(), json!(sites));
     let request = Request {
         operation: "sites.publish".into(),
         args,
     };
-    let secrets: Vec<&str> = spec.env.values().map(String::as_str).collect();
-    let scrub = |t: &str| {
-        secrets
-            .iter()
-            .filter(|s| s.len() >= 8)
-            .fold(t.to_string(), |acc, s| acc.replace(s, "…"))
-    };
-    match run_with(&instance, &request, |k| spec.env.get(k).cloned()) {
-        Ok(r) => {
-            let _ = writeln!(log, "{}", scrub(&r.result.to_string()));
-            for v in &r.violations {
-                let _ = writeln!(log, "violation: {}", scrub(v));
-            }
-            Report {
-                published: if r.ok { sites } else { Vec::new() },
-                violations: r.violations.iter().map(|v| scrub(v)).collect(),
-                ..report(
-                    spec,
-                    if r.ok {
-                        Outcome::Passed
-                    } else {
-                        Outcome::Failed
-                    },
-                    &log,
-                )
-            }
-        }
-        Err(e) => {
-            let why = scrub(&e.to_string());
-            failed(why.clone(), &format!("{log}{why}\n"))
-        }
+    let r =
+        run_with(&instance, &request, |k| spec.env.get(k).cloned()).map_err(|e| e.to_string())?;
+    let _ = writeln!(log, "{}", r.result);
+    if r.ok {
+        Ok(sites)
+    } else {
+        Err(r.violations.join("; "))
     }
 }
 
@@ -299,6 +321,7 @@ fn bound(spec: &JobSpec, dir: &Path) -> Report {
         checks,
         merged: None,
         published: Vec::new(),
+        workers: Vec::new(),
     }
 }
 

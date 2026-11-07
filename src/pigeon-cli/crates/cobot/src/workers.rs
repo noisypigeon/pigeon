@@ -168,6 +168,9 @@ pub struct Bindings {
     /// Plain-text variables; never an ID or a secret.
     #[serde(default)]
     pub vars: BTreeMap<String, String>,
+    /// The binding that names the running version, for health checks.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub version_metadata: Option<String>,
 }
 
 /// A D1 database.
@@ -461,6 +464,7 @@ fn validate_bindings(s: &Spec, root: &Path, add: &mut impl FnMut(String)) {
     names.extend(b.secrets_store.keys());
     names.extend(b.queues.producers.keys());
     names.extend(b.vars.keys());
+    names.extend(&b.version_metadata);
     names.extend(&s.secrets);
     let mut seen = BTreeSet::new();
     for n in names {
@@ -506,15 +510,23 @@ fn validate_bindings(s: &Spec, root: &Path, add: &mut impl FnMut(String)) {
     }
 }
 
+/// Every `$output` reference `spec` makes.
+#[must_use]
+pub fn references(spec: &Spec) -> Vec<String> {
+    let b = &spec.bindings;
+    b.d1.values()
+        .map(|d| d.id.clone())
+        .chain(b.r2.values().cloned())
+        .chain(b.secrets_store.values().map(|x| x.store.clone()))
+        .collect()
+}
+
 /// The units whose outputs `spec` references.
 #[must_use]
 pub fn referenced_units(spec: &Spec) -> BTreeSet<String> {
-    let b = &spec.bindings;
-    b.d1.values()
-        .map(|d| d.id.as_str())
-        .chain(b.r2.values().map(String::as_str))
-        .chain(b.secrets_store.values().map(|x| x.store.as_str()))
-        .filter_map(reference)
+    references(spec)
+        .iter()
+        .filter_map(|r| reference(r))
         .map(|r| r.unit)
         .collect()
 }
@@ -617,15 +629,40 @@ pub fn render(
     found: &Found,
     outputs: &BTreeMap<String, Map<String, Value>>,
 ) -> Result<Value, Vec<String>> {
+    render_with(found, outputs, None)
+}
+
+/// As [`render`], but with each container's `image` a registry reference from `images`, keyed
+/// `<worker>/<class>`, when given: such a deploy needs no Docker; see
+/// `.claude/decisions/2026-11-07-development-control-plane-deploys-itself.md` §4.
+///
+/// # Errors
+///
+/// A message for each reference that doesn't resolve, and each container `images` lacks.
+pub fn render_with(
+    found: &Found,
+    outputs: &BTreeMap<String, Map<String, Value>>,
+    images: Option<&BTreeMap<String, String>>,
+) -> Result<Value, Vec<String>> {
     let spec = &found.spec;
     let mut problems = Vec::new();
+    if let Some(images) = images {
+        for c in &spec.containers {
+            if !images.contains_key(&image_key(spec, &c.class)) {
+                problems.push(format!(
+                    "no image for `{}`; push one with `pigeon cobot workers images push`",
+                    image_key(spec, &c.class)
+                ));
+            }
+        }
+    }
     let mut get = |r: &str| {
         resolve(r, outputs).unwrap_or_else(|e| {
             problems.push(e);
             String::new()
         })
     };
-    let mut out = render_script(spec);
+    let mut out = render_script(spec, images);
     render_bindings(&spec.bindings, &mut out, &mut get);
     if problems.is_empty() {
         Ok(out)
@@ -634,8 +671,14 @@ pub fn render(
     }
 }
 
+/// A container's key in an image map: `<worker>/<class>`.
+#[must_use]
+pub fn image_key(spec: &Spec, class: &str) -> String {
+    format!("{}/{class}", spec.name)
+}
+
 /// The script, its triggers, classes and containers.
-fn render_script(spec: &Spec) -> Value {
+fn render_script(spec: &Spec, images: Option<&BTreeMap<String, String>>) -> Value {
     let features = spec.entry.features.join(",");
     let mut build = "worker-build --release --no-default-features".to_string();
     if !features.is_empty() {
@@ -680,7 +723,10 @@ fn render_script(spec: &Spec) -> Value {
             .map(|c| {
                 json!({
                     "class_name": c.class,
-                    "image": format!("./{}.Dockerfile", c.class),
+                    "image": images
+                        .and_then(|i| i.get(&image_key(spec, &c.class)))
+                        .cloned()
+                        .unwrap_or_else(|| format!("./{}.Dockerfile", c.class)),
                     "instance_type": c.instance_type,
                     "max_instances": c.max_instances,
                 })
@@ -753,6 +799,9 @@ fn render_bindings(bindings: &Bindings, out: &mut Value, get: &mut impl FnMut(&s
     }
     if !bindings.vars.is_empty() {
         out["vars"] = json!(bindings.vars);
+    }
+    if let Some(v) = &bindings.version_metadata {
+        out["version_metadata"] = json!({ "binding": v });
     }
 }
 
@@ -1068,6 +1117,23 @@ pub fn deploy(
     plan: &str,
     tools: &Tools,
 ) -> Result<Vec<String>, Error> {
+    let mut done = migrate(found, dir, tools)?;
+    done.extend(build_images(
+        root,
+        found,
+        &|class| image_tag(&found.spec, class, plan),
+        tools,
+    )?);
+    done.push(wrangler_deploy(found, dir, tools)?);
+    Ok(done)
+}
+
+/// Applies `found`'s D1 migrations from its rendered directory `dir`; each step's name.
+///
+/// # Errors
+///
+/// [`Error::Tool`] when wrangler fails.
+pub fn migrate(found: &Found, dir: &Path, tools: &Tools) -> Result<Vec<String>, Error> {
     let mut done = Vec::new();
     for d in found.spec.bindings.d1.values() {
         if d.migrations.is_some() {
@@ -1088,6 +1154,22 @@ pub fn deploy(
             done.push(format!("D1 {} migrated", d.name));
         }
     }
+    Ok(done)
+}
+
+/// Builds each of `found`'s container images from its Dockerfile stage with Docker, tagged
+/// `tag(class)`; each step's name.
+///
+/// # Errors
+///
+/// [`Error::Tool`] when Docker fails.
+pub fn build_images(
+    root: &Path,
+    found: &Found,
+    tag: &dyn Fn(&str) -> String,
+    tools: &Tools,
+) -> Result<Vec<String>, Error> {
+    let mut done = Vec::new();
     for c in &found.spec.containers {
         let file = root.join(&c.image.dockerfile);
         let context = file.parent().unwrap_or(root);
@@ -1103,7 +1185,7 @@ pub fn deploy(
         }
         args.extend([
             "-t".into(),
-            image_tag(&found.spec, &c.class, plan),
+            tag(&c.class),
             "-f".into(),
             file.to_string_lossy().into_owned(),
             context.to_string_lossy().into_owned(),
@@ -1111,14 +1193,52 @@ pub fn deploy(
         tools.run(&tools.docker, &args, root, None)?;
         done.push(format!("image {} built from {}", c.class, c.image.target));
     }
+    Ok(done)
+}
+
+/// `wrangler deploy` of `found` from its rendered directory `dir`; the step's name.
+///
+/// # Errors
+///
+/// [`Error::Tool`] when wrangler fails.
+pub fn wrangler_deploy(found: &Found, dir: &Path, tools: &Tools) -> Result<String, Error> {
     tools.run(
         &tools.wrangler,
         &strings(&["deploy", "-c", "wrangler.jsonc"]),
         dir,
         None,
     )?;
-    done.push(format!("{} deployed", found.spec.name));
-    Ok(done)
+    Ok(format!("{} deployed", found.spec.name))
+}
+
+/// Builds each of `found`'s container images and pushes it to Cloudflare's registry as
+/// `<worker>-<class>:<tag>`; each image's registry reference, keyed as [`image_key`].
+///
+/// # Errors
+///
+/// [`Error::Tool`] when Docker or wrangler fails.
+pub fn push_images(
+    root: &Path,
+    found: &Found,
+    tag: &str,
+    account: &str,
+    tools: &Tools,
+) -> Result<BTreeMap<String, String>, Error> {
+    let local = |class: &str| format!("{}-{}:{tag}", found.spec.name, class.to_ascii_lowercase());
+    build_images(root, found, &local, tools)?;
+    let mut out = BTreeMap::new();
+    for c in &found.spec.containers {
+        // wrangler's output is scrubbed of the account, so the reference is built, not read.
+        tools.run(
+            &tools.wrangler,
+            &strings(&["containers", "push", &local(&c.class)]),
+            root,
+            None,
+        )?;
+        let pushed = format!("registry.cloudflare.com/{account}/{}", local(&c.class));
+        out.insert(image_key(&found.spec, &c.class), pushed);
+    }
+    Ok(out)
 }
 
 /// The spec's secrets that the deployed Worker lacks.

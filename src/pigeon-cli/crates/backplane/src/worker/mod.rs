@@ -43,6 +43,13 @@ async fn fetch(mut req: Request, env: Env, _ctx: worker::Context) -> Result<Resp
         Ok(who) => who,
         Err(why) => return Response::error(format!("unauthorized: {why}"), 401),
     };
+    let deployer = platform::secret(&env, cobot::ship_wire::ACCESS_ID_VAR).ok();
+    if req.path() == "/healthz" {
+        return health(&env, &settings).await;
+    }
+    if deployer.is_some_and(|d| d == who.subject) {
+        return Response::error("the deployer's token reads /healthz only", 403);
+    }
     if req.path().starts_with("/git/") {
         return gitdoor::serve(req, &env, &settings, &who).await;
     }
@@ -303,6 +310,18 @@ async fn dispatch(
             let (status, v) = to_change(env, &s.repo, number, Method::Get, "/status", None).await?;
             Ok((Some(number.to_string()), respond(operation, status, v)))
         }
+        Routed::DeployRetry => {
+            let mut r = main_stub(env, &s.repo)?
+                .fetch_with_request(json_request(
+                    "https://main/retry",
+                    Method::Post,
+                    None,
+                    None,
+                )?)
+                .await?;
+            let v: Value = r.json().await?;
+            Ok((None, respond(operation, r.status_code(), v)))
+        }
         Routed::DeployStatus => {
             let mut r = main_stub(env, &s.repo)?
                 .fetch_with_str("https://main/status")
@@ -328,6 +347,31 @@ async fn dispatch(
             Ok((None, respond(operation, 200, json!({ "changes": rows }))))
         }
     }
+}
+
+/// `/healthz`: the version serving, and whether D1 and a Durable Object answer; see
+/// .claude/decisions/2026-11-07-development-control-plane-deploys-itself.md §7.
+async fn health(env: &Env, s: &Settings) -> Result<Response> {
+    let version = env
+        .get_binding::<worker::WorkerVersionMetadata>("CF_VERSION_METADATA")
+        .map(|v| v.id())
+        .unwrap_or_default();
+    let d1 = match env.d1("DB") {
+        Ok(db) => db.prepare("SELECT 1").all().await.is_ok(),
+        Err(_) => false,
+    };
+    let object = match main_stub(env, &s.repo) {
+        Ok(stub) => stub
+            .fetch_with_str("https://main/status")
+            .await
+            .is_ok_and(|r| r.status_code() == 200),
+        Err(_) => false,
+    };
+    let ok = d1 && object && !version.is_empty();
+    Ok(Response::from_json(
+        &json!({ "ok": ok, "version": version, "d1": d1, "durable_object": object }),
+    )?
+    .with_status(if ok { 200 } else { 503 }))
 }
 
 fn main_stub(env: &Env, repo: &str) -> Result<worker::Stub> {

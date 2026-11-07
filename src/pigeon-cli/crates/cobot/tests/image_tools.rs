@@ -34,7 +34,13 @@ fn mise(manifest: &str, tool: &str) -> String {
 fn image_tools_match_mise() {
     let dockerfile = read("../../Dockerfile");
     let toml = read("../../../../mise.toml");
-    for (key, tool) in [("TOFU_VERSION", "opentofu"), ("ZOLA_VERSION", "zola")] {
+    for (key, tool) in [
+        ("TOFU_VERSION", "opentofu"),
+        ("ZOLA_VERSION", "zola"),
+        ("NODE_VERSION", "node"),
+        ("WRANGLER_VERSION", "\"npm:wrangler\""),
+        ("WORKER_BUILD_VERSION", "\"cargo:worker-build\""),
+    ] {
         let want = mise(&toml, tool);
         let got = defaults(&dockerfile, key);
         assert!(!got.is_empty(), "Dockerfile has no ARG {key}");

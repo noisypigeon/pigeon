@@ -289,7 +289,7 @@ fn changelog_rules() {
 #[test]
 fn every_policy_is_valid() {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../../.config/policies");
-    assert_eq!(sentinel::load_dir(&dir).expect("loads").len(), 13);
+    assert_eq!(sentinel::load_dir(&dir).expect("loads").len(), 14);
 }
 
 fn layout_root(skip: &[&str], extra: &[&str]) -> TempDir {
@@ -447,6 +447,34 @@ fn mirror_forbids_github_workflows() {
             v.iter().any(|m| m.starts_with(&format!("{file}:1:"))),
             "{file}: {v:?}"
         );
+    }
+}
+
+#[test]
+fn migrations_only_expand() {
+    let dir = "src/pigeon-cli/crates/backplane/migrations";
+    let ok = [
+        (
+            "src/pigeon-cli/crates/backplane/migrations/0001_schema.sql",
+            "CREATE TABLE runs (id TEXT PRIMARY KEY);\n",
+        ),
+        (
+            "src/pigeon-cli/crates/backplane/migrations/0002_more.sql",
+            "ALTER TABLE runs ADD COLUMN at INTEGER;\n",
+        ),
+    ];
+    passes(&violations("migrations", tree_root(&ok).path(), None));
+    for sql in [
+        "DROP TABLE runs;\n",
+        "ALTER TABLE runs DROP COLUMN at;\n",
+        "ALTER TABLE runs RENAME TO jobs;\n",
+        "alter table runs rename column at to started;\n",
+    ] {
+        let file = format!("{dir}/0003_contract.sql");
+        let mut files = ok.to_vec();
+        files.push((file.as_str(), sql));
+        let v = violations("migrations", tree_root(&files).path(), None);
+        assert!(v.iter().any(|m| m.starts_with(&file)), "{sql}: {v:?}");
     }
 }
 

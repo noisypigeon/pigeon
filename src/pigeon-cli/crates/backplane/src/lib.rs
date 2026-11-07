@@ -18,6 +18,8 @@ pub mod mcp;
 pub mod runs;
 #[cfg(feature = "engines")]
 pub mod serve;
+#[cfg(feature = "engines")]
+pub mod ship;
 pub mod totp;
 pub mod wire;
 #[cfg(feature = "worker")]

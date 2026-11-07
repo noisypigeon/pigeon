@@ -1,0 +1,6 @@
+description: D1 migrations only expand, because a rollback runs the previous Worker against them; a drop or rename waits for a later change, per 2026-11-07-development-control-plane-deploys-itself.md §7.
+target: tree
+rules:
+  - find:
+      match: '/migrations/[^/]+\.sql$'
+      forbid_content: '(?i)\b(drop|rename)\b'

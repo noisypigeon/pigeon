@@ -213,7 +213,12 @@ belong in the ADR, never in the file.
   attribute, decrypted with the state passphrase; sensitive values stay hidden.
 - `pigeon cobot workers validate|permissions|render|plan|deploy|status|secrets put|teardown`:
   the platform's Workers, from `infra/<unit>/workers/<name>/worker.yaml`, with
-  wrangler; `deploy --plan ID` only, from `plan --state …`.
+  wrangler; `deploy --plan ID` only, from `plan --state …`; this local deploy
+  is break-glass once the pipeline deploys Workers.
+- `pigeon cobot workers outputs --state …` and `workers images push`: the JSON
+  for the `DEPLOY_OUTPUTS` and `DEPLOY_IMAGES` Worker secrets, piped to
+  `workers secrets put`; `deploy_retry` deploys `main` again after a deploy
+  failed, as for a missing image.
 - `CHANGE_BASE=origin/main mise run ci-scoped`: only the checks this branch's
   paths need (`pigeon cobot scope`; `--file P` to name paths, `--json` to list
   them; backplane's `change.scope` answers the same); `mise run ci` stays the

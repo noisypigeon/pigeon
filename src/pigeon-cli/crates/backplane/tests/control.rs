@@ -167,6 +167,7 @@ fn reports_become_events() {
         }],
         merged: None,
         published: vec![],
+        workers: vec![],
     };
     assert_eq!(
         control::event_of("fmt", A, &report(Outcome::Running, vec![])),
@@ -380,6 +381,7 @@ fn deploy_report(outcome: Outcome) -> Report {
         checks: vec![],
         merged: None,
         published: vec!["sites/docs".into()],
+        workers: vec!["pigeon-control: v1 → v2".into()],
     }
 }
 
@@ -462,12 +464,16 @@ fn no_free_container_is_waiting_not_a_lost_job() {
 }
 
 #[test]
-fn checks_run_on_checker_and_git_jobs_on_runner() {
+fn checks_and_deploys_run_on_checker_and_git_jobs_on_runner() {
     use backplane::changes::MERGE;
     use backplane::control::Class;
     assert_eq!(control::class_of(BOUND), Class::Runner);
     assert_eq!(control::class_of(MERGE), Class::Runner);
-    assert_eq!(control::class_of(control::DEPLOY), Class::Runner);
+    assert_eq!(
+        control::class_of(control::DEPLOY),
+        Class::Checker,
+        "a deploy builds the Worker"
+    );
     assert_eq!(control::class_of("fmt"), Class::Checker);
     assert_eq!(
         control::class_of("clippy backplane worker (wasm)"),
@@ -510,4 +516,27 @@ fn git_tokens_show_metadata_and_never_a_value() {
         json!([{ "id": "t3" }])
     );
     assert_eq!(control::token_rows(&json!(null)), json!([]));
+}
+
+#[test]
+fn a_failed_deploy_is_retried_on_request_and_only_then() {
+    let mut p = Pipeline::default();
+    assert_eq!(p.retry(), None, "nothing deployed or failed yet");
+    p.pushed(A);
+    assert_eq!(p.start().as_deref(), Some(A));
+    assert_eq!(p.retry(), None, "a deploy runs");
+    p.finished(&deploy_report(Outcome::Passed), 1);
+    assert_eq!(
+        p.history[0].workers,
+        vec!["pigeon-control: v1 → v2".to_string()]
+    );
+    assert_eq!(p.retry(), None, "the newest push is deployed");
+    p.pushed(B);
+    assert_eq!(p.start().as_deref(), Some(B));
+    p.finished(&deploy_report(Outcome::Failed), 2);
+    assert_eq!(p.start(), None, "a failure waits");
+    assert_eq!(p.retry().as_deref(), Some(B), "until it is retried");
+    assert_eq!(p.retry(), None, "once at a time");
+    p.finished(&deploy_report(Outcome::Passed), 3);
+    assert_eq!(p.deployed.as_deref(), Some(B));
 }

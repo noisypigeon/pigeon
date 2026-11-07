@@ -311,6 +311,13 @@ const CATALOG: &[Operation] = &[
         args: &[],
     },
     Operation {
+        name: "deploy.retry",
+        engine: Engine::Backplane,
+        effect: Effect::Build,
+        summary: "Deploy main's newest push again after its deploy failed, as when its image was missing",
+        args: &[],
+    },
+    Operation {
         name: "infra.plan",
         engine: Engine::Cobot,
         effect: Effect::Plan,

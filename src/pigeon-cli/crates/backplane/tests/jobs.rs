@@ -285,7 +285,8 @@ fn a_deploy_publishes_only_the_sites_whose_inputs_changed() {
     };
     let r = deploy(&docs_only, Some(&before), "a");
     assert_eq!(r.outcome, Outcome::Passed, "{}", r.log);
-    assert!(r.log.contains("nothing to publish"), "{}", r.log);
+    assert!(r.log.contains("no site to publish"), "{}", r.log);
+    assert!(r.log.contains("no Worker to deploy"), "{}", r.log);
     let mut config = std::fs::read_to_string(work.join("config.yaml")).expect("read");
     config.push_str("# a change the architecture site draws\n");
     std::fs::write(work.join("config.yaml"), config).expect("write");

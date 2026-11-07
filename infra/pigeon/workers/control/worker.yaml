@@ -36,8 +36,15 @@ bindings:
     REPO: pigeon
     # change/1 to change/11 were pushed by hand, before the control plane numbered changes.
     CHANGE_FLOOR: "12"
+    # Where the deploy job asks /healthz.
+    PUBLIC_HOST: pigeon-control.pigeon-dev.workers.dev
+  version_metadata: CF_VERSION_METADATA
 # DEPLOY_TOKEN: an account token with Workers R2 Storage Edit and Zone Read, for publishing sites.
 # SESSION_KEY: 32 random bytes, hex; signs MCP session IDs.
 # APPROVER_TOTP: the owner's authenticator secret, base32, from `pigeon backplane totp-secret`.
 # APPROVER: the owner's email, recorded on approvals made in the card.
-secrets: [BACKPLANE_TOKEN, ARTIFACTS_TOKEN, ACCESS_TEAM, ACCESS_AUD, DEPLOY_TOKEN, SESSION_KEY, APPROVER_TOTP, APPROVER]
+# The deploy job's alone, per .claude/decisions/2026-11-07-development-control-plane-deploys-itself.md:
+# WORKERS_DEPLOY_TOKEN: an account token with `pigeon cobot workers permissions`;
+# DEPLOY_OUTPUTS: `pigeon cobot workers outputs`; DEPLOY_IMAGES: `pigeon cobot workers images push`;
+# DEPLOYER_ACCESS_ID, DEPLOYER_ACCESS_SECRET: an Access service token, for /healthz only.
+secrets: [BACKPLANE_TOKEN, ARTIFACTS_TOKEN, ACCESS_TEAM, ACCESS_AUD, DEPLOY_TOKEN, SESSION_KEY, APPROVER_TOTP, APPROVER, WORKERS_DEPLOY_TOKEN, DEPLOY_OUTPUTS, DEPLOY_IMAGES, DEPLOYER_ACCESS_ID, DEPLOYER_ACCESS_SECRET]

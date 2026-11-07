@@ -193,6 +193,20 @@ pub enum WorkersCommand {
     Secrets(WorkersSecrets),
     /// Delete a Worker and its Container applications
     Teardown(WorkersOne),
+    /// Print the state's outputs the specs reference, as JSON, for
+    /// `secrets put <worker> DEPLOY_OUTPUTS`
+    Outputs(WorkersState),
+    /// Container images in Cloudflare's registry
+    #[command(subcommand)]
+    Images(WorkersImages),
+}
+
+/// `pigeon cobot workers images` commands.
+#[derive(Subcommand, Debug)]
+pub enum WorkersImages {
+    /// Build each container's image with Docker and push it to Cloudflare's registry; print
+    /// their references as JSON, for `secrets put <worker> DEPLOY_IMAGES`
+    Push(WorkersAt),
 }
 
 /// The repository root, and Workers by name [default: every one].

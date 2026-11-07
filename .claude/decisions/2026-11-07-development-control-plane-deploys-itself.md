@@ -211,3 +211,40 @@ Each step is a change through the pipeline, in this order:
 - **A `DEPLOY_OUTPUTS` missing a reference** refuses the deploy, naming it.
 - **A job-runner fix,** after §5, runs in the next change's jobs without an
   image build.
+
+## Amendments
+
+### 2026-11-07: Steps 2 to 4 land as one change; the job image blocks a deploy only on its protocol
+
+- **One change.** The deploy job's new code runs only in a rebuilt `ci` image,
+  so the snapshot, images by reference, `/healthz`, the image's tools and the
+  Worker deploy in `MainRun` land together.
+- **The owner's one-time setup, from the merged `main`:**
+  - set `WORKERS_DEPLOY_TOKEN`;
+  - create the deployer's Access service token, add it to the Access
+    application, and set `DEPLOYER_ACCESS_ID` and `DEPLOYER_ACCESS_SECRET`;
+  - publish `DEPLOY_OUTPUTS` with `pigeon cobot workers outputs`;
+  - push the new image with `pigeon cobot workers images push` into
+    `DEPLOY_IMAGES`;
+  - deploy once by hand.
+- **§4's "needs image" narrows** (`cobot::scope::image_inputs`).
+  - Until §5, every Rust change would leave the image behind `pigeon`, which
+    would hold nearly every deploy.
+  - **A deploy waits** only when a change since the images' commit touches
+    the image's tools (the Dockerfile, `mise.toml`, the toolchain) or the job
+    protocol the Worker and the job server share (backplane's `control.rs`,
+    `jobs.rs`, `changes.rs`, `runs.rs` and `serve.rs`).
+  - **Other changes deploy.** Any other `pigeon` code or `Cargo.lock` only
+    leaves the image behind, and the deploy's log says so.
+  - **After a new image** is pushed and `DEPLOY_IMAGES` set, `deploy.retry` (a
+    build operation, open to the agent) deploys `main`'s newest push again.
+- **The deploy job runs on `Checker`,** because it builds the Worker to wasm,
+  amending the approvals ADR's §4 table. The `ci` image warms that release
+  build.
+- **The deploy uses `wrangler deploy`,** not `versions upload`. It records the
+  version serving before and after from the Workers deployments API, and a
+  rollback is a deployment of the recorded version at 100%.
+- **Only `/healthz` for the deployer.** The deployer's Access token is refused
+  every other path by the Worker itself. `/healthz` answers 503 unless D1 and
+  `MainRun` answer and the version is known.
+- **What remains:** §5, `pigeon` from `builds/`, then §6.

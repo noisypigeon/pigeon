@@ -37,6 +37,8 @@ pub enum Routed {
     },
     /// What `main`'s pipeline last published.
     DeployStatus,
+    /// Deploy `main`'s newest push again after it failed.
+    DeployRetry,
     /// The repository's git tokens, without their values.
     GitTokens,
     /// Every change, optionally in one state.
@@ -123,6 +125,7 @@ pub fn route(request: &Request, by: &str, at: u64) -> Result<Routed, String> {
         }),
         "change.status" => Ok(Routed::Status { number: number(a)? }),
         "deploy.status" => Ok(Routed::DeployStatus),
+        "deploy.retry" => Ok(Routed::DeployRetry),
         "git.tokens" => Ok(Routed::GitTokens),
         "change.list" => Ok(Routed::List {
             state: text(a, "state"),
@@ -336,6 +339,9 @@ pub struct Report {
     /// For a deploy: the sites it published.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub published: Vec<String>,
+    /// For a deploy: each Worker it deployed, as `<name>: <from> → <to>`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub workers: Vec<String>,
 }
 
 /// The event a finished report is, for `job` on head `sha`; none while it runs.
@@ -585,6 +591,9 @@ pub struct Deployed {
     /// The sites it published.
     #[serde(default)]
     pub published: Vec<String>,
+    /// Each Worker it deployed, as `<name>: <from> → <to>`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub workers: Vec<String>,
     /// Its violations, or why it failed.
     #[serde(default)]
     pub violations: Vec<String>,
@@ -650,8 +659,23 @@ impl Pipeline {
             outcome: report.outcome,
             at,
             published: report.published.clone(),
+            workers: report.workers.clone(),
             violations: report.violations.clone(),
         });
+    }
+
+    /// Deploy the newest push again after it failed, as when its image was missing; none while
+    /// a deploy runs, or when the newest push is deployed.
+    pub fn retry(&mut self) -> Option<String> {
+        if self.running.is_some() || self.target.is_some() {
+            return None;
+        }
+        let last = self.history.first()?;
+        if last.outcome != Outcome::Failed || self.deployed.as_deref() == Some(last.sha.as_str()) {
+            return None;
+        }
+        self.target = Some(last.sha.clone());
+        self.start()
     }
 
     /// The running deploy's Container was lost: the same deploy, again, until its attempts are
@@ -670,6 +694,7 @@ impl Pipeline {
             outcome: Outcome::Failed,
             at,
             published: Vec::new(),
+            workers: Vec::new(),
             violations: vec![format!(
                 "the deploy's Container was lost {} times",
                 crate::runs::MAX_ATTEMPTS
@@ -717,7 +742,9 @@ impl Class {
 /// The class `job` runs in.
 #[must_use]
 pub fn class_of(job: &str) -> Class {
-    if job == BOUND || job == MERGE || job == DEPLOY {
+    // A deploy builds the Worker to wasm, so it runs on `Checker`; see
+    // .claude/decisions/2026-11-07-development-control-plane-deploys-itself.md.
+    if job == BOUND || job == MERGE {
         Class::Runner
     } else {
         Class::Checker

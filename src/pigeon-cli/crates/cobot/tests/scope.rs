@@ -189,3 +189,31 @@ fn deploys_name_the_sites_a_change_to_main_publishes() {
         "code and docs publish nothing; a template reaches a site by its pinned tag"
     );
 }
+
+#[test]
+fn workers_deploy_when_their_spec_crates_or_migrations_change() {
+    let workers = |files: Option<&[&str]>| {
+        let files: Option<Vec<String>> =
+            files.map(|f| f.iter().map(|s| (*s).to_string()).collect());
+        cobot::scope::workers(&repo_root(), files.as_deref()).expect("scopes")
+    };
+    let control = vec!["pigeon-control".to_string()];
+    for hit in [
+        "src/pigeon-cli/crates/backplane/src/mcp.rs",
+        "src/pigeon-cli/crates/cobot/src/workers.rs",
+        "src/pigeon-cli/crates/backplane/migrations/0003_x.sql",
+        "infra/pigeon/workers/control/worker.yaml",
+        "src/pigeon-cli/Dockerfile",
+        "src/pigeon-cli/Cargo.lock",
+    ] {
+        assert_eq!(workers(Some(&[hit])), control, "{hit}");
+    }
+    for miss in [
+        ".claude/decisions/x.md",
+        "src/site-templates/blog/templates/index.html",
+        "infra/pigeon/sites/docs/config.yaml",
+    ] {
+        assert!(workers(Some(&[miss])).is_empty(), "{miss}");
+    }
+    assert_eq!(workers(None), control);
+}

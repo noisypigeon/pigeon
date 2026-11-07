@@ -42,6 +42,10 @@ pub mod secrets;
 #[cfg(feature = "engines")]
 pub mod session;
 #[cfg(feature = "engines")]
+pub mod ship;
+#[cfg(any(feature = "engines", feature = "worker"))]
+pub mod ship_wire;
+#[cfg(feature = "engines")]
 pub mod sites;
 #[cfg(feature = "engines")]
 pub mod state;

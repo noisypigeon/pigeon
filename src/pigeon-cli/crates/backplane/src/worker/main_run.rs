@@ -77,7 +77,17 @@ impl MainRun {
                 .await
                 .map_err(|e| e.to_string())?;
         let deploy = secret(&self.env, "DEPLOY_TOKEN").map_err(|e| e.to_string())?;
-        let env = BTreeMap::from([("CLOUDFLARE_API_TOKEN".to_string(), deploy)]);
+        let mut env = BTreeMap::from([("CLOUDFLARE_API_TOKEN".to_string(), deploy)]);
+        // Only the deploy job receives these; see
+        // .claude/decisions/2026-11-07-development-control-plane-deploys-itself.md §6.
+        for k in cobot::ship_wire::SECRETS {
+            if let Ok(v) = secret(&self.env, k) {
+                env.insert(k.to_string(), v);
+            }
+        }
+        if let Ok(host) = self.env.var(cobot::ship_wire::HOST_VAR) {
+            env.insert(cobot::ship_wire::HOST_VAR.to_string(), host.to_string());
+        }
         let spec = control::deploy_spec(&remote, &token, sha, p.deployed.as_deref(), env);
         let body = serde_json::to_value(&spec).map_err(|e| e.to_string())?;
         let req = json_request("https://checker/start", Method::Post, Some(&body), None)
@@ -141,6 +151,18 @@ impl DurableObject for MainRun {
                 let starting = p.start();
                 self.save(&p, starting.as_deref()).await?;
                 Response::from_json(&p)
+            }
+            (Method::Post, "retry") => {
+                let mut p = self.pipeline().await?;
+                let starting = p.retry();
+                self.save(&p, starting.as_deref()).await?;
+                if starting.is_none() {
+                    return Response::error(
+                        "nothing to retry: a deploy runs, or main's newest push is deployed or hasn't failed",
+                        409,
+                    );
+                }
+                Response::from_json(&json!({ "pipeline": p }))
             }
             (Method::Get, "status") => {
                 let p = self.pipeline().await?;
