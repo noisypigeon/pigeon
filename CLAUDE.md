@@ -84,6 +84,11 @@ belong in the ADR, never in the file.
   `DEPLOY_OUTPUTS`, images by registry reference, a health check and
   rollback; the local deploy is break-glass, per
   [`2026-11-07-development-control-plane-deploys-itself.md`](.claude/decisions/2026-11-07-development-control-plane-deploys-itself.md).
+- Job images: `images push` mints its own long registry login; the `ci`
+  image warms only dependencies; jobs start through `pigeon-start` from
+  `main`'s newest `builds/<sha>/pigeon`, pinned by SHA-256; images are built
+  on Cloudflare once a BuildKit spike works, per
+  [`2026-11-07-development-job-images-on-cloudflare.md`](.claude/decisions/2026-11-07-development-job-images-on-cloudflare.md).
 - The agent's git goes through the control plane's front door,
   `/git/<namespace>/<repo>.git`: a token minted per request, pushes only to an
   authorized change's branch, all or nothing, and `git.tokens` lists tokens
