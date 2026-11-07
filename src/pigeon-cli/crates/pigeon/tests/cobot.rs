@@ -168,3 +168,19 @@ fn plan_names_each_tofu_step_on_stderr() {
         "progress stays off stdout"
     );
 }
+
+#[test]
+fn a_worker_secret_is_never_set_empty() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../..");
+    cobot()
+        .args(["workers", "secrets", "put", "--root"])
+        .arg(&root)
+        .args(["pigeon-control", "DEPLOY_IMAGES"])
+        .env_remove("CLOUDFLARE_API_TOKEN")
+        .write_stdin("\n")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "no value on stdin; DEPLOY_IMAGES is unchanged",
+        ));
+}

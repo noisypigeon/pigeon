@@ -61,7 +61,7 @@ ARG NODE_SHA256=cc2f601cee82d9a5a233302fe307abc600727035fd7d2c3a3571755989e95008
 ARG WRANGLER_VERSION=4.151.3
 ARG WORKER_BUILD_VERSION=0.8.7
 RUN apt-get update \
- && apt-get install -y --no-install-recommends ca-certificates curl git xz-utils \
+ && apt-get install -y --no-install-recommends ca-certificates curl git libssl-dev pkg-config xz-utils \
  && rm -rf /var/lib/apt/lists/* \
  && rustup component add clippy rustfmt \
  && rustup target add wasm32-unknown-unknown \

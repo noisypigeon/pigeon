@@ -66,6 +66,13 @@ pub fn run(command: WorkersCommand) -> Result<(), cobot::Error> {
                     message: e.to_string(),
                 })?;
             let value = value.trim_end_matches(['\r', '\n']);
+            // A pipe whose producer failed sends nothing; a secret is never set empty.
+            if value.is_empty() {
+                return Err(cobot::Error::Tool {
+                    command: "secrets put".into(),
+                    message: format!("no value on stdin; {} is unchanged", p.key),
+                });
+            }
             workers::put_secret(&f, &p.key, value, &tools()?, &p.worker.root)?;
             println!("cobot: set {} on {}", p.key, f.spec.name);
             Ok(())
