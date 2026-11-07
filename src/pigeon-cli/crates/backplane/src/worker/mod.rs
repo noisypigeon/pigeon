@@ -369,7 +369,7 @@ async fn health(env: &Env, s: &Settings) -> Result<Response> {
     };
     let ok = d1 && object && !version.is_empty();
     Ok(Response::from_json(
-        &json!({ "ok": ok, "version": version, "d1": d1, "durable_object": object }),
+        &json!({ "ok": ok, "version": version, "instance": s.instance, "d1": d1, "durable_object": object }),
     )?
     .with_status(if ok { 200 } else { 503 }))
 }
