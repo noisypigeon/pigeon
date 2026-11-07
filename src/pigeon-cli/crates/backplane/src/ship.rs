@@ -163,10 +163,12 @@ pub fn build(
     let bucket = workers::resolve(&reference, &outputs)?;
     let workspace = dir.join(cobot::scope::WORKSPACE);
     let argv: Vec<String> = BUILD.iter().map(|s| (*s).to_string()).collect();
+    let started = std::time::Instant::now();
     let (ok, out) = cobot::ci::exec(&workspace, &argv, cobot::ci::TIMEOUT, &spec.token);
+    let took = started.elapsed().as_secs();
     if !ok {
         let _ = writeln!(log, "{}", crate::control::tail(&out));
-        return Err("pigeon's release build failed".into());
+        return Err(format!("pigeon's release build failed after {took}s"));
     }
     let target = std::env::var_os("CARGO_TARGET_DIR")
         .map_or_else(|| workspace.join("target"), std::path::PathBuf::from);
@@ -195,7 +197,11 @@ pub fn build(
                 .replace(&bucket, "…")
                 .replace(&account, "…")
         })?;
-    let _ = writeln!(log, "stored {key}: {} bytes, sha256 {sha256}", binary.len());
+    let _ = writeln!(
+        log,
+        "stored {key}: built in {took}s, {} bytes, sha256 {sha256}",
+        binary.len()
+    );
     Ok(Some(Build {
         sha: spec.sha.clone(),
         sha256,
