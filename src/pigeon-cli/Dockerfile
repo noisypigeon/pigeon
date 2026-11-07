@@ -112,5 +112,14 @@ RUN export CARGO_BUILD_JOBS="$WARM_JOBS" \
  && cd / && rm -rf /warm \
  && mkdir -p /tmp/.cache \
  && chown -R 65532:65532 /cache /tmp/.cache
+# Rootless BuildKit for image jobs: the job user by name, setuid newuidmap and newgidmap, and its
+# subordinate IDs (job images ADR §4, spike amendment). After the warm-up, so that layer stays.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends uidmap \
+ && rm -rf /var/lib/apt/lists/* \
+ && echo 'nonroot:x:65532:65532:nonroot:/tmp:/usr/sbin/nologin' >> /etc/passwd \
+ && echo 'nonroot:x:65532:' >> /etc/group \
+ && echo 'nonroot:100000:65536' >> /etc/subuid \
+ && echo 'nonroot:100000:65536' >> /etc/subgid
 USER 65532:65532
 ENTRYPOINT ["/usr/local/bin/pigeon"]

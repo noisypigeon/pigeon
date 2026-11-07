@@ -289,3 +289,25 @@ Each step is its own change, in this order:
   passed, a retry deploys it again from nothing: every site, and every Worker
   with its current images. A deploy since itself would change nothing. A
   failed push is retried from the last deploy that passed, as before.
+
+### 2026-11-07: The spike's first findings; the `ci` image gains rootless BuildKit's prerequisites
+
+- **A `Checker` Container,** from change 40's runs:
+  - a micro-VM (`6.18.56-cloudflare-microvm`), with 4 CPUs, 12 GB of memory
+    and 15 GB of free disk, running as user 65532;
+  - user namespaces allowed (`unshare -Ur` works), overlay available, no
+    seccomp, `NoNewPrivs` 0, a full capability bounding set, and setuid
+    honoured on the root filesystem;
+  - fast pulls from Docker Hub.
+- **BuildKit starts, but can't build.**
+  - In a one-ID user namespace `buildkitd` answers, but unpacking a base
+    image fails: `lchown … /etc/gshadow … GID 42: invalid argument`. An
+    image's files belong to more than one user.
+  - RootlessKit needs subordinate ID ranges, and the image has none, nor
+    `newuidmap`.
+- **So the `ci` stage gains, after its warm-up layer:**
+  - the `uidmap` package;
+  - a `nonroot` entry for 65532 in `/etc/passwd` and `/etc/group`;
+  - `nonroot:100000:65536` in `/etc/subuid` and `/etc/subgid`.
+
+  The spike then runs again under RootlessKit, for the build's time and disk.
