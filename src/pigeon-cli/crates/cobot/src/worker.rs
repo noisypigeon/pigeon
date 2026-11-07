@@ -97,12 +97,47 @@ impl Launch {
     }
 }
 
-/// What a job's Container needs: only the signing key. A job's read token comes with its
-/// request, so nothing else lives in the Container's environment.
+/// The variable naming the `pigeon` build a job Container downloads.
+pub const BUILD_URL_VAR: &str = "PIGEON_BUILD_URL";
+/// The variable holding that build's SHA-256.
+pub const BUILD_SHA256_VAR: &str = "PIGEON_BUILD_SHA256";
+/// The variable holding the builds token's client ID.
+pub const BUILD_ACCESS_ID_VAR: &str = "PIGEON_BUILD_ACCESS_ID";
+/// The variable holding the builds token's secret.
+pub const BUILD_ACCESS_SECRET_VAR: &str = "PIGEON_BUILD_ACCESS_SECRET";
+/// The image's wrapper that runs a named build, else the image's `pigeon`.
+pub const START: &str = "/usr/local/bin/pigeon-start";
+
+/// A `pigeon` build a job Container runs: where to download it, and its SHA-256; see
+/// `.claude/decisions/2026-11-07-development-job-images-on-cloudflare.md` §3.
+#[derive(Clone, PartialEq, Eq)]
+pub struct JobsBuild {
+    /// Its URL, behind Access.
+    pub url: String,
+    /// Its SHA-256, hex.
+    pub sha256: String,
+    /// The Access service token that may read it: client ID and secret.
+    pub access: (String, String),
+}
+
+impl std::fmt::Debug for JobsBuild {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("JobsBuild")
+            .field("url", &self.url)
+            .field("sha256", &self.sha256)
+            .finish_non_exhaustive()
+    }
+}
+
+/// What a job's Container needs: the signing key, and the build to run if there is one. A
+/// job's read token comes with its request, so nothing else lives in the Container's
+/// environment.
 #[derive(Clone, PartialEq, Eq)]
 pub struct JobsLaunch {
     /// The signing key.
     pub token: String,
+    /// `main`'s newest `pigeon`, run through [`START`]; none runs the image's own.
+    pub build: Option<JobsBuild>,
 }
 
 impl std::fmt::Debug for JobsLaunch {
@@ -112,11 +147,17 @@ impl std::fmt::Debug for JobsLaunch {
 }
 
 impl JobsLaunch {
-    /// The Container's command line: `pigeon backplane jobs`, signed.
+    /// The Container's command line: `pigeon backplane jobs`, signed; through [`START`] when a
+    /// build is named.
     #[must_use]
     pub fn entrypoint(&self) -> Vec<String> {
+        let program = if self.build.is_some() {
+            START
+        } else {
+            "/usr/local/bin/pigeon"
+        };
         [
-            "/usr/local/bin/pigeon",
+            program,
             "backplane",
             "jobs",
             "--listen",
@@ -126,10 +167,17 @@ impl JobsLaunch {
         .to_vec()
     }
 
-    /// The Container's environment: the signing key only.
+    /// The Container's environment: the signing key, and the build's URL and SHA-256.
     #[must_use]
     pub fn env(&self) -> Vec<(&'static str, &str)> {
-        vec![(TOKEN_VAR, self.token.as_str())]
+        let mut env = vec![(TOKEN_VAR, self.token.as_str())];
+        if let Some(b) = &self.build {
+            env.push((BUILD_URL_VAR, b.url.as_str()));
+            env.push((BUILD_SHA256_VAR, b.sha256.as_str()));
+            env.push((BUILD_ACCESS_ID_VAR, b.access.0.as_str()));
+            env.push((BUILD_ACCESS_SECRET_VAR, b.access.1.as_str()));
+        }
+        env
     }
 }
 
@@ -411,6 +459,70 @@ mod tests {
                 ("COBOT_STATE_PASSPHRASE", "passphrase"),
             ]
         );
+    }
+
+    #[test]
+    fn a_job_starts_through_pigeon_start_only_when_a_build_is_named() {
+        let mut jobs = super::JobsLaunch {
+            token: TOKEN.into(),
+            build: None,
+        };
+        assert_eq!(jobs.entrypoint()[0], "/usr/local/bin/pigeon");
+        assert_eq!(jobs.env(), [("BACKPLANE_TOKEN", TOKEN)]);
+        let sha256 = "ab".repeat(32);
+        jobs.build = Some(super::JobsBuild {
+            url: "https://control.example/builds/x/pigeon".into(),
+            sha256: sha256.clone(),
+            access: ("builds-id".into(), "builds-secret".into()),
+        });
+        assert!(!format!("{jobs:?}").contains("builds-secret"));
+        assert!(!format!("{:?}", jobs.build.as_ref().expect("a build")).contains("builds-secret"));
+        assert_eq!(
+            jobs.entrypoint(),
+            [
+                "/usr/local/bin/pigeon-start",
+                "backplane",
+                "jobs",
+                "--listen",
+                "0.0.0.0:8080"
+            ]
+        );
+        assert_eq!(
+            jobs.env(),
+            [
+                ("BACKPLANE_TOKEN", TOKEN),
+                (
+                    "PIGEON_BUILD_URL",
+                    "https://control.example/builds/x/pigeon"
+                ),
+                ("PIGEON_BUILD_SHA256", sha256.as_str()),
+                ("PIGEON_BUILD_ACCESS_ID", "builds-id"),
+                ("PIGEON_BUILD_ACCESS_SECRET", "builds-secret"),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_build_path_names_one_full_commit_and_nothing_else() {
+        let sha = "0123456789abcdef0123456789abcdef01234567";
+        assert_eq!(
+            crate::ship_wire::build_path_sha(&format!("/builds/{sha}/pigeon")),
+            Some(sha)
+        );
+        assert_eq!(
+            crate::ship_wire::build_key(sha),
+            format!("builds/{sha}/pigeon")
+        );
+        for bad in [
+            "/builds/0123456789ab/pigeon".to_string(),
+            format!("/builds/{}/pigeon", sha.to_uppercase()),
+            format!("/builds/{sha}/other"),
+            format!("/builds/{sha}/../ci/log/pigeon"),
+            format!("/builds/../{sha}/pigeon"),
+            format!("/ci/{sha}/pigeon"),
+        ] {
+            assert_eq!(crate::ship_wire::build_path_sha(&bad), None, "{bad}");
+        }
     }
 
     #[test]

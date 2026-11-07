@@ -142,27 +142,38 @@ fn ids_names_and_images_are_scrubbed() {
 }
 
 #[test]
-fn image_inputs_block_on_the_job_protocol_and_lag_on_other_code() {
+fn image_inputs_block_only_on_the_image_tools() {
     let files = |f: &[&str]| f.iter().map(|s| (*s).to_string()).collect::<Vec<_>>();
-    let (blocks, lags) = cobot::scope::image_inputs(&files(&[
+    let blocks = cobot::scope::image_inputs(&files(&[
         "src/pigeon-cli/Dockerfile",
         "src/pigeon-cli/crates/backplane/src/jobs.rs",
-        "src/pigeon-cli/crates/backplane/src/mcp.rs",
+        "src/pigeon-cli/pigeon-start",
         "src/pigeon-cli/Cargo.lock",
+        "mise.toml",
         ".claude/decisions/x.md",
     ]));
     assert_eq!(
         blocks,
         files(&[
             "src/pigeon-cli/Dockerfile",
-            "src/pigeon-cli/crates/backplane/src/jobs.rs"
+            "src/pigeon-cli/pigeon-start",
+            "mise.toml"
         ])
     );
-    assert_eq!(
-        lags,
-        files(&[
-            "src/pigeon-cli/crates/backplane/src/mcp.rs",
-            "src/pigeon-cli/Cargo.lock"
-        ])
-    );
+}
+
+#[test]
+fn a_deploy_builds_pigeon_only_when_the_workspace_changed() {
+    let files = |f: &[&str]| f.iter().map(|s| (*s).to_string()).collect::<Vec<_>>();
+    assert!(cobot::scope::builds(None));
+    assert!(cobot::scope::builds(Some(&files(&[
+        "src/pigeon-cli/crates/backplane/src/jobs.rs"
+    ]))));
+    assert!(cobot::scope::builds(Some(&files(&[
+        "src/pigeon-cli/Cargo.lock"
+    ]))));
+    assert!(!cobot::scope::builds(Some(&files(&[
+        ".claude/decisions/x.md",
+        "infra/pigeon/sites/docs/config.yaml"
+    ]))));
 }

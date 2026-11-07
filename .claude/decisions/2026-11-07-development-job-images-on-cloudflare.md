@@ -191,3 +191,51 @@ Each step is its own change, in this order:
   Container runs the image's `pigeon`, and its log says why.
 - **After the spike works:** a Dockerfile change is built, pushed and rolled
   out by the pipeline alone.
+
+## Amendments
+
+### 2026-11-07: Steps 2 to 4 landed; the measured sizes; how `pigeon` from builds starts
+
+- **Sizes** (Docker Desktop's content size, compressed; `docker history` shows 0B
+  for every layer on its containerd store, so the cache layer alone wasn't
+  measured):
+
+  | `Checker` image | Size |
+  |---|---|
+  | Before Node and wrangler (`!25`) | about 1.24 GB |
+  | The whole-source warm-up (`!26` to `!30`) | 1.75 GB |
+  | The dependencies-only warm-up (`!31`) | 1.28 GB |
+
+- **`images push` retries a dropped upload** (`!32`). The first push after
+  `!30` failed on a closed connection to Docker Desktop's proxy, not on its
+  login. A failed `docker push` is retried after 10 s and 30 s, skipping the
+  layers already pushed.
+- **How §3 starts:**
+  - The deploy job builds `pigeon` only when something under `src/pigeon-cli/`
+    changed (`cobot::scope::builds`); otherwise jobs keep the last build.
+  - The build is stored in the bucket bound as `CI_LOGS`, the one the Worker
+    serves `/builds/` from, with S3 credentials derived from
+    `WORKERS_DEPLOY_TOKEN`. That replaces §3's public `/builds/*` path; see
+    below.
+  - A Container starts through `pigeon-start` only when `MainRun` has a
+    `latest_build`. Before the first build it runs the image's `pigeon`
+    directly, so an image without `pigeon-start` still starts.
+  - `latest_build` is kept from any deploy whose report names a build of its
+    own commit, even when the rest of that deploy failed.
+- **Builds are read with an Access service token, not a bypass.** Access's
+  Workers application type has no path field, so a Bypass on `/builds/*` would
+  open the whole Worker.
+  - A dedicated service token, `BUILDS_ACCESS_ID` and
+    `BUILDS_ACCESS_SECRET`, is given to every job Container with the build's
+    URL. The Worker refuses it every path but `/builds/`, as it refuses the
+    deployer's token every path but `/healthz`.
+  - `pigeon-start` sends its headers through curl's stdin config, never argv,
+    and unsets them before it runs `pigeon`.
+  - Without the token, no build is named, and jobs run the image's `pigeon`.
+  - It reads only builds of public code, so a check's code holding it gains
+    nothing.
+  - `pigeon-start` joins `IMAGE_BLOCKS`, since it lives in the image.
+- **The change that lands §3 needs one last image push.** It edits `jobs.rs`
+  and `control.rs`, which still block a deploy until it is deployed. Its deploy
+  then runs the image's older `pigeon`, which builds nothing, so the first build
+  comes with the next merge that changes `src/pigeon-cli/`.

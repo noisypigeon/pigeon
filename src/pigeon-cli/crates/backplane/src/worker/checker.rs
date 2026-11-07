@@ -61,6 +61,7 @@ async fn serve(state: &State, env: &Env, mut req: Request, class: &str) -> Resul
                 &container,
                 &JobsLaunch {
                     token: token.clone(),
+                    build: super::latest_build(env).await,
                 },
             )
             .await

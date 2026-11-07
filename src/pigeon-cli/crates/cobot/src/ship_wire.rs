@@ -22,3 +22,26 @@ pub const SECRETS: [&str; 5] = [
     ACCESS_ID_VAR,
     ACCESS_SECRET_VAR,
 ];
+
+/// The Access service token job Containers download builds with: its client ID; the Worker
+/// lets it read `/builds/` only.
+pub const BUILDS_ACCESS_ID_VAR: &str = "BUILDS_ACCESS_ID";
+/// See [`BUILDS_ACCESS_ID_VAR`]: its secret.
+pub const BUILDS_ACCESS_SECRET_VAR: &str = "BUILDS_ACCESS_SECRET";
+
+/// The R2 key of `main`'s `pigeon` built at `sha`.
+#[must_use]
+pub fn build_key(sha: &str) -> String {
+    format!("builds/{sha}/pigeon")
+}
+
+/// The commit of a `/builds/<sha>/pigeon` path: a full, lowercase SHA-1, and nothing else.
+#[must_use]
+pub fn build_path_sha(path: &str) -> Option<&str> {
+    let sha = path.strip_prefix("/builds/")?.strip_suffix("/pigeon")?;
+    (sha.len() == 40
+        && sha
+            .bytes()
+            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)))
+    .then_some(sha)
+}

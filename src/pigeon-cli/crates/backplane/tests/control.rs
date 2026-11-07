@@ -168,6 +168,7 @@ fn reports_become_events() {
         merged: None,
         published: vec![],
         workers: vec![],
+        build: None,
     };
     assert_eq!(
         control::event_of("fmt", A, &report(Outcome::Running, vec![])),
@@ -382,6 +383,7 @@ fn deploy_report(outcome: Outcome) -> Report {
         merged: None,
         published: vec!["sites/docs".into()],
         workers: vec!["pigeon-control: v1 → v2".into()],
+        build: None,
     }
 }
 
@@ -413,6 +415,58 @@ fn main_deploys_one_at_a_time_and_always_the_newest_push() {
     assert_eq!(p.target, None, "a finished deploy clears its target");
     p.pushed("not a sha");
     assert_eq!(p.target, None, "only a SHA is a push");
+}
+
+#[test]
+fn the_newest_build_a_deploy_stored_is_what_jobs_run() {
+    let build = |sha: &str| backplane::control::Build {
+        sha: sha.into(),
+        sha256: "ab".repeat(32),
+    };
+    let mut p = Pipeline::default();
+    p.pushed(A);
+    p.start();
+    p.finished(
+        &Report {
+            build: Some(build(A)),
+            ..deploy_report(Outcome::Failed)
+        },
+        10,
+    );
+    assert_eq!(
+        p.latest_build,
+        Some(build(A)),
+        "a build from main is kept even when its deploy failed"
+    );
+    p.pushed(B);
+    p.start();
+    p.finished(&deploy_report(Outcome::Passed), 11);
+    assert_eq!(
+        p.latest_build,
+        Some(build(A)),
+        "a deploy that built nothing keeps the last build"
+    );
+    p.pushed(C);
+    p.start();
+    p.finished(
+        &Report {
+            build: Some(build(B)),
+            ..deploy_report(Outcome::Passed)
+        },
+        12,
+    );
+    assert_eq!(
+        p.latest_build,
+        Some(build(A)),
+        "a build of another commit than the deploy's is refused"
+    );
+    let shown = serde_json::to_value(&p).expect("json");
+    assert_eq!(shown["latest_build"]["sha"], A);
+    let old: Pipeline = serde_json::from_value(serde_json::json!({ "history": [] })).expect("old");
+    assert_eq!(
+        old.latest_build, None,
+        "a pipeline stored before builds still reads"
+    );
 }
 
 #[test]

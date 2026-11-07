@@ -67,6 +67,7 @@ impl Board {
             merged: None,
             published: Vec::new(),
             workers: Vec::new(),
+            build: None,
         };
         self.set(running.clone());
         let board = Arc::clone(self);
@@ -95,6 +96,7 @@ fn report(spec: &JobSpec, outcome: Outcome, log: &str) -> Report {
         merged: None,
         published: Vec::new(),
         workers: Vec::new(),
+        build: None,
     }
 }
 
@@ -146,7 +148,8 @@ pub fn run(spec: &JobSpec, dir: &Path) -> Report {
 }
 
 /// The deploy job: the instance's sites whose inputs changed since the last deploy, built and
-/// published with the job's credentials, then the Workers whose inputs changed; see
+/// published with the job's credentials, then the Workers whose inputs changed, then `pigeon`
+/// for job Containers; see
 /// `.claude/decisions/2026-11-07-development-control-plane-deploys-itself.md`.
 fn deploy(spec: &JobSpec, dir: &Path) -> Report {
     let failed = |why: String, log: &str| Report {
@@ -186,6 +189,13 @@ fn deploy(spec: &JobSpec, dir: &Path) -> Report {
             Vec::new()
         }
     };
+    let build = match crate::ship::build(spec, dir, files.as_deref(), &mut log) {
+        Ok(b) => b,
+        Err(why) => {
+            violations.push(why);
+            None
+        }
+    };
     let violations: Vec<String> = violations.iter().map(|v| scrub(v)).collect();
     for v in &violations {
         let _ = writeln!(log, "violation: {v}");
@@ -193,6 +203,7 @@ fn deploy(spec: &JobSpec, dir: &Path) -> Report {
     Report {
         published,
         workers,
+        build,
         violations: violations.clone(),
         ..report(
             spec,
@@ -322,6 +333,7 @@ fn bound(spec: &JobSpec, dir: &Path) -> Report {
         merged: None,
         published: Vec::new(),
         workers: Vec::new(),
+        build: None,
     }
 }
 

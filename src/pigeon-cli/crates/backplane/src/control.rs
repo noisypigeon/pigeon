@@ -342,6 +342,20 @@ pub struct Report {
     /// For a deploy: each Worker it deployed, as `<name>: <from> → <to>`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub workers: Vec<String>,
+    /// For a deploy: the `pigeon` it built and stored, if it built one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub build: Option<Build>,
+}
+
+/// `main`'s `pigeon` built at a commit and stored at `builds/<sha>/pigeon`; see
+/// `.claude/decisions/2026-11-07-development-job-images-on-cloudflare.md` §3.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Build {
+    /// The commit of `main` it was built from.
+    pub sha: String,
+    /// The binary's SHA-256, hex.
+    pub sha256: String,
 }
 
 /// The event a finished report is, for `job` on head `sha`; none while it runs.
@@ -616,6 +630,9 @@ pub struct Pipeline {
     /// The last deploys, newest first.
     #[serde(default)]
     pub history: Vec<Deployed>,
+    /// The newest `pigeon` a deploy built, which job Containers run.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latest_build: Option<Build>,
 }
 
 /// How many deploys `deploy.status` keeps.
@@ -649,6 +666,14 @@ impl Pipeline {
         };
         if report.outcome == Outcome::Passed {
             self.deployed = Some(sha.clone());
+        }
+        // A build stored from `main` is good for jobs whatever else the deploy did.
+        if let Some(b) = report
+            .build
+            .clone()
+            .filter(|b| b.sha == sha && b.sha256.len() == 64)
+        {
+            self.latest_build = Some(b);
         }
         // A failure waits for the next push, which publishes everything since the last deploy.
         if self.target.as_deref() == Some(sha.as_str()) {

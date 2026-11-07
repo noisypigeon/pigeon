@@ -554,39 +554,33 @@ pub fn deploys(root: &Path, files: Option<&[String]>) -> Result<Vec<String>, Err
         .collect())
 }
 
-/// Paths whose change makes the job image too old for the Worker: the image's tools, and the
-/// job protocol the Worker and the job server share. A Worker deploy waits for a new image;
-/// see `.claude/decisions/2026-11-07-development-control-plane-deploys-itself.md` §4.
-pub const IMAGE_BLOCKS: [&str; 8] = [
+/// Paths whose change makes the job image too old for the Worker: the image's tools and its
+/// entrypoint. A Worker
+/// deploy waits for a new image; jobs run `main`'s newest `pigeon` from `builds/`, so its code
+/// is not among them; see `.claude/decisions/2026-11-07-development-job-images-on-cloudflare.md`
+/// §3.
+pub const IMAGE_BLOCKS: [&str; 4] = [
     "src/pigeon-cli/Dockerfile",
+    "src/pigeon-cli/pigeon-start",
     "mise.toml",
     "src/pigeon-cli/rust-toolchain.toml",
-    "src/pigeon-cli/crates/backplane/src/control.rs",
-    "src/pigeon-cli/crates/backplane/src/jobs.rs",
-    "src/pigeon-cli/crates/backplane/src/changes.rs",
-    "src/pigeon-cli/crates/backplane/src/runs.rs",
-    "src/pigeon-cli/crates/backplane/src/serve.rs",
 ];
 
-/// Paths whose change leaves the job image behind without breaking it: `pigeon`'s other code,
-/// and its dependencies. A Worker deploy goes out and says so.
-pub const IMAGE_LAGS: [&str; 2] = ["src/pigeon-cli/crates/", "src/pigeon-cli/Cargo.lock"];
-
-/// The files among `files` that make the job image block a Worker deploy, and those that only
-/// leave it behind.
+/// The files among `files` that make the job image block a Worker deploy.
 #[must_use]
-pub fn image_inputs(files: &[String]) -> (Vec<String>, Vec<String>) {
-    let blocks: Vec<String> = files
+pub fn image_inputs(files: &[String]) -> Vec<String> {
+    files
         .iter()
         .filter(|f| IMAGE_BLOCKS.contains(&f.as_str()))
         .cloned()
-        .collect();
-    let lags = files
-        .iter()
-        .filter(|f| !blocks.contains(f) && under(f, &IMAGE_LAGS))
-        .cloned()
-        .collect();
-    (blocks, lags)
+        .collect()
+}
+
+/// Whether a deploy of `main` touching `files` builds `pigeon` again: when any of the Rust
+/// workspace changed; `files` of `None` means everything.
+#[must_use]
+pub fn builds(files: Option<&[String]>) -> bool {
+    files.is_none_or(|f| f.iter().any(|f| f.starts_with("src/pigeon-cli/")))
 }
 
 /// The Workers a change to `main` touching `files` must deploy, by name; `files` of `None`

@@ -38,6 +38,11 @@ const QUEUE: &str = "queue";
 
 #[event(fetch)]
 async fn fetch(mut req: Request, env: Env, _ctx: worker::Context) -> Result<Response> {
+    // Builds of public code, for any identity Access let through; each job checks the SHA-256
+    // its Worker gave it; see .claude/decisions/2026-11-07-development-job-images-on-cloudflare.md §3.
+    if req.method() == Method::Get && req.path().starts_with("/builds/") {
+        return build(&env, &req.path()).await;
+    }
     let settings = Settings::from(&env)?;
     let who = match platform::identify(&req, &settings).await {
         Ok(who) => who,
@@ -49,6 +54,10 @@ async fn fetch(mut req: Request, env: Env, _ctx: worker::Context) -> Result<Resp
     }
     if deployer.is_some_and(|d| d == who.subject) {
         return Response::error("the deployer's token reads /healthz only", 403);
+    }
+    let builds = platform::secret(&env, cobot::ship_wire::BUILDS_ACCESS_ID_VAR).ok();
+    if builds.is_some_and(|b| b == who.subject) {
+        return Response::error("the builds token reads /builds/ only", 403);
     }
     if req.path().starts_with("/git/") {
         return gitdoor::serve(req, &env, &settings, &who).await;
@@ -372,6 +381,53 @@ async fn health(env: &Env, s: &Settings) -> Result<Response> {
         &json!({ "ok": ok, "version": version, "instance": s.instance, "d1": d1, "durable_object": object }),
     )?
     .with_status(if ok { 200 } else { 503 }))
+}
+
+/// `GET /builds/<sha>/pigeon`: `main`'s `pigeon` built at that commit, from R2.
+async fn build(env: &Env, path: &str) -> Result<Response> {
+    let Some(sha) = cobot::ship_wire::build_path_sha(path) else {
+        return Response::error("not found", 404);
+    };
+    let Some(object) = env
+        .bucket("CI_LOGS")?
+        .get(cobot::ship_wire::build_key(sha))
+        .execute()
+        .await?
+    else {
+        return Response::error("no build of that commit", 404);
+    };
+    let Some(body) = object.body() else {
+        return Response::error("no build of that commit", 404);
+    };
+    // Streamed: a build is tens of MB, too much to hold in the Worker's memory.
+    let mut r = Response::from_stream(body.stream()?)?;
+    let h = r.headers_mut();
+    h.set("content-type", "application/octet-stream")?;
+    h.set("cache-control", "public, max-age=31536000, immutable")?;
+    Ok(r)
+}
+
+/// `main`'s pipeline's newest build, as job Containers fetch it; none when there is no build
+/// yet, no public host, or no builds token to fetch it with.
+pub(super) async fn latest_build(env: &Env) -> Option<cobot::worker::JobsBuild> {
+    let host = env.var(cobot::ship_wire::HOST_VAR).ok()?.to_string();
+    let access = (
+        platform::secret(env, cobot::ship_wire::BUILDS_ACCESS_ID_VAR).ok()?,
+        platform::secret(env, cobot::ship_wire::BUILDS_ACCESS_SECRET_VAR).ok()?,
+    );
+    let repo = env.var("REPO").ok()?.to_string();
+    let mut r = main_stub(env, &repo)
+        .ok()?
+        .fetch_with_str("https://main/status")
+        .await
+        .ok()?;
+    let v: Value = r.json().await.ok()?;
+    let b: control::Build = serde_json::from_value(v["pipeline"]["latest_build"].clone()).ok()?;
+    Some(cobot::worker::JobsBuild {
+        url: format!("https://{host}/builds/{}/pigeon", b.sha),
+        sha256: b.sha256,
+        access,
+    })
 }
 
 fn main_stub(env: &Env, repo: &str) -> Result<worker::Stub> {
