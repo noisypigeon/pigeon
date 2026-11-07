@@ -224,3 +224,22 @@ needed, and §1's SSE round trip and pending calls go.
 - **The owner sets the key** once, with its value from
   `openssl rand -hex 32` on stdin:
   `pigeon cobot workers secrets put --root . pigeon-control SESSION_KEY`.
+
+### 2026-11-07: The approval card shows for a project `.mcp.json` server, and opens the page
+
+- **The card shows.** In a cloud session, Claude Code shows the `-32042`
+  answer for the project `.mcp.json` server as a card: "pigeon wants to open
+  a URL", with the host, the link and the server's message, and **Decline**,
+  **I'm done, continue** and **Open link**. **Open link** opens the approval
+  page in the owner's browser, signed in to Access.
+- **The agent sees no link.** Its tool call ends with the error's message
+  only, so the card is the owner's path. The text link stays for clients that
+  don't declare URL elicitation.
+- **The first click failed.** The page's `Referrer-Policy: no-referrer` made
+  browsers post its form with `Origin: null`, which the same-origin check
+  refused before redeeming, so no grant was spent.
+- **The fix.** `!21` sends `Referrer-Policy: same-origin`, and the check also
+  accepts the browser's own `Sec-Fetch-Site: same-origin`.
+- **A deploy is built from the checkout it runs in.** The first deploy after
+  `!21` ran from an older checkout and shipped the old page, so a deploy
+  starts from a fresh fetch of `main`.
