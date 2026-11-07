@@ -165,6 +165,10 @@ fn render_is_stable_and_resolves_every_binding() {
     );
     assert_eq!(w["r2_buckets"][0]["bucket_name"], "pigeon-state");
     assert_eq!(
+        w["r2_buckets"][0]["jurisdiction"], "eu",
+        "the catalog's buckets are in the EU; a binding without it names another bucket"
+    );
+    assert_eq!(
         w["durable_objects"]["bindings"][1],
         json!({ "name": "RUNNER", "class_name": "Runner" })
     );

@@ -737,6 +737,12 @@ fn render_script(spec: &Spec, images: Option<&BTreeMap<String, String>>) -> Valu
 }
 
 /// D1, R2, Secrets Store, queues and vars, with references resolved through `get`.
+/// The jurisdiction of every R2 bucket a Worker binds: the catalog's `cloudflare/r2-bucket`
+/// default. Without it a binding names a default-jurisdiction bucket of the same name, which
+/// wrangler creates empty; see
+/// `.claude/decisions/2026-11-07-development-job-images-on-cloudflare.md`.
+pub const R2_JURISDICTION: &str = "eu";
+
 fn render_bindings(bindings: &Bindings, out: &mut Value, get: &mut impl FnMut(&str) -> String) {
     if !bindings.d1.is_empty() {
         out["d1_databases"] = bindings
@@ -756,7 +762,9 @@ fn render_bindings(bindings: &Bindings, out: &mut Value, get: &mut impl FnMut(&s
         out["r2_buckets"] = bindings
             .r2
             .iter()
-            .map(|(k, r)| json!({ "binding": k, "bucket_name": get(r) }))
+            .map(|(k, r)| {
+                json!({ "binding": k, "bucket_name": get(r), "jurisdiction": R2_JURISDICTION })
+            })
             .collect();
     }
     if !bindings.secrets_store.is_empty() {

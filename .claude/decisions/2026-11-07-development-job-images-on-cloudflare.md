@@ -262,3 +262,18 @@ Each step is its own change, in this order:
   version and SHA-256. RootlessKit's matches its published `SHA256SUMS`;
   BuildKit publishes none, so its pin is the checksum measured when it was
   pinned.
+
+### 2026-11-07: R2 bindings name their jurisdiction
+
+- **The first build was stored but never served.**
+  - The deploy job uploads through the EU S3 endpoint, into the EU bucket the
+    catalog creates.
+  - The Worker's `CI_LOGS` binding named no jurisdiction, so it bound a
+    default-jurisdiction bucket of the same name, which wrangler had created
+    empty on deploy.
+  - Every CI log since went there, and `/builds/` found nothing, so jobs fell
+    back to the image's `pigeon`.
+- **`cobot::workers` renders `"jurisdiction": "eu"` on every R2 binding**
+  (`R2_JURISDICTION`), the `cloudflare/r2-bucket` module's default.
+- **The auto-created twin keeps only the old logs.** Deleting it is the
+  owner's call.
