@@ -10,6 +10,7 @@
 mod approve;
 mod change;
 mod checker;
+mod elicit;
 mod gitdoor;
 mod main_run;
 mod platform;
@@ -82,37 +83,10 @@ async fn fetch(mut req: Request, env: Env, _ctx: worker::Context) -> Result<Resp
                     Ok(r)
                 }
                 Action::Accept => Ok(Response::empty()?.with_status(202)),
+                Action::Answer { id, result } => elicit::answer(&env, &id, &result).await,
                 Action::Call { id, request } => {
                     if !who.human && grants::OPERATIONS.contains(&request.operation.as_str()) {
-                        let number = request.args.get("number").and_then(|v| match v {
-                            Value::String(s) => s.parse().ok(),
-                            other => other.as_u64().and_then(|n| u32::try_from(n).ok()),
-                        });
-                        let Some(number) = number else {
-                            return Response::from_json(&mcp::answer(
-                                &id,
-                                Err(crate::Error::Invalid(vec![
-                                    "`number` must be a change number".into(),
-                                ])),
-                            ));
-                        };
-                        return match approve::offer(
-                            &env,
-                            &settings,
-                            &host,
-                            number,
-                            &request.operation,
-                        )
-                        .await
-                        {
-                            Ok(link) => {
-                                Response::from_json(&mcp::url_required(&id, &link, &session))
-                            }
-                            Err(why) => Response::from_json(&mcp::answer(
-                                &id,
-                                Err(crate::Error::Invalid(vec![why])),
-                            )),
-                        };
+                        return offer(&env, &settings, &host, &session, &id, &request).await;
                     }
                     let outcome = run(&env, &settings, &who, &request).await;
                     Response::from_json(&mcp::answer(&id, outcome))
@@ -128,6 +102,38 @@ async fn fetch(mut req: Request, env: Env, _ctx: worker::Context) -> Result<Resp
             }
         }
         _ => Response::error("not found", 404),
+    }
+}
+
+/// A service token's call of an owner's operation: a card asking for the owner's code when
+/// the client shows forms, else a link to the approval page.
+async fn offer(
+    env: &Env,
+    settings: &Settings,
+    host: &str,
+    session: &mcp::Session,
+    id: &Value,
+    request: &wire::Request,
+) -> Result<Response> {
+    let refused =
+        |why: String| Response::from_json(&mcp::answer(id, Err(crate::Error::Invalid(vec![why]))));
+    let number = request.args.get("number").and_then(|v| match v {
+        Value::String(s) => s.parse().ok(),
+        other => other.as_u64().and_then(|n| u32::try_from(n).ok()),
+    });
+    let Some(number) = number else {
+        return refused("`number` must be a change number".into());
+    };
+    if session.form_elicitation {
+        return match elicit::card(env.clone(), id.clone(), number, request.operation.clone()).await
+        {
+            Ok(r) => Ok(r),
+            Err(why) => refused(why),
+        };
+    }
+    match approve::offer(env, settings, host, number, &request.operation).await {
+        Ok(link) => Response::from_json(&mcp::url_required(id, &link, session)),
+        Err(why) => refused(why),
     }
 }
 
@@ -384,15 +390,20 @@ async fn queue(batch: MessageBatch<Value>, env: Env, _ctx: worker::Context) -> R
 #[durable_object]
 pub struct Instance {
     state: State,
+    env: Env,
 }
 
 impl DurableObject for Instance {
-    fn new(state: State, _env: Env) -> Self {
-        Self { state }
+    fn new(state: State, env: Env) -> Self {
+        Self { state, env }
     }
 
     async fn fetch(&self, mut req: Request) -> Result<Response> {
         let path = req.path();
+        if path.starts_with("/elicit/") {
+            let body: Value = req.json().await?;
+            return elicit::serve(&self.state, &self.env, &path, body).await;
+        }
         let segments: Vec<&str> = path.trim_matches('/').split('/').collect();
         let method = req.method();
         // Only storage is awaited between the queue's read and write (ADR §3).

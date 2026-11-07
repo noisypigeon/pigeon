@@ -21,6 +21,10 @@ pub enum BackplaneCommand {
     /// Take a change's jobs over signed HTTP (POST /v0/jobs, GET /v0/jobs/<id>), in a job
     /// Container; needs `BACKPLANE_TOKEN`
     Jobs(JobsArgs),
+    /// Print a new authenticator secret for approvals in the card: base32 on stdout, for
+    /// `pigeon cobot workers secrets put … APPROVER_TOTP`, and its `otpauth://` URI on stderr,
+    /// for the authenticator app
+    TotpSecret,
 }
 
 /// `pigeon backplane jobs` arguments.

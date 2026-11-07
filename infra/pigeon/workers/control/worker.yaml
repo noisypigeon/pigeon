@@ -38,4 +38,6 @@ bindings:
     CHANGE_FLOOR: "12"
 # DEPLOY_TOKEN: an account token with Workers R2 Storage Edit and Zone Read, for publishing sites.
 # SESSION_KEY: 32 random bytes, hex; signs MCP session IDs.
-secrets: [BACKPLANE_TOKEN, ARTIFACTS_TOKEN, ACCESS_TEAM, ACCESS_AUD, DEPLOY_TOKEN, SESSION_KEY]
+# APPROVER_TOTP: the owner's authenticator secret, base32, from `pigeon backplane totp-secret`.
+# APPROVER: the owner's email, recorded on approvals made in the card.
+secrets: [BACKPLANE_TOKEN, ARTIFACTS_TOKEN, ACCESS_TEAM, ACCESS_AUD, DEPLOY_TOKEN, SESSION_KEY, APPROVER_TOTP, APPROVER]

@@ -17,6 +17,9 @@ pub const PROTOCOL: &str = "2025-06-18";
 /// The protocol version with URL-mode elicitation, spoken when a client offers it.
 pub const PROTOCOL_URL: &str = "2025-11-25";
 
+/// The prefix of the IDs of elicitations this server asks.
+pub const ELICIT: &str = "elicit-";
+
 /// The header carrying a session's ID.
 pub const SESSION_HEADER: &str = "Mcp-Session-Id";
 
@@ -39,6 +42,8 @@ pub struct Session {
     pub protocol: String,
     /// Whether the client shows URL-mode elicitations.
     pub url_elicitation: bool,
+    /// Whether the client shows form-mode elicitations.
+    pub form_elicitation: bool,
 }
 
 impl Default for Session {
@@ -46,6 +51,7 @@ impl Default for Session {
         Self {
             protocol: PROTOCOL.into(),
             url_elicitation: false,
+            form_elicitation: false,
         }
     }
 }
@@ -56,16 +62,26 @@ fn mac(key: &[u8], payload: &str) -> Hmac<Sha256> {
     m
 }
 
-/// `session`'s ID, signed with `key`: `v1.<protocol>.<u|n>.<hex HMAC-SHA256>`.
+/// `session`'s ID, signed with `key`: `v2.<protocol>.<caps>.<hex HMAC-SHA256>`, where `caps` holds
+/// `f` for form and `u` for URL elicitation, or is `n` for neither.
 #[must_use]
 pub fn session_id(session: &Session, key: &[u8]) -> String {
-    let flag = if session.url_elicitation { "u" } else { "n" };
-    let payload = format!("v1.{}.{flag}", session.protocol);
+    let mut caps = String::new();
+    if session.form_elicitation {
+        caps.push('f');
+    }
+    if session.url_elicitation {
+        caps.push('u');
+    }
+    if caps.is_empty() {
+        caps.push('n');
+    }
+    let payload = format!("v2.{}.{caps}", session.protocol);
     let tag = hex(&mac(key, &payload).finalize().into_bytes());
     format!("{payload}.{tag}")
 }
 
-/// The session `id` names, if `key` signed it.
+/// The session `id` names, if `key` signed it; `v1` IDs carry URL elicitation only.
 #[must_use]
 pub fn session(id: &str, key: &[u8]) -> Option<Session> {
     let (payload, tag) = id.rsplit_once('.')?;
@@ -75,29 +91,43 @@ pub fn session(id: &str, key: &[u8]) -> Option<Session> {
         .collect::<Option<_>>()?;
     mac(key, payload).verify_slice(&tag).ok()?;
     let mut parts = payload.split('.');
-    let (Some("v1"), Some(protocol), Some(flag), None) =
+    let (Some(version), Some(protocol), Some(caps), None) =
         (parts.next(), parts.next(), parts.next(), parts.next())
     else {
         return None;
     };
+    let (url, form) = match version {
+        "v1" => (caps == "u", false),
+        "v2" => (caps.contains('u'), caps.contains('f')),
+        _ => return None,
+    };
     Some(Session {
         protocol: protocol.to_string(),
-        url_elicitation: flag == "u",
+        url_elicitation: url,
+        form_elicitation: form,
     })
 }
 
-/// The session a client's `initialize` params ask for: `2025-11-25` when offered, and URL
-/// elicitation when that version declares `capabilities.elicitation.url`.
+/// The session a client's `initialize` params ask for: `2025-11-25` when offered, else
+/// `2025-06-18`. Form elicitation is an `elicitation` capability that is empty or names `form`;
+/// URL elicitation names `url`, in `2025-11-25` only.
 #[must_use]
 pub fn negotiate(params: &Value) -> Session {
-    let offered = params["protocolVersion"].as_str();
-    if offered == Some(PROTOCOL_URL) {
+    let elicitation = &params["capabilities"]["elicitation"];
+    let form = elicitation
+        .as_object()
+        .is_some_and(|o| o.is_empty() || o.get("form").is_some_and(Value::is_object));
+    if params["protocolVersion"].as_str() == Some(PROTOCOL_URL) {
         Session {
             protocol: PROTOCOL_URL.into(),
-            url_elicitation: params["capabilities"]["elicitation"]["url"].is_object(),
+            url_elicitation: elicitation["url"].is_object(),
+            form_elicitation: form,
         }
     } else {
-        Session::default()
+        Session {
+            form_elicitation: form,
+            ..Session::default()
+        }
     }
 }
 
@@ -113,8 +143,16 @@ pub enum Action {
         /// What was negotiated.
         session: Session,
     },
-    /// A notification: answer `202 Accepted` with no body.
+    /// A notification, or a response this server didn't ask for: answer `202 Accepted`.
     Accept,
+    /// The client's answer to an elicitation this server asked: answer `202 Accepted` once
+    /// it is handed on.
+    Answer {
+        /// The elicitation's ID, starting [`ELICIT`].
+        id: String,
+        /// The client's `result`, or its `error` as `{ "action": "cancel" }`.
+        result: Value,
+    },
     /// Run this operation, then [`answer`] with its outcome.
     Call {
         /// The request's ID.
@@ -177,8 +215,16 @@ pub fn parse(message: &Value, version: &str) -> Action {
         ));
     }
     let Some(method) = message.get("method").and_then(Value::as_str) else {
-        // A response from the client: nothing to answer.
-        return Action::Accept;
+        return match message.get("id").and_then(Value::as_str) {
+            Some(i) if i.starts_with(ELICIT) => Action::Answer {
+                id: i.to_string(),
+                result: message
+                    .get("result")
+                    .cloned()
+                    .unwrap_or_else(|| json!({ "action": "cancel" })),
+            },
+            _ => Action::Accept,
+        };
     };
     if message.get("id").is_none() {
         return Action::Accept;
@@ -309,4 +355,38 @@ pub fn url_required(id: &Value, link: &Link, session: &Session) -> Value {
             "isError": false,
         }),
     )
+}
+
+/// The `elicitation/create` request asking for a form: `message` above `schema`'s fields.
+#[must_use]
+pub fn elicit_form(id: &str, message: &str, schema: &Value) -> Value {
+    json!({
+        "jsonrpc": "2.0",
+        "id": id,
+        "method": "elicitation/create",
+        "params": { "mode": "form", "message": message, "requestedSchema": schema },
+    })
+}
+
+/// The form asking for the owner's 6-digit authenticator code.
+#[must_use]
+pub fn code_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": { "code": {
+            "type": "string",
+            "title": "Authenticator code",
+            "description": "The 6-digit code from your authenticator app for pigeon",
+            "minLength": 6,
+            "maxLength": 6,
+            "pattern": "^[0-9]{6}$",
+        } },
+        "required": ["code"],
+    })
+}
+
+/// One JSON-RPC message as a Server-Sent Event.
+#[must_use]
+pub fn sse(message: &Value) -> String {
+    format!("event: message\ndata: {message}\n\n")
 }

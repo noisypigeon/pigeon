@@ -72,9 +72,10 @@ belong in the ADR, never in the file.
   runs survive a stop; a run's root is a D1 bundle; the platform defines rules
   in `catalog/policies/` and an instance invokes them, per
   [`2026-11-05-runtime-control-plane-worker.md`](.claude/decisions/2026-11-05-runtime-control-plane-worker.md).
-- Approvals are URL elicitations (or a link in the tool result) to an
-  Access-protected `/approve/<n>` page, a one-time grant bound to the
-  operation and head, approved by the signed-in person; images and the Worker
+- Approvals are made in the Claude card: a form asking for the owner's
+  authenticator code (TOTP, `pigeon backplane totp-secret`), bound to one
+  grant of the operation and head; clients without forms get a URL card to an
+  Access-protected `/approve/<n>` page; images and the Worker
   to be built on Cloudflare,
   platform state to live in R2, and jobs to run on two Container classes, per
   [`2026-11-06-development-control-plane-approvals-images-state.md`](.claude/decisions/2026-11-06-development-control-plane-approvals-images-state.md).

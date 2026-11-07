@@ -243,3 +243,51 @@ needed, and §1's SSE round trip and pending calls go.
 - **A deploy is built from the checkout it runs in.** The first deploy after
   `!21` ran from an older checkout and shipped the old page, so a deploy
   starts from a fresh fetch of `main`.
+
+### 2026-11-07: Approvals are made in the card, proven by the owner's authenticator code
+
+The owner asked to approve in the card, without the website.
+- **A plain in-card Accept is form-mode elicitation**, which this ADR's first
+  amendment refused, because an `Elicitation` hook in the session can answer
+  it.
+- **The card therefore asks for something only the owner has:** a 6-digit
+  code from their authenticator app. Its secret is in the app and in a Worker
+  secret, never in the repository, the session or a hook's reach.
+
+What it is:
+- **The card.** When a service token calls `change.authorize`,
+  `change.approve`, `change.merge` or `change.close`, and the client declared
+  form elicitation (an `elicitation` capability that is empty or names
+  `form`):
+  - the Worker mints the grant as before;
+  - it answers the call as Server-Sent Events, first an `elicitation/create`
+    form with one field, `code` (`^[0-9]{6}$`), under a message naming the
+    operation, title, branch, head SHA, checks and proposer;
+  - the call stays open for at most 10 minutes, until the client's answer
+    arrives as its own POST;
+  - then it ends with the operation's result.
+- **The code.** TOTP per RFC 6238: HMAC-SHA1, 6 digits, 30-second steps, one
+  step either side.
+  - Each step is used once.
+  - A card takes one code; a wrong one ends it.
+  - Five wrong codes in an hour lock approvals by code for that hour, while
+    `cloudflared` still works.
+  - The `Instance` Durable Object keeps that guard.
+- **One card at a time.** A new card supersedes any card still open, so a code
+  typed into one card can't answer another.
+- **Who approves.** The code proves the owner. The operation then runs as
+  `APPROVER`, a Worker secret holding the owner's email, so the state machine
+  still refuses the proposer and checks the state and the grant's head.
+- **Enrollment, once:**
+  - `pigeon backplane totp-secret` prints a new base32 secret on stdout and
+    its `otpauth://` URI on stderr, for the app;
+  - the stdout goes to `pigeon cobot workers secrets put --root . pigeon-control APPROVER_TOTP`;
+  - the owner's email goes to `… APPROVER`.
+- **Fallback.** A client without form elicitation keeps the URL card and the
+  page. The page is removed in a later change, once the code card is seen
+  working.
+- **The residual risk.** The card's text is drawn by the client. A
+  compromised client could describe one operation while the code goes to
+  another pending one; one card at a time narrows that to what the server
+  sent. The page, drawn by the Worker, was stronger here. The owner accepts
+  the card for its convenience.
