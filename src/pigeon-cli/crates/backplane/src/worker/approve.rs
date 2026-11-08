@@ -88,16 +88,24 @@ pub(super) async fn live(env: &Env, s: &Settings) -> Result<Vec<Waiting>> {
         let alive = match (token, w.expires > now()) {
             (Some(token), true) => {
                 let body = json!({ "token": token });
-                let status = if w.path.starts_with("/mandate/") {
+                if w.path.starts_with("/mandate/") {
                     super::mandates::to_instance(env, s, "/mandates/peek", &body)
                         .await?
                         .0
+                        == 200
                 } else {
-                    to_change(env, &s.repo, w.number, Method::Post, "/peek", Some(&body))
-                        .await?
-                        .0
-                };
-                status == 200
+                    let (status, v) =
+                        to_change(env, &s.repo, w.number, Method::Post, "/peek", Some(&body))
+                            .await?;
+                    status == 200
+                        && match (
+                            serde_json::from_value::<Change>(v["change"].clone()),
+                            serde_json::from_value::<Grant>(v["grant"].clone()),
+                        ) {
+                            (Ok(c), Ok(g)) => crate::grants::still_applies(&c, &g),
+                            _ => false,
+                        }
+                }
             }
             _ => false,
         };

@@ -343,3 +343,17 @@ What the pieces offer:
     (`/peek`, or `/mandates/peek`) and remove the rest.
 - **`digest.show` no longer gives the agent approval links.** Only the
   owner gets them, as in the event log.
+
+### 2026-11-08: The owner's iPhone is notified; dead links are judged by their change
+
+- **Installed from the Home Screen, `/approvals` subscribed the owner's
+  iPhone:** "This device is notified".
+- **The inbox still showed 46 to 49.** Those page links were never used,
+  because the card approved those changes instead, so they still peeked. An
+  entry now stays only while `grants::still_applies` holds: its operation
+  still applies to the change, and the change's head is the one the link was
+  made for.
+- **The first push reached the owner's iPhone.** Its tap opened
+  `/approve/66` without its grant, "this link has no grant". The push now
+  opens the approval link itself, grant included. Only the owner fetches
+  it, from `/approvals/latest.json`.

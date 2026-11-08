@@ -92,6 +92,15 @@ pub fn offerable(change: &Change, operation: &str) -> Result<(), String> {
     }
 }
 
+/// Whether `grant` still means something on `change`: its operation still applies and the head
+/// is the one it was made for, so the inbox keeps it.
+#[must_use]
+pub fn still_applies(change: &Change, grant: &Grant) -> bool {
+    grant.number == change.number
+        && grant.head == change.head
+        && offerable(change, &grant.operation).is_ok()
+}
+
 /// A change's open grants, by [`key`].
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Grants(pub BTreeMap<String, Grant>);

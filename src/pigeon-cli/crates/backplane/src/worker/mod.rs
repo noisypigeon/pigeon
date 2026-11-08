@@ -190,7 +190,8 @@ async fn offer(
                 settings,
                 "Approval waiting",
                 &said,
-                &format!("/approve/{number}"),
+                link.strip_prefix(&format!("https://{host}"))
+                    .unwrap_or(&link),
             )
             .await;
             let linked = format!("{said}: {link}");

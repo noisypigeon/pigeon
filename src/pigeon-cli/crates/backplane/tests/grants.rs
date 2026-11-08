@@ -123,3 +123,19 @@ fn a_page_grant_lives_a_day_and_a_card_grant_fifteen_minutes() {
         "the page's link outlives the card's"
     );
 }
+
+#[test]
+fn a_grant_still_applies_only_while_its_operation_and_head_do() {
+    let mut c = change(State::Checked, Some(HEAD));
+    let mut g = Grants::default();
+    let grant = g.mint(&c, "change.approve", "tok", 0).expect("mint");
+    assert!(backplane::grants::still_applies(&c, &grant));
+    c.state = State::Merged;
+    assert!(
+        !backplane::grants::still_applies(&c, &grant),
+        "merged since"
+    );
+    c.state = State::Checked;
+    c.head = Some(NEXT.into());
+    assert!(!backplane::grants::still_applies(&c, &grant), "a new head");
+}
