@@ -299,3 +299,86 @@ a mandate that may deploy until step 5's rehearsal has passed.
   Because the version before can't decode a variant it doesn't know, the
   owner reviews any change that adds a stored variant. A fixture can't
   catch it.
+
+### 2026-11-08: Step 2's spike: what Cloudflare does at 0%, and the design it gives
+
+The spike read Cloudflare's current documentation on gradual deployments,
+version overrides, Durable Object code updates and Container rollouts. Its
+findings change §2 in five places. Step 2's first deploy checks them live
+(see "Proof" below).
+
+#### Findings
+
+1. **Objects follow the deployment, never the override.**
+   - Each Durable Object is assigned one version from the deployment's
+     percentages, and keeps it until the next deployment.
+   - So with green at 0%, every object runs blue, `Checker` and `Runner`
+     included. The override header changes only the Worker's own code.
+   - The override smoke therefore tests green's Worker against blue's
+     objects, which is what §1 promises to hold. It must start no job.
+2. **An override applies only to a version in the current deployment.**
+   - A deployment serves at most two versions, so green must be deployed
+     at 0% beside blue, not merely uploaded.
+   - Version URLs aren't generated for a Worker with Durable Objects, so the
+     smoke sends the header to the production host.
+3. **`wrangler versions upload` doesn't roll out Containers.**
+   - It uploads the Worker only: no image is published, and no instance is
+     replaced.
+   - So a deploy whose container configuration changed (an image reference,
+     an instance type) takes the `wrangler deploy` path, as a migration does.
+4. **Cloudflare bounds a busy object's old code.**
+   - A Worker's `durable_objects.code_update_strategy` (`deferred` with
+     `max_delay`, 300 seconds by default, or `immediate`) resets an object
+     still running old code once the delay passes.
+   - `wrangler versions deploy` takes it per deployment, as
+     `--durable-objects-code-update-mode`.
+5. **The version handshake's reset loops under an override.**
+   - Green, at 0%, stamps its calls as newer than blue's objects. So every
+     smoke call would abort an object, which then starts again on blue,
+     its assigned version.
+   - The native strategy does the handshake's job without that loop.
+
+#### Design
+
+- **Objects no longer abort themselves.**
+  - `platform::stale` is removed, along with `MainRun`'s guard.
+  - The deploy sets the code update strategy to `deferred`, 60 seconds.
+    `HEALTH_WAIT` stays longer than that.
+  - Objects keep `/version`, and calls keep the `X-Pigeon-Version` header,
+    so `/healthz` still reports which version each object runs.
+- **The path is chosen per deploy.**
+  - **`wrangler deploy`, as today:** for a migration, a Durable Object class
+    change, a container configuration change, or a Worker with no earlier
+    version.
+  - **Version blue-green:** for everything else.
+- **Version blue-green, in order:**
+  1. `wrangler versions upload`. Its output names green.
+  2. `wrangler versions deploy blue@100% green@0%`.
+  3. The smoke, through `Cloudflare-Workers-Version-Overrides`, on
+     `/healthz/smoke` (below). On failure, the job deploys `blue@100%`
+     alone, and its report says green never took traffic.
+  4. `wrangler versions deploy green@100%`, with the deferred strategy.
+  5. `/healthz` as today: `ok`, green's version, and the `Instance`
+     current within `HEALTH_WAIT`. On failure, the job rolls back to
+     `blue@100%`, with the `immediate` strategy.
+- **`/healthz/smoke`: the smoke runs inside the Worker.**
+  - The deployer's service token still reads only `/healthz` and
+    `/healthz/smoke`. Its reach doesn't grow to MCP or `/v0/run`.
+  - Green answers from its own code, with no write:
+    - the version it serves, D1, and whether the `Instance` and `MainRun`
+      answer, whatever version they run;
+    - MCP `tools/list`;
+    - a read-only `change.status` of the newest change;
+    - `deploy.status`.
+  - The answer is JSON with one entry per probe. The job requires every
+    probe to pass, and the version to be green's.
+- **The report** names the path taken and, for blue-green, each step's
+  outcome. It gains no stored field; the step outcomes go to the deploy
+  log.
+
+#### Proof
+
+Step 2's first blue-green deploy logs the smoke's answer. It shows green's
+Worker version beside blue's object versions, which confirms finding 1 live.
+If Cloudflare refuses a 0% version (finding 2), the job falls back to
+`wrangler deploy` and says so, and this amendment is amended again.
