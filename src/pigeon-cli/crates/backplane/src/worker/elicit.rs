@@ -39,6 +39,9 @@ struct Pending {
     token: String,
     #[serde(default)]
     answer: Option<Value>,
+    /// One tap approves it: the grant is at the confirm tier.
+    #[serde(default)]
+    confirm: bool,
 }
 
 async fn to_instance(env: &Env, s: &Settings, path: &str, body: &Value) -> Result<Value> {
@@ -108,12 +111,17 @@ pub async fn card(
         .map_err(|e| e.to_string())?;
     let change = &st["change"];
     let message = format!(
-        "{operation} — change {number}\n{}\nBranch: {}\nHead: {}\nChecks: {}\nProposed by: {}\n\nEnter your authenticator code to confirm.",
+        "{operation} — change {number}\n{}\nBranch: {}\nHead: {}\nChecks: {}\nProposed by: {}\n\n{}",
         change["title"].as_str().unwrap_or_default(),
         st["branch"].as_str().unwrap_or_default(),
         grant.head.as_deref().unwrap_or("none pushed"),
         checks(change),
         change["proposer"].as_str().unwrap_or_default(),
+        if grant.needs_code() {
+            "Enter your authenticator code to confirm."
+        } else {
+            "This is a low-risk operation: accept to approve it."
+        },
     );
     let key = format!("{}{number}-{}", mcp::ELICIT, &grants::key(&token)[..12]);
     let pending = Pending {
@@ -122,11 +130,17 @@ pub async fn card(
         operation: operation.clone(),
         token,
         answer: None,
+        confirm: !grant.needs_code(),
     };
     to_instance(&env, &s, "/elicit/open", &json!(pending))
         .await
         .map_err(|e| e.to_string())?;
-    let first = mcp::sse(&mcp::elicit_form(&key, &message, &mcp::code_schema()));
+    let schema = if grant.needs_code() {
+        mcp::code_schema()
+    } else {
+        json!({ "type": "object", "properties": {} })
+    };
+    let first = mcp::sse(&mcp::elicit_form(&key, &message, &schema));
     let rest = async move {
         let answer = to_instance(&env, &s, "/elicit/await", &json!({ "key": key }))
             .await
@@ -338,7 +352,9 @@ async fn judge(state: &State, env: &Env, pending: &Pending, result: &Value) -> R
         return Ok(json!({ "status": "declined", "why": "the owner declined" }));
     }
     let code = result["content"]["code"].as_str().unwrap_or_default();
-    if let Err(why) = verify(state, env, code).await? {
+    if !pending.confirm
+        && let Err(why) = verify(state, env, code).await?
+    {
         return Ok(json!({ "status": "refused", "why": why }));
     }
     let s = Settings::from(env)?;

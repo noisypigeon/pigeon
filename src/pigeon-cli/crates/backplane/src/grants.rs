@@ -37,6 +37,17 @@ pub struct Grant {
     pub head: Option<String>,
     /// When it expires, in Unix seconds.
     pub expires: u64,
+    /// The tier it needs, from the head's tiers when minted; none is code.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tier: Option<crate::approvals::Tier>,
+}
+
+impl Grant {
+    /// Whether redeeming it needs the owner's code, not one tap.
+    #[must_use]
+    pub fn needs_code(&self) -> bool {
+        self.tier != Some(crate::approvals::Tier::Confirm)
+    }
 }
 
 /// Lowercase hex.
@@ -119,6 +130,7 @@ impl Grants {
             number: change.number,
             head: change.head.clone(),
             expires: now + ttl,
+            tier: Some(crate::approvals::tier_of(change, operation)),
         };
         self.0.insert(key(token), grant.clone());
         Ok(grant)

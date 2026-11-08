@@ -74,7 +74,7 @@ pub async fn pending(
 /// # Errors
 ///
 /// When a binding fails.
-pub async fn serve(mut req: Request, env: &Env, s: &Settings, who: &Identity) -> Result<Response> {
+pub async fn serve(req: Request, env: &Env, s: &Settings, who: &Identity) -> Result<Response> {
     if !who.human {
         return refused(403, "only a person signed in to Access approves");
     }
@@ -110,62 +110,89 @@ pub async fn serve(mut req: Request, env: &Env, s: &Settings, who: &Identity) ->
             };
             html(200, &approve::page(&change, &grant, &token))
         }
-        Method::Post => {
-            let origin = req.headers().get("origin")?;
-            let site = req.headers().get("sec-fetch-site")?;
-            if !approve::same_origin(origin.as_deref(), site.as_deref(), &host) {
-                return refused(403, "this form is posted only from its own page");
-            }
-            let form = req.text().await?;
-            let (Some(token), Some(operation), Some(code)) = (
-                approve::field(&form, "grant"),
-                approve::field(&form, "operation"),
-                approve::field(&form, "code"),
-            ) else {
-                return refused(400, "the form is missing its grant or code");
-            };
-            if let Err(why) = elicit::check_code(env, s, code.trim()).await? {
-                return refused(403, &why);
-            }
-            let body = json!({ "token": token, "operation": operation });
-            let (status, v) =
-                to_change(env, &s.repo, n, Method::Post, "/redeem", Some(&body)).await?;
-            let _ = elicit::inbox(
-                env,
-                s,
-                "/approvals/remove",
-                &json!({ "path": format!("/approve/{n}?grant={token}") }),
-            )
-            .await;
-            if status != 200 {
-                return refused(403, v.as_str().unwrap_or("this link is not valid"));
-            }
-            let Ok(grant) = serde_json::from_value::<Grant>(v) else {
-                return refused(500, "the grant was unreadable");
-            };
-            let mut args = Map::new();
-            args.insert("number".into(), Value::from(n));
-            if grant.operation == "change.approve"
-                && let Some(head) = &grant.head
-            {
-                args.insert("sha".into(), Value::from(head.clone()));
-            }
-            let request = wire::Request {
-                operation: grant.operation.clone(),
-                args,
-            };
-            match run(env, s, who, &request).await {
-                Ok(r) if r.ok => html(
-                    200,
-                    &approve::outcome(
-                        &format!("Done: {} on change {n}", grant.operation),
-                        &format!("Recorded as {}.", who.subject),
-                    ),
-                ),
-                Ok(r) => refused(409, &r.violations.join("\n")),
-                Err(e) => refused(409, &e.to_string()),
-            }
-        }
+        Method::Post => post(req, env, s, who, n, &host).await,
         _ => refused(405, "method not allowed"),
+    }
+}
+
+/// `POST /approve/<number>`: the owner's code when the grant needs it, then the operation as
+/// `who`.
+async fn post(
+    mut req: Request,
+    env: &Env,
+    s: &Settings,
+    who: &Identity,
+    n: u32,
+    host: &str,
+) -> Result<Response> {
+    let origin = req.headers().get("origin")?;
+    let site = req.headers().get("sec-fetch-site")?;
+    if !approve::same_origin(origin.as_deref(), site.as_deref(), host) {
+        return refused(403, "this form is posted only from its own page");
+    }
+    let form = req.text().await?;
+    let (Some(token), Some(operation)) = (
+        approve::field(&form, "grant"),
+        approve::field(&form, "operation"),
+    ) else {
+        return refused(400, "the form is missing its grant");
+    };
+    let (status, v) = to_change(
+        env,
+        &s.repo,
+        n,
+        Method::Post,
+        "/peek",
+        Some(&json!({ "token": token })),
+    )
+    .await?;
+    if status != 200 {
+        return refused(403, v.as_str().unwrap_or("this link is not valid"));
+    }
+    let Ok(peeked) = serde_json::from_value::<Grant>(v["grant"].clone()) else {
+        return refused(500, "the grant was unreadable");
+    };
+    if peeked.needs_code() {
+        let code = approve::field(&form, "code").unwrap_or_default();
+        if let Err(why) = elicit::check_code(env, s, code.trim()).await? {
+            return refused(403, &why);
+        }
+    }
+    let body = json!({ "token": token, "operation": operation });
+    let (status, v) = to_change(env, &s.repo, n, Method::Post, "/redeem", Some(&body)).await?;
+    let _ = elicit::inbox(
+        env,
+        s,
+        "/approvals/remove",
+        &json!({ "path": format!("/approve/{n}?grant={token}") }),
+    )
+    .await;
+    if status != 200 {
+        return refused(403, v.as_str().unwrap_or("this link is not valid"));
+    }
+    let Ok(grant) = serde_json::from_value::<Grant>(v) else {
+        return refused(500, "the grant was unreadable");
+    };
+    let mut args = Map::new();
+    args.insert("number".into(), Value::from(n));
+    if grant.operation == "change.approve"
+        && let Some(head) = &grant.head
+    {
+        args.insert("sha".into(), Value::from(head.clone()));
+    }
+    let request = wire::Request {
+        operation: grant.operation.clone(),
+        args,
+    };
+    match run(env, s, who, &request).await {
+        Ok(r) if r.ok => html(
+            200,
+            &approve::outcome(
+                &format!("Done: {} on change {n}", grant.operation),
+                &format!("Recorded as {}.", who.subject),
+            ),
+        ),
+        Ok(r) => refused(409, &r.violations.join("\n")),
+        Err(e) => refused(409, &e.to_string()),
     }
 }

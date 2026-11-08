@@ -28,6 +28,14 @@ pub fn escape(s: &str) -> String {
     out
 }
 
+/// The page's field for the owner's code, at the code tier.
+const CODE_FIELD: &str = "<p><label>Authenticator code<br><input name=\"code\" inputmode=\"numeric\" \
+autocomplete=\"one-time-code\" pattern=\"[0-9]{6}\" maxlength=\"6\" required></label></p>";
+
+/// What the page says instead, at the confirm tier.
+const CONFIRM_NOTE: &str =
+    "<p>This is a low-risk operation, so one tap approves it; no code is needed.</p>";
+
 /// A verb for the button.
 fn verb(operation: &str) -> &'static str {
     match operation {
@@ -173,13 +181,16 @@ pub fn page(change: &Change, grant: &Grant, token: &str) -> String {
         "</dl><form method=\"post\" action=\"/approve/{n}\">\
 <input type=\"hidden\" name=\"grant\" value=\"{}\">\
 <input type=\"hidden\" name=\"operation\" value=\"{}\">\
-<p><label>Authenticator code<br><input name=\"code\" inputmode=\"numeric\" \
-autocomplete=\"one-time-code\" pattern=\"[0-9]{{6}}\" maxlength=\"6\" required></label></p>\
-<button type=\"submit\">{}</button></form>\
+{}<button type=\"submit\">{}</button></form>\
 <p><small>This link works once, for this head only, until it expires. \
 <a href=\"/approvals\">Everything waiting</a></small></p>",
         escape(token),
         escape(&grant.operation),
+        if grant.needs_code() {
+            CODE_FIELD
+        } else {
+            CONFIRM_NOTE
+        },
         escape(verb(&grant.operation))
     );
     shell(&format!("{} — change {n}", verb(&grant.operation)), &b)

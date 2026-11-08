@@ -296,8 +296,17 @@ fn bound(spec: &JobSpec, dir: &Path) -> Report {
             return r;
         }
     };
-    let mut log = format!("{} file(s) changed:\n{}\n", files.len(), files.join("\n"));
+    let exe =
+        std::env::current_exe().map_or_else(|_| "unknown".into(), |p| p.display().to_string());
+    let mut log = format!(
+        "pigeon: {exe}\n{} file(s) changed:\n{}\n",
+        files.len(),
+        files.join("\n")
+    );
     let tiers = tiers(spec, dir, &files);
+    if tiers.is_none() {
+        log.push_str("tiers: none, as main has no readable rules\n");
+    }
     if let Some(t) = &tiers {
         let _ = writeln!(
             log,

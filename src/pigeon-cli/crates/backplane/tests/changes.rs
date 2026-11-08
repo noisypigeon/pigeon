@@ -397,3 +397,36 @@ fn a_merge_is_asked_for_once_approved_and_a_failure_keeps_it_approved() {
         Some(JobStatus::Passed)
     );
 }
+
+#[test]
+fn a_new_push_clears_the_old_heads_tiers() {
+    let mut c = Change::propose(10, "x", "feat: x", "plan", vec!["**".into()], "agent");
+    c.apply(Event::ApprovePlan {
+        by: "owner".into(),
+        at: 1,
+    })
+    .expect("approves");
+    c.apply(Event::Pushed {
+        sha: "a".repeat(40),
+    })
+    .expect("pushed");
+    c.tiers = Some(backplane::approvals::Tiers {
+        authorize: backplane::approvals::Tiered {
+            tier: backplane::approvals::Tier::Code,
+            rule: "r".into(),
+        },
+        merge: backplane::approvals::Tiered {
+            tier: backplane::approvals::Tier::Confirm,
+            rule: "r".into(),
+        },
+        close: backplane::approvals::Tiered {
+            tier: backplane::approvals::Tier::Confirm,
+            rule: "r".into(),
+        },
+    });
+    c.apply(Event::Pushed {
+        sha: "b".repeat(40),
+    })
+    .expect("pushed again");
+    assert_eq!(c.tiers, None);
+}

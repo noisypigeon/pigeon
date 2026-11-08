@@ -306,3 +306,28 @@ approved at the code tier:
   code at every tier.
 - **The page's files join the guarded list:** `approve.rs` and
   `worker/approve.rs`.
+
+### 2026-11-08: The confirm tier goes live for merges and closes
+
+- **A grant records its tier when minted** (`Grant.tier`, from
+  `approvals::tier_of` on the change's current head).
+  - Approving and merging take the head's merge tier.
+  - Closing takes its close tier.
+  - Auto counts as confirm until automatic approval lands.
+  - A head with no tiers needs the code; closing, which takes nothing from
+    `main`, needs a tap.
+- **Authorizing stays at the code tier.** A plan is authorized before any
+  push, so the bound job hasn't classified it, and the Worker doesn't read the
+  rules. Mandates (step 5) need it classified.
+- **At the confirm tier:**
+  - the page shows one button and no code field;
+  - `approval_wait` shows an Accept card with no fields;
+  - neither checks a code.
+
+  The page still needs a person's Access identity. The card is the one an
+  `Elicitation` hook could forge, which §1 accepts for confirm because it can
+  only approve what isn't dangerous.
+- **A new push clears the old head's tiers,** so a grant never takes a tier
+  from another head.
+- **`change_status` shows the bound job's log tail** as `bound_log`. It says
+  which rules the job read and the tiers it gave, without the dashboard.

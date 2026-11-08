@@ -126,3 +126,62 @@ fn the_rules_and_every_policy_always_need_the_code() {
         assert_eq!(tiers.merge.tier, Tier::Code, "{file}");
     }
 }
+
+#[test]
+fn an_operation_needs_the_tier_its_head_was_given_and_code_without_one() {
+    use backplane::changes::{Change, State};
+    let mut c = Change::propose(
+        9,
+        "x",
+        "feat: x",
+        "plan",
+        vec!["tooling/**".into()],
+        "agent",
+    );
+    c.state = State::Checked;
+    assert_eq!(
+        backplane::approvals::tier_of(&c, "change.approve"),
+        Tier::Code,
+        "no tiers yet"
+    );
+    assert_eq!(
+        backplane::approvals::tier_of(&c, "change.close"),
+        Tier::Confirm
+    );
+    assert_eq!(
+        backplane::approvals::tier_of(&c, "change.authorize"),
+        Tier::Code
+    );
+    c.tiers = Some(tiers_of(&["tooling/**"], &["tooling/README.md"], PLAIN));
+    assert_eq!(
+        backplane::approvals::tier_of(&c, "change.approve"),
+        Tier::Confirm
+    );
+    assert_eq!(
+        backplane::approvals::tier_of(&c, "change.merge"),
+        Tier::Confirm
+    );
+    let adr = [".claude/decisions/2026-11-07-development-job-images-on-cloudflare.md"];
+    c.tiers = Some(tiers_of(
+        &adr,
+        &adr,
+        Facts {
+            deploys_worker: false,
+            appends_only: true,
+        },
+    ));
+    assert_eq!(
+        backplane::approvals::tier_of(&c, "change.merge"),
+        Tier::Confirm,
+        "auto counts as confirm until automatic approval lands"
+    );
+    c.tiers = Some(tiers_of(
+        &["src/pigeon-cli/Dockerfile"],
+        &["src/pigeon-cli/Dockerfile"],
+        PLAIN,
+    ));
+    assert_eq!(
+        backplane::approvals::tier_of(&c, "change.merge"),
+        Tier::Code
+    );
+}

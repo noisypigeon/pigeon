@@ -31,6 +31,7 @@ fn the_page_shows_the_facts_escaped_and_runs_nothing() {
         number: 7,
         head: c.head.clone(),
         expires: 1,
+        tier: None,
     };
     let html = approve::page(&c, &grant, "tok\"><script>");
     assert!(!html.contains("<script"), "{html}");
@@ -133,4 +134,42 @@ fn the_inbox_links_each_waiting_approval_escaped() {
     );
     assert!(!html.contains("<script"));
     assert!(approve::inbox(&[]).contains("Nothing is waiting."));
+}
+
+#[test]
+fn a_confirm_grant_asks_for_no_code() {
+    let mut c = Change::propose(
+        8,
+        "docs",
+        "docs: x",
+        "plan",
+        vec!["docs/**".into()],
+        "agent",
+    );
+    c.state = State::Checked;
+    c.head = Some("2222222222222222222222222222222222222222".into());
+    let grant = Grant {
+        operation: "change.approve".into(),
+        number: 8,
+        head: c.head.clone(),
+        expires: 1,
+        tier: Some(backplane::approvals::Tier::Confirm),
+    };
+    let html = approve::page(&c, &grant, "tok");
+    assert!(!html.contains("name=\"code\""), "{html}");
+    assert!(html.contains("one tap approves it"), "{html}");
+    assert_eq!(html.matches("<button").count(), 1);
+    let coded = Grant {
+        tier: Some(backplane::approvals::Tier::Code),
+        ..grant.clone()
+    };
+    assert!(approve::page(&c, &coded, "tok").contains("name=\"code\""));
+    let unknown = Grant {
+        tier: None,
+        ..grant
+    };
+    assert!(
+        approve::page(&c, &unknown, "tok").contains("name=\"code\""),
+        "a grant with no tier asks for the code"
+    );
 }

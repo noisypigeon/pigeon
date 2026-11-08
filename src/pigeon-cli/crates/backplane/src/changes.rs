@@ -366,7 +366,12 @@ impl Change {
         }
         match event {
             Event::ApprovePlan { by, at } => self.approve_plan(by, at),
-            Event::Pushed { sha } => self.pushed(sha),
+            Event::Pushed { sha } => {
+                if !self.on_head(&sha) {
+                    self.tiers = None;
+                }
+                self.pushed(sha)
+            }
             Event::Started { job, sha } => self.started(&job, &sha),
             Event::Bounded {
                 sha,

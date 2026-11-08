@@ -17,6 +17,8 @@ const CHANGE: &str = "change";
 const PENDING: &str = "pending";
 const LOGS: &str = "logs";
 const FAILURES: &str = "failures";
+/// The storage key of the last bound job's log tail, shown in its status.
+const BOUND_LOG: &str = "bound_log";
 const GRANTS: &str = "grants";
 
 /// How often a running job is asked how it went.
@@ -196,6 +198,11 @@ impl ChangeRun {
         let mut logs: Map<String, Value> = self.load(LOGS).await?;
         logs.insert(job.into(), key.into());
         storage.put(LOGS, &logs).await?;
+        if job == crate::changes::BOUND {
+            storage
+                .put(BOUND_LOG, &control::last(&report.log, SHOWN).to_string())
+                .await?;
+        }
         let mut failures: Map<String, Value> = self.load(FAILURES).await?;
         if report.outcome == Outcome::Failed {
             let log = &report.log;
@@ -234,9 +241,13 @@ impl DurableObject for ChangeRun {
                     return Response::error("no such change", 404);
                 };
                 let failures: Map<String, Value> = self.load(FAILURES).await?;
-                Response::from_json(
-                    &json!({ "change": change, "branch": change.branch(), "failures": failures }),
-                )
+                let bound_log: Option<String> = self.state.storage().get(BOUND_LOG).await?;
+                Response::from_json(&json!({
+                    "change": change,
+                    "branch": change.branch(),
+                    "failures": failures,
+                    "bound_log": bound_log,
+                }))
             }
             (Method::Post, "grant") => {
                 let Some(change) = existing else {

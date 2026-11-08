@@ -168,3 +168,20 @@ pub fn classify(rules: &Rules, scope: &[String], files: &[String], facts: Facts)
         close,
     }
 }
+
+/// The tier `operation` on `change` needs now, from its head's tiers.
+/// - Authorizing stays code until the Worker classifies a scope.
+/// - Auto counts as confirm until automatic approval lands.
+/// - No tiers means code, except to close, which takes nothing from `main`.
+#[must_use]
+pub fn tier_of(change: &crate::changes::Change, operation: &str) -> Tier {
+    let tiers = change.tiers.as_ref();
+    let at_least_confirm = |t: &Tiered| t.tier.max(Tier::Confirm);
+    match operation {
+        "change.approve" | "change.merge" => {
+            tiers.map_or(Tier::Code, |t| at_least_confirm(&t.merge))
+        }
+        "change.close" => tiers.map_or(Tier::Confirm, |t| at_least_confirm(&t.close)),
+        _ => Tier::Code,
+    }
+}
