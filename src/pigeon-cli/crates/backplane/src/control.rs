@@ -127,6 +127,7 @@ pub fn route(request: &Request, by: &str, at: u64) -> Result<Routed, String> {
         "deploy.status" => Ok(Routed::DeployStatus),
         "deploy.retry" => Ok(Routed::DeployRetry),
         "git.tokens" => Ok(Routed::GitTokens),
+        "approval.wait" => Err("`approval.wait` shows a card, so it is called over MCP".into()),
         "change.list" => Ok(Routed::List {
             state: text(a, "state"),
         }),

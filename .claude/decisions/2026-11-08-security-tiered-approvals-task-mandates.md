@@ -277,3 +277,32 @@ approved at the code tier:
   - The bound job reports `tiers` (authorize, merge and close, each with its
     rule) for every head, and `change_status` shows them.
   - Nothing is approved by them yet.
+
+### 2026-11-08: The page and pending approvals land, with the code everywhere
+
+- **An owner's operation called by the agent no longer waits.**
+  - It mints a page grant, lasting 24 hours (`grants::PAGE_TTL`; a card's
+    stays 15 minutes), and adds it to the inbox the `Instance` Durable
+    Object keeps.
+  - It answers at once, not done: `pending` holds the operation, the change,
+    the link and when it expires.
+  - The agent passes the link on, in its reply and as a push notification.
+- **`approval_wait`,** a new MCP tool for the agent (`approval.wait`), shows
+  today's code card for one operation on a client that shows forms.
+  - Its grant is the card's own. Whichever of the card or the page is used
+    first wins; the other is then refused, because the change has moved on.
+- **The page is the removed one, restored, with:**
+  - one field for the authenticator code;
+  - the head's tiers;
+  - a link to `/approvals`, the inbox, newest first.
+- **One code check for card and page.** `Instance`'s `/code/verify` runs the
+  card's `Guard` for both: each step used once, and five wrong codes in an
+  hour lock both.
+  - The page checks the code before it redeems, so a wrong code doesn't
+    spend the link.
+- **Only a person's Access identity** opens the page, or posts to it,
+  same-origin. The operation runs as that person.
+- **The confirm tier is not live yet.** Until step 4, the page asks for the
+  code at every tier.
+- **The page's files join the guarded list:** `approve.rs` and
+  `worker/approve.rs`.

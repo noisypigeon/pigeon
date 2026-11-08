@@ -9,8 +9,12 @@ use sha2::{Digest, Sha256};
 
 use crate::changes::{Change, State};
 
-/// How long a grant lives, in seconds.
+/// How long a card's grant lives, in seconds.
 pub const TTL: u64 = 15 * 60;
+
+/// How long a page's grant lives, in seconds: long enough to approve from a phone later; see
+/// `.claude/decisions/2026-11-08-security-tiered-approvals-task-mandates.md` §4.
+pub const PAGE_TTL: u64 = 24 * 60 * 60;
 
 /// The operations a grant offers: those only a person runs on a change.
 pub const OPERATIONS: [&str; 4] = [
@@ -92,13 +96,29 @@ impl Grants {
         token: &str,
         now: u64,
     ) -> Result<Grant, String> {
+        self.mint_for(change, operation, token, now, TTL)
+    }
+
+    /// As [`Self::mint`], living `ttl` seconds.
+    ///
+    /// # Errors
+    ///
+    /// When the operation doesn't apply to the change now.
+    pub fn mint_for(
+        &mut self,
+        change: &Change,
+        operation: &str,
+        token: &str,
+        now: u64,
+        ttl: u64,
+    ) -> Result<Grant, String> {
         offerable(change, operation)?;
         self.0.retain(|_, g| g.expires > now);
         let grant = Grant {
             operation: operation.to_string(),
             number: change.number,
             head: change.head.clone(),
-            expires: now + TTL,
+            expires: now + ttl,
         };
         self.0.insert(key(token), grant.clone());
         Ok(grant)

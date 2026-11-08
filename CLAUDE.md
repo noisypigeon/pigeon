@@ -74,8 +74,8 @@ belong in the ADR, never in the file.
   [`2026-11-05-runtime-control-plane-worker.md`](.claude/decisions/2026-11-05-runtime-control-plane-worker.md).
 - Approvals are made in the Claude card: a form asking for the owner's
   authenticator code (TOTP, `pigeon backplane totp-secret`), bound to one
-  grant of the operation and head; there is no approval website, and a client
-  without forms approves with `cloudflared`; images and the Worker
+  grant of the operation and head; a pending approval's page and the
+  `/approvals` inbox take the same code from any browser; images and the Worker
   to be built on Cloudflare,
   platform state to live in R2, and jobs to run on two Container classes, per
   [`2026-11-06-development-control-plane-approvals-images-state.md`](.claude/decisions/2026-11-06-development-control-plane-approvals-images-state.md).
@@ -214,7 +214,9 @@ belong in the ADR, never in the file.
   (`infra/pigeon/workers/control/`) serves MCP on `/mcp` behind Access: tools
   `change_propose`, `change_status`, `change_pushed`, `ci_rerun`, and the
   owner's `change_authorize`, `change_approve`, `change_merge` (squashes the
-  approved head onto `main` as `<title> (!n)`) and `change_close`.
+  approved head onto `main` as `<title> (!n)`) and `change_close`, which,
+  called by the agent, answer at once with the approval page's link;
+  `approval_wait` shows the code card for one.
   Each push to `main` runs `MainRun`'s pipeline: one deploy at a time, of the
   newest push, publishing the instance's sites whose inputs changed since the
   last deploy (`cobot::scope::deploys`, `sites.publish`); `deploy_status`

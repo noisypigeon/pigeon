@@ -98,3 +98,19 @@ fn a_grant_is_offered_only_where_its_operation_applies() {
     );
     assert!(g.0.is_empty());
 }
+
+#[test]
+fn a_page_grant_lives_a_day_and_a_card_grant_fifteen_minutes() {
+    let c = change(State::Checked, Some(HEAD));
+    let mut g = Grants::default();
+    let page = g
+        .mint_for(&c, "change.approve", "page", 100, grants::PAGE_TTL)
+        .expect("mint");
+    assert_eq!(page.expires, 100 + 24 * 60 * 60);
+    let card = g.mint(&c, "change.approve", "card", 100).expect("mint");
+    assert_eq!(card.expires, 100 + TTL);
+    assert!(
+        g.peek("page", 7, 100 + TTL + 1).is_ok(),
+        "the page's link outlives the card's"
+    );
+}

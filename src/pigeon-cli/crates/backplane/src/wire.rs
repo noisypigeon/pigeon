@@ -311,6 +311,13 @@ const CATALOG: &[Operation] = &[
         args: &[],
     },
     Operation {
+        name: "approval.wait",
+        engine: Engine::Backplane,
+        effect: Effect::Build,
+        summary: "Show the owner's code card for a pending approval of `operation` (change.authorize, change.approve, change.merge or change.close) on change `number`, on a client that shows forms; the page's link works meanwhile",
+        args: &[NUMBER, arg("operation", true, Kind::String)],
+    },
+    Operation {
         name: "deploy.retry",
         engine: Engine::Backplane,
         effect: Effect::Build,

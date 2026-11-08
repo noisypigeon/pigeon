@@ -7,6 +7,7 @@
     reason = "`durable_object` generates undocumented wasm-bindgen items"
 )]
 
+mod approve;
 mod change;
 mod checker;
 mod elicit;
@@ -62,6 +63,9 @@ async fn fetch(mut req: Request, env: Env, _ctx: worker::Context) -> Result<Resp
     if req.path().starts_with("/git/") {
         return gitdoor::serve(req, &env, &settings, &who).await;
     }
+    if req.path().starts_with("/approve/") || req.path() == "/approvals" {
+        return approve::serve(req, &env, &settings, &who).await;
+    }
     match (req.method(), req.path().as_str()) {
         (Method::Post, "/mcp") => {
             let key = platform::secret(&env, "SESSION_KEY").ok();
@@ -96,8 +100,11 @@ async fn fetch(mut req: Request, env: Env, _ctx: worker::Context) -> Result<Resp
                 Action::Accept => Ok(Response::empty()?.with_status(202)),
                 Action::Answer { id, result } => elicit::answer(&env, &id, &result).await,
                 Action::Call { id, request } => {
+                    if request.operation == "approval.wait" {
+                        return wait(&env, &session, &id, &request).await;
+                    }
                     if !who.human && grants::OPERATIONS.contains(&request.operation.as_str()) {
-                        return offer(&env, &session, &id, &request).await;
+                        return offer(&env, &settings, &id, &request).await;
                     }
                     let outcome = run(&env, &settings, &who, &request).await;
                     Response::from_json(&mcp::answer(&id, outcome))
@@ -116,9 +123,54 @@ async fn fetch(mut req: Request, env: Env, _ctx: worker::Context) -> Result<Resp
     }
 }
 
-/// A service token's call of an owner's operation: a card asking for the owner's code, when
-/// the client shows forms.
+/// The change number of `request`'s `number` argument.
+fn number_arg(request: &wire::Request) -> Option<u32> {
+    request.args.get("number").and_then(|v| match v {
+        Value::String(s) => s.parse().ok(),
+        other => other.as_u64().and_then(|n| u32::try_from(n).ok()),
+    })
+}
+
+/// A service token's call of an owner's operation: pending, with a link to the approval page,
+/// at once; `approval.wait` shows the card on a client that shows forms; see
+/// `.claude/decisions/2026-11-08-security-tiered-approvals-task-mandates.md` §4.
 async fn offer(
+    env: &Env,
+    settings: &Settings,
+    id: &Value,
+    request: &wire::Request,
+) -> Result<Response> {
+    let refused =
+        |why: String| Response::from_json(&mcp::answer(id, Err(crate::Error::Invalid(vec![why]))));
+    let Some(number) = number_arg(request) else {
+        return refused("`number` must be a change number".into());
+    };
+    let host = env
+        .var(cobot::ship_wire::HOST_VAR)
+        .map(|v| v.to_string())
+        .unwrap_or_default();
+    match approve::pending(env, settings, &host, number, &request.operation).await {
+        Ok((link, expires)) => Response::from_json(&mcp::answer(
+            id,
+            Ok(wire::Response {
+                operation: request.operation.clone(),
+                ok: false,
+                result: json!({
+                    "pending": { "operation": request.operation, "number": number, "link": link, "expires": expires }
+                }),
+                violations: vec![format!(
+                    "waiting for the owner: `{}` on change {number} is approved at {link} with the authenticator code, or in the card `approval_wait` shows",
+                    request.operation
+                )],
+            }),
+        )),
+        Err(why) => refused(why),
+    }
+}
+
+/// `approval.wait`: the owner's code card for `operation` on change `number`, when the client
+/// shows forms.
+async fn wait(
     env: &Env,
     session: &mcp::Session,
     id: &Value,
@@ -126,23 +178,27 @@ async fn offer(
 ) -> Result<Response> {
     let refused =
         |why: String| Response::from_json(&mcp::answer(id, Err(crate::Error::Invalid(vec![why]))));
-    let number = request.args.get("number").and_then(|v| match v {
-        Value::String(s) => s.parse().ok(),
-        other => other.as_u64().and_then(|n| u32::try_from(n).ok()),
-    });
-    let Some(number) = number else {
+    let Some(number) = number_arg(request) else {
         return refused("`number` must be a change number".into());
     };
-    if session.form_elicitation {
-        return match elicit::card(env.clone(), id.clone(), number, request.operation.clone()).await
-        {
-            Ok(r) => Ok(r),
-            Err(why) => refused(why),
-        };
+    let operation = request
+        .args
+        .get("operation")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_string();
+    if !grants::OPERATIONS.contains(&operation.as_str()) {
+        return refused(format!("`{operation}` isn't approved by the owner"));
     }
-    refused(
-        "this client doesn't show forms, so it can't ask for the owner's code; approve with cloudflared, or reconnect a client that shows forms".into(),
-    )
+    if !session.form_elicitation {
+        return refused(
+            "this client doesn't show forms; the owner approves at the page's link".into(),
+        );
+    }
+    match elicit::card(env.clone(), id.clone(), number, operation).await {
+        Ok(r) => Ok(r),
+        Err(why) => refused(why),
+    }
 }
 
 fn change_stub(env: &Env, repo: &str, number: u32) -> Result<worker::Stub> {
@@ -492,7 +548,8 @@ impl DurableObject for Instance {
 
     async fn fetch(&self, mut req: Request) -> Result<Response> {
         let path = req.path();
-        if path.starts_with("/elicit/") {
+        if path.starts_with("/elicit/") || path.starts_with("/approvals/") || path == "/code/verify"
+        {
             let body: Value = req.json().await?;
             return elicit::serve(&self.state, &self.env, &path, body).await;
         }

@@ -246,7 +246,12 @@ impl DurableObject for ChangeRun {
                 let operation = body["operation"].as_str().unwrap_or_default();
                 let token = platform::random_hex(32)?;
                 let mut grants: Grants = self.load(GRANTS).await?;
-                match grants.mint(&change, operation, &token, now()) {
+                let ttl = if body["page"].as_bool() == Some(true) {
+                    crate::grants::PAGE_TTL
+                } else {
+                    crate::grants::TTL
+                };
+                match grants.mint_for(&change, operation, &token, now(), ttl) {
                     Ok(grant) => {
                         self.state.storage().put(GRANTS, &grants).await?;
                         Response::from_json(
@@ -254,6 +259,18 @@ impl DurableObject for ChangeRun {
                         )
                     }
                     Err(why) => Response::error(why, 409),
+                }
+            }
+            (Method::Post, "peek") => {
+                let Some(change) = existing else {
+                    return Response::error("no such change", 404);
+                };
+                let body: Value = req.json().await?;
+                let token = body["token"].as_str().unwrap_or_default();
+                let grants: Grants = self.load(GRANTS).await?;
+                match grants.peek(token, change.number, now()) {
+                    Ok(grant) => Response::from_json(&json!({ "grant": grant, "change": change })),
+                    Err(why) => Response::error(why, 403),
                 }
             }
             (Method::Post, "redeem") => {

@@ -24,6 +24,9 @@ const PENDING: &str = "elicit";
 /// The storage key of the code's [`Guard`].
 const GUARD: &str = "totp";
 
+/// The storage key of the inbox: every approval waiting for the page.
+const WAITING: &str = "waiting";
+
 /// How long a card waits for its answer, in seconds.
 const WAIT: u64 = 600;
 
@@ -253,8 +256,79 @@ pub async fn serve(state: &State, env: &Env, path: &str, body: Value) -> Result<
                 "why": "the card was not answered within 10 minutes",
             }))
         }
+        "/approvals/add" => {
+            let w: crate::approve::Waiting = serde_json::from_value(body)?;
+            let mut list: Vec<crate::approve::Waiting> =
+                storage.get(WAITING).await?.unwrap_or_default();
+            list.retain(|x| x.expires > now() && x.path != w.path);
+            list.push(w);
+            storage.put(WAITING, &list).await?;
+            Response::from_json(&json!({ "status": "added" }))
+        }
+        "/approvals/list" => {
+            let mut list: Vec<crate::approve::Waiting> =
+                storage.get(WAITING).await?.unwrap_or_default();
+            list.retain(|x| x.expires > now());
+            Response::from_json(&list)
+        }
+        "/approvals/remove" => {
+            let path = body["path"].as_str().unwrap_or_default();
+            let mut list: Vec<crate::approve::Waiting> =
+                storage.get(WAITING).await?.unwrap_or_default();
+            list.retain(|x| x.expires > now() && x.path != path);
+            storage.put(WAITING, &list).await?;
+            Response::from_json(&json!({ "status": "removed" }))
+        }
+        "/code/verify" => {
+            let code = body["code"].as_str().unwrap_or_default();
+            match verify(state, env, code).await? {
+                Ok(()) => Response::from_json(&json!({ "status": "ok" })),
+                Err(why) => Response::from_json(&json!({ "status": "refused", "why": why })),
+            }
+        }
         _ => Response::error("not found", 404),
     }
+}
+
+/// Checks the owner's `code` against the authenticator secret, under the one guard the card and
+/// the page share: each step used once, and five wrong codes in an hour lock it.
+async fn verify(state: &State, env: &Env, code: &str) -> Result<std::result::Result<(), String>> {
+    let secret = totp::base32_decode(&platform::secret(env, "APPROVER_TOTP")?)?;
+    let storage = state.storage();
+    let mut guard: Guard = storage.get(GUARD).await?.unwrap_or_default();
+    let checked = guard.verify(&secret, code, now());
+    storage.put(GUARD, &guard).await?;
+    Ok(checked.map(|_| ()))
+}
+
+/// Checks `code` with the `Instance` Durable Object.
+///
+/// # Errors
+///
+/// When the binding fails.
+pub async fn check_code(
+    env: &Env,
+    s: &Settings,
+    code: &str,
+) -> Result<std::result::Result<(), String>> {
+    let v = to_instance(env, s, "/code/verify", &json!({ "code": code })).await?;
+    Ok(if v["status"].as_str() == Some("ok") {
+        Ok(())
+    } else {
+        Err(v["why"]
+            .as_str()
+            .unwrap_or("the code was refused")
+            .to_string())
+    })
+}
+
+/// Lists, adds or removes inbox entries with the `Instance` Durable Object, at `path`.
+///
+/// # Errors
+///
+/// When the binding fails.
+pub async fn inbox(env: &Env, s: &Settings, path: &str, body: &Value) -> Result<Value> {
+    to_instance(env, s, path, body).await
 }
 
 /// The outcome of the client's `result` for `pending`: declined, refused with why, or `ok` with
@@ -264,12 +338,7 @@ async fn judge(state: &State, env: &Env, pending: &Pending, result: &Value) -> R
         return Ok(json!({ "status": "declined", "why": "the owner declined" }));
     }
     let code = result["content"]["code"].as_str().unwrap_or_default();
-    let secret = totp::base32_decode(&platform::secret(env, "APPROVER_TOTP")?)?;
-    let storage = state.storage();
-    let mut guard: Guard = storage.get(GUARD).await?.unwrap_or_default();
-    let checked = guard.verify(&secret, code, now());
-    storage.put(GUARD, &guard).await?;
-    if let Err(why) = checked {
+    if let Err(why) = verify(state, env, code).await? {
         return Ok(json!({ "status": "refused", "why": why }));
     }
     let s = Settings::from(env)?;

@@ -1,0 +1,171 @@
+//! `/approve/<number>` and `/approvals`: the page a pending approval's link opens, its inbox, and
+//! the POST that approves with the owner's code as the signed-in person; see
+//! `.claude/decisions/2026-11-08-security-tiered-approvals-task-mandates.md` §4.
+
+use serde_json::{Map, Value, json};
+use worker::{Env, Method, Request, Response, Result};
+
+use super::platform::{Settings, now};
+use super::{elicit, run, to_change};
+use crate::access::Identity;
+use crate::approve::{self, Waiting};
+use crate::changes::Change;
+use crate::grants::Grant;
+use crate::wire;
+
+fn html(status: u16, body: &str) -> Result<Response> {
+    let mut r = Response::from_html(body)?.with_status(status);
+    let h = r.headers_mut();
+    h.set("content-security-policy", approve::CSP)?;
+    h.set("cache-control", "no-store")?;
+    h.set("referrer-policy", "same-origin")?;
+    h.set("x-content-type-options", "nosniff")?;
+    Ok(r)
+}
+
+fn refused(status: u16, why: &str) -> Result<Response> {
+    html(status, &approve::outcome("Not done", why))
+}
+
+/// The change number in `/approve/<number>`.
+fn number(path: &str) -> Option<u32> {
+    let n = path.strip_prefix("/approve/")?;
+    (!n.starts_with('0')).then(|| n.parse().ok()).flatten()
+}
+
+/// Mints a page grant of `operation` on change `number`, puts it in the inbox, and answers the
+/// link to its page on `host`, and when it expires.
+///
+/// # Errors
+///
+/// A message when the change refuses it, or a binding fails.
+pub async fn pending(
+    env: &Env,
+    s: &Settings,
+    host: &str,
+    number: u32,
+    operation: &str,
+) -> std::result::Result<(String, u64), String> {
+    let body = json!({ "operation": operation, "page": true });
+    let (status, v) = to_change(env, &s.repo, number, Method::Post, "/grant", Some(&body))
+        .await
+        .map_err(|e| e.to_string())?;
+    if status != 200 {
+        return Err(v.as_str().map_or_else(|| v.to_string(), str::to_string));
+    }
+    let token = v["token"].as_str().ok_or("the grant has no token")?;
+    let grant: Grant = serde_json::from_value(v["grant"].clone()).map_err(|e| e.to_string())?;
+    let path = format!("/approve/{number}?grant={token}");
+    let waiting = Waiting {
+        number,
+        operation: operation.to_string(),
+        title: v["title"].as_str().unwrap_or_default().to_string(),
+        path: path.clone(),
+        expires: grant.expires,
+    };
+    elicit::inbox(env, s, "/approvals/add", &json!(waiting))
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok((format!("https://{host}{path}"), grant.expires))
+}
+
+/// Serves `/approvals` and `/approve/<number>` for `who`.
+///
+/// # Errors
+///
+/// When a binding fails.
+pub async fn serve(mut req: Request, env: &Env, s: &Settings, who: &Identity) -> Result<Response> {
+    if !who.human {
+        return refused(403, "only a person signed in to Access approves");
+    }
+    let path = req.path();
+    if path == "/approvals" {
+        let v = elicit::inbox(env, s, "/approvals/list", &json!({})).await?;
+        let mut list: Vec<Waiting> = serde_json::from_value(v).unwrap_or_default();
+        list.retain(|w| w.expires > now());
+        return html(200, &approve::inbox(&list));
+    }
+    let Some(n) = number(&path) else {
+        return refused(404, "not found");
+    };
+    let url = req.url()?;
+    let host = url.host_str().unwrap_or_default().to_string();
+    match req.method() {
+        Method::Get => {
+            let token = url.query().and_then(|q| approve::field(q, "grant"));
+            let Some(token) = token else {
+                return refused(400, "this link has no grant");
+            };
+            let body = json!({ "token": token });
+            let (status, v) =
+                to_change(env, &s.repo, n, Method::Post, "/peek", Some(&body)).await?;
+            if status != 200 {
+                return refused(403, v.as_str().unwrap_or("this link is not valid"));
+            }
+            let (Ok(change), Ok(grant)) = (
+                serde_json::from_value::<Change>(v["change"].clone()),
+                serde_json::from_value::<Grant>(v["grant"].clone()),
+            ) else {
+                return refused(500, "the change's answer was unreadable");
+            };
+            html(200, &approve::page(&change, &grant, &token))
+        }
+        Method::Post => {
+            let origin = req.headers().get("origin")?;
+            let site = req.headers().get("sec-fetch-site")?;
+            if !approve::same_origin(origin.as_deref(), site.as_deref(), &host) {
+                return refused(403, "this form is posted only from its own page");
+            }
+            let form = req.text().await?;
+            let (Some(token), Some(operation), Some(code)) = (
+                approve::field(&form, "grant"),
+                approve::field(&form, "operation"),
+                approve::field(&form, "code"),
+            ) else {
+                return refused(400, "the form is missing its grant or code");
+            };
+            if let Err(why) = elicit::check_code(env, s, code.trim()).await? {
+                return refused(403, &why);
+            }
+            let body = json!({ "token": token, "operation": operation });
+            let (status, v) =
+                to_change(env, &s.repo, n, Method::Post, "/redeem", Some(&body)).await?;
+            let _ = elicit::inbox(
+                env,
+                s,
+                "/approvals/remove",
+                &json!({ "path": format!("/approve/{n}?grant={token}") }),
+            )
+            .await;
+            if status != 200 {
+                return refused(403, v.as_str().unwrap_or("this link is not valid"));
+            }
+            let Ok(grant) = serde_json::from_value::<Grant>(v) else {
+                return refused(500, "the grant was unreadable");
+            };
+            let mut args = Map::new();
+            args.insert("number".into(), Value::from(n));
+            if grant.operation == "change.approve"
+                && let Some(head) = &grant.head
+            {
+                args.insert("sha".into(), Value::from(head.clone()));
+            }
+            let request = wire::Request {
+                operation: grant.operation.clone(),
+                args,
+            };
+            match run(env, s, who, &request).await {
+                Ok(r) if r.ok => html(
+                    200,
+                    &approve::outcome(
+                        &format!("Done: {} on change {n}", grant.operation),
+                        &format!("Recorded as {}.", who.subject),
+                    ),
+                ),
+                Ok(r) => refused(409, &r.violations.join("\n")),
+                Err(e) => refused(409, &e.to_string()),
+            }
+        }
+        _ => refused(405, "method not allowed"),
+    }
+}

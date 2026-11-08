@@ -2,6 +2,7 @@
 
 pub mod access;
 pub mod approvals;
+pub mod approve;
 pub mod architecture;
 #[cfg(feature = "engines")]
 pub mod catalog;
