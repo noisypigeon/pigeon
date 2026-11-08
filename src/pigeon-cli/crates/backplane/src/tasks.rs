@@ -162,3 +162,120 @@ impl Tasks {
             .collect()
     }
 }
+
+/// How long a task waits unclaimed before the owner's digest names it, in seconds; see
+/// `.claude/decisions/2026-11-08-development-events-tickets-digest-mandate.md` §4.
+pub const STALE: u64 = 2 * 60 * 60;
+
+/// What the owner's digest is built from.
+#[derive(Debug, Clone, Default)]
+pub struct DigestInput<'a> {
+    /// Approvals waiting.
+    pub waiting: &'a [crate::approve::Waiting],
+    /// Every task.
+    pub tasks: Option<&'a Tasks>,
+    /// Every mandate.
+    pub mandates: &'a [crate::mandates::Mandate],
+    /// Deploys that failed since the last digest: the commit and why.
+    pub failed_deploys: &'a [(String, String)],
+    /// Changes merged without the owner since the last digest: the change and who approved.
+    pub merged_without_owner: &'a [(u32, String)],
+}
+
+/// The owner's digest.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Digest {
+    /// Approvals waiting, oldest first: the change, the operation and the page.
+    pub approvals: Vec<(u32, String, String)>,
+    /// Tasks unclaimed longer than [`STALE`].
+    pub stale_tasks: Vec<Task>,
+    /// Mandates paused, with why.
+    pub paused: Vec<(u32, String)>,
+    /// Deploys that failed: the commit and why.
+    pub failed_deploys: Vec<(String, String)>,
+    /// Changes merged without the owner: the change and who approved.
+    pub merged_without_owner: Vec<(u32, String)>,
+}
+
+impl Digest {
+    /// Whether it holds something the owner must act on, so it is pushed.
+    #[must_use]
+    pub fn needs_owner(&self) -> bool {
+        !(self.approvals.is_empty()
+            && self.stale_tasks.is_empty()
+            && self.paused.is_empty()
+            && self.failed_deploys.is_empty())
+    }
+
+    /// Whether it holds anything at all.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        !self.needs_owner() && self.merged_without_owner.is_empty()
+    }
+
+    /// One line per item, for a push or a page.
+    #[must_use]
+    pub fn lines(&self) -> Vec<String> {
+        let mut out: Vec<String> = self
+            .approvals
+            .iter()
+            .map(|(n, op, path)| format!("waiting: `{op}` on change {n}: {path}"))
+            .collect();
+        out.extend(self.stale_tasks.iter().map(|t| {
+            format!(
+                "unclaimed: task {} ({}) on change {}: {}",
+                t.id, t.kind, t.change, t.note
+            )
+        }));
+        out.extend(
+            self.paused
+                .iter()
+                .map(|(id, why)| format!("paused: mandate {id}: {why}")),
+        );
+        out.extend(
+            self.failed_deploys.iter().map(|(sha, why)| {
+                format!("deploy failed: {}: {why}", sha.get(..12).unwrap_or(sha))
+            }),
+        );
+        out.extend(
+            self.merged_without_owner
+                .iter()
+                .map(|(n, by)| format!("merged without you: change {n}, by {by}")),
+        );
+        out
+    }
+}
+
+/// The owner's digest at `now`.
+#[must_use]
+pub fn digest(input: &DigestInput<'_>, now: u64) -> Digest {
+    let mut waiting: Vec<&crate::approve::Waiting> =
+        input.waiting.iter().filter(|w| w.expires > now).collect();
+    waiting.sort_by_key(|w| w.expires);
+    Digest {
+        approvals: waiting
+            .iter()
+            .map(|w| (w.number, w.operation.clone(), w.path.clone()))
+            .collect(),
+        stale_tasks: input
+            .tasks
+            .map(|t| {
+                t.list
+                    .iter()
+                    .filter(|t| {
+                        !t.done && t.claimed_by.is_none() && now.saturating_sub(t.created) >= STALE
+                    })
+                    .cloned()
+                    .collect()
+            })
+            .unwrap_or_default(),
+        paused: input
+            .mandates
+            .iter()
+            .filter(|m| m.state == crate::mandates::State::Paused)
+            .map(|m| (m.id, m.why.clone().unwrap_or_default()))
+            .collect(),
+        failed_deploys: input.failed_deploys.to_vec(),
+        merged_without_owner: input.merged_without_owner.to_vec(),
+    }
+}
