@@ -16,6 +16,7 @@ fn open(number: u32, session: Option<&str>, scope: &[&str], affects: &[&str]) ->
         session: session.map(str::to_string),
         scope: globs(scope),
         affects: globs(affects),
+        plan: String::new(),
     }
 }
 

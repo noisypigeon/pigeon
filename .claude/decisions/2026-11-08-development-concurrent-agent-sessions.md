@@ -323,3 +323,37 @@ merge and task modules.
   the change's turn, so the next merge starts.
 - **The turn is held while the restacked head is checked,** a few
   minutes. The queue still moves past a turn held longer than 20 minutes.
+
+### 2026-11-08: Step 4 lands: reconciliation planned on conflict and on review
+
+- **`conflicted` is a field, not a state,** for the same reason `behind` is
+  one: a new state would need two releases.
+  - `Change.conflict` holds `main`'s commit, the paths and the
+    reconciliation change.
+  - While it is set, the change is refused approval and merge. Its next
+    push clears it.
+- **The restack job brings the conflict's context:**
+  - for each path: the subjects of `main`'s commits that touched it, and
+    both sides' diffs, each cut to 4 KiB;
+  - the messages of those commits, which name the changes merged and the
+    ADRs their plans cited.
+- **`backplane::reconcile` plans the reconciliation** (`reconcile-<n>`,
+  `fix: reconcile !<n> with main`), proposed by `pigeon` for the conflicted
+  change's session, with `parent` naming that change. The plan:
+  - cites this ADR;
+  - lists the conflicting paths and the merged changes behind them;
+  - states the rule: with any ADR cited on either side, append an
+    amendment to the later one and make the paths agree with it; otherwise
+    fix the paths, `main`'s side being settled;
+  - shows both hunks.
+- **Its scope is the conflicting paths plus the later ADR.** It is
+  authorized like any change, so a mandate that covers that scope and cites
+  either ADR authorizes it.
+- **A review** (`review-<open>-<merged>`) is planned when a change that
+  declared `affects` merges:
+  - for each open change whose scope or `affects` meets those globs, and
+    whose plan cites an ADR the merged change's doesn't;
+  - its scope is the later ADR, and its plan asks for an amendment citing
+    the earlier one.
+- **Not yet:** step 5's tasks, so a session learns of a reconciliation
+  from `change_status`'s `conflict.reconcile`, or from the digest.

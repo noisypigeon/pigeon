@@ -113,9 +113,21 @@ impl ChangeRun {
     async fn save_after(&self, change: &Change, pending: &[Pending], wait: bool) -> Result<()> {
         let storage = self.state.storage();
         let before: Option<Change> = storage.get(CHANGE).await?;
+        let mut change = change.clone();
+        if let Some(c) = change.conflict.as_mut()
+            && let Some(p) = c.proposal.take()
+        {
+            match super::merges::reconcile(&self.env, change.number, change.session.clone(), p)
+                .await
+            {
+                Ok(n) => c.reconcile = n,
+                Err(e) => worker::console_error!("reconcile: {e}"),
+            }
+        }
+        let change = &change;
         storage.put(CHANGE, change).await?;
         if before.is_some_and(|b| b.merge_after.is_some()) && control::merge_dropped(change) {
-            super::merges::ended(&self.env, change.number, None).await?;
+            super::merges::ended(&self.env, change, None).await?;
         }
         storage.put(PENDING, pending).await?;
         let open = change
@@ -387,7 +399,7 @@ impl DurableObject for ChangeRun {
         }
         self.save_after(&change, &next, wait).await?;
         if let Some(merged) = ended
-            && let Err(e) = super::merges::ended(&self.env, change.number, merged.as_deref()).await
+            && let Err(e) = super::merges::ended(&self.env, &change, merged.as_deref()).await
         {
             worker::console_error!("merge queue: {e}");
         }

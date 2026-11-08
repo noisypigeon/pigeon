@@ -19,6 +19,7 @@ pub mod jobs;
 pub mod mandates;
 pub mod mcp;
 pub mod merges;
+pub mod reconcile;
 pub mod runs;
 #[cfg(feature = "engines")]
 pub mod serve;

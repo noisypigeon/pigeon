@@ -8,9 +8,11 @@ use worker::{Env, Method, Response, Result, State};
 use super::mandates::to_instance;
 use super::platform::{self, Settings, now};
 use super::to_change;
-use crate::changes::Event;
+use crate::changes::{Change, Event};
 use crate::control;
 use crate::merges::{Entry, MergeQueue, Queued};
+use crate::reconcile::{PROPOSER, Proposal};
+use crate::sessions;
 
 /// The storage key of the merge queue.
 const MERGES: &str = "merges";
@@ -50,14 +52,14 @@ pub async fn ask(env: &Env, s: &Settings, number: u32, by: &str) -> Result<(u16,
     Ok((status, json!({ "change": v })))
 }
 
-/// Change `number`'s merge ended, as `merged`, the commit `main` now holds, or failed: marks
-/// every other open change behind `main`, which restacks the checked and approved ones, then
-/// starts the next merge.
+/// Change `c`'s merge ended, as `merged`, the commit `main` now holds, or failed: marks every
+/// other open change behind `main`, which restacks the checked and approved ones, plans a
+/// review for each open change in the area `c`'s ADR decides, then starts the next merge.
 ///
 /// # Errors
 ///
 /// When a binding fails.
-pub async fn ended(env: &Env, number: u32, merged: Option<&str>) -> Result<()> {
+pub async fn ended(env: &Env, c: &Change, merged: Option<&str>) -> Result<()> {
     let s = Settings::from(env)?;
     if let Some(main) = merged {
         let rows = platform::d1_rows(env, &control::open(&s.instance, &s.repo)).await?;
@@ -65,21 +67,65 @@ pub async fn ended(env: &Env, number: u32, merged: Option<&str>) -> Result<()> {
             main: main.to_string(),
         })?;
         for open in control::open_rows(&rows) {
-            if open.number != number {
-                let _ = to_change(
-                    env,
-                    &s.repo,
-                    open.number,
-                    Method::Post,
-                    "/event",
-                    Some(&body),
-                )
-                .await;
+            if open.number == c.number {
+                continue;
+            }
+            let _ = to_change(
+                env,
+                &s.repo,
+                open.number,
+                Method::Post,
+                "/event",
+                Some(&body),
+            )
+            .await;
+            let globs: Vec<String> = c
+                .affects
+                .iter()
+                .filter(|a| {
+                    open.scope
+                        .iter()
+                        .chain(&open.affects)
+                        .any(|o| sessions::meet(a, o))
+                })
+                .cloned()
+                .collect();
+            if globs.is_empty() {
+                continue;
+            }
+            if let Some(p) =
+                crate::reconcile::review(open.number, &open.plan, c.number, &c.plan, &globs)
+                && let Err(e) = reconcile(env, open.number, open.session.clone(), p).await
+            {
+                worker::console_error!("review of change {}: {e}", open.number);
             }
         }
     }
-    let (_, v) = to_instance(env, &s, "/merges/done", &json!({ "number": number })).await?;
+    let (_, v) = to_instance(env, &s, "/merges/done", &json!({ "number": c.number })).await?;
     start(env, &s, serde_json::from_value(v["next"].clone()).ok()).await
+}
+
+/// Proposes reconciliation `p` of change `parent`, for its `session`: the new change's
+/// number, if proposed.
+///
+/// # Errors
+///
+/// When a binding fails.
+pub async fn reconcile(
+    env: &Env,
+    parent: u32,
+    session: Option<String>,
+    p: Proposal,
+) -> Result<Option<u32>> {
+    let s = Settings::from(env)?;
+    let mut change = Change::propose(0, &p.slug, &p.title, &p.plan, p.scope, PROPOSER);
+    change.session = session;
+    change.parent = Some(parent);
+    let (number, r) = super::propose(env, &s, "change.propose", change).await?;
+    if !r.ok {
+        worker::console_warn!("reconcile {parent}: {}", r.violations.join("; "));
+    }
+    Ok(number.and_then(|n| n.parse().ok()))
 }
 
 async fn merge(env: &Env, s: &Settings, number: u32, by: &str) -> Result<(u16, Value)> {

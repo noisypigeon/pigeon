@@ -161,6 +161,46 @@ pub struct Restacked {
     /// The paths git couldn't merge.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub conflicts: Vec<String>,
+    /// The commit of `main` it replayed onto.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub onto: String,
+    /// For a conflict: each path's changes on both sides.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub context: Vec<ConflictContext>,
+    /// For a conflict: the messages of `main`'s commits that touched the paths.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub messages: String,
+}
+
+/// One conflicting path's changes on both sides.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ConflictContext {
+    /// The path.
+    pub path: String,
+    /// The subjects of `main`'s commits that touched it.
+    #[serde(default)]
+    pub commits: Vec<String>,
+    /// `main`'s diff of it since the fork.
+    #[serde(default)]
+    pub base_diff: String,
+    /// The change's diff of it since the fork.
+    #[serde(default)]
+    pub change_diff: String,
+}
+
+/// A head that conflicts with `main`, and the reconciliation planned for it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Conflicted {
+    /// The commit of `main` it conflicts with.
+    pub onto: String,
+    /// The paths in conflict.
+    pub paths: Vec<String>,
+    /// The reconciliation to propose; taken once proposed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub proposal: Option<crate::reconcile::Proposal>,
+    /// The reconciliation change, once proposed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reconcile: Option<u32>,
 }
 
 /// An approval to carry onto a restacked head, if its patch and merge tier hold.
@@ -236,6 +276,12 @@ pub struct Change {
     /// carries over.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub merge_after: Option<String>,
+    /// Its head conflicts with `main`; cleared by its next push.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub conflict: Option<Conflicted>,
+    /// For a reconciliation: the change it reconciles or reviews.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent: Option<u32>,
 }
 
 /// Something that happened to a change.
@@ -361,6 +407,17 @@ impl std::fmt::Display for Refusal {
 
 impl std::error::Error for Refusal {}
 
+fn conflicted(branch: &str, c: &Conflicted) -> String {
+    let by = c
+        .reconcile
+        .map(|n| format!("; change {n} reconciles it"))
+        .unwrap_or_default();
+    format!(
+        "{branch} conflicts with main in {}{by}; rebase it onto main and push",
+        c.paths.join(", ")
+    )
+}
+
 fn refuse<T>(why: impl Into<String>) -> Result<T, Refusal> {
     Err(Refusal(why.into()))
 }
@@ -425,6 +482,8 @@ impl Change {
             behind: None,
             carried: None,
             merge_after: None,
+            conflict: None,
+            parent: None,
         }
     }
 
@@ -457,7 +516,7 @@ impl Change {
                 self.pushed(sha)
             }
             Event::Behind { main } => self.behind(main),
-            Event::Restacked { sha, restack } => self.restacked(&sha, restack),
+            Event::Restacked { sha, restack } => self.restacked(&sha, &restack),
             Event::Started { job, sha } => self.started(&job, &sha),
             Event::Bounded {
                 sha,
@@ -523,6 +582,7 @@ impl Change {
         let mut effects = self.cancel_open();
         self.head = Some(sha);
         self.approval = None;
+        self.conflict = None;
         self.violations.clear();
         self.jobs = vec![Job::queued(BOUND, Vec::new())];
         self.state = State::Pushed;
@@ -558,7 +618,7 @@ impl Change {
     }
 
     /// The restack job's report on head `sha`.
-    fn restacked(&mut self, sha: &str, r: Restacked) -> Result<Vec<Effect>, Refusal> {
+    fn restacked(&mut self, sha: &str, r: &Restacked) -> Result<Vec<Effect>, Refusal> {
         let pushed_first = r.to.is_some() && self.head == r.to;
         if !self.on_head(sha) && !pushed_first {
             return Ok(Vec::new());
@@ -567,7 +627,7 @@ impl Change {
             j.status = JobStatus::Passed;
         }
         let carries = r.relation == Relation::Disjoint && r.same_patch;
-        match (&r.relation, r.to) {
+        match (&r.relation, r.to.clone()) {
             (Relation::Current, _) => {
                 self.behind = None;
                 self.carried = None;
@@ -579,6 +639,14 @@ impl Change {
             (Relation::Conflicting, _) | (_, None) => {
                 self.carried = None;
                 self.merge_after = None;
+                if r.relation == Relation::Conflicting {
+                    self.conflict = Some(Conflicted {
+                        onto: r.onto.clone(),
+                        paths: r.conflicts.clone(),
+                        proposal: Some(crate::reconcile::conflict(self, r)),
+                        reconcile: None,
+                    });
+                }
                 self.violations = vec![format!(
                     "{} conflicts with main in {}; rebase it onto main and push",
                     self.branch(),
@@ -790,6 +858,9 @@ impl Change {
     }
 
     fn approve(&mut self, by: String, sha: String, at: u64) -> Result<Vec<Effect>, Refusal> {
+        if let Some(c) = &self.conflict {
+            return refuse(conflicted(&self.branch(), c));
+        }
         if self.state != State::Checked {
             return refuse(format!(
                 "{} is {}; only a checked head is approved",
@@ -832,6 +903,9 @@ impl Change {
 
     /// Starts the merge job on an approved head.
     fn start_merge(&mut self) -> Result<Vec<Effect>, Refusal> {
+        if let Some(c) = &self.conflict {
+            return refuse(conflicted(&self.branch(), c));
+        }
         if self.state != State::Approved {
             return refuse(format!(
                 "{} is {}; only an approved head is merged",

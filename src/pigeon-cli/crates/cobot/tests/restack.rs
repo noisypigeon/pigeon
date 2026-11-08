@@ -151,6 +151,15 @@ fn a_conflict_is_reported_and_nothing_is_pushed() {
     assert_eq!(r.relation, Relation::Conflicting);
     assert_eq!(r.conflicts, ["a.txt"]);
     assert_eq!(r.to, None);
+    assert_eq!(r.context.len(), 1);
+    assert_eq!(r.context[0].commits, ["other"]);
+    assert!(
+        r.context[0].base_diff.contains("+uno"),
+        "{}",
+        r.context[0].base_diff
+    );
+    assert!(r.context[0].change_diff.contains("+ONE"));
+    assert!(r.messages.contains("other"));
     git(
         &work,
         &["fetch", "-q", &url, "+refs/heads/*:refs/remotes/r/*"],

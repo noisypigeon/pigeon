@@ -40,6 +40,9 @@ pub struct Open {
     /// What its ADR will govern.
     #[serde(default)]
     pub affects: Vec<String>,
+    /// Its plan.
+    #[serde(default)]
+    pub plan: String,
 }
 
 /// An open change a proposal overlaps.

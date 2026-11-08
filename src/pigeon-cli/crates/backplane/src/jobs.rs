@@ -12,7 +12,7 @@ use std::sync::{Arc, Mutex};
 
 use serde_json::{Map, Value, json};
 
-use crate::changes::{BOUND, Check, MERGE, RESTACK, Relation, Restacked};
+use crate::changes::{BOUND, Check, ConflictContext, MERGE, RESTACK, Relation, Restacked};
 use crate::control::{DEPLOY, JobSpec, Outcome, Report, tail};
 use crate::{Instance, Request, run_with};
 
@@ -327,6 +327,18 @@ fn restack(spec: &JobSpec, dir: &Path) -> Report {
                     to: r.to,
                     same_patch: r.same_patch,
                     conflicts: r.conflicts,
+                    onto: r.onto,
+                    context: r
+                        .context
+                        .into_iter()
+                        .map(|c| ConflictContext {
+                            path: c.path,
+                            commits: c.commits,
+                            base_diff: c.base_diff,
+                            change_diff: c.change_diff,
+                        })
+                        .collect(),
+                    messages: r.messages,
                 }),
                 ..report(spec, Outcome::Passed, "")
             }

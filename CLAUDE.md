@@ -219,7 +219,8 @@ belong in the ADR, never in the file.
   waits its turn in one merge queue, and a merge marks the other open
   changes `behind` and restacks the checked and approved ones onto `main`
   (an approval carries over when the patch and tier are the same; ADRs
-  merge by union), per
+  merge by union); a restack conflict, or an ADR's `affects` meeting an
+  open change, proposes a `reconcile-<n>` or `review-<n>-<m>` change, per
   [`2026-11-08-development-concurrent-agent-sessions.md`](.claude/decisions/2026-11-08-development-concurrent-agent-sessions.md).
 - `pigeon backplane jobs --listen ADDR`: a job Container's server, signed under
   `BACKPLANE_TOKEN`; the control plane's `Checker` runs it. The Worker

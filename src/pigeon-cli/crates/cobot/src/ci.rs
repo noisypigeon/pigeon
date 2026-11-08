@@ -378,6 +378,72 @@ pub struct Restack {
     /// The paths git couldn't merge.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub conflicts: Vec<String>,
+    /// For a conflict: each path's changes on both sides.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub context: Vec<Conflict>,
+    /// For a conflict: the messages of the base's commits that touched the paths, which name
+    /// the changes merged and the ADRs they cite.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub messages: String,
+}
+
+/// One conflicting path's changes on both sides, each diff cut to [`CONTEXT_MAX`] bytes.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct Conflict {
+    /// The path.
+    pub path: String,
+    /// The subjects of the base's commits that touched it since the fork.
+    #[serde(default)]
+    pub commits: Vec<String>,
+    /// The base's diff of it since the fork.
+    #[serde(default)]
+    pub base_diff: String,
+    /// The change's diff of it since the fork.
+    #[serde(default)]
+    pub change_diff: String,
+}
+
+/// The most of each diff, and of the messages, a conflict's context keeps.
+pub const CONTEXT_MAX: usize = 4096;
+
+/// `text` cut to at most `max` bytes, at a character boundary.
+fn cut(text: &str, max: usize) -> String {
+    let mut end = text.len().min(max);
+    while !text.is_char_boundary(end) {
+        end -= 1;
+    }
+    text[..end].to_string()
+}
+
+/// The context of `paths`, in conflict between `fork..onto` and `fork..sha`.
+fn conflict_context(
+    dir: &Path,
+    fork: &str,
+    onto: &str,
+    sha: &str,
+    paths: &[String],
+) -> Result<(Vec<Conflict>, String), Error> {
+    let range = format!("{fork}..{onto}");
+    let mut context = Vec::new();
+    for path in paths {
+        let commits = git(dir, "", "", &["log", "--format=%s", &range, "--", path])?;
+        context.push(Conflict {
+            path: path.clone(),
+            commits: commits.lines().map(str::to_string).collect(),
+            base_diff: cut(
+                &git(dir, "", "", &["diff", fork, onto, "--", path])?,
+                CONTEXT_MAX,
+            ),
+            change_diff: cut(
+                &git(dir, "", "", &["diff", fork, sha, "--", path])?,
+                CONTEXT_MAX,
+            ),
+        });
+    }
+    let mut args = vec!["log", "--format=%B", range.as_str(), "--"];
+    args.extend(paths.iter().map(String::as_str));
+    let messages = cut(&git(dir, "", "", &args)?, CONTEXT_MAX);
+    Ok((context, messages))
 }
 
 fn patch_id(dir: &Path, from: &str, to: &str) -> Result<String, Error> {
@@ -528,6 +594,8 @@ pub fn restack(
         to: None,
         same_patch: true,
         conflicts: Vec::new(),
+        context: Vec::new(),
+        messages: String::new(),
     };
     if fork == onto {
         return Ok(r);
@@ -539,6 +607,7 @@ pub fn restack(
     let tree = match merge_tree(dir, &onto, sha)? {
         Ok(tree) => tree,
         Err(conflicts) => {
+            (r.context, r.messages) = conflict_context(dir, &fork, &onto, sha, &conflicts)?;
             r.relation = Relation::Conflicting;
             r.same_patch = false;
             r.conflicts = conflicts;
