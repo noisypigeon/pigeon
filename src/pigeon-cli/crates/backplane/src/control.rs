@@ -581,6 +581,21 @@ pub fn next_number(instance: &str, repo: &str, floor: u32) -> Statement {
     }
 }
 
+/// Whether `change` holds a merge turn it no longer waits on: no merge asked for meanwhile,
+/// and none running or done.
+#[must_use]
+pub fn merge_dropped(change: &Change) -> bool {
+    change.merge_after.is_none()
+        && change.state != changes::State::Merged
+        && !change.jobs.iter().any(|j| {
+            j.name == MERGE
+                && matches!(
+                    j.status,
+                    changes::JobStatus::Queued | changes::JobStatus::Running
+                )
+        })
+}
+
 /// Every open change: neither merged nor closed.
 #[must_use]
 pub fn open(instance: &str, repo: &str) -> Statement {

@@ -1,7 +1,9 @@
 //! The merge queue; see `.claude/decisions/2026-11-08-development-concurrent-agent-sessions.md` §3.
 
 use backplane::approvals::{Tier, Tiered, Tiers};
-use backplane::changes::{Change, Check, Effect, Event, RESTACK, Relation, Restacked, State};
+use backplane::changes::{
+    Change, Check, Effect, Event, MERGE, RESTACK, Relation, Restacked, State,
+};
 use backplane::merges::{MergeQueue, Queued, STUCK};
 
 const A: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -226,4 +228,85 @@ fn only_a_checked_or_approved_head_is_restacked() {
         []
     );
     assert_eq!(c.behind, None);
+}
+
+/// Bounds head `sha` with `merge`'s tier and starts its one check; the check's finish is left
+/// to the caller.
+fn bound(c: &mut Change, sha: &str, merge: Tier) {
+    c.apply(Event::Bounded {
+        sha: sha.into(),
+        violations: vec![],
+        checks: vec![Check {
+            name: "fmt".into(),
+            argv: vec![],
+        }],
+        tiers: Some(tiers(merge)),
+    })
+    .expect("bounded");
+    c.apply(Event::Started {
+        job: "fmt".into(),
+        sha: sha.into(),
+    })
+    .expect("started");
+}
+
+fn finish(c: &mut Change, sha: &str) -> Vec<Effect> {
+    c.apply(Event::Finished {
+        job: "fmt".into(),
+        sha: sha.into(),
+        ok: true,
+    })
+    .expect("finished")
+}
+
+#[test]
+fn a_merge_asked_for_while_restacking_starts_once_the_approval_carries() {
+    let mut c = approved();
+    c.apply(Event::Behind { main: MAIN.into() })
+        .expect("behind");
+    let asked = c.apply(Event::Merge { by: "owner".into() }).expect("merge");
+    assert_eq!(asked, [], "it waits for the restack");
+    assert_eq!(c.merge_after.as_deref(), Some("owner"));
+    c.apply(restacked(Relation::Disjoint, Some(C), true))
+        .expect("restacked");
+    bound(&mut c, C, Tier::Confirm);
+    assert_eq!(finish(&mut c, C), [Effect::Start(MERGE.into())]);
+    assert_eq!(c.state, State::Approved);
+    assert_eq!(c.merge_after, None);
+    assert!(!backplane::control::merge_dropped(&c), "its merge runs");
+}
+
+#[test]
+fn a_merge_asked_for_while_a_current_restack_runs_starts_when_it_reports() {
+    let mut c = approved();
+    c.apply(Event::Behind { main: MAIN.into() })
+        .expect("behind");
+    c.apply(Event::Merge { by: "owner".into() }).expect("merge");
+    let effects = c
+        .apply(restacked(Relation::Current, None, true))
+        .expect("current");
+    assert_eq!(effects, [Effect::Start(MERGE.into())]);
+}
+
+#[test]
+fn a_merge_whose_approval_did_not_carry_gives_up_its_turn() {
+    let mut c = approved();
+    c.apply(Event::Behind { main: MAIN.into() })
+        .expect("behind");
+    c.apply(Event::Merge { by: "owner".into() }).expect("merge");
+    c.apply(restacked(Relation::Disjoint, Some(C), true))
+        .expect("restacked");
+    bound(&mut c, C, Tier::Code);
+    assert_eq!(finish(&mut c, C), []);
+    assert_eq!((c.state, c.merge_after.as_deref()), (State::Checked, None));
+    assert!(backplane::control::merge_dropped(&c));
+
+    let mut c = approved();
+    c.apply(Event::Behind { main: MAIN.into() })
+        .expect("behind");
+    c.apply(Event::Merge { by: "owner".into() }).expect("merge");
+    c.apply(restacked(Relation::Conflicting, None, false))
+        .expect("conflict");
+    assert_eq!(c.merge_after, None);
+    assert!(backplane::control::merge_dropped(&c));
 }

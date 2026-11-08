@@ -232,6 +232,10 @@ pub struct Change {
     /// An approval carried across a restack.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub carried: Option<Carried>,
+    /// Who asked to merge while its restack was pending; its merge starts once the approval
+    /// carries over.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub merge_after: Option<String>,
 }
 
 /// Something that happened to a change.
@@ -420,6 +424,7 @@ impl Change {
             affects: Vec::new(),
             behind: None,
             carried: None,
+            merge_after: None,
         }
     }
 
@@ -566,10 +571,14 @@ impl Change {
             (Relation::Current, _) => {
                 self.behind = None;
                 self.carried = None;
-                Ok(Vec::new())
+                match self.merge_after.take() {
+                    Some(_) => self.start_merge(),
+                    None => Ok(Vec::new()),
+                }
             }
             (Relation::Conflicting, _) | (_, None) => {
                 self.carried = None;
+                self.merge_after = None;
                 self.violations = vec![format!(
                     "{} conflicts with main in {}; rebase it onto main and push",
                     self.branch(),
@@ -583,8 +592,7 @@ impl Change {
                     _ => self.carried = None,
                 }
                 if pushed_first {
-                    self.carry();
-                    return Ok(Vec::new());
+                    return Ok(self.carry());
                 }
                 self.tiers = None;
                 self.behind = None;
@@ -594,18 +602,21 @@ impl Change {
     }
 
     /// Approves a restacked head that reached `checked` with the approval carried to it, when
-    /// its merge tier is no higher than the one approved.
-    fn carry(&mut self) {
+    /// its merge tier is no higher than the one approved, then starts a merge asked for
+    /// meanwhile; a merge whose approval didn't carry is dropped.
+    fn carry(&mut self) -> Vec<Effect> {
         if self.state != State::Checked {
-            return;
+            return Vec::new();
         }
         let (Some(c), Some(t)) = (&self.carried, &self.tiers) else {
-            return;
+            self.merge_after = None;
+            return Vec::new();
         };
         if c.to.is_none() {
-            return;
+            return Vec::new();
         }
-        if c.to == self.head && t.merge.tier <= c.merge {
+        let carries = c.to == self.head && t.merge.tier <= c.merge;
+        if carries {
             self.approval = Some(Approval {
                 by: c.by.clone(),
                 sha: self.head.clone(),
@@ -614,6 +625,10 @@ impl Change {
             self.state = State::Approved;
         }
         self.carried = None;
+        match self.merge_after.take() {
+            Some(_) if carries => self.start_merge().unwrap_or_default(),
+            _ => Vec::new(),
+        }
     }
 
     fn on_head(&self, sha: &str) -> bool {
@@ -704,7 +719,7 @@ impl Change {
         }
         if self.jobs.iter().all(|j| j.status == JobStatus::Passed) {
             self.state = State::Checked;
-            self.carry();
+            return self.carry();
         }
         Vec::new()
     }
@@ -801,6 +816,22 @@ impl Change {
     }
 
     fn merge(&mut self, by: &str) -> Result<Vec<Effect>, Refusal> {
+        if by.is_empty() {
+            return refuse("a merge names who asked for it");
+        }
+        let restacking =
+            self.state == State::Approved && self.job(RESTACK).is_some_and(|j| j.open());
+        let carrying = self.carried.is_some()
+            && matches!(self.state, State::Pushed | State::Bounded | State::Checked);
+        if restacking || carrying {
+            self.merge_after = Some(by.to_string());
+            return Ok(Vec::new());
+        }
+        self.start_merge()
+    }
+
+    /// Starts the merge job on an approved head.
+    fn start_merge(&mut self) -> Result<Vec<Effect>, Refusal> {
         if self.state != State::Approved {
             return refuse(format!(
                 "{} is {}; only an approved head is merged",
@@ -810,9 +841,6 @@ impl Change {
         }
         if self.job(MERGE).is_some_and(|j| j.open()) {
             return refuse(format!("{} is already being merged", self.branch()));
-        }
-        if by.is_empty() {
-            return refuse("a merge names who asked for it");
         }
         self.jobs.retain(|j| j.name != MERGE);
         self.jobs.push(Job::queued(MERGE, Vec::new()));

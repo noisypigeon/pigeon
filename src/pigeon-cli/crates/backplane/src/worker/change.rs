@@ -112,7 +112,11 @@ impl ChangeRun {
     /// at once, as when no Container is free.
     async fn save_after(&self, change: &Change, pending: &[Pending], wait: bool) -> Result<()> {
         let storage = self.state.storage();
+        let before: Option<Change> = storage.get(CHANGE).await?;
         storage.put(CHANGE, change).await?;
+        if before.is_some_and(|b| b.merge_after.is_some()) && control::merge_dropped(change) {
+            super::merges::ended(&self.env, change.number, None).await?;
+        }
         storage.put(PENDING, pending).await?;
         let open = change
             .jobs

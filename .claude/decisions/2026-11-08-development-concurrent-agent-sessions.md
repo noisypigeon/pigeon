@@ -304,3 +304,22 @@ merge and task modules.
     its merge refuses to start until it is approved again, so it is asked
     to merge again;
   - a failed restack job leaves the change as it was, still `behind`.
+
+### 2026-11-08: A queued merge waits through its restack
+
+- **A merge asked for while the change is restacking no longer loses its
+  turn.** That covers an approved head whose restack job runs, and a head
+  waiting for a carried approval.
+  - The change records who asked (`merge_after`) and answers without
+    starting the merge job, so the queue keeps the turn.
+  - When the restack reports `current`, or the carried approval lands, the
+    merge starts.
+- **A merge that can no longer happen gives its turn back:**
+  - a restack conflict;
+  - an approval that didn't carry;
+  - a new push that took the head.
+
+  `ChangeRun` sees `merge_after` cleared with no merge running and ends
+  the change's turn, so the next merge starts.
+- **The turn is held while the restacked head is checked,** a few
+  minutes. The queue still moves past a turn held longer than 20 minutes.
