@@ -177,3 +177,62 @@ fn a_deploy_builds_pigeon_only_when_the_workspace_changed() {
         "infra/pigeon/sites/docs/config.yaml"
     ]))));
 }
+
+#[test]
+fn a_deploy_is_whole_for_a_new_worker_its_own_files_or_new_images() {
+    let dir = "infra/pigeon/workers/control";
+    let code = vec!["src/pigeon-cli/crates/backplane/src/lib.rs".to_string()];
+    let spec = vec![format!("{dir}/worker.yaml")];
+    assert_eq!(
+        ship::whole_deploy(dir, Some(&code), false, Some("blue")),
+        None
+    );
+    assert!(ship::whole_deploy(dir, Some(&code), false, None).is_some());
+    assert!(ship::whole_deploy(dir, Some(&code), true, Some("blue")).is_some());
+    assert!(ship::whole_deploy(dir, None, false, Some("blue")).is_some());
+    let why = ship::whole_deploy(dir, Some(&spec), false, Some("blue")).unwrap_or_default();
+    assert!(why.contains("worker.yaml"), "{why}");
+    let sibling = vec!["infra/pigeon/workers/controller/worker.yaml".to_string()];
+    assert_eq!(
+        ship::whole_deploy(dir, Some(&sibling), false, Some("blue")),
+        None
+    );
+}
+
+#[test]
+fn the_uploaded_version_is_read_from_wranglers_output() {
+    let out = "Total Upload: 812.40 KiB\nWorker Startup Time: 21 ms\nUploaded pigeon-control (3.1 sec)\nWorker Version ID: 6783e1f1-7188-41f5-94dc-b45758d696f9\n";
+    assert_eq!(
+        ship::uploaded_version(out).as_deref(),
+        Some("6783e1f1-7188-41f5-94dc-b45758d696f9")
+    );
+    assert_eq!(ship::uploaded_version("Uploaded pigeon-control\n"), None);
+}
+
+#[test]
+fn a_smoke_passes_only_as_green_with_every_probe() {
+    let green = "g";
+    let pass = json!({ "ok": true, "version": "g", "probes": { "d1": true, "tools": true } });
+    assert!(ship::smoke_passed(&pass, green));
+    assert!(!ship::smoke_passed(&pass, "b"));
+    let probe = json!({ "ok": true, "version": "g", "probes": { "d1": true, "tools": false } });
+    assert!(!ship::smoke_passed(&probe, green));
+    let none = json!({ "ok": true, "version": "g", "probes": {} });
+    assert!(!ship::smoke_passed(&none, green));
+}
+
+#[test]
+fn a_deployment_names_its_versions_and_how_objects_update() {
+    let d = ship::deployment(&[("blue", 100), ("green", 0)], false);
+    assert_eq!(
+        d["versions"][1],
+        json!({ "version_id": "green", "percentage": 0 })
+    );
+    assert_eq!(
+        d["code_update_strategy"],
+        json!({ "mode": "deferred", "max_delay": ship::CODE_UPDATE_DELAY })
+    );
+    let back = ship::deployment(&[("blue", 100)], true);
+    assert_eq!(back["code_update_strategy"], json!({ "mode": "immediate" }));
+    assert!(ship::HEALTH_WAIT.as_secs() > u64::from(ship::CODE_UPDATE_DELAY));
+}

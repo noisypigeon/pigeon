@@ -1,13 +1,8 @@
-//! Which of two Worker versions is newer, so a Durable Object running older code than its caller
-//! resets itself; see
-//! `.claude/decisions/2026-11-08-development-events-tickets-digest-mandate.md`, the amendment on
-//! busy Durable Objects.
+//! Which of two Worker versions is newer, so `/healthz` reports a Durable Object still on older
+//! code; see `.claude/decisions/2026-11-08-runtime-blue-green-self-standup.md`, step 2's spike.
 
 /// The header a caller names its version in: its timestamp, a space, and its ID.
 pub const HEADER: &str = "x-pigeon-version";
-
-/// The header a stale object's answer carries, so its caller retries.
-pub const STALE: &str = "x-pigeon-stale";
 
 /// A version as the header carries it.
 #[must_use]

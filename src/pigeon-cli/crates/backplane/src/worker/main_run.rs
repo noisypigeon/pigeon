@@ -35,7 +35,7 @@ impl MainRun {
         Ok(())
     }
 
-    /// Whether a deploy is in flight: it isn't reset while one is, since it runs the deploy.
+    /// Whether a deploy is in flight.
     async fn busy(&self) -> Result<bool> {
         Ok(self.pipeline().await?.running.is_some()
             || self
@@ -157,11 +157,6 @@ impl DurableObject for MainRun {
     }
 
     async fn fetch(&self, mut req: Request) -> Result<Response> {
-        if !self.busy().await?
-            && let Some(r) = platform::stale(&self.state, &self.env, &req)?
-        {
-            return Ok(r);
-        }
         let path = req.path();
         if path == "/version" {
             return Response::ok(platform::version(&self.env));

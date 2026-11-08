@@ -302,7 +302,7 @@ pub fn version(env: &Env) -> String {
 }
 
 /// Sends `req` to a Durable Object `stub`, naming this code's version; retries once when the
-/// object answers that it was stale and reset itself, or the reset cut the call off.
+/// call fails, as when Cloudflare resets the object onto new code.
 ///
 /// # Errors
 ///
@@ -314,30 +314,7 @@ pub async fn call(env: &Env, stub: &worker::Stub, mut req: Request) -> Result<Re
     }
     let again = req.clone()?;
     match stub.fetch_with_request(req).await {
-        Ok(r) if r.headers().get(crate::versions::STALE)?.is_none() => Ok(r),
-        _ => stub.fetch_with_request(again).await,
+        Ok(r) => Ok(r),
+        Err(_) => stub.fetch_with_request(again).await,
     }
-}
-
-/// The answer of a Durable Object whose caller runs newer code: it resets itself, so the next
-/// call starts it on that code; none when it is current.
-///
-/// # Errors
-///
-/// When a header can't be read or set.
-pub fn stale(state: &worker::State, env: &Env, req: &Request) -> Result<Option<Response>> {
-    let caller = req.headers().get(crate::versions::HEADER)?;
-    if !crate::versions::caller_is_newer(caller.as_deref(), &version(env)) {
-        return Ok(None);
-    }
-    worker::console_log!("stale version: resetting this object");
-    let raw = state.as_raw();
-    if let Ok(abort) = worker::js_sys::Reflect::get(raw, &JsValue::from_str("abort"))
-        && let Ok(abort) = abort.dyn_into::<worker::js_sys::Function>()
-    {
-        let _ = abort.call1(raw, &JsValue::from_str("stale version"));
-    }
-    let mut r = Response::error("stale-version", 503)?;
-    r.headers_mut().set(crate::versions::STALE, "1")?;
-    Ok(Some(r))
 }

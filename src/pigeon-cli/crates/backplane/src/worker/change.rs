@@ -241,9 +241,6 @@ impl DurableObject for ChangeRun {
     }
 
     async fn fetch(&self, mut req: Request) -> Result<Response> {
-        if let Some(r) = platform::stale(&self.state, &self.env, &req)? {
-            return Ok(r);
-        }
         self.rearm().await?;
         let path = req.path();
         let existing: Option<Change> = self.state.storage().get(CHANGE).await?;

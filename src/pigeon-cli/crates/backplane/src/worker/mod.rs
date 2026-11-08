@@ -55,16 +55,13 @@ async fn fetch(mut req: Request, env: Env, _ctx: worker::Context) -> Result<Resp
         Ok(who) => who,
         Err(why) => return Response::error(format!("unauthorized: {why}"), 401),
     };
-    let deployer = platform::secret(&env, cobot::ship_wire::ACCESS_ID_VAR).ok();
-    if req.path() == "/healthz" {
-        return health(&env, &settings).await;
+    match req.path().as_str() {
+        "/healthz" => return health(&env, &settings).await,
+        "/healthz/smoke" => return smoke(&env, &settings, &who).await,
+        _ => {}
     }
-    if deployer.is_some_and(|d| d == who.subject) {
-        return Response::error("the deployer's token reads /healthz only", 403);
-    }
-    let builds = platform::secret(&env, cobot::ship_wire::BUILDS_ACCESS_ID_VAR).ok();
-    if builds.is_some_and(|b| b == who.subject) {
-        return Response::error("the builds token reads /builds/ only", 403);
+    if let Some(refused) = narrow_token(&env, &who) {
+        return refused;
     }
     if req.path().starts_with("/git/") {
         return gitdoor::serve(req, &env, &settings, &who).await;
@@ -605,6 +602,96 @@ async fn health(env: &Env, s: &Settings) -> Result<Response> {
     .with_status(if ok { 200 } else { 503 }))
 }
 
+/// The refusal for a token that reaches only `/healthz` and `/builds/`, past those.
+fn narrow_token(env: &Env, who: &Identity) -> Option<Result<Response>> {
+    let is = |var: &str| platform::secret(env, var).is_ok_and(|id| id == who.subject);
+    if is(cobot::ship_wire::ACCESS_ID_VAR) {
+        return Some(Response::error(
+            "the deployer's token reads /healthz and /healthz/smoke only",
+            403,
+        ));
+    }
+    if is(cobot::ship_wire::BUILDS_ACCESS_ID_VAR) {
+        return Some(Response::error("the builds token reads /builds/ only", 403));
+    }
+    None
+}
+
+/// `/healthz/smoke`: this version's own code answering, with no write: D1, both objects at any
+/// version, MCP `tools/list`, the newest change's status and `deploy.status`; see
+/// .claude/decisions/2026-11-08-runtime-blue-green-self-standup.md, step 2's spike.
+async fn smoke(env: &Env, s: &Settings, who: &Identity) -> Result<Response> {
+    let version = env
+        .get_binding::<worker::WorkerVersionMetadata>("CF_VERSION_METADATA")
+        .map(|v| v.id())
+        .unwrap_or_default();
+    let d1 = match env.d1("DB") {
+        Ok(db) => db.prepare("SELECT 1").all().await.is_ok(),
+        Err(_) => false,
+    };
+    let answers = |url: &'static str| async move {
+        let req = json_request(url, Method::Get, None, None).ok()?;
+        let stub = if url.starts_with("https://main") {
+            main_stub(env, &s.repo).ok()?
+        } else {
+            env.durable_object("INSTANCE")
+                .ok()?
+                .id_from_name(&s.instance)
+                .ok()?
+                .get_stub()
+                .ok()?
+        };
+        let r = platform::call(env, &stub, req).await.ok()?;
+        (r.status_code() < 500).then_some(())
+    };
+    let instance = answers("https://instance/version").await.is_some();
+    let main = answers("https://main/version").await.is_some();
+    let tools = match mcp::parse(
+        &json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/list" }),
+        crate::VERSION,
+    ) {
+        Action::Reply(v) => v["result"]["tools"]
+            .as_array()
+            .is_some_and(|t| !t.is_empty()),
+        _ => false,
+    };
+    let read = |operation: &str, args: Value| wire::Request {
+        operation: operation.into(),
+        args: serde_json::from_value(args).unwrap_or_default(),
+    };
+    let listed = run(env, s, who, &read("change.list", json!({}))).await;
+    let newest = listed
+        .as_ref()
+        .ok()
+        .and_then(|r| r.result["changes"][0]["number"].as_u64());
+    let change = match newest {
+        Some(n) => run(
+            env,
+            s,
+            who,
+            &read("change.status", json!({ "number": n.to_string() })),
+        )
+        .await
+        .is_ok_and(|r| r.ok),
+        None => listed.is_ok_and(|r| r.ok),
+    };
+    let deploy = run(env, s, who, &read("deploy.status", json!({})))
+        .await
+        .is_ok_and(|r| r.ok);
+    let probes = json!({
+        "d1": d1, "instance": instance, "main": main, "tools": tools,
+        "change_status": change, "deploy_status": deploy,
+    });
+    let ok = !version.is_empty()
+        && probes
+            .as_object()
+            .is_some_and(|m| m.values().all(|v| v == true));
+    Ok(
+        Response::from_json(&json!({ "ok": ok, "version": version, "probes": probes }))?
+            .with_status(if ok { 200 } else { 503 }),
+    )
+}
+
 /// `GET /builds/<sha>/pigeon`: `main`'s `pigeon` built at that commit, from R2.
 async fn build(env: &Env, path: &str) -> Result<Response> {
     let Some(sha) = cobot::ship_wire::build_path_sha(path) else {
@@ -722,9 +809,6 @@ impl DurableObject for Instance {
     }
 
     async fn fetch(&self, mut req: Request) -> Result<Response> {
-        if let Some(r) = platform::stale(&self.state, &self.env, &req)? {
-            return Ok(r);
-        }
         let path = req.path();
         if path == "/version" {
             return Response::ok(platform::version(&self.env));

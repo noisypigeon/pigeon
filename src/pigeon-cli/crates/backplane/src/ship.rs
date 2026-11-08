@@ -104,8 +104,13 @@ pub fn workers(
             .into_iter()
             .next()
             .ok_or_else(|| format!("no Worker `{name}`"))?;
-        let s = ship::ship(dir, &found, &outputs, &images, &tools, &target)
+        let rebuilt = built.is_some();
+        let whole = |from: Option<&str>| ship::whole_deploy(&found.dir, files, rebuilt, from);
+        let s = ship::ship(dir, &found, &outputs, &images, &tools, &target, whole)
             .map_err(|e| e.to_string())?;
+        for step in &s.steps {
+            let _ = writeln!(log, "{}: {step}", s.name);
+        }
         let line = format!(
             "{}: {} → {}",
             s.name,
