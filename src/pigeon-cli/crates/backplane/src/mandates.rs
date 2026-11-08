@@ -286,3 +286,109 @@ impl Mandates {
         Ok(m.clone())
     }
 }
+
+/// What a mandate says about an operation on a change.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Decision {
+    /// Approve it under the mandate.
+    Allow,
+    /// Ask the owner, as without a mandate, and say why.
+    Ask(String),
+    /// Ask the owner, and pause the mandate, saying why.
+    Pause(String),
+}
+
+/// Whether `m` approves `operation` on `change` at `now`.
+/// - It must be usable, cited by the change's plan, and cover the change's scope.
+/// - Approving and merging also need the head classified, never by a guarded path, and at
+///   most confirm, or code only because it deploys and the mandate may deploy.
+#[must_use]
+pub fn decide(m: &Mandate, change: &crate::changes::Change, operation: &str, now: u64) -> Decision {
+    use crate::approvals::Tier;
+    if !m.usable(now) {
+        return Decision::Ask(format!(
+            "mandate {} is {:?}, expired or used up",
+            m.id, m.state
+        ));
+    }
+    if !change.plan.contains(&m.adr) {
+        return Decision::Ask(format!(
+            "change {}'s plan doesn't cite mandate {}'s ADR, {}",
+            change.number, m.id, m.adr
+        ));
+    }
+    if !m.covers(&change.scope) {
+        return Decision::Pause(format!(
+            "change {} reaches outside mandate {}'s scope",
+            change.number, m.id
+        ));
+    }
+    if !matches!(operation, "change.approve" | "change.merge") {
+        return Decision::Allow;
+    }
+    let Some(tiers) = &change.tiers else {
+        return Decision::Ask(format!("change {}'s head has no tiers yet", change.number));
+    };
+    let merge = &tiers.merge;
+    if merge.rule.starts_with("guarded") {
+        return Decision::Ask(format!(
+            "change {} touches a guarded path ({}), which always needs the code",
+            change.number, merge.rule
+        ));
+    }
+    match merge.tier {
+        Tier::Auto | Tier::Confirm => Decision::Allow,
+        Tier::Code if merge.rule == "deploys" && m.may_deploy => Decision::Allow,
+        Tier::Code if merge.rule == "deploys" => Decision::Ask(format!(
+            "change {} deploys, and mandate {} may not",
+            change.number, m.id
+        )),
+        Tier::Code => Decision::Ask(format!(
+            "change {} needs the code ({})",
+            change.number, merge.rule
+        )),
+    }
+}
+
+impl Mandates {
+    /// Decides `operation` on `change` under its mandate, recording a merge against the budget
+    /// and pausing the mandate when the decision says so; none when the change names none.
+    pub fn decide(
+        &mut self,
+        change: &crate::changes::Change,
+        operation: &str,
+        now: u64,
+    ) -> Option<(u32, Decision)> {
+        let id = change.mandate?;
+        let Some(m) = self.get_mut(id) else {
+            return Some((id, Decision::Ask(format!("no mandate {id}"))));
+        };
+        let d = decide(m, change, operation, now);
+        match &d {
+            Decision::Allow if operation == "change.merge" => {
+                m.used += 1;
+                m.merged.push(change.number);
+            }
+            Decision::Pause(why) => {
+                m.state = State::Paused;
+                m.why = Some(why.clone());
+            }
+            _ => {}
+        }
+        Some((id, d))
+    }
+
+    /// Pauses every active mandate, saying `why`, as when a deploy fails.
+    pub fn pause_all(&mut self, why: &str) -> Vec<u32> {
+        self.list
+            .iter_mut()
+            .filter(|m| m.state == State::Active)
+            .map(|m| {
+                m.state = State::Paused;
+                m.why = Some(why.to_string());
+                m.id
+            })
+            .collect()
+    }
+}

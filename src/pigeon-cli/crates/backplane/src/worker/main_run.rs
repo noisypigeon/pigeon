@@ -208,6 +208,16 @@ impl DurableObject for MainRun {
             match self.poll(&sha).await? {
                 Ok(Some(report)) => {
                     p.finished(&report, now());
+                    if report.outcome == Outcome::Failed {
+                        let why = format!("the deploy of {sha} failed");
+                        let paused = match platform::Settings::from(&self.env) {
+                            Ok(s) => super::mandates::pause_all(&self.env, &s, &why).await,
+                            Err(e) => Err(e),
+                        };
+                        if let Err(e) = paused {
+                            worker::console_error!("mandates: {e}");
+                        }
+                    }
                     next = p.start();
                 }
                 Ok(None) => {}

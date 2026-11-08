@@ -9,7 +9,8 @@ use super::platform::{self, Settings, json_request, now};
 use super::{approve as page, elicit};
 use crate::access::Identity;
 use crate::approve::{self, Waiting};
-use crate::mandates::{Mandate, Mandates};
+use crate::changes::Change;
+use crate::mandates::{Decision, Mandate, Mandates};
 
 /// The storage key of every mandate.
 const MANDATES: &str = "mandates";
@@ -23,7 +24,12 @@ fn text(args: &Map<String, Value>, k: &str) -> Option<String> {
     }
 }
 
-async fn to_instance(env: &Env, s: &Settings, path: &str, body: &Value) -> Result<(u16, Value)> {
+pub(super) async fn to_instance(
+    env: &Env,
+    s: &Settings,
+    path: &str,
+    body: &Value,
+) -> Result<(u16, Value)> {
     let req = json_request(
         &format!("https://instance{path}"),
         Method::Post,
@@ -118,8 +124,57 @@ async fn offer(env: &Env, s: &Settings, m: &Mandate) -> Result<String> {
     Ok(format!("https://{host}{path}"))
 }
 
-/// The `Instance` Durable Object's side: `/mandates/propose`, `list`, `offer`, `peek`, `grant`
-/// and `end`.
+/// Whether the mandate `change` names approves `operation` on it: the mandate's number, when
+/// it does; none, saying why in the log, when the owner is asked as usual.
+///
+/// # Errors
+///
+/// When a binding fails.
+pub async fn approves(
+    env: &Env,
+    s: &Settings,
+    change: &Change,
+    operation: &str,
+) -> Result<Option<u32>> {
+    if change.mandate.is_none() {
+        return Ok(None);
+    }
+    let (status, v) = to_instance(
+        env,
+        s,
+        "/mandates/decide",
+        &json!({ "change": change, "operation": operation }),
+    )
+    .await?;
+    let id = v["id"].as_u64().and_then(|i| u32::try_from(i).ok());
+    match (
+        status,
+        serde_json::from_value::<Decision>(v["decision"].clone()),
+    ) {
+        (200, Ok(Decision::Allow)) => Ok(id),
+        (200, Ok(Decision::Ask(why) | Decision::Pause(why))) => {
+            worker::console_log!("mandate: the owner approves {operation}: {why}");
+            Ok(None)
+        }
+        _ => {
+            worker::console_warn!("mandate: {v}");
+            Ok(None)
+        }
+    }
+}
+
+/// Pauses every active mandate, saying `why`.
+///
+/// # Errors
+///
+/// When a binding fails.
+pub async fn pause_all(env: &Env, s: &Settings, why: &str) -> Result<()> {
+    to_instance(env, s, "/mandates/pause", &json!({ "why": why })).await?;
+    Ok(())
+}
+
+/// The `Instance` Durable Object's side: `/mandates/propose`, `list`, `offer`, `peek`, `grant`,
+/// `end`, `decide` and `pause`.
 ///
 /// # Errors
 ///
@@ -163,6 +218,17 @@ pub async fn serve(state: &State, path: &str, body: Value) -> Result<Response> {
             };
         }
         "/mandates/grant" => all.grant(&s("token"), &s("by"), now()).map(|m| json!(m)),
+        "/mandates/decide" => {
+            let change: Change = match serde_json::from_value(body["change"].clone()) {
+                Ok(c) => c,
+                Err(e) => return Response::error(format!("unreadable change: {e}"), 400),
+            };
+            match all.decide(&change, &s("operation"), now()) {
+                Some((id, d)) => Ok(json!({ "id": id, "decision": d })),
+                None => Err("the change names no mandate".into()),
+            }
+        }
+        "/mandates/pause" => Ok(json!({ "paused": all.pause_all(&s("why")) })),
         "/mandates/end" => match n("id") {
             Some(id) => all.end(id, &s("why")).map(|m| json!(m)),
             None => Err("`id` must be a mandate number".into()),

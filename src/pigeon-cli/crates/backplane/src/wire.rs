@@ -218,12 +218,13 @@ const CATALOG: &[Operation] = &[
         name: "change.propose",
         engine: Engine::Backplane,
         effect: Effect::Plan,
-        summary: "Propose a change: its slug, Conventional Commit title, plan and scope (globs, one per line); returns its number and branch, change/<number>-<slug>",
+        summary: "Propose a change: its slug, Conventional Commit title, plan and scope (globs, one per line), and optionally the `mandate` it is carried out under; returns its number and branch, change/<number>-<slug>",
         args: &[
             arg("slug", true, Kind::String),
             arg("title", true, Kind::String),
             arg("plan", true, Kind::String),
             arg("scope", true, Kind::String),
+            arg("mandate", false, Kind::Text),
         ],
     },
     Operation {

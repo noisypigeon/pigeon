@@ -168,9 +168,12 @@ pub struct Change {
     /// The commit on `main` it was merged as.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub merged_as: Option<String>,
-    /// The head's approval tiers, as the bound job classified it; shown, not yet enforced.
+    /// The head's approval tiers, as the bound job classified it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tiers: Option<crate::approvals::Tiers>,
+    /// The mandate it is carried out under, if any.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mandate: Option<u32>,
 }
 
 /// Something that happened to a change.
@@ -342,6 +345,7 @@ impl Change {
             violations: Vec::new(),
             merged_as: None,
             tiers: None,
+            mandate: None,
         }
     }
 

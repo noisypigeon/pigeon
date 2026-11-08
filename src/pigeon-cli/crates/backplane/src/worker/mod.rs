@@ -149,6 +149,9 @@ async fn offer(
     let Some(number) = number_arg(request) else {
         return refused("`number` must be a change number".into());
     };
+    if let Some(r) = under_mandate(env, settings, number, request).await? {
+        return Response::from_json(&mcp::answer(id, r));
+    }
     let host = env
         .var(cobot::ship_wire::HOST_VAR)
         .map(|v| v.to_string())
@@ -170,6 +173,31 @@ async fn offer(
         )),
         Err(why) => refused(why),
     }
+}
+
+/// Runs `request` on change `number` as its mandate, when the mandate approves it; see
+/// `.claude/decisions/2026-11-08-security-tiered-approvals-task-mandates.md` §3.
+async fn under_mandate(
+    env: &Env,
+    s: &Settings,
+    number: u32,
+    request: &wire::Request,
+) -> Result<Option<std::result::Result<WireResponse, crate::Error>>> {
+    let (status, v) = to_change(env, &s.repo, number, Method::Get, "/status", None).await?;
+    if status != 200 {
+        return Ok(None);
+    }
+    let Ok(change) = serde_json::from_value::<Change>(v["change"].clone()) else {
+        return Ok(None);
+    };
+    let Some(m) = mandates::approves(env, s, &change, &request.operation).await? else {
+        return Ok(None);
+    };
+    let who = Identity {
+        subject: format!("mandate:{m}"),
+        human: true,
+    };
+    Ok(Some(run(env, s, &who, request).await))
 }
 
 /// `approval.wait`: the owner's code card for `operation` on change `number`, when the client
@@ -336,6 +364,7 @@ async fn dispatch(
             title,
             plan,
             scope,
+            mandate,
         } => {
             for _ in 0..3 {
                 let rows =
@@ -346,8 +375,9 @@ async fn dispatch(
                     .and_then(|r| r["n"].as_u64())
                     .and_then(|n| u32::try_from(n).ok())
                     .unwrap_or(s.floor);
-                let change =
+                let mut change =
                     Change::propose(number, &slug, &title, &plan, scope.clone(), &who.subject);
+                change.mandate = mandate;
                 let body = serde_json::to_value(&change)?;
                 let (status, v) =
                     to_change(env, &s.repo, number, Method::Post, "/propose", Some(&body)).await?;

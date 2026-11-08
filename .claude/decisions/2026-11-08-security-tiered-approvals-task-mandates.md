@@ -359,3 +359,21 @@ approved at the code tier:
   `guarded`, and a mandate never lowers that. So the Worker needs no copy of
   the rules to keep guarded paths out of a mandate.
 - **Guarded** as approval machinery: `mandates.rs` and `worker/mandates.rs`.
+
+### 2026-11-08: Approving inside a mandate (5b)
+
+- **`change.propose` takes an optional `mandate`,** kept on the change.
+- **Before it opens a pending approval,** the Worker asks the `Instance` for
+  the mandate's decision (`mandates::decide`):
+  - **allow:** the mandate is active, unexpired and within budget; the plan
+    cites its ADR; its scope covers the change's; and, to approve or merge,
+    the head's merge tier is auto or confirm, or code only for `deploys`
+    with a mandate that may deploy. The operation runs as `mandate:<id>`,
+    and a merge spends one unit of the budget;
+  - **ask:** anything else, such as a guarded head, a head with no tiers yet
+    or a plan that cites another ADR. The owner gets the usual link;
+  - **pause:** a change whose scope reaches outside the mandate. The mandate
+    pauses, saying why, and the owner gets the usual link.
+- **A failed deploy pauses every active mandate.**
+- **Not yet:** pausing after two failed checks on one head, resuming, and
+  telling the owner of a pause; `mandate_status` shows the pause and why.

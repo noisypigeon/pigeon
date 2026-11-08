@@ -218,7 +218,9 @@ belong in the ADR, never in the file.
   called by the agent, answer at once with the approval page's link;
   `approval_wait` shows the code card for one. `mandate_propose`,
   `mandate_status` and `mandate_end` handle mandates; one is granted on
-  `/mandate/<id>` with the code.
+  `/mandate/<id>` with the code. A change proposed with `mandate` is
+  authorized, approved and merged as `mandate:<id>` while the mandate covers
+  it; otherwise the owner is asked as usual.
   Each push to `main` runs `MainRun`'s pipeline: one deploy at a time, of the
   newest push, publishing the instance's sites whose inputs changed since the
   last deploy (`cobot::scope::deploys`, `sites.publish`); `deploy_status`

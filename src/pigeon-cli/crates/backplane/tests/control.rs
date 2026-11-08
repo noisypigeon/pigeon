@@ -65,7 +65,8 @@ fn operations_route_to_events_with_the_access_identity() {
             slug: "worker-control".into(),
             title: "feat(x): y".into(),
             plan: "p".into(),
-            scope: vec!["a/**".into(), "b/".into()]
+            scope: vec!["a/**".into(), "b/".into()],
+            mandate: None,
         })
     );
     assert!(

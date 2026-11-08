@@ -22,6 +22,8 @@ pub enum Routed {
         plan: String,
         /// Its scope, one glob each.
         scope: Vec<String>,
+        /// The mandate it is carried out under, if any.
+        mandate: Option<u32>,
     },
     /// Apply an event to change `number`; `by` is filled in from Access.
     Event {
@@ -110,11 +112,20 @@ pub fn route(request: &Request, by: &str, at: u64) -> Result<Routed, String> {
                 .filter(|l| !l.is_empty())
                 .map(str::to_string)
                 .collect();
+            let mandate = match text(a, "mandate") {
+                Some(m) if !m.trim().is_empty() => Some(
+                    m.trim()
+                        .parse::<u32>()
+                        .map_err(|_| format!("`mandate` must be a mandate number, not `{m}`"))?,
+                ),
+                _ => None,
+            };
             Ok(Routed::Propose {
                 slug,
                 title: need(a, "title")?,
                 plan: need(a, "plan")?,
                 scope,
+                mandate,
             })
         }
         "change.authorize" => event(Event::ApprovePlan { by: by.into(), at }),
