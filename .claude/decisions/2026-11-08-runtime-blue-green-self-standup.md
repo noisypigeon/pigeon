@@ -382,3 +382,100 @@ Step 2's first blue-green deploy logs the smoke's answer. It shows green's
 Worker version beside blue's object versions, which confirms finding 1 live.
 If Cloudflare refuses a 0% version (finding 2), the job falls back to
 `wrangler deploy` and says so, and this amendment is amended again.
+
+### 2026-11-08: Step 3's design: where a stack is declared, and how a Worker names it
+
+A survey of the code found six places where §3 and §4 don't fit what cobot
+does today. This amendment settles each one, and splits step 3 into two
+changes.
+
+#### What the survey found
+
+1. **Kind units live only in the root `config.yaml`.** `infra/pigeon/config.yaml`
+   is a directory unit, and can't hold `units:`.
+2. **Only an apex or a site may use `derived` blocks.** A platform kind
+   uses `singletons`, `each` and per-property blocks, as
+   `infra/pigeon/schema.json` already does.
+3. **A Worker's `$output.<unit>` must name a directory unit.**
+   `validate_bindings` rejects a kind unit.
+4. **A Worker spec's names are literals:** the Worker, the D1 database, the
+   queue, and the `vars` (`PUBLIC_HOST`, `INSTANCE_NAME`). `Spec` denies
+   unknown fields.
+5. **Nothing creates the queue or Access.** `pigeon-ci-events`, the Access
+   application, its policies and its three service tokens were made by
+   hand. The Cloudflare catalog has no D1, queue or Access capability.
+6. **New modules touch guarded files.** Each new module's `CHANGELOG.md`
+   must be listed in `.config/policies/release-changelog.yaml`.
+
+#### Design
+
+- **A stack is a kind unit in the root `config.yaml`**, as
+  `platform/<color>` with `kind: pigeon/platform`. This replaces §3's
+  `infra/pigeon/config.yaml`.
+- **The `pigeon/platform` kind** lives at
+  `catalog/pigeon/kinds/platform/schema.json`.
+  - **Its settings name every resource explicitly,** so today's stack can
+    be declared without renaming anything:
+    - `worker`;
+    - `database`;
+    - `buckets`;
+    - `queue`;
+    - `hostname`;
+    - `instance` (the `INSTANCE_NAME`);
+    - `change_floor`;
+    - `access`: the application's name, the owner's email, and the three
+      service tokens' names.
+  - **It composes only prefixed modules:** `cloudflare/account`,
+    `cloudflare/d1-database`, `cloudflare/r2-bucket` with
+    `agnostic/random-string`, `cloudflare/queue`, and the Access modules.
+  - **Its outputs** are each resource's ID and name, and each service
+    token's client ID. A service token's secret is a sensitive output.
+    It is never put in `DEPLOY_OUTPUTS`, and §5's fill phase is its only
+    reader.
+  - **It is `local: true`.** No instance run plans it. Its owner plans and
+    applies it by name, as with `infra/pigeon/`, until §5's stand-up does.
+- **Four Cloudflare modules,** each a single resource on provider 5.28.0:
+  - `cloudflare/queue`;
+  - `cloudflare/access-application`;
+  - `cloudflare/access-policy` (reusable, for the account);
+  - `cloudflare/access-service-token`.
+  - `capabilities.yaml` gains `d1.write`, `queues.write` and `access.write`
+    for §5's minted credentials. Until then, nothing mints them.
+- **A Worker spec names its stack once,** with `deployment: pigeon/platform`.
+  - Its values may then use `$deployment.<output or setting>`: the
+    Worker's `name`, the D1 database's `name` and `id`, the R2 values,
+    a queue consumer's `queue`, `vars`, and `routes[].custom_domain`.
+  - A render, plan or deploy picks the stack by its unit ID,
+    `platform/<color>`. The deploy job uses the Worker var `DEPLOYMENT`,
+    which the render sets. So one `worker.yaml` serves every stack.
+  - `validate_bindings` accepts a kind unit of the root `config.yaml`
+    wherever it accepts a directory unit.
+- **Platform state goes to R2,** with `--state r2://<bucket>/platform`.
+  - The bucket is `pigeon-platform-state`, which `infra/pigeon/` creates.
+    It isn't any stack's, so tearing a stack down never takes its own
+    state with it.
+  - Its passphrase is the platform's own, never an instance's.
+  - The private `noisypigeon/pigeon-platform-state` repository keeps
+    `infra/pigeon/`'s state only. That unit shrinks over time to the
+    account's bootstrap.
+
+#### Execution of step 3, in two changes
+
+- **3a. `feat(catalog)`:**
+  - the four modules, with their `release-changelog.yaml` and
+    `releases.yaml` entries;
+  - the capabilities;
+  - the `pigeon/platform` kind.
+
+  No unit uses any of them yet, so 3a plans and deploys nothing.
+- **3b. `feat(cobot)`:**
+  - `deployment:` and `$deployment` in Worker specs;
+  - kind units accepted by `validate_bindings`;
+  - `--deployment` on `workers render|plan|deploy`;
+  - the deploy job reading `DEPLOYMENT`.
+
+  `worker.yaml` keeps its literals until step 4.
+
+Step 4 then declares `platform/blue` with today's names, imports its
+resources into the R2 state, and moves `worker.yaml` onto `$deployment`.
+Step 4 is unchanged otherwise.
