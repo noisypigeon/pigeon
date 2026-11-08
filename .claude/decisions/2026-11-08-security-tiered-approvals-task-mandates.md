@@ -377,3 +377,16 @@ approved at the code tier:
 - **A failed deploy pauses every active mandate.**
 - **Not yet:** pausing after two failed checks on one head, resuming, and
   telling the owner of a pause; `mandate_status` shows the pause and why.
+
+### 2026-11-08: Mandate operations reach the control plane; a used link says so
+
+- **The Worker refused `mandate.*`.** It sent them on as Container
+  operations, so mandates could be neither proposed, listed nor ended over
+  MCP. They are now control-plane operations, as `change.*` are, and a
+  test holds it.
+- **A used approval link answers that it was used:** "this link was
+  already used: `<operation>` on change `<n>` is done". It no longer says
+  "not valid".
+  - A redeemed grant is kept, marked `used`, until it expires, which is
+    when minting prunes it.
+  - It still can't be used twice.

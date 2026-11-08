@@ -405,3 +405,14 @@ fn an_instance_apart_from_its_platform_needs_no_paths_of_its_own() {
             .any(|n| n["kind"] == "policy")
     );
 }
+
+#[test]
+fn the_control_plane_runs_mandates_itself() {
+    for name in ["mandate.propose", "mandate.status", "mandate.end"] {
+        let op = catalog()
+            .iter()
+            .find(|o| o.name == name)
+            .expect("in the catalog");
+        assert!(op.control_plane(), "{name}");
+    }
+}

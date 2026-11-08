@@ -29,12 +29,21 @@ fn a_grant_is_redeemed_once_for_its_operation_and_head() {
     assert_eq!(minted.expires, 100 + TTL);
     assert!(!g.0.contains_key("tok"), "stored by hash, not the token");
     assert_eq!(g.peek("tok", 7, 200).expect("peek"), &minted);
-    assert_eq!(g.redeem("tok", "change.approve", &c, 200), Ok(minted));
-    assert!(
-        g.redeem("tok", "change.approve", &c, 201).is_err(),
-        "single use"
+    let used = g.redeem("tok", "change.approve", &c, 200).expect("redeems");
+    assert_eq!(used.used, Some(200));
+    assert_eq!(backplane::grants::Grant { used: None, ..used }, minted);
+    let again = g
+        .redeem("tok", "change.approve", &c, 201)
+        .expect_err("single use");
+    assert_eq!(
+        again,
+        "this link was already used: `change.approve` on change 7 is done"
     );
-    assert!(g.peek("tok", 7, 201).is_err());
+    assert!(
+        g.peek("tok", 7, 201)
+            .expect_err("used")
+            .contains("already used")
+    );
 }
 
 #[test]

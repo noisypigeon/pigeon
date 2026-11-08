@@ -32,6 +32,7 @@ fn the_page_shows_the_facts_escaped_and_runs_nothing() {
         head: c.head.clone(),
         expires: 1,
         tier: None,
+        used: None,
     };
     let html = approve::page(&c, &grant, "tok\"><script>");
     assert!(!html.contains("<script"), "{html}");
@@ -154,6 +155,7 @@ fn a_confirm_grant_asks_for_no_code() {
         head: c.head.clone(),
         expires: 1,
         tier: Some(backplane::approvals::Tier::Confirm),
+        used: None,
     };
     let html = approve::page(&c, &grant, "tok");
     assert!(!html.contains("name=\"code\""), "{html}");

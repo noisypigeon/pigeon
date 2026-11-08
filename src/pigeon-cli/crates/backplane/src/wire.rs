@@ -164,6 +164,7 @@ impl Operation {
             || self.name.starts_with("ci.")
             || self.name.starts_with("deploy.")
             || self.name.starts_with("git.")
+            || self.name.starts_with("mandate.")
     }
 }
 

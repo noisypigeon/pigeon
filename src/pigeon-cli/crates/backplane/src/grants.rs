@@ -39,6 +39,9 @@ pub struct Grant {
     /// The tier it needs, from the head's tiers when minted; none is code.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tier: Option<crate::approvals::Tier>,
+    /// When it was used; a used grant is kept until it expires, to say so.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub used: Option<u64>,
 }
 
 impl Grant {
@@ -130,6 +133,7 @@ impl Grants {
             head: change.head.clone(),
             expires: now + ttl,
             tier: Some(crate::approvals::tier_of(change, operation)),
+            used: None,
         };
         self.0.insert(key(token), grant.clone());
         Ok(grant)
@@ -146,6 +150,12 @@ impl Grants {
             .get(&key(token))
             .filter(|g| g.number == number)
             .ok_or("this link is not valid; ask for a new one")?;
+        if g.used.is_some() {
+            return Err(format!(
+                "this link was already used: `{}` on change {} is done",
+                g.operation, g.number
+            ));
+        }
         if g.expires <= now {
             return Err("this link has expired; ask for a new one".into());
         }
@@ -154,7 +164,7 @@ impl Grants {
 
     /// Uses `token`'s grant on `change` for `operation`: once, before it expires, and only
     /// while the change's head is the one it was minted for. A grant found is spent even when
-    /// refused.
+    /// refused, and kept as used until it expires.
     ///
     /// # Errors
     ///
@@ -167,7 +177,12 @@ impl Grants {
         now: u64,
     ) -> Result<Grant, String> {
         self.peek(token, change.number, now)?;
-        let g = self.0.remove(&key(token)).ok_or("this link is not valid")?;
+        let stored = self
+            .0
+            .get_mut(&key(token))
+            .ok_or("this link is not valid; ask for a new one")?;
+        stored.used = Some(now);
+        let g = stored.clone();
         if g.operation != operation {
             return Err(format!(
                 "this link is for `{}`, not `{operation}`",
