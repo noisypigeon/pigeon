@@ -6,3 +6,6 @@ capabilities:
   redirects.write: { permissions: [Dynamic URL Redirects Write], scope: zone }
   r2.write: { permissions: [Workers R2 Storage Write], scope: account }
   artifacts.write: { permissions: [Artifacts Read, Artifacts Edit], scope: account }
+  d1.write: { permissions: [D1 Write], scope: account }
+  queues.write: { permissions: [Queues Write], scope: account }
+  access.write: { permissions: ["Access: Apps and Policies Write", "Access: Service Tokens Write"], scope: account }

@@ -15,6 +15,10 @@ target:
     - catalog/cloudflare/modules/ruleset/CHANGELOG.md
     - catalog/cloudflare/modules/account/CHANGELOG.md
     - catalog/cloudflare/modules/d1-database/CHANGELOG.md
+    - catalog/cloudflare/modules/queue/CHANGELOG.md
+    - catalog/cloudflare/modules/access-application/CHANGELOG.md
+    - catalog/cloudflare/modules/access-policy/CHANGELOG.md
+    - catalog/cloudflare/modules/access-service-token/CHANGELOG.md
     - catalog/agnostic/modules/random-string/CHANGELOG.md
     - catalog/agnostic/CHANGELOG.md
     - catalog/digitalocean/modules/project-resources/CHANGELOG.md

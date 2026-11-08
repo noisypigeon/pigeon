@@ -1,0 +1,232 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "pigeon/platform",
+  "description": "One stack of the platform: every resource that holds its state or takes its traffic, each named explicitly; see .claude/decisions/2026-11-08-runtime-blue-green-self-standup.md, step 3's design.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "worker",
+    "hostname",
+    "instance",
+    "change_floor",
+    "database",
+    "buckets",
+    "queue",
+    "access",
+    "service_tokens"
+  ],
+  "properties": {
+    "worker": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+      "description": "The control plane Worker's name."
+    },
+    "hostname": {
+      "type": "string",
+      "description": "The host the stack serves, and Access protects.",
+      "pattern": "^[a-z0-9]+([.-][a-z0-9]+)+$"
+    },
+    "instance": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+      "description": "The instance it serves (INSTANCE_NAME)."
+    },
+    "change_floor": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "The first change number it assigns."
+    },
+    "database": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+        }
+      },
+      "description": "The stack's D1 database."
+    },
+    "buckets": {
+      "description": "Private R2 buckets, each named <name>-<random suffix>.",
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+            "maxLength": 56
+          }
+        }
+      },
+      "x-cobot": {
+        "module": "cloudflare/r2-bucket",
+        "for_each": "$item.name",
+        "inputs": {
+          "account_id": "$module.account.id",
+          "name": "$item.name",
+          "suffix": "$module.bucket_suffixes[$item.name].result"
+        }
+      }
+    },
+    "queue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+        }
+      },
+      "description": "The queue Artifacts push events arrive on."
+    },
+    "access": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "application",
+        "owners_policy",
+        "services_policy",
+        "owners"
+      ],
+      "description": "The Access application on the hostname and its two policies.",
+      "properties": {
+        "application": {
+          "type": "string",
+          "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+          "description": "The Access application's name."
+        },
+        "owners": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "format": "email"
+          },
+          "description": "The people Access lets in."
+        },
+        "owners_policy": {
+          "type": "string",
+          "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+          "description": "The policy that lets the owners in."
+        },
+        "services_policy": {
+          "type": "string",
+          "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+          "description": "The policy that lets the stack's service tokens in."
+        }
+      }
+    },
+    "service_tokens": {
+      "type": "array",
+      "uniqueItems": true,
+      "description": "The stack's service tokens: the agent's, the deployer's and the builds'.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "x-cobot": {
+        "module": "cloudflare/access-service-token",
+        "for_each": "$item.name",
+        "inputs": {
+          "account_id": "$module.account.id",
+          "name": "$item.name"
+        }
+      }
+    }
+  },
+  "x-cobot": {
+    "version": "0.1.0",
+    "local": true,
+    "secrets": [],
+    "providers": {
+      "cloudflare": {}
+    },
+    "singletons": {
+      "account": {
+        "module": "cloudflare/account",
+        "inputs": {}
+      },
+      "d1": {
+        "module": "cloudflare/d1-database",
+        "inputs": {
+          "account_id": "$module.account.id",
+          "name": "$config.database.name"
+        }
+      },
+      "queue": {
+        "module": "cloudflare/queue",
+        "inputs": {
+          "account_id": "$module.account.id",
+          "name": "$config.queue.name"
+        }
+      },
+      "owners": {
+        "module": "cloudflare/access-policy",
+        "inputs": {
+          "account_id": "$module.account.id",
+          "name": "$config.access.owners_policy",
+          "emails": "$config.access.owners"
+        }
+      },
+      "services": {
+        "module": "cloudflare/access-policy",
+        "inputs": {
+          "account_id": "$module.account.id",
+          "name": "$config.access.services_policy",
+          "service_token_ids": "$module.service_tokens[*].id"
+        }
+      },
+      "application": {
+        "module": "cloudflare/access-application",
+        "inputs": {
+          "account_id": "$module.account.id",
+          "name": "$config.access.application",
+          "domain": "$config.hostname",
+          "policy_ids": [
+            "$module.owners.id",
+            "$module.services.id"
+          ]
+        }
+      }
+    },
+    "each": {
+      "bucket_suffixes": {
+        "module": "agnostic/random-string",
+        "over": "buckets",
+        "for_each": "$item.name",
+        "inputs": {}
+      }
+    },
+    "outputs": {
+      "account_id": "$module.account.id",
+      "database_id": "$module.d1.id",
+      "bucket_names": "$module.buckets[*].name",
+      "queue_name": "$module.queue.name",
+      "access_aud": "$module.application.aud",
+      "service_token_ids": "$module.service_tokens[*].client_id"
+    }
+  }
+}

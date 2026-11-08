@@ -104,6 +104,22 @@ units:
     manifest: catalog/cloudflare/modules/d1-database/module.yaml
     paths: [catalog/cloudflare/modules/d1-database/]
     exclude: ['*.md']
+  infra-cloudflare-queue:
+    manifest: catalog/cloudflare/modules/queue/module.yaml
+    paths: [catalog/cloudflare/modules/queue/]
+    exclude: ['*.md']
+  infra-cloudflare-access-application:
+    manifest: catalog/cloudflare/modules/access-application/module.yaml
+    paths: [catalog/cloudflare/modules/access-application/]
+    exclude: ['*.md']
+  infra-cloudflare-access-policy:
+    manifest: catalog/cloudflare/modules/access-policy/module.yaml
+    paths: [catalog/cloudflare/modules/access-policy/]
+    exclude: ['*.md']
+  infra-cloudflare-access-service-token:
+    manifest: catalog/cloudflare/modules/access-service-token/module.yaml
+    paths: [catalog/cloudflare/modules/access-service-token/]
+    exclude: ['*.md']
   infra-cloudflare-ruleset:
     manifest: catalog/cloudflare/modules/ruleset/module.yaml
     paths: [catalog/cloudflare/modules/ruleset/]
@@ -193,6 +209,10 @@ tiers:
   - { file: catalog/cloudflare/modules/ruleset/CHANGELOG.md, unit: infra-cloudflare-ruleset, from: infra/cloudflare/modules/ruleset/CHANGELOG.md }
   - { file: catalog/cloudflare/modules/account/CHANGELOG.md, unit: infra-cloudflare-account }
   - { file: catalog/cloudflare/modules/d1-database/CHANGELOG.md, unit: infra-cloudflare-d1-database }
+  - { file: catalog/cloudflare/modules/queue/CHANGELOG.md, unit: infra-cloudflare-queue }
+  - { file: catalog/cloudflare/modules/access-application/CHANGELOG.md, unit: infra-cloudflare-access-application }
+  - { file: catalog/cloudflare/modules/access-policy/CHANGELOG.md, unit: infra-cloudflare-access-policy }
+  - { file: catalog/cloudflare/modules/access-service-token/CHANGELOG.md, unit: infra-cloudflare-access-service-token }
   - { file: catalog/agnostic/modules/random-string/CHANGELOG.md, unit: infra-agnostic-random-string, from: infra/agnostic/modules/random-string/CHANGELOG.md }
   - { file: catalog/agnostic/CHANGELOG.md, unit: infra-agnostic-schema, from: infra/agnostic/CHANGELOG.md }
   - { file: catalog/digitalocean/modules/project-resources/CHANGELOG.md, unit: infra-digitalocean-project-resources }
