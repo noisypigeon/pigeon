@@ -29,12 +29,21 @@ impl MainRun {
     /// that keeps failing, and only an alarm moves a deploy on.
     async fn rearm(&self) -> Result<()> {
         let storage = self.state.storage();
-        let busy = self.pipeline().await?.running.is_some()
-            || storage.get::<String>(STARTING).await?.is_some();
-        if busy && storage.get_alarm().await?.is_none() {
+        if self.busy().await? && storage.get_alarm().await?.is_none() {
             storage.set_alarm(Duration::from_millis(0)).await?;
         }
         Ok(())
+    }
+
+    /// Whether a deploy is in flight: it isn't reset while one is, since it runs the deploy.
+    async fn busy(&self) -> Result<bool> {
+        Ok(self.pipeline().await?.running.is_some()
+            || self
+                .state
+                .storage()
+                .get::<String>(STARTING)
+                .await?
+                .is_some())
     }
 
     async fn pipeline(&self) -> Result<Pipeline> {
@@ -148,7 +157,9 @@ impl DurableObject for MainRun {
     }
 
     async fn fetch(&self, mut req: Request) -> Result<Response> {
-        if let Some(r) = platform::stale(&self.state, &self.env, &req)? {
+        if !self.busy().await?
+            && let Some(r) = platform::stale(&self.state, &self.env, &req)?
+        {
             return Ok(r);
         }
         let path = req.path();

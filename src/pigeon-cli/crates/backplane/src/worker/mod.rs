@@ -583,16 +583,16 @@ async fn health(env: &Env, s: &Settings) -> Result<Response> {
                 .ok()?
         };
         let mut r = platform::call(env, &stub, req).await.ok()?;
-        (r.status_code() == 200).then_some(())?;
-        r.text().await.ok()
+        match r.status_code() {
+            200 => r.text().await.ok(),
+            404 => Some(String::new()),
+            _ => None,
+        }
     };
     let main = ask("https://main/version").await;
     let instance = ask("https://instance/version").await;
-    let object = main.is_some();
-    let current = [&main, &instance].iter().all(|v| {
-        v.as_deref()
-            .is_some_and(|v| !crate::versions::caller_is_newer(Some(&mine), v))
-    });
+    let object = instance.is_some();
+    let current = crate::versions::object_current(instance.as_deref(), &mine);
     let ok = d1 && object && current && !version.is_empty();
     Ok(Response::from_json(&json!({
         "ok": ok,

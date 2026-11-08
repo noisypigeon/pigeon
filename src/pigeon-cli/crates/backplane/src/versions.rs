@@ -30,3 +30,11 @@ pub fn caller_is_newer(caller: Option<&str>, mine: &str) -> bool {
     };
     their_id != our_id && !ours.is_empty() && theirs > ours
 }
+
+/// Whether an object answering `answered` to `/version` is current for a Worker stamped `mine`:
+/// it answered, and isn't older. An empty answer is an object without the handshake, which
+/// can't reset itself and is replaced when it idles; it counts as current.
+#[must_use]
+pub fn object_current(answered: Option<&str>, mine: &str) -> bool {
+    answered.is_some_and(|v| v.trim().is_empty() || !caller_is_newer(Some(mine), v))
+}

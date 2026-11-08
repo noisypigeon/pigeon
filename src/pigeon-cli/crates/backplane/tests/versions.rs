@@ -25,3 +25,20 @@ fn only_a_later_caller_with_another_id_makes_an_object_stale() {
         "an object that doesn't know its version"
     );
 }
+
+#[test]
+fn an_object_without_the_handshake_counts_as_current_and_a_silent_one_does_not() {
+    use backplane::versions::object_current;
+    let mine = stamp("2026-11-08T21:00:00Z", "new");
+    assert!(object_current(Some(""), &mine));
+    assert!(object_current(Some(&mine), &mine));
+    assert!(object_current(
+        Some(&stamp("2026-11-08T22:00:00Z", "newer")),
+        &mine
+    ));
+    assert!(!object_current(
+        Some(&stamp("2026-11-08T20:00:00Z", "old")),
+        &mine
+    ));
+    assert!(!object_current(None, &mine));
+}

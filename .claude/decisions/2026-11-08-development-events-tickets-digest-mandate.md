@@ -482,3 +482,26 @@ What the pieces offer:
   live in `worker/mandates.rs` and `worker/elicit.rs`, which are guarded
   approval files. So the merge asks the owner, as a guarded path always
   does. Mandate 1 authorizes it and stays one merge short of its budget.
+
+### 2026-11-08: The handshake's first deploy
+
+!69's deploy failed its health check and rolled back. Two causes:
+
+- **The objects ran code from before the handshake.** They answered
+  `/version` with a 404, and old code can't reset itself. `/healthz`
+  required both objects to be current, so the first deploy could never
+  pass.
+- **`MainRun` runs the deploy that `/healthz` checks.** With the handshake,
+  the stamped call from `/healthz` would reset `MainRun` mid-deploy.
+
+The fix:
+
+- **`MainRun` doesn't reset while a deploy is in flight** (`running` or
+  starting). It resets on the first call after the deploy ends.
+- **`/healthz` gates on the `Instance` only.** `durable_object` means the
+  `Instance` answered. A 404 counts as an object without the handshake,
+  which is current enough: it's replaced when it idles
+  (`versions::object_current`). `objects.main` is reported, not gated.
+- **Rollout.** After this deploy, the owner's monitors pause for a minute so
+  the pre-handshake `Instance` idles out. From then on, the handshake
+  resets it.
