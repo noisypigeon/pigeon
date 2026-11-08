@@ -11,6 +11,7 @@ mod approve;
 mod change;
 mod checker;
 mod elicit;
+mod events;
 mod gitdoor;
 mod main_run;
 mod mandates;
@@ -638,6 +639,10 @@ impl DurableObject for Instance {
         if path.starts_with("/mandates/") {
             let body: Value = req.json().await?;
             return mandates::serve(&self.state, &path, body).await;
+        }
+        if path.starts_with("/events/") {
+            let body: Value = req.json().await?;
+            return events::serve(&self.state, &path, &body).await;
         }
         if path.starts_with("/tasks/") {
             let body: Value = req.json().await?;

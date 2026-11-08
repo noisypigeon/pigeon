@@ -10,6 +10,7 @@ pub mod changes;
 pub mod control;
 #[cfg(feature = "engines")]
 pub mod engine;
+pub mod events;
 pub mod gitdoor;
 pub mod grants;
 #[cfg(feature = "engines")]
