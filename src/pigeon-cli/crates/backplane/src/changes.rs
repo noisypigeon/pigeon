@@ -170,6 +170,12 @@ pub struct Change {
     /// The mandate it is carried out under, if any.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mandate: Option<u32>,
+    /// The agent session that proposed it, as it named itself.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session: Option<String>,
+    /// For a design change: the globs its ADR will govern.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub affects: Vec<String>,
 }
 
 /// Something that happened to a change.
@@ -342,6 +348,8 @@ impl Change {
             merged_as: None,
             tiers: None,
             mandate: None,
+            session: None,
+            affects: Vec::new(),
         }
     }
 

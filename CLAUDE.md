@@ -213,6 +213,10 @@ belong in the ADR, never in the file.
   it's pushed (`.config/policies/change.yaml`). Git reads trailers from the
   message's last paragraph only, so they share it with `Co-Authored-By`, with
   no blank line between.
+- Several agent sessions may work at once: `change_propose` takes `session`
+  (the session's URL) and, for a design change, `affects` (the globs its ADR
+  will govern), and answers the open changes it `overlaps`, per
+  [`2026-11-08-development-concurrent-agent-sessions.md`](.claude/decisions/2026-11-08-development-concurrent-agent-sessions.md).
 - `pigeon backplane jobs --listen ADDR`: a job Container's server, signed under
   `BACKPLANE_TOKEN`; the control plane's `Checker` runs it. The Worker
   (`infra/pigeon/workers/control/`) serves MCP on `/mcp` behind Access: tools

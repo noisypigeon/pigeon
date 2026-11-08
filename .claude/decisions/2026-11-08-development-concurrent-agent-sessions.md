@@ -222,3 +222,21 @@ merge and task modules.
 - **Two amendments to one ADR** both merge, through the union driver.
 - **An ADR declared with `affects` merges.** An open change in that area
   gets a `review` reconciliation.
+
+## Amendments
+
+### 2026-11-08: Step 1 lands: sessions, `affects` and overlaps
+
+- **`change.propose` takes `session` and `affects`,** kept on the change
+  and in its D1 row. Migration `0003_change_sessions.sql` adds two nullable
+  columns, so an older Worker reads past them.
+- **The answer's `overlaps`** lists each open change whose scope or
+  `affects` meets the proposal's: its number, state, session and globs.
+- **The same new file is flagged, not refused.** At propose, the Worker
+  can't tell creating a file from amending one, since that would mean
+  reading `main`'s tree.
+  - An overlap lists in `same` the exact paths both changes name.
+  - If both changes do create the same file, the merge queue sees it as a
+    conflict (add/add) and reconciles it, as §4 does any conflict.
+- **Sessions name themselves:** the label is one line of at most 200
+  characters, and grants nothing.

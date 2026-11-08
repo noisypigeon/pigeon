@@ -24,6 +24,10 @@ pub enum Routed {
         scope: Vec<String>,
         /// The mandate it is carried out under, if any.
         mandate: Option<u32>,
+        /// The session proposing it.
+        session: Option<String>,
+        /// For a design change: the globs its ADR will govern.
+        affects: Vec<String>,
     },
     /// Apply an event to change `number`; `by` is filled in from Access.
     Event {
@@ -106,12 +110,16 @@ pub fn route(request: &Request, by: &str, at: u64) -> Result<Routed, String> {
                     "slug `{slug}` must be lowercase words joined by `-`"
                 ));
             }
-            let scope: Vec<String> = need(a, "scope")?
-                .lines()
-                .map(str::trim)
-                .filter(|l| !l.is_empty())
-                .map(str::to_string)
-                .collect();
+            let globs = |s: &str| -> Vec<String> {
+                s.lines()
+                    .map(str::trim)
+                    .filter(|l| !l.is_empty())
+                    .map(str::to_string)
+                    .collect()
+            };
+            let scope = globs(&need(a, "scope")?);
+            let affects = globs(&text(a, "affects").unwrap_or_default());
+            let session = crate::sessions::session(text(a, "session").as_deref())?;
             let mandate = match text(a, "mandate") {
                 Some(m) if !m.trim().is_empty() => Some(
                     m.trim()
@@ -126,6 +134,8 @@ pub fn route(request: &Request, by: &str, at: u64) -> Result<Routed, String> {
                 plan: need(a, "plan")?,
                 scope,
                 mandate,
+                session,
+                affects,
             })
         }
         "change.authorize" => event(Event::ApprovePlan { by: by.into(), at }),
@@ -491,8 +501,10 @@ pub fn mirror(
     out.push(Statement {
         sql:
             "INSERT INTO changes (instance, repo, number, slug, title, plan, scope, proposer, state,
-                head, plan_approver, approver, approved_sha, violations, created, updated)
-              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?15)
+                head, plan_approver, approver, approved_sha, violations, created, updated, session,
+                affects)
+              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?15, ?16,
+                ?17)
               ON CONFLICT (instance, repo, number) DO UPDATE SET
                 state = excluded.state, head = excluded.head,
                 plan_approver = excluded.plan_approver, approver = excluded.approver,
@@ -514,6 +526,8 @@ pub fn mirror(
             opt(change.approval.as_ref().and_then(|a| a.sha.as_deref())),
             Value::String(serde_json::to_string(&change.violations).unwrap_or_default()),
             now.into(),
+            opt(change.session.as_deref()),
+            Value::String(serde_json::to_string(&change.affects).unwrap_or_default()),
         ],
     });
     if let Some(sha) = &change.head {
@@ -555,11 +569,43 @@ pub fn next_number(instance: &str, repo: &str, floor: u32) -> Statement {
     }
 }
 
+/// Every open change: neither merged nor closed.
+#[must_use]
+pub fn open(instance: &str, repo: &str) -> Statement {
+    Statement {
+        sql: "SELECT number, state, session, scope, affects FROM changes
+              WHERE instance = ?1 AND repo = ?2 AND state NOT IN ('merged', 'closed')
+              ORDER BY number LIMIT 100",
+        params: vec![instance.into(), repo.into()],
+    }
+}
+
+/// The open changes in `rows`, as [`open`] answers them.
+#[must_use]
+pub fn open_rows(rows: &[serde_json::Value]) -> Vec<crate::sessions::Open> {
+    let globs = |v: &serde_json::Value| -> Vec<String> {
+        v.as_str()
+            .and_then(|s| serde_json::from_str(s).ok())
+            .unwrap_or_default()
+    };
+    rows.iter()
+        .filter_map(|r| {
+            Some(crate::sessions::Open {
+                number: u32::try_from(r["number"].as_u64()?).ok()?,
+                state: r["state"].as_str()?.to_string(),
+                session: r["session"].as_str().map(str::to_string),
+                scope: globs(&r["scope"]),
+                affects: globs(&r["affects"]),
+            })
+        })
+        .collect()
+}
+
 /// Every change, newest first, optionally in one state.
 #[must_use]
 pub fn list(instance: &str, repo: &str, state: Option<&str>) -> Statement {
     Statement {
-        sql: "SELECT number, slug, title, state, head, updated FROM changes
+        sql: "SELECT number, slug, title, state, head, session, updated FROM changes
               WHERE instance = ?1 AND repo = ?2 AND (?3 IS NULL OR state = ?3)
               ORDER BY number DESC LIMIT 100",
         params: vec![

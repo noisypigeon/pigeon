@@ -365,36 +365,14 @@ async fn dispatch(
             plan,
             scope,
             mandate,
+            session,
+            affects,
         } => {
-            for _ in 0..3 {
-                let rows =
-                    platform::d1_rows(env, &control::next_number(&s.instance, &s.repo, s.floor))
-                        .await?;
-                let number = rows
-                    .first()
-                    .and_then(|r| r["n"].as_u64())
-                    .and_then(|n| u32::try_from(n).ok())
-                    .unwrap_or(s.floor);
-                let mut change =
-                    Change::propose(number, &slug, &title, &plan, scope.clone(), &who.subject);
-                change.mandate = mandate;
-                let body = serde_json::to_value(&change)?;
-                let (status, v) =
-                    to_change(env, &s.repo, number, Method::Post, "/propose", Some(&body)).await?;
-                if status != 409 {
-                    let result =
-                        json!({ "number": number, "branch": change.branch(), "change": v });
-                    return Ok((Some(number.to_string()), respond(operation, status, result)));
-                }
-            }
-            Ok((
-                None,
-                respond(
-                    operation,
-                    409,
-                    json!("no change number was free; try again"),
-                ),
-            ))
+            let mut change = Change::propose(0, &slug, &title, &plan, scope, &who.subject);
+            change.mandate = mandate;
+            change.session = session;
+            change.affects = affects;
+            propose(env, s, operation, change).await
         }
         Routed::Event { number, event } => {
             let body = serde_json::to_value(&event)?;
@@ -453,6 +431,48 @@ async fn dispatch(
             Ok((None, respond(operation, status, v)))
         }
     }
+}
+
+/// Numbers `change` and stores it, answering the open changes it overlaps.
+async fn propose(
+    env: &Env,
+    s: &Settings,
+    operation: &str,
+    mut change: Change,
+) -> Result<(Option<String>, WireResponse)> {
+    let open = platform::d1_rows(env, &control::open(&s.instance, &s.repo)).await?;
+    let overlaps =
+        crate::sessions::overlaps(&change.scope, &change.affects, &control::open_rows(&open));
+    for _ in 0..3 {
+        let rows =
+            platform::d1_rows(env, &control::next_number(&s.instance, &s.repo, s.floor)).await?;
+        change.number = rows
+            .first()
+            .and_then(|r| r["n"].as_u64())
+            .and_then(|n| u32::try_from(n).ok())
+            .unwrap_or(s.floor);
+        let number = change.number;
+        let body = serde_json::to_value(&change)?;
+        let (status, v) =
+            to_change(env, &s.repo, number, Method::Post, "/propose", Some(&body)).await?;
+        if status != 409 {
+            let result = json!({
+                "number": number,
+                "branch": change.branch(),
+                "change": v,
+                "overlaps": overlaps,
+            });
+            return Ok((Some(number.to_string()), respond(operation, status, result)));
+        }
+    }
+    Ok((
+        None,
+        respond(
+            operation,
+            409,
+            json!("no change number was free; try again"),
+        ),
+    ))
 }
 
 /// `/healthz`: the version serving, and whether D1 and a Durable Object answer; see

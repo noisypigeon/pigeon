@@ -87,7 +87,8 @@ fn literal(glob: &str) -> &str {
 /// Whether a scope glob may reach a path `pattern` matches: one's literal prefix starts the
 /// other. A pattern with no literal prefix, such as `**/x`, counts only where it matches the scope
 /// itself; the merge's tier checks the files it really touches.
-fn overlaps(scope: &str, pattern: &str) -> bool {
+#[must_use]
+pub fn overlaps(scope: &str, pattern: &str) -> bool {
     let (a, b) = (literal(scope), literal(pattern));
     if b.is_empty() {
         return matches(pattern, scope);

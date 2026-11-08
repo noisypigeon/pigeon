@@ -21,6 +21,7 @@ pub mod mcp;
 pub mod runs;
 #[cfg(feature = "engines")]
 pub mod serve;
+pub mod sessions;
 #[cfg(feature = "engines")]
 pub mod ship;
 pub mod totp;

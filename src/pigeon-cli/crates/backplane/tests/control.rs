@@ -67,6 +67,8 @@ fn operations_route_to_events_with_the_access_identity() {
             plan: "p".into(),
             scope: vec!["a/**".into(), "b/".into()],
             mandate: None,
+            session: None,
+            affects: Vec::new(),
         })
     );
     assert!(
@@ -232,9 +234,10 @@ fn events_round_trip_their_wire_form() {
     );
 }
 
-const SCHEMA: [&str; 2] = [
+const SCHEMA: [&str; 3] = [
     include_str!("../migrations/0001_schema_v0.sql"),
     include_str!("../migrations/0002_changes.sql"),
+    include_str!("../migrations/0003_change_sessions.sql"),
 ];
 
 fn db() -> rusqlite::Connection {
@@ -667,4 +670,41 @@ fn deploys_reference_the_newest_images_and_the_owners_push_wins() {
         "references stay hidden: {shown}"
     );
     assert!(shown.contains(C), "{shown}");
+}
+
+#[test]
+fn the_mirror_keeps_a_changes_session_and_affects_for_overlaps() {
+    let db = db();
+    let logs = serde_json::Map::new();
+    let mut c = Change::propose(12, "x", "docs(adr): x", "p", vec!["a.md".into()], "agent");
+    c.session = Some("s-a".into());
+    c.affects = vec!["src/**".into()];
+    for s in control::mirror("pigeon", "pigeon", &c, &logs, 1) {
+        run(&db, &s);
+    }
+    let old = Change::propose(13, "y", "feat(y): y", "p", vec!["b/**".into()], "agent");
+    for s in control::mirror("pigeon", "pigeon", &old, &logs, 1) {
+        run(&db, &s);
+    }
+    let q = control::open("pigeon", "pigeon");
+    let mut stmt = db.prepare(q.sql).expect("prepares");
+    let rows: Vec<serde_json::Value> = stmt
+        .query_map(rusqlite::params!["pigeon", "pigeon"], |r| {
+            Ok(serde_json::json!({
+                "number": r.get::<_, i64>(0)?,
+                "state": r.get::<_, String>(1)?,
+                "session": r.get::<_, Option<String>>(2)?,
+                "scope": r.get::<_, String>(3)?,
+                "affects": r.get::<_, String>(4)?,
+            }))
+        })
+        .expect("queries")
+        .map(|r| r.expect("row"))
+        .collect();
+    let open = control::open_rows(&rows);
+    assert_eq!(open.len(), 2);
+    assert_eq!(open[0].session.as_deref(), Some("s-a"));
+    assert_eq!(open[0].affects, ["src/**"]);
+    assert_eq!(open[1].session, None, "a change with no session");
+    assert_eq!(open[1].affects, Vec::<String>::new());
 }
