@@ -170,6 +170,7 @@ fn reports_become_events() {
         workers: vec![],
         build: None,
         images: None,
+        tiers: None,
     };
     assert_eq!(
         control::event_of("fmt", A, &report(Outcome::Running, vec![])),
@@ -220,6 +221,7 @@ fn events_round_trip_their_wire_form() {
         sha: A.into(),
         violations: vec![],
         checks: vec![],
+        tiers: None,
     };
     let text = serde_json::to_string(&e).expect("serialize");
     assert!(text.contains("\"type\":\"bounded\""), "{text}");
@@ -302,6 +304,7 @@ fn the_mirror_writes_every_state_the_migration_allows() {
             name: "fmt".into(),
             argv: vec![],
         }],
+        tiers: None,
     })
     .expect("bounded");
     c.apply(Event::Started {
@@ -386,6 +389,7 @@ fn deploy_report(outcome: Outcome) -> Report {
         workers: vec!["pigeon-control: v1 → v2".into()],
         build: None,
         images: None,
+        tiers: None,
     }
 }
 

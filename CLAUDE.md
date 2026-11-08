@@ -80,7 +80,7 @@ belong in the ADR, never in the file.
   platform state to live in R2, and jobs to run on two Container classes, per
   [`2026-11-06-development-control-plane-approvals-images-state.md`](.claude/decisions/2026-11-06-development-control-plane-approvals-images-state.md).
 - Approvals have three tiers chosen by the control plane from
-  `.config/policies/approvals.yaml` on `main`: auto (standing rules, or a
+  `.config/approvals.yaml` on `main`: auto (standing rules, or a
   mandate the owner granted once for a task), confirm (one tap) and code (the
   authenticator code); guarded paths are always code; a page,
   `/approve/<grant>`, behind Access approves any tier from a phone, per

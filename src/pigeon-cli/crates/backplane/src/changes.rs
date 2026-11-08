@@ -168,6 +168,9 @@ pub struct Change {
     /// The commit on `main` it was merged as.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub merged_as: Option<String>,
+    /// The head's approval tiers, as the bound job classified it; shown, not yet enforced.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tiers: Option<crate::approvals::Tiers>,
 }
 
 /// Something that happened to a change.
@@ -201,6 +204,9 @@ pub enum Event {
         violations: Vec<String>,
         /// The checks `change.scope` named.
         checks: Vec<Check>,
+        /// The head's approval tiers, shown only for now.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        tiers: Option<crate::approvals::Tiers>,
     },
     /// A check finished.
     Finished {
@@ -335,6 +341,7 @@ impl Change {
             jobs: Vec::new(),
             violations: Vec::new(),
             merged_as: None,
+            tiers: None,
         }
     }
 
@@ -365,7 +372,13 @@ impl Change {
                 sha,
                 violations,
                 checks,
-            } => self.bounded(&sha, violations, checks),
+                tiers,
+            } => {
+                if self.on_head(&sha) {
+                    self.tiers = tiers;
+                }
+                self.bounded(&sha, violations, checks)
+            }
             Event::Finished { job, sha, ok } => self.finished(&job, &sha, ok),
             Event::Lost { job, sha } => self.lost(&job, &sha),
             Event::Rerun { job } => self.rerun(&job),

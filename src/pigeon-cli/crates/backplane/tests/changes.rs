@@ -47,6 +47,7 @@ fn checking(sha: &str) -> Change {
             sha: sha.into(),
             violations: vec![],
             checks: vec![check("fmt"), check("test")],
+            tiers: None,
         })
         .expect("bounded");
     assert_eq!(
@@ -159,6 +160,7 @@ fn results_for_an_old_head_are_ignored() {
         sha: A.into(),
         violations: vec!["x".into()],
         checks: vec![],
+        tiers: None,
     })
     .expect("ignored");
     assert_eq!(c.state, State::Pushed);
@@ -216,6 +218,7 @@ fn a_refused_head_runs_no_checks_and_a_failure_stops_the_rest() {
             sha: A.into(),
             violations: vec!["outside `scope`: x".into()],
             checks: vec![check("fmt")],
+            tiers: None,
         })
         .expect("bounded");
     assert_eq!(effects, []);
@@ -298,6 +301,7 @@ fn a_change_with_no_checks_is_checked_once_bounded() {
         sha: A.into(),
         violations: vec![],
         checks: vec![],
+        tiers: None,
     })
     .expect("bounded");
     assert_eq!(c.state, State::Checked);

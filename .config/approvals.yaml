@@ -1,0 +1,23 @@
+# Approval tiers; read from main by the bound job. See
+# .claude/decisions/2026-11-08-security-tiered-approvals-task-mandates.md.
+# Always the authenticator code, and never in a mandate.
+guarded:
+  - .config/approvals.yaml
+  - .config/policies/**
+  - "**/secrets.config.yaml"
+  - .mcp.json
+  - .claude/settings*.json
+  - src/pigeon-cli/crates/backplane/src/approvals.rs
+  - src/pigeon-cli/crates/backplane/src/access.rs
+  - src/pigeon-cli/crates/backplane/src/grants.rs
+  - src/pigeon-cli/crates/backplane/src/totp.rs
+  - src/pigeon-cli/crates/backplane/src/worker/elicit.rs
+# The code without a mandate that may deploy; every Worker's inputs count too.
+deploying:
+  - infra/**
+  - src/pigeon-cli/Dockerfile
+  - src/pigeon-cli/pigeon-start
+  - "**/migrations/**"
+spikes:
+  - tooling/spikes/**
+decisions: .claude/decisions/

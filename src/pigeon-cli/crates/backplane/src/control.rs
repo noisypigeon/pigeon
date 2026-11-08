@@ -348,6 +348,9 @@ pub struct Report {
     /// For a deploy: the job images it built and pushed, if their inputs changed.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub images: Option<Images>,
+    /// For the bound job: the head's approval tiers, when `main` has rules.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tiers: Option<crate::approvals::Tiers>,
 }
 
 /// The job images a deploy references, as the `DEPLOY_IMAGES` secret holds them: the commit
@@ -404,6 +407,7 @@ pub fn event_of(job: &str, sha: &str, report: &Report) -> Option<Event> {
             sha: sha.to_string(),
             violations,
             checks: report.checks.clone(),
+            tiers: report.tiers.clone(),
         });
     }
     Some(Event::Finished {

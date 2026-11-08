@@ -255,3 +255,25 @@ approved at the code tier:
 - **A mandate pauses itself** when a deploy is made to fail, or a change
   reaches outside its scope, and the push notification says why.
 - **A change to `approvals.yaml` under a mandate** still asks for the code.
+
+## Amendments
+
+### 2026-11-08: The rules live in `.config/approvals.yaml`; the classifier lands in shadow
+
+- **Not under `.config/policies/`.** Sentinel loads every YAML file there as
+  one of its policies, so the rules are `.config/approvals.yaml`, which is
+  itself guarded.
+- **Backplane starts no process.** `.config/policies/backplane.yaml` forbids
+  `std::process::Command` in backplane, so the bound job reads the base's
+  rules and diffs through cobot (`ci::base_file`, `ci::appends_only`).
+- **A plan's tier comes from its scope.**
+  - A scope glob reaches a guarded or deploying pattern when one's literal
+    prefix starts the other.
+  - A pattern with no literal prefix, such as `**/secrets.config.yaml`,
+    counts only where it matches the scope entry itself. The merge's tier
+    checks the files a head really touches, so a guarded file always needs
+    the code at merge.
+- **Shadow first.**
+  - The bound job reports `tiers` (authorize, merge and close, each with its
+    rule) for every head, and `change_status` shows them.
+  - Nothing is approved by them yet.

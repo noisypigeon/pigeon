@@ -104,6 +104,29 @@ pub fn changed(dir: &Path, base: &str, sha: &str) -> Result<Vec<String>, Error> 
         .collect())
 }
 
+/// The file at `path` on the checkout's fetched `base`, if it exists there.
+#[must_use]
+pub fn base_file(dir: &Path, base: &str, path: &str) -> Option<String> {
+    git(
+        dir,
+        "",
+        "",
+        &["show", &format!("refs/remotes/origin/{base}:{path}")],
+    )
+    .ok()
+}
+
+/// Whether `path` existed on the fetched `base` and `sha` only adds lines to it.
+#[must_use]
+pub fn appends_only(dir: &Path, base: &str, sha: &str, path: &str) -> bool {
+    let base = format!("refs/remotes/origin/{base}");
+    let existed = git(dir, "", "", &["cat-file", "-e", &format!("{base}:{path}")]).is_ok();
+    let range = format!("{base}...{sha}");
+    existed
+        && git(dir, "", "", &["diff", "--numstat", &range, "--", path])
+            .is_ok_and(|n| n.split_whitespace().nth(1) == Some("0"))
+}
+
 /// Runs `argv` in `dir` for at most `timeout`: whether it passed, and its output, stdout then
 /// stderr, with `secret` cut out.
 #[must_use]

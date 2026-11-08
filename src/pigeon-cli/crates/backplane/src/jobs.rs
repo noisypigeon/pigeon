@@ -69,6 +69,7 @@ impl Board {
             workers: Vec::new(),
             build: None,
             images: None,
+            tiers: None,
         };
         self.set(running.clone());
         let board = Arc::clone(self);
@@ -99,6 +100,7 @@ fn report(spec: &JobSpec, outcome: Outcome, log: &str) -> Report {
         workers: Vec::new(),
         build: None,
         images: None,
+        tiers: None,
     }
 }
 
@@ -295,6 +297,19 @@ fn bound(spec: &JobSpec, dir: &Path) -> Report {
         }
     };
     let mut log = format!("{} file(s) changed:\n{}\n", files.len(), files.join("\n"));
+    let tiers = tiers(spec, dir, &files);
+    if let Some(t) = &tiers {
+        let _ = writeln!(
+            log,
+            "tiers: authorize {:?} ({}), merge {:?} ({}), close {:?} ({})",
+            t.authorize.tier,
+            t.authorize.rule,
+            t.merge.tier,
+            t.merge.rule,
+            t.close.tier,
+            t.close.rule
+        );
+    }
     let violations = match policy(spec, dir, &files) {
         Ok(v) => v,
         Err(e) => vec![e],
@@ -339,7 +354,31 @@ fn bound(spec: &JobSpec, dir: &Path) -> Report {
         workers: Vec::new(),
         build: None,
         images: None,
+        tiers,
     }
+}
+
+/// The head's approval tiers, by the rules on the base branch; none when the base has none; see
+/// `.claude/decisions/2026-11-08-security-tiered-approvals-task-mandates.md` §2.
+fn tiers(spec: &JobSpec, dir: &Path, files: &[String]) -> Option<crate::approvals::Tiers> {
+    let text = cobot::ci::base_file(dir, &spec.base, crate::approvals::RULES)?;
+    let rules: crate::approvals::Rules = serde_saphyr::from_str(&text).ok()?;
+    let decisions = rules.decisions.clone().unwrap_or_default();
+    let appends_only = !decisions.is_empty()
+        && files
+            .iter()
+            .filter(|f| f.starts_with(&decisions))
+            .all(|f| cobot::ci::appends_only(dir, &spec.base, &spec.sha, f));
+    let facts = crate::approvals::Facts {
+        deploys_worker: cobot::scope::workers(dir, Some(files)).map_or(true, |w| !w.is_empty()),
+        appends_only,
+    };
+    Some(crate::approvals::classify(
+        &rules,
+        &spec.scope,
+        files,
+        facts,
+    ))
 }
 
 fn policy(spec: &JobSpec, dir: &Path, files: &[String]) -> Result<Vec<String>, String> {
