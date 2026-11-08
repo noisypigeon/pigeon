@@ -708,3 +708,77 @@ fn base64_and_checksums_are_exact() {
     ));
     assert!(!cobot::imagebuild::verified(&f, &"0".repeat(64)));
 }
+
+const STACK_SPEC: &str = r#"description: The platform's control plane.
+name: $deployment.worker
+entry: { crate: crates/backplane, features: [worker] }
+compatibility_date: "2026-10-01"
+deployment: pigeon/platform
+bindings:
+  d1: { DB: { name: $deployment.database_name, id: $deployment.database_id } }
+  r2: { CI_LOGS: "$deployment.bucket_names[pigeon-ci]" }
+  queues: { consumers: [ { queue: $deployment.queue_name, max_batch_size: 10 } ] }
+  vars: { PUBLIC_HOST: $deployment.hostname, CHANGE_FLOOR: $deployment.change_floor }
+"#;
+
+fn stacks(root: &Path) {
+    let p = root;
+    fs::create_dir_all(p.join("catalog/pigeon/kinds/platform")).expect("mkdir");
+    fs::write(
+        p.join("catalog/pigeon/kinds/platform/schema.json"),
+        r#"{"type":"object","x-cobot":{"version":"0.1.0","local":true}}"#,
+    )
+    .expect("write");
+    fs::write(
+        p.join("config.yaml"),
+        "schema: v1\nname: pigeon\ndescription: d\nrepository: https://example.com/r\nmoves: []\nunits:\n  platform/blue:\n    kind: pigeon/platform\n    worker: pigeon-control\n    database_name: pigeon\n    hostname: blue.example.com\n    change_floor: 12\n  platform/green:\n    kind: pigeon/platform\n    worker: pigeon-green\n    database_name: pigeon-green\n    hostname: green.example.com\n    change_floor: 1\n",
+    )
+    .expect("write");
+}
+
+#[test]
+fn a_stack_bound_spec_takes_its_settings_and_names_its_outputs() {
+    let root = fixture(STACK_SPEC);
+    stacks(root.path());
+    let f = found(root.path());
+    let blue = workers::bind(root.path(), &f, "platform/blue").expect("binds");
+    assert_eq!(blue.spec.name, "pigeon-control");
+    assert_eq!(blue.spec.deployment, None);
+    let db = &blue.spec.bindings.d1["DB"];
+    assert_eq!(db.name, "pigeon");
+    assert_eq!(db.id, "$output.platform/blue.database_id");
+    assert_eq!(
+        blue.spec.bindings.r2["CI_LOGS"],
+        "$output.platform/blue.bucket_names[pigeon-ci]"
+    );
+    let vars = &blue.spec.bindings.vars;
+    assert_eq!(vars["PUBLIC_HOST"], "blue.example.com");
+    assert_eq!(vars["CHANGE_FLOOR"], "12");
+    assert_eq!(vars[workers::DEPLOYMENT_VAR], "platform/blue");
+    let green = workers::bind(root.path(), &f, "platform/green").expect("binds");
+    assert_eq!(green.spec.name, "pigeon-green");
+    assert!(workers::bind(root.path(), &f, "platform/red").is_err());
+}
+
+#[test]
+fn a_stack_bound_spec_is_validated_against_every_stack_and_needs_one() {
+    let root = fixture(STACK_SPEC);
+    stacks(root.path());
+    assert_eq!(
+        workers::validate(root.path(), &found(root.path())),
+        Vec::new()
+    );
+    let named = workers::select_bound(root.path(), &[], None).expect_err("needs a stack");
+    assert!(named.to_string().contains("--deployment"), "{named}");
+    let bound = workers::select_bound(root.path(), &[], Some("platform/green")).expect("binds");
+    assert_eq!(bound[0].spec.name, "pigeon-green");
+    let unbound = fixture(&STACK_SPEC.replace("deployment: pigeon/platform\n", ""));
+    stacks(unbound.path());
+    let problems = workers::validate(unbound.path(), &found(unbound.path()));
+    assert!(
+        problems
+            .iter()
+            .any(|p| p.message.contains("needs `deployment")),
+        "{problems:?}"
+    );
+}

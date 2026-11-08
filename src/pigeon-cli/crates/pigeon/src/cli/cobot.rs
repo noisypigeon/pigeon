@@ -227,6 +227,9 @@ pub struct WorkersAt {
     /// The repository root
     #[arg(long, default_value = ".")]
     pub root: PathBuf,
+    /// The stack a spec with `deployment:` is bound to, by its unit ID, e.g. `platform/blue`
+    #[arg(long)]
+    pub deployment: Option<String>,
     /// Workers, by name
     pub names: Vec<String>,
 }
@@ -262,6 +265,9 @@ pub struct WorkersOne {
     /// The repository root
     #[arg(long, default_value = ".")]
     pub root: PathBuf,
+    /// The stack a spec with `deployment:` is bound to, by its unit ID
+    #[arg(long)]
+    pub deployment: Option<String>,
     /// The Worker
     pub name: String,
 }

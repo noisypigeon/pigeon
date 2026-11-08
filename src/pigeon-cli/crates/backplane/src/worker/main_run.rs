@@ -104,6 +104,9 @@ impl MainRun {
         if let Some(i) = images.and_then(|i| serde_json::to_string(i).ok()) {
             env.insert(cobot::ship_wire::IMAGES_VAR.to_string(), i);
         }
+        if let Ok(d) = self.env.var(cobot::ship_wire::DEPLOYMENT_VAR) {
+            env.insert(cobot::ship_wire::DEPLOYMENT_VAR.to_string(), d.to_string());
+        }
         if let Ok(host) = self.env.var(cobot::ship_wire::HOST_VAR) {
             env.insert(cobot::ship_wire::HOST_VAR.to_string(), host.to_string());
         }

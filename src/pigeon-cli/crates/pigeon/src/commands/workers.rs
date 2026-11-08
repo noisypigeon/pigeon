@@ -19,7 +19,7 @@ use crate::cli::{ImagesPush, WorkersCommand, WorkersImages, WorkersSecrets, Work
 pub fn run(command: WorkersCommand) -> Result<(), cobot::Error> {
     match command {
         WorkersCommand::Validate(at) => {
-            let found = workers::select(&at.root, &at.names)?;
+            let found = workers::select_bound(&at.root, &at.names, at.deployment.as_deref())?;
             let problems: Vec<_> = found
                 .iter()
                 .flat_map(|f| workers::validate(&at.root, f))
@@ -31,10 +31,11 @@ pub fn run(command: WorkersCommand) -> Result<(), cobot::Error> {
             Ok(())
         }
         WorkersCommand::Permissions(at) => {
-            let specs: Vec<_> = workers::select(&at.root, &at.names)?
-                .into_iter()
-                .map(|f| f.spec)
-                .collect();
+            let specs: Vec<_> =
+                workers::select_bound(&at.root, &at.names, at.deployment.as_deref())?
+                    .into_iter()
+                    .map(|f| f.spec)
+                    .collect();
             for p in workers::permissions(&specs) {
                 println!("{p}");
             }
@@ -51,13 +52,17 @@ pub fn run(command: WorkersCommand) -> Result<(), cobot::Error> {
         WorkersCommand::Deploy(d) => deploy(&d.run, &d.plan),
         WorkersCommand::Status(at) => {
             let tools = tools()?;
-            for f in workers::select(&at.root, &at.names)? {
+            for f in workers::select_bound(&at.root, &at.names, at.deployment.as_deref())? {
                 print!("{}", workers::status(&f, &tools, &at.root)?);
             }
             Ok(())
         }
         WorkersCommand::Secrets(WorkersSecrets::Put(p)) => {
-            let f = one(&p.worker.root, &p.worker.name)?;
+            let f = one(
+                &p.worker.root,
+                &p.worker.name,
+                p.worker.deployment.as_deref(),
+            )?;
             let mut value = String::new();
             std::io::stdin()
                 .read_to_string(&mut value)
@@ -91,7 +96,7 @@ pub fn run(command: WorkersCommand) -> Result<(), cobot::Error> {
         }
         WorkersCommand::Images(WorkersImages::Push(p)) => images_push(&p),
         WorkersCommand::Teardown(o) => {
-            let f = one(&o.root, &o.name)?;
+            let f = one(&o.root, &o.name, o.deployment.as_deref())?;
             for d in workers::teardown(&f, &tools()?, &o.root)? {
                 println!("cobot: {d}");
             }
@@ -100,8 +105,8 @@ pub fn run(command: WorkersCommand) -> Result<(), cobot::Error> {
     }
 }
 
-fn one(root: &Path, name: &str) -> Result<Found, cobot::Error> {
-    workers::select(root, &[name.to_string()])?
+fn one(root: &Path, name: &str, deployment: Option<&str>) -> Result<Found, cobot::Error> {
+    workers::select_bound(root, &[name.to_string()], deployment)?
         .into_iter()
         .next()
         .ok_or_else(|| cobot::Error::UnknownUnit(format!("workers/{name}")))
@@ -147,7 +152,7 @@ fn account_tools() -> Result<(Tools, cobot::cloudflare::Api, String), cobot::Err
 fn state_outputs(
     s: &WorkersState,
 ) -> Result<(Session, Vec<Found>, cobot::ship::Outputs), cobot::Error> {
-    let found = workers::select(&s.at.root, &s.at.names)?;
+    let found = workers::select_bound(&s.at.root, &s.at.names, s.at.deployment.as_deref())?;
     let problems: Vec<_> = found
         .iter()
         .flat_map(|f| workers::validate(&s.at.root, f))
@@ -246,7 +251,7 @@ fn images_push(p: &ImagesPush) -> Result<(), cobot::Error> {
         source,
         images: BTreeMap::new(),
     };
-    for f in workers::select(root, &p.at.names)? {
+    for f in workers::select_bound(root, &p.at.names, p.at.deployment.as_deref())? {
         let pushed =
             workers::push_images(root, &f, &tag, &account, &api, p.expiration_minutes, &tools)?;
         for (k, v) in pushed {

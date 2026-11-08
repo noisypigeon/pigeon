@@ -77,6 +77,92 @@ pub struct Spec {
     /// Whether it also serves its `workers.dev` hostname, e.g. until it has a route.
     #[serde(default)]
     pub workers_dev: bool,
+    /// The kind of stack it is deployed into, such as `pigeon/platform`; its values may then
+    /// use `$deployment.<setting or output>`, bound by [`bind`]. See
+    /// `.claude/decisions/2026-11-08-runtime-blue-green-self-standup.md`, step 3's design.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub deployment: Option<String>,
+}
+
+/// What a value names its stack's settings and outputs by.
+pub const DEPLOYMENT_PREFIX: &str = "$deployment.";
+
+pub use crate::ship_wire::DEPLOYMENT_VAR;
+
+fn rebind(v: &mut Value, unit: &str, settings: &Value, bad: &mut Vec<String>) {
+    match v {
+        Value::String(s) => {
+            let Some(rest) = s.strip_prefix(DEPLOYMENT_PREFIX) else {
+                return;
+            };
+            let key = rest.split(['.', '[']).next().unwrap_or_default();
+            match &settings[key] {
+                Value::Null => *s = format!("$output.{unit}.{rest}"),
+                _ if rest != key => bad.push(format!("`{s}`: a setting is named whole")),
+                Value::String(x) => *s = x.clone(),
+                Value::Number(n) => *s = n.to_string(),
+                Value::Bool(b) => *s = b.to_string(),
+                _ => bad.push(format!("`{s}`: setting `{key}` is not a single value")),
+            }
+        }
+        Value::Array(items) => items
+            .iter_mut()
+            .for_each(|x| rebind(x, unit, settings, bad)),
+        Value::Object(m) => m.values_mut().for_each(|x| rebind(x, unit, settings, bad)),
+        _ => {}
+    }
+}
+
+/// `found` bound to the stack `unit` of the manifest at `root`: each `$deployment.<setting>`
+/// replaced by the unit's setting, each other `$deployment.<output>` by
+/// `$output.<unit>.<output>`, and [`DEPLOYMENT_VAR`] set to `unit`. A spec with no
+/// `deployment` is returned as it is.
+///
+/// # Errors
+///
+/// A message for an unknown unit, one of another kind, or a value that can't be bound.
+pub fn bind(root: &Path, found: &Found, unit: &str) -> Result<Found, String> {
+    let Some(kind) = found.spec.deployment.as_deref() else {
+        return Ok(found.clone());
+    };
+    let (manifest, _) = crate::manifest::load(root, root)
+        .ok_or_else(|| format!("no config.yaml declares stack `{unit}`"))?;
+    let entry = manifest
+        .units
+        .get(unit)
+        .ok_or_else(|| format!("config.yaml has no unit `{unit}`"))?;
+    if entry.kind != kind {
+        return Err(format!("`{unit}` is a `{}`, not a `{kind}`", entry.kind));
+    }
+    let mut v = serde_json::to_value(&found.spec).map_err(|e| e.to_string())?;
+    let mut bad = Vec::new();
+    rebind(&mut v, unit, &entry.settings, &mut bad);
+    if !bad.is_empty() {
+        return Err(bad.join("; "));
+    }
+    let mut spec: Spec = serde_json::from_value(v).map_err(|e| e.to_string())?;
+    spec.deployment = None;
+    spec.bindings
+        .vars
+        .insert(DEPLOYMENT_VAR.to_string(), unit.to_string());
+    Ok(Found {
+        spec,
+        ..found.clone()
+    })
+}
+
+/// The units of `kind` in the manifest at `root`, sorted.
+#[must_use]
+pub fn stacks(root: &Path, kind: &str) -> Vec<String> {
+    crate::manifest::load(root, root)
+        .map(|(m, _)| {
+            m.units
+                .into_iter()
+                .filter(|(_, e)| e.kind == kind)
+                .map(|(id, _)| id)
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 /// The crate a Worker is built from, with `worker-build`.
@@ -380,11 +466,71 @@ pub fn select(root: &Path, names: &[String]) -> Result<Vec<Found>, Error> {
         .collect())
 }
 
+/// As [`select`], each spec bound with [`bind`] to the stack `deployment`.
+///
+/// # Errors
+///
+/// As [`select`], and [`Error::Invalid`] for a spec that names a stack kind when `deployment`
+/// is none, or that can't be bound to it.
+pub fn select_bound(
+    root: &Path,
+    names: &[String],
+    deployment: Option<&str>,
+) -> Result<Vec<Found>, Error> {
+    let mut out = Vec::new();
+    let mut problems = Vec::new();
+    for f in select(root, names)? {
+        let path = format!("{}/{SPEC}", f.dir);
+        match (&f.spec.deployment, deployment) {
+            (None, _) => out.push(f),
+            (Some(kind), None) => problems.push(Problem {
+                path,
+                message: format!("deployed into a `{kind}`: pass --deployment <unit>"),
+            }),
+            (Some(_), Some(unit)) => match bind(root, &f, unit) {
+                Ok(b) => out.push(b),
+                Err(message) => problems.push(Problem { path, message }),
+            },
+        }
+    }
+    if problems.is_empty() {
+        Ok(out)
+    } else {
+        Err(Error::Invalid(problems))
+    }
+}
+
 /// Every problem with `found`'s spec, against the files under `root`.
 #[must_use]
 pub fn validate(root: &Path, found: &Found) -> Vec<Problem> {
-    let mut out = Vec::new();
     let file = format!("{}/{SPEC}", found.dir);
+    let problem = |message: String| Problem {
+        path: file.clone(),
+        message,
+    };
+    if let Some(kind) = &found.spec.deployment {
+        // A stack-bound spec is checked as each stack of its kind binds it.
+        let units = stacks(root, kind);
+        if units.is_empty() {
+            return vec![problem(format!(
+                "`deployment`: no unit of kind `{kind}` in config.yaml"
+            ))];
+        }
+        let mut out = Vec::new();
+        for u in units {
+            match bind(root, found, &u) {
+                Ok(bound) => out.extend(validate(root, &bound)),
+                Err(e) => out.push(problem(format!("bound to `{u}`: {e}"))),
+            }
+        }
+        return out;
+    }
+    let mut out = Vec::new();
+    if serde_json::to_string(&found.spec).is_ok_and(|t| t.contains(DEPLOYMENT_PREFIX)) {
+        out.push(problem(format!(
+            "`{DEPLOYMENT_PREFIX}…` needs `deployment: <catalog>/<kind>`"
+        )));
+    }
     let mut add = |m: String| {
         out.push(Problem {
             path: file.clone(),
@@ -490,7 +636,7 @@ fn validate_bindings(s: &Spec, root: &Path, add: &mut impl FnMut(String)) {
     for r in refs {
         match reference(r) {
             None => add(format!("`{r}` must be a `$output.<unit>.<name>` reference")),
-            Some(x) if !root.join(&x.unit).is_dir() => {
+            Some(x) if !root.join(&x.unit).is_dir() && !is_manifest_unit(root, &x.unit) => {
                 add(format!("`{r}` names unknown unit `{}`", x.unit));
             }
             Some(_) => {}
@@ -508,6 +654,10 @@ fn validate_bindings(s: &Spec, root: &Path, add: &mut impl FnMut(String)) {
             add(format!("var `{k}` looks like an ID; use a reference"));
         }
     }
+}
+
+fn is_manifest_unit(root: &Path, unit: &str) -> bool {
+    crate::manifest::load(root, root).is_some_and(|(m, _)| m.units.contains_key(unit))
 }
 
 /// Every `$output` reference `spec` makes.

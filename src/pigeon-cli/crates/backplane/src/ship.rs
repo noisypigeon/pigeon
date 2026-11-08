@@ -56,6 +56,7 @@ pub fn workers(
         ));
     }
     let get = |k: &str| var(k).unwrap_or_default();
+    let deployment = var(workers::DEPLOYMENT_VAR);
     let outputs: Outputs = serde_json::from_str(&get(ship::OUTPUTS_VAR))
         .map_err(|e| format!("{} is not JSON outputs: {e}", ship::OUTPUTS_VAR))?;
     let mut images: Images = serde_json::from_str(&get(ship::IMAGES_VAR))
@@ -99,7 +100,7 @@ pub fn workers(
     };
     let mut shipped = Vec::new();
     for name in names {
-        let found = workers::select(dir, std::slice::from_ref(&name))
+        let found = workers::select_bound(dir, std::slice::from_ref(&name), deployment.as_deref())
             .map_err(|e| e.to_string())?
             .into_iter()
             .next()
@@ -234,13 +235,18 @@ fn build_images(
     log: &mut String,
 ) -> Result<Images, String> {
     let failed = |e: cobot::Error| format!("needs image: building it failed: {e}");
+    let deployment = spec
+        .env
+        .get(workers::DEPLOYMENT_VAR)
+        .filter(|v| !v.is_empty())
+        .cloned();
     let work = std::env::temp_dir().join("pigeon-images");
     let _ = std::fs::remove_dir_all(&work);
     let builder = cobot::imagebuild::fetch(&work).map_err(failed)?;
     let tag: String = spec.sha.chars().take(12).collect();
     let mut refs = images.images.clone();
     for name in names {
-        let found = workers::select(dir, std::slice::from_ref(name))
+        let found = workers::select_bound(dir, std::slice::from_ref(name), deployment.as_deref())
             .map_err(|e| e.to_string())?
             .into_iter()
             .next()
