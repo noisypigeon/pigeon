@@ -457,7 +457,8 @@ async fn dispatch(
         Routed::DeployStatus => {
             let req = json_request("https://main/status", Method::Get, None, None)?;
             let mut r = platform::call(env, &main_stub(env, &s.repo)?, req).await?;
-            let v: Value = r.json().await?;
+            let mut v: Value = r.json().await?;
+            v["pipeline"]["last_log"] = json!(last_log(env, &v).await?);
             Ok((None, respond(operation, r.status_code(), v)))
         }
         Routed::GitTokens => {
@@ -600,6 +601,21 @@ async fn health(env: &Env, s: &Settings) -> Result<Response> {
         "objects": { "main": main, "instance": instance, "expected": mine },
     }))?
     .with_status(if ok { 200 } else { 503 }))
+}
+
+/// The newest deploy's log, from where its job stored it.
+async fn last_log(env: &Env, status: &Value) -> Result<Option<String>> {
+    let Some(sha) = status["pipeline"]["history"][0]["sha"].as_str() else {
+        return Ok(None);
+    };
+    let key = format!("ci/{}.log", control::deploy_id(sha));
+    match env.bucket("CI_LOGS")?.get(key).execute().await? {
+        Some(o) => match o.body() {
+            Some(b) => Ok(Some(b.text().await?)),
+            None => Ok(None),
+        },
+        None => Ok(None),
+    }
 }
 
 /// The refusal for a token that reaches only `/healthz` and `/builds/`, past those.
