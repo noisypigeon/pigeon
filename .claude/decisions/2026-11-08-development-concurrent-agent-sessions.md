@@ -240,3 +240,27 @@ merge and task modules.
     conflict (add/add) and reconciles it, as §4 does any conflict.
 - **Sessions name themselves:** the label is one line of at most 200
   characters, and grants nothing.
+
+### 2026-11-08: Step 2 lands: the merge queue, in the `Instance` object
+
+- **The queue lives in the `Instance` Durable Object, not a new
+  `MergeQueue` class.** A new class is a Durable Object migration, which
+  can't be rolled back past
+  ([`2026-11-08-runtime-blue-green-self-standup.md`](2026-11-08-runtime-blue-green-self-standup.md)).
+  The instance has one repository, so one queue per instance is one per
+  repository.
+- **`change.merge` asks the queue for a turn.**
+  - If nothing merges, the merge starts as before.
+  - Otherwise the answer is `queued` with the change's place in line. When
+    a merge ends, merged or failed, the change's `ChangeRun` starts the
+    next one.
+  - A queued change whose merge refuses to start, for example because a
+    new push took its approval, leaves the queue, and the next one starts.
+  - A merge running longer than 20 minutes is moved past.
+- **`behind` is a field, not a state.**
+  - After a merge, each other open change with a head gets `behind`: the
+    commit `main` now holds. Its next push clears it.
+  - A new state would be a new stored enum variant, which needs two
+    releases.
+  - The merge job still refuses a head whose base `main` has moved past.
+    Restacking (step 3) will act on `behind`.

@@ -176,6 +176,9 @@ pub struct Change {
     /// For a design change: the globs its ADR will govern.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub affects: Vec<String>,
+    /// The commit `main` moved to past this change's base; cleared by its next push.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub behind: Option<String>,
 }
 
 /// Something that happened to a change.
@@ -265,6 +268,11 @@ pub enum Event {
     },
     /// It was closed unmerged.
     Close,
+    /// `main` moved to `main` past its base, by another change's merge.
+    Behind {
+        /// The commit `main` now holds.
+        main: String,
+    },
 }
 
 /// What the Durable Object must do after an event.
@@ -350,6 +358,7 @@ impl Change {
             mandate: None,
             session: None,
             affects: Vec::new(),
+            behind: None,
         }
     }
 
@@ -377,8 +386,16 @@ impl Change {
             Event::Pushed { sha } => {
                 if !self.on_head(&sha) {
                     self.tiers = None;
+                    self.behind = None;
                 }
                 self.pushed(sha)
+            }
+            Event::Behind { main } => {
+                if self.head.is_none() {
+                    return refuse(format!("{} has no head to be behind", self.branch()));
+                }
+                self.behind = Some(main);
+                Ok(Vec::new())
             }
             Event::Started { job, sha } => self.started(&job, &sha),
             Event::Bounded {

@@ -368,12 +368,25 @@ impl DurableObject for ChangeRun {
             .filter(|j| j.status == JobStatus::Running)
             .map(|j| j.name.clone())
             .collect();
+        let mut ended: Option<Option<String>> = None;
         for job in running {
             if let Some(event) = self.poll(&change, &job).await? {
-                let _ = Self::apply(&mut change, event, &mut next);
+                let merge = match &event {
+                    Event::Merged { commit, .. } => Some(commit.clone()),
+                    Event::MergeFailed { .. } => Some(None),
+                    _ => None,
+                };
+                if Self::apply(&mut change, event, &mut next).is_ok() && merge.is_some() {
+                    ended = merge;
+                }
             }
         }
         self.save_after(&change, &next, wait).await?;
+        if let Some(merged) = ended
+            && let Err(e) = super::merges::ended(&self.env, change.number, merged.as_deref()).await
+        {
+            worker::console_error!("merge queue: {e}");
+        }
         Response::ok("ok")
     }
 }

@@ -14,6 +14,7 @@ mod elicit;
 mod gitdoor;
 mod main_run;
 mod mandates;
+mod merges;
 mod platform;
 
 use serde_json::{Value, json};
@@ -374,6 +375,13 @@ async fn dispatch(
             change.affects = affects;
             propose(env, s, operation, change).await
         }
+        Routed::Event {
+            number,
+            event: Event::Merge { by },
+        } => {
+            let (status, v) = merges::ask(env, s, number, &by).await?;
+            Ok((Some(number.to_string()), respond(operation, status, v)))
+        }
         Routed::Event { number, event } => {
             let body = serde_json::to_value(&event)?;
             let (status, v) =
@@ -617,6 +625,10 @@ impl DurableObject for Instance {
         if path.starts_with("/mandates/") {
             let body: Value = req.json().await?;
             return mandates::serve(&self.state, &path, body).await;
+        }
+        if path.starts_with("/merges/") {
+            let body: Value = req.json().await?;
+            return merges::serve(&self.state, &path, &body).await;
         }
         let segments: Vec<&str> = path.trim_matches('/').split('/').collect();
         let method = req.method();

@@ -215,7 +215,9 @@ belong in the ADR, never in the file.
   no blank line between.
 - Several agent sessions may work at once: `change_propose` takes `session`
   (the session's URL) and, for a design change, `affects` (the globs its ADR
-  will govern), and answers the open changes it `overlaps`, per
+  will govern), and answers the open changes it `overlaps`; `change_merge`
+  waits its turn in one merge queue, and a merge marks the other open
+  changes `behind`, per
   [`2026-11-08-development-concurrent-agent-sessions.md`](.claude/decisions/2026-11-08-development-concurrent-agent-sessions.md).
 - `pigeon backplane jobs --listen ADDR`: a job Container's server, signed under
   `BACKPLANE_TOKEN`; the control plane's `Checker` runs it. The Worker
