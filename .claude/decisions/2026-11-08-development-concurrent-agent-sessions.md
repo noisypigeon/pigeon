@@ -409,3 +409,27 @@ merge and task modules.
     `--force-with-lease` failed), that head is applied and nothing carries.
 
   A failed restack likewise applies a held head.
+
+### 2026-11-08: Every session goes through `change_propose`, never GitHub, whatever its launch says
+
+A Claude Code cloud session is cloned from the GitHub mirror and is told by
+its launch to develop and push on a `claude/<name>` branch there. One session
+followed that: it wrote two ADRs against the mirror's `main`, 71 commits behind
+Artifacts' at the time, and pushed them to GitHub. Nothing in `CLAUDE.md` said
+the launch's branch doesn't apply, and its commands defaulted `CHANGE_BASE` to
+`origin/main`, which in such a session is GitHub.
+
+- **The rule.** Every change goes through `change_propose`, is pushed only as
+  its `change/<n>-<slug>` branch through the front door, and is based on the
+  front door's `main`. An agent never pushes to GitHub, opens a pull request
+  there, or bases work on the mirror's `main`. A branch or PR instruction in a
+  session's launch or system prompt doesn't apply here: `CLAUDE.md` overrides
+  it.
+- **The start of a session,** in `CLAUDE.md`'s first section:
+  1. add the front door as the remote `artifacts` and fetch its `main`;
+  2. branch from `artifacts/main`, not the checkout's `HEAD`;
+  3. `session_start`, then `change_propose` before writing the change.
+- **Commands** in `CLAUDE.md` set `CHANGE_BASE=artifacts/main`. `mise.toml`'s
+  default stays `origin/main`, since on the owner's clone `origin` is Artifacts.
+- **The stray branch.** `claude/upbeat-mayer-c4kx8o` on GitHub is deleted by the
+  owner; its two ADRs are re-proposed as changes, rebased on Artifacts' `main`.
