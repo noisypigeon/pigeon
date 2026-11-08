@@ -168,6 +168,7 @@ impl Operation {
             || self.name.starts_with("task.")
             || self.name.starts_with("events.")
             || self.name.starts_with("digest.")
+            || self.name.starts_with("session.")
     }
 }
 
@@ -231,6 +232,7 @@ const CATALOG: &[Operation] = &[
             arg("mandate", false, Kind::Text),
             arg("session", false, Kind::String),
             arg("affects", false, Kind::String),
+            arg("ticket", false, Kind::String),
         ],
     },
     Operation {
@@ -238,14 +240,18 @@ const CATALOG: &[Operation] = &[
         engine: Engine::Backplane,
         effect: Effect::Apply,
         summary: "Approve a proposed change's plan, so its branch may be pushed; never by its proposer",
-        args: &[NUMBER],
+        args: &[NUMBER, arg("ticket", false, Kind::String)],
     },
     Operation {
         name: "change.pushed",
         engine: Engine::Backplane,
         effect: Effect::Build,
         summary: "Report a push of a change's branch, naming its head, when the push event may be missed; the bound job refuses a SHA that isn't the branch's head",
-        args: &[NUMBER, arg("sha", true, Kind::String)],
+        args: &[
+            NUMBER,
+            arg("sha", true, Kind::String),
+            arg("ticket", false, Kind::String),
+        ],
     },
     Operation {
         name: "change.status",
@@ -266,28 +272,36 @@ const CATALOG: &[Operation] = &[
         engine: Engine::Backplane,
         effect: Effect::Apply,
         summary: "Approve a checked change's head for merge (sha?: the head; a person's call without it approves the current head, and a service token's call asks the owner for their code in the card); never by its proposer",
-        args: &[NUMBER, arg("sha", false, Kind::String)],
+        args: &[
+            NUMBER,
+            arg("sha", false, Kind::String),
+            arg("ticket", false, Kind::String),
+        ],
     },
     Operation {
         name: "change.merge",
         engine: Engine::Backplane,
         effect: Effect::Apply,
         summary: "Merge an approved change: its head is squashed onto main as `<title> (!<number>)` and its branch deleted; main must be an ancestor of the head",
-        args: &[NUMBER],
+        args: &[NUMBER, arg("ticket", false, Kind::String)],
     },
     Operation {
         name: "change.close",
         engine: Engine::Backplane,
         effect: Effect::Apply,
         summary: "Close a change unmerged, stopping its jobs",
-        args: &[NUMBER],
+        args: &[NUMBER, arg("ticket", false, Kind::String)],
     },
     Operation {
         name: "ci.rerun",
         engine: Engine::Backplane,
         effect: Effect::Build,
         summary: "Run one of a finished head's jobs again, and those its failure cancelled",
-        args: &[NUMBER, arg("job", true, Kind::String)],
+        args: &[
+            NUMBER,
+            arg("job", true, Kind::String),
+            arg("ticket", false, Kind::String),
+        ],
     },
     Operation {
         name: "git.tokens",
@@ -339,6 +353,16 @@ const CATALOG: &[Operation] = &[
         args: &[],
     },
     Operation {
+        name: "session.start",
+        engine: Engine::Backplane,
+        effect: Effect::Build,
+        summary: "A ticket for session `label` (its URL), lasting 24 hours; pass it as `ticket` on every change it proposes and acts on, and as the X-Pigeon-Ticket header on its pushes. A label already holding a live ticket is refused unless `replace`, which revokes that one",
+        args: &[
+            arg("label", true, Kind::String),
+            arg("replace", false, Kind::Text),
+        ],
+    },
+    Operation {
         name: "events.wait",
         engine: Engine::Backplane,
         effect: Effect::Read,
@@ -375,6 +399,7 @@ const CATALOG: &[Operation] = &[
         args: &[
             arg("id", true, Kind::Text),
             arg("session", true, Kind::String),
+            arg("ticket", false, Kind::String),
         ],
     },
     Operation {
@@ -382,7 +407,10 @@ const CATALOG: &[Operation] = &[
         engine: Engine::Backplane,
         effect: Effect::Build,
         summary: "Mark task `id` done; a task on a change that merges is done by itself",
-        args: &[arg("id", true, Kind::Text)],
+        args: &[
+            arg("id", true, Kind::Text),
+            arg("ticket", false, Kind::String),
+        ],
     },
     Operation {
         name: "mandate.status",

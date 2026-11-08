@@ -54,7 +54,8 @@ pub async fn serve(mut req: Request, env: &Env, s: &Settings, who: &Identity) ->
             Ok(p) => p,
             Err(why) => return Response::error(why, 400),
         };
-        let refusals = judge(env, s, &push).await?;
+        let ticket = req.headers().get(super::tickets::HEADER)?;
+        let refusals = judge(env, s, &push, ticket.as_deref()).await?;
         let numbers: Vec<String> = push
             .updates
             .iter()
@@ -86,7 +87,12 @@ pub async fn serve(mut req: Request, env: &Env, s: &Settings, who: &Identity) ->
 }
 
 /// Every refused ref of `push`, with why.
-async fn judge(env: &Env, s: &Settings, push: &gitdoor::Push) -> Result<Vec<(String, String)>> {
+async fn judge(
+    env: &Env,
+    s: &Settings,
+    push: &gitdoor::Push,
+    ticket: Option<&str>,
+) -> Result<Vec<(String, String)>> {
     let mut changes: BTreeMap<u32, Option<Change>> = BTreeMap::new();
     let mut refusals = Vec::new();
     for u in &push.updates {
@@ -105,6 +111,15 @@ async fn judge(env: &Env, s: &Settings, push: &gitdoor::Push) -> Result<Vec<(Str
             None => None,
         };
         if let Err(why) = gitdoor::judge(u, change.as_ref()) {
+            refusals.push((u.name.clone(), why));
+            continue;
+        }
+        let labels: Vec<String> = change
+            .as_ref()
+            .and_then(|c| c.session.clone())
+            .into_iter()
+            .collect();
+        if let Err(why) = super::tickets::allows(env, s, &labels, ticket).await? {
             refusals.push((u.name.clone(), why));
         }
     }

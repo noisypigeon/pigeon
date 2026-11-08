@@ -29,6 +29,7 @@ pub mod sessions;
 #[cfg(feature = "engines")]
 pub mod ship;
 pub mod tasks;
+pub mod tickets;
 pub mod totp;
 pub mod wire;
 #[cfg(feature = "worker")]

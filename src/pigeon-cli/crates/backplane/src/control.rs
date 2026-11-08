@@ -54,6 +54,11 @@ pub enum Routed {
     },
     /// `digest.show`: the owner's digest now.
     Digest,
+    /// `session.start`, with its arguments.
+    SessionStart {
+        /// Its arguments.
+        args: serde_json::Map<String, Value>,
+    },
     /// `events.wait`, with its arguments; see
     /// `.claude/decisions/2026-11-08-development-events-tickets-digest-mandate.md` §2.
     Events {
@@ -179,6 +184,7 @@ pub fn route(request: &Request, by: &str, at: u64) -> Result<Routed, String> {
         }),
         "events.wait" => Ok(Routed::Events { args: a.clone() }),
         "digest.show" => Ok(Routed::Digest),
+        "session.start" => Ok(Routed::SessionStart { args: a.clone() }),
         "task.list" | "task.wait" | "task.claim" | "task.done" => Ok(Routed::Task {
             operation: request.operation.clone(),
             args: a.clone(),

@@ -357,3 +357,30 @@ What the pieces offer:
   `/approve/66` without its grant, "this link has no grant". The push now
   opens the approval link itself, grant included. Only the owner fetches
   it, from `/approvals/latest.json`.
+
+### 2026-11-08: Step 5 lands: session tickets
+
+- **`session.start` (MCP `session_start`)** takes a `label`, the session's
+  URL, and returns a 24-hour ticket:
+  `<label>.<generation>.<expires>.<HMAC-SHA256 under SESSION_KEY>`. The
+  `Instance` keeps each label's generation and expiry.
+- **The rule: a label that holds a live ticket is used only with that
+  ticket, of its current generation.** A label without one works as before,
+  so the changes open when this lands are unaffected. The check covers:
+  - every changing operation an agent sends: the labels named by its
+    `session` argument or by its change;
+  - the approvals an agent asks the owner for, checked before the link is
+    made;
+  - pushes through the git front door to a ticketed session's change
+    branch, which carry the ticket in `X-Pigeon-Ticket` (git's
+    `-c http.extraHeader="X-Pigeon-Ticket: <ticket>"`).
+
+  The ops that change something take an optional `ticket`.
+- **A lost ticket is replaced, not confirmed.**
+  - `session.start` refuses a label holding a live ticket unless `replace`.
+    Replacing raises its generation, revokes the old ticket, and is
+    recorded as `session.replaced` in the event log.
+  - That differs from §5's one-tap confirm. The threat is a mistake, and
+    replacing a label on purpose isn't one; the event log keeps the record.
+- **Owner operations need no ticket.** Access names the owner, and a
+  mandate acts as a person.

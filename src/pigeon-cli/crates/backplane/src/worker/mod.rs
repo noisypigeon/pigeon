@@ -19,6 +19,7 @@ mod merges;
 mod platform;
 mod push;
 mod tasks;
+mod tickets;
 
 use serde_json::{Value, json};
 use worker::{
@@ -164,6 +165,9 @@ async fn offer(
     let Some(number) = number_arg(request) else {
         return refused("`number` must be a change number".into());
     };
+    if let Err(why) = tickets::guard(env, settings, request).await? {
+        return refused(why);
+    }
     if let Some(r) = under_mandate(env, settings, number, request).await? {
         return Response::from_json(&mcp::answer(id, r));
     }
@@ -346,6 +350,12 @@ async fn run(
 ) -> std::result::Result<WireResponse, crate::Error> {
     let op = wire::validate(request)?;
     access::authorize(op, who).map_err(|m| crate::Error::Invalid(vec![m]))?;
+    if !who.human && op.effect != wire::Effect::Read {
+        tickets::guard(env, s, request)
+            .await
+            .map_err(|e| crate::Error::Invalid(vec![e.to_string()]))?
+            .map_err(|m| crate::Error::Invalid(vec![m]))?;
+    }
     if !op.control_plane() {
         return Err(crate::Error::Invalid(vec![format!(
             "`{}` runs in an instance's Container, which the control plane doesn't dispatch yet",
@@ -479,6 +489,9 @@ async fn dispatch(
                     .await?;
             Ok((None, respond(operation, 200, json!({ "changes": rows }))))
         }
+        Routed::SessionStart { args } => {
+            Ok(answered(operation, tickets::start(env, s, &args).await?))
+        }
         Routed::Digest => Ok((
             None,
             respond(operation, 200, push::show(env, s, who.human).await?),
@@ -490,10 +503,7 @@ async fn dispatch(
         Routed::Task {
             operation: op,
             args,
-        } => {
-            let (status, v) = tasks::run(env, s, &op, &args).await?;
-            Ok((None, respond(operation, status, v)))
-        }
+        } => Ok(answered(operation, tasks::run(env, s, &op, &args).await?)),
         Routed::Mandate {
             operation: op,
             args,
@@ -549,6 +559,11 @@ async fn propose(
             json!("no change number was free; try again"),
         ),
     ))
+}
+
+/// An operation's answer from a `(status, value)` pair.
+fn answered(operation: &str, (status, v): (u16, Value)) -> (Option<String>, WireResponse) {
+    (None, respond(operation, status, v))
 }
 
 /// `/healthz`: the version serving, and whether D1 and a Durable Object answer; see
@@ -702,6 +717,10 @@ impl DurableObject for Instance {
         if path.starts_with("/mandates/") {
             let body: Value = req.json().await?;
             return mandates::serve(&self.state, &path, body).await;
+        }
+        if path.starts_with("/tickets/") {
+            let body: Value = req.json().await?;
+            return tickets::serve(&self.state, &path, &body).await;
         }
         if path.starts_with("/push/") || path.starts_with("/digest/") {
             let body: Value = req.json().await?;
