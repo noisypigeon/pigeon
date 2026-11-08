@@ -478,11 +478,10 @@ async fn dispatch(
                     .await?;
             Ok((None, respond(operation, 200, json!({ "changes": rows }))))
         }
-        Routed::Digest => {
-            let (d, _) = push::build(env, s).await?;
-            let v = json!({ "lines": d.lines(), "needs_owner": d.needs_owner(), "digest": d });
-            Ok((None, respond(operation, 200, v)))
-        }
+        Routed::Digest => Ok((
+            None,
+            respond(operation, 200, push::show(env, s, who.human).await?),
+        )),
         Routed::Events { args } => {
             let v = events::wait(env, s, &args, who.human).await?;
             Ok((None, respond(operation, 200, v)))

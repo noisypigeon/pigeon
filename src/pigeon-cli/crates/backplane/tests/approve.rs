@@ -195,3 +195,16 @@ fn the_inbox_shows_the_digest_and_offers_to_notify_this_device() {
         "other pages run no script"
     );
 }
+
+#[test]
+fn the_inbox_installs_as_a_home_screen_app_for_ios_push() {
+    let html = approve::inbox_with(&[], &[]);
+    let head = &html[..html.find("</head>").expect("a head")];
+    assert!(head.contains("<link rel=\"manifest\" href=\"/approvals/manifest.json\">"));
+    assert!(head.contains("apple-mobile-web-app-capable"));
+    assert!(html.contains("Add to Home Screen"));
+    assert!(approve::INBOX_CSP.contains("manifest-src 'self'"));
+    let m: serde_json::Value = serde_json::from_str(approve::MANIFEST).expect("JSON");
+    assert_eq!(m["display"], "standalone");
+    assert_eq!(m["start_url"], "/approvals");
+}

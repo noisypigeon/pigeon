@@ -12,7 +12,15 @@ use crate::grants::Grant;
 pub const CSP: &str = "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'";
 
 /// The inbox's policy: [`CSP`], plus its own script, its fetches and its service worker.
-pub const INBOX_CSP: &str = "default-src 'none'; style-src 'unsafe-inline'; script-src 'self'; connect-src 'self'; worker-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'";
+pub const INBOX_CSP: &str = "default-src 'none'; style-src 'unsafe-inline'; script-src 'self'; connect-src 'self'; worker-src 'self'; manifest-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'";
+
+/// The inbox's web app manifest, so iOS installs it to the Home Screen, where Web Push works.
+pub const MANIFEST: &str = r##"{"name":"pigeon approvals","short_name":"pigeon","start_url":"/approvals","scope":"/","display":"standalone","background_color":"#141414","theme_color":"#2b59c3"}"##;
+
+/// The inbox's `<head>` additions: its manifest and iOS's standalone flags.
+const INBOX_HEAD: &str = "<link rel=\"manifest\" href=\"/approvals/manifest.json\">\
+<meta name=\"apple-mobile-web-app-capable\" content=\"yes\">\
+<meta name=\"apple-mobile-web-app-title\" content=\"pigeon\">";
 
 /// `s` escaped for HTML text and attribute values.
 #[must_use]
@@ -52,9 +60,14 @@ fn verb(operation: &str) -> &'static str {
 }
 
 fn shell(title: &str, body: &str) -> String {
+    shell_with(title, "", body)
+}
+
+/// A page with `head` added to its `<head>`.
+fn shell_with(title: &str, head: &str, body: &str) -> String {
     format!(
         "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">\
-<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\
+<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">{head}\
 <title>{}</title><style>\
 body{{font:16px/1.5 system-ui,sans-serif;max-width:46rem;margin:2rem auto;padding:0 1rem;color:#1b1b1b;background:#fff}}\
 code,pre{{background:#f2f2f2;color:inherit;border-radius:4px;padding:.1rem .3rem;font-size:.9em}}\
@@ -124,9 +137,10 @@ pub fn inbox_with(waiting: &[Waiting], digest: &[String]) -> String {
     }
     b.push_str(
         "<p><button id=\"notify\" type=\"button\">Notify this device</button></p>\
-         <script src=\"/approvals/push.js\"></script>",
+         <p><small>On an iPhone or iPad: Share, then Add to Home Screen, and tap this from the \
+         icon.</small></p><script src=\"/approvals/push.js\"></script>",
     );
-    shell("Waiting for you", &b)
+    shell_with("Waiting for you", INBOX_HEAD, &b)
 }
 
 /// The page offering `grant` on `change`, posting `token` and the owner's code back to

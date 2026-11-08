@@ -73,6 +73,43 @@ pub async fn pending(
     Ok((format!("https://{host}{path}"), grant.expires))
 }
 
+/// The approvals still waiting: those whose link is unexpired and unused, the rest dropped
+/// from the inbox.
+///
+/// # Errors
+///
+/// When a binding fails.
+pub(super) async fn live(env: &Env, s: &Settings) -> Result<Vec<Waiting>> {
+    let v = elicit::inbox(env, s, "/approvals/list", &json!({})).await?;
+    let list: Vec<Waiting> = serde_json::from_value(v).unwrap_or_default();
+    let mut kept = Vec::new();
+    for w in list {
+        let token = w.path.split_once("?grant=").map(|(_, t)| t.to_string());
+        let alive = match (token, w.expires > now()) {
+            (Some(token), true) => {
+                let body = json!({ "token": token });
+                let status = if w.path.starts_with("/mandate/") {
+                    super::mandates::to_instance(env, s, "/mandates/peek", &body)
+                        .await?
+                        .0
+                } else {
+                    to_change(env, &s.repo, w.number, Method::Post, "/peek", Some(&body))
+                        .await?
+                        .0
+                };
+                status == 200
+            }
+            _ => false,
+        };
+        if alive {
+            kept.push(w);
+        } else {
+            elicit::inbox(env, s, "/approvals/remove", &json!({ "path": w.path })).await?;
+        }
+    }
+    Ok(kept)
+}
+
 /// Serves `/approvals` and `/approve/<number>` for `who`.
 ///
 /// # Errors
@@ -84,9 +121,7 @@ pub async fn serve(req: Request, env: &Env, s: &Settings, who: &Identity) -> Res
     }
     let path = req.path();
     if path == "/approvals" {
-        let v = elicit::inbox(env, s, "/approvals/list", &json!({})).await?;
-        let mut list: Vec<Waiting> = serde_json::from_value(v).unwrap_or_default();
-        list.retain(|w| w.expires > now());
+        let list = live(env, s).await?;
         let digest = match super::push::build(env, s).await {
             Ok((d, _)) => d.lines(),
             Err(e) => vec![format!("the digest is unavailable: {e}")],

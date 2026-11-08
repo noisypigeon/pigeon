@@ -194,7 +194,7 @@ self.addEventListener("notificationclick", (event) => {
 pub const PAGE_SCRIPT: &str = r#"document.addEventListener("DOMContentLoaded", () => {
   const b = document.getElementById("notify");
   if (!b) { return; }
-  if (!("serviceWorker" in navigator) || !("PushManager" in window)) { b.textContent = "This browser can't take notifications"; b.disabled = true; return; }
+  if (!("serviceWorker" in navigator) || !("PushManager" in window)) { b.textContent = navigator.standalone === false ? "Add this page to the Home Screen, then tap here from its icon" : "This browser can't take notifications"; b.disabled = true; return; }
   b.addEventListener("click", async () => {
     b.disabled = true;
     try {
@@ -206,8 +206,9 @@ pub const PAGE_SCRIPT: &str = r#"document.addEventListener("DOMContentLoaded", (
       const reg = await navigator.serviceWorker.register("/sw.js", { scope: "/" });
       await navigator.serviceWorker.ready;
       const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: appKey });
-      const r = await fetch("/approvals/push", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ endpoint: sub.endpoint }) });
-      b.textContent = r.ok ? "This device is notified" : "Not saved: " + r.status;
+      const r = await fetch("/approvals/push", { method: "POST", credentials: "same-origin", redirect: "manual", headers: { "content-type": "application/json" }, body: JSON.stringify({ endpoint: sub.endpoint }) });
+      if (r.type === "opaqueredirect") { b.textContent = "Not saved: Access asked to sign in again; reload this page and tap again"; b.disabled = false; return; }
+      b.textContent = r.ok ? "This device is notified" : "Not saved: " + r.status + " " + (await r.text()).slice(0, 200);
     } catch (e) { b.textContent = "Not saved: " + e; b.disabled = false; }
   });
 });

@@ -319,3 +319,27 @@ What the pieces offer:
     a mandate or a standing rule.
   - `digest.show` (MCP `digest_show`) returns it now, and `/approvals`
     shows it.
+
+### 2026-11-08: iOS installs the inbox; the inbox and digest drop dead links
+
+- **iOS gives the push API only to a web app opened from the Home Screen**
+  (iOS 16.4 and later). The owner's first try, in the Claude app's
+  browser, found no `PushManager`.
+  - `/approvals` now has a manifest (`/approvals/manifest.json`,
+    `display: standalone`) and iOS's standalone flags.
+  - The page says to use Share, then Add to Home Screen, and to tap from
+    the icon. The inbox's CSP allows `manifest-src 'self'`.
+- **The second try saved nothing: "Not saved: 404".** The likeliest cause
+  is Access redirecting the POST to its login, which `fetch` followed as a
+  GET.
+  - The page now posts with `redirect: "manual"` and says when Access asks
+    to sign in again.
+  - It shows the answer's text, and the Worker's 404 names the method and
+    path.
+- **Waiting approvals were never pruned.** An entry left the inbox only
+  when approved on its page. Those approved in the card, or replaced, stayed
+  until their 24 hours ran out.
+  - The inbox and the digest now keep only entries whose link still peeks
+    (`/peek`, or `/mandates/peek`) and remove the rest.
+- **`digest.show` no longer gives the agent approval links.** Only the
+  owner gets them, as in the event log.

@@ -86,9 +86,7 @@ async fn send(env: &Env, s: &Settings, title: &str, body: &str, path: &str) -> R
 pub async fn build(env: &Env, s: &Settings) -> Result<(Digest, u64)> {
     let (_, cursor) = to_instance(env, s, "/digest/cursor", &json!({})).await?;
     let after = cursor["after"].as_u64().unwrap_or_default();
-    let waiting: Vec<pages::Waiting> =
-        serde_json::from_value(super::elicit::inbox(env, s, "/approvals/list", &json!({})).await?)
-            .unwrap_or_default();
+    let waiting = page::live(env, s).await?;
     let (_, open_tasks) = to_instance(env, s, "/tasks/list", &json!({})).await?;
     let tasks = Tasks {
         last: 0,
@@ -132,6 +130,21 @@ pub async fn build(env: &Env, s: &Settings) -> Result<(Digest, u64)> {
         now(),
     );
     Ok((d, last))
+}
+
+/// `digest.show`: the digest now; an approval's page link only for the owner.
+///
+/// # Errors
+///
+/// When a binding fails.
+pub async fn show(env: &Env, s: &Settings, owner: bool) -> Result<Value> {
+    let (mut d, _) = build(env, s).await?;
+    if !owner {
+        for a in &mut d.approvals {
+            a.2 = format!("/approve/{}", a.0);
+        }
+    }
+    Ok(json!({ "lines": d.lines(), "needs_owner": d.needs_owner(), "digest": d }))
 }
 
 /// The hourly digest: pushed when it needs the owner and differs from the last one pushed.
@@ -228,6 +241,7 @@ pub fn is_page(path: &str) -> bool {
             | "/approvals/vapid"
             | "/approvals/push"
             | "/approvals/latest.json"
+            | "/approvals/manifest.json"
     )
 }
 
@@ -255,6 +269,12 @@ pub async fn page_serve(
     }
     match (req.method(), req.path().as_str()) {
         (Method::Get, "/sw.js") => script(SERVICE_WORKER),
+        (Method::Get, "/approvals/manifest.json") => {
+            let mut r = Response::ok(pages::MANIFEST)?;
+            r.headers_mut()
+                .set("content-type", "application/manifest+json")?;
+            Ok(r)
+        }
         (Method::Get, "/approvals/push.js") => script(PAGE_SCRIPT),
         (Method::Get, "/approvals/vapid") => match platform::secret(env, VAPID_VAR)
             .ok()
@@ -280,6 +300,6 @@ pub async fn page_serve(
             let (status, v) = to_instance(env, s, "/push/add", &add).await?;
             Ok(Response::from_json(&v)?.with_status(status))
         }
-        _ => Response::error("not found", 404),
+        (method, path) => Response::error(format!("{method:?} {path} isn't served here"), 404),
     }
 }
