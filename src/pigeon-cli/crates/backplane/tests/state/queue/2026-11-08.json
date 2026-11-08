@@ -1,0 +1,15 @@
+{
+  "current": {
+    "id": "r1",
+    "kind": "apply",
+    "plan": "p1",
+    "attempts": 1
+  },
+  "waiting": [
+    {
+      "id": "r2",
+      "kind": "plan",
+      "attempts": 0
+    }
+  ]
+}

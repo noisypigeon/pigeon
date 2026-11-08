@@ -26,7 +26,6 @@ pub const OPERATIONS: [&str; 4] = [
 
 /// What a grant lets its redeemer do.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct Grant {
     /// The operation.
     pub operation: String,

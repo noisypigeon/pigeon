@@ -273,3 +273,29 @@ a mandate that may deploy until step 5's rehearsal has passed.
   - moves every change, grant, mandate and approval;
   - keeps the owner's authenticator;
   - leaves the approval links on `control.pigeon.dev` working.
+
+## Amendments
+
+### 2026-11-08: Step 1 lands: stored types tolerate later fields
+
+- **Tolerant now:** every type in Durable Object storage, and every type
+  that the Worker and a job (which may run a different build) exchange:
+  - `Change`, `Event`, `Grant`, `Waiting`, `Mandate`, `Pipeline` and `Queue`;
+  - the types nested in them;
+  - `JobSpec` and `Report`.
+- **Strict still:** inputs a person writes or calls with, namely
+  `approvals::Rules`, `Instance`, `Paths` and `wire::Request`.
+- **`tests/state/<type>/<date>.json`** holds each stored type as this
+  release writes it. `tests/state.rs` checks three things:
+  - every fixture still decodes;
+  - the newest fixture round-trips, so adding, renaming or dropping a field
+    fails until a new fixture is added beside the old one;
+  - the newest fixture decodes with a field added to every struct, as a
+    later release might write it.
+- **A new enum variant follows two releases,** as a dropped field does:
+  - the first release reads the variant;
+  - a release after the rollback window writes it.
+
+  Because the version before can't decode a variant it doesn't know, the
+  owner reviews any change that adds a stored variant. A fixture can't
+  catch it.

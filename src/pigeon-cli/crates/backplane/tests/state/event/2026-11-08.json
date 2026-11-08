@@ -1,0 +1,33 @@
+{
+  "type": "bounded",
+  "sha": "4b9d607fc484588dfbd8797bab2b99b7e4963204",
+  "violations": [
+    "a violation"
+  ],
+  "checks": [
+    {
+      "name": "fmt",
+      "argv": [
+        "cargo",
+        "fmt",
+        "--all",
+        "--",
+        "--check"
+      ]
+    }
+  ],
+  "tiers": {
+    "authorize": {
+      "tier": "code",
+      "rule": "guarded: src/pigeon-cli/crates/backplane/**"
+    },
+    "merge": {
+      "tier": "confirm",
+      "rule": "routine"
+    },
+    "close": {
+      "tier": "auto",
+      "rule": "spike"
+    }
+  }
+}

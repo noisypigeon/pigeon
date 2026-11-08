@@ -1,0 +1,21 @@
+{
+  "id": "49-bound",
+  "remote": "https://git.example/pigeon.git",
+  "token": "t",
+  "base": "main",
+  "branch": "change/49-mandate-auto",
+  "sha": "4b9d607fc484588dfbd8797bab2b99b7e4963204",
+  "number": 49,
+  "title": "feat(backplane): x",
+  "plan": "p",
+  "scope": [
+    "a/**"
+  ],
+  "job": "bound",
+  "argv": [],
+  "approver": "owner@example.com",
+  "since": "64c7fd64a3ef0fa582bd8c9fa53e244fb7919736",
+  "env": {
+    "K": "v"
+  }
+}

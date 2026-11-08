@@ -1,0 +1,30 @@
+{
+  "last": 2,
+  "list": [
+    {
+      "id": 2,
+      "adr": ".claude/decisions/2026-11-08-security-tiered-approvals-task-mandates.md",
+      "summary": "step 6",
+      "scope": [
+        "src/pigeon-cli/crates/backplane/**"
+      ],
+      "may_deploy": true,
+      "budget": 5,
+      "used": 1,
+      "hours": 24,
+      "expires": 1794199000,
+      "state": "paused",
+      "granted_by": "owner@example.com",
+      "why": "the deploy of x failed",
+      "merged": [
+        49
+      ]
+    }
+  ],
+  "grants": {
+    "00": [
+      2,
+      1794199000
+    ]
+  }
+}

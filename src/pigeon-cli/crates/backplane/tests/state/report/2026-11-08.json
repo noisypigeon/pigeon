@@ -1,0 +1,52 @@
+{
+  "id": "49-bound",
+  "outcome": "passed",
+  "log": "pigeon: /tmp/pigeon-build",
+  "violations": [
+    "a violation"
+  ],
+  "checks": [
+    {
+      "name": "fmt",
+      "argv": [
+        "cargo",
+        "fmt",
+        "--all",
+        "--",
+        "--check"
+      ]
+    }
+  ],
+  "merged": "64c7fd64a3ef0fa582bd8c9fa53e244fb7919736",
+  "published": [
+    "sites/docs"
+  ],
+  "workers": [
+    "pigeon-control: a → b"
+  ],
+  "build": {
+    "sha": "64c7fd64a3ef0fa582bd8c9fa53e244fb7919736",
+    "sha256": "96fe65d24d3cdc6ea728c8daac2c38446b728cbc3e0e1b7c0c683a0fa8b7ef41"
+  },
+  "images": {
+    "source": "391ce969ad2d4ed36b80fcea43822e9e25f9ba06",
+    "images": {
+      "pigeon-control/Checker": "registry.example/pigeon-ci@sha256:00",
+      "pigeon-control/Runner": "registry.example/pigeon-ci@sha256:00"
+    }
+  },
+  "tiers": {
+    "authorize": {
+      "tier": "code",
+      "rule": "guarded: src/pigeon-cli/crates/backplane/**"
+    },
+    "merge": {
+      "tier": "confirm",
+      "rule": "routine"
+    },
+    "close": {
+      "tier": "auto",
+      "rule": "spike"
+    }
+  }
+}

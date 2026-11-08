@@ -67,7 +67,6 @@ input{{font:inherit;font-size:1.4rem;letter-spacing:.3rem;width:9rem;padding:.4r
 
 /// One approval waiting in the inbox.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct Waiting {
     /// The change.
     pub number: u32,

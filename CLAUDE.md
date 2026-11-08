@@ -79,6 +79,10 @@ belong in the ADR, never in the file.
   to be built on Cloudflare,
   platform state to live in R2, and jobs to run on two Container classes, per
   [`2026-11-06-development-control-plane-approvals-images-state.md`](.claude/decisions/2026-11-06-development-control-plane-approvals-images-state.md).
+- Durable Object state and job wire types tolerate unknown fields; a new
+  field has a default, a field or enum variant is dropped or added over two
+  releases, and `backplane/tests/state/` fixtures check it, per
+  [`2026-11-08-runtime-blue-green-self-standup.md`](.claude/decisions/2026-11-08-runtime-blue-green-self-standup.md).
 - Approvals have three tiers chosen by the control plane from
   `.config/approvals.yaml` on `main`: auto (standing rules, or a
   mandate the owner granted once for a task), confirm (one tap) and code (the

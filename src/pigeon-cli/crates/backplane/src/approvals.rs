@@ -21,7 +21,6 @@ pub enum Tier {
 
 /// A tier and the rule that chose it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct Tiered {
     /// The tier.
     pub tier: Tier,
@@ -31,7 +30,6 @@ pub struct Tiered {
 
 /// The tiers of a change's operations, for one head.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct Tiers {
     /// Authorizing its plan, from its scope.
     pub authorize: Tiered,

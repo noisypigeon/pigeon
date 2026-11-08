@@ -21,7 +21,6 @@ pub enum Kind {
 
 /// One run.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct Run {
     /// Its ID.
     pub id: String,
@@ -69,7 +68,6 @@ impl std::error::Error for QueueError {}
 
 /// One instance's runs.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct Queue {
     /// The run in progress, if any.
     #[serde(default, skip_serializing_if = "Option::is_none")]

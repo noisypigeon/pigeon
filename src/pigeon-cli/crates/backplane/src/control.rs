@@ -231,7 +231,6 @@ pub fn push(event: &Value) -> Option<Push> {
 
 /// What a job's Container is told: where to fetch, what to check out, and what to run.
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct JobSpec {
     /// Its ID, unique per change, head and job.
     pub id: String,
@@ -342,7 +341,6 @@ pub enum Outcome {
 
 /// A job's report.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct Report {
     /// Its ID.
     pub id: String,
@@ -381,7 +379,6 @@ pub struct Report {
 /// they were built from, and each container's registry reference by `<worker>/<Class>`; see
 /// `.claude/decisions/2026-11-07-development-job-images-on-cloudflare.md` §4.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct Images {
     /// The commit they were built from.
     pub source: String,
@@ -392,7 +389,6 @@ pub struct Images {
 /// `main`'s `pigeon` built at a commit and stored at `builds/<sha>/pigeon`; see
 /// `.claude/decisions/2026-11-07-development-job-images-on-cloudflare.md` §3.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct Build {
     /// The commit of `main` it was built from.
     pub sha: String,
@@ -637,7 +633,6 @@ pub fn deploy_spec(
 
 /// One deploy, as `deploy.status` shows it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct Deployed {
     /// The commit of `main`.
     pub sha: String,
@@ -659,7 +654,6 @@ pub struct Deployed {
 /// `main`'s pipeline: at most one deploy at a time, always of the newest push, and only after
 /// the last one ended; the `MainRun` Durable Object keeps it.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct Pipeline {
     /// The last commit deployed without a failure.
     #[serde(default, skip_serializing_if = "Option::is_none")]

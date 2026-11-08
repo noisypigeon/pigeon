@@ -64,7 +64,6 @@ impl State {
 
 /// An approval: who, when, and for a merge the head SHA it covers.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct Approval {
     /// The approver's identity.
     pub by: String,
@@ -93,7 +92,6 @@ pub enum JobStatus {
 
 /// One job on one head.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct Job {
     /// Its name: [`BOUND`], or a name `change.scope` gave.
     pub name: String,
@@ -124,7 +122,6 @@ impl Job {
 
 /// A check `change.scope` named, as the bound job reports it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct Check {
     /// Its name.
     pub name: String,
@@ -134,7 +131,6 @@ pub struct Check {
 
 /// A change.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct Change {
     /// Its number, as in `change/<number>-<slug>`.
     pub number: u32,
@@ -178,7 +174,7 @@ pub struct Change {
 
 /// Something that happened to a change.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum Event {
     /// The owner approved its plan.
     ApprovePlan {

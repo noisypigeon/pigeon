@@ -35,7 +35,6 @@ pub enum State {
 
 /// A task approved once.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct Mandate {
     /// Its number.
     pub id: u32,
