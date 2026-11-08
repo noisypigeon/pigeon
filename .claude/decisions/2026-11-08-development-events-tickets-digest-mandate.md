@@ -384,3 +384,75 @@ What the pieces offer:
     replacing a label on purpose isn't one; the event log keeps the record.
 - **Owner operations need no ticket.** Access names the owner, and a
   mandate acts as a person.
+
+### 2026-11-08: Plan: busy Durable Objects keep old code, so objects check their version
+
+- **What was seen.**
+  - After !67 deployed, the Worker answered `session.start` but the
+    `Instance` object answered "not found" for `/tickets/start`, the route
+    !67 added. Routes !64 had added answered, so the object still ran !66's
+    code.
+  - A session's `Monitor` was long-polling the event log. Each poll has the
+    Worker call the `Instance` every 2 seconds for up to 50.
+  - With the monitor stopped for about a minute, the next call reached !67's
+    code.
+  - So an object that never goes quiet may keep its old version long after
+    a deploy, and every session following events keeps it busy.
+- **The cause isn't proven.** Cloudflare restarts Durable Objects on a
+  deploy, but what happens to one with a steady stream of requests isn't
+  documented. Step 1 measures it before anything relies on it.
+- **The fix: every call to an object names the Worker's version, and an
+  older object resets itself.**
+  - The Worker sends `X-Pigeon-Version`, the version ID from
+    `CF_VERSION_METADATA`, on each call to an `Instance`, `ChangeRun`,
+    `MainRun` or job object.
+  - The object compares it with its own version ID. An older object calls
+    `ctx.abort()` (through `js_sys::Reflect`, since workers-rs doesn't wrap
+    it) and answers 503 `stale-version`.
+  - The caller retries once. Storage survives an abort, so nothing is lost.
+  - A newer object never aborts for an older caller. During a deploy, an
+    old Worker isolate's call reaches the new object and is served as now.
+- **The long poll leans on the object less.** `events.wait` looks every 5
+  seconds, not every 2, and returns on the first new event as now. A poll
+  of 50 seconds then makes 10 calls, not 25.
+- **The deploy checks its objects.**
+  - `/healthz` asks the `Instance` and `MainRun` for their versions, and
+    answers 503 until both match the Worker's.
+  - The deploy job's health check already waits up to two minutes for
+    `/healthz` with the new version. It now waits for the objects too, and
+    reports a mismatch as a failed deploy. A failed deploy rolls back and
+    pauses mandates, as any failed deploy does.
+- **Loose ends:**
+  - `session.end` revokes a label's ticket, open to the agent since it only
+    takes power away. The trial label `ticket-trial` is ended with it.
+  - Mandate 1 has one merge and some hours left. Steps 2 to 4 below stay
+    inside its scope (backplane's crate) and touch no guarded file, so they
+    use its last merge. The mandate is then used up.
+  - The session that wrote this ADR starts its ticket with `session_start`
+    and passes it from then on. A session already running keeps its MCP
+    tool list from when it started, so it sends `ticket` through
+    `/v0/run`, or reconnects.
+
+#### Steps
+
+1. **Measure.** With a monitor polling, deploy a trivial Worker change, and
+   watch `/healthz`'s new object versions to see how long the `Instance`
+   keeps the old one. This runs with step 3's change: `/healthz` reports
+   the objects' versions before anything acts on them.
+2. **Handshake.** `X-Pigeon-Version` on every call to an object; the
+   abort, the 503 and the one retry; tests of the comparison.
+3. **`/healthz` and the deploy job.** The objects' versions; the deploy job
+   waits for them to match.
+4. **Polling and tickets.** `events.wait` looks every 5 seconds;
+   `session.end` added; `ticket-trial` ended.
+
+#### Verification
+
+- **A deploy while a monitor polls:**
+  - the next call after it reaches the new code, with one
+    `stale-version` retry at most;
+  - `/healthz` shows matching versions, and the deploy reports passed.
+- **A forced mismatch** (an object kept on an old version in a test) makes
+  the deploy fail and roll back.
+- **`session.end`** on `ticket-trial` frees the label; a second end is a
+  no-op.
