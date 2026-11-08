@@ -167,6 +167,7 @@ impl Operation {
             || self.name.starts_with("mandate.")
             || self.name.starts_with("task.")
             || self.name.starts_with("events.")
+            || self.name.starts_with("digest.")
     }
 }
 
@@ -329,6 +330,13 @@ const CATALOG: &[Operation] = &[
             arg("budget", false, Kind::Text),
             arg("hours", false, Kind::Text),
         ],
+    },
+    Operation {
+        name: "digest.show",
+        engine: Engine::Backplane,
+        effect: Effect::Read,
+        summary: "The owner's digest now: approvals waiting, tasks unclaimed two hours, paused mandates, failed deploys and changes merged without the owner; `needs_owner` says whether it would be pushed",
+        args: &[],
     },
     Operation {
         name: "events.wait",

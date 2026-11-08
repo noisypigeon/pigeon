@@ -49,4 +49,8 @@ bindings:
 # DEPLOYER_ACCESS_ID, DEPLOYER_ACCESS_SECRET: an Access service token, for /healthz only.
 # BUILDS_ACCESS_ID, BUILDS_ACCESS_SECRET: an Access service token job Containers download main's
 # pigeon with, for /builds/ only; see .claude/decisions/2026-11-07-development-job-images-on-cloudflare.md.
-secrets: [BACKPLANE_TOKEN, ARTIFACTS_TOKEN, ACCESS_TEAM, ACCESS_AUD, DEPLOY_TOKEN, SESSION_KEY, APPROVER_TOTP, APPROVER, WORKERS_DEPLOY_TOKEN, DEPLOY_OUTPUTS, DEPLOY_IMAGES, DEPLOYER_ACCESS_ID, DEPLOYER_ACCESS_SECRET, BUILDS_ACCESS_ID, BUILDS_ACCESS_SECRET]
+# PUSH_VAPID_KEY: the Web Push key, from `pigeon backplane vapid-key`; optional, see
+# .claude/decisions/2026-11-08-development-events-tickets-digest-mandate.md §3.
+secrets: [BACKPLANE_TOKEN, ARTIFACTS_TOKEN, ACCESS_TEAM, ACCESS_AUD, DEPLOY_TOKEN, SESSION_KEY, APPROVER_TOTP, APPROVER, WORKERS_DEPLOY_TOKEN, DEPLOY_OUTPUTS, DEPLOY_IMAGES, DEPLOYER_ACCESS_ID, DEPLOYER_ACCESS_SECRET, BUILDS_ACCESS_ID, BUILDS_ACCESS_SECRET, PUSH_VAPID_KEY]
+# The owner's hourly digest.
+crons: ["17 * * * *"]

@@ -246,9 +246,13 @@ async fn deploy_event(env: &Env, sha: &str, report: &Report) {
         )
     };
     let summary = format!("the deploy of {} {how}", sha.get(..12).unwrap_or(sha));
-    if let Ok(s) = platform::Settings::from(env)
-        && let Err(e) = super::events::append(env, &s, kind, None, None, &summary, false).await
-    {
+    let Ok(s) = platform::Settings::from(env) else {
+        return;
+    };
+    if let Err(e) = super::events::append(env, &s, kind, None, None, &summary, false).await {
         worker::console_error!("deploy event: {e}");
+    }
+    if report.outcome != Outcome::Passed {
+        super::push::notify(env, &s, "Deploy failed", &summary, "/approvals").await;
     }
 }

@@ -44,6 +44,7 @@ pub fn run(command: BackplaneCommand) -> i32 {
         BackplaneCommand::Serve(args) => serve(&args),
         BackplaneCommand::Jobs(args) => jobs(&args),
         BackplaneCommand::TotpSecret => totp_secret(),
+        BackplaneCommand::VapidKey => vapid_key(),
     }
 }
 
@@ -62,6 +63,28 @@ fn totp_secret() -> i32 {
     );
     println!("{secret}");
     SUCCESS
+}
+
+/// A random P-256 private key, base64url, on stdout, and its public key on stderr.
+fn vapid_key() -> i32 {
+    use std::io::Read;
+    for _ in 0..8 {
+        let mut bytes = [0u8; 32];
+        if let Err(e) =
+            std::fs::File::open("/dev/urandom").and_then(|mut f| f.read_exact(&mut bytes))
+        {
+            eprintln!("backplane: no randomness: {e}");
+            return INVALID;
+        }
+        let secret = backplane::push::b64url(&bytes);
+        if let Ok(v) = backplane::push::Vapid::from_secret(&secret) {
+            eprintln!("Web Push public key: {}", v.public_key());
+            println!("{secret}");
+            return SUCCESS;
+        }
+    }
+    eprintln!("backplane: no valid key after 8 tries");
+    INVALID
 }
 
 fn serve(args: &ServeArgs) -> i32 {

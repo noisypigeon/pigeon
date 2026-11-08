@@ -133,7 +133,12 @@ fn the_inbox_links_each_waiting_approval_escaped() {
         html.find("change 4").expect("4") < html.find("change 3").expect("3"),
         "newest first"
     );
-    assert!(!html.contains("<script"));
+    assert_eq!(
+        html.matches("<script").count(),
+        1,
+        "only the page's own push script"
+    );
+    assert!(html.contains("<script src=\"/approvals/push.js\"></script>"));
     assert!(approve::inbox(&[]).contains("Nothing is waiting."));
 }
 
@@ -173,5 +178,20 @@ fn a_confirm_grant_asks_for_no_code() {
     assert!(
         approve::page(&c, &unknown, "tok").contains("name=\"code\""),
         "a grant with no tier asks for the code"
+    );
+}
+
+#[test]
+fn the_inbox_shows_the_digest_and_offers_to_notify_this_device() {
+    let html = approve::inbox_with(&[], &["waiting: <b>x</b>".to_string()]);
+    assert!(html.contains("<h2>Digest</h2>"));
+    assert!(html.contains("waiting: &lt;b&gt;x&lt;/b&gt;"), "escaped");
+    assert!(html.contains("id=\"notify\""));
+    assert!(html.contains("<script src=\"/approvals/push.js\"></script>"));
+    assert!(approve::INBOX_CSP.contains("script-src 'self'"));
+    assert!(approve::INBOX_CSP.contains("worker-src 'self'"));
+    assert!(
+        !approve::CSP.contains("script-src"),
+        "other pages run no script"
     );
 }

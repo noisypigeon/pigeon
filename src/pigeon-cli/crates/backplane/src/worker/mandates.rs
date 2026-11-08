@@ -152,7 +152,13 @@ pub async fn approves(
         serde_json::from_value::<Decision>(v["decision"].clone()),
     ) {
         (200, Ok(Decision::Allow)) => Ok(id),
-        (200, Ok(Decision::Ask(why) | Decision::Pause(why))) => {
+        (200, Ok(Decision::Pause(why))) => {
+            worker::console_log!("mandate paused: {why}");
+            let body = format!("mandate {}: {why}", change.mandate.unwrap_or_default());
+            super::push::notify(env, s, "Mandate paused", &body, "/approvals").await;
+            Ok(None)
+        }
+        (200, Ok(Decision::Ask(why))) => {
             worker::console_log!("mandate: the owner approves {operation}: {why}");
             Ok(None)
         }

@@ -281,3 +281,41 @@ What the pieces offer:
 
   It prints one line per event, which wakes the session, and carries
   `after` forward. On re-arming, `AFTER` is the last id seen.
+
+### 2026-11-08: Step 4 lands: Web Push and the hourly digest
+
+- **Pushes carry no payload.**
+  - A push to an empty body needs only VAPID's ES256 signature (RFC 8292),
+    not RFC 8291's payload encryption.
+  - The service worker, `/sw.js`, then fetches `/approvals/latest.json`
+    from the control plane, behind Access, and shows it. A tap opens its
+    page.
+  - So the Worker signs with `p256` (RustCrypto, deterministic RFC 6979
+    nonces, no randomness in wasm). It encrypts nothing.
+- **Subscribing.**
+  - `/approvals` shows the digest above the waiting approvals, and a
+    "Notify this device" button. Its script, `/approvals/push.js`, reads
+    the public key from `/approvals/vapid` and posts the subscription to
+    `/approvals/push`, same-origin only.
+  - The `Instance` keeps up to 10 devices and drops one its push service
+    answers 404 or 410 for.
+  - The inbox's CSP allows its own script, its fetches and its service
+    worker. Every other page still runs no script.
+- **The key.** `pigeon backplane vapid-key` prints a private key for
+  `pigeon cobot workers secrets put control PUSH_VAPID_KEY`, and its public
+  half on stderr. Without the secret, nothing is pushed and `/approvals/vapid`
+  answers 503. So this deploys before the owner sets it.
+- **What is pushed:**
+  - an approval offered: "Approval waiting", opening its page;
+  - a mandate paused by a change outside its scope;
+  - a deploy that failed. A failed deploy also pauses mandates, so that push
+    covers that case;
+  - the hourly digest, when it needs the owner and differs from the last
+    digest pushed.
+- **The digest.**
+  - A cron at `17 * * * *` builds it from the instance's state and the
+    events after its cursor.
+  - The merges made without the owner are the `change.approved` events by
+    a mandate or a standing rule.
+  - `digest.show` (MCP `digest_show`) returns it now, and `/approvals`
+    shows it.

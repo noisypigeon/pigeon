@@ -14,9 +14,13 @@ use crate::grants::Grant;
 use crate::wire;
 
 pub(super) fn html(status: u16, body: &str) -> Result<Response> {
+    html_with(status, body, approve::CSP)
+}
+
+fn html_with(status: u16, body: &str, csp: &str) -> Result<Response> {
     let mut r = Response::from_html(body)?.with_status(status);
     let h = r.headers_mut();
-    h.set("content-security-policy", approve::CSP)?;
+    h.set("content-security-policy", csp)?;
     h.set("cache-control", "no-store")?;
     h.set("referrer-policy", "same-origin")?;
     h.set("x-content-type-options", "nosniff")?;
@@ -83,7 +87,15 @@ pub async fn serve(req: Request, env: &Env, s: &Settings, who: &Identity) -> Res
         let v = elicit::inbox(env, s, "/approvals/list", &json!({})).await?;
         let mut list: Vec<Waiting> = serde_json::from_value(v).unwrap_or_default();
         list.retain(|w| w.expires > now());
-        return html(200, &approve::inbox(&list));
+        let digest = match super::push::build(env, s).await {
+            Ok((d, _)) => d.lines(),
+            Err(e) => vec![format!("the digest is unavailable: {e}")],
+        };
+        return html_with(
+            200,
+            &approve::inbox_with(&list, &digest),
+            approve::INBOX_CSP,
+        );
     }
     let Some(n) = number(&path) else {
         return refused(404, "not found");

@@ -25,6 +25,9 @@ pub enum BackplaneCommand {
     /// `pigeon cobot workers secrets put … APPROVER_TOTP`, and its `otpauth://` URI on stderr,
     /// for the authenticator app
     TotpSecret,
+    /// Print a new Web Push key: its private half, base64url, on stdout, for
+    /// `pigeon cobot workers secrets put … PUSH_VAPID_KEY`, and its public half on stderr
+    VapidKey,
 }
 
 /// `pigeon backplane jobs` arguments.

@@ -31,6 +31,7 @@ cobot = { workspace = true, optional = true }
 futures-util = { workspace = true, optional = true }
 gantry = { workspace = true, optional = true }
 hmac.workspace = true
+p256.workspace = true
 sentinel = { workspace = true, optional = true }
 serde.workspace = true
 serde-saphyr = { workspace = true, optional = true }

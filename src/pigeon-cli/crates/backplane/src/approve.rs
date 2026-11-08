@@ -11,6 +11,9 @@ use crate::grants::Grant;
 /// The page's Content-Security-Policy: no scripts, no external loads, forms only to itself.
 pub const CSP: &str = "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'";
 
+/// The inbox's policy: [`CSP`], plus its own script, its fetches and its service worker.
+pub const INBOX_CSP: &str = "default-src 'none'; style-src 'unsafe-inline'; script-src 'self'; connect-src 'self'; worker-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'";
+
 /// `s` escaped for HTML text and attribute values.
 #[must_use]
 pub fn escape(s: &str) -> String {
@@ -83,7 +86,21 @@ pub struct Waiting {
 /// The inbox: every approval waiting, newest first, each a link to its page.
 #[must_use]
 pub fn inbox(waiting: &[Waiting]) -> String {
+    inbox_with(waiting, &[])
+}
+
+/// The inbox, under the digest's `lines` and a button that subscribes this device to pushes;
+/// see `.claude/decisions/2026-11-08-development-events-tickets-digest-mandate.md` §3, §4.
+#[must_use]
+pub fn inbox_with(waiting: &[Waiting], digest: &[String]) -> String {
     let mut b = String::from("<h1>Waiting for you</h1>");
+    if !digest.is_empty() {
+        b.push_str("<h2>Digest</h2><ul>");
+        for line in digest {
+            let _ = write!(b, "<li>{}</li>", escape(line));
+        }
+        b.push_str("</ul>");
+    }
     if waiting.is_empty() {
         b.push_str("<p>Nothing is waiting.</p>");
     } else {
@@ -105,6 +122,10 @@ pub fn inbox(waiting: &[Waiting]) -> String {
         }
         b.push_str("</ul>");
     }
+    b.push_str(
+        "<p><button id=\"notify\" type=\"button\">Notify this device</button></p>\
+         <script src=\"/approvals/push.js\"></script>",
+    );
     shell("Waiting for you", &b)
 }
 

@@ -231,7 +231,10 @@ belong in the ADR, never in the file.
   tool `events_wait`) long-polls the instance's event log after an event
   number, for a session or changes. Arm `Monitor` with a `curl` loop over
   it that prints one line per event, and act on each line rather than
-  calling `change_status` on a timer, per
+  calling `change_status` on a timer. The owner is pushed to (Web Push, from
+  `/approvals`, with `PUSH_VAPID_KEY` from `pigeon backplane vapid-key`)
+  only when an approval waits, a mandate pauses, a deploy fails or the
+  hourly digest (`digest_show`) needs them, per
   [`2026-11-08-development-events-tickets-digest-mandate.md`](.claude/decisions/2026-11-08-development-events-tickets-digest-mandate.md).
 - `pigeon backplane jobs --listen ADDR`: a job Container's server, signed under
   `BACKPLANE_TOKEN`; the control plane's `Checker` runs it. The Worker

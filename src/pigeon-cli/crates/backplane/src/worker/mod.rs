@@ -17,6 +17,7 @@ mod main_run;
 mod mandates;
 mod merges;
 mod platform;
+mod push;
 mod tasks;
 
 use serde_json::{Value, json};
@@ -66,6 +67,9 @@ async fn fetch(mut req: Request, env: Env, _ctx: worker::Context) -> Result<Resp
     }
     if req.path().starts_with("/git/") {
         return gitdoor::serve(req, &env, &settings, &who).await;
+    }
+    if push::is_page(&req.path()) {
+        return push::page_serve(req, &env, &settings, &who).await;
     }
     if req.path().starts_with("/approve/") || req.path() == "/approvals" {
         return approve::serve(req, &env, &settings, &who).await;
@@ -179,6 +183,14 @@ async fn offer(
                 None,
                 &said,
                 false,
+            )
+            .await;
+            push::notify(
+                env,
+                settings,
+                "Approval waiting",
+                &said,
+                &format!("/approve/{number}"),
             )
             .await;
             let linked = format!("{said}: {link}");
@@ -466,6 +478,11 @@ async fn dispatch(
                     .await?;
             Ok((None, respond(operation, 200, json!({ "changes": rows }))))
         }
+        Routed::Digest => {
+            let (d, _) = push::build(env, s).await?;
+            let v = json!({ "lines": d.lines(), "needs_owner": d.needs_owner(), "digest": d });
+            Ok((None, respond(operation, 200, v)))
+        }
         Routed::Events { args } => {
             let v = events::wait(env, s, &args, who.human).await?;
             Ok((None, respond(operation, 200, v)))
@@ -612,6 +629,15 @@ fn main_stub(env: &Env, repo: &str) -> Result<worker::Stub> {
         .get_stub()
 }
 
+/// The hourly digest; see
+/// `.claude/decisions/2026-11-08-development-events-tickets-digest-mandate.md` §4.
+#[event(scheduled)]
+async fn scheduled(_event: worker::ScheduledEvent, env: Env, _ctx: worker::ScheduleContext) {
+    if let Err(e) = push::hourly(&env).await {
+        worker::console_error!("digest: {e}");
+    }
+}
+
 /// Artifacts push events: a push to a change's branch is that change's `Pushed`; a push to
 /// `main` goes to its pipeline.
 #[event(queue)]
@@ -676,6 +702,10 @@ impl DurableObject for Instance {
         if path.starts_with("/mandates/") {
             let body: Value = req.json().await?;
             return mandates::serve(&self.state, &path, body).await;
+        }
+        if path.starts_with("/push/") || path.starts_with("/digest/") {
+            let body: Value = req.json().await?;
+            return push::serve(&self.state, &path, &body).await;
         }
         if path.starts_with("/events/") {
             let body: Value = req.json().await?;
