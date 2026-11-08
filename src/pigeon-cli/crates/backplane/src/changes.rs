@@ -282,6 +282,9 @@ pub struct Change {
     /// For a reconciliation: the change it reconciles or reviews.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub parent: Option<u32>,
+    /// A head pushed while its restack ran, applied once the restack reports.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub held: Option<String>,
 }
 
 /// Something that happened to a change.
@@ -484,6 +487,7 @@ impl Change {
             merge_after: None,
             conflict: None,
             parent: None,
+            held: None,
         }
     }
 
@@ -509,11 +513,11 @@ impl Change {
         match event {
             Event::ApprovePlan { by, at } => self.approve_plan(by, at),
             Event::Pushed { sha } => {
-                if !self.on_head(&sha) {
-                    self.tiers = None;
-                    self.behind = None;
+                if !self.on_head(&sha) && self.job(RESTACK).is_some_and(|j| j.open()) {
+                    self.held = Some(sha);
+                    return Ok(Vec::new());
                 }
-                self.pushed(sha)
+                self.push(sha)
             }
             Event::Behind { main } => self.behind(main),
             Event::Restacked { sha, restack } => self.restacked(&sha, &restack),
@@ -590,6 +594,15 @@ impl Change {
         Ok(effects)
     }
 
+    /// A new head: its tiers and `behind` go with the old one.
+    fn push(&mut self, sha: String) -> Result<Vec<Effect>, Refusal> {
+        if !self.on_head(&sha) {
+            self.tiers = None;
+            self.behind = None;
+        }
+        self.pushed(sha)
+    }
+
     /// `main` moved: a checked or approved head is restacked, keeping its approval to carry.
     fn behind(&mut self, main: String) -> Result<Vec<Effect>, Refusal> {
         let Some(head) = self.head.clone() else {
@@ -617,8 +630,22 @@ impl Change {
         Ok(vec![Effect::Start(RESTACK.into())])
     }
 
-    /// The restack job's report on head `sha`.
+    /// The restack job's report on head `sha`, then a head held while it ran, if another.
     fn restacked(&mut self, sha: &str, r: &Restacked) -> Result<Vec<Effect>, Refusal> {
+        let held = self.held.take();
+        let mut effects = self.restack_report(sha, r)?;
+        if let Some(h) = held
+            && !self.on_head(&h)
+        {
+            self.carried = None;
+            self.merge_after = None;
+            effects.extend(self.push(h)?);
+        }
+        Ok(effects)
+    }
+
+    /// The restack job's report on head `sha`.
+    fn restack_report(&mut self, sha: &str, r: &Restacked) -> Result<Vec<Effect>, Refusal> {
         let pushed_first = r.to.is_some() && self.head == r.to;
         if !self.on_head(sha) && !pushed_first {
             return Ok(Vec::new());
@@ -760,6 +787,20 @@ impl Change {
     fn finished(&mut self, name: &str, sha: &str, ok: bool) -> Result<Vec<Effect>, Refusal> {
         if !self.on_head(sha) || name == BOUND {
             return Ok(Vec::new());
+        }
+        if name == RESTACK {
+            if let Some(j) = self.job(RESTACK) {
+                j.status = if ok {
+                    JobStatus::Passed
+                } else {
+                    JobStatus::Failed
+                };
+            }
+            self.carried = None;
+            return match self.held.take() {
+                Some(h) => self.push(h),
+                None => Ok(Vec::new()),
+            };
         }
         let Some(j) = self.job(name) else {
             return refuse(format!("no job `{name}`"));

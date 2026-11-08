@@ -385,6 +385,7 @@ impl DurableObject for ChangeRun {
             .map(|j| j.name.clone())
             .collect();
         let mut ended: Option<Option<String>> = None;
+        let mut restack_failed = false;
         for job in running {
             if let Some(event) = self.poll(&change, &job).await? {
                 let merge = match &event {
@@ -392,12 +393,20 @@ impl DurableObject for ChangeRun {
                     Event::MergeFailed { .. } => Some(None),
                     _ => None,
                 };
+                if let Event::Finished { job, ok: false, .. } = &event
+                    && job == crate::changes::RESTACK
+                {
+                    restack_failed = true;
+                }
                 if Self::apply(&mut change, event, &mut next).is_ok() && merge.is_some() {
                     ended = merge;
                 }
             }
         }
         self.save_after(&change, &next, wait).await?;
+        if restack_failed && let Err(e) = super::tasks::restack_failed(&self.env, &change).await {
+            worker::console_error!("restack task: {e}");
+        }
         if let Some(merged) = ended
             && let Err(e) = super::merges::ended(&self.env, &change, merged.as_deref()).await
         {

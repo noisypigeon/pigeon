@@ -165,6 +165,7 @@ impl Operation {
             || self.name.starts_with("deploy.")
             || self.name.starts_with("git.")
             || self.name.starts_with("mandate.")
+            || self.name.starts_with("task.")
     }
 }
 
@@ -327,6 +328,40 @@ const CATALOG: &[Operation] = &[
             arg("budget", false, Kind::Text),
             arg("hours", false, Kind::Text),
         ],
+    },
+    Operation {
+        name: "task.list",
+        engine: Engine::Backplane,
+        effect: Effect::Read,
+        summary: "The open tasks `session` may take: its own at once, any after 30 minutes unclaimed, such as a reconciliation to carry out",
+        args: &[arg("session", false, Kind::String)],
+    },
+    Operation {
+        name: "task.wait",
+        engine: Engine::Backplane,
+        effect: Effect::Read,
+        summary: "Waits up to `seconds` (at most 50) for an unclaimed task `session` may take, then lists them",
+        args: &[
+            arg("session", false, Kind::String),
+            arg("seconds", false, Kind::Text),
+        ],
+    },
+    Operation {
+        name: "task.claim",
+        engine: Engine::Backplane,
+        effect: Effect::Build,
+        summary: "Take task `id` for `session`, so no other session works on it",
+        args: &[
+            arg("id", true, Kind::Text),
+            arg("session", true, Kind::String),
+        ],
+    },
+    Operation {
+        name: "task.done",
+        engine: Engine::Backplane,
+        effect: Effect::Build,
+        summary: "Mark task `id` done; a task on a change that merges is done by itself",
+        args: &[arg("id", true, Kind::Text)],
     },
     Operation {
         name: "mandate.status",

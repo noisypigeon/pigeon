@@ -52,6 +52,14 @@ pub enum Routed {
         /// The state.
         state: Option<String>,
     },
+    /// A task operation, with its arguments; see
+    /// `.claude/decisions/2026-11-08-development-concurrent-agent-sessions.md` §5.
+    Task {
+        /// The operation.
+        operation: String,
+        /// Its arguments.
+        args: serde_json::Map<String, Value>,
+    },
     /// A mandate operation, with its arguments; see
     /// `.claude/decisions/2026-11-08-security-tiered-approvals-task-mandates.md` §3.
     Mandate {
@@ -158,6 +166,10 @@ pub fn route(request: &Request, by: &str, at: u64) -> Result<Routed, String> {
         "git.tokens" => Ok(Routed::GitTokens),
         "approval.wait" => Err("`approval.wait` shows a card, so it is called over MCP".into()),
         "mandate.propose" | "mandate.status" | "mandate.end" => Ok(Routed::Mandate {
+            operation: request.operation.clone(),
+            args: a.clone(),
+        }),
+        "task.list" | "task.wait" | "task.claim" | "task.done" => Ok(Routed::Task {
             operation: request.operation.clone(),
             args: a.clone(),
         }),

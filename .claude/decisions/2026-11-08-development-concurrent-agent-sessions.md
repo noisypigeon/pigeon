@@ -357,3 +357,55 @@ merge and task modules.
     the earlier one.
 - **Not yet:** step 5's tasks, so a session learns of a reconciliation
   from `change_status`'s `conflict.reconcile`, or from the digest.
+
+### 2026-11-08: Steps 5 and 6 land: tasks and limits
+
+- **Tasks live in the `Instance` Durable Object** (`backplane::tasks`).
+  - One task is open per kind and change. Kinds: `reconcile`, `review`, and
+    `restack-failed`.
+  - A task is made when a reconciliation or review is proposed, and when a
+    restack job fails.
+  - Tasks on a change are done when it merges; `task_done` closes one by
+    hand.
+  - Done tasks are kept a day.
+- **MCP tools:**
+  - `task_list` shows the open tasks a `session` may take: its own at once,
+    any after 30 minutes unclaimed, and those it took;
+  - `task_wait` waits up to 50 seconds for an unclaimed one;
+  - `task_claim` takes one for a session;
+  - `task_done` closes one.
+- **Limits are constants, not `.config/sessions.yaml`.** The Worker reads
+  no file from `main` at propose time, and a constant changes through a
+  change like any other. They are 3 open changes per session and 12 per
+  instance, checked at propose; reconciliations proposed by `pigeon` don't
+  count against them. Checks on a restacked head are already scoped by its
+  paths.
+- **Sessions keep to their own changes, by rule, not by token.**
+  - Every session holds the same agent token, so CLAUDE.md asks a session
+    to act only on changes it proposed or tasks it claimed.
+  - After its change is restacked, a session runs `git fetch` and resets
+    to the branch before pushing again, since its push would otherwise be
+    refused as non-fast-forward.
+- **Not yet:** the owner's digest of tasks unclaimed for two hours, which
+  waits for the tiered-approvals ADR's digest (its step 6).
+
+### 2026-11-08: The first live restack, and a push held while a restack runs
+
+- **!57's merge restacked open change !58 live.**
+  - !58 was approved and disjoint from !57. Its branch became one commit on
+    the new `main`, with its own message and `Change-Scope` trailers,
+    authored by `pigeon`, and its checks ran again.
+- **Its approval didn't carry.**
+  - Artifacts' push event for the new head reached !58 before the restack
+    job's report, and the push replaced !58's jobs, dropping the restack
+    job.
+  - That job is named by the old head, so its report was never read, and
+    `carried` never learned its new head.
+- **Fix: a push made while a restack runs is held,** as `held`. When the
+  restack reports:
+  - if the held head is the one it pushed, it is applied as before and the
+    approval carries;
+  - if it is another head (the session pushed meanwhile, so the restack's
+    `--force-with-lease` failed), that head is applied and nothing carries.
+
+  A failed restack likewise applies a held head.

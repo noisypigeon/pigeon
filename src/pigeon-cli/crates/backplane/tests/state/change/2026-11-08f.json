@@ -1,0 +1,91 @@
+{
+  "number": 49,
+  "slug": "mandate-auto",
+  "title": "feat(backplane): approve a change's operations inside its mandate",
+  "plan": "Step 5b of .claude/decisions/2026-11-08-security-tiered-approvals-task-mandates.md.",
+  "scope": [
+    "src/pigeon-cli/crates/backplane/**"
+  ],
+  "proposer": "agent.access",
+  "state": "checked",
+  "head": "4b9d607fc484588dfbd8797bab2b99b7e4963204",
+  "plan_approval": {
+    "by": "owner@example.com",
+    "at": 1794112217
+  },
+  "jobs": [
+    {
+      "name": "bound",
+      "argv": [],
+      "status": "passed",
+      "attempts": 1
+    },
+    {
+      "name": "fmt",
+      "argv": [
+        "cargo",
+        "fmt",
+        "--all",
+        "--",
+        "--check"
+      ],
+      "status": "passed",
+      "attempts": 1
+    },
+    {
+      "name": "merge",
+      "argv": [],
+      "status": "passed",
+      "attempts": 1
+    }
+  ],
+  "violations": [
+    "a violation"
+  ],
+  "merged_as": "64c7fd64a3ef0fa582bd8c9fa53e244fb7919736",
+  "tiers": {
+    "authorize": {
+      "tier": "code",
+      "rule": "guarded: src/pigeon-cli/crates/backplane/**"
+    },
+    "merge": {
+      "tier": "confirm",
+      "rule": "routine"
+    },
+    "close": {
+      "tier": "auto",
+      "rule": "spike"
+    }
+  },
+  "mandate": 2,
+  "session": "https://claude.ai/code/session_example",
+  "affects": [
+    "src/pigeon-cli/crates/backplane/src/merge*.rs"
+  ],
+  "behind": "dddddddddddddddddddddddddddddddddddddddd",
+  "carried": {
+    "by": "owner@example.com",
+    "at": 1794112563,
+    "from": "4b9d607fc484588dfbd8797bab2b99b7e4963204",
+    "merge": "confirm",
+    "to": "cccccccccccccccccccccccccccccccccccccccc"
+  },
+  "merge_after": "owner@example.com",
+  "conflict": {
+    "onto": "dddddddddddddddddddddddddddddddddddddddd",
+    "paths": [
+      "src/a.rs"
+    ],
+    "proposal": {
+      "slug": "reconcile-49",
+      "title": "fix: reconcile !49 with main",
+      "plan": "Reconciles !49.",
+      "scope": [
+        "src/a.rs"
+      ]
+    },
+    "reconcile": 57
+  },
+  "parent": 48,
+  "held": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+}

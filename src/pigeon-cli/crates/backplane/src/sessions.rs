@@ -101,3 +101,43 @@ pub fn overlaps(scope: &[String], affects: &[String], open: &[Open]) -> Vec<Over
     out.sort_by_key(|o| o.number);
     out
 }
+
+/// The most open changes one session holds.
+pub const MAX_PER_SESSION: usize = 3;
+
+/// The most open changes an instance holds.
+pub const MAX_OPEN: usize = 12;
+
+/// Whether a proposal for `session` fits beside the `open` changes.
+///
+/// # Errors
+///
+/// Which limit it passes, naming the open changes.
+pub fn limit(open: &[Open], session: Option<&str>) -> Result<(), String> {
+    let numbers = |o: &[&Open]| {
+        o.iter()
+            .map(|o| format!("!{}", o.number))
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
+    if open.len() >= MAX_OPEN {
+        let all: Vec<&Open> = open.iter().collect();
+        return Err(format!(
+            "{MAX_OPEN} changes are open ({}); merge or close one first",
+            numbers(&all)
+        ));
+    }
+    if let Some(s) = session {
+        let mine: Vec<&Open> = open
+            .iter()
+            .filter(|o| o.session.as_deref() == Some(s))
+            .collect();
+        if mine.len() >= MAX_PER_SESSION {
+            return Err(format!(
+                "session {s} holds {MAX_PER_SESSION} open changes ({}); merge or close one first",
+                numbers(&mine)
+            ));
+        }
+    }
+    Ok(())
+}

@@ -168,17 +168,51 @@ fn an_approved_disjoint_head_is_restacked_and_keeps_its_approval() {
 }
 
 #[test]
-fn the_push_event_may_arrive_before_the_restack_report() {
+fn a_push_during_a_restack_is_held_until_the_restack_reports() {
     let mut c = approved();
     c.apply(Event::Behind { main: MAIN.into() })
         .expect("behind");
-    c.apply(Event::Pushed { sha: C.into() })
-        .expect("pushed first");
-    check(&mut c, C, Tier::Confirm);
-    assert_eq!(c.state, State::Checked, "no report yet");
+    assert_eq!(
+        c.apply(Event::Pushed { sha: C.into() }).expect("held"),
+        [],
+        "the restack's own push, reported before the job"
+    );
+    assert_eq!((c.state, c.head.as_deref()), (State::Approved, Some(A)));
+    assert_eq!(c.held.as_deref(), Some(C));
     c.apply(restacked(Relation::Disjoint, Some(C), true))
         .expect("restacked");
-    assert_eq!(c.state, State::Approved);
+    assert_eq!(
+        (c.state, c.head.as_deref(), c.held.as_deref()),
+        (State::Pushed, Some(C), None)
+    );
+    check(&mut c, C, Tier::Confirm);
+    assert_eq!(c.state, State::Approved, "the approval carried");
+}
+
+#[test]
+fn a_sessions_push_during_a_failed_restack_becomes_the_head() {
+    let mut c = approved();
+    c.apply(Event::Behind { main: MAIN.into() })
+        .expect("behind");
+    c.apply(Event::Started {
+        job: RESTACK.into(),
+        sha: A.into(),
+    })
+    .expect("started");
+    c.apply(Event::Pushed { sha: B.into() }).expect("held");
+    let effects = c
+        .apply(Event::Finished {
+            job: RESTACK.into(),
+            sha: A.into(),
+            ok: false,
+        })
+        .expect("failed");
+    assert!(
+        effects.contains(&Effect::Start("bound".into())),
+        "{effects:?}"
+    );
+    assert_eq!((c.state, c.head.as_deref()), (State::Pushed, Some(B)));
+    assert_eq!((c.carried.clone(), c.held.clone()), (None, None));
 }
 
 #[test]

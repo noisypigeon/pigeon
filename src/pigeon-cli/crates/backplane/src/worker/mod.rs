@@ -16,6 +16,7 @@ mod main_run;
 mod mandates;
 mod merges;
 mod platform;
+mod tasks;
 
 use serde_json::{Value, json};
 use worker::{
@@ -431,6 +432,13 @@ async fn dispatch(
                     .await?;
             Ok((None, respond(operation, 200, json!({ "changes": rows }))))
         }
+        Routed::Task {
+            operation: op,
+            args,
+        } => {
+            let (status, v) = tasks::run(env, s, &op, &args).await?;
+            Ok((None, respond(operation, status, v)))
+        }
         Routed::Mandate {
             operation: op,
             args,
@@ -448,9 +456,14 @@ async fn propose(
     operation: &str,
     mut change: Change,
 ) -> Result<(Option<String>, WireResponse)> {
-    let open = platform::d1_rows(env, &control::open(&s.instance, &s.repo)).await?;
-    let overlaps =
-        crate::sessions::overlaps(&change.scope, &change.affects, &control::open_rows(&open));
+    let open =
+        control::open_rows(&platform::d1_rows(env, &control::open(&s.instance, &s.repo)).await?);
+    if change.proposer != crate::reconcile::PROPOSER
+        && let Err(why) = crate::sessions::limit(&open, change.session.as_deref())
+    {
+        return Ok((None, respond(operation, 409, json!(why))));
+    }
+    let overlaps = crate::sessions::overlaps(&change.scope, &change.affects, &open);
     for _ in 0..3 {
         let rows =
             platform::d1_rows(env, &control::next_number(&s.instance, &s.repo, s.floor)).await?;
@@ -625,6 +638,10 @@ impl DurableObject for Instance {
         if path.starts_with("/mandates/") {
             let body: Value = req.json().await?;
             return mandates::serve(&self.state, &path, body).await;
+        }
+        if path.starts_with("/tasks/") {
+            let body: Value = req.json().await?;
+            return tasks::serve(&self.state, &path, &body).await;
         }
         if path.starts_with("/merges/") {
             let body: Value = req.json().await?;

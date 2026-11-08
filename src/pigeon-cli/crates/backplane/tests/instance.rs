@@ -139,6 +139,8 @@ fn catalog_names_are_unique_and_dotted() {
             ("sites.build", Effect::Build),
             ("sites.publish", Effect::Apply),
             ("mandate.propose", Effect::Plan),
+            ("task.claim", Effect::Build),
+            ("task.done", Effect::Build),
             ("mandate.end", Effect::Build),
             ("approval.wait", Effect::Build),
             ("deploy.retry", Effect::Build),

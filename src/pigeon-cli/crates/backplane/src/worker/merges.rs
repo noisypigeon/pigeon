@@ -61,6 +61,9 @@ pub async fn ask(env: &Env, s: &Settings, number: u32, by: &str) -> Result<(u16,
 /// When a binding fails.
 pub async fn ended(env: &Env, c: &Change, merged: Option<&str>) -> Result<()> {
     let s = Settings::from(env)?;
+    if merged.is_some() {
+        super::tasks::close_for(env, &s, c.number).await?;
+    }
     if let Some(main) = merged {
         let rows = platform::d1_rows(env, &control::open(&s.instance, &s.repo)).await?;
         let body = serde_json::to_value(Event::Behind {
@@ -121,11 +124,17 @@ pub async fn reconcile(
     let mut change = Change::propose(0, &p.slug, &p.title, &p.plan, p.scope, PROPOSER);
     change.session = session;
     change.parent = Some(parent);
+    let session = change.session.clone();
     let (number, r) = super::propose(env, &s, "change.propose", change).await?;
     if !r.ok {
         worker::console_warn!("reconcile {parent}: {}", r.violations.join("; "));
     }
-    Ok(number.and_then(|n| n.parse().ok()))
+    let number: Option<u32> = number.and_then(|n| n.parse().ok());
+    if let Some(n) = number {
+        let kind = p.slug.split('-').next().unwrap_or("reconcile");
+        super::tasks::add(env, &s, kind, n, Some(parent), session, &p.title).await?;
+    }
+    Ok(number)
 }
 
 async fn merge(env: &Env, s: &Settings, number: u32, by: &str) -> Result<(u16, Value)> {
