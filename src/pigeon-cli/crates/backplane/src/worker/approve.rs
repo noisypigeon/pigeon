@@ -13,7 +13,7 @@ use crate::changes::Change;
 use crate::grants::Grant;
 use crate::wire;
 
-fn html(status: u16, body: &str) -> Result<Response> {
+pub(super) fn html(status: u16, body: &str) -> Result<Response> {
     let mut r = Response::from_html(body)?.with_status(status);
     let h = r.headers_mut();
     h.set("content-security-policy", approve::CSP)?;
@@ -23,7 +23,7 @@ fn html(status: u16, body: &str) -> Result<Response> {
     Ok(r)
 }
 
-fn refused(status: u16, why: &str) -> Result<Response> {
+pub(super) fn refused(status: u16, why: &str) -> Result<Response> {
     html(status, &approve::outcome("Not done", why))
 }
 

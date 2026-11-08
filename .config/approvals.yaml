@@ -10,6 +10,8 @@ guarded:
   - src/pigeon-cli/crates/backplane/src/approvals.rs
   - src/pigeon-cli/crates/backplane/src/approve.rs
   - src/pigeon-cli/crates/backplane/src/worker/approve.rs
+  - src/pigeon-cli/crates/backplane/src/mandates.rs
+  - src/pigeon-cli/crates/backplane/src/worker/mandates.rs
   - src/pigeon-cli/crates/backplane/src/access.rs
   - src/pigeon-cli/crates/backplane/src/grants.rs
   - src/pigeon-cli/crates/backplane/src/totp.rs

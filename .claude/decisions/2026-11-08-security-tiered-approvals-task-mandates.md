@@ -331,3 +331,31 @@ approved at the code tier:
   from another head.
 - **`change_status` shows the bound job's log tail** as `bound_log`. It says
   which rules the job read and the tiers it gave, without the dashboard.
+
+### 2026-11-08: Mandates land in two parts; first, granting them
+
+- **Step 5 splits.**
+  - **5a: mandates themselves.** The agent proposes one, the owner grants it
+    with the code, either may see it, anyone may end it.
+  - **5b: approving inside one.** Automatic authorize, approve and merge,
+    and the pauses.
+- **The `Instance` Durable Object keeps them** (`backplane::mandates`), with
+  the grants that open their page. Not D1: they are few, and one instance
+  holds them.
+- **`mandate.propose`** takes an ADR under `.claude/decisions/`, a summary,
+  scope globs, a deploy flag, a budget (1 to 10 merges, default 5) and hours
+  (1 to 72, default 24).
+  - It answers with a page link, `/mandate/<id>?grant=…`, lasting 24 hours,
+    also listed in `/approvals`.
+  - The page shows the mandate and takes the code, with the same guard as
+    every approval.
+  - A grant starts the hours; it can't be granted again once ended.
+- **`mandate.status`** lists every mandate. **`mandate.end`** ends one, open
+  to the agent because ending only takes power away.
+- **Covering a scope.** A change's glob lies inside a mandate's when it is
+  that glob's path or, for a wildcard, a narrower `**` beneath it; `**` alone
+  never fits a narrower mandate.
+- **5b leans on the bound job.** A guarded file makes a head's merge tier
+  `guarded`, and a mandate never lowers that. So the Worker needs no copy of
+  the rules to keep guarded paths out of a mandate.
+- **Guarded** as approval machinery: `mandates.rs` and `worker/mandates.rs`.

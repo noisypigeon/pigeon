@@ -43,6 +43,7 @@ fn verb(operation: &str) -> &'static str {
         "change.approve" => "Approve this head",
         "change.merge" => "Merge",
         "change.close" => "Close unmerged",
+        "mandate.grant" => "Grant the mandate",
         _ => "Confirm",
     }
 }
@@ -91,9 +92,14 @@ pub fn inbox(waiting: &[Waiting]) -> String {
         for w in waiting.iter().rev() {
             let _ = write!(
                 b,
-                "<li><a href=\"{}\">{} — change {}</a><br><small>{}</small></li>",
+                "<li><a href=\"{}\">{} — {} {}</a><br><small>{}</small></li>",
                 escape(&w.path),
                 escape(verb(&w.operation)),
+                if w.operation.starts_with("mandate.") {
+                    "mandate"
+                } else {
+                    "change"
+                },
                 w.number,
                 escape(&w.title)
             );
@@ -256,4 +262,42 @@ pub fn same_origin(origin: Option<&str>, fetch_site: Option<&str>, host: &str) -
         Some("null") | None => fetch_site == Some("same-origin"),
         Some(o) => o == format!("https://{host}"),
     }
+}
+
+/// The page granting `mandate`, posting `token` and the owner's code back to `/mandate/<id>`.
+#[must_use]
+pub fn mandate_page(m: &crate::mandates::Mandate, token: &str) -> String {
+    let mut b = String::new();
+    let _ = write!(
+        b,
+        "<h1>Grant mandate {}</h1><p><strong>{}</strong></p><dl>",
+        m.id,
+        escape(&m.summary)
+    );
+    let mut row = |k: &str, v: String| {
+        let _ = write!(b, "<dt>{}</dt><dd>{v}</dd>", escape(k));
+    };
+    row("ADR", format!("<code>{}</code>", escape(&m.adr)));
+    row(
+        "Scope",
+        format!("<pre>{}</pre>", escape(&m.scope.join("\n"))),
+    );
+    row(
+        "May deploy",
+        if m.may_deploy { "yes" } else { "no" }.to_string(),
+    );
+    row("Budget", format!("{} merges ({} used)", m.budget, m.used));
+    row("Lasts", format!("{} hours from now", m.hours));
+    let _ = write!(
+        b,
+        "</dl><p>Changes inside this scope are authorized, approved and merged without asking \
+you, until the budget is used or it expires. The approval rules and policies always need your \
+code.</p><form method=\"post\" action=\"/mandate/{}\">\
+<input type=\"hidden\" name=\"grant\" value=\"{}\">{CODE_FIELD}\
+<button type=\"submit\">Grant the mandate</button></form>\
+<p><small><a href=\"/approvals\">Everything waiting</a></small></p>",
+        m.id,
+        escape(token)
+    );
+    shell(&format!("Grant mandate {}", m.id), &b)
 }

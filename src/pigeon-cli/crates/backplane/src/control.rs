@@ -46,6 +46,14 @@ pub enum Routed {
         /// The state.
         state: Option<String>,
     },
+    /// A mandate operation, with its arguments; see
+    /// `.claude/decisions/2026-11-08-security-tiered-approvals-task-mandates.md` §3.
+    Mandate {
+        /// The operation.
+        operation: String,
+        /// Its arguments.
+        args: Map<String, Value>,
+    },
 }
 
 fn text(args: &Map<String, Value>, k: &str) -> Option<String> {
@@ -128,6 +136,10 @@ pub fn route(request: &Request, by: &str, at: u64) -> Result<Routed, String> {
         "deploy.retry" => Ok(Routed::DeployRetry),
         "git.tokens" => Ok(Routed::GitTokens),
         "approval.wait" => Err("`approval.wait` shows a card, so it is called over MCP".into()),
+        "mandate.propose" | "mandate.status" | "mandate.end" => Ok(Routed::Mandate {
+            operation: request.operation.clone(),
+            args: a.clone(),
+        }),
         "change.list" => Ok(Routed::List {
             state: text(a, "state"),
         }),

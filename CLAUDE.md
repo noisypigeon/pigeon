@@ -216,7 +216,9 @@ belong in the ADR, never in the file.
   owner's `change_authorize`, `change_approve`, `change_merge` (squashes the
   approved head onto `main` as `<title> (!n)`) and `change_close`, which,
   called by the agent, answer at once with the approval page's link;
-  `approval_wait` shows the code card for one.
+  `approval_wait` shows the code card for one. `mandate_propose`,
+  `mandate_status` and `mandate_end` handle mandates; one is granted on
+  `/mandate/<id>` with the code.
   Each push to `main` runs `MainRun`'s pipeline: one deploy at a time, of the
   newest push, publishing the instance's sites whose inputs changed since the
   last deploy (`cobot::scope::deploys`, `sites.publish`); `deploy_status`

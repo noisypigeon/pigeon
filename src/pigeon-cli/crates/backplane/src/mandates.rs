@@ -1,0 +1,288 @@
+//! Mandates: a task the owner approves once, with the code, so the changes carrying it out go
+//! through automatically; see
+//! `.claude/decisions/2026-11-08-security-tiered-approvals-task-mandates.md` §3.
+
+use std::collections::BTreeMap;
+
+use serde::{Deserialize, Serialize};
+
+use crate::approvals::matches;
+
+/// The most merges a mandate allows.
+pub const MAX_BUDGET: u32 = 10;
+/// The merges a mandate allows unless it says.
+pub const DEFAULT_BUDGET: u32 = 5;
+/// The longest a mandate lasts, in hours.
+pub const MAX_HOURS: u32 = 72;
+/// How long a mandate lasts unless it says, in hours.
+pub const DEFAULT_HOURS: u32 = 24;
+/// Where ADRs live; a mandate executes one.
+pub const DECISIONS: &str = ".claude/decisions/";
+
+/// Where a mandate is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum State {
+    /// Waiting for the owner's code.
+    Proposed,
+    /// Granted, within its budget and expiry.
+    Active,
+    /// Stopped by itself; the owner resumes it or lets it end.
+    Paused,
+    /// Done, expired, used up, or ended.
+    Ended,
+}
+
+/// A task approved once.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Mandate {
+    /// Its number.
+    pub id: u32,
+    /// The ADR it executes, from the repository root.
+    pub adr: String,
+    /// What the task is.
+    pub summary: String,
+    /// The paths its changes may touch, one glob each.
+    pub scope: Vec<String>,
+    /// Whether its changes may deploy.
+    pub may_deploy: bool,
+    /// The merges it allows.
+    pub budget: u32,
+    /// The merges made under it.
+    #[serde(default)]
+    pub used: u32,
+    /// How long it lasts once granted, in hours.
+    pub hours: u32,
+    /// When it expires, once granted, in Unix seconds.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expires: Option<u64>,
+    /// Where it is.
+    pub state: State,
+    /// Who granted it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub granted_by: Option<String>,
+    /// Why it paused or ended, when it did.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub why: Option<String>,
+    /// The changes merged under it.
+    #[serde(default)]
+    pub merged: Vec<u32>,
+}
+
+/// The literal part of `glob` before its first wildcard.
+fn literal(glob: &str) -> &str {
+    glob.find(['*', '?']).map_or(glob, |i| &glob[..i])
+}
+
+impl Mandate {
+    /// A new mandate, proposed.
+    ///
+    /// # Errors
+    ///
+    /// Why it can't be proposed: no ADR under `.claude/decisions/`, an empty scope, or a budget
+    /// or lifetime out of range.
+    pub fn propose(
+        id: u32,
+        adr: &str,
+        summary: &str,
+        scope: Vec<String>,
+        may_deploy: bool,
+        budget: Option<u32>,
+        hours: Option<u32>,
+    ) -> Result<Self, String> {
+        let is_adr = adr.starts_with(DECISIONS)
+            && std::path::Path::new(adr)
+                .extension()
+                .is_some_and(|e| e == "md")
+            && !adr.contains("..");
+        if !is_adr {
+            return Err(format!("`adr` must be an ADR under {DECISIONS}"));
+        }
+        if summary.trim().is_empty() {
+            return Err("a mandate needs a summary".into());
+        }
+        let scope: Vec<String> = scope
+            .into_iter()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect();
+        if scope.is_empty() || scope.iter().any(|s| s.starts_with('/') || s.contains("..")) {
+            return Err("a mandate's scope is one or more relative globs".into());
+        }
+        let budget = budget.unwrap_or(DEFAULT_BUDGET);
+        if !(1..=MAX_BUDGET).contains(&budget) {
+            return Err(format!("`budget` is 1 to {MAX_BUDGET} merges"));
+        }
+        let hours = hours.unwrap_or(DEFAULT_HOURS);
+        if !(1..=MAX_HOURS).contains(&hours) {
+            return Err(format!("`hours` is 1 to {MAX_HOURS}"));
+        }
+        Ok(Self {
+            id,
+            adr: adr.to_string(),
+            summary: summary.trim().to_string(),
+            scope,
+            may_deploy,
+            budget,
+            used: 0,
+            hours,
+            expires: None,
+            state: State::Proposed,
+            granted_by: None,
+            why: None,
+            merged: Vec::new(),
+        })
+    }
+
+    /// Whether a change's `scope` lies inside this mandate's: each glob within one of its own.
+    #[must_use]
+    pub fn covers(&self, scope: &[String]) -> bool {
+        !scope.is_empty()
+            && scope.iter().all(|c| {
+                let wild = c.contains(['*', '?']);
+                self.scope.iter().any(|m| {
+                    if wild {
+                        m.ends_with("**")
+                            && matches(m, literal(c))
+                            && literal(c).len() >= literal(m).len()
+                    } else {
+                        matches(m, c)
+                    }
+                })
+            })
+    }
+
+    /// Whether it may approve now: active, unexpired and within its budget.
+    #[must_use]
+    pub fn usable(&self, now: u64) -> bool {
+        self.state == State::Active
+            && self.expires.is_some_and(|e| now < e)
+            && self.used < self.budget
+    }
+}
+
+/// Every mandate, and the grants that let the owner approve one on its page.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Mandates {
+    /// The last number given.
+    #[serde(default)]
+    pub last: u32,
+    /// The mandates, oldest first.
+    #[serde(default)]
+    pub list: Vec<Mandate>,
+    /// Open grants by token hash: the mandate and when the grant expires.
+    #[serde(default)]
+    pub grants: BTreeMap<String, (u32, u64)>,
+}
+
+impl Mandates {
+    /// Proposes a mandate, numbered next.
+    ///
+    /// # Errors
+    ///
+    /// As [`Mandate::propose`].
+    pub fn propose(
+        &mut self,
+        adr: &str,
+        summary: &str,
+        scope: Vec<String>,
+        may_deploy: bool,
+        budget: Option<u32>,
+        hours: Option<u32>,
+    ) -> Result<Mandate, String> {
+        let m = Mandate::propose(
+            self.last + 1,
+            adr,
+            summary,
+            scope,
+            may_deploy,
+            budget,
+            hours,
+        )?;
+        self.last = m.id;
+        self.list.push(m.clone());
+        Ok(m)
+    }
+
+    /// Mandate `id`.
+    #[must_use]
+    pub fn get(&self, id: u32) -> Option<&Mandate> {
+        self.list.iter().find(|m| m.id == id)
+    }
+
+    fn get_mut(&mut self, id: u32) -> Option<&mut Mandate> {
+        self.list.iter_mut().find(|m| m.id == id)
+    }
+
+    /// Mints a grant under `token`'s hash to grant proposed mandate `id`, until `expires`.
+    ///
+    /// # Errors
+    ///
+    /// When there is no such mandate waiting to be granted.
+    pub fn offer(&mut self, id: u32, token: &str, now: u64, expires: u64) -> Result<(), String> {
+        match self.get(id) {
+            Some(m) if m.state == State::Proposed || m.state == State::Paused => {}
+            Some(m) => {
+                return Err(format!(
+                    "mandate {id} is {:?}; there is nothing to grant",
+                    m.state
+                ));
+            }
+            None => return Err(format!("no mandate {id}")),
+        }
+        self.grants.retain(|_, (_, e)| *e > now);
+        self.grants.insert(crate::grants::key(token), (id, expires));
+        Ok(())
+    }
+
+    /// The mandate `token`'s grant names, without using it.
+    ///
+    /// # Errors
+    ///
+    /// When the token names none, or it has expired.
+    pub fn peek(&self, token: &str, now: u64) -> Result<&Mandate, String> {
+        let (id, expires) = self
+            .grants
+            .get(&crate::grants::key(token))
+            .ok_or("this link is not valid; ask for a new one")?;
+        if *expires <= now {
+            return Err("this link has expired; ask for a new one".into());
+        }
+        self.get(*id)
+            .ok_or_else(|| "its mandate is gone".to_string())
+    }
+
+    /// Grants (or resumes) the mandate `token` names, as `by`: active for its hours from `now`.
+    /// The grant is spent even when refused.
+    ///
+    /// # Errors
+    ///
+    /// Why it can't be granted.
+    pub fn grant(&mut self, token: &str, by: &str, now: u64) -> Result<Mandate, String> {
+        let id = self.peek(token, now)?.id;
+        self.grants.remove(&crate::grants::key(token));
+        let m = self.get_mut(id).ok_or("its mandate is gone")?;
+        match m.state {
+            State::Proposed => m.expires = Some(now + u64::from(m.hours) * 3600),
+            State::Paused => {}
+            other => return Err(format!("mandate {id} is {other:?}")),
+        }
+        m.state = State::Active;
+        m.granted_by = Some(by.to_string());
+        m.why = None;
+        Ok(m.clone())
+    }
+
+    /// Ends mandate `id`, saying `why`; anyone may, since it only takes power away.
+    ///
+    /// # Errors
+    ///
+    /// When there is no such mandate.
+    pub fn end(&mut self, id: u32, why: &str) -> Result<Mandate, String> {
+        let m = self.get_mut(id).ok_or_else(|| format!("no mandate {id}"))?;
+        m.state = State::Ended;
+        m.why = Some(why.to_string());
+        Ok(m.clone())
+    }
+}

@@ -13,6 +13,7 @@ mod checker;
 mod elicit;
 mod gitdoor;
 mod main_run;
+mod mandates;
 mod platform;
 
 use serde_json::{Value, json};
@@ -65,6 +66,9 @@ async fn fetch(mut req: Request, env: Env, _ctx: worker::Context) -> Result<Resp
     }
     if req.path().starts_with("/approve/") || req.path() == "/approvals" {
         return approve::serve(req, &env, &settings, &who).await;
+    }
+    if req.path().starts_with("/mandate/") {
+        return mandates::page_serve(req, &env, &settings, &who).await;
     }
     match (req.method(), req.path().as_str()) {
         (Method::Post, "/mcp") => {
@@ -411,6 +415,13 @@ async fn dispatch(
                     .await?;
             Ok((None, respond(operation, 200, json!({ "changes": rows }))))
         }
+        Routed::Mandate {
+            operation: op,
+            args,
+        } => {
+            let (status, v) = mandates::run(env, s, who, &op, &args).await?;
+            Ok((None, respond(operation, status, v)))
+        }
     }
 }
 
@@ -552,6 +563,10 @@ impl DurableObject for Instance {
         {
             let body: Value = req.json().await?;
             return elicit::serve(&self.state, &self.env, &path, body).await;
+        }
+        if path.starts_with("/mandates/") {
+            let body: Value = req.json().await?;
+            return mandates::serve(&self.state, &path, body).await;
         }
         let segments: Vec<&str> = path.trim_matches('/').split('/').collect();
         let method = req.method();

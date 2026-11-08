@@ -138,6 +138,8 @@ fn catalog_names_are_unique_and_dotted() {
             ("ci.rerun", Effect::Build),
             ("sites.build", Effect::Build),
             ("sites.publish", Effect::Apply),
+            ("mandate.propose", Effect::Plan),
+            ("mandate.end", Effect::Build),
             ("approval.wait", Effect::Build),
             ("deploy.retry", Effect::Build),
             ("infra.plan", Effect::Plan),
