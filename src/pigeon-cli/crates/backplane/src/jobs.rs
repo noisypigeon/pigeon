@@ -12,7 +12,7 @@ use std::sync::{Arc, Mutex};
 
 use serde_json::{Map, Value, json};
 
-use crate::changes::{BOUND, Check, MERGE};
+use crate::changes::{BOUND, Check, MERGE, RESTACK, Relation, Restacked};
 use crate::control::{DEPLOY, JobSpec, Outcome, Report, tail};
 use crate::{Instance, Request, run_with};
 
@@ -70,6 +70,7 @@ impl Board {
             build: None,
             images: None,
             tiers: None,
+            restack: None,
         };
         self.set(running.clone());
         let board = Arc::clone(self);
@@ -101,6 +102,7 @@ fn report(spec: &JobSpec, outcome: Outcome, log: &str) -> Report {
         build: None,
         images: None,
         tiers: None,
+        restack: None,
     }
 }
 
@@ -138,6 +140,9 @@ pub fn run(spec: &JobSpec, dir: &Path) -> Report {
     }
     if spec.job == MERGE {
         return merge(spec, dir);
+    }
+    if spec.job == RESTACK {
+        return restack(spec, dir);
     }
     if spec.job == DEPLOY {
         return deploy(spec, dir);
@@ -285,6 +290,54 @@ fn merge(spec: &JobSpec, dir: &Path) -> Report {
     }
 }
 
+/// ADRs only gain amendments, so a restack merges two appends to one by union.
+const UNION: &str = ".claude/decisions/*.md";
+
+/// The restack job: the head replayed onto the base as it now stands, and pushed to the
+/// change's branch when git merges it; see
+/// `.claude/decisions/2026-11-08-development-concurrent-agent-sessions.md` §3.
+fn restack(spec: &JobSpec, dir: &Path) -> Report {
+    match cobot::ci::restack(
+        dir,
+        &spec.remote,
+        &spec.token,
+        &spec.base,
+        &spec.branch,
+        &spec.sha,
+        &[UNION],
+    ) {
+        Ok(r) => {
+            let relation = match r.relation {
+                cobot::ci::Relation::Current => Relation::Current,
+                cobot::ci::Relation::Disjoint => Relation::Disjoint,
+                cobot::ci::Relation::Clean => Relation::Clean,
+                cobot::ci::Relation::Conflicting => Relation::Conflicting,
+            };
+            Report {
+                log: format!(
+                    "{} onto {}: {relation:?}{}\n",
+                    spec.sha,
+                    r.onto,
+                    r.to.as_deref()
+                        .map(|t| format!(" as {t}"))
+                        .unwrap_or_default()
+                ),
+                restack: Some(Restacked {
+                    relation,
+                    to: r.to,
+                    same_patch: r.same_patch,
+                    conflicts: r.conflicts,
+                }),
+                ..report(spec, Outcome::Passed, "")
+            }
+        }
+        Err(e) => Report {
+            violations: vec![e.to_string()],
+            ..report(spec, Outcome::Failed, &e.to_string())
+        },
+    }
+}
+
 /// The bound job: the change and pull-request policies, with the change's approved scope and
 /// its plan as the body, then the checks its paths need.
 fn bound(spec: &JobSpec, dir: &Path) -> Report {
@@ -364,6 +417,7 @@ fn bound(spec: &JobSpec, dir: &Path) -> Report {
         build: None,
         images: None,
         tiers,
+        restack: None,
     }
 }
 

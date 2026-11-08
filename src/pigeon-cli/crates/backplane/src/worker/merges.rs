@@ -50,38 +50,36 @@ pub async fn ask(env: &Env, s: &Settings, number: u32, by: &str) -> Result<(u16,
     Ok((status, json!({ "change": v })))
 }
 
-/// Change `number`'s merge ended, as `merged`, the commit `main` now holds, or failed: starts
-/// the next merge, and marks every other open change behind `main`.
+/// Change `number`'s merge ended, as `merged`, the commit `main` now holds, or failed: marks
+/// every other open change behind `main`, which restacks the checked and approved ones, then
+/// starts the next merge.
 ///
 /// # Errors
 ///
 /// When a binding fails.
 pub async fn ended(env: &Env, number: u32, merged: Option<&str>) -> Result<()> {
     let s = Settings::from(env)?;
-    let (_, v) = to_instance(env, &s, "/merges/done", &json!({ "number": number })).await?;
-    start(env, &s, serde_json::from_value(v["next"].clone()).ok()).await?;
-    let Some(main) = merged else {
-        return Ok(());
-    };
-    let rows = platform::d1_rows(env, &control::open(&s.instance, &s.repo)).await?;
-    for open in control::open_rows(&rows) {
-        if open.number == number {
-            continue;
-        }
+    if let Some(main) = merged {
+        let rows = platform::d1_rows(env, &control::open(&s.instance, &s.repo)).await?;
         let body = serde_json::to_value(Event::Behind {
             main: main.to_string(),
         })?;
-        let _ = to_change(
-            env,
-            &s.repo,
-            open.number,
-            Method::Post,
-            "/event",
-            Some(&body),
-        )
-        .await;
+        for open in control::open_rows(&rows) {
+            if open.number != number {
+                let _ = to_change(
+                    env,
+                    &s.repo,
+                    open.number,
+                    Method::Post,
+                    "/event",
+                    Some(&body),
+                )
+                .await;
+            }
+        }
     }
-    Ok(())
+    let (_, v) = to_instance(env, &s, "/merges/done", &json!({ "number": number })).await?;
+    start(env, &s, serde_json::from_value(v["next"].clone()).ok()).await
 }
 
 async fn merge(env: &Env, s: &Settings, number: u32, by: &str) -> Result<(u16, Value)> {

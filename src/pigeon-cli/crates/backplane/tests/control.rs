@@ -174,6 +174,7 @@ fn reports_become_events() {
         build: None,
         images: None,
         tiers: None,
+        restack: None,
     };
     assert_eq!(
         control::event_of("fmt", A, &report(Outcome::Running, vec![])),
@@ -394,6 +395,7 @@ fn deploy_report(outcome: Outcome) -> Report {
         build: None,
         images: None,
         tiers: None,
+        restack: None,
     }
 }
 

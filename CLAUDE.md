@@ -217,7 +217,9 @@ belong in the ADR, never in the file.
   (the session's URL) and, for a design change, `affects` (the globs its ADR
   will govern), and answers the open changes it `overlaps`; `change_merge`
   waits its turn in one merge queue, and a merge marks the other open
-  changes `behind`, per
+  changes `behind` and restacks the checked and approved ones onto `main`
+  (an approval carries over when the patch and tier are the same; ADRs
+  merge by union), per
   [`2026-11-08-development-concurrent-agent-sessions.md`](.claude/decisions/2026-11-08-development-concurrent-agent-sessions.md).
 - `pigeon backplane jobs --listen ADDR`: a job Container's server, signed under
   `BACKPLANE_TOKEN`; the control plane's `Checker` runs it. The Worker

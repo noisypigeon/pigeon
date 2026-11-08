@@ -383,6 +383,9 @@ pub struct Report {
     /// For the bound job: the head's approval tiers, when `main` has rules.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tiers: Option<crate::approvals::Tiers>,
+    /// For the restack job: what it did.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub restack: Option<changes::Restacked>,
 }
 
 /// The job images a deploy references, as the `DEPLOY_IMAGES` secret holds them: the commit
@@ -426,6 +429,15 @@ pub fn event_of(job: &str, sha: &str, report: &Report) -> Option<Event> {
                     .cloned()
                     .unwrap_or_else(|| "the merge job failed; see its log".into()),
             },
+        });
+    }
+    if job == changes::RESTACK
+        && report.outcome == Outcome::Passed
+        && let Some(restack) = &report.restack
+    {
+        return Some(Event::Restacked {
+            sha: sha.to_string(),
+            restack: restack.clone(),
         });
     }
     if job == BOUND {
@@ -895,7 +907,7 @@ impl Class {
 pub fn class_of(job: &str) -> Class {
     // A deploy builds the Worker to wasm, so it runs on `Checker`; see
     // .claude/decisions/2026-11-07-development-control-plane-deploys-itself.md.
-    if job == BOUND || job == MERGE {
+    if job == BOUND || job == MERGE || job == changes::RESTACK {
         Class::Runner
     } else {
         Class::Checker

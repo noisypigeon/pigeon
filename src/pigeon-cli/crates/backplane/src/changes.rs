@@ -13,6 +13,10 @@ pub const BOUND: &str = "bound";
 /// The job that merges an approved head onto `main`, with a write token.
 pub const MERGE: &str = "merge";
 
+/// The job that replays an approved or checked head onto `main` after `main` moved; see
+/// `.claude/decisions/2026-11-08-development-concurrent-agent-sessions.md` §3.
+pub const RESTACK: &str = "restack";
+
 /// Where a change is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -129,6 +133,52 @@ pub struct Check {
     pub argv: Vec<String>,
 }
 
+/// How a head stood to `main` after `main` moved.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Relation {
+    /// `main` is still its base.
+    Current,
+    /// None of its files changed on `main`.
+    Disjoint,
+    /// Some did, and git merged them.
+    Clean,
+    /// Git couldn't merge them.
+    Conflicting,
+}
+
+/// What the restack job did.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Restacked {
+    /// How the head stood.
+    pub relation: Relation,
+    /// The head it pushed; none when current or conflicting.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub to: Option<String>,
+    /// Whether the change's own diff stayed the same.
+    #[serde(default)]
+    pub same_patch: bool,
+    /// The paths git couldn't merge.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub conflicts: Vec<String>,
+}
+
+/// An approval to carry onto a restacked head, if its patch and merge tier hold.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Carried {
+    /// Who approved.
+    pub by: String,
+    /// When.
+    pub at: u64,
+    /// The head they approved.
+    pub from: String,
+    /// That head's merge tier.
+    pub merge: crate::approvals::Tier,
+    /// The restacked head it carries to, once the restack job reports it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub to: Option<String>,
+}
+
 /// A change.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Change {
@@ -179,6 +229,9 @@ pub struct Change {
     /// The commit `main` moved to past this change's base; cleared by its next push.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub behind: Option<String>,
+    /// An approval carried across a restack.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub carried: Option<Carried>,
 }
 
 /// Something that happened to a change.
@@ -273,6 +326,13 @@ pub enum Event {
         /// The commit `main` now holds.
         main: String,
     },
+    /// The restack job replayed head `sha` onto `main`.
+    Restacked {
+        /// The head it replayed.
+        sha: String,
+        /// What it did.
+        restack: Restacked,
+    },
 }
 
 /// What the Durable Object must do after an event.
@@ -359,6 +419,7 @@ impl Change {
             session: None,
             affects: Vec::new(),
             behind: None,
+            carried: None,
         }
     }
 
@@ -390,13 +451,8 @@ impl Change {
                 }
                 self.pushed(sha)
             }
-            Event::Behind { main } => {
-                if self.head.is_none() {
-                    return refuse(format!("{} has no head to be behind", self.branch()));
-                }
-                self.behind = Some(main);
-                Ok(Vec::new())
-            }
+            Event::Behind { main } => self.behind(main),
+            Event::Restacked { sha, restack } => self.restacked(&sha, restack),
             Event::Started { job, sha } => self.started(&job, &sha),
             Event::Bounded {
                 sha,
@@ -467,6 +523,97 @@ impl Change {
         self.state = State::Pushed;
         effects.push(Effect::Start(BOUND.into()));
         Ok(effects)
+    }
+
+    /// `main` moved: a checked or approved head is restacked, keeping its approval to carry.
+    fn behind(&mut self, main: String) -> Result<Vec<Effect>, Refusal> {
+        let Some(head) = self.head.clone() else {
+            return refuse(format!("{} has no head to be behind", self.branch()));
+        };
+        self.behind = Some(main);
+        if !matches!(self.state, State::Checked | State::Approved)
+            || self.job(RESTACK).is_some_and(|j| j.open())
+            || self.job(MERGE).is_some_and(|j| j.open())
+        {
+            return Ok(Vec::new());
+        }
+        self.carried = match (&self.approval, &self.tiers) {
+            (Some(a), Some(t)) if self.state == State::Approved => Some(Carried {
+                by: a.by.clone(),
+                at: a.at,
+                from: head,
+                merge: t.merge.tier,
+                to: None,
+            }),
+            _ => None,
+        };
+        self.jobs.retain(|j| j.name != RESTACK);
+        self.jobs.push(Job::queued(RESTACK, Vec::new()));
+        Ok(vec![Effect::Start(RESTACK.into())])
+    }
+
+    /// The restack job's report on head `sha`.
+    fn restacked(&mut self, sha: &str, r: Restacked) -> Result<Vec<Effect>, Refusal> {
+        let pushed_first = r.to.is_some() && self.head == r.to;
+        if !self.on_head(sha) && !pushed_first {
+            return Ok(Vec::new());
+        }
+        if let Some(j) = self.job(RESTACK) {
+            j.status = JobStatus::Passed;
+        }
+        let carries = r.relation == Relation::Disjoint && r.same_patch;
+        match (&r.relation, r.to) {
+            (Relation::Current, _) => {
+                self.behind = None;
+                self.carried = None;
+                Ok(Vec::new())
+            }
+            (Relation::Conflicting, _) | (_, None) => {
+                self.carried = None;
+                self.violations = vec![format!(
+                    "{} conflicts with main in {}; rebase it onto main and push",
+                    self.branch(),
+                    r.conflicts.join(", ")
+                )];
+                Ok(Vec::new())
+            }
+            (_, Some(to)) => {
+                match &mut self.carried {
+                    Some(c) if carries && c.from == sha => c.to = Some(to.clone()),
+                    _ => self.carried = None,
+                }
+                if pushed_first {
+                    self.carry();
+                    return Ok(Vec::new());
+                }
+                self.tiers = None;
+                self.behind = None;
+                self.pushed(to)
+            }
+        }
+    }
+
+    /// Approves a restacked head that reached `checked` with the approval carried to it, when
+    /// its merge tier is no higher than the one approved.
+    fn carry(&mut self) {
+        if self.state != State::Checked {
+            return;
+        }
+        let (Some(c), Some(t)) = (&self.carried, &self.tiers) else {
+            return;
+        };
+        if c.to.is_none() {
+            return;
+        }
+        if c.to == self.head && t.merge.tier <= c.merge {
+            self.approval = Some(Approval {
+                by: c.by.clone(),
+                sha: self.head.clone(),
+                at: c.at,
+            });
+            self.state = State::Approved;
+        }
+        self.carried = None;
     }
 
     fn on_head(&self, sha: &str) -> bool {
@@ -557,6 +704,7 @@ impl Change {
         }
         if self.jobs.iter().all(|j| j.status == JobStatus::Passed) {
             self.state = State::Checked;
+            self.carry();
         }
         Vec::new()
     }

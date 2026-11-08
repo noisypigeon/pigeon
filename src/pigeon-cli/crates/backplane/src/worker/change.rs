@@ -127,7 +127,7 @@ impl ChangeRun {
     }
 
     async fn start(&self, change: &Change, job: &str) -> std::result::Result<(), String> {
-        let write = job == crate::changes::MERGE;
+        let write = job == crate::changes::MERGE || job == crate::changes::RESTACK;
         let (remote, token) =
             platform::credentials(&self.env, write, cobot::artifacts_wire::TOKEN_TTL)
                 .await

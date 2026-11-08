@@ -345,3 +345,229 @@ pub fn merged_already(
     )?;
     Ok(Some(found).filter(|f| !f.is_empty()))
 }
+
+/// How a change's head stands to its base branch after the branch moved.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Relation {
+    /// The base is still its base.
+    Current,
+    /// None of its files changed on the base.
+    Disjoint,
+    /// Some did, and git merges them without conflict.
+    Clean,
+    /// Git can't merge them.
+    Conflicting,
+}
+
+/// A restack: how the head stood, and the head it became, if one was pushed.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct Restack {
+    /// How it stood.
+    pub relation: Relation,
+    /// The head it started from.
+    pub from: String,
+    /// The base it was replayed onto.
+    pub onto: String,
+    /// The new head pushed to its branch; none when current or conflicting.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub to: Option<String>,
+    /// Whether the change's own diff is the same, by `git patch-id --stable`.
+    #[serde(default)]
+    pub same_patch: bool,
+    /// The paths git couldn't merge.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub conflicts: Vec<String>,
+}
+
+fn patch_id(dir: &Path, from: &str, to: &str) -> Result<String, Error> {
+    let diff = command("", "")
+        .arg("-C")
+        .arg(dir)
+        .args(["diff", "--binary", from, to])
+        .output()
+        .map_err(|e| Error::Git {
+            args: "diff".into(),
+            message: e.to_string(),
+        })?;
+    let mut child = command("", "")
+        .arg("-C")
+        .arg(dir)
+        .args(["patch-id", "--stable"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .map_err(|e| Error::Git {
+            args: "patch-id".into(),
+            message: e.to_string(),
+        })?;
+    if let Some(mut i) = child.stdin.take() {
+        use std::io::Write as _;
+        i.write_all(&diff.stdout).map_err(|e| Error::Git {
+            args: "patch-id".into(),
+            message: e.to_string(),
+        })?;
+    }
+    let out = child.wait_with_output().map_err(|e| Error::Git {
+        args: "patch-id".into(),
+        message: e.to_string(),
+    })?;
+    Ok(String::from_utf8_lossy(&out.stdout)
+        .split_whitespace()
+        .next()
+        .unwrap_or_default()
+        .to_string())
+}
+
+/// `ours` and `theirs` merged in `dir`'s work tree: the tree, or the paths in conflict.
+fn merge_tree(dir: &Path, ours: &str, theirs: &str) -> Result<Result<String, Vec<String>>, Error> {
+    let out = command("", "")
+        .arg("-C")
+        .arg(dir)
+        .args([
+            "merge-tree",
+            "--write-tree",
+            "--name-only",
+            "--no-messages",
+            ours,
+            theirs,
+        ])
+        .output()
+        .map_err(|e| Error::Git {
+            args: "merge-tree".into(),
+            message: e.to_string(),
+        })?;
+    let text = String::from_utf8_lossy(&out.stdout).to_string();
+    let mut lines = text.lines().filter(|l| !l.is_empty());
+    let tree = lines.next().unwrap_or_default().to_string();
+    match out.status.code() {
+        Some(0) => Ok(Ok(tree)),
+        Some(1) => Ok(Err(lines.map(str::to_string).collect())),
+        _ => Err(Error::Git {
+            args: "merge-tree".into(),
+            message: String::from_utf8_lossy(&out.stderr).trim().to_string(),
+        }),
+    }
+}
+
+/// A commit of `tree` on `parent` with `message`, by pigeon.
+fn commit_tree(dir: &Path, tree: &str, parent: &str, message: &str) -> Result<String, Error> {
+    let commit = command("", "")
+        .arg("-C")
+        .arg(dir)
+        .args([
+            "-c",
+            "user.name=pigeon",
+            "-c",
+            "user.email=pigeon@users.noreply.pigeon.dev",
+        ])
+        .args(["commit-tree", tree, "-p", parent, "-F", "-"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .and_then(|mut c| {
+            if let Some(mut i) = c.stdin.take() {
+                use std::io::Write as _;
+                i.write_all(message.as_bytes())?;
+            }
+            c.wait_with_output()
+        })
+        .map_err(|e| Error::Git {
+            args: "commit-tree".into(),
+            message: e.to_string(),
+        })?;
+    if !commit.status.success() {
+        return Err(Error::Git {
+            args: "commit-tree".into(),
+            message: String::from_utf8_lossy(&commit.stderr).trim().to_string(),
+        });
+    }
+    Ok(String::from_utf8_lossy(&commit.stdout).trim().to_string())
+}
+
+/// Replays `sha`, `branch`'s head checked out in `dir` by [`checkout`], onto `base` as it now
+/// stands, as one commit carrying the message of the change's first commit, and pushes it to
+/// `branch` only if `sha` is still its head. Paths matching a `union` glob merge by union; see
+/// `.claude/decisions/2026-11-08-development-concurrent-agent-sessions.md` §3.
+///
+/// # Errors
+///
+/// [`Error::Git`] when git fails, or the push loses to a newer head.
+pub fn restack(
+    dir: &Path,
+    remote: &str,
+    token: &str,
+    base: &str,
+    branch: &str,
+    sha: &str,
+    union: &[&str],
+) -> Result<Restack, Error> {
+    let attributes = union.iter().fold(String::new(), |mut a, g| {
+        let _ = writeln!(a, "{g} merge=union");
+        a
+    });
+    let info = dir.join(".git/info");
+    std::fs::create_dir_all(&info)
+        .and_then(|()| std::fs::write(info.join("attributes"), attributes))
+        .map_err(|e| Error::Io {
+            path: info.clone(),
+            message: e.to_string(),
+        })?;
+    let onto = git(
+        dir,
+        "",
+        "",
+        &["rev-parse", &format!("refs/remotes/origin/{base}")],
+    )?;
+    let fork = git(dir, "", "", &["merge-base", &onto, sha])?;
+    let mut r = Restack {
+        relation: Relation::Current,
+        from: sha.to_string(),
+        onto: onto.clone(),
+        to: None,
+        same_patch: true,
+        conflicts: Vec::new(),
+    };
+    if fork == onto {
+        return Ok(r);
+    }
+    let mine = changed_since(dir, &fork, sha)?;
+    let theirs = changed_since(dir, &fork, &onto)?;
+    let detached = ["-c", "advice.detachedHead=false", "checkout", "-q", &onto];
+    git(dir, "", "", &detached)?;
+    let tree = match merge_tree(dir, &onto, sha)? {
+        Ok(tree) => tree,
+        Err(conflicts) => {
+            r.relation = Relation::Conflicting;
+            r.same_patch = false;
+            r.conflicts = conflicts;
+            return Ok(r);
+        }
+    };
+    let commits = git(
+        dir,
+        "",
+        "",
+        &["rev-list", "--reverse", &format!("{fork}..{sha}")],
+    )?;
+    let first = commits.lines().next().unwrap_or(sha);
+    let message = git(dir, "", "", &["log", "-1", "--format=%B", first])?;
+    let new = commit_tree(dir, &tree, &onto, &format!("{message}\n"))?;
+    r.relation = if mine.iter().any(|p| theirs.contains(p)) {
+        Relation::Clean
+    } else {
+        Relation::Disjoint
+    };
+    r.same_patch = patch_id(dir, &fork, sha)? == patch_id(dir, &onto, &new)?;
+    let lease = format!("--force-with-lease=refs/heads/{branch}:{sha}");
+    let refspec = format!("{new}:refs/heads/{branch}");
+    git(
+        dir,
+        remote,
+        token,
+        &["push", "-q", &lease, remote, &refspec],
+    )?;
+    r.to = Some(new);
+    Ok(r)
+}

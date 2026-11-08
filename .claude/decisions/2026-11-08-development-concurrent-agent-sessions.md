@@ -264,3 +264,43 @@ merge and task modules.
     releases.
   - The merge job still refuses a head whose base `main` has moved past.
     Restacking (step 3) will act on `behind`.
+
+### 2026-11-08: Step 3 lands: restacking, carried approvals and ADR unions
+
+- **A merge marks every other open change `behind` before the next queued
+  merge starts.** Each `checked` or `approved` head whose merge isn't
+  running gets a `restack` job, on the `Runner` with a write token, as a
+  merge does.
+- **The restack job (`cobot::ci::restack`):**
+  - checks out `main` and merges the head into it with `git merge-tree`;
+  - writes one commit on `main` that carries the message of the change's
+    first commit, so its `Change-Scope` trailers stay first;
+  - pushes it to the change's branch with `--force-with-lease`, so a newer
+    push by the session wins.
+- **The report gives the relation:**
+  - current: nothing happens;
+  - disjoint or clean: the new head is pushed and checked like any push;
+  - conflicting: the change keeps its head and gets a violation naming the
+    conflicting paths, until step 4's reconciliation.
+- **An approval carries over** when three things hold:
+  - the head was approved before the restack;
+  - the restack was disjoint, with the same `git patch-id --stable`;
+  - the new head's merge tier is no higher than the approved one.
+
+  The approval is kept on the change as `carried`, and it is applied when
+  the new head reaches `checked`. Artifacts' push event may arrive before
+  the job's report, so the approval is applied only once the report names
+  the new head, whichever arrives first. The approver and time stay the
+  original ones.
+- **ADRs merge by union, set by the job, not the repository.**
+  - The layout policy allows no root `.gitattributes`, so the job writes
+    `.claude/decisions/*.md merge=union` into its clone's
+    `.git/info/attributes`.
+  - Two amendments appended to one ADR then merge without conflict.
+  - Union drops the blank line between the two blocks; the bound job's
+    policies still check the result.
+- **Not yet:**
+  - a restacked change that was waiting in the merge queue leaves it, since
+    its merge refuses to start until it is approved again, so it is asked
+    to merge again;
+  - a failed restack job leaves the change as it was, still `behind`.
