@@ -302,9 +302,7 @@ async fn to_change(
     body: Option<&Value>,
 ) -> Result<(u16, Value)> {
     let req = json_request(&format!("https://change{path}"), method, body, None)?;
-    let mut r = change_stub(env, repo, number)?
-        .fetch_with_request(req)
-        .await?;
+    let mut r = platform::call(env, &change_stub(env, repo, number)?, req).await?;
     let status = r.status_code();
     let text = r.text().await?;
     Ok((
@@ -454,21 +452,14 @@ async fn dispatch(
             Ok((Some(number.to_string()), respond(operation, status, v)))
         }
         Routed::DeployRetry => {
-            let mut r = main_stub(env, &s.repo)?
-                .fetch_with_request(json_request(
-                    "https://main/retry",
-                    Method::Post,
-                    None,
-                    None,
-                )?)
-                .await?;
+            let req = json_request("https://main/retry", Method::Post, None, None)?;
+            let mut r = platform::call(env, &main_stub(env, &s.repo)?, req).await?;
             let v: Value = r.json().await?;
             Ok((None, respond(operation, r.status_code(), v)))
         }
         Routed::DeployStatus => {
-            let mut r = main_stub(env, &s.repo)?
-                .fetch_with_str("https://main/status")
-                .await?;
+            let req = json_request("https://main/status", Method::Get, None, None)?;
+            let mut r = platform::call(env, &main_stub(env, &s.repo)?, req).await?;
             let v: Value = r.json().await?;
             Ok((None, respond(operation, r.status_code(), v)))
         }
@@ -489,6 +480,7 @@ async fn dispatch(
                     .await?;
             Ok((None, respond(operation, 200, json!({ "changes": rows }))))
         }
+        Routed::SessionEnd { args } => Ok(answered(operation, tickets::end(env, s, &args).await?)),
         Routed::SessionStart { args } => {
             Ok(answered(operation, tickets::start(env, s, &args).await?))
         }
@@ -573,21 +565,43 @@ async fn health(env: &Env, s: &Settings) -> Result<Response> {
         .get_binding::<worker::WorkerVersionMetadata>("CF_VERSION_METADATA")
         .map(|v| v.id())
         .unwrap_or_default();
+    let mine = platform::version(env);
     let d1 = match env.d1("DB") {
         Ok(db) => db.prepare("SELECT 1").all().await.is_ok(),
         Err(_) => false,
     };
-    let object = match main_stub(env, &s.repo) {
-        Ok(stub) => stub
-            .fetch_with_str("https://main/status")
-            .await
-            .is_ok_and(|r| r.status_code() == 200),
-        Err(_) => false,
+    let ask = |url: &'static str| async move {
+        let req = json_request(url, Method::Get, None, None).ok()?;
+        let stub = if url.starts_with("https://main") {
+            main_stub(env, &s.repo).ok()?
+        } else {
+            env.durable_object("INSTANCE")
+                .ok()?
+                .id_from_name(&s.instance)
+                .ok()?
+                .get_stub()
+                .ok()?
+        };
+        let mut r = platform::call(env, &stub, req).await.ok()?;
+        (r.status_code() == 200).then_some(())?;
+        r.text().await.ok()
     };
-    let ok = d1 && object && !version.is_empty();
-    Ok(Response::from_json(
-        &json!({ "ok": ok, "version": version, "instance": s.instance, "d1": d1, "durable_object": object }),
-    )?
+    let main = ask("https://main/version").await;
+    let instance = ask("https://instance/version").await;
+    let object = main.is_some();
+    let current = [&main, &instance].iter().all(|v| {
+        v.as_deref()
+            .is_some_and(|v| !crate::versions::caller_is_newer(Some(&mine), v))
+    });
+    let ok = d1 && object && current && !version.is_empty();
+    Ok(Response::from_json(&json!({
+        "ok": ok,
+        "version": version,
+        "instance": s.instance,
+        "d1": d1,
+        "durable_object": object,
+        "objects": { "main": main, "instance": instance, "expected": mine },
+    }))?
     .with_status(if ok { 200 } else { 503 }))
 }
 
@@ -671,7 +685,7 @@ async fn queue(batch: MessageBatch<Value>, env: Env, _ctx: worker::Context) -> R
             control::Target::Main => {
                 let body = json!({ "sha": push.sha });
                 let req = json_request("https://main/pushed", Method::Post, Some(&body), None)?;
-                match main_stub(&env, &s.repo)?.fetch_with_request(req).await {
+                match platform::call(&env, &main_stub(&env, &s.repo)?, req).await {
                     Ok(r) if (200..300).contains(&r.status_code()) => message.ack(),
                     _ => message.retry(),
                 }
@@ -708,7 +722,13 @@ impl DurableObject for Instance {
     }
 
     async fn fetch(&self, mut req: Request) -> Result<Response> {
+        if let Some(r) = platform::stale(&self.state, &self.env, &req)? {
+            return Ok(r);
+        }
         let path = req.path();
+        if path == "/version" {
+            return Response::ok(platform::version(&self.env));
+        }
         if path.starts_with("/elicit/") || path.starts_with("/approvals/") || path == "/code/verify"
         {
             let body: Value = req.json().await?;

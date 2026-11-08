@@ -148,8 +148,14 @@ impl DurableObject for MainRun {
     }
 
     async fn fetch(&self, mut req: Request) -> Result<Response> {
-        self.rearm().await?;
+        if let Some(r) = platform::stale(&self.state, &self.env, &req)? {
+            return Ok(r);
+        }
         let path = req.path();
+        if path == "/version" {
+            return Response::ok(platform::version(&self.env));
+        }
+        self.rearm().await?;
         match (req.method(), path.trim_matches('/')) {
             (Method::Post, "pushed") => {
                 let body: Value = req.json().await?;

@@ -228,7 +228,9 @@ belong in the ADR, never in the file.
   it before pushing again. A session starts with `session_start` (its URL as
   `label`) and passes the ticket as `ticket` on every change operation and as
   `git -c http.extraHeader="X-Pigeon-Ticket: <ticket>"` on its pushes; a
-  ticketed label is refused without it, per
+  ticketed label is refused without it, and `session_end` frees it. Calls to
+  the `Instance`, `ChangeRun` and `MainRun` objects name the Worker's
+  version, and an older object resets itself, per
   [`2026-11-08-development-concurrent-agent-sessions.md`](.claude/decisions/2026-11-08-development-concurrent-agent-sessions.md).
 - Sessions follow events instead of polling: `GET /v0/events` (and the MCP
   tool `events_wait`) long-polls the instance's event log after an event

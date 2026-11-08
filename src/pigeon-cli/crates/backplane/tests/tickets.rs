@@ -69,3 +69,13 @@ fn a_ticketed_label_needs_its_current_ticket_and_others_need_none() {
         "a label without a ticket works as before"
     );
 }
+
+#[test]
+fn ending_a_ticket_frees_its_label() {
+    let mut t = Tickets::default();
+    t.start(A, false, 0).expect("issues");
+    assert!(t.end(A));
+    assert!(!t.end(A), "a second end is a no-op");
+    assert_eq!(require(KEY, &t, &[A.to_string()], None, 1), Ok(()));
+    assert_eq!(t.start(A, false, 1).expect("anew").generation, 1);
+}

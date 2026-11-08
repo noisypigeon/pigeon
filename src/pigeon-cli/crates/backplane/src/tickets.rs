@@ -107,6 +107,11 @@ impl Tickets {
         Ok(issued)
     }
 
+    /// Ends `label`'s ticket, if it holds one: whether it did.
+    pub fn end(&mut self, label: &str) -> bool {
+        self.0.remove(label).is_some()
+    }
+
     /// `label`'s live ticket, if any.
     #[must_use]
     pub fn live(&self, label: &str, now: u64) -> Option<Issued> {

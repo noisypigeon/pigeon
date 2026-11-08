@@ -5,7 +5,7 @@ use serde_json::Value;
 use worker::js_sys::{self, Array, Function, Promise, Reflect, Uint8Array};
 use worker::wasm_bindgen::{JsCast, JsValue};
 use worker::wasm_bindgen_futures::JsFuture;
-use worker::{Date, Env, Fetch, Headers, Method, Request, RequestInit, Result};
+use worker::{Date, Env, Fetch, Headers, Method, Request, RequestInit, Response, Result};
 
 use crate::access::{self, Identity};
 use crate::control::Statement;
@@ -291,4 +291,53 @@ pub fn random_hex(n: u32) -> Result<String> {
     let bytes = Uint8Array::new_with_length(n);
     method(&crypto, "getRandomValues")?.call1(&crypto, &bytes)?;
     Ok(crate::grants::hex(&bytes.to_vec()))
+}
+
+/// This code's version, as `versions::HEADER` carries it; empty where it isn't known.
+#[must_use]
+pub fn version(env: &Env) -> String {
+    env.get_binding::<worker::WorkerVersionMetadata>("CF_VERSION_METADATA")
+        .map(|v| crate::versions::stamp(&v.timestamp(), &v.id()))
+        .unwrap_or_default()
+}
+
+/// Sends `req` to a Durable Object `stub`, naming this code's version; retries once when the
+/// object answers that it was stale and reset itself, or the reset cut the call off.
+///
+/// # Errors
+///
+/// When the call fails twice.
+pub async fn call(env: &Env, stub: &worker::Stub, mut req: Request) -> Result<Response> {
+    let v = version(env);
+    if !v.is_empty() {
+        req.headers_mut()?.set(crate::versions::HEADER, &v)?;
+    }
+    let again = req.clone()?;
+    match stub.fetch_with_request(req).await {
+        Ok(r) if r.headers().get(crate::versions::STALE)?.is_none() => Ok(r),
+        _ => stub.fetch_with_request(again).await,
+    }
+}
+
+/// The answer of a Durable Object whose caller runs newer code: it resets itself, so the next
+/// call starts it on that code; none when it is current.
+///
+/// # Errors
+///
+/// When a header can't be read or set.
+pub fn stale(state: &worker::State, env: &Env, req: &Request) -> Result<Option<Response>> {
+    let caller = req.headers().get(crate::versions::HEADER)?;
+    if !crate::versions::caller_is_newer(caller.as_deref(), &version(env)) {
+        return Ok(None);
+    }
+    worker::console_log!("stale version: resetting this object");
+    let raw = state.as_raw();
+    if let Ok(abort) = worker::js_sys::Reflect::get(raw, &JsValue::from_str("abort"))
+        && let Ok(abort) = abort.dyn_into::<worker::js_sys::Function>()
+    {
+        let _ = abort.call1(raw, &JsValue::from_str("stale version"));
+    }
+    let mut r = Response::error("stale-version", 503)?;
+    r.headers_mut().set(crate::versions::STALE, "1")?;
+    Ok(Some(r))
 }

@@ -51,12 +51,11 @@ async fn to_instance(env: &Env, s: &Settings, path: &str, body: &Value) -> Resul
         Some(body),
         None,
     )?;
-    let mut r = env
+    let stub = env
         .durable_object("INSTANCE")?
         .id_from_name(&s.instance)?
-        .get_stub()?
-        .fetch_with_request(req)
-        .await?;
+        .get_stub()?;
+    let mut r = platform::call(env, &stub, req).await?;
     let text = r.text().await?;
     Ok(serde_json::from_str(&text).unwrap_or(Value::String(text)))
 }

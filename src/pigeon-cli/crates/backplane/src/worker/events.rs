@@ -19,7 +19,7 @@ const LOG: &str = "events";
 pub const WAIT_MAX: u64 = 50;
 
 /// How often a long poll looks.
-const LOOK: Duration = Duration::from_secs(2);
+const LOOK: Duration = Duration::from_secs(5);
 
 /// Appends an event to the instance's log; `owner` keeps it from agents.
 ///

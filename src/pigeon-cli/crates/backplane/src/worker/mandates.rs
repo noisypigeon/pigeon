@@ -36,12 +36,11 @@ pub(super) async fn to_instance(
         Some(body),
         None,
     )?;
-    let mut r = env
+    let stub = env
         .durable_object("INSTANCE")?
         .id_from_name(&s.instance)?
-        .get_stub()?
-        .fetch_with_request(req)
-        .await?;
+        .get_stub()?;
+    let mut r = platform::call(env, &stub, req).await?;
     let status = r.status_code();
     let text = r.text().await?;
     Ok((

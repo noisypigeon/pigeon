@@ -353,6 +353,13 @@ const CATALOG: &[Operation] = &[
         args: &[],
     },
     Operation {
+        name: "session.end",
+        engine: Engine::Backplane,
+        effect: Effect::Build,
+        summary: "End session `label`'s ticket, so the label works as before; open to anyone, since it only takes power away",
+        args: &[arg("label", true, Kind::String)],
+    },
+    Operation {
         name: "session.start",
         engine: Engine::Backplane,
         effect: Effect::Build,

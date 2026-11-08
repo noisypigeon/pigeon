@@ -54,6 +54,11 @@ pub enum Routed {
     },
     /// `digest.show`: the owner's digest now.
     Digest,
+    /// `session.end`, with its arguments.
+    SessionEnd {
+        /// Its arguments.
+        args: serde_json::Map<String, Value>,
+    },
     /// `session.start`, with its arguments.
     SessionStart {
         /// Its arguments.
@@ -185,6 +190,7 @@ pub fn route(request: &Request, by: &str, at: u64) -> Result<Routed, String> {
         "events.wait" => Ok(Routed::Events { args: a.clone() }),
         "digest.show" => Ok(Routed::Digest),
         "session.start" => Ok(Routed::SessionStart { args: a.clone() }),
+        "session.end" => Ok(Routed::SessionEnd { args: a.clone() }),
         "task.list" | "task.wait" | "task.claim" | "task.done" => Ok(Routed::Task {
             operation: request.operation.clone(),
             args: a.clone(),

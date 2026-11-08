@@ -456,3 +456,29 @@ What the pieces offer:
   the deploy fail and roll back.
 - **`session.end`** on `ticket-trial` frees the label; a second end is a
   no-op.
+
+### 2026-11-08: The version handshake lands
+
+- **`platform::call` stamps every call** to the `Instance`, `ChangeRun` and
+  `MainRun` objects with `X-Pigeon-Version: <timestamp> <id>`, from
+  `CF_VERSION_METADATA`. It retries once on a `stale-version` answer, or on
+  an error, since an object resetting itself cuts its call off.
+- **`platform::stale` runs first in those objects' `fetch`.**
+  - An object calls `ctx.abort()` only when the caller's timestamp is later
+    and its ID differs (`versions::caller_is_newer`; RFC 3339 timestamps
+    compare as text). An older caller, as during a rollback, never resets a
+    newer object.
+  - The job objects, `Checker` and `Runner`, aren't stamped: resetting one
+    would stop its Container's job.
+- **`/healthz` asks the `Instance` and `MainRun` for `/version`.**
+  - Asking stamps the call, so a stale object resets and answers on the new
+    code.
+  - `/healthz` is 503 while either object is older than the Worker, and
+    accepts objects newer than it (after a rollback). The deploy job already
+    waits for `/healthz`.
+- **`events.wait` looks every 5 seconds.** `session.end` revokes a ticket,
+  recorded as `session.ended`.
+- **This merge isn't the mandate's.** `to_instance` and the inbox's call
+  live in `worker/mandates.rs` and `worker/elicit.rs`, which are guarded
+  approval files. So the merge asks the owner, as a guarded path always
+  does. Mandate 1 authorizes it and stays one merge short of its budget.

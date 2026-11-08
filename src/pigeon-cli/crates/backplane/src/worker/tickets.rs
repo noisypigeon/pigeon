@@ -63,6 +63,40 @@ pub async fn start(
     ))
 }
 
+/// `session.end`: revokes `label`'s ticket; open to anyone, since it only takes power away.
+///
+/// # Errors
+///
+/// When a binding fails.
+pub async fn end(
+    env: &Env,
+    s: &Settings,
+    args: &serde_json::Map<String, Value>,
+) -> Result<(u16, Value)> {
+    let Some(label) = args
+        .get("label")
+        .and_then(Value::as_str)
+        .map(str::to_string)
+    else {
+        return Ok((400, json!("`label` names the session")));
+    };
+    let (_, v) = to_instance(env, s, "/tickets/end", &json!({ "label": label })).await?;
+    if v["ended"] == true {
+        let said = format!("session {label}'s ticket ended");
+        super::events::append(
+            env,
+            s,
+            "session.ended",
+            None,
+            Some(label.clone()),
+            &said,
+            false,
+        )
+        .await?;
+    }
+    Ok((200, json!({ "label": label, "ended": v["ended"] })))
+}
+
 /// Whether `ticket` lets an agent act for `labels` now.
 ///
 /// # Errors
@@ -137,6 +171,11 @@ pub async fn serve(state: &State, path: &str, body: &Value) -> Result<Response> 
             }
         }
         "/tickets/list" => Response::from_json(&all),
+        "/tickets/end" => {
+            let ended = all.end(body["label"].as_str().unwrap_or_default());
+            storage.put(TICKETS, &all).await?;
+            Response::from_json(&json!({ "ended": ended }))
+        }
         _ => Response::error("not found", 404),
     }
 }

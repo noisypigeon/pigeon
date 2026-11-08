@@ -31,6 +31,7 @@ pub mod ship;
 pub mod tasks;
 pub mod tickets;
 pub mod totp;
+pub mod versions;
 pub mod wire;
 #[cfg(feature = "worker")]
 pub mod worker;
