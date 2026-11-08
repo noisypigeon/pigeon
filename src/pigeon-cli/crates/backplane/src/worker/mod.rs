@@ -119,6 +119,14 @@ async fn fetch(mut req: Request, env: Env, _ctx: worker::Context) -> Result<Resp
             }
         }
         (Method::Get, "/v0/operations") => Response::from_json(&wire::catalog()),
+        (Method::Get, "/v0/events") => {
+            let url = req.url()?;
+            let args: serde_json::Map<String, Value> = url
+                .query_pairs()
+                .map(|(k, v)| (k.into_owned(), Value::String(v.into_owned())))
+                .collect();
+            Response::from_json(&events::wait(&env, &settings, &args, who.human).await?)
+        }
         (Method::Post, "/v0/run") => {
             let request: wire::Request = req.json().await?;
             match run(&env, &settings, &who, &request).await {
@@ -160,20 +168,45 @@ async fn offer(
         .map(|v| v.to_string())
         .unwrap_or_default();
     match approve::pending(env, settings, &host, number, &request.operation).await {
-        Ok((link, expires)) => Response::from_json(&mcp::answer(
-            id,
-            Ok(wire::Response {
-                operation: request.operation.clone(),
-                ok: false,
-                result: json!({
-                    "pending": { "operation": request.operation, "number": number, "link": link, "expires": expires }
+        Ok((link, expires)) => {
+            let op = &request.operation;
+            let said = format!("`{op}` on !{number} waits for the owner");
+            let _ = events::append(
+                env,
+                settings,
+                "approval.pending",
+                Some(number),
+                None,
+                &said,
+                false,
+            )
+            .await;
+            let linked = format!("{said}: {link}");
+            let _ = events::append(
+                env,
+                settings,
+                "approval.pending",
+                Some(number),
+                None,
+                &linked,
+                true,
+            )
+            .await;
+            Response::from_json(&mcp::answer(
+                id,
+                Ok(wire::Response {
+                    operation: request.operation.clone(),
+                    ok: false,
+                    result: json!({
+                        "pending": { "operation": request.operation, "number": number, "link": link, "expires": expires }
+                    }),
+                    violations: vec![format!(
+                        "waiting for the owner: `{}` on change {number} is approved at {link} with the authenticator code, or in the card `approval_wait` shows",
+                        request.operation
+                    )],
                 }),
-                violations: vec![format!(
-                    "waiting for the owner: `{}` on change {number} is approved at {link} with the authenticator code, or in the card `approval_wait` shows",
-                    request.operation
-                )],
-            }),
-        )),
+            ))
+        }
         Err(why) => refused(why),
     }
 }
@@ -432,6 +465,10 @@ async fn dispatch(
                 platform::d1_rows(env, &control::list(&s.instance, &s.repo, state.as_deref()))
                     .await?;
             Ok((None, respond(operation, 200, json!({ "changes": rows }))))
+        }
+        Routed::Events { args } => {
+            let v = events::wait(env, s, &args, who.human).await?;
+            Ok((None, respond(operation, 200, v)))
         }
         Routed::Task {
             operation: op,

@@ -166,6 +166,7 @@ impl Operation {
             || self.name.starts_with("git.")
             || self.name.starts_with("mandate.")
             || self.name.starts_with("task.")
+            || self.name.starts_with("events.")
     }
 }
 
@@ -327,6 +328,18 @@ const CATALOG: &[Operation] = &[
             arg("may_deploy", false, Kind::Text),
             arg("budget", false, Kind::Text),
             arg("hours", false, Kind::Text),
+        ],
+    },
+    Operation {
+        name: "events.wait",
+        engine: Engine::Backplane,
+        effect: Effect::Read,
+        summary: "The instance's events after `after` (an event number), for `session` and `change` (numbers, comma-separated) if named, waiting up to `seconds` (at most 50) for one; answers `last` and `events`",
+        args: &[
+            arg("after", false, Kind::Text),
+            arg("session", false, Kind::String),
+            arg("change", false, Kind::Text),
+            arg("seconds", false, Kind::Text),
         ],
     },
     Operation {

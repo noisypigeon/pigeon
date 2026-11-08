@@ -88,7 +88,9 @@ pub async fn add(
     let body = json!({
         "kind": kind, "change": change, "parent": parent, "session": session, "note": note,
     });
-    to_instance(env, s, "/tasks/add", &body).await.map(|_| ())
+    to_instance(env, s, "/tasks/add", &body).await?;
+    let said = format!("task ({kind}) on !{change}: {note}");
+    super::events::append(env, s, "task.made", Some(change), session, &said, false).await
 }
 
 /// Tells `c`'s session its restack onto `main` failed.

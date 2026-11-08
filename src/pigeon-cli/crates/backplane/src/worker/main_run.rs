@@ -208,6 +208,7 @@ impl DurableObject for MainRun {
             match self.poll(&sha).await? {
                 Ok(Some(report)) => {
                     p.finished(&report, now());
+                    deploy_event(&self.env, &sha, &report).await;
                     if report.outcome == Outcome::Failed {
                         let why = format!("the deploy of {sha} failed");
                         let paused = match platform::Settings::from(&self.env) {
@@ -228,5 +229,26 @@ impl DurableObject for MainRun {
         }
         self.save_after(&p, next.as_deref(), wait).await?;
         Response::ok("ok")
+    }
+}
+
+/// Tells the event log how the deploy of `sha` ended.
+async fn deploy_event(env: &Env, sha: &str, report: &Report) {
+    let (kind, how) = if report.outcome == Outcome::Passed {
+        ("deploy.passed", "passed".to_string())
+    } else {
+        (
+            "deploy.failed",
+            format!(
+                "failed: {}",
+                report.violations.first().cloned().unwrap_or_default()
+            ),
+        )
+    };
+    let summary = format!("the deploy of {} {how}", sha.get(..12).unwrap_or(sha));
+    if let Ok(s) = platform::Settings::from(env)
+        && let Err(e) = super::events::append(env, &s, kind, None, None, &summary, false).await
+    {
+        worker::console_error!("deploy event: {e}");
     }
 }

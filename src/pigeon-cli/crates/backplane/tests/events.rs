@@ -82,3 +82,74 @@ fn the_log_keeps_the_newest_and_drops_the_old() {
     assert_eq!(log.list.len(), 1, "a week later only the newest is kept");
     assert_eq!(log.last, KEEP as u64 + 6, "numbers keep rising");
 }
+
+mod of_change {
+    use backplane::changes::{Change, Check, Event};
+    use backplane::events::of_change;
+
+    const A: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    const MAIN: &str = "dddddddddddddddddddddddddddddddddddddddd";
+
+    fn kinds(found: &[(String, String)]) -> Vec<&str> {
+        found.iter().map(|(k, _)| k.as_str()).collect()
+    }
+
+    #[test]
+    fn a_change_reports_its_states_and_its_jobs_starts_and_ends() {
+        let mut c = Change::propose(60, "x", "feat(x): y", "p", vec!["a/**".into()], "agent");
+        assert_eq!(kinds(&of_change(None, &c)), ["change.proposed"]);
+        let before = c.clone();
+        c.apply(Event::ApprovePlan {
+            by: "owner".into(),
+            at: 1,
+        })
+        .expect("plan");
+        c.apply(Event::Pushed { sha: A.into() }).expect("pushed");
+        assert_eq!(kinds(&of_change(Some(&before), &c)), ["change.pushed"]);
+        let before = c.clone();
+        c.apply(Event::Bounded {
+            sha: A.into(),
+            violations: vec![],
+            checks: vec![Check {
+                name: "fmt".into(),
+                argv: vec![],
+            }],
+            tiers: None,
+        })
+        .expect("bounded");
+        c.apply(Event::Started {
+            job: "fmt".into(),
+            sha: A.into(),
+        })
+        .expect("started");
+        let found = of_change(Some(&before), &c);
+        assert_eq!(
+            kinds(&found),
+            ["change.bounded", "job.passed", "job.started"],
+            "the bound job ended, and `fmt` started"
+        );
+        assert!(found[1].1.contains("`bound`"));
+        assert!(found[2].1.contains("`fmt`"));
+        let before = c.clone();
+        c.apply(Event::Finished {
+            job: "fmt".into(),
+            sha: A.into(),
+            ok: true,
+        })
+        .expect("finished");
+        assert_eq!(
+            kinds(&of_change(Some(&before), &c)),
+            ["change.checked", "job.passed"]
+        );
+        let before = c.clone();
+        c.apply(Event::Behind { main: MAIN.into() })
+            .expect("behind");
+        let found = of_change(Some(&before), &c);
+        assert_eq!(
+            kinds(&found),
+            ["change.behind"],
+            "its restack is only queued"
+        );
+        assert_eq!(of_change(Some(&c), &c), [], "nothing new, nothing said");
+    }
+}

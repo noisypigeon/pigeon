@@ -224,3 +224,60 @@ What the pieces offer:
   - a second session's `change_pushed` on the first session's change is
     refused, and so is its push of that branch;
   - a lost ticket is recovered with one confirm tap.
+
+## Amendments
+
+### 2026-11-08: The first mandate and the carry-over, proven live
+
+- **Mandate 1 was granted once, with the code.** It then authorized,
+  approved and merged !61 (the event log) and !62 (the digest builder) as
+  `mandate:1`, with no prompt to the owner.
+- **Merging !61 restacked !62.**
+  - The two changes were disjoint, so !62 became one commit, `0a91069`, on
+    the new `main`, and its checks ran again.
+  - Its approval carried to the new head with its original time, and it
+    merged.
+  - `mandate_status` showed `used: 2`, `merged: [61, 62]`.
+- So !59's fix holds: the push for the restacked head was held until the
+  restack reported.
+
+### 2026-11-08: Steps 1 and 2 land: producers, the long poll, and how a session follows
+
+- **Producers.**
+  - `ChangeRun` compares each change before and after it is saved
+    (`events::of_change`). It reports a new state, each job's start and end,
+    falling `behind`, and a conflict with its reconciliation.
+  - `MainRun` reports each deploy's end.
+  - Offering an approval reports `approval.pending` twice: once for
+    everyone, with no link, and once for the owner only, with the link.
+  - Making a task reports `task.made`.
+  - Mandate events wait for the guarded change in step 4.
+- **`GET /v0/events?after=&session=&change=&wait=`** and the MCP tool
+  `events_wait` share one long poll, up to 50 seconds. They answer `last`
+  and the events after `after`. A person sees owner-only events; a service
+  token doesn't.
+- **There is no `pigeon backplane events --follow` yet.** `pigeon` has no
+  client for the control plane, and a `curl` loop through the agent's proxy
+  does the same. A session arms `Monitor` (timeout 30 minutes, re-armed on
+  expiry) with:
+
+  ```sh
+  HOST=pigeon-control.pigeon-dev.workers.dev SESSION="$SESSION_URL" AFTER=0 python3 -u - <<'PY'
+  import json, os, subprocess, time, urllib.parse
+  after = int(os.environ["AFTER"]); session = urllib.parse.quote(os.environ["SESSION"], safe="")
+  while True:
+      url = f"https://{os.environ['HOST']}/v0/events?after={after}&session={session}&wait=50"
+      out = subprocess.run(["curl", "-sS", "--max-time", "70", url], capture_output=True, text=True).stdout
+      try:
+          d = json.loads(out)
+      except ValueError:
+          time.sleep(5)
+          continue
+      for e in d["events"]:
+          print(e["id"], e["kind"], e["summary"], flush=True)
+      after = d.get("last", after)
+  PY
+  ```
+
+  It prints one line per event, which wakes the session, and carries
+  `after` forward. On re-arming, `AFTER` is the last id seen.

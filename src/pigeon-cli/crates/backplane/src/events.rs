@@ -2,6 +2,7 @@
 //! polling; see `.claude/decisions/2026-11-08-development-events-tickets-digest-mandate.md` §1.
 
 use std::collections::VecDeque;
+use std::fmt::Write as _;
 
 use serde::{Deserialize, Serialize};
 
@@ -109,4 +110,62 @@ impl Log {
     pub fn since(&self, f: &Filter) -> Vec<&Event> {
         self.list.iter().filter(|e| f.wants(e)).take(PAGE).collect()
     }
+}
+
+/// What happened to `after` since `before`, as event kinds and summaries: its state, its jobs'
+/// starts and ends, and its falling behind or into conflict.
+#[must_use]
+pub fn of_change(
+    before: Option<&crate::changes::Change>,
+    after: &crate::changes::Change,
+) -> Vec<(String, String)> {
+    use crate::changes::JobStatus;
+    let n = after.number;
+    let mut out = Vec::new();
+    if before.is_none_or(|b| b.state != after.state) {
+        let mut summary = format!("!{n} {}: {}", after.title, after.state.name());
+        if let Some(a) = &after.approval
+            && after.state == crate::changes::State::Approved
+        {
+            let _ = write!(summary, " by {}", a.by);
+        }
+        if let Some(v) = after.violations.first() {
+            let _ = write!(summary, ": {v}");
+        }
+        out.push((format!("change.{}", after.state.name()), summary));
+    }
+    let was = |name: &str| {
+        before
+            .filter(|b| b.head == after.head)
+            .and_then(|b| b.jobs.iter().find(|j| j.name == name))
+            .map(|j| j.status)
+    };
+    for j in &after.jobs {
+        let kind = match (was(&j.name), j.status) {
+            (Some(JobStatus::Running), JobStatus::Running) => None,
+            (_, JobStatus::Running) => Some("job.started"),
+            (Some(s), JobStatus::Passed) if s != JobStatus::Passed => Some("job.passed"),
+            (Some(s), JobStatus::Failed) if s != JobStatus::Failed => Some("job.failed"),
+            _ => None,
+        };
+        if let Some(k) = kind {
+            out.push((k.to_string(), format!("!{n} job `{}`", j.name)));
+        }
+    }
+    if after.behind.is_some() && before.is_none_or(|b| b.behind != after.behind) {
+        out.push(("change.behind".into(), format!("!{n} is behind main")));
+    }
+    if let Some(c) = &after.conflict
+        && before.is_none_or(|b| b.conflict.as_ref().map(|x| &x.reconcile) != Some(&c.reconcile))
+    {
+        let by = c
+            .reconcile
+            .map(|r| format!("; !{r} reconciles it"))
+            .unwrap_or_default();
+        out.push((
+            "change.conflicted".into(),
+            format!("!{n} conflicts with main in {}{by}", c.paths.join(", ")),
+        ));
+    }
+    out
 }

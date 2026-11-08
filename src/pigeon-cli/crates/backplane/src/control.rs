@@ -52,6 +52,12 @@ pub enum Routed {
         /// The state.
         state: Option<String>,
     },
+    /// `events.wait`, with its arguments; see
+    /// `.claude/decisions/2026-11-08-development-events-tickets-digest-mandate.md` §2.
+    Events {
+        /// Its arguments.
+        args: serde_json::Map<String, Value>,
+    },
     /// A task operation, with its arguments; see
     /// `.claude/decisions/2026-11-08-development-concurrent-agent-sessions.md` §5.
     Task {
@@ -169,6 +175,7 @@ pub fn route(request: &Request, by: &str, at: u64) -> Result<Routed, String> {
             operation: request.operation.clone(),
             args: a.clone(),
         }),
+        "events.wait" => Ok(Routed::Events { args: a.clone() }),
         "task.list" | "task.wait" | "task.claim" | "task.done" => Ok(Routed::Task {
             operation: request.operation.clone(),
             args: a.clone(),

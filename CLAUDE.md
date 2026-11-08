@@ -227,6 +227,12 @@ belong in the ADR, never in the file.
   claimed, and after its branch is restacked runs `git fetch` and resets to
   it before pushing again, per
   [`2026-11-08-development-concurrent-agent-sessions.md`](.claude/decisions/2026-11-08-development-concurrent-agent-sessions.md).
+- Sessions follow events instead of polling: `GET /v0/events` (and the MCP
+  tool `events_wait`) long-polls the instance's event log after an event
+  number, for a session or changes. Arm `Monitor` with a `curl` loop over
+  it that prints one line per event, and act on each line rather than
+  calling `change_status` on a timer, per
+  [`2026-11-08-development-events-tickets-digest-mandate.md`](.claude/decisions/2026-11-08-development-events-tickets-digest-mandate.md).
 - `pigeon backplane jobs --listen ADDR`: a job Container's server, signed under
   `BACKPLANE_TOKEN`; the control plane's `Checker` runs it. The Worker
   (`infra/pigeon/workers/control/`) serves MCP on `/mcp` behind Access: tools
