@@ -19,3 +19,16 @@ variable "service_token_ids" {
   default  = {}
   nullable = false
 }
+
+# One service token's ID, as `$module.<tokens>[<name>].id` gives it.
+variable "service_token_id" {
+  type    = string
+  default = null
+}
+
+# Whether the account's Cloudflare members are let in.
+variable "account_members" {
+  type     = bool
+  default  = false
+  nullable = false
+}

@@ -8,11 +8,16 @@ terraform {
   }
 }
 
+locals {
+  policies = concat(var.policy_ids, values(var.policy_id_map))
+}
+
 resource "cloudflare_zero_trust_access_application" "this" {
   account_id       = var.account_id
   name             = var.name
   type             = "self_hosted"
   domain           = var.domain
   session_duration = var.session_duration
-  policies         = [for i, id in var.policy_ids : { id = id, precedence = i + 1 }]
+  destinations     = var.worker_id == null ? null : [for t in var.worker_types : { type = t, worker_id = var.worker_id }]
+  policies         = [for i, id in local.policies : { id = id, precedence = i + 1 }]
 }

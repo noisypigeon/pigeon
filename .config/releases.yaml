@@ -120,6 +120,10 @@ units:
     manifest: catalog/cloudflare/modules/access-service-token/module.yaml
     paths: [catalog/cloudflare/modules/access-service-token/]
     exclude: ['*.md']
+  infra-cloudflare-worker:
+    manifest: catalog/cloudflare/modules/worker/module.yaml
+    paths: [catalog/cloudflare/modules/worker/]
+    exclude: ['*.md']
   infra-cloudflare-ruleset:
     manifest: catalog/cloudflare/modules/ruleset/module.yaml
     paths: [catalog/cloudflare/modules/ruleset/]
@@ -209,6 +213,7 @@ tiers:
   - { file: catalog/cloudflare/modules/ruleset/CHANGELOG.md, unit: infra-cloudflare-ruleset, from: infra/cloudflare/modules/ruleset/CHANGELOG.md }
   - { file: catalog/cloudflare/modules/account/CHANGELOG.md, unit: infra-cloudflare-account }
   - { file: catalog/cloudflare/modules/d1-database/CHANGELOG.md, unit: infra-cloudflare-d1-database }
+  - { file: catalog/cloudflare/modules/worker/CHANGELOG.md, unit: infra-cloudflare-worker }
   - { file: catalog/cloudflare/modules/queue/CHANGELOG.md, unit: infra-cloudflare-queue }
   - { file: catalog/cloudflare/modules/access-application/CHANGELOG.md, unit: infra-cloudflare-access-application }
   - { file: catalog/cloudflare/modules/access-policy/CHANGELOG.md, unit: infra-cloudflare-access-policy }

@@ -1,2 +1,2 @@
 version: 0.1.0
-description: One self-hosted Access application, with reusable policies in order.
+description: One self-hosted Access application, on a hostname or a Worker, with reusable policies in order.

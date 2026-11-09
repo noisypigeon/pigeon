@@ -97,53 +97,47 @@
       "additionalProperties": false,
       "required": [
         "application",
-        "owners_policy",
-        "services_policy",
-        "owners"
+        "owners_policy"
       ],
-      "description": "The Access application on the hostname and its two policies.",
+      "description": "The Access application on the stack's Worker, and its owners' policy: the account's Cloudflare members, so no address is committed.",
       "properties": {
         "application": {
           "type": "string",
-          "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+          "minLength": 1,
+          "maxLength": 128,
           "description": "The Access application's name."
-        },
-        "owners": {
-          "type": "array",
-          "minItems": 1,
-          "uniqueItems": true,
-          "items": {
-            "type": "string",
-            "format": "email"
-          },
-          "description": "The people Access lets in."
         },
         "owners_policy": {
           "type": "string",
-          "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
-          "description": "The policy that lets the owners in."
-        },
-        "services_policy": {
-          "type": "string",
-          "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
-          "description": "The policy that lets the stack's service tokens in."
+          "minLength": 1,
+          "maxLength": 128,
+          "description": "The policy that lets the account's members in."
         }
       }
     },
     "service_tokens": {
       "type": "array",
       "uniqueItems": true,
-      "description": "The stack's service tokens: the agent's, the deployer's and the builds'.",
+      "description": "The stack's service tokens, each with its own Service Auth policy: the agent's, the deployer's and the builds'.",
       "items": {
         "type": "object",
         "additionalProperties": false,
         "required": [
-          "name"
+          "name",
+          "policy"
         ],
         "properties": {
           "name": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "maxLength": 128,
+            "description": "The token's name."
+          },
+          "policy": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "description": "Its Service Auth policy's name."
           }
         }
       },
@@ -158,7 +152,7 @@
     }
   },
   "x-cobot": {
-    "version": "0.1.0",
+    "version": "0.2.0",
     "local": true,
     "secrets": [],
     "providers": {
@@ -188,15 +182,7 @@
         "inputs": {
           "account_id": "$module.account.id",
           "name": "$config.access.owners_policy",
-          "emails": "$config.access.owners"
-        }
-      },
-      "services": {
-        "module": "cloudflare/access-policy",
-        "inputs": {
-          "account_id": "$module.account.id",
-          "name": "$config.access.services_policy",
-          "service_token_ids": "$module.service_tokens[*].id"
+          "account_members": true
         }
       },
       "application": {
@@ -204,11 +190,18 @@
         "inputs": {
           "account_id": "$module.account.id",
           "name": "$config.access.application",
-          "domain": "$config.hostname",
           "policy_ids": [
-            "$module.owners.id",
-            "$module.services.id"
-          ]
+            "$module.owners.id"
+          ],
+          "policy_id_map": "$module.token_policies[*].id",
+          "worker_id": "$module.worker.id"
+        }
+      },
+      "worker": {
+        "module": "cloudflare/worker",
+        "inputs": {
+          "account_id": "$module.account.id",
+          "name": "$config.worker"
         }
       }
     },
@@ -218,6 +211,16 @@
         "over": "buckets",
         "for_each": "$item.name",
         "inputs": {}
+      },
+      "token_policies": {
+        "module": "cloudflare/access-policy",
+        "over": "service_tokens",
+        "for_each": "$item.name",
+        "inputs": {
+          "account_id": "$module.account.id",
+          "name": "$item.policy",
+          "service_token_id": "$module.service_tokens[$item.name].id"
+        }
       }
     },
     "outputs": {

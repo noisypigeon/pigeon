@@ -153,11 +153,18 @@ fn named(s: &str, name: &str) -> Option<Match> {
     .then(|| Match::Suffixed(suffix.to_string()))
 }
 
-/// A module input's literal string: the value itself, or the item's name under `for_each`.
-fn literal(v: &Value, key: Option<&str>) -> Option<String> {
+/// A module input's literal string: the value itself, or, under `for_each`, the item's key or
+/// one of its fields.
+fn literal(v: &Value, key: Option<&str>, item: &Value) -> Option<String> {
     let s = v.as_str()?;
-    if s == "${each.value.name}" || s == "${each.key}" {
+    if s == "${each.key}" {
         return key.map(str::to_string);
+    }
+    if let Some(field) = s
+        .strip_prefix("${each.value.")
+        .and_then(|f| f.strip_suffix('}'))
+    {
+        return item[field].as_str().map(str::to_string);
     }
     (!s.contains("${")).then(|| s.to_string())
 }
@@ -213,7 +220,10 @@ pub fn imports(rendered: &Value, account: &str, lookup: &dyn Lookup) -> Result<V
         };
         let all = lookup.list(kind, jurisdiction)?;
         for key in keys {
-            let Some(name) = literal(&m["name"], key.as_deref()) else {
+            let item = key
+                .as_deref()
+                .map_or(Value::Null, |k| m["for_each"][k].clone());
+            let Some(name) = literal(&m["name"], key.as_deref(), &item) else {
                 continue;
             };
             let suffixed = kind == Kind::Bucket && !m["suffix"].is_null();

@@ -8,7 +8,28 @@ variable "name" {
 }
 
 variable "domain" {
-  type = string
+  type    = string
+  default = null
+}
+
+# The Worker it protects, by ID (from `cloudflare/worker`), as Worker destinations.
+variable "worker_id" {
+  type    = string
+  default = null
+}
+
+# The Worker's URLs it protects: production (`worker`) and preview (`preview_worker`).
+variable "worker_types" {
+  type     = list(string)
+  default  = ["worker", "preview_worker"]
+  nullable = false
+}
+
+# More policy IDs, keyed by any name, after `policy_ids`.
+variable "policy_id_map" {
+  type     = map(string)
+  default  = {}
+  nullable = false
 }
 
 variable "session_duration" {

@@ -587,3 +587,20 @@ Step 4a follows the amendment above, with three differences in the details:
   offers it again under a new link, which voids the old one.
 - **Refusing needs no code,** because it only takes power away. It fails the
   run and erases the token. A lost job starts again, at most three times.
+
+### 2026-11-09: Step 4b: `platform/blue` declared as today's Access is
+
+Today's Access setup differs from step 3's kind, and the kind now follows
+it:
+
+- **The owners' policy admits the account's Cloudflare members.** It holds
+  no email list, so no address is committed.
+- **Each service token has its own Service Auth policy,** named in the unit
+  beside the token.
+- **The application is the Worker's own.** Its destinations are the
+  Worker's production and preview URLs. A new `cloudflare/worker` module
+  looks the Worker's ID up by name, so the ID never enters the repository.
+
+Adopting by name reads a `for_each` item's other fields as well, such as a
+token's policy name. `platform/blue` declares today's names exactly, so its
+first plan should import every resource and create nothing.

@@ -28,6 +28,7 @@ impl Lookup for Fake {
                 found("pigeon-owner", "p1"),
                 found("dup", "p2"),
                 found("dup", "p3"),
+                found("agent", "p4"),
             ],
             Kind::ServiceToken => vec![found("pigeon-agent", "t1")],
         })
@@ -40,15 +41,17 @@ fn rendered() -> Value {
         "account": { "source": src("account") },
         "d1": { "source": src("d1-database"), "name": "pigeon" },
         "bucket_suffixes": { "source": "/platform/catalog/agnostic/modules/random-string",
-            "for_each": { "pigeon-ci": {}, "pigeon-state": {}, "pigeon-plans": {} } },
+            "for_each": { "pigeon-ci": { "name": "pigeon-ci" }, "pigeon-state": { "name": "pigeon-state" }, "pigeon-plans": { "name": "pigeon-plans" } } },
         "buckets": { "source": src("r2-bucket"), "name": "${each.value.name}",
             "suffix": "${module.bucket_suffixes[each.value.name].result}",
-            "for_each": { "pigeon-ci": {}, "pigeon-state": {}, "pigeon-plans": {} } },
+            "for_each": { "pigeon-ci": { "name": "pigeon-ci" }, "pigeon-state": { "name": "pigeon-state" }, "pigeon-plans": { "name": "pigeon-plans" } } },
         "queue": { "source": src("queue"), "name": "pigeon-ci-events" },
         "application": { "source": src("access-application"), "name": "pigeon-control" },
         "owners": { "source": src("access-policy"), "name": "pigeon-owner" },
         "service_tokens": { "source": src("access-service-token"), "name": "${each.value.name}",
-            "for_each": { "pigeon-agent": {}, "pigeon-builds": {} } }
+            "for_each": { "pigeon-agent": { "name": "pigeon-agent" }, "pigeon-builds": { "name": "pigeon-builds" } } },
+        "token_policies": { "source": src("access-policy"), "name": "${each.value.policy}",
+            "for_each": { "pigeon-agent": { "name": "pigeon-agent", "policy": "agent" } } }
     }})
 }
 
@@ -130,7 +133,16 @@ fn each_declared_name_the_account_holds_is_imported_and_the_rest_created() {
         .as_deref(),
         Some("a1b2c3")
     );
-    assert_eq!(got.len(), 9, "{got:#?}");
+    assert_eq!(
+        to(
+            &got,
+            "module.token_policies[\"pigeon-agent\"].cloudflare_zero_trust_access_policy.this"
+        )
+        .as_deref(),
+        Some("acct/p4"),
+        "a name from the item's own field"
+    );
+    assert_eq!(got.len(), 10, "{got:#?}");
 }
 
 #[test]

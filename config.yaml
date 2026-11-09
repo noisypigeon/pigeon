@@ -22,3 +22,17 @@ units:
     site:
       title: pigeon
       description: The pigeon platform's architecture, drawn from its own configuration.
+  platform/blue:
+    kind: pigeon/platform
+    worker: pigeon-control
+    hostname: pigeon-control.pigeon-dev.workers.dev
+    instance: pigeon
+    change_floor: 12
+    database: { name: pigeon }
+    buckets: [ { name: pigeon-state }, { name: pigeon-plans }, { name: pigeon-ci } ]
+    queue: { name: pigeon-ci-events }
+    access: { application: "pigeon-control - Cloudflare Workers", owners_policy: Cloudflare account members }
+    service_tokens:
+      - { name: pigeon-agent, policy: agent }
+      - { name: pigeon-deployer, policy: pigeon-deployer }
+      - { name: pigeon-builds, policy: pigeon-builds }
