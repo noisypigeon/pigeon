@@ -31,7 +31,7 @@ bindings:
   r2:
     CI_LOGS: "$deployment.bucket_names[pigeon-ci]"
   queues:
-    consumers: [ { queue: $deployment.queue_name, max_batch_size: 10 } ]
+    consumers: [ { queue: $deployment.queue.name, max_batch_size: 10 } ]
   vars:
     INSTANCE_NAME: $deployment.instance
     NAMESPACE: pigeon
