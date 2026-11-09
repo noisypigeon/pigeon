@@ -20,6 +20,8 @@ pub mod jobs;
 pub mod mandates;
 pub mod mcp;
 pub mod merges;
+#[cfg(feature = "engines")]
+pub mod platform_job;
 pub mod push;
 pub mod reconcile;
 pub mod runs;

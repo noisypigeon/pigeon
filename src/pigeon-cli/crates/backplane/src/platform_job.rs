@@ -1,0 +1,234 @@
+//! The platform job: plans or applies one `pigeon/platform` unit on a Runner, with the owner's
+//! one-time account token, its state in R2 under `PLATFORM_STATE_KEY`, and existing resources
+//! adopted by name; see `.claude/decisions/2026-11-08-runtime-blue-green-self-standup.md`,
+//! step 4's amendment.
+
+use std::fmt::Write as _;
+use std::path::Path;
+
+use serde_json::{Value, json};
+
+use crate::control::{JobSpec, Outcome, Report};
+
+pub use crate::control::PLATFORM;
+
+/// The secret holding the platform state's passphrase.
+pub const STATE_KEY_VAR: &str = "PLATFORM_STATE_KEY";
+
+/// The state bucket's name, before its random suffix.
+pub const STATE_BUCKET: &str = "pigeon-platform-state";
+
+/// The prefix the platform's state lives under in its bucket.
+pub const STATE_PREFIX: &str = "platform";
+
+/// What a platform job does.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Task {
+    /// Plan the unit and store the plan.
+    Plan {
+        /// The unit, e.g. `platform/blue`.
+        unit: String,
+    },
+    /// Apply a stored plan of the unit.
+    Apply {
+        /// The unit.
+        unit: String,
+        /// The stored plan's ID.
+        plan: String,
+    },
+}
+
+impl Task {
+    /// The task `argv` names: `plan <unit>` or `apply <unit> <plan>`.
+    ///
+    /// # Errors
+    ///
+    /// A message for any other `argv`.
+    pub fn parse(argv: &[String]) -> Result<Self, String> {
+        match argv {
+            [verb, unit] if verb == "plan" && is_unit(unit) => {
+                Ok(Self::Plan { unit: unit.clone() })
+            }
+            [verb, unit, plan] if verb == "apply" && is_unit(unit) && !plan.is_empty() => {
+                Ok(Self::Apply {
+                    unit: unit.clone(),
+                    plan: plan.clone(),
+                })
+            }
+            _ => Err("a platform job is `plan <unit>` or `apply <unit> <plan>`".into()),
+        }
+    }
+}
+
+fn is_unit(u: &str) -> bool {
+    u.split_once('/').is_some_and(|(a, n)| {
+        a == "platform"
+            && !n.is_empty()
+            && n.bytes()
+                .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+    })
+}
+
+/// The state bucket among `names`: the one named `pigeon-platform-state-<suffix>`.
+///
+/// # Errors
+///
+/// A message when more than one is.
+pub fn state_bucket(names: &[String]) -> Result<Option<String>, String> {
+    let prefix = format!("{STATE_BUCKET}-");
+    let found: Vec<&String> = names
+        .iter()
+        .filter(|n| {
+            n.strip_prefix(&prefix).is_some_and(|s| {
+                !s.is_empty()
+                    && s.bytes()
+                        .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit())
+            })
+        })
+        .collect();
+    match found.as_slice() {
+        [] => Ok(None),
+        [one] => Ok(Some((*one).clone())),
+        _ => Err(format!(
+            "{} buckets are named {STATE_BUCKET}-…",
+            found.len()
+        )),
+    }
+}
+
+/// Why a plan with `changes` isn't applied by this job: it destroys something. A stack is
+/// removed by `platform.teardown`, never by a plan.
+#[must_use]
+pub fn destroys(changes: &[cobot::Change]) -> Option<String> {
+    let gone: Vec<String> = changes
+        .iter()
+        .filter(|c| matches!(c.action, cobot::Action::Delete | cobot::Action::Replace))
+        .map(|c| format!("{} ({})", c.address, c.action.word()))
+        .collect();
+    (!gone.is_empty()).then(|| format!("the plan destroys {}", gone.join(", ")))
+}
+
+fn random_suffix() -> Result<String, String> {
+    let mut b = [0u8; 4];
+    std::fs::File::open("/dev/urandom")
+        .and_then(|mut f| std::io::Read::read_exact(&mut f, &mut b))
+        .map_err(|e| format!("no randomness: {e}"))?;
+    Ok(b.iter().fold(String::new(), |mut s, x| {
+        let _ = write!(s, "{x:02x}");
+        s
+    }))
+}
+
+/// The state bucket on `account`, created with a random suffix if there is none.
+fn ensure_bucket(
+    api: &cobot::cloudflare::Api,
+    account: &str,
+    log: &mut String,
+) -> Result<String, String> {
+    let names = cobot::cloudflare::bucket_names(api, account)?;
+    if let Some(b) = state_bucket(&names)? {
+        log.push_str("the platform's state bucket exists\n");
+        return Ok(b);
+    }
+    let name = format!("{STATE_BUCKET}-{}", random_suffix()?);
+    cobot::cloudflare::create_bucket(api, account, &name)?;
+    log.push_str("created the platform's state bucket\n");
+    Ok(name)
+}
+
+fn changes(c: &[cobot::Change]) -> Value {
+    Value::Array(
+        c.iter()
+            .map(|c| json!({ "address": c.address, "action": c.action.word(), "attributes": c.attributes }))
+            .collect(),
+    )
+}
+
+/// Runs a platform job from the checkout at `dir`.
+#[must_use]
+pub fn run(spec: &JobSpec, dir: &Path) -> Report {
+    let mut log = String::new();
+    let secrets: Vec<String> = spec.env.values().cloned().collect();
+    let scrub = |t: &str| {
+        secrets
+            .iter()
+            .filter(|s| s.len() >= 8)
+            .fold(t.to_string(), |acc, s| acc.replace(s.as_str(), "…"))
+    };
+    match work(spec, dir, &mut log) {
+        Ok(result) => Report {
+            platform: Some(result),
+            ..crate::jobs::report(spec, Outcome::Passed, &scrub(&log))
+        },
+        Err(why) => Report {
+            violations: vec![scrub(&why)],
+            ..crate::jobs::report(spec, Outcome::Failed, &scrub(&log))
+        },
+    }
+}
+
+fn work(spec: &JobSpec, dir: &Path, log: &mut String) -> Result<Value, String> {
+    let task = Task::parse(&spec.argv)?;
+    let env = |k: &str| spec.env.get(k).filter(|v| !v.is_empty()).cloned();
+    let token = env(cobot::cloudflare::TOKEN_VAR)
+        .ok_or("the owner's account token didn't reach the job")?;
+    let key = env(STATE_KEY_VAR).ok_or(format!("{STATE_KEY_VAR} isn't set"))?;
+    let api = cobot::cloudflare::Api::new(None, token.clone());
+    let account = api.account()?;
+    let bucket = ensure_bucket(&api, &account, log)?;
+    let vars = [
+        (cobot::cloudflare::TOKEN_VAR.to_string(), token.clone()),
+        (cobot::PASSPHRASE_VAR.to_string(), key),
+        (
+            cobot::state::ENDPOINT_VAR.to_string(),
+            cobot::sites::endpoint(&account),
+        ),
+        (
+            cobot::state::ACCESS_KEY_VAR.to_string(),
+            api.token_id(&account)?,
+        ),
+        (
+            cobot::state::SECRET_KEY_VAR.to_string(),
+            cobot::s3::sha256_hex(token.as_bytes()),
+        ),
+    ];
+    let var = |k: &str| vars.iter().find(|(n, _)| n == k).map(|(_, v)| v.clone());
+    let state = format!("r2://{bucket}/{STATE_PREFIX}");
+    let providers = dir.join(".config");
+    let failed = |e: cobot::Error| e.to_string();
+    let mut s = cobot::session::open(dir, &providers, &state, var).map_err(failed)?;
+    let now = cobot::session::now();
+    match task {
+        Task::Plan { unit } => {
+            s.ctx.adopt = true;
+            let units = cobot::select_in(dir, dir, &providers, std::slice::from_ref(&unit))
+                .map_err(failed)?;
+            let (stored, plans) = cobot::plan_stored(&s.ctx, &units, now).map_err(failed)?;
+            s.push().map_err(failed)?;
+            let all: Vec<cobot::Change> = plans.iter().flat_map(|p| p.changes.clone()).collect();
+            let _ = writeln!(
+                log,
+                "planned {unit}: {} change(s), plan {}",
+                all.len(),
+                stored.id
+            );
+            if let Some(why) = destroys(&all) {
+                return Err(why);
+            }
+            Ok(json!({ "task": "plan", "unit": unit, "plan": stored.id,
+                "expires": stored.expires, "changes": changes(&all) }))
+        }
+        Task::Apply { unit, plan } => {
+            let applied = s.apply_stored(&plan, now);
+            s.push().map_err(failed)?;
+            let applied = applied.map_err(failed)?;
+            let all: Vec<cobot::Change> = applied.iter().flat_map(|p| p.changes.clone()).collect();
+            let _ = writeln!(
+                log,
+                "applied plan {plan} to {unit}: {} change(s)",
+                all.len()
+            );
+            Ok(json!({ "task": "apply", "unit": unit, "plan": plan, "changes": changes(&all) }))
+        }
+    }
+}

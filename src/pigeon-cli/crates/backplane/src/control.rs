@@ -420,6 +420,10 @@ pub struct Report {
     /// For the restack job: what it did.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub restack: Option<changes::Restacked>,
+    /// For a platform job: the plan or apply, its unit and its changes; see
+    /// .claude/decisions/2026-11-08-runtime-blue-green-self-standup.md, step 4's amendment.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub platform: Option<serde_json::Value>,
 }
 
 /// The job images a deploy references, as the `DEPLOY_IMAGES` secret holds them: the commit
@@ -705,6 +709,10 @@ pub fn audit(
 /// The job that publishes what a push to `main` changed.
 pub const DEPLOY: &str = "deploy";
 
+/// The job that plans or applies a platform unit; see
+/// .claude/decisions/2026-11-08-runtime-blue-green-self-standup.md, step 4's amendment.
+pub const PLATFORM: &str = "platform";
+
 /// A deploy job's ID: `main-<sha, 12>-deploy`.
 #[must_use]
 pub fn deploy_id(sha: &str) -> String {
@@ -957,7 +965,7 @@ impl Class {
 pub fn class_of(job: &str) -> Class {
     // A deploy builds the Worker to wasm, so it runs on `Checker`; see
     // .claude/decisions/2026-11-07-development-control-plane-deploys-itself.md.
-    if job == BOUND || job == MERGE || job == changes::RESTACK {
+    if job == BOUND || job == MERGE || job == changes::RESTACK || job == PLATFORM {
         Class::Runner
     } else {
         Class::Checker

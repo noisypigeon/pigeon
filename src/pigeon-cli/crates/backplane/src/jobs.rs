@@ -71,6 +71,7 @@ impl Board {
             images: None,
             tiers: None,
             restack: None,
+            platform: None,
         };
         self.set(running.clone());
         let board = Arc::clone(self);
@@ -89,7 +90,7 @@ impl Board {
     }
 }
 
-fn report(spec: &JobSpec, outcome: Outcome, log: &str) -> Report {
+pub(crate) fn report(spec: &JobSpec, outcome: Outcome, log: &str) -> Report {
     Report {
         id: spec.id.clone(),
         outcome,
@@ -103,6 +104,7 @@ fn report(spec: &JobSpec, outcome: Outcome, log: &str) -> Report {
         images: None,
         tiers: None,
         restack: None,
+        platform: None,
     }
 }
 
@@ -146,6 +148,9 @@ pub fn run(spec: &JobSpec, dir: &Path) -> Report {
     }
     if spec.job == DEPLOY {
         return deploy(spec, dir);
+    }
+    if spec.job == crate::control::PLATFORM {
+        return crate::platform_job::run(spec, dir);
     }
     let workspace = dir.join(cobot::scope::WORKSPACE);
     let (ok, log) = cobot::ci::exec(&workspace, &spec.argv, cobot::ci::TIMEOUT, &spec.token);
@@ -430,6 +435,7 @@ fn bound(spec: &JobSpec, dir: &Path) -> Report {
         images: None,
         tiers,
         restack: None,
+        platform: None,
     }
 }
 

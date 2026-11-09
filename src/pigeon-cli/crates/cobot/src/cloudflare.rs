@@ -246,6 +246,34 @@ fn ok(status: u16, body: &Value, method: &str, path: &str) -> Result<Value, Stri
     }
 }
 
+/// The names of `account`'s R2 buckets in the default jurisdiction.
+///
+/// # Errors
+///
+/// A message naming the call that failed.
+pub fn bucket_names(api: &Api, account: &str) -> Result<Vec<String>, String> {
+    let v = api.get(&format!("/accounts/{account}/r2/buckets?per_page=1000"))?;
+    Ok(v["buckets"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|b| b["name"].as_str().map(str::to_string))
+        .collect())
+}
+
+/// Creates the R2 bucket `name` on `account`, in the default jurisdiction.
+///
+/// # Errors
+///
+/// A message naming the call that failed.
+pub fn create_bucket(api: &Api, account: &str, name: &str) -> Result<(), String> {
+    api.post(
+        &format!("/accounts/{account}/r2/buckets"),
+        &serde_json::json!({ "name": name }),
+    )
+    .map(|_| ())
+}
+
 #[cfg(test)]
 mod tests {
     use super::{shown, token};
