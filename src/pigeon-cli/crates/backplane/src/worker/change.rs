@@ -11,7 +11,7 @@ use worker::{DurableObject, Env, Method, Request, Response, Result, State, durab
 use super::platform::{self, Settings, job_stub, json_request, now};
 use crate::changes::{Change, Effect, Event, JobStatus};
 use crate::control::{self, Outcome, Report};
-use crate::grants::Grants;
+use crate::grants::{Grant, Grants};
 
 const CHANGE: &str = "change";
 const PENDING: &str = "pending";
@@ -47,6 +47,24 @@ pub struct ChangeRun {
 }
 
 impl ChangeRun {
+    /// Records the owner's proof on `grant` as covering `change`'s remaining stages, when it
+    /// needed one and the page named who gave it; see the 2026-11-09 approvals ADR §3.
+    async fn keep_grant(&self, change: &Change, grant: &Grant, body: &Value) -> Result<()> {
+        let Some(by) = body["by"].as_str() else {
+            return Ok(());
+        };
+        if !grant.needs_code() {
+            return Ok(());
+        }
+        let mut change = change.clone();
+        change.grant = Some(crate::changes::ChangeGrant {
+            by: by.to_string(),
+            expires: now() + crate::grants::PAGE_TTL,
+            review: body["review"].as_bool().unwrap_or_default(),
+        });
+        self.state.storage().put(CHANGE, &change).await
+    }
+
     /// Sets an alarm now if work is pending or a job is open but none is set: the runtime
     /// drops an alarm that keeps failing, and only an alarm moves a job on.
     async fn rearm(&self) -> Result<()> {
@@ -311,6 +329,9 @@ impl DurableObject for ChangeRun {
                 let mut grants: Grants = self.load(GRANTS).await?;
                 let redeemed = grants.redeem(token, operation, &change, now());
                 self.state.storage().put(GRANTS, &grants).await?;
+                if let Ok(g) = &redeemed {
+                    self.keep_grant(&change, g, &body).await?;
+                }
                 match redeemed {
                     Ok(grant) => Response::from_json(&grant),
                     Err(why) => Response::error(why, 403),

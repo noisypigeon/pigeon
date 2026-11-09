@@ -115,7 +115,7 @@ pub async fn build(env: &Env, s: &Settings) -> Result<(Digest, u64)> {
         .filter(|x| x.kind == "change.approved")
         .filter_map(|x| {
             let by = x.summary.rsplit_once(" by ")?.1;
-            (by.starts_with("mandate:") || by.starts_with("policy:"))
+            (by.starts_with("mandate:") || by.starts_with("policy:") || by.starts_with("grant:"))
                 .then(|| (x.change.unwrap_or_default(), by.to_string()))
         })
         .collect();

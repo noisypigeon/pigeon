@@ -219,6 +219,19 @@ pub struct Carried {
     pub to: Option<String>,
 }
 
+/// One proof covering a change's remaining stages; see
+/// `.claude/decisions/2026-11-09-security-approvals-once-passkeys.md` §3.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ChangeGrant {
+    /// Who gave the proof.
+    pub by: String,
+    /// When it lapses, in Unix seconds.
+    pub expires: u64,
+    /// Whether the owner keeps the merge for themselves.
+    #[serde(default)]
+    pub review: bool,
+}
+
 /// A change.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Change {
@@ -285,6 +298,9 @@ pub struct Change {
     /// A head pushed while its restack ran, applied once the restack reports.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub held: Option<String>,
+    /// The owner's one proof for its remaining stages.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub grant: Option<ChangeGrant>,
 }
 
 /// Something that happened to a change.
@@ -488,6 +504,7 @@ impl Change {
             conflict: None,
             parent: None,
             held: None,
+            grant: None,
         }
     }
 

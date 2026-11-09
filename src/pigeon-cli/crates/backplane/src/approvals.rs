@@ -213,6 +213,22 @@ pub fn by_policy(change: &crate::changes::Change, operation: &str) -> Option<Str
     (merge.tier <= Tier::Confirm).then(|| merge.rule.clone())
 }
 
+/// Who approves `operation` on `change` through its change grant at `now`: authorizing,
+/// approving or merging at no more than the code tier, while the grant lasts and, to merge,
+/// unless the owner kept the merge; see
+/// `.claude/decisions/2026-11-09-security-approvals-once-passkeys.md` §3.
+#[must_use]
+pub fn by_grant(change: &crate::changes::Change, operation: &str, now: u64) -> Option<String> {
+    let g = change.grant.as_ref()?;
+    let stage = matches!(
+        operation,
+        "change.authorize" | "change.approve" | "change.merge"
+    );
+    let kept = g.review && operation == "change.merge";
+    (stage && !kept && now < g.expires && tier_of(change, operation) <= Tier::Code)
+        .then(|| g.by.clone())
+}
+
 /// The tier `operation` on `change` needs now, from its head's tiers.
 /// - Authorizing stays code until the Worker classifies a scope.
 /// - Auto counts as confirm until automatic approval lands.

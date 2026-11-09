@@ -44,6 +44,12 @@ const CODE_FIELD: &str = "<p><label>Authenticator code<br><input name=\"code\" i
 autocomplete=\"one-time-code\" pattern=\"[0-9]{6}\" maxlength=\"6\" required></label></p>";
 
 /// What the page says instead, at the confirm tier.
+/// What a proof on a change's page also covers, and the box that keeps the merge for the owner;
+/// see `.claude/decisions/2026-11-09-security-approvals-once-passkeys.md` §3.
+const COVERS: &str = "<p><small>This proof also covers the change's later stages, at no more than \
+the code tier, for 24 hours. A head that touches a secret, or destroys anything, still asks.</small></p>\
+<p><label><input type=\"checkbox\" name=\"review\" value=\"1\"> Keep the merge for me to approve</label></p>";
+
 const CONFIRM_NOTE: &str =
     "<p>This is a low-risk operation, so one tap approves it; no code is needed.</p>";
 
@@ -226,10 +232,12 @@ pub fn page(change: &Change, grant: &Grant, token: &str) -> String {
 <a href=\"/approvals\">Everything waiting</a></small></p>",
         escape(token),
         escape(&grant.operation),
-        if grant.needs_code() {
-            CODE_FIELD
+        if grant.needs_code() && grant.operation != "change.close" {
+            format!("{CODE_FIELD}{COVERS}")
+        } else if grant.needs_code() {
+            CODE_FIELD.to_string()
         } else {
-            CONFIRM_NOTE
+            CONFIRM_NOTE.to_string()
         },
         escape(verb(&grant.operation))
     );

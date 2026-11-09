@@ -215,7 +215,9 @@ async fn post(
             return refused(403, &why);
         }
     }
-    let body = json!({ "token": token, "operation": operation });
+    let review = approve::field(&form, "review").as_deref() == Some("1");
+    let body =
+        json!({ "token": token, "operation": operation, "by": who.subject, "review": review });
     let (status, v) = to_change(env, &s.repo, n, Method::Post, "/redeem", Some(&body)).await?;
     let _ = elicit::inbox(
         env,

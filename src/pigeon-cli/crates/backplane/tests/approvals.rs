@@ -282,3 +282,51 @@ fn secrets_and_destruction_need_the_owner_each_time() {
         "a pushed change's work would be lost"
     );
 }
+
+#[test]
+fn one_proof_covers_a_changes_later_stages_up_to_the_code_tier() {
+    use backplane::approvals::by_grant;
+    use backplane::changes::{Change, ChangeGrant};
+    let mut c = Change::propose(9, "x", "feat: x", "plan", vec!["infra/**".into()], "agent");
+    assert_eq!(by_grant(&c, "change.authorize", 100), None, "no proof yet");
+    c.grant = Some(ChangeGrant {
+        by: "owner@example.com".into(),
+        expires: 1000,
+        review: false,
+    });
+    assert_eq!(
+        by_grant(&c, "change.authorize", 100).as_deref(),
+        Some("owner@example.com")
+    );
+    c.head = Some("abc".into());
+    c.tiers = Some(tiers_of(&["infra/**"], &["infra/x/unit.yaml"], PLAIN));
+    assert_eq!(c.tiers.as_ref().map(|t| t.merge.tier), Some(Tier::Code));
+    assert!(
+        by_grant(&c, "change.merge", 100).is_some(),
+        "a deploying head"
+    );
+    assert_eq!(by_grant(&c, "change.merge", 1000), None, "lapsed");
+    assert_eq!(
+        by_grant(&c, "change.close", 100),
+        None,
+        "closing is never covered"
+    );
+    c.tiers = Some(tiers_of(
+        &["infra/**"],
+        &["infra/x/secrets.config.yaml"],
+        PLAIN,
+    ));
+    assert_eq!(
+        by_grant(&c, "change.merge", 100),
+        None,
+        "a secret asks again"
+    );
+    c.tiers = Some(tiers_of(&["infra/**"], &["infra/x/unit.yaml"], PLAIN));
+    c.grant.as_mut().expect("grant").review = true;
+    assert!(by_grant(&c, "change.approve", 100).is_some());
+    assert_eq!(
+        by_grant(&c, "change.merge", 100),
+        None,
+        "the owner kept the merge"
+    );
+}
