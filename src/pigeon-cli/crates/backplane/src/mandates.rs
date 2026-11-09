@@ -347,6 +347,10 @@ pub fn decide(m: &Mandate, change: &crate::changes::Change, operation: &str, now
             "change {} needs the code ({})",
             change.number, merge.rule
         )),
+        Tier::Owner => Decision::Ask(format!(
+            "change {} needs the owner each time ({})",
+            change.number, merge.rule
+        )),
     }
 }
 

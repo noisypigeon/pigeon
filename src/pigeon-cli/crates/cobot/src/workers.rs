@@ -489,15 +489,39 @@ pub fn discover(root: &Path) -> Result<Vec<Found>, Error> {
 /// As [`discover`], and [`Error::UnknownUnit`] for an unknown name.
 pub fn select(root: &Path, names: &[String]) -> Result<Vec<Found>, Error> {
     let all = discover(root)?;
+    let aliases: Vec<Vec<String>> = all.iter().map(|f| known_as(root, f)).collect();
     for n in names {
-        if !all.iter().any(|f| &f.spec.name == n) {
+        if !aliases.iter().any(|k| k.contains(n)) {
             return Err(Error::UnknownUnit(format!("workers/{n}")));
         }
     }
     Ok(all
         .into_iter()
-        .filter(|f| names.is_empty() || names.contains(&f.spec.name))
+        .zip(aliases)
+        .filter(|(_, k)| names.is_empty() || k.iter().any(|n| names.contains(n)))
+        .map(|(f, _)| f)
         .collect())
+}
+
+/// The names `found` answers to: its own, and for a stack-bound spec, the name each stack of
+/// its kind gives it.
+fn known_as(root: &Path, found: &Found) -> Vec<String> {
+    let mut out = vec![found.spec.name.clone()];
+    if let Some(kind) = &found.spec.deployment {
+        out.extend(
+            stacks(root, kind)
+                .iter()
+                .filter_map(|u| bind(root, found, u).ok())
+                .map(|b| b.spec.name),
+        );
+    }
+    out
+}
+
+/// The name `found` deploys as: bound as a deploy binds it with no stack named, else its own.
+#[must_use]
+pub fn deployed_name(root: &Path, found: &Found) -> String {
+    bound(root, found, None).map_or_else(|_| found.spec.name.clone(), |b| b.spec.name)
 }
 
 /// As [`select`], each spec bound with [`bind`] to the stack `deployment`.

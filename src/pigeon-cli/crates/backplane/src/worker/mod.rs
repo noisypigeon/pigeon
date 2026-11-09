@@ -172,6 +172,9 @@ async fn offer(
     if let Some(r) = under_mandate(env, settings, number, request).await? {
         return Response::from_json(&mcp::answer(id, r));
     }
+    if let Some(r) = under_policy(env, settings, number, request).await? {
+        return Response::from_json(&mcp::answer(id, r));
+    }
     let host = env
         .var(cobot::ship_wire::HOST_VAR)
         .map(|v| v.to_string())
@@ -249,6 +252,31 @@ async fn under_mandate(
     };
     let who = Identity {
         subject: format!("mandate:{m}"),
+        human: true,
+    };
+    Ok(Some(run(env, s, &who, request).await))
+}
+
+/// Runs `request` on change `number` as `policy:<rule>`, when its head's tier lets the control
+/// plane approve it; see `.claude/decisions/2026-11-09-security-approvals-once-passkeys.md` §1.
+async fn under_policy(
+    env: &Env,
+    s: &Settings,
+    number: u32,
+    request: &wire::Request,
+) -> Result<Option<std::result::Result<WireResponse, crate::Error>>> {
+    let (status, v) = to_change(env, &s.repo, number, Method::Get, "/status", None).await?;
+    if status != 200 {
+        return Ok(None);
+    }
+    let Ok(change) = serde_json::from_value::<Change>(v["change"].clone()) else {
+        return Ok(None);
+    };
+    let Some(rule) = crate::approvals::by_policy(&change, &request.operation) else {
+        return Ok(None);
+    };
+    let who = Identity {
+        subject: format!("policy:{rule}"),
         human: true,
     };
     Ok(Some(run(env, s, &who, request).await))

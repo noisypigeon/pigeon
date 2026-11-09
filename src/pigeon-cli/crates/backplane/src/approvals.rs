@@ -17,6 +17,9 @@ pub enum Tier {
     Confirm,
     /// The owner, with the authenticator code.
     Code,
+    /// The owner, proven, for each operation: destruction and secrets; see
+    /// `.claude/decisions/2026-11-09-security-approvals-once-passkeys.md` §2.
+    Owner,
 }
 
 /// A tier and the rule that chose it.
@@ -54,6 +57,12 @@ pub struct Rules {
     /// Where ADRs live; a change that only appends to existing ones is automatic.
     #[serde(default)]
     pub decisions: Option<String>,
+    /// Paths whose change adds, reads or exposes a secret: always the owner.
+    #[serde(default)]
+    pub secrets: Vec<String>,
+    /// Files whose `secrets:` list a change may lengthen, which needs the owner.
+    #[serde(default)]
+    pub secret_lists: Vec<String>,
 }
 
 /// Whether `path` matches `glob`.
@@ -166,6 +175,18 @@ pub fn classify(rules: &Rules, scope: &[String], files: &[String], facts: Facts)
         merge,
         close,
     }
+}
+
+/// The rule under which the control plane itself approves `operation` on `change`: approving
+/// or merging a head whose merge tier is auto or confirm; see
+/// `.claude/decisions/2026-11-09-security-approvals-once-passkeys.md` §1.
+#[must_use]
+pub fn by_policy(change: &crate::changes::Change, operation: &str) -> Option<String> {
+    if !matches!(operation, "change.approve" | "change.merge") {
+        return None;
+    }
+    let merge = &change.tiers.as_ref()?.merge;
+    (merge.tier <= Tier::Confirm).then(|| merge.rule.clone())
 }
 
 /// The tier `operation` on `change` needs now, from its head's tiers.

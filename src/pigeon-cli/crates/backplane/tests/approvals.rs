@@ -185,3 +185,45 @@ fn an_operation_needs_the_tier_its_head_was_given_and_code_without_one() {
         Tier::Code
     );
 }
+
+#[test]
+fn the_control_plane_approves_and_merges_only_what_is_auto_or_confirm() {
+    use backplane::approvals::{Tiered, by_policy};
+    use backplane::changes::Change;
+    let mut c = Change::propose(
+        9,
+        "x",
+        "feat: x",
+        "plan",
+        vec!["tooling/**".into()],
+        "agent",
+    );
+    assert_eq!(by_policy(&c, "change.approve"), None, "no tiers yet");
+    c.tiers = Some(tiers_of(&["tooling/**"], &["tooling/README.md"], PLAIN));
+    assert_eq!(by_policy(&c, "change.approve").as_deref(), Some("routine"));
+    assert_eq!(by_policy(&c, "change.merge").as_deref(), Some("routine"));
+    assert_eq!(
+        by_policy(&c, "change.authorize"),
+        None,
+        "authorizing stays the owner's"
+    );
+    assert_eq!(
+        by_policy(&c, "change.close"),
+        None,
+        "closing stays the owner's"
+    );
+    c.tiers = Some(tiers_of(
+        &["src/pigeon-cli/Dockerfile"],
+        &["src/pigeon-cli/Dockerfile"],
+        PLAIN,
+    ));
+    assert_eq!(by_policy(&c, "change.merge"), None, "code is the owner's");
+    let mut owner = tiers_of(&["tooling/**"], &["tooling/README.md"], PLAIN);
+    owner.merge = Tiered {
+        tier: Tier::Owner,
+        rule: "secrets: x".into(),
+    };
+    c.tiers = Some(owner);
+    assert_eq!(by_policy(&c, "change.merge"), None);
+    assert!(Tier::Owner > Tier::Code, "owner outranks code");
+}

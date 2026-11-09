@@ -819,3 +819,14 @@ fn a_nested_setting_binds_by_its_path_and_one_stack_needs_no_name() {
         .expect_err("an object isn't a value");
     assert!(e.contains("not a single value"), "{e}");
 }
+
+#[test]
+fn a_stack_bound_spec_is_selected_by_the_name_each_stack_gives_it() {
+    let root = fixture(STACK_SPEC);
+    stacks(root.path());
+    for name in ["pigeon-control", "pigeon-green", "$deployment.worker"] {
+        let found = workers::select(root.path(), &[name.to_string()]).expect(name);
+        assert_eq!(found.len(), 1, "{name}");
+    }
+    assert!(workers::select(root.path(), &["pigeon-red".into()]).is_err());
+}

@@ -619,7 +619,10 @@ pub fn builds(files: Option<&[String]>) -> bool {
 pub fn workers(root: &Path, files: Option<&[String]>) -> Result<Vec<String>, Error> {
     let found = crate::workers::discover(root)?;
     let Some(files) = files else {
-        return Ok(found.into_iter().map(|f| f.spec.name).collect());
+        return Ok(found
+            .iter()
+            .map(|f| crate::workers::deployed_name(root, f))
+            .collect());
     };
     let crates = crates(root)?;
     let mut out = Vec::new();
@@ -666,7 +669,7 @@ pub fn workers(root: &Path, files: Option<&[String]>) -> Result<Vec<String>, Err
                 .any(|i| file == i || (i.ends_with('/') && file.starts_with(i.as_str())))
         });
         if hit {
-            out.push(f.spec.name);
+            out.push(crate::workers::deployed_name(root, &f));
         }
     }
     Ok(out)
