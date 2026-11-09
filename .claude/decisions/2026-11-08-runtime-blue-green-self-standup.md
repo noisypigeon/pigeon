@@ -479,3 +479,96 @@ changes.
 Step 4 then declares `platform/blue` with today's names, imports its
 resources into the R2 state, and moves `worker.yaml` onto `$deployment`.
 Step 4 is unchanged otherwise.
+
+### 2026-11-09: Step 4 runs on the engine: `platform.plan` and `platform.apply`
+
+No agent session holds an account token, a state passphrase or R2
+credentials, and step 4 needs all three. Rather than have the owner apply
+`platform/blue` by hand, this amendment brings forward the part of §5 that
+lets the engine apply a stack under the owner's grant. Step 4's import is
+then its first use, and §5's stand-up reuses it.
+
+#### The operations
+
+- **`platform.plan <unit>`** plans one `pigeon/platform` unit.
+  **`platform.apply <unit> <plan>`** applies a stored plan of it, exactly.
+- **Each is a Runner job,** as the deploy job is, and each is approved at
+  the code tier, every time. An agent's call answers with the approval
+  page's link.
+- **The plan's report** lists each resource's address and action. Sensitive
+  values stay hidden, as `cobot show` hides them. The apply grant binds
+  the plan's ID and digest. A plan applies only within 24 hours, and only
+  while the state hasn't moved since it was made.
+
+#### The credential
+
+- **The approval page for `platform.plan` takes an account token** beside
+  the authenticator code. The owner makes it in the dashboard with:
+  - Account Settings Read;
+  - D1 Edit;
+  - Workers R2 Storage Edit;
+  - Queues Edit;
+  - Access: Apps and Policies Edit;
+  - Access: Service Tokens Edit.
+- **The Worker verifies the token before accepting it:** active, and for
+  this account only.
+- **It is stored only for the run,** encrypted with AES-GCM under a key
+  derived from `BACKPLANE_TOKEN`, in the run's D1 row. It is erased when
+  the apply finishes, when the plan is refused, or after 24 hours,
+  whichever comes first.
+- **It reaches the job only inside the signed job spec,** and is never in a
+  log, event, report or digest. The page reminds the owner to revoke it
+  afterwards.
+
+#### State
+
+- **The bucket** is `pigeon-platform-state-<random>`.
+  - The job finds it by that prefix with the owner's token.
+  - If it doesn't exist, the job creates it with a random suffix.
+  - Its full name is never in the repository.
+- **R2 access** uses S3 credentials derived from the owner's token, as the
+  deploy job derives them for builds. State lives under the prefix
+  `platform/`.
+- **The passphrase** is a new Worker secret, `PLATFORM_STATE_KEY`.
+  - The owner sets it once, from 32 random bytes, and keeps a copy as
+    break-glass.
+  - It is the platform's alone, never an instance's.
+
+#### Adopting existing resources by name
+
+The repository never holds IDs, so the job looks them up. For each resource
+the unit declares that isn't in state yet, the job finds it by its declared
+name and writes an OpenTofu `import` block for it:
+
+- the D1 database, by name;
+- each bucket, by name or `name-<suffix>`. The suffix's `random_string` is
+  imported from the name;
+- the queue, by name;
+- the Access application, its two policies and its service tokens, by
+  name.
+
+A name that matches more than one resource stops the plan. A name that
+matches none is created.
+
+- **Imported service tokens have no secret in state,** because Cloudflare
+  shows a secret only once. That's fine for `platform/blue`, whose secrets
+  are already set; §5 creates fresh ones.
+- **The expected plan for `platform/blue`** imports everything and creates
+  nothing. The only update allowed is the D1 no-op the `infra/pigeon/`
+  README describes. Anything else means a name is wrong, and the owner
+  refuses the apply.
+
+#### Execution
+
+- **4a. `feat(backplane)`:**
+  - the two operations, and the credential on the approval page;
+  - the Runner job;
+  - adopting by name in `cobot`;
+  - `PLATFORM_STATE_KEY` in `worker.yaml`'s secret list.
+- **4b. `feat(infra)`:** `platform/blue` in the root `config.yaml`, with
+  today's names. Then the owner sets `PLATFORM_STATE_KEY`, plans, and
+  applies.
+- **4c. `feat(infra)`:**
+  - `worker.yaml` moves onto `$deployment`, bound to `platform/blue`;
+  - `DEPLOY_OUTPUTS` comes from the stack's state;
+  - the custom domain `control.pigeon.dev` is added.
