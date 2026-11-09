@@ -106,6 +106,12 @@ belong in the ADR, never in the file.
   authenticator code); guarded paths are always code; a page,
   `/approve/<grant>`, behind Access approves any tier from a phone, per
   [`2026-11-08-security-tiered-approvals-task-mandates.md`](.claude/decisions/2026-11-08-security-tiered-approvals-task-mandates.md).
+- Confirm-tier approvals are automatic; a code-tier change takes one proof for
+  all its stages; destructive operations and changes that add, read or expose
+  secrets (`secrets:` and `secret_lists:` in `.config/approvals.yaml`) take
+  the owner's proof each time; a proof is the code or a passkey registered on
+  `/passkeys`, per
+  [`2026-11-09-security-approvals-once-passkeys.md`](.claude/decisions/2026-11-09-security-approvals-once-passkeys.md).
 - The control plane deploys itself: on each push to `main`, `MainRun`'s
   deploy job deploys the Workers whose inputs changed, with outputs from
   `DEPLOY_OUTPUTS`, images by registry reference, a health check and
