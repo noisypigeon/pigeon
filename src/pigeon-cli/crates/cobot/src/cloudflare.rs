@@ -119,7 +119,7 @@ impl Api {
         self.call_with(method, path, body, &[])
     }
 
-    fn call_with(
+    pub(crate) fn call_with(
         &self,
         method: &str,
         path: &str,
@@ -143,10 +143,15 @@ impl Api {
                     |r, (k, v)| r.header(*k, *v),
                 )
                 .call(),
-            (_, Some(b)) => agent
-                .post(&url)
-                .header("authorization", &auth)
-                .header("content-type", "application/json")
+            (_, Some(b)) => headers
+                .iter()
+                .fold(
+                    agent
+                        .post(&url)
+                        .header("authorization", &auth)
+                        .header("content-type", "application/json"),
+                    |r, (k, v)| r.header(*k, *v),
+                )
                 .send(b.to_string().as_bytes()),
         };
         let mut r = sent.map_err(|_| format!("{method} {what}: the request failed"))?;
@@ -246,13 +251,19 @@ fn ok(status: u16, body: &Value, method: &str, path: &str) -> Result<Value, Stri
     }
 }
 
-/// The names of `account`'s R2 buckets in the default jurisdiction.
+/// The jurisdiction the platform's buckets are in, as [`crate::sites::endpoint`] reaches them.
+pub const JURISDICTION: &str = "eu";
+
+/// The names of `account`'s R2 buckets in [`JURISDICTION`].
 ///
 /// # Errors
 ///
 /// A message naming the call that failed.
 pub fn bucket_names(api: &Api, account: &str) -> Result<Vec<String>, String> {
-    let v = api.get(&format!("/accounts/{account}/r2/buckets?per_page=1000"))?;
+    let v = api.get_with(
+        &format!("/accounts/{account}/r2/buckets?per_page=1000"),
+        &[("cf-r2-jurisdiction", JURISDICTION)],
+    )?;
     Ok(v["buckets"]
         .as_array()
         .into_iter()
@@ -261,16 +272,20 @@ pub fn bucket_names(api: &Api, account: &str) -> Result<Vec<String>, String> {
         .collect())
 }
 
-/// Creates the R2 bucket `name` on `account`, in the default jurisdiction.
+/// Creates the R2 bucket `name` on `account`, in [`JURISDICTION`].
 ///
 /// # Errors
 ///
 /// A message naming the call that failed.
 pub fn create_bucket(api: &Api, account: &str, name: &str) -> Result<(), String> {
-    api.post(
-        &format!("/accounts/{account}/r2/buckets"),
-        &serde_json::json!({ "name": name }),
+    let path = format!("/accounts/{account}/r2/buckets");
+    api.call_with(
+        "POST",
+        &path,
+        Some(&serde_json::json!({ "name": name })),
+        &[("cf-r2-jurisdiction", JURISDICTION)],
     )
+    .and_then(|(status, b)| ok(status, &b, "POST", &path))
     .map(|_| ())
 }
 
