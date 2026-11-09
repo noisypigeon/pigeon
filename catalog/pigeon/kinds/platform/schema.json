@@ -124,7 +124,9 @@
         "additionalProperties": false,
         "required": [
           "name",
-          "policy"
+          "policy",
+          "secret_version",
+          "previous_secret_expires"
         ],
         "properties": {
           "name": {
@@ -138,6 +140,16 @@
             "minLength": 1,
             "maxLength": 128,
             "description": "Its Service Auth policy's name."
+          },
+          "secret_version": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "The live secret's version, as Cloudflare holds it; raising it rotates the secret."
+          },
+          "previous_secret_expires": {
+            "type": "string",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$",
+            "description": "When the secret before the live one stops being accepted, as Cloudflare holds it (RFC 3339, UTC)."
           }
         }
       },
@@ -146,13 +158,15 @@
         "for_each": "$item.name",
         "inputs": {
           "account_id": "$module.account.id",
-          "name": "$item.name"
+          "name": "$item.name",
+          "secret_version": "$item.secret_version",
+          "previous_secret_expires": "$item.previous_secret_expires"
         }
       }
     }
   },
   "x-cobot": {
-    "version": "0.2.0",
+    "version": "0.3.0",
     "local": true,
     "secrets": [],
     "providers": {

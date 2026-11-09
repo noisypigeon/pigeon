@@ -13,8 +13,8 @@ resource "cloudflare_zero_trust_access_service_token" "this" {
   name       = var.name
   duration   = var.duration
 
-  # Rotation is never a side effect of adopting or updating a token.
-  lifecycle {
-    ignore_changes = [client_secret_version, previous_client_secret_expires_at]
-  }
+  # The live secret's version, and when the one before it stops being accepted; raising the
+  # version rotates the secret.
+  client_secret_version             = var.secret_version
+  previous_client_secret_expires_at = var.previous_secret_expires
 }

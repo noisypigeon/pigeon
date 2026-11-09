@@ -33,6 +33,6 @@ units:
     queue: { name: pigeon-ci-events }
     access: { application: "pigeon-control - Cloudflare Workers", owners_policy: Cloudflare account members }
     service_tokens:
-      - { name: pigeon-agent, policy: agent }
-      - { name: pigeon-deployer, policy: pigeon-deployer }
-      - { name: pigeon-builds, policy: pigeon-builds }
+      - { name: pigeon-agent, policy: agent, secret_version: 2, previous_secret_expires: "2026-11-06T02:37:43Z" }
+      - { name: pigeon-deployer, policy: pigeon-deployer, secret_version: 1, previous_secret_expires: "2026-11-07T03:09:37Z" }
+      - { name: pigeon-builds, policy: pigeon-builds, secret_version: 2, previous_secret_expires: "2026-11-08T04:20:01Z" }
