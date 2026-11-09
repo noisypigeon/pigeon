@@ -81,12 +81,23 @@ impl Board {
                 .clone()
                 .unwrap_or_else(std::env::temp_dir)
                 .join(WORK)
-                .join(&spec.id);
+                .join(dir_name(&spec));
             let report = run(&spec, &dir);
             let _ = std::fs::remove_dir_all(&dir);
             board.set(report);
         });
         running
+    }
+}
+
+/// The directory a job checks out into: its ID, but a platform apply's is its plan's, since the
+/// saved plan carries the state's absolute path; see
+/// `.claude/decisions/2026-11-08-runtime-blue-green-self-standup.md` (step 4c-1).
+#[must_use]
+pub fn dir_name(spec: &JobSpec) -> String {
+    match spec.id.strip_suffix("-apply") {
+        Some(run) if spec.job == crate::control::PLATFORM => format!("{run}-plan"),
+        _ => spec.id.clone(),
     }
 }
 

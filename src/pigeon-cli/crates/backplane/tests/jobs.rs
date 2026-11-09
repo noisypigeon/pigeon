@@ -329,3 +329,23 @@ fn a_merge_whose_report_was_lost_is_found_on_main_when_run_again() {
         "merged once"
     );
 }
+
+#[test]
+fn a_platform_apply_checks_out_where_its_plan_did() {
+    let sha = "0123456789abcdef0123";
+    let mut s = spec(Path::new("/x"), sha, backplane::control::PLATFORM, &[], &[]);
+    for (id, dir) in [
+        ("platform-14-plan", "platform-14-plan"),
+        ("platform-14-apply", "platform-14-plan"),
+    ] {
+        s.id = id.into();
+        assert_eq!(jobs::dir_name(&s), dir);
+    }
+    let mut other = spec(Path::new("/x"), sha, BOUND, &[], &[]);
+    other.id = "7-abc-apply".into();
+    assert_eq!(
+        jobs::dir_name(&other),
+        "7-abc-apply",
+        "only platform jobs share a directory"
+    );
+}
