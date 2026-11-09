@@ -897,6 +897,10 @@ fn unit_state(
         lockfile: providers::lockfile(&ctx.providers),
         ..tofu::Env::default()
     };
+    if let Some(c) = &ctx.provider_config {
+        env.vars
+            .push(("TF_CLI_CONFIG_FILE".into(), c.display().to_string()));
+    }
     env.providers = providers::used(allow, &source.dir, &work.join("main.tf.json"))
         .into_iter()
         .map(str::to_string)
