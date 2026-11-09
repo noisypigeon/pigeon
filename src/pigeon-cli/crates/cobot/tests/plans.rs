@@ -50,6 +50,7 @@ fn ctx(root: &Path, state: &Path) -> cobot::Context {
         platform: None,
         adopt: false,
         provider_config: None,
+        provider_token: false,
     }
 }
 

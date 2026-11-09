@@ -212,6 +212,7 @@ fn ctx(root: &Path, state: &Path, passphrase: &str) -> cobot::Context {
         platform: None,
         adopt: false,
         provider_config: None,
+        provider_token: false,
     }
 }
 

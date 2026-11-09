@@ -613,6 +613,7 @@ fn ctx(root: &Path, platform: &Path, state: &Path, api: &str) -> cobot::Context 
         platform: Some(platform.to_path_buf()),
         adopt: false,
         provider_config: None,
+        provider_token: false,
     }
 }
 

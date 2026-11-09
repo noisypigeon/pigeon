@@ -120,6 +120,7 @@ fn a_context_never_prints_its_secrets() {
         platform: None,
         adopt: false,
         provider_config: None,
+        provider_token: false,
     };
     let shown = format!("{ctx:?}");
     for secret in [

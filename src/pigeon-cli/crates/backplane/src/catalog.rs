@@ -155,6 +155,7 @@ fn sites_publish(
         platform: instance.platform.clone(),
         adopt: false,
         provider_config: None,
+        provider_token: false,
     };
     let (architecture, _) = architecture_describe(instance)?;
     let data = std::collections::BTreeMap::from([("architecture".to_string(), architecture)]);

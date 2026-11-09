@@ -273,6 +273,7 @@ fn a_unit_composing_an_agnostic_module_applies_end_to_end() {
         platform: None,
         adopt: false,
         provider_config: None,
+        provider_token: false,
     };
     let units = cobot::select(root, &root.join(".config"), &[UNIT.into()]).expect("valid");
     let applied = cobot::apply(&ctx, &units).expect("apply");
@@ -319,6 +320,7 @@ fn a_unit_without_blocks_renders_no_module_and_plans_clean() {
         platform: None,
         adopt: false,
         provider_config: None,
+        provider_token: false,
     };
     let plans = cobot::plan(&ctx, &units).expect("plan");
     assert!(!plans[0].has_changes(), "{}", cobot::summary(&plans));

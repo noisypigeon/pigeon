@@ -215,6 +215,7 @@ fn work(spec: &JobSpec, dir: &Path, log: &mut String) -> Result<Value, String> {
         ),
     };
     s.ctx.provider_config = config;
+    s.ctx.provider_token = true;
     let now = cobot::session::now();
     match task {
         Task::Plan { unit } => {

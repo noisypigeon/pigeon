@@ -325,6 +325,9 @@ pub struct Context {
     /// A CLI configuration that installs providers from a local mirror, as
     /// [`crate::providers::mirror_config`] writes it; `None` installs them directly.
     pub provider_config: Option<PathBuf>,
+    /// Whether tofu runs with [`Self::cloudflare_token`] as `CLOUDFLARE_API_TOKEN`, for a
+    /// run whose token is not in the process environment, such as a platform job.
+    pub provider_token: bool,
 }
 
 /// Shows which secrets are set, never their values.
@@ -348,6 +351,7 @@ impl fmt::Debug for Context {
             .field("platform", &self.platform)
             .field("adopt", &self.adopt)
             .field("provider_config", &self.provider_config)
+            .field("provider_token", &self.provider_token)
             .finish()
     }
 }
@@ -470,6 +474,12 @@ fn ready(
     if let Some(c) = &ctx.provider_config {
         env.vars
             .push(("TF_CLI_CONFIG_FILE".into(), c.display().to_string()));
+    }
+    if ctx.provider_token
+        && let Some(t) = &ctx.cloudflare_token
+    {
+        env.vars.push((cloudflare::TOKEN_VAR.into(), t.clone()));
+        env.hidden.push(t.clone());
     }
     let mut pending = None;
     let moved = moved_state(&root, &state, unit)?;

@@ -62,6 +62,7 @@ pub fn open(
         platform: None,
         adopt: false,
         provider_config: None,
+        provider_token: false,
         credentials: var(crate::CREDENTIALS_VAR),
     };
     Ok(Session { ctx, mirror })

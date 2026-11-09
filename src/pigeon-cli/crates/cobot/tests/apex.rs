@@ -864,6 +864,7 @@ fn ctx_on(root: &Path, state: &Path, day: &str) -> cobot::Context {
         platform: None,
         adopt: false,
         provider_config: None,
+        provider_token: false,
     }
 }
 
