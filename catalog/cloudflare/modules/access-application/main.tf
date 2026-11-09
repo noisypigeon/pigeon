@@ -20,4 +20,9 @@ resource "cloudflare_zero_trust_access_application" "this" {
   session_duration = var.session_duration
   destinations     = var.worker_id == null ? null : [for t in var.worker_types : { type = t, worker_id = var.worker_id }]
   policies         = [for i, id in local.policies : { id = id, precedence = i + 1 }]
+
+  # Login methods and these flags are the dashboard's; adopting an application keeps them.
+  lifecycle {
+    ignore_changes = [allowed_idps, auto_redirect_to_identity, enable_binding_cookie, options_preflight_bypass]
+  }
 }

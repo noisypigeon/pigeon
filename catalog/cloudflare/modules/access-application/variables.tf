@@ -18,10 +18,10 @@ variable "worker_id" {
   default = null
 }
 
-# The Worker's URLs it protects: production (`worker`) and preview (`preview_worker`).
+# The Worker's URLs it protects: production (`worker`), and preview (`preview_worker`) if listed.
 variable "worker_types" {
   type     = list(string)
-  default  = ["worker", "preview_worker"]
+  default  = ["worker"]
   nullable = false
 }
 

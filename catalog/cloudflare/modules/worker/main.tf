@@ -9,7 +9,11 @@ terraform {
   }
 }
 
-data "cloudflare_worker" "this" {
+# `cloudflare_worker`'s `id` echoes its input; the list carries the immutable ID.
+data "cloudflare_workers" "all" {
   account_id = var.account_id
-  worker_id  = var.name
+}
+
+locals {
+  id = one([for w in data.cloudflare_workers.all.result : w.id if w.name == var.name])
 }
