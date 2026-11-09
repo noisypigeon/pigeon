@@ -604,3 +604,61 @@ it:
 Adopting by name reads a `for_each` item's other fields as well, such as a
 token's policy name. `platform/blue` declares today's names exactly, so its
 first plan should import every resource and create nothing.
+
+### 2026-11-09: Step 4 adopted `platform/blue`; step 4c in three changes
+
+Platform run 13 applied, so `platform/blue` now holds today's control
+plane: its database, buckets, queue, Access application, policies and
+service tokens. It imported everything and created nothing. Runs 1 to 12
+established six rules on the way:
+
+- **A plan shows its values.** Each change carries its attributes' values
+  before and after, masked as `cobot show` masks them. An action and
+  attribute names alone hid three of the problems below.
+- **The account token also needs Workers Scripts Read,** for the Worker
+  lookup.
+- **The Worker is found by its immutable ID.** `cloudflare_worker`'s `id`
+  echoes its input, so `cloudflare/worker` reads the ID from the
+  `cloudflare_workers` list, and fails when no Worker has the name.
+- **Access protects the Worker's production URL only.** The kind no longer
+  adds a preview destination.
+- **The application's login settings stay the dashboard's.** These are
+  `allowed_idps`, `auto_redirect_to_identity`, `enable_binding_cookie` and
+  `options_preflight_bypass`, which `cloudflare/access-application` ignores.
+- **A service token carries its live secret version and previous expiry**
+  (`secret_version`, `previous_secret_expires`). The provider defaults the
+  version to 1 and requires the expiry with it, so leaving them out would
+  lower a rotated token's version. Raising `secret_version` rotates the
+  secret deliberately.
+
+Step 4c is three changes:
+
+- **4c-1. `feat(backplane)`: the stack's outputs come from its runs.**
+  - A platform apply's job reads the unit's outputs from its state and
+    returns them. `MainRun` keeps the newest outputs of each unit.
+  - The deploy job's `DEPLOY_OUTPUTS` is the secret's snapshot, with each
+    platform unit's outputs taken from `MainRun` in its place.
+  - A plan or apply that finishes posts `platform.planned` or
+    `platform.applied` to the event log, as a failure posts
+    `platform.failed`.
+  - `platform.plan` on a unit with an open run names that run.
+  - `platform/blue` is then planned and applied once, with no changes, so
+    `MainRun` holds its outputs.
+- **4c-2. `feat(infra)`: `worker.yaml` binds to the stack.** It names
+  `deployment: pigeon/platform` and takes these from `$deployment`:
+  - its name;
+  - the database's name and ID;
+  - the CI bucket;
+  - the queue;
+  - `INSTANCE_NAME`, `CHANGE_FLOOR` and `PUBLIC_HOST`.
+
+  The running Worker has no `DEPLOYMENT` var until this deploys. So the
+  deploy job binds a stack-bound spec to the kind's only unit when
+  `DEPLOYMENT` is unset, and refuses when there are several.
+- **4c-3. `feat(infra)`: `control.pigeon.dev`.**
+  - The kind gains an optional `domain`, which the Access application
+    protects as a self-hosted hostname. That is applied first, so the
+    hostname is covered before anything serves it.
+  - Then `worker.yaml` adds the custom domain from `$deployment.domain`.
+  - `PUBLIC_HOST` stays the `workers.dev` hostname until clients have
+    moved.
