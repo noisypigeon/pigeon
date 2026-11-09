@@ -152,6 +152,10 @@ pub fn run(spec: &JobSpec, dir: &Path) -> Report {
     if spec.job == crate::control::PLATFORM {
         return crate::platform_job::run(spec, dir);
     }
+    // A check may read a released template by its tag, as `sites.build` does.
+    if let Err(e) = cobot::ci::fetch_tags(dir, &spec.remote, &spec.token) {
+        return report(spec, Outcome::Failed, &e.to_string());
+    }
     let workspace = dir.join(cobot::scope::WORKSPACE);
     let (ok, log) = cobot::ci::exec(&workspace, &spec.argv, cobot::ci::TIMEOUT, &spec.token);
     report(
