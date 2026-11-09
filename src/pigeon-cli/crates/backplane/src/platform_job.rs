@@ -12,8 +12,7 @@ use crate::control::{JobSpec, Outcome, Report};
 
 pub use crate::control::PLATFORM;
 
-/// The secret holding the platform state's passphrase.
-pub const STATE_KEY_VAR: &str = "PLATFORM_STATE_KEY";
+pub use crate::control::PLATFORM_STATE_KEY_VAR as STATE_KEY_VAR;
 
 /// The state bucket's name, before its random suffix.
 pub const STATE_BUCKET: &str = "pigeon-platform-state";

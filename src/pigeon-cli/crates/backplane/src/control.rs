@@ -12,6 +12,14 @@ use crate::wire::Request;
 /// A request for the control plane, as the Worker routes it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Routed {
+    /// A platform run's operation; see
+    /// .claude/decisions/2026-11-08-runtime-blue-green-self-standup.md, step 4's amendment.
+    Platform {
+        /// `platform.plan`, `platform.apply` or `platform.status`.
+        operation: String,
+        /// Its arguments.
+        args: Map<String, Value>,
+    },
     /// Create change `slug`, numbered by the Worker.
     Propose {
         /// Its slug.
@@ -181,6 +189,10 @@ pub fn route(request: &Request, by: &str, at: u64) -> Result<Routed, String> {
         "change.status" => Ok(Routed::Status { number: number(a)? }),
         "deploy.status" => Ok(Routed::DeployStatus),
         "deploy.retry" => Ok(Routed::DeployRetry),
+        "platform.plan" | "platform.apply" | "platform.status" => Ok(Routed::Platform {
+            operation: request.operation.clone(),
+            args: a.clone(),
+        }),
         "git.tokens" => Ok(Routed::GitTokens),
         "approval.wait" => Err("`approval.wait` shows a card, so it is called over MCP".into()),
         "mandate.propose" | "mandate.status" | "mandate.end" => Ok(Routed::Mandate {
@@ -712,6 +724,9 @@ pub const DEPLOY: &str = "deploy";
 /// The job that plans or applies a platform unit; see
 /// .claude/decisions/2026-11-08-runtime-blue-green-self-standup.md, step 4's amendment.
 pub const PLATFORM: &str = "platform";
+
+/// The Worker secret holding the platform state's passphrase.
+pub const PLATFORM_STATE_KEY_VAR: &str = "PLATFORM_STATE_KEY";
 
 /// A deploy job's ID: `main-<sha, 12>-deploy`.
 #[must_use]

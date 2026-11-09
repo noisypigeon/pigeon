@@ -17,6 +17,7 @@ mod main_run;
 mod mandates;
 mod merges;
 mod platform;
+mod platforms;
 mod push;
 mod tasks;
 mod tickets;
@@ -71,6 +72,9 @@ async fn fetch(mut req: Request, env: Env, _ctx: worker::Context) -> Result<Resp
     }
     if req.path().starts_with("/approve/") || req.path() == "/approvals" {
         return approve::serve(req, &env, &settings, &who).await;
+    }
+    if req.path().starts_with("/platform/") {
+        return platforms::page_serve(req, &env, &settings, &who).await;
     }
     if req.path().starts_with("/mandate/") {
         return mandates::page_serve(req, &env, &settings, &who).await;
@@ -499,6 +503,13 @@ async fn dispatch(
             args,
         } => {
             let (status, v) = mandates::run(env, s, who, &op, &args).await?;
+            Ok((None, respond(operation, status, v)))
+        }
+        Routed::Platform {
+            operation: op,
+            args,
+        } => {
+            let (status, v) = platforms::run(env, s, &op, &args).await?;
             Ok((None, respond(operation, status, v)))
         }
     }

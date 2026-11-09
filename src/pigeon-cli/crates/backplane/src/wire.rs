@@ -169,6 +169,7 @@ impl Operation {
             || self.name.starts_with("events.")
             || self.name.starts_with("digest.")
             || self.name.starts_with("session.")
+            || self.name.starts_with("platform.")
     }
 }
 
@@ -445,6 +446,33 @@ const CATALOG: &[Operation] = &[
         engine: Engine::Backplane,
         effect: Effect::Build,
         summary: "Deploy main's newest push again: after a failed deploy, as when its image was missing, or after a passed one, everything, as when new images must roll out",
+        args: &[],
+    },
+    Operation {
+        name: "platform.plan",
+        engine: Engine::Backplane,
+        effect: Effect::Plan,
+        summary: "Plan a pigeon/platform unit: answers at once with the page where the owner grants it with their code and a one-time account token (args: unit, e.g. platform/blue)",
+        args: &[
+            arg("unit", true, Kind::String),
+            arg("ticket", false, Kind::String),
+        ],
+    },
+    Operation {
+        name: "platform.apply",
+        engine: Engine::Backplane,
+        effect: Effect::Plan,
+        summary: "Offer a planned platform run's apply again: answers with the page where the owner reviews its changes and grants it with their code (args: run)",
+        args: &[
+            arg("run", true, Kind::Text),
+            arg("ticket", false, Kind::String),
+        ],
+    },
+    Operation {
+        name: "platform.status",
+        engine: Engine::Backplane,
+        effect: Effect::Read,
+        summary: "The platform runs, newest first, with nothing secret",
         args: &[],
     },
     Operation {

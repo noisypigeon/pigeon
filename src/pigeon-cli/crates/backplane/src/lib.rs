@@ -22,6 +22,7 @@ pub mod mcp;
 pub mod merges;
 #[cfg(feature = "engines")]
 pub mod platform_job;
+pub mod platforms;
 pub mod push;
 pub mod reconcile;
 pub mod runs;

@@ -572,3 +572,18 @@ matches none is created.
   - `worker.yaml` moves onto `$deployment`, bound to `platform/blue`;
   - `DEPLOY_OUTPUTS` comes from the stack's state;
   - the custom domain `control.pigeon.dev` is added.
+
+### 2026-11-09: Step 4a lands: where runs live
+
+Step 4a follows the amendment above, with three differences in the details:
+
+- **Runs live in the `MainRun` object, not in D1.** `MainRun` already starts
+  and polls a Runner job, knows `main`'s deployed commit, and has the alarm
+  loop. So platform runs share that alarm, and never hold up a deploy. The
+  sealed token sits in the object's storage with its run, and no migration
+  is needed.
+- **The apply's grant is offered when the plan finishes.** It is pushed to
+  the owner with the plan's changes on its page. `platform.apply <run>`
+  offers it again under a new link, which voids the old one.
+- **Refusing needs no code,** because it only takes power away. It fails the
+  run and erases the token. A lost job starts again, at most three times.

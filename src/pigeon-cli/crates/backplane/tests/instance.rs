@@ -146,6 +146,8 @@ fn catalog_names_are_unique_and_dotted() {
             ("mandate.end", Effect::Build),
             ("approval.wait", Effect::Build),
             ("deploy.retry", Effect::Build),
+            ("platform.plan", Effect::Plan),
+            ("platform.apply", Effect::Plan),
             ("infra.plan", Effect::Plan),
             ("infra.apply", Effect::Apply)
         ],

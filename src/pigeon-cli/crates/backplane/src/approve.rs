@@ -335,3 +335,71 @@ code.</p><form method=\"post\" action=\"/mandate/{}\">\
     );
     shell(&format!("Grant mandate {}", m.id), &b)
 }
+
+/// The page granting the next step of platform run `run`, posting `token` back to
+/// `/platform/<id>`: for its plan, the owner's code and one-time account token; for its apply,
+/// the plan's changes, the code, and a refusal; see
+/// `.claude/decisions/2026-11-08-runtime-blue-green-self-standup.md`, step 4's amendment.
+#[must_use]
+pub fn platform_page(run: &crate::platforms::Run, token: &str) -> String {
+    use crate::platforms::Stage;
+    let mut b = String::new();
+    let planning = run.stage == Stage::Offered;
+    let title = if planning {
+        format!("Plan {}", run.unit)
+    } else {
+        format!("Apply the plan of {}", run.unit)
+    };
+    let _ = write!(
+        b,
+        "<h1>{}</h1><p>Platform run {}.</p>",
+        escape(&title),
+        run.id
+    );
+    if planning {
+        b.push_str(
+            "<p>The engine plans this stack with an account token you make in the dashboard, \
+with only: Account Settings Read, D1 Edit, Workers R2 Storage Edit, Queues Edit, \
+Access: Apps and Policies Edit, Access: Service Tokens Edit. It is sealed for this run alone \
+and erased after the apply, a refusal or 24 hours; revoke it in the dashboard afterwards.</p>",
+        );
+    } else {
+        let _ = write!(
+            b,
+            "<p>Plan <code>{}</code>, {} change(s). Existing resources are imported; nothing is \
+destroyed (a plan that destroys is refused before it reaches you).</p><pre>",
+            escape(run.plan.as_deref().unwrap_or_default()),
+            run.changes.len()
+        );
+        for c in &run.changes {
+            let _ = writeln!(
+                b,
+                "{} {}",
+                escape(c["action"].as_str().unwrap_or_default()),
+                escape(c["address"].as_str().unwrap_or_default())
+            );
+        }
+        b.push_str("</pre>");
+    }
+    let _ = write!(
+        b,
+        "<form method=\"post\" action=\"/platform/{}\">\
+<input type=\"hidden\" name=\"grant\" value=\"{}\">{CODE_FIELD}",
+        run.id,
+        escape(token)
+    );
+    if planning {
+        b.push_str(
+            "<p><label>Account token<br><input name=\"account_token\" type=\"password\" \
+autocomplete=\"off\" minlength=\"20\" required></label></p>\
+<button type=\"submit\" name=\"decision\" value=\"grant\">Plan it</button></form>",
+        );
+    } else {
+        b.push_str(
+            "<button type=\"submit\" name=\"decision\" value=\"grant\">Apply</button> \
+<button type=\"submit\" name=\"decision\" value=\"refuse\" formnovalidate>Refuse</button></form>",
+        );
+    }
+    b.push_str("<p><small><a href=\"/approvals\">Everything waiting</a></small></p>");
+    shell(&title, &b)
+}

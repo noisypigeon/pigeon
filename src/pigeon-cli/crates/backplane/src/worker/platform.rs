@@ -318,3 +318,78 @@ pub async fn call(env: &Env, stub: &worker::Stub, mut req: Request) -> Result<Re
         Err(_) => stub.fetch_with_request(again).await,
     }
 }
+
+/// The AES-GCM key a run's sealed token is kept under: SHA-256 of a label and `secret`.
+async fn sealing_key(secret: &str) -> Result<JsValue> {
+    use sha2::{Digest as _, Sha256};
+    let mut h = Sha256::new();
+    h.update(b"pigeon platform token\0");
+    h.update(secret.as_bytes());
+    let raw = h.finalize();
+    let subtle = subtle()?;
+    let usages = Array::of2(&"encrypt".into(), &"decrypt".into());
+    let args = Array::of5(
+        &"raw".into(),
+        &Uint8Array::from(raw.as_slice()),
+        &"AES-GCM".into(),
+        &JsValue::FALSE,
+        &usages,
+    );
+    promise(method(&subtle, "importKey")?.apply(&subtle, &args)?).await
+}
+
+fn gcm(iv: &[u8]) -> Result<JsValue> {
+    let alg = js_sys::Object::new();
+    Reflect::set(&alg, &"name".into(), &"AES-GCM".into())?;
+    Reflect::set(&alg, &"iv".into(), &Uint8Array::from(iv))?;
+    Ok(alg.into())
+}
+
+fn unhex(s: &str) -> Option<Vec<u8>> {
+    s.len()
+        .is_multiple_of(2)
+        .then(|| {
+            (0..s.len())
+                .step_by(2)
+                .map(|i| u8::from_str_radix(s.get(i..i + 2)?, 16).ok())
+                .collect()
+        })
+        .flatten()
+}
+
+/// `plain` sealed with AES-GCM under a key derived from `secret`: `<iv hex>.<ciphertext hex>`.
+///
+/// # Errors
+///
+/// When `WebCrypto` refuses.
+pub async fn seal(secret: &str, plain: &str) -> Result<String> {
+    let key = sealing_key(secret).await?;
+    let iv = unhex(&random_hex(12)?).unwrap_or_default();
+    let subtle = subtle()?;
+    let args = Array::of3(&gcm(&iv)?, &key, &Uint8Array::from(plain.as_bytes()));
+    let out = promise(method(&subtle, "encrypt")?.apply(&subtle, &args)?).await?;
+    let bytes = Uint8Array::new(&out).to_vec();
+    Ok(format!(
+        "{}.{}",
+        crate::grants::hex(&iv),
+        crate::grants::hex(&bytes)
+    ))
+}
+
+/// What [`seal`] sealed under `secret`.
+///
+/// # Errors
+///
+/// When the text is malformed, or doesn't open under `secret`.
+pub async fn unseal(secret: &str, sealed: &str) -> Result<String> {
+    let bad = || worker::Error::RustError("the sealed token is unreadable".into());
+    let (iv, ct) = sealed.split_once('.').ok_or_else(bad)?;
+    let (iv, ct) = (unhex(iv).ok_or_else(bad)?, unhex(ct).ok_or_else(bad)?);
+    let key = sealing_key(secret).await?;
+    let subtle = subtle()?;
+    let args = Array::of3(&gcm(&iv)?, &key, &Uint8Array::from(ct.as_slice()));
+    let out = promise(method(&subtle, "decrypt")?.apply(&subtle, &args)?)
+        .await
+        .map_err(|_| bad())?;
+    String::from_utf8(Uint8Array::new(&out).to_vec()).map_err(|_| bad())
+}

@@ -88,7 +88,9 @@ pub(super) async fn live(env: &Env, s: &Settings) -> Result<Vec<Waiting>> {
         let alive = match (token, w.expires > now()) {
             (Some(token), true) => {
                 let body = json!({ "token": token });
-                if w.path.starts_with("/mandate/") {
+                if w.path.starts_with("/platform/") {
+                    super::platforms::live(env, s, w.number, &body).await?
+                } else if w.path.starts_with("/mandate/") {
                     super::mandates::to_instance(env, s, "/mandates/peek", &body)
                         .await?
                         .0

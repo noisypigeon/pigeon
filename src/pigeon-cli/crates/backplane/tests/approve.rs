@@ -208,3 +208,28 @@ fn the_inbox_installs_as_a_home_screen_app_for_ios_push() {
     assert_eq!(m["display"], "standalone");
     assert_eq!(m["start_url"], "/approvals");
 }
+
+#[test]
+fn a_platform_plan_page_asks_for_the_token_and_an_apply_page_shows_the_changes() {
+    use backplane::platforms::{Runs, Stage};
+    let mut runs = Runs::default();
+    let run = runs.propose("platform/blue", "tok", 0).expect("proposes");
+    let page = backplane::approve::platform_page(&run, "tok<");
+    assert!(
+        page.contains("name=\"account_token\" type=\"password\""),
+        "{page}"
+    );
+    assert!(page.contains("tok&lt;"), "the grant is escaped");
+    assert!(!page.contains("name=\"decision\" value=\"refuse\""));
+    runs.grant_plan(1, "tok", "SEALED", "o", 1).expect("grants");
+    let change = serde_json::json!({ "action": "update", "address": "module.d1.<x>" });
+    let run = runs
+        .planned(1, Ok(("p1".into(), vec![change])), "t2", 2)
+        .expect("planned");
+    assert_eq!(run.stage, Stage::Planned);
+    let page = backplane::approve::platform_page(&run, "t2");
+    assert!(page.contains("update module.d1.&lt;x&gt;"), "{page}");
+    assert!(page.contains("value=\"refuse\""));
+    assert!(!page.contains("account_token"));
+    assert!(!page.contains("SEALED"));
+}

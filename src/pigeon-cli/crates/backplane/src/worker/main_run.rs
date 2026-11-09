@@ -165,6 +165,10 @@ impl DurableObject for MainRun {
             return Response::ok(platform::version(&self.env));
         }
         self.rearm().await?;
+        if let Some(rest) = path.trim_matches('/').strip_prefix("platform/") {
+            let body: Value = req.json().await.unwrap_or(Value::Null);
+            return super::platforms::serve(&self.state, rest, &body).await;
+        }
         match (req.method(), path.trim_matches('/')) {
             (Method::Post, "pushed") => {
                 let body: Value = req.json().await?;
@@ -199,6 +203,12 @@ impl DurableObject for MainRun {
 
     async fn alarm(&self) -> Result<Response> {
         let mut p = self.pipeline().await?;
+        // Platform jobs share the alarm, and never hold up a deploy; see
+        // .claude/decisions/2026-11-08-runtime-blue-green-self-standup.md, step 4's amendment.
+        if let Err(e) = super::platforms::tick(&self.state, &self.env, p.deployed.as_deref()).await
+        {
+            worker::console_error!("platform runs: {e}");
+        }
         let starting: Option<String> = self.state.storage().get(STARTING).await?;
         let mut next: Option<String> = None;
         let mut wait = false;
@@ -243,6 +253,10 @@ impl DurableObject for MainRun {
             next = p.start();
         }
         self.save_after(&p, next.as_deref(), wait).await?;
+        let storage = self.state.storage();
+        if super::platforms::running(&self.state).await? && storage.get_alarm().await?.is_none() {
+            storage.set_alarm(super::platforms::POLL).await?;
+        }
         Response::ok("ok")
     }
 }
