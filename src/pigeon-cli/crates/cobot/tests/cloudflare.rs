@@ -118,6 +118,7 @@ fn a_context_never_prints_its_secrets() {
         cloudflare_token: Some("token-secret".into()),
         cloudflare_api: None,
         platform: None,
+        adopt: false,
     };
     let shown = format!("{ctx:?}");
     for secret in [

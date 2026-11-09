@@ -108,8 +108,24 @@ impl Api {
         Err(last)
     }
 
+    /// `GET path`'s result, with extra request `headers`.
+    pub(crate) fn get_with(&self, path: &str, headers: &[(&str, &str)]) -> Result<Value, String> {
+        self.call_with("GET", path, None, headers)
+            .and_then(|(status, body)| ok(status, &body, "GET", path))
+    }
+
     /// One call: its status and JSON body. Messages name the method and path, never the token.
     fn call(&self, method: &str, path: &str, body: Option<&Value>) -> Result<(u16, Value), String> {
+        self.call_with(method, path, body, &[])
+    }
+
+    fn call_with(
+        &self,
+        method: &str,
+        path: &str,
+        body: Option<&Value>,
+        headers: &[(&str, &str)],
+    ) -> Result<(u16, Value), String> {
         let agent: ureq::Agent = ureq::Agent::config_builder()
             .http_status_as_error(false)
             .timeout_global(Some(Duration::from_secs(30)))
@@ -120,7 +136,13 @@ impl Api {
         let auth = format!("Bearer {}", self.token);
         let sent = match (method, body) {
             ("DELETE", _) => agent.delete(&url).header("authorization", &auth).call(),
-            (_, None) => agent.get(&url).header("authorization", &auth).call(),
+            (_, None) => headers
+                .iter()
+                .fold(
+                    agent.get(&url).header("authorization", &auth),
+                    |r, (k, v)| r.header(*k, *v),
+                )
+                .call(),
             (_, Some(b)) => agent
                 .post(&url)
                 .header("authorization", &auth)

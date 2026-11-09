@@ -862,6 +862,7 @@ fn ctx_on(root: &Path, state: &Path, day: &str) -> cobot::Context {
         cloudflare_token: None,
         cloudflare_api: None,
         platform: None,
+        adopt: false,
     }
 }
 

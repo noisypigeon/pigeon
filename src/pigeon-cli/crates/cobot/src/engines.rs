@@ -319,6 +319,9 @@ pub struct Context {
     /// elsewhere; see `.claude/decisions/2026-11-05-development-pigeon-its-own-instance.md`
     /// (2026-11-05 amendment).
     pub platform: Option<PathBuf>,
+    /// Whether a plan adopts the resources its account already holds under the names a unit
+    /// declares, through `import` blocks; see [`crate::adopt`].
+    pub adopt: bool,
 }
 
 /// Shows which secrets are set, never their values.
@@ -340,6 +343,7 @@ impl fmt::Debug for Context {
             .field("cloudflare_token", &set(&self.cloudflare_token))
             .field("cloudflare_api", &self.cloudflare_api)
             .field("platform", &self.platform)
+            .field("adopt", &self.adopt)
             .finish()
     }
 }
@@ -512,11 +516,41 @@ fn ready(
             )?;
         }
     }
+    if ctx.adopt && unit.config.is_some() {
+        adopt_into(ctx, &work)?;
+    }
     let remark = match (moved, pending) {
         (Some(m), Some(p)) => Some(format!("{m} {p}")),
         (m, p) => m.or(p),
     };
     Ok((work, env, remark))
+}
+
+/// Adds to `work`'s `main.tf.json` an `import` block for each resource its account already
+/// holds under a declared name.
+fn adopt_into(ctx: &Context, work: &Path) -> Result<(), Error> {
+    let file = work.join("main.tf.json");
+    let failed = |message: String| Error::Io {
+        path: file.clone(),
+        message: format!("adopting by name: {message}"),
+    };
+    let api = ctx
+        .cloudflare()
+        .ok_or_else(|| failed("needs the run's Cloudflare token".into()))?;
+    let account = api.account().map_err(failed)?;
+    let mut value: Value = fs::read_to_string(&file)
+        .map_err(io(&file))
+        .and_then(|t| serde_json::from_str(&t).map_err(|e| failed(e.to_string())))?;
+    let lookup = crate::adopt::Cloudflare {
+        api: &api,
+        account: &account,
+    };
+    let imports = crate::adopt::imports(&value, &account, &lookup).map_err(failed)?;
+    if !imports.is_empty() {
+        value["import"] = Value::Array(imports);
+        write_render(work, &value)?;
+    }
+    Ok(())
 }
 
 /// Feeds the runner's credentials for the ones `unit` requests into `TF_VAR_credentials`;

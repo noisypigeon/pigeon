@@ -2,6 +2,8 @@
 //! `.claude/decisions/2026-11-02-runtime-cobot-infrastructure-as-code.md`.
 
 #[cfg(feature = "engines")]
+pub mod adopt;
+#[cfg(feature = "engines")]
 pub mod apex;
 #[cfg(feature = "engines")]
 pub mod artifacts;

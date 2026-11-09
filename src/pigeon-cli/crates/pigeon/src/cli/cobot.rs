@@ -97,6 +97,9 @@ pub struct CobotPlan {
     /// Store the plan in the state for `apply --plan`, valid for 24 hours
     #[arg(long)]
     pub store: bool,
+    /// Import each resource the account already holds under a name a unit declares
+    #[arg(long)]
+    pub adopt: bool,
 }
 
 /// `pigeon cobot show` arguments.

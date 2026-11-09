@@ -611,6 +611,7 @@ fn ctx(root: &Path, platform: &Path, state: &Path, api: &str) -> cobot::Context 
         cloudflare_token: Some(TOKEN.into()),
         cloudflare_api: Some(api.into()),
         platform: Some(platform.to_path_buf()),
+        adopt: false,
     }
 }
 

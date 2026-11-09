@@ -415,6 +415,7 @@ fn now() -> u64 {
 
 fn plan(args: &CobotPlan) -> Result<(), cobot::Error> {
     let mut session = context(&args.run)?;
+    session.ctx.adopt = args.adopt;
     let ctx = &session.ctx;
     let units = cobot::select_in(
         &ctx.root,
