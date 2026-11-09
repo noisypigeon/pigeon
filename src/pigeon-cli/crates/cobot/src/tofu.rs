@@ -186,7 +186,7 @@ pub fn summary(text: &str) -> String {
 }
 
 /// How many lines of an error's detail [`summary`] keeps.
-pub const DETAIL_LINES: usize = 3;
+pub const DETAIL_LINES: usize = 6;
 
 /// Whether `tofu`'s output reads as a network failure worth a retry.
 #[must_use]

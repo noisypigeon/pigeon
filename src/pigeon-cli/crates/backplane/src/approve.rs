@@ -359,7 +359,7 @@ pub fn platform_page(run: &crate::platforms::Run, token: &str) -> String {
     if planning {
         b.push_str(
             "<p>The engine plans this stack with an account token you make in the dashboard, \
-with only: Account Settings Read, D1 Edit, Workers R2 Storage Edit, Queues Edit, \
+with only: Account Settings Read, Workers Scripts Read, D1 Edit, Workers R2 Storage Edit, Queues Edit, \
 Access: Apps and Policies Edit, Access: Service Tokens Edit. It is sealed for this run alone \
 and erased after the apply, a refusal or 24 hours; revoke it in the dashboard afterwards.</p>",
         );
