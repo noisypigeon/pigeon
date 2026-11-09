@@ -25,3 +25,18 @@ deploying:
 spikes:
   - tooling/spikes/**
 decisions: .claude/decisions/
+# Changes that add, read or expose a secret: the owner, each time. See
+# .claude/decisions/2026-11-09-security-approvals-once-passkeys.md §2.
+secrets:
+  - .config/approvals.yaml
+  - "**/secrets.config.yaml"
+  - .mcp.json
+  - .claude/settings*.json
+  - catalog/cloudflare/capabilities.yaml
+  - catalog/cloudflare/modules/api-token/**
+  - catalog/cloudflare/modules/access-service-token/**
+  - src/pigeon-cli/crates/backplane/src/worker/platform.rs
+  - src/pigeon-cli/crates/backplane/src/platform_job.rs
+# Files whose `secrets:` list a head may not lengthen without the owner.
+secret_lists:
+  - "**/worker.yaml"

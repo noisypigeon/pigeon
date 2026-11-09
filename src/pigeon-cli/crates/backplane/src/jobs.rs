@@ -465,9 +465,19 @@ fn tiers(spec: &JobSpec, dir: &Path, files: &[String]) -> Option<crate::approval
             .iter()
             .filter(|f| f.starts_with(&decisions))
             .all(|f| cobot::ci::appends_only(dir, &spec.base, &spec.sha, f));
+    let adds_secret = files
+        .iter()
+        .filter(|f| {
+            rules
+                .secret_lists
+                .iter()
+                .any(|g| crate::approvals::matches(g, f))
+        })
+        .any(|f| adds_secret(dir, &spec.base, f));
     let facts = crate::approvals::Facts {
         deploys_worker: cobot::scope::workers(dir, Some(files)).map_or(true, |w| !w.is_empty()),
         appends_only,
+        adds_secret,
     };
     Some(crate::approvals::classify(
         &rules,
@@ -475,6 +485,34 @@ fn tiers(spec: &JobSpec, dir: &Path, files: &[String]) -> Option<crate::approval
         files,
         facts,
     ))
+}
+
+/// Whether the head's `secrets:` list in `path` names one its base's doesn't; an unreadable
+/// head counts as adding one, so the owner is asked.
+fn adds_secret(dir: &Path, base: &str, path: &str) -> bool {
+    let names = |text: &str| -> Option<Vec<String>> {
+        let v: serde_json::Value = serde_saphyr::from_str(text).ok()?;
+        Some(
+            v["secrets"]
+                .as_array()
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|x| x.as_str().map(str::to_string))
+                        .collect()
+                })
+                .unwrap_or_default(),
+        )
+    };
+    let Some(head) = std::fs::read_to_string(dir.join(path))
+        .ok()
+        .and_then(|t| names(&t))
+    else {
+        return true;
+    };
+    let before = cobot::ci::base_file(dir, base, path)
+        .and_then(|t| names(&t))
+        .unwrap_or_default();
+    crate::approvals::lengthens(&before, &head)
 }
 
 fn policy(spec: &JobSpec, dir: &Path, files: &[String]) -> Result<Vec<String>, String> {

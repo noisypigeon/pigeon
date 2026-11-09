@@ -119,11 +119,19 @@ pub struct Facts {
     pub deploys_worker: bool,
     /// Every file under `decisions` existed on the base and only gained lines.
     pub appends_only: bool,
+    /// A `secret_lists` file names a secret the base's doesn't.
+    pub adds_secret: bool,
 }
 
 /// The tiers of a change with `scope` whose head touches `files`.
 #[must_use]
 pub fn classify(rules: &Rules, scope: &[String], files: &[String], facts: Facts) -> Tiers {
+    let secret_file = files
+        .iter()
+        .find(|f| rules.secrets.iter().any(|g| matches(g, f)));
+    let secret_scope = scope
+        .iter()
+        .find(|s| rules.secrets.iter().any(|g| overlaps(s, g)));
     let guarded_file = files
         .iter()
         .find(|f| rules.guarded.iter().any(|g| matches(g, f)));
@@ -136,7 +144,9 @@ pub fn classify(rules: &Rules, scope: &[String], files: &[String], facts: Facts)
     let decisions = rules.decisions.as_deref().unwrap_or("\u{0}");
     let adr_only =
         !files.is_empty() && facts.appends_only && files.iter().all(|f| f.starts_with(decisions));
-    let authorize = if let Some(s) = guarded_scope {
+    let authorize = if let Some(s) = secret_scope {
+        tiered(Tier::Owner, format!("secrets: {s}"))
+    } else if let Some(s) = guarded_scope {
         tiered(Tier::Code, format!("guarded: {s}"))
     } else if spike(scope, &|g, s| g == s || matches(g, literal(s))) {
         tiered(Tier::Auto, "spike")
@@ -150,7 +160,11 @@ pub fn classify(rules: &Rules, scope: &[String], files: &[String], facts: Facts)
     } else {
         tiered(Tier::Confirm, "routine")
     };
-    let merge = if let Some(f) = guarded_file {
+    let merge = if let Some(f) = secret_file {
+        tiered(Tier::Owner, format!("secrets: {f}"))
+    } else if facts.adds_secret {
+        tiered(Tier::Owner, "adds a secret")
+    } else if let Some(f) = guarded_file {
         tiered(Tier::Code, format!("guarded: {f}"))
     } else if spike(files, &|g, f| matches(g, f)) {
         tiered(Tier::Confirm, "spike, merged")
@@ -177,11 +191,21 @@ pub fn classify(rules: &Rules, scope: &[String], files: &[String], facts: Facts)
     }
 }
 
+/// Whether `head` names a secret `before` doesn't.
+#[must_use]
+pub fn lengthens(before: &[String], head: &[String]) -> bool {
+    head.iter().any(|h| !before.contains(h))
+}
+
 /// The rule under which the control plane itself approves `operation` on `change`: approving
 /// or merging a head whose merge tier is auto or confirm; see
 /// `.claude/decisions/2026-11-09-security-approvals-once-passkeys.md` §1.
 #[must_use]
 pub fn by_policy(change: &crate::changes::Change, operation: &str) -> Option<String> {
+    if operation == "change.close" {
+        // Closing loses nothing until something was pushed.
+        return change.head.is_none().then(|| "unpushed".to_string());
+    }
     if !matches!(operation, "change.approve" | "change.merge") {
         return None;
     }
@@ -201,6 +225,8 @@ pub fn tier_of(change: &crate::changes::Change, operation: &str) -> Tier {
         "change.approve" | "change.merge" => {
             tiers.map_or(Tier::Code, |t| at_least_confirm(&t.merge))
         }
+        // Closing a pushed change throws its work away; see the 2026-11-09 approvals ADR §2.
+        "change.close" if change.head.is_some() => Tier::Owner,
         "change.close" => tiers.map_or(Tier::Confirm, |t| at_least_confirm(&t.close)),
         _ => Tier::Code,
     }

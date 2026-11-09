@@ -20,6 +20,7 @@ fn tiers_of(scope: &[&str], files: &[&str], facts: Facts) -> Tiers {
 const PLAIN: Facts = Facts {
     deploys_worker: false,
     appends_only: false,
+    adds_secret: false,
 };
 
 #[test]
@@ -80,14 +81,15 @@ fn what_deploys_needs_the_code() {
         Facts {
             deploys_worker: true,
             appends_only: false,
+            adds_secret: false,
         },
     );
     assert_eq!(worker.merge.tier, Tier::Code);
     assert_eq!(worker.merge.rule, "deploys");
-    assert_eq!(worker.authorize.tier, Tier::Code);
+    assert_eq!(worker.authorize.tier, Tier::Owner);
     assert!(
-        worker.authorize.rule.starts_with("guarded"),
-        "a scope over backplane's crate reaches the approval files: {}",
+        worker.authorize.rule.starts_with("secrets"),
+        "a scope over backplane's crate reaches its secret handling: {}",
         worker.authorize.rule
     );
 }
@@ -101,6 +103,7 @@ fn an_amendment_merges_automatically() {
         Facts {
             deploys_worker: false,
             appends_only: true,
+            adds_secret: false,
         },
     );
     assert_eq!(tiers.merge.tier, Tier::Auto);
@@ -120,10 +123,11 @@ fn the_rules_and_every_policy_always_need_the_code() {
             Facts {
                 deploys_worker: false,
                 appends_only: true,
+                adds_secret: false,
             },
         );
-        assert_eq!(tiers.authorize.tier, Tier::Code, "{file}");
-        assert_eq!(tiers.merge.tier, Tier::Code, "{file}");
+        assert!(tiers.authorize.tier >= Tier::Code, "{file}");
+        assert!(tiers.merge.tier >= Tier::Code, "{file}");
     }
 }
 
@@ -168,6 +172,7 @@ fn an_operation_needs_the_tier_its_head_was_given_and_code_without_one() {
         Facts {
             deploys_worker: false,
             appends_only: true,
+            adds_secret: false,
         },
     ));
     assert_eq!(
@@ -208,9 +213,9 @@ fn the_control_plane_approves_and_merges_only_what_is_auto_or_confirm() {
         "authorizing stays the owner's"
     );
     assert_eq!(
-        by_policy(&c, "change.close"),
-        None,
-        "closing stays the owner's"
+        by_policy(&c, "change.close").as_deref(),
+        Some("unpushed"),
+        "nothing pushed, nothing lost"
     );
     c.tiers = Some(tiers_of(
         &["src/pigeon-cli/Dockerfile"],
@@ -226,4 +231,54 @@ fn the_control_plane_approves_and_merges_only_what_is_auto_or_confirm() {
     c.tiers = Some(owner);
     assert_eq!(by_policy(&c, "change.merge"), None);
     assert!(Tier::Owner > Tier::Code, "owner outranks code");
+}
+
+#[test]
+fn secrets_and_destruction_need_the_owner_each_time() {
+    use backplane::approvals::{by_policy, lengthens, tier_of};
+    use backplane::changes::Change;
+    let t = tiers_of(&["infra/x/**"], &["infra/x/secrets.config.yaml"], PLAIN);
+    assert_eq!(t.merge.tier, Tier::Owner, "{t:?}");
+    let t = tiers_of(&[".mcp.json"], &[".mcp.json"], PLAIN);
+    assert_eq!(t.authorize.tier, Tier::Owner, "{t:?}");
+    let rules = tiers_of(
+        &[".config/approvals.yaml"],
+        &[".config/approvals.yaml"],
+        PLAIN,
+    );
+    assert_eq!(rules.merge.tier, Tier::Owner, "the rules themselves");
+    let lengthened = tiers_of(
+        &["infra/pigeon/workers/control/worker.yaml"],
+        &["infra/pigeon/workers/control/worker.yaml"],
+        Facts {
+            deploys_worker: true,
+            appends_only: false,
+            adds_secret: true,
+        },
+    );
+    assert_eq!(
+        (lengthened.merge.tier, lengthened.merge.rule.as_str()),
+        (Tier::Owner, "adds a secret")
+    );
+    assert!(lengthens(&["A".into()], &["A".into(), "B".into()]));
+    assert!(
+        !lengthens(&["A".into(), "B".into()], &["A".into()]),
+        "removing one doesn't"
+    );
+    let mut c = Change::propose(
+        9,
+        "x",
+        "feat: x",
+        "plan",
+        vec!["tooling/**".into()],
+        "agent",
+    );
+    assert_eq!(by_policy(&c, "change.close").as_deref(), Some("unpushed"));
+    c.head = Some("abc".into());
+    assert_eq!(by_policy(&c, "change.close"), None);
+    assert_eq!(
+        tier_of(&c, "change.close"),
+        Tier::Owner,
+        "a pushed change's work would be lost"
+    );
 }
