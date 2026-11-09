@@ -442,6 +442,9 @@ fn finished(runs: &mut Runs, run: &Run, r: &Report) -> Result<Option<(Run, &'sta
         Ok((v["plan"].as_str().unwrap_or_default().to_string(), changes))
     };
     let v = r.platform.clone().unwrap_or(Value::Null);
+    if let Some(kept) = runs.list.iter_mut().find(|x| x.id == run.id) {
+        kept.log = control::tail(&r.log).to_string();
+    }
     if run.stage == Stage::Planning {
         let token = platform::random_hex(32)?;
         let next = runs

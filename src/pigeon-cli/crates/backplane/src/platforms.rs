@@ -70,6 +70,9 @@ pub struct Run {
     /// Why it failed.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub why: Option<String>,
+    /// The last job's log, its tail, scrubbed of its credentials by the job.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub log: String,
     /// Who granted each step, in order.
     #[serde(default)]
     pub granted_by: Vec<String>,

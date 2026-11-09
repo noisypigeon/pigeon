@@ -152,7 +152,8 @@ fn diagnostics(output: &Output, env: &Env) -> String {
     let summaries: Vec<&str> = text
         .lines()
         .map(str::trim)
-        .filter(|l| l.starts_with("Error:"))
+        // Each error, and the resource address it names (`with <address>,`).
+        .filter(|l| l.starts_with("Error:") || l.starts_with("with "))
         .collect();
     let body = if summaries.is_empty() {
         "no diagnostic summary".to_string()
