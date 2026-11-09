@@ -322,6 +322,9 @@ pub struct Context {
     /// Whether a plan adopts the resources its account already holds under the names a unit
     /// declares, through `import` blocks; see [`crate::adopt`].
     pub adopt: bool,
+    /// A CLI configuration that installs providers from a local mirror, as
+    /// [`crate::providers::mirror_config`] writes it; `None` installs them directly.
+    pub provider_config: Option<PathBuf>,
 }
 
 /// Shows which secrets are set, never their values.
@@ -344,6 +347,7 @@ impl fmt::Debug for Context {
             .field("cloudflare_api", &self.cloudflare_api)
             .field("platform", &self.platform)
             .field("adopt", &self.adopt)
+            .field("provider_config", &self.provider_config)
             .finish()
     }
 }
@@ -463,6 +467,10 @@ fn ready(
         lockfile: providers::lockfile(&ctx.providers),
         ..tofu::Env::default()
     };
+    if let Some(c) = &ctx.provider_config {
+        env.vars
+            .push(("TF_CLI_CONFIG_FILE".into(), c.display().to_string()));
+    }
     let mut pending = None;
     let moved = moved_state(&root, &state, unit)?;
     if let Some(c) = &unit.config

@@ -119,6 +119,7 @@ fn a_context_never_prints_its_secrets() {
         cloudflare_api: None,
         platform: None,
         adopt: false,
+        provider_config: None,
     };
     let shown = format!("{ctx:?}");
     for secret in [

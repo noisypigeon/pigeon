@@ -231,6 +231,83 @@ pub fn lock_for(lock: &str, sources: &[&str]) -> String {
     out
 }
 
+/// The registry the allowlisted providers come from.
+pub const REGISTRY: &str = "registry.opentofu.org";
+
+/// The platform a job's providers are built for.
+pub const TARGET: &str = "linux_amd64";
+
+/// The package name of provider `source` at `version`, for [`TARGET`]:
+/// `terraform-provider-<type>_<version>_<target>.zip`.
+#[must_use]
+pub fn package(source: &str, version: &str) -> String {
+    format!(
+        "terraform-provider-{}_{version}_{TARGET}.zip",
+        Allowlist::local_name(source)
+    )
+}
+
+/// Where a packed filesystem mirror keeps `source`'s package, under the mirror's root.
+#[must_use]
+pub fn mirror_path(source: &str, version: &str) -> String {
+    format!("{REGISTRY}/{source}/{}", package(source, version))
+}
+
+/// An `OpenTofu` CLI configuration that installs `sources` from the packed mirror at `mirror`,
+/// and every other provider directly; the lock file still checks each package's hash. See
+/// `.claude/decisions/2026-11-08-runtime-blue-green-self-standup.md`, step 4's amendment.
+#[must_use]
+pub fn mirror_config(mirror: &Path, sources: &[String]) -> String {
+    let list = sources
+        .iter()
+        .map(|s| format!("\"{REGISTRY}/{s}\""))
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!(
+        "provider_installation {{\n  filesystem_mirror {{\n    path    = \"{}\"\n    include = [{list}]\n  }}\n  direct {{\n    exclude = [{list}]\n  }}\n}}\n",
+        mirror.display()
+    )
+}
+
+/// Where a platform's state bucket keeps the providers' packages.
+pub const PACKAGES_PREFIX: &str = "providers/";
+
+/// Fetches each allowlisted provider's package that `store` holds under [`PACKAGES_PREFIX`]
+/// into a packed mirror under `root/.cobot/provider-mirror`, and writes the CLI configuration
+/// that installs from it: that configuration's path (none when the bucket holds no package),
+/// and the sources found. The lock file still checks each package at `tofu init`.
+///
+/// # Errors
+///
+/// A message for a failed read or write.
+pub fn fetch_mirror(
+    store: &crate::s3::Bucket,
+    allow: &Allowlist,
+    root: &Path,
+    now: u64,
+) -> Result<(Option<PathBuf>, Vec<String>), String> {
+    let dir = root.join(".cobot/provider-mirror");
+    let mut found = Vec::new();
+    for (source, version) in &allow.providers {
+        let key = format!("{PACKAGES_PREFIX}{}", package(source, version));
+        let Some(bytes) = store.get(&key, now).map_err(|e| e.0)? else {
+            continue;
+        };
+        let path = dir.join(mirror_path(source, version));
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        }
+        std::fs::write(&path, bytes).map_err(|e| e.to_string())?;
+        found.push(source.clone());
+    }
+    if found.is_empty() {
+        return Ok((None, found));
+    }
+    let config = dir.join("tofu.rc");
+    std::fs::write(&config, mirror_config(&dir, &found)).map_err(|e| e.to_string())?;
+    Ok((Some(config), found))
+}
+
 #[cfg(test)]
 mod tests {
     use super::{Allowlist, declared, lock_for};

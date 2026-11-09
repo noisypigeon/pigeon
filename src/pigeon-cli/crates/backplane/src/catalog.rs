@@ -154,6 +154,7 @@ fn sites_publish(
         cloudflare_api: None,
         platform: instance.platform.clone(),
         adopt: false,
+        provider_config: None,
     };
     let (architecture, _) = architecture_describe(instance)?;
     let data = std::collections::BTreeMap::from([("architecture".to_string(), architecture)]);

@@ -61,6 +61,7 @@ pub fn open(
         cloudflare_api: None,
         platform: None,
         adopt: false,
+        provider_config: None,
         credentials: var(crate::CREDENTIALS_VAR),
     };
     Ok(Session { ctx, mirror })

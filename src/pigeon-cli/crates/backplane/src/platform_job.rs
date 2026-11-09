@@ -196,6 +196,25 @@ fn work(spec: &JobSpec, dir: &Path, log: &mut String) -> Result<Value, String> {
     let providers = dir.join(".config");
     let failed = |e: cobot::Error| e.to_string();
     let mut s = cobot::session::open(dir, &providers, &state, var).map_err(failed)?;
+    let store = cobot::s3::Bucket {
+        endpoint: cobot::sites::endpoint(&account),
+        name: bucket.clone(),
+        creds: cobot::s3::Credentials {
+            access_key: api.token_id(&account)?,
+            secret_key: cobot::s3::sha256_hex(token.as_bytes()),
+        },
+    };
+    let allow = cobot::providers::Allowlist::load(&providers).map_err(failed)?;
+    let (config, found) =
+        cobot::providers::fetch_mirror(&store, &allow, dir, cobot::session::now())?;
+    let _ = match &config {
+        Some(_) => writeln!(log, "providers from the state bucket: {}", found.join(", ")),
+        None => writeln!(
+            log,
+            "no provider packages in the state bucket: installing from the registry"
+        ),
+    };
+    s.ctx.provider_config = config;
     let now = cobot::session::now();
     match task {
         Task::Plan { unit } => {
