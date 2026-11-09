@@ -782,3 +782,40 @@ fn a_stack_bound_spec_is_validated_against_every_stack_and_needs_one() {
         "{problems:?}"
     );
 }
+
+#[test]
+fn a_nested_setting_binds_by_its_path_and_one_stack_needs_no_name() {
+    let spec = STACK_SPEC.replace("$deployment.database_name", "$deployment.database.name");
+    let root = fixture(&spec);
+    stacks(root.path());
+    let config = root.path().join("config.yaml");
+    let text = fs::read_to_string(&config).expect("read");
+    let only_blue = text
+        .split("  platform/green:")
+        .next()
+        .expect("blue")
+        .replace(
+            "    database_name: pigeon\n",
+            "    database: { name: pigeon }\n",
+        );
+    fs::write(&config, only_blue).expect("write");
+    let f = found(root.path());
+    let bound = workers::bound(root.path(), &f, None).expect("the only stack");
+    assert_eq!(bound.spec.bindings.d1["DB"].name, "pigeon");
+    assert_eq!(
+        bound.spec.bindings.vars[workers::DEPLOYMENT_VAR],
+        "platform/blue"
+    );
+    let picked = workers::select_bound(root.path(), &[], None).expect("binds");
+    assert_eq!(picked[0].spec.name, "pigeon-control");
+    let whole = fixture(&spec.replace("$deployment.database.name", "$deployment.database"));
+    stacks(whole.path());
+    fs::write(
+        whole.path().join("config.yaml"),
+        fs::read_to_string(&config).expect("read"),
+    )
+    .expect("write");
+    let e = workers::bind(whole.path(), &found(whole.path()), "platform/blue")
+        .expect_err("an object isn't a value");
+    assert!(e.contains("not a single value"), "{e}");
+}

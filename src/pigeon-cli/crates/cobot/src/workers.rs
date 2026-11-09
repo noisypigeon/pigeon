@@ -96,13 +96,21 @@ fn rebind(v: &mut Value, unit: &str, settings: &Value, bad: &mut Vec<String>) {
                 return;
             };
             let key = rest.split(['.', '[']).next().unwrap_or_default();
-            match &settings[key] {
-                Value::Null => *s = format!("$output.{unit}.{rest}"),
-                _ if rest != key => bad.push(format!("`{s}`: a setting is named whole")),
-                Value::String(x) => *s = x.clone(),
-                Value::Number(n) => *s = n.to_string(),
-                Value::Bool(b) => *s = b.to_string(),
-                _ => bad.push(format!("`{s}`: setting `{key}` is not a single value")),
+            if settings[key].is_null() {
+                *s = format!("$output.{unit}.{rest}");
+                return;
+            }
+            // A nested setting is named by its path, such as `database.name`.
+            let path = (!rest.contains('[')).then(|| rest.split('.').collect::<Vec<_>>());
+            let found = path
+                .as_ref()
+                .and_then(|p| p.iter().try_fold(settings, |v, k| v.get(*k)));
+            match found {
+                Some(Value::String(x)) => *s = x.clone(),
+                Some(Value::Number(n)) => *s = n.to_string(),
+                Some(Value::Bool(b)) => *s = b.to_string(),
+                Some(_) => bad.push(format!("`{s}`: setting `{rest}` is not a single value")),
+                None => bad.push(format!("`{s}`: no setting `{rest}`")),
             }
         }
         Value::Array(items) => items
@@ -149,6 +157,32 @@ pub fn bind(root: &Path, found: &Found, unit: &str) -> Result<Found, String> {
         spec,
         ..found.clone()
     })
+}
+
+/// `found` bound as a deploy binds it: to `deployment` when given, else to its kind's only
+/// stack; see the step 4c amendment of
+/// `.claude/decisions/2026-11-08-runtime-blue-green-self-standup.md`. A spec with no
+/// `deployment` is returned as it is.
+///
+/// # Errors
+///
+/// A message when no stack is named and its kind has none or several, or as [`bind`].
+pub fn bound(root: &Path, found: &Found, deployment: Option<&str>) -> Result<Found, String> {
+    let Some(kind) = found.spec.deployment.as_deref() else {
+        return Ok(found.clone());
+    };
+    if let Some(unit) = deployment {
+        return bind(root, found, unit);
+    }
+    match stacks(root, kind).as_slice() {
+        [only] => bind(root, found, only),
+        [] => Err(format!(
+            "deployed into a `{kind}`, but config.yaml has none"
+        )),
+        _ => Err(format!(
+            "deployed into a `{kind}`, and config.yaml has several: pass --deployment <unit>"
+        )),
+    }
 }
 
 /// The units of `kind` in the manifest at `root`, sorted.
@@ -481,16 +515,9 @@ pub fn select_bound(
     let mut problems = Vec::new();
     for f in select(root, names)? {
         let path = format!("{}/{SPEC}", f.dir);
-        match (&f.spec.deployment, deployment) {
-            (None, _) => out.push(f),
-            (Some(kind), None) => problems.push(Problem {
-                path,
-                message: format!("deployed into a `{kind}`: pass --deployment <unit>"),
-            }),
-            (Some(_), Some(unit)) => match bind(root, &f, unit) {
-                Ok(b) => out.push(b),
-                Err(message) => problems.push(Problem { path, message }),
-            },
+        match bound(root, &f, deployment) {
+            Ok(b) => out.push(b),
+            Err(message) => problems.push(Problem { path, message }),
         }
     }
     if problems.is_empty() {

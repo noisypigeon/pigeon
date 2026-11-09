@@ -167,10 +167,16 @@ pub fn build(
     };
     let outputs: Outputs = serde_json::from_str(&outputs)
         .map_err(|e| format!("{} is not JSON outputs: {e}", ship::OUTPUTS_VAR))?;
-    let reference = workers::discover(dir)
-        .map_err(|e| e.to_string())?
-        .into_iter()
-        .find_map(|f| f.spec.bindings.r2.get(BUILDS_BINDING).cloned())
+    let deployment = var(workers::DEPLOYMENT_VAR);
+    let mut reference = None;
+    for f in workers::discover(dir).map_err(|e| e.to_string())? {
+        let f = workers::bound(dir, &f, deployment.as_deref())?;
+        if let Some(r) = f.spec.bindings.r2.get(BUILDS_BINDING) {
+            reference = Some(r.clone());
+            break;
+        }
+    }
+    let reference = reference
         .ok_or_else(|| format!("no Worker binds {BUILDS_BINDING}, where builds are stored"))?;
     let bucket = workers::resolve(&reference, &outputs)?;
     let workspace = dir.join(cobot::scope::WORKSPACE);
