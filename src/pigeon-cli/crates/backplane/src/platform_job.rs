@@ -143,6 +143,42 @@ fn changes(c: &[cobot::Change]) -> Value {
     )
 }
 
+/// The plan's changes with their values, before and after, as `show` masks them, by
+/// resource: the owner reviews a plan before applying it. Output changes are kept as `shown`
+/// lists them.
+fn with_values(shown: &Value, diff: impl IntoIterator<Item = cobot::AttrChange>) -> Value {
+    let mut out: Vec<Value> = Vec::new();
+    for d in diff {
+        let v = json!({ "attribute": d.attribute, "before": d.before, "after": d.after,
+            "replaces": d.replaces });
+        match out.iter_mut().find(|c| c["address"] == d.address.as_str()) {
+            Some(c) => {
+                if let Some(a) = c["attributes"].as_array_mut() {
+                    a.push(json!(d.attribute));
+                }
+                if let Some(a) = c["values"].as_array_mut() {
+                    a.push(v);
+                }
+            }
+            None => out.push(json!({ "address": d.address, "action": d.action,
+                "attributes": [d.attribute], "values": [v] })),
+        }
+    }
+    out.extend(
+        shown
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter(|c| {
+                c["address"]
+                    .as_str()
+                    .is_some_and(|a| a.starts_with("output."))
+            })
+            .cloned(),
+    );
+    Value::Array(out)
+}
+
 /// Runs a platform job from the checkout at `dir`.
 #[must_use]
 pub fn run(spec: &JobSpec, dir: &Path) -> Report {
@@ -234,8 +270,15 @@ fn work(spec: &JobSpec, dir: &Path, log: &mut String) -> Result<Value, String> {
             if let Some(why) = destroys(&all) {
                 return Err(why);
             }
+            let shown = match cobot::show_stored(&s.ctx, &stored.id, now) {
+                Ok(units) => with_values(&changes(&all), units.into_iter().flat_map(|(_, d)| d)),
+                Err(e) => {
+                    let _ = writeln!(log, "the plan's values couldn't be shown: {e}");
+                    changes(&all)
+                }
+            };
             Ok(json!({ "task": "plan", "unit": unit, "plan": stored.id,
-                "expires": stored.expires, "changes": changes(&all) }))
+                "expires": stored.expires, "changes": shown }))
         }
         Task::Apply { unit, plan } => {
             let applied = s.apply_stored(&plan, now);
@@ -249,5 +292,43 @@ fn work(spec: &JobSpec, dir: &Path, log: &mut String) -> Result<Value, String> {
             );
             Ok(json!({ "task": "apply", "unit": unit, "plan": plan, "changes": changes(&all) }))
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn attr(address: &str, attribute: &str, before: &str, after: &str) -> cobot::AttrChange {
+        cobot::AttrChange {
+            address: address.into(),
+            action: "update".into(),
+            attribute: attribute.into(),
+            before: before.into(),
+            after: after.into(),
+            replaces: false,
+        }
+    }
+
+    #[test]
+    fn values_group_by_resource_and_keep_outputs() {
+        let shown = json!([
+            { "address": "module.t[\"…\"].x.this", "action": "update", "attributes": ["a"] },
+            { "address": "output.id", "action": "create", "attributes": [] },
+        ]);
+        let got = with_values(
+            &shown,
+            [
+                attr("module.t[\"one\"].x.this", "a", "1", "2"),
+                attr("module.t[\"two\"].x.this", "a", "1", "3"),
+                attr("module.t[\"one\"].x.this", "b", "x", "(sensitive)"),
+            ],
+        );
+        let list = got.as_array().unwrap();
+        assert_eq!(list.len(), 3);
+        assert_eq!(list[0]["attributes"], json!(["a", "b"]));
+        assert_eq!(list[0]["values"][1]["after"], "(sensitive)");
+        assert_eq!(list[1]["values"][0]["after"], "3");
+        assert_eq!(list[2]["address"], "output.id");
     }
 }
