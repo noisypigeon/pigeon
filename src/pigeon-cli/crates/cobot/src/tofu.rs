@@ -149,19 +149,66 @@ impl Env {
 fn diagnostics(output: &Output, env: &Env) -> String {
     let text = String::from_utf8_lossy(&output.stderr).into_owned()
         + &String::from_utf8_lossy(&output.stdout);
-    let summaries: Vec<&str> = text
-        .lines()
-        .map(str::trim)
-        // Each error, and the resource address it names (`with <address>,`).
-        .filter(|l| l.starts_with("Error:") || l.starts_with("with "))
-        .collect();
-    let body = if summaries.is_empty() {
-        "no diagnostic summary".to_string()
-    } else {
-        summaries.join("; ")
-    };
+    let body = summary(&text);
     mask(&env.scrub(&body))
 }
+
+/// The lines of `tofu`'s output a failure is reported with: each `Error:` line, the resource it
+/// names (`with <address>,`), and up to [`DETAIL_LINES`] lines of its detail.
+#[must_use]
+pub fn summary(text: &str) -> String {
+    let mut kept: Vec<&str> = Vec::new();
+    let mut detail = 0;
+    for l in text
+        .lines()
+        .map(|l| l.trim_matches(|c: char| c == '│' || c.is_whitespace()))
+    {
+        if l.starts_with("Error:") {
+            kept.push(l);
+            detail = DETAIL_LINES;
+        } else if l.starts_with("with ") {
+            kept.push(l);
+        } else if detail > 0
+            && !l.is_empty()
+            && !l.starts_with("on ")
+            && !l.starts_with('╷')
+            && !l.starts_with('╵')
+        {
+            kept.push(l);
+            detail -= 1;
+        }
+    }
+    if kept.is_empty() {
+        "no diagnostic summary".to_string()
+    } else {
+        kept.join("; ")
+    }
+}
+
+/// How many lines of an error's detail [`summary`] keeps.
+pub const DETAIL_LINES: usize = 3;
+
+/// Whether `tofu`'s output reads as a network failure worth a retry.
+#[must_use]
+pub fn transient(text: &str) -> bool {
+    const SIGNS: [&str; 8] = [
+        "failed to make http request",
+        "Failed to install provider",
+        "Failed to query available provider packages",
+        "connection reset",
+        "i/o timeout",
+        "TLS handshake timeout",
+        "no such host",
+        "context deadline exceeded",
+    ];
+    SIGNS.iter().any(|s| text.contains(s))
+}
+
+/// The waits before each retry of a `tofu init` or `plan` that failed on the network.
+pub const RETRY_WAITS: [std::time::Duration; 2] = [
+    std::time::Duration::from_secs(20),
+    std::time::Duration::from_secs(20),
+];
 
 fn run(unit: &str, work: &Path, env: &Env, args: &[&str]) -> Result<Output, Error> {
     Command::new("tofu")
@@ -186,7 +233,24 @@ fn run(unit: &str, work: &Path, env: &Env, args: &[&str]) -> Result<Output, Erro
 fn step(unit: &str, work: &Path, env: &Env, args: &[&str], ok: &[i32]) -> Result<Output, Error> {
     let started = std::time::Instant::now();
     eprintln!("cobot: {unit}: tofu {}…", args[0]);
-    let output = run(unit, work, env, args)?;
+    let mut output = run(unit, work, env, args)?;
+    if matches!(args[0], "init" | "plan") {
+        for wait in RETRY_WAITS {
+            let code = output.status.code().unwrap_or(-1);
+            let text = String::from_utf8_lossy(&output.stderr).into_owned()
+                + &String::from_utf8_lossy(&output.stdout);
+            if ok.contains(&code) || !transient(&text) {
+                break;
+            }
+            eprintln!(
+                "cobot: {unit}: tofu {} failed on the network; again in {}s",
+                args[0],
+                wait.as_secs()
+            );
+            std::thread::sleep(wait);
+            output = run(unit, work, env, args)?;
+        }
+    }
     eprintln!(
         "cobot: {unit}: tofu {} took {:.1}s",
         args[0],
@@ -492,5 +556,36 @@ mod tests {
             redact("a sekret-passphrase b", "sekret-passphrase"),
             "a *** b"
         );
+    }
+}
+
+#[cfg(test)]
+mod failures {
+    use super::{summary, transient};
+
+    const INIT: &str = "\nInitializing provider plugins...\n╷\n│ Error: Failed to install provider\n│ \n│ Error while installing cloudflare/cloudflare v5.28.0: could not query provider\n│ registry: dial tcp: lookup registry.opentofu.org: i/o timeout\n╵\n";
+
+    const PLAN: &str = "╷\n│ Error: failed to make http request\n│ \n│   with module.queue.cloudflare_queue.this,\n│   on .terraform/modules/queue/main.tf line 11:\n│   11: resource \"cloudflare_queue\" \"this\" {\n│ \n│ GET \"https://api.cloudflare.com/client/v4/accounts/x/queues/y\": 403 Forbidden\n╵\n";
+
+    #[test]
+    fn a_failure_keeps_its_error_its_resource_and_its_detail() {
+        let s = summary(INIT);
+        assert!(s.starts_with("Error: Failed to install provider; "), "{s}");
+        assert!(s.contains("i/o timeout"), "{s}");
+        let p = summary(PLAN);
+        assert!(
+            p.contains("with module.queue.cloudflare_queue.this,"),
+            "{p}"
+        );
+        assert!(p.contains("403 Forbidden"), "{p}");
+        assert!(!p.contains("line 11"), "source locations are left out: {p}");
+        assert_eq!(summary("nothing\n"), "no diagnostic summary");
+    }
+
+    #[test]
+    fn network_failures_are_retried_and_others_are_not() {
+        assert!(transient(INIT));
+        assert!(transient(PLAN));
+        assert!(!transient("Error: Invalid reference"));
     }
 }
