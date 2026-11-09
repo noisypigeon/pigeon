@@ -1,0 +1,246 @@
+//! Passkeys: registering and asserting with ES256; see
+//! `.claude/decisions/2026-11-09-security-approvals-once-passkeys.md` §4.
+
+use backplane::passkeys::{
+    Keyring, Passkey, REGISTER, assert, der_signature, grant_purpose, register,
+};
+use backplane::push::b64url;
+use p256::ecdsa::signature::Signer as _;
+use p256::ecdsa::{Signature, SigningKey};
+use sha2::{Digest as _, Sha256};
+
+const HOST: &str = "control.example.com";
+const CHALLENGE: &str = "Y2hhbGxlbmdlLTAxMjM0NTY3ODk";
+
+fn key() -> SigningKey {
+    SigningKey::from_slice(&[7u8; 32]).expect("a scalar")
+}
+
+fn spki(k: &SigningKey) -> Vec<u8> {
+    let mut out = vec![
+        0x30, 0x59, 0x30, 0x13, 0x06, 0x07, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x02, 0x01, 0x06, 0x08,
+        0x2a, 0x86, 0x48, 0xce, 0x3d, 0x03, 0x01, 0x07, 0x03, 0x42, 0x00,
+    ];
+    out.extend_from_slice(k.verifying_key().to_encoded_point(false).as_bytes());
+    out
+}
+
+fn client(kind: &str, challenge: &str, origin: &str) -> Vec<u8> {
+    format!(
+        r#"{{"type":"{kind}","challenge":"{challenge}","origin":"{origin}","crossOrigin":false}}"#
+    )
+    .into_bytes()
+}
+
+fn authenticator(host: &str, flags: u8, counter: u32) -> Vec<u8> {
+    let mut out = Sha256::digest(host.as_bytes()).to_vec();
+    out.push(flags);
+    out.extend_from_slice(&counter.to_be_bytes());
+    out
+}
+
+fn der(sig: &Signature) -> Vec<u8> {
+    let int = |b: &[u8]| {
+        let b: Vec<u8> = b.iter().copied().skip_while(|x| *x == 0).collect();
+        let mut v = if b.first().is_some_and(|x| x & 0x80 != 0) {
+            vec![0]
+        } else {
+            vec![]
+        };
+        v.extend(b);
+        let mut out = vec![0x02, u8::try_from(v.len()).expect("short")];
+        out.extend(v);
+        out
+    };
+    let bytes = sig.to_bytes();
+    let mut body = int(&bytes[..32]);
+    body.extend(int(&bytes[32..]));
+    let mut out = vec![0x30, u8::try_from(body.len()).expect("short")];
+    out.extend(body);
+    out
+}
+
+fn sign(k: &SigningKey, authenticator: &[u8], client: &[u8]) -> Vec<u8> {
+    let mut signed = authenticator.to_vec();
+    signed.extend_from_slice(&Sha256::digest(client));
+    let sig: Signature = k.sign(&signed);
+    der(&sig)
+}
+
+fn registered(counter: u32) -> Passkey {
+    let k = key();
+    let (point, _) = register(
+        &client("webauthn.create", CHALLENGE, &format!("https://{HOST}")),
+        &authenticator(HOST, 0x05, 0),
+        &spki(&k),
+        CHALLENGE,
+        HOST,
+    )
+    .expect("registers");
+    Passkey {
+        id: "cred".into(),
+        key: b64url(&point),
+        counter,
+        name: "laptop".into(),
+        created: 0,
+        used: None,
+    }
+}
+
+#[test]
+fn a_registered_passkey_proves_the_owner_once_per_challenge() {
+    let k = key();
+    let pk = registered(0);
+    let origin = format!("https://{HOST}");
+    let c = client("webauthn.get", CHALLENGE, &origin);
+    let a = authenticator(HOST, 0x05, 0);
+    assert_eq!(
+        assert(&pk, &c, &a, &sign(&k, &a, &c), CHALLENGE, HOST),
+        Ok(0)
+    );
+    let other = client("webauthn.get", "b3RoZXI", &origin);
+    assert!(
+        assert(&pk, &other, &a, &sign(&k, &a, &other), CHALLENGE, HOST).is_err(),
+        "another link's"
+    );
+    let elsewhere = client("webauthn.get", CHALLENGE, "https://evil.example");
+    assert!(
+        assert(
+            &pk,
+            &elsewhere,
+            &a,
+            &sign(&k, &a, &elsewhere),
+            CHALLENGE,
+            HOST
+        )
+        .is_err()
+    );
+    let rp = authenticator("evil.example", 0x05, 0);
+    assert!(
+        assert(&pk, &c, &rp, &sign(&k, &rp, &c), CHALLENGE, HOST).is_err(),
+        "another RP"
+    );
+    let unverified = authenticator(HOST, 0x01, 0);
+    assert!(
+        assert(
+            &pk,
+            &c,
+            &unverified,
+            &sign(&k, &unverified, &c),
+            CHALLENGE,
+            HOST
+        )
+        .is_err()
+    );
+    let forged = SigningKey::from_slice(&[9u8; 32]).expect("a scalar");
+    assert!(
+        assert(&pk, &c, &a, &sign(&forged, &a, &c), CHALLENGE, HOST).is_err(),
+        "another key"
+    );
+    assert!(
+        assert(&pk, &c, &a, b"\x30\x00", CHALLENGE, HOST).is_err(),
+        "not a signature"
+    );
+}
+
+#[test]
+fn a_counter_that_goes_back_is_refused() {
+    let k = key();
+    let pk = registered(5);
+    let c = client("webauthn.get", CHALLENGE, &format!("https://{HOST}"));
+    let later = authenticator(HOST, 0x05, 6);
+    assert_eq!(
+        assert(&pk, &c, &later, &sign(&k, &later, &c), CHALLENGE, HOST),
+        Ok(6)
+    );
+    let same = authenticator(HOST, 0x05, 5);
+    assert!(assert(&pk, &c, &same, &sign(&k, &same, &c), CHALLENGE, HOST).is_err());
+}
+
+#[test]
+fn registration_takes_only_p256_from_this_site_with_verification() {
+    let k = key();
+    let origin = format!("https://{HOST}");
+    let c = client("webauthn.create", CHALLENGE, &origin);
+    let mut rsa = spki(&k);
+    rsa[10] ^= 1;
+    assert!(register(&c, &authenticator(HOST, 0x05, 0), &rsa, CHALLENGE, HOST).is_err());
+    assert!(
+        register(
+            &c,
+            &authenticator(HOST, 0x01, 0),
+            &spki(&k),
+            CHALLENGE,
+            HOST
+        )
+        .is_err()
+    );
+    let get = client("webauthn.get", CHALLENGE, &origin);
+    assert!(
+        register(
+            &get,
+            &authenticator(HOST, 0x05, 0),
+            &spki(&k),
+            CHALLENGE,
+            HOST
+        )
+        .is_err()
+    );
+    assert!(
+        der_signature(&[0x30, 0x03, 0x02, 0x01, 0x01]).is_err(),
+        "no s"
+    );
+}
+
+#[test]
+fn the_keyring_registers_and_proves_only_with_challenges_it_minted_for_that_purpose() {
+    let k = key();
+    let origin = format!("https://{HOST}");
+    let mut ring = Keyring::default();
+    let reg = ring.mint(REGISTER, &[1u8; 32], 100);
+    let c = client("webauthn.create", &reg, &origin);
+    let made = authenticator(HOST, 0x05, 0);
+    assert!(
+        ring.register("cred", "phone", &c, &made, &spki(&k), HOST, 101)
+            .is_ok(),
+        "registers"
+    );
+    assert!(
+        ring.register("cred2", "x", &c, &made, &spki(&k), HOST, 102)
+            .is_err(),
+        "a challenge is used once"
+    );
+    let purpose = grant_purpose("token-for-change-7");
+    let for_grant = ring.mint(&purpose, &[2u8; 32], 110);
+    let got = client("webauthn.get", &for_grant, &origin);
+    let a = authenticator(HOST, 0x05, 0);
+    let sig = sign(&k, &a, &got);
+    assert!(
+        ring.prove("cred", &got, &a, &sig, &grant_purpose("another"), HOST, 111)
+            .is_err(),
+        "another link's purpose"
+    );
+    let again = ring.mint(&purpose, &[3u8; 32], 112);
+    let got = client("webauthn.get", &again, &origin);
+    let sig = sign(&k, &a, &got);
+    assert_eq!(
+        ring.prove("cred", &got, &a, &sig, &purpose, HOST, 113),
+        Ok(())
+    );
+    assert_eq!(ring.keys[0].used, Some(113));
+    assert!(
+        ring.prove("cred", &got, &a, &sig, &purpose, HOST, 114)
+            .is_err(),
+        "a replay"
+    );
+    let late = ring.mint(&purpose, &[4u8; 32], 200);
+    let got = client("webauthn.get", &late, &origin);
+    let sig = sign(&k, &a, &got);
+    assert!(
+        ring.prove("cred", &got, &a, &sig, &purpose, HOST, 200 + 301)
+            .is_err(),
+        "a lapsed challenge"
+    );
+    assert!(ring.remove("cred"));
+    assert!(!ring.remove("cred"));
+}

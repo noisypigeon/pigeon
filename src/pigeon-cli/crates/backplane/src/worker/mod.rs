@@ -16,6 +16,7 @@ mod gitdoor;
 mod main_run;
 mod mandates;
 mod merges;
+mod passkeys;
 mod platform;
 mod platforms;
 mod push;
@@ -72,6 +73,9 @@ async fn fetch(mut req: Request, env: Env, _ctx: worker::Context) -> Result<Resp
     }
     if req.path().starts_with("/approve/") || req.path() == "/approvals" {
         return approve::serve(req, &env, &settings, &who).await;
+    }
+    if passkeys::is_page(&req.path()) {
+        return passkeys::page_serve(req, &env, &settings, &who).await;
     }
     if req.path().starts_with("/platform/") {
         return platforms::page_serve(req, &env, &settings, &who).await;
@@ -904,6 +908,10 @@ impl DurableObject for Instance {
         if path.starts_with("/mandates/") {
             let body: Value = req.json().await?;
             return mandates::serve(&self.state, &path, body).await;
+        }
+        if path.starts_with("/passkeys/") {
+            let body: Value = req.json().await?;
+            return passkeys::serve(&self.state, &path, body).await;
         }
         if path.starts_with("/tickets/") {
             let body: Value = req.json().await?;

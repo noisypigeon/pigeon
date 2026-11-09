@@ -16,6 +16,9 @@ guarded:
   - src/pigeon-cli/crates/backplane/src/grants.rs
   - src/pigeon-cli/crates/backplane/src/totp.rs
   - src/pigeon-cli/crates/backplane/src/worker/elicit.rs
+  - src/pigeon-cli/crates/backplane/src/passkeys.rs
+  - src/pigeon-cli/crates/backplane/src/worker/passkeys.rs
+  - src/pigeon-cli/crates/backplane/src/worker/passkey.js
 # The code without a mandate that may deploy; every Worker's inputs count too.
 deploying:
   - infra/**

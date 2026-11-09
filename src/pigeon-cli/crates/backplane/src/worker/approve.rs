@@ -17,7 +17,7 @@ pub(super) fn html(status: u16, body: &str) -> Result<Response> {
     html_with(status, body, approve::CSP)
 }
 
-fn html_with(status: u16, body: &str, csp: &str) -> Result<Response> {
+pub(super) fn html_with(status: u16, body: &str, csp: &str) -> Result<Response> {
     let mut r = Response::from_html(body)?.with_status(status);
     let h = r.headers_mut();
     h.set("content-security-policy", csp)?;
@@ -165,7 +165,11 @@ pub async fn serve(req: Request, env: &Env, s: &Settings, who: &Identity) -> Res
             ) else {
                 return refused(500, "the change's answer was unreadable");
             };
-            html(200, &approve::page(&change, &grant, &token))
+            html_with(
+                200,
+                &approve::page(&change, &grant, &token),
+                approve::PROOF_CSP,
+            )
         }
         Method::Post => post(req, env, s, who, n, &host).await,
         _ => refused(405, "method not allowed"),
@@ -210,8 +214,14 @@ async fn post(
         return refused(500, "the grant was unreadable");
     };
     if peeked.needs_code() {
-        let code = approve::field(&form, "code").unwrap_or_default();
-        if let Err(why) = elicit::check_code(env, s, code.trim()).await? {
+        let proved = if super::passkeys::answered(&form) {
+            let purpose = crate::passkeys::grant_purpose(&token);
+            super::passkeys::prove(env, s, &form, &purpose, host).await?
+        } else {
+            let code = approve::field(&form, "code").unwrap_or_default();
+            elicit::check_code(env, s, code.trim()).await?
+        };
+        if let Err(why) = proved {
             return refused(403, &why);
         }
     }

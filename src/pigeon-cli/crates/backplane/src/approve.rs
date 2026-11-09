@@ -11,6 +11,10 @@ use crate::grants::Grant;
 /// The page's Content-Security-Policy: no scripts, no external loads, forms only to itself.
 pub const CSP: &str = "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'";
 
+/// A page that takes a proof: [`CSP`], plus `/passkey.js` and its fetch of a challenge; see
+/// `.claude/decisions/2026-11-09-security-approvals-once-passkeys.md` §4.
+pub const PROOF_CSP: &str = "default-src 'none'; style-src 'unsafe-inline'; script-src 'self'; connect-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'";
+
 /// The inbox's policy: [`CSP`], plus its own script, its fetches and its service worker.
 pub const INBOX_CSP: &str = "default-src 'none'; style-src 'unsafe-inline'; script-src 'self'; connect-src 'self'; worker-src 'self'; manifest-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'";
 
@@ -233,15 +237,72 @@ pub fn page(change: &Change, grant: &Grant, token: &str) -> String {
         escape(token),
         escape(&grant.operation),
         if grant.needs_code() && grant.operation != "change.close" {
-            format!("{CODE_FIELD}{COVERS}")
+            format!(
+                "{}{CODE_FIELD}{COVERS}",
+                passkey_button(&crate::passkeys::grant_purpose(token))
+            )
         } else if grant.needs_code() {
-            CODE_FIELD.to_string()
+            format!(
+                "{}{CODE_FIELD}",
+                passkey_button(&crate::passkeys::grant_purpose(token))
+            )
         } else {
             CONFIRM_NOTE.to_string()
         },
         escape(verb(&grant.operation))
     );
     shell(&format!("{} — change {n}", verb(&grant.operation)), &b)
+}
+
+/// The button that proves the owner with a passkey instead of the code, for `purpose`; hidden
+/// until `/passkey.js` finds `WebAuthn`.
+fn passkey_button(purpose: &str) -> String {
+    format!(
+        "<p><button type=\"button\" data-passkey=\"prove\" data-purpose=\"{}\" hidden>Use a passkey</button> \
+<small data-passkey-status></small></p><script src=\"/passkey.js\" defer></script>",
+        escape(purpose)
+    )
+}
+
+/// `/passkeys`: the owner's passkeys, a form to register one with the code, and `said`.
+#[must_use]
+pub fn passkeys_page(keys: &[(String, String, u64, Option<u64>)], said: Option<&str>) -> String {
+    use std::fmt::Write as _;
+    let mut b = String::from("<h1>Passkeys</h1>");
+    if let Some(said) = said {
+        let _ = write!(b, "<p><strong>{}</strong></p>", escape(said));
+    }
+    b.push_str(
+        "<p>A passkey approves wherever the authenticator code does on these pages. \
+Registering or removing one takes the code.</p>",
+    );
+    if keys.is_empty() {
+        b.push_str("<p>None yet.</p>");
+    } else {
+        b.push_str("<ul>");
+        for (id, name, created, used) in keys {
+            let _ = write!(
+                b,
+                "<li>{} <small>(registered {created}{})</small>\
+<form method=\"post\" action=\"/passkeys\"><input type=\"hidden\" name=\"remove\" value=\"{}\">\
+{CODE_FIELD}<button type=\"submit\">Remove</button></form></li>",
+                escape(name),
+                used.map_or(String::new(), |u| format!(", last used {u}")),
+                escape(id)
+            );
+        }
+        b.push_str("</ul>");
+    }
+    let _ = write!(
+        b,
+        "<h2>Register this device</h2><form method=\"post\" action=\"/passkeys\">\
+<p><label>Name<br><input name=\"name\" maxlength=\"64\" required></label></p>{CODE_FIELD}\
+<p><button type=\"button\" data-passkey=\"register\" data-purpose=\"{}\" hidden>Create a passkey</button> \
+<small data-passkey-status></small></p></form><script src=\"/passkey.js\" defer></script>\
+<p><small><a href=\"/approvals\">Everything waiting</a></small></p>",
+        escape(crate::passkeys::REGISTER)
+    );
+    shell("Passkeys", &b)
 }
 
 /// A page saying how it went.

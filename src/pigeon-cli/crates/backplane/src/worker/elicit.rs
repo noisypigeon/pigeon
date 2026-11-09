@@ -22,7 +22,7 @@ use crate::wire;
 const PENDING: &str = "elicit";
 
 /// The storage key of the code's [`Guard`].
-const GUARD: &str = "totp";
+pub(super) const GUARD: &str = "totp";
 
 /// The storage key of the inbox: every approval waiting for the page.
 const WAITING: &str = "waiting";

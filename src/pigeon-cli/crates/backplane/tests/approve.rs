@@ -35,7 +35,10 @@ fn the_page_shows_the_facts_escaped_and_runs_nothing() {
         used: None,
     };
     let html = approve::page(&c, &grant, "tok\"><script>");
-    assert!(!html.contains("<script"), "{html}");
+    // Only the passkey script, from this origin; see the 2026-11-09 approvals ADR §4.
+    let ours = "<script src=\"/passkey.js\" defer></script>";
+    assert_eq!(html.matches(ours).count(), 1, "{html}");
+    assert!(!html.replace(ours, "").contains("<script"), "{html}");
     assert!(html.contains("feat: &lt;script&gt;alert(1)&lt;/script&gt;"));
     assert!(html.contains("plan with &quot;quotes&quot; &amp; &lt;b&gt;tags&lt;/b&gt;"));
     assert!(html.contains("agent&lt;x&gt;"));
@@ -43,7 +46,12 @@ fn the_page_shows_the_facts_escaped_and_runs_nothing() {
     assert!(html.contains("value=\"tok&quot;&gt;&lt;script&gt;\""));
     assert!(html.contains("<form method=\"post\" action=\"/approve/7\">"));
     assert_eq!(html.matches("<form").count(), 1);
-    assert_eq!(html.matches("<button").count(), 1);
+    assert_eq!(
+        html.matches("<button").count(),
+        2,
+        "approve, and the hidden passkey button"
+    );
+    assert!(html.contains("data-passkey=\"prove\""));
     assert_eq!(
         html.matches("name=\"code\"").count(),
         1,
@@ -53,6 +61,16 @@ fn the_page_shows_the_facts_escaped_and_runs_nothing() {
     assert!(html.contains("href=\"/approvals\""));
     assert!(approve::CSP.contains("default-src 'none'"));
     assert!(!approve::CSP.contains("script-src"));
+    let scripts: Vec<&str> = approve::PROOF_CSP
+        .split(';')
+        .map(str::trim)
+        .filter(|d| d.starts_with("script-src"))
+        .collect();
+    assert_eq!(
+        scripts,
+        ["script-src 'self'"],
+        "only this origin's script, never inline"
+    );
     let done = approve::outcome("Done <x>", "by <y>");
     assert!(!done.contains("<x>") && !done.contains("<y>"));
 }
