@@ -284,13 +284,24 @@ fn work(spec: &JobSpec, dir: &Path, log: &mut String) -> Result<Value, String> {
             let applied = s.apply_stored(&plan, now);
             s.push().map_err(failed)?;
             let applied = applied.map_err(failed)?;
+            // Applied is applied: outputs that can't be read are logged, never a failure.
+            let outputs = match cobot::outputs(&s.ctx, &unit) {
+                Ok(o) => Value::Object(o),
+                Err(e) => {
+                    let _ = writeln!(log, "the stack's outputs couldn't be read: {e}");
+                    Value::Null
+                }
+            };
             let all: Vec<cobot::Change> = applied.iter().flat_map(|p| p.changes.clone()).collect();
             let _ = writeln!(
                 log,
                 "applied plan {plan} to {unit}: {} change(s)",
                 all.len()
             );
-            Ok(json!({ "task": "apply", "unit": unit, "plan": plan, "changes": changes(&all) }))
+            Ok(
+                json!({ "task": "apply", "unit": unit, "plan": plan, "changes": changes(&all),
+                "outputs": outputs }),
+            )
         }
     }
 }

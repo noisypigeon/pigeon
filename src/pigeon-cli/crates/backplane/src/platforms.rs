@@ -341,6 +341,54 @@ impl Runs {
     }
 }
 
+/// Each platform unit's newest outputs, as its last apply read them from state; see the step 4c
+/// amendment of `.claude/decisions/2026-11-08-runtime-blue-green-self-standup.md`.
+pub type Kept = std::collections::BTreeMap<String, serde_json::Map<String, Value>>;
+
+/// The event a finished run posts: its kind and words; `None` while it isn't finished, or
+/// when it merely expired or was refused, which post their own.
+#[must_use]
+pub fn finish_event(run: &Run) -> Option<(&'static str, String)> {
+    let head = format!("platform run {} of {}", run.id, run.unit);
+    match run.stage {
+        Stage::Planned => Some((
+            "platform.planned",
+            format!(
+                "{head} planned: {} change(s), waiting to be applied",
+                run.changes.len()
+            ),
+        )),
+        Stage::Applied => Some((
+            "platform.applied",
+            format!("{head} applied: {} change(s)", run.changes.len()),
+        )),
+        Stage::Failed => Some((
+            "platform.failed",
+            format!(
+                "{head} failed: {}",
+                run.why.as_deref().unwrap_or("no reason given")
+            ),
+        )),
+        _ => None,
+    }
+}
+
+/// The deploy job's outputs: the secret's snapshot `secret` with each unit of `kept` in its
+/// place; `secret` itself when nothing is kept, and `None` when neither has any.
+#[must_use]
+pub fn merged_outputs(secret: Option<&str>, kept: &Kept) -> Option<String> {
+    if kept.is_empty() {
+        return secret.map(str::to_string);
+    }
+    let mut all: serde_json::Map<String, Value> = secret
+        .and_then(|s| serde_json::from_str(s).ok())
+        .unwrap_or_default();
+    for (unit, outputs) in kept {
+        all.insert(unit.clone(), Value::Object(outputs.clone()));
+    }
+    serde_json::to_string(&all).ok()
+}
+
 fn fail(run: &mut Run, why: String) {
     run.stage = Stage::Failed;
     run.why = Some(why);

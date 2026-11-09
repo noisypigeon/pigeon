@@ -17,9 +17,12 @@ use super::platform::{self, Settings, job_stub, json_request, now, secret};
 use crate::access::Identity;
 use crate::approve::{self, Waiting};
 use crate::control::{self, JobSpec, Outcome, Report};
-use crate::platforms::{Run, Runs, Stage};
+use crate::platforms::{Kept, Run, Runs, Stage};
 
 const RUNS: &str = "platform-runs";
+
+/// Where `MainRun` keeps each platform unit's newest outputs.
+const OUTPUTS: &str = "platform-outputs";
 
 /// How often a running platform job is asked how it went.
 pub const POLL: Duration = Duration::from_secs(15);
@@ -49,7 +52,9 @@ async fn to_main(env: &Env, s: &Settings, path: &str, body: &Value) -> Result<(u
     )?;
     let mut r = platform::call(env, &main_stub(env, s)?, req).await?;
     let status = r.status_code();
-    let v = r.json().await.unwrap_or(Value::Null);
+    // A refusal is text, as `Response::error` writes it.
+    let text = r.text().await.unwrap_or_default();
+    let v = serde_json::from_str(&text).unwrap_or(Value::String(text));
     Ok((status, v))
 }
 
@@ -292,6 +297,15 @@ async fn store(state: &State, runs: &Runs) -> Result<()> {
     state.storage().put(RUNS, runs).await
 }
 
+/// Each platform unit's newest outputs, for the deploy job.
+///
+/// # Errors
+///
+/// When storage fails.
+pub async fn kept(state: &State) -> Result<Kept> {
+    Ok(state.storage().get(OUTPUTS).await?.unwrap_or_default())
+}
+
 /// Arms `state`'s alarm for a poll when none is set.
 async fn arm(state: &State) -> Result<()> {
     let storage = state.storage();
@@ -372,6 +386,7 @@ pub async fn tick(state: &State, env: &Env, sha: Option<&str>) -> Result<()> {
     let gone = runs.expire(now());
     let jobs: Vec<Run> = runs.running().into_iter().cloned().collect();
     let mut offers: Vec<(Run, &'static str, String)> = Vec::new();
+    let mut ended: Vec<u32> = Vec::new();
     for run in jobs {
         let Some(job) = run.job_id() else { continue };
         let report = poll(env, &job).await;
@@ -386,6 +401,15 @@ pub async fn tick(state: &State, env: &Env, sha: Option<&str>) -> Result<()> {
                 if let Some((next, op, token)) = done {
                     offers.push((next, op, token));
                 }
+                if let Some(applied) = runs.list.iter().find(|x| x.id == run.id)
+                    && applied.stage == Stage::Applied
+                    && let Some(o) = r.platform.as_ref().and_then(|v| v["outputs"].as_object())
+                {
+                    let mut all = kept(state).await?;
+                    all.insert(applied.unit.clone(), o.clone());
+                    state.storage().put(OUTPUTS, &all).await?;
+                }
+                ended.push(run.id);
             }
             Ok(None) => {}
             Err(()) if attempts >= ATTEMPTS => {
@@ -395,6 +419,7 @@ pub async fn tick(state: &State, env: &Env, sha: Option<&str>) -> Result<()> {
                 } else {
                     let _ = runs.applied(run.id, Err(why));
                 }
+                ended.push(run.id);
             }
             Err(()) => {
                 state
@@ -411,6 +436,17 @@ pub async fn tick(state: &State, env: &Env, sha: Option<&str>) -> Result<()> {
     if let Ok(s) = Settings::from(env) {
         for (run, op, token) in offers {
             let _ = announce(env, &s, &run, op, &token).await;
+        }
+        for id in ended {
+            let Some((kind, said)) = runs
+                .list
+                .iter()
+                .find(|r| r.id == id)
+                .and_then(crate::platforms::finish_event)
+            else {
+                continue;
+            };
+            let _ = super::events::append(env, &s, kind, None, None, &said, false).await;
         }
         for id in gone {
             let said = format!("platform run {id} expired, its token erased");

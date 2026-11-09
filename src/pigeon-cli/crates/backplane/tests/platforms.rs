@@ -1,7 +1,7 @@
 //! Platform runs: offers, grants, the sealed token's lifetime; see
 //! `.claude/decisions/2026-11-08-runtime-blue-green-self-standup.md`, step 4's amendment.
 
-use backplane::platforms::{LIFETIME, Runs, Stage};
+use backplane::platforms::{Kept, LIFETIME, Runs, Stage, finish_event, merged_outputs};
 use serde_json::json;
 
 #[test]
@@ -92,4 +92,50 @@ fn a_shown_run_holds_nothing_secret() {
         .shown();
     let text = serde_json::to_string(&r).expect("serializes");
     assert!(!text.contains("SEALED"), "{text}");
+}
+
+#[test]
+fn a_finished_run_says_what_happened() {
+    let mut runs = Runs::default();
+    runs.propose("platform/blue", "g1", 0).expect("proposes");
+    assert_eq!(finish_event(runs.get(1).expect("run")), None);
+    runs.grant_plan(1, "g1", "SEALED", "o", 1).expect("grants");
+    let r = runs
+        .planned(1, Ok(("p".into(), vec![json!({}), json!({})])), "g2", 2)
+        .expect("planned");
+    let (kind, said) = finish_event(&r).expect("an event");
+    assert_eq!(kind, "platform.planned");
+    assert!(
+        said.contains("run 1 of platform/blue planned: 2 change(s)"),
+        "{said}"
+    );
+    runs.grant_apply(1, "g2", "o", 3).expect("grants");
+    let r = runs.applied(1, Err("tofu failed".into())).expect("records");
+    let (kind, said) = finish_event(&r).expect("an event");
+    assert_eq!(kind, "platform.failed");
+    assert!(said.ends_with("failed: tofu failed"), "{said}");
+}
+
+#[test]
+fn kept_outputs_replace_their_unit_in_the_secret() {
+    let secret = r#"{"infra/pigeon":{"database_id":"old"},"platform/blue":{"queue_name":"old"}}"#;
+    assert_eq!(
+        merged_outputs(Some(secret), &Kept::new()).as_deref(),
+        Some(secret)
+    );
+    assert_eq!(merged_outputs(None, &Kept::new()), None);
+    let mut kept = Kept::new();
+    let outputs = json!({ "queue_name": "pigeon-ci-events", "database_id": "d" });
+    kept.insert(
+        "platform/blue".into(),
+        outputs.as_object().cloned().expect("object"),
+    );
+    let got: serde_json::Value =
+        serde_json::from_str(&merged_outputs(Some(secret), &kept).expect("merged")).expect("JSON");
+    assert_eq!(got["infra/pigeon"]["database_id"], "old");
+    assert_eq!(got["platform/blue"]["queue_name"], "pigeon-ci-events");
+    assert_eq!(got["platform/blue"]["database_id"], "d");
+    let alone: serde_json::Value =
+        serde_json::from_str(&merged_outputs(None, &kept).expect("merged")).expect("JSON");
+    assert_eq!(alone["platform/blue"]["database_id"], "d");
 }

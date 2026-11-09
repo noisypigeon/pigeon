@@ -99,6 +99,15 @@ impl MainRun {
                 env.insert(k.to_string(), v);
             }
         }
+        // Each platform unit's outputs come from its newest apply; see the step 4c amendment of
+        // .claude/decisions/2026-11-08-runtime-blue-green-self-standup.md.
+        let kept = super::platforms::kept(&self.state)
+            .await
+            .map_err(|e| e.to_string())?;
+        let secret_outputs = env.get(cobot::ship_wire::OUTPUTS_VAR).cloned();
+        if let Some(o) = crate::platforms::merged_outputs(secret_outputs.as_deref(), &kept) {
+            env.insert(cobot::ship_wire::OUTPUTS_VAR.to_string(), o);
+        }
         // The newest images, which a deploy may have built since the secret was set; see
         // .claude/decisions/2026-11-07-development-job-images-on-cloudflare.md §4.
         if let Some(i) = images.and_then(|i| serde_json::to_string(i).ok()) {
