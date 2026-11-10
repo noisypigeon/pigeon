@@ -1,0 +1,11 @@
+description: ci.yml opens read-only and dispatch-only; see 2026-11-10-development-code-checks-github-actions.md §6.
+target:
+  files: [.github/workflows/ci.yml]
+  optional: true
+rules:
+  - line: { at: 1, matches: '^# ' }
+  - line: { at: 2, matches: '^name: ci$' }
+  - line: { at: 3, matches: '^permissions:$' }
+  - line: { at: 4, matches: '^  contents: read$' }
+  - line: { at: 5, matches: '^on:$' }
+  - line: { at: 6, matches: '^  workflow_dispatch:$' }

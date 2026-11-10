@@ -289,7 +289,7 @@ fn changelog_rules() {
 #[test]
 fn every_policy_is_valid() {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../../.config/policies");
-    assert_eq!(sentinel::load_dir(&dir).expect("loads").len(), 14);
+    assert_eq!(sentinel::load_dir(&dir).expect("loads").len(), 15);
 }
 
 fn layout_root(skip: &[&str], extra: &[&str]) -> TempDir {
@@ -446,6 +446,102 @@ fn mirror_forbids_github_workflows() {
         assert!(
             v.iter().any(|m| m.starts_with(&format!("{file}:1:"))),
             "{file}: {v:?}"
+        );
+    }
+}
+
+const CI: &str = ".github/workflows/ci.yml";
+
+const CI_YML: &str =
+    "# Code checks; see .claude/decisions/2026-11-10-development-code-checks-github-actions.md.
+name: ci
+permissions:
+  contents: read
+on:
+  workflow_dispatch:
+    inputs:
+      sha: { required: true, type: string }
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@0123456789abcdef0123456789abcdef01234567
+        with: { ref: \"${{ inputs.sha }}\" }
+      - run: cargo fmt --all --check
+";
+
+/// Both mirror policies' violations on a tree of `files`.
+fn mirror(files: &[(&str, &str)]) -> Vec<String> {
+    let root = tree_root(files);
+    let mut v = violations("mirror", root.path(), None);
+    v.extend(violations("mirror-workflow", root.path(), None));
+    v
+}
+
+#[test]
+fn mirror_allows_only_a_dispatched_read_only_pinned_ci_yml() {
+    passes(&mirror(&[]));
+    passes(&mirror(&[(CI, CI_YML)]));
+    fails(&mirror(&[
+        (CI, CI_YML),
+        (".github/workflows/ci.yml.yml", CI_YML),
+    ]));
+
+    let checkout = "      - uses: actions/checkout@0123456789abcdef0123456789abcdef01234567\n";
+    for (why, content) in [
+        (
+            "a push trigger",
+            CI_YML.replace("jobs:", "  push: { branches: [main] }\njobs:"),
+        ),
+        ("an inline trigger", CI_YML.replace("on:\n", "on: push\n")),
+        (
+            "a job's write permission",
+            CI_YML.replace(
+                "    runs-on:",
+                "    permissions: { actions: write }\n    runs-on:",
+            ),
+        ),
+        (
+            "write-all",
+            CI_YML.replace("  contents: read", "  contents: read\n  checks: write-all"),
+        ),
+        (
+            "no permissions",
+            CI_YML.replace("permissions:\n  contents: read\n", ""),
+        ),
+        (
+            "a secret",
+            CI_YML.replace("cargo fmt", "echo ${{ secrets.T }} && cargo fmt"),
+        ),
+        (
+            "the token",
+            CI_YML.replace("cargo fmt", "echo $GITHUB_TOKEN && cargo fmt"),
+        ),
+        (
+            "a tag",
+            CI_YML.replace(checkout, "      - uses: actions/checkout@v4\n"),
+        ),
+        (
+            "no ref",
+            CI_YML.replace(checkout, "      - uses: actions/checkout\n"),
+        ),
+        (
+            "a short SHA",
+            CI_YML.replace(checkout, "      - uses: actions/checkout@0123456\n"),
+        ),
+        (
+            "a local action",
+            CI_YML.replace(checkout, "      - uses: ./.github/actions/x\n"),
+        ),
+        (
+            "a docker action",
+            CI_YML.replace(checkout, "      - uses: docker://alpine:3\n"),
+        ),
+    ] {
+        assert_ne!(content, CI_YML, "{why} changed nothing");
+        assert!(
+            !mirror(&[(CI, &content)]).is_empty(),
+            "{why} should be refused"
         );
     }
 }

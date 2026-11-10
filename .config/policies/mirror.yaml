@@ -1,6 +1,27 @@
-description: GitHub is a source mirror only, so nothing runs there; CI and delivery are Cloudflare's, per 2026-11-05-development-git-hosting-cloudflare-artifacts.md (2026-11-06 amendment).
+description: GitHub is a source mirror that runs only ci.yml, the control plane's dispatch-only, read-only, pinned code checks; see 2026-11-10-development-code-checks-github-actions.md §6.
 target: tree
 rules:
+  # One workflow, ci.yml; nothing else under .github/workflows/.
   - find:
       match: '^\.github/workflows/'
+      allow_under: [.github/workflows/ci.yml]
       forbid_content: '[\s\S]'
+  - find:
+      match: '^\.github/workflows/ci\.yml.'
+      forbid_content: '[\s\S]'
+  # Dispatched only: no other trigger, under `on:` or inline.
+  - find:
+      match: '^\.github/workflows/ci\.yml$'
+      forbid_content: '^(  (push|pull_request|pull_request_target|pull_request_review|pull_request_review_comment|schedule|workflow_run|workflow_call|repository_dispatch|merge_group|issue_comment|issues|release|create|delete|fork|discussion|discussion_comment|check_run|check_suite|status|deployment|deployment_status|label|milestone|page_build|public|registry_package|watch|gollum|branch_protection_rule)\s*:|on:\s*\S)'
+  # No write permission.
+  - find:
+      match: '^\.github/workflows/ci\.yml$'
+      forbid_content: ':\s*write\b|write-all'
+  # No secret and no token.
+  - find:
+      match: '^\.github/workflows/ci\.yml$'
+      forbid_content: '\bsecrets\b|GITHUB_TOKEN|github\.token'
+  # Every action pinned to a commit; no local or docker action.
+  - find:
+      match: '^\.github/workflows/ci\.yml$'
+      forbid_content: '^\s*-?\s*uses:\s*(\./|docker://|[^\s@]+(\s|$)|[^\s@]+@([0-9a-f]{0,39}|[0-9a-f]{41,}|\S*[^0-9a-f\s]\S*)(\s|$))'

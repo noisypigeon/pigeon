@@ -7,6 +7,8 @@ guarded:
   - "**/secrets.config.yaml"
   - .mcp.json
   - .claude/settings*.json
+  # The code checks' workflow; see .claude/decisions/2026-11-10-development-code-checks-github-actions.md §6.
+  - .github/**
   - src/pigeon-cli/crates/backplane/src/approvals.rs
   - src/pigeon-cli/crates/backplane/src/approve.rs
   - src/pigeon-cli/crates/backplane/src/worker/approve.rs
