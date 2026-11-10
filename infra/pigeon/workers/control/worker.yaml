@@ -6,9 +6,9 @@ name: $deployment.worker
 deployment: pigeon/platform
 entry: { crate: src/pigeon-cli/crates/backplane, features: [worker] }
 compatibility_date: "2026-10-01"
-# Until clients move to platform.pigeon.dev; see
+# Served only at its domains below; see
 # .claude/decisions/2026-11-10-runtime-platform-hostname-dashboard-observability.md §1.
-workers_dev: true
+workers_dev: false
 # The platform's hostname and the stack's own, which Access covers.
 routes:
   - custom_domain: $deployment.domains[0]
