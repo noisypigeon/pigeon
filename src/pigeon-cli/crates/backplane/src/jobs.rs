@@ -324,7 +324,11 @@ fn merge(spec: &JobSpec, dir: &Path) -> Report {
         spec.plan.trim()
     );
     if let Some(by) = &spec.approver {
-        let _ = writeln!(message, "Change-Approved-By: {by}");
+        let _ = writeln!(
+            message,
+            "Change-Approved-By: {}",
+            crate::control::public_approver(by)
+        );
     }
     let _ = writeln!(message, "Change-Head: {}", spec.sha);
     match cobot::ci::squash_onto(
@@ -335,6 +339,9 @@ fn merge(spec: &JobSpec, dir: &Path) -> Report {
         &spec.branch,
         &spec.sha,
         &message,
+        spec.env
+            .get(crate::control::COMMIT_AUTHOR)
+            .map(String::as_str),
     ) {
         Ok(commit) => Report {
             log: format!("merged {} as {commit}\n", spec.sha),

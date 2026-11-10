@@ -228,14 +228,30 @@ killed after {} minutes",
     (ok, scrub(&log, secret))
 }
 
+/// `(name, email)` of a git identity written `Name <email>`, when it is one.
+#[must_use]
+pub fn identity(s: &str) -> Option<(String, String)> {
+    let (name, rest) = s.trim().split_once('<')?;
+    let email = rest.strip_suffix('>')?;
+    let name = name.trim();
+    let bad = |p: &str| p.is_empty() || p.contains(['<', '>', '\n', '\r']);
+    if bad(name) || bad(email) || !email.contains('@') {
+        return None;
+    }
+    Some((name.to_string(), email.to_string()))
+}
+
 /// Commits `sha`'s tree onto `base`'s head as one commit with `message`, and pushes it to
 /// `remote`'s `base`, then deletes `branch` there; the commit pushed. `base`'s head must be an
 /// ancestor of `sha`, so the commit's tree is exactly the checked one; the push is never
-/// forced, so a `base` that moved since the fetch is refused.
+/// forced, so a `base` that moved since the fetch is refused. With `author` (`Name <email>`),
+/// the commit's author is it; its committer is always `pigeon`.
 ///
 /// # Errors
 ///
-/// [`Error::Git`] when `base` isn't an ancestor of `sha`, or git fails.
+/// [`Error::Git`] when `base` isn't an ancestor of `sha`, `author` isn't `Name <email>`, or
+/// git fails.
+#[allow(clippy::too_many_arguments)]
 pub fn squash_onto(
     dir: &Path,
     remote: &str,
@@ -244,7 +260,15 @@ pub fn squash_onto(
     branch: &str,
     sha: &str,
     message: &str,
+    author: Option<&str>,
 ) -> Result<String, Error> {
+    let author = match author {
+        Some(a) => Some(identity(a).ok_or_else(|| Error::Git {
+            args: "commit-tree".into(),
+            message: format!("the author `{a}` is not `Name <email>`"),
+        })?),
+        None => None,
+    };
     let on = format!("refs/remotes/origin/{base}");
     let ancestor = command("", "")
         .arg("-C")
@@ -263,7 +287,12 @@ pub fn squash_onto(
     }
     let parent = git(dir, "", "", &["rev-parse", &on])?;
     let tree = format!("{sha}^{{tree}}");
-    let commit = command("", "")
+    let mut cmd = command("", "");
+    if let Some((name, email)) = &author {
+        cmd.env("GIT_AUTHOR_NAME", name)
+            .env("GIT_AUTHOR_EMAIL", email);
+    }
+    let commit = cmd
         .arg("-C")
         .arg(dir)
         .args([

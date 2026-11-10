@@ -50,6 +50,9 @@ bindings:
     PASSKEY_RP_ID: $deployment.domains[0]
     # The GitHub mirror MainRun pushes to; see .claude/decisions/2026-11-08-development-github-mirror-on-merge.md.
     MIRROR: https://github.com/noisypigeon/pigeon
+    # The merges' author, the owner's GitHub noreply address; see the 2026-11-10 amendment of
+    # .claude/decisions/2026-11-05-development-changes-through-pigeon-mcp.md.
+    COMMIT_AUTHOR: "noisypigeon <167243387+noisypigeon@users.noreply.github.com>"
   version_metadata: CF_VERSION_METADATA
 # DEPLOY_TOKEN: an account token with Workers R2 Storage Edit and Zone Read, for publishing sites.
 # SESSION_KEY: 32 random bytes, hex; signs MCP session IDs.

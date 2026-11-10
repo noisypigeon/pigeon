@@ -167,7 +167,14 @@ impl ChangeRun {
             platform::credentials(&self.env, write, cobot::artifacts_wire::TOKEN_TTL)
                 .await
                 .map_err(|e| e.to_string())?;
-        let spec = control::spec(change, job, &remote, &token)?;
+        let mut spec = control::spec(change, job, &remote, &token)?;
+        if job == crate::changes::MERGE
+            && let Ok(author) = self.env.var(control::COMMIT_AUTHOR)
+            && !author.to_string().is_empty()
+        {
+            spec.env
+                .insert(control::COMMIT_AUTHOR.into(), author.to_string());
+        }
         let body = serde_json::to_value(&spec).map_err(|e| e.to_string())?;
         let req = json_request("https://checker/start", Method::Post, Some(&body), None)
             .map_err(|e| e.to_string())?;

@@ -320,7 +320,8 @@ pub struct JobSpec {
     /// publishes every site.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub since: Option<String>,
-    /// For a deploy: its credentials, as environment; never logged or shown.
+    /// For a deploy: its credentials, as environment; never logged or shown. For the merge job:
+    /// [`COMMIT_AUTHOR`].
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub env: std::collections::BTreeMap<String, String>,
 }
@@ -350,6 +351,23 @@ pub fn job_id(number: u32, sha: &str, job: &str) -> String {
         })
         .collect();
     format!("{number}-{}-{job}", &sha[..12.min(sha.len())])
+}
+
+/// The Worker var, and the merge job's `env` key, naming the squash's author as `Name <email>`;
+/// unset, merges are authored by `pigeon`. See
+/// .claude/decisions/2026-11-05-development-changes-through-pigeon-mcp.md, the 2026-11-10
+/// amendment.
+pub const COMMIT_AUTHOR: &str = "COMMIT_AUTHOR";
+
+/// What a merge commit's `Change-Approved-By:` says of approver `by`: the approval's kind, never
+/// an identity, since `main` is published; D1's audit keeps `by`.
+#[must_use]
+pub fn public_approver(by: &str) -> String {
+    match by.split_once(':') {
+        Some(("policy" | "mandate", _)) => by.to_string(),
+        Some(("grant", _)) => "grant:owner".into(),
+        _ => "owner".into(),
+    }
 }
 
 /// The spec for `job` on `change`'s head.

@@ -739,3 +739,18 @@ fn the_mirror_keeps_a_changes_session_and_affects_for_overlaps() {
     assert_eq!(open[1].session, None, "a change with no session");
     assert_eq!(open[1].affects, Vec::<String>::new());
 }
+
+#[test]
+fn a_merge_commit_names_the_approvals_kind_never_an_identity() {
+    for (by, shown) in [
+        ("owner@example.com", "owner"),
+        ("a07759a856eb15d9711537fe6bec2108.access", "owner"),
+        ("grant:owner@example.com", "grant:owner"),
+        ("grant:4f2a", "grant:owner"),
+        ("policy:routine", "policy:routine"),
+        ("mandate:7", "mandate:7"),
+        ("", "owner"),
+    ] {
+        assert_eq!(control::public_approver(by), shown, "{by}");
+    }
+}

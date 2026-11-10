@@ -206,3 +206,25 @@ Steps 8 and 10 of §1, for sites. Infrastructure applies stay the owner's.
   - `initialize` on `/mcp` answers as the agent.
 
   A plain `curl` gets Access's 302 to its login page.
+
+### 2026-11-10: Merges are authored by the owner, and name no approver's identity
+
+The mirror ([`2026-11-08-development-github-mirror-on-merge.md`](2026-11-08-development-github-mirror-on-merge.md)) publishes `main` on GitHub. The 2026-11-06 merge amendment's commit format had two problems there:
+
+- every squash was authored by `pigeon <pigeon@users.noreply.pigeon.dev>`, so GitHub attributed none of them to the owner;
+- `Change-Approved-By:` held the approver's Access identity, an email address, which the mirror then made public.
+
+What changes:
+
+- **The author.**
+  - A squash is authored by the Worker's `COMMIT_AUTHOR` var, `Name <email>`. `worker.yaml` sets it to the owner's GitHub noreply address, so GitHub attributes merges to the owner.
+  - The committer stays `pigeon`, so a merge still shows that the control plane made it.
+  - With the var unset, both stay `pigeon`.
+  - The Worker hands the author to the merge job in its spec's `env`, under the same name.
+- **The trailer names the approval's kind, never an identity:**
+  - an owner's proof is `owner`;
+  - a grant is `grant:owner`;
+  - `policy:<rule>` and `mandate:<id>` are unchanged.
+
+  D1's audit keeps who approved.
+- **Commits already on `main`** keep their author and trailer. Rewriting them is the owner's break-glass decision, outside the change flow.

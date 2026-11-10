@@ -228,6 +228,10 @@ fn the_merge_job_squashes_the_checked_tree_onto_main_and_deletes_the_branch() {
     let (bare, sha) = remote(tmp.path(), &["CLAUDE.md"]);
     let mut s = spec(&bare, &sha, MERGE, &["CLAUDE.md"], &[]);
     s.approver = Some("owner@example.com".into());
+    s.env.insert(
+        backplane::control::COMMIT_AUTHOR.into(),
+        "Owner <1+owner@users.noreply.github.com>".into(),
+    );
     let r = jobs::run(&s, &tmp.path().join("m"));
     assert_eq!(r.outcome, Outcome::Passed, "{}", r.log);
     let commit = r.merged.expect("merged");
@@ -239,9 +243,19 @@ fn the_merge_job_squashes_the_checked_tree_onto_main_and_deletes_the_branch() {
     );
     let message = git(&bare, &["log", "-1", "--format=%B", &commit]);
     assert!(message.starts_with("docs: x (!1)\n"), "{message}");
+    assert!(message.contains("Change-Approved-By: owner\n"), "{message}");
     assert!(
-        message.contains("Change-Approved-By: owner@example.com"),
-        "{message}"
+        !message.contains("@example.com"),
+        "no approver's email: {message}"
+    );
+    assert_eq!(
+        git(&bare, &["log", "-1", "--format=%an <%ae>", &commit]),
+        "Owner <1+owner@users.noreply.github.com>"
+    );
+    assert_eq!(
+        git(&bare, &["log", "-1", "--format=%cn <%ce>", &commit]),
+        "pigeon <pigeon@users.noreply.pigeon.dev>",
+        "the control plane commits it"
     );
     assert!(
         message.contains(&format!("Change-Head: {sha}")),
@@ -256,6 +270,35 @@ fn the_merge_job_squashes_the_checked_tree_onto_main_and_deletes_the_branch() {
         git(&bare, &["branch", "--list", "change/1-x"]),
         "",
         "the branch is gone"
+    );
+}
+
+#[test]
+fn a_merge_with_no_author_is_pigeons_and_a_malformed_author_is_refused() {
+    let tmp = TempDir::new().expect("tempdir");
+    let (bare, sha) = remote(tmp.path(), &["CLAUDE.md"]);
+    let mut s = spec(&bare, &sha, MERGE, &["CLAUDE.md"], &[]);
+    s.approver = Some("grant:owner@example.com".into());
+    s.env.insert(
+        backplane::control::COMMIT_AUTHOR.into(),
+        "no-angle-brackets@example.com".into(),
+    );
+    let r = jobs::run(&s, &tmp.path().join("bad"));
+    assert_eq!(r.outcome, Outcome::Failed, "{}", r.log);
+    assert!(r.violations.join(" ").contains("is not `Name <email>`"));
+
+    s.env.clear();
+    let r = jobs::run(&s, &tmp.path().join("m"));
+    assert_eq!(r.outcome, Outcome::Passed, "{}", r.log);
+    let commit = r.merged.expect("merged");
+    assert_eq!(
+        git(&bare, &["log", "-1", "--format=%an <%ae>", &commit]),
+        "pigeon <pigeon@users.noreply.pigeon.dev>"
+    );
+    let message = git(&bare, &["log", "-1", "--format=%B", &commit]);
+    assert!(
+        message.contains("Change-Approved-By: grant:owner\n"),
+        "{message}"
     );
 }
 
