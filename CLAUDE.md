@@ -118,6 +118,13 @@ belong in the ADR, never in the file.
   `trace_show`, `events_query` and `stats_show` read logs, traces, events and
   build, deploy and check stats, per
   [`2026-11-10-runtime-platform-hostname-dashboard-observability.md`](.claude/decisions/2026-11-10-runtime-platform-hostname-dashboard-observability.md).
+- The factory's code: `pigeon-sentinel` is its own binary and release, judges
+  with `main`'s build and `main`'s policies, and a change to it is its own
+  grant; cobot and gantry fold into backplane, whose `core/` is pure
+  transitions returning effects, each state owned by one object, and whose
+  `shell/` acts; per-push checks run the tests on changed code paths, and the
+  merge runs the full suite once, per
+  [`2026-11-10-development-factory-crates-functional-core.md`](.claude/decisions/2026-11-10-development-factory-crates-functional-core.md).
 - Change slots are freed: a change closed before authorization closes; a
   conflicted change has one reconciliation, and a family holds one slot; the
   control plane alone evicts, hourly, a change whose session has gone or that
