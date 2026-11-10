@@ -149,6 +149,7 @@ fn only_a_person_applies() {
         "change.approve",
         "change.merge",
         "change.close",
+        "ci.cloudflare",
         "infra.apply",
     ] {
         assert!(access::authorize(op(n), &agent).is_err(), "{n}");

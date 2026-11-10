@@ -92,6 +92,9 @@ pub struct Actions {
     /// The last dispatch number used.
     #[serde(default)]
     pub seq: u32,
+    /// The head the owner moved to Cloudflare's `Checker`; its code checks never dispatch.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cloudflare: Option<String>,
 }
 
 /// Where the change's `mirror` job is on the head.
@@ -156,9 +159,19 @@ impl Actions {
         });
     }
 
-    /// Drops every entry not on `head`, so an old head's results are never applied.
+    /// Drops every entry not on `head`, so an old head's results are never applied; a new head
+    /// goes back to GitHub.
     pub fn keep_head(&mut self, head: Option<&str>) {
         self.dispatches.retain(|d| Some(d.sha.as_str()) == head);
+        if self.cloudflare.as_deref() != head {
+            self.cloudflare = None;
+        }
+    }
+
+    /// Whether the owner moved head `sha`'s code checks to Cloudflare.
+    #[must_use]
+    pub fn on_cloudflare(&self, sha: &str) -> bool {
+        self.cloudflare.as_deref() == Some(sha)
     }
 
     /// Keeps only the checks still `open` on the change: an undispatched entry loses the others

@@ -44,6 +44,11 @@ pub enum Routed {
         /// What happened.
         event: Event,
     },
+    /// The owner's break-glass on change `number`: its head's code checks on the `Checker`.
+    BreakGlass {
+        /// The change.
+        number: u32,
+    },
     /// Change `number`'s status.
     Status {
         /// The change.
@@ -183,9 +188,14 @@ pub fn route(request: &Request, by: &str, at: u64) -> Result<Routed, String> {
         }),
         "change.close" => event(Event::Close),
         "change.merge" => event(Event::Merge { by: by.into() }),
-        "ci.rerun" => event(Event::Rerun {
-            job: need(a, "job")?,
-        }),
+        "ci.rerun" => match text(a, "on").as_deref() {
+            None | Some("" | "github") => event(Event::Rerun {
+                job: need(a, "job")?,
+            }),
+            Some("cloudflare") => Err(format!("`on: cloudflare` is the owner's `{BREAK_GLASS}`")),
+            Some(other) => Err(format!("`on` is `github` or `cloudflare`, not `{other}`")),
+        },
+        BREAK_GLASS => Ok(Routed::BreakGlass { number: number(a)? }),
         "change.status" => Ok(Routed::Status { number: number(a)? }),
         "deploy.status" => Ok(Routed::DeployStatus),
         "deploy.retry" => Ok(Routed::DeployRetry),
@@ -843,6 +853,92 @@ pub const MIRROR: &str = changes::MIRROR;
 
 /// The job that deletes a merged or closed change's branch from GitHub.
 pub const UNMIRROR: &str = "unmirror";
+
+/// The owner's break-glass: a change head's code checks on Cloudflare's `Checker`, which
+/// `ci_rerun … on: cloudflare` asks for; see
+/// `.claude/decisions/2026-11-10-development-code-checks-github-actions.md` §5.
+pub const BREAK_GLASS: &str = "ci.cloudflare";
+
+/// `request` as the operation it asks for: `ci.rerun` with `on: cloudflare` is [`BREAK_GLASS`]
+/// on its change, so it needs the owner like `change.close`.
+#[must_use]
+pub fn retarget(request: &Request) -> Request {
+    let on = request.args.get("on").and_then(Value::as_str);
+    if request.operation != "ci.rerun" || on != Some("cloudflare") {
+        return request.clone();
+    }
+    let args = request
+        .args
+        .iter()
+        .filter(|(k, _)| matches!(k.as_str(), "number" | "ticket"))
+        .map(|(k, v)| (k.clone(), v.clone()))
+        .collect();
+    Request {
+        operation: BREAK_GLASS.into(),
+        args,
+    }
+}
+
+/// Whether `change` has a code check on its head that hasn't passed, which [`BREAK_GLASS`] would
+/// run on Cloudflare.
+#[must_use]
+pub fn code_unpassed(change: &Change) -> bool {
+    change.head.is_some()
+        && change
+            .jobs
+            .iter()
+            .any(|j| crate::actions::on_github(&j.argv) && j.status != changes::JobStatus::Passed)
+}
+
+/// [`BREAK_GLASS`] on `change`: `github` records its head as run on Cloudflare and drops its
+/// dispatches; the answer is the events to apply, then the checks to start on the `Checker`.
+///
+/// # Errors
+///
+/// When the change has no open head with a code check that hasn't passed.
+pub fn break_glass(
+    change: &Change,
+    github: &mut crate::actions::Actions,
+) -> Result<(Vec<Event>, Vec<String>), String> {
+    use changes::JobStatus;
+    let Some(sha) = change.head.clone() else {
+        return Err(format!("{} has no head", change.branch()));
+    };
+    if matches!(
+        change.state,
+        changes::State::Merged | changes::State::Closed
+    ) {
+        return Err(format!("{} is {}", change.branch(), change.state.name()));
+    }
+    if !code_unpassed(change) {
+        return Err(format!(
+            "{}'s code checks have all passed on {sha}",
+            change.branch()
+        ));
+    }
+    github.cloudflare = Some(sha.clone());
+    github.dispatches.clear();
+    let code = change
+        .jobs
+        .iter()
+        .filter(|j| crate::actions::on_github(&j.argv));
+    let mut events = Vec::new();
+    let mut start = Vec::new();
+    for j in code {
+        match j.status {
+            JobStatus::Running => events.push(Event::Lost {
+                job: j.name.clone(),
+                sha: sha.clone(),
+            }),
+            JobStatus::Queued => start.push(j.name.clone()),
+            JobStatus::Failed => events.push(Event::Rerun {
+                job: j.name.clone(),
+            }),
+            JobStatus::Passed | JobStatus::Cancelled => {}
+        }
+    }
+    Ok((events, start))
+}
 
 /// Whether `job` on `change` runs on GitHub Actions: a code check, on a change whose head a
 /// `mirror` job pushes, on a Worker that mirrors; see

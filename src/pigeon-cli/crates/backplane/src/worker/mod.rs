@@ -118,6 +118,7 @@ async fn fetch(mut req: Request, env: Env, _ctx: worker::Context) -> Result<Resp
                 Action::Accept => Ok(Response::empty()?.with_status(202)),
                 Action::Answer { id, result } => elicit::answer(&env, &id, &result).await,
                 Action::Call { id, request } => {
+                    let request = control::retarget(&request);
                     if request.operation == "approval.wait" {
                         return wait(&env, &session, &id, &request).await;
                     }
@@ -408,6 +409,8 @@ async fn run(
     who: &Identity,
     request: &wire::Request,
 ) -> std::result::Result<WireResponse, crate::Error> {
+    let retargeted = control::retarget(request);
+    let request = &retargeted;
     let op = wire::validate(request)?;
     access::authorize(op, who).map_err(|m| crate::Error::Invalid(vec![m]))?;
     if !who.human && op.effect != wire::Effect::Read {
@@ -470,6 +473,21 @@ async fn run(
         .map_err(|e| crate::Error::Invalid(vec![e.to_string()]))
 }
 
+/// The owner's approved break-glass on change `number`; see
+/// `.claude/decisions/2026-11-10-development-code-checks-github-actions.md` §5.
+async fn break_glass(
+    env: &Env,
+    s: &Settings,
+    operation: &str,
+    number: u32,
+) -> Result<(Option<String>, WireResponse)> {
+    let (status, v) = to_change(env, &s.repo, number, Method::Post, "/cloudflare", None).await?;
+    Ok((
+        Some(number.to_string()),
+        respond(operation, status, json!({ "change": v })),
+    ))
+}
+
 async fn dispatch(
     env: &Env,
     s: &Settings,
@@ -509,6 +527,7 @@ async fn dispatch(
                 respond(operation, status, json!({ "change": v })),
             ))
         }
+        Routed::BreakGlass { number } => break_glass(env, s, operation, number).await,
         Routed::Status { number } => {
             let (status, v) = to_change(env, &s.repo, number, Method::Get, "/status", None).await?;
             Ok((Some(number.to_string()), respond(operation, status, v)))

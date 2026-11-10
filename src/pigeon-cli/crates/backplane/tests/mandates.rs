@@ -250,3 +250,14 @@ fn a_mandate_pauses_when_a_change_reaches_outside_it_or_a_deploy_fails() {
     none.mandate = None;
     assert!(other.decide(&none, "change.merge", 10).is_none());
 }
+
+#[test]
+fn a_mandate_never_moves_checks_to_cloudflare() {
+    let mut all = active(5, true);
+    let plan = format!("Per {ADR}.");
+    let c = change(&["tooling/x/**"], &plan, Some((Tier::Confirm, "routine")));
+    assert!(matches!(
+        decision(&mut all, &c, backplane::control::BREAK_GLASS),
+        Decision::Ask(_)
+    ));
+}

@@ -455,6 +455,23 @@ impl ChangeRun {
         true
     }
 
+    /// The owner's break-glass: the head's code checks that haven't passed, on the `Checker`.
+    async fn break_glass(&self, mut change: Change) -> Result<Response> {
+        let mut github: Actions = self.load(ACTIONS).await?;
+        let (events, start) = match control::break_glass(&change, &mut github) {
+            Ok(v) => v,
+            Err(why) => return Response::error(why, 409),
+        };
+        let mut pending: Vec<Pending> = self.load(PENDING).await?;
+        for e in events {
+            let _ = Self::apply(&mut change, e, &mut pending);
+        }
+        pending.extend(start.into_iter().map(Pending::Start));
+        self.state.storage().put(ACTIONS, &github).await?;
+        self.save(&change, &pending).await?;
+        Response::from_json(&change)
+    }
+
     /// Stops job `id`'s Container in `class`, if it still runs.
     async fn stop(&self, class: control::Class, id: &str) -> Result<()> {
         if let Ok(stub) = job_stub(&self.env, class, id) {
@@ -620,6 +637,10 @@ impl DurableObject for ChangeRun {
                     Err(why) => Response::error(why, 403),
                 }
             }
+            (Method::Post, "cloudflare") => match existing {
+                Some(change) => self.break_glass(change).await,
+                None => Response::error("no such change", 404),
+            },
             (Method::Post, "event") => {
                 let Some(mut change) = existing else {
                     return Response::error("no such change", 404);
@@ -660,7 +681,10 @@ impl DurableObject for ChangeRun {
                         Ok(()) => {}
                     }
                 }
-                Pending::Start(job) if control::to_github(&change, &job, mirrors) => {
+                Pending::Start(job)
+                    if control::to_github(&change, &job, mirrors)
+                        && !github.on_cloudflare(change.head.as_deref().unwrap_or_default()) =>
+                {
                     if let Some(sha) = &change.head {
                         github.queue(change.number, sha, &job);
                     }

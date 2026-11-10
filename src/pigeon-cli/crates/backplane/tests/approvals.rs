@@ -398,3 +398,24 @@ fn a_sentinel_change_holds_nothing_but_sentinel_and_its_adr() {
         "without a sentinel list, nothing is kept apart"
     );
 }
+
+#[test]
+fn the_break_glass_is_the_owners_alone() {
+    use backplane::approvals::{by_grant, by_policy, tier_of};
+    use backplane::changes::{Change, ChangeGrant};
+    use backplane::control::BREAK_GLASS;
+    let mut c = Change::propose(9, "x", "feat: x", "plan", vec!["src/**".into()], "agent");
+    c.head = Some("abc".into());
+    c.grant = Some(ChangeGrant {
+        by: "owner@example.com".into(),
+        expires: 1000,
+        review: false,
+    });
+    assert_eq!(tier_of(&c, BREAK_GLASS), Tier::Owner);
+    assert_eq!(
+        by_grant(&c, BREAK_GLASS, 100),
+        None,
+        "the change's one proof doesn't cover it"
+    );
+    assert_eq!(by_policy(&c, BREAK_GLASS), None);
+}

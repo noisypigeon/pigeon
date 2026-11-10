@@ -323,6 +323,12 @@ pub fn decide(m: &Mandate, change: &crate::changes::Change, operation: &str, now
             change.number, m.id
         ));
     }
+    if operation == crate::control::BREAK_GLASS {
+        return Decision::Ask(format!(
+            "`{operation}` on change {} is the owner's each time",
+            change.number
+        ));
+    }
     if !matches!(operation, "change.approve" | "change.merge") {
         return Decision::Allow;
     }

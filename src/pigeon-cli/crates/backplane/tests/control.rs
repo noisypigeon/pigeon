@@ -829,3 +829,102 @@ fn code_checks_go_to_github_only_on_a_mirrored_change() {
     );
     assert_eq!(control::mirror_state(&plain), Mirror::Failed);
 }
+
+fn job(name: &str, cmd: &str, status: backplane::changes::JobStatus) -> backplane::changes::Job {
+    backplane::changes::Job {
+        name: name.into(),
+        argv: cmd.split(' ').map(str::to_string).collect(),
+        status,
+        attempts: 1,
+    }
+}
+
+#[test]
+fn ci_rerun_on_cloudflare_is_the_owners_break_glass() {
+    let req = |on: Option<&str>| {
+        let mut args = json!({ "number": 9, "job": "fmt", "ticket": "t" });
+        if let Some(o) = on {
+            args["on"] = json!(o);
+        }
+        request("ci.rerun", &args)
+    };
+    let r = control::retarget(&req(Some("cloudflare")));
+    assert_eq!(r.operation, control::BREAK_GLASS);
+    let mut keys: Vec<&String> = r.args.keys().collect();
+    keys.sort();
+    assert_eq!(keys, ["number", "ticket"]);
+    for kept in [req(Some("github")), req(None)] {
+        let r = control::retarget(&kept);
+        assert_eq!(
+            (r.operation.as_str(), r.args.clone()),
+            ("ci.rerun", kept.args)
+        );
+    }
+    assert!(matches!(
+        control::route(&req(Some("github")), "a", 1),
+        Ok(Routed::Event {
+            event: Event::Rerun { .. },
+            ..
+        })
+    ));
+    assert!(control::route(&req(Some("cloudflare")), "a", 1).is_err());
+    assert!(control::route(&req(Some("elsewhere")), "a", 1).is_err());
+    assert!(matches!(
+        control::route(&r, "owner", 1),
+        Ok(Routed::BreakGlass { number: 9 })
+    ));
+}
+
+#[test]
+fn the_break_glass_moves_a_heads_unpassed_code_checks_to_the_checker() {
+    use backplane::actions::Actions;
+    use backplane::changes::{JobStatus, State};
+    let mut c = pushed();
+    c.state = State::Bounded;
+    c.jobs = vec![
+        job("bound", "", JobStatus::Passed),
+        job("fmt", "cargo fmt --all", JobStatus::Passed),
+        job("test", "cargo test --workspace", JobStatus::Running),
+        job("clippy", "cargo clippy --all-targets", JobStatus::Queued),
+        job("policy.check", "cargo run -p pigeon", JobStatus::Running),
+        job(control::MIRROR, "", JobStatus::Passed),
+    ];
+    let mut github = Actions::default();
+    github.queue(9, A, "test");
+    let (events, start) = control::break_glass(&c, &mut github).expect("applies");
+    assert_eq!(
+        events,
+        [Event::Lost {
+            job: "test".into(),
+            sha: A.into()
+        }]
+    );
+    assert_eq!(start, ["clippy"]);
+    assert!(github.on_cloudflare(A));
+    assert_eq!(github.dispatches.len(), 0, "nothing more is dispatched");
+
+    let mut failed = pushed();
+    failed.state = State::Failed;
+    failed.jobs = vec![
+        job("bound", "", JobStatus::Passed),
+        job("test", "cargo test --workspace", JobStatus::Failed),
+        job("fmt", "cargo fmt --all", JobStatus::Cancelled),
+    ];
+    let (events, start) = control::break_glass(&failed, &mut Actions::default()).expect("applies");
+    assert_eq!(events, [Event::Rerun { job: "test".into() }]);
+    assert_eq!(
+        start.len(),
+        0,
+        "the re-run queues those its failure cancelled"
+    );
+    let mut after = failed.clone();
+    let effects = after.apply(events[0].clone()).expect("reruns");
+    assert_eq!(effects.len(), 2, "test and fmt start again: {effects:?}");
+
+    let mut done = failed;
+    done.jobs.retain(|j| j.name == "bound");
+    assert!(
+        control::break_glass(&done, &mut Actions::default()).is_err(),
+        "nothing to run"
+    );
+}

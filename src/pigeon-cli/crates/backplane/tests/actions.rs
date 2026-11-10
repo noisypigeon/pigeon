@@ -278,3 +278,17 @@ fn only_open_checks_are_dispatched_or_followed() {
         "nothing is due for a change that stopped"
     );
 }
+
+#[test]
+fn a_head_the_owner_moved_to_cloudflare_stays_there_until_a_new_head() {
+    let mut a = dispatched();
+    a.cloudflare = Some(A.into());
+    assert!(a.on_cloudflare(A) && !a.on_cloudflare(B));
+    a.keep_head(Some(A));
+    assert!(a.on_cloudflare(A));
+    a.keep_head(Some(B));
+    assert!(
+        !a.on_cloudflare(A) && !a.on_cloudflare(B),
+        "a new head goes back to GitHub"
+    );
+}

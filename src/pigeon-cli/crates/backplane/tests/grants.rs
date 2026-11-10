@@ -139,3 +139,34 @@ fn a_grant_still_applies_only_while_its_operation_and_head_do() {
     c.head = Some(NEXT.into());
     assert!(!backplane::grants::still_applies(&c, &grant), "a new head");
 }
+
+#[test]
+fn the_break_glass_is_offered_only_on_an_open_head_with_a_code_check_not_passed() {
+    use backplane::changes::{Job, JobStatus};
+    use backplane::control::BREAK_GLASS;
+    let job = |name: &str, cmd: &str, status: JobStatus| Job {
+        name: name.into(),
+        argv: cmd.split(' ').map(str::to_string).collect(),
+        status,
+        attempts: 1,
+    };
+    let mut c = change(State::Bounded, Some(HEAD));
+    c.jobs = vec![
+        job("policy.check", "cargo run -p pigeon", JobStatus::Queued),
+        job("fmt", "cargo fmt --all", JobStatus::Passed),
+    ];
+    assert!(
+        grants::offerable(&c, BREAK_GLASS).is_err(),
+        "no code check left"
+    );
+    c.jobs
+        .push(job("test", "cargo test --workspace", JobStatus::Running));
+    assert!(grants::offerable(&c, BREAK_GLASS).is_ok());
+    c.state = State::Merged;
+    assert!(grants::offerable(&c, BREAK_GLASS).is_err());
+    c.state = State::Failed;
+    let mut all = Grants::default();
+    let g = all.mint(&c, BREAK_GLASS, "tok", 10).expect("mints");
+    assert!(g.needs_code(), "the owner proves it each time");
+    assert!(grants::OPERATIONS.contains(&BREAK_GLASS));
+}

@@ -64,6 +64,7 @@ fn verb(operation: &str) -> &'static str {
         "change.approve" => "Approve this head",
         "change.merge" => "Merge",
         "change.close" => "Close unmerged",
+        crate::control::BREAK_GLASS => "Run its code checks on Cloudflare",
         "mandate.grant" => "Grant the mandate",
         _ => "Confirm",
     }

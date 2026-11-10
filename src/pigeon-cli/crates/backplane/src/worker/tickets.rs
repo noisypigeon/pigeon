@@ -139,7 +139,9 @@ pub async fn guard(
         Value::String(n) => n.parse::<u32>().ok(),
         other => other.as_u64().and_then(|n| u32::try_from(n).ok()),
     });
-    let scoped = request.operation.starts_with("change.") || request.operation == "ci.rerun";
+    let scoped = request.operation.starts_with("change.")
+        || request.operation == "ci.rerun"
+        || request.operation == crate::control::BREAK_GLASS;
     if let (Some(n), true) = (number, scoped) {
         let (status, v) = to_change(env, &s.repo, n, Method::Get, "/status", None).await?;
         if status == 200

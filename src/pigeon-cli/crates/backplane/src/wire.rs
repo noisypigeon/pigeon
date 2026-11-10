@@ -297,12 +297,20 @@ const CATALOG: &[Operation] = &[
         name: "ci.rerun",
         engine: Engine::Backplane,
         effect: Effect::Build,
-        summary: "Run one of a finished head's jobs again, and those its failure cancelled",
+        summary: "Run one of a finished head's jobs again, and those its failure cancelled; `on: cloudflare` asks the owner to run the head's code checks on Cloudflare instead of GitHub",
         args: &[
             NUMBER,
             arg("job", true, Kind::String),
+            arg("on", false, Kind::String),
             arg("ticket", false, Kind::String),
         ],
+    },
+    Operation {
+        name: "ci.cloudflare",
+        engine: Engine::Backplane,
+        effect: Effect::Apply,
+        summary: "The owner's break-glass: run a change head's code checks that haven't passed on Cloudflare's Checker instead of GitHub Actions",
+        args: &[NUMBER, arg("ticket", false, Kind::String)],
     },
     Operation {
         name: "git.tokens",
