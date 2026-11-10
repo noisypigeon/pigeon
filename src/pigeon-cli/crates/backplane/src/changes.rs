@@ -893,6 +893,16 @@ impl Change {
     }
 
     fn rerun(&mut self, name: &str) -> Result<Vec<Effect>, Refusal> {
+        // The mirror job never gates, so it runs again on any head that passed `bound`.
+        if name == MIRROR
+            && let Some(j) = self.job(MIRROR)
+        {
+            if j.open() {
+                return Ok(Vec::new());
+            }
+            *j = Job::queued(MIRROR, Vec::new());
+            return Ok(vec![Effect::Start(MIRROR.into())]);
+        }
         if !matches!(self.state, State::Failed | State::Checked | State::Refused) {
             return refuse(format!(
                 "{} is {}; only a finished head's jobs run again",

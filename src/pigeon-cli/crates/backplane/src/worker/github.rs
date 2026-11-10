@@ -2,7 +2,7 @@
 //! `.claude/decisions/2026-11-08-development-github-mirror-on-merge.md` §1, §3.
 
 use serde_json::Value;
-use worker::{Env, Fetch, Headers, Method, Request, RequestInit};
+use worker::{Env, Fetch, Headers, Method, Request, RequestInit, RequestRedirect};
 
 use super::platform::{now, rs256_sign, secret};
 use crate::mirroring;
@@ -50,7 +50,11 @@ async fn call(
         .await
         .map_err(|e| e.to_string())?;
     let status = r.status_code();
-    let v: Value = r.json().await.unwrap_or(Value::Null);
+    let v: Value = if status == 204 {
+        Value::Null
+    } else {
+        r.json().await.unwrap_or(Value::Null)
+    };
     if (200..300).contains(&status) {
         Ok(v)
     } else {
@@ -61,12 +65,18 @@ async fn call(
     }
 }
 
-/// An installation token for `owner/repo` only, with what a mirror push needs; minted per job.
+/// An installation token for `owner/repo` only, with the permissions `request` asks for, such
+/// as [`mirroring::token_request`]'s; minted per job.
 ///
 /// # Errors
 ///
 /// When the App's secrets are missing or GitHub refuses; never with a token.
-pub async fn installation_token(env: &Env, owner: &str, repo: &str) -> Result<String, String> {
+pub async fn installation_token(
+    env: &Env,
+    owner: &str,
+    repo: &str,
+    request: &Value,
+) -> Result<String, String> {
     let id = secret(env, APP_ID).map_err(|_| format!("the secret `{APP_ID}` is not set"))?;
     let pem = secret(env, APP_KEY).map_err(|_| format!("the secret `{APP_KEY}` is not set"))?;
     let der = mirroring::pkcs8_der(&pem)?;
@@ -89,7 +99,7 @@ pub async fn installation_token(env: &Env, owner: &str, repo: &str) -> Result<St
         Method::Post,
         &format!("/app/installations/{n}/access_tokens"),
         &jwt,
-        Some(&mirroring::token_request(repo)),
+        Some(request),
     )
     .await?;
     minted["token"]
@@ -127,4 +137,92 @@ pub async fn refs(remote: &str, bearer: Option<&str>) -> Result<Vec<(String, Str
     }
     let body = r.bytes().await.map_err(|e| e.to_string())?;
     mirroring::advertised(&body).ok_or_else(|| "info/refs is not an advertisement".to_string())
+}
+
+/// Dispatches `main`'s `ci.yml` on `owner/repo` with `body`, from
+/// [`crate::actions::dispatch_body`].
+///
+/// # Errors
+///
+/// When GitHub refuses, with its status and message.
+pub async fn dispatch(token: &str, owner: &str, repo: &str, body: &Value) -> Result<(), String> {
+    let path = format!(
+        "/repos/{owner}/{repo}/actions/workflows/{}/dispatches",
+        crate::actions::WORKFLOW
+    );
+    call(Method::Post, &path, token, Some(body))
+        .await
+        .map(|_| ())
+}
+
+/// The newest dispatched runs of `ci.yml` on `main`, as GitHub lists them.
+///
+/// # Errors
+///
+/// When GitHub refuses.
+pub async fn runs(token: &str, owner: &str, repo: &str) -> Result<Value, String> {
+    let path = format!(
+        "/repos/{owner}/{repo}/actions/workflows/{}/runs?event=workflow_dispatch&branch={}&per_page=50",
+        crate::actions::WORKFLOW,
+        crate::actions::REF
+    );
+    call(Method::Get, &path, token, None).await
+}
+
+/// Run `id` and its jobs.
+///
+/// # Errors
+///
+/// When GitHub refuses.
+pub async fn run(token: &str, owner: &str, repo: &str, id: u64) -> Result<(Value, Value), String> {
+    let base = format!("/repos/{owner}/{repo}/actions/runs/{id}");
+    let run = call(Method::Get, &base, token, None).await?;
+    let jobs = call(
+        Method::Get,
+        &format!("{base}/jobs?per_page=100"),
+        token,
+        None,
+    )
+    .await?;
+    Ok((run, jobs))
+}
+
+/// Job `id`'s log: GitHub answers with a redirect to it, followed without the token.
+///
+/// # Errors
+///
+/// When either request fails.
+pub async fn job_log(token: &str, owner: &str, repo: &str, id: u64) -> Result<String, String> {
+    let headers = Headers::new();
+    let set = |k: &str, v: &str| headers.set(k, v).map_err(|e| e.to_string());
+    set("authorization", &format!("Bearer {token}"))?;
+    set("accept", "application/vnd.github+json")?;
+    set("x-github-api-version", "2022-11-28")?;
+    set("user-agent", "pigeon-control")?;
+    let mut init = RequestInit::new();
+    init.with_method(Method::Get)
+        .with_headers(headers)
+        .with_redirect(RequestRedirect::Manual);
+    let url = format!("{API}/repos/{owner}/{repo}/actions/jobs/{id}/logs");
+    let req = Request::new_with_init(&url, &init).map_err(|e| e.to_string())?;
+    let r = Fetch::Request(req)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+    let location = r
+        .headers()
+        .get("location")
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| format!("job {id}'s log: {} and no redirect", r.status_code()))?;
+    let mut plain = RequestInit::new();
+    plain.with_method(Method::Get);
+    let req = Request::new_with_init(&location, &plain).map_err(|e| e.to_string())?;
+    let mut r = Fetch::Request(req)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+    if !(200..300).contains(&r.status_code()) {
+        return Err(format!("job {id}'s log: {}", r.status_code()));
+    }
+    r.text().await.map_err(|e| e.to_string())
 }

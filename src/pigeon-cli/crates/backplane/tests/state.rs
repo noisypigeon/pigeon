@@ -6,6 +6,7 @@
 
 use std::path::{Path, PathBuf};
 
+use backplane::actions::Actions;
 use backplane::approve::Waiting;
 use backplane::changes::{Change, Event};
 use backplane::control::{JobSpec, Pipeline, Report};
@@ -119,6 +120,11 @@ fn the_mirror() {
 }
 
 #[test]
+fn a_changes_dispatches_to_github() {
+    check::<Actions>("actions");
+}
+
+#[test]
 fn the_run_queue() {
     check::<Queue>("queue");
 }
@@ -134,6 +140,7 @@ fn every_fixture_directory_is_checked() {
     assert_eq!(
         names,
         [
+            "actions",
             "change",
             "event",
             "grant",

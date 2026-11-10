@@ -778,3 +778,53 @@ fn a_merge_commit_names_the_approvals_kind_never_an_identity() {
         assert_eq!(control::public_approver(by), shown, "{by}");
     }
 }
+
+#[test]
+fn code_checks_go_to_github_only_on_a_mirrored_change() {
+    use backplane::actions::Mirror;
+    let mut c = pushed();
+    c.apply(control::with_mirror(Event::Bounded {
+        sha: A.into(),
+        violations: vec![],
+        checks: vec![
+            Check {
+                name: "fmt".into(),
+                argv: vec!["cargo".into(), "fmt".into()],
+            },
+            Check {
+                name: "policy.check".into(),
+                argv: vec!["cargo".into(), "run".into()],
+            },
+        ],
+        tiers: None,
+    }))
+    .expect("bounded");
+    assert!(control::to_github(&c, "fmt", true));
+    assert!(
+        !control::to_github(&c, "fmt", false),
+        "a Worker that doesn't mirror"
+    );
+    assert!(!control::to_github(&c, "policy.check", true));
+    assert!(!control::to_github(&c, control::MIRROR, true));
+    assert_eq!(control::mirror_state(&c), Mirror::Open);
+    let names: Vec<String> = control::checks_of(&c).into_iter().map(|k| k.name).collect();
+    assert_eq!(names, ["bound", "fmt", "policy.check", "mirror"]);
+
+    let mut plain = pushed();
+    plain
+        .apply(Event::Bounded {
+            sha: A.into(),
+            violations: vec![],
+            checks: vec![Check {
+                name: "fmt".into(),
+                argv: vec!["cargo".into(), "fmt".into()],
+            }],
+            tiers: None,
+        })
+        .expect("bounded");
+    assert!(
+        !control::to_github(&plain, "fmt", true),
+        "a change bounded before the mirror job keeps its Checker"
+    );
+    assert_eq!(control::mirror_state(&plain), Mirror::Failed);
+}

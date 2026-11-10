@@ -2,6 +2,7 @@
 //! apply events and return at once; its alarm does the slow work (minting a read token,
 //! starting and stopping job Containers, polling them) and mirrors the change to D1.
 
+use std::cell::RefCell;
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
@@ -9,6 +10,7 @@ use serde_json::{Map, Value, json};
 use worker::{DurableObject, Env, Method, Request, Response, Result, State, durable_object};
 
 use super::platform::{self, Settings, job_stub, json_request, now};
+use crate::actions::{self, Actions, Due};
 use crate::changes::{Change, Effect, Event, JobStatus};
 use crate::control::{self, Outcome, Report};
 use crate::grants::{Grant, Grants};
@@ -20,6 +22,11 @@ const FAILURES: &str = "failures";
 /// The storage key of the last bound job's log tail, shown in its status.
 const BOUND_LOG: &str = "bound_log";
 const GRANTS: &str = "grants";
+/// The storage key of the change's dispatches to GitHub Actions.
+const ACTIONS: &str = "actions";
+
+/// How long an Actions token is reused, in seconds: GitHub's last an hour.
+const TOKEN_REUSE: u64 = 50 * 60;
 
 /// How often a running job is asked how it went.
 const POLL: Duration = Duration::from_secs(20);
@@ -39,11 +46,20 @@ enum Pending {
     StopIn(control::Class, String),
 }
 
+/// The mirror's repository on GitHub and a token for its Actions.
+struct Gh<'a> {
+    token: &'a str,
+    owner: &'a str,
+    repo: &'a str,
+}
+
 /// One change; its name is `<repo>#<number>`.
 #[durable_object]
 pub struct ChangeRun {
     state: State,
     env: Env,
+    /// An installation token for Actions and when it was minted; in memory only.
+    actions_token: RefCell<Option<(String, u64)>>,
 }
 
 impl ChangeRun {
@@ -207,7 +223,13 @@ impl ChangeRun {
         let to = super::github::mirror(&self.env).ok_or("this Worker has no GitHub mirror")?;
         let (owner, repo) = crate::mirroring::github_repo(&to)
             .ok_or_else(|| format!("the mirror `{to}` is not a GitHub repository"))?;
-        let token = super::github::installation_token(&self.env, &owner, &repo).await?;
+        let token = super::github::installation_token(
+            &self.env,
+            &owner,
+            &repo,
+            &crate::mirroring::token_request(&repo),
+        )
+        .await?;
         Ok((to, token))
     }
 
@@ -228,6 +250,209 @@ impl ChangeRun {
         } else {
             Err(r.text().await.unwrap_or_default())
         }
+    }
+
+    /// An installation token for Actions on the mirror, reused for [`TOKEN_REUSE`].
+    async fn actions_token(&self, owner: &str, repo: &str) -> std::result::Result<String, String> {
+        let at = now();
+        if let Some((t, minted)) = self.actions_token.borrow().clone()
+            && at < minted + TOKEN_REUSE
+        {
+            return Ok(t);
+        }
+        let t = super::github::installation_token(
+            &self.env,
+            owner,
+            repo,
+            &crate::mirroring::actions_token_request(repo),
+        )
+        .await?;
+        *self.actions_token.borrow_mut() = Some((t.clone(), at));
+        Ok(t)
+    }
+
+    /// Carries out what `github` says is due: re-runs the mirror job, dispatches `ci.yml`, finds
+    /// and polls runs, and applies each finished check with its log; see
+    /// `.claude/decisions/2026-11-10-development-code-checks-github-actions.md` §3–§5.
+    async fn github_step(
+        &self,
+        change: &mut Change,
+        github: &mut Actions,
+        next: &mut Vec<Pending>,
+    ) -> Result<()> {
+        let at = now();
+        let open: Vec<String> = change
+            .jobs
+            .iter()
+            .filter(|j| matches!(j.status, JobStatus::Queued | JobStatus::Running))
+            .map(|j| j.name.clone())
+            .collect();
+        github.keep_open(&open);
+        let due = github.due(control::mirror_state(change), at);
+        if due.contains(&Due::Mirror) {
+            let _ = Self::apply(
+                change,
+                Event::Rerun {
+                    job: control::MIRROR.into(),
+                },
+                next,
+            );
+        }
+        let calls: Vec<Due> = due.into_iter().filter(|d| *d != Due::Mirror).collect();
+        let (Some(sha), false) = (change.head.clone(), calls.is_empty()) else {
+            return Ok(());
+        };
+        let fail_all = |github: &mut Actions, why: &str| {
+            for d in &calls {
+                if let Due::Dispatch(i) | Due::Find(i) | Due::Poll(i) = d {
+                    github.failed(*i, why, at);
+                }
+            }
+        };
+        let Some((owner, repo)) =
+            super::github::mirror(&self.env).and_then(|to| crate::mirroring::github_repo(&to))
+        else {
+            fail_all(github, "this Worker has no GitHub mirror");
+            return Ok(());
+        };
+        let token = match self.actions_token(&owner, &repo).await {
+            Ok(t) => t,
+            Err(why) => {
+                fail_all(github, &why);
+                return Ok(());
+            }
+        };
+        for d in calls {
+            match d {
+                Due::Dispatch(i) => {
+                    let body = actions::dispatch_body(
+                        &github.dispatches[i],
+                        change.number,
+                        &control::checks_of(change),
+                    );
+                    match super::github::dispatch(&token, &owner, &repo, &body).await {
+                        Ok(()) => {
+                            for job in github.dispatched(i, at) {
+                                let _ = Self::apply(
+                                    change,
+                                    Event::Started {
+                                        job,
+                                        sha: sha.clone(),
+                                    },
+                                    next,
+                                );
+                            }
+                        }
+                        Err(why) => github.failed(i, &why, at),
+                    }
+                }
+                Due::Find(i) => match super::github::runs(&token, &owner, &repo).await {
+                    Ok(listed) => github.found(i, &listed, at),
+                    Err(why) => github.failed(i, &why, at),
+                },
+                Due::Poll(i) => {
+                    let gh = Gh {
+                        token: &token,
+                        owner: &owner,
+                        repo: &repo,
+                    };
+                    self.github_poll(&gh, change, github, i, next).await?;
+                }
+                Due::Mirror => {}
+            }
+        }
+        Ok(())
+    }
+
+    /// Polls entry `i`'s run, applying each finished check with its log.
+    async fn github_poll(
+        &self,
+        gh: &Gh<'_>,
+        change: &mut Change,
+        github: &mut Actions,
+        i: usize,
+        next: &mut Vec<Pending>,
+    ) -> Result<()> {
+        let (Some(run), Some(sha)) = (github.dispatches[i].run, change.head.clone()) else {
+            return Ok(());
+        };
+        let at = now();
+        let url = github.dispatches[i].url.clone().unwrap_or_default();
+        let (r, jobs) = match super::github::run(gh.token, gh.owner, gh.repo, run).await {
+            Ok(v) => v,
+            Err(why) => {
+                github.failed(i, &why, at);
+                return Ok(());
+            }
+        };
+        for f in github.polled(i, &r, &jobs, at) {
+            let log = match f.job {
+                Some(id) => super::github::job_log(gh.token, gh.owner, gh.repo, id)
+                    .await
+                    .unwrap_or_else(|e| format!("the log is unavailable: {e}\n{url}\n")),
+                None => format!("the run completed without this check: {url}\n"),
+            };
+            let outcome = if f.ok {
+                Outcome::Passed
+            } else {
+                Outcome::Failed
+            };
+            let id = control::job_id(change.number, &sha, &f.name);
+            self.keep_log(&f.name, &id, &Report::of(&id, outcome, &log))
+                .await?;
+            let _ = Self::apply(
+                change,
+                Event::Finished {
+                    job: f.name,
+                    sha: sha.clone(),
+                    ok: f.ok,
+                },
+                next,
+            );
+        }
+        Ok(())
+    }
+
+    /// Starts `job`'s Container, applying `Started`, or `Lost` when it didn't start; false when
+    /// it waits for a free Container, queued again.
+    async fn start_container(
+        &self,
+        change: &mut Change,
+        github: &Actions,
+        job: String,
+        next: &mut Vec<Pending>,
+    ) -> bool {
+        let sha = change.head.clone().unwrap_or_default();
+        let running = change
+            .jobs
+            .iter()
+            .filter(|j| j.status == JobStatus::Running && !github.owns(&sha, &j.name))
+            .count();
+        if !control::may_start(running) {
+            next.push(Pending::Start(job));
+            return false;
+        }
+        let started = self.start(change, &job).await;
+        if let Err(why) = &started
+            && control::no_capacity(why)
+        {
+            worker::console_log!("job {job} waits for a free Container");
+            next.push(Pending::Start(job));
+            return false;
+        }
+        let _ = Self::apply(
+            change,
+            Event::Started {
+                job: job.clone(),
+                sha: sha.clone(),
+            },
+            next,
+        );
+        if let Err(why) = started {
+            worker::console_warn!("job {job} did not start: {why}");
+            let _ = Self::apply(change, Event::Lost { job, sha }, next);
+        }
+        true
     }
 
     /// Stops job `id`'s Container in `class`, if it still runs.
@@ -307,7 +532,11 @@ impl ChangeRun {
 
 impl DurableObject for ChangeRun {
     fn new(state: State, env: Env) -> Self {
-        Self { state, env }
+        Self {
+            state,
+            env,
+            actions_token: RefCell::new(None),
+        }
     }
 
     async fn fetch(&self, mut req: Request) -> Result<Response> {
@@ -329,11 +558,13 @@ impl DurableObject for ChangeRun {
                 };
                 let failures: Map<String, Value> = self.load(FAILURES).await?;
                 let bound_log: Option<String> = self.state.storage().get(BOUND_LOG).await?;
+                let github: Actions = self.load(ACTIONS).await?;
                 Response::from_json(&json!({
                     "change": change,
                     "branch": change.branch(),
                     "failures": failures,
                     "bound_log": bound_log,
+                    "github": github.view(),
                 }))
             }
             (Method::Post, "grant") => {
@@ -412,6 +643,9 @@ impl DurableObject for ChangeRun {
         let mut pending: Vec<Pending> = self.load(PENDING).await?;
         let mut next = Vec::new();
         let mut wait = false;
+        let mut github: Actions = self.load(ACTIONS).await?;
+        github.keep_head(change.head.as_deref());
+        let mirrors = super::github::mirror(&self.env).is_some();
         for p in std::mem::take(&mut pending) {
             match p {
                 Pending::Stop(id) => self.stop(control::Class::Checker, &id).await?,
@@ -426,46 +660,26 @@ impl DurableObject for ChangeRun {
                         Ok(()) => {}
                     }
                 }
+                Pending::Start(job) if control::to_github(&change, &job, mirrors) => {
+                    if let Some(sha) = &change.head {
+                        github.queue(change.number, sha, &job);
+                    }
+                }
                 Pending::Start(job) => {
-                    let sha = change.head.clone().unwrap_or_default();
-                    let running = change
-                        .jobs
-                        .iter()
-                        .filter(|j| j.status == JobStatus::Running)
-                        .count();
-                    if !control::may_start(running) {
-                        next.push(Pending::Start(job));
-                        wait = true;
-                        continue;
-                    }
-                    let started = self.start(&change, &job).await;
-                    if let Err(why) = &started
-                        && control::no_capacity(why)
+                    if !self
+                        .start_container(&mut change, &github, job, &mut next)
+                        .await
                     {
-                        worker::console_log!("job {job} waits for a free Container");
-                        next.push(Pending::Start(job));
                         wait = true;
-                        continue;
-                    }
-                    let _ = Self::apply(
-                        &mut change,
-                        Event::Started {
-                            job: job.clone(),
-                            sha: sha.clone(),
-                        },
-                        &mut next,
-                    );
-                    if let Err(why) = started {
-                        worker::console_warn!("job {job} did not start: {why}");
-                        let _ = Self::apply(&mut change, Event::Lost { job, sha }, &mut next);
                     }
                 }
             }
         }
+        let head = change.head.clone().unwrap_or_default();
         let running: Vec<String> = change
             .jobs
             .iter()
-            .filter(|j| j.status == JobStatus::Running)
+            .filter(|j| j.status == JobStatus::Running && !github.owns(&head, &j.name))
             .map(|j| j.name.clone())
             .collect();
         let mut ended: Option<Option<String>> = None;
@@ -485,6 +699,9 @@ impl DurableObject for ChangeRun {
                 }
             }
         }
+        self.github_step(&mut change, &mut github, &mut next)
+            .await?;
+        self.state.storage().put(ACTIONS, &github).await?;
         self.save_after(&change, &next, wait).await?;
         if restack_failed && let Err(e) = super::tasks::restack_failed(&self.env, &change).await {
             worker::console_error!("restack task: {e}");

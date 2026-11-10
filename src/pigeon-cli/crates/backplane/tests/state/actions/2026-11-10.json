@@ -1,0 +1,23 @@
+{
+  "dispatches": [
+    {
+      "sha": "0123456789abcdef0123456789abcdef01234567",
+      "id": "149-0123456789ab-1",
+      "checks": ["fmt", "test cobot pigeon pigeon-backplane"],
+      "dispatched_at": 1794340000,
+      "run": 42,
+      "url": "https://github.com/noisypigeon/pigeon/actions/runs/42",
+      "reported": ["fmt"],
+      "failures": 1,
+      "next_at": 1794340090,
+      "waiting": "waiting: GitHub (GitHub /repos/noisypigeon/pigeon/actions/runs/42: 503 )"
+    },
+    {
+      "sha": "0123456789abcdef0123456789abcdef01234567",
+      "id": "149-0123456789ab-2",
+      "checks": ["clippy cobot worker"],
+      "failures": 0
+    }
+  ],
+  "seq": 2
+}

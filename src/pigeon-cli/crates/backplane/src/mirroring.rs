@@ -331,6 +331,16 @@ pub fn token_request(repo: &str) -> Value {
     })
 }
 
+/// The installation token request for dispatching and following `ci.yml` on `repo`: Actions
+/// only; see `.claude/decisions/2026-11-10-development-code-checks-github-actions.md` §4.
+#[must_use]
+pub fn actions_token_request(repo: &str) -> Value {
+    json!({
+        "repositories": [repo],
+        "permissions": { "actions": "write" },
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -517,6 +527,11 @@ mod tests {
         assert_eq!(
             token_request("pigeon")["permissions"],
             json!({ "contents": "write", "workflows": "write" })
+        );
+        assert_eq!(
+            actions_token_request("pigeon"),
+            json!({ "repositories": ["pigeon"], "permissions": { "actions": "write" } }),
+            "a dispatch's token can't push"
         );
     }
 }

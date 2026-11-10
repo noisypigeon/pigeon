@@ -1,6 +1,7 @@
 //! Composes the engines into one platform; see `.claude/decisions/2026-11-03-development-backplane-platform-composition-layer.md`.
 
 pub mod access;
+pub mod actions;
 pub mod approvals;
 pub mod approve;
 pub mod architecture;

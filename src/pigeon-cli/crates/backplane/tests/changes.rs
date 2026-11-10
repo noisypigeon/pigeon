@@ -548,3 +548,33 @@ fn a_mirrored_change_is_unmirrored_once_merged_or_closed() {
     assert!(control::unmirror_due(Some(&approved), &c));
     assert!(!control::unmirror_due(Some(&approved), &approved));
 }
+
+#[test]
+fn a_failed_mirror_job_runs_again_while_the_change_is_open() {
+    let (mut c, _) = mirrored(A, &["fmt"]);
+    c.apply(Event::Started {
+        job: MIRROR.into(),
+        sha: A.into(),
+    })
+    .expect("starts");
+    assert_eq!(
+        c.apply(Event::Rerun { job: MIRROR.into() }).expect("open"),
+        [],
+        "an open mirror job is left to run"
+    );
+    c.apply(Event::Finished {
+        job: MIRROR.into(),
+        sha: A.into(),
+        ok: false,
+    })
+    .expect("fails");
+    assert_eq!(c.state, State::Bounded, "fmt still runs");
+    assert_eq!(
+        c.apply(Event::Rerun { job: MIRROR.into() })
+            .expect("reruns"),
+        [Effect::Start(MIRROR.into())]
+    );
+    assert_eq!(c.state, State::Bounded, "nothing else moves");
+    let fmt = c.jobs.iter().find(|j| j.name == "fmt").expect("fmt");
+    assert_eq!(fmt.status, JobStatus::Queued);
+}

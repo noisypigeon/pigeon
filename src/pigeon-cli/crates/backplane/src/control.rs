@@ -456,6 +456,28 @@ pub struct Report {
     pub platform: Option<serde_json::Value>,
 }
 
+impl Report {
+    /// A report of job `id` with only its outcome and the tail of `log`.
+    #[must_use]
+    pub fn of(id: &str, outcome: Outcome, log: &str) -> Self {
+        Self {
+            id: id.to_string(),
+            outcome,
+            log: tail(log).to_string(),
+            violations: Vec::new(),
+            checks: Vec::new(),
+            merged: None,
+            published: Vec::new(),
+            workers: Vec::new(),
+            build: None,
+            images: None,
+            tiers: None,
+            restack: None,
+            platform: None,
+        }
+    }
+}
+
 /// The job images a deploy references, as the `DEPLOY_IMAGES` secret holds them: the commit
 /// they were built from, and each container's registry reference by `<worker>/<Class>`; see
 /// `.claude/decisions/2026-11-07-development-job-images-on-cloudflare.md` §4.
@@ -817,6 +839,48 @@ pub const MIRROR: &str = changes::MIRROR;
 
 /// The job that deletes a merged or closed change's branch from GitHub.
 pub const UNMIRROR: &str = "unmirror";
+
+/// Whether `job` on `change` runs on GitHub Actions: a code check, on a change whose head a
+/// `mirror` job pushes, on a Worker that mirrors; see
+/// `.claude/decisions/2026-11-10-development-code-checks-github-actions.md` §1.
+#[must_use]
+pub fn to_github(change: &Change, job: &str, mirrors: bool) -> bool {
+    mirrors
+        && change.jobs.iter().any(|j| j.name == MIRROR)
+        && change
+            .jobs
+            .iter()
+            .any(|j| j.name == job && crate::actions::on_github(&j.argv))
+}
+
+/// Where `change`'s `mirror` job is, for its dispatches.
+#[must_use]
+pub fn mirror_state(change: &Change) -> crate::actions::Mirror {
+    use crate::actions::Mirror;
+    match change
+        .jobs
+        .iter()
+        .find(|j| j.name == MIRROR)
+        .map(|j| j.status)
+    {
+        Some(changes::JobStatus::Passed) => Mirror::Passed,
+        Some(changes::JobStatus::Queued | changes::JobStatus::Running) => Mirror::Open,
+        _ => Mirror::Failed,
+    }
+}
+
+/// `change`'s checks as `bound` recorded them, for a dispatch's `checks` input.
+#[must_use]
+pub fn checks_of(change: &Change) -> Vec<Check> {
+    change
+        .jobs
+        .iter()
+        .map(|j| Check {
+            name: j.name.clone(),
+            argv: j.argv.clone(),
+        })
+        .collect()
+}
 
 /// `event` with the [`MIRROR`] job among a passing bound job's checks, for a Worker that
 /// mirrors; a refused head gains nothing, so it never leaves Cloudflare.

@@ -120,7 +120,9 @@ impl MainRun {
     async fn start_mirror(&self, to: &str, sha: &str) -> std::result::Result<(), String> {
         let (owner, repo) = mirroring::github_repo(to)
             .ok_or_else(|| format!("the mirror `{to}` is not a GitHub repository"))?;
-        let to_token = github::installation_token(&self.env, &owner, &repo).await?;
+        let to_token =
+            github::installation_token(&self.env, &owner, &repo, &mirroring::token_request(&repo))
+                .await?;
         let (remote, token) =
             platform::credentials(&self.env, false, cobot::artifacts_wire::TOKEN_TTL)
                 .await
