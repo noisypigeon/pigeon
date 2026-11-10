@@ -433,3 +433,34 @@ the launch's branch doesn't apply, and its commands defaulted `CHANGE_BASE` to
   default stays `origin/main`, since on the owner's clone `origin` is Artifacts.
 - **The stray branch.** `claude/upbeat-mayer-c4kx8o` on GitHub is deleted by the
   owner; its two ADRs are re-proposed as changes, rebased on Artifacts' `main`.
+
+### 2026-11-10: A session holds 5 open changes, and the instance 20
+
+The limits from steps 5 and 6 (`max_open_per_session` 3, `max_open` 12) were
+too tight in use.
+
+- **Why.** Generated `reconcile-<n>` and `review-<n>-<m>` changes count against
+  their session's slots and the instance's.
+  - On 2026-11-09, generated changes held ten slots.
+  - On 2026-11-10, they took !127 and !132.
+  - A normal stretch of one session's work needs three slots at once: an ADR,
+    its implementation, and a fix found along the way.
+  - When the instance reached 12, one jammed session blocked the others.
+- **The new limits:**
+  - **5 per session:** three changes of the session's own, plus two generated
+    or stale ones;
+  - **20 per instance:** three sessions at 5, plus 5 for changes proposed
+    without a session and generated changes waiting to close.
+- **What they cost:**
+  - more open changes queue their checks behind `Checker`'s 12 Containers;
+  - each merge restacks up to 19 changes on `Runner`'s 8;
+  - more open changes can conflict with each other.
+
+  These are longer queues, not failures.
+- **They are a stopgap.** The lasting fix is §2 of
+  [`2026-11-10-development-change-slot-eviction-policy.md`](2026-11-10-development-change-slot-eviction-policy.md):
+  a change and its generated changes hold one slot, until a generated one is
+  claimed and pushed. Once that lands, these limits are revisited, and are not
+  raised again before it.
+- **Execution:** `backplane::sessions::MAX_PER_SESSION` and `MAX_OPEN`, and
+  the test in `backplane/tests/tasks.rs` that pins them.

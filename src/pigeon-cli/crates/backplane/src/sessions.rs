@@ -102,11 +102,12 @@ pub fn overlaps(scope: &[String], affects: &[String], open: &[Open]) -> Vec<Over
     out
 }
 
-/// The most open changes one session holds.
-pub const MAX_PER_SESSION: usize = 3;
+/// The most open changes one session holds; see the concurrent-sessions ADR's 2026-11-10
+/// amendment.
+pub const MAX_PER_SESSION: usize = 5;
 
 /// The most open changes an instance holds.
-pub const MAX_OPEN: usize = 12;
+pub const MAX_OPEN: usize = 20;
 
 /// Whether a proposal for `session` fits beside the `open` changes.
 ///
