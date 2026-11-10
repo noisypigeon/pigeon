@@ -101,3 +101,86 @@ fn a_policy_directory_can_be_named_apart_from_the_root() {
     );
     assert_eq!(o.status.code(), Some(0), "{}", stdout(&o));
 }
+
+#[test]
+fn describe_lists_each_policy_and_its_target() {
+    let root = TempDir::new().expect("tempdir");
+    let dir = root.path().join(".config/policies");
+    fs::create_dir_all(&dir).expect("mkdir");
+    for (name, target) in [
+        ("a-file", "{ file: f.md }"),
+        ("b-files", "{ files: [x.md, y.md] }"),
+        ("c-dir", "{ dir: docs }"),
+        ("d-tree", "tree"),
+        ("e-pr", "pull-request"),
+        ("f-change", "change"),
+    ] {
+        let rule = if target == "tree" {
+            "  - find: { match: '^x$', forbid_content: 'y' }"
+        } else if target.starts_with('{') {
+            "  - line: { at: 1, matches: '^ok$' }"
+        } else {
+            "  - field: { name: title, matches: '^x' }"
+        };
+        fs::write(
+            dir.join(format!("{name}.yaml")),
+            format!("description: d.\ntarget: {target}\nrules:\n{rule}\n"),
+        )
+        .expect("write");
+    }
+    let o = sentinel(&["describe"], Some(root.path()));
+    assert_eq!(
+        o.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&o.stderr)
+    );
+    let v: serde_json::Value = serde_json::from_str(&stdout(&o)).expect("json");
+    let got: Vec<(String, String, Vec<String>)> = v
+        .as_array()
+        .expect("a list")
+        .iter()
+        .map(|p| {
+            (
+                p["name"].as_str().unwrap_or_default().to_string(),
+                p["target"]["kind"].as_str().unwrap_or_default().to_string(),
+                p["target"]["paths"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|x| x.as_str().map(str::to_string))
+                    .collect(),
+            )
+        })
+        .collect();
+    let want = |n: &str, k: &str, p: &[&str]| {
+        (
+            n.to_string(),
+            k.to_string(),
+            p.iter().map(|s| (*s).to_string()).collect::<Vec<_>>(),
+        )
+    };
+    assert_eq!(
+        got,
+        [
+            want("a-file", "file", &["f.md"]),
+            want("b-files", "files", &["x.md", "y.md"]),
+            want("c-dir", "dir", &["docs"]),
+            want("d-tree", "tree", &[]),
+            want("e-pr", "pull-request", &[]),
+            want("f-change", "change", &[]),
+        ]
+    );
+}
+
+#[test]
+fn describe_refuses_an_invalid_policy() {
+    let root = fixture(
+        "description: x\ntarget: { file: f.md }\nrules:\n  - nope: {}\n",
+        None,
+    );
+    assert_eq!(
+        sentinel(&["describe"], Some(root.path())).status.code(),
+        Some(2)
+    );
+}

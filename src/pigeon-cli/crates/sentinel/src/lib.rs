@@ -184,6 +184,34 @@ pub fn invoke(
         .collect()
 }
 
+/// Each policy's name and what it targets, as JSON: `[{name, target: {kind, paths}}]`, `kind`
+/// one of `pull-request`, `change`, `tree`, `file`, `files` and `dir`; for readers that don't
+/// link this library, such as backplane's `architecture.describe`.
+#[must_use]
+pub fn describe(policies: &[LoadedPolicy]) -> serde_json::Value {
+    use policy::{NamedTarget, Target};
+    let shown = |p: &Path| p.display().to_string();
+    serde_json::Value::Array(
+        policies
+            .iter()
+            .map(|p| {
+                let (kind, paths): (&str, Vec<String>) = match &p.policy.target {
+                    Target::Named(NamedTarget::PullRequest) => ("pull-request", Vec::new()),
+                    Target::Named(NamedTarget::Change) => ("change", Vec::new()),
+                    Target::Named(NamedTarget::Tree) => ("tree", Vec::new()),
+                    Target::File(f) => ("file", vec![shown(&f.file)]),
+                    Target::Files(f) => ("files", f.files.iter().map(|p| shown(p)).collect()),
+                    Target::Dir(d) => ("dir", vec![shown(&d.dir)]),
+                };
+                serde_json::json!({
+                    "name": p.name,
+                    "target": { "kind": kind, "paths": paths },
+                })
+            })
+            .collect(),
+    )
+}
+
 /// Runs `policies` against `root`. Pull-request policies run only when
 /// `pull_request` is given.
 ///
