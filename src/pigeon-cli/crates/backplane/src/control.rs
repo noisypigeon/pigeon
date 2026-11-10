@@ -549,6 +549,9 @@ pub fn instance_row(instance: &str, now: u64) -> Statement {
     }
 }
 
+/// D1's plan approver for a change closed before its plan was authorized.
+pub const CLOSED_UNAUTHORIZED: &str = "(closed unauthorized)";
+
 /// Mirrors `change` to D1's `changes` and its head's `jobs`, at `now`.
 #[must_use]
 pub fn mirror(
@@ -583,7 +586,13 @@ pub fn mirror(
             change.proposer.clone().into(),
             change.state.name().into(),
             opt(change.head.as_deref()),
-            opt(change.plan_approval.as_ref().map(|a| a.by.as_str())),
+            match (&change.plan_approval, change.state) {
+                (Some(a), _) => a.by.clone().into(),
+                // D1 refuses a plan approver only on `proposed`: a closed, never-authorized change
+                // needs one; see .claude/decisions/2026-11-08-development-concurrent-agent-sessions.md §4.
+                (None, changes::State::Closed) => CLOSED_UNAUTHORIZED.into(),
+                (None, _) => Value::Null,
+            },
             opt(change.approval.as_ref().map(|a| a.by.as_str())),
             opt(change.approval.as_ref().and_then(|a| a.sha.as_deref())),
             Value::String(serde_json::to_string(&change.violations).unwrap_or_default()),

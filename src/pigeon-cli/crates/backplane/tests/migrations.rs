@@ -212,3 +212,75 @@ fn changes_refuse_impossible_rows() {
     assert!(refused(&db, &job(7, "lost")), "unknown job status");
     assert!(!refused(&db, &job(7, "running")));
 }
+
+/// Every migration, in order, applied to SQLite.
+fn migrated() -> Connection {
+    let db = applied();
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("migrations");
+    let mut files: Vec<_> = std::fs::read_dir(dir)
+        .expect("migrations")
+        .map(|e| e.expect("entry").path())
+        .filter(|p| p.extension().is_some_and(|e| e == "sql"))
+        .filter(|p| !p.ends_with("0001_schema_v0.sql"))
+        .collect();
+    files.sort();
+    for f in files {
+        db.execute_batch(&std::fs::read_to_string(&f).expect("reads"))
+            .unwrap_or_else(|e| panic!("{}: {e}", f.display()));
+    }
+    db
+}
+
+fn run(db: &Connection, statements: &[backplane::control::Statement]) {
+    for s in statements {
+        let params: Vec<rusqlite::types::Value> = s
+            .params
+            .iter()
+            .map(|v| match v {
+                serde_json::Value::Null => rusqlite::types::Value::Null,
+                serde_json::Value::Number(n) => {
+                    rusqlite::types::Value::Integer(n.as_i64().expect("integer"))
+                }
+                serde_json::Value::String(t) => rusqlite::types::Value::Text(t.clone()),
+                other => rusqlite::types::Value::Text(other.to_string()),
+            })
+            .collect();
+        db.execute(s.sql, rusqlite::params_from_iter(params))
+            .unwrap_or_else(|e| panic!("{}: {e}", s.sql));
+    }
+}
+
+#[test]
+fn a_change_closed_before_its_plan_was_authorized_mirrors() {
+    use backplane::changes::{Change, Event};
+    use backplane::control;
+    let db = migrated();
+    let mut c = Change::propose(
+        9,
+        "reconcile-79",
+        "fix: reconcile !79 with main",
+        "p",
+        vec!["a/**".into()],
+        "pigeon",
+    );
+    let logs = serde_json::Map::new();
+    run(&db, &control::mirror("i1", "pigeon", &c, &logs, 10));
+    c.apply(Event::Close).expect("closes");
+    run(&db, &control::mirror("i1", "pigeon", &c, &logs, 11));
+    let (state, by): (String, String) = db
+        .query_row(
+            "SELECT state, plan_approver FROM changes WHERE number = 9",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .expect("row");
+    assert_eq!(state, "closed");
+    assert_eq!(by, control::CLOSED_UNAUTHORIZED);
+    assert!(
+        refused(
+            &db,
+            "UPDATE changes SET state = 'proposed' WHERE number = 9"
+        ),
+        "a proposed change still has no plan approver"
+    );
+}
