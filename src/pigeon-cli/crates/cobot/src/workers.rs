@@ -100,12 +100,8 @@ fn rebind(v: &mut Value, unit: &str, settings: &Value, bad: &mut Vec<String>) {
                 *s = format!("$output.{unit}.{rest}");
                 return;
             }
-            // A nested setting is named by its path, such as `database.name`.
-            let path = (!rest.contains('[')).then(|| rest.split('.').collect::<Vec<_>>());
-            let found = path
-                .as_ref()
-                .and_then(|p| p.iter().try_fold(settings, |v, k| v.get(*k)));
-            match found {
+            // A nested setting is named by its path, such as `database.name` or `domains[0]`.
+            match setting_at(settings, rest) {
                 Some(Value::String(x)) => *s = x.clone(),
                 Some(Value::Number(n)) => *s = n.to_string(),
                 Some(Value::Bool(b)) => *s = b.to_string(),
@@ -119,6 +115,20 @@ fn rebind(v: &mut Value, unit: &str, settings: &Value, bad: &mut Vec<String>) {
         Value::Object(m) => m.values_mut().for_each(|x| rebind(x, unit, settings, bad)),
         _ => {}
     }
+}
+
+/// The setting at `path` in `settings`: keys joined by `.`, each optionally followed by list
+/// indexes, such as `database.name` or `domains[1]`.
+fn setting_at<'a>(settings: &'a Value, path: &str) -> Option<&'a Value> {
+    path.split('.').try_fold(settings, |v, segment| {
+        let mut parts = segment.split('[');
+        let mut at = v.get(parts.next()?)?;
+        for index in parts {
+            let i: usize = index.strip_suffix(']')?.parse().ok()?;
+            at = at.get(i)?;
+        }
+        Some(at)
+    })
 }
 
 /// `found` bound to the stack `unit` of the manifest at `root`: each `$deployment.<setting>`

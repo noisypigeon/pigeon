@@ -830,3 +830,32 @@ fn a_stack_bound_spec_is_selected_by_the_name_each_stack_gives_it() {
     }
     assert!(workers::select(root.path(), &["pigeon-red".into()]).is_err());
 }
+
+#[test]
+fn a_list_settings_item_binds_by_its_index() {
+    let spec = STACK_SPEC.replace(
+        "vars: { PUBLIC_HOST: $deployment.hostname,",
+        "vars: { LIVE: \"$deployment.domains[0]\", OWN: \"$deployment.domains[1]\", PUBLIC_HOST: $deployment.hostname,",
+    );
+    let root = fixture(&spec);
+    stacks(root.path());
+    let config = root.path().join("config.yaml");
+    let text = fs::read_to_string(&config).expect("read").replace(
+        "    hostname: blue.example.com\n",
+        "    hostname: blue.example.com\n    domains: [live.example.com, blue.live.example.com]\n",
+    );
+    fs::write(&config, text).expect("write");
+    let blue = workers::bind(root.path(), &found(root.path()), "platform/blue").expect("binds");
+    assert_eq!(blue.spec.bindings.vars["LIVE"], "live.example.com");
+    assert_eq!(blue.spec.bindings.vars["OWN"], "blue.live.example.com");
+    let past = fixture(&spec.replace("domains[1]", "domains[2]"));
+    stacks(past.path());
+    fs::write(
+        past.path().join("config.yaml"),
+        fs::read_to_string(&config).expect("read"),
+    )
+    .expect("write");
+    let e =
+        workers::bind(past.path(), &found(past.path()), "platform/blue").expect_err("past the end");
+    assert!(e.contains("domains[2]"), "{e}");
+}
