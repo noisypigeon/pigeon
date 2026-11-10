@@ -810,9 +810,71 @@ pub fn deploy_spec(
     }
 }
 
-/// The job that mirrors `main` and the tags to GitHub; see
-/// `.claude/decisions/2026-11-08-development-github-mirror-on-merge.md`.
-pub const MIRROR: &str = "mirror";
+/// The job that mirrors `main` and the tags to GitHub, or a change's bounded head to its
+/// branch there; see `.claude/decisions/2026-11-08-development-github-mirror-on-merge.md` and
+/// `.claude/decisions/2026-11-10-development-code-checks-github-actions.md` §2.
+pub const MIRROR: &str = changes::MIRROR;
+
+/// The job that deletes a merged or closed change's branch from GitHub.
+pub const UNMIRROR: &str = "unmirror";
+
+/// `event` with the [`MIRROR`] job among a passing bound job's checks, for a Worker that
+/// mirrors; a refused head gains nothing, so it never leaves Cloudflare.
+#[must_use]
+pub fn with_mirror(event: Event) -> Event {
+    match event {
+        Event::Bounded {
+            sha,
+            violations,
+            mut checks,
+            tiers,
+        } => {
+            if violations.is_empty() && !checks.iter().any(|c| c.name == MIRROR) {
+                checks.push(Check {
+                    name: MIRROR.into(),
+                    argv: Vec::new(),
+                });
+            }
+            Event::Bounded {
+                sha,
+                violations,
+                checks,
+                tiers,
+            }
+        }
+        other => other,
+    }
+}
+
+/// Whether `after`, just merged or closed from `before`, has a branch on GitHub to delete: a
+/// head the [`MIRROR`] job was started on.
+#[must_use]
+pub fn unmirror_due(before: Option<&Change>, after: &Change) -> bool {
+    let done = |c: &Change| matches!(c.state, changes::State::Merged | changes::State::Closed);
+    !before.is_some_and(done)
+        && done(after)
+        && after
+            .jobs
+            .iter()
+            .any(|j| j.name == MIRROR && j.attempts > 0)
+}
+
+/// The spec that deletes `change`'s branch from `to`, with `to_token`.
+#[must_use]
+pub fn unmirror_spec(change: &Change, to: &str, to_token: &str) -> JobSpec {
+    let sha = change.head.clone().unwrap_or_default();
+    JobSpec {
+        id: job_id(change.number, &sha, UNMIRROR),
+        branch: change.branch(),
+        number: change.number,
+        job: UNMIRROR.into(),
+        env: std::collections::BTreeMap::from([
+            (MIRROR_TO.to_string(), to.to_string()),
+            (MIRROR_TOKEN.to_string(), to_token.to_string()),
+        ]),
+        ..deploy_spec("", "", &sha, None, std::collections::BTreeMap::new())
+    }
+}
 
 /// The mirror job's environment: GitHub's remote.
 pub const MIRROR_TO: &str = "MIRROR_TO";
@@ -1060,7 +1122,13 @@ impl Class {
 pub fn class_of(job: &str) -> Class {
     // A deploy builds the Worker to wasm, so it runs on `Checker`; see
     // .claude/decisions/2026-11-07-development-control-plane-deploys-itself.md.
-    if job == BOUND || job == MERGE || job == changes::RESTACK || job == PLATFORM || job == MIRROR {
+    if job == BOUND
+        || job == MERGE
+        || job == changes::RESTACK
+        || job == PLATFORM
+        || job == MIRROR
+        || job == UNMIRROR
+    {
         Class::Runner
     } else {
         Class::Checker

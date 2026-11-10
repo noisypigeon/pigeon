@@ -2,8 +2,9 @@
 //! `.claude/decisions/2026-11-05-development-changes-through-pigeon-mcp.md` §1.
 
 use backplane::changes::{
-    BOUND, Change, Check, Effect, Event, JobStatus, MERGE, State, branch, is_sha,
+    BOUND, Change, Check, Effect, Event, JobStatus, MERGE, MIRROR, State, branch, is_sha,
 };
+use backplane::control;
 use backplane::runs::MAX_ATTEMPTS;
 
 const A: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -429,4 +430,121 @@ fn a_new_push_clears_the_old_heads_tiers() {
     })
     .expect("pushed again");
     assert_eq!(c.tiers, None);
+}
+
+/// A change pushed at `sha` and bounded on a Worker that mirrors, with `checks`.
+fn mirrored(sha: &str, checks: &[&str]) -> (Change, Vec<Effect>) {
+    let mut c = planned();
+    c.apply(Event::Pushed { sha: sha.into() }).expect("pushed");
+    c.apply(Event::Started {
+        job: BOUND.into(),
+        sha: sha.into(),
+    })
+    .expect("starts");
+    let effects = c
+        .apply(control::with_mirror(Event::Bounded {
+            sha: sha.into(),
+            violations: vec![],
+            checks: checks.iter().map(|n| check(n)).collect(),
+            tiers: None,
+        }))
+        .expect("bounded");
+    (c, effects)
+}
+
+#[test]
+fn the_mirror_job_never_gates_a_change() {
+    let (mut c, effects) = mirrored(A, &["fmt"]);
+    assert_eq!(
+        effects,
+        [Effect::Start("fmt".into()), Effect::Start(MIRROR.into())]
+    );
+    pass(&mut c, "fmt", A);
+    assert_eq!(c.state, State::Checked, "an open mirror job holds nothing");
+    c.apply(Event::Started {
+        job: MIRROR.into(),
+        sha: A.into(),
+    })
+    .expect("starts");
+    for _ in 0..MAX_ATTEMPTS {
+        c.apply(Event::Lost {
+            job: MIRROR.into(),
+            sha: A.into(),
+        })
+        .expect("lost");
+        let _ = c.apply(Event::Started {
+            job: MIRROR.into(),
+            sha: A.into(),
+        });
+    }
+    assert_eq!(c.state, State::Checked, "nor does a failed one");
+
+    let (mut c, effects) = mirrored(B, &[]);
+    assert_eq!(effects, [Effect::Start(MIRROR.into())]);
+    assert_eq!(c.state, State::Checked);
+    c.apply(Event::Approve {
+        by: "owner".into(),
+        sha: B.into(),
+        at: 9,
+    })
+    .expect("approves");
+    let before = c.clone();
+    let effects = c
+        .apply(Event::Merged {
+            sha: B.into(),
+            commit: None,
+        })
+        .expect("merges");
+    assert_eq!(effects, [Effect::Cancel(vec![MIRROR.into()])]);
+    assert!(
+        !control::unmirror_due(Some(&before), &c),
+        "a mirror job never started pushed nothing"
+    );
+}
+
+#[test]
+fn a_refused_head_never_queues_the_mirror_job() {
+    let mut c = planned();
+    c.apply(Event::Pushed { sha: A.into() }).expect("pushed");
+    let effects = c
+        .apply(control::with_mirror(Event::Bounded {
+            sha: A.into(),
+            violations: vec!["outside its scope".into()],
+            checks: vec![],
+            tiers: None,
+        }))
+        .expect("refused");
+    assert_eq!(effects, []);
+    assert_eq!(c.state, State::Refused);
+    assert!(c.jobs.iter().all(|j| j.name != MIRROR));
+    assert!(c.apply(Event::Rerun { job: MIRROR.into() }).is_err());
+}
+
+#[test]
+fn a_mirrored_change_is_unmirrored_once_merged_or_closed() {
+    let (mut c, _) = mirrored(A, &[]);
+    pass(&mut c, MIRROR, A);
+    let open = c.clone();
+    c.apply(Event::Close).expect("closes");
+    assert!(control::unmirror_due(Some(&open), &c));
+    let closed = c.clone();
+    c.apply(Event::Close).expect("closes again");
+    assert!(!control::unmirror_due(Some(&closed), &c), "only once");
+
+    let (mut c, _) = mirrored(B, &[]);
+    pass(&mut c, MIRROR, B);
+    c.apply(Event::Approve {
+        by: "owner".into(),
+        sha: B.into(),
+        at: 9,
+    })
+    .expect("approves");
+    let approved = c.clone();
+    c.apply(Event::Merged {
+        sha: B.into(),
+        commit: None,
+    })
+    .expect("merges");
+    assert!(control::unmirror_due(Some(&approved), &c));
+    assert!(!control::unmirror_due(Some(&approved), &approved));
 }

@@ -452,6 +452,88 @@ pub fn mirror_from(
     })
 }
 
+/// Refuses a branch that is not a change's, so `main` and tags reach a mirror only through
+/// [`mirror_from`].
+fn change_branch(branch: &str) -> Result<String, Error> {
+    match branch.strip_prefix("change/") {
+        Some(rest) if !rest.is_empty() && !branch.contains("..") && !branch.contains(':') => {
+            Ok(format!("refs/heads/{branch}"))
+        }
+        _ => Err(Error::Tool {
+            command: "git mirror".into(),
+            message: format!("`{branch}` is not a change's branch"),
+        }),
+    }
+}
+
+/// Force-pushes commit `sha` of `remote`'s `branch`, read with `token`, to `to` as that
+/// branch, which must be `change/*`, through the bare repository `dir`; with `to_token` sent
+/// as in [`mirror_from`]. See
+/// `.claude/decisions/2026-11-10-development-code-checks-github-actions.md` §2.
+///
+/// # Errors
+///
+/// [`Error::Tool`] when the branch is not a change's, the branch no longer holds `sha`, or git
+/// fails.
+pub fn push_change(
+    remote: &str,
+    token: &str,
+    branch: &str,
+    sha: &str,
+    to: &str,
+    to_token: Option<&str>,
+    dir: &Path,
+) -> Result<(), Error> {
+    let r = change_branch(branch)?;
+    checked(
+        command(remote, token)
+            .arg("--git-dir")
+            .arg(dir)
+            .args(["fetch", "--quiet", "--force", remote, &format!("+{r}:{r}")])
+            .output(),
+        "git fetch",
+    )?;
+    let has = plain(dir)
+        .args(["merge-base", "--is-ancestor", sha, &r])
+        .status()
+        .is_ok_and(|s| s.success());
+    if !has {
+        return Err(Error::Tool {
+            command: "git mirror".into(),
+            message: format!("{branch} no longer holds {sha}"),
+        });
+    }
+    let mut push = match to_token {
+        Some(t) => basic(dir, to, t),
+        None => plain(dir),
+    };
+    push.args(["push", "--quiet", "--force", to, &format!("{sha}:{r}")]);
+    checked(push.output(), "git push").map(|_| ())
+}
+
+/// Deletes `branch`, which must be `change/*`, from `to`; one already gone is not an error.
+///
+/// # Errors
+///
+/// [`Error::Tool`] when the branch is not a change's, or git fails.
+pub fn delete_change(
+    branch: &str,
+    to: &str,
+    to_token: Option<&str>,
+    dir: &Path,
+) -> Result<(), Error> {
+    let r = change_branch(branch)?;
+    let mut push = match to_token {
+        Some(t) => basic(dir, to, t),
+        None => plain(dir),
+    };
+    push.args(["push", "--quiet", to, &format!(":{r}")]);
+    match checked(push.output(), "git push") {
+        Err(Error::Tool { message, .. }) if message.contains("remote ref does not exist") => Ok(()),
+        other => other.map(|_| ()),
+    }
+}
+
 /// `git --git-dir dir` with `token` sent to `to` only as the basic credential
 /// `x-access-token:<token>`, as GitHub takes an App's installation token; through the
 /// environment, never argv or a file.

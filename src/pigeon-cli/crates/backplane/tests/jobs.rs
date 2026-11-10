@@ -480,3 +480,61 @@ fn a_mirror_job_moves_main_and_tags_and_never_shows_its_token() {
     let shown = serde_json::to_string(&r).expect("json");
     assert!(!shown.contains("ghs-never-shown"), "{shown}");
 }
+
+#[test]
+fn a_bounded_change_head_reaches_its_branch_on_the_mirror_and_leaves_it_once_done() {
+    let tmp = TempDir::new().expect("tempdir");
+    let (from, sha) = remote(tmp.path(), &["docs/x.md"]);
+    let to = tmp.path().join("github.git");
+    git(
+        tmp.path(),
+        &["init", "-q", "--bare", to.to_str().expect("utf-8")],
+    );
+    let to_url = format!("file://{}", to.display());
+    let mut s = spec(&from, &sha, backplane::control::MIRROR, &[], &[]);
+    s.env = std::collections::BTreeMap::from([
+        (backplane::control::MIRROR_TO.into(), to_url.clone()),
+        (
+            backplane::control::MIRROR_TOKEN.into(),
+            "ghs-never-shown".into(),
+        ),
+    ]);
+    let r = jobs::run(&s, &tmp.path().join("job"));
+    assert_eq!(r.outcome, Outcome::Passed, "{}", r.log);
+    assert_eq!(git(&to, &["rev-parse", "refs/heads/change/1-x"]), sha);
+    assert_eq!(
+        git(
+            &to,
+            &[
+                "for-each-ref",
+                "--format=%(refname)",
+                "refs/heads",
+                "refs/tags"
+            ]
+        ),
+        "refs/heads/change/1-x",
+        "only the change's branch: main and tags go by the main mirror"
+    );
+    assert!(
+        !serde_json::to_string(&r)
+            .expect("json")
+            .contains("ghs-never-shown")
+    );
+
+    let mut change = backplane::changes::Change::propose(1, "x", "docs: x", "p", vec![], "a");
+    change.head = Some(sha);
+    let u = backplane::control::unmirror_spec(&change, &to_url, "ghs-never-shown");
+    let r = jobs::run(&u, &tmp.path().join("job"));
+    assert_eq!(r.outcome, Outcome::Passed, "{}", r.log);
+    assert_eq!(
+        git(&to, &["for-each-ref", "--format=%(refname)", "refs/heads"]),
+        ""
+    );
+    let r = jobs::run(&u, &tmp.path().join("job"));
+    assert_eq!(
+        r.outcome,
+        Outcome::Passed,
+        "a branch already gone: {}",
+        r.log
+    );
+}

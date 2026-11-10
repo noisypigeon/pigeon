@@ -762,3 +762,95 @@ fn a_sync_refuses_histories_that_diverged() {
         "Artifacts is untouched"
     );
 }
+
+#[test]
+fn a_change_head_is_force_pushed_to_its_branch_and_deleted_after() {
+    let dir = TempDir::new().expect("tempdir");
+    let (artifacts, github, work) = pair(dir.path());
+    let first = run_git(&artifacts, &["rev-parse", "refs/heads/change/wip"]);
+    let token = "ghs_change-token-never-shown";
+    let staged = dir.path().join("job").join("c.git");
+    git::bare(&staged).expect("bare");
+    let push = |sha: &str| {
+        git::push_change(
+            &url(&artifacts),
+            GIT_TOKEN,
+            "change/wip",
+            sha,
+            &url(&github),
+            Some(token),
+            &staged,
+        )
+    };
+    push(&first).expect("first head");
+    assert_eq!(
+        run_git(&github, &["rev-parse", "refs/heads/change/wip"]),
+        first
+    );
+    run_git(&work, &["checkout", "-q", "-B", "change/wip", "main"]);
+    fs::write(work.join("c.txt"), "c").expect("write");
+    run_git(&work, &["add", "."]);
+    run_git(&work, &["commit", "-q", "-m", "rewritten"]);
+    run_git(
+        &work,
+        &[
+            "push",
+            "-q",
+            "-f",
+            artifacts.to_str().expect("utf8"),
+            "change/wip",
+        ],
+    );
+    let second = run_git(&work, &["rev-parse", "HEAD"]);
+    push(&second).expect("a new head replaces the old");
+    assert_eq!(
+        run_git(&github, &["rev-parse", "refs/heads/change/wip"]),
+        second
+    );
+    let err = push(&first).expect_err("not the branch's").to_string();
+    assert!(err.contains("no longer holds"), "{err}");
+    let config = fs::read_to_string(staged.join("config")).expect("config");
+    assert!(!config.contains(token), "the token never reaches a file");
+    git::delete_change("change/wip", &url(&github), Some(token), &staged).expect("delete");
+    git::delete_change("change/wip", &url(&github), Some(token), &staged)
+        .expect("a branch already gone is not an error");
+    let branches = run_git(
+        &github,
+        &["for-each-ref", "--format=%(refname)", "refs/heads"],
+    );
+    assert_eq!(branches, "refs/heads/keep\nrefs/heads/main");
+}
+
+#[test]
+fn only_a_change_branch_is_pushed_or_deleted_this_way() {
+    let dir = TempDir::new().expect("tempdir");
+    let (artifacts, github, _) = pair(dir.path());
+    let main = run_git(&artifacts, &["rev-parse", "refs/heads/main"]);
+    let staged = stage(dir.path(), "c.git");
+    for branch in [
+        "main",
+        "keep",
+        "change/",
+        "change/../main",
+        "refs/heads/main",
+    ] {
+        let err = git::push_change(
+            &url(&artifacts),
+            GIT_TOKEN,
+            branch,
+            &main,
+            &url(&github),
+            None,
+            &staged,
+        )
+        .expect_err(branch)
+        .to_string();
+        assert!(err.contains("not a change's branch"), "{branch}: {err}");
+        assert!(git::delete_change(branch, &url(&github), None, &staged).is_err());
+    }
+    let branches = run_git(
+        &github,
+        &["for-each-ref", "--format=%(refname)", "refs/heads"],
+    );
+    assert_eq!(branches, "refs/heads/keep\nrefs/heads/main");
+}

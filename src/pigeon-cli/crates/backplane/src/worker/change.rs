@@ -145,9 +145,16 @@ impl ChangeRun {
         let change = &change;
         storage.put(CHANGE, change).await?;
         super::events::changed(&self.env, before.as_ref(), change).await;
-        if before.is_some_and(|b| b.merge_after.is_some()) && control::merge_dropped(change) {
+        if before.as_ref().is_some_and(|b| b.merge_after.is_some())
+            && control::merge_dropped(change)
+        {
             super::merges::ended(&self.env, change, None).await?;
         }
+        let mut pending = pending.to_vec();
+        if control::unmirror_due(before.as_ref(), change) {
+            pending.push(Pending::Start(control::UNMIRROR.into()));
+        }
+        let pending = &pending;
         storage.put(PENDING, pending).await?;
         let open = change
             .jobs
@@ -168,6 +175,11 @@ impl ChangeRun {
                 .await
                 .map_err(|e| e.to_string())?;
         let mut spec = control::spec(change, job, &remote, &token)?;
+        if job == control::MIRROR {
+            let (to, to_token) = self.github().await?;
+            spec.env.insert(control::MIRROR_TO.into(), to);
+            spec.env.insert(control::MIRROR_TOKEN.into(), to_token);
+        }
         if job == crate::changes::MERGE
             && let Ok(author) = self.env.var(control::COMMIT_AUTHOR)
             && !author.to_string().is_empty()
@@ -179,6 +191,34 @@ impl ChangeRun {
         let req = json_request("https://checker/start", Method::Post, Some(&body), None)
             .map_err(|e| e.to_string())?;
         let mut r = job_stub(&self.env, control::class_of(job), &spec.id)
+            .map_err(|e| e.to_string())?
+            .fetch_with_request(req)
+            .await
+            .map_err(|e| e.to_string())?;
+        if (200..300).contains(&r.status_code()) {
+            Ok(())
+        } else {
+            Err(r.text().await.unwrap_or_default())
+        }
+    }
+
+    /// The GitHub mirror and an installation token for it, minted for one job.
+    async fn github(&self) -> std::result::Result<(String, String), String> {
+        let to = super::github::mirror(&self.env).ok_or("this Worker has no GitHub mirror")?;
+        let (owner, repo) = crate::mirroring::github_repo(&to)
+            .ok_or_else(|| format!("the mirror `{to}` is not a GitHub repository"))?;
+        let token = super::github::installation_token(&self.env, &owner, &repo).await?;
+        Ok((to, token))
+    }
+
+    /// Starts the job deleting `change`'s branch from GitHub; nothing polls it.
+    async fn unmirror(&self, change: &Change) -> std::result::Result<(), String> {
+        let (to, to_token) = self.github().await?;
+        let spec = control::unmirror_spec(change, &to, &to_token);
+        let body = serde_json::to_value(&spec).map_err(|e| e.to_string())?;
+        let req = json_request("https://checker/start", Method::Post, Some(&body), None)
+            .map_err(|e| e.to_string())?;
+        let mut r = job_stub(&self.env, control::class_of(control::UNMIRROR), &spec.id)
             .map_err(|e| e.to_string())?
             .fetch_with_request(req)
             .await
@@ -219,7 +259,12 @@ impl ChangeRun {
                 if report.outcome != Outcome::Running {
                     self.keep_log(job, &id, &report).await?;
                 }
-                Ok(control::event_of(job, &sha, &report))
+                let event = control::event_of(job, &sha, &report);
+                Ok(if super::github::mirror(&self.env).is_some() {
+                    event.map(control::with_mirror)
+                } else {
+                    event
+                })
             }
             404 => Ok(Some(Event::Lost {
                 job: job.into(),
@@ -371,6 +416,16 @@ impl DurableObject for ChangeRun {
             match p {
                 Pending::Stop(id) => self.stop(control::Class::Checker, &id).await?,
                 Pending::StopIn(class, id) => self.stop(class, &id).await?,
+                Pending::Start(job) if job == control::UNMIRROR => {
+                    match self.unmirror(&change).await {
+                        Err(why) if control::no_capacity(&why) => {
+                            next.push(Pending::Start(job));
+                            wait = true;
+                        }
+                        Err(why) => worker::console_warn!("unmirror {}: {why}", change.branch()),
+                        Ok(()) => {}
+                    }
+                }
                 Pending::Start(job) => {
                     let sha = change.head.clone().unwrap_or_default();
                     let running = change

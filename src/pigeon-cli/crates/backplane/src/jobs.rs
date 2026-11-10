@@ -13,7 +13,9 @@ use std::sync::{Arc, Mutex};
 use serde_json::{Map, Value, json};
 
 use crate::changes::{BOUND, Check, ConflictContext, MERGE, RESTACK, Relation, Restacked};
-use crate::control::{DEPLOY, JobSpec, MIRROR, MIRROR_TO, MIRROR_TOKEN, Outcome, Report, tail};
+use crate::control::{
+    DEPLOY, JobSpec, MIRROR, MIRROR_TO, MIRROR_TOKEN, Outcome, Report, UNMIRROR, tail,
+};
 use crate::{Instance, Request, run_with};
 
 /// Where jobs check out, under the Container's temporary directory.
@@ -133,7 +135,7 @@ pub fn run(spec: &JobSpec, dir: &Path) -> Report {
             ..report(spec, Outcome::Passed, "")
         };
     }
-    if spec.job == MIRROR {
+    if spec.job == MIRROR || spec.job == UNMIRROR {
         return mirror(spec, dir);
     }
     let _ = std::fs::remove_dir_all(dir);
@@ -180,7 +182,9 @@ pub fn run(spec: &JobSpec, dir: &Path) -> Report {
 }
 
 /// The mirror job: `main` and the tags, fast-forward and add-only, to GitHub in a fresh bare
-/// repository; see `.claude/decisions/2026-11-08-development-github-mirror-on-merge.md`.
+/// repository; on a change's branch, its head, force-pushed; the unmirror job deletes that
+/// branch. See `.claude/decisions/2026-11-08-development-github-mirror-on-merge.md` and
+/// `.claude/decisions/2026-11-10-development-code-checks-github-actions.md` §2.
 fn mirror(spec: &JobSpec, dir: &Path) -> Report {
     let failed = |why: String| Report {
         violations: vec![why.clone()],
@@ -193,6 +197,31 @@ fn mirror(spec: &JobSpec, dir: &Path) -> Report {
     let staged = dir.join("mirror.git");
     if let Err(e) = cobot::git::bare(&staged) {
         return failed(e.to_string());
+    }
+    let scrub = |e: cobot::Error| failed(e.to_string().replace(to_token.as_str(), "***"));
+    if spec.job == UNMIRROR {
+        return match cobot::git::delete_change(&spec.branch, to, Some(to_token), &staged) {
+            Ok(()) => report(spec, Outcome::Passed, &format!("deleted {}\n", spec.branch)),
+            Err(e) => scrub(e),
+        };
+    }
+    if crate::changes::branch(&spec.branch).is_some() {
+        return match cobot::git::push_change(
+            &spec.remote,
+            &spec.token,
+            &spec.branch,
+            &spec.sha,
+            to,
+            Some(to_token),
+            &staged,
+        ) {
+            Ok(()) => report(
+                spec,
+                Outcome::Passed,
+                &format!("{} {}\n", spec.sha, spec.branch),
+            ),
+            Err(e) => scrub(e),
+        };
     }
     match cobot::git::mirror_from(
         &spec.remote,
@@ -210,7 +239,7 @@ fn mirror(spec: &JobSpec, dir: &Path) -> Report {
             }
             report(spec, Outcome::Passed, &log)
         }
-        Err(e) => failed(e.to_string().replace(to_token.as_str(), "***")),
+        Err(e) => scrub(e),
     }
 }
 

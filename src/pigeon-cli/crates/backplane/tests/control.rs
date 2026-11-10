@@ -546,6 +546,30 @@ fn a_mirror_runs_on_runner_and_never_shows_its_tokens() {
 }
 
 #[test]
+fn a_change_is_unmirrored_by_its_branch_on_a_runner() {
+    let s = control::unmirror_spec(&pushed(), "https://github.com/o/r.git", "ghs-unmirror");
+    assert_eq!(s.id, "9-0123456789ab-unmirror");
+    assert_eq!(s.job, control::UNMIRROR);
+    assert_eq!(s.branch, "change/9-worker-control");
+    assert!(s.token.is_empty(), "it reads nothing from Artifacts");
+    assert_eq!(s.env[control::MIRROR_TOKEN], "ghs-unmirror");
+    assert!(!format!("{s:?}").contains("ghs-unmirror"));
+    assert_eq!(
+        control::class_of(control::UNMIRROR),
+        backplane::control::Class::Runner
+    );
+    let refused = Event::Bounded {
+        sha: A.into(),
+        violations: vec!["no".into()],
+        checks: vec![],
+        tiers: None,
+    };
+    assert_eq!(control::with_mirror(refused.clone()), refused);
+    let other = Event::Close;
+    assert_eq!(control::with_mirror(other.clone()), other);
+}
+
+#[test]
 fn no_free_container_is_waiting_not_a_lost_job() {
     assert!(control::no_capacity(
         "Maximum number of running container instances exceeded. Try again later"

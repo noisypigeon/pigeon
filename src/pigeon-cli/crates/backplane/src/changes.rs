@@ -17,6 +17,10 @@ pub const MERGE: &str = "merge";
 /// `.claude/decisions/2026-11-08-development-concurrent-agent-sessions.md` §3.
 pub const RESTACK: &str = "restack";
 
+/// The job that pushes a bounded head to GitHub as the change's branch; it never gates the
+/// change. See `.claude/decisions/2026-11-10-development-code-checks-github-actions.md` §2.
+pub const MIRROR: &str = "mirror";
+
 /// Where a change is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -121,6 +125,11 @@ impl Job {
 
     fn open(&self) -> bool {
         matches!(self.status, JobStatus::Queued | JobStatus::Running)
+    }
+
+    /// Whether its result decides the change: every job but [`MIRROR`].
+    fn gates(&self) -> bool {
+        self.name != MIRROR
     }
 }
 
@@ -790,7 +799,7 @@ impl Change {
                 effects.push(Effect::Start(c.name.clone()));
                 self.jobs.push(Job::queued(&c.name, c.argv));
             }
-            if effects.is_empty() {
+            if !self.jobs.iter().any(|j| j.gates() && j.open()) {
                 self.state = State::Checked;
             }
             Ok(effects)
@@ -840,11 +849,12 @@ impl Change {
         if self.state != State::Bounded {
             return Vec::new();
         }
-        if self.jobs.iter().any(|j| j.status == JobStatus::Failed) {
+        let mut gating = self.jobs.iter().filter(|j| j.gates());
+        if gating.clone().any(|j| j.status == JobStatus::Failed) {
             self.state = State::Failed;
             return self.cancel_open();
         }
-        if self.jobs.iter().all(|j| j.status == JobStatus::Passed) {
+        if gating.all(|j| j.status == JobStatus::Passed) {
             self.state = State::Checked;
             return self.carry();
         }
@@ -995,8 +1005,9 @@ impl Change {
             j.status = JobStatus::Passed;
         }
         self.merged_as = commit;
+        let effects = self.cancel_open();
         self.state = State::Merged;
-        Ok(Vec::new())
+        Ok(effects)
     }
 
     fn cancel_open(&mut self) -> Vec<Effect> {
