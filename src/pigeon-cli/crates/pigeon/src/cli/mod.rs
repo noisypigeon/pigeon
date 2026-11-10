@@ -30,7 +30,7 @@ pub struct Cli {
 pub enum Commands {
     /// Check the repository against its policies
     #[cfg(feature = "sentinel")]
-    #[command(subcommand, version = ::sentinel::VERSION)]
+    #[command(subcommand)]
     Sentinel(SentinelCommand),
     /// Not implemented yet
     #[cfg(feature = "gantry")]

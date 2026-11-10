@@ -1,11 +1,15 @@
-//! `pigeon sentinel`; see `.claude/decisions/2026-11-02-development-cargo-workspace-mise-toolchain.md`.
+//! `pigeon sentinel`: runs the `pigeon-sentinel` binary; see
+//! `.claude/decisions/2026-11-10-development-factory-crates-functional-core.md` §1.
 
 use std::env;
+use std::path::{Path, PathBuf};
+use std::process::Command;
 
-use sentinel::PullRequest;
-
-use super::{INVALID, SUCCESS, VIOLATION};
+use super::INVALID;
 use crate::cli::{CheckArgs, SentinelCommand};
+
+/// The binary's name.
+const BINARY: &str = "pigeon-sentinel";
 
 /// Runs a `pigeon sentinel` command and returns its exit code.
 #[must_use]
@@ -15,36 +19,46 @@ pub fn run(command: SentinelCommand) -> i32 {
     }
 }
 
-fn check(args: &CheckArgs) -> i32 {
-    let dir = args
-        .policies
-        .clone()
-        .unwrap_or_else(|| args.root.join(".config/policies"));
-    let policies = match sentinel::load_dir(&dir) {
-        Ok(p) => p,
-        Err(e) => {
-            eprintln!("sentinel: {e}");
-            return INVALID;
-        }
-    };
-    let pull_request = args.pull_request.then(|| PullRequest {
-        title: env::var("PR_TITLE").ok(),
-        body: env::var("PR_BODY").ok(),
-        number: env::var("PR_NUMBER").ok(),
-        files: env::var("PR_FILES").ok(),
-        branch: env::var("PR_BRANCH").ok(),
-        scope: env::var("PR_SCOPE").ok(),
-    });
-    match sentinel::check(&policies, &args.root, pull_request.as_ref()) {
-        Ok(report) => {
-            for v in &report.violations {
-                println!("{v}");
+/// `PIGEON_SENTINEL`, else `pigeon-sentinel` beside this executable or in its parent
+/// directory, else on `PATH`.
+fn locate() -> PathBuf {
+    if let Some(p) = env::var_os("PIGEON_SENTINEL").filter(|p| !p.is_empty()) {
+        return PathBuf::from(p);
+    }
+    if let Ok(exe) = env::current_exe() {
+        let here = exe.parent();
+        for dir in here.into_iter().chain(here.and_then(Path::parent)) {
+            let candidate = dir.join(BINARY);
+            if candidate.is_file() {
+                return candidate;
             }
-            println!("{}", report.summary());
-            if report.passed() { SUCCESS } else { VIOLATION }
         }
+    }
+    PathBuf::from(BINARY)
+}
+
+/// `pigeon-sentinel check`'s arguments for `args`.
+fn argv(args: &CheckArgs) -> Vec<String> {
+    let mut out = vec![
+        "check".to_string(),
+        "--root".into(),
+        args.root.display().to_string(),
+    ];
+    if let Some(p) = &args.policies {
+        out.extend(["--policies".into(), p.display().to_string()]);
+    }
+    if args.pull_request {
+        out.push("--pull-request".into());
+    }
+    out
+}
+
+fn check(args: &CheckArgs) -> i32 {
+    let binary = locate();
+    match Command::new(&binary).args(argv(args)).status() {
+        Ok(status) => status.code().unwrap_or(INVALID),
         Err(e) => {
-            eprintln!("sentinel: {e}");
+            eprintln!("sentinel: {} didn't run: {e}", binary.display());
             INVALID
         }
     }

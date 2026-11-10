@@ -35,10 +35,10 @@ fn docs_only_runs_the_policies_only() {
             "src/pigeon-cli/crates/sentinel/src/rules.rs"
         ])
         .iter()
-        .filter(|n| n.starts_with("test "))
+        .filter(|n| *n == "test this repository's policies")
         .count(),
         1,
-        "once, when sentinel's and its dependants' tests already run"
+        "once, beside sentinel's own tests"
     );
     assert_eq!(names(&[]), ["policy.check"]);
 }
@@ -92,20 +92,18 @@ fn cobot_runs_itself_its_dependants_and_the_worker() {
 }
 
 #[test]
-fn sentinel_runs_sentinel_and_its_dependants_without_the_worker() {
+fn sentinel_runs_only_its_own_checks_as_nothing_links_it() {
     let got = names(&["src/pigeon-cli/crates/sentinel/src/rules.rs"]);
-    assert!(
-        got.contains(&"test pigeon pigeon-backplane pigeon-sentinel".to_string()),
-        "{got:?}"
-    );
-    assert!(!got.iter().any(|n| n.contains("cobot")), "{got:?}");
-    assert!(
-        got.contains(&"clippy pigeon --features sentinel".to_string()),
-        "{got:?}"
-    );
-    assert!(
-        got.contains(&"clippy backplane worker (wasm)".to_string()),
-        "{got:?}"
+    assert_eq!(
+        got,
+        [
+            "fmt",
+            "clippy pigeon-sentinel",
+            "test pigeon-sentinel",
+            "policy.check"
+        ],
+        "pigeon and backplane run pigeon-sentinel, so they don't rebuild for it; see \
+         .claude/decisions/2026-11-10-development-factory-crates-functional-core.md §1"
     );
 }
 

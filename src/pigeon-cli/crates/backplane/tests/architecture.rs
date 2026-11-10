@@ -4,7 +4,9 @@
 use std::fs;
 use std::path::PathBuf;
 
-use backplane::{Instance, Request, Response, run};
+use backplane::{Instance, Request, Response, run_with};
+
+mod common;
 use serde_json::Value;
 use tempfile::TempDir;
 
@@ -16,12 +18,13 @@ fn repo_root() -> PathBuf {
 
 fn describe(root: &std::path::Path) -> Response {
     let instance = Instance::load(root).expect("valid manifest");
-    run(
+    run_with(
         &instance,
         &Request {
             operation: "architecture.describe".into(),
             ..Request::default()
         },
+        common::var,
     )
     .expect("runs")
 }

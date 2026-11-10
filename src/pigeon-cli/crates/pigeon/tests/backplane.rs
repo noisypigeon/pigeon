@@ -8,13 +8,16 @@ use assert_cmd::Command;
 use predicates::prelude::*;
 use tempfile::TempDir;
 
+mod common;
+
 fn repo_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../..")
 }
 
 fn backplane() -> Command {
     let mut cmd = Command::cargo_bin("pigeon").expect("binary");
-    cmd.arg("backplane");
+    cmd.arg("backplane")
+        .env("PIGEON_SENTINEL", common::sentinel());
     cmd
 }
 

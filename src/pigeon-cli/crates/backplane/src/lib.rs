@@ -30,6 +30,8 @@ pub mod push;
 pub mod reconcile;
 pub mod runs;
 #[cfg(feature = "engines")]
+pub mod sentinel;
+#[cfg(feature = "engines")]
 pub mod serve;
 pub mod sessions;
 #[cfg(feature = "engines")]

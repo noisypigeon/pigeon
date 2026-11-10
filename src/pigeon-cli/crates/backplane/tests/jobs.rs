@@ -10,6 +10,13 @@ use backplane::control::{JobSpec, Outcome};
 use backplane::jobs::{self, Board};
 use tempfile::TempDir;
 
+mod common;
+
+/// Runs `spec` with the built `pigeon-sentinel` as the bound job's judge.
+fn run_job(spec: &JobSpec, dir: &Path) -> backplane::control::Report {
+    jobs::run_judged(spec, dir, common::sentinel())
+}
+
 fn git(dir: &Path, args: &[&str]) -> String {
     let out = Command::new("git")
         .arg("-C")
@@ -99,7 +106,7 @@ fn spec(remote: &Path, sha: &str, job: &str, scope: &[&str], argv: &[&str]) -> J
 fn the_bound_job_passes_a_change_inside_its_scope_and_names_its_checks() {
     let tmp = TempDir::new().expect("tempdir");
     let (bare, sha) = remote(tmp.path(), &["CLAUDE.md", "catalog/cloudflare/kinds/x.md"]);
-    let r = jobs::run(
+    let r = run_job(
         &spec(&bare, &sha, BOUND, &["CLAUDE.md", "catalog/**"], &[]),
         &tmp.path().join("job"),
     );
@@ -125,7 +132,7 @@ fn the_bound_job_judges_with_mains_policies_not_the_changes_own() {
         &["mise.toml"],
         &[".config/policies/change.yaml"],
     );
-    let r = jobs::run(
+    let r = run_job(
         &spec(&bare, &sha, BOUND, &[".config/policies/**"], &[]),
         &tmp.path().join("job"),
     );
@@ -143,7 +150,7 @@ fn the_bound_job_judges_with_mains_policies_not_the_changes_own() {
 fn the_bound_job_refuses_a_file_outside_the_approved_scope_and_a_stale_head() {
     let tmp = TempDir::new().expect("tempdir");
     let (bare, sha) = remote(tmp.path(), &["CLAUDE.md", "mise.toml"]);
-    let r = jobs::run(
+    let r = run_job(
         &spec(&bare, &sha, BOUND, &["CLAUDE.md"], &[]),
         &tmp.path().join("a"),
     );
@@ -157,7 +164,7 @@ fn the_bound_job_refuses_a_file_outside_the_approved_scope_and_a_stale_head() {
     );
     assert!(r.checks.is_empty(), "a refused head runs no checks");
     let stale = "0123456789abcdef0123456789abcdef01234567";
-    let r = jobs::run(
+    let r = run_job(
         &spec(&bare, stale, BOUND, &["**"], &[]),
         &tmp.path().join("b"),
     );
@@ -173,7 +180,7 @@ fn the_bound_job_refuses_a_file_outside_the_approved_scope_and_a_stale_head() {
 fn a_check_runs_in_the_workspace_and_its_token_is_cut_from_the_log() {
     let tmp = TempDir::new().expect("tempdir");
     let (bare, sha) = remote(tmp.path(), &["CLAUDE.md"]);
-    let r = jobs::run(
+    let r = run_job(
         &spec(
             &bare,
             &sha,
@@ -186,7 +193,7 @@ fn a_check_runs_in_the_workspace_and_its_token_is_cut_from_the_log() {
     assert_eq!(r.outcome, Outcome::Failed);
     assert!(r.log.contains("src/pigeon-cli"), "{}", r.log);
     assert!(!r.log.contains("a-token-never-shown"), "{}", r.log);
-    let r = jobs::run(
+    let r = run_job(
         &spec(&bare, &sha, "ok", &["**"], &["true"]),
         &tmp.path().join("d"),
     );
@@ -232,7 +239,7 @@ fn the_merge_job_squashes_the_checked_tree_onto_main_and_deletes_the_branch() {
         backplane::control::COMMIT_AUTHOR.into(),
         "Owner <1+owner@users.noreply.github.com>".into(),
     );
-    let r = jobs::run(&s, &tmp.path().join("m"));
+    let r = run_job(&s, &tmp.path().join("m"));
     assert_eq!(r.outcome, Outcome::Passed, "{}", r.log);
     let commit = r.merged.expect("merged");
     assert_eq!(git(&bare, &["rev-parse", "refs/heads/main"]), commit);
@@ -283,12 +290,12 @@ fn a_merge_with_no_author_is_pigeons_and_a_malformed_author_is_refused() {
         backplane::control::COMMIT_AUTHOR.into(),
         "no-angle-brackets@example.com".into(),
     );
-    let r = jobs::run(&s, &tmp.path().join("bad"));
+    let r = run_job(&s, &tmp.path().join("bad"));
     assert_eq!(r.outcome, Outcome::Failed, "{}", r.log);
     assert!(r.violations.join(" ").contains("is not `Name <email>`"));
 
     s.env.clear();
-    let r = jobs::run(&s, &tmp.path().join("m"));
+    let r = run_job(&s, &tmp.path().join("m"));
     assert_eq!(r.outcome, Outcome::Passed, "{}", r.log);
     let commit = r.merged.expect("merged");
     assert_eq!(
@@ -313,7 +320,7 @@ fn the_merge_job_refuses_when_main_has_moved_past_the_branch() {
     git(&work, &["commit", "-q", "-m", "docs: moved"]);
     git(&work, &["push", "-q", "origin", "main"]);
     let main = git(&bare, &["rev-parse", "refs/heads/main"]);
-    let r = jobs::run(
+    let r = run_job(
         &spec(&bare, &sha, MERGE, &["CLAUDE.md"], &[]),
         &tmp.path().join("m"),
     );
@@ -354,7 +361,7 @@ fn a_deploy_publishes_only_the_sites_whose_inputs_changed() {
             since,
             std::collections::BTreeMap::new(),
         );
-        jobs::run(&s, &tmp.path().join(dir))
+        run_job(&s, &tmp.path().join(dir))
     };
     let r = deploy(&docs_only, Some(&before), "a");
     assert_eq!(r.outcome, Outcome::Passed, "{}", r.log);
@@ -389,10 +396,10 @@ fn a_merge_whose_report_was_lost_is_found_on_main_when_run_again() {
     let (bare, sha) = remote(tmp.path(), &["CLAUDE.md"]);
     let mut s = spec(&bare, &sha, MERGE, &["CLAUDE.md"], &[]);
     s.approver = Some("owner@example.com".into());
-    let first = jobs::run(&s, &tmp.path().join("m1"));
+    let first = run_job(&s, &tmp.path().join("m1"));
     assert_eq!(first.outcome, Outcome::Passed, "{}", first.log);
     let commit = first.merged.expect("merged");
-    let again = jobs::run(&s, &tmp.path().join("m2"));
+    let again = run_job(&s, &tmp.path().join("m2"));
     assert_eq!(again.outcome, Outcome::Passed, "{}", again.log);
     assert_eq!(again.merged.as_deref(), Some(commit.as_str()));
     assert!(again.log.contains("already on main"), "{}", again.log);
@@ -457,7 +464,7 @@ fn a_mirror_job_moves_main_and_tags_and_never_shows_its_token() {
         &to_url,
         "ghs-never-shown",
     );
-    let r = jobs::run(&s, &tmp.path().join("job"));
+    let r = run_job(&s, &tmp.path().join("job"));
     assert_eq!(r.outcome, Outcome::Passed, "{}", r.log);
     assert_eq!(git(&to, &["rev-parse", "refs/heads/main"]), sha);
     assert_eq!(git(&to, &["rev-parse", "refs/tags/v1^{commit}"]), sha);
@@ -475,7 +482,7 @@ fn a_mirror_job_moves_main_and_tags_and_never_shows_its_token() {
         &format!("file://{}", tmp.path().join("gone.git").display()),
         "ghs-never-shown",
     );
-    let r = jobs::run(&gone, &tmp.path().join("job"));
+    let r = run_job(&gone, &tmp.path().join("job"));
     assert_eq!(r.outcome, Outcome::Failed);
     let shown = serde_json::to_string(&r).expect("json");
     assert!(!shown.contains("ghs-never-shown"), "{shown}");
@@ -499,7 +506,7 @@ fn a_bounded_change_head_reaches_its_branch_on_the_mirror_and_leaves_it_once_don
             "ghs-never-shown".into(),
         ),
     ]);
-    let r = jobs::run(&s, &tmp.path().join("job"));
+    let r = run_job(&s, &tmp.path().join("job"));
     assert_eq!(r.outcome, Outcome::Passed, "{}", r.log);
     assert_eq!(git(&to, &["rev-parse", "refs/heads/change/1-x"]), sha);
     assert_eq!(
@@ -524,13 +531,13 @@ fn a_bounded_change_head_reaches_its_branch_on_the_mirror_and_leaves_it_once_don
     let mut change = backplane::changes::Change::propose(1, "x", "docs: x", "p", vec![], "a");
     change.head = Some(sha);
     let u = backplane::control::unmirror_spec(&change, &to_url, "ghs-never-shown");
-    let r = jobs::run(&u, &tmp.path().join("job"));
+    let r = run_job(&u, &tmp.path().join("job"));
     assert_eq!(r.outcome, Outcome::Passed, "{}", r.log);
     assert_eq!(
         git(&to, &["for-each-ref", "--format=%(refname)", "refs/heads"]),
         ""
     );
-    let r = jobs::run(&u, &tmp.path().join("job"));
+    let r = run_job(&u, &tmp.path().join("job"));
     assert_eq!(
         r.outcome,
         Outcome::Passed,
@@ -574,7 +581,7 @@ fn the_sentinel_binary_is_asked_with_the_change_as_its_pull_request() {
     .expect("judged");
     assert_eq!(
         got,
-        ["fix: x|7|a/**,b|check --pull-request --json --root /head --policies /main-policies"]
+        ["fix: x|7|a/**,b|check --json --pull-request --root /head --policies /main-policies"]
     );
 }
 

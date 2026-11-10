@@ -3,8 +3,6 @@
 use std::collections::BTreeSet;
 use std::path::Path;
 
-use sentinel::policy::{NamedTarget, Target};
-
 use super::{Edge, Graph, Group, Lane, Node};
 use crate::wire::{Engine, catalog};
 use crate::{Error, Instance, engines};
@@ -48,6 +46,19 @@ fn owner(units: &[String], path: &Path) -> String {
 ///
 /// [`Error::Engine`] if sentinel cannot load the policies.
 pub fn describe(instance: &Instance) -> Result<(Graph, Vec<String>), Error> {
+    describe_with(instance, &|k| std::env::var(k).ok())
+}
+
+/// [`describe`], finding `pigeon-sentinel` through `var`; a missing binary is a problem, and the
+/// graph is drawn without policies.
+///
+/// # Errors
+///
+/// [`Error::Engine`] if `pigeon-sentinel` refuses the policies.
+pub fn describe_with(
+    instance: &Instance,
+    var: &dyn Fn(&str) -> Option<String>,
+) -> Result<(Graph, Vec<String>), Error> {
     let mut g = Graph::default();
     let mut problems = Vec::new();
     engines_and_operations(&mut g);
@@ -58,7 +69,7 @@ pub fn describe(instance: &Instance) -> Result<(Graph, Vec<String>), Error> {
         &mut g,
         &mut problems,
     );
-    policies(instance, &units, &mut g)?;
+    policies(instance, &units, var, &mut g, &mut problems)?;
     g.normalize();
     Ok((g, problems))
 }
@@ -226,7 +237,13 @@ fn sites(root: &Path, platform: &Path, g: &mut Graph, problems: &mut Vec<String>
 }
 
 /// Every policy, and what it governs.
-fn policies(instance: &Instance, units: &[String], g: &mut Graph) -> Result<(), Error> {
+fn policies(
+    instance: &Instance,
+    units: &[String],
+    var: &dyn Fn(&str) -> Option<String>,
+    g: &mut Graph,
+    problems: &mut Vec<String>,
+) -> Result<(), Error> {
     let (Some(rel), Some(dir)) = (&instance.paths.policies, instance.policies_dir()) else {
         return Ok(());
     };
@@ -254,17 +271,27 @@ fn policies(instance: &Instance, units: &[String], g: &mut Graph) -> Result<(), 
     if !any {
         return Ok(());
     }
-    let policies = sentinel::load_dir(&dir).map_err(|e| Error::Engine {
-        engine: Engine::Sentinel,
-        message: e.to_string(),
-    })?;
+    let binary = crate::sentinel::locate(var);
+    let policies = match crate::sentinel::describe(&binary, &dir) {
+        Ok(p) => p,
+        Err(crate::sentinel::Failure::Missing(why)) => {
+            problems.push(format!("{}: {why}", Engine::Sentinel.name()));
+            return Ok(());
+        }
+        Err(crate::sentinel::Failure::Refused(why)) => {
+            return Err(Error::Engine {
+                engine: Engine::Sentinel,
+                message: why,
+            });
+        }
+    };
     for p in &policies {
         let id = format!("policy:{}", p.name);
         let source = format!("{policies_dir}/{}.yaml", p.name);
         g.nodes
             .push(node(&id, "policy", Lane::Policy, &p.name, &source));
-        let targets: BTreeSet<String> = match &p.policy.target {
-            Target::Named(NamedTarget::PullRequest | NamedTarget::Change) => {
+        let targets: BTreeSet<String> = match p.kind.as_str() {
+            "pull-request" | "change" => {
                 g.nodes.push(node(
                     PULL_REQUEST,
                     "source",
@@ -274,10 +301,8 @@ fn policies(instance: &Instance, units: &[String], g: &mut Graph) -> Result<(), 
                 ));
                 BTreeSet::from([PULL_REQUEST.to_string()])
             }
-            Target::Named(NamedTarget::Tree) => BTreeSet::from([REPOSITORY.to_string()]),
-            Target::File(f) => BTreeSet::from([owner(units, &f.file)]),
-            Target::Files(f) => f.files.iter().map(|p| owner(units, p)).collect(),
-            Target::Dir(d) => BTreeSet::from([owner(units, &d.dir)]),
+            "tree" => BTreeSet::from([REPOSITORY.to_string()]),
+            _ => p.paths.iter().map(|f| owner(units, Path::new(f))).collect(),
         };
         for t in targets {
             g.edges

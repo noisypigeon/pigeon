@@ -3,7 +3,14 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use backplane::{Effect, Error, Instance, Request, catalog, run};
+use backplane::{Effect, Error, Instance, Request, Response, catalog, run_with};
+
+mod common;
+
+/// Runs `request` with the built `pigeon-sentinel` as the judge.
+fn run(instance: &Instance, request: &Request) -> Result<Response, Error> {
+    run_with(instance, request, common::var)
+}
 use tempfile::TempDir;
 
 const MANIFEST: &str = "description: A test instance.\nschema: v0\nname: test\nrepository: https://example.invalid/test\npaths:\n  policies: .config/policies\n  providers: .config/providers.yaml\n  releases: .config/releases.yaml\n";

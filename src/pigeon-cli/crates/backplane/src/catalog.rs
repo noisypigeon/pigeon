@@ -35,11 +35,13 @@ pub fn run_with(
     };
     match op.name {
         "instance.show" => Ok(respond(json!(instance), Vec::new())),
-        "architecture.describe" => architecture_describe(instance).map(|(r, v)| respond(r, v)),
-        "policy.check" => policy_check(instance, &request.args).map(|(r, v)| respond(r, v)),
+        "architecture.describe" => {
+            architecture_describe(instance, &var).map(|(r, v)| respond(r, v))
+        }
+        "policy.check" => policy_check(instance, &request.args, &var).map(|(r, v)| respond(r, v)),
         "change.scope" => change_scope(instance, &request.args).map(|r| respond(r, Vec::new())),
         "sites.publish" => sites_publish(instance, &request.args, &var).map(|(r, v)| respond(r, v)),
-        "sites.build" => sites_build(instance, &request.args).map(|r| respond(r, Vec::new())),
+        "sites.build" => sites_build(instance, &request.args, &var).map(|r| respond(r, Vec::new())),
         "infra.validate" => infra_validate(instance).map(|(r, v)| respond(r, v)),
         "infra.plan" => infra_plan(instance, &request.args, &var).map(|r| respond(r, Vec::new())),
         "infra.apply" => infra_apply(instance, &request.args, &var).map(|r| respond(r, Vec::new())),
@@ -52,8 +54,11 @@ pub fn run_with(
 }
 
 /// The graph and its layout, with any problem found on the way as a violation.
-fn architecture_describe(instance: &Instance) -> Result<(Value, Vec<String>), Error> {
-    let (graph, problems) = crate::architecture::describe(instance)?;
+fn architecture_describe(
+    instance: &Instance,
+    var: &impl Fn(&str) -> Option<String>,
+) -> Result<(Value, Vec<String>), Error> {
+    let (graph, problems) = crate::architecture::describe_with(instance, var)?;
     let layout = crate::architecture::layout(&graph);
     Ok((
         json!({
@@ -66,46 +71,52 @@ fn architecture_describe(instance: &Instance) -> Result<(Value, Vec<String>), Er
     ))
 }
 
-/// The pull request `args` describe, if they name any of its fields.
-fn pull_request(args: &Map<String, Value>) -> Option<sentinel::PullRequest> {
+/// The pull request `args` describe, as `pigeon-sentinel`'s `PR_*` variables, if they name any
+/// of its fields but the scope.
+fn pull_request(args: &Map<String, Value>) -> Option<Vec<(&'static str, String)>> {
     let field = |k: &str| match args.get(k)? {
         Value::String(s) => Some(s.clone()),
         other => Some(other.to_string()),
     };
-    let pr = sentinel::PullRequest {
-        title: field("title"),
-        body: field("body"),
-        number: field("number"),
-        files: field("files"),
-        branch: field("branch"),
-        scope: field("scope"),
-    };
-    (pr.title.is_some()
-        || pr.body.is_some()
-        || pr.number.is_some()
-        || pr.files.is_some()
-        || pr.branch.is_some())
-    .then_some(pr)
+    let fields = [
+        ("PR_TITLE", "title"),
+        ("PR_BODY", "body"),
+        ("PR_NUMBER", "number"),
+        ("PR_FILES", "files"),
+        ("PR_BRANCH", "branch"),
+        ("PR_SCOPE", "scope"),
+    ];
+    let named = fields
+        .iter()
+        .any(|(_, k)| *k != "scope" && field(k).is_some());
+    named.then(|| {
+        fields
+            .iter()
+            .filter_map(|(var, k)| Some((*var, field(k)?)))
+            .collect()
+    })
 }
 
 fn policy_check(
     instance: &Instance,
     args: &Map<String, Value>,
+    var: &impl Fn(&str) -> Option<String>,
 ) -> Result<(Value, Vec<String>), Error> {
-    let engine = |e: sentinel::Error| Error::Engine {
-        engine: Engine::Sentinel,
-        message: e.to_string(),
-    };
     let Some(dir) = instance.policies_dir() else {
         return Ok((json!({ "ran": 0, "skipped": 0 }), Vec::new()));
     };
-    let policies = sentinel::load_dir(&dir).map_err(engine)?;
+    let binary = crate::sentinel::locate(var);
     let pr = pull_request(args);
-    let report = sentinel::check(&policies, &instance.root, pr.as_ref()).map_err(engine)?;
-    let violations = report.violations.iter().map(ToString::to_string).collect();
+    let report =
+        crate::sentinel::check(&binary, &instance.root, &dir, pr.as_deref()).map_err(|e| {
+            Error::Engine {
+                engine: Engine::Sentinel,
+                message: e.to_string(),
+            }
+        })?;
     Ok((
         json!({ "ran": report.ran, "skipped": report.skipped }),
-        violations,
+        report.violations,
     ))
 }
 
@@ -157,7 +168,7 @@ fn sites_publish(
         provider_config: None,
         provider_token: false,
     };
-    let (architecture, _) = architecture_describe(instance)?;
+    let (architecture, _) = architecture_describe(instance, var)?;
     let data = std::collections::BTreeMap::from([("architecture".to_string(), architecture)]);
     let published = cobot::publish(&ctx, &wanted, 5, &data).map_err(|e| cobot_failed(&e))?;
     let violations = published
@@ -196,7 +207,11 @@ fn strings(args: &Map<String, Value>, k: &str) -> Vec<String> {
 
 /// Builds the named sites, or every site, with `architecture.describe`'s result as their
 /// `data/architecture.json`, per the architecture-site ADR §3.
-fn sites_build(instance: &Instance, args: &Map<String, Value>) -> Result<Value, Error> {
+fn sites_build(
+    instance: &Instance,
+    args: &Map<String, Value>,
+    var: &impl Fn(&str) -> Option<String>,
+) -> Result<Value, Error> {
     let cobot = |e: cobot::Error| Error::Engine {
         engine: Engine::Cobot,
         message: e.to_string(),
@@ -216,7 +231,7 @@ fn sites_build(instance: &Instance, args: &Map<String, Value>) -> Result<Value, 
     if sites.is_empty() {
         return Ok(json!({ "sites": [] }));
     }
-    let (architecture, _) = architecture_describe(instance)?;
+    let (architecture, _) = architecture_describe(instance, var)?;
     let data = std::collections::BTreeMap::from([("architecture".to_string(), architecture)]);
     let built = cobot::sites::build_in(&instance.root, instance.platform_root(), &sites, &data)
         .map_err(cobot)?;

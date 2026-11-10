@@ -10,7 +10,7 @@ publish.workspace = true
 
 [features]
 default = ["sentinel", "gantry", "cobot", "backplane"]
-sentinel = ["dep:sentinel"]
+sentinel = []
 gantry = ["dep:gantry"]
 cobot = ["dep:cobot", "dep:serde", "dep:serde_json"]
 backplane = ["dep:backplane", "dep:serde", "dep:serde_json", "dep:signal-hook"]
@@ -20,7 +20,6 @@ backplane = { workspace = true, optional = true, features = ["engines"] }
 clap.workspace = true
 cobot = { workspace = true, optional = true, features = ["engines"] }
 gantry = { workspace = true, optional = true }
-sentinel = { workspace = true, optional = true }
 serde = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
 signal-hook = { workspace = true, optional = true }

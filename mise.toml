@@ -49,15 +49,24 @@ run = [
 [tasks.rust]
 depends = ["fmt-check", "lint", "features", "test"]
 
+# policy.check runs pigeon-sentinel, built beside pigeon; see
+# .claude/decisions/2026-11-10-development-factory-crates-functional-core.md §1.
+[tasks.sentinel-build]
+dir = "src/pigeon-cli"
+run = "cargo build -q --locked -p pigeon-sentinel"
+
 [tasks.sentinel]
+depends = ["sentinel-build"]
 dir = "src/pigeon-cli"
 run = "cargo run -q --locked -p pigeon -- backplane run policy.check --root ../.."
 
 [tasks.sentinel-pr]
+depends = ["sentinel-build"]
 dir = "src/pigeon-cli"
 run = 'cargo run -q --locked -p pigeon -- backplane run policy.check --root ../.. --text "title=$PR_TITLE" --text "body=$PR_BODY" --text "number=$PR_NUMBER" --text "files=$PR_FILES"'
 
 [tasks.sentinel-change]
+depends = ["sentinel-build"]
 description = "policy.check on this branch as a change: its branch, files against CHANGE_BASE (default origin/main), and its first commit's title, body and Change-Scope trailers"
 dir = "src/pigeon-cli"
 run = '''

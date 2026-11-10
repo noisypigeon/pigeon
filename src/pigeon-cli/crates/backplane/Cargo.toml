@@ -19,7 +19,6 @@ engines = [
   "dep:cobot",
   "cobot/engines",
   "dep:gantry",
-  "dep:sentinel",
   "dep:serde-saphyr",
   "dep:httparse",
   "dep:rustls",
@@ -32,7 +31,6 @@ futures-util = { workspace = true, optional = true }
 gantry = { workspace = true, optional = true }
 hmac.workspace = true
 p256.workspace = true
-sentinel = { workspace = true, optional = true }
 serde.workspace = true
 serde-saphyr = { workspace = true, optional = true }
 sha1.workspace = true

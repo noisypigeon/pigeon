@@ -9,29 +9,31 @@ use crate::wire::Engine;
 pub struct EngineInfo {
     /// The engine.
     pub engine: Engine,
-    /// Its crate version.
-    pub version: &'static str,
+    /// Its version: its crate's, or for sentinel the binary's, `not installed` when absent.
+    pub version: String,
     /// `policy`, `action` or `planned`.
     pub role: &'static str,
 }
 
-/// Every engine backplane composes.
+/// Every engine backplane composes; sentinel's version is its binary's, found as
+/// [`crate::sentinel::locate`] finds it.
 #[must_use]
 pub fn engines() -> Vec<EngineInfo> {
+    let sentinel = crate::sentinel::locate(&|k| std::env::var(k).ok());
     vec![
         EngineInfo {
             engine: Engine::Sentinel,
-            version: sentinel::VERSION,
+            version: crate::sentinel::version(&sentinel).unwrap_or_else(|| "not installed".into()),
             role: "policy",
         },
         EngineInfo {
             engine: Engine::Cobot,
-            version: cobot::VERSION,
+            version: cobot::VERSION.into(),
             role: "action",
         },
         EngineInfo {
             engine: Engine::Gantry,
-            version: gantry::VERSION,
+            version: gantry::VERSION.into(),
             role: "planned",
         },
     ]

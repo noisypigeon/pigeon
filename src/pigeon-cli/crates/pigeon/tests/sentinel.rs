@@ -1,125 +1,66 @@
-//! `pigeon sentinel check` end to end.
+//! `pigeon sentinel check` hands its arguments to `pigeon-sentinel` and returns its exit code;
+//! the judge's own behaviour is tested with the binary, in `crates/sentinel/tests/cli.rs`.
 #![cfg(feature = "sentinel")]
 
-use std::fs;
-use std::path::PathBuf;
+use std::os::unix::fs::PermissionsExt as _;
+use std::path::{Path, PathBuf};
 
 use assert_cmd::Command;
 use predicates::prelude::*;
 use tempfile::TempDir;
 
-fn repo_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../..")
+/// A stand-in `pigeon-sentinel` in `dir` that prints its arguments and exits with `code`.
+fn stand_in(dir: &Path, code: i32) -> PathBuf {
+    let p = dir.join("pigeon-sentinel");
+    std::fs::write(&p, format!("#!/bin/sh\necho \"args: $*\"\nexit {code}\n")).expect("write");
+    std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o755)).expect("chmod");
+    p
 }
 
-fn check(root: &std::path::Path) -> Command {
+fn pigeon(sentinel: &Path) -> Command {
     let mut cmd = Command::cargo_bin("pigeon").expect("binary");
-    cmd.args(["sentinel", "check", "--root"]).arg(root);
-    for var in [
-        "PR_TITLE",
-        "PR_BODY",
-        "PR_NUMBER",
-        "PR_FILES",
-        "PR_BRANCH",
-        "PR_SCOPE",
-    ] {
-        cmd.env_remove(var);
-    }
+    cmd.env("PIGEON_SENTINEL", sentinel);
     cmd
 }
 
-fn fixture(policy: &str, files: &[(&str, &str)]) -> TempDir {
-    let root = TempDir::new().expect("tempdir");
-    fs::create_dir_all(root.path().join(".config/policies")).expect("mkdir");
-    fs::write(root.path().join(".config/policies/p.yaml"), policy).expect("write");
-    for (name, content) in files {
-        fs::write(root.path().join(name), content).expect("write");
-    }
-    root
-}
-
-const POLICY: &str = "description: f starts with ok.\ntarget: { file: f.md }\nrules:\n  - line: { at: 1, matches: '^ok$' }\n";
-
 #[test]
-fn this_repository_holds() {
-    check(&repo_root())
+fn check_hands_its_arguments_to_pigeon_sentinel() {
+    let tmp = TempDir::new().expect("tempdir");
+    pigeon(&stand_in(tmp.path(), 0))
+        .args([
+            "sentinel",
+            "check",
+            "--root",
+            "r",
+            "--policies",
+            "p",
+            "--pull-request",
+        ])
         .assert()
         .code(0)
-        .stdout(predicate::str::is_match(r"policies hold, 2 skipped").expect("regex"));
-}
-
-#[test]
-fn violation_exits_1_with_path_and_line() {
-    let root = fixture(POLICY, &[("f.md", "no\n")]);
-    check(root.path())
-        .assert()
-        .code(1)
         .stdout(predicate::str::contains(
-            "f.md:1: p: line does not match `^ok$`",
+            "args: check --root r --policies p --pull-request",
         ));
 }
 
 #[test]
-fn clean_exits_0() {
-    let root = fixture(POLICY, &[("f.md", "ok\n")]);
-    check(root.path()).assert().code(0);
+fn check_returns_pigeon_sentinels_exit_code() {
+    let tmp = TempDir::new().expect("tempdir");
+    for code in [1, 2] {
+        let dir = tmp.path().join(code.to_string());
+        std::fs::create_dir_all(&dir).expect("mkdir");
+        pigeon(&stand_in(&dir, code))
+            .args(["sentinel", "check"])
+            .assert()
+            .code(code);
+    }
 }
 
 #[test]
-fn invalid_policy_exits_2_naming_the_file() {
-    let root = fixture(
-        "description: x\ntarget: { file: f.md }\nrules:\n  - nope: {}\n",
-        &[],
-    );
-    check(root.path())
+fn a_missing_pigeon_sentinel_exits_2() {
+    pigeon(Path::new("/nonexistent/pigeon-sentinel"))
+        .args(["sentinel", "check"])
         .assert()
         .code(2)
-        .stderr(predicate::str::contains("p.yaml"));
-}
-
-#[test]
-fn missing_policy_dir_exits_2() {
-    let root = TempDir::new().expect("tempdir");
-    check(root.path()).assert().code(2);
-}
-
-#[test]
-fn pull_request_reads_the_environment() {
-    let policy = "description: Titles say hi.\ntarget: pull-request\nrules:\n  - field: { name: title, matches: '^hi$' }\n";
-    let root = fixture(policy, &[]);
-    check(root.path())
-        .arg("--pull-request")
-        .env("PR_TITLE", "hi")
-        .env("PR_BODY", "")
-        .env("PR_NUMBER", "1")
-        .env("PR_FILES", "")
-        .assert()
-        .code(0);
-    check(root.path())
-        .arg("--pull-request")
-        .env("PR_TITLE", "bye")
-        .env("PR_BODY", "")
-        .env("PR_NUMBER", "1")
-        .env("PR_FILES", "")
-        .assert()
-        .code(1);
-    check(root.path())
-        .arg("--pull-request")
-        .assert()
-        .code(1)
-        .stdout(predicate::str::contains("`title` is not set"));
-    check(root.path())
-        .assert()
-        .code(0)
-        .stdout(predicate::str::contains("1 skipped"));
-}
-
-#[test]
-fn sentinel_reports_its_own_version() {
-    Command::cargo_bin("pigeon")
-        .expect("binary")
-        .args(["sentinel", "--version"])
-        .assert()
-        .success()
-        .stdout(predicate::str::contains(sentinel::VERSION));
+        .stderr(predicate::str::contains("didn't run"));
 }

@@ -6,7 +6,7 @@ mod describe;
 mod layout;
 
 #[cfg(feature = "engines")]
-pub use describe::describe;
+pub use describe::{describe, describe_with};
 pub use layout::{GroupBox, LaneBox, Layout, Placed, Routed, layout};
 
 use serde::{Deserialize, Serialize};
