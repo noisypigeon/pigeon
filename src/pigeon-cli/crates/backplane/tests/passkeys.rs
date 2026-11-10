@@ -2,7 +2,7 @@
 //! `.claude/decisions/2026-11-09-security-approvals-once-passkeys.md` §4.
 
 use backplane::passkeys::{
-    Keyring, Passkey, REGISTER, assert, der_signature, grant_purpose, register,
+    Keyring, Passkey, REGISTER, assert, der_signature, grant_purpose, register, relying_party,
 };
 use backplane::push::b64url;
 use p256::ecdsa::signature::Signer as _;
@@ -75,6 +75,7 @@ fn registered(counter: u32) -> Passkey {
         &spki(&k),
         CHALLENGE,
         HOST,
+        HOST,
     )
     .expect("registers");
     Passkey {
@@ -95,12 +96,21 @@ fn a_registered_passkey_proves_the_owner_once_per_challenge() {
     let c = client("webauthn.get", CHALLENGE, &origin);
     let a = authenticator(HOST, 0x05, 0);
     assert_eq!(
-        assert(&pk, &c, &a, &sign(&k, &a, &c), CHALLENGE, HOST),
+        assert(&pk, &c, &a, &sign(&k, &a, &c), CHALLENGE, HOST, HOST),
         Ok(0)
     );
     let other = client("webauthn.get", "b3RoZXI", &origin);
     assert!(
-        assert(&pk, &other, &a, &sign(&k, &a, &other), CHALLENGE, HOST).is_err(),
+        assert(
+            &pk,
+            &other,
+            &a,
+            &sign(&k, &a, &other),
+            CHALLENGE,
+            HOST,
+            HOST
+        )
+        .is_err(),
         "another link's"
     );
     let elsewhere = client("webauthn.get", CHALLENGE, "https://evil.example");
@@ -111,13 +121,14 @@ fn a_registered_passkey_proves_the_owner_once_per_challenge() {
             &a,
             &sign(&k, &a, &elsewhere),
             CHALLENGE,
+            HOST,
             HOST
         )
         .is_err()
     );
     let rp = authenticator("evil.example", 0x05, 0);
     assert!(
-        assert(&pk, &c, &rp, &sign(&k, &rp, &c), CHALLENGE, HOST).is_err(),
+        assert(&pk, &c, &rp, &sign(&k, &rp, &c), CHALLENGE, HOST, HOST).is_err(),
         "another RP"
     );
     let unverified = authenticator(HOST, 0x01, 0);
@@ -128,17 +139,18 @@ fn a_registered_passkey_proves_the_owner_once_per_challenge() {
             &unverified,
             &sign(&k, &unverified, &c),
             CHALLENGE,
+            HOST,
             HOST
         )
         .is_err()
     );
     let forged = SigningKey::from_slice(&[9u8; 32]).expect("a scalar");
     assert!(
-        assert(&pk, &c, &a, &sign(&forged, &a, &c), CHALLENGE, HOST).is_err(),
+        assert(&pk, &c, &a, &sign(&forged, &a, &c), CHALLENGE, HOST, HOST).is_err(),
         "another key"
     );
     assert!(
-        assert(&pk, &c, &a, b"\x30\x00", CHALLENGE, HOST).is_err(),
+        assert(&pk, &c, &a, b"\x30\x00", CHALLENGE, HOST, HOST).is_err(),
         "not a signature"
     );
 }
@@ -150,11 +162,19 @@ fn a_counter_that_goes_back_is_refused() {
     let c = client("webauthn.get", CHALLENGE, &format!("https://{HOST}"));
     let later = authenticator(HOST, 0x05, 6);
     assert_eq!(
-        assert(&pk, &c, &later, &sign(&k, &later, &c), CHALLENGE, HOST),
+        assert(
+            &pk,
+            &c,
+            &later,
+            &sign(&k, &later, &c),
+            CHALLENGE,
+            HOST,
+            HOST
+        ),
         Ok(6)
     );
     let same = authenticator(HOST, 0x05, 5);
-    assert!(assert(&pk, &c, &same, &sign(&k, &same, &c), CHALLENGE, HOST).is_err());
+    assert!(assert(&pk, &c, &same, &sign(&k, &same, &c), CHALLENGE, HOST, HOST).is_err());
 }
 
 #[test]
@@ -164,13 +184,24 @@ fn registration_takes_only_p256_from_this_site_with_verification() {
     let c = client("webauthn.create", CHALLENGE, &origin);
     let mut rsa = spki(&k);
     rsa[10] ^= 1;
-    assert!(register(&c, &authenticator(HOST, 0x05, 0), &rsa, CHALLENGE, HOST).is_err());
+    assert!(
+        register(
+            &c,
+            &authenticator(HOST, 0x05, 0),
+            &rsa,
+            CHALLENGE,
+            HOST,
+            HOST
+        )
+        .is_err()
+    );
     assert!(
         register(
             &c,
             &authenticator(HOST, 0x01, 0),
             &spki(&k),
             CHALLENGE,
+            HOST,
             HOST
         )
         .is_err()
@@ -182,6 +213,7 @@ fn registration_takes_only_p256_from_this_site_with_verification() {
             &authenticator(HOST, 0x05, 0),
             &spki(&k),
             CHALLENGE,
+            HOST,
             HOST
         )
         .is_err()
@@ -201,12 +233,12 @@ fn the_keyring_registers_and_proves_only_with_challenges_it_minted_for_that_purp
     let c = client("webauthn.create", &reg, &origin);
     let made = authenticator(HOST, 0x05, 0);
     assert!(
-        ring.register("cred", "phone", &c, &made, &spki(&k), HOST, 101)
+        ring.register("cred", "phone", &c, &made, &spki(&k), HOST, HOST, 101)
             .is_ok(),
         "registers"
     );
     assert!(
-        ring.register("cred2", "x", &c, &made, &spki(&k), HOST, 102)
+        ring.register("cred2", "x", &c, &made, &spki(&k), HOST, HOST, 102)
             .is_err(),
         "a challenge is used once"
     );
@@ -216,20 +248,29 @@ fn the_keyring_registers_and_proves_only_with_challenges_it_minted_for_that_purp
     let a = authenticator(HOST, 0x05, 0);
     let sig = sign(&k, &a, &got);
     assert!(
-        ring.prove("cred", &got, &a, &sig, &grant_purpose("another"), HOST, 111)
-            .is_err(),
+        ring.prove(
+            "cred",
+            &got,
+            &a,
+            &sig,
+            &grant_purpose("another"),
+            HOST,
+            HOST,
+            111
+        )
+        .is_err(),
         "another link's purpose"
     );
     let again = ring.mint(&purpose, &[3u8; 32], 112);
     let got = client("webauthn.get", &again, &origin);
     let sig = sign(&k, &a, &got);
     assert_eq!(
-        ring.prove("cred", &got, &a, &sig, &purpose, HOST, 113),
+        ring.prove("cred", &got, &a, &sig, &purpose, HOST, HOST, 113),
         Ok(())
     );
     assert_eq!(ring.keys[0].used, Some(113));
     assert!(
-        ring.prove("cred", &got, &a, &sig, &purpose, HOST, 114)
+        ring.prove("cred", &got, &a, &sig, &purpose, HOST, HOST, 114)
             .is_err(),
         "a replay"
     );
@@ -237,10 +278,80 @@ fn the_keyring_registers_and_proves_only_with_challenges_it_minted_for_that_purp
     let got = client("webauthn.get", &late, &origin);
     let sig = sign(&k, &a, &got);
     assert!(
-        ring.prove("cred", &got, &a, &sig, &purpose, HOST, 200 + 301)
+        ring.prove("cred", &got, &a, &sig, &purpose, HOST, HOST, 200 + 301)
             .is_err(),
         "a lapsed challenge"
     );
     assert!(ring.remove("cred"));
     assert!(!ring.remove("cred"));
+}
+
+#[test]
+fn the_relying_party_is_the_configured_id_for_it_and_its_subdomains_only() {
+    let rp = Some("platform.example.com");
+    assert_eq!(
+        relying_party("platform.example.com", rp),
+        "platform.example.com"
+    );
+    assert_eq!(
+        relying_party("blue.platform.example.com", rp),
+        "platform.example.com"
+    );
+    assert_eq!(relying_party("x.workers.dev", rp), "x.workers.dev");
+    assert_eq!(
+        relying_party("evilplatform.example.com", rp),
+        "evilplatform.example.com"
+    );
+    assert_eq!(
+        relying_party("blue.platform.example.com", None),
+        "blue.platform.example.com"
+    );
+    assert_eq!(relying_party("a.example.com", Some(" ")), "a.example.com");
+}
+
+#[test]
+fn a_passkey_for_the_platform_registers_on_a_stack_and_proves_on_the_live_host() {
+    let k = key();
+    let rp = "platform.example.com";
+    let (stack, live) = ("blue.platform.example.com", "platform.example.com");
+    let mut ring = Keyring::default();
+    let reg = ring.mint(REGISTER, &[1u8; 32], 100);
+    let c = client("webauthn.create", &reg, &format!("https://{stack}"));
+    let made = authenticator(rp, 0x05, 0);
+    assert_eq!(
+        ring.register("cred", "phone", &c, &made, &spki(&k), stack, rp, 101),
+        Ok(())
+    );
+    let purpose = grant_purpose("token-for-change-9");
+    let a = authenticator(rp, 0x05, 0);
+    let got = client(
+        "webauthn.get",
+        &ring.mint(&purpose, &[2u8; 32], 110),
+        &format!("https://{live}"),
+    );
+    let sig = sign(&k, &a, &got);
+    assert_eq!(
+        ring.prove("cred", &got, &a, &sig, &purpose, live, rp, 111),
+        Ok(())
+    );
+    let other = client(
+        "webauthn.get",
+        &ring.mint(&purpose, &[3u8; 32], 112),
+        &format!("https://{live}"),
+    );
+    let sig = sign(&k, &a, &other);
+    assert!(
+        ring.prove(
+            "cred",
+            &other,
+            &a,
+            &sig,
+            &purpose,
+            "x.workers.dev",
+            "x.workers.dev",
+            113
+        )
+        .is_err(),
+        "another site's page"
+    );
 }

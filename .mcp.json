@@ -2,7 +2,7 @@
   "mcpServers": {
     "pigeon": {
       "type": "http",
-      "url": "https://pigeon-control.pigeon-dev.workers.dev/mcp"
+      "url": "https://platform.pigeon.dev/mcp"
     }
   }
 }

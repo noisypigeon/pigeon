@@ -105,9 +105,19 @@ pub fn client_data(
     Ok(())
 }
 
-/// Checks the authenticator data's relying party and flags: presence and verification.
-fn flags(data: &AuthData, host: &str) -> Result<(), String> {
-    if data.rp_id_hash[..] != Sha256::digest(host.as_bytes())[..] {
+/// The relying party ID a page on `host` uses: `configured` (`PASSKEY_RP_ID`) when `host` is it
+/// or under it, so one passkey serves every stack's hostname; else `host` itself.
+#[must_use]
+pub fn relying_party(host: &str, configured: Option<&str>) -> String {
+    match configured.map(str::trim).filter(|rp| !rp.is_empty()) {
+        Some(rp) if host == rp || host.ends_with(&format!(".{rp}")) => rp.to_string(),
+        _ => host.to_string(),
+    }
+}
+
+/// Checks the authenticator data's relying party, `rp`, and flags: presence and verification.
+fn flags(data: &AuthData, rp: &str) -> Result<(), String> {
+    if data.rp_id_hash[..] != Sha256::digest(rp.as_bytes())[..] {
         return Err("the passkey belongs to another site".into());
     }
     if data.flags & USER_PRESENT == 0 || data.flags & USER_VERIFIED == 0 {
@@ -116,7 +126,8 @@ fn flags(data: &AuthData, host: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// A registration's key and counter, once its client data, authenticator data and key check.
+/// A registration's key and counter, once its client data (from `host`), authenticator data (for
+/// relying party `rp`) and key check.
 ///
 /// # Errors
 ///
@@ -127,17 +138,18 @@ pub fn register(
     spki: &[u8],
     challenge: &str,
     host: &str,
+    rp: &str,
 ) -> Result<(Vec<u8>, u32), String> {
     client_data(client, "webauthn.create", challenge, host)?;
     let data = auth_data(authenticator)?;
-    flags(&data, host)?;
+    flags(&data, rp)?;
     let key = point(spki)?;
     VerifyingKey::from_sec1_bytes(&key).map_err(|_| "the passkey's key isn't on P-256")?;
     Ok((key, data.counter))
 }
 
-/// An assertion's new counter, once its client data, authenticator data, counter and signature
-/// check against `passkey`.
+/// An assertion's new counter, once its client data (from `host`), authenticator data (for `rp`),
+/// counter and signature check against `passkey`.
 ///
 /// # Errors
 ///
@@ -149,10 +161,11 @@ pub fn assert(
     signature: &[u8],
     challenge: &str,
     host: &str,
+    rp: &str,
 ) -> Result<u32, String> {
     client_data(client, "webauthn.get", challenge, host)?;
     let data = auth_data(authenticator)?;
-    flags(&data, host)?;
+    flags(&data, rp)?;
     if (passkey.counter > 0 || data.counter > 0) && data.counter <= passkey.counter {
         return Err("the passkey's counter went back; it may be cloned".into());
     }
@@ -280,10 +293,11 @@ impl Keyring {
         authenticator: &[u8],
         spki: &[u8],
         host: &str,
+        rp: &str,
         now: u64,
     ) -> Result<(), String> {
         let challenge = self.take(client, REGISTER, now)?;
-        let (key, counter) = register(client, authenticator, spki, &challenge, host)?;
+        let (key, counter) = register(client, authenticator, spki, &challenge, host, rp)?;
         if id.is_empty() || self.keys.iter().any(|k| k.id == id) {
             return Err("this passkey is already registered".into());
         }
@@ -312,6 +326,7 @@ impl Keyring {
         signature: &[u8],
         purpose: &str,
         host: &str,
+        rp: &str,
         now: u64,
     ) -> Result<(), String> {
         let challenge = self.take(client, purpose, now)?;
@@ -320,7 +335,7 @@ impl Keyring {
             .iter_mut()
             .find(|k| k.id == id)
             .ok_or("this passkey isn't registered here")?;
-        key.counter = assert(key, client, authenticator, signature, &challenge, host)?;
+        key.counter = assert(key, client, authenticator, signature, &challenge, host, rp)?;
         key.used = Some(now);
         Ok(())
     }

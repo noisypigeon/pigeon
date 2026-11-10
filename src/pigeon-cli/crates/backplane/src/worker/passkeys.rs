@@ -20,6 +20,13 @@ const KEYRING: &str = "passkeys";
 /// The script every proof page loads.
 const SCRIPT: &str = include_str!("passkey.js");
 
+/// The relying party ID for a page on `host`, from `PASSKEY_RP_ID`; see
+/// `.claude/decisions/2026-11-10-runtime-platform-hostname-dashboard-observability.md` §2.
+fn rp_for(env: &Env, host: &str) -> String {
+    let configured = env.var("PASSKEY_RP_ID").ok().map(|v| v.to_string());
+    passkeys::relying_party(host, configured.as_deref())
+}
+
 /// Whether `path` is one of the passkey pages.
 #[must_use]
 pub fn is_page(path: &str) -> bool {
@@ -37,6 +44,10 @@ pub async fn serve(state: &State, path: &str, body: Value) -> Result<Response> {
     let storage = state.storage();
     let mut ring: Keyring = storage.get(KEYRING).await?.unwrap_or_default();
     let s = |k: &str| body[k].as_str().unwrap_or_default().to_string();
+    // A page from before `rp` was sent asks for its own host.
+    let rp = Some(s("rp"))
+        .filter(|r| !r.is_empty())
+        .unwrap_or_else(|| s("host"));
     let bytes = |k: &str| b64url_decode(body[k].as_str().unwrap_or_default()).unwrap_or_default();
     let answer = match path {
         "/passkeys/list" => json!({
@@ -57,6 +68,7 @@ pub async fn serve(state: &State, path: &str, body: Value) -> Result<Response> {
             &bytes("authenticator"),
             &bytes("spki"),
             &s("host"),
+            &rp,
             now(),
         )),
         "/passkeys/prove" => {
@@ -72,6 +84,7 @@ pub async fn serve(state: &State, path: &str, body: Value) -> Result<Response> {
                     &bytes("signature"),
                     &s("purpose"),
                     &s("host"),
+                    &rp,
                     t,
                 )
             };
@@ -130,6 +143,7 @@ pub async fn prove(
         &json!({
             "id": f("pk_id"), "client": f("pk_client"), "authenticator": f("pk_authenticator"),
             "signature": f("pk_signature"), "purpose": purpose, "host": host,
+            "rp": rp_for(env, host),
         }),
     )
     .await?;
@@ -186,13 +200,14 @@ pub async fn page_serve(
             if purpose != passkeys::REGISTER && !purpose.starts_with("grant:") {
                 return refused(400, "no such purpose");
             }
-            let v = to_instance(
+            let mut v = to_instance(
                 env,
                 s,
                 "/passkeys/challenge",
                 &json!({ "purpose": purpose }),
             )
             .await?;
+            v["rp"] = json!(rp_for(env, &host));
             Response::from_json(&v)
         }
         (Method::Get, "/passkeys") => list(env, s, None).await,
@@ -214,6 +229,7 @@ pub async fn page_serve(
                     &json!({
                         "id": f("pk_id"), "name": f("name"), "client": f("pk_client"),
                         "authenticator": f("pk_authenticator"), "spki": f("pk_spki"), "host": host,
+                        "rp": rp_for(env, &host),
                     }),
                 )
                 .await?;

@@ -38,7 +38,7 @@
           const cred = await navigator.credentials.create({
             publicKey: {
               challenge: bytes(c.challenge),
-              rp: { id: location.hostname, name: "pigeon" },
+              rp: { id: c.rp || location.hostname, name: "pigeon" },
               user: { id: bytes(c.user), name: "owner", displayName: "pigeon owner" },
               pubKeyCredParams: [{ type: "public-key", alg: -7 }],
               authenticatorSelection: { userVerification: "required", residentKey: "preferred" },
@@ -54,7 +54,7 @@
           const cred = await navigator.credentials.get({
             publicKey: {
               challenge: bytes(c.challenge),
-              rpId: location.hostname,
+              rpId: c.rp || location.hostname,
               userVerification: "required",
               allowCredentials: ids,
             },

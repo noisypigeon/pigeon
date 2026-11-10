@@ -43,8 +43,11 @@ bindings:
     REPO: pigeon
     # change/1 to change/11 were pushed by hand, before the control plane numbered changes.
     CHANGE_FLOOR: $deployment.change_floor
-    # Where the deploy job asks /healthz.
-    PUBLIC_HOST: $deployment.hostname
+    # Where the deploy job asks /healthz: the stack's own hostname.
+    PUBLIC_HOST: $deployment.domains[1]
+    # Passkeys' relying party, the platform's hostname; see
+    # .claude/decisions/2026-11-10-runtime-platform-hostname-dashboard-observability.md §2.
+    PASSKEY_RP_ID: $deployment.domains[0]
   version_metadata: CF_VERSION_METADATA
 # DEPLOY_TOKEN: an account token with Workers R2 Storage Edit and Zone Read, for publishing sites.
 # SESSION_KEY: 32 random bytes, hex; signs MCP session IDs.

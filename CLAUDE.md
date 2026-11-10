@@ -9,7 +9,7 @@ work on its `main`. Per the concurrent-sessions ADR's
 `2026-11-08` amendment
 ([`2026-11-08-development-concurrent-agent-sessions.md`](.claude/decisions/2026-11-08-development-concurrent-agent-sessions.md)):
 
-1. `git remote add artifacts https://pigeon-control.pigeon-dev.workers.dev/git/pigeon/pigeon.git`,
+1. `git remote add artifacts https://platform.pigeon.dev/git/pigeon/pigeon.git`,
    then `git fetch artifacts main`.
 2. Branch from `artifacts/main`, never the checkout's `HEAD`.
 3. `session_start` (the session's URL as `label`), then `change_propose`
