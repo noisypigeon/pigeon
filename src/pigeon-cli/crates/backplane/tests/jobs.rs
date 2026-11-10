@@ -32,6 +32,11 @@ fn git(dir: &Path, args: &[&str]) -> String {
 /// A bare remote holding this repository's HEAD as `main`, and `change/1-x` one commit on top
 /// touching `paths`; the remote and the branch's head.
 fn remote(tmp: &Path, paths: &[&str]) -> (PathBuf, String) {
+    remote_removing(tmp, paths, &[])
+}
+
+/// As [`remote`], the change also deleting `removed`.
+fn remote_removing(tmp: &Path, paths: &[&str], removed: &[&str]) -> (PathBuf, String) {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../..");
     let bare = tmp.join("remote.git");
     let work = tmp.join("work");
@@ -60,6 +65,9 @@ fn remote(tmp: &Path, paths: &[&str]) -> (PathBuf, String) {
         std::fs::create_dir_all(f.parent().expect("parent")).expect("mkdir");
         std::fs::write(&f, "changed\n").expect("write");
         git(&work, &["add", p]);
+    }
+    for p in removed {
+        git(&work, &["rm", "-q", p]);
     }
     git(&work, &["commit", "-q", "-m", "docs: x"]);
     git(&work, &["push", "-q", "origin", "change/1-x"]);
@@ -107,6 +115,28 @@ fn the_bound_job_passes_a_change_inside_its_scope_and_names_its_checks() {
         "policy.check is the bound job's own"
     );
     assert!(r.log.contains("2 file(s) changed"), "{}", r.log);
+}
+
+#[test]
+fn the_bound_job_judges_with_mains_policies_not_the_changes_own() {
+    let tmp = TempDir::new().expect("tempdir");
+    let (bare, sha) = remote_removing(
+        tmp.path(),
+        &["mise.toml"],
+        &[".config/policies/change.yaml"],
+    );
+    let r = jobs::run(
+        &spec(&bare, &sha, BOUND, &[".config/policies/**"], &[]),
+        &tmp.path().join("job"),
+    );
+    assert_eq!(r.outcome, Outcome::Failed, "{}", r.log);
+    assert!(
+        r.violations
+            .iter()
+            .any(|v| v.contains("outside `scope`: mise.toml")),
+        "main's change policy still bounds it: {:?}",
+        r.violations
+    );
 }
 
 #[test]

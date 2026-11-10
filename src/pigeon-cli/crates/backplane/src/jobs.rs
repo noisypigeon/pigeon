@@ -554,7 +554,8 @@ fn adds_secret(dir: &Path, base: &str, path: &str) -> bool {
 }
 
 fn policy(spec: &JobSpec, dir: &Path, files: &[String]) -> Result<Vec<String>, String> {
-    let instance = Instance::load(dir).map_err(|e| e.to_string())?;
+    let mut instance = Instance::load(dir).map_err(|e| e.to_string())?;
+    instance.paths.policies = base_policies(spec, dir)?;
     let mut args = Map::new();
     for (k, v) in [
         ("branch", spec.branch.clone()),
@@ -573,6 +574,25 @@ fn policy(spec: &JobSpec, dir: &Path, files: &[String]) -> Result<Vec<String>, S
     run_with(&instance, &request, |_| None)
         .map(|r| r.violations)
         .map_err(|e| e.to_string())
+}
+
+/// The base's policy directory, as the base's manifest names it, written under the checkout's
+/// `.git`; none when the base names none. A change is never judged by rules it edits; see
+/// `.claude/decisions/2026-11-10-development-factory-crates-functional-core.md` §2.
+fn base_policies(spec: &JobSpec, dir: &Path) -> Result<Option<PathBuf>, String> {
+    let manifest = crate::instance::MANIFEST;
+    let Some(text) = cobot::ci::base_file(dir, &spec.base, manifest) else {
+        return Ok(None);
+    };
+    let v: Value =
+        serde_saphyr::from_str(&text).map_err(|e| format!("{}'s {manifest}: {e}", spec.base))?;
+    let Some(rel) = v["paths"]["policies"].as_str() else {
+        return Ok(None);
+    };
+    let out = dir.join(".git").join("pigeon-base-policies");
+    let _ = std::fs::remove_dir_all(&out);
+    cobot::ci::base_tree(dir, &spec.base, rel, &out).map_err(|e| e.to_string())?;
+    Ok(Some(out))
 }
 
 /// A job request's answer: its report so far, or why it was refused.

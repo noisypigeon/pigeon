@@ -116,6 +116,42 @@ pub fn base_file(dir: &Path, base: &str, path: &str) -> Option<String> {
     .ok()
 }
 
+/// Writes each file under `path` on the fetched `base` to `out`, at its path below `path`; how
+/// many it wrote.
+///
+/// # Errors
+///
+/// [`Error::Git`] when git fails, [`Error::Io`] when a file can't be written.
+pub fn base_tree(dir: &Path, base: &str, path: &str, out: &Path) -> Result<usize, Error> {
+    let rev = format!("refs/remotes/origin/{base}");
+    let prefix = path.trim_end_matches('/');
+    let listed = git(
+        dir,
+        "",
+        "",
+        &["ls-tree", "-r", "--name-only", &rev, "--", prefix],
+    )?;
+    let io = |file: &Path, e: std::io::Error| Error::Io {
+        path: file.to_path_buf(),
+        message: e.to_string(),
+    };
+    let mut written = 0;
+    for name in listed.lines().filter(|l| !l.is_empty()) {
+        let below = name
+            .strip_prefix(prefix)
+            .unwrap_or(name)
+            .trim_start_matches('/');
+        let text = git(dir, "", "", &["show", &format!("{rev}:{name}")])?;
+        let file = out.join(below);
+        if let Some(parent) = file.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| io(parent, e))?;
+        }
+        std::fs::write(&file, format!("{text}\n")).map_err(|e| io(&file, e))?;
+        written += 1;
+    }
+    Ok(written)
+}
+
 /// Whether `path` existed on the fetched `base` and `sha` only adds lines to it.
 #[must_use]
 pub fn appends_only(dir: &Path, base: &str, sha: &str, path: &str) -> bool {
