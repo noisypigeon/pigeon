@@ -91,6 +91,60 @@ pub fn json_request(
     Request::new_with_init(url, &init)
 }
 
+/// A failed Cloudflare API call: its status, none when there was no answer, and why.
+type ApiFailure = (Option<u16>, String);
+
+/// One attempt at a Cloudflare API call with `token`: its `result`.
+async fn attempt(
+    token: &str,
+    method: Method,
+    path: &str,
+    body: Option<&Value>,
+) -> std::result::Result<Value, ApiFailure> {
+    let shown = path
+        .split('/')
+        .map(|p| if p.len() >= 32 { "…" } else { p })
+        .collect::<Vec<_>>()
+        .join("/");
+    let url = format!("https://api.cloudflare.com/client/v4{path}");
+    let request =
+        json_request(&url, method, body, Some(token)).map_err(|e| (None, e.to_string()))?;
+    let mut r = Fetch::Request(request)
+        .send()
+        .await
+        .map_err(|e| (None, format!("Cloudflare API {shown}: no answer: {e}")))?;
+    let status = r.status_code();
+    let v: Value = r.json().await.unwrap_or(Value::Null);
+    if !(200..300).contains(&status) || v["success"] == false {
+        let errors = v["errors"].to_string();
+        return Err((
+            Some(status),
+            format!("Cloudflare API {shown}: {status} {errors}"),
+        ));
+    }
+    Ok(v["result"].clone())
+}
+
+/// [`attempt`], tried again after each of [`crate::gitcreds::BACKOFF_MS`] while the failure is
+/// [`crate::gitcreds::retryable`].
+async fn retrying(
+    token: &str,
+    method: Method,
+    path: &str,
+    body: Option<&Value>,
+) -> std::result::Result<Value, ApiFailure> {
+    let mut pauses = crate::gitcreds::BACKOFF_MS.iter();
+    loop {
+        match attempt(token, method.clone(), path, body).await {
+            Err((status, why)) if crate::gitcreds::retryable(status) => match pauses.next() {
+                Some(ms) => worker::Delay::from(std::time::Duration::from_millis(*ms)).await,
+                None => return Err((status, why)),
+            },
+            done => return done,
+        }
+    }
+}
+
 /// One Cloudflare API call with `token`: its `result`.
 ///
 /// # Errors
@@ -102,22 +156,9 @@ pub async fn cloudflare(
     path: &str,
     body: Option<&Value>,
 ) -> Result<Value> {
-    let url = format!("https://api.cloudflare.com/client/v4{path}");
-    let mut r = Fetch::Request(json_request(&url, method, body, Some(token))?)
-        .send()
-        .await?;
-    let status = r.status_code();
-    let v: Value = r.json().await.unwrap_or(Value::Null);
-    if !(200..300).contains(&status) || v["success"] == false {
-        let errors = v["errors"].to_string();
-        let shown = path
-            .split('/')
-            .map(|p| if p.len() >= 32 { "…" } else { p })
-            .collect::<Vec<_>>()
-            .join("/");
-        return Err(format!("Cloudflare API {shown}: {status} {errors}").into());
-    }
-    Ok(v["result"].clone())
+    attempt(token, method, path, body)
+        .await
+        .map_err(|(_, why)| why.into())
 }
 
 /// The one account `token` sees.
@@ -272,27 +313,80 @@ pub async fn d1_rows(env: &Env, statement: &Statement) -> Result<Vec<Value>> {
         .results::<Value>()
 }
 
+thread_local! {
+    /// What the credentials path keeps between requests in this isolate.
+    static KEPT: std::cell::RefCell<crate::gitcreds::Kept> =
+        std::cell::RefCell::new(crate::gitcreds::Kept::default());
+}
+
 /// The repository's remote, and a token for it valid for `ttl` seconds: write only when `write`.
+/// The account and remote are looked up once per isolate, and a token is reused while half
+/// its lifetime remains; brief API failures are retried.
 ///
 /// # Errors
 ///
-/// When the Artifacts API refuses, or its answers lack a remote or token.
+/// When the Artifacts API refuses, naming the step and Cloudflare's status, or its answers lack
+/// a remote or token.
 pub async fn credentials(env: &Env, write: bool, ttl: u64) -> Result<(String, String)> {
     let s = Settings::from(env)?;
     let api = secret(env, "ARTIFACTS_TOKEN")?;
-    let account = account(&api).await?;
+    let t = now();
+    let kept = KEPT.with(|k| k.borrow().clone());
+    if let (Some(remote), Some(token)) = (&kept.remote, kept.token(write, ttl, t)) {
+        return Ok((remote.clone(), token.to_string()));
+    }
+    let failed = |step: &str, (_, why): ApiFailure| -> worker::Error {
+        format!("Artifacts: {step}: {why}").into()
+    };
+    let (account, remote) = if let (Some(a), Some(r)) = (kept.account.clone(), kept.remote.clone())
+    {
+        (a, r)
+    } else {
+        let accounts = retrying(&api, Method::Get, "/accounts", None)
+            .await
+            .map_err(|e| failed("looking up the account", e))?;
+        let account = match accounts.as_array().map(Vec::as_slice) {
+            Some([one]) => one["id"]
+                .as_str()
+                .map(str::to_string)
+                .ok_or("Artifacts: the account has no ID")?,
+            _ => return Err("Artifacts: the token must see exactly one account".into()),
+        };
+        let path = format!(
+            "/accounts/{account}/artifacts/namespaces/{}/repos/{}",
+            s.namespace, s.repo
+        );
+        let repo = retrying(&api, Method::Get, &path, None)
+            .await
+            .map_err(|e| failed("looking up the repository", e))?;
+        let remote = cobot::artifacts_wire::remote_in(&repo)
+            .ok_or("Artifacts: the repository's answer has no remote")?;
+        (account, remote)
+    };
     let base = format!("/accounts/{account}/artifacts/namespaces/{}", s.namespace);
-    let repo = cloudflare(&api, Method::Get, &format!("{base}/repos/{}", s.repo), None).await?;
-    let remote =
-        cobot::artifacts_wire::remote_in(&repo).ok_or("the repository's answer has no remote")?;
     let body = cobot::artifacts_wire::token_body(&s.repo, write, ttl);
-    let minted = cloudflare(&api, Method::Post, &format!("{base}/tokens"), Some(&body)).await?;
+    let step = if write {
+        "minting a write token"
+    } else {
+        "minting a read token"
+    };
+    let minted = retrying(&api, Method::Post, &format!("{base}/tokens"), Some(&body))
+        .await
+        .map_err(|e| failed(step, e))?;
     let token = cobot::artifacts_wire::token_in(&minted).ok_or_else(|| {
         format!(
-            "no token in the answer, whose fields are {}",
+            "Artifacts: no token in the answer, whose fields are {}",
             cobot::artifacts_wire::shape(&minted)
         )
     })?;
+    KEPT.with(|k| {
+        let next = k
+            .borrow()
+            .clone()
+            .with_repository(account, remote.clone())
+            .with_token(write, token.clone(), t, ttl);
+        *k.borrow_mut() = next;
+    });
     Ok((remote, token))
 }
 

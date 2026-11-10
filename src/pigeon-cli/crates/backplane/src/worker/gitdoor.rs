@@ -137,7 +137,13 @@ async fn forward(
     body: Option<Vec<u8>>,
     write: bool,
 ) -> Result<Response> {
-    let (remote, token) = platform::credentials(env, write, TTL).await?;
+    let (remote, token) = match platform::credentials(env, write, TTL).await {
+        Ok(c) => c,
+        Err(e) => {
+            worker::console_error!("git front door: {e}");
+            return Response::error(e.to_string(), 502);
+        }
+    };
     let endpoint = path.split_once(".git/").map_or("", |(_, e)| e);
     let mut url = format!("{}/{endpoint}", remote.trim_end_matches('/'));
     if let Some(q) = query {
