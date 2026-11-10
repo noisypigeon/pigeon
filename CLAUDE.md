@@ -112,6 +112,12 @@ belong in the ADR, never in the file.
   the owner's proof each time; a proof is the code or a passkey registered on
   `/passkeys`, per
   [`2026-11-09-security-approvals-once-passkeys.md`](.claude/decisions/2026-11-09-security-approvals-once-passkeys.md).
+- The platform instance is served at `platform.pigeon.dev` (each stack also at
+  `<color>.platform.pigeon.dev`), every path unchanged; passkeys use it as
+  their relying party; `/` is the dashboard; `logs_query`, `traces_query`,
+  `trace_show`, `events_query` and `stats_show` read logs, traces, events and
+  build, deploy and check stats, per
+  [`2026-11-10-runtime-platform-hostname-dashboard-observability.md`](.claude/decisions/2026-11-10-runtime-platform-hostname-dashboard-observability.md).
 - The control plane deploys itself: on each push to `main`, `MainRun`'s
   deploy job deploys the Workers whose inputs changed, with outputs from
   `DEPLOY_OUTPUTS`, images by registry reference, a health check and
