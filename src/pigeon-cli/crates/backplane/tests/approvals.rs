@@ -1,7 +1,7 @@
 //! Approval tiers from `.config/approvals.yaml`; see
 //! `.claude/decisions/2026-11-08-security-tiered-approvals-task-mandates.md`.
 
-use backplane::approvals::{Facts, Rules, Tier, Tiers, classify, matches};
+use backplane::approvals::{Facts, Rules, Tier, Tiers, classify, matches, mixed_with_sentinel};
 
 fn rules() -> Rules {
     let path =
@@ -328,5 +328,73 @@ fn one_proof_covers_a_changes_later_stages_up_to_the_code_tier() {
         by_grant(&c, "change.merge", 100),
         None,
         "the owner kept the merge"
+    );
+}
+
+/// This repository's rules, with sentinel's paths named.
+fn with_sentinel() -> Rules {
+    let mut r = rules();
+    r.sentinel = paths(&[
+        "src/pigeon-cli/crates/sentinel/**",
+        ".config/policies/**",
+        ".config/approvals.yaml",
+    ]);
+    r
+}
+
+#[test]
+fn a_sentinel_change_needs_the_code_and_says_why() {
+    let r = with_sentinel();
+    let file = "src/pigeon-cli/crates/sentinel/src/rules.rs";
+    let tiers = classify(
+        &r,
+        &paths(&["src/pigeon-cli/crates/sentinel/**"]),
+        &paths(&[file]),
+        PLAIN,
+    );
+    assert_eq!(tiers.authorize.tier, Tier::Code);
+    assert!(tiers.authorize.rule.starts_with("sentinel"), "{tiers:?}");
+    assert_eq!(tiers.merge.tier, Tier::Code);
+    assert_eq!(tiers.merge.rule, format!("sentinel: {file}"));
+    let rules_file = classify(
+        &r,
+        &paths(&[".config/approvals.yaml"]),
+        &paths(&[".config/approvals.yaml"]),
+        PLAIN,
+    );
+    assert_eq!(
+        rules_file.merge.tier,
+        Tier::Owner,
+        "a secret path stays the owner's"
+    );
+}
+
+#[test]
+fn a_sentinel_change_holds_nothing_but_sentinel_and_its_adr() {
+    let r = with_sentinel();
+    let alone = paths(&[
+        "src/pigeon-cli/crates/sentinel/src/rules.rs",
+        "src/pigeon-cli/crates/sentinel/tests/cli.rs",
+        ".claude/decisions/2026-11-10-x.md",
+    ]);
+    assert_eq!(mixed_with_sentinel(&r, &alone), None);
+    let mixed = paths(&[
+        ".config/policies/change.yaml",
+        "src/pigeon-cli/crates/backplane/src/jobs.rs",
+    ]);
+    let why = mixed_with_sentinel(&r, &mixed).expect("refused");
+    assert!(
+        why.contains("src/pigeon-cli/crates/backplane/src/jobs.rs"),
+        "{why}"
+    );
+    assert_eq!(
+        mixed_with_sentinel(&r, &paths(&["src/pigeon-cli/crates/backplane/src/jobs.rs"])),
+        None,
+        "no sentinel path, nothing to keep apart"
+    );
+    assert_eq!(
+        mixed_with_sentinel(&rules(), &mixed).is_some(),
+        !rules().sentinel.is_empty(),
+        "without a sentinel list, nothing is kept apart"
     );
 }

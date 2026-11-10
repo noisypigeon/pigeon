@@ -300,8 +300,8 @@ pub enum Decision {
 
 /// Whether `m` approves `operation` on `change` at `now`.
 /// - It must be usable, cited by the change's plan, and cover the change's scope.
-/// - Approving and merging also need the head classified, never by a guarded path, and at
-///   most confirm, or code only because it deploys and the mandate may deploy.
+/// - Approving and merging also need the head classified, never by a guarded or sentinel path,
+///   and at most confirm, or code only because it deploys and the mandate may deploy.
 #[must_use]
 pub fn decide(m: &Mandate, change: &crate::changes::Change, operation: &str, now: u64) -> Decision {
     use crate::approvals::Tier;
@@ -330,9 +330,9 @@ pub fn decide(m: &Mandate, change: &crate::changes::Change, operation: &str, now
         return Decision::Ask(format!("change {}'s head has no tiers yet", change.number));
     };
     let merge = &tiers.merge;
-    if merge.rule.starts_with("guarded") {
+    if merge.rule.starts_with("guarded") || merge.rule.starts_with("sentinel") {
         return Decision::Ask(format!(
-            "change {} touches a guarded path ({}), which always needs the code",
+            "change {} touches a guarded or sentinel path ({}), which always needs the code",
             change.number, merge.rule
         ));
     }

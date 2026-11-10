@@ -63,6 +63,11 @@ pub struct Rules {
     /// Files whose `secrets:` list a change may lengthen, which needs the owner.
     #[serde(default)]
     pub secret_lists: Vec<String>,
+    /// Sentinel's paths: the judge and its rules. A change touching them is its own grant: code,
+    /// never a mandate, and nothing else in it; see
+    /// `.claude/decisions/2026-11-10-development-factory-crates-functional-core.md` §2.
+    #[serde(default)]
+    pub sentinel: Vec<String>,
 }
 
 /// Whether `path` matches `glob`.
@@ -132,6 +137,12 @@ pub fn classify(rules: &Rules, scope: &[String], files: &[String], facts: Facts)
     let secret_scope = scope
         .iter()
         .find(|s| rules.secrets.iter().any(|g| overlaps(s, g)));
+    let sentinel_file = files
+        .iter()
+        .find(|f| rules.sentinel.iter().any(|g| matches(g, f)));
+    let sentinel_scope = scope
+        .iter()
+        .find(|s| rules.sentinel.iter().any(|g| overlaps(s, g)));
     let guarded_file = files
         .iter()
         .find(|f| rules.guarded.iter().any(|g| matches(g, f)));
@@ -146,6 +157,8 @@ pub fn classify(rules: &Rules, scope: &[String], files: &[String], facts: Facts)
         !files.is_empty() && facts.appends_only && files.iter().all(|f| f.starts_with(decisions));
     let authorize = if let Some(s) = secret_scope {
         tiered(Tier::Owner, format!("secrets: {s}"))
+    } else if let Some(s) = sentinel_scope {
+        tiered(Tier::Code, format!("sentinel: {s}"))
     } else if let Some(s) = guarded_scope {
         tiered(Tier::Code, format!("guarded: {s}"))
     } else if spike(scope, &|g, s| g == s || matches(g, literal(s))) {
@@ -164,6 +177,8 @@ pub fn classify(rules: &Rules, scope: &[String], files: &[String], facts: Facts)
         tiered(Tier::Owner, format!("secrets: {f}"))
     } else if facts.adds_secret {
         tiered(Tier::Owner, "adds a secret")
+    } else if let Some(f) = sentinel_file {
+        tiered(Tier::Code, format!("sentinel: {f}"))
     } else if let Some(f) = guarded_file {
         tiered(Tier::Code, format!("guarded: {f}"))
     } else if spike(files, &|g, f| matches(g, f)) {
@@ -189,6 +204,26 @@ pub fn classify(rules: &Rules, scope: &[String], files: &[String], facts: Facts)
         merge,
         close,
     }
+}
+
+/// Why a head touching sentinel's paths is refused: it also touches `file`, which is neither a
+/// sentinel path nor under the decisions directory; none when it touches no sentinel path, or
+/// only those.
+#[must_use]
+pub fn mixed_with_sentinel(rules: &Rules, files: &[String]) -> Option<String> {
+    let sentinel = |f: &str| rules.sentinel.iter().any(|g| matches(g, f));
+    if !files.iter().any(|f| sentinel(f)) {
+        return None;
+    }
+    let decisions = rules.decisions.as_deref().unwrap_or("\u{0}");
+    let other = files
+        .iter()
+        .find(|f| !sentinel(f) && !f.starts_with(decisions))?;
+    Some(format!(
+        "a sentinel change touches only sentinel's paths and its ADR, as its own grant; this one \
+         also touches {other}; see \
+         .claude/decisions/2026-11-10-development-factory-crates-functional-core.md §2"
+    ))
 }
 
 /// Whether `head` names a secret `before` doesn't.

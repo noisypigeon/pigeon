@@ -480,7 +480,8 @@ fn bound(spec: &JobSpec, dir: &Path, sentinel: &Path) -> Report {
         files.len(),
         files.join("\n")
     );
-    let tiers = tiers(spec, dir, &files);
+    let rules = base_rules(spec, dir);
+    let tiers = rules.as_ref().map(|r| tiers(spec, dir, &files, r));
     if tiers.is_none() {
         log.push_str("tiers: none, as main has no readable rules\n");
     }
@@ -496,10 +497,15 @@ fn bound(spec: &JobSpec, dir: &Path, sentinel: &Path) -> Report {
             t.close.rule
         );
     }
-    let violations = match policy(spec, dir, &files, sentinel, &mut log) {
+    let mut violations = match policy(spec, dir, &files, sentinel, &mut log) {
         Ok(v) => v,
         Err(e) => vec![e],
     };
+    violations.extend(
+        rules
+            .as_ref()
+            .and_then(|r| crate::approvals::mixed_with_sentinel(r, &files)),
+    );
     for v in &violations {
         let _ = writeln!(log, "violation: {v}");
     }
@@ -548,9 +554,12 @@ fn bound(spec: &JobSpec, dir: &Path, sentinel: &Path) -> Report {
 
 /// The head's approval tiers, by the rules on the base branch; none when the base has none; see
 /// `.claude/decisions/2026-11-08-security-tiered-approvals-task-mandates.md` §2.
-fn tiers(spec: &JobSpec, dir: &Path, files: &[String]) -> Option<crate::approvals::Tiers> {
-    let text = cobot::ci::base_file(dir, &spec.base, crate::approvals::RULES)?;
-    let rules: crate::approvals::Rules = serde_saphyr::from_str(&text).ok()?;
+fn tiers(
+    spec: &JobSpec,
+    dir: &Path,
+    files: &[String],
+    rules: &crate::approvals::Rules,
+) -> crate::approvals::Tiers {
     let decisions = rules.decisions.clone().unwrap_or_default();
     let appends_only = !decisions.is_empty()
         && files
@@ -571,12 +580,13 @@ fn tiers(spec: &JobSpec, dir: &Path, files: &[String]) -> Option<crate::approval
         appends_only,
         adds_secret,
     };
-    Some(crate::approvals::classify(
-        &rules,
-        &spec.scope,
-        files,
-        facts,
-    ))
+    crate::approvals::classify(rules, &spec.scope, files, facts)
+}
+
+/// The approval rules on the base branch; none when it has none, or they don't read.
+fn base_rules(spec: &JobSpec, dir: &Path) -> Option<crate::approvals::Rules> {
+    let text = cobot::ci::base_file(dir, &spec.base, crate::approvals::RULES)?;
+    serde_saphyr::from_str(&text).ok()
 }
 
 /// Whether the head's `secrets:` list in `path` names one its base's doesn't; an unreadable

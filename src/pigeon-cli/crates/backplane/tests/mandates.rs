@@ -185,6 +185,21 @@ fn a_mandate_never_approves_a_guarded_head_nor_one_it_may_not_deploy() {
         decision(&mut all, &guarded, "change.merge"),
         Decision::Ask(_)
     ));
+    let sentinel = change(
+        &["tooling/**"],
+        &plan,
+        Some((
+            Tier::Code,
+            "sentinel: src/pigeon-cli/crates/sentinel/src/rules.rs",
+        )),
+    );
+    assert!(
+        matches!(
+            decision(&mut all, &sentinel, "change.merge"),
+            Decision::Ask(_)
+        ),
+        "a sentinel change is never a mandate's"
+    );
     let deploys = change(&["tooling/**"], &plan, Some((Tier::Code, "deploys")));
     assert!(matches!(
         decision(&mut all, &deploys, "change.approve"),
