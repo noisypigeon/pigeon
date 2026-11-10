@@ -7,6 +7,7 @@
   "required": [
     "worker",
     "hostname",
+    "domains",
     "instance",
     "change_floor",
     "database",
@@ -20,6 +21,15 @@
       "type": "string",
       "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
       "description": "The control plane Worker's name."
+    },
+    "domains": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z0-9]+([.-][a-z0-9]+)+$"
+      },
+      "description": "The hostnames the stack serves as custom domains, which Access protects: the live domain and its own <color> host."
     },
     "hostname": {
       "type": "string",
@@ -166,7 +176,7 @@
     }
   },
   "x-cobot": {
-    "version": "0.3.0",
+    "version": "0.4.0",
     "local": true,
     "secrets": [],
     "providers": {
@@ -208,7 +218,8 @@
             "$module.owners.id"
           ],
           "policy_id_map": "$module.token_policies[*].id",
-          "worker_id": "$module.worker.id"
+          "worker_id": "$module.worker.id",
+          "hostnames": "$config.domains"
         }
       },
       "worker": {

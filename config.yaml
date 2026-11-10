@@ -26,6 +26,7 @@ units:
     kind: pigeon/platform
     worker: pigeon-control
     hostname: pigeon-control.pigeon-dev.workers.dev
+    domains: [platform.pigeon.dev, blue.platform.pigeon.dev]
     instance: pigeon
     change_floor: 12
     database: { name: pigeon }

@@ -42,3 +42,10 @@ variable "policy_ids" {
   default  = []
   nullable = false
 }
+
+# Hostnames it protects as public destinations, such as a Worker's custom domains.
+variable "hostnames" {
+  type     = list(string)
+  default  = []
+  nullable = false
+}
