@@ -721,6 +721,7 @@ impl Change {
             return Vec::new();
         }
         let (Some(c), Some(t)) = (&self.carried, &self.tiers) else {
+            self.carried = None;
             self.merge_after = None;
             return Vec::new();
         };
@@ -950,8 +951,9 @@ impl Change {
         }
         let restacking =
             self.state == State::Approved && self.job(RESTACK).is_some_and(|j| j.open());
-        let carrying = self.carried.is_some()
-            && matches!(self.state, State::Pushed | State::Bounded | State::Checked);
+        // On `checked` the carry is already decided, so only a head still checking waits for it.
+        let carrying =
+            self.carried.is_some() && matches!(self.state, State::Pushed | State::Bounded);
         if restacking || carrying {
             self.merge_after = Some(by.to_string());
             return Ok(Vec::new());

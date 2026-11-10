@@ -347,3 +347,54 @@ fn a_merge_whose_approval_did_not_carry_gives_up_its_turn() {
     assert_eq!(c.merge_after, None);
     assert!(backplane::control::merge_dropped(&c));
 }
+
+#[test]
+fn a_merge_on_a_checked_unapproved_head_is_refused_not_parked() {
+    // !138: restacked, then checked with no tiers, so its approval never carried.
+    let mut c = approved();
+    c.apply(Event::Behind { main: MAIN.into() })
+        .expect("behind");
+    c.apply(restacked(Relation::Disjoint, Some(C), true))
+        .expect("restacked");
+    c.apply(Event::Bounded {
+        sha: C.into(),
+        violations: vec![],
+        checks: vec![Check {
+            name: "fmt".into(),
+            argv: vec![],
+        }],
+        tiers: None,
+    })
+    .expect("bounded");
+    c.apply(Event::Started {
+        job: "fmt".into(),
+        sha: C.into(),
+    })
+    .expect("started");
+    assert_eq!(finish(&mut c, C), []);
+    assert_eq!(c.state, State::Checked);
+    assert_eq!(c.carried, None, "the carry is decided");
+
+    let refused = c
+        .apply(Event::Merge { by: "owner".into() })
+        .expect_err("an unapproved head isn't merged");
+    assert!(
+        format!("{refused:?}").contains("only an approved head"),
+        "{refused:?}"
+    );
+    assert_eq!(
+        c.merge_after, None,
+        "nothing parked, so the queue's turn is released"
+    );
+
+    c.apply(Event::Approve {
+        by: "owner".into(),
+        sha: C.into(),
+        at: 9,
+    })
+    .expect("approved");
+    assert_eq!(
+        c.apply(Event::Merge { by: "owner".into() }).expect("merge"),
+        [Effect::Start(MERGE.into())]
+    );
+}
