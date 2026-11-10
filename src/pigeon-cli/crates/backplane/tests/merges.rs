@@ -398,3 +398,59 @@ fn a_merge_on_a_checked_unapproved_head_is_refused_not_parked() {
         [Effect::Start(MERGE.into())]
     );
 }
+
+#[test]
+fn a_merge_whose_container_is_lost_on_every_attempt_releases_its_turn() {
+    use backplane::control::merge_ended;
+    use backplane::runs::MAX_ATTEMPTS;
+
+    // !142: its merge job's Container was lost three times, and the queue kept its turn.
+    let mut c = approved();
+    assert_eq!(
+        c.apply(Event::Merge { by: "owner".into() }).expect("merge"),
+        [Effect::Start(MERGE.into())]
+    );
+    for n in 1..=MAX_ATTEMPTS {
+        c.apply(Event::Started {
+            job: MERGE.into(),
+            sha: A.into(),
+        })
+        .expect("started");
+        let lost = Event::Lost {
+            job: MERGE.into(),
+            sha: A.into(),
+        };
+        c.apply(lost.clone()).expect("lost");
+        if n < MAX_ATTEMPTS {
+            assert_eq!(merge_ended(&lost, &c), None, "attempt {n} is retried");
+        } else {
+            assert_eq!(merge_ended(&lost, &c), Some(None), "the last loss ends it");
+        }
+    }
+
+    let other = Event::Lost {
+        job: "fmt".into(),
+        sha: A.into(),
+    };
+    assert_eq!(merge_ended(&other, &c), None, "only the merge job's loss");
+    assert_eq!(
+        merge_ended(
+            &Event::Merged {
+                sha: A.into(),
+                commit: Some(B.into()),
+            },
+            &c
+        ),
+        Some(Some(B.into()))
+    );
+    assert_eq!(
+        merge_ended(
+            &Event::MergeFailed {
+                sha: A.into(),
+                reason: "x".into(),
+            },
+            &c
+        ),
+        Some(None)
+    );
+}

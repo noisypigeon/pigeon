@@ -417,18 +417,16 @@ impl DurableObject for ChangeRun {
         let mut restack_failed = false;
         for job in running {
             if let Some(event) = self.poll(&change, &job).await? {
-                let merge = match &event {
-                    Event::Merged { commit, .. } => Some(commit.clone()),
-                    Event::MergeFailed { .. } => Some(None),
-                    _ => None,
-                };
                 if let Event::Finished { job, ok: false, .. } = &event
                     && job == crate::changes::RESTACK
                 {
                     restack_failed = true;
                 }
-                if Self::apply(&mut change, event, &mut next).is_ok() && merge.is_some() {
-                    ended = merge;
+                let seen = event.clone();
+                if Self::apply(&mut change, event, &mut next).is_ok()
+                    && let Some(merge) = control::merge_ended(&seen, &change)
+                {
+                    ended = Some(merge);
                 }
             }
         }
