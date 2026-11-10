@@ -66,6 +66,7 @@ fn the_digest_names_what_waits_on_the_owner_and_what_merged_without_them() {
             mandates: &mandates.list,
             failed_deploys: &failed,
             merged_without_owner: &merged,
+            mirror: None,
         },
         STALE + 10,
     );
@@ -109,4 +110,17 @@ fn only_merges_without_the_owner_are_news_but_not_a_push() {
     );
     assert!(!d.is_empty());
     assert!(!d.needs_owner());
+}
+
+#[test]
+fn a_mirror_behind_needs_the_owner() {
+    let d = digest(
+        &DigestInput {
+            mirror: Some("mirror: GitHub has been behind for 25 hours"),
+            ..DigestInput::default()
+        },
+        0,
+    );
+    assert!(d.needs_owner());
+    assert_eq!(d.lines(), ["mirror: GitHub has been behind for 25 hours"]);
 }

@@ -519,6 +519,33 @@ fn a_deploy_spec_never_shows_its_credentials() {
 }
 
 #[test]
+fn a_mirror_runs_on_runner_and_never_shows_its_tokens() {
+    let s = control::mirror_spec(
+        "https://git.example/p.git",
+        "read-token-value",
+        A,
+        "https://github.com/o/p",
+        "ghs-mirror-token",
+    );
+    assert_eq!(s.id, control::mirror_id(A));
+    assert_eq!(s.job, control::MIRROR);
+    assert_eq!(s.branch, "main");
+    assert_eq!(
+        s.env.get(control::MIRROR_TO).map(String::as_str),
+        Some("https://github.com/o/p")
+    );
+    let shown = format!("{s:?}");
+    assert!(
+        !shown.contains("ghs-mirror-token") && !shown.contains("read-token-value"),
+        "{shown}"
+    );
+    assert_eq!(
+        control::class_of(control::MIRROR),
+        backplane::control::Class::Runner
+    );
+}
+
+#[test]
 fn no_free_container_is_waiting_not_a_lost_job() {
     assert!(control::no_capacity(
         "Maximum number of running container instances exceeded. Try again later"

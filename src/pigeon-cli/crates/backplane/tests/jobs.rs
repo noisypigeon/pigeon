@@ -349,3 +349,61 @@ fn a_platform_apply_checks_out_where_its_plan_did() {
         "only platform jobs share a directory"
     );
 }
+
+#[test]
+fn a_mirror_job_moves_main_and_tags_and_never_shows_its_token() {
+    let tmp = TempDir::new().expect("tempdir");
+    let from = tmp.path().join("artifacts.git");
+    let to = tmp.path().join("github.git");
+    let work = tmp.path().join("work");
+    git(
+        tmp.path(),
+        &["init", "-q", "--bare", from.to_str().expect("utf-8")],
+    );
+    git(
+        tmp.path(),
+        &["init", "-q", "--bare", to.to_str().expect("utf-8")],
+    );
+    git(
+        tmp.path(),
+        &["init", "-q", "-b", "main", work.to_str().expect("utf-8")],
+    );
+    std::fs::write(work.join("a.txt"), "a\n").expect("write");
+    git(&work, &["add", "a.txt"]);
+    git(&work, &["commit", "-q", "-m", "a"]);
+    git(&work, &["tag", "v1"]);
+    let from_path = from.to_str().expect("utf-8");
+    git(&work, &["push", "-q", from_path, "main", "v1"]);
+    git(&work, &["push", "-q", from_path, "main:change/2-x"]);
+    let sha = git(&work, &["rev-parse", "HEAD"]);
+    let to_url = format!("file://{}", to.display());
+    let s = backplane::control::mirror_spec(
+        &format!("file://{}", from.display()),
+        "a-token-never-shown",
+        &sha,
+        &to_url,
+        "ghs-never-shown",
+    );
+    let r = jobs::run(&s, &tmp.path().join("job"));
+    assert_eq!(r.outcome, Outcome::Passed, "{}", r.log);
+    assert_eq!(git(&to, &["rev-parse", "refs/heads/main"]), sha);
+    assert_eq!(git(&to, &["rev-parse", "refs/tags/v1^{commit}"]), sha);
+    assert_eq!(
+        git(&to, &["for-each-ref", "--format=%(refname)", "refs/heads"]),
+        "refs/heads/main",
+        "change/* never reaches the mirror"
+    );
+    assert!(!r.log.contains("ghs-never-shown"));
+
+    let gone = backplane::control::mirror_spec(
+        &format!("file://{}", from.display()),
+        "a-token-never-shown",
+        &sha,
+        &format!("file://{}", tmp.path().join("gone.git").display()),
+        "ghs-never-shown",
+    );
+    let r = jobs::run(&gone, &tmp.path().join("job"));
+    assert_eq!(r.outcome, Outcome::Failed);
+    let shown = serde_json::to_string(&r).expect("json");
+    assert!(!shown.contains("ghs-never-shown"), "{shown}");
+}

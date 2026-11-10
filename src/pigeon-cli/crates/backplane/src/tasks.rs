@@ -180,6 +180,8 @@ pub struct DigestInput<'a> {
     pub failed_deploys: &'a [(String, String)],
     /// Changes merged without the owner since the last digest: the change and who approved.
     pub merged_without_owner: &'a [(u32, String)],
+    /// Why the GitHub mirror needs the owner, if it does.
+    pub mirror: Option<&'a str>,
 }
 
 /// The owner's digest.
@@ -195,6 +197,9 @@ pub struct Digest {
     pub failed_deploys: Vec<(String, String)>,
     /// Changes merged without the owner: the change and who approved.
     pub merged_without_owner: Vec<(u32, String)>,
+    /// Why the GitHub mirror needs the owner.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mirror: Option<String>,
 }
 
 impl Digest {
@@ -204,7 +209,8 @@ impl Digest {
         !(self.approvals.is_empty()
             && self.stale_tasks.is_empty()
             && self.paused.is_empty()
-            && self.failed_deploys.is_empty())
+            && self.failed_deploys.is_empty()
+            && self.mirror.is_none())
     }
 
     /// Whether it holds anything at all.
@@ -242,6 +248,7 @@ impl Digest {
                 .iter()
                 .map(|(n, by)| format!("merged without you: change {n}, by {by}")),
         );
+        out.extend(self.mirror.clone());
         out
     }
 }
@@ -277,5 +284,6 @@ pub fn digest(input: &DigestInput<'_>, now: u64) -> Digest {
             .collect(),
         failed_deploys: input.failed_deploys.to_vec(),
         merged_without_owner: input.merged_without_owner.to_vec(),
+        mirror: input.mirror.map(str::to_string),
     }
 }

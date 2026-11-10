@@ -48,6 +48,8 @@ bindings:
     # Passkeys' relying party, the platform's hostname; see
     # .claude/decisions/2026-11-10-runtime-platform-hostname-dashboard-observability.md §2.
     PASSKEY_RP_ID: $deployment.domains[0]
+    # The GitHub mirror MainRun pushes to; see .claude/decisions/2026-11-08-development-github-mirror-on-merge.md.
+    MIRROR: https://github.com/noisypigeon/pigeon
   version_metadata: CF_VERSION_METADATA
 # DEPLOY_TOKEN: an account token with Workers R2 Storage Edit and Zone Read, for publishing sites.
 # SESSION_KEY: 32 random bytes, hex; signs MCP session IDs.
@@ -59,10 +61,12 @@ bindings:
 # DEPLOYER_ACCESS_ID, DEPLOYER_ACCESS_SECRET: an Access service token, for /healthz only.
 # BUILDS_ACCESS_ID, BUILDS_ACCESS_SECRET: an Access service token job Containers download main's
 # pigeon with, for /builds/ only; see .claude/decisions/2026-11-07-development-job-images-on-cloudflare.md.
+# GITHUB_APP_ID, GITHUB_APP_KEY: the mirror's GitHub App and its PKCS#8 key; until set, the
+# mirror fails and the digest names it, per .claude/decisions/2026-11-08-development-github-mirror-on-merge.md §3.
 # PUSH_VAPID_KEY: the Web Push key, from `pigeon backplane vapid-key`; optional, see
 # .claude/decisions/2026-11-08-development-events-tickets-digest-mandate.md §3.
 # PLATFORM_STATE_KEY: 32 random bytes, hex; platform runs' state passphrase, the platform's
 # alone; see .claude/decisions/2026-11-08-runtime-blue-green-self-standup.md, step 4's amendment.
-secrets: [BACKPLANE_TOKEN, ARTIFACTS_TOKEN, ACCESS_TEAM, ACCESS_AUD, DEPLOY_TOKEN, SESSION_KEY, APPROVER_TOTP, APPROVER, WORKERS_DEPLOY_TOKEN, DEPLOY_OUTPUTS, DEPLOY_IMAGES, DEPLOYER_ACCESS_ID, DEPLOYER_ACCESS_SECRET, BUILDS_ACCESS_ID, BUILDS_ACCESS_SECRET, PUSH_VAPID_KEY, PLATFORM_STATE_KEY]
+secrets: [BACKPLANE_TOKEN, ARTIFACTS_TOKEN, ACCESS_TEAM, ACCESS_AUD, DEPLOY_TOKEN, SESSION_KEY, APPROVER_TOTP, APPROVER, WORKERS_DEPLOY_TOKEN, DEPLOY_OUTPUTS, DEPLOY_IMAGES, DEPLOYER_ACCESS_ID, DEPLOYER_ACCESS_SECRET, BUILDS_ACCESS_ID, BUILDS_ACCESS_SECRET, PUSH_VAPID_KEY, PLATFORM_STATE_KEY, GITHUB_APP_ID, GITHUB_APP_KEY]
 # The owner's hourly digest.
 crons: ["17 * * * *"]

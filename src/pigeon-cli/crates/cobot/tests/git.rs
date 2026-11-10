@@ -594,6 +594,7 @@ fn a_mirror_fast_forwards_adds_tags_and_never_pushes_changes() {
         "main",
         "pigeon",
         &url(&github),
+        None,
         &stage(dir.path(), "m.git"),
     )
     .expect("mirror");
@@ -618,6 +619,43 @@ fn a_mirror_fast_forwards_adds_tags_and_never_pushes_changes() {
 }
 
 #[test]
+fn a_mirror_with_a_token_names_it_nowhere() {
+    let dir = TempDir::new().expect("tempdir");
+    let (artifacts, github, work) = pair(dir.path());
+    let head = commit_to(&work, &artifacts, "next.txt", "v2");
+    let token = "ghs_mirror-token-never-shown";
+    let staged = dir.path().join("job").join("m.git");
+    git::bare(&staged).expect("bare");
+    let done = git::mirror_from(
+        &url(&artifacts),
+        GIT_TOKEN,
+        "main",
+        "pigeon",
+        &url(&github),
+        Some(token),
+        &staged,
+    )
+    .expect("mirror");
+    assert_eq!(run_git(&github, &["rev-parse", "refs/heads/main"]), head);
+    assert!(!format!("{done:?}").contains(token));
+    let config = fs::read_to_string(staged.join("config")).expect("config");
+    assert!(!config.contains(token), "the token never reaches a file");
+    let gone = dir.path().join("gone.git");
+    let err = git::mirror_from(
+        &url(&artifacts),
+        GIT_TOKEN,
+        "main",
+        "pigeon",
+        &url(&gone),
+        Some(token),
+        &staged,
+    )
+    .expect_err("no such mirror")
+    .to_string();
+    assert!(!err.contains(token), "{err}");
+}
+
+#[test]
 fn a_mirror_that_moved_ahead_is_refused_until_synced() {
     let dir = TempDir::new().expect("tempdir");
     let (artifacts, github, _) = pair(dir.path());
@@ -639,6 +677,7 @@ fn a_mirror_that_moved_ahead_is_refused_until_synced() {
         "main",
         "pigeon",
         &url(&github),
+        None,
         &stage_m,
     )
     .expect_err("refused")
@@ -684,6 +723,7 @@ fn a_mirror_that_moved_ahead_is_refused_until_synced() {
         "main",
         "pigeon",
         &url(&github),
+        None,
         &stage_m,
     )
     .expect("a synced mirror takes the next push");

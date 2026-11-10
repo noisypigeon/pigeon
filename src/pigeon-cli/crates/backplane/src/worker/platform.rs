@@ -177,6 +177,32 @@ pub async fn rs256(jwk: &Value, data: &[u8], signature: &[u8]) -> Result<bool> {
         .unwrap_or(false))
 }
 
+/// `data` signed RS256 with the PKCS#8 private key `der`.
+///
+/// # Errors
+///
+/// When `WebCrypto` refuses the key or the signature.
+pub async fn rs256_sign(der: &[u8], data: &[u8]) -> Result<Vec<u8>> {
+    let subtle = subtle()?;
+    let alg = js_sys::Object::new();
+    Reflect::set(&alg, &"name".into(), &"RSASSA-PKCS1-v1_5".into())?;
+    Reflect::set(&alg, &"hash".into(), &"SHA-256".into())?;
+    let usages = Array::of1(&"sign".into());
+    let import = method(&subtle, "importKey")?;
+    let args = Array::of5(
+        &"pkcs8".into(),
+        &Uint8Array::from(der),
+        &alg,
+        &JsValue::FALSE,
+        &usages,
+    );
+    let key = promise(import.apply(&subtle, &args)?).await?;
+    let sign = method(&subtle, "sign")?;
+    let args = Array::of3(&alg, &key, &Uint8Array::from(data));
+    let signed = promise(sign.apply(&subtle, &args)?).await?;
+    Ok(Uint8Array::new(&signed).to_vec())
+}
+
 /// Who `req` is from, per its Access token: decoded, its key fetched from the team's certs,
 /// its signature verified, then its claims checked.
 ///

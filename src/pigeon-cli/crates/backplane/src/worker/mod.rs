@@ -13,6 +13,7 @@ mod checker;
 mod elicit;
 mod events;
 mod gitdoor;
+mod github;
 mod main_run;
 mod mandates;
 mod merges;
@@ -826,7 +827,7 @@ pub(super) async fn latest_build(env: &Env) -> Option<cobot::worker::JobsBuild> 
     })
 }
 
-fn main_stub(env: &Env, repo: &str) -> Result<worker::Stub> {
+pub(super) fn main_stub(env: &Env, repo: &str) -> Result<worker::Stub> {
     env.durable_object("MAIN_RUN")?
         .id_from_name(&format!("{repo}#main"))?
         .get_stub()
@@ -836,9 +837,31 @@ fn main_stub(env: &Env, repo: &str) -> Result<worker::Stub> {
 /// `.claude/decisions/2026-11-08-development-events-tickets-digest-mandate.md` §4.
 #[event(scheduled)]
 async fn scheduled(_event: worker::ScheduledEvent, env: Env, _ctx: worker::ScheduleContext) {
+    // The mirror's hourly reconcile; see
+    // .claude/decisions/2026-11-08-development-github-mirror-on-merge.md §1.
+    if github::mirror(&env).is_some()
+        && let Err(e) = reconcile_mirror(&env).await
+    {
+        worker::console_error!("mirror reconcile: {e}");
+    }
     if let Err(e) = push::hourly(&env).await {
         worker::console_error!("digest: {e}");
     }
+}
+
+async fn reconcile_mirror(env: &Env) -> Result<()> {
+    let s = Settings::from(env)?;
+    let req = json_request(
+        "https://main/reconcile",
+        Method::Post,
+        Some(&json!({})),
+        None,
+    )?;
+    let mut r = platform::call(env, &main_stub(env, &s.repo)?, req).await?;
+    if !(200..300).contains(&r.status_code()) {
+        return Err(r.text().await.unwrap_or_default().into());
+    }
+    Ok(())
 }
 
 /// Artifacts push events: a push to a change's branch is that change's `Pushed`; a push to

@@ -771,6 +771,38 @@ pub fn deploy_spec(
     }
 }
 
+/// The job that mirrors `main` and the tags to GitHub; see
+/// `.claude/decisions/2026-11-08-development-github-mirror-on-merge.md`.
+pub const MIRROR: &str = "mirror";
+
+/// The mirror job's environment: GitHub's remote.
+pub const MIRROR_TO: &str = "MIRROR_TO";
+
+/// The mirror job's environment: the installation token for GitHub's remote.
+pub const MIRROR_TOKEN: &str = "MIRROR_TOKEN";
+
+/// A mirror job's ID: `main-<sha, 12>-mirror`.
+#[must_use]
+pub fn mirror_id(sha: &str) -> String {
+    format!("main-{}-{MIRROR}", &sha[..12.min(sha.len())])
+}
+
+/// The spec for mirroring `sha` of `main` from `remote` (read with `token`) to `to`, pushed
+/// with `to_token`.
+#[must_use]
+pub fn mirror_spec(remote: &str, token: &str, sha: &str, to: &str, to_token: &str) -> JobSpec {
+    JobSpec {
+        id: mirror_id(sha),
+        job: MIRROR.into(),
+        since: None,
+        env: std::collections::BTreeMap::from([
+            (MIRROR_TO.to_string(), to.to_string()),
+            (MIRROR_TOKEN.to_string(), to_token.to_string()),
+        ]),
+        ..deploy_spec(remote, token, sha, None, std::collections::BTreeMap::new())
+    }
+}
+
 /// One deploy, as `deploy.status` shows it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Deployed {
@@ -989,7 +1021,7 @@ impl Class {
 pub fn class_of(job: &str) -> Class {
     // A deploy builds the Worker to wasm, so it runs on `Checker`; see
     // .claude/decisions/2026-11-07-development-control-plane-deploys-itself.md.
-    if job == BOUND || job == MERGE || job == changes::RESTACK || job == PLATFORM {
+    if job == BOUND || job == MERGE || job == changes::RESTACK || job == PLATFORM || job == MIRROR {
         Class::Runner
     } else {
         Class::Checker

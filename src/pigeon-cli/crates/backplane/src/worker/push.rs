@@ -119,6 +119,7 @@ pub async fn build(env: &Env, s: &Settings) -> Result<(Digest, u64)> {
                 .then(|| (x.change.unwrap_or_default(), by.to_string()))
         })
         .collect();
+    let behind = mirror_behind(env, s).await;
     let d = digest(
         &DigestInput {
             waiting: &waiting,
@@ -126,10 +127,20 @@ pub async fn build(env: &Env, s: &Settings) -> Result<(Digest, u64)> {
             mandates: &mandates,
             failed_deploys: &failed,
             merged_without_owner: &merged,
+            mirror: behind.as_deref(),
         },
         now(),
     );
     Ok((d, last))
+}
+
+/// Why the GitHub mirror needs the owner, per `MainRun`; none when it can't be asked.
+async fn mirror_behind(env: &Env, s: &Settings) -> Option<String> {
+    let req = platform::json_request("https://main/status", Method::Get, None, None).ok()?;
+    let stub = super::main_stub(env, &s.repo).ok()?;
+    let mut r = platform::call(env, &stub, req).await.ok()?;
+    let v: Value = r.json().await.ok()?;
+    v["mirror_behind"].as_str().map(str::to_string)
 }
 
 /// `digest.show`: the digest now; an approval's page link only for the owner.

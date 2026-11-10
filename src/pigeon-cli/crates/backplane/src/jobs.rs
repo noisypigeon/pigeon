@@ -13,7 +13,7 @@ use std::sync::{Arc, Mutex};
 use serde_json::{Map, Value, json};
 
 use crate::changes::{BOUND, Check, ConflictContext, MERGE, RESTACK, Relation, Restacked};
-use crate::control::{DEPLOY, JobSpec, Outcome, Report, tail};
+use crate::control::{DEPLOY, JobSpec, MIRROR, MIRROR_TO, MIRROR_TOKEN, Outcome, Report, tail};
 use crate::{Instance, Request, run_with};
 
 /// Where jobs check out, under the Container's temporary directory.
@@ -133,6 +133,9 @@ pub fn run(spec: &JobSpec, dir: &Path) -> Report {
             ..report(spec, Outcome::Passed, "")
         };
     }
+    if spec.job == MIRROR {
+        return mirror(spec, dir);
+    }
     let _ = std::fs::remove_dir_all(dir);
     if let Err(e) = cobot::ci::checkout(
         dir,
@@ -174,6 +177,41 @@ pub fn run(spec: &JobSpec, dir: &Path) -> Report {
         if ok { Outcome::Passed } else { Outcome::Failed },
         &log,
     )
+}
+
+/// The mirror job: `main` and the tags, fast-forward and add-only, to GitHub in a fresh bare
+/// repository; see `.claude/decisions/2026-11-08-development-github-mirror-on-merge.md`.
+fn mirror(spec: &JobSpec, dir: &Path) -> Report {
+    let failed = |why: String| Report {
+        violations: vec![why.clone()],
+        ..report(spec, Outcome::Failed, &why)
+    };
+    let (Some(to), Some(to_token)) = (spec.env.get(MIRROR_TO), spec.env.get(MIRROR_TOKEN)) else {
+        return failed("a mirror job names its mirror and its token".into());
+    };
+    let _ = std::fs::remove_dir_all(dir);
+    let staged = dir.join("mirror.git");
+    if let Err(e) = cobot::git::bare(&staged) {
+        return failed(e.to_string());
+    }
+    match cobot::git::mirror_from(
+        &spec.remote,
+        &spec.token,
+        &spec.branch,
+        "mirror",
+        to,
+        Some(to_token),
+        &staged,
+    ) {
+        Ok(done) => {
+            let mut log = String::new();
+            for (r, sha) in &done.refs {
+                let _ = writeln!(log, "{sha} {r}");
+            }
+            report(spec, Outcome::Passed, &log)
+        }
+        Err(e) => failed(e.to_string().replace(to_token.as_str(), "***")),
+    }
 }
 
 /// The deploy job: the instance's sites whose inputs changed since the last deploy, built and

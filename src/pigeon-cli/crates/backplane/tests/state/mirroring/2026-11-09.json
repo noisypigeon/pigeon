@@ -1,0 +1,16 @@
+{
+  "target": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "mirrored": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "running": ["bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", 1],
+  "failures": 1,
+  "retry_at": 1794200060,
+  "checked_at": 1794196400,
+  "behind_since": 1794200000,
+  "drift": "GitHub holds 1 tag(s) Artifacts lacks",
+  "last": {
+    "sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "ok": false,
+    "at": 1794200000,
+    "why": "GitHub /repos/noisypigeon/pigeon/installation: 404 Not Found"
+  }
+}

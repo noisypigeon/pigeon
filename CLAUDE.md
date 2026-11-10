@@ -154,6 +154,12 @@ belong in the ADR, never in the file.
   the release job runs on Cloudflare, per the hosting ADR's 2026-11-06
   amendment. The release-bot and `cobot.yml` notes below describe that paused
   path.
+- The control plane mirrors `main` and the tags to GitHub on each push to
+  `main` (`MainRun`'s `mirror` job on `Runner`, fast-forward and add-only),
+  with a GitHub App installation token minted per job from `GITHUB_APP_ID`
+  and `GITHUB_APP_KEY`, and reconciles hourly; `deploy_status` shows it and
+  the digest names a mirror behind, per
+  [`2026-11-08-development-github-mirror-on-merge.md`](.claude/decisions/2026-11-08-development-github-mirror-on-merge.md).
 - Releases and changelogs are machinery, per
   [`2026-11-02-release-crate-units-and-images.md`](.claude/decisions/2026-11-02-release-crate-units-and-images.md):
   - every `CHANGELOG.md` is generated on merge by the release bot, which runs

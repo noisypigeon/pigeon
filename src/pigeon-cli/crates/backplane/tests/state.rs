@@ -11,6 +11,7 @@ use backplane::changes::{Change, Event};
 use backplane::control::{JobSpec, Pipeline, Report};
 use backplane::grants::Grant;
 use backplane::mandates::Mandates;
+use backplane::mirroring::Mirroring;
 use backplane::runs::Queue;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -113,6 +114,11 @@ fn the_pipeline_and_what_jobs_exchange() {
 }
 
 #[test]
+fn the_mirror() {
+    check::<Mirroring>("mirroring");
+}
+
+#[test]
 fn the_run_queue() {
     check::<Queue>("queue");
 }
@@ -128,7 +134,15 @@ fn every_fixture_directory_is_checked() {
     assert_eq!(
         names,
         [
-            "change", "event", "grant", "job_spec", "mandates", "pipeline", "queue", "report",
+            "change",
+            "event",
+            "grant",
+            "job_spec",
+            "mandates",
+            "mirroring",
+            "pipeline",
+            "queue",
+            "report",
             "waiting"
         ]
     );

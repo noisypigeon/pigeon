@@ -104,3 +104,13 @@ A mirror job is one fetch and one push: seconds of `standard-1`, once per merge.
   - GitHub's `main` equals Artifacts';
   - a change merged through the control plane reaches GitHub within a minute, with no command run;
   - with GitHub unreachable, merges and deploys keep succeeding, `deploy_status` shows the mirror behind, and the next reconcile after GitHub returns catches up.
+
+## Amendments
+
+### 2026-11-09: Step 2 lands: the mirror in `MainRun`, its state in storage, its reconcile on the hourly cron
+
+- **State.** `backplane::mirroring::Mirroring` lives in `MainRun`'s storage beside the pipeline, not in D1. `deploy_status` shows it as `mirror`, and as `mirror_behind` when the digest would name it. A fixture in `tests/state/mirroring/` holds its stored form.
+- **The reconcile** runs from the Worker's existing hourly cron (`17 * * * *`), which posts `/reconcile` to `MainRun` before building the digest. It is due at most once an hour.
+- **The mirror is set by the Worker var `MIRROR`.** Without it nothing is mirrored, so another instance's control plane opts in by setting it.
+- **Until the App's secrets are set,** each mirror fails with "the secret `GITHUB_APP_ID` is not set". It backs off to hourly, and the digest names it after 24 hours.
+- **`deploy_retry`** also clears the mirror's wait, and answers 409 only when neither a deploy nor a mirror can start.

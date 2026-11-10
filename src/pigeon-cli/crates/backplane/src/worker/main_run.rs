@@ -1,6 +1,7 @@
 //! The `MainRun` Durable Object: `main`'s pipeline. Each push to `main` is recorded; its alarm
 //! runs one deploy job at a time, of the newest push, which publishes the sites whose inputs
-//! changed since the last deploy (`control::Pipeline`).
+//! changed since the last deploy (`control::Pipeline`). Beside it, each push is mirrored to
+//! GitHub (`mirroring::Mirroring`), and both sides' refs are compared hourly.
 
 use std::collections::BTreeMap;
 use std::time::Duration;
@@ -8,10 +9,13 @@ use std::time::Duration;
 use serde_json::{Value, json};
 use worker::{DurableObject, Env, Method, Request, Response, Result, State, durable_object};
 
+use super::github;
 use super::platform::{self, job_stub, json_request, now, secret};
 use crate::control::{self, Outcome, Pipeline, Report};
+use crate::mirroring::{self, Mirroring};
 
 const PIPELINE: &str = "pipeline";
+const MIRRORING: &str = "mirroring";
 const STARTING: &str = "starting";
 
 /// How often a running deploy is asked how it went.
@@ -79,6 +83,125 @@ impl MainRun {
         Ok(())
     }
 
+    async fn mirroring(&self) -> Result<Mirroring> {
+        Ok(self
+            .state
+            .storage()
+            .get(MIRRORING)
+            .await?
+            .unwrap_or_default())
+    }
+
+    /// Saves `m`, and brings the alarm forward to when the mirror next needs it.
+    async fn save_mirroring(&self, m: &Mirroring) -> Result<()> {
+        let storage = self.state.storage();
+        storage.put(MIRRORING, m).await?;
+        let at = now();
+        let want = if m.running.is_some() {
+            Some(at + POLL.as_secs())
+        } else if m.target.is_some() && m.target != m.mirrored {
+            Some(m.retry_at.unwrap_or(at).max(at))
+        } else {
+            None
+        };
+        if let Some(want) = want {
+            let want_ms = i64::try_from(want * 1000).unwrap_or(i64::MAX);
+            if storage.get_alarm().await?.is_none_or(|t| t > want_ms) {
+                storage
+                    .set_alarm(Duration::from_secs(want.saturating_sub(at)))
+                    .await?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Starts the mirror of `sha` in a job Container, with a read token for Artifacts and an
+    /// installation token for GitHub, both minted for this job.
+    async fn start_mirror(&self, to: &str, sha: &str) -> std::result::Result<(), String> {
+        let (owner, repo) = mirroring::github_repo(to)
+            .ok_or_else(|| format!("the mirror `{to}` is not a GitHub repository"))?;
+        let to_token = github::installation_token(&self.env, &owner, &repo).await?;
+        let (remote, token) =
+            platform::credentials(&self.env, false, cobot::artifacts_wire::TOKEN_TTL)
+                .await
+                .map_err(|e| e.to_string())?;
+        let spec = control::mirror_spec(&remote, &token, sha, to, &to_token);
+        let body = serde_json::to_value(&spec).map_err(|e| e.to_string())?;
+        let req = json_request("https://checker/start", Method::Post, Some(&body), None)
+            .map_err(|e| e.to_string())?;
+        let mut r = job_stub(&self.env, control::class_of(control::MIRROR), &spec.id)
+            .map_err(|e| e.to_string())?
+            .fetch_with_request(req)
+            .await
+            .map_err(|e| e.to_string())?;
+        if (200..300).contains(&r.status_code()) {
+            Ok(())
+        } else {
+            Err(r.text().await.unwrap_or_default())
+        }
+    }
+
+    /// Moves the mirror on: polls a running job, or starts the newest push's.
+    async fn mirror_step(&self) -> Result<()> {
+        let Some(to) = github::mirror(&self.env) else {
+            return Ok(());
+        };
+        let mut m = self.mirroring().await?;
+        let at = now();
+        let start = if let Some((sha, _)) = m.running.clone() {
+            let id = control::mirror_id(&sha);
+            match self.poll_job(&id, control::MIRROR).await? {
+                Ok(Some(report)) => {
+                    let ok = report.outcome == Outcome::Passed;
+                    let why = report.violations.first().cloned().unwrap_or_default();
+                    m.finished(ok, &why, at);
+                    if !ok {
+                        worker::console_warn!("the mirror of {sha} failed: {why}");
+                    }
+                    m.start(at)
+                }
+                Ok(None) => None,
+                Err(()) => m.lost(at),
+            }
+        } else {
+            m.start(at)
+        };
+        if let Some(sha) = start {
+            match self.start_mirror(&to, &sha).await {
+                Ok(()) => {}
+                Err(why) if control::no_capacity(&why) => {
+                    // No attempt used: it starts on a later alarm.
+                    m.running = None;
+                }
+                Err(why) => {
+                    worker::console_warn!("the mirror of {sha} did not start: {why}");
+                    m.finished(false, &why, at);
+                }
+            }
+        }
+        self.save_mirroring(&m).await
+    }
+
+    /// Compares both sides' refs, when due: what GitHub lacks becomes the mirror's target.
+    async fn reconcile(&self) -> Result<Value> {
+        let Some(to) = github::mirror(&self.env) else {
+            return Ok(json!({ "mirror": null }));
+        };
+        let mut m = self.mirroring().await?;
+        let at = now();
+        if !m.reconcile_due(at) {
+            return Ok(json!({ "mirror": m }));
+        }
+        let (remote, token) =
+            platform::credentials(&self.env, false, cobot::artifacts_wire::TOKEN_TTL).await?;
+        let ours = github::refs(&remote, Some(&token)).await?;
+        let theirs = github::refs(&to, None).await?;
+        m.reconciled(&ours, &theirs, "main", at);
+        self.save_mirroring(&m).await?;
+        self.mirror_step().await?;
+        Ok(json!({ "mirror": self.mirroring().await? }))
+    }
+
     /// Starts the deploy of `sha` in a job Container, referencing `images`.
     async fn start(
         &self,
@@ -138,8 +261,17 @@ impl MainRun {
     /// The running deploy's report: `Some` when it finished, `Err(())` when its Container is
     /// gone, `None` while it runs or can't be asked.
     async fn poll(&self, sha: &str) -> Result<std::result::Result<Option<Report>, ()>> {
-        let id = control::deploy_id(sha);
-        let mut r = job_stub(&self.env, control::class_of(control::DEPLOY), &id)?
+        self.poll_job(&control::deploy_id(sha), control::DEPLOY)
+            .await
+    }
+
+    /// Job `id`'s report, for a job of kind `job`, as [`Self::poll`] answers.
+    async fn poll_job(
+        &self,
+        id: &str,
+        job: &str,
+    ) -> Result<std::result::Result<Option<Report>, ()>> {
+        let mut r = job_stub(&self.env, control::class_of(job), id)?
             .fetch_with_str(&format!("https://checker/status/{id}"))
             .await?;
         Ok(match r.status_code() {
@@ -188,13 +320,27 @@ impl DurableObject for MainRun {
                 p.pushed(sha);
                 let starting = p.start();
                 self.save(&p, starting.as_deref()).await?;
+                if github::mirror(&self.env).is_some() {
+                    let mut m = self.mirroring().await?;
+                    m.pushed(sha, now());
+                    self.save_mirroring(&m).await?;
+                }
                 Response::from_json(&p.shown())
             }
             (Method::Post, "retry") => {
                 let mut p = self.pipeline().await?;
                 let starting = p.retry();
                 self.save(&p, starting.as_deref()).await?;
-                if starting.is_none() {
+                let mut m = self.mirroring().await?;
+                let mirroring = github::mirror(&self.env).is_some()
+                    && m.target.is_some()
+                    && m.target != m.mirrored
+                    && m.running.is_none();
+                if mirroring {
+                    m.retry_at = None;
+                    self.save_mirroring(&m).await?;
+                }
+                if starting.is_none() && !mirroring {
                     return Response::error(
                         "nothing to retry: a deploy runs or waits, or main has had no deploy",
                         409,
@@ -204,8 +350,17 @@ impl DurableObject for MainRun {
             }
             (Method::Get, "status") => {
                 let p = self.pipeline().await?;
-                Response::from_json(&json!({ "pipeline": p.shown() }))
+                let m = self.mirroring().await?;
+                Response::from_json(&json!({
+                    "pipeline": p.shown(),
+                    "mirror": m,
+                    "mirror_behind": m.behind(now()),
+                }))
             }
+            (Method::Post, "reconcile") => match self.reconcile().await {
+                Ok(v) => Response::from_json(&v),
+                Err(e) => Response::error(format!("reconcile: {e}"), 502),
+            },
             _ => Response::error("not found", 404),
         }
     }
@@ -262,9 +417,17 @@ impl DurableObject for MainRun {
             next = p.start();
         }
         self.save_after(&p, next.as_deref(), wait).await?;
+        if let Err(e) = self.mirror_step().await {
+            worker::console_error!("mirror: {e}");
+        }
         let storage = self.state.storage();
-        if super::platforms::running(&self.state).await? && storage.get_alarm().await?.is_none() {
-            storage.set_alarm(super::platforms::POLL).await?;
+        if super::platforms::running(&self.state).await? {
+            // The earliest alarm wins: the mirror's may be an hour away.
+            let poll_at = i64::try_from((now() + super::platforms::POLL.as_secs()) * 1000)
+                .unwrap_or(i64::MAX);
+            if storage.get_alarm().await?.is_none_or(|t| t > poll_at) {
+                storage.set_alarm(super::platforms::POLL).await?;
+            }
         }
         Response::ok("ok")
     }

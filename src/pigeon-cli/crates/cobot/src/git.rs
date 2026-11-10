@@ -370,30 +370,43 @@ pub fn mirror(
         &d.branch,
         name,
         to,
+        None,
         &stage(root, name)?,
     )
 }
 
 fn stage(root: &Path, name: &str) -> Result<PathBuf, Error> {
     let dir = root.join(MIRROR_DIR).join(format!("{name}.git"));
+    bare(&dir)?;
+    Ok(dir)
+}
+
+/// Makes `dir` a bare repository, unless it is one already.
+///
+/// # Errors
+///
+/// [`Error::Io`] or [`Error::Tool`] when it can't be made.
+pub fn bare(dir: &Path) -> Result<(), Error> {
     if !dir.join("HEAD").is_file() {
-        fs::create_dir_all(&dir).map_err(|e| Error::Io {
-            path: dir.clone(),
+        fs::create_dir_all(dir).map_err(|e| Error::Io {
+            path: dir.to_path_buf(),
             message: e.to_string(),
         })?;
         checked(
             Command::new("git")
                 .args(["init", "--quiet", "--bare"])
-                .arg(&dir)
+                .arg(dir)
                 .output(),
             "git init",
         )?;
     }
-    Ok(dir)
+    Ok(())
 }
 
 /// [`mirror`] from `remote` with `token`, through the bare repository `dir`: the mirror's
 /// branch only fast-forwards and its tags are only added; a mirror that moved ahead is refused.
+/// With `to_token`, the push to `to` sends it as GitHub's `x-access-token` basic credential,
+/// through the environment only; without it, the user's own git credentials apply.
 ///
 /// # Errors
 ///
@@ -404,6 +417,7 @@ pub fn mirror_from(
     branch: &str,
     name: &str,
     to: &str,
+    to_token: Option<&str>,
     dir: &Path,
 ) -> Result<Mirrored, Error> {
     let heads = format!("refs/heads/{branch}:refs/heads/{branch}");
@@ -416,7 +430,10 @@ pub fn mirror_from(
             .output(),
         "git fetch",
     )?;
-    let mut push = plain(dir);
+    let mut push = match to_token {
+        Some(t) => basic(dir, to, t),
+        None => plain(dir),
+    };
     push.args(["push", "--quiet", "--atomic", to, &heads])
         .arg("refs/tags/*:refs/tags/*");
     checked(push.output(), "git push").map_err(|e| match e {
@@ -433,6 +450,18 @@ pub fn mirror_from(
         to: to.to_string(),
         refs: refs(dir, branch)?,
     })
+}
+
+/// `git --git-dir dir` with `token` sent to `to` only as the basic credential
+/// `x-access-token:<token>`, as GitHub takes an App's installation token; through the
+/// environment, never argv or a file.
+fn basic(dir: &Path, to: &str, token: &str) -> Command {
+    let auth = crate::imagebuild::base64(format!("x-access-token:{token}").as_bytes());
+    let mut c = plain(dir);
+    c.env("GIT_CONFIG_COUNT", "1")
+        .env("GIT_CONFIG_KEY_0", format!("http.{to}.extraHeader"))
+        .env("GIT_CONFIG_VALUE_0", format!("Authorization: Basic {auth}"));
+    c
 }
 
 /// `git --git-dir dir`, never prompting.
