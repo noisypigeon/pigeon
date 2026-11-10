@@ -149,8 +149,9 @@ belong in the ADR, never in the file.
   authorized change's branch, all or nothing, and `git.tokens` lists tokens
   without values; the session's Artifacts token is retired, per
   [`2026-11-06-security-git-front-door-spike.md`](.claude/decisions/2026-11-06-security-git-front-door-spike.md).
-- GitHub is a source mirror only: no workflows run there (`mirror.yaml`
-  forbids them), checks and delivery are Cloudflare's, and releases pause until
+- GitHub is a source mirror, and runs only `main`'s `ci.yml` for the control
+  plane's code checks (`mirror.yaml` allows that one workflow); judging and
+  delivery are Cloudflare's, and releases pause until
   the release job runs on Cloudflare, per the hosting ADR's 2026-11-06
   amendment. The release-bot and `cobot.yml` notes below describe that paused
   path.
@@ -238,6 +239,18 @@ belong in the ADR, never in the file.
 
 `mise run ci` must pass before every change is pushed.
 
+Where each check runs:
+
+- locally, before a push: `mise run ci`, or `ci-scoped` for this branch's
+  paths;
+- after a push, on Cloudflare: `bound` and every sentinel policy;
+- then, on GitHub Actions: the code checks `change.scope` selects (fmt,
+  clippy, wasm builds, tests), through `main`'s `ci.yml`, with each run's link
+  in `change_status` under `github`; while GitHub is down a check shows
+  `waiting: GitHub` and is retried;
+- `ci_rerun` re-dispatches one check; `ci_rerun` with `on: cloudflare` is the
+  owner's break-glass, running the head's code checks on the `Checker`.
+
 - `mise run build` / `test` / `fmt` / `lint`
 - `mise run rust`: fmt-check, clippy `-D warnings`, `features`, tests.
 - `mise run features`: clippy with each subcommand feature alone.
@@ -300,7 +313,8 @@ belong in the ADR, never in the file.
 - `pigeon backplane jobs --listen ADDR`: a job Container's server, signed under
   `BACKPLANE_TOKEN`; the control plane's `Checker` runs it. The Worker
   (`infra/pigeon/workers/control/`) serves MCP on `/mcp` behind Access: tools
-  `change_propose`, `change_status`, `change_pushed`, `ci_rerun`, and the
+  `change_propose`, `change_status`, `change_pushed`, `ci_rerun` (`on:
+  cloudflare` asks the owner), and the
   owner's `change_authorize`, `change_approve`, `change_merge` (squashes the
   approved head onto `main` as `<title> (!n)`) and `change_close`, which,
   called by the agent, answer at once with the approval page's link;
