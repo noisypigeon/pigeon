@@ -1,23 +1,17 @@
 description: Release units and changelog tiers; only the release bot writes versions and changelogs.
 repository: https://github.com/noisypigeon/pigeon
 units:
+  # Its own crate alone; see .claude/decisions/2026-11-10-development-factory-crates-functional-core.md §1.
   sentinel:
     manifest: src/pigeon-cli/crates/sentinel/Cargo.toml
-    features: sentinel
+    features: ""
     image: ghcr.io/noisypigeon/pigeon-sentinel
     paths:
       - src/pigeon-cli/crates/sentinel/
-      - src/pigeon-cli/crates/pigeon/src/commands/sentinel.rs
-      - src/pigeon-cli/crates/pigeon/src/cli/sentinel.rs
-      - src/pigeon-cli/crates/pigeon/src/main.rs
-      - src/pigeon-cli/crates/pigeon/src/lib.rs
-      - src/pigeon-cli/crates/pigeon/src/cli/mod.rs
-      - src/pigeon-cli/crates/pigeon/src/commands/mod.rs
-      - src/pigeon-cli/crates/pigeon/Cargo.toml
       - src/pigeon-cli/Dockerfile
       - src/pigeon-cli/.dockerignore
     exclude: [tests/, benches/, '*.md']
-    cargo: { workspace: src/pigeon-cli, package: pigeon }
+    cargo: { workspace: src/pigeon-cli, package: pigeon-sentinel }
   gantry:
     manifest: src/pigeon-cli/crates/gantry/Cargo.toml
     features: gantry

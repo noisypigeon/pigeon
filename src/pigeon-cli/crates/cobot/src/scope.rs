@@ -73,6 +73,8 @@ fn pigeon(args: &[&str]) -> Vec<String> {
 struct Crates {
     by_dir: BTreeMap<String, String>,
     deps: BTreeMap<String, BTreeSet<String>>,
+    /// `pigeon`'s features, each with the packages it enables.
+    features: BTreeMap<String, BTreeSet<String>>,
 }
 
 fn read_toml(path: &Path) -> Result<toml::Value, Error> {
@@ -104,6 +106,7 @@ fn crates(root: &Path) -> Result<Crates, Error> {
         .collect();
     let mut by_dir = BTreeMap::new();
     let mut deps = BTreeMap::new();
+    let mut features = BTreeMap::new();
     for entry in fs::read_dir(ws.join("crates"))
         .map_err(|e| Error::Io {
             path: ws.join("crates"),
@@ -127,13 +130,82 @@ fn crates(root: &Path) -> Result<Crates, Error> {
             .filter_map(|k| members.get(k))
             .filter_map(|p| p.rsplit('/').next().map(str::to_string))
             .collect();
+        if name == "pigeon" {
+            features = pigeon_features(&m, &members);
+        }
         by_dir.insert(format!("{WORKSPACE}/crates/{dir}/"), name.to_string());
         deps.insert(name.to_string(), mine);
     }
-    Ok(Crates { by_dir, deps })
+    Ok(Crates {
+        by_dir,
+        deps,
+        features,
+    })
 }
 
+/// `pigeon`'s features but `default`, each with the workspace packages its `dep:` entries enable.
+fn pigeon_features(
+    manifest: &toml::Value,
+    members: &BTreeMap<String, String>,
+) -> BTreeMap<String, BTreeSet<String>> {
+    manifest
+        .get("features")
+        .and_then(toml::Value::as_table)
+        .into_iter()
+        .flatten()
+        .filter(|(f, _)| f.as_str() != "default")
+        .map(|(f, list)| {
+            let packages = list
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|e| e.as_str()?.strip_prefix("dep:"))
+                .filter_map(|k| members.get(k))
+                .filter_map(|p| p.rsplit('/').next().map(str::to_string))
+                .collect();
+            (f.clone(), packages)
+        })
+        .collect()
+}
+
+/// `pigeon`'s files every command shares.
+const PIGEON_SHARED: [&str; 5] = [
+    "src/main.rs",
+    "src/lib.rs",
+    "src/cli/mod.rs",
+    "src/commands/mod.rs",
+    "Cargo.toml",
+];
+
 impl Crates {
+    /// The `pigeon` features whose build `files` and the `affected` packages change: a feature
+    /// whose package is affected, whose `commands/<f>.rs` or `cli/<f>.rs` changed, or every one
+    /// when a file all commands share changed.
+    fn pigeon_features_touched(
+        &self,
+        affected: &BTreeSet<String>,
+        files: &[&str],
+    ) -> BTreeSet<String> {
+        let prefix = format!("{WORKSPACE}/crates/pigeon/");
+        let pigeon: Vec<&str> = files
+            .iter()
+            .filter_map(|f| f.strip_prefix(&prefix))
+            .collect();
+        if pigeon.iter().any(|f| PIGEON_SHARED.contains(f)) {
+            return self.features.keys().cloned().collect();
+        }
+        self.features
+            .iter()
+            .filter(|(f, packages)| {
+                packages.iter().any(|p| affected.contains(p))
+                    || pigeon.iter().any(|p| {
+                        *p == format!("src/commands/{f}.rs") || *p == format!("src/cli/{f}.rs")
+                    })
+            })
+            .map(|(f, _)| f.clone())
+            .collect()
+    }
+
     /// `changed` and every crate that depends on one of them, transitively.
     fn with_dependants(&self, changed: &BTreeSet<String>) -> BTreeSet<String> {
         let mut out = changed.clone();
@@ -304,7 +376,7 @@ fn rust_jobs(crates: &Crates, config: &Config, files: &[&str]) -> Vec<Job> {
                     .find(|(dir, _)| paths.iter().any(|p| p == *dir))
                     .map(|(_, c)| c.clone())
             };
-            let features: BTreeSet<String> = config
+            let mut features: BTreeSet<String> = config
                 .units
                 .values()
                 .filter(|u| !u.features.is_empty())
@@ -317,6 +389,7 @@ fn rust_jobs(crates: &Crates, config: &Config, files: &[&str]) -> Vec<Job> {
                 })
                 .map(|u| u.features.clone())
                 .collect();
+            features.extend(crates.pigeon_features_touched(&affected, files));
             out.extend(features.iter().map(feature_clippy));
         }
         let workers: Vec<&str> = WORKER
@@ -358,6 +431,7 @@ pub fn jobs(root: &Path, files: &[String]) -> Result<Vec<Job>, Error> {
         .values()
         .filter(|u| !u.features.is_empty())
         .map(|u| u.features.clone())
+        .chain(crates.features.keys().cloned())
         .collect();
     let mut out = Vec::new();
     if files.iter().any(|f| under(f, &EVERYTHING)) {
@@ -394,7 +468,7 @@ pub fn jobs(root: &Path, files: &[String]) -> Result<Vec<Job>, Error> {
             ));
         }
     }
-    let policy_tests = ["sentinel", "pigeon", "pigeon-backplane"];
+    let policy_tests = ["pigeon-sentinel", "pigeon", "pigeon-backplane"];
     if files.iter().any(|f| under(f, &POLICIES))
         && !policy_tests.iter().all(|p| ran_tests_of(&out, p))
     {
@@ -404,7 +478,7 @@ pub fn jobs(root: &Path, files: &[String]) -> Result<Vec<Job>, Error> {
                 "cargo",
                 "test",
                 "-p",
-                "sentinel",
+                "pigeon-sentinel",
                 "-p",
                 "pigeon",
                 "-p",

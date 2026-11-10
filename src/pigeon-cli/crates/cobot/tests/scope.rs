@@ -95,7 +95,7 @@ fn cobot_runs_itself_its_dependants_and_the_worker() {
 fn sentinel_runs_sentinel_and_its_dependants_without_the_worker() {
     let got = names(&["src/pigeon-cli/crates/sentinel/src/rules.rs"]);
     assert!(
-        got.contains(&"test pigeon pigeon-backplane sentinel".to_string()),
+        got.contains(&"test pigeon pigeon-backplane pigeon-sentinel".to_string()),
         "{got:?}"
     );
     assert!(!got.iter().any(|n| n.contains("cobot")), "{got:?}");
@@ -115,6 +115,13 @@ fn a_pigeon_command_runs_only_its_feature() {
     assert!(got.contains(&"test pigeon".to_string()), "{got:?}");
     let features: Vec<&String> = got.iter().filter(|n| n.contains("--features")).collect();
     assert_eq!(features, ["clippy pigeon --features cobot"], "{got:?}");
+}
+
+#[test]
+fn pigeons_sentinel_command_runs_its_feature_apart_from_the_release_units() {
+    let got = names(&["src/pigeon-cli/crates/pigeon/src/commands/sentinel.rs"]);
+    let features: Vec<&String> = got.iter().filter(|n| n.contains("--features")).collect();
+    assert_eq!(features, ["clippy pigeon --features sentinel"], "{got:?}");
 }
 
 #[test]

@@ -1,5 +1,5 @@
 [package]
-name = "sentinel"
+name = "pigeon-sentinel"
 description = "A policy engine that checks a repository against YAML policies."
 version = "0.1.16"
 edition.workspace = true
@@ -7,6 +7,13 @@ rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 publish.workspace = true
+
+[lib]
+name = "sentinel"
+
+[[bin]]
+name = "pigeon-sentinel"
+path = "src/main.rs"
 
 [dependencies]
 regex.workspace = true
