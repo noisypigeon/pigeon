@@ -160,6 +160,12 @@ belong in the ADR, never in the file.
   and `GITHUB_APP_KEY`, and reconciles hourly; `deploy_status` shows it and
   the digest names a mirror behind, per
   [`2026-11-08-development-github-mirror-on-merge.md`](.claude/decisions/2026-11-08-development-github-mirror-on-merge.md).
+- Code checks (fmt, clippy, wasm builds, tests and the merge gate's full set)
+  run on GitHub Actions: the control plane pushes a change's head there after
+  `bound` passes, dispatches `main`'s `ci.yml` on it with no secrets, and reads
+  the run through the App; judging, validation, merge, deploy and the platform
+  stay on Cloudflare, per
+  [`2026-11-10-development-code-checks-github-actions.md`](.claude/decisions/2026-11-10-development-code-checks-github-actions.md).
 - Releases and changelogs are machinery, per
   [`2026-11-02-release-crate-units-and-images.md`](.claude/decisions/2026-11-02-release-crate-units-and-images.md):
   - every `CHANGELOG.md` is generated on merge by the release bot, which runs
