@@ -118,6 +118,14 @@ belong in the ADR, never in the file.
   `trace_show`, `events_query` and `stats_show` read logs, traces, events and
   build, deploy and check stats, per
   [`2026-11-10-runtime-platform-hostname-dashboard-observability.md`](.claude/decisions/2026-11-10-runtime-platform-hostname-dashboard-observability.md).
+- Change slots are freed: a change closed before authorization closes; a
+  conflicted change has one reconciliation, and a family holds one slot; the
+  control plane alone evicts, hourly, a change whose session has gone or that
+  is outdated, when an eviction policy in `.config/policies/` allows it, keeping
+  its head as `refs/evicted/<n>-<slug>`; a session never evicts; incomplete
+  work is flagged with what remains, and the owner asked whether a new session
+  should finish it, per
+  [`2026-11-10-development-change-slot-eviction-policy.md`](.claude/decisions/2026-11-10-development-change-slot-eviction-policy.md).
 - The control plane deploys itself: on each push to `main`, `MainRun`'s
   deploy job deploys the Workers whose inputs changed, with outputs from
   `DEPLOY_OUTPUTS`, images by registry reference, a health check and
