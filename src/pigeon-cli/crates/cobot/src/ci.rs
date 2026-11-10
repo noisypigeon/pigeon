@@ -116,6 +116,36 @@ pub fn base_file(dir: &Path, base: &str, path: &str) -> Option<String> {
     .ok()
 }
 
+/// What a program printed, and its exit code: none when a signal ended it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Ran {
+    /// Its exit code.
+    pub code: Option<i32>,
+    /// Its standard output.
+    pub stdout: String,
+    /// Its standard error.
+    pub stderr: String,
+}
+
+/// Runs `program` with `args` and only `env` added to the job's environment, input closed.
+///
+/// # Errors
+///
+/// Why it didn't start.
+pub fn run_program(program: &Path, args: &[String], env: &[(&str, String)]) -> Result<Ran, String> {
+    let out = Command::new(program)
+        .args(args)
+        .envs(env.iter().map(|(k, v)| (*k, v.as_str())))
+        .stdin(Stdio::null())
+        .output()
+        .map_err(|e| format!("{} didn't run: {e}", program.display()))?;
+    Ok(Ran {
+        code: out.status.code(),
+        stdout: String::from_utf8_lossy(&out.stdout).into_owned(),
+        stderr: String::from_utf8_lossy(&out.stderr).into_owned(),
+    })
+}
+
 /// Writes each file under `path` on the fetched `base` to `out`, at its path below `path`; how
 /// many it wrote.
 ///

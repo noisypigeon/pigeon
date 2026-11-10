@@ -1,23 +1,44 @@
 #!/bin/sh
 # A job Container's entrypoint: runs main's newest pigeon build when the Worker names one and
 # its SHA-256 matches, else the image's own; see
-# .claude/decisions/2026-11-07-development-job-images-on-cloudflare.md §3.
+# .claude/decisions/2026-11-07-development-job-images-on-cloudflare.md §3. A named
+# pigeon-sentinel that matches is exported as PIGEON_SENTINEL, for the bound job; see
+# .claude/decisions/2026-11-10-development-factory-crates-functional-core.md §2.
 set -u
 baked=/usr/local/bin/pigeon
-if [ -n "${PIGEON_BUILD_URL:-}" ] && [ -n "${PIGEON_BUILD_SHA256:-}" ]; then
-  build="${TMPDIR:-/tmp}/pigeon-build"
-  # The builds token's headers go to curl on stdin, never in argv.
+dir="${TMPDIR:-/tmp}"
+
+# fetch URL SHA256 FILE: downloads with the builds token, whose headers go to curl on stdin,
+# never in argv; succeeds only when the file's SHA-256 matches.
+fetch() {
   if printf 'header = "CF-Access-Client-Id: %s"\nheader = "CF-Access-Client-Secret: %s"\n' \
       "${PIGEON_BUILD_ACCESS_ID:-}" "${PIGEON_BUILD_ACCESS_SECRET:-}" \
-    | curl -fsSL --retry 3 --max-time 120 --config - -o "$build" "$PIGEON_BUILD_URL" \
-    && printf '%s  %s\n' "$PIGEON_BUILD_SHA256" "$build" | sha256sum -c - >/dev/null 2>&1; then
-    chmod +x "$build"
+    | curl -fsSL --retry 3 --max-time 120 --config - -o "$3" "$1" \
+    && printf '%s  %s\n' "$2" "$3" | sha256sum -c - >/dev/null 2>&1; then
+    chmod +x "$3"
+    return 0
+  fi
+  rm -f "$3"
+  return 1
+}
+
+unset PIGEON_SENTINEL
+if [ -n "${PIGEON_SENTINEL_URL:-}" ] && [ -n "${PIGEON_SENTINEL_SHA256:-}" ]; then
+  if fetch "$PIGEON_SENTINEL_URL" "$PIGEON_SENTINEL_SHA256" "$dir/pigeon-sentinel"; then
+    export PIGEON_SENTINEL="$dir/pigeon-sentinel"
+    echo "pigeon-start: judging with sentinel build $PIGEON_SENTINEL_SHA256" >&2
+  else
+    echo "pigeon-start: the sentinel build at $PIGEON_SENTINEL_URL is missing or its checksum differs; judging with the linked library" >&2
+  fi
+fi
+
+if [ -n "${PIGEON_BUILD_URL:-}" ] && [ -n "${PIGEON_BUILD_SHA256:-}" ]; then
+  if fetch "$PIGEON_BUILD_URL" "$PIGEON_BUILD_SHA256" "$dir/pigeon-build"; then
     unset PIGEON_BUILD_ACCESS_ID PIGEON_BUILD_ACCESS_SECRET
     echo "pigeon-start: running build $PIGEON_BUILD_SHA256" >&2
-    exec "$build" "$@"
+    exec "$dir/pigeon-build" "$@"
   fi
   echo "pigeon-start: the build at $PIGEON_BUILD_URL is missing or its checksum differs; running the image's pigeon" >&2
-  rm -f "$build"
 else
   echo "pigeon-start: no build named; running the image's pigeon" >&2
 fi

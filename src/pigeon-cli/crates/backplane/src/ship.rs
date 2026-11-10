@@ -140,6 +140,16 @@ pub const BUILD: [&str; 9] = [
     "backplane",
 ];
 
+/// The command that builds the `pigeon-sentinel` the bound job judges with.
+pub const SENTINEL_BUILD: [&str; 6] = [
+    "cargo",
+    "build",
+    "--release",
+    "--locked",
+    "-p",
+    cobot::ship_wire::SENTINEL_BINARY,
+];
+
 /// Builds `pigeon` from the checkout at `dir` when the workspace changed among `files`, and
 /// stores it at [`cobot::ship_wire::build_key`] in the [`BUILDS_BINDING`] bucket, with S3
 /// credentials from the deploy token; the build, or none when nothing changed.
@@ -180,19 +190,26 @@ pub fn build(
         .ok_or_else(|| format!("no Worker binds {BUILDS_BINDING}, where builds are stored"))?;
     let bucket = workers::resolve(&reference, &outputs)?;
     let workspace = dir.join(cobot::scope::WORKSPACE);
-    let argv: Vec<String> = BUILD.iter().map(|s| (*s).to_string()).collect();
-    let started = std::time::Instant::now();
-    let (ok, out) = cobot::ci::exec(&workspace, &argv, cobot::ci::TIMEOUT, &spec.token);
-    let took = started.elapsed().as_secs();
-    if !ok {
-        let _ = writeln!(log, "{}", crate::control::tail(&out));
-        return Err(format!("pigeon's release build failed after {took}s"));
-    }
     let target = std::env::var_os("CARGO_TARGET_DIR")
         .map_or_else(|| workspace.join("target"), std::path::PathBuf::from);
-    let binary = std::fs::read(target.join("release/pigeon"))
-        .map_err(|e| format!("the built pigeon can't be read: {e}"))?;
+    let compile = |argv: &[&str], name: &str, log: &mut String| {
+        let argv: Vec<String> = argv.iter().map(|s| (*s).to_string()).collect();
+        let started = std::time::Instant::now();
+        let (ok, out) = cobot::ci::exec(&workspace, &argv, cobot::ci::TIMEOUT, &spec.token);
+        let took = started.elapsed().as_secs();
+        if !ok {
+            let _ = writeln!(log, "{}", crate::control::tail(&out));
+            return Err(format!("{name}'s release build failed after {took}s"));
+        }
+        let binary = std::fs::read(target.join("release").join(name))
+            .map_err(|e| format!("the built {name} can't be read: {e}"))?;
+        Ok((binary, took))
+    };
+    let (binary, took) = compile(&BUILD, "pigeon", log)?;
     let sha256 = cobot::s3::sha256_hex(&binary);
+    let (sentinel, sentinel_took) =
+        compile(&SENTINEL_BUILD, cobot::ship_wire::SENTINEL_BINARY, log)?;
+    let sentinel_sha256 = cobot::s3::sha256_hex(&sentinel);
     let api = cobot::cloudflare::Api::new(None, token.clone());
     let account = api.account()?;
     let creds = cobot::s3::Credentials {
@@ -207,22 +224,37 @@ pub fn build(
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_or(0, |d| d.as_secs());
-    let key = cobot::ship_wire::build_key(&spec.sha);
-    store
-        .put(&key, &binary, "application/octet-stream", now)
-        .map_err(|e| {
-            format!("storing {key} failed: {e}")
-                .replace(&bucket, "…")
-                .replace(&account, "…")
-        })?;
-    let _ = writeln!(
-        log,
-        "stored {key}: built in {took}s, {} bytes, sha256 {sha256}",
-        binary.len()
-    );
+    for (key, bytes, took, sum) in [
+        (
+            cobot::ship_wire::build_key(&spec.sha),
+            &binary,
+            took,
+            &sha256,
+        ),
+        (
+            cobot::ship_wire::sentinel_key(&spec.sha),
+            &sentinel,
+            sentinel_took,
+            &sentinel_sha256,
+        ),
+    ] {
+        store
+            .put(&key, bytes, "application/octet-stream", now)
+            .map_err(|e| {
+                format!("storing {key} failed: {e}")
+                    .replace(&bucket, "…")
+                    .replace(&account, "…")
+            })?;
+        let _ = writeln!(
+            log,
+            "stored {key}: built in {took}s, {} bytes, sha256 {sum}",
+            bytes.len()
+        );
+    }
     Ok(Some(Build {
         sha: spec.sha.clone(),
         sha256,
+        sentinel_sha256: Some(sentinel_sha256),
     }))
 }
 

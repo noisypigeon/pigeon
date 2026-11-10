@@ -101,6 +101,7 @@ impl Launch {
 pub const BUILD_URL_VAR: &str = "PIGEON_BUILD_URL";
 /// The variable holding that build's SHA-256.
 pub const BUILD_SHA256_VAR: &str = "PIGEON_BUILD_SHA256";
+pub use crate::ship_wire::{SENTINEL_SHA256_VAR, SENTINEL_URL_VAR};
 /// The variable holding the builds token's client ID.
 pub const BUILD_ACCESS_ID_VAR: &str = "PIGEON_BUILD_ACCESS_ID";
 /// The variable holding the builds token's secret.
@@ -118,6 +119,8 @@ pub struct JobsBuild {
     pub sha256: String,
     /// The Access service token that may read it: client ID and secret.
     pub access: (String, String),
+    /// The `pigeon-sentinel` built beside it: its URL and SHA-256; none for a build without one.
+    pub sentinel: Option<(String, String)>,
 }
 
 impl std::fmt::Debug for JobsBuild {
@@ -125,6 +128,7 @@ impl std::fmt::Debug for JobsBuild {
         f.debug_struct("JobsBuild")
             .field("url", &self.url)
             .field("sha256", &self.sha256)
+            .field("sentinel", &self.sentinel)
             .finish_non_exhaustive()
     }
 }
@@ -176,6 +180,10 @@ impl JobsLaunch {
             env.push((BUILD_SHA256_VAR, b.sha256.as_str()));
             env.push((BUILD_ACCESS_ID_VAR, b.access.0.as_str()));
             env.push((BUILD_ACCESS_SECRET_VAR, b.access.1.as_str()));
+            if let Some((url, sha256)) = &b.sentinel {
+                env.push((SENTINEL_URL_VAR, url.as_str()));
+                env.push((SENTINEL_SHA256_VAR, sha256.as_str()));
+            }
         }
         env
     }
@@ -474,6 +482,7 @@ mod tests {
             url: "https://control.example/builds/x/pigeon".into(),
             sha256: sha256.clone(),
             access: ("builds-id".into(), "builds-secret".into()),
+            sentinel: None,
         });
         assert!(!format!("{jobs:?}").contains("builds-secret"));
         assert!(!format!("{:?}", jobs.build.as_ref().expect("a build")).contains("builds-secret"));
@@ -500,6 +509,51 @@ mod tests {
                 ("PIGEON_BUILD_ACCESS_SECRET", "builds-secret"),
             ]
         );
+        let sentinel = "cd".repeat(32);
+        if let Some(b) = jobs.build.as_mut() {
+            b.sentinel = Some((
+                "https://control.example/builds/x/pigeon-sentinel".into(),
+                sentinel.clone(),
+            ));
+        }
+        assert_eq!(
+            jobs.env()[5..],
+            [
+                (
+                    "PIGEON_SENTINEL_URL",
+                    "https://control.example/builds/x/pigeon-sentinel"
+                ),
+                ("PIGEON_SENTINEL_SHA256", sentinel.as_str()),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_build_path_names_pigeon_or_pigeon_sentinel_and_nothing_else() {
+        let sha = "0123456789abcdef0123456789abcdef01234567";
+        assert_eq!(
+            crate::ship_wire::build_path(&format!("/builds/{sha}/pigeon-sentinel")),
+            Some((sha, "pigeon-sentinel"))
+        );
+        assert_eq!(
+            crate::ship_wire::build_path(&format!("/builds/{sha}/pigeon")),
+            Some((sha, "pigeon"))
+        );
+        assert_eq!(
+            crate::ship_wire::build_path_sha(&format!("/builds/{sha}/pigeon-sentinel")),
+            None
+        );
+        assert_eq!(
+            crate::ship_wire::sentinel_key(sha),
+            format!("builds/{sha}/pigeon-sentinel")
+        );
+        for bad in [
+            format!("/builds/{sha}/pigeon-other"),
+            format!("/builds/{sha}/pigeon-sentinel/x"),
+            format!("/builds/{sha}/"),
+        ] {
+            assert_eq!(crate::ship_wire::build_path(&bad), None, "{bad}");
+        }
     }
 
     #[test]

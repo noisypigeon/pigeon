@@ -538,3 +538,68 @@ fn a_bounded_change_head_reaches_its_branch_on_the_mirror_and_leaves_it_once_don
         r.log
     );
 }
+
+fn sentinel_spec() -> JobSpec {
+    serde_json::from_value(serde_json::json!({
+        "id": "7-x", "remote": "file:///r", "token": "t", "base": "main",
+        "branch": "change/7-x", "sha": "a", "number": 7, "title": "fix: x",
+        "plan": "a plan", "scope": ["a/**", "b"], "job": "bound",
+    }))
+    .expect("a spec")
+}
+
+/// A stand-in `pigeon-sentinel` in `dir` running `body`.
+fn stand_in(dir: &Path, body: &str) -> PathBuf {
+    use std::os::unix::fs::PermissionsExt as _;
+    let p = dir.join("pigeon-sentinel");
+    std::fs::write(&p, format!("#!/bin/sh\n{body}\n")).expect("write");
+    std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o755)).expect("chmod");
+    p
+}
+
+#[test]
+fn the_sentinel_binary_is_asked_with_the_change_as_its_pull_request() {
+    let tmp = TempDir::new().expect("tempdir");
+    let bin = stand_in(
+        tmp.path(),
+        r#"printf '{"ran":1,"skipped":0,"violations":["%s|%s|%s|%s"]}' "$PR_TITLE" "$PR_NUMBER" "$(printf %s "$PR_SCOPE" | tr '\n' ,)" "$*"; exit 1"#,
+    );
+    let got = jobs::judge_with(
+        &bin,
+        &sentinel_spec(),
+        Path::new("/head"),
+        &["a/1".into()],
+        Path::new("/main-policies"),
+    )
+    .expect("judged");
+    assert_eq!(
+        got,
+        ["fix: x|7|a/**,b|check --pull-request --json --root /head --policies /main-policies"]
+    );
+}
+
+#[test]
+fn a_sentinel_binary_that_cant_judge_is_an_error_not_a_pass() {
+    let tmp = TempDir::new().expect("tempdir");
+    let bad = stand_in(tmp.path(), "echo 'p.yaml: bad' >&2; exit 2");
+    let why = jobs::judge_with(
+        &bad,
+        &sentinel_spec(),
+        Path::new("/h"),
+        &[],
+        Path::new("/p"),
+    )
+    .expect_err("refused");
+    assert!(why.contains("p.yaml: bad"), "{why}");
+    let garbled = stand_in(tmp.path(), "echo not-json; exit 0");
+    assert!(
+        jobs::judge_with(
+            &garbled,
+            &sentinel_spec(),
+            Path::new("/h"),
+            &[],
+            Path::new("/p")
+        )
+        .is_err()
+    );
+}

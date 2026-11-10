@@ -780,17 +780,18 @@ async fn smoke(env: &Env, s: &Settings, who: &Identity) -> Result<Response> {
     )
 }
 
-/// `GET /builds/<sha>/pigeon`: `main`'s `pigeon` built at that commit, from R2.
+/// `GET /builds/<sha>/<binary>`: `main`'s `pigeon` or `pigeon-sentinel` built at that commit,
+/// from R2.
 async fn build(env: &Env, path: &str) -> Result<Response> {
-    let Some(sha) = cobot::ship_wire::build_path_sha(path) else {
+    let Some((sha, binary)) = cobot::ship_wire::build_path(path) else {
         return Response::error("not found", 404);
     };
-    let Some(object) = env
-        .bucket("CI_LOGS")?
-        .get(cobot::ship_wire::build_key(sha))
-        .execute()
-        .await?
-    else {
+    let key = if binary == cobot::ship_wire::SENTINEL_BINARY {
+        cobot::ship_wire::sentinel_key(sha)
+    } else {
+        cobot::ship_wire::build_key(sha)
+    };
+    let Some(object) = env.bucket("CI_LOGS")?.get(key).execute().await? else {
         return Response::error("no build of that commit", 404);
     };
     let Some(body) = object.body() else {
@@ -820,10 +821,21 @@ pub(super) async fn latest_build(env: &Env) -> Option<cobot::worker::JobsBuild> 
         .ok()?;
     let v: Value = r.json().await.ok()?;
     let b: control::Build = serde_json::from_value(v["pipeline"]["latest_build"].clone()).ok()?;
+    let sentinel = b.sentinel_sha256.map(|sum| {
+        (
+            format!(
+                "https://{host}/builds/{}/{}",
+                b.sha,
+                cobot::ship_wire::SENTINEL_BINARY
+            ),
+            sum,
+        )
+    });
     Some(cobot::worker::JobsBuild {
         url: format!("https://{host}/builds/{}/pigeon", b.sha),
         sha256: b.sha256,
         access,
+        sentinel,
     })
 }
 

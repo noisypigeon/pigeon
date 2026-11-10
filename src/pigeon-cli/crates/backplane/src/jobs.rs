@@ -478,7 +478,7 @@ fn bound(spec: &JobSpec, dir: &Path) -> Report {
             t.close.rule
         );
     }
-    let violations = match policy(spec, dir, &files) {
+    let violations = match policy(spec, dir, &files, &mut log) {
         Ok(v) => v,
         Err(e) => vec![e],
     };
@@ -589,9 +589,30 @@ fn adds_secret(dir: &Path, base: &str, path: &str) -> bool {
     crate::approvals::lengthens(&before, &head)
 }
 
-fn policy(spec: &JobSpec, dir: &Path, files: &[String]) -> Result<Vec<String>, String> {
+/// The variable naming the `pigeon-sentinel` that `pigeon-start` downloaded and verified.
+pub const SENTINEL_VAR: &str = "PIGEON_SENTINEL";
+
+/// The head's violations of the base's policies: judged by `main`'s `pigeon-sentinel` when the
+/// Container has one, else by the linked library; see
+/// `.claude/decisions/2026-11-10-development-factory-crates-functional-core.md` §2.
+fn policy(
+    spec: &JobSpec,
+    dir: &Path,
+    files: &[String],
+    log: &mut String,
+) -> Result<Vec<String>, String> {
+    let policies = base_policies(spec, dir)?;
+    if let Some(binary) = std::env::var_os(SENTINEL_VAR).map(PathBuf::from) {
+        let sum = std::env::var(cobot::ship_wire::SENTINEL_SHA256_VAR).unwrap_or_default();
+        let _ = writeln!(log, "sentinel: {} (sha256 {sum})", binary.display());
+        return match policies {
+            Some(p) => judge_with(&binary, spec, dir, files, &p),
+            None => Ok(Vec::new()),
+        };
+    }
+    log.push_str("sentinel: linked\n");
     let mut instance = Instance::load(dir).map_err(|e| e.to_string())?;
-    instance.paths.policies = base_policies(spec, dir)?;
+    instance.paths.policies = policies;
     let mut args = Map::new();
     for (k, v) in [
         ("branch", spec.branch.clone()),
@@ -610,6 +631,52 @@ fn policy(spec: &JobSpec, dir: &Path, files: &[String]) -> Result<Vec<String>, S
     run_with(&instance, &request, |_| None)
         .map(|r| r.violations)
         .map_err(|e| e.to_string())
+}
+
+/// The violations `binary`, a `pigeon-sentinel`, finds in the head at `dir` against `policies`,
+/// with the change as its pull request.
+///
+/// # Errors
+///
+/// When it didn't run, couldn't judge (an invalid policy), or printed no JSON report.
+pub fn judge_with(
+    binary: &Path,
+    spec: &JobSpec,
+    dir: &Path,
+    files: &[String],
+    policies: &Path,
+) -> Result<Vec<String>, String> {
+    let shown = binary.display();
+    let args: Vec<String> = ["check", "--pull-request", "--json", "--root"]
+        .into_iter()
+        .map(str::to_string)
+        .chain([
+            dir.display().to_string(),
+            "--policies".into(),
+            policies.display().to_string(),
+        ])
+        .collect();
+    let env = [
+        ("PR_TITLE", spec.title.clone()),
+        ("PR_BODY", spec.plan.clone()),
+        ("PR_NUMBER", spec.number.to_string()),
+        ("PR_FILES", files.join("\n")),
+        ("PR_BRANCH", spec.branch.clone()),
+        ("PR_SCOPE", spec.scope.join("\n")),
+    ];
+    let ran = cobot::ci::run_program(binary, &args, &env)?;
+    if !matches!(ran.code, Some(0 | 1)) {
+        return Err(format!("{shown} couldn't judge: {}", ran.stderr.trim()));
+    }
+    let v: Value = serde_json::from_str(&ran.stdout)
+        .map_err(|e| format!("{shown}'s report isn't JSON: {e}"))?;
+    Ok(v["violations"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .map(str::to_string)
+        .collect())
 }
 
 /// The base's policy directory, as the base's manifest names it, written under the checkout's
