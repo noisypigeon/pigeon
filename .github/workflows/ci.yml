@@ -1,0 +1,80 @@
+# Code checks the control plane dispatches on a change's head; see .claude/decisions/2026-11-10-development-code-checks-github-actions.md.
+name: ci
+permissions:
+  contents: read
+on:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: The head to check out, a full commit SHA.
+        required: true
+        type: string
+      number:
+        description: The change, or 0 for main.
+        required: true
+        type: string
+      dispatch:
+        description: The control plane's ID for this run, by which it finds it.
+        required: true
+        type: string
+      checks:
+        description: 'The checks, as JSON from change.scope: [{"name": "...", "argv": ["cargo", "..."]}].'
+        required: true
+        type: string
+run-name: "!${{ inputs.number }} ${{ inputs.sha }} (${{ inputs.dispatch }})"
+env:
+  CARGO_TERM_COLOR: never
+  CARGO_PROFILE_DEV_DEBUG: "0"
+  CARGO_PROFILE_TEST_DEBUG: "0"
+  # Equal to src/pigeon-cli/Dockerfile's tools stage, as its ci image has them.
+  TOFU_VERSION: 1.13.1
+  TOFU_SHA256: 378ada19d4bc70c43732004e8159be771b23b9a5afdf059e5f8a2b3fa2c70a69
+  ZOLA_VERSION: 0.23.6
+  ZOLA_SHA256: 8f5132b3522412d04e395e0b25f6d68613ad272a873e54a2b3ebf664873024a4
+defaults:
+  run:
+    shell: bash
+jobs:
+  check:
+    name: ${{ matrix.check.name }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    # The ci image's base, by digest.
+    container: docker.io/library/rust:1.99.1-slim-bookworm@sha256:24707e70a4f1e23d9a7b25202ec43126d28a52294b96aad5c670df1fd1f1d400
+    strategy:
+      fail-fast: false
+      matrix:
+        check: ${{ fromJSON(inputs.checks) }}
+    steps:
+      - name: Tools
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends ca-certificates curl git jq libssl-dev pkg-config xz-utils
+          rustup component add clippy rustfmt
+          rustup target add wasm32-unknown-unknown
+          cd /tmp
+          curl -fsSLo tofu.tar.gz "https://github.com/opentofu/opentofu/releases/download/v${TOFU_VERSION}/tofu_${TOFU_VERSION}_linux_amd64.tar.gz"
+          curl -fsSLo zola.tar.gz "https://github.com/getzola/zola/releases/download/v${ZOLA_VERSION}/zola-v${ZOLA_VERSION}-x86_64-unknown-linux-gnu.tar.gz"
+          printf '%s  tofu.tar.gz\n%s  zola.tar.gz\n' "$TOFU_SHA256" "$ZOLA_SHA256" | sha256sum -c -
+          tar -xzf tofu.tar.gz -C /usr/local/bin tofu
+          tar -xzf zola.tar.gz -C /usr/local/bin zola
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.sha }}
+          persist-credentials: false
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            /usr/local/cargo/registry
+            /usr/local/cargo/git
+            src/pigeon-cli/target
+          key: cargo-${{ hashFiles('src/pigeon-cli/Cargo.lock') }}-${{ matrix.check.name }}
+          restore-keys: cargo-${{ hashFiles('src/pigeon-cli/Cargo.lock') }}-
+      - name: ${{ matrix.check.name }}
+        working-directory: src/pigeon-cli
+        env:
+          ARGV: ${{ toJSON(matrix.check.argv) }}
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          mapfile -t argv < <(jq -r '.[]' <<<"$ARGV")
+          "${argv[@]}"
