@@ -45,3 +45,11 @@ secrets:
 # Files whose `secrets:` list a head may not lengthen without the owner.
 secret_lists:
   - "**/worker.yaml"
+# Sentinel's paths: the judge and its rules. A change touching them is its own grant: code (the
+# owner for this file), never a mandate, and nothing in it but these and its ADR. See
+# .claude/decisions/2026-11-10-development-factory-crates-functional-core.md §2.
+sentinel:
+  - src/pigeon-cli/crates/sentinel/**
+  - .config/policies/**
+  - catalog/policies/**
+  - .config/approvals.yaml
