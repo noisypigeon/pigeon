@@ -39,9 +39,10 @@ fn runs(title: &str) -> Value {
 }
 
 #[test]
-fn only_cargo_code_checks_run_on_github() {
+fn only_code_checks_run_on_github() {
     for code in [
         "cargo fmt --all -- --check",
+        "bash ../../tooling/ci/test-map.sh",
         "cargo clippy -p cobot --all-targets --locked -- -D warnings",
         "cargo test -p pigeon-backplane --locked",
         "cargo build --release",
@@ -53,6 +54,7 @@ fn only_cargo_code_checks_run_on_github() {
         "cargo run -q --locked -p pigeon -- backplane run policy.check --root ../..",
         "cargo run -q --locked -p pigeon -- backplane run infra.validate --root ../..",
         "sh ../../spikes/1/run.sh",
+        "bash ../../tooling/ci/other.sh",
         "fmt",
         "",
     ] {

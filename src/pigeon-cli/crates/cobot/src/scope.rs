@@ -511,11 +511,27 @@ pub fn jobs(root: &Path, files: &[String]) -> Result<Vec<Job>, Error> {
         });
     }
     out.extend(spikes(&files));
+    if files.contains(&TEST_MAP) {
+        out.push(test_map());
+    }
     out.push(Job {
         name: "policy.check".into(),
         argv: pigeon(&["backplane", "run", "policy.check", "--root", "../.."]),
     });
     Ok(out)
+}
+
+/// The test map's script: each test binary and the workspace files it runs; see the 2026-11-11
+/// amendment to `.claude/decisions/2026-11-10-development-factory-crates-functional-core.md`.
+pub const TEST_MAP: &str = "tooling/ci/test-map.sh";
+
+/// The `test map` check, run on GitHub from the workspace; it writes `tests.json`.
+#[must_use]
+pub fn test_map() -> Job {
+    Job {
+        name: "test map".into(),
+        argv: vec!["bash".into(), format!("../../{TEST_MAP}")],
+    }
 }
 
 /// Where spikes live: `tooling/spikes/<name>/run.sh`, run as a check with no credentials; see

@@ -31,6 +31,9 @@ env:
   TOFU_SHA256: 378ada19d4bc70c43732004e8159be771b23b9a5afdf059e5f8a2b3fa2c70a69
   ZOLA_VERSION: 0.23.6
   ZOLA_SHA256: 8f5132b3522412d04e395e0b25f6d68613ad272a873e54a2b3ebf664873024a4
+  # The test map's coverage tool, built from its crates.io release.
+  LLVM_COV_VERSION: 0.9.1
+  LLVM_COV_SHA256: 5e00647cc92940c4dd82249c480fe08fd3809767e89f056bcec46d8a7962ea5b
 defaults:
   run:
     shell: bash
@@ -58,6 +61,15 @@ jobs:
           printf '%s  tofu.tar.gz\n%s  zola.tar.gz\n' "$TOFU_SHA256" "$ZOLA_SHA256" | sha256sum -c -
           tar -xzf tofu.tar.gz -C /usr/local/bin tofu
           tar -xzf zola.tar.gz -C /usr/local/bin zola
+      - name: Coverage tools
+        if: matrix.check.name == 'test map'
+        run: |
+          rustup component add llvm-tools
+          cd /tmp
+          curl -fsSLo llvm-cov.crate "https://static.crates.io/crates/cargo-llvm-cov/cargo-llvm-cov-${LLVM_COV_VERSION}.crate"
+          printf '%s  llvm-cov.crate\n' "$LLVM_COV_SHA256" | sha256sum -c -
+          tar -xzf llvm-cov.crate
+          cargo install --locked --path "cargo-llvm-cov-${LLVM_COV_VERSION}"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.sha }}
@@ -78,3 +90,11 @@ jobs:
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           mapfile -t argv < <(jq -r '.[]' <<<"$ARGV")
           "${argv[@]}"
+      # The test map's output, the unzipped artifact `tests.json`, which the control plane copies
+      # beside main's build.
+      - if: matrix.check.name == 'test map'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          path: src/pigeon-cli/tests.json
+          archive: false
+          if-no-files-found: error

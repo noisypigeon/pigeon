@@ -25,11 +25,18 @@ const BACKOFF: [u64; 3] = [60, 300, 1800];
 /// The cargo subcommands that are code checks.
 const CODE: [&str; 5] = ["fmt", "clippy", "test", "build", "check"];
 
-/// Whether a check with `argv` is a code check, run on GitHub: `cargo fmt|clippy|test|build|check`.
+/// The test map's script, as `cobot::scope::test_map` runs it from the workspace.
+pub const TEST_MAP: &str = "../../tooling/ci/test-map.sh";
+
+/// Whether a check with `argv` is a code check, run on GitHub: `cargo fmt|clippy|test|build|check`,
+/// or the test map.
 #[must_use]
 pub fn on_github(argv: &[String]) -> bool {
-    argv.first().is_some_and(|p| p == "cargo")
-        && argv.get(1).is_some_and(|v| CODE.contains(&v.as_str()))
+    match argv {
+        [p, v, ..] if p == "cargo" => CODE.contains(&v.as_str()),
+        [p, script] => p == "bash" && script == TEST_MAP,
+        _ => false,
+    }
 }
 
 /// One dispatch of [`WORKFLOW`] on a head.

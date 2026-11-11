@@ -268,3 +268,17 @@ fn the_full_set_is_what_a_workspace_wide_change_runs() {
         "{full:?} within {wide:?}"
     );
 }
+
+#[test]
+fn the_test_map_runs_when_its_script_changes() {
+    assert_eq!(
+        names(&["tooling/ci/test-map.sh"]),
+        ["test map", "policy.check"]
+    );
+    assert_eq!(
+        cobot::scope::test_map().argv,
+        ["bash", "../../tooling/ci/test-map.sh"],
+        "as backplane's actions::on_github knows it"
+    );
+    assert!(!names(&["src/pigeon-cli/Cargo.lock"]).contains(&"test map".to_string()));
+}
