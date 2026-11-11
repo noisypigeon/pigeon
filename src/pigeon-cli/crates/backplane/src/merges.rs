@@ -5,8 +5,25 @@ use std::collections::VecDeque;
 
 use serde::{Deserialize, Serialize};
 
+use crate::changes::{Change, GATE, JobStatus, MERGE, RESTACK};
+
 /// How long a merge may run before the queue moves past it, in seconds.
 pub const STUCK: u64 = 60 * 60;
+
+/// How long a turn is held before the queue asks its holder whether a merge is on its way, in
+/// seconds; see the 2026-11-11 amendment on a turn held by no merge.
+pub const SETTLE: u64 = 2 * 60;
+
+/// Whether change `c` still has a merge on its way: a merge job, a restack or a gate check
+/// queued or running, or a merge parked.
+#[must_use]
+pub fn holds_turn(c: &Change) -> bool {
+    let on_its_way = |name: &str| name == MERGE || name == RESTACK || name.starts_with(GATE);
+    c.merge_after.is_some()
+        || c.jobs.iter().any(|j| {
+            on_its_way(&j.name) && matches!(j.status, JobStatus::Queued | JobStatus::Running)
+        })
+}
 
 /// A merge asked for.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -101,6 +118,15 @@ impl MergeQueue {
             self.merging = None;
         }
         self.next(now)
+    }
+
+    /// The change holding the turn, once it has held it [`SETTLE`].
+    #[must_use]
+    pub fn holder(&self, now: u64) -> Option<u32> {
+        self.merging
+            .as_ref()
+            .filter(|e| now.saturating_sub(e.at) >= SETTLE)
+            .map(|e| e.number)
     }
 
     fn next(&mut self, now: u64) -> Option<Entry> {

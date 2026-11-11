@@ -975,6 +975,12 @@ impl Change {
             *j = Job::queued(MIRROR, Vec::new());
             return Ok(vec![Effect::Start(MIRROR.into())]);
         }
+        if name == MERGE {
+            return refuse(format!(
+                "a merge runs again through the merge queue: change_merge {}",
+                self.number
+            ));
+        }
         if !matches!(self.state, State::Failed | State::Checked | State::Refused) {
             return refuse(format!(
                 "{} is {}; only a finished head's jobs run again",

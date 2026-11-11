@@ -10,7 +10,7 @@ use super::platform::{self, Settings, now};
 use super::to_change;
 use crate::changes::{Change, Event};
 use crate::control;
-use crate::merges::{Entry, MergeQueue, Queued};
+use crate::merges::{self, Entry, MergeQueue, Queued};
 use crate::reconcile::{PROPOSER, Proposal};
 use crate::sessions;
 
@@ -26,6 +26,7 @@ const TRIES: usize = 10;
 ///
 /// When a binding fails.
 pub async fn ask(env: &Env, s: &Settings, number: u32, by: &str) -> Result<(u16, Value)> {
+    hand_back_idle(env, s).await?;
     let (status, v) = to_instance(
         env,
         s,
@@ -51,6 +52,34 @@ pub async fn ask(env: &Env, s: &Settings, number: u32, by: &str) -> Result<(u16,
         return Ok((status, v));
     }
     Ok((status, json!({ "change": v })))
+}
+
+/// Hands back the turn of a holder with no merge on its way, recording `merge.released`; see the
+/// 2026-11-11 amendment on a turn held by no merge.
+async fn hand_back_idle(env: &Env, s: &Settings) -> Result<()> {
+    let (_, queue) = to_instance(env, s, "/merges/list", &json!({})).await?;
+    let Some(n) = serde_json::from_value::<MergeQueue>(queue)
+        .ok()
+        .and_then(|q| q.holder(now()))
+    else {
+        return Ok(());
+    };
+    let (status, view) = to_change(env, &s.repo, n, Method::Get, "/status", None).await?;
+    let Ok(c) = serde_json::from_value::<Change>(view["change"].clone()) else {
+        return Ok(());
+    };
+    if status != 200 || merges::holds_turn(&c) {
+        return Ok(());
+    }
+    let why = format!(
+        "!{n} gave its merge turn back: {}",
+        control::release_reason(&c)
+    );
+    let added = super::events::append(env, s, "merge.released", Some(n), None, &why, false);
+    if let Err(e) = added.await {
+        worker::console_error!("merge.released: {e}");
+    }
+    ended(env, &c, c.merged_as.as_deref()).await
 }
 
 /// Change `c`'s merge ended, as `merged`, the commit `main` now holds, or failed: marks every
