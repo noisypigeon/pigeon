@@ -18,7 +18,7 @@ units:
     kind: cloudflare/static-site
     zone: pigeon.dev
     hosts: [docs]
-    template: { name: architecture, version: 0.1.0 }
+    template: { name: architecture, version: tree }
     site:
       title: pigeon
       description: The pigeon platform's architecture, drawn from its own configuration.
