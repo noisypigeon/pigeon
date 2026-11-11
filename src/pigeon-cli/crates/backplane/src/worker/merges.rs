@@ -33,11 +33,12 @@ pub async fn ask(env: &Env, s: &Settings, number: u32, by: &str) -> Result<(u16,
         &json!({ "number": number, "by": by }),
     )
     .await?;
-    if status != 200 {
-        return Ok((409, v));
-    }
+    // A turn the queue moved past starts, whatever it answers this ask.
     if let Ok(e) = serde_json::from_value::<Entry>(v["resumed"].clone()) {
         start(env, s, Some(e)).await?;
+    }
+    if status != 200 {
+        return Ok((409, v["error"].clone()));
     }
     if let Ok(Queued::Behind(place)) = serde_json::from_value::<Queued>(v["queued"].clone()) {
         let message = format!("change {number} merges after {place} other merge(s)");
@@ -180,12 +181,13 @@ pub async fn serve(state: &State, path: &str, body: &Value) -> Result<Response> 
         .unwrap_or_default();
     let answer = match path {
         "/merges/enqueue" => {
-            let resumed = q.unstick(now());
-            match q.enqueue(number, body["by"].as_str().unwrap_or_default(), now()) {
+            let (resumed, queued) = q.ask(number, body["by"].as_str().unwrap_or_default(), now());
+            match queued {
                 Ok(queued) => json!({ "queued": queued, "resumed": resumed }),
                 Err(why) => {
                     storage.put(MERGES, &q).await?;
-                    return Response::error(why, 409);
+                    let refused = json!({ "error": why, "resumed": resumed });
+                    return Ok(Response::from_json(&refused)?.with_status(409));
                 }
             }
         }

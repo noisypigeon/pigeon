@@ -69,6 +69,19 @@ impl MergeQueue {
         Ok(Queued::Behind(self.waiting.len()))
     }
 
+    /// Asks for change `number`'s merge for `by` at `now`, first moving past a stuck turn: the
+    /// merge it moved on to, which must start whatever this ask is answered, and the answer.
+    pub fn ask(
+        &mut self,
+        number: u32,
+        by: &str,
+        now: u64,
+    ) -> (Option<Entry>, Result<Queued, String>) {
+        let resumed = self.unstick(now);
+        let queued = self.enqueue(number, by, now);
+        (resumed, queued)
+    }
+
     /// Change `number`'s merge ended, or never started: the next merge to start, if any.
     pub fn done(&mut self, number: u32, now: u64) -> Option<Entry> {
         self.waiting.retain(|e| e.number != number);

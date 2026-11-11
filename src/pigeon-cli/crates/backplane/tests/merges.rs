@@ -658,3 +658,31 @@ fn a_released_turn_says_why() {
         control::release_reason(&c)
     );
 }
+
+#[test]
+fn a_turn_moved_past_is_handed_back_even_when_the_ask_is_refused() {
+    // !181 held the turn; an ask for a change already waiting moved past it, but its refusal
+    // dropped the merge it moved on to.
+    let mut q = MergeQueue::default();
+    q.enqueue(181, "owner", 0).expect("181 merges");
+    q.enqueue(185, "owner", 1).expect("185 waits");
+    let late = backplane::merges::STUCK + 10;
+    let (resumed, queued) = q.ask(185, "owner", late);
+    assert_eq!(
+        resumed.map(|e| e.number),
+        Some(185),
+        "the queue moved on to 185"
+    );
+    assert!(queued.is_err(), "185 was already asked for");
+    assert_eq!(q.merging.as_ref().map(|e| e.number), Some(185));
+}
+
+#[test]
+fn closing_a_change_gives_its_place_in_the_queue_back() {
+    let before = approved_172();
+    let mut after = before.clone();
+    after.state = State::Closed;
+    assert!(control::leaves_merge_queue(Some(&before), &after));
+    assert!(!control::leaves_merge_queue(Some(&after), &after), "once");
+    assert!(!control::leaves_merge_queue(Some(&before), &before));
+}

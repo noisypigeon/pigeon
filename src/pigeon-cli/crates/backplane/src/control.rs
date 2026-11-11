@@ -736,6 +736,16 @@ pub fn merge_dropped(change: &Change) -> bool {
         })
 }
 
+/// Whether `after`, saved over `before`, gives its place in the merge queue back: its merge
+/// asked for was dropped, or it was just closed, waiting or holding the turn.
+#[must_use]
+pub fn leaves_merge_queue(before: Option<&Change>, after: &Change) -> bool {
+    let dropped = before.is_some_and(|b| b.merge_after.is_some()) && merge_dropped(after);
+    let closed = after.state == changes::State::Closed
+        && before.is_some_and(|b| b.state != changes::State::Closed);
+    dropped || closed
+}
+
 /// Why `change` gave its merge turn back without merging, for the `merge.released` event.
 #[must_use]
 pub fn release_reason(change: &Change) -> String {

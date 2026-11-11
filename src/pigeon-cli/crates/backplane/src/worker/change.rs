@@ -161,9 +161,7 @@ impl ChangeRun {
         let change = &change;
         storage.put(CHANGE, change).await?;
         super::events::changed(&self.env, before.as_ref(), change).await;
-        if before.as_ref().is_some_and(|b| b.merge_after.is_some())
-            && control::merge_dropped(change)
-        {
+        if control::leaves_merge_queue(before.as_ref(), change) {
             if let Ok(s) = Settings::from(&self.env) {
                 let why = format!(
                     "!{} gave its merge turn back: {}",
