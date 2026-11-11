@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <title>{{ config.title }}</title>
+  <title>Network Diagram · {{ config.title }}</title>
   <meta name="color-scheme" content="dark light">
   <meta name="description" content="{{ config.description }}">
   <link rel="canonical" href="{{ config.base_url }}/">
@@ -13,82 +13,178 @@
   <link rel="preconnect" href="https://fonts.bunny.net" crossorigin>
   <link rel="stylesheet" href="https://fonts.bunny.net/css?family={{ config.extra.look.font_family }}&display=swap">
   {%- endif %}
+  <script src="/assets/js/rail.js" defer></script>
 </head>
 {%- set data = load_data(path="data/architecture.json", required=false) %}
+{%- set sha = "" %}
+{%- if config.extra.features.commit %}{% set sha = get_env(name="SITE_COMMIT_SHA", default="") %}{% endif %}
 <body class="{% if config.extra.features.motion %}motion{% endif %}">
-  <div class="wrap">
-    <header class="top">
-      <div class="brand">{{ config.title }}</div>
-      <p class="lede">{{ config.description }}</p>
-    </header>
+  <header class="top"><span class="brand">{{ config.title }}</span></header>
 
-    <main id="main">
-    {%- if data %}
-      {%- set l = data.layout %}
-      <div class="frame">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {{ l.width }} {{ l.height }}" width="{{ l.width }}" height="{{ l.height }}" role="img" aria-labelledby="diagram-title">
-          <title id="diagram-title">{{ config.title }}: {{ data.nodes | length }} parts and {{ data.edges | length }} connections</title>
-          <defs>
-            {%- for m in ["fg", "mu", "ed", "fl", "cr", "sg"] %}
-            <marker id="m-{{ m }}" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L8 4L0 8z" class="mk-{{ m }}"/></marker>
+  <main id="main">
+    <h1>Network Diagram</h1>
+  {%- if data and data.network %}
+    {%- set net = data.network %}
+    {%- set d = net.diagram %}
+    {%- set_global back = "" %}
+    {%- for l in net.links %}
+      {%- set from = net.parts | filter(attribute="id", value=l.from) | first %}
+      {%- if from and from.kind == "github" and not back %}{% set_global back = l %}{% endif %}
+    {%- endfor %}
+
+    <div class="label">Clients</div>
+    <div class="row bus-below" style="--n: {{ net.clients | length }}">
+      {%- for c in net.clients %}
+      <div class="col">
+        <details class="card" open>
+          <summary><span class="title">{{ c.title }}</span><span class="count">{{ c.items | length }}</span><span class="grow"></span><svg class="chev" width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></summary>
+          <ul class="items">
+            {%- for it in c.items %}
+            <li><span class="mono">{{ it.k }}</span>{% if it.v %}<span class="muted">{{ it.v }}</span>{% endif %}</li>
             {%- endfor %}
-          </defs>
-          {%- for lane in l.lanes %}
-          <text class="lane-h" x="{{ lane.x }}" y="44">{{ lane.lane }}</text>
-          {%- endfor %}
-          {%- for b in l.groups %}
-          {%- set gr = data.groups | nth(n=loop.index0) %}
-          <g class="g {{ gr.kind }}"><rect x="{{ b.x }}" y="{{ b.y }}" width="{{ b.w }}" height="{{ b.h }}" rx="10"/><text x="{{ b.x + 12 }}" y="{{ b.y + 16 }}">{{ gr.label }}</text></g>
-          {%- endfor %}
-          {%- for e in l.edges %}
-          {%- if e.carries in ["request", "binds"] %}{% set m = "fg" %}{% elif e.carries in ["runs", "governs"] %}{% set m = "mu" %}{% elif e.carries == "apply" %}{% set m = "ed" %}{% elif e.carries in ["state", "artifact"] %}{% set m = "fl" %}{% elif e.carries == "credential" %}{% set m = "cr" %}{% else %}{% set m = "sg" %}{% endif %}
-          <path class="e {{ e.carries }}" d="{{ e.d }}" marker-end="url(#m-{{ m }})"><title>{{ e.from }} → {{ e.to }} · {{ e.carries }}</title></path>
-          {%- if e.carries == "signed-request" %}<path class="e signed-in" d="{{ e.d }}"/>{% endif %}
-          {%- endfor %}
-          {%- for p in l.nodes %}
-          {%- set n = data.nodes | nth(n=loop.index0) %}
-          <g class="n lane-{{ n.lane }}"><title>{{ n.id }} · {{ n.source }}</title><rect class="n" x="{{ p.x }}" y="{{ p.y }}" width="{{ p.w }}" height="{{ p.h }}" rx="6"/><text x="{{ p.x + 14 }}" y="{{ p.y + 25 }}">{{ n.label }}</text></g>
-          {%- endfor %}
-        </svg>
+          </ul>
+        </details>
+        <span class="stub"></span>
+      </div>
+      {%- endfor %}
+    </div>
+    <div class="arrow"><span>HTTPS</span></div>
+
+    <div id="rail-wrap" class="rail-wrap">
+    <section class="region cloudflare" aria-label="Cloudflare">
+      <div class="region-h">
+        <span class="region-name">Cloudflare</span>
+        {%- for h in net.access.hosts %}<span class="pill mono">{{ h }}</span>{% endfor %}
       </div>
 
-      <ul class="legend" aria-label="What each line carries">
-        {%- for c in [["request", "request · binds"], ["signed-request", "signed request"], ["apply", "apply"], ["state", "state"], ["artifact", "site files"], ["credential", "credential"], ["runs", "runs"], ["governs", "governs"]] %}
-        <li><svg viewBox="0 0 34 10" aria-hidden="true"><path d="M0 5H34" class="e {{ c[0] }}"/>{% if c[0] == "signed-request" %}<path d="M0 5H34" class="e signed-in"/>{% endif %}</svg>{{ c[1] }}</li>
-        {%- endfor %}
-      </ul>
-
-      <details>
-        <summary>Every part and connection, with the file it was derived from</summary>
-        <div class="tables">
-          <div class="tw"><table>
-            <thead><tr><th>Part</th><th>Lane</th><th>Source</th></tr></thead>
-            <tbody>
-            {%- for n in data.nodes %}
-              <tr><td>{{ n.label }}</td><td>{{ n.lane }}</td><td class="src">{{ n.source }}</td></tr>
-            {%- endfor %}
-            </tbody>
-          </table></div>
-          <div class="tw"><table>
-            <thead><tr><th>From</th><th>To</th><th>Carries</th><th>Source</th></tr></thead>
-            <tbody>
-            {%- for e in data.edges %}
-              <tr><td>{{ e.from }}</td><td>{{ e.to }}</td><td>{{ e.carries }}</td><td class="src">{{ e.source }}</td></tr>
-            {%- endfor %}
-            </tbody>
-          </table></div>
+      <div class="card panel access">
+        <div class="panel-h"><svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l8 3v6c0 4.5-3.4 8.2-8 9-4.6-.8-8-4.5-8-9V6z"/></svg><span class="grow">Access</span><span class="pill">edge</span></div>
+        <div class="cols">
+          <div class="sec"><span class="muted">Hostnames</span>
+            {%- for h in net.access.hosts %}<div class="kv"><span class="mono">{{ h }}</span><span class="rule"></span><span class="pill">protected</span></div>{% endfor %}
+          </div>
+          <div class="sec"><span class="muted">Service tokens</span>
+            {%- for t in net.access.tokens %}<div class="kv"><span class="mono">{{ t }}</span><span class="rule"></span><span class="pill">service</span></div>{% endfor %}
+          </div>
         </div>
-      </details>
-    {%- else %}
-      <p class="empty">This site draws <code>pigeon backplane run architecture.describe</code>; build it with <code>--data architecture=FILE</code>.</p>
-    {%- endif %}
-    </main>
+      </div>
+      <div class="arrow"><span>verified JWT</span></div>
 
-    <footer>
-      <span>Drawn from architecture.describe; nothing in this diagram is stored or placed by hand.</span>
-      {%- if config.extra.features.commit %}{% set sha = get_env(name="SITE_COMMIT_SHA", default="") %}{% if sha %}
-      <span>commit {{ sha }}</span>{% endif %}{% endif %}
-    </footer>
-  </div>
+      {%- set w = net.worker %}
+      <div class="card panel worker">
+        <div class="panel-h"><svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4l-5 8 5 8M16 4l5 8-5 8"/></svg><span class="grow">{{ w.name }}</span><span class="pill">Worker</span></div>
+        <div class="cols">
+          <div class="sec"><span class="muted">In</span>
+            <div class="kv"><span>fetch</span><span class="rule"></span><span class="pill mono">{{ w.routes }} routes</span></div>
+            {%- if w.queues %}<div class="kv"><span>queue</span><span class="rule"></span><span class="pill mono">{{ w.queues }}</span></div>{% endif %}
+            {%- for c in w.crons %}<div class="kv"><span>cron</span><span class="rule"></span><span class="pill mono">{{ c }}</span></div>{% endfor %}
+          </div>
+          <div class="sec"><span class="muted">Out</span>
+            <div class="kv"><span>Durable Objects</span><span class="rule"></span><span class="pill mono">{{ w.objects | length }}</span></div>
+            <div class="kv"><span>Containers</span><span class="rule"></span><span class="pill mono">{{ w.containers | length }}</span></div>
+            {%- if w.d1 or w.r2 %}<div class="kv"><span>D1 · R2</span><span class="rule"></span><span class="pill mono">{{ w.d1 | concat(with=w.r2) | join(sep=" · ") }}</span></div>{% endif %}
+          </div>
+          <div class="sec"><span class="muted">Holds</span>
+            <div class="kv"><span>secrets</span><span class="rule"></span><span class="pill mono">{{ w.secrets }}</span></div>
+            {%- if sha %}<div class="kv"><span>built from</span><span class="rule"></span><span class="pill mono">{{ sha | truncate(length=7, end="") }}</span></div>{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <div class="scroller">
+        <div class="diagram" style="width: {{ d.width }}px; height: {{ d.height + 60 }}px">
+          <svg class="lines" width="{{ d.width }}" height="{{ d.height + 60 }}" viewBox="0 -60 {{ d.width }} {{ d.height + 60 }}" role="img" aria-label="Connections between the Durable Objects, Containers, storage and Artifacts">
+            <defs>
+              {%- for k in ["call", "job", "store", "git", "in"] %}
+              <marker id="h-{{ k }}" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L8 4L0 8z" class="mk-{{ k }}"/></marker>
+              {%- endfor %}
+            </defs>
+            {%- set_global xs = [] %}
+            {%- for b in d.boxes %}
+              {%- set p = net.parts | filter(attribute="id", value=b.id) | first %}
+              {%- if p.kind == "object" %}{% set c = b.x + b.w / 2 %}{% set_global xs = xs | concat(with=c) %}{% endif %}
+            {%- endfor %}
+            {%- if xs %}
+            <path class="bus" d="M{{ d.width / 2 }} -60V-30M{{ xs | first }} -30H{{ xs | last }}"/>
+            {%- for x in xs %}<path class="bus" d="M{{ x }} -30V-1" marker-end="url(#h-in)"/>{% endfor %}
+            {%- endif %}
+            {%- for r in d.routes %}
+              {%- set l = net.links | filter(attribute="id", value=r.id) | first %}
+            <g class="link k-{{ l.kind }}"><title>{{ l.from }} → {{ l.to }}: {{ l.label }} ({{ l.source }})</title>
+              <path d="{{ r.d }}" marker-end="url(#h-{{ l.kind }})"/>
+              <text x="{{ r.lx }}" y="{{ r.ly }}" text-anchor="{{ r.anchor }}">{{ l.label }}</text>
+            </g>
+            {%- endfor %}
+          </svg>
+          {%- for b in d.boxes %}
+            {%- set p = net.parts | filter(attribute="id", value=b.id) | first %}
+          <div class="box kind-{{ p.kind }}{% if p.many %} many{% endif %}" id="part-{{ p.id }}" style="left: {{ b.x }}px; top: {{ b.y + 60 }}px; width: {{ b.w }}px; height: {{ b.h }}px"{% if back and p.id == back.to %} data-rail-to{% endif %}>
+            <div class="box-h"><span class="dot"></span><span class="grow">{{ p.id }}</span><span class="pill">{% if p.kind == "object" %}Durable Object{% elif p.kind == "container" %}Container{% else %}{{ p.kind }}{% endif %}</span></div>
+            <span class="role">{{ p.role }}{% if p.many %} (one per change){% endif %}</span>
+          </div>
+          {%- endfor %}
+        </div>
+      </div>
+      <ul class="legend" aria-label="Line colours">
+        <li><span class="swatch k-call"></span>calls · events</li>
+        <li><span class="swatch k-job"></span>starts a job, signed</li>
+        <li><span class="swatch k-store"></span>writes</li>
+        <li><span class="swatch k-git"></span>git, minted token</li>
+      </ul>
+    </section>
+
+    {%- set gh = net.parts | filter(attribute="kind", value="github") %}
+    {%- if net.github and gh %}
+    <div class="arrow"><span>GitHub API · App token</span></div>
+    <section class="region github" aria-label="GitHub">
+      <div class="region-h"><span class="region-name">GitHub</span><span class="pill mono">{{ net.github }}</span></div>
+      <div class="row bus-above" style="--n: {{ gh | length }}">
+        {%- for p in gh %}
+        <div class="col">
+          <span class="stub arrowed"></span>
+          <div class="card panel" id="part-{{ p.id }}"{% if back and p.id == back.from %} data-rail-from{% endif %}>
+            <div class="panel-h"><span class="dot"></span><span class="grow">{{ p.id }}</span></div>
+            <div class="sec">
+              <span class="muted">{{ p.role }}</span>
+              {%- for l in net.links %}
+                {%- if l.to == p.id %}<div class="kv"><span>{{ l.from }}</span><span class="rule"></span><span class="pill">{{ l.label }}</span></div>{% endif %}
+                {%- if l.from == p.id %}<div class="fallback"><span class="mono">if failing → {{ l.to }}</span><span>{{ l.label }}</span></div>{% endif %}
+              {%- endfor %}
+            </div>
+          </div>
+        </div>
+        {%- endfor %}
+      </div>
+    </section>
+    {%- if back %}
+    <svg id="rail" class="rail" hidden aria-hidden="true"><defs><marker id="h-rail" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L8 4L0 8z"/></marker></defs><path marker-end="url(#h-rail)"/></svg>
+    <div id="rail-label" class="rail-label" hidden><span class="mono">GitHub failing or degraded</span><span>{{ back.label }}</span></div>
+    {%- endif %}
+    {%- endif %}
+    </div>
+
+    <details class="evidence">
+      <summary>Every link, and the code it was derived from</summary>
+      <div class="tw"><table>
+        <thead><tr><th>From</th><th>To</th><th>Label</th><th>Kind</th><th>Evidence</th></tr></thead>
+        <tbody>
+        {%- for l in net.links %}
+          <tr><td>{{ l.from }}</td><td>{{ l.to }}</td><td>{{ l.label }}</td><td>{{ l.kind }}</td><td class="mono">{{ l.source }}</td></tr>
+        {%- endfor %}
+        </tbody>
+      </table></div>
+    </details>
+  {%- else %}
+    <p class="empty">This site draws <code>pigeon backplane run architecture.describe</code>'s <code>network</code>; build it with <code>--data architecture=FILE</code>.</p>
+  {%- endif %}
+  </main>
+
+  <footer>
+    <span>Derived from the code by <span class="mono">architecture.describe</span>; nothing here is placed by hand.</span>
+    {%- if sha %}<span>Built from <span class="mono">{{ sha | truncate(length=12, end="") }}</span>.</span>{% endif %}
+    {%- if data and data.network and data.network.access.hosts %}
+    <span>Deploys, changes and approvals: <a href="https://{{ data.network.access.hosts | first }}/">{{ data.network.access.hosts | first }}</a>, behind Access.</span>
+    {%- endif %}
+  </footer>
 </body>
 </html>

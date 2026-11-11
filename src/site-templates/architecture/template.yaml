@@ -6,6 +6,6 @@ zola: 0.23.6
 features:
   fonts: { default: true, description: "Bunny Fonts, for extra.look.font_family." }
   commit: { default: true, description: "The build's commit, from SITE_COMMIT_SHA, in the footer." }
-  motion: { default: true, description: "Animated dashes along moving edges; off under prefers-reduced-motion." }
+  motion: { default: true, description: "Moving dashes along the line back from GitHub; off under prefers-reduced-motion." }
 # A site has no site/; its page is drawn from data/architecture.json.
 content: none
