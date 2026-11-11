@@ -140,3 +140,22 @@ Each step is its own change.
 - After step 5, `docs.pigeon.dev` doesn't resolve, the plan destroyed only
   its domain and rules, and the next merge publishes the site, which
   `/healthz/smoke` reports.
+
+## Amendments
+
+### 2026-11-11: cobot's modules move into backplane, and this ADR's paths with them
+
+Reviewed against
+[`2026-11-10-development-factory-crates-functional-core.md`](2026-11-10-development-factory-crates-functional-core.md),
+whose step 6b (!198) moves the `cobot` crate into `backplane` as
+`backplane::cobot`.
+
+- **The two agree.** That move changes no behaviour, and nothing here depends
+  on cobot being its own crate.
+- **Paths:** `src/pigeon-cli/crates/cobot/src/sites.rs` and `static_site.rs`
+  become `src/pigeon-cli/crates/backplane/src/cobot/sites.rs` and
+  `static_site.rs`. !198 rewrites this ADR's `Governs` line to match, as it
+  does every ADR's.
+- **Step 2's `feat(cobot)`** edits those files at their new paths once !198
+  merges, and its tests are backplane's `cobot_sites` and `cobot_manifest`.
+  `pigeon cobot sites …` is unchanged.
