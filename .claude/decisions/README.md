@@ -30,6 +30,7 @@ Copy this, replacing `<Title>` with the ADR's title:
 * Model: <the Claude model that wrote it, by name>
 * Author: Willow Graysen (@noisypigeon).
 * Category: <category>
+* Governs: `<glob>`, `<glob>`
 
 ## Context
 
@@ -47,6 +48,8 @@ What changed, and the steps to execute it.
 ```
 
 - `Date` and `Category` must match the filename.
+- `Governs` lists, in backticks, the globs of the files the decision rules;
+  each matches a file.
 - The only H2s are the title, `## Context`, `## Implementation plan.` and an
   optional `## Amendments`, in that order. Use `###` inside them.
 - Leave out `## Amendments` until the first amendment. Each entry is

@@ -4,6 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: development
+* Governs: `src/pigeon-cli/crates/backplane/src/worker/main_run.rs`, `src/pigeon-cli/crates/backplane/src/ship.rs`, `src/pigeon-cli/crates/cobot/src/ship*.rs`, `src/pigeon-cli/crates/backplane/migrations/**`, `.config/policies/migrations.yaml`, `infra/pigeon/workers/control/worker.yaml`
 
 ## Context
 

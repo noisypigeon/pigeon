@@ -4,6 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: runtime
+* Governs: `src/site-templates/*/schema.json`, `src/site-templates/*/template.yaml`, `src/site-templates/*/scaffold/**`, `workloads/*/blog/config.yaml`, `workloads/*/blog/site/**`, `src/pigeon-cli/crates/cobot/tests/template.rs`
 
 ## Context
 

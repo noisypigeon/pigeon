@@ -4,6 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: development
+* Governs: `.claude/decisions/README.md`, `.config/policies/decisions.yaml`, `.config/policies/pull-request.yaml`, `.github/pull_request_template.md`, `CLAUDE.md`, `CHANGELOG.md`
 
 ## Context
 

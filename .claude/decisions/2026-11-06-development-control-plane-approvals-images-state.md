@@ -4,6 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: development
+* Governs: `src/pigeon-cli/crates/backplane/src/grants.rs`, `src/pigeon-cli/crates/backplane/src/totp.rs`, `src/pigeon-cli/crates/backplane/src/worker/elicit.rs`, `src/pigeon-cli/crates/cobot/src/state.rs`, `infra/pigeon/workers/control/worker.yaml`, `.mcp.json`
 
 ## Context
 

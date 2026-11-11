@@ -4,6 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: development
+* Governs: `.github/workflows/ci.yml`, `.config/policies/mirror*.yaml`, `src/pigeon-cli/crates/backplane/src/actions.rs`, `src/pigeon-cli/crates/backplane/src/worker/github.rs`, `src/pigeon-cli/crates/backplane/src/worker/change.rs`, `src/pigeon-cli/crates/backplane/tests/actions.rs`
 
 ## Context
 

@@ -4,6 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: development
+* Governs: `.config/instance.yaml`, `.config/policies/backplane.yaml`, `src/pigeon-cli/crates/backplane/src/engine.rs`, `src/pigeon-cli/crates/backplane/src/catalog.rs`, `src/pigeon-cli/crates/pigeon/src/commands/backplane.rs`, `src/pigeon-cli/crates/pigeon/src/cli/backplane.rs`
 
 ## Context
 

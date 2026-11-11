@@ -4,6 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: security
+* Governs: `.config/approvals.yaml`, `src/pigeon-cli/crates/backplane/src/approvals.rs`, `src/pigeon-cli/crates/backplane/src/passkeys.rs`, `src/pigeon-cli/crates/backplane/src/worker/passkey*`, `src/pigeon-cli/crates/backplane/tests/passkeys.rs`
 
 ## Context
 

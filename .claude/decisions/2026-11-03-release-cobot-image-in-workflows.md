@@ -4,6 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: release
+* Governs: `src/pigeon-cli/Dockerfile`, `src/pigeon-cli/.dockerignore`, `src/pigeon-cli/crates/cobot/tests/image_tools.rs`, `mise.toml`
 
 ## Context
 

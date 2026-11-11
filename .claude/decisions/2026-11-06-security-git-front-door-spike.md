@@ -4,6 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: security
+* Governs: `src/pigeon-cli/crates/backplane/src/gitdoor.rs`, `src/pigeon-cli/crates/backplane/src/gitcreds.rs`, `src/pigeon-cli/crates/backplane/src/worker/gitdoor.rs`, `src/pigeon-cli/crates/backplane/tests/git*.rs`
 
 ## Context
 

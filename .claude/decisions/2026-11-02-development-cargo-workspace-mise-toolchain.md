@@ -4,6 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: development
+* Governs: `mise.toml`, `src/pigeon-cli/Cargo.toml`, `src/pigeon-cli/Cargo.lock`, `src/pigeon-cli/crates/*/Cargo.toml`, `src/pigeon-cli/crates/sentinel/src/policy.rs`, `.gitignore`
 
 ## Context
 

@@ -4,6 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: runtime
+* Governs: `catalog/digitalocean/**`, `.config/providers.yaml`
 
 ## Context
 

@@ -4,6 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: development
+* Governs: `src/pigeon-cli/Dockerfile`, `src/pigeon-cli/pigeon-start`, `src/pigeon-cli/crates/cobot/src/imagebuild.rs`, `src/pigeon-cli/crates/cobot/src/workers.rs`, `src/pigeon-cli/crates/pigeon/src/commands/workers.rs`, `src/pigeon-cli/crates/backplane/src/ship.rs`
 
 ## Context
 

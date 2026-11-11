@@ -4,6 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: runtime
+* Governs: `config.yaml`, `catalog/*/kinds/**`, `src/pigeon-cli/crates/cobot/src/manifest.rs`, `src/pigeon-cli/crates/cobot/src/unit.rs`, `src/pigeon-cli/crates/cobot/src/moves.rs`, `src/pigeon-cli/crates/cobot/tests/manifest.rs`
 
 ## Context
 

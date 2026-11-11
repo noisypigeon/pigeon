@@ -4,6 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: runtime
+* Governs: `infra/pigeon/workers/control/worker.yaml`, `.mcp.json`, `src/pigeon-cli/crates/backplane/src/worker/mod.rs`, `src/pigeon-cli/crates/backplane/src/worker/passkeys.rs`, `src/pigeon-cli/crates/backplane/src/passkeys.rs`
 
 ## Context
 

@@ -4,6 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: runtime
+* Governs: `infra/cloudflare/**`, `catalog/cloudflare/schema.json`, `catalog/cloudflare/modules/**`, `src/pigeon-cli/crates/cobot/src/config.rs`, `src/pigeon-cli/crates/cobot/src/secrets.rs`, `.config/providers*`
 
 ## Context
 

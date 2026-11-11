@@ -4,6 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: runtime
+* Governs: `src/pigeon-cli/crates/backplane/src/worker/**`, `src/pigeon-cli/crates/backplane/src/mcp.rs`, `src/pigeon-cli/crates/backplane/src/runs.rs`, `src/pigeon-cli/crates/backplane/migrations/0001_schema_v0.sql`, `src/pigeon-cli/crates/cobot/src/worker.rs`, `infra/pigeon/workers/control/worker.yaml`
 
 ## Context
 

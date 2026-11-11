@@ -4,6 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: runtime
+* Governs: `src/site-templates/architecture/**`, `src/pigeon-cli/crates/backplane/src/architecture/**`, `src/pigeon-cli/crates/backplane/tests/architecture.rs`, `src/pigeon-cli/crates/cobot/src/sites.rs`, `config.yaml`
 
 ## Context
 

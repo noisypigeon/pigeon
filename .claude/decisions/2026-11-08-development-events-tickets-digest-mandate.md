@@ -4,6 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: development
+* Governs: `src/pigeon-cli/crates/backplane/src/events.rs`, `src/pigeon-cli/crates/backplane/src/tickets.rs`, `src/pigeon-cli/crates/backplane/src/push.rs`, `src/pigeon-cli/crates/backplane/src/worker/events.rs`, `src/pigeon-cli/crates/backplane/src/worker/tickets.rs`, `src/pigeon-cli/crates/backplane/src/worker/push.rs`
 
 ## Context
 
