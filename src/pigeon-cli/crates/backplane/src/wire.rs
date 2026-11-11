@@ -16,8 +16,6 @@ pub enum Engine {
     Sentinel,
     /// Actions: infrastructure, releases.
     Cobot,
-    /// Planned: scheduling and data operations.
-    Gantry,
 }
 
 impl Engine {
@@ -28,7 +26,6 @@ impl Engine {
             Self::Backplane => "backplane",
             Self::Sentinel => "sentinel",
             Self::Cobot => "cobot",
-            Self::Gantry => "gantry",
         }
     }
 }

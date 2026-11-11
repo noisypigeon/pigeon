@@ -33,9 +33,6 @@ pub enum Commands {
     #[command(subcommand)]
     Sentinel(SentinelCommand),
     /// Not implemented yet
-    #[cfg(feature = "gantry")]
-    #[command(version = gantry::VERSION)]
-    Gantry,
     /// Validate, render, plan and apply infrastructure units, and cut releases
     #[cfg(feature = "cobot")]
     #[command(subcommand, version = ::cobot::VERSION)]

@@ -38,7 +38,6 @@ dir = "src/pigeon-cli"
 run = [
   "cargo clippy -p pigeon --all-targets --locked --no-default-features -- -D warnings",
   "cargo clippy -p pigeon --all-targets --locked --no-default-features --features sentinel -- -D warnings",
-  "cargo clippy -p pigeon --all-targets --locked --no-default-features --features gantry -- -D warnings",
   "cargo clippy -p pigeon --all-targets --locked --no-default-features --features cobot -- -D warnings",
   "cargo clippy -p pigeon --all-targets --locked --no-default-features --features backplane -- -D warnings",
   "cargo clippy -p cobot --lib --locked --no-default-features --features worker -- -D warnings",

@@ -1020,10 +1020,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "gantry"
-version = "0.1.10"
-
-[[package]]
 name = "generic-array"
 version = "0.14.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1851,7 +1847,6 @@ dependencies = [
  "assert_cmd",
  "clap",
  "cobot",
- "gantry",
  "pigeon-backplane",
  "predicates",
  "serde",
@@ -1866,7 +1861,6 @@ version = "0.1.30"
 dependencies = [
  "cobot",
  "futures-util",
- "gantry",
  "hmac",
  "httparse",
  "p256",

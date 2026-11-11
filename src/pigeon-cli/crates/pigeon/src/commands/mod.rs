@@ -4,8 +4,6 @@
 pub mod backplane;
 #[cfg(feature = "cobot")]
 pub mod cobot;
-#[cfg(feature = "gantry")]
-pub mod gantry;
 #[cfg(feature = "sentinel")]
 pub mod sentinel;
 #[cfg(feature = "cobot")]
@@ -33,8 +31,6 @@ pub fn dispatch(command: Commands) -> i32 {
     match command {
         #[cfg(feature = "sentinel")]
         Commands::Sentinel(c) => sentinel::run(c),
-        #[cfg(feature = "gantry")]
-        Commands::Gantry => gantry::run(),
         #[cfg(feature = "cobot")]
         Commands::Cobot(c) => cobot::run(c),
         #[cfg(feature = "backplane")]

@@ -21,6 +21,5 @@ fn only_built_subcommands_exist() {
     let help = pigeon().arg("--help").assert().success();
     let out = String::from_utf8(help.get_output().stdout.clone()).expect("utf-8");
     assert_eq!(out.contains("sentinel"), cfg!(feature = "sentinel"));
-    assert_eq!(out.contains("gantry"), cfg!(feature = "gantry"));
     assert_eq!(out.contains("backplane"), cfg!(feature = "backplane"));
 }

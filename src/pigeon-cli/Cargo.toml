@@ -1,6 +1,7 @@
 [workspace]
 resolver = "3"
 members = ["crates/*"]
+exclude = ["crates/gantry"]
 
 [workspace.package]
 version = "0.1.0"
@@ -12,7 +13,6 @@ publish = false
 
 [workspace.dependencies]
 sentinel = { path = "crates/sentinel", package = "pigeon-sentinel" }
-gantry = { path = "crates/gantry" }
 cobot = { path = "crates/cobot", default-features = false }
 backplane = { path = "crates/backplane", package = "pigeon-backplane", default-features = false }
 age = { version = "0.12.1", default-features = false }

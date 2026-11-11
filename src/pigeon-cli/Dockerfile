@@ -14,8 +14,6 @@ ENTRYPOINT ["/usr/local/bin/pigeon"]
 
 FROM runtime AS sentinel
 
-FROM runtime AS gantry
-
 # tofu and zola, checksum-pinned; versions equal mise.toml's.
 FROM docker.io/library/debian:bookworm-20261005-slim@sha256:7c7b2c966bc9ee8cedfeef67e0e279108992c77681fa595db4a9d65c06ccc587 AS tools
 ARG TOFU_VERSION=1.13.1

@@ -31,10 +31,5 @@ pub fn engines() -> Vec<EngineInfo> {
             version: cobot::VERSION.into(),
             role: "action",
         },
-        EngineInfo {
-            engine: Engine::Gantry,
-            version: gantry::VERSION.into(),
-            role: "planned",
-        },
     ]
 }

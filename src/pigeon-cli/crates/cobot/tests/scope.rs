@@ -130,7 +130,6 @@ fn a_workspace_setting_runs_everything() {
         "clippy",
         "clippy pigeon (no features)",
         "clippy pigeon --features sentinel",
-        "clippy pigeon --features gantry",
         "clippy pigeon --features cobot",
         "clippy pigeon --features backplane",
         "clippy backplane worker (wasm)",

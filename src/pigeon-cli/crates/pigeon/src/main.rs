@@ -4,12 +4,7 @@ use clap::Parser;
 use pigeon::cli::Cli;
 
 #[cfg_attr(
-    not(any(
-        feature = "sentinel",
-        feature = "gantry",
-        feature = "cobot",
-        feature = "backplane"
-    )),
+    not(any(feature = "sentinel", feature = "cobot", feature = "backplane")),
     expect(unreachable_code, reason = "no subcommands are built")
 )]
 fn main() {

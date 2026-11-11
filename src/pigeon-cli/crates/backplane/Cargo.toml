@@ -18,7 +18,6 @@ default = ["engines"]
 engines = [
   "dep:cobot",
   "cobot/engines",
-  "dep:gantry",
   "dep:serde-saphyr",
   "dep:httparse",
   "dep:rustls",
@@ -28,7 +27,6 @@ worker = ["dep:cobot", "cobot/worker", "dep:futures-util", "dep:wasm-bindgen", "
 [dependencies]
 cobot = { workspace = true, optional = true }
 futures-util = { workspace = true, optional = true }
-gantry = { workspace = true, optional = true }
 hmac.workspace = true
 p256.workspace = true
 serde.workspace = true
