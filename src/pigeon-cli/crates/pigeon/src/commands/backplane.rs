@@ -46,6 +46,8 @@ pub fn run(command: BackplaneCommand) -> i32 {
         BackplaneCommand::Jobs(args) => jobs(&args),
         BackplaneCommand::TotpSecret => totp_secret(),
         BackplaneCommand::VapidKey => vapid_key(),
+        #[cfg(feature = "signing")]
+        BackplaneCommand::Signing(c) => super::signing::run(c),
     }
 }
 

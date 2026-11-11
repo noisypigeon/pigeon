@@ -8,28 +8,42 @@ use clap::{Args, Subcommand};
 #[derive(Subcommand, Debug)]
 pub enum BackplaneCommand {
     /// Validate and show the instance manifest; exit 2 if invalid
+    #[cfg(feature = "backplane")]
     Instance(RootArgs),
     /// List the engines, their versions and roles
+    #[cfg(feature = "backplane")]
     Engines(JsonArgs),
     /// List the operations a surface may request
+    #[cfg(feature = "backplane")]
     Operations(JsonArgs),
     /// Run an operation; exit 1 on a violation, 2 on an error
+    #[cfg(feature = "backplane")]
     Run(RunArgs),
     /// List the ADRs that govern each path, by their `Governs` globs
+    #[cfg(feature = "backplane")]
     Decisions(DecisionsArgs),
     /// Answer operations over HTTP (GET /healthz, GET /v0/operations, POST /v0/run); needs
     /// `BACKPLANE_TOKEN`
+    #[cfg(feature = "backplane")]
     Serve(ServeArgs),
     /// Take a change's jobs over signed HTTP (POST /v0/jobs, GET /v0/jobs/<id>), in a job
     /// Container; needs `BACKPLANE_TOKEN`
+    #[cfg(feature = "backplane")]
     Jobs(JobsArgs),
     /// Print a new authenticator secret for approvals in the card: base32 on stdout, for
     /// `pigeon cobot workers secrets put … APPROVER_TOTP`, and its `otpauth://` URI on stderr,
     /// for the authenticator app
+    #[cfg(feature = "backplane")]
     TotpSecret,
     /// Print a new Web Push key: its private half, base64url, on stdout, for
     /// `pigeon cobot workers secrets put … PUSH_VAPID_KEY`, and its public half on stderr
+    #[cfg(feature = "backplane")]
     VapidKey,
+    /// Load the release's signing identity into a throwaway keychain, upload the signed app,
+    /// and clean up, in Buildkite's `sign` step
+    #[cfg(feature = "signing")]
+    #[command(subcommand)]
+    Signing(SigningCommand),
 }
 
 /// `pigeon backplane decisions` arguments.
@@ -129,4 +143,35 @@ pub struct RunArgs {
     /// The instance root and output format
     #[command(flatten)]
     pub root: RootArgs,
+}
+
+/// `pigeon backplane signing` commands.
+#[cfg(feature = "signing")]
+#[derive(Subcommand, Debug)]
+pub enum SigningCommand {
+    /// Exchange the job's OIDC token for the signing identity and load it; prints the
+    /// `ExportOptions.plist` path
+    Load(SigningArgs),
+    /// Upload a signed `.ipa` to App Store Connect with the grant's token
+    Upload(UploadArgs),
+    /// Undo `load`; succeeds when there is nothing to undo
+    Clean(SigningArgs),
+}
+
+/// Where the harness keeps its files.
+#[cfg(feature = "signing")]
+#[derive(Args, Debug)]
+pub struct SigningArgs {
+    /// The control plane to ask
+    #[arg(long, default_value = backplane::signing::PLATFORM)]
+    pub platform: String,
+}
+
+/// `pigeon backplane signing upload` arguments.
+#[cfg(feature = "signing")]
+#[derive(Args, Debug)]
+pub struct UploadArgs {
+    /// The signed app
+    #[arg(long)]
+    pub ipa: PathBuf,
 }

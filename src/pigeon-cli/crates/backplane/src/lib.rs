@@ -39,6 +39,7 @@ pub mod serve;
 pub mod sessions;
 #[cfg(feature = "engines")]
 pub mod ship;
+pub mod signing;
 pub mod tasks;
 pub mod testmaps;
 pub mod tickets;

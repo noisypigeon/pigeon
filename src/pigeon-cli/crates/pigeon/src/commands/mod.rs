@@ -6,6 +6,8 @@ pub mod backplane;
 pub mod cobot;
 #[cfg(feature = "sentinel")]
 pub mod sentinel;
+#[cfg(feature = "signing")]
+pub mod signing;
 #[cfg(feature = "cobot")]
 pub mod workers;
 
@@ -21,10 +23,15 @@ pub const INVALID: i32 = 2;
 /// Runs a command and returns its exit code.
 #[must_use]
 #[cfg_attr(
-    not(any(feature = "sentinel", feature = "cobot", feature = "backplane")),
+    not(any(
+        feature = "sentinel",
+        feature = "cobot",
+        feature = "backplane",
+        feature = "signing"
+    )),
     expect(
         clippy::needless_pass_by_value,
-        reason = "only `sentinel`, `cobot` and `backplane` carry arguments"
+        reason = "only `sentinel`, `cobot`, `backplane` and `signing` carry arguments"
     )
 )]
 pub fn dispatch(command: Commands) -> i32 {
@@ -35,5 +42,7 @@ pub fn dispatch(command: Commands) -> i32 {
         Commands::Cobot(c) => cobot::run(c),
         #[cfg(feature = "backplane")]
         Commands::Backplane(c) => backplane::run(c),
+        #[cfg(all(feature = "signing", not(feature = "backplane")))]
+        Commands::Backplane(crate::cli::BackplaneCommand::Signing(c)) => signing::run(c),
     }
 }
