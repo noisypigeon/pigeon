@@ -736,6 +736,15 @@ pub fn merge_dropped(change: &Change) -> bool {
         })
 }
 
+/// Applies to `change`, a copy loaded before `journal` grew past `seen`, the events applied to the
+/// stored change meanwhile; their effects are already pending, so they are dropped here. See the
+/// 2026-11-11 amendment to `.claude/decisions/2026-11-08-development-concurrent-agent-sessions.md`.
+pub fn catch_up(change: &mut Change, journal: &[changes::Event], seen: usize) {
+    for e in journal.iter().skip(seen) {
+        let _ = change.apply(e.clone());
+    }
+}
+
 /// Whether `after`, saved over `before`, gives its place in the merge queue back: its merge
 /// asked for was dropped, or it was just closed, waiting or holding the turn.
 #[must_use]

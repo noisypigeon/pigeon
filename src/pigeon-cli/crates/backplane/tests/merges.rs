@@ -660,6 +660,110 @@ fn a_released_turn_says_why() {
 }
 
 #[test]
+fn an_alarm_catches_up_on_events_applied_while_it_ran() {
+    // !185: approved through /event while the alarm awaited; its stale copy saved over it.
+    let mut stored = approved_172();
+    stored
+        .apply(Event::Behind { main: MAIN.into() })
+        .expect("behind");
+    let mut stale = stored.clone();
+    let journal = vec![Event::Merge { by: "owner".into() }];
+    stored.apply(journal[0].clone()).expect("parked");
+    assert!(stale.merge_after.is_none(), "the alarm's copy misses it");
+    control::catch_up(&mut stale, &journal, 0);
+    assert_eq!(stale.merge_after.as_deref(), Some("owner"));
+    assert!(!control::merge_dropped(&stale), "the turn is still held");
+    let mut again = stored.clone();
+    control::catch_up(&mut again, &journal, 1);
+    assert_eq!(
+        again, stored,
+        "events before `seen` are already in the copy"
+    );
+}
+
+#[test]
+fn a_restacked_head_with_nothing_left_to_check_carries_its_approval_at_bound() {
+    // !185: an ADR change's restacked head went to checked at bound, its approval never carried.
+    let mut c = approved_with(&[], &[]);
+    c.apply(Event::Behind { main: MAIN.into() })
+        .expect("behind");
+    c.apply(restacked(Relation::Disjoint, Some(C), true))
+        .expect("restacked");
+    c.apply(Event::Bounded {
+        sha: C.into(),
+        violations: vec![],
+        checks: vec![],
+        full: vec![],
+        tiers: Some(tiers(Tier::Confirm)),
+    })
+    .expect("bounded");
+    assert_eq!(c.state, State::Approved, "the approval carried at bound");
+    assert_eq!(
+        c.apply(Event::Merge { by: "owner".into() }).expect("merge"),
+        [Effect::Start(MERGE.into())]
+    );
+}
+
+#[test]
+fn an_approved_head_with_a_carry_left_over_merges_and_a_parked_merge_starts_on_approval() {
+    // !181: approved by hand while its carry was pending; its merge parked forever.
+    let mut c = approved_with(&[], &[]);
+    c.apply(Event::Behind { main: MAIN.into() })
+        .expect("behind");
+    c.apply(restacked(Relation::Disjoint, Some(C), true))
+        .expect("restacked");
+    c.apply(Event::Merge { by: "owner".into() })
+        .expect("parked");
+    assert_eq!(c.merge_after.as_deref(), Some("owner"));
+    let effects = c
+        .apply(Event::Bounded {
+            sha: C.into(),
+            violations: vec![],
+            checks: vec![],
+            full: vec![],
+            tiers: Some(tiers(Tier::Confirm)),
+        })
+        .expect("bounded");
+    assert_eq!(
+        effects,
+        [Effect::Start(MERGE.into())],
+        "carried and started"
+    );
+
+    let mut c = approved_with(&["fmt"], &[]);
+    c.apply(Event::Behind { main: MAIN.into() })
+        .expect("behind");
+    c.apply(restacked(Relation::Disjoint, Some(C), true))
+        .expect("restacked");
+    c.apply(Event::Bounded {
+        sha: C.into(),
+        violations: vec![],
+        checks: vec![named("fmt")],
+        full: vec![],
+        tiers: None,
+    })
+    .expect("bounded");
+    c.apply(Event::Finished {
+        job: "fmt".into(),
+        sha: C.into(),
+        ok: true,
+    })
+    .expect("checked, its carry undecided");
+    c.apply(Event::Approve {
+        by: "owner".into(),
+        sha: C.into(),
+        at: 9,
+    })
+    .expect("approved by hand");
+    assert_eq!(c.carried, None, "the carry is moot");
+    assert_eq!(
+        c.apply(Event::Merge { by: "owner".into() }).expect("merge"),
+        [Effect::Start(MERGE.into())],
+        "an approved head merges"
+    );
+}
+
+#[test]
 fn a_turn_moved_past_is_handed_back_even_when_the_ask_is_refused() {
     // !181 held the turn; an ask for a change already waiting moved past it, but its refusal
     // dropped the merge it moved on to.

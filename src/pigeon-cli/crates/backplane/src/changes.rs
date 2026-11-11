@@ -816,6 +816,7 @@ impl Change {
             }
             if !self.jobs.iter().any(|j| j.gates() && j.open()) {
                 self.state = State::Checked;
+                effects.extend(self.carry());
             }
             Ok(effects)
         } else {
@@ -1033,7 +1034,12 @@ impl Change {
             at,
         });
         self.state = State::Approved;
-        Ok(Vec::new())
+        // Approved by hand while a carry was pending: the carry is moot, and a parked merge starts.
+        self.carried = None;
+        match self.merge_after.take() {
+            Some(by) => self.start_merge(&by),
+            None => Ok(Vec::new()),
+        }
     }
 
     fn merge(&mut self, by: &str) -> Result<Vec<Effect>, Refusal> {
@@ -1047,7 +1053,7 @@ impl Change {
         let carrying = self.carried.is_some()
             && !matches!(
                 self.state,
-                State::Failed | State::Refused | State::Merged | State::Closed
+                State::Approved | State::Failed | State::Refused | State::Merged | State::Closed
             );
         if restacking || carrying {
             self.merge_after = Some(by.to_string());

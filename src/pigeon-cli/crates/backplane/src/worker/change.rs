@@ -17,6 +17,8 @@ use crate::grants::{Grant, Grants};
 
 const CHANGE: &str = "change";
 const PENDING: &str = "pending";
+/// The events applied through `/event` since the alarm last saved, which it catches up on.
+const JOURNAL: &str = "journal";
 const LOGS: &str = "logs";
 const FAILURES: &str = "failures";
 /// The storage key of the last bound job's log tail, shown in its status.
@@ -136,6 +138,20 @@ impl ChangeRun {
             }
         }
         Ok(())
+    }
+
+    /// `POST /event`: applies `event`, and journals it for an alarm already running, which
+    /// would otherwise save over it.
+    async fn on_event(&self, mut change: Change, event: Event) -> Result<Response> {
+        let mut pending: Vec<Pending> = self.load(PENDING).await?;
+        if let Err(why) = Self::apply(&mut change, event.clone(), &mut pending) {
+            return Response::error(why, 409);
+        }
+        let mut journal: Vec<Event> = self.load(JOURNAL).await?;
+        journal.push(event);
+        self.state.storage().put(JOURNAL, &journal).await?;
+        self.save(&change, &pending).await?;
+        Response::from_json(&change)
     }
 
     async fn save(&self, change: &Change, pending: &[Pending]) -> Result<()> {
@@ -652,18 +668,10 @@ impl DurableObject for ChangeRun {
                 Some(change) => self.break_glass(change).await,
                 None => Response::error("no such change", 404),
             },
-            (Method::Post, "event") => {
-                let Some(mut change) = existing else {
-                    return Response::error("no such change", 404);
-                };
-                let event: Event = req.json().await?;
-                let mut pending: Vec<Pending> = self.load(PENDING).await?;
-                if let Err(why) = Self::apply(&mut change, event, &mut pending) {
-                    return Response::error(why, 409);
-                }
-                self.save(&change, &pending).await?;
-                Response::from_json(&change)
-            }
+            (Method::Post, "event") => match existing {
+                Some(change) => self.on_event(change, req.json().await?).await,
+                None => Response::error("no such change", 404),
+            },
             _ => Response::error("not found", 404),
         }
     }
@@ -673,6 +681,9 @@ impl DurableObject for ChangeRun {
             return Response::ok("no change");
         };
         let mut pending: Vec<Pending> = self.load(PENDING).await?;
+        // What `/event` may add while this alarm awaits, which it keeps rather than overwrites.
+        let seen = self.load::<Vec<Event>>(JOURNAL).await?.len();
+        let took = pending.len();
         let mut next = Vec::new();
         let mut wait = false;
         let mut github: Actions = self.load(ACTIONS).await?;
@@ -737,6 +748,14 @@ impl DurableObject for ChangeRun {
         self.github_step(&mut change, &mut github, &mut next)
             .await?;
         self.state.storage().put(ACTIONS, &github).await?;
+        let journal: Vec<Event> = self.load(JOURNAL).await?;
+        control::catch_up(&mut change, &journal, seen);
+        let stored: Vec<Pending> = self.load(PENDING).await?;
+        next.extend(stored.into_iter().skip(took));
+        self.state
+            .storage()
+            .put(JOURNAL, &Vec::<Event>::new())
+            .await?;
         self.save_after(&change, &next, wait).await?;
         if restack_failed && let Err(e) = super::tasks::restack_failed(&self.env, &change).await {
             worker::console_error!("restack task: {e}");
