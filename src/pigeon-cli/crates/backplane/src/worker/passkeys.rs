@@ -27,12 +27,6 @@ fn rp_for(env: &Env, host: &str) -> String {
     passkeys::relying_party(host, configured.as_deref())
 }
 
-/// Whether `path` is one of the passkey pages.
-#[must_use]
-pub fn is_page(path: &str) -> bool {
-    path == "/passkeys" || path == "/passkeys/challenge" || path == "/passkey.js"
-}
-
 // The `Instance` side.
 
 /// `/passkeys/*` on the `Instance` Durable Object.
@@ -261,4 +255,23 @@ async fn list(env: &Env, s: &Settings, said: Option<&str>) -> Result<Response> {
         })
         .collect();
     html_with(200, &page::passkeys_page(&keys, said), page::PROOF_CSP)
+}
+
+/// The routes this surface serves.
+pub(super) const ROUTES: &[super::Route] = &[
+    super::Route::any(crate::routes::Path::Exact("/passkeys"), serve_route),
+    super::Route::any(
+        crate::routes::Path::Exact("/passkeys/challenge"),
+        serve_route,
+    ),
+    super::Route::any(crate::routes::Path::Exact("/passkey.js"), serve_route),
+];
+
+fn serve_route<'a>(
+    req: Request,
+    env: &'a Env,
+    s: &'a Settings,
+    who: &'a Identity,
+) -> futures_util::future::LocalBoxFuture<'a, Result<Response>> {
+    Box::pin(page_serve(req, env, s, who))
 }

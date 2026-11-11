@@ -567,3 +567,18 @@ async fn start(env: &Env, run: &Run, sha: Option<&str>) -> std::result::Result<(
         Err(r.text().await.unwrap_or_default())
     }
 }
+
+/// The routes this surface serves.
+pub(super) const ROUTES: &[super::Route] = &[super::Route::any(
+    crate::routes::Path::Prefix("/platform/"),
+    serve_route,
+)];
+
+fn serve_route<'a>(
+    req: Request,
+    env: &'a Env,
+    s: &'a Settings,
+    who: &'a Identity,
+) -> futures_util::future::LocalBoxFuture<'a, Result<Response>> {
+    Box::pin(page_serve(req, env, s, who))
+}

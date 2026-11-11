@@ -171,3 +171,18 @@ async fn forward(
     }
     Response::error(format!("Artifacts answered {status}"), 502)
 }
+
+/// The routes this surface serves.
+pub(super) const ROUTES: &[super::Route] = &[super::Route::any(
+    crate::routes::Path::Prefix("/git/"),
+    serve_route,
+)];
+
+fn serve_route<'a>(
+    req: Request,
+    env: &'a Env,
+    s: &'a Settings,
+    who: &'a Identity,
+) -> futures_util::future::LocalBoxFuture<'a, Result<Response>> {
+    Box::pin(serve(req, env, s, who))
+}

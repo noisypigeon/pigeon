@@ -265,3 +265,18 @@ async fn post(
         Err(e) => refused(409, &e.to_string()),
     }
 }
+
+/// The routes this surface serves.
+pub(super) const ROUTES: &[super::Route] = &[
+    super::Route::any(crate::routes::Path::Prefix("/approve/"), serve_route),
+    super::Route::any(crate::routes::Path::Exact("/approvals"), serve_route),
+];
+
+fn serve_route<'a>(
+    req: Request,
+    env: &'a Env,
+    s: &'a Settings,
+    who: &'a Identity,
+) -> futures_util::future::LocalBoxFuture<'a, Result<Response>> {
+    Box::pin(serve(req, env, s, who))
+}

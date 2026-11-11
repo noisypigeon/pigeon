@@ -29,6 +29,7 @@ pub mod platform_job;
 pub mod platforms;
 pub mod push;
 pub mod reconcile;
+pub mod routes;
 pub mod runs;
 #[cfg(feature = "engines")]
 pub mod sentinel;

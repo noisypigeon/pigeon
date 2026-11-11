@@ -7,6 +7,7 @@
     reason = "`durable_object` generates undocumented wasm-bindgen items"
 )]
 
+mod api;
 mod approve;
 mod change;
 mod checker;
@@ -47,7 +48,7 @@ use crate::wire::{self, Response as WireResponse};
 const QUEUE: &str = "queue";
 
 #[event(fetch)]
-async fn fetch(mut req: Request, env: Env, _ctx: worker::Context) -> Result<Response> {
+async fn fetch(req: Request, env: Env, _ctx: worker::Context) -> Result<Response> {
     // Builds of public code, for any identity Access let through; each job checks the SHA-256
     // its Worker gave it; see .claude/decisions/2026-11-07-development-job-images-on-cloudflare.md §3.
     if req.method() == Method::Get && req.path().starts_with("/builds/") {
@@ -66,89 +67,35 @@ async fn fetch(mut req: Request, env: Env, _ctx: worker::Context) -> Result<Resp
     if let Some(refused) = narrow_token(&env, &who) {
         return refused;
     }
-    if req.path().starts_with("/git/") {
-        return gitdoor::serve(req, &env, &settings, &who).await;
-    }
-    if push::is_page(&req.path()) {
-        return push::page_serve(req, &env, &settings, &who).await;
-    }
-    if req.path().starts_with("/approve/") || req.path() == "/approvals" {
-        return approve::serve(req, &env, &settings, &who).await;
-    }
-    if passkeys::is_page(&req.path()) {
-        return passkeys::page_serve(req, &env, &settings, &who).await;
-    }
-    if req.path().starts_with("/platform/") {
-        return platforms::page_serve(req, &env, &settings, &who).await;
-    }
-    if req.path().starts_with("/mandate/") {
-        return mandates::page_serve(req, &env, &settings, &who).await;
-    }
-    match (req.method(), req.path().as_str()) {
-        (Method::Post, "/mcp") => {
-            let key = platform::secret(&env, "SESSION_KEY").ok();
-            let session = req
-                .headers()
-                .get(mcp::SESSION_HEADER)?
-                .zip(key.as_deref())
-                .and_then(|(id, k)| mcp::session(&id, k.as_bytes()))
-                .unwrap_or_default();
-            let message: Value = match req.json().await {
-                Ok(v) => v,
-                Err(_) => {
-                    return Response::from_json(&mcp::error(
-                        &Value::Null,
-                        mcp::code::INVALID_REQUEST,
-                        "not JSON",
-                    ));
-                }
-            };
-            match mcp::parse(&message, crate::VERSION) {
-                Action::Reply(v) => Response::from_json(&v),
-                Action::Initialize { reply, session } => {
-                    let mut r = Response::from_json(&reply)?;
-                    if let Some(k) = key {
-                        r.headers_mut().set(
-                            mcp::SESSION_HEADER,
-                            &mcp::session_id(&session, k.as_bytes()),
-                        )?;
-                    }
-                    Ok(r)
-                }
-                Action::Accept => Ok(Response::empty()?.with_status(202)),
-                Action::Answer { id, result } => elicit::answer(&env, &id, &result).await,
-                Action::Call { id, request } => {
-                    let request = control::retarget(&request);
-                    if request.operation == "approval.wait" {
-                        return wait(&env, &session, &id, &request).await;
-                    }
-                    if !who.human && grants::OPERATIONS.contains(&request.operation.as_str()) {
-                        return offer(&env, &settings, &id, &request).await;
-                    }
-                    let outcome = run(&env, &settings, &who, &request).await;
-                    Response::from_json(&mcp::answer(&id, outcome))
-                }
-            }
-        }
-        (Method::Get, "/v0/operations") => Response::from_json(&wire::catalog()),
-        (Method::Get, "/v0/events") => {
-            let url = req.url()?;
-            let args: serde_json::Map<String, Value> = url
-                .query_pairs()
-                .map(|(k, v)| (k.into_owned(), Value::String(v.into_owned())))
-                .collect();
-            Response::from_json(&events::wait(&env, &settings, &args, who.human).await?)
-        }
-        (Method::Post, "/v0/run") => {
-            let request: wire::Request = req.json().await?;
-            match run(&env, &settings, &who, &request).await {
-                Ok(r) => Response::from_json(&r),
-                Err(e) => Response::error(e.to_string(), 400),
-            }
-        }
-        _ => Response::error("not found", 404),
+    let (method, path) = (req.method(), req.path());
+    match crate::routes::find(SURFACES, &method, &path) {
+        Some(route) => (route.serve)(req, &env, &settings, &who).await,
+        None => Response::error("not found", 404),
     }
 }
+
+/// What serves a route: the request, with the Worker's bindings, settings and caller.
+pub(super) type Serve = for<'a> fn(
+    Request,
+    &'a Env,
+    &'a Settings,
+    &'a Identity,
+) -> futures_util::future::LocalBoxFuture<'a, Result<Response>>;
+
+/// A route of one of the Worker's surfaces.
+pub(super) type Route = crate::routes::Route<Method, Serve>;
+
+/// The router: each surface's routes, which it declares beside its handlers; see
+/// `.claude/decisions/2026-11-10-development-factory-crates-functional-core.md` §4.
+const SURFACES: &[&[Route]] = &[
+    api::ROUTES,
+    gitdoor::ROUTES,
+    push::ROUTES,
+    approve::ROUTES,
+    passkeys::ROUTES,
+    platforms::ROUTES,
+    mandates::ROUTES,
+];
 
 /// The change number of `request`'s `number` argument.
 fn number_arg(request: &wire::Request) -> Option<u32> {

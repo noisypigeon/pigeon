@@ -242,20 +242,6 @@ pub async fn serve(state: &State, path: &str, body: &Value) -> Result<Response> 
     }
 }
 
-/// The paths [`page_serve`] answers.
-#[must_use]
-pub fn is_page(path: &str) -> bool {
-    matches!(
-        path,
-        "/sw.js"
-            | "/approvals/push.js"
-            | "/approvals/vapid"
-            | "/approvals/push"
-            | "/approvals/latest.json"
-            | "/approvals/manifest.json"
-    )
-}
-
 fn script(body: &str) -> Result<Response> {
     let mut r = Response::ok(body)?;
     r.headers_mut()
@@ -313,4 +299,32 @@ pub async fn page_serve(
         }
         (method, path) => Response::error(format!("{method:?} {path} isn't served here"), 404),
     }
+}
+
+/// The routes this surface serves.
+pub(super) const ROUTES: &[super::Route] = &[
+    super::Route::any(crate::routes::Path::Exact("/sw.js"), serve_route),
+    super::Route::any(
+        crate::routes::Path::Exact("/approvals/push.js"),
+        serve_route,
+    ),
+    super::Route::any(crate::routes::Path::Exact("/approvals/vapid"), serve_route),
+    super::Route::any(crate::routes::Path::Exact("/approvals/push"), serve_route),
+    super::Route::any(
+        crate::routes::Path::Exact("/approvals/latest.json"),
+        serve_route,
+    ),
+    super::Route::any(
+        crate::routes::Path::Exact("/approvals/manifest.json"),
+        serve_route,
+    ),
+];
+
+fn serve_route<'a>(
+    req: Request,
+    env: &'a Env,
+    s: &'a Settings,
+    who: &'a Identity,
+) -> futures_util::future::LocalBoxFuture<'a, Result<Response>> {
+    Box::pin(page_serve(req, env, s, who))
 }

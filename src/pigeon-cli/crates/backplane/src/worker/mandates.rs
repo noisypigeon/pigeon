@@ -331,3 +331,18 @@ pub async fn page_serve(
         _ => page::refused(405, "method not allowed"),
     }
 }
+
+/// The routes this surface serves.
+pub(super) const ROUTES: &[super::Route] = &[super::Route::any(
+    crate::routes::Path::Prefix("/mandate/"),
+    serve_route,
+)];
+
+fn serve_route<'a>(
+    req: Request,
+    env: &'a Env,
+    s: &'a Settings,
+    who: &'a Identity,
+) -> futures_util::future::LocalBoxFuture<'a, Result<Response>> {
+    Box::pin(page_serve(req, env, s, who))
+}
