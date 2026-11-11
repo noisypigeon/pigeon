@@ -275,3 +275,17 @@ A file at the repository root, sectioned by date:
 2. **PR B**, the implementation, on a branch restarted from the new `main`. It holds steps 2 to 6.
    - Its first CI run fails until its own changelog bullet lands in the follow-up commit. Only then is it merged.
 3. After the merge, confirm that the `push` run on `main` is green.
+
+### 2026-11-11: An agent carries an ADR's execution through, step after step
+
+At the owner's request, an agent executing an ADR's steps doesn't ask before
+each one.
+
+- **It continues.** As soon as a step's change merges, the agent proposes the
+  next step's change, until the execution is done or the owner says stop.
+- **It still stops for the owner's decisions:**
+  - an approval the change's tier needs;
+  - a secret or a credential;
+  - a design question the ADR doesn't answer, which it raises as an amendment;
+  - a failure it can't fix within the step.
+- **It reports as it goes:** each merge, and what the next step is.

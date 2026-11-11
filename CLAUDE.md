@@ -29,7 +29,8 @@ belong in the ADR, never in the file.
   naming, template and amendments are in
   [`.claude/decisions/README.md`](.claude/decisions/README.md).
 - The development lifecycle (ADR PR, then autonomous implementation PR, squash
-  merges, PR conventions) is
+  merges, PR conventions; an agent continues through an ADR's execution steps
+  unless stopped) is
   [`2026-11-02-development-adr-driven-lifecycle.md`](.claude/decisions/2026-11-02-development-adr-driven-lifecycle.md).
 - The Rust workspace and its Mise-pinned toolchain are
   [`2026-11-02-development-cargo-workspace-mise-toolchain.md`](.claude/decisions/2026-11-02-development-cargo-workspace-mise-toolchain.md).
