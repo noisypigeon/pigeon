@@ -352,6 +352,13 @@ const CATALOG: &[Operation] = &[
         ],
     },
     Operation {
+        name: "apple.check",
+        engine: Engine::Backplane,
+        effect: Effect::Read,
+        summary: "Whether the Apple connection works: its secrets are set, App Store Connect accepts its tokens, the app exists, and its App Store profile is active, with its expiry; it never shows a secret",
+        args: &[],
+    },
+    Operation {
         name: "digest.show",
         engine: Engine::Backplane,
         effect: Effect::Read,

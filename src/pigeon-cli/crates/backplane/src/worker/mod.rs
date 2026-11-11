@@ -8,6 +8,7 @@
 )]
 
 mod api;
+mod apple;
 mod approve;
 mod change;
 mod checker;
@@ -53,6 +54,18 @@ async fn fetch(req: Request, env: Env, _ctx: worker::Context) -> Result<Response
     // its Worker gave it; see .claude/decisions/2026-11-07-development-job-images-on-cloudflare.md §3.
     if req.method() == Method::Get && req.path().starts_with("/builds/") {
         return build(&env, &req.path()).await;
+    }
+    // The one public path: Access lets it through, and the route authenticates its caller with
+    // a Buildkite OIDC token; see .claude/decisions/2026-11-11-release-ios-app-buildkite-testflight.md §5.
+    if req.path() == crate::apple::ROUTE {
+        return if req.method() == Method::Post {
+            apple::release(req, &env).await
+        } else {
+            Response::error("method not allowed", 405)
+        };
+    }
+    if req.path().starts_with(&format!("{}/", crate::apple::ROUTE)) {
+        return Response::error("not found", 404);
     }
     let settings = Settings::from(&env)?;
     let who = match platform::identify(&req, &settings).await {
@@ -435,6 +448,7 @@ async fn break_glass(
     ))
 }
 
+#[expect(clippy::too_many_lines, reason = "one arm per control-plane operation")]
 async fn dispatch(
     env: &Env,
     s: &Settings,
@@ -517,6 +531,7 @@ async fn dispatch(
             None,
             respond(operation, 200, push::show(env, s, who.human).await?),
         )),
+        Routed::AppleCheck => Ok((None, respond(operation, 200, apple::check(env).await?))),
         Routed::Events { args } => {
             let v = events::wait(env, s, &args, who.human).await?;
             Ok((None, respond(operation, 200, v)))
