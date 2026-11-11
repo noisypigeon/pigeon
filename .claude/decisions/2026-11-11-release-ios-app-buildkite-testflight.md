@@ -202,3 +202,42 @@ The owner registered the App ID as `dev.pigeon.app`. It replaces `dev.pigeon.Pig
 - **Platform-neutral,** so a later Mac app or extension sits under it (`dev.pigeon.app.<name>`).
 - `src/pigeon-ios/project.yml`'s `PRODUCT_BUNDLE_IDENTIFIER` follows. The home-screen name stays `Pigeon` (`CFBundleDisplayName`); the App Store name is set in App Store Connect and is not in the tree.
 - The App ID has no capabilities beyond Apple's defaults. The first capability's change adds an entitlements file, and checks that `-exportArchive` applies its entitlements to the unsigned archive (§4).
+
+### 2026-11-11: GitHub Actions builds and tests; Buildkite's hosted agents only sign
+
+At the owner's direction, a change's checks and the release's build move to GitHub Actions' macOS runners, and Buildkite is kept for signing alone. This supersedes §2, §3, the `archive` step of §4 and the `ios` check of §9 step 6; that text stays as written.
+
+#### 1. Tests: `main`'s `ci.yml`
+
+- `change.scope` maps `src/pigeon-ios/**` to the check `ios`, which runs in `.github/workflows/ci.yml` like every code check ([`2026-11-10-development-code-checks-github-actions.md`](2026-11-10-development-code-checks-github-actions.md)): `main`'s workflow, dispatched on the head, holding no secret.
+- `ci.yml` runs an `ios` check on a `macos` runner, and every other check on Linux, as now.
+- The `ios` job selects the Xcode in `.xcode-version`, runs `xcodegen generate`, and builds and tests on a simulator with `CODE_SIGNING_ALLOWED=NO`.
+- There is no `pigeon-ios-check` pipeline, and no `macos` queue.
+
+#### 2. The release's archive: GitHub Actions
+
+- `MainRun`'s `ios` unit dispatches `ci.yml` on the released commit with the one check `ios.archive`, once the GitHub mirror holds it.
+- `ios.archive` runs §4's `archive` command on a `macos` runner and uploads `Pigeon.xcarchive.zip` as the run's artifact.
+- The control plane copies it to R2 at `builds/<sha>/ios/Pigeon.xcarchive.zip`, as it copies the test map, and only then creates the Buildkite build.
+
+#### 3. Signing: one hosted queue, one step
+
+- Buildkite organization `willow-graysen`; cluster `pigeon`; one hosted macOS queue, `macos-sign`, with the Xcode of `.xcode-version`.
+- One pipeline, `pigeon-ios-release`: the one step `sign`, fixed in its settings; no build triggers; branch filtering `main`; rebuilds disabled.
+- Each job is a fresh machine, so no `pre-exit` hook; `ios-sign.sh` still runs `signing clean` on exit.
+- `ios-sign.sh` installs the Rust toolchain `mise.toml` pins to build the harness, and stops before `signing load` unless `xcrun --find iTMSTransporter` succeeds.
+- The archive comes in the grant: `Grant` gains `archive_url`, an R2 URL for `builds/<sha>/ios/Pigeon.xcarchive.zip` valid for 15 minutes, which `signing load` downloads into its directory.
+- `release_grant` requires `organization_slug` `willow-graysen`, in place of `noisypigeon`.
+- `BUILDKITE_TOKEN` is scoped to `willow-graysen` with `read_builds`, `write_builds`, `read_build_logs` and `read_artifacts`, and no GraphQL access.
+
+#### 4. The secret names, ahead of step 4
+
+`infra/pigeon/workers/control/worker.yaml` declares §5's secrets now, so the owner can put them before step 4 lands. Until each is put, a deploy names it as missing; nothing reads them before step 4.
+
+#### 5. Execution, from here
+
+1. This amendment, with the secret names.
+2. The owner: puts §5's secrets.
+3. Step 4, the Apple connection, with `archive_url` and the `willow-graysen` check.
+4. The `ios` check in `ci.yml` and `change.scope`.
+5. The release: `ios.archive`, its copy to R2, `ios_releases`, `ios-sign.sh`, the `ios` deploy unit, and an AppIcon.
