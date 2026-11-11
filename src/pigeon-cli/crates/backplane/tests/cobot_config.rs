@@ -481,3 +481,124 @@ fn rotation_and_secrets_end_to_end() {
         Err(backplane::cobot::Error::SecretsPassphrase)
     ));
 }
+
+/// The repository's root, whose catalog and `config.yaml` the platform kind's tests use.
+fn repo_root() -> std::path::PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../..")
+}
+
+/// `platform/blue` rendered from the repository's `config.yaml`, with `extra` appended to its
+/// unit, in an instance of its own on the repository's catalog.
+fn platform_blue(extra: &str) -> Value {
+    let root = repo_root();
+    let config = fs::read_to_string(root.join("config.yaml")).expect("config.yaml");
+    let anchor = "  platform/blue:\n";
+    let at = config.find(anchor).expect("platform/blue") + anchor.len();
+    // The unit ends at the first non-blank line indented less than its fields.
+    let mut end = at;
+    for line in config[at..].split_inclusive('\n') {
+        if !line.starts_with("    ") && !line.trim().is_empty() {
+            break;
+        }
+        end += line.len();
+    }
+    let edited = format!("{}{extra}{}", &config[..end], &config[end..]);
+    let instance = TempDir::new().expect("tempdir");
+    write(instance.path(), "config.yaml", &edited);
+    let units = backplane::cobot::select_in(
+        instance.path(),
+        &root,
+        &root.join(".config"),
+        &["platform/blue".to_string()],
+    )
+    .expect("platform/blue is valid");
+    let today = backplane::cobot::generations::day("2026-11-11").expect("day");
+    backplane::cobot::render_json(
+        &units[0],
+        Path::new("/state"),
+        &backplane::cobot::providers::Allowlist::default(),
+        today,
+        &backplane::cobot::config::Existing::new(),
+    )
+}
+
+#[test]
+fn a_platform_without_public_paths_renders_no_bypass() {
+    let json = platform_blue("");
+    let m = &json["module"];
+    // The blocks render with nothing to create.
+    assert_eq!(m["public_policies"]["for_each"], json!({}));
+    assert_eq!(m["public_applications"]["for_each"], json!({}));
+    assert_eq!(
+        m["application"]["policy_ids"],
+        json!(["${module.owners.id}"])
+    );
+}
+
+#[test]
+fn a_public_path_renders_one_bypass_policy_and_one_application_over_its_paths() {
+    let json = platform_blue(
+        "    public_paths:\n      - { name: apple release, paths: [platform.pigeon.dev/v0/apple/release, blue.platform.pigeon.dev/v0/apple/release] }\n",
+    );
+    let m = &json["module"];
+    let policy = &m["public_policies"];
+    assert_eq!(policy["bypass"], true);
+    assert_eq!(policy["name"], "${each.value.name}");
+    assert_eq!(
+        policy["for_each"]
+            .as_object()
+            .expect("map")
+            .keys()
+            .collect::<Vec<_>>(),
+        ["apple release"]
+    );
+    assert!(policy.get("emails").is_none() && policy.get("account_members").is_none());
+    let app = &m["public_applications"];
+    assert_eq!(app["hostnames"], "${each.value.paths}");
+    assert_eq!(
+        app["for_each"]["apple release"]["paths"],
+        json!([
+            "platform.pigeon.dev/v0/apple/release",
+            "blue.platform.pigeon.dev/v0/apple/release"
+        ])
+    );
+    assert_eq!(
+        app["policy_ids"],
+        json!(["${module.public_policies[each.value.name].id}"])
+    );
+    assert!(
+        app.get("worker_id").is_none(),
+        "only the paths, never the Worker"
+    );
+    assert_eq!(
+        m["application"]["policy_ids"],
+        json!(["${module.owners.id}"])
+    );
+}
+
+#[test]
+fn an_absent_each_list_is_empty() {
+    let repo = repo("infra/proof", &[]);
+    let path = repo.path().join("infra/proof/schema.json");
+    let mut s: Value =
+        serde_json::from_str(&fs::read_to_string(&path).expect("schema")).expect("json");
+    s["required"] = json!(["label", "tokens", "rotation"]);
+    fs::write(&path, serde_json::to_string_pretty(&s).expect("json")).expect("write");
+    write(
+        repo.path(),
+        "infra/proof/config.yaml",
+        &CONFIG.replace("items: [a, b]\n", ""),
+    );
+    assert_eq!(problems(repo.path()), Vec::<String>::new());
+    let units =
+        backplane::cobot::select(repo.path(), &repo.path().join(".config"), &[]).expect("valid");
+    let today = backplane::cobot::generations::day("2026-11-11").expect("day");
+    let json = backplane::cobot::render_json(
+        &units[0],
+        Path::new("/state"),
+        &backplane::cobot::providers::Allowlist::default(),
+        today,
+        &backplane::cobot::config::Existing::new(),
+    );
+    assert_eq!(json["module"]["items"]["for_each"], json!({}));
+}

@@ -173,6 +173,37 @@
           "previous_secret_expires": "$item.previous_secret_expires"
         }
       }
+    },
+    "public_paths": {
+      "type": "array",
+      "uniqueItems": true,
+      "description": "Paths reached without an Access login, each its own application with a bypass policy; its route authenticates the caller itself. See .claude/decisions/2026-11-08-runtime-blue-green-self-standup.md.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "paths"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "description": "The application's and its policy's name."
+          },
+          "paths": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "description": "The path on each of the stack's domains, as hostname and path.",
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z0-9.-]+/[A-Za-z0-9/._-]+$"
+            }
+          }
+        }
+      }
     }
   },
   "x-cobot": {
@@ -245,6 +276,29 @@
           "account_id": "$module.account.id",
           "name": "$item.policy",
           "service_token_id": "$module.service_tokens[$item.name].id"
+        }
+      },
+      "public_policies": {
+        "module": "cloudflare/access-policy",
+        "over": "public_paths",
+        "for_each": "$item.name",
+        "inputs": {
+          "account_id": "$module.account.id",
+          "name": "$item.name",
+          "bypass": true
+        }
+      },
+      "public_applications": {
+        "module": "cloudflare/access-application",
+        "over": "public_paths",
+        "for_each": "$item.name",
+        "inputs": {
+          "account_id": "$module.account.id",
+          "name": "$item.name",
+          "policy_ids": [
+            "$module.public_policies[$item.name].id"
+          ],
+          "hostnames": "$item.paths"
         }
       }
     },

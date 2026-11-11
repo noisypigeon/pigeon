@@ -1115,7 +1115,11 @@ fn item_keys(block: &Block, config: &Value) -> Result<Vec<String>, String> {
             block.name
         ));
     };
-    let Some(items) = config.get(&block.over).and_then(Value::as_array) else {
+    // An absent list is empty; see .claude/decisions/2026-11-08-runtime-blue-green-self-standup.md.
+    let Some(over) = config.get(&block.over) else {
+        return Ok(Vec::new());
+    };
+    let Some(items) = over.as_array() else {
         return Err(format!("`{}` must be a list", block.over));
     };
     let mut keys = Vec::new();

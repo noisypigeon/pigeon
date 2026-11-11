@@ -32,3 +32,11 @@ variable "account_members" {
   default  = false
   nullable = false
 }
+
+# Whether the policy bypasses Access for everyone, for a path its Worker authenticates itself; see
+# .claude/decisions/2026-11-08-runtime-blue-green-self-standup.md.
+variable "bypass" {
+  type     = bool
+  default  = false
+  nullable = false
+}
