@@ -164,3 +164,31 @@ Each step is its own change.
 - **The split:**
   - `bound`, `infra.validate`, the policies, the merge and the deploy still run only on Cloudflare;
   - no workflow run holds a token that can write.
+
+## Amendments
+
+### 2026-11-11: the owner's CI window, every change's code checks on the `Checker` for a bounded time
+
+On 2026-11-11 around 20:00 UTC, GitHub Actions runners sat in `queued` for over 20 minutes. Every change waited on them, and §5's break-glass moves one head at a time, each approved on its own.
+
+**The window.**
+
+- The owner may open a window of 1 to 24 hours with `ci.window` and `hours`. While it is open, every change's code checks (§1), and the merge gate's `gate:` checks, run on the `Checker`, as §5's break-glass does for one head.
+- `ci.window` is at the owner tier, approved with the authenticator code like `ci.cloudflare`. The MCP tool is `ci_window`.
+- Opening it runs the break-glass on each open change with a code check queued or running on GitHub, so nothing already waiting stays on the stuck runners.
+- It closes by itself at its end, or early with `hours: 0`. Routing then goes back to GitHub for every new dispatch. A head already moved to the `Checker` finishes there, as with §5.
+- Opening a window while one is open replaces its end.
+
+**Where it lives.**
+
+- The window, its end and who opened it, is stored on the `Instance` object. `ChangeRun`'s alarm reads it before routing a code check.
+- The decision stays pure: `control::to_github` takes whether the window is open at `now`, and a window whose end has passed is closed without anyone closing it.
+- Each open and close is a `ci.window` event in the instance's event log.
+- `deploy_status` shows whether the window is open and until when.
+
+**Execution.** One `feat(backplane)` change:
+
+1. a `Window` type with `open(now)`, and `control::to_github` taking it, with tests for the window open, closed and expired;
+2. `Instance` storage and its route, the `ci.window` operation in the catalog and owner tier, the `ci_window` tool, and the `ci.window` event;
+3. on open, the break-glass for each open change with code checks queued or running on GitHub, tested on a change's dispatches;
+4. `deploy_status` gains `ci_window`.
