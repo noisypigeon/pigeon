@@ -103,7 +103,7 @@ pub fn run_document(
                 }
             }
             Rule::Line(r) => line(&mut ctx, &lines, r),
-            Rule::Fields(r) => fields(&mut ctx, &lines, r),
+            Rule::Fields(r) => fields(&mut ctx, &lines, r, root),
             Rule::Headings(r) => headings(&mut ctx, &lines, r),
             Rule::Items(r) => items(&mut ctx, &lines, r),
             Rule::Contains(r) => contains(&mut ctx, root, r),
@@ -316,7 +316,7 @@ fn line(ctx: &mut Ctx, lines: &[Line], r: &LineRule) {
     }
 }
 
-fn fields(ctx: &mut Ctx, lines: &[Line], r: &FieldsRule) {
+fn fields(ctx: &mut Ctx, lines: &[Line], r: &FieldsRule, root: &Path) {
     let mut rest = lines.iter().skip(r.after).filter(|l| !l.is_blank());
     for e in &r.expect {
         let Some(l) = rest.next() else {
@@ -348,6 +348,15 @@ fn fields(ctx: &mut Ctx, lines: &[Line], r: &FieldsRule) {
         } else if e.nonempty == Some(true) {
             if value.trim().is_empty() {
                 ctx.push(Some(l.number), format!("`{}` is empty", e.key));
+            }
+        } else if e.globs == Some(true) {
+            for glob in globs(value) {
+                if !matches_a_file(root, glob) {
+                    ctx.push(
+                        Some(l.number),
+                        format!("`{}` names `{glob}`, which matches no file", e.key),
+                    );
+                }
             }
         } else if let Some(m) = &e.matches
             && !m.0.is_match(value)
@@ -715,6 +724,39 @@ fn field(ctx: &mut Ctx, root: &Path, r: &FieldRule) {
     }
 }
 
+/// The globs of a `globs` field's value: comma-separated, each optionally in backticks.
+fn globs(value: &str) -> impl Iterator<Item = &str> {
+    value
+        .split(',')
+        .map(|g| g.trim().trim_matches('`').trim())
+        .filter(|g| !g.is_empty())
+}
+
+/// Whether a file under `root` matches `glob`; only the glob's literal directory is walked, and
+/// never `.git` or `target`.
+fn matches_a_file(root: &Path, glob: &str) -> bool {
+    let literal = glob.find(['*', '?']).map_or(glob, |i| &glob[..i]);
+    if literal == glob {
+        return root.join(glob).is_file() || (glob.ends_with('/') && root.join(glob).is_dir());
+    }
+    let dir = literal.rfind('/').map_or("", |i| &literal[..i]);
+    let skip = [crate::policy::Pattern(
+        regex::Regex::new(r"(^|/)(\.git|target)$").expect("valid"),
+    )];
+    let Some(re) = self::glob(glob) else {
+        return false;
+    };
+    let (found, _) = walk(&root.join(dir), &skip);
+    found.iter().any(|f| {
+        let path = if dir.is_empty() {
+            f.clone()
+        } else {
+            format!("{dir}/{f}")
+        };
+        re.is_match(&path)
+    })
+}
+
 fn contains(ctx: &mut Ctx, root: &Path, r: &ContainsRule) {
     let text = ctx.interpolate(&r.text);
     let path = r.file.display().to_string();
@@ -751,6 +793,30 @@ mod tests {
             run(rules, "abc.md", "a=abc-y\n"),
             vec!["`a` is `abc-y`; expected `abc-{x}`"]
         );
+    }
+
+    #[test]
+    fn fields_globs_condition_needs_each_glob_to_match_a_file() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let rules = "  - fields: { after: 0, pattern: '^(?<key>\\w+): (?<value>.*)$', expect: [{ key: g, globs: true }] }\n";
+        let run_at = |content: &str| {
+            let yaml = format!("description: test.\ntarget: {{ file: f }}\nrules:\n{rules}");
+            let loaded = LoadedPolicy {
+                name: "t".into(),
+                policy: Policy::parse(&yaml).expect("valid"),
+            };
+            let mut out = Vec::new();
+            run_document(&loaded, Path::new("f"), content, root, &mut out);
+            out.iter().map(|v| v.message.clone()).collect::<Vec<_>>()
+        };
+        assert_eq!(
+            run_at("g: `src/**`, `Cargo.toml`, src/rules.rs, `src/*.rs`, tests/\n"),
+            Vec::<String>::new()
+        );
+        let got = run_at("g: `src/**`, `nowhere/**`, `src/*.md`\n");
+        assert_eq!(got.len(), 2, "{got:?}");
+        assert!(got[0].contains("`nowhere/**`"), "{got:?}");
+        assert!(got[1].contains("`src/*.md`"), "{got:?}");
     }
 
     #[test]

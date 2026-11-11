@@ -198,6 +198,9 @@ pub struct Expect {
     pub nonempty: Option<bool>,
     /// The value matches.
     pub matches: Option<Pattern>,
+    /// The value is a comma-separated list of path globs, each optionally in backticks, and each
+    /// matches a file under the root.
+    pub globs: Option<bool>,
 }
 
 /// See [`Rule::Headings`]. Exactly one of `sequence` and `each` is set.
@@ -426,10 +429,11 @@ impl Policy {
                     for e in &r.expect {
                         let set = usize::from(e.equals.is_some())
                             + usize::from(e.nonempty == Some(true))
-                            + usize::from(e.matches.is_some());
+                            + usize::from(e.matches.is_some())
+                            + usize::from(e.globs == Some(true));
                         if set != 1 {
                             return at(&format!(
-                                "`{}` takes exactly one of `equals`, `nonempty: true` and `matches`",
+                                "`{}` takes exactly one of `equals`, `nonempty: true`, `matches` and `globs: true`",
                                 e.key
                             ));
                         }
