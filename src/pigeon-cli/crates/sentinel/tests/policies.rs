@@ -28,7 +28,7 @@ fn violations(name: &str, root: &Path, pr: Option<&PullRequest>) -> Vec<String> 
 
 fn adr(date: &str, category: &str, title: &str) -> String {
     format!(
-        "## {title}\n\n* Date: {date}\n* Model: Claude Opus 5.5\n* Author: Willow Graysen (@noisypigeon).\n* Category: {category}\n\n## Context\n\nWhy.\n\n```\n## Not a heading, it is inside a fence\n```\n\n## Implementation plan.\n\n### Steps\n\nHow.\n"
+        "## {title}\n\n* Date: {date}\n* Model: Claude Opus 5.5\n* Author: Willow Graysen (@noisypigeon).\n* Category: {category}\n* Governs: `.claude/decisions/*.md`\n\n## Context\n\nWhy.\n\n```\n## Not a heading, it is inside a fence\n```\n\n## Implementation plan.\n\n### Steps\n\nHow.\n"
     )
 }
 
