@@ -495,3 +495,40 @@ where nothing records why.
 **Execution,** in one change: the two events, the broader park, and tests that
 replay 172's sequence. The replay passes on the transitions as they were, so the
 events are what name the cause the next time a turn is lost.
+
+### 2026-11-11: A merge that can't finish gives its turn back, and a turn held by no merge is handed back
+
+Change 175 passed its merge gate (event 4917). Its merge job's Container then
+failed to start 3 times while the git front door returned 502 (event 4918).
+The merge job failed and the change stayed approved, but the queue kept its
+turn, and no `merge.released` was recorded. `change_merge` answered "already
+being merged", and `ci_rerun` refused the merge job on an approved head.
+The change's alarm records a Container that never starts as lost outside the
+poll that releases the turn.
+
+- **A merge job that ends without merging gives the turn back.** That covers a
+  merge job that failed, or whose Container was lost on every attempt, whether
+  or not it started.
+- **The change stays approved.** Its approval and its passed gate stand.
+  `change_merge` queues it again, and the merge starts without rerunning the
+  gate.
+- **A turn held by no merge is handed back.** When a merge is asked for, the
+  queue asks the change holding the turn whether a merge is still on its way:
+  - a merge job queued or running;
+  - a merge parked;
+  - a restack or a gate check running.
+
+  If none is, and the change has held the turn 2 minutes, the queue records
+  `merge.released` with the change's reason and moves on. This frees a turn
+  kept before the fix, such as 175's, the first time a merge is asked for
+  after the fix deploys.
+- **A merge job runs again only through the queue.** `ci_rerun` on `merge`
+  answers with `change_merge`.
+
+**Execution:**
+
+- !192 (`fix(backplane)`) releases the turn when the merge job's Container
+  can't start.
+- One more change adds the queue's check of its holder, the `ci_rerun` answer,
+  and tests that replay 175's sequence: its merge job lost 3 times without
+  starting, the turn handed back, and the change merged again.
