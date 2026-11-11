@@ -193,3 +193,96 @@ fn a_credential_draws_its_capabilities_and_a_unit_dir_policy_its_unit() {
     assert!(has("policy:pigeon-dir", "unit:infra/pigeon"));
     assert!(!has("policy:pigeon-dir", "repository"));
 }
+
+/// Each row of the link table is drawn only while its evidence is in the tree; a row whose code
+/// is gone fails here, so the table follows the code.
+#[test]
+fn every_link_is_evidenced_by_the_tree() {
+    let root = repo_root();
+    let missing: Vec<&str> = backplane::architecture::LINKS
+        .iter()
+        .filter(|r| !backplane::architecture::evidenced(&root, r))
+        .map(|r| r.id)
+        .collect();
+    assert!(missing.is_empty(), "no evidence for {missing:?}");
+    let r = describe(&root);
+    let network = &r.result["network"];
+    assert_eq!(
+        network["links"].as_array().map(Vec::len),
+        Some(backplane::architecture::LINKS.len())
+    );
+    let parts: Vec<&str> = network["parts"]
+        .as_array()
+        .expect("parts")
+        .iter()
+        .filter_map(|p| p["id"].as_str())
+        .collect();
+    for want in [
+        "ChangeRun",
+        "Instance",
+        "MainRun",
+        "Checker",
+        "Runner",
+        "D1",
+        "R2",
+        "Artifacts",
+    ] {
+        assert!(parts.contains(&want), "{want} is missing: {parts:?}");
+    }
+    assert!(network["worker"]["secrets"].as_u64().is_some_and(|n| n > 0));
+    let text = network.to_string();
+    for secret in [
+        "BACKPLANE_TOKEN",
+        "SESSION_KEY",
+        "APPROVER_TOTP",
+        "GITHUB_APP_KEY",
+    ] {
+        assert!(!text.contains(secret), "{secret} reaches the network");
+    }
+}
+
+#[test]
+fn an_instance_without_the_worker_has_no_network() {
+    let dir = TempDir::new().expect("tempdir");
+    let config = dir.path().join(".config");
+    fs::create_dir_all(config.join("policies")).expect("mkdir");
+    fs::write(config.join("instance.yaml"), MANIFEST).expect("write");
+    fs::write(config.join("providers.yaml"), "").expect("write");
+    fs::write(config.join("releases.yaml"), "").expect("write");
+    let r = describe(dir.path());
+    assert!(r.result["network"].is_null(), "{}", r.result["network"]);
+}
+
+#[test]
+fn a_row_whose_evidence_is_gone_is_not_evidenced() {
+    use backplane::architecture::{Row, evidenced};
+    let dir = TempDir::new().expect("tempdir");
+    let worker = dir
+        .path()
+        .join("src/pigeon-cli/crates/backplane/src/worker");
+    fs::create_dir_all(&worker).expect("mkdir");
+    fs::write(worker.join("merges.rs"), "Event::Behind; to_change(x)").expect("write");
+    let row = |evidence| Row {
+        id: "x",
+        from: "a",
+        to: "b",
+        label: "",
+        kind: backplane::architecture::Kind::Call,
+        evidence,
+    };
+    let ordered = row(&[
+        ("worker/merges.rs", "Event::Behind"),
+        ("worker/merges.rs", "to_change("),
+    ]);
+    assert!(evidenced(dir.path(), &ordered));
+    let backwards = row(&[
+        ("worker/merges.rs", "to_change("),
+        ("worker/merges.rs", "Event::Behind"),
+    ]);
+    assert!(
+        !evidenced(dir.path(), &backwards),
+        "fragments are found in order"
+    );
+    fs::write(worker.join("merges.rs"), "to_change(x)").expect("write");
+    assert!(!evidenced(dir.path(), &ordered));
+}

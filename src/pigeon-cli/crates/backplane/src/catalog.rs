@@ -60,12 +60,14 @@ fn architecture_describe(
 ) -> Result<(Value, Vec<String>), Error> {
     let (graph, problems) = crate::architecture::describe_with(instance, var)?;
     let layout = crate::architecture::layout(&graph);
+    let network = crate::architecture::network(&instance.root, instance.platform_root());
     Ok((
         json!({
             "nodes": graph.nodes,
             "edges": graph.edges,
             "groups": graph.groups,
             "layout": layout,
+            "network": network,
         }),
         problems,
     ))
