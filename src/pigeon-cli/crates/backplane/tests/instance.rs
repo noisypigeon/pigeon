@@ -430,3 +430,15 @@ fn the_control_plane_runs_mandates_itself() {
         assert!(op.control_plane(), "{name}");
     }
 }
+
+#[test]
+fn the_control_plane_runs_apple_check_itself() {
+    let op = catalog()
+        .iter()
+        .find(|o| o.name == "apple.check")
+        .expect("in the catalog");
+    assert!(
+        op.control_plane(),
+        "its secrets live only in the control plane's Worker"
+    );
+}

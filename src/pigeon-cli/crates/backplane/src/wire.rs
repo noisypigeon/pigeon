@@ -167,6 +167,7 @@ impl Operation {
             || self.name.starts_with("digest.")
             || self.name.starts_with("session.")
             || self.name.starts_with("platform.")
+            || self.name.starts_with("apple.")
     }
 }
 
