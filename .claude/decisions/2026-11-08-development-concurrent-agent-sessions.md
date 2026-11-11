@@ -465,3 +465,33 @@ too tight in use.
   raised again before it.
 - **Execution:** `backplane::sessions::MAX_PER_SESSION` and `MAX_OPEN`, and
   the test in `backplane/tests/tasks.rs` that pins them.
+
+### 2026-11-11: A queued merge keeps its turn, and a turn is never lost silently
+
+Change 172 was approved and queued before change 168, then lost its turn
+while its restacked head was checked again. 168 merged ahead of it. 172 was
+then restacked after each of four more merges without merging, and its merge
+was asked for again by hand each time (events 3493 to 4137). Replaying that
+sequence through `changes.rs` keeps the turn, so it was dropped in the Worker,
+where nothing records why.
+
+- **A turn is never lost silently.** The event log records:
+  - `merge.skipped`, with the change's answer, when the queue passes over a
+    change whose merge didn't start;
+  - `merge.released`, with the reason, when a change gives its turn back
+    without merging.
+- **A change still on its way to merging keeps its place.**
+  - That is a change that is approved, carries an approval through a
+    restack, or is restacking.
+  - A merge it can't start yet parks: the change records who asked and
+    holds its turn, whatever its new head's checks have reached, and the
+    merge starts when the approval carries.
+  - Only a change that can no longer merge leaves the queue: failed,
+    conflicting, closed, or its approval not carried.
+- **The turn's holder keeps `main` still.** Nothing else merges until it
+  merges or gives its turn back, so a change in its merge gate is never
+  restacked under it.
+
+**Execution,** in one change: the two events, the broader park, and tests that
+replay 172's sequence. The replay passes on the transitions as they were, so the
+events are what name the cause the next time a turn is lost.
