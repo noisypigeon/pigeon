@@ -347,6 +347,8 @@ pub struct Network {
     pub parts: Vec<Part>,
     /// The kept links.
     pub links: Vec<Link>,
+    /// Where the parts sit and how the links run.
+    pub diagram: super::place::Diagram,
 }
 
 fn read(platform: &Path, file: &str) -> Option<String> {
@@ -418,7 +420,7 @@ pub fn network(root: &Path, platform: &Path) -> Option<Network> {
         .collect();
     let parts = parts(platform, &worker, &repos, github.as_deref());
     let known = |id: &str| id == "Worker" || parts.iter().any(|p| p.id == id);
-    let links = LINKS
+    let links: Vec<Link> = LINKS
         .iter()
         .filter(|r| known(r.from) && known(r.to) && evidenced(platform, r))
         .map(|r| Link {
@@ -434,6 +436,7 @@ pub fn network(root: &Path, platform: &Path) -> Option<Network> {
             },
         })
         .collect();
+    let diagram = super::place::place(&parts, &links);
     Some(Network {
         clients: clients(&routes),
         access,
@@ -441,6 +444,7 @@ pub fn network(root: &Path, platform: &Path) -> Option<Network> {
         github,
         parts,
         links,
+        diagram,
     })
 }
 

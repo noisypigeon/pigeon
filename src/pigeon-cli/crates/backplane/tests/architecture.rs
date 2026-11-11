@@ -286,3 +286,66 @@ fn a_row_whose_evidence_is_gone_is_not_evidenced() {
     fs::write(worker.join("merges.rs"), "to_change(x)").expect("write");
     assert!(!evidenced(dir.path(), &ordered));
 }
+
+/// The network's boxes never overlap, and each route leaves its source's border and ends on its
+/// target's; see §8 and the 2026-11-11 amendment.
+#[test]
+fn the_network_diagram_is_placed_without_overlaps() {
+    let r = describe(&repo_root());
+    let d = &r.result["network"]["diagram"];
+    let boxes = d["boxes"].as_array().expect("boxes");
+    let rect = |b: &Value| {
+        let n = |k: &str| b[k].as_i64().expect("number");
+        (n("x"), n("y"), n("x") + n("w"), n("y") + n("h"))
+    };
+    for (i, a) in boxes.iter().enumerate() {
+        for b in &boxes[i + 1..] {
+            let (a, b) = (rect(a), rect(b));
+            assert!(
+                a.2 <= b.0 || b.2 <= a.0 || a.3 <= b.1 || b.3 <= a.1,
+                "{a:?} overlaps {b:?}"
+            );
+        }
+    }
+    let at = |id: &str| {
+        rect(
+            boxes
+                .iter()
+                .find(|b| b["id"] == id)
+                .unwrap_or_else(|| panic!("{id} has no box")),
+        )
+    };
+    let links = r.result["network"]["links"].as_array().expect("links");
+    for route in d["routes"].as_array().expect("routes") {
+        let link = links
+            .iter()
+            .find(|l| l["id"] == route["id"])
+            .expect("a route is a link's");
+        let path = route["d"].as_str().expect("d");
+        let numbers: Vec<i64> = path
+            .split(|c: char| c.is_ascii_alphabetic() || c == ' ')
+            .filter(|s| !s.is_empty())
+            .map(|s| s.parse().expect("integer"))
+            .collect();
+        let (s, t) = (
+            at(link["from"].as_str().expect("from")),
+            at(link["to"].as_str().expect("to")),
+        );
+        let (sx, sy) = (numbers[0], numbers[1]);
+        assert!(
+            (s.0..=s.2).contains(&sx) && (s.1..=s.3).contains(&sy),
+            "{path} leaves {s:?}"
+        );
+        let last = *numbers.last().expect("end");
+        let ends = path
+            .rsplit(|c: char| c.is_ascii_digit() || c == '-')
+            .find(|s| !s.is_empty());
+        let near = |v: i64, edge: i64| (v - edge).abs() <= 1;
+        let ok = match ends {
+            Some("V") => near(last, t.1) || near(last, t.3),
+            Some("H") => near(last, t.0) || near(last, t.2),
+            _ => false,
+        };
+        assert!(ok || link["from"] == link["to"], "{path} ends off {t:?}");
+    }
+}

@@ -6,12 +6,16 @@ mod describe;
 mod layout;
 #[cfg(feature = "engines")]
 mod network;
+#[cfg(feature = "engines")]
+mod place;
 
 #[cfg(feature = "engines")]
 pub use describe::{describe, describe_with};
 pub use layout::{GroupBox, LaneBox, Layout, Placed, Routed, layout};
 #[cfg(feature = "engines")]
 pub use network::{Kind, LINKS, Network, Row, evidenced, network};
+#[cfg(feature = "engines")]
+pub use place::{Diagram, place};
 
 use serde::{Deserialize, Serialize};
 
