@@ -77,6 +77,17 @@ struct Crates {
     features: BTreeMap<String, BTreeSet<String>>,
 }
 
+impl Crates {
+    /// Those of `packages` the workspace has.
+    fn of<'a>(&self, packages: &[&'a str]) -> Vec<&'a str> {
+        packages
+            .iter()
+            .copied()
+            .filter(|p| self.by_dir.values().any(|n| n == p))
+            .collect()
+    }
+}
+
 fn read_toml(path: &Path) -> Result<toml::Value, Error> {
     let io = |message: String| Error::Io {
         path: path.to_path_buf(),
@@ -229,7 +240,7 @@ fn under(path: &str, prefixes: &[&str]) -> bool {
 }
 
 /// The full set, for a change to a workspace-wide setting.
-fn everything(features: &BTreeSet<String>) -> Vec<Job> {
+fn everything(features: &BTreeSet<String>, crates: &Crates) -> Vec<Job> {
     let mut out = vec![
         job("fmt", &["cargo", "fmt", "--all", "--", "--check"]),
         job(
@@ -262,7 +273,7 @@ fn everything(features: &BTreeSet<String>) -> Vec<Job> {
         ],
     ));
     out.extend(features.iter().map(feature_clippy));
-    out.extend(worker_jobs(&WORKER));
+    out.extend(worker_jobs(&crates.of(&WORKER)));
     out.push(job("test", &["cargo", "test", "--workspace", "--locked"]));
     out.push(Job {
         name: "backplane instance".into(),
@@ -427,7 +438,7 @@ fn all_features(config: &Config, crates: &Crates) -> BTreeSet<String> {
 pub fn full(root: &Path) -> Result<Vec<Job>, Error> {
     let config = Config::load(&root.join(RELEASES))?;
     let crates = crates(root)?;
-    Ok(everything(&all_features(&config, &crates)))
+    Ok(everything(&all_features(&config, &crates), &crates))
 }
 
 /// Whether `out` already tests all of `package`, alone or as the whole workspace.
@@ -471,7 +482,7 @@ pub fn jobs_with(root: &Path, files: &[String], map: Option<&TestMap>) -> Result
     let all_features = all_features(&config, &crates);
     let mut out = Vec::new();
     if files.iter().any(|f| under(f, &EVERYTHING)) {
-        out.extend(everything(&all_features));
+        out.extend(everything(&all_features, &crates));
     } else {
         out.extend(rust_jobs(&crates, &config, &files, map));
     }
@@ -916,4 +927,34 @@ pub fn workers(root: &Path, files: Option<&[String]>) -> Result<Vec<String>, Err
         }
     }
     Ok(out)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::{BTreeMap, BTreeSet};
+
+    use super::{Crates, WORKER, everything};
+
+    #[test]
+    fn a_workspace_setting_builds_only_the_workers_the_tree_has() {
+        let crates = Crates {
+            by_dir: [(
+                "src/pigeon-cli/crates/backplane/".to_string(),
+                "pigeon-backplane".to_string(),
+            )]
+            .into(),
+            deps: BTreeMap::default(),
+            features: BTreeMap::default(),
+        };
+        assert_eq!(crates.of(&WORKER), ["pigeon-backplane"]);
+        let names: Vec<String> = everything(&BTreeSet::default(), &crates)
+            .into_iter()
+            .map(|j| j.name)
+            .collect();
+        assert!(
+            names.contains(&"clippy backplane worker (wasm)".to_string()),
+            "{names:?}"
+        );
+        assert!(!names.iter().any(|n| n.contains("cobot")), "{names:?}");
+    }
 }
