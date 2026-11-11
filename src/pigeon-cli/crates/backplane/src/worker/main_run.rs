@@ -128,7 +128,7 @@ impl MainRun {
             github::installation_token(&self.env, &owner, &repo, &mirroring::token_request(&repo))
                 .await?;
         let (remote, token) =
-            platform::credentials(&self.env, false, cobot::artifacts_wire::TOKEN_TTL)
+            platform::credentials(&self.env, false, crate::cobot::artifacts_wire::TOKEN_TTL)
                 .await
                 .map_err(|e| e.to_string())?;
         let spec = control::mirror_spec(&remote, &token, sha, to, &to_token);
@@ -297,7 +297,8 @@ impl MainRun {
             return Ok(json!({ "mirror": m }));
         }
         let (remote, token) =
-            platform::credentials(&self.env, false, cobot::artifacts_wire::TOKEN_TTL).await?;
+            platform::credentials(&self.env, false, crate::cobot::artifacts_wire::TOKEN_TTL)
+                .await?;
         let ours = github::refs(&remote, Some(&token)).await?;
         let theirs = github::refs(&to, None).await?;
         m.reconciled(&ours, &theirs, "main", at);
@@ -314,14 +315,14 @@ impl MainRun {
         images: Option<&control::Images>,
     ) -> std::result::Result<(), String> {
         let (remote, token) =
-            platform::credentials(&self.env, false, cobot::artifacts_wire::TOKEN_TTL)
+            platform::credentials(&self.env, false, crate::cobot::artifacts_wire::TOKEN_TTL)
                 .await
                 .map_err(|e| e.to_string())?;
         let deploy = secret(&self.env, "DEPLOY_TOKEN").map_err(|e| e.to_string())?;
         let mut env = BTreeMap::from([("CLOUDFLARE_API_TOKEN".to_string(), deploy)]);
         // Only the deploy job receives these; see
         // .claude/decisions/2026-11-07-development-control-plane-deploys-itself.md §6.
-        for k in cobot::ship_wire::SECRETS {
+        for k in crate::cobot::ship_wire::SECRETS {
             if let Ok(v) = secret(&self.env, k) {
                 env.insert(k.to_string(), v);
             }
@@ -331,20 +332,26 @@ impl MainRun {
         let kept = super::platforms::kept(&self.state)
             .await
             .map_err(|e| e.to_string())?;
-        let secret_outputs = env.get(cobot::ship_wire::OUTPUTS_VAR).cloned();
+        let secret_outputs = env.get(crate::cobot::ship_wire::OUTPUTS_VAR).cloned();
         if let Some(o) = crate::platforms::merged_outputs(secret_outputs.as_deref(), &kept) {
-            env.insert(cobot::ship_wire::OUTPUTS_VAR.to_string(), o);
+            env.insert(crate::cobot::ship_wire::OUTPUTS_VAR.to_string(), o);
         }
         // The newest images, which a deploy may have built since the secret was set; see
         // .claude/decisions/2026-11-07-development-job-images-on-cloudflare.md §4.
         if let Some(i) = images.and_then(|i| serde_json::to_string(i).ok()) {
-            env.insert(cobot::ship_wire::IMAGES_VAR.to_string(), i);
+            env.insert(crate::cobot::ship_wire::IMAGES_VAR.to_string(), i);
         }
-        if let Ok(d) = self.env.var(cobot::ship_wire::DEPLOYMENT_VAR) {
-            env.insert(cobot::ship_wire::DEPLOYMENT_VAR.to_string(), d.to_string());
+        if let Ok(d) = self.env.var(crate::cobot::ship_wire::DEPLOYMENT_VAR) {
+            env.insert(
+                crate::cobot::ship_wire::DEPLOYMENT_VAR.to_string(),
+                d.to_string(),
+            );
         }
-        if let Ok(host) = self.env.var(cobot::ship_wire::HOST_VAR) {
-            env.insert(cobot::ship_wire::HOST_VAR.to_string(), host.to_string());
+        if let Ok(host) = self.env.var(crate::cobot::ship_wire::HOST_VAR) {
+            env.insert(
+                crate::cobot::ship_wire::HOST_VAR.to_string(),
+                host.to_string(),
+            );
         }
         let spec = control::deploy_spec(&remote, &token, sha, p.deployed.as_deref(), env);
         let body = serde_json::to_value(&spec).map_err(|e| e.to_string())?;
@@ -482,7 +489,7 @@ impl DurableObject for MainRun {
         let mut next: Option<String> = None;
         let mut wait = false;
         if let Some(sha) = starting {
-            let secret = secret(&self.env, cobot::ship_wire::IMAGES_VAR)
+            let secret = secret(&self.env, crate::cobot::ship_wire::IMAGES_VAR)
                 .ok()
                 .and_then(|v| serde_json::from_str(&v).ok());
             let images = p.images_for_deploy(secret);

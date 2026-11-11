@@ -249,7 +249,7 @@ fn change_scope_names_the_checks_and_needs_files() {
         names,
         [
             "infra.validate",
-            "test cobot (catalog manifest apex git credentials)",
+            "test pigeon-backplane: cobot_catalog cobot_manifest cobot_apex cobot_git cobot_credentials",
             "policy.check"
         ]
     );

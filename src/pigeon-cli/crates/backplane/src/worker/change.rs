@@ -219,7 +219,7 @@ impl ChangeRun {
     async fn start(&self, change: &Change, job: &str) -> std::result::Result<(), String> {
         let write = job == crate::changes::MERGE || job == crate::changes::RESTACK;
         let (remote, token) =
-            platform::credentials(&self.env, write, cobot::artifacts_wire::TOKEN_TTL)
+            platform::credentials(&self.env, write, crate::cobot::artifacts_wire::TOKEN_TTL)
                 .await
                 .map_err(|e| e.to_string())?;
         let mut spec = control::spec(change, job, &remote, &token)?;

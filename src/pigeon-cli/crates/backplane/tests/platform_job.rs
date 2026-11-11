@@ -56,21 +56,24 @@ fn the_state_bucket_is_the_one_suffixed_bucket_of_its_name() {
 
 #[test]
 fn a_plan_that_destroys_anything_is_refused() {
-    let change = |address: &str, action| cobot::Change {
+    let change = |address: &str, action| backplane::cobot::Change {
         address: address.into(),
         action,
         attributes: Vec::new(),
     };
     let safe = [change(
         "module.d1.cloudflare_d1_database.this",
-        cobot::Action::Update,
+        backplane::cobot::Action::Update,
     )];
     assert_eq!(destroys(&safe), None);
     let gone = [
-        change("module.queue.cloudflare_queue.this", cobot::Action::Create),
+        change(
+            "module.queue.cloudflare_queue.this",
+            backplane::cobot::Action::Create,
+        ),
         change(
             "module.buckets[\"pigeon-ci\"].cloudflare_r2_bucket.this",
-            cobot::Action::Replace,
+            backplane::cobot::Action::Replace,
         ),
     ];
     let why = destroys(&gone).unwrap_or_default();

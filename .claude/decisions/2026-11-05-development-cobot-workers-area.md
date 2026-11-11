@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: development
-* Governs: `infra/pigeon/workers/**`, `src/pigeon-cli/crates/cobot/src/workers.rs`, `src/pigeon-cli/crates/cobot/tests/workers.rs`, `src/pigeon-cli/crates/pigeon/src/commands/workers.rs`, `mise.toml`
+* Governs: `infra/pigeon/workers/**`, `src/pigeon-cli/crates/backplane/src/cobot/workers.rs`, `src/pigeon-cli/crates/backplane/tests/cobot_workers.rs`, `src/pigeon-cli/crates/pigeon/src/commands/workers.rs`, `mise.toml`
 
 ## Context
 

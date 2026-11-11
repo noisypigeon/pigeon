@@ -16,7 +16,7 @@ use rustls::server::WebPkiClientVerifier;
 use rustls::{RootCertStore, ServerConfig, ServerConnection, StreamOwned};
 use serde_json::{Value, json};
 
-use cobot::link::constant_eq;
+use crate::cobot::link::constant_eq;
 
 use crate::{Effect, Error, Instance, Request, catalog, run_with};
 
@@ -47,7 +47,7 @@ pub const TLS_KEY_VAR: &str = "BACKPLANE_TLS_KEY";
 /// The environment variable holding the CA that issues client certificates, as PEM.
 pub const TLS_CLIENT_CA_VAR: &str = "BACKPLANE_TLS_CLIENT_CA";
 
-pub use cobot::link::{
+pub use crate::cobot::link::{
     NONCE_HEADER, SIGNATURE_HEADER, SKEW, TIMESTAMP_HEADER, sign_request, sign_response,
 };
 

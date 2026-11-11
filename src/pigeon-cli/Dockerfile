@@ -31,7 +31,7 @@ RUN curl -fsSLo tofu.tar.gz "https://github.com/opentofu/opentofu/releases/downl
  && tar -xzf tofu.tar.gz -C /out tofu \
  && tar -xzf zola.tar.gz -C /out zola
 
-FROM docker.io/library/debian:bookworm-20261005-slim@sha256:7c7b2c966bc9ee8cedfeef67e0e279108992c77681fa595db4a9d65c06ccc587 AS cobot
+FROM docker.io/library/debian:bookworm-20261005-slim@sha256:7c7b2c966bc9ee8cedfeef67e0e279108992c77681fa595db4a9d65c06ccc587 AS backplane
 ARG TOFU_VERSION=1.13.1
 ARG ZOLA_VERSION=0.23.6
 RUN apt-get update \
@@ -44,9 +44,6 @@ RUN tofu version | grep -qF "OpenTofu v${TOFU_VERSION}" \
 ENV HOME=/tmp
 USER 65532:65532
 ENTRYPOINT ["/usr/local/bin/pigeon"]
-
-# Backplane runs cobot, so it needs cobot's tools.
-FROM cobot AS backplane
 
 # The workspace's manifests and lockfile with empty sources: the input of the ci stage's warm
 # layer, unchanged unless a manifest or Cargo.lock is
@@ -62,7 +59,7 @@ RUN mkdir /recipe \
       if [ -f "$d/src/main.rs" ]; then echo 'fn main() {}' > "/recipe/$d/src/main.rs"; fi; \
     done
 
-# A change's jobs run here (lifecycle ADR §4): the toolchain mise.toml pins, git, cobot's
+# A change's jobs run here (lifecycle ADR §4): the toolchain mise.toml pins, git, backplane's
 # tools, and the workspace's dependencies already compiled, so a job builds only the crates
 # it touches. Build with `--build-arg FEATURES=backplane`.
 FROM docker.io/library/rust:1.99.1-slim-bookworm@sha256:24707e70a4f1e23d9a7b25202ec43126d28a52294b96aad5c670df1fd1f1d400 AS ci

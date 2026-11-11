@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: release
-* Governs: `.config/releases.yaml`, `.config/policies/*changelog.yaml`, `src/pigeon-cli/Dockerfile`, `src/pigeon-cli/crates/cobot/src/release/**`, `src/pigeon-cli/crates/pigeon/src/cli/*.rs`
+* Governs: `.config/releases.yaml`, `.config/policies/*changelog.yaml`, `src/pigeon-cli/Dockerfile`, `src/pigeon-cli/crates/backplane/src/cobot/release/**`, `src/pigeon-cli/crates/pigeon/src/cli/*.rs`
 
 ## Context
 

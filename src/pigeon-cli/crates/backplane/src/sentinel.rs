@@ -9,7 +9,7 @@ use serde_json::Value;
 pub const VAR: &str = "PIGEON_SENTINEL";
 
 /// The binary's name.
-pub const BINARY: &str = cobot::ship_wire::SENTINEL_BINARY;
+pub const BINARY: &str = crate::cobot::ship_wire::SENTINEL_BINARY;
 
 /// Where `pigeon-sentinel` is: `var`'s [`VAR`], else beside the running executable or in its
 /// parent directory, else its bare name, found on `PATH`.
@@ -71,7 +71,7 @@ impl std::fmt::Display for Failure {
 
 fn run(binary: &Path, args: &[String], env: &[(&str, String)]) -> Result<Value, Failure> {
     let shown = binary.display();
-    let ran = cobot::ci::run_program(binary, args, env).map_err(Failure::Missing)?;
+    let ran = crate::cobot::ci::run_program(binary, args, env).map_err(Failure::Missing)?;
     if !matches!(ran.code, Some(0 | 1)) {
         return Err(Failure::Refused(format!(
             "{shown} couldn't judge: {}",
@@ -151,7 +151,7 @@ pub fn describe(binary: &Path, policies: &Path) -> Result<Vec<Described>, Failur
 /// The binary's version, as `pigeon-sentinel --version` prints it; none when it doesn't run.
 #[must_use]
 pub fn version(binary: &Path) -> Option<String> {
-    let ran = cobot::ci::run_program(binary, &["--version".to_string()], &[]).ok()?;
+    let ran = crate::cobot::ci::run_program(binary, &["--version".to_string()], &[]).ok()?;
     (ran.code == Some(0)).then(|| {
         ran.stdout
             .trim()

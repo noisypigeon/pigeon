@@ -25,7 +25,7 @@ const BACKOFF: [u64; 3] = [60, 300, 1800];
 /// The cargo subcommands that are code checks.
 const CODE: [&str; 5] = ["fmt", "clippy", "test", "build", "check"];
 
-/// The test map's script, as `cobot::scope::test_map` runs it from the workspace.
+/// The test map's script, as `crate::cobot::scope::test_map` runs it from the workspace.
 pub const TEST_MAP: &str = "../../tooling/ci/test-map.sh";
 
 /// Whether a check with `argv` is a code check, run on GitHub: `cargo fmt|clippy|test|build|check`,

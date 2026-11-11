@@ -8,6 +8,7 @@ use std::path::Path;
 
 use serde_json::{Value, json};
 
+use crate::cobot;
 use crate::control::{JobSpec, Outcome, Report};
 
 pub use crate::control::PLATFORM;

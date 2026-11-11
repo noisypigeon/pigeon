@@ -16,24 +16,33 @@ crate-type = ["cdylib", "rlib"]
 [features]
 default = ["engines"]
 engines = [
-  "dep:cobot",
-  "cobot/engines",
+  "dep:age",
+  "dep:jsonschema",
+  "dep:md-5",
+  "dep:regex",
+  "dep:toml",
+  "dep:ureq",
   "dep:serde-saphyr",
   "dep:httparse",
   "dep:rustls",
 ]
-worker = ["dep:cobot", "cobot/worker", "dep:futures-util", "dep:wasm-bindgen", "dep:worker", "worker/d1", "worker/queue"]
+worker = ["dep:futures-util", "dep:wasm-bindgen", "dep:worker", "worker/d1", "worker/queue"]
 
 [dependencies]
-cobot = { workspace = true, optional = true }
+age = { workspace = true, optional = true }
 futures-util = { workspace = true, optional = true }
 hmac.workspace = true
+jsonschema = { workspace = true, optional = true }
+md-5 = { workspace = true, optional = true }
 p256.workspace = true
+regex = { workspace = true, optional = true }
 serde.workspace = true
 serde-saphyr = { workspace = true, optional = true }
 sha1.workspace = true
 sha2.workspace = true
 serde_json.workspace = true
+toml = { workspace = true, optional = true }
+ureq = { workspace = true, optional = true }
 httparse = { workspace = true, optional = true }
 rustls = { workspace = true, optional = true }
 wasm-bindgen = { workspace = true, optional = true }

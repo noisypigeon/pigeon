@@ -220,7 +220,7 @@ pub struct ImagesPush {
     #[command(flatten)]
     pub at: WorkersAt,
     /// How long the registry login lasts, in minutes
-    #[arg(long, default_value_t = cobot::workers::LOGIN_MINUTES)]
+    #[arg(long, default_value_t = backplane::cobot::workers::LOGIN_MINUTES)]
     pub expiration_minutes: u32,
 }
 

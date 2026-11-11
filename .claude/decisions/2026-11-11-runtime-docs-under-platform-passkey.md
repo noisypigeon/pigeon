@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: runtime
-* Governs: `config.yaml`, `infra/pigeon/workers/control/worker.yaml`, `catalog/cloudflare/kinds/static-site/schema.json`, `catalog/pigeon/kinds/platform/schema.json`, `src/pigeon-cli/crates/cobot/src/sites.rs`, `src/pigeon-cli/crates/cobot/src/static_site.rs`, `src/site-templates/architecture/templates/index.html`, `src/pigeon-cli/crates/backplane/src/worker/mod.rs`, `src/pigeon-cli/crates/backplane/src/worker/passkeys.rs`
+* Governs: `config.yaml`, `infra/pigeon/workers/control/worker.yaml`, `catalog/cloudflare/kinds/static-site/schema.json`, `catalog/pigeon/kinds/platform/schema.json`, `src/pigeon-cli/crates/backplane/src/cobot/sites.rs`, `src/pigeon-cli/crates/backplane/src/cobot/static_site.rs`, `src/site-templates/architecture/templates/index.html`, `src/pigeon-cli/crates/backplane/src/worker/mod.rs`, `src/pigeon-cli/crates/backplane/src/worker/passkeys.rs`
 
 ## Context
 

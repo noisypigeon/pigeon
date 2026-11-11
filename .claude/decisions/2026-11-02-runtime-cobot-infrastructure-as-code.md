@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: runtime
-* Governs: `src/pigeon-cli/crates/cobot/src/tofu.rs`, `src/pigeon-cli/crates/cobot/src/state.rs`, `src/pigeon-cli/crates/cobot/src/plans.rs`, `src/pigeon-cli/crates/cobot/src/moves.rs`, `.config/moves.yaml`, `.config/policies/terraform.yaml`
+* Governs: `src/pigeon-cli/crates/backplane/src/cobot/tofu.rs`, `src/pigeon-cli/crates/backplane/src/cobot/state.rs`, `src/pigeon-cli/crates/backplane/src/cobot/plans.rs`, `src/pigeon-cli/crates/backplane/src/cobot/moves.rs`, `.config/moves.yaml`, `.config/policies/terraform.yaml`
 
 ## Context
 

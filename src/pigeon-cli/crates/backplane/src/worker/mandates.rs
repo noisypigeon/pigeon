@@ -117,7 +117,7 @@ async fn offer(env: &Env, s: &Settings, m: &Mandate) -> Result<String> {
     };
     elicit::inbox(env, s, "/approvals/add", &json!(waiting)).await?;
     let host = env
-        .var(cobot::ship_wire::HOST_VAR)
+        .var(crate::cobot::ship_wire::HOST_VAR)
         .map(|v| v.to_string())
         .unwrap_or_default();
     Ok(format!("https://{host}{path}"))

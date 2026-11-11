@@ -383,13 +383,13 @@ pub fn evidenced(platform: &Path, row: &Row) -> bool {
 /// platform has no backplane Worker.
 #[must_use]
 pub fn network(root: &Path, platform: &Path) -> Option<Network> {
-    let found = cobot::workers::discover(platform)
+    let found = crate::cobot::workers::discover(platform)
         .ok()?
         .into_iter()
         .find(|f| f.spec.entry.krate.ends_with("crates/backplane"))?;
     let kind = found.spec.deployment.clone();
-    let (manifest, _) = cobot::manifest::load(root, platform)?;
-    let stacks: Vec<&cobot::manifest::Entry> = manifest
+    let (manifest, _) = crate::cobot::manifest::load(root, platform)?;
+    let stacks: Vec<&crate::cobot::manifest::Entry> = manifest
         .units
         .values()
         .filter(|e| Some(&e.kind) == kind.as_ref())
@@ -400,7 +400,7 @@ pub fn network(root: &Path, platform: &Path) -> Option<Network> {
         .find(|(_, e)| Some(&e.kind) == kind.as_ref())
         .map(|(id, _)| id.clone());
     let spec = match &stack {
-        Some(unit) => cobot::workers::bind(root, &found, unit).ok()?.spec,
+        Some(unit) => crate::cobot::workers::bind(root, &found, unit).ok()?.spec,
         None => found.spec,
     };
     let access = access(&stacks);
@@ -708,7 +708,7 @@ fn parts(platform: &Path, w: &Worker, repos: &[String], github: Option<&str>) ->
 }
 
 /// Access, from the platform units' domains and service tokens.
-fn access(stacks: &[&cobot::manifest::Entry]) -> Access {
+fn access(stacks: &[&crate::cobot::manifest::Entry]) -> Access {
     let mut access = Access::default();
     for e in stacks {
         let strings = |v: &serde_json::Value| -> Vec<String> {
@@ -737,7 +737,7 @@ fn access(stacks: &[&cobot::manifest::Entry]) -> Access {
 /// The Worker, from its bound spec.
 fn worker(
     platform: &Path,
-    spec: &cobot::workers::Spec,
+    spec: &crate::cobot::workers::Spec,
     routes: &[(String, Vec<String>)],
 ) -> Worker {
     let containers: Vec<String> = spec.containers.iter().map(|c| c.class.clone()).collect();

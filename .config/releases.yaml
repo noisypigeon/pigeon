@@ -12,23 +12,6 @@ units:
       - src/pigeon-cli/.dockerignore
     exclude: [tests/, benches/, '*.md']
     cargo: { workspace: src/pigeon-cli, package: pigeon-sentinel }
-  cobot:
-    manifest: src/pigeon-cli/crates/cobot/Cargo.toml
-    features: cobot
-    image: ghcr.io/noisypigeon/pigeon-cobot
-    paths:
-      - src/pigeon-cli/crates/cobot/
-      - src/pigeon-cli/crates/pigeon/src/commands/cobot.rs
-      - src/pigeon-cli/crates/pigeon/src/cli/cobot.rs
-      - src/pigeon-cli/crates/pigeon/src/main.rs
-      - src/pigeon-cli/crates/pigeon/src/lib.rs
-      - src/pigeon-cli/crates/pigeon/src/cli/mod.rs
-      - src/pigeon-cli/crates/pigeon/src/commands/mod.rs
-      - src/pigeon-cli/crates/pigeon/Cargo.toml
-      - src/pigeon-cli/Dockerfile
-      - src/pigeon-cli/.dockerignore
-    exclude: [tests/, benches/, '*.md']
-    cargo: { workspace: src/pigeon-cli, package: pigeon }
   backplane:
     manifest: src/pigeon-cli/crates/backplane/Cargo.toml
     features: backplane
@@ -37,6 +20,9 @@ units:
       - src/pigeon-cli/crates/backplane/
       - src/pigeon-cli/crates/pigeon/src/commands/backplane.rs
       - src/pigeon-cli/crates/pigeon/src/cli/backplane.rs
+      - src/pigeon-cli/crates/pigeon/src/commands/cobot.rs
+      - src/pigeon-cli/crates/pigeon/src/cli/cobot.rs
+      - src/pigeon-cli/crates/pigeon/src/commands/workers.rs
       - src/pigeon-cli/crates/pigeon/src/main.rs
       - src/pigeon-cli/crates/pigeon/src/lib.rs
       - src/pigeon-cli/crates/pigeon/src/cli/mod.rs
@@ -178,7 +164,6 @@ tiers:
   - { file: src/pigeon-cli/CHANGELOG.md, paths: [src/pigeon-cli/] }
   - { file: src/pigeon-cli/crates/pigeon/CHANGELOG.md, paths: [src/pigeon-cli/crates/pigeon/] }
   - { file: src/pigeon-cli/crates/sentinel/CHANGELOG.md, unit: sentinel }
-  - { file: src/pigeon-cli/crates/cobot/CHANGELOG.md, unit: cobot }
   - { file: src/pigeon-cli/crates/backplane/CHANGELOG.md, unit: backplane }
   - { file: catalog/cloudflare/modules/zone/CHANGELOG.md, unit: infra-cloudflare-zone, from: infra/cloudflare/modules/zone/CHANGELOG.md }
   - { file: catalog/cloudflare/modules/permission-groups/CHANGELOG.md, unit: infra-cloudflare-permission-groups, from: infra/cloudflare/modules/permission-groups/CHANGELOG.md }

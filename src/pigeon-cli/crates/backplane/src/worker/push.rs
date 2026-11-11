@@ -35,7 +35,7 @@ async fn send(env: &Env, s: &Settings, title: &str, body: &str, path: &str) -> R
     };
     let vapid = Vapid::from_secret(&secret).map_err(worker::Error::RustError)?;
     let host = env
-        .var(cobot::ship_wire::HOST_VAR)
+        .var(crate::cobot::ship_wire::HOST_VAR)
         .map(|v| v.to_string())
         .unwrap_or_default();
     let latest = Latest {

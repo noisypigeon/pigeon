@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: development
-* Governs: `catalog/README.md`, `catalog/*/capabilities.yaml`, `infra/README.md`, `infra/pigeon/**`, `.config/policies/secrets*.yaml`, `src/pigeon-cli/crates/cobot/src/catalog.rs`
+* Governs: `catalog/README.md`, `catalog/*/capabilities.yaml`, `infra/README.md`, `infra/pigeon/**`, `.config/policies/secrets*.yaml`, `src/pigeon-cli/crates/backplane/src/cobot/catalog.rs`
 
 ## Context
 

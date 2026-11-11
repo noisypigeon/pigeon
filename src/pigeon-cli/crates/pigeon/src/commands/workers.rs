@@ -5,8 +5,8 @@ use std::env;
 use std::io::Read;
 use std::path::Path;
 
-use cobot::session::Session;
-use cobot::workers::{self, Found, Tools};
+use backplane::cobot::session::Session;
+use backplane::cobot::workers::{self, Found, Tools};
 use serde_json::{Map, Value};
 
 use crate::cli::{ImagesPush, WorkersCommand, WorkersImages, WorkersSecrets, WorkersState};
@@ -16,7 +16,7 @@ use crate::cli::{ImagesPush, WorkersCommand, WorkersImages, WorkersSecrets, Work
 /// # Errors
 ///
 /// As each command's engine function.
-pub fn run(command: WorkersCommand) -> Result<(), cobot::Error> {
+pub fn run(command: WorkersCommand) -> Result<(), backplane::cobot::Error> {
     match command {
         WorkersCommand::Validate(at) => {
             let found = workers::select_bound(&at.root, &at.names, at.deployment.as_deref())?;
@@ -25,7 +25,7 @@ pub fn run(command: WorkersCommand) -> Result<(), cobot::Error> {
                 .flat_map(|f| workers::validate(&at.root, f))
                 .collect();
             if !problems.is_empty() {
-                return Err(cobot::Error::Invalid(problems));
+                return Err(backplane::cobot::Error::Invalid(problems));
             }
             println!("cobot: {} Worker spec(s) valid", found.len());
             Ok(())
@@ -64,16 +64,16 @@ pub fn run(command: WorkersCommand) -> Result<(), cobot::Error> {
                 p.worker.deployment.as_deref(),
             )?;
             let mut value = String::new();
-            std::io::stdin()
-                .read_to_string(&mut value)
-                .map_err(|e| cobot::Error::Tool {
+            std::io::stdin().read_to_string(&mut value).map_err(|e| {
+                backplane::cobot::Error::Tool {
                     command: "stdin".into(),
                     message: e.to_string(),
-                })?;
+                }
+            })?;
             let value = value.trim_end_matches(['\r', '\n']);
             // A pipe whose producer failed sends nothing; a secret is never set empty.
             if value.is_empty() {
-                return Err(cobot::Error::Tool {
+                return Err(backplane::cobot::Error::Tool {
                     command: "secrets put".into(),
                     message: format!("no value on stdin; {} is unchanged", p.key),
                 });
@@ -85,12 +85,12 @@ pub fn run(command: WorkersCommand) -> Result<(), cobot::Error> {
         WorkersCommand::Outputs(s) => {
             let (_, found, outputs) = state_outputs(&s)?;
             let specs: Vec<_> = found.into_iter().map(|f| f.spec).collect();
-            let snapshot = cobot::ship::snapshot(&specs, &outputs);
+            let snapshot = backplane::cobot::ship::snapshot(&specs, &outputs);
             println!("{}", serde_json::to_string(&snapshot).unwrap_or_default());
             eprintln!(
                 "cobot: {} unit(s) of outputs; pipe this to `pigeon cobot workers secrets put --root . <worker> {}`",
                 snapshot.len(),
-                cobot::ship::OUTPUTS_VAR
+                backplane::cobot::ship::OUTPUTS_VAR
             );
             Ok(())
         }
@@ -105,36 +105,43 @@ pub fn run(command: WorkersCommand) -> Result<(), cobot::Error> {
     }
 }
 
-fn one(root: &Path, name: &str, deployment: Option<&str>) -> Result<Found, cobot::Error> {
+fn one(
+    root: &Path,
+    name: &str,
+    deployment: Option<&str>,
+) -> Result<Found, backplane::cobot::Error> {
     workers::select_bound(root, &[name.to_string()], deployment)?
         .into_iter()
         .next()
-        .ok_or_else(|| cobot::Error::UnknownUnit(format!("workers/{name}")))
+        .ok_or_else(|| backplane::cobot::Error::UnknownUnit(format!("workers/{name}")))
 }
 
 /// wrangler and docker, with the run's account; the token and account are scrubbed from output.
-fn tools() -> Result<Tools, cobot::Error> {
+fn tools() -> Result<Tools, backplane::cobot::Error> {
     Ok(account_tools()?.0)
 }
 
 /// As [`tools`], with the API and the account they run against.
-fn account_tools() -> Result<(Tools, cobot::cloudflare::Api, String), cobot::Error> {
-    let token = cobot::cloudflare::token(
-        env::var(cobot::CREDENTIALS_VAR).ok().as_deref(),
-        env::var(cobot::cloudflare::TOKEN_VAR).ok(),
+fn account_tools()
+-> Result<(Tools, backplane::cobot::cloudflare::Api, String), backplane::cobot::Error> {
+    let token = backplane::cobot::cloudflare::token(
+        env::var(backplane::cobot::CREDENTIALS_VAR).ok().as_deref(),
+        env::var(backplane::cobot::cloudflare::TOKEN_VAR).ok(),
     )
-    .ok_or_else(|| cobot::Error::Tool {
+    .ok_or_else(|| backplane::cobot::Error::Tool {
         command: "workers".into(),
         message: format!(
             "set {} to a token with `pigeon cobot workers permissions`",
-            cobot::cloudflare::TOKEN_VAR
+            backplane::cobot::cloudflare::TOKEN_VAR
         ),
     })?;
-    let api = cobot::cloudflare::Api::new(None, token.clone());
-    let account = api.account().map_err(|message| cobot::Error::Tool {
-        command: "workers".into(),
-        message,
-    })?;
+    let api = backplane::cobot::cloudflare::Api::new(None, token.clone());
+    let account = api
+        .account()
+        .map_err(|message| backplane::cobot::Error::Tool {
+            command: "workers".into(),
+            message,
+        })?;
     eprintln!(
         "cobot: account …{}",
         &account[account.len().saturating_sub(4)..]
@@ -142,7 +149,10 @@ fn account_tools() -> Result<(Tools, cobot::cloudflare::Api, String), cobot::Err
     let mut t = Tools::from(|k| env::var(k).ok());
     t.env = vec![
         ("CLOUDFLARE_ACCOUNT_ID".into(), account.clone()),
-        (cobot::cloudflare::TOKEN_VAR.into(), token.clone()),
+        (
+            backplane::cobot::cloudflare::TOKEN_VAR.into(),
+            token.clone(),
+        ),
     ];
     t.secrets.push(token);
     Ok((t, api, account))
@@ -151,27 +161,28 @@ fn account_tools() -> Result<(Tools, cobot::cloudflare::Api, String), cobot::Err
 /// Each selected Worker, checked, the state's session, and the outputs their references name.
 fn state_outputs(
     s: &WorkersState,
-) -> Result<(Session, Vec<Found>, cobot::ship::Outputs), cobot::Error> {
+) -> Result<(Session, Vec<Found>, backplane::cobot::ship::Outputs), backplane::cobot::Error> {
     let found = workers::select_bound(&s.at.root, &s.at.names, s.at.deployment.as_deref())?;
     let problems: Vec<_> = found
         .iter()
         .flat_map(|f| workers::validate(&s.at.root, f))
         .collect();
     if !problems.is_empty() {
-        return Err(cobot::Error::Invalid(problems));
+        return Err(backplane::cobot::Error::Invalid(problems));
     }
     let providers = s
         .providers
         .clone()
         .unwrap_or_else(|| s.at.root.join(".config"));
-    let session = cobot::session::open(&s.at.root, &providers, &s.state.to_string_lossy(), |k| {
-        env::var(k).ok()
-    })?;
+    let session =
+        backplane::cobot::session::open(&s.at.root, &providers, &s.state.to_string_lossy(), |k| {
+            env::var(k).ok()
+        })?;
     let mut outputs: BTreeMap<String, Map<String, Value>> = BTreeMap::new();
     for f in &found {
         for unit in workers::referenced_units(&f.spec) {
             if let std::collections::btree_map::Entry::Vacant(e) = outputs.entry(unit) {
-                let o = cobot::outputs(&session.ctx, e.key())?;
+                let o = backplane::cobot::outputs(&session.ctx, e.key())?;
                 e.insert(o);
             }
         }
@@ -181,16 +192,16 @@ fn state_outputs(
 
 /// Each selected Worker and its configuration, references resolved from the state, and the
 /// state's session.
-fn rendered(s: &WorkersState) -> Result<(Session, Vec<(Found, Value)>), cobot::Error> {
+fn rendered(s: &WorkersState) -> Result<(Session, Vec<(Found, Value)>), backplane::cobot::Error> {
     let (session, found, outputs) = state_outputs(s)?;
     let all = found
         .into_iter()
         .map(|f| match workers::render(&f, &outputs) {
             Ok(v) => Ok((f, v)),
-            Err(problems) => Err(cobot::Error::Invalid(
+            Err(problems) => Err(backplane::cobot::Error::Invalid(
                 problems
                     .into_iter()
-                    .map(|message| cobot::Problem {
+                    .map(|message| backplane::cobot::Problem {
                         path: format!("{}/{}", f.dir, workers::SPEC),
                         message,
                     })
@@ -215,9 +226,9 @@ fn git(root: &Path, args: &[&str]) -> Option<String> {
 /// Builds and pushes each selected Worker's images, tagged with the checkout's commit, which
 /// must be clean; prints the references as JSON. See
 /// `.claude/decisions/2026-11-07-development-job-images-on-cloudflare.md` §1.
-fn images_push(p: &ImagesPush) -> Result<(), cobot::Error> {
+fn images_push(p: &ImagesPush) -> Result<(), backplane::cobot::Error> {
     let root = &p.at.root;
-    let refused = |message: String| cobot::Error::Tool {
+    let refused = |message: String| backplane::cobot::Error::Tool {
         command: "images push".into(),
         message,
     };
@@ -247,7 +258,7 @@ fn images_push(p: &ImagesPush) -> Result<(), cobot::Error> {
     }
     let (tools, api, account) = account_tools()?;
     let tag = source.chars().take(12).collect::<String>();
-    let mut images = cobot::ship::Images {
+    let mut images = backplane::cobot::ship::Images {
         source,
         images: BTreeMap::new(),
     };
@@ -262,18 +273,18 @@ fn images_push(p: &ImagesPush) -> Result<(), cobot::Error> {
     println!("{}", serde_json::to_string(&images).unwrap_or_default());
     eprintln!(
         "cobot: pipe this to `pigeon cobot workers secrets put --root . <worker> {}`",
-        cobot::ship::IMAGES_VAR
+        backplane::cobot::ship::IMAGES_VAR
     );
     Ok(())
 }
 
-fn plan(s: &WorkersState) -> Result<(), cobot::Error> {
+fn plan(s: &WorkersState) -> Result<(), backplane::cobot::Error> {
     let (mut session, all) = rendered(s)?;
     let map: BTreeMap<String, Value> = all
         .iter()
         .map(|(f, v)| (f.spec.name.clone(), v.clone()))
         .collect();
-    let stored = workers::store(&session.ctx.state, &map, cobot::session::now())?;
+    let stored = workers::store(&session.ctx.state, &map, backplane::cobot::session::now())?;
     session.push()?;
     for (f, v) in &all {
         workers::write(&s.at.root, f, v, &stored.id)?;
@@ -286,16 +297,16 @@ fn plan(s: &WorkersState) -> Result<(), cobot::Error> {
     Ok(())
 }
 
-fn deploy(s: &WorkersState, id: &str) -> Result<(), cobot::Error> {
+fn deploy(s: &WorkersState, id: &str) -> Result<(), backplane::cobot::Error> {
     let (session, all) = rendered(s)?;
-    let stored = workers::load(&session.ctx.state, id, cobot::session::now())?;
+    let stored = workers::load(&session.ctx.state, id, backplane::cobot::session::now())?;
     let tools = tools()?;
     for (f, v) in &all {
         let Some(want) = stored.workers.get(&f.spec.name) else {
             continue;
         };
         if &workers::digest(v) != want {
-            return Err(cobot::Error::Plan(format!(
+            return Err(backplane::cobot::Error::Plan(format!(
                 "{} changed since plan {id}; plan again",
                 f.spec.name
             )));

@@ -483,25 +483,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1c133bc6a41be0d194c306b5506d15e6feeea7b1d6604bd3f8310dfb2ca96486"
 
 [[package]]
-name = "cobot"
-version = "0.1.38"
-dependencies = [
- "age",
- "hmac",
- "jsonschema",
- "md-5",
- "regex",
- "serde",
- "serde-saphyr",
- "serde_json",
- "sha2 0.10.9",
- "tempfile",
- "toml",
- "ureq",
- "worker",
-]
-
-[[package]]
 name = "colorchoice"
 version = "1.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1846,7 +1827,6 @@ version = "0.1.0"
 dependencies = [
  "assert_cmd",
  "clap",
- "cobot",
  "pigeon-backplane",
  "predicates",
  "serde",
@@ -1860,12 +1840,15 @@ dependencies = [
 name = "pigeon-backplane"
 version = "0.1.30"
 dependencies = [
- "cobot",
+ "age",
  "futures-util",
  "hmac",
  "httparse",
+ "jsonschema",
+ "md-5",
  "p256",
  "rcgen",
+ "regex",
  "rusqlite",
  "rustls",
  "serde",
@@ -1874,6 +1857,8 @@ dependencies = [
  "sha1",
  "sha2 0.10.9",
  "tempfile",
+ "toml",
+ "ureq",
  "wasm-bindgen",
  "worker",
 ]

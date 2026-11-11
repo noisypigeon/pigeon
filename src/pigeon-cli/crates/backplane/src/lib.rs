@@ -8,6 +8,7 @@ pub mod architecture;
 #[cfg(feature = "engines")]
 pub mod catalog;
 pub mod changes;
+pub mod cobot;
 pub mod control;
 pub mod decisions;
 #[cfg(feature = "engines")]

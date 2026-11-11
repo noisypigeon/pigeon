@@ -35,7 +35,7 @@ pub enum Commands {
     /// Not implemented yet
     /// Validate, render, plan and apply infrastructure units, and cut releases
     #[cfg(feature = "cobot")]
-    #[command(subcommand, version = ::cobot::VERSION)]
+    #[command(subcommand, version = ::backplane::cobot::VERSION)]
     Cobot(CobotCommand),
     /// Run platform operations against this instance
     #[cfg(any(feature = "backplane", feature = "signing"))]

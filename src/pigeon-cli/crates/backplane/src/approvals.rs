@@ -120,7 +120,7 @@ fn tiered(tier: Tier, rule: impl Into<String>) -> Tiered {
 /// What a head's files are, beyond their paths.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct Facts {
-    /// Its merge deploys a Worker (`cobot::scope::workers`).
+    /// Its merge deploys a Worker (`crate::cobot::scope::workers`).
     pub deploys_worker: bool,
     /// Every file under `decisions` existed on the base and only gained lines.
     pub appends_only: bool,

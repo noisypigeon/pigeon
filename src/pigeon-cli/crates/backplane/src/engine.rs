@@ -28,7 +28,7 @@ pub fn engines() -> Vec<EngineInfo> {
         },
         EngineInfo {
             engine: Engine::Cobot,
-            version: cobot::VERSION.into(),
+            version: crate::cobot::VERSION.into(),
             role: "action",
         },
     ]

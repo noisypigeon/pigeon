@@ -43,7 +43,7 @@ fn only_code_checks_run_on_github() {
     for code in [
         "cargo fmt --all -- --check",
         "bash ../../tooling/ci/test-map.sh",
-        "cargo clippy -p cobot --all-targets --locked -- -D warnings",
+        "cargo clippy -p pigeon-backplane --all-targets --locked -- -D warnings",
         "cargo test -p pigeon-backplane --locked",
         "cargo build --release",
         "cargo check -p sentinel",

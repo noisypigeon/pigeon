@@ -8,7 +8,7 @@ use serde_json::{Value, json};
 use crate::actions::{self, Actions, Finished};
 use crate::changes::Check;
 
-/// The check's name, as `cobot::scope::test_map` names it.
+/// The check's name, as `crate::cobot::scope::test_map` names it.
 pub const CHECK: &str = "test map";
 
 /// The run's artifact: the map, unzipped.

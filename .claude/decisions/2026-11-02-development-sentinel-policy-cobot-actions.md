@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: development
-* Governs: `.config/policies/sentinel-actions.yaml`, `src/pigeon-cli/crates/sentinel/src/**`, `src/pigeon-cli/crates/cobot/src/release/**`, `src/pigeon-cli/crates/cobot/tests/release*.rs`, `src/pigeon-cli/crates/pigeon/src/commands/cobot.rs`
+* Governs: `.config/policies/sentinel-actions.yaml`, `src/pigeon-cli/crates/sentinel/src/**`, `src/pigeon-cli/crates/backplane/src/cobot/release/**`, `src/pigeon-cli/crates/backplane/tests/cobot_release*.rs`, `src/pigeon-cli/crates/pigeon/src/commands/cobot.rs`
 
 ## Context
 

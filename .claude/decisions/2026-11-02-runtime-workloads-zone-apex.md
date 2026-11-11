@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: runtime
-* Governs: `workloads/*/apex/**`, `workloads/README.md`, `catalog/cloudflare/schema.json`, `catalog/cloudflare/modules/dns-record/**`, `catalog/cloudflare/presets/**`, `src/pigeon-cli/crates/cobot/src/apex.rs`
+* Governs: `workloads/*/apex/**`, `workloads/README.md`, `catalog/cloudflare/schema.json`, `catalog/cloudflare/modules/dns-record/**`, `catalog/cloudflare/presets/**`, `src/pigeon-cli/crates/backplane/src/cobot/apex.rs`
 
 ## Context
 

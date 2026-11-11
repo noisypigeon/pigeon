@@ -140,7 +140,7 @@ pub fn run_judged(spec: &JobSpec, dir: &Path, sentinel: &Path) -> Report {
     // A merge whose report was lost may already be on the base; finding it there is the merge.
     if spec.job == MERGE
         && let Ok(Some(commit)) =
-            cobot::ci::merged_already(dir, &spec.remote, &spec.token, &spec.base, &spec.sha)
+            crate::cobot::ci::merged_already(dir, &spec.remote, &spec.token, &spec.base, &spec.sha)
     {
         return Report {
             log: format!("{} is already on {} as {commit}\n", spec.sha, spec.base),
@@ -152,7 +152,7 @@ pub fn run_judged(spec: &JobSpec, dir: &Path, sentinel: &Path) -> Report {
         return mirror(spec, dir);
     }
     let _ = std::fs::remove_dir_all(dir);
-    if let Err(e) = cobot::ci::checkout(
+    if let Err(e) = crate::cobot::ci::checkout(
         dir,
         &spec.remote,
         &spec.token,
@@ -182,11 +182,16 @@ pub fn run_judged(spec: &JobSpec, dir: &Path, sentinel: &Path) -> Report {
         return crate::platform_job::run(spec, dir);
     }
     // A check may read a released template by its tag, as `sites.build` does.
-    if let Err(e) = cobot::ci::fetch_tags(dir, &spec.remote, &spec.token) {
+    if let Err(e) = crate::cobot::ci::fetch_tags(dir, &spec.remote, &spec.token) {
         return report(spec, Outcome::Failed, &e.to_string());
     }
-    let workspace = dir.join(cobot::scope::WORKSPACE);
-    let (ok, log) = cobot::ci::exec(&workspace, &spec.argv, cobot::ci::TIMEOUT, &spec.token);
+    let workspace = dir.join(crate::cobot::scope::WORKSPACE);
+    let (ok, log) = crate::cobot::ci::exec(
+        &workspace,
+        &spec.argv,
+        crate::cobot::ci::TIMEOUT,
+        &spec.token,
+    );
     report(
         spec,
         if ok { Outcome::Passed } else { Outcome::Failed },
@@ -208,18 +213,18 @@ fn mirror(spec: &JobSpec, dir: &Path) -> Report {
     };
     let _ = std::fs::remove_dir_all(dir);
     let staged = dir.join("mirror.git");
-    if let Err(e) = cobot::git::bare(&staged) {
+    if let Err(e) = crate::cobot::git::bare(&staged) {
         return failed(e.to_string());
     }
-    let scrub = |e: cobot::Error| failed(e.to_string().replace(to_token.as_str(), "***"));
+    let scrub = |e: crate::cobot::Error| failed(e.to_string().replace(to_token.as_str(), "***"));
     if spec.job == UNMIRROR {
-        return match cobot::git::delete_change(&spec.branch, to, Some(to_token), &staged) {
+        return match crate::cobot::git::delete_change(&spec.branch, to, Some(to_token), &staged) {
             Ok(()) => report(spec, Outcome::Passed, &format!("deleted {}\n", spec.branch)),
             Err(e) => scrub(e),
         };
     }
     if crate::changes::branch(&spec.branch).is_some() {
-        return match cobot::git::push_change(
+        return match crate::cobot::git::push_change(
             &spec.remote,
             &spec.token,
             &spec.branch,
@@ -236,7 +241,7 @@ fn mirror(spec: &JobSpec, dir: &Path) -> Report {
             Err(e) => scrub(e),
         };
     }
-    match cobot::git::mirror_from(
+    match crate::cobot::git::mirror_from(
         &spec.remote,
         &spec.token,
         &spec.branch,
@@ -265,11 +270,11 @@ fn deploy(spec: &JobSpec, dir: &Path) -> Report {
         violations: vec![why],
         ..report(spec, Outcome::Failed, log)
     };
-    if let Err(e) = cobot::ci::fetch_tags(dir, &spec.remote, &spec.token) {
+    if let Err(e) = crate::cobot::ci::fetch_tags(dir, &spec.remote, &spec.token) {
         return failed(e.to_string(), "");
     }
     let files = match &spec.since {
-        Some(since) => cobot::ci::changed_since(dir, since, &spec.sha).ok(),
+        Some(since) => crate::cobot::ci::changed_since(dir, since, &spec.sha).ok(),
         None => None,
     };
     let mut log = match &files {
@@ -335,7 +340,7 @@ fn publish_sites(
     files: Option<&[String]>,
     log: &mut String,
 ) -> Result<Vec<String>, String> {
-    let sites = cobot::scope::deploys(dir, files).map_err(|e| e.to_string())?;
+    let sites = crate::cobot::scope::deploys(dir, files).map_err(|e| e.to_string())?;
     if sites.is_empty() {
         log.push_str("no site to publish\n");
         return Ok(Vec::new());
@@ -380,7 +385,7 @@ fn merge(spec: &JobSpec, dir: &Path) -> Report {
         );
     }
     let _ = writeln!(message, "Change-Head: {}", spec.sha);
-    match cobot::ci::squash_onto(
+    match crate::cobot::ci::squash_onto(
         dir,
         &spec.remote,
         &spec.token,
@@ -411,7 +416,7 @@ const UNION: &str = ".claude/decisions/*.md";
 /// change's branch when git merges it; see
 /// `.claude/decisions/2026-11-08-development-concurrent-agent-sessions.md` §3.
 fn restack(spec: &JobSpec, dir: &Path) -> Report {
-    match cobot::ci::restack(
+    match crate::cobot::ci::restack(
         dir,
         &spec.remote,
         &spec.token,
@@ -422,10 +427,10 @@ fn restack(spec: &JobSpec, dir: &Path) -> Report {
     ) {
         Ok(r) => {
             let relation = match r.relation {
-                cobot::ci::Relation::Current => Relation::Current,
-                cobot::ci::Relation::Disjoint => Relation::Disjoint,
-                cobot::ci::Relation::Clean => Relation::Clean,
-                cobot::ci::Relation::Conflicting => Relation::Conflicting,
+                crate::cobot::ci::Relation::Current => Relation::Current,
+                crate::cobot::ci::Relation::Disjoint => Relation::Disjoint,
+                crate::cobot::ci::Relation::Clean => Relation::Clean,
+                crate::cobot::ci::Relation::Conflicting => Relation::Conflicting,
             };
             Report {
                 log: format!(
@@ -467,7 +472,7 @@ fn restack(spec: &JobSpec, dir: &Path) -> Report {
 /// The bound job: the change and pull-request policies, with the change's approved scope and
 /// its plan as the body, then the checks its paths need.
 fn bound(spec: &JobSpec, dir: &Path, sentinel: &Path) -> Report {
-    let files = match cobot::ci::changed(dir, &spec.base, &spec.sha) {
+    let files = match crate::cobot::ci::changed(dir, &spec.base, &spec.sha) {
         Ok(f) => f,
         Err(e) => {
             let mut r = report(spec, Outcome::Failed, &e.to_string());
@@ -513,7 +518,7 @@ fn bound(spec: &JobSpec, dir: &Path, sentinel: &Path) -> Report {
     }
     let checks = if violations.is_empty() {
         let map = test_map(&mut log);
-        match cobot::scope::jobs_with(dir, &files, map.as_ref()) {
+        match crate::cobot::scope::jobs_with(dir, &files, map.as_ref()) {
             Ok(jobs) => jobs
                 .into_iter()
                 .filter(|j| j.name != "policy.check")
@@ -560,12 +565,12 @@ fn bound(spec: &JobSpec, dir: &Path, sentinel: &Path) -> Report {
 /// `main`'s test map, from `PIGEON_TEST_MAP`, which `pigeon-start` exports; none without one, and
 /// the tests are then chosen by crate. See the 2026-11-11 amendment to
 /// `.claude/decisions/2026-11-10-development-factory-crates-functional-core.md`.
-fn test_map(log: &mut String) -> Option<cobot::scope::TestMap> {
+fn test_map(log: &mut String) -> Option<crate::cobot::scope::TestMap> {
     let Ok(path) = std::env::var(TEST_MAP_VAR) else {
         log.push_str("test map: none; tests by crate\n");
         return None;
     };
-    match cobot::scope::TestMap::read(std::path::Path::new(&path)) {
+    match crate::cobot::scope::TestMap::read(std::path::Path::new(&path)) {
         Ok(m) => {
             let _ = writeln!(log, "test map: {} binaries, of {}", m.binaries.len(), m.sha);
             Some(m)
@@ -587,7 +592,7 @@ fn full_set(dir: &Path, checks: &[Check], log: &mut String) -> Vec<Check> {
     if !checks.iter().any(|c| crate::actions::on_github(&c.argv)) {
         return Vec::new();
     }
-    match cobot::scope::full(dir) {
+    match crate::cobot::scope::full(dir) {
         Ok(jobs) => {
             let full: Vec<Check> = jobs
                 .into_iter()
@@ -620,7 +625,7 @@ fn tiers(
         && files
             .iter()
             .filter(|f| f.starts_with(&decisions))
-            .all(|f| cobot::ci::appends_only(dir, &spec.base, &spec.sha, f));
+            .all(|f| crate::cobot::ci::appends_only(dir, &spec.base, &spec.sha, f));
     let adds_secret = files
         .iter()
         .filter(|f| {
@@ -631,7 +636,8 @@ fn tiers(
         })
         .any(|f| adds_secret(dir, &spec.base, f));
     let facts = crate::approvals::Facts {
-        deploys_worker: cobot::scope::workers(dir, Some(files)).map_or(true, |w| !w.is_empty()),
+        deploys_worker: crate::cobot::scope::workers(dir, Some(files))
+            .map_or(true, |w| !w.is_empty()),
         appends_only,
         adds_secret,
     };
@@ -640,7 +646,7 @@ fn tiers(
 
 /// The approval rules on the base branch; none when it has none, or they don't read.
 fn base_rules(spec: &JobSpec, dir: &Path) -> Option<crate::approvals::Rules> {
-    let text = cobot::ci::base_file(dir, &spec.base, crate::approvals::RULES)?;
+    let text = crate::cobot::ci::base_file(dir, &spec.base, crate::approvals::RULES)?;
     serde_saphyr::from_str(&text).ok()
 }
 
@@ -666,7 +672,7 @@ fn adds_secret(dir: &Path, base: &str, path: &str) -> bool {
     else {
         return true;
     };
-    let before = cobot::ci::base_file(dir, base, path)
+    let before = crate::cobot::ci::base_file(dir, base, path)
         .and_then(|t| names(&t))
         .unwrap_or_default();
     crate::approvals::lengthens(&before, &head)
@@ -682,7 +688,7 @@ fn policy(
     sentinel: &Path,
     log: &mut String,
 ) -> Result<Vec<String>, String> {
-    let sum = std::env::var(cobot::ship_wire::SENTINEL_SHA256_VAR).unwrap_or_default();
+    let sum = std::env::var(crate::cobot::ship_wire::SENTINEL_SHA256_VAR).unwrap_or_default();
     let _ = writeln!(log, "sentinel: {} (sha256 {sum})", sentinel.display());
     match base_policies(spec, dir)? {
         Some(p) => judge_with(sentinel, spec, dir, files, &p),
@@ -721,7 +727,7 @@ pub fn judge_with(
 /// `.claude/decisions/2026-11-10-development-factory-crates-functional-core.md` §2.
 fn base_policies(spec: &JobSpec, dir: &Path) -> Result<Option<PathBuf>, String> {
     let manifest = crate::instance::MANIFEST;
-    let Some(text) = cobot::ci::base_file(dir, &spec.base, manifest) else {
+    let Some(text) = crate::cobot::ci::base_file(dir, &spec.base, manifest) else {
         return Ok(None);
     };
     let v: Value =
@@ -731,7 +737,7 @@ fn base_policies(spec: &JobSpec, dir: &Path) -> Result<Option<PathBuf>, String> 
     };
     let out = dir.join(".git").join("pigeon-base-policies");
     let _ = std::fs::remove_dir_all(&out);
-    cobot::ci::base_tree(dir, &spec.base, rel, &out).map_err(|e| e.to_string())?;
+    crate::cobot::ci::base_tree(dir, &spec.base, rel, &out).map_err(|e| e.to_string())?;
     Ok(Some(out))
 }
 

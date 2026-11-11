@@ -359,12 +359,12 @@ pub async fn credentials(env: &Env, write: bool, ttl: u64) -> Result<(String, St
         let repo = retrying(&api, Method::Get, &path, None)
             .await
             .map_err(|e| failed("looking up the repository", e))?;
-        let remote = cobot::artifacts_wire::remote_in(&repo)
+        let remote = crate::cobot::artifacts_wire::remote_in(&repo)
             .ok_or("Artifacts: the repository's answer has no remote")?;
         (account, remote)
     };
     let base = format!("/accounts/{account}/artifacts/namespaces/{}", s.namespace);
-    let body = cobot::artifacts_wire::token_body(&s.repo, write, ttl);
+    let body = crate::cobot::artifacts_wire::token_body(&s.repo, write, ttl);
     let step = if write {
         "minting a write token"
     } else {
@@ -373,10 +373,10 @@ pub async fn credentials(env: &Env, write: bool, ttl: u64) -> Result<(String, St
     let minted = retrying(&api, Method::Post, &format!("{base}/tokens"), Some(&body))
         .await
         .map_err(|e| failed(step, e))?;
-    let token = cobot::artifacts_wire::token_in(&minted).ok_or_else(|| {
+    let token = crate::cobot::artifacts_wire::token_in(&minted).ok_or_else(|| {
         format!(
             "Artifacts: no token in the answer, whose fields are {}",
-            cobot::artifacts_wire::shape(&minted)
+            crate::cobot::artifacts_wire::shape(&minted)
         )
     })?;
     KEPT.with(|k| {

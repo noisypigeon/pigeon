@@ -119,19 +119,19 @@ fn units(instance: &Instance, g: &mut Graph, problems: &mut Vec<String>) -> Vec<
         .push(node(REPOSITORY, "source", Lane::Source, "repository", "."));
     // Every problem `infra.validate` reports, discovery's included; the graph keeps the
     // units discovery could read.
-    match cobot::validate_in(root, instance.platform_root(), &instance.providers_dir()) {
+    match crate::cobot::validate_in(root, instance.platform_root(), &instance.providers_dir()) {
         Ok(_) => {}
-        Err(cobot::Error::Invalid(found)) => {
+        Err(crate::cobot::Error::Invalid(found)) => {
             problems.extend(found.iter().map(|p| format!("{}: {}", p.path, p.message)));
         }
         Err(e) => problems.push(format!("{}: {e}", Engine::Cobot.name())),
     }
-    let (units, _) = cobot::unit::discover_in(root, instance.platform_root());
+    let (units, _) = crate::cobot::unit::discover_in(root, instance.platform_root());
     let paths: Vec<String> = units.iter().map(|u| u.path.clone()).collect();
     for u in &units {
         let id = format!("unit:{}", u.path);
         let file = if u.is_config() {
-            cobot::config::CONFIG
+            crate::cobot::config::CONFIG
         } else {
             "unit.yaml"
         };
@@ -206,7 +206,7 @@ fn units(instance: &Instance, g: &mut Graph, problems: &mut Vec<String>) -> Vec<
 
 /// Every static site's bucket, named by its unit, and the hosts it serves.
 fn sites(root: &Path, platform: &Path, g: &mut Graph, problems: &mut Vec<String>) {
-    match cobot::sites::find_in(root, platform, &[]) {
+    match crate::cobot::sites::find_in(root, platform, &[]) {
         Ok(sites) => {
             for s in sites {
                 let store = format!("store:{}", s.unit);
@@ -231,7 +231,7 @@ fn sites(root: &Path, platform: &Path, g: &mut Graph, problems: &mut Vec<String>
                 }
             }
         }
-        Err(cobot::Error::Invalid(_)) => {}
+        Err(crate::cobot::Error::Invalid(_)) => {}
         Err(e) => problems.push(format!("{}: {e}", Engine::Cobot.name())),
     }
 }

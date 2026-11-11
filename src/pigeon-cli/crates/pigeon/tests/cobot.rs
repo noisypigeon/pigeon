@@ -87,7 +87,7 @@ fn cobot_reports_its_own_version() {
         .arg("--version")
         .assert()
         .success()
-        .stdout(predicate::str::contains(cobot::VERSION));
+        .stdout(predicate::str::contains(backplane::cobot::VERSION));
 }
 
 #[test]
