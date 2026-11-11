@@ -101,7 +101,9 @@ impl Launch {
 pub const BUILD_URL_VAR: &str = "PIGEON_BUILD_URL";
 /// The variable holding that build's SHA-256.
 pub const BUILD_SHA256_VAR: &str = "PIGEON_BUILD_SHA256";
-pub use crate::ship_wire::{SENTINEL_SHA256_VAR, SENTINEL_URL_VAR};
+pub use crate::ship_wire::{
+    SENTINEL_SHA256_VAR, SENTINEL_URL_VAR, TEST_MAP_SHA256_VAR, TEST_MAP_URL_VAR,
+};
 /// The variable holding the builds token's client ID.
 pub const BUILD_ACCESS_ID_VAR: &str = "PIGEON_BUILD_ACCESS_ID";
 /// The variable holding the builds token's secret.
@@ -121,6 +123,8 @@ pub struct JobsBuild {
     pub access: (String, String),
     /// The `pigeon-sentinel` built beside it: its URL and SHA-256; none for a build without one.
     pub sentinel: Option<(String, String)>,
+    /// `main`'s newest test map: its URL and SHA-256; none before the first.
+    pub test_map: Option<(String, String)>,
 }
 
 impl std::fmt::Debug for JobsBuild {
@@ -129,6 +133,7 @@ impl std::fmt::Debug for JobsBuild {
             .field("url", &self.url)
             .field("sha256", &self.sha256)
             .field("sentinel", &self.sentinel)
+            .field("test_map", &self.test_map)
             .finish_non_exhaustive()
     }
 }
@@ -183,6 +188,10 @@ impl JobsLaunch {
             if let Some((url, sha256)) = &b.sentinel {
                 env.push((SENTINEL_URL_VAR, url.as_str()));
                 env.push((SENTINEL_SHA256_VAR, sha256.as_str()));
+            }
+            if let Some((url, sha256)) = &b.test_map {
+                env.push((TEST_MAP_URL_VAR, url.as_str()));
+                env.push((TEST_MAP_SHA256_VAR, sha256.as_str()));
             }
         }
         env
@@ -483,6 +492,7 @@ mod tests {
             sha256: sha256.clone(),
             access: ("builds-id".into(), "builds-secret".into()),
             sentinel: None,
+            test_map: None,
         });
         assert!(!format!("{jobs:?}").contains("builds-secret"));
         assert!(!format!("{:?}", jobs.build.as_ref().expect("a build")).contains("builds-secret"));
@@ -526,6 +536,23 @@ mod tests {
                 ("PIGEON_SENTINEL_SHA256", sentinel.as_str()),
             ]
         );
+        let map = "ef".repeat(32);
+        if let Some(b) = jobs.build.as_mut() {
+            b.test_map = Some((
+                "https://control.example/builds/x/tests.json".into(),
+                map.clone(),
+            ));
+        }
+        assert_eq!(
+            jobs.env()[7..],
+            [
+                (
+                    "PIGEON_TEST_MAP_URL",
+                    "https://control.example/builds/x/tests.json"
+                ),
+                ("PIGEON_TEST_MAP_SHA256", map.as_str()),
+            ]
+        );
     }
 
     #[test]
@@ -538,6 +565,10 @@ mod tests {
         assert_eq!(
             crate::ship_wire::build_path(&format!("/builds/{sha}/pigeon")),
             Some((sha, "pigeon"))
+        );
+        assert_eq!(
+            crate::ship_wire::build_path(&format!("/builds/{sha}/tests.json")),
+            Some((sha, "tests.json"))
         );
         assert_eq!(
             crate::ship_wire::build_path_sha(&format!("/builds/{sha}/pigeon-sentinel")),

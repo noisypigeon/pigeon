@@ -799,14 +799,16 @@ async fn smoke(env: &Env, s: &Settings, who: &Identity) -> Result<Response> {
     )
 }
 
-/// `GET /builds/<sha>/<binary>`: `main`'s `pigeon` or `pigeon-sentinel` built at that commit,
-/// from R2.
+/// `GET /builds/<sha>/<file>`: `main`'s `pigeon` or `pigeon-sentinel` built at that commit, or
+/// its test map, from R2.
 async fn build(env: &Env, path: &str) -> Result<Response> {
     let Some((sha, binary)) = cobot::ship_wire::build_path(path) else {
         return Response::error("not found", 404);
     };
     let key = if binary == cobot::ship_wire::SENTINEL_BINARY {
         cobot::ship_wire::sentinel_key(sha)
+    } else if binary == cobot::ship_wire::TEST_MAP_FILE {
+        crate::testmaps::key(sha)
     } else {
         cobot::ship_wire::build_key(sha)
     };
@@ -850,11 +852,19 @@ pub(super) async fn latest_build(env: &Env) -> Option<cobot::worker::JobsBuild> 
             sum,
         )
     });
+    let test_map =
+        serde_json::from_value::<crate::testmaps::Map>(v["test_map"]["latest_map"].clone())
+            .ok()
+            .map(|m| {
+                let file = cobot::ship_wire::TEST_MAP_FILE;
+                (format!("https://{host}/builds/{}/{file}", m.sha), m.sha256)
+            });
     Some(cobot::worker::JobsBuild {
         url: format!("https://{host}/builds/{}/pigeon", b.sha),
         sha256: b.sha256,
         access,
         sentinel,
+        test_map,
     })
 }
 

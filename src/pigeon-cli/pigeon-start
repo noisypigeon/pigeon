@@ -3,7 +3,8 @@
 # its SHA-256 matches, else the image's own; see
 # .claude/decisions/2026-11-07-development-job-images-on-cloudflare.md §3. A named
 # pigeon-sentinel that matches is exported as PIGEON_SENTINEL, for the bound job; see
-# .claude/decisions/2026-11-10-development-factory-crates-functional-core.md §2.
+# .claude/decisions/2026-11-10-development-factory-crates-functional-core.md §2. A named test
+# map that matches is exported as PIGEON_TEST_MAP, per that ADR's 2026-11-11 amendment.
 set -u
 baked=/usr/local/bin/pigeon
 dir="${TMPDIR:-/tmp}"
@@ -29,6 +30,16 @@ if [ -n "${PIGEON_SENTINEL_URL:-}" ] && [ -n "${PIGEON_SENTINEL_SHA256:-}" ]; th
     echo "pigeon-start: judging with sentinel build $PIGEON_SENTINEL_SHA256" >&2
   else
     echo "pigeon-start: the sentinel build at $PIGEON_SENTINEL_URL is missing or its checksum differs; judging with the linked library" >&2
+  fi
+fi
+
+unset PIGEON_TEST_MAP
+if [ -n "${PIGEON_TEST_MAP_URL:-}" ] && [ -n "${PIGEON_TEST_MAP_SHA256:-}" ]; then
+  if fetch "$PIGEON_TEST_MAP_URL" "$PIGEON_TEST_MAP_SHA256" "$dir/tests.json"; then
+    export PIGEON_TEST_MAP="$dir/tests.json"
+    echo "pigeon-start: test map $PIGEON_TEST_MAP_SHA256" >&2
+  else
+    echo "pigeon-start: the test map at $PIGEON_TEST_MAP_URL is missing or its checksum differs; selecting by crate" >&2
   fi
 fi
 

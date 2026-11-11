@@ -51,14 +51,23 @@ pub const SENTINEL_URL_VAR: &str = "PIGEON_SENTINEL_URL";
 /// The variable holding that build's SHA-256.
 pub const SENTINEL_SHA256_VAR: &str = "PIGEON_SENTINEL_SHA256";
 
+/// The test map kept beside a build; see the 2026-11-11 amendment to
+/// `.claude/decisions/2026-11-10-development-factory-crates-functional-core.md`.
+pub const TEST_MAP_FILE: &str = "tests.json";
+
+/// The variable naming the test map a job Container downloads.
+pub const TEST_MAP_URL_VAR: &str = "PIGEON_TEST_MAP_URL";
+/// The variable holding that map's SHA-256.
+pub const TEST_MAP_SHA256_VAR: &str = "PIGEON_TEST_MAP_SHA256";
+
 /// The R2 key of `main`'s `pigeon-sentinel` built at `sha`.
 #[must_use]
 pub fn sentinel_key(sha: &str) -> String {
     format!("builds/{sha}/{SENTINEL_BINARY}")
 }
 
-/// The commit and binary of a `/builds/<sha>/<binary>` path: a full, lowercase SHA-1 and one of
-/// [`BUILD_BINARIES`], and nothing else.
+/// The commit and file of a `/builds/<sha>/<file>` path: a full, lowercase SHA-1 and one of
+/// [`BUILD_BINARIES`] or [`TEST_MAP_FILE`], and nothing else.
 #[must_use]
 pub fn build_path(path: &str) -> Option<(&str, &str)> {
     let (sha, binary) = path.strip_prefix("/builds/")?.split_once('/')?;
@@ -66,8 +75,8 @@ pub fn build_path(path: &str) -> Option<(&str, &str)> {
         && sha
             .bytes()
             .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
-        && BUILD_BINARIES.contains(&binary))
-    .then_some((sha, binary))
+        && (BUILD_BINARIES.contains(&binary) || binary == TEST_MAP_FILE))
+        .then_some((sha, binary))
 }
 
 /// The commit of a `/builds/<sha>/pigeon` path: a full, lowercase SHA-1, and nothing else.
