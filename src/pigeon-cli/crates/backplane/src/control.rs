@@ -439,6 +439,10 @@ pub struct Report {
     /// For the bound job: the checks `change.scope` named.
     #[serde(default)]
     pub checks: Vec<Check>,
+    /// For the bound job: the head's full set of code checks, for the merge gate; none for a
+    /// head with no Rust input.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub full: Vec<Check>,
     /// For the merge job: the commit `main` now holds.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub merged: Option<String>,
@@ -476,6 +480,7 @@ impl Report {
             log: tail(log).to_string(),
             violations: Vec::new(),
             checks: Vec::new(),
+            full: Vec::new(),
             merged: None,
             published: Vec::new(),
             workers: Vec::new(),
@@ -553,6 +558,7 @@ pub fn event_of(job: &str, sha: &str, report: &Report) -> Option<Event> {
             sha: sha.to_string(),
             violations,
             checks: report.checks.clone(),
+            full: report.full.clone(),
             tiers: report.tiers.clone(),
         });
     }
@@ -991,6 +997,7 @@ pub fn with_mirror(event: Event) -> Event {
             sha,
             violations,
             mut checks,
+            full,
             tiers,
         } => {
             if violations.is_empty() && !checks.iter().any(|c| c.name == MIRROR) {
@@ -1003,6 +1010,7 @@ pub fn with_mirror(event: Event) -> Event {
                 sha,
                 violations,
                 checks,
+                full,
                 tiers,
             }
         }

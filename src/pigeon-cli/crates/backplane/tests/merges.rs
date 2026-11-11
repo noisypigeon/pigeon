@@ -2,8 +2,9 @@
 
 use backplane::approvals::{Tier, Tiered, Tiers};
 use backplane::changes::{
-    Change, Check, Effect, Event, MERGE, RESTACK, Relation, Restacked, State,
+    Change, Check, Effect, Event, GATE, MERGE, RESTACK, Relation, Restacked, State,
 };
+use backplane::control;
 use backplane::merges::{MergeQueue, Queued, STUCK};
 
 const A: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -92,6 +93,7 @@ fn check(c: &mut Change, sha: &str, merge: Tier) {
             name: "fmt".into(),
             argv: vec![],
         }],
+        full: vec![],
         tiers: Some(tiers(merge)),
     })
     .expect("bounded");
@@ -277,6 +279,7 @@ fn bound(c: &mut Change, sha: &str, merge: Tier) {
             name: "fmt".into(),
             argv: vec![],
         }],
+        full: vec![],
         tiers: Some(tiers(merge)),
     })
     .expect("bounded");
@@ -363,6 +366,7 @@ fn a_merge_on_a_checked_unapproved_head_is_refused_not_parked() {
             name: "fmt".into(),
             argv: vec![],
         }],
+        full: vec![],
         tiers: None,
     })
     .expect("bounded");
@@ -453,4 +457,135 @@ fn a_merge_whose_container_is_lost_on_every_attempt_releases_its_turn() {
         ),
         Some(None)
     );
+}
+
+fn named(n: &str) -> Check {
+    Check {
+        name: n.into(),
+        argv: vec!["cargo".into(), n.into()],
+    }
+}
+
+/// An approved change on head `A` whose checks were `checks`, all passed, and whose full set is
+/// `full`.
+fn approved_with(checks: &[&str], full: &[&str]) -> Change {
+    let mut c = Change::propose(70, "g", "feat(g): h", "p", vec!["a/**".into()], "agent");
+    c.apply(Event::ApprovePlan {
+        by: "owner".into(),
+        at: 1,
+    })
+    .expect("plan");
+    c.apply(Event::Pushed { sha: A.into() }).expect("pushed");
+    c.apply(Event::Bounded {
+        sha: A.into(),
+        violations: vec![],
+        checks: checks.iter().map(|n| named(n)).collect(),
+        full: full.iter().map(|n| named(n)).collect(),
+        tiers: Some(tiers(Tier::Confirm)),
+    })
+    .expect("bounded");
+    for n in checks {
+        c.apply(Event::Finished {
+            job: (*n).into(),
+            sha: A.into(),
+            ok: true,
+        })
+        .expect("finished");
+    }
+    assert_eq!(c.state, State::Checked);
+    c.apply(Event::Approve {
+        by: "owner".into(),
+        sha: A.into(),
+        at: 5,
+    })
+    .expect("approved");
+    c
+}
+
+fn gate(n: &str) -> String {
+    format!("{GATE}{n}")
+}
+
+#[test]
+fn the_merge_gate_runs_the_full_checks_not_yet_passed_then_merges() {
+    let mut c = approved_with(&["fmt"], &["fmt", "clippy", "test"]);
+    let effects = c.apply(Event::Merge { by: "owner".into() }).expect("gates");
+    assert_eq!(
+        effects,
+        [Effect::Start(gate("clippy")), Effect::Start(gate("test"))],
+        "fmt already passed on this head"
+    );
+    assert_eq!(c.merge_after.as_deref(), Some("owner"));
+    assert!(
+        !control::merge_dropped(&c),
+        "the turn is held while the gate runs"
+    );
+    let none = c
+        .apply(Event::Finished {
+            job: gate("clippy"),
+            sha: A.into(),
+            ok: true,
+        })
+        .expect("finished");
+    assert!(none.is_empty(), "one still runs");
+    let merge = c
+        .apply(Event::Finished {
+            job: gate("test"),
+            sha: A.into(),
+            ok: true,
+        })
+        .expect("finished");
+    assert_eq!(merge, [Effect::Start(MERGE.into())]);
+    assert_eq!(c.state, State::Approved);
+    assert_eq!(c.merge_after, None);
+}
+
+#[test]
+fn a_failed_gate_fails_the_change_and_releases_the_merge_turn() {
+    let mut c = approved_with(&["fmt"], &["fmt", "clippy", "test"]);
+    c.apply(Event::Merge { by: "owner".into() }).expect("gates");
+    let effects = c
+        .apply(Event::Finished {
+            job: gate("test"),
+            sha: A.into(),
+            ok: false,
+        })
+        .expect("finished");
+    assert_eq!(effects, [Effect::Cancel(vec![gate("clippy")])]);
+    assert_eq!(c.state, State::Failed);
+    assert!(
+        c.violations
+            .iter()
+            .any(|v| v.contains("merge gate") && v.contains("test")),
+        "{:?}",
+        c.violations
+    );
+    assert_eq!(c.merge_after, None);
+    assert!(control::merge_dropped(&c), "the queue moves on");
+}
+
+#[test]
+fn a_head_without_rust_or_already_fully_checked_merges_at_once() {
+    let mut docs = approved_with(&["fmt"], &[]);
+    assert_eq!(
+        docs.apply(Event::Merge { by: "owner".into() })
+            .expect("merges"),
+        [Effect::Start(MERGE.into())]
+    );
+    let mut whole = approved_with(&["fmt", "test"], &["fmt", "test"]);
+    assert_eq!(
+        whole
+            .apply(Event::Merge { by: "owner".into() })
+            .expect("merges"),
+        [Effect::Start(MERGE.into())],
+        "its own checks were the full set"
+    );
+}
+
+#[test]
+fn a_new_head_forgets_the_old_heads_full_set() {
+    let mut c = approved_with(&["fmt"], &["fmt", "test"]);
+    assert_eq!(c.full.len(), 2);
+    c.apply(Event::Pushed { sha: B.into() }).expect("pushed");
+    assert!(c.full.is_empty(), "the bound job reports the new head's");
 }

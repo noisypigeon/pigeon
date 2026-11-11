@@ -251,3 +251,20 @@ fn a_spike_runs_as_its_own_check() {
         "other tooling runs no spike"
     );
 }
+
+#[test]
+fn the_full_set_is_what_a_workspace_wide_change_runs() {
+    let full: Vec<String> = cobot::scope::full(&repo_root())
+        .expect("reads")
+        .into_iter()
+        .map(|j| j.name)
+        .collect();
+    for want in ["fmt", "clippy", "test", "clippy backplane worker (wasm)"] {
+        assert!(full.contains(&want.to_string()), "{want}: {full:?}");
+    }
+    let wide = names(&["src/pigeon-cli/Cargo.lock"]);
+    assert!(
+        full.iter().all(|n| wide.contains(n)),
+        "{full:?} within {wide:?}"
+    );
+}

@@ -48,6 +48,7 @@ fn checking(sha: &str) -> Change {
             sha: sha.into(),
             violations: vec![],
             checks: vec![check("fmt"), check("test")],
+            full: vec![],
             tiers: None,
         })
         .expect("bounded");
@@ -161,6 +162,7 @@ fn results_for_an_old_head_are_ignored() {
         sha: A.into(),
         violations: vec!["x".into()],
         checks: vec![],
+        full: vec![],
         tiers: None,
     })
     .expect("ignored");
@@ -219,6 +221,7 @@ fn a_refused_head_runs_no_checks_and_a_failure_stops_the_rest() {
             sha: A.into(),
             violations: vec!["outside `scope`: x".into()],
             checks: vec![check("fmt")],
+            full: vec![],
             tiers: None,
         })
         .expect("bounded");
@@ -302,6 +305,7 @@ fn a_change_with_no_checks_is_checked_once_bounded() {
         sha: A.into(),
         violations: vec![],
         checks: vec![],
+        full: vec![],
         tiers: None,
     })
     .expect("bounded");
@@ -446,6 +450,7 @@ fn mirrored(sha: &str, checks: &[&str]) -> (Change, Vec<Effect>) {
             sha: sha.into(),
             violations: vec![],
             checks: checks.iter().map(|n| check(n)).collect(),
+            full: vec![],
             tiers: None,
         }))
         .expect("bounded");
@@ -511,6 +516,7 @@ fn a_refused_head_never_queues_the_mirror_job() {
             sha: A.into(),
             violations: vec!["outside its scope".into()],
             checks: vec![],
+            full: vec![],
             tiers: None,
         }))
         .expect("refused");

@@ -164,6 +164,7 @@ fn reports_become_events() {
         outcome,
         log: String::new(),
         violations: violations.into_iter().map(Into::into).collect(),
+        full: vec![],
         checks: vec![Check {
             name: "fmt".into(),
             argv: vec!["cargo".into()],
@@ -226,6 +227,7 @@ fn events_round_trip_their_wire_form() {
         sha: A.into(),
         violations: vec![],
         checks: vec![],
+        full: vec![],
         tiers: None,
     };
     let text = serde_json::to_string(&e).expect("serialize");
@@ -306,6 +308,7 @@ fn the_mirror_writes_every_state_the_migration_allows() {
     c.apply(Event::Bounded {
         sha: A.into(),
         violations: vec![],
+        full: vec![],
         checks: vec![Check {
             name: "fmt".into(),
             argv: vec![],
@@ -389,6 +392,7 @@ fn deploy_report(outcome: Outcome) -> Report {
         outcome,
         log: String::new(),
         violations: vec![],
+        full: vec![],
         checks: vec![],
         merged: None,
         published: vec!["sites/docs".into()],
@@ -563,6 +567,7 @@ fn a_change_is_unmirrored_by_its_branch_on_a_runner() {
         sha: A.into(),
         violations: vec!["no".into()],
         checks: vec![],
+        full: vec![],
         tiers: None,
     };
     assert_eq!(control::with_mirror(refused.clone()), refused);
@@ -787,6 +792,7 @@ fn code_checks_go_to_github_only_on_a_mirrored_change() {
     c.apply(control::with_mirror(Event::Bounded {
         sha: A.into(),
         violations: vec![],
+        full: vec![],
         checks: vec![
             Check {
                 name: "fmt".into(),
@@ -816,6 +822,7 @@ fn code_checks_go_to_github_only_on_a_mirrored_change() {
         .apply(Event::Bounded {
             sha: A.into(),
             violations: vec![],
+            full: vec![],
             checks: vec![Check {
                 name: "fmt".into(),
                 argv: vec!["cargo".into(), "fmt".into()],

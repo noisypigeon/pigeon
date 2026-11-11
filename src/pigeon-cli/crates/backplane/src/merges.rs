@@ -6,7 +6,7 @@ use std::collections::VecDeque;
 use serde::{Deserialize, Serialize};
 
 /// How long a merge may run before the queue moves past it, in seconds.
-pub const STUCK: u64 = 20 * 60;
+pub const STUCK: u64 = 60 * 60;
 
 /// A merge asked for.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

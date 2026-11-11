@@ -110,6 +110,7 @@ mod of_change {
         c.apply(Event::Bounded {
             sha: A.into(),
             violations: vec![],
+            full: vec![],
             checks: vec![Check {
                 name: "fmt".into(),
                 argv: vec![],

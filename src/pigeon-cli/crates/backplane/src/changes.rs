@@ -13,6 +13,10 @@ pub const BOUND: &str = "bound";
 /// The job that merges an approved head onto `main`, with a write token.
 pub const MERGE: &str = "merge";
 
+/// What a merge gate job's name starts with: `gate: <check>`, one of the head's full set; see
+/// `.claude/decisions/2026-11-10-development-factory-crates-functional-core.md` §5.
+pub const GATE: &str = "gate: ";
+
 /// The job that replays an approved or checked head onto `main` after `main` moved; see
 /// `.claude/decisions/2026-11-08-development-concurrent-agent-sessions.md` §3.
 pub const RESTACK: &str = "restack";
@@ -294,10 +298,14 @@ pub struct Change {
     /// An approval carried across a restack.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub carried: Option<Carried>,
-    /// Who asked to merge while its restack was pending; its merge starts once the approval
-    /// carries over.
+    /// Who asked to merge while its restack was pending, or while its merge gate runs; its
+    /// merge starts once the approval carries over and the gate passes.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub merge_after: Option<String>,
+    /// The head's full set of code checks, which the merge gate runs; none for a head with no
+    /// Rust input.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub full: Vec<Check>,
     /// Its head conflicts with `main`; cleared by its next push.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub conflict: Option<Conflicted>,
@@ -343,6 +351,9 @@ pub enum Event {
         violations: Vec<String>,
         /// The checks `change.scope` named.
         checks: Vec<Check>,
+        /// The head's full set of code checks, for the merge gate.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        full: Vec<Check>,
         /// The head's approval tiers, shown only for now.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         tiers: Option<crate::approvals::Tiers>,
@@ -510,6 +521,7 @@ impl Change {
             behind: None,
             carried: None,
             merge_after: None,
+            full: Vec::new(),
             conflict: None,
             parent: None,
             held: None,
@@ -552,10 +564,12 @@ impl Change {
                 sha,
                 violations,
                 checks,
+                full,
                 tiers,
             } => {
                 if self.on_head(&sha) {
                     self.tiers = tiers;
+                    self.full = full;
                 }
                 self.bounded(&sha, violations, checks)
             }
@@ -625,6 +639,7 @@ impl Change {
         if !self.on_head(&sha) {
             self.tiers = None;
             self.behind = None;
+            self.full.clear();
         }
         self.pushed(sha)
     }
@@ -685,7 +700,7 @@ impl Change {
                 self.behind = None;
                 self.carried = None;
                 match self.merge_after.take() {
-                    Some(_) => self.start_merge(),
+                    Some(by) => self.start_merge(&by),
                     None => Ok(Vec::new()),
                 }
             }
@@ -748,7 +763,7 @@ impl Change {
         }
         self.carried = None;
         match self.merge_after.take() {
-            Some(_) if carries => self.start_merge().unwrap_or_default(),
+            Some(by) if carries => self.start_merge(&by).unwrap_or_default(),
             _ => Vec::new(),
         }
     }
@@ -840,7 +855,60 @@ impl Change {
         } else {
             JobStatus::Failed
         };
+        if name.starts_with(GATE) {
+            return self.gate_settled();
+        }
         Ok(self.settle())
+    }
+
+    /// The head's full checks not yet passed on it, under their own name or as a gate job.
+    fn gate_missing(&self) -> Vec<Check> {
+        let passed = |name: &str| {
+            self.jobs
+                .iter()
+                .any(|j| j.name == name && j.status == JobStatus::Passed)
+        };
+        self.full
+            .iter()
+            .filter(|c| !passed(&c.name) && !passed(&format!("{GATE}{}", c.name)))
+            .cloned()
+            .collect()
+    }
+
+    /// After a gate job settles: a failure fails the change, naming the checks, and drops its
+    /// merge; the last pass starts the merge.
+    fn gate_settled(&mut self) -> Result<Vec<Effect>, Refusal> {
+        if self.state != State::Approved {
+            return Ok(Vec::new());
+        }
+        let gate: Vec<&Job> = self
+            .jobs
+            .iter()
+            .filter(|j| j.name.starts_with(GATE))
+            .collect();
+        let open = gate.iter().any(|j| j.open());
+        let failed: Vec<String> = gate
+            .iter()
+            .filter(|j| j.status == JobStatus::Failed)
+            .map(|j| j.name.trim_start_matches(GATE).to_string())
+            .collect();
+        if !failed.is_empty() {
+            self.violations = vec![format!(
+                "the merge gate failed on {}: {}; push a fix, or ci_rerun the check",
+                self.head.as_deref().unwrap_or("its head"),
+                failed.join(", ")
+            )];
+            self.merge_after = None;
+            self.state = State::Failed;
+            return Ok(self.cancel_open());
+        }
+        if open {
+            return Ok(Vec::new());
+        }
+        match self.merge_after.take() {
+            Some(by) => self.start_merge(&by),
+            None => Ok(Vec::new()),
+        }
     }
 
     /// After a check settles: a failure fails the change and stops the rest; the last pass
@@ -888,6 +956,9 @@ impl Change {
             )];
             self.state = State::Refused;
             return Ok(Vec::new());
+        }
+        if name.starts_with(GATE) {
+            return self.gate_settled();
         }
         Ok(self.settle())
     }
@@ -978,11 +1049,12 @@ impl Change {
             self.merge_after = Some(by.to_string());
             return Ok(Vec::new());
         }
-        self.start_merge()
+        self.start_merge(by)
     }
 
-    /// Starts the merge job on an approved head.
-    fn start_merge(&mut self) -> Result<Vec<Effect>, Refusal> {
+    /// Starts the merge job on an approved head for `by`, after the merge gate: the head's full
+    /// checks not yet passed run first, as `gate: <check>` jobs, and the merge waits for them.
+    fn start_merge(&mut self, by: &str) -> Result<Vec<Effect>, Refusal> {
         if let Some(c) = &self.conflict {
             return refuse(conflicted(&self.branch(), c));
         }
@@ -995,6 +1067,25 @@ impl Change {
         }
         if self.job(MERGE).is_some_and(|j| j.open()) {
             return refuse(format!("{} is already being merged", self.branch()));
+        }
+        let missing = self.gate_missing();
+        if !missing.is_empty() {
+            self.merge_after = Some(by.to_string());
+            if self
+                .jobs
+                .iter()
+                .any(|j| j.name.starts_with(GATE) && j.open())
+            {
+                return Ok(Vec::new());
+            }
+            let mut effects = Vec::new();
+            for c in missing {
+                let name = format!("{GATE}{}", c.name);
+                self.jobs.retain(|j| j.name != name);
+                effects.push(Effect::Start(name.clone()));
+                self.jobs.push(Job::queued(&name, c.argv));
+            }
+            return Ok(effects);
         }
         self.jobs.retain(|j| j.name != MERGE);
         self.jobs.push(Job::queued(MERGE, Vec::new()));

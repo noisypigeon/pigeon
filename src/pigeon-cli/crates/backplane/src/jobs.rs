@@ -66,6 +66,7 @@ impl Board {
             log: String::new(),
             violations: Vec::new(),
             checks: Vec::new(),
+            full: Vec::new(),
             merged: None,
             published: Vec::new(),
             workers: Vec::new(),
@@ -110,6 +111,7 @@ pub(crate) fn report(spec: &JobSpec, outcome: Outcome, log: &str) -> Report {
         log: tail(log).to_string(),
         violations: Vec::new(),
         checks: Vec::new(),
+        full: Vec::new(),
         merged: None,
         published: Vec::new(),
         workers: Vec::new(),
@@ -531,6 +533,7 @@ fn bound(spec: &JobSpec, dir: &Path, sentinel: &Path) -> Report {
     for c in &checks {
         let _ = writeln!(log, "check: {}", c.name);
     }
+    let full = full_set(dir, &checks, &mut log);
     Report {
         id: spec.id.clone(),
         outcome: if violations.is_empty() {
@@ -541,6 +544,7 @@ fn bound(spec: &JobSpec, dir: &Path, sentinel: &Path) -> Report {
         log: tail(&log).to_string(),
         violations,
         checks,
+        full,
         merged: None,
         published: Vec::new(),
         workers: Vec::new(),
@@ -549,6 +553,33 @@ fn bound(spec: &JobSpec, dir: &Path, sentinel: &Path) -> Report {
         tiers,
         restack: None,
         platform: None,
+    }
+}
+
+/// The head's full set of code checks, which the merge gate runs, when `checks` holds any code
+/// check; none for a head with no Rust input. See
+/// `.claude/decisions/2026-11-10-development-factory-crates-functional-core.md` §5.
+fn full_set(dir: &Path, checks: &[Check], log: &mut String) -> Vec<Check> {
+    if !checks.iter().any(|c| crate::actions::on_github(&c.argv)) {
+        return Vec::new();
+    }
+    match cobot::scope::full(dir) {
+        Ok(jobs) => {
+            let full: Vec<Check> = jobs
+                .into_iter()
+                .filter(|j| crate::actions::on_github(&j.argv))
+                .map(|j| Check {
+                    name: j.name,
+                    argv: j.argv,
+                })
+                .collect();
+            let _ = writeln!(log, "merge gate: {} check(s)", full.len());
+            full
+        }
+        Err(e) => {
+            let _ = writeln!(log, "merge gate: the full set isn't readable ({e})");
+            Vec::new()
+        }
     }
 }
 

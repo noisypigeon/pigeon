@@ -403,6 +403,29 @@ fn rust_jobs(crates: &Crates, config: &Config, files: &[&str]) -> Vec<Job> {
     out
 }
 
+/// `pigeon`'s features, from the release units and its manifest.
+fn all_features(config: &Config, crates: &Crates) -> BTreeSet<String> {
+    config
+        .units
+        .values()
+        .filter(|u| !u.features.is_empty())
+        .map(|u| u.features.clone())
+        .chain(crates.features.keys().cloned())
+        .collect()
+}
+
+/// Every check a workspace-wide change runs: the full set the merge gate runs on a head; see
+/// `.claude/decisions/2026-11-10-development-factory-crates-functional-core.md` §5.
+///
+/// # Errors
+///
+/// [`Error::Io`] when the workspace's manifests or the release configuration can't be read.
+pub fn full(root: &Path) -> Result<Vec<Job>, Error> {
+    let config = Config::load(&root.join(RELEASES))?;
+    let crates = crates(root)?;
+    Ok(everything(&all_features(&config, &crates)))
+}
+
 /// Whether `out` already tests `package`, alone or as the whole workspace.
 fn ran_tests_of(out: &[Job], package: &str) -> bool {
     out.iter().any(|j| {
@@ -426,13 +449,7 @@ pub fn jobs(root: &Path, files: &[String]) -> Result<Vec<Job>, Error> {
         .collect();
     let config = Config::load(&root.join(RELEASES))?;
     let crates = crates(root)?;
-    let all_features: BTreeSet<String> = config
-        .units
-        .values()
-        .filter(|u| !u.features.is_empty())
-        .map(|u| u.features.clone())
-        .chain(crates.features.keys().cloned())
-        .collect();
+    let all_features = all_features(&config, &crates);
     let mut out = Vec::new();
     if files.iter().any(|f| under(f, &EVERYTHING)) {
         out.extend(everything(&all_features));
