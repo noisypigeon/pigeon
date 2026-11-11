@@ -191,3 +191,14 @@ The runner's half of §5's exchange. It runs on `macos-sign` agents only, and is
 - After step 7's merge, `main`'s deploy releases build 1, and it appears in the internal group, showing "Pigeon" centred.
 - An OIDC token from `archive`, from `pigeon-ios-check`, or replayed after `sign`, is refused at `/v0/apple/release`.
 - No Apple key, certificate, key ID or team ID appears in the tree, a Buildkite log, a change row or R2.
+
+## Amendments
+
+### 2026-11-11: The bundle ID is dev.pigeon.app
+
+The owner registered the App ID as `dev.pigeon.app`. It replaces `dev.pigeon.Pigeon` in §1, §5 and §9 step 2.2; that text stays as written.
+
+- **Lowercase,** so no tool's case handling can split the App ID from its profile.
+- **Platform-neutral,** so a later Mac app or extension sits under it (`dev.pigeon.app.<name>`).
+- `src/pigeon-ios/project.yml`'s `PRODUCT_BUNDLE_IDENTIFIER` follows. The home-screen name stays `Pigeon` (`CFBundleDisplayName`); the App Store name is set in App Store Connect and is not in the tree.
+- The App ID has no capabilities beyond Apple's defaults. The first capability's change adds an entitlements file, and checks that `-exportArchive` applies its entitlements to the unsigned archive (§4).
