@@ -339,3 +339,58 @@ safety and speed steps come first, so the large moves run under them.
     `failed` with the test named.
 - **The factory:** after step 8, adding an ADR doesn't touch `CLAUDE.md`, and
   two changes adding pages to different surfaces don't overlap.
+
+## Amendments
+
+### 2026-11-11: The test map is per test binary, and built after each merge on `main`
+
+§5 said the map records each test, and that the merge gate's coverage run
+writes it, as the CI ADR's §3 repeats
+([`2026-11-10-development-code-checks-github-actions.md`](2026-11-10-development-code-checks-github-actions.md)).
+Both are changed.
+
+- **Per test binary, not per test.**
+  - A test binary is one crate's library tests, or one `tests/*.rs` file:
+    about sixty in the workspace.
+  - Mapping each test would rerun the instrumented suite once per test, which
+    means hundreds of runs. Mapping each binary takes one instrumented build
+    and one run per binary.
+  - It is still much finer than per crate: a change to one module runs the few
+    binaries that touch it, not every binary of the crate and its dependants.
+- **Built after each merge, not in the gate.**
+  - The merge gate (step 4) runs the full set uninstrumented, so a merge turn
+    doesn't grow by a coverage build.
+  - After each merge, the control plane dispatches `ci.yml` on `main`'s new
+    head, as change 0, with one check: `test map`. It runs each test binary
+    under `cargo llvm-cov` and writes `tests.json`, mapping each binary to the
+    workspace source files it executed.
+  - The control plane copies that artifact to `builds/<sha>/tests.json`,
+    beside the build of the same commit.
+- **How a change uses it.**
+  - Job Containers get the newest map beside the newest build, through
+    `pigeon-start`, as they get `pigeon-sentinel`.
+  - `change.scope` runs, for each changed source file under a crate's `src/`,
+    each binary whose recorded files include it, as `cargo test -p <package>
+    --lib` or `--test <name>`. A changed or added test file runs its own
+    binary.
+  - The fallback to per-crate selection stays as §5 lists it, for a missing
+    map, build files, files the map doesn't know, and more than half of the
+    binaries.
+  - The map may be one merge behind. A file that a newer merge made reachable
+    from a binary is caught by the gate's full set before it merges.
+- **Tools.** `ci.yml` installs `cargo-llvm-cov` and `cargo-nextest` from pinned
+  release archives checked by SHA-256, as it installs `tofu` and `zola`, and
+  `llvm-tools` with rustup.
+
+**Execution,** in place of step 5:
+
+1. **`ci.yml`:** the `test map` check and its script. It writes `tests.json` as
+   an artifact. It takes the owner's proof, since `.github/**` is guarded.
+2. **The control plane:**
+   - `MainRun` dispatches the `test map` check on each new `main`;
+   - it copies the artifact to `builds/<sha>/tests.json`;
+   - `pigeon-start` gets the newest map beside the newest build, as
+     `PIGEON_TEST_MAP`.
+3. **Selection:** `change.scope` reads `PIGEON_TEST_MAP` and picks binaries by
+   it, with the fallbacks.
+
