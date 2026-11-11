@@ -623,6 +623,12 @@ pub fn mirror(
 ) -> Vec<Statement> {
     let opt = |v: Option<&str>| v.map_or(Value::Null, Into::into);
     let mut out = vec![instance_row(instance, now)];
+    let approval = change.approval.as_ref().filter(|_| {
+        matches!(
+            change.state,
+            changes::State::Approved | changes::State::Merged
+        )
+    });
     out.push(Statement {
         sql:
             "INSERT INTO changes (instance, repo, number, slug, title, plan, scope, proposer, state,
@@ -653,8 +659,9 @@ pub fn mirror(
                 (None, changes::State::Closed) => CLOSED_UNAUTHORIZED.into(),
                 (None, _) => Value::Null,
             },
-            opt(change.approval.as_ref().map(|a| a.by.as_str())),
-            opt(change.approval.as_ref().and_then(|a| a.sha.as_deref())),
+            // D1 holds an approver only on an approved or merged head; a close keeps it in the object.
+            opt(approval.map(|a| a.by.as_str())),
+            opt(approval.and_then(|a| a.sha.as_deref())),
             Value::String(serde_json::to_string(&change.violations).unwrap_or_default()),
             now.into(),
             opt(change.session.as_deref()),

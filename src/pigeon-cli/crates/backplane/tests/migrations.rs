@@ -284,3 +284,46 @@ fn a_change_closed_before_its_plan_was_authorized_mirrors() {
         "a proposed change still has no plan approver"
     );
 }
+
+#[test]
+fn a_change_closed_after_its_approval_mirrors_without_an_approver() {
+    use backplane::changes::{Change, Event};
+    use backplane::control;
+    let db = migrated();
+    let mut c = Change::propose(191, "x", "refactor: x", "p", vec!["a/**".into()], "agent");
+    let sha = "a".repeat(40);
+    let events = [
+        Event::ApprovePlan {
+            by: "owner".into(),
+            at: 1,
+        },
+        Event::Pushed { sha: sha.clone() },
+        Event::Bounded {
+            sha: sha.clone(),
+            violations: vec![],
+            checks: vec![],
+            full: vec![],
+            tiers: None,
+        },
+        Event::Approve {
+            by: "owner".into(),
+            sha,
+            at: 2,
+        },
+    ];
+    for e in events {
+        c.apply(e).expect("applies");
+    }
+    let logs = serde_json::Map::new();
+    run(&db, &control::mirror("i1", "pigeon", &c, &logs, 10));
+    c.apply(Event::Close).expect("closes");
+    run(&db, &control::mirror("i1", "pigeon", &c, &logs, 11));
+    let (state, by): (String, Option<String>) = db
+        .query_row(
+            "SELECT state, approver FROM changes WHERE number = 191",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .expect("row");
+    assert_eq!((state.as_str(), by), ("closed", None));
+}
