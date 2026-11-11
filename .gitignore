@@ -1,2 +1,4 @@
 /src/pigeon-cli/target
 /.cobot/
+/src/pigeon-ios/*.xcodeproj
+/src/pigeon-ios/build

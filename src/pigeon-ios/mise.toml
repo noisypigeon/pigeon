@@ -1,0 +1,17 @@
+# The iOS app's tools and tasks, macOS only; see .claude/decisions/2026-11-11-release-ios-app-buildkite-testflight.md §1.
+[tools]
+"spm:yonaskolb/XcodeGen" = "2.44.1"
+
+[tasks.generate]
+run = "xcodegen generate --spec project.yml"
+
+[tasks.ios]
+description = "Generate the project and build it for the simulator, unsigned"
+depends = ["generate"]
+run = '''
+export DEVELOPER_DIR="/Applications/Xcode_$(cat .xcode-version).app/Contents/Developer"
+[ -d "$DEVELOPER_DIR" ] || unset DEVELOPER_DIR
+xcodebuild build -project Pigeon.xcodeproj -scheme Pigeon \
+  -destination 'generic/platform=iOS Simulator' \
+  -derivedDataPath build CODE_SIGNING_ALLOWED=NO
+'''
