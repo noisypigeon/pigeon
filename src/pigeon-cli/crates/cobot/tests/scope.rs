@@ -282,3 +282,118 @@ fn the_test_map_runs_when_its_script_changes() {
     );
     assert!(!names(&["src/pigeon-cli/Cargo.lock"]).contains(&"test map".to_string()));
 }
+
+const COBOT: &str = "src/pigeon-cli/crates/cobot/";
+
+fn map() -> cobot::scope::TestMap {
+    let bin = |package: &str, kind: &str, name: &str, files: &[&str]| cobot::scope::Binary {
+        package: package.into(),
+        kind: kind.into(),
+        name: name.into(),
+        files: files.iter().map(|f| format!("{COBOT}{f}")).collect(),
+    };
+    let mut binaries = vec![
+        bin("cobot", "lib", "cobot", &["src/git.rs", "src/scope.rs"]),
+        bin("cobot", "test", "git", &["src/git.rs"]),
+        bin(
+            "cobot",
+            "test",
+            "scope",
+            &["src/scope.rs", "src/release.rs"],
+        ),
+    ];
+    for n in 0..2 {
+        binaries.push(bin("pigeon", "test", &format!("t{n}"), &["src/other.rs"]));
+    }
+    cobot::scope::TestMap {
+        sha: "a".repeat(40),
+        binaries,
+    }
+}
+
+fn with_map(files: &[&str]) -> Vec<String> {
+    let files: Vec<String> = files.iter().map(|f| (*f).to_string()).collect();
+    cobot::scope::jobs_with(&repo_root(), &files, Some(&map()))
+        .expect("scopes")
+        .into_iter()
+        .map(|Job { name, .. }| name)
+        .collect()
+}
+
+fn tests_of(names: &[String]) -> Vec<&String> {
+    names
+        .iter()
+        .filter(|n| n.starts_with("test ") && *n != "test cobot worker")
+        .collect()
+}
+
+#[test]
+fn the_test_map_runs_the_binaries_that_ran_a_changed_file() {
+    let got = with_map(&["src/pigeon-cli/crates/cobot/src/git.rs"]);
+    assert_eq!(tests_of(&got), ["test cobot: lib, git"], "{got:?}");
+    assert!(
+        got.contains(&"clippy cobot pigeon pigeon-backplane".to_string()),
+        "clippy still covers the dependants: {got:?}"
+    );
+    let got = with_map(&["src/pigeon-cli/crates/cobot/tests/scope.rs"]);
+    assert_eq!(tests_of(&got), ["test cobot: scope"], "its own binary");
+    let jobs = cobot::scope::jobs_with(
+        &repo_root(),
+        &["src/pigeon-cli/crates/cobot/src/release.rs".to_string()],
+        Some(&map()),
+    )
+    .expect("scopes");
+    let test = jobs
+        .iter()
+        .find(|j| j.name.starts_with("test cobot:"))
+        .expect("a test");
+    assert_eq!(
+        test.argv,
+        [
+            "cargo", "test", "-p", "cobot", "--test", "scope", "--locked"
+        ]
+    );
+}
+
+#[test]
+fn the_test_map_falls_back_to_crates_when_it_cannot_say() {
+    let by_crate = ["test cobot pigeon pigeon-backplane"];
+    for (files, why) in [
+        (
+            &["src/pigeon-cli/crates/cobot/src/new.rs"][..],
+            "a file it doesn't know",
+        ),
+        (
+            &["src/pigeon-cli/crates/cobot/Cargo.toml"][..],
+            "a manifest",
+        ),
+        (
+            &["src/pigeon-cli/crates/cobot/tests/state/x.json"][..],
+            "a fixture",
+        ),
+        (
+            &[
+                "src/pigeon-cli/crates/cobot/src/git.rs",
+                "src/pigeon-cli/crates/cobot/src/scope.rs",
+            ][..],
+            "more than half of the binaries",
+        ),
+    ] {
+        let got = with_map(files);
+        assert_eq!(tests_of(&got), by_crate, "{why}: {got:?}");
+    }
+    let got = names(&["src/pigeon-cli/crates/cobot/src/git.rs"]);
+    assert_eq!(tests_of(&got), by_crate, "no map");
+}
+
+#[test]
+fn a_mapped_test_check_does_not_stand_in_for_a_crates_whole_suite() {
+    let got = with_map(&[
+        "src/pigeon-cli/crates/cobot/src/git.rs",
+        "catalog/cloudflare/kinds/git-repo/schema.json",
+    ]);
+    assert!(
+        got.contains(&"test cobot (catalog, manifest, apex, git, credentials)".to_string()),
+        "{got:?}"
+    );
+}

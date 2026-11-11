@@ -512,7 +512,8 @@ fn bound(spec: &JobSpec, dir: &Path, sentinel: &Path) -> Report {
         let _ = writeln!(log, "violation: {v}");
     }
     let checks = if violations.is_empty() {
-        match cobot::scope::jobs(dir, &files) {
+        let map = test_map(&mut log);
+        match cobot::scope::jobs_with(dir, &files, map.as_ref()) {
             Ok(jobs) => jobs
                 .into_iter()
                 .filter(|j| j.name != "policy.check")
@@ -555,6 +556,29 @@ fn bound(spec: &JobSpec, dir: &Path, sentinel: &Path) -> Report {
         platform: None,
     }
 }
+
+/// `main`'s test map, from `PIGEON_TEST_MAP`, which `pigeon-start` exports; none without one, and
+/// the tests are then chosen by crate. See the 2026-11-11 amendment to
+/// `.claude/decisions/2026-11-10-development-factory-crates-functional-core.md`.
+fn test_map(log: &mut String) -> Option<cobot::scope::TestMap> {
+    let Ok(path) = std::env::var(TEST_MAP_VAR) else {
+        log.push_str("test map: none; tests by crate\n");
+        return None;
+    };
+    match cobot::scope::TestMap::read(std::path::Path::new(&path)) {
+        Ok(m) => {
+            let _ = writeln!(log, "test map: {} binaries, of {}", m.binaries.len(), m.sha);
+            Some(m)
+        }
+        Err(e) => {
+            let _ = writeln!(log, "test map: {e}; tests by crate");
+            None
+        }
+    }
+}
+
+/// The variable `pigeon-start` exports the test map's path in.
+pub const TEST_MAP_VAR: &str = "PIGEON_TEST_MAP";
 
 /// The head's full set of code checks, which the merge gate runs, when `checks` holds any code
 /// check; none for a head with no Rust input. See

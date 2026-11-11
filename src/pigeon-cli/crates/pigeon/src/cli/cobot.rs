@@ -310,6 +310,9 @@ pub struct ScopeArgs {
     /// Print the checks as JSON
     #[arg(long, conflicts_with = "run")]
     pub json: bool,
+    /// Choose the tests by this test map, `tests.json`
+    #[arg(long)]
+    pub test_map: Option<PathBuf>,
 }
 
 /// `pigeon cobot git mirror` arguments.

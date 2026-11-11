@@ -323,7 +323,13 @@ fn scope(args: &ScopeArgs) -> i32 {
     } else {
         Ok(args.files.clone())
     }
-    .and_then(|files| cobot::scope::jobs(&args.root, &files));
+    .and_then(|files| {
+        let map = match &args.test_map {
+            Some(p) => Some(cobot::scope::TestMap::read(p)?),
+            None => None,
+        };
+        cobot::scope::jobs_with(&args.root, &files, map.as_ref())
+    });
     let jobs = match jobs {
         Ok(jobs) => jobs,
         Err(e) => {

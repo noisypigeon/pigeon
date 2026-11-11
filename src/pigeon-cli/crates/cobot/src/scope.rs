@@ -5,7 +5,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::Path;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::Error;
 use crate::release::Config;
@@ -339,8 +339,9 @@ fn worker_jobs(crates: &[&str]) -> Vec<Job> {
     out
 }
 
-/// The Rust checks for the crates `files` touch and their dependants.
-fn rust_jobs(crates: &Crates, config: &Config, files: &[&str]) -> Vec<Job> {
+/// The Rust checks for the crates `files` touch and their dependants; with `map`, their tests are
+/// the binaries [`TestMap::select`] picks.
+fn rust_jobs(crates: &Crates, config: &Config, files: &[&str], map: Option<&TestMap>) -> Vec<Job> {
     let mut out = Vec::new();
     let changed: BTreeSet<String> = files
         .iter()
@@ -398,7 +399,10 @@ fn rust_jobs(crates: &Crates, config: &Config, files: &[&str]) -> Vec<Job> {
             .filter(|w| affected.contains(*w))
             .collect();
         out.extend(worker_jobs(&workers));
-        out.push(with_p("test", &["--locked"]));
+        match map.and_then(|m| m.select(crates, files)) {
+            Some(picked) => out.extend(picked),
+            None => out.push(with_p("test", &["--locked"])),
+        }
     }
     out
 }
@@ -426,10 +430,14 @@ pub fn full(root: &Path) -> Result<Vec<Job>, Error> {
     Ok(everything(&all_features(&config, &crates)))
 }
 
-/// Whether `out` already tests `package`, alone or as the whole workspace.
+/// Whether `out` already tests all of `package`, alone or as the whole workspace.
 fn ran_tests_of(out: &[Job], package: &str) -> bool {
     out.iter().any(|j| {
         j.argv.get(1).is_some_and(|v| v == "test")
+            && !j
+                .argv
+                .iter()
+                .any(|a| matches!(a.as_str(), "--lib" | "--bin" | "--test"))
             && (j.argv.iter().any(|a| a == "--workspace")
                 || j.argv.windows(2).any(|w| w[0] == "-p" && w[1] == package))
     })
@@ -442,6 +450,17 @@ fn ran_tests_of(out: &[Job], package: &str) -> bool {
 ///
 /// [`Error::Io`] when the workspace's manifests or the release configuration can't be read.
 pub fn jobs(root: &Path, files: &[String]) -> Result<Vec<Job>, Error> {
+    jobs_with(root, files, None)
+}
+
+/// As [`jobs`], with the tests a Rust change runs chosen by `map`, `main`'s test map, when it
+/// knows the change; see the 2026-11-11 amendment to
+/// `.claude/decisions/2026-11-10-development-factory-crates-functional-core.md`.
+///
+/// # Errors
+///
+/// As [`jobs`].
+pub fn jobs_with(root: &Path, files: &[String], map: Option<&TestMap>) -> Result<Vec<Job>, Error> {
     let files: Vec<&str> = files
         .iter()
         .map(|f| f.trim())
@@ -454,7 +473,7 @@ pub fn jobs(root: &Path, files: &[String]) -> Result<Vec<Job>, Error> {
     if files.iter().any(|f| under(f, &EVERYTHING)) {
         out.extend(everything(&all_features));
     } else {
-        out.extend(rust_jobs(&crates, &config, &files));
+        out.extend(rust_jobs(&crates, &config, &files, map));
     }
     let ran_cobot = ran_tests_of(&out, "cobot");
     if files.iter().any(|f| under(f, &INFRA)) {
@@ -519,6 +538,123 @@ pub fn jobs(root: &Path, files: &[String]) -> Result<Vec<Job>, Error> {
         argv: pigeon(&["backplane", "run", "policy.check", "--root", "../.."]),
     });
     Ok(out)
+}
+
+/// One test binary in the test map, and the workspace files it ran.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub struct Binary {
+    /// Its package.
+    pub package: String,
+    /// `lib`, `bin` or `test`.
+    pub kind: String,
+    /// Its target's name.
+    pub name: String,
+    /// The repository paths it ran.
+    #[serde(default)]
+    pub files: Vec<String>,
+}
+
+/// `main`'s test map, `tests.json`, as [`TEST_MAP`] writes it.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TestMap {
+    /// The commit it maps.
+    #[serde(default)]
+    pub sha: String,
+    /// Its binaries.
+    #[serde(default)]
+    pub binaries: Vec<Binary>,
+}
+
+impl TestMap {
+    /// The map in `path`.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Io`] when it can't be read, [`Error::Tool`] when it isn't a map.
+    pub fn read(path: &Path) -> Result<Self, Error> {
+        let text = fs::read_to_string(path).map_err(|e| Error::Io {
+            path: path.to_path_buf(),
+            message: e.to_string(),
+        })?;
+        serde_json::from_str(&text).map_err(|e| Error::Tool {
+            command: format!("test map {}", path.display()),
+            message: e.to_string(),
+        })
+    }
+
+    /// The test checks for `files`, one per package, from the binaries that ran them; none when
+    /// the map can't say: a non-`.rs` file under a crate, a `.rs` file it doesn't know, or more
+    /// than half of its binaries.
+    fn select(&self, crates: &Crates, files: &[&str]) -> Option<Vec<Job>> {
+        let mut picked: BTreeSet<&Binary> = BTreeSet::new();
+        for f in files {
+            let Some((dir, package)) = crates
+                .by_dir
+                .iter()
+                .find(|(d, _)| f.starts_with(d.as_str()))
+            else {
+                continue;
+            };
+            let rel = &f[dir.len()..];
+            if Path::new(rel).extension().is_none_or(|e| e != "rs") {
+                return None;
+            }
+            let own = rel
+                .strip_prefix("tests/")
+                .and_then(|t| t.strip_suffix(".rs"))
+                .filter(|t| !t.contains('/'));
+            let reached: Vec<&Binary> = self
+                .binaries
+                .iter()
+                .filter(|b| {
+                    own.is_some_and(|t| b.package == *package && b.kind == "test" && b.name == t)
+                        || b.files.iter().any(|x| x == f)
+                })
+                .collect();
+            if reached.is_empty() {
+                return None;
+            }
+            picked.extend(reached);
+        }
+        if picked.len() * 2 > self.binaries.len() {
+            return None;
+        }
+        let mut by_package: BTreeMap<&str, Vec<&Binary>> = BTreeMap::new();
+        for b in picked {
+            by_package.entry(&b.package).or_default().push(b);
+        }
+        Some(
+            by_package
+                .into_iter()
+                .map(|(package, bins)| {
+                    let mut argv = vec![
+                        "cargo".to_string(),
+                        "test".into(),
+                        "-p".into(),
+                        package.into(),
+                    ];
+                    let mut names = Vec::new();
+                    for b in bins {
+                        if b.kind == "lib" {
+                            argv.push("--lib".into());
+                        } else {
+                            argv.extend([format!("--{}", b.kind), b.name.clone()]);
+                        }
+                        names.push(if b.kind == "lib" {
+                            "lib".to_string()
+                        } else {
+                            b.name.clone()
+                        });
+                    }
+                    argv.push("--locked".into());
+                    Job {
+                        name: format!("test {package}: {}", names.join(", ")),
+                        argv,
+                    }
+                })
+                .collect(),
+        )
+    }
 }
 
 /// The test map's script: each test binary and the workspace files it runs; see the 2026-11-11
