@@ -9,6 +9,7 @@ pub mod architecture;
 pub mod catalog;
 pub mod changes;
 pub mod control;
+pub mod decisions;
 #[cfg(feature = "engines")]
 pub mod engine;
 pub mod events;

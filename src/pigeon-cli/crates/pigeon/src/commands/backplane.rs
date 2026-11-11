@@ -3,7 +3,7 @@
 use backplane::{Instance, Request, Response};
 
 use super::{INVALID, SUCCESS, VIOLATION};
-use crate::cli::{BackplaneCommand, JobsArgs, RootArgs, ServeArgs};
+use crate::cli::{BackplaneCommand, DecisionsArgs, JobsArgs, RootArgs, ServeArgs};
 
 /// Runs a `pigeon backplane` command and returns its exit code.
 #[must_use]
@@ -41,6 +41,7 @@ pub fn run(command: BackplaneCommand) -> i32 {
         BackplaneCommand::Run(args) => {
             operation(&args.operation, &args.args, &args.text, &args.root)
         }
+        BackplaneCommand::Decisions(args) => decisions(&args),
         BackplaneCommand::Serve(args) => serve(&args),
         BackplaneCommand::Jobs(args) => jobs(&args),
         BackplaneCommand::TotpSecret => totp_secret(),
@@ -204,6 +205,56 @@ fn print_text(response: &Response) {
         "backplane: {} {state}: {}",
         response.operation, response.result
     );
+}
+
+/// `pigeon backplane decisions`: the ADRs governing each path.
+fn decisions(args: &DecisionsArgs) -> i32 {
+    let dir = args.root.join(backplane::decisions::DIR);
+    let entries = match std::fs::read_dir(&dir) {
+        Ok(e) => e,
+        Err(e) => {
+            eprintln!("backplane: {}: {e}", dir.display());
+            return INVALID;
+        }
+    };
+    let mut all = Vec::new();
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().into_owned();
+        let is_md = std::path::Path::new(&name)
+            .extension()
+            .is_some_and(|e| e.eq_ignore_ascii_case("md"));
+        if !is_md || name == "README.md" {
+            continue;
+        }
+        match std::fs::read_to_string(entry.path()) {
+            Ok(text) => all.push(backplane::decisions::parse(&name, &text)),
+            Err(e) => {
+                eprintln!("backplane: {name}: {e}");
+                return INVALID;
+            }
+        }
+    }
+    all.sort_by(|a, b| a.file.cmp(&b.file));
+    let found: Vec<(&str, Vec<&backplane::decisions::Decision>)> = args
+        .paths
+        .iter()
+        .map(|p| (p.as_str(), backplane::decisions::governing(&all, p)))
+        .collect();
+    if args.json {
+        let v: serde_json::Map<String, serde_json::Value> = found
+            .iter()
+            .map(|(p, ds)| ((*p).to_string(), serde_json::json!(ds)))
+            .collect();
+        print_json(&v);
+    } else {
+        for (p, ds) in &found {
+            println!("{p}:");
+            for d in ds {
+                println!("  {} ({})", d.file, d.title);
+            }
+        }
+    }
+    SUCCESS
 }
 
 fn print_json<T: serde::Serialize + ?Sized>(value: &T) {

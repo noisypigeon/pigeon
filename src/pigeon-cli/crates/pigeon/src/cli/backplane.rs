@@ -15,6 +15,8 @@ pub enum BackplaneCommand {
     Operations(JsonArgs),
     /// Run an operation; exit 1 on a violation, 2 on an error
     Run(RunArgs),
+    /// List the ADRs that govern each path, by their `Governs` globs
+    Decisions(DecisionsArgs),
     /// Answer operations over HTTP (GET /healthz, GET /v0/operations, POST /v0/run); needs
     /// `BACKPLANE_TOKEN`
     Serve(ServeArgs),
@@ -28,6 +30,20 @@ pub enum BackplaneCommand {
     /// Print a new Web Push key: its private half, base64url, on stdout, for
     /// `pigeon cobot workers secrets put … PUSH_VAPID_KEY`, and its public half on stderr
     VapidKey,
+}
+
+/// `pigeon backplane decisions` arguments.
+#[derive(Args, Debug)]
+pub struct DecisionsArgs {
+    /// Repository paths
+    #[arg(required = true)]
+    pub paths: Vec<String>,
+    /// The repository's root
+    #[arg(long, default_value = ".")]
+    pub root: PathBuf,
+    /// Print JSON
+    #[arg(long)]
+    pub json: bool,
 }
 
 /// `pigeon backplane jobs` arguments.
