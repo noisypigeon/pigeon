@@ -193,6 +193,42 @@ pub async fn run(token: &str, owner: &str, repo: &str, id: u64) -> Result<(Value
 ///
 /// When either request fails.
 pub async fn job_log(token: &str, owner: &str, repo: &str, id: u64) -> Result<String, String> {
+    let path = format!("/repos/{owner}/{repo}/actions/jobs/{id}/logs");
+    let mut r = redirected(token, &path, &format!("job {id}'s log")).await?;
+    r.text().await.map_err(|e| e.to_string())
+}
+
+/// Run `run`'s artifact `name`, uploaded unzipped: listed with the token, then downloaded from
+/// GitHub's redirect without it.
+///
+/// # Errors
+///
+/// When the run has no such artifact, or a request fails.
+pub async fn artifact(
+    token: &str,
+    owner: &str,
+    repo: &str,
+    run: u64,
+    name: &str,
+) -> Result<Vec<u8>, String> {
+    let base = format!("/repos/{owner}/{repo}/actions");
+    let listed = call(
+        Method::Get,
+        &format!("{base}/runs/{run}/artifacts?name={name}"),
+        token,
+        None,
+    )
+    .await?;
+    let id = listed["artifacts"][0]["id"]
+        .as_u64()
+        .ok_or_else(|| format!("run {run} has no artifact `{name}`"))?;
+    let what = format!("artifact `{name}`");
+    let mut r = redirected(token, &format!("{base}/artifacts/{id}/zip"), &what).await?;
+    r.bytes().await.map_err(|e| e.to_string())
+}
+
+/// `path`'s answer, a redirect, followed without the token; `what` names it in errors.
+async fn redirected(token: &str, path: &str, what: &str) -> Result<worker::Response, String> {
     let headers = Headers::new();
     let set = |k: &str, v: &str| headers.set(k, v).map_err(|e| e.to_string());
     set("authorization", &format!("Bearer {token}"))?;
@@ -203,8 +239,7 @@ pub async fn job_log(token: &str, owner: &str, repo: &str, id: u64) -> Result<St
     init.with_method(Method::Get)
         .with_headers(headers)
         .with_redirect(RequestRedirect::Manual);
-    let url = format!("{API}/repos/{owner}/{repo}/actions/jobs/{id}/logs");
-    let req = Request::new_with_init(&url, &init).map_err(|e| e.to_string())?;
+    let req = Request::new_with_init(&format!("{API}{path}"), &init).map_err(|e| e.to_string())?;
     let r = Fetch::Request(req)
         .send()
         .await
@@ -213,16 +248,16 @@ pub async fn job_log(token: &str, owner: &str, repo: &str, id: u64) -> Result<St
         .headers()
         .get("location")
         .map_err(|e| e.to_string())?
-        .ok_or_else(|| format!("job {id}'s log: {} and no redirect", r.status_code()))?;
+        .ok_or_else(|| format!("{what}: {} and no redirect", r.status_code()))?;
     let mut plain = RequestInit::new();
     plain.with_method(Method::Get);
     let req = Request::new_with_init(&location, &plain).map_err(|e| e.to_string())?;
-    let mut r = Fetch::Request(req)
+    let r = Fetch::Request(req)
         .send()
         .await
         .map_err(|e| e.to_string())?;
     if !(200..300).contains(&r.status_code()) {
-        return Err(format!("job {id}'s log: {}", r.status_code()));
+        return Err(format!("{what}: {}", r.status_code()));
     }
-    r.text().await.map_err(|e| e.to_string())
+    Ok(r)
 }

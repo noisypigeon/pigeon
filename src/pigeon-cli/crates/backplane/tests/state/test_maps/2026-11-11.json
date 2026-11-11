@@ -1,0 +1,22 @@
+{
+  "actions": {
+    "dispatches": [
+      {
+        "sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "id": "0-bbbbbbbbbbbb-3",
+        "checks": ["test map"],
+        "dispatched_at": 1794357000,
+        "run": 42,
+        "url": "https://github.com/o/r/actions/runs/42",
+        "failures": 0,
+        "next_at": 1794357030
+      }
+    ],
+    "seq": 3
+  },
+  "latest_map": {
+    "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "failed": "the test map of cccccccccccccccccccccccccccccccccccccccc failed"
+}

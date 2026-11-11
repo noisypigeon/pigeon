@@ -14,6 +14,7 @@ use backplane::grants::Grant;
 use backplane::mandates::Mandates;
 use backplane::mirroring::Mirroring;
 use backplane::runs::Queue;
+use backplane::testmaps::TestMaps;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
@@ -125,6 +126,11 @@ fn a_changes_dispatches_to_github() {
 }
 
 #[test]
+fn mains_test_maps() {
+    check::<TestMaps>("test_maps");
+}
+
+#[test]
 fn the_run_queue() {
     check::<Queue>("queue");
 }
@@ -150,6 +156,7 @@ fn every_fixture_directory_is_checked() {
             "pipeline",
             "queue",
             "report",
+            "test_maps",
             "waiting"
         ]
     );

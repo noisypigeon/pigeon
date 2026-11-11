@@ -7,16 +7,20 @@ use std::collections::BTreeMap;
 use std::time::Duration;
 
 use serde_json::{Value, json};
+use sha2::Digest;
 use worker::{DurableObject, Env, Method, Request, Response, Result, State, durable_object};
 
 use super::github;
 use super::platform::{self, job_stub, json_request, now, secret};
+use crate::actions::Due;
 use crate::control::{self, Outcome, Pipeline, Report};
 use crate::mirroring::{self, Mirroring};
+use crate::testmaps::{self, TestMaps};
 
 const PIPELINE: &str = "pipeline";
 const MIRRORING: &str = "mirroring";
 const STARTING: &str = "starting";
+const TEST_MAPS: &str = "test_maps";
 
 /// How often a running deploy is asked how it went.
 const POLL: Duration = Duration::from_secs(20);
@@ -157,7 +161,11 @@ impl MainRun {
                     let ok = report.outcome == Outcome::Passed;
                     let why = report.violations.first().cloned().unwrap_or_default();
                     m.finished(ok, &why, at);
-                    if !ok {
+                    if ok {
+                        let mut t = self.test_maps().await?;
+                        t.mirrored(&sha);
+                        self.state.storage().put(TEST_MAPS, &t).await?;
+                    } else {
                         worker::console_warn!("the mirror of {sha} failed: {why}");
                     }
                     m.start(at)
@@ -182,6 +190,100 @@ impl MainRun {
             }
         }
         self.save_mirroring(&m).await
+    }
+
+    async fn test_maps(&self) -> Result<TestMaps> {
+        Ok(self
+            .state
+            .storage()
+            .get(TEST_MAPS)
+            .await?
+            .unwrap_or_default())
+    }
+
+    /// Moves the test map on: dispatches, finds and polls the `test map` check of `main`'s
+    /// newest mirrored commit, and copies a passed one's map to `builds/<sha>/tests.json`.
+    async fn test_map_step(&self) -> Result<()> {
+        let mut t = self.test_maps().await?;
+        let at = now();
+        let due = t.actions.due(crate::actions::Mirror::Passed, at);
+        if due.is_empty() && t.copying.is_none() {
+            return Ok(());
+        }
+        let Some((owner, repo)) =
+            github::mirror(&self.env).and_then(|to| mirroring::github_repo(&to))
+        else {
+            return Ok(());
+        };
+        let request = mirroring::actions_token_request(&repo);
+        let token = match github::installation_token(&self.env, &owner, &repo, &request).await {
+            Ok(token) => token,
+            Err(why) => {
+                worker::console_warn!("the test map waits: {why}");
+                return Ok(());
+            }
+        };
+        for d in due {
+            let call = match d {
+                Due::Dispatch(i) => {
+                    let body = crate::actions::dispatch_body(
+                        &t.actions.dispatches[i],
+                        testmaps::MAIN,
+                        &[testmaps::check()],
+                    );
+                    github::dispatch(&token, &owner, &repo, &body)
+                        .await
+                        .map(|()| drop(t.actions.dispatched(i, at)))
+                }
+                Due::Find(i) => github::runs(&token, &owner, &repo)
+                    .await
+                    .map(|listed| t.actions.found(i, &listed, at)),
+                Due::Poll(i) => {
+                    let run = t.actions.dispatches[i].run.unwrap_or_default();
+                    github::run(&token, &owner, &repo, run)
+                        .await
+                        .map(|(r, jobs)| {
+                            for f in t.actions.polled(i, &r, &jobs, at) {
+                                t.finished(i, &f);
+                            }
+                        })
+                }
+                Due::Mirror => Ok(()),
+            };
+            if let (Err(why), Due::Dispatch(i) | Due::Find(i) | Due::Poll(i)) = (call, d) {
+                t.actions.failed(i, &why, at);
+            }
+        }
+        t.prune();
+        if let Some((sha, run)) = t.copying.clone() {
+            let got = github::artifact(&token, &owner, &repo, run, testmaps::ARTIFACT).await;
+            match got.and_then(|b| testmaps::invalid(&b, &sha).map_or(Ok(b), Err)) {
+                Ok(body) => {
+                    let sum = crate::grants::hex(&sha2::Sha256::digest(&body));
+                    self.env
+                        .bucket("CI_LOGS")?
+                        .put(testmaps::key(&sha), body)
+                        .execute()
+                        .await?;
+                    t.copied(&sha, &sum);
+                }
+                Err(why) => {
+                    worker::console_warn!("the test map of {sha}: {why}");
+                    t.copy_failed(&sha, &why);
+                }
+            }
+        }
+        self.state.storage().put(TEST_MAPS, &t).await?;
+        if t.busy() {
+            let poll_at = i64::try_from((now() + crate::actions::POLL) * 1000).unwrap_or(i64::MAX);
+            let storage = self.state.storage();
+            if storage.get_alarm().await?.is_none_or(|a| a > poll_at) {
+                storage
+                    .set_alarm(Duration::from_secs(crate::actions::POLL))
+                    .await?;
+            }
+        }
+        Ok(())
     }
 
     /// Compares both sides' refs, when due: what GitHub lacks becomes the mirror's target.
@@ -357,6 +459,7 @@ impl DurableObject for MainRun {
                     "pipeline": p.shown(),
                     "mirror": m,
                     "mirror_behind": m.behind(now()),
+                    "test_map": self.test_maps().await?.view(),
                 }))
             }
             (Method::Post, "reconcile") => match self.reconcile().await {
@@ -421,6 +524,9 @@ impl DurableObject for MainRun {
         self.save_after(&p, next.as_deref(), wait).await?;
         if let Err(e) = self.mirror_step().await {
             worker::console_error!("mirror: {e}");
+        }
+        if let Err(e) = self.test_map_step().await {
+            worker::console_error!("test map: {e}");
         }
         let storage = self.state.storage();
         if super::platforms::running(&self.state).await? {

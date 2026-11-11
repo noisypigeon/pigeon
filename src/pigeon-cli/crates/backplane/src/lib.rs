@@ -38,6 +38,7 @@ pub mod sessions;
 #[cfg(feature = "engines")]
 pub mod ship;
 pub mod tasks;
+pub mod testmaps;
 pub mod tickets;
 pub mod totp;
 pub mod versions;
