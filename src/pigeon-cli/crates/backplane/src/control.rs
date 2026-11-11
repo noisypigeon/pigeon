@@ -736,6 +736,21 @@ pub fn merge_dropped(change: &Change) -> bool {
         })
 }
 
+/// Why `change` gave its merge turn back without merging, for the `merge.released` event.
+#[must_use]
+pub fn release_reason(change: &Change) -> String {
+    if let Some(v) = change.violations.first() {
+        return v.clone();
+    }
+    if change.conflict.is_some() {
+        return "it conflicts with main".into();
+    }
+    format!(
+        "it is {} and carries no approval, so its merge can't start",
+        change.state.name()
+    )
+}
+
 /// Every open change: neither merged nor closed.
 #[must_use]
 pub fn open(instance: &str, repo: &str) -> Statement {

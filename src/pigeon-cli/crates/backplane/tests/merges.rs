@@ -589,3 +589,72 @@ fn a_new_head_forgets_the_old_heads_full_set() {
     c.apply(Event::Pushed { sha: B.into() }).expect("pushed");
     assert!(c.full.is_empty(), "the bound job reports the new head's");
 }
+
+/// Change 172 on head `A`, approved with a full set beyond its own checks.
+fn approved_172() -> Change {
+    approved_with(&["fmt"], &["fmt", "test"])
+}
+
+#[test]
+fn a_merge_offered_at_any_point_of_a_restack_keeps_the_turn_and_gates_once_carried() {
+    // !172: approved and queued, then restacked; the queue's merge may reach it at any point.
+    for at in 0..4 {
+        let mut c = approved_172();
+        let mut offered = false;
+        let mut offer = |c: &mut Change, point: usize| {
+            if point == at && !offered {
+                offered = true;
+                c.apply(Event::Merge { by: "owner".into() })
+                    .expect("parked, not refused");
+                assert!(
+                    !control::merge_dropped(c),
+                    "point {point}: the turn is held"
+                );
+            }
+        };
+        c.apply(Event::Behind { main: MAIN.into() })
+            .expect("behind");
+        offer(&mut c, 0);
+        c.apply(restacked(Relation::Disjoint, Some(C), true))
+            .expect("restacked");
+        offer(&mut c, 1);
+        c.apply(Event::Bounded {
+            sha: C.into(),
+            violations: vec![],
+            checks: vec![named("fmt")],
+            full: vec![named("fmt"), named("test")],
+            tiers: Some(tiers(Tier::Confirm)),
+        })
+        .expect("bounded");
+        offer(&mut c, 2);
+        let effects = c
+            .apply(Event::Finished {
+                job: "fmt".into(),
+                sha: C.into(),
+                ok: true,
+            })
+            .expect("checked");
+        offer(&mut c, 3);
+        assert_eq!(c.state, State::Approved, "point {at}: the approval carried");
+        let gated = effects.contains(&Effect::Start(gate("test")))
+            || c.jobs.iter().any(|j| j.name == gate("test"));
+        assert!(gated, "point {at}: the gate runs: {:?}", c.jobs);
+        assert!(!control::merge_dropped(&c), "point {at}: still its turn");
+    }
+}
+
+#[test]
+fn a_released_turn_says_why() {
+    let mut c = approved_172();
+    c.apply(Event::Behind { main: MAIN.into() })
+        .expect("behind");
+    c.apply(Event::Merge { by: "owner".into() }).expect("merge");
+    c.apply(restacked(Relation::Conflicting, None, false))
+        .expect("conflict");
+    assert!(control::merge_dropped(&c));
+    assert!(
+        control::release_reason(&c).contains("conflicts with main"),
+        "{}",
+        control::release_reason(&c)
+    );
+}

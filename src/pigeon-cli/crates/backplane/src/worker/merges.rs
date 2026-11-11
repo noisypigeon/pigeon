@@ -153,6 +153,13 @@ async fn start(env: &Env, s: &Settings, mut next: Option<Entry>) -> Result<()> {
             return Ok(());
         }
         worker::console_warn!("merge queue: change {} didn't start: {v}", e.number);
+        let answer: String = v.to_string().chars().take(300).collect();
+        let why = format!("!{} was passed over in the merge queue: {answer}", e.number);
+        let added =
+            super::events::append(env, s, "merge.skipped", Some(e.number), None, &why, false);
+        if let Err(err) = added.await {
+            worker::console_error!("merge.skipped: {err}");
+        }
         let (_, v) = to_instance(env, s, "/merges/done", &json!({ "number": e.number })).await?;
         next = serde_json::from_value(v["next"].clone()).ok();
     }

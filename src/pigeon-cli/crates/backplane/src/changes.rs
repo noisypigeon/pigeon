@@ -1042,9 +1042,13 @@ impl Change {
         }
         let restacking =
             self.state == State::Approved && self.job(RESTACK).is_some_and(|j| j.open());
-        // On `checked` the carry is already decided, so only a head still checking waits for it.
-        let carrying =
-            self.carried.is_some() && matches!(self.state, State::Pushed | State::Bounded);
+        // A head carrying an approval waits for the carry, whatever its checks have reached; see
+        // the 2026-11-11 amendment to the concurrent-sessions ADR.
+        let carrying = self.carried.is_some()
+            && !matches!(
+                self.state,
+                State::Failed | State::Refused | State::Merged | State::Closed
+            );
         if restacking || carrying {
             self.merge_after = Some(by.to_string());
             return Ok(Vec::new());

@@ -164,6 +164,19 @@ impl ChangeRun {
         if before.as_ref().is_some_and(|b| b.merge_after.is_some())
             && control::merge_dropped(change)
         {
+            if let Ok(s) = Settings::from(&self.env) {
+                let why = format!(
+                    "!{} gave its merge turn back: {}",
+                    change.number,
+                    control::release_reason(change)
+                );
+                let n = Some(change.number);
+                let added =
+                    super::events::append(&self.env, &s, "merge.released", n, None, &why, false);
+                if let Err(e) = added.await {
+                    worker::console_error!("merge.released: {e}");
+                }
+            }
             super::merges::ended(&self.env, change, None).await?;
         }
         let mut pending = pending.to_vec();
