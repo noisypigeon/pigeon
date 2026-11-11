@@ -39,8 +39,9 @@
           "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
         },
         "version": {
+          "description": "A released X.Y.Z, or tree: src/site-templates/<name>/ at the published commit, for a template in the instance's own tree.",
           "type": "string",
-          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+          "pattern": "^([0-9]+\\.[0-9]+\\.[0-9]+|tree)$"
         },
         "features": {
           "type": "array",

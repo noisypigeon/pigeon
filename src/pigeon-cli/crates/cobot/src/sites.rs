@@ -22,6 +22,11 @@ use crate::{Error, WORK_DIR, unit};
 pub const TEMPLATES: &str = "src/site-templates";
 /// A template's theme and tag prefix, as `<PREFIX>-<name>`.
 pub const PREFIX: &str = "site-template";
+
+/// The version that reads the template from the instance's own tree at `HEAD`, while releases
+/// pause; see the 2026-11-11 amendment of
+/// `.claude/decisions/2026-11-05-runtime-architecture-site-through-backplane.md`.
+pub const TREE: &str = "tree";
 /// The post naming rule `YYYY-MM-DD-<slug>.md`.
 pub const DATE_SLUG: &str = "date-slug";
 /// What a contract site's `site/` may hold.
@@ -53,10 +58,24 @@ pub struct Site {
 }
 
 impl Site {
-    /// The template tag it pins.
+    /// The template tag it pins, or `<theme>@tree` for [`TREE`].
     #[must_use]
     pub fn tag(&self) -> String {
-        format!("{}/v{}", self.theme(), self.version)
+        if self.version == TREE {
+            format!("{}@{TREE}", self.theme())
+        } else {
+            format!("{}/v{}", self.theme(), self.version)
+        }
+    }
+
+    /// The revision its template is read at: `HEAD` for [`TREE`], else its tag.
+    #[must_use]
+    pub fn revision(&self) -> String {
+        if self.version == TREE {
+            "HEAD".into()
+        } else {
+            self.tag()
+        }
     }
 
     /// Its template's theme name, which also names the template's tags.
@@ -217,6 +236,21 @@ pub fn find_in(root: &Path, platform: &Path, wanted: &[String]) -> Result<Vec<Si
             Some(m) => m.content(&u.path).unwrap_or_else(|| u.dir.join("site")),
             None => u.dir.join("site"),
         };
+        let version = template["version"].as_str().unwrap_or_default().to_string();
+        if version == TREE
+            && !root
+                .join(TEMPLATES)
+                .join(name)
+                .join("template.yaml")
+                .is_file()
+        {
+            return Err(Error::Io {
+                path: PathBuf::from(&u.path).join(crate::config::CONFIG),
+                message: format!(
+                    "static_site.template.version: `{TREE}` needs {TEMPLATES}/{name}/ in this instance's own tree"
+                ),
+            });
+        }
         out.push(Site {
             unit: u.path.clone(),
             dir: u.dir.clone(),
@@ -224,7 +258,7 @@ pub fn find_in(root: &Path, platform: &Path, wanted: &[String]) -> Result<Vec<Si
             zone: site.zone.clone(),
             workload: w.clone(),
             template: name.to_string(),
-            version: template["version"].as_str().unwrap_or_default().to_string(),
+            version,
             features: template["features"]
                 .as_array()
                 .into_iter()
@@ -278,7 +312,7 @@ pub fn features(
 /// The site's tag's features, their defaults, its post naming and whether it
 /// has content, from its `template.yaml`.
 fn declared(root: &Path, site: &Site) -> Result<Declared, Error> {
-    let at = format!("{}:{}/template.yaml", site.tag(), site.project());
+    let at = format!("{}:{}/template.yaml", site.revision(), site.project());
     let text = git(root, &["show", &at])?;
     let manifest: Manifest =
         serde_saphyr::from_str(&String::from_utf8_lossy(&text)).map_err(|e| Error::Io {
@@ -421,7 +455,7 @@ fn theme(root: &Path, site: &Site, work: &Path) -> Result<(), Error> {
         &[
             "archive",
             "--format=tar",
-            &format!("{}:{}", site.tag(), site.project()),
+            &format!("{}:{}", site.revision(), site.project()),
         ],
     )?;
     let archive = work.join("themes").join(format!("{}.tar", site.theme()));
@@ -456,7 +490,7 @@ fn assemble(
         root,
         &[
             "show",
-            &format!("{}:{}/schema.json", site.tag(), site.project()),
+            &format!("{}:{}/schema.json", site.revision(), site.project()),
         ],
     )
     .map_err(|_| {

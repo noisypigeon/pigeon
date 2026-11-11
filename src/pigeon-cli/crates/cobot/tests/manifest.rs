@@ -695,3 +695,32 @@ fn the_first_plan_of_moved_units_destroys_and_replaces_nothing() {
         assert_eq!(grep(&dir, TOKEN), Vec::<PathBuf>::new());
     }
 }
+
+/// While releases pause, a site may read its template from its own instance's tree; see the
+/// 2026-11-11 amendment of
+/// `.claude/decisions/2026-11-05-runtime-architecture-site-through-backplane.md`.
+#[test]
+fn a_tree_pin_reads_head_only_for_a_template_in_the_instances_own_tree() {
+    let platform = platform();
+    let pinned = manifest().replace("version: 1.0.2", "version: tree");
+    let inst = instance(&pinned);
+    let err = cobot::sites::find_in(inst.path(), platform.path(), &[]).expect_err("refused");
+    assert!(err.to_string().contains("own tree"), "{err}");
+
+    let template = inst.path().join("src/site-templates/blog");
+    fs::create_dir_all(&template).expect("mkdir");
+    fs::write(template.join("template.yaml"), "version: 0.1.0\n").expect("write");
+    let sites = cobot::sites::find_in(inst.path(), platform.path(), &[]).expect("found");
+    assert_eq!(
+        (sites[0].revision(), sites[0].tag()),
+        ("HEAD".to_string(), "site-template-blog@tree".to_string())
+    );
+}
+
+#[test]
+fn a_released_pin_still_reads_its_tag() {
+    let platform = platform();
+    let inst = instance(&manifest());
+    let sites = cobot::sites::find_in(inst.path(), platform.path(), &[]).expect("found");
+    assert_eq!(sites[0].revision(), "site-template-blog/v1.0.2");
+}
