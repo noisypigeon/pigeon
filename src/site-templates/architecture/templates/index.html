@@ -28,8 +28,7 @@
     {%- set d = net.diagram %}
     {%- set_global back = "" %}
     {%- for l in net.links %}
-      {%- set from = net.parts | filter(attribute="id", value=l.from) | first %}
-      {%- if from and from.kind == "github" and not back %}{% set_global back = l %}{% endif %}
+      {%- for p in net.parts %}{% if p.id == l.from and p.kind == "github" and not back %}{% set_global back = l %}{% endif %}{% endfor %}
     {%- endfor %}
 
     <div class="label">Clients</div>
@@ -82,7 +81,7 @@
           <div class="sec"><span class="muted">Out</span>
             <div class="kv"><span>Durable Objects</span><span class="rule"></span><span class="pill mono">{{ w.objects | length }}</span></div>
             <div class="kv"><span>Containers</span><span class="rule"></span><span class="pill mono">{{ w.containers | length }}</span></div>
-            {%- if w.d1 or w.r2 %}<div class="kv"><span>D1 · R2</span><span class="rule"></span><span class="pill mono">{{ w.d1 | concat(with=w.r2) | join(sep=" · ") }}</span></div>{% endif %}
+            {%- if w.d1 or w.r2 %}<div class="kv"><span>D1 · R2</span><span class="rule"></span><span class="pill mono">{{ w.d1 | join(sep=" · ") }}{% if w.d1 and w.r2 %} · {% endif %}{{ w.r2 | join(sep=" · ") }}</span></div>{% endif %}
           </div>
           <div class="sec"><span class="muted">Holds</span>
             <div class="kv"><span>secrets</span><span class="rule"></span><span class="pill mono">{{ w.secrets }}</span></div>
@@ -99,30 +98,28 @@
               <marker id="h-{{ k }}" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L8 4L0 8z" class="mk-{{ k }}"/></marker>
               {%- endfor %}
             </defs>
-            {%- set_global xs = [] %}
-            {%- for b in d.boxes %}
-              {%- set p = net.parts | filter(attribute="id", value=b.id) | first %}
-              {%- if p.kind == "object" %}{% set c = b.x + b.w / 2 %}{% set_global xs = xs | concat(with=c) %}{% endif %}
-            {%- endfor %}
-            {%- if xs %}
-            <path class="bus" d="M{{ d.width / 2 }} -60V-30M{{ xs | first }} -30H{{ xs | last }}"/>
-            {%- for x in xs %}<path class="bus" d="M{{ x }} -30V-1" marker-end="url(#h-in)"/>{% endfor %}
+            {%- set_global x0 = -1 %}{% set_global x1 = -1 %}
+            {%- for b in d.boxes %}{% for p in net.parts %}{% if p.id == b.id and p.kind == "object" %}
+              {%- set c = b.x + b.w / 2 %}
+              {%- if x0 < 0 or c < x0 %}{% set_global x0 = c %}{% endif %}{% if c > x1 %}{% set_global x1 = c %}{% endif %}
+            {%- endif %}{% endfor %}{% endfor %}
+            {%- if x0 >= 0 %}
+            <path class="bus" d="M{{ d.width / 2 }} -60V-30M{{ x0 }} -30H{{ x1 }}"/>
+            {%- for b in d.boxes %}{% for p in net.parts %}{% if p.id == b.id and p.kind == "object" %}<path class="bus" d="M{{ b.x + b.w / 2 }} -30V-1" marker-end="url(#h-in)"/>{% endif %}{% endfor %}{% endfor %}
             {%- endif %}
-            {%- for r in d.routes %}
-              {%- set l = net.links | filter(attribute="id", value=r.id) | first %}
+            {%- for r in d.routes %}{% for l in net.links %}{% if l.id == r.id %}
             <g class="link k-{{ l.kind }}"><title>{{ l.from }} → {{ l.to }}: {{ l.label }} ({{ l.source }})</title>
               <path d="{{ r.d }}" marker-end="url(#h-{{ l.kind }})"/>
               <text x="{{ r.lx }}" y="{{ r.ly }}" text-anchor="{{ r.anchor }}">{{ l.label }}</text>
             </g>
-            {%- endfor %}
+            {%- endif %}{% endfor %}{% endfor %}
           </svg>
-          {%- for b in d.boxes %}
-            {%- set p = net.parts | filter(attribute="id", value=b.id) | first %}
+          {%- for b in d.boxes %}{% for p in net.parts %}{% if p.id == b.id %}
           <div class="box kind-{{ p.kind }}{% if p.many %} many{% endif %}" id="part-{{ p.id }}" style="left: {{ b.x }}px; top: {{ b.y + 60 }}px; width: {{ b.w }}px; height: {{ b.h }}px"{% if back and p.id == back.to %} data-rail-to{% endif %}>
             <div class="box-h"><span class="dot"></span><span class="grow">{{ p.id }}</span><span class="pill">{% if p.kind == "object" %}Durable Object{% elif p.kind == "container" %}Container{% else %}{{ p.kind }}{% endif %}</span></div>
             <span class="role">{{ p.role }}{% if p.many %} (one per change){% endif %}</span>
           </div>
-          {%- endfor %}
+          {%- endif %}{% endfor %}{% endfor %}
         </div>
       </div>
       <ul class="legend" aria-label="Line colours">
@@ -133,13 +130,14 @@
       </ul>
     </section>
 
-    {%- set gh = net.parts | filter(attribute="kind", value="github") %}
-    {%- if net.github and gh %}
+    {%- set_global gh = 0 %}
+    {%- for p in net.parts %}{% if p.kind == "github" %}{% set_global gh = gh + 1 %}{% endif %}{% endfor %}
+    {%- if net.github and gh > 0 %}
     <div class="arrow"><span>GitHub API · App token</span></div>
     <section class="region github" aria-label="GitHub">
       <div class="region-h"><span class="region-name">GitHub</span><span class="pill mono">{{ net.github }}</span></div>
-      <div class="row bus-above" style="--n: {{ gh | length }}">
-        {%- for p in gh %}
+      <div class="row bus-above" style="--n: {{ gh }}">
+        {%- for p in net.parts %}{% if p.kind == "github" %}
         <div class="col">
           <span class="stub arrowed"></span>
           <div class="card panel" id="part-{{ p.id }}"{% if back and p.id == back.from %} data-rail-from{% endif %}>
@@ -153,7 +151,7 @@
             </div>
           </div>
         </div>
-        {%- endfor %}
+        {%- endif %}{% endfor %}
       </div>
     </section>
     {%- if back %}

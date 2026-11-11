@@ -1786,32 +1786,54 @@ fn the_architecture_template_draws_its_data() {
     git_in(root, &["add", "-A"]);
     git_in(root, &["commit", "-q", "-m", "init"]);
     git_in(root, &["tag", "site-template-architecture/v0.1.0"]);
-    let node = |id: &str, lane: &str| json!({ "id": id, "kind": "unit", "lane": lane, "label": id, "source": "test" });
-    let placed = |id: &str, x: i64| json!({ "id": id, "x": x, "y": 104, "w": 112, "h": 40 });
+    // A small network, as `architecture.describe` returns it; see the 2026-11-11 amendment of
+    // .claude/decisions/2026-11-05-runtime-architecture-site-through-backplane.md.
+    let part = |id: &str, kind: &str| json!({ "id": id, "kind": kind, "role": format!("{id} role"), "many": false, "source": "test" });
+    let link = |id: &str, from: &str, to: &str, kind: &str| json!({ "id": id, "from": from, "to": to, "label": format!("{id} label"), "kind": kind, "source": "test" });
+    let boxed = |id: &str, x: i64, y: i64| json!({ "id": id, "x": x, "y": y, "w": 220, "h": 100 });
     let data = json!({
-        "nodes": [node("a", "units"), node("b", "providers")],
-        "edges": [{ "from": "a", "to": "b", "carries": "apply", "source": "test" }],
-        "groups": [{ "id": "g", "kind": "local", "label": "local unit", "members": ["a"] }],
-        "layout": {
-            "width": 400, "height": 200,
-            "lanes": [{ "lane": "units", "x": 32, "w": 112 }, { "lane": "providers", "x": 208, "w": 112 }],
-            "nodes": [placed("a", 32), placed("b", 208)],
-            "groups": [{ "id": "g", "x": 10, "y": 68, "w": 156, "h": 98 }],
-            "edges": [{ "from": "a", "to": "b", "carries": "apply", "d": "M144 124C176 124 176 124 206 124", "start": [144, 124], "end": [208, 124] }]
+        "nodes": [], "edges": [], "groups": [],
+        "network": {
+            "clients": [{ "id": "mcp", "title": "MCP clients", "items": [{ "k": "POST /mcp", "v": "2 tools" }] }],
+            "access": { "hosts": ["platform.example.invalid"], "tokens": ["agent"] },
+            "worker": { "name": "control", "routes": 3, "queues": 1, "crons": ["17 * * * *"], "secrets": 4,
+                        "objects": ["Run"], "containers": [{ "class": "Box", "instance_type": "standard-1", "jobs": [] }],
+                        "d1": ["DB"], "r2": ["LOGS"] },
+            "github": "example/repo",
+            "parts": [part("Run", "object"), part("Box", "container"), part("R2", "bucket"), part("Actions", "github")],
+            "links": [link("run_box", "Run", "Box", "job"), link("run_r2", "Run", "R2", "store"), link("back", "Actions", "Box", "job")],
+            "diagram": {
+                "width": 1000, "height": 620,
+                "boxes": [boxed("Run", 390, 0), boxed("Box", 390, 260), boxed("R2", 390, 520)],
+                "routes": [
+                    { "id": "run_box", "d": "M500 100V259", "lx": 506, "ly": 180, "anchor": "start" },
+                    { "id": "run_r2", "d": "M450 100V200H300V519", "lx": 375, "ly": 193, "anchor": "middle" }
+                ]
+            }
         }
     });
     let sites = cobot::sites::find(root, &[]).expect("find");
     let data = BTreeMap::from([("architecture".to_string(), data)]);
     let built = cobot::sites::build_with(root, &sites, &data).expect("build");
     let page = fs::read_to_string(built[0].public.join("index.html")).expect("index");
-    assert_eq!(page.matches("<rect class=\"n\"").count(), 2, "{page}");
-    assert_eq!(page.matches("<path class=\"e apply\"").count(), 1);
-    assert!(page.contains("local unit") && page.contains("<title>Architecture</title>"));
-    assert!(!page.contains("<script"), "no JavaScript");
+    assert_eq!(page.matches("class=\"box kind-").count(), 3, "{page}");
+    assert_eq!(page.matches("<g class=\"link k-").count(), 2, "{page}");
+    for want in [
+        "<h1>Network Diagram</h1>",
+        "MCP clients",
+        "platform.example.invalid",
+        "run_r2 label",
+        "data-rail-from",
+        "data-rail-to",
+        "/assets/js/rail.js",
+    ] {
+        assert!(page.contains(want), "{want}: {page}");
+    }
+    assert!(built[0].public.join("assets/js/rail.js").is_file());
 
     let plain = cobot::sites::build(root, &sites).expect("build");
     let empty = fs::read_to_string(plain[0].public.join("index.html")).expect("index");
-    assert!(!empty.contains("<svg xmlns") && empty.contains("architecture.describe"));
+    assert!(!empty.contains("class=\"diagram\"") && empty.contains("architecture.describe"));
 }
 
 #[test]

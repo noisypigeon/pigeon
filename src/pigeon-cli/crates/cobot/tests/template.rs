@@ -114,7 +114,7 @@ fn every_template_names_its_theme_and_scaffold() {
 }
 
 #[test]
-fn the_architecture_template_has_no_content_and_no_script() {
+fn the_architecture_template_has_no_content_and_only_its_rail_script() {
     let dir = templates_dir().join("architecture");
     let manifest: Value = serde_saphyr::from_str(
         &fs::read_to_string(dir.join("template.yaml")).expect("template.yaml"),
@@ -123,7 +123,12 @@ fn the_architecture_template_has_no_content_and_no_script() {
     assert_eq!(manifest["content"], "none");
     let index = fs::read_to_string(dir.join("templates/index.html")).expect("index.html");
     assert!(index.contains("load_data(path=\"data/architecture.json\""));
-    assert!(!index.contains("<script"), "the page needs no JavaScript");
+    // Its only script is the static rail.js; see the 2026-11-11 amendment of
+    // .claude/decisions/2026-11-05-runtime-architecture-site-through-backplane.md.
+    let rail = "<script src=\"/assets/js/rail.js\" defer></script>";
+    assert_eq!(index.matches("<script").count(), 1, "one script");
+    assert!(index.contains(rail), "the script is rail.js");
+    assert!(dir.join("static/assets/js/rail.js").is_file());
 }
 
 #[test]
