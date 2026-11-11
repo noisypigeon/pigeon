@@ -1,6 +1,7 @@
-description: Backplane composes; it writes no file and starts no process, per 2026-11-03-development-backplane-platform-composition-layer.md.
+description: Backplane composes; it writes no file and starts no process, per 2026-11-03-development-backplane-platform-composition-layer.md, except in its cobot module, the shell, per 2026-11-10-development-factory-crates-functional-core.md §1.
 target: tree
 rules:
   - find:
       match: '^src/pigeon-cli/crates/backplane/src/'
+      allow_under: [src/pigeon-cli/crates/backplane/src/cobot/]
       forbid_content: 'std::process::Command|Command::new|fs::write'
