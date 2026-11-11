@@ -297,3 +297,48 @@ Each step is released before the next relies on it, and each passes `mise run ci
 
   These are the capabilities the `cloudflare/zone` and `cloudflare/static-site` kinds declare, plus the account lookup.
 - **The first deploys failed** with `GET the listing: status 404`: the pipeline published before the bucket existed. A deploy with no successful one before it publishes every site, so the first merge after the apply publishes `sites/docs`.
+
+### 2026-11-11: The page is a network diagram, derived; the template is read from the tree while releases pause
+
+The owner asked for the site to show where traffic goes, in the Cloudflare
+dashboard's look: clients, then Cloudflare, then GitHub, read top to bottom.
+The lane diagram (§3) is replaced.
+
+- **`describe` gains `network`,** beside `nodes`, `edges` and `layout`:
+  - **clients:** MCP (`POST /mcp`, the catalog's tools and how many only
+    read), git (`/git/`) and the owner's pages, from the Worker's routes;
+  - **Access:** the `pigeon/platform` unit's `domains` and its service
+    tokens' names;
+  - **the Worker:** its routes, queue, crons, the number of its secrets,
+    its Durable Object classes and Containers,
+    from `worker.yaml`;
+  - **links** between the objects, Containers, D1, R2 and Artifacts, and
+    out to GitHub.
+- **A link is a row in backplane's table, kept only when its evidence is in
+  the tree:** a file and a pattern, such as `merges.rs` sending
+  `Event::Behind` through `to_change`. A test fails when a row's evidence is
+  gone, so the table follows the code. Nothing else adds a link.
+- **The page draws `network` only:** each object's role, each link's label
+  and kind (`call`, `job`, `store`, `git`), and where each box sits. It still
+  never places a part `describe` didn't return.
+- **The way back from GitHub is drawn, not duplicated:** one dashed line from
+  the Actions card to `Checker`, labelled with what the code does: checks wait
+  and retry (`waiting: GitHub`); the owner's `ci_rerun on: cloudflare` runs
+  them on `Checker`. A small static script, `/assets/js/rail.js`, routes the
+  line; without it, the Actions card says the same in words.
+- **No live state.** `docs.pigeon.dev` is public. The page shows the commit
+  it was built from and links to `platform.pigeon.dev`, whose dashboard
+  (`2026-11-10-runtime-platform-hostname-dashboard-observability.md` §3)
+  shows deploys, changes and approvals behind Access.
+- **The template is read from the tree while releases pause.** A site whose
+  template is in its own instance's repository may pin `version: tree`: the
+  sites job reads `src/site-templates/<name>/` at the commit it publishes.
+  `sites/docs` uses it. When the release job runs on Cloudflare, the site
+  pins a released version again, and `tree` is refused for any other site.
+
+Steps, each its own change:
+
+1. `describe`'s `network` and the link table, with the evidence test.
+2. `version: tree` in cobot's sites, for a template in the instance's tree.
+3. The template: `index.html`, `main.css` and `rail.js`.
+4. `config.yaml`: `sites/docs` pins `version: tree`.
