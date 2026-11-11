@@ -483,7 +483,7 @@ pub fn jobs_with(root: &Path, files: &[String], map: Option<&TestMap>) -> Result
         });
         if !ran_cobot {
             out.push(job(
-                "test cobot (catalog, manifest, apex, git, credentials)",
+                "test cobot (catalog manifest apex git credentials)",
                 &[
                     "cargo",
                     "test",
@@ -648,7 +648,7 @@ impl TestMap {
                     }
                     argv.push("--locked".into());
                     Job {
-                        name: format!("test {package}: {}", names.join(", ")),
+                        name: format!("test {package}: {}", names.join(" ")),
                         argv,
                     }
                 })

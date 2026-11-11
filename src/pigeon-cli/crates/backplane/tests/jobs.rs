@@ -117,7 +117,7 @@ fn the_bound_job_passes_a_change_inside_its_scope_and_names_its_checks() {
         names,
         [
             "infra.validate",
-            "test cobot (catalog, manifest, apex, git, credentials)"
+            "test cobot (catalog manifest apex git credentials)"
         ],
         "policy.check is the bound job's own"
     );

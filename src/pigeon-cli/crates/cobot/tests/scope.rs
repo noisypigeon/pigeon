@@ -50,7 +50,7 @@ fn the_catalog_runs_infra_checks_and_no_rust_build() {
         got,
         [
             "infra.validate",
-            "test cobot (catalog, manifest, apex, git, credentials)",
+            "test cobot (catalog manifest apex git credentials)",
             "policy.check"
         ]
     );
@@ -330,7 +330,7 @@ fn tests_of(names: &[String]) -> Vec<&String> {
 #[test]
 fn the_test_map_runs_the_binaries_that_ran_a_changed_file() {
     let got = with_map(&["src/pigeon-cli/crates/cobot/src/git.rs"]);
-    assert_eq!(tests_of(&got), ["test cobot: lib, git"], "{got:?}");
+    assert_eq!(tests_of(&got), ["test cobot: lib git"], "{got:?}");
     assert!(
         got.contains(&"clippy cobot pigeon pigeon-backplane".to_string()),
         "clippy still covers the dependants: {got:?}"
@@ -393,7 +393,20 @@ fn a_mapped_test_check_does_not_stand_in_for_a_crates_whole_suite() {
         "catalog/cloudflare/kinds/git-repo/schema.json",
     ]);
     assert!(
-        got.contains(&"test cobot (catalog, manifest, apex, git, credentials)".to_string()),
+        got.contains(&"test cobot (catalog manifest apex git credentials)".to_string()),
         "{got:?}"
     );
+}
+
+#[test]
+fn no_check_name_holds_a_comma_which_a_github_cache_key_refuses() {
+    for files in [
+        &["src/pigeon-cli/crates/cobot/src/git.rs"][..],
+        &["src/pigeon-cli/Cargo.lock"][..],
+        &["catalog/cloudflare/kinds/git-repo/schema.json"][..],
+    ] {
+        for name in with_map(files) {
+            assert!(!name.contains(','), "{name}");
+        }
+    }
 }
