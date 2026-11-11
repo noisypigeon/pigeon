@@ -395,3 +395,18 @@ Both are changed.
 3. **Selection:** `change.scope` reads `PIGEON_TEST_MAP` and picks binaries by
    it, with the fallbacks.
 
+
+### 2026-11-11: Step 6b agrees with the owner's CI window
+
+Reviewed against
+[`2026-11-10-development-code-checks-github-actions.md`](2026-11-10-development-code-checks-github-actions.md)'s
+2026-11-11 amendment (!213), the CI window that sends every change's code
+checks to the `Checker` for N hours.
+
+- **The two agree.** Step 6b (!198) changes only paths in the files that
+  amendment governs: `worker/change.rs`, `worker/github.rs` and `actions.rs`
+  import `crate::cobot::…` instead of `cobot::…`, and `tests/actions.rs`'s
+  sample check names `pigeon-backplane`. Routing is unchanged.
+- **The window's code** adds no check of the `cobot` package: since !209 the
+  worker checks are only those of packages the tree has, so a head after
+  !198 gets backplane's alone, on GitHub or the `Checker`.
