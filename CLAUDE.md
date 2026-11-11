@@ -23,218 +23,31 @@ A comment in code or config says what something is, in a line or two. When the
 why matters, cite the ADR that holds it. Rationale, history and alternatives
 belong in the ADR, never in the file.
 
-## Pointers
+## Decisions
 
-- Decisions are ADRs in `.claude/decisions/`, written before the code. Their
+- Decisions are ADRs in `.claude/decisions/`, written before the code; their
   naming, template and amendments are in
   [`.claude/decisions/README.md`](.claude/decisions/README.md).
-- The development lifecycle (ADR PR, then autonomous implementation PR, squash
-  merges, PR conventions; an agent continues through an ADR's execution steps
-  unless stopped) is
-  [`2026-11-02-development-adr-driven-lifecycle.md`](.claude/decisions/2026-11-02-development-adr-driven-lifecycle.md).
-- The Rust workspace and its Mise-pinned toolchain are
-  [`2026-11-02-development-cargo-workspace-mise-toolchain.md`](.claude/decisions/2026-11-02-development-cargo-workspace-mise-toolchain.md).
-  Crates live in `src/pigeon-cli/crates/<name>/`.
-- The repository's areas are `src/<project>/`, `tooling/`, `infra/` and
-  `workloads/`, per
-  [`2026-11-02-development-repository-area-layout.md`](.claude/decisions/2026-11-02-development-repository-area-layout.md).
-- `pigeon sentinel` enforces the policies in `.config/policies/`, one YAML file
-  per subject.
-- Sentinel is policy and its enforcement; cobot performs the actions policies
-  govern (releases, changelogs, tags, infrastructure). Sentinel's library
-  writes no file and starts no process, per
-  [`2026-11-02-development-sentinel-policy-cobot-actions.md`](.claude/decisions/2026-11-02-development-sentinel-policy-cobot-actions.md).
-- Provider catalogs (`schema.json`, `modules/`, `presets/`, `capabilities.yaml`)
-  live in `catalog/<provider>/` (today `cloudflare`, `digitalocean`, `scaleway`,
-  `backblaze` and `agnostic`); a catalog declares capabilities and never mints
-  keys or holds secrets; units stay in `infra/` and `workloads/`, and an
-  `infra/<provider>/` that still holds its own `schema.json` wins over its
-  catalog, per
-  [`2026-11-04-development-platform-instance-separation.md`](.claude/decisions/2026-11-04-development-platform-instance-separation.md).
-  No new secret enters the repository; `.config/policies/secrets*.yaml` pin the
-  two `secrets.config.yaml` files to their current keys.
-- This repository is pigeon's own instance; noisypigeon's workloads move to
-  `noisypigeon/noisypigeon`; `pigeon backplane run` is the single entry point,
-  CI holds no credentials, and the owner plans and applies from the CLI, run
-  from pigeon with `--instance DIR` naming the instance, per
-  [`2026-11-05-development-pigeon-its-own-instance.md`](.claude/decisions/2026-11-05-development-pigeon-its-own-instance.md).
-- An instance is one root `config.yaml` (manifest `v1`) of kind-typed units:
-  `units.<id>` names a platform-defined `kind: <catalog>/<kind>` from
-  `catalog/<catalog>/kinds/`; credentials are declared and filled by the run,
-  IDs are looked up, and `moves` carries state, per
-  [`2026-11-05-runtime-instance-config-kind-units.md`](.claude/decisions/2026-11-05-runtime-instance-config-kind-units.md).
-- Git is hosted on Cloudflare Artifacts and GitHub is only a mirror: a
-  repository is a `kind: cloudflare/git-repo` unit (an API kind, never planned)
-  in its instance's namespace and own account, created by
-  `pigeon cobot git apply`; work is pushed with `pigeon cobot git push` and
-  mirrored with `pigeon cobot git mirror`, per
-  [`2026-11-05-development-git-hosting-cloudflare-artifacts.md`](.claude/decisions/2026-11-05-development-git-hosting-cloudflare-artifacts.md).
-- A change is planned, approved, bounded by sentinel, checked by targeted CI in
-  Sandbox on Artifacts push events, approved again and merged and rolled out by
-  the control plane, through pigeon's MCP; until that is served, the agent pushes
-  only `change/<n>-<slug>` branches with a repository-scoped token and the owner
-  merges, per
-  [`2026-11-05-development-changes-through-pigeon-mcp.md`](.claude/decisions/2026-11-05-development-changes-through-pigeon-mcp.md).
-- `infra/pigeon/` bootstraps the platform's own Cloudflare account. It is a
-  local unit (`x-cobot.local: true`): CI validates it but plans and applies
-  only unnamed units, so its owner applies it by hand with a scoped token in
-  the environment and state in the private `noisypigeon/pigeon-platform-state`,
-  per its README and the separation ADR's phase 2 amendment.
-- Backplane (package `pigeon-backplane`) composes the engines into one
-  platform serving the instance in `.config/instance.yaml`; it judges through
-  sentinel, acts through cobot, and writes and starts nothing itself, per
-  [`2026-11-03-development-backplane-platform-composition-layer.md`](.claude/decisions/2026-11-03-development-backplane-platform-composition-layer.md).
-- The control plane is backplane's `worker` build on `pigeon.dev`: a Durable
-  Object per instance, D1, plan-then-approve, Access, MCP and drift; cobot's
-  `worker` build dispatches signed runs to Containers and mints credentials;
-  runs survive a stop; a run's root is a D1 bundle; the platform defines rules
-  in `catalog/policies/` and an instance invokes them, per
-  [`2026-11-05-runtime-control-plane-worker.md`](.claude/decisions/2026-11-05-runtime-control-plane-worker.md).
-- Approvals are made in the Claude card: a form asking for the owner's
-  authenticator code (TOTP, `pigeon backplane totp-secret`), bound to one
-  grant of the operation and head; a pending approval's page and the
-  `/approvals` inbox take the same code from any browser; images and the Worker
-  to be built on Cloudflare,
-  platform state to live in R2, and jobs to run on two Container classes, per
-  [`2026-11-06-development-control-plane-approvals-images-state.md`](.claude/decisions/2026-11-06-development-control-plane-approvals-images-state.md).
-- Durable Object state and job wire types tolerate unknown fields; a new
-  field has a default, a field or enum variant is dropped or added over two
-  releases, and `backplane/tests/state/` fixtures check it, per
-  [`2026-11-08-runtime-blue-green-self-standup.md`](.claude/decisions/2026-11-08-runtime-blue-green-self-standup.md).
-- Approvals have three tiers chosen by the control plane from
-  `.config/approvals.yaml` on `main`: auto (standing rules, or a
-  mandate the owner granted once for a task), confirm (one tap) and code (the
-  authenticator code); guarded paths are always code; a page,
-  `/approve/<grant>`, behind Access approves any tier from a phone, per
-  [`2026-11-08-security-tiered-approvals-task-mandates.md`](.claude/decisions/2026-11-08-security-tiered-approvals-task-mandates.md).
-- Confirm-tier approvals are automatic; a code-tier change takes one proof for
-  all its stages; destructive operations and changes that add, read or expose
-  secrets (`secrets:` and `secret_lists:` in `.config/approvals.yaml`) take
-  the owner's proof each time; a proof is the code or a passkey registered on
-  `/passkeys`, per
-  [`2026-11-09-security-approvals-once-passkeys.md`](.claude/decisions/2026-11-09-security-approvals-once-passkeys.md).
-- The platform instance is served at `platform.pigeon.dev` (each stack also at
-  `<color>.platform.pigeon.dev`), every path unchanged; passkeys use it as
-  their relying party; `/` is the dashboard; `logs_query`, `traces_query`,
-  `trace_show`, `events_query` and `stats_show` read logs, traces, events and
-  build, deploy and check stats, per
-  [`2026-11-10-runtime-platform-hostname-dashboard-observability.md`](.claude/decisions/2026-11-10-runtime-platform-hostname-dashboard-observability.md).
-- The factory's code: `pigeon-sentinel` is its own binary and release, judges
-  with `main`'s build and `main`'s policies, and a change to it is its own
-  grant; cobot and gantry fold into backplane, whose `core/` is pure
-  transitions returning effects, each state owned by one object, and whose
-  `shell/` acts; per-push checks run the tests on changed code paths, and the
-  merge runs the full suite once, per
-  [`2026-11-10-development-factory-crates-functional-core.md`](.claude/decisions/2026-11-10-development-factory-crates-functional-core.md).
-- Change slots are freed: a change closed before authorization closes; a
-  conflicted change has one reconciliation, and a family holds one slot; the
-  control plane alone evicts, hourly, a change whose session has gone or that
-  is outdated, when an eviction policy in `.config/policies/` allows it, keeping
-  its head as `refs/evicted/<n>-<slug>`; a session never evicts; incomplete
-  work is flagged with what remains, and the owner asked whether a new session
-  should finish it, per
-  [`2026-11-10-development-change-slot-eviction-policy.md`](.claude/decisions/2026-11-10-development-change-slot-eviction-policy.md).
-- The control plane deploys itself: on each push to `main`, `MainRun`'s
-  deploy job deploys the Workers whose inputs changed, with outputs from
-  `DEPLOY_OUTPUTS`, images by registry reference, a health check and
-  rollback; the local deploy is break-glass, per
-  [`2026-11-07-development-control-plane-deploys-itself.md`](.claude/decisions/2026-11-07-development-control-plane-deploys-itself.md).
-- Job images: `images push` mints its own long registry login; the `ci`
-  image warms only dependencies; jobs start through `pigeon-start` from
-  `main`'s newest `builds/<sha>/pigeon`, pinned by SHA-256; when the image's
-  inputs change, the deploy job builds and pushes it with rootless BuildKit,
-  and `MainRun` keeps the newest images, per
-  [`2026-11-07-development-job-images-on-cloudflare.md`](.claude/decisions/2026-11-07-development-job-images-on-cloudflare.md).
-- The agent's git goes through the control plane's front door,
-  `/git/<namespace>/<repo>.git`: a token minted per request, pushes only to an
-  authorized change's branch, all or nothing, and `git.tokens` lists tokens
-  without values; the session's Artifacts token is retired, per
-  [`2026-11-06-security-git-front-door-spike.md`](.claude/decisions/2026-11-06-security-git-front-door-spike.md).
-- GitHub is a source mirror, and runs only `main`'s `ci.yml` for the control
-  plane's code checks (`mirror.yaml` allows that one workflow); judging and
-  delivery are Cloudflare's, and releases pause until
-  the release job runs on Cloudflare, per the hosting ADR's 2026-11-06
-  amendment. The release-bot and `cobot.yml` notes below describe that paused
-  path.
-- The control plane mirrors `main` and the tags to GitHub on each push to
-  `main` (`MainRun`'s `mirror` job on `Runner`, fast-forward and add-only),
-  with a GitHub App installation token minted per job from `GITHUB_APP_ID`
-  and `GITHUB_APP_KEY`, and reconciles hourly; `deploy_status` shows it and
-  the digest names a mirror behind, per
-  [`2026-11-08-development-github-mirror-on-merge.md`](.claude/decisions/2026-11-08-development-github-mirror-on-merge.md).
-- Code checks (fmt, clippy, wasm builds, tests and the merge gate's full set)
-  run on GitHub Actions: the control plane pushes a change's head there after
-  `bound` passes, dispatches `main`'s `ci.yml` on it with no secrets, and reads
-  the run through the App; judging, validation, merge, deploy and the platform
-  stay on Cloudflare, per
-  [`2026-11-10-development-code-checks-github-actions.md`](.claude/decisions/2026-11-10-development-code-checks-github-actions.md).
-- Releases and changelogs are machinery, per
-  [`2026-11-02-release-crate-units-and-images.md`](.claude/decisions/2026-11-02-release-crate-units-and-images.md):
-  - every `CHANGELOG.md` is generated on merge by the release bot, which runs
-    `pigeon cobot release` and `pigeon cobot tags`; a PR never edits one, and
-    `pull-request.yaml` fails one that does;
-  - `sentinel`, `gantry`, `cobot` and `backplane` are release units in
-    `.config/releases.yaml`, each with its own version and tag
-    `<unit>/vX.Y.Z` and image `ghcr.io/noisypigeon/pigeon-<unit>`, built
-    from the Dockerfile stage named for it; the bot bumps them, never a PR;
-  - a unit releases only when its own build changed: its crate and slice of
-    `pigeon` (`commands/<unit>.rs`, `cli/<unit>.rs`), shared `pigeon` code,
-    its `cargo tree`, or workspace build settings;
-  - `rust.yml` runs only when a Rust input changed;
-  - `pigeon` compiles in only the features (subcommands) asked for;
-  - a policy that needs an unreleased sentinel feature, or a unit or
-    workload that needs an unreleased cobot feature, waits: merge and
-    release the engine change first, then use it in a later PR, per
-    [`2026-11-03-release-cobot-image-in-workflows.md`](.claude/decisions/2026-11-03-release-cobot-image-in-workflows.md);
-  - the cobot image's `tofu` and `zola` versions equal `mise.toml`'s, which
-    a cobot test checks.
-- Infrastructure is cobot's, per
-  [`2026-11-02-runtime-cobot-infrastructure-as-code.md`](.claude/decisions/2026-11-02-runtime-cobot-infrastructure-as-code.md):
-  units (`unit.yaml`, schema v0) live only under `infra/` and `workloads/`;
-  `cobot.yml` plans on PR and applies on merge, committing encrypted state to
-  the private `noisypigeon/pigeon-cobot-state`. Never run `tofu apply` or
-  `pigeon cobot apply` by hand against that repository.
-- OpenTofu owns declarative resources; Workers, Containers and their images,
-  migrations, crons and secrets deploy through `pigeon cobot workers` (wrangler,
-  only via cobot) from `workers/<name>/worker.yaml` specs that hold no IDs, per
-  [`2026-11-05-development-cobot-workers-area.md`](.claude/decisions/2026-11-05-development-cobot-workers-area.md).
-- Config units (`config.yaml` validated by `schema.json`, composed from its
-  `x-cobot` annotations into single-resource `modules/`) are per
-  [`2026-11-02-runtime-cloudflare-provisioner-unit.md`](.claude/decisions/2026-11-02-runtime-cloudflare-provisioner-unit.md).
-  A unit's `secrets.config.yaml` holds only `ENC[cobot:v1:…]` values, under
-  `COBOT_SECRETS_PASSPHRASE` in `infra/` and `COBOT_WORKLOAD_SECRETS_PASSPHRASE`
-  in `workloads/`. Only `infra/` keys are break-glass, and they are never handed
-  to a workload, which gets only its own secrets and minted tokens. Providers
-  come only from `main`'s `.config/providers.yaml` and `providers.lock.hcl`.
-- Any unit composes a catalog's module as `module: <catalog>/<name>`, such as
-  `cloudflare/r2-bucket` or the provider-agnostic `agnostic/random-string`, and
-  `x-cobot.each` runs a block over another property's items, per
-  [`2026-11-03-runtime-infra-agnostic-shared-modules.md`](.claude/decisions/2026-11-03-runtime-infra-agnostic-shared-modules.md)
-  and the separation ADR's catalog-composition amendment.
-- Workloads live in `workloads/<zone>/`; each zone's apex (global config and
-  DNS) is its own unit, `workloads/<zone>/apex/`, which only enables what
-  the Cloudflare catalog, `catalog/cloudflare/`, defines (its schema's
-  `$defs.apex`, its `modules/` and `presets/`), per
-  [`2026-11-02-runtime-workloads-zone-apex.md`](.claude/decisions/2026-11-02-runtime-workloads-zone-apex.md).
-- A workload with only a `config.yaml` enables what `catalog/cloudflare/`
-  defines (its `$defs.workload`): today `static_site`, an R2 bucket and a
-  custom domain per apex host, built with a released template from
-  `src/site-templates/<name>/` (`site-template-<name>/vX.Y.Z`; the blog's
-  older tags are `static-site-template/vX.Y.Z`) and published by `cobot.yml`
-  after apply, per
-  [`2026-11-03-runtime-cloudflare-static-sites-r2.md`](.claude/decisions/2026-11-03-runtime-cloudflare-static-sites-r2.md).
-- A static site's settings are `static_site.site` in its `config.yaml`, checked
-  against the pinned template's `schema.json`; its `site/` holds only
-  `posts/` (named `YYYY-MM-DD-<slug>.md`), `pages/` and `assets/`, per
-  [`2026-11-03-runtime-static-site-config-contract.md`](.claude/decisions/2026-11-03-runtime-static-site-config-contract.md).
-- Site templates are a family in `src/site-templates/<name>/` (`blog` and
-  `architecture`), named by `static_site.template.name`; a template
-  with `content: none` takes no `site/`. The architecture site is `infra/pigeon/sites/docs/` on
-  `docs.pigeon.dev`, a diagram regenerated from the code by backplane's
-  `architecture.describe` and published through the control plane, per
-  [`2026-11-05-runtime-architecture-site-through-backplane.md`](.claude/decisions/2026-11-05-runtime-architecture-site-through-backplane.md).
+- Each ADR's `* Governs:` line names the paths it rules. Before changing a
+  path, run `pigeon backplane decisions <path>` and read the ADRs it lists; a
+  design change's `affects` are its ADR's globs.
+- An agent continues through an ADR's execution steps unless stopped, per the
+  lifecycle ADR's 2026-11-11 amendment.
+
+## Rules
+
 - The repo is public: never push secrets, credentials, key IDs or private
-  bucket names, in commits, branch names, PR text or CI logs.
+  bucket names, in commits, branch names, PR text or CI logs. No new secret
+  enters the repository; `.config/policies/secrets*.yaml` pin the two
+  `secrets.config.yaml` files to their current keys.
+- No change edits a `CHANGELOG.md`; the release bot generates them.
+- Never run `tofu apply` or `pigeon cobot apply` by hand against
+  `noisypigeon/pigeon-cobot-state`.
+- Workers, Containers, migrations and secrets deploy only through
+  `pigeon cobot workers`; the local deploy is break-glass.
+- `infra/` secret keys are break-glass and never handed to a workload, which
+  gets only its own secrets and minted tokens.
+- A session never evicts a change; the control plane alone does.
 
 ## Commands
 
