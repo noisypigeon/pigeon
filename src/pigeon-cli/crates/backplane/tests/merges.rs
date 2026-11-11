@@ -404,6 +404,41 @@ fn a_merge_on_a_checked_unapproved_head_is_refused_not_parked() {
 }
 
 #[test]
+fn a_merge_whose_container_never_starts_releases_its_turn() {
+    use backplane::control::merge_ended_by;
+    use backplane::runs::MAX_ATTEMPTS;
+
+    // !175: its merge job's Container failed to start three times, and the queue kept its turn.
+    let mut c = approved();
+    c.apply(Event::Merge { by: "owner".into() }).expect("merge");
+    let mut applied = Vec::new();
+    for n in 1..=MAX_ATTEMPTS {
+        let started = Event::Started {
+            job: MERGE.into(),
+            sha: A.into(),
+        };
+        let lost = Event::Lost {
+            job: MERGE.into(),
+            sha: A.into(),
+        };
+        c.apply(started).expect("started");
+        c.apply(lost.clone()).expect("lost");
+        applied.push(lost);
+        let want = (n == MAX_ATTEMPTS).then_some(None);
+        assert_eq!(
+            merge_ended_by(&applied[n as usize - 1..], &c),
+            want,
+            "attempt {n}"
+        );
+    }
+    assert_eq!(
+        merge_ended_by(&[], &c),
+        None,
+        "nothing applied ends nothing"
+    );
+}
+
+#[test]
 fn a_merge_whose_container_is_lost_on_every_attempt_releases_its_turn() {
     use backplane::control::merge_ended;
     use backplane::runs::MAX_ATTEMPTS;

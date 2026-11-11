@@ -721,6 +721,13 @@ pub fn merge_ended(event: &Event, change: &Change) -> Option<Option<String>> {
     }
 }
 
+/// Whether the events an alarm `applied` to `change`, a job's start lost among them, ended its
+/// merge: as [`merge_ended`], for the last that did.
+#[must_use]
+pub fn merge_ended_by(applied: &[Event], change: &Change) -> Option<Option<String>> {
+    applied.iter().rev().find_map(|e| merge_ended(e, change))
+}
+
 /// Whether `change` holds a merge turn it no longer waits on: no merge asked for meanwhile,
 /// and none running or done.
 #[must_use]

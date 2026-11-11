@@ -440,14 +440,15 @@ impl ChangeRun {
         Ok(())
     }
 
-    /// Starts `job`'s Container, applying `Started`, or `Lost` when it didn't start; false when
-    /// it waits for a free Container, queued again.
+    /// Starts `job`'s Container, applying `Started`, or `Lost` when it didn't start, which joins
+    /// `applied`; false when it waits for a free Container, queued again.
     async fn start_container(
         &self,
         change: &mut Change,
         github: &Actions,
         job: String,
         next: &mut Vec<Pending>,
+        applied: &mut Vec<Event>,
     ) -> bool {
         let sha = change.head.clone().unwrap_or_default();
         let running = change
@@ -477,7 +478,10 @@ impl ChangeRun {
         );
         if let Err(why) = started {
             worker::console_warn!("job {job} did not start: {why}");
-            let _ = Self::apply(change, Event::Lost { job, sha }, next);
+            let lost = Event::Lost { job, sha };
+            if Self::apply(change, lost.clone(), next).is_ok() {
+                applied.push(lost);
+            }
         }
         true
     }
@@ -686,6 +690,7 @@ impl DurableObject for ChangeRun {
         let took = pending.len();
         let mut next = Vec::new();
         let mut wait = false;
+        let mut applied = Vec::new();
         let mut github: Actions = self.load(ACTIONS).await?;
         github.keep_head(change.head.as_deref());
         let mirrors = super::github::mirror(&self.env).is_some();
@@ -713,7 +718,7 @@ impl DurableObject for ChangeRun {
                 }
                 Pending::Start(job) => {
                     if !self
-                        .start_container(&mut change, &github, job, &mut next)
+                        .start_container(&mut change, &github, job, &mut next, &mut applied)
                         .await
                     {
                         wait = true;
@@ -728,7 +733,6 @@ impl DurableObject for ChangeRun {
             .filter(|j| j.status == JobStatus::Running && !github.owns(&head, &j.name))
             .map(|j| j.name.clone())
             .collect();
-        let mut ended: Option<Option<String>> = None;
         let mut restack_failed = false;
         for job in running {
             if let Some(event) = self.poll(&change, &job).await? {
@@ -737,14 +741,12 @@ impl DurableObject for ChangeRun {
                 {
                     restack_failed = true;
                 }
-                let seen = event.clone();
-                if Self::apply(&mut change, event, &mut next).is_ok()
-                    && let Some(merge) = control::merge_ended(&seen, &change)
-                {
-                    ended = Some(merge);
+                if Self::apply(&mut change, event.clone(), &mut next).is_ok() {
+                    applied.push(event);
                 }
             }
         }
+        let ended = control::merge_ended_by(&applied, &change);
         self.github_step(&mut change, &mut github, &mut next)
             .await?;
         self.state.storage().put(ACTIONS, &github).await?;
