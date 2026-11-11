@@ -663,3 +663,30 @@ Step 4c is three changes:
   - Then `worker.yaml` adds the custom domain from `$deployment.domain`.
   - `PUBLIC_HOST` stays the `workers.dev` hostname until clients have
     moved.
+
+### 2026-11-11: A platform may declare public paths, each a bypass Access application
+
+[`2026-11-11-release-ios-app-buildkite-testflight.md`](2026-11-11-release-ios-app-buildkite-testflight.md) §5 needs one route reachable without an Access login: `POST /v0/apple/release`, which authenticates its caller itself with a Buildkite OIDC token. The kind can't express that: one application covers each hostname, and `cloudflare/access-policy` only allows.
+
+- **`public_paths`, optional on the kind:** a top-level list of `{ name, paths }`, since a kind's `each` blocks iterate top-level lists. `paths` are the path on each of the stack's domains, as hostname and path (`platform.pigeon.dev/v0/apple/release`).
+- **An absent list is empty,** for every `each` block, so a unit that declares no public path needs no new key.
+- **Each entry is its own Access application,** whose destinations are those `paths` as public URIs and whose one policy bypasses Access for everyone. Access applies the most specific match, so only those paths skip the login, and every other path keeps the owners' application.
+- **`cloudflare/access-policy` gains `bypass`** (bool, default false). With it the decision is `bypass` and the policy includes everyone; the module refuses it alongside `emails`, service tokens or `account_members`. The module goes to 0.2.0.
+- **The Worker stays the gate.** A public path is served only by a route that authenticates the request itself. The Worker's rule that refuses a request without an Access token names each such route as its exception, beside `/builds/`; any other path under a public one answers 404.
+- **Each public path is decided by an ADR,** which names the route and how it authenticates. Declaring one takes a platform apply, which needs the owner's grant.
+- **`platform/blue` declares one:** `{ name: pigeon-control apple release, paths: [platform.pigeon.dev/v0/apple/release, blue.platform.pigeon.dev/v0/apple/release] }`.
+
+#### Execution, in this order, so no path is public before its route can refuse
+
+1. This amendment.
+2. **`feat(catalog)`:** `bypass` on `cloudflare/access-policy`; `public_paths` on the kind, with its applications and policies under `each`; and an absent `each` list read as empty. `config.yaml` declares nothing yet, so the next plan changes nothing.
+3. **The iOS ADR's step 4** merges and deploys: the route, its OIDC check, and its exception in the Worker. Behind Access, it is reachable only by the owner until step 4 here.
+4. **`feat(infra)`:** `platform/blue` declares the path. The owner runs `platform.plan`, reads that it creates one application and one policy and changes nothing else, then `platform.apply`.
+
+#### Verification
+
+- The kind's tests: a `public_paths` entry renders one application and one bypass policy; none renders neither; `bypass` beside `emails` is refused.
+- After step 4, without an Access login:
+  - `POST https://platform.pigeon.dev/v0/apple/release` reaches the Worker, and with no OIDC token answers 401;
+  - `GET https://platform.pigeon.dev/v0/apple/release/x` answers 404;
+  - `https://platform.pigeon.dev/` and `/mcp` still redirect to the Access login.
