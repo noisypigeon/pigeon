@@ -425,16 +425,22 @@ fn a_merge_whose_container_never_starts_releases_its_turn() {
         c.apply(lost.clone()).expect("lost");
         applied.push(lost);
         let want = (n == MAX_ATTEMPTS).then_some(None);
+        let ended = merge_ended_by(&applied[n as usize - 1..], &c);
+        assert_eq!(ended, want, "attempt {n}");
         assert_eq!(
-            merge_ended_by(&applied[n as usize - 1..], &c),
-            want,
-            "attempt {n}"
+            control::released_without_merge(ended.as_ref()),
+            n == MAX_ATTEMPTS,
+            "attempt {n} records merge.released only when it gives the turn back"
         );
     }
     assert_eq!(
         merge_ended_by(&[], &c),
         None,
         "nothing applied ends nothing"
+    );
+    assert!(
+        !control::released_without_merge(Some(&Some(B.into()))),
+        "a merge isn't a release"
     );
 }
 

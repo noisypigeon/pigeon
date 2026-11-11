@@ -735,6 +735,12 @@ pub fn merge_ended_by(applied: &[Event], change: &Change) -> Option<Option<Strin
     applied.iter().rev().find_map(|e| merge_ended(e, change))
 }
 
+/// Whether a merge that ended, as [`merge_ended_by`] answers, gave its turn back without merging.
+#[must_use]
+pub fn released_without_merge(ended: Option<&Option<String>>) -> bool {
+    matches!(ended, Some(None))
+}
+
 /// Whether `change` holds a merge turn it no longer waits on: no merge asked for meanwhile,
 /// and none running or done.
 #[must_use]

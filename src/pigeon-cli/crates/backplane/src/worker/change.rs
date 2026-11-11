@@ -178,19 +178,7 @@ impl ChangeRun {
         storage.put(CHANGE, change).await?;
         super::events::changed(&self.env, before.as_ref(), change).await;
         if control::leaves_merge_queue(before.as_ref(), change) {
-            if let Ok(s) = Settings::from(&self.env) {
-                let why = format!(
-                    "!{} gave its merge turn back: {}",
-                    change.number,
-                    control::release_reason(change)
-                );
-                let n = Some(change.number);
-                let added =
-                    super::events::append(&self.env, &s, "merge.released", n, None, &why, false);
-                if let Err(e) = added.await {
-                    worker::console_error!("merge.released: {e}");
-                }
-            }
+            self.released(change).await;
             super::merges::ended(&self.env, change, None).await?;
         }
         let mut pending = pending.to_vec();
@@ -209,6 +197,23 @@ impl ChangeRun {
             storage.set_alarm(POLL).await?;
         }
         self.mirror(change).await
+    }
+
+    /// Records `merge.released`: `change` gave its merge turn back without merging.
+    async fn released(&self, change: &Change) {
+        let Ok(s) = Settings::from(&self.env) else {
+            return;
+        };
+        let why = format!(
+            "!{} gave its merge turn back: {}",
+            change.number,
+            control::release_reason(change)
+        );
+        let n = Some(change.number);
+        let added = super::events::append(&self.env, &s, "merge.released", n, None, &why, false);
+        if let Err(e) = added.await {
+            worker::console_error!("merge.released: {e}");
+        }
     }
 
     async fn start(&self, change: &Change, job: &str) -> std::result::Result<(), String> {
@@ -761,6 +766,9 @@ impl DurableObject for ChangeRun {
         self.save_after(&change, &next, wait).await?;
         if restack_failed && let Err(e) = super::tasks::restack_failed(&self.env, &change).await {
             worker::console_error!("restack task: {e}");
+        }
+        if control::released_without_merge(ended.as_ref()) {
+            self.released(&change).await;
         }
         if let Some(merged) = ended
             && let Err(e) = super::merges::ended(&self.env, &change, merged.as_deref()).await
