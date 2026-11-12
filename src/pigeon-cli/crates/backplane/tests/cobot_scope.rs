@@ -150,6 +150,20 @@ fn a_workspace_setting_runs_everything() {
 }
 
 #[test]
+fn the_ios_app_runs_its_macos_check_and_no_rust_build() {
+    assert_eq!(
+        names(&["src/pigeon-ios/Pigeon/ContentView.swift"]),
+        ["ios", "policy.check"]
+    );
+    let ios = jobs(&repo_root(), &["src/pigeon-ios/project.yml".to_string()])
+        .expect("scopes")
+        .into_iter()
+        .find(|j| j.name == "ios")
+        .expect("an ios check");
+    assert_eq!(ios.argv, ["bash", "../pigeon-ios/check.sh"]);
+}
+
+#[test]
 fn site_templates_build_the_sites() {
     assert_eq!(
         names(&["src/site-templates/blog/index.html"]),

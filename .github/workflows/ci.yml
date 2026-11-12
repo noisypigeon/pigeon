@@ -34,22 +34,28 @@ env:
   # The test map's coverage tool, built from its crates.io release.
   LLVM_COV_VERSION: 0.9.1
   LLVM_COV_SHA256: 5e00647cc92940c4dd82249c480fe08fd3809767e89f056bcec46d8a7962ea5b
+  # The `ios` check's project generator, as src/pigeon-ios/mise.toml pins it.
+  XCODEGEN_VERSION: 2.44.1
+  XCODEGEN_SHA256: a2e905fb68446e9bb4008cdfe2e13e3f176d0cbcca828b71770f8e53fca91b73
 defaults:
   run:
     shell: bash
 jobs:
   check:
     name: ${{ matrix.check.name }}
-    runs-on: ubuntu-24.04
+    # `ios` builds the app on macOS, with no container; see
+    # .claude/decisions/2026-11-11-release-ios-app-buildkite-testflight.md's 2026-11-11 amendment.
+    runs-on: ${{ matrix.check.name == 'ios' && 'macos-15' || 'ubuntu-24.04' }}
     timeout-minutes: 60
     # The ci image's base, by digest.
-    container: docker.io/library/rust:1.99.1-slim-bookworm@sha256:24707e70a4f1e23d9a7b25202ec43126d28a52294b96aad5c670df1fd1f1d400
+    container: ${{ matrix.check.name != 'ios' && 'docker.io/library/rust:1.99.1-slim-bookworm@sha256:24707e70a4f1e23d9a7b25202ec43126d28a52294b96aad5c670df1fd1f1d400' || '' }}
     strategy:
       fail-fast: false
       matrix:
         check: ${{ fromJSON(inputs.checks) }}
     steps:
       - name: Tools
+        if: runner.os == 'Linux'
         run: |
           apt-get update
           apt-get install -y --no-install-recommends ca-certificates curl git jq libssl-dev pkg-config xz-utils
@@ -61,6 +67,15 @@ jobs:
           printf '%s  tofu.tar.gz\n%s  zola.tar.gz\n' "$TOFU_SHA256" "$ZOLA_SHA256" | sha256sum -c -
           tar -xzf tofu.tar.gz -C /usr/local/bin tofu
           tar -xzf zola.tar.gz -C /usr/local/bin zola
+      - name: XcodeGen
+        if: runner.os == 'macOS'
+        run: |
+          cd "$RUNNER_TEMP"
+          curl -fsSLo xcodegen.zip "https://github.com/yonaskolb/XcodeGen/releases/download/${XCODEGEN_VERSION}/xcodegen.zip"
+          printf '%s  xcodegen.zip\n' "$XCODEGEN_SHA256" | shasum -a 256 -c -
+          unzip -q xcodegen.zip
+          PREFIX="$RUNNER_TEMP/xcodegen-install" xcodegen/install.sh
+          echo "$RUNNER_TEMP/xcodegen-install/bin" >> "$GITHUB_PATH"
       - name: Coverage tools
         if: matrix.check.name == 'test map'
         run: |
@@ -75,6 +90,7 @@ jobs:
           ref: ${{ inputs.sha }}
           persist-credentials: false
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        if: runner.os == 'Linux'
         with:
           path: |
             /usr/local/cargo/registry

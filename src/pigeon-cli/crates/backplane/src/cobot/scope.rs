@@ -41,6 +41,10 @@ const POLICIES: [&str; 1] = [".config/policies/"];
 /// Paths whose change rebuilds the sites.
 const SITES: [&str; 4] = ["src/site-templates/", "workloads/", "sites/", "config.yaml"];
 
+/// The iOS app, which its `ios` check builds on macOS; see
+/// `.claude/decisions/2026-11-11-release-ios-app-buildkite-testflight.md`.
+const IOS: [&str; 1] = ["src/pigeon-ios/"];
+
 /// The crates whose `worker` build compiles to wasm.
 const WORKER: [&str; 1] = ["pigeon-backplane"];
 
@@ -522,6 +526,9 @@ pub fn jobs_with(root: &Path, files: &[String], map: Option<&TestMap>) -> Result
             name: "sites.build".into(),
             argv: pigeon(&["backplane", "run", "sites.build", "--root", "../.."]),
         });
+    }
+    if files.iter().any(|f| under(f, &IOS)) {
+        out.push(job("ios", &["bash", "../pigeon-ios/check.sh"]));
     }
     out.extend(spikes(&files));
     if files.contains(&TEST_MAP) {
