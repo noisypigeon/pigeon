@@ -6,6 +6,7 @@ pub mod assemble;
 pub mod checks;
 pub mod layout;
 pub mod publish;
+pub mod view;
 
 #[cfg(test)]
 mod tests;

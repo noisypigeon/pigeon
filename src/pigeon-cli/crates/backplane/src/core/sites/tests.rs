@@ -137,3 +137,80 @@ fn probes_check_the_root_a_page_a_missing_page_and_the_www_redirect() {
     assert!(!list[4].passes(301, Some("https://www.example.com/"), ""));
     assert_eq!(probes(None, "example.com", &hosts, &keys, 7), Vec::new());
 }
+
+/// The docs gate; see the docs-under-platform ADR §2 and §3.
+mod view {
+    use super::super::view::{TTL, Target, cookie, gate, set_cookie, sign, target, valid};
+
+    const KEY: &[u8] = b"0123456789abcdef0123456789abcdef";
+
+    #[test]
+    fn a_path_names_its_key_and_nothing_leaves_the_prefix() {
+        assert_eq!(target("/docs"), Some(Target::Slash));
+        assert_eq!(target("/docs/"), Some(Target::Key("index.html".into())));
+        assert_eq!(target("/docs/a/"), Some(Target::Key("a/index.html".into())));
+        let css = Target::Key("assets/css/main.css".into());
+        assert_eq!(target("/docs/assets/css/main.css"), Some(css));
+        for outside in [
+            "/",
+            "/docsx",
+            "/docs/../passkeys",
+            "/docs/./a",
+            "/docs/a\\b",
+            "/approvals",
+        ] {
+            assert_eq!(target(outside), None, "{outside}");
+        }
+    }
+
+    #[test]
+    fn a_cookie_works_for_its_identity_until_it_expires() {
+        let now = 1_000_000;
+        let v = sign(KEY, "owner@example.com", now + TTL);
+        assert!(valid(KEY, &v, "owner@example.com", now));
+        assert!(!valid(KEY, &v, "other@example.com", now), "identity");
+        assert!(!valid(KEY, &v, "owner@example.com", now + TTL), "expired");
+        assert!(!valid(b"other key", &v, "owner@example.com", now), "key");
+        let far = sign(KEY, "owner@example.com", now + TTL + 1);
+        let (expires, tag) = v.split_once('.').expect("value");
+        let moved = format!("{}.{tag}", expires.parse::<u64>().expect("n") - 1);
+        // Too long-lived, an unsigned expiry, and malformed values.
+        for bad in [far.as_str(), moved.as_str(), "", "x", "1.", ".abc", "n.n"] {
+            assert!(!valid(KEY, bad, "owner@example.com", now), "{bad:?}");
+        }
+    }
+
+    #[test]
+    fn the_cookie_is_read_from_its_header_and_set_host_only() {
+        let header = "a=1; __Host-pigeon-docs=123.abc; b=2";
+        assert_eq!(cookie(header), Some("123.abc"));
+        assert_eq!(cookie("pigeon-docs=1"), None);
+        let set = set_cookie("123.abc");
+        for part in [
+            "__Host-pigeon-docs=123.abc",
+            "Path=/",
+            "Secure",
+            "HttpOnly",
+            "SameSite=Strict",
+        ] {
+            assert!(set.contains(part), "{set}");
+        }
+        assert!(!set.contains("Domain"), "{set}");
+    }
+
+    #[test]
+    fn the_gate_shows_no_site_and_escapes_what_it_echoes() {
+        let page = gate("/docs/\"><x>", true, Some("<refused>"));
+        assert!(page.contains("data-purpose=\"view:docs\""), "{page}");
+        assert!(
+            page.contains("&lt;refused&gt;") && !page.contains("<x>"),
+            "{page}"
+        );
+        assert!(!page.contains("diagram"), "{page}");
+        let none = gate("/docs/", false, None);
+        assert!(
+            none.contains("href=\"/passkeys\"") && !none.contains("data-passkey"),
+            "{none}"
+        );
+    }
+}
