@@ -293,3 +293,28 @@ A failure at any step marks the row `failed` with its reason; the digest names i
 3. **`feat(backplane)`:** `ios.release` and `ios.status`, the release's steps in `MainRun`, the Buildkite client, and `GET /v0/apple/release/archive`.
 4. **`feat(backplane)`:** the harness imports the intermediate, and `tooling/ci/buildkite/ios-sign.sh`.
 5. **The owner:** `ios.release`; build 1 reaches the internal group.
+
+### 2026-11-12: The upload uses App Store Connect's Build Uploads API, not Transporter
+
+Build 2 signed and exported, then `iTMSTransporter -m upload -jwt` stopped
+with `Client configuration failed` before any network step. `-jwt` is
+undocumented for Transporter 4, so §6's upload is replaced.
+
+- **`pigeon backplane signing upload --ipa FILE --version V --build N`** calls
+  the Build Uploads API with the grant's upload JWT, from the `0600` file, as
+  before:
+  1. `GET /v1/apps?filter[bundleId]=dev.pigeon.app` for the app's ID;
+  2. `POST /v1/buildUploads` with `cfBundleShortVersionString` V,
+     `cfBundleVersion` N and platform `IOS`;
+  3. `POST /v1/buildUploadFiles` for the IPA: its name, size, asset type
+     `ASSET` and UTI `com.apple.ipa`;
+  4. each of the answer's `uploadOperations`: its method, URL and headers,
+     with its `length` bytes from its `offset`;
+  5. `PATCH /v1/buildUploadFiles/{id}` with `uploaded: true`.
+  - A refused step stops it. It retries only the part transfers.
+- **The key still never leaves Cloudflare.** The JWT is the same 20-minute
+  token; no `.p8` reaches the Mac.
+- **`ios-sign.sh`** reads V and N from the archive's `Info.plist`, and no
+  longer needs `iTMSTransporter`.
+- **What follows is unchanged:** the control plane polls `GET /v1/builds`
+  until the build is `VALID`.
