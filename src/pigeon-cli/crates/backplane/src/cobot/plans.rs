@@ -1,10 +1,10 @@
-//! Stored plans: `plans/<id>/` in the state, applied exactly as planned; see the phase 3
+//! Stored plans: `plans/<id>/` in the state, read and written; the checks are
+//! [`crate::core::infra::plans`]; see the phase 3
 //! amendment §5 of `.claude/decisions/2026-11-04-development-platform-instance-separation.md`.
 
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use crate::cobot::Error;
@@ -12,69 +12,7 @@ use crate::cobot::s3::hex;
 use crate::cobot::tofu::Change;
 use crate::cobot::unit::Unit;
 
-/// The directory under the state holding stored plans.
-pub const DIR: &str = "plans";
-/// Each plan's manifest.
-pub const MANIFEST: &str = "plan.json";
-/// Each unit's saved plan file, encrypted like state.
-pub const FILE: &str = "plan.tfplan";
-/// How long a stored plan may be applied: 24 hours.
-pub const LIFETIME_SECS: u64 = 24 * 60 * 60;
-/// The directory under [`DIR`] holding completed plans' records.
-pub const COMPLETED: &str = "completed";
-/// How long a completed plan's record is kept: 7 days.
-pub const COMPLETED_SECS: u64 = 7 * 24 * 60 * 60;
-
-/// A completed apply: what each unit applied, kept after its plan is removed so a retry can
-/// report it.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(deny_unknown_fields)]
-pub struct Completed {
-    /// The plan's ID.
-    pub id: String,
-    /// When the apply completed, in Unix seconds.
-    pub completed: u64,
-    /// Each unit's changes and note, in apply order.
-    pub units: Vec<CompletedUnit>,
-}
-
-/// One unit of a completed apply.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(deny_unknown_fields)]
-pub struct CompletedUnit {
-    /// The unit's path.
-    pub unit: String,
-    /// Its changes: addresses, actions and attribute names only.
-    pub changes: Vec<Change>,
-    /// Its note, if any.
-    pub note: Option<String>,
-}
-
-/// A stored plan's manifest.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(deny_unknown_fields)]
-pub struct Stored {
-    /// Its ID: hex, from its units, plans and creation time.
-    pub id: String,
-    /// When it was stored, in Unix seconds.
-    pub created: u64,
-    /// After this, in Unix seconds, it is refused.
-    pub expires: u64,
-    /// Its units, in apply order.
-    pub units: Vec<StoredUnit>,
-}
-
-/// One unit of a stored plan.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(deny_unknown_fields)]
-pub struct StoredUnit {
-    /// The unit's path.
-    pub unit: String,
-    /// The SHA-256 of its desired state when planned.
-    pub digest: String,
-    /// Its planned changes: addresses and actions only.
-    pub changes: Vec<Change>,
-}
+pub use crate::core::infra::plans::*;
 
 fn io(path: &Path) -> impl Fn(std::io::Error) -> Error + '_ {
     move |e| Error::Io {
@@ -176,13 +114,6 @@ fn module_files(root: &Path, dir: &Path, out: &mut Vec<String>) -> Result<(), Er
     Ok(())
 }
 
-fn valid_id(id: &str) -> bool {
-    id.len() == 32
-        && id
-            .bytes()
-            .all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase())
-}
-
 /// Stores each unit's plan file under `<state>/plans/<id>/`, with a manifest.
 ///
 /// # Errors
@@ -237,23 +168,10 @@ pub fn store(
 ///
 /// [`Error::Plan`] for a malformed, unknown or expired ID or manifest.
 pub fn load(state: &Path, id: &str, now: u64) -> Result<Stored, Error> {
-    if !valid_id(id) {
-        return Err(Error::Plan(format!("`{id}` is not a plan ID")));
-    }
-    let manifest = state.join(DIR).join(id).join(MANIFEST);
-    let text =
-        fs::read_to_string(&manifest).map_err(|_| Error::Plan(format!("no stored plan {id}")))?;
-    let stored: Stored = serde_json::from_str(&text)
-        .map_err(|e| Error::Plan(format!("plan {id}'s manifest: {e}")))?;
-    if stored.id != id || stored.units.is_empty() {
-        return Err(Error::Plan(format!(
-            "plan {id}'s manifest does not match it"
-        )));
-    }
-    if now >= stored.expires {
-        return Err(Error::Plan(format!("plan {id} expired; plan again")));
-    }
-    Ok(stored)
+    let text = valid_id(id)
+        .then(|| fs::read_to_string(state.join(DIR).join(id).join(MANIFEST)).ok())
+        .flatten();
+    check(id, text.as_deref(), now).map_err(Error::Plan)
 }
 
 /// Copies plan `id`'s file for `unit` into place at `to`.
@@ -325,9 +243,11 @@ pub fn completed(state: &Path, id: &str, now: u64) -> Option<Completed> {
     if !valid_id(id) {
         return None;
     }
-    let record: Completed =
-        serde_json::from_str(&fs::read_to_string(completed_path(state, id)).ok()?).ok()?;
-    (record.id == id && now < record.completed + COMPLETED_SECS).then_some(record)
+    completed_of(
+        id,
+        &fs::read_to_string(completed_path(state, id)).ok()?,
+        now,
+    )
 }
 
 /// Removes completed plans' records older than [`COMPLETED_SECS`].
@@ -342,11 +262,7 @@ pub fn prune_completed(state: &Path, now: u64) -> Result<(), Error> {
     };
     for entry in entries.flatten() {
         let path = entry.path();
-        let expired = fs::read_to_string(&path)
-            .ok()
-            .and_then(|t| serde_json::from_str::<Completed>(&t).ok())
-            .is_none_or(|r| now >= r.completed + COMPLETED_SECS);
-        if expired {
+        if expired(fs::read_to_string(&path).ok().as_deref(), now) {
             fs::remove_file(&path).map_err(io(&path))?;
         }
     }

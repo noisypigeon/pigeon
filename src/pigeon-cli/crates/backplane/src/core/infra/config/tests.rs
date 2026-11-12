@@ -7,7 +7,7 @@ use serde_json::json;
 
 use super::{Disk, Module, ModuleInfo, from_kind, render, validate};
 use crate::cobot::generations::Day;
-use crate::cobot::providers::Allowlist;
+use crate::core::infra::providers::Allowlist;
 
 fn unit() -> super::ConfigUnit {
     let schema = json!({

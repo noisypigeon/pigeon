@@ -10,7 +10,7 @@ use super::{
 };
 use crate::cobot::apex;
 use crate::cobot::generations::{self, Day, Generation};
-use crate::cobot::providers::Allowlist;
+use crate::core::infra::providers::Allowlist;
 
 /// Escapes template sequences so a literal string is never evaluated.
 pub(crate) fn literal(value: &Value) -> Value {

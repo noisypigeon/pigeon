@@ -8,7 +8,7 @@ use std::sync::LazyLock;
 use regex::Regex;
 use serde::Deserialize;
 
-use crate::cobot::providers::Allowlist;
+use crate::core::infra::providers::Allowlist;
 
 /// The areas that may hold units.
 pub const AREAS: [&str; 2] = ["infra", "workloads"];

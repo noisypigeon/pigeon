@@ -9,7 +9,7 @@ use super::super::{
     BLOCK, Block, CONFIG, ConfigUnit, Disk, Expr, MODULE_VERSION, Map, ModuleInfo, SCHEMA, blocks,
     declared_secrets, exprs_in, has_handoff, module_named_well, parse, x_cobot,
 };
-use crate::cobot::providers::Allowlist;
+use crate::core::infra::providers::Allowlist;
 
 /// Checks one block's name and module; the module's info if it exists.
 pub(crate) fn check_module(

@@ -8,8 +8,8 @@ use super::{
     BLOCK, CONFIG, CREDENTIAL, ConfigUnit, Disk, Expr, SCHEMA, SEMVER, allowed, blocks,
     declared_credentials, declared_secrets, exprs_in, parse, walk_strings, x_cobot,
 };
-use crate::cobot::providers::Allowlist;
 use crate::cobot::{apex, secrets};
+use crate::core::infra::providers::Allowlist;
 
 mod blocks;
 

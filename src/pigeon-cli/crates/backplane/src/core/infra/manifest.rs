@@ -11,7 +11,7 @@ use regex::Regex;
 use serde::Deserialize;
 use serde_json::{Map, Value};
 
-use crate::cobot::moves::Move;
+use crate::core::infra::moves::Move;
 
 /// The manifest, under the instance's root.
 pub const FILE: &str = "config.yaml";
