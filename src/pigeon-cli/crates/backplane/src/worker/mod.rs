@@ -505,11 +505,13 @@ async fn dispatch(
             mandate,
             session,
             affects,
+            full,
         } => {
             let mut change = Change::propose(0, &slug, &title, &plan, scope, &who.subject);
             change.mandate = mandate;
             change.session = session;
             change.affects = affects;
+            change.full_asked = full.then(|| who.subject.clone());
             propose(env, s, operation, change).await
         }
         Routed::Event {

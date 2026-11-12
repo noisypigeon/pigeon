@@ -73,6 +73,7 @@ fn operations_route_to_events_with_the_access_identity() {
             mandate: None,
             session: None,
             affects: Vec::new(),
+            full: false,
         })
     );
     assert!(
@@ -993,4 +994,33 @@ fn ci_window_routes_with_its_hours() {
     assert_eq!(ask(json!(0)), Ok(Routed::CiWindow { hours: 0 }));
     assert!(ask(json!(25)).is_err());
     assert!(ask(json!("six")).is_err());
+}
+
+#[test]
+fn a_full_merge_gate_can_be_asked_for_at_proposal_and_at_merge() {
+    let propose = control::route(
+        &request(
+            "change.propose",
+            &json!({ "slug": "x", "title": "feat(x): y", "plan": "p", "scope": "a/**", "full": true }),
+        ),
+        "agent",
+        1,
+    );
+    assert!(matches!(propose, Ok(Routed::Propose { full: true, .. })));
+    let merge =
+        |args: serde_json::Value| control::route(&request("change.merge", &args), "owner", 1);
+    assert!(matches!(
+        merge(json!({ "number": "7", "full": "true" })),
+        Ok(Routed::Event {
+            event: Event::MergeFull { .. },
+            ..
+        })
+    ));
+    assert!(matches!(
+        merge(json!({ "number": "7" })),
+        Ok(Routed::Event {
+            event: Event::Merge { .. },
+            ..
+        })
+    ));
 }

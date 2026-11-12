@@ -403,3 +403,39 @@ fn a_clean_restack_makes_the_gate_full_and_a_session_push_clears_it() {
     let (c, _) = step(&c, Event::Pushed { sha: C.into() }).expect("a session push");
     assert_eq!(c.gate_full, None);
 }
+
+#[test]
+fn a_full_run_asked_for_at_merge_holds_whatever_the_gate() {
+    use crate::core::deploy::gate::Gate;
+    let mut c = run(
+        pushed(),
+        vec![Event::Bounded {
+            sha: A.into(),
+            violations: Vec::new(),
+            checks: Vec::new(),
+            full: full_set(),
+            tiers: None,
+            gate: Some(Gate::Scoped),
+        }],
+    );
+    c = run(
+        c,
+        vec![Event::Approve {
+            by: "owner".into(),
+            sha: A.into(),
+            at: 2,
+        }],
+    );
+    let (c, effects) = step(&c, Event::MergeFull { by: "owner".into() }).expect("merges");
+    assert_eq!(
+        effects,
+        vec![
+            Effect::Start("gate: clippy".into()),
+            Effect::Start("gate: test".into())
+        ]
+    );
+    assert_eq!(
+        c.gate_why().as_deref(),
+        Some("owner asked for the full run")
+    );
+}

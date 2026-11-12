@@ -223,7 +223,7 @@ const CATALOG: &[Operation] = &[
         name: "change.propose",
         engine: Engine::Backplane,
         effect: Effect::Plan,
-        summary: "Propose a change: its slug, Conventional Commit title, plan and scope (globs, one per line), and optionally the `mandate` it is carried out under, the `session` proposing it, and for a design change the globs its ADR `affects`; returns its number, its branch, change/<number>-<slug>, and the open changes it `overlaps`",
+        summary: "Propose a change: its slug, Conventional Commit title, plan and scope (globs, one per line), and optionally the `mandate` it is carried out under, the `session` proposing it, for a design change the globs its ADR `affects`, and `full` true to run the whole test suite in its merge gate; returns its number, its branch, change/<number>-<slug>, and the open changes it `overlaps`",
         args: &[
             arg("slug", true, Kind::String),
             arg("title", true, Kind::String),
@@ -233,6 +233,7 @@ const CATALOG: &[Operation] = &[
             arg("session", false, Kind::String),
             arg("affects", false, Kind::String),
             arg("ticket", false, Kind::String),
+            arg("full", false, Kind::Text),
         ],
     },
     Operation {
@@ -283,8 +284,12 @@ const CATALOG: &[Operation] = &[
         name: "change.merge",
         engine: Engine::Backplane,
         effect: Effect::Apply,
-        summary: "Merge an approved change: its head is squashed onto main as `<title> (!<number>)` and its branch deleted; main must be an ancestor of the head",
-        args: &[NUMBER, arg("ticket", false, Kind::String)],
+        summary: "Merge an approved change: its head is squashed onto main as `<title> (!<number>)` and its branch deleted; main must be an ancestor of the head (args: full?, true to run the whole test suite in its merge gate)",
+        args: &[
+            NUMBER,
+            arg("ticket", false, Kind::String),
+            arg("full", false, Kind::Text),
+        ],
     },
     Operation {
         name: "change.close",

@@ -645,6 +645,10 @@ impl DurableObject for ChangeRun {
                     "failures": failures,
                     "bound_log": bound_log,
                     "github": github.view(),
+                    "gate": match change.gate_why() {
+                        None => json!({ "mode": "scoped" }),
+                        Some(why) => json!({ "mode": "full", "why": why }),
+                    },
                 }))
             }
             (Method::Post, "grant") => {

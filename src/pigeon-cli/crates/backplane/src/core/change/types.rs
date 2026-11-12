@@ -309,6 +309,10 @@ pub struct Change {
     /// cleared by the session's next push.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub gate_full: Option<String>,
+    /// Who asked for the full test run in the merge gate, at its proposal or its merge; it holds
+    /// for every head.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub full_asked: Option<String>,
     /// Its head conflicts with `main`; cleared by its next push.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub conflict: Option<Conflicted>,
@@ -401,6 +405,11 @@ pub enum Event {
     },
     /// A person asked for the approved head to be merged.
     Merge {
+        /// Who.
+        by: String,
+    },
+    /// A person asked for the approved head to be merged after the full test run.
+    MergeFull {
         /// Who.
         by: String,
     },
@@ -535,6 +544,7 @@ impl Change {
             full: Vec::new(),
             gate: None,
             gate_full: None,
+            full_asked: None,
             conflict: None,
             parent: None,
             held: None,

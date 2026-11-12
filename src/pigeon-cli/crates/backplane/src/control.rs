@@ -36,6 +36,8 @@ pub enum Routed {
         session: Option<String>,
         /// For a design change: the globs its ADR will govern.
         affects: Vec<String>,
+        /// Whether its merge gate runs the full test suite whatever its scope.
+        full: bool,
     },
     /// Apply an event to change `number`; `by` is filled in from Access.
     Event {
@@ -122,6 +124,11 @@ fn text(args: &Map<String, Value>, k: &str) -> Option<String> {
     }
 }
 
+/// Whether argument `k` is `true`, as a boolean or as text.
+fn flag(args: &Map<String, Value>, k: &str) -> bool {
+    text(args, k).is_some_and(|v| v.trim() == "true")
+}
+
 fn need(args: &Map<String, Value>, k: &str) -> Result<String, String> {
     text(args, k)
         .map(|s| s.trim().to_string())
@@ -188,6 +195,7 @@ pub fn route(request: &Request, by: &str, at: u64) -> Result<Routed, String> {
                 mandate,
                 session,
                 affects,
+                full: flag(a, "full"),
             })
         }
         "change.authorize" => event(Event::ApprovePlan { by: by.into(), at }),
@@ -200,6 +208,7 @@ pub fn route(request: &Request, by: &str, at: u64) -> Result<Routed, String> {
             at,
         }),
         "change.close" => event(Event::Close),
+        "change.merge" if flag(a, "full") => event(Event::MergeFull { by: by.into() }),
         "change.merge" => event(Event::Merge { by: by.into() }),
         "ci.rerun" => match text(a, "on").as_deref() {
             None | Some("" | "github") => event(Event::Rerun {

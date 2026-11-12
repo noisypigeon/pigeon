@@ -13,7 +13,7 @@ impl Change {
                 .iter()
                 .any(|j| j.name == name && j.status == JobStatus::Passed)
         };
-        let scoped = self.gate_full.is_none() && self.gate == Some(Gate::Scoped);
+        let scoped = self.gate_why().is_none();
         self.full
             .iter()
             .filter(|c| !(scoped && whole_suite(c)))
@@ -27,6 +27,9 @@ impl Change {
     /// `.claude/decisions/2026-11-10-development-factory-crates-functional-core.md`.
     #[must_use]
     pub fn gate_why(&self) -> Option<String> {
+        if let Some(by) = &self.full_asked {
+            return Some(format!("{by} asked for the full run"));
+        }
         if let Some(why) = &self.gate_full {
             return Some(why.clone());
         }

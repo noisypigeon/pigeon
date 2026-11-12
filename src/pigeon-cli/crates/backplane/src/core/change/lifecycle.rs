@@ -60,6 +60,10 @@ impl Change {
             Event::Rerun { job } => self.rerun(&job),
             Event::Approve { by, sha, at } => self.approve(by, sha, at),
             Event::Merge { by } => self.merge(&by),
+            Event::MergeFull { by } => {
+                self.full_asked = Some(by.clone());
+                self.merge(&by)
+            }
             Event::Merged { sha, commit } => self.merged(&sha, commit),
             Event::MergeFailed { sha, reason } => {
                 if self.on_head(&sha) && self.state == State::Approved {
