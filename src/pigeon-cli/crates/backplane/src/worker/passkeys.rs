@@ -163,6 +163,16 @@ pub async fn prove(
     })
 }
 
+/// Whether the owner has registered a passkey.
+///
+/// # Errors
+///
+/// When the binding fails.
+pub(super) async fn registered(env: &Env, s: &Settings) -> Result<bool> {
+    let v = to_instance(env, s, "/passkeys/list", &json!({})).await?;
+    Ok(v["keys"].as_array().is_some_and(|k| !k.is_empty()))
+}
+
 /// Whether `form` carries a passkey answer rather than a code.
 #[must_use]
 pub fn answered(form: &str) -> bool {
@@ -203,7 +213,8 @@ pub async fn page_serve(
         (Method::Post, "/passkeys/challenge") => {
             let body: Value = req.json().await?;
             let purpose = body["purpose"].as_str().unwrap_or_default();
-            if purpose != passkeys::REGISTER && !purpose.starts_with("grant:") {
+            let viewing = purpose == crate::core::sites::view::PURPOSE;
+            if purpose != passkeys::REGISTER && !purpose.starts_with("grant:") && !viewing {
                 return refused(400, "no such purpose");
             }
             let mut v = to_instance(

@@ -10,34 +10,7 @@ use crate::cobot::generations::Day;
 use crate::cobot::s3::{self, Credentials};
 use crate::cobot::{apex, static_site};
 
-/// A file's `Content-Type`, from its extension.
-#[must_use]
-pub fn content_type(key: &str) -> &'static str {
-    let ext = key.rsplit_once('.').map(|(_, e)| e.to_ascii_lowercase());
-    match ext.as_deref() {
-        Some("html" | "htm") => "text/html; charset=utf-8",
-        Some("css") => "text/css; charset=utf-8",
-        Some("js" | "mjs") => "text/javascript; charset=utf-8",
-        Some("json" | "map") => "application/json",
-        Some("xml") => "application/xml",
-        Some("txt") => "text/plain; charset=utf-8",
-        Some("svg") => "image/svg+xml",
-        Some("png") => "image/png",
-        Some("jpg" | "jpeg") => "image/jpeg",
-        Some("gif") => "image/gif",
-        Some("webp") => "image/webp",
-        Some("avif") => "image/avif",
-        Some("ico") => "image/x-icon",
-        Some("woff2") => "font/woff2",
-        Some("woff") => "font/woff",
-        Some("ttf") => "font/ttf",
-        Some("pdf") => "application/pdf",
-        Some("mp4") => "video/mp4",
-        Some("webm") => "video/webm",
-        Some("wasm") => "application/wasm",
-        _ => "application/octet-stream",
-    }
-}
+pub use super::view::content_type;
 
 /// One object to upload: its body and type.
 #[derive(Debug, Clone)]

@@ -14,6 +14,7 @@ mod buildkite;
 mod change;
 mod checker;
 mod ci_window;
+mod docs;
 mod elicit;
 mod events;
 mod gitdoor;
@@ -118,6 +119,7 @@ const SURFACES: &[&[Route]] = &[
     platforms::ROUTES,
     mandates::ROUTES,
     ci_window::ROUTES,
+    docs::ROUTES,
 ];
 
 /// The change number of `request`'s `number` argument.
@@ -818,10 +820,15 @@ async fn smoke(env: &Env, s: &Settings, who: &Identity) -> Result<Response> {
     let deploy = run(env, s, who, &read("deploy.status", json!({})))
         .await
         .is_ok_and(|r| r.ok);
-    let probes = json!({
+    let mut probes = json!({
         "d1": d1, "instance": instance, "main": main, "tools": tools,
         "change_status": change, "deploy_status": deploy,
     });
+    // The docs site, once its bucket is bound.
+    if let Ok(bucket) = env.bucket(docs::BINDING) {
+        let found = bucket.head("index.html").await.is_ok_and(|o| o.is_some());
+        probes["docs"] = json!(found);
+    }
     let ok = !version.is_empty()
         && probes
             .as_object()
