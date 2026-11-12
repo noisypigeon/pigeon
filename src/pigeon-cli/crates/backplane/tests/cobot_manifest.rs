@@ -97,6 +97,7 @@ fn platform() -> TempDir {
         ".config/providers.lock.hcl",
         "catalog/cloudflare",
         "catalog/agnostic",
+        "catalog/pigeon",
     ] {
         copy_from(&repo_root(), dir.path(), rel);
     }
@@ -415,6 +416,58 @@ fn a_site_unit_builds_from_its_content_at_its_own_hosts() {
     assert_eq!(blog.hosts, [ZONE.to_string(), format!("www.{ZONE}")]);
     assert_eq!(blog.bucket(), "blog-noisypigeon-com");
     assert_eq!(blog.settings, Some(json!({ "title": "Willow Graysen" })));
+}
+
+/// The blog served by a platform unit at `/docs`, with no host of its own.
+fn served_manifest() -> String {
+    manifest()
+        .replace(
+            "hosts: [\"@\", www]",
+            "hosts: []\n    served_by: { unit: platform/blue, path: /docs }",
+        )
+        .replace(
+            "moves:",
+            "  platform/blue:
+    kind: pigeon/platform
+    worker: w
+    hostname: w.example.workers.dev
+    domains: [platform.example.dev, blue.platform.example.dev]
+    instance: i
+    change_floor: 1
+    database: { name: d }
+    buckets: [ { name: b } ]
+    queue: { name: q }
+    access: { application: a, owners_policy: o }
+    service_tokens: []
+moves:",
+        )
+}
+
+#[test]
+fn a_served_site_builds_at_its_platforms_path_and_claims_no_domain() {
+    let platform = platform();
+    let inst = instance(&served_manifest());
+    let got = problems(inst.path(), platform.path());
+    assert!(got.is_empty(), "{got:?}");
+    let sites = backplane::cobot::sites::find_in(inst.path(), platform.path(), &[]).expect("found");
+    let blog = &sites[0];
+    assert!(blog.hosts.is_empty(), "{:?}", blog.hosts);
+    assert_eq!(
+        blog.url().as_deref(),
+        Some("https://platform.example.dev/docs")
+    );
+    let rendered = render(inst.path(), platform.path(), "sites/blog");
+    assert!(items(&rendered, "domains").is_empty(), "{rendered}");
+    assert_eq!(items(&rendered, "bucket").len(), 1, "{rendered}");
+}
+
+#[test]
+fn a_site_served_by_no_platform_is_refused() {
+    let platform = platform();
+    let inst = instance(&served_manifest().replace("unit: platform/blue", "unit: platform/nope"));
+    let err =
+        backplane::cobot::sites::find_in(inst.path(), platform.path(), &[]).expect_err("refused");
+    assert!(err.to_string().contains("served_by"), "{err}");
 }
 
 #[test]

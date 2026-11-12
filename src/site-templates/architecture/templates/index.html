@@ -7,13 +7,13 @@
   <meta name="color-scheme" content="dark light">
   <meta name="description" content="{{ config.description }}">
   <link rel="canonical" href="{{ config.base_url }}/">
-  <link rel="manifest" href="/manifest.json">
-  <link rel="stylesheet" href="/assets/css/main.css">
+  <link rel="manifest" href="{{ get_url(path="manifest.json") }}">
+  <link rel="stylesheet" href="{{ get_url(path="assets/css/main.css") }}">
   {%- if config.extra.features.fonts %}
   <link rel="preconnect" href="https://fonts.bunny.net" crossorigin>
   <link rel="stylesheet" href="https://fonts.bunny.net/css?family={{ config.extra.look.font_family }}&display=swap">
   {%- endif %}
-  <script src="/assets/js/rail.js" defer></script>
+  <script src="{{ get_url(path="assets/js/rail.js") }}" defer></script>
 </head>
 {%- set data = load_data(path="data/architecture.json", required=false) %}
 {%- set sha = "" %}

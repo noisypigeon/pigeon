@@ -125,10 +125,32 @@ fn the_architecture_template_has_no_content_and_only_its_rail_script() {
     assert!(index.contains("load_data(path=\"data/architecture.json\""));
     // Its only script is the static rail.js; see the 2026-11-11 amendment of
     // .claude/decisions/2026-11-05-runtime-architecture-site-through-backplane.md.
-    let rail = "<script src=\"/assets/js/rail.js\" defer></script>";
+    let rail = "<script src=\"{{ get_url(path=\"assets/js/rail.js\") }}\" defer></script>";
     assert_eq!(index.matches("<script").count(), 1, "one script");
     assert!(index.contains(rail), "the script is rail.js");
     assert!(dir.join("static/assets/js/rail.js").is_file());
+}
+
+/// It builds under a path, as `served_by` serves it; see
+/// `.claude/decisions/2026-11-11-runtime-docs-under-platform-passkey.md` §4.
+#[test]
+fn the_architecture_template_links_relative_to_its_base_url() {
+    let dir = templates_dir().join("architecture");
+    let index = fs::read_to_string(dir.join("templates/index.html")).expect("index.html");
+    for root in ["href=\"/", "src=\"/"] {
+        assert!(
+            !index.contains(root),
+            "a root-relative `{root}` in index.html"
+        );
+    }
+    let manifest: Value = serde_json::from_str(
+        &fs::read_to_string(dir.join("scaffold/static/manifest.json")).expect("manifest.json"),
+    )
+    .expect("json");
+    assert_eq!(
+        manifest["start_url"], "./",
+        "start_url is relative to manifest.json"
+    );
 }
 
 #[test]

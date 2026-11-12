@@ -758,7 +758,11 @@ impl Expansion {
             let is_site = own
                 .as_ref()
                 .is_some_and(crate::cobot::static_site::is_static);
-            if is_site && hosts.is_empty() {
+            // A site a platform serves at a path claims no host.
+            let served = own
+                .as_ref()
+                .is_some_and(|c| c["static_site"].get("served_by").is_some());
+            if is_site && hosts.is_empty() && !served {
                 self.problems.push(format!(
                     "workloads/{zone}/{w}: a static site needs a host; the apex assigns it none"
                 ));

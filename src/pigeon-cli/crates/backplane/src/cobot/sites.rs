@@ -58,6 +58,9 @@ pub struct Site {
     pub hosts: Vec<String>,
     /// Its settings, `static_site.site`, built through the template's contract.
     pub settings: Option<Value>,
+    /// Its URL when a platform serves it at a path (`served_by`); see
+    /// `.claude/decisions/2026-11-11-runtime-docs-under-platform-passkey.md` §4.
+    pub served: Option<String>,
 }
 
 impl Site {
@@ -109,6 +112,23 @@ impl Site {
             .or_else(|| self.hosts.first())
             .map(String::as_str)
     }
+
+    /// Its `base_url`: where a platform serves it, else its canonical host.
+    #[must_use]
+    pub fn url(&self) -> Option<String> {
+        self.served
+            .clone()
+            .or_else(|| self.canonical().map(|h| format!("https://{h}")))
+    }
+}
+
+/// A site's URL when a platform unit serves it at a path, from its `served_by`; see
+/// `.claude/decisions/2026-11-11-runtime-docs-under-platform-passkey.md` §4.
+fn served_url(m: &crate::cobot::manifest::Manifest, settings: &Value) -> Option<String> {
+    let by = settings.get("served_by")?;
+    let unit = m.units.get(by["unit"].as_str()?)?;
+    let host = unit.settings["domains"][0].as_str()?;
+    Some(format!("https://{host}{}", by["path"].as_str()?))
 }
 
 /// A built site: where Zola wrote it.
@@ -239,6 +259,13 @@ pub fn find_in(root: &Path, platform: &Path, wanted: &[String]) -> Result<Vec<Si
             Some(m) => m.content(&u.path).unwrap_or_else(|| u.dir.join("site")),
             None => u.dir.join("site"),
         };
+        let served = match (&site.manifest, settings.get("served_by")) {
+            (Some(m), Some(_)) => Some(served_url(m, settings).ok_or_else(|| Error::Io {
+                path: PathBuf::from(&u.path).join(crate::cobot::config::CONFIG),
+                message: "served_by: `unit` must be a unit with `domains`".into(),
+            })?),
+            _ => None,
+        };
         let version = template["version"].as_str().unwrap_or_default().to_string();
         if version == TREE
             && !root
@@ -271,6 +298,7 @@ pub fn find_in(root: &Path, platform: &Path, wanted: &[String]) -> Result<Vec<Si
                 .collect(),
             hosts,
             settings: settings.get("site").cloned(),
+            served,
         });
     }
     if let Some(missing) = wanted
@@ -408,13 +436,10 @@ pub fn build_in(
     for site in sites {
         let declared = declared(platform, site)?;
         let features = features(site, &declared.features)?;
-        let base = format!(
-            "https://{}",
-            site.canonical().ok_or_else(|| Error::Io {
-                path: PathBuf::from(&site.unit),
-                message: "the apex assigns this static site no host".into(),
-            })?
-        );
+        let base = site.url().ok_or_else(|| Error::Io {
+            path: PathBuf::from(&site.unit),
+            message: "the apex assigns this static site no host".into(),
+        })?;
         let work = root.join(WORK_DIR).join(&site.unit).join("site");
         if work.exists() {
             fs::remove_dir_all(&work).map_err(io(&work))?;
@@ -769,6 +794,10 @@ pub fn checks(
     tries: u32,
     wait: Duration,
 ) -> Vec<Check> {
+    // A served site sits behind the platform's passkey gate; its digests are checked instead.
+    if built.site.served.is_some() {
+        return Vec::new();
+    }
     probes(
         built.site.canonical(),
         &built.site.zone,
@@ -818,6 +847,7 @@ mod tests {
             features: features.iter().map(|f| (*f).to_string()).collect(),
             hosts: vec!["z.com".into(), "www.z.com".into()],
             settings: None,
+            served: None,
         }
     }
 

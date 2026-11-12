@@ -139,10 +139,14 @@ pub fn bucket(config: &Value, site: &Site) -> Map<String, Value> {
 #[must_use]
 pub fn domains(config: &Value, site: &Site) -> (Map<String, Value>, Vec<String>) {
     let mut out = Map::new();
-    let (Some(w), Some(_)) = (&site.workload, settings(config, site)) else {
+    let (Some(w), Some(s)) = (&site.workload, settings(config, site)) else {
         return (out, Vec::new());
     };
     let hosts = hosts(site, w);
+    // A platform serves it at a path, with no host of its own.
+    if hosts.is_empty() && s.get("served_by").is_some() {
+        return (out, Vec::new());
+    }
     if hosts.is_empty() {
         let why = if site.manifest.is_some() {
             "hosts: a static site needs a host".to_string()

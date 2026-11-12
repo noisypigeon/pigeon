@@ -17,12 +17,29 @@
       "pattern": "^[a-z0-9-]+(\\.[a-z0-9-]+)+$"
     },
     "hosts": {
-      "description": "The names it claims, relative to the zone.",
+      "description": "The names it claims, relative to the zone; none when a platform serves it (served_by).",
       "type": "array",
-      "minItems": 1,
       "uniqueItems": true,
       "items": {
         "$ref": "#/$defs/name"
+      }
+    },
+    "served_by": {
+      "description": "A pigeon/platform unit that serves it at a path, with no host of its own; see .claude/decisions/2026-11-11-runtime-docs-under-platform-passkey.md §4.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "unit",
+        "path"
+      ],
+      "properties": {
+        "unit": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string",
+          "pattern": "^/[a-z0-9-]+$"
+        }
       }
     },
     "template": {
