@@ -97,6 +97,13 @@ pub enum Routed {
         /// Its arguments.
         args: serde_json::Map<String, Value>,
     },
+    /// `ci.window` for `hours`, 0 closing it; see
+    /// `.claude/decisions/2026-11-10-development-code-checks-github-actions.md`, its 2026-11-11
+    /// amendment.
+    CiWindow {
+        /// How long it lasts.
+        hours: u32,
+    },
     /// A mandate operation, with its arguments; see
     /// `.claude/decisions/2026-11-08-security-tiered-approvals-task-mandates.md` §3.
     Mandate {
@@ -202,6 +209,9 @@ pub fn route(request: &Request, by: &str, at: u64) -> Result<Routed, String> {
             Some(other) => Err(format!("`on` is `github` or `cloudflare`, not `{other}`")),
         },
         BREAK_GLASS => Ok(Routed::BreakGlass { number: number(a)? }),
+        crate::ci_window::OPERATION => Ok(Routed::CiWindow {
+            hours: crate::ci_window::hours(text(a, "hours").as_deref())?,
+        }),
         "change.status" => Ok(Routed::Status { number: number(a)? }),
         "deploy.status" => Ok(Routed::DeployStatus),
         "deploy.retry" => Ok(Routed::DeployRetry),
@@ -966,6 +976,22 @@ pub fn code_unpassed(change: &Change) -> bool {
             .any(|j| crate::actions::on_github(&j.argv) && j.status != changes::JobStatus::Passed)
 }
 
+/// Whether opening the CI window moves `change`: open, with a code check on its head queued or
+/// running, as on GitHub; one that only failed stays for `ci_rerun`.
+#[must_use]
+pub fn window_moves(change: &Change) -> bool {
+    use changes::JobStatus;
+    change.head.is_some()
+        && !matches!(
+            change.state,
+            changes::State::Merged | changes::State::Closed
+        )
+        && change.jobs.iter().any(|j| {
+            crate::actions::on_github(&j.argv)
+                && matches!(j.status, JobStatus::Queued | JobStatus::Running)
+        })
+}
+
 /// [`BREAK_GLASS`] on `change`: `github` records its head as run on Cloudflare and drops its
 /// dispatches; the answer is the events to apply, then the checks to start on the `Checker`.
 ///
@@ -1017,11 +1043,13 @@ pub fn break_glass(
 }
 
 /// Whether `job` on `change` runs on GitHub Actions: a code check, on a change whose head a
-/// `mirror` job pushes, on a Worker that mirrors; see
-/// `.claude/decisions/2026-11-10-development-code-checks-github-actions.md` §1.
+/// `mirror` job pushes, on a Worker that mirrors, while the owner's CI window is closed; see
+/// `.claude/decisions/2026-11-10-development-code-checks-github-actions.md` §1 and its
+/// 2026-11-11 amendment.
 #[must_use]
-pub fn to_github(change: &Change, job: &str, mirrors: bool) -> bool {
+pub fn to_github(change: &Change, job: &str, mirrors: bool, window_open: bool) -> bool {
     mirrors
+        && !window_open
         && change.jobs.iter().any(|j| j.name == MIRROR)
         && change
             .jobs

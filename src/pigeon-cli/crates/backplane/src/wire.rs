@@ -313,6 +313,16 @@ const CATALOG: &[Operation] = &[
         args: &[NUMBER, arg("ticket", false, Kind::String)],
     },
     Operation {
+        name: "ci.window",
+        engine: Engine::Backplane,
+        effect: Effect::Plan,
+        summary: "Ask the owner to run every change's code checks on Cloudflare's Checker instead of GitHub Actions for `hours` (1 to 24; 0 closes the window early); answers with the page's link, granted with the code",
+        args: &[
+            arg("hours", true, Kind::Text),
+            arg("ticket", false, Kind::String),
+        ],
+    },
+    Operation {
         name: "git.tokens",
         engine: Engine::Backplane,
         effect: Effect::Read,

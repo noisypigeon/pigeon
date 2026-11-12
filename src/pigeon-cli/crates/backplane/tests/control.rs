@@ -812,13 +812,17 @@ fn code_checks_go_to_github_only_on_a_mirrored_change() {
         tiers: None,
     }))
     .expect("bounded");
-    assert!(control::to_github(&c, "fmt", true));
+    assert!(control::to_github(&c, "fmt", true, false));
     assert!(
-        !control::to_github(&c, "fmt", false),
+        !control::to_github(&c, "fmt", false, false),
         "a Worker that doesn't mirror"
     );
-    assert!(!control::to_github(&c, "policy.check", true));
-    assert!(!control::to_github(&c, control::MIRROR, true));
+    assert!(!control::to_github(&c, "policy.check", true, false));
+    assert!(!control::to_github(&c, control::MIRROR, true, false));
+    assert!(
+        !control::to_github(&c, "fmt", true, true),
+        "the owner's CI window keeps code checks on the Checker"
+    );
     assert_eq!(control::mirror_state(&c), Mirror::Open);
     let names: Vec<String> = control::checks_of(&c).into_iter().map(|k| k.name).collect();
     assert_eq!(names, ["bound", "fmt", "policy.check", "mirror"]);
@@ -837,7 +841,7 @@ fn code_checks_go_to_github_only_on_a_mirrored_change() {
         })
         .expect("bounded");
     assert!(
-        !control::to_github(&plain, "fmt", true),
+        !control::to_github(&plain, "fmt", true, false),
         "a change bounded before the mirror job keeps its Checker"
     );
     assert_eq!(control::mirror_state(&plain), Mirror::Failed);
@@ -940,4 +944,48 @@ fn the_break_glass_moves_a_heads_unpassed_code_checks_to_the_checker() {
         control::break_glass(&done, &mut Actions::default()).is_err(),
         "nothing to run"
     );
+}
+
+#[test]
+fn opening_the_ci_window_moves_a_change_waiting_on_github() {
+    use backplane::actions::Actions;
+    use backplane::changes::{JobStatus, State};
+    let mut c = pushed();
+    c.state = State::Bounded;
+    c.jobs = vec![
+        job("bound", "", JobStatus::Passed),
+        job("fmt", "cargo fmt --all", JobStatus::Passed),
+        job("test", "cargo test --workspace", JobStatus::Running),
+        job(control::MIRROR, "", JobStatus::Passed),
+    ];
+    assert!(control::window_moves(&c));
+    let mut github = Actions::default();
+    github.queue(9, A, "test");
+    control::break_glass(&c, &mut github).expect("applies");
+    assert!(github.on_cloudflare(A));
+    assert_eq!(github.dispatches.len(), 0, "its GitHub dispatch is dropped");
+
+    let mut failed = c.clone();
+    failed.jobs[2].status = JobStatus::Failed;
+    assert!(
+        !control::window_moves(&failed),
+        "a failed check waits for ci_rerun"
+    );
+    let mut closed = c.clone();
+    closed.state = State::Closed;
+    assert!(!control::window_moves(&closed));
+    let mut passed = c;
+    passed.jobs[2].status = JobStatus::Passed;
+    assert!(!control::window_moves(&passed));
+}
+
+#[test]
+fn ci_window_routes_with_its_hours() {
+    let ask = |h: serde_json::Value| {
+        control::route(&request("ci.window", &json!({ "hours": h })), "a", 1)
+    };
+    assert_eq!(ask(json!("6")), Ok(Routed::CiWindow { hours: 6 }));
+    assert_eq!(ask(json!(0)), Ok(Routed::CiWindow { hours: 0 }));
+    assert!(ask(json!(25)).is_err());
+    assert!(ask(json!("six")).is_err());
 }

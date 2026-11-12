@@ -13,6 +13,7 @@ mod approve;
 mod buildkite;
 mod change;
 mod checker;
+mod ci_window;
 mod elicit;
 mod events;
 mod gitdoor;
@@ -116,6 +117,7 @@ const SURFACES: &[&[Route]] = &[
     passkeys::ROUTES,
     platforms::ROUTES,
     mandates::ROUTES,
+    ci_window::ROUTES,
 ];
 
 /// The change number of `request`'s `number` argument.
@@ -531,6 +533,7 @@ async fn dispatch(
             ))
         }
         Routed::BreakGlass { number } => break_glass(env, s, operation, number).await,
+        Routed::CiWindow { hours } => Ok(answered(operation, ci_window::run(env, s, hours).await?)),
         Routed::Status { number } => {
             let (status, v) = to_change(env, &s.repo, number, Method::Get, "/status", None).await?;
             Ok((Some(number.to_string()), respond(operation, status, v)))
@@ -541,13 +544,7 @@ async fn dispatch(
             let v: Value = r.json().await?;
             Ok((None, respond(operation, r.status_code(), v)))
         }
-        Routed::DeployStatus => {
-            let req = json_request("https://main/status", Method::Get, None, None)?;
-            let mut r = platform::call(env, &main_stub(env, &s.repo)?, req).await?;
-            let mut v: Value = r.json().await?;
-            v["pipeline"]["last_log"] = json!(last_log(env, &v).await?);
-            Ok((None, respond(operation, r.status_code(), v)))
-        }
+        Routed::DeployStatus => deploy_status(env, s, operation).await,
         Routed::GitTokens => {
             let api = platform::secret(env, "ARTIFACTS_TOKEN")?;
             let account = platform::account(&api).await?;
@@ -613,6 +610,20 @@ async fn dispatch(
             Ok((None, respond(operation, status, v)))
         }
     }
+}
+
+/// `deploy.status`: `main`'s pipeline, its last log, and the owner's CI window when open.
+async fn deploy_status(
+    env: &Env,
+    s: &Settings,
+    operation: &str,
+) -> Result<(Option<String>, WireResponse)> {
+    let req = json_request("https://main/status", Method::Get, None, None)?;
+    let mut r = platform::call(env, &main_stub(env, &s.repo)?, req).await?;
+    let mut v: Value = r.json().await?;
+    v["pipeline"]["last_log"] = json!(last_log(env, &v).await?);
+    v["ci_window"] = json!(ci_window::current(env, s).await?);
+    Ok((None, respond(operation, r.status_code(), v)))
 }
 
 /// Numbers `change` and stores it, answering the open changes it overlaps.
@@ -1012,6 +1023,10 @@ impl DurableObject for Instance {
         if path.starts_with("/tasks/") {
             let body: Value = req.json().await?;
             return tasks::serve(&self.state, &path, &body).await;
+        }
+        if path.starts_with("/ci-window/") {
+            let body: Value = req.json().await?;
+            return ci_window::serve(&self.state, &path, &body).await;
         }
         if path.starts_with("/merges/") {
             let body: Value = req.json().await?;

@@ -492,6 +492,18 @@ impl ChangeRun {
         true
     }
 
+    /// The CI window opened: the break-glass, when the change has code checks waiting on GitHub.
+    async fn window(&self, existing: Option<Change>) -> Result<Response> {
+        match existing {
+            Some(change) if control::window_moves(&change) => {
+                self.break_glass(change).await?;
+                Response::from_json(&json!({ "moved": true }))
+            }
+            Some(_) => Response::from_json(&json!({ "moved": false })),
+            None => Response::error("no such change", 404),
+        }
+    }
+
     /// The owner's break-glass: the head's code checks that haven't passed, on the `Checker`.
     async fn break_glass(&self, mut change: Change) -> Result<Response> {
         let mut github: Actions = self.load(ACTIONS).await?;
@@ -507,6 +519,20 @@ impl ChangeRun {
         self.state.storage().put(ACTIONS, &github).await?;
         self.save(&change, &pending).await?;
         Response::from_json(&change)
+    }
+
+    /// Whether the owner's CI window is open now; closed when the `Instance` doesn't answer.
+    async fn window_open(&self) -> bool {
+        let Ok(s) = Settings::from(&self.env) else {
+            return false;
+        };
+        match super::ci_window::current(&self.env, &s).await {
+            Ok(w) => w.is_some(),
+            Err(e) => {
+                worker::console_warn!("ci window: {e}");
+                false
+            }
+        }
     }
 
     /// Stops job `id`'s Container in `class`, if it still runs.
@@ -675,6 +701,7 @@ impl DurableObject for ChangeRun {
                     Err(why) => Response::error(why, 403),
                 }
             }
+            (Method::Post, "window") => self.window(existing).await,
             (Method::Post, "cloudflare") => match existing {
                 Some(change) => self.break_glass(change).await,
                 None => Response::error("no such change", 404),
@@ -701,6 +728,11 @@ impl DurableObject for ChangeRun {
         let mut github: Actions = self.load(ACTIONS).await?;
         github.keep_head(change.head.as_deref());
         let mirrors = super::github::mirror(&self.env).is_some();
+        let window_open = mirrors
+            && pending.iter().any(
+                |p| matches!(p, Pending::Start(j) if control::to_github(&change, j, true, false)),
+            )
+            && self.window_open().await;
         for p in std::mem::take(&mut pending) {
             match p {
                 Pending::Stop(id) => self.stop(control::Class::Checker, &id).await?,
@@ -716,7 +748,7 @@ impl DurableObject for ChangeRun {
                     }
                 }
                 Pending::Start(job)
-                    if control::to_github(&change, &job, mirrors)
+                    if control::to_github(&change, &job, mirrors, window_open)
                         && !github.on_cloudflare(change.head.as_deref().unwrap_or_default()) =>
                 {
                     if let Some(sha) = &change.head {

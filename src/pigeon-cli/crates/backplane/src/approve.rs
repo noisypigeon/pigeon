@@ -70,6 +70,7 @@ fn verb(operation: &str) -> &'static str {
         "change.close" => "Close unmerged",
         crate::control::BREAK_GLASS => "Run its code checks on Cloudflare",
         "mandate.grant" => "Grant the mandate",
+        crate::ci_window::OPERATION => "Move code checks to Cloudflare",
         _ => "Confirm",
     }
 }
@@ -413,6 +414,38 @@ code.</p><form method=\"post\" action=\"/mandate/{}\">\
         escape(token)
     );
     shell(&format!("Grant mandate {}", m.id), &b)
+}
+
+/// The page granting CI window offer `o`, posting `token` back to `/ci-window/<id>` with the
+/// code; see `.claude/decisions/2026-11-10-development-code-checks-github-actions.md`, its
+/// 2026-11-11 amendment.
+#[must_use]
+pub fn ci_window_page(o: &crate::ci_window::Offer, token: &str) -> String {
+    let (title, what) = if o.hours == 0 {
+        (
+            "Close the CI window".to_string(),
+            "Code checks go back to GitHub Actions for every new head.".to_string(),
+        )
+    } else {
+        (
+            format!("Code checks on Cloudflare for {} hours", o.hours),
+            format!(
+                "For {} hours from now, every change's code checks, and the merge gate's, run on the Checker instead of GitHub Actions. Changes with checks queued or running on GitHub move now. It closes by itself.",
+                o.hours
+            ),
+        )
+    };
+    let b = format!(
+        "<h1>{}</h1><p>{}</p><form method=\"post\" action=\"/ci-window/{}\">\
+<input type=\"hidden\" name=\"grant\" value=\"{}\">{CODE_FIELD}\
+<button type=\"submit\">Approve</button></form>\
+<p><small><a href=\"/approvals\">Everything waiting</a></small></p>",
+        escape(&title),
+        escape(&what),
+        o.id,
+        escape(token)
+    );
+    shell(&title, &b)
 }
 
 /// The page granting the next step of platform run `run`, posting `token` back to
