@@ -8,6 +8,7 @@
 )]
 
 mod api;
+mod app;
 mod apple;
 mod approve;
 mod buildkite;

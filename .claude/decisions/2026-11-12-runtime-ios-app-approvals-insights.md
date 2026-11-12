@@ -4,7 +4,7 @@
 * Model: Claude
 * Author: Willow Graysen (@noisypigeon).
 * Category: runtime
-* Governs: `src/pigeon-ios/Pigeon/**`, `src/pigeon-ios/project.yml`, `src/pigeon-cli/crates/backplane/src/core/app/**`, `src/pigeon-cli/crates/backplane/src/devices.rs`, `src/pigeon-cli/crates/backplane/src/worker/devices.rs`, `src/pigeon-cli/crates/backplane/src/core/insights/**`, `src/pigeon-cli/crates/backplane/src/insights.rs`, `src/pigeon-cli/crates/backplane/src/worker/insights.rs`, `src/pigeon-cli/crates/backplane/migrations/0005_insights.sql`, `.config/insights.yaml`
+* Governs: `src/pigeon-ios/Pigeon/**`, `src/pigeon-ios/project.yml`, `src/pigeon-cli/crates/backplane/src/core/app/**`, `src/pigeon-cli/crates/backplane/src/devices.rs`, `src/pigeon-cli/crates/backplane/src/worker/devices.rs`, `src/pigeon-cli/crates/backplane/src/core/insights/**`, `src/pigeon-cli/crates/backplane/src/insights.rs`, `src/pigeon-cli/crates/backplane/src/worker/insights.rs`, `src/pigeon-cli/crates/backplane/migrations/0005_insights.sql`, `.config/insights.yaml`, `src/pigeon-cli/crates/backplane/src/worker/app.rs`
 
 ## Context
 
@@ -325,3 +325,20 @@ Steps 3 to 7 each add the backplane files they create to this ADR's
   `buildkite_macos_minute`, so a policy can check each is a number or `null`
   and that nothing else is in it. That policy is a sentinel change, so it
   follows in its own change, as the factory ADR's §2 requires.
+
+### 2026-11-12: Step 5 lands: approvals in the app
+
+- **Paths.** `Governs` gains `worker/app.rs`; the core is in `core/app/`.
+- **An approval's ID is its grant's key,** the SHA-256 of its token. The app
+  never holds a token, and the passkey challenge's purpose is the same
+  `grant:<key>` the approval page uses.
+- **Routes,** each behind the device signature: `GET /v0/app/approvals`,
+  `GET /v0/app/approvals/<id>`, `POST /v0/app/challenge` and
+  `POST /v0/app/approvals/<id>`. `GET /v0/app/home` lists the waiting ones
+  beside the insights.
+- **Approving checks the passkey against `PASSKEY_RP_ID`,** the origin a
+  native assertion carries, then redeems the grant and runs its operation as
+  the owner, `APPROVER`, exactly as the approval page does. The app always
+  sends a passkey, even for a confirm-tier grant.
+- **Phase one serves change approvals.** Platform, mandate and CI-window
+  grants stay on their pages.

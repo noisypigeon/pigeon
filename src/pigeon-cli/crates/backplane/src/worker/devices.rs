@@ -157,9 +157,40 @@ pub async fn public(mut req: Request, env: &Env) -> Option<Result<Response>> {
                     Err(why) => Response::error(format!("unauthorized: {why}"), 401),
                 },
                 (Method::Get, "/v0/app/home") => match authenticate(env, &s, &req, b"").await? {
-                    Ok(_) => Response::from_json(&super::insights::home(env).await?),
+                    Ok(_) => {
+                        let mut home = super::insights::home(env).await?;
+                        home["approvals"] = super::app::list(env, &s).await?;
+                        Response::from_json(&home)
+                    }
                     Err(why) => Response::error(format!("unauthorized: {why}"), 401),
                 },
+                (Method::Get, "/v0/app/approvals") => {
+                    match authenticate(env, &s, &req, b"").await? {
+                        Ok(_) => Response::from_json(&super::app::list(env, &s).await?),
+                        Err(why) => Response::error(format!("unauthorized: {why}"), 401),
+                    }
+                }
+                (Method::Get, p) if p.starts_with("/v0/app/approvals/") => {
+                    if let Err(why) = authenticate(env, &s, &req, b"").await? {
+                        return Response::error(format!("unauthorized: {why}"), 401);
+                    }
+                    super::app::detail(env, &s, p.trim_start_matches("/v0/app/approvals/")).await
+                }
+                (Method::Post, p)
+                    if p == "/v0/app/challenge" || p.starts_with("/v0/app/approvals/") =>
+                {
+                    let bytes = req.bytes().await?;
+                    if let Err(why) = authenticate(env, &s, &req, &bytes).await? {
+                        return Response::error(format!("unauthorized: {why}"), 401);
+                    }
+                    let body: Value = serde_json::from_slice(&bytes).unwrap_or(Value::Null);
+                    if p == "/v0/app/challenge" {
+                        super::app::challenge(env, &s, &body).await
+                    } else {
+                        let id = p.trim_start_matches("/v0/app/approvals/");
+                        super::app::approve(env, &s, id, &body).await
+                    }
+                }
                 (Method::Get, "/v0/app/insights") => {
                     if let Err(why) = authenticate(env, &s, &req, b"").await? {
                         return Response::error(format!("unauthorized: {why}"), 401);
