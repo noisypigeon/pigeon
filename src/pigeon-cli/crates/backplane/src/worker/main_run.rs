@@ -14,6 +14,7 @@ use super::github;
 use super::platform::{self, job_stub, json_request, now, secret};
 use crate::actions::Due;
 use crate::control::{self, Outcome, Pipeline, Report};
+use crate::iosrelease::{self, IosReleases, Moved};
 use crate::mirroring::{self, Mirroring};
 use crate::testmaps::{self, TestMaps};
 
@@ -21,6 +22,7 @@ const PIPELINE: &str = "pipeline";
 const MIRRORING: &str = "mirroring";
 const STARTING: &str = "starting";
 const TEST_MAPS: &str = "test_maps";
+const IOS_RELEASES: &str = "ios_releases";
 
 /// How often a running deploy is asked how it went.
 const POLL: Duration = Duration::from_secs(20);
@@ -190,6 +192,242 @@ impl MainRun {
             }
         }
         self.save_mirroring(&m).await
+    }
+
+    async fn ios_releases(&self) -> Result<IosReleases> {
+        Ok(self
+            .state
+            .storage()
+            .get(IOS_RELEASES)
+            .await?
+            .unwrap_or_default())
+    }
+
+    /// `ios.release`: starts a release of `main`'s mirrored head; see the 2026-11-12 amendment
+    /// to .claude/decisions/2026-11-11-release-ios-app-buildkite-testflight.md.
+    async fn ios_release(&self) -> std::result::Result<Value, String> {
+        let m = self.mirroring().await.map_err(|e| e.to_string())?;
+        let sha = m
+            .mirrored
+            .clone()
+            .ok_or("main has not reached GitHub yet, so nothing can be archived")?;
+        let mut r = self.ios_releases().await.map_err(|e| e.to_string())?;
+        if let Some(c) = &r.current {
+            return Err(format!("release {} is still in flight", c.build));
+        }
+        let rows = platform::d1_rows(&self.env, &iosrelease::next_build())
+            .await
+            .map_err(|e| e.to_string())?;
+        let build = rows.first().and_then(|v| v["build"].as_u64()).unwrap_or(1);
+        let at = now();
+        r.start(build, &sha, at)?;
+        platform::d1(&self.env, &[iosrelease::insert(build, &sha, at)])
+            .await
+            .map_err(|e| e.to_string())?;
+        self.state
+            .storage()
+            .put(IOS_RELEASES, &r)
+            .await
+            .map_err(|e| e.to_string())?;
+        self.state
+            .storage()
+            .set_alarm(Duration::from_secs(1))
+            .await
+            .map_err(|e| e.to_string())?;
+        self.ios_event(
+            "ios.release",
+            &format!("iOS build {build} of {} started", short(&sha)),
+        )
+        .await;
+        Ok(json!({ "build": build, "sha": sha, "state": "archiving" }))
+    }
+
+    /// `ios.status`: the release in flight and the newest releases.
+    async fn ios_status(&self) -> Result<Value> {
+        let r = self.ios_releases().await?;
+        let rows = platform::d1_rows(&self.env, &iosrelease::recent()).await?;
+        Ok(json!({ "in_flight": r.view(), "releases": rows }))
+    }
+
+    async fn ios_event(&self, kind: &str, summary: &str) {
+        let Ok(s) = platform::Settings::from(&self.env) else {
+            return;
+        };
+        if let Err(e) = super::events::append(&self.env, &s, kind, None, None, summary, false).await
+        {
+            worker::console_error!("ios event: {e}");
+        }
+    }
+
+    /// Records where the release in flight moved.
+    async fn ios_moved(&self, build: u64, moved: &Moved, buildkite: Option<u64>) -> Result<()> {
+        let at = now();
+        match moved {
+            Moved::To(state) => {
+                platform::d1(
+                    &self.env,
+                    &[iosrelease::set_state(build, state, buildkite, at)],
+                )
+                .await?;
+                self.ios_event("ios.release", &format!("iOS build {build}: {state}"))
+                    .await;
+            }
+            Moved::Failed(why) => {
+                platform::d1(&self.env, &[crate::apple::fail(build, why, at)]).await?;
+                self.ios_event("ios.failed", &format!("iOS build {build} failed: {why}"))
+                    .await;
+                if let Ok(s) = platform::Settings::from(&self.env) {
+                    super::push::notify(&self.env, &s, "iOS release failed", why, "/approvals")
+                        .await;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Moves the release in flight on: GitHub's archive, its copy and Buildkite build, Buildkite's
+    /// signing, and App Store Connect's processing.
+    async fn ios_step(&self) -> Result<()> {
+        let mut r = self.ios_releases().await?;
+        let Some(c) = r.current.clone() else {
+            return Ok(());
+        };
+        let at = now();
+        match c.stage {
+            iosrelease::Stage::Archiving => self.ios_archive_step(&mut r, at).await?,
+            iosrelease::Stage::Copying => {
+                let moved = match self.ios_copy(&c).await {
+                    Ok(number) => {
+                        let m = r.signing(number, at);
+                        self.ios_moved(c.build, &m, Some(number)).await?;
+                        None
+                    }
+                    Err(why) => Some(r.fail(&why)),
+                };
+                if let Some(m) = moved {
+                    self.ios_moved(c.build, &m, None).await?;
+                }
+            }
+            iosrelease::Stage::Signing => {
+                let number = c.buildkite.unwrap_or_default();
+                match super::buildkite::state(&self.env, number).await {
+                    Ok(state) => {
+                        let rows =
+                            platform::d1_rows(&self.env, &iosrelease::state_of(c.build)).await?;
+                        let row = rows.first().and_then(|v| v["state"].as_str()).unwrap_or("");
+                        if let Some(m) = r.signed(&state, row, at) {
+                            self.ios_moved(c.build, &m, None).await?;
+                        }
+                    }
+                    Err(why) => worker::console_warn!("iOS build {}: {why}", c.build),
+                }
+            }
+            iosrelease::Stage::Processing => {
+                match super::apple::processing(&self.env, c.build).await {
+                    Ok(state) => {
+                        if let Some(m) = r.processed(state.as_deref()) {
+                            self.ios_moved(c.build, &m, None).await?;
+                        }
+                    }
+                    Err(why) => worker::console_warn!("iOS build {}: {why}", c.build),
+                }
+            }
+        }
+        self.state.storage().put(IOS_RELEASES, &r).await?;
+        if r.busy() {
+            let poll_at = i64::try_from((now() + crate::actions::POLL) * 1000).unwrap_or(i64::MAX);
+            let storage = self.state.storage();
+            if storage.get_alarm().await?.is_none_or(|a| a > poll_at) {
+                storage
+                    .set_alarm(Duration::from_secs(crate::actions::POLL))
+                    .await?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Dispatches, finds and polls the release's `ios.archive` run.
+    async fn ios_archive_step(&self, r: &mut IosReleases, at: u64) -> Result<()> {
+        let Some(c) = r.current.clone() else {
+            return Ok(());
+        };
+        let due = r.actions.due(crate::actions::Mirror::Passed, at);
+        let Some((owner, repo)) =
+            github::mirror(&self.env).and_then(|to| mirroring::github_repo(&to))
+        else {
+            return Ok(());
+        };
+        let request = mirroring::actions_token_request(&repo);
+        let token = match github::installation_token(&self.env, &owner, &repo, &request).await {
+            Ok(token) => token,
+            Err(why) => {
+                worker::console_warn!("iOS build {} waits: {why}", c.build);
+                return Ok(());
+            }
+        };
+        let check = iosrelease::check(c.build);
+        let mut ended: Option<Moved> = None;
+        for d in due {
+            let call = match d {
+                Due::Dispatch(i) => {
+                    let body = crate::actions::dispatch_body(
+                        &r.actions.dispatches[i],
+                        iosrelease::number(c.build),
+                        std::slice::from_ref(&check),
+                    );
+                    github::dispatch(&token, &owner, &repo, &body)
+                        .await
+                        .map(|()| drop(r.actions.dispatched(i, at)))
+                }
+                Due::Find(i) => github::runs(&token, &owner, &repo)
+                    .await
+                    .map(|listed| r.actions.found(i, &listed, at)),
+                Due::Poll(i) => {
+                    let run = r.actions.dispatches[i].run.unwrap_or_default();
+                    github::run(&token, &owner, &repo, run)
+                        .await
+                        .map(|(run, jobs)| {
+                            for f in r.actions.polled(i, &run, &jobs, at) {
+                                if f.name == iosrelease::CHECK {
+                                    ended = Some(r.archived(i, &f, at));
+                                }
+                            }
+                        })
+                }
+                Due::Mirror => Ok(()),
+            };
+            if let (Err(why), Due::Dispatch(i) | Due::Find(i) | Due::Poll(i)) = (call, d) {
+                r.actions.failed(i, &why, at);
+            }
+        }
+        if let Some(Moved::Failed(why)) = &ended {
+            self.ios_moved(c.build, &Moved::Failed(why.clone()), None)
+                .await?;
+        }
+        Ok(())
+    }
+
+    /// Copies the release's archive from its GitHub run to R2, and creates its Buildkite build:
+    /// that build's number.
+    async fn ios_copy(&self, c: &iosrelease::Current) -> std::result::Result<u64, String> {
+        let run = c.run.ok_or("the archive's run is unknown")?;
+        let (owner, repo) = github::mirror(&self.env)
+            .and_then(|to| mirroring::github_repo(&to))
+            .ok_or("no GitHub mirror")?;
+        let request = mirroring::actions_token_request(&repo);
+        let token = github::installation_token(&self.env, &owner, &repo, &request).await?;
+        let body = github::artifact(&token, &owner, &repo, run, iosrelease::ARTIFACT).await?;
+        if let Some(why) = iosrelease::invalid(&body) {
+            return Err(why);
+        }
+        self.env
+            .bucket("CI_LOGS")
+            .map_err(|e| e.to_string())?
+            .put(iosrelease::key(&c.sha, c.build), body)
+            .execute()
+            .await
+            .map_err(|e| e.to_string())?;
+        super::buildkite::create(&self.env, c.build, &c.sha).await
     }
 
     async fn test_maps(&self) -> Result<TestMaps> {
@@ -469,6 +707,11 @@ impl DurableObject for MainRun {
                     "test_map": self.test_maps().await?.view(),
                 }))
             }
+            (Method::Post, "ios/release") => match self.ios_release().await {
+                Ok(v) => Response::from_json(&v),
+                Err(why) => Response::error(why, 409),
+            },
+            (Method::Get, "ios/status") => Response::from_json(&self.ios_status().await?),
             (Method::Post, "reconcile") => match self.reconcile().await {
                 Ok(v) => Response::from_json(&v),
                 Err(e) => Response::error(format!("reconcile: {e}"), 502),
@@ -535,6 +778,9 @@ impl DurableObject for MainRun {
         if let Err(e) = self.test_map_step().await {
             worker::console_error!("test map: {e}");
         }
+        if let Err(e) = self.ios_step().await {
+            worker::console_error!("ios release: {e}");
+        }
         let storage = self.state.storage();
         if super::platforms::running(&self.state).await? {
             // The earliest alarm wins: the mirror's may be an hour away.
@@ -571,4 +817,9 @@ async fn deploy_event(env: &Env, sha: &str, report: &Report) {
     if report.outcome != Outcome::Passed {
         super::push::notify(env, &s, "Deploy failed", &summary, "/approvals").await;
     }
+}
+
+/// The first 12 characters of a SHA.
+fn short(sha: &str) -> &str {
+    sha.get(..12).unwrap_or(sha)
 }

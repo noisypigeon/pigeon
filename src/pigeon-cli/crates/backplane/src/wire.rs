@@ -168,6 +168,7 @@ impl Operation {
             || self.name.starts_with("session.")
             || self.name.starts_with("platform.")
             || self.name.starts_with("apple.")
+            || self.name.starts_with("ios.")
     }
 }
 
@@ -351,6 +352,20 @@ const CATALOG: &[Operation] = &[
             arg("budget", false, Kind::Text),
             arg("hours", false, Kind::Text),
         ],
+    },
+    Operation {
+        name: "ios.release",
+        engine: Engine::Backplane,
+        effect: Effect::Build,
+        summary: "Release main's commit on GitHub to TestFlight as the next iOS build: archived on GitHub, signed on Buildkite, processed by App Store Connect; one at a time",
+        args: &[],
+    },
+    Operation {
+        name: "ios.status",
+        engine: Engine::Backplane,
+        effect: Effect::Read,
+        summary: "The iOS release in flight, its stage and links, and the newest releases with their states",
+        args: &[],
     },
     Operation {
         name: "apple.check",

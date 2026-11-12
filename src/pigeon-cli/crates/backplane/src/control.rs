@@ -69,6 +69,10 @@ pub enum Routed {
     Digest,
     /// `apple.check`: the Apple connection's health.
     AppleCheck,
+    /// `ios.release`: start a release of `main`'s mirrored head.
+    IosRelease,
+    /// `ios.status`: the iOS releases.
+    IosStatus,
     /// `session.end`, with its arguments.
     SessionEnd {
         /// Its arguments.
@@ -214,6 +218,8 @@ pub fn route(request: &Request, by: &str, at: u64) -> Result<Routed, String> {
         "events.wait" => Ok(Routed::Events { args: a.clone() }),
         "digest.show" => Ok(Routed::Digest),
         "apple.check" => Ok(Routed::AppleCheck),
+        "ios.release" => Ok(Routed::IosRelease),
+        "ios.status" => Ok(Routed::IosStatus),
         "session.start" => Ok(Routed::SessionStart { args: a.clone() }),
         "session.end" => Ok(Routed::SessionEnd { args: a.clone() }),
         "task.list" | "task.wait" | "task.claim" | "task.done" => Ok(Routed::Task {

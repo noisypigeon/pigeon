@@ -78,7 +78,7 @@ async fn asc_token(env: &Env, ttl: u64) -> Result<String> {
 }
 
 /// `GET` an App Store Connect path with a fresh token.
-async fn asc_get(env: &Env, path: &str) -> std::result::Result<Value, String> {
+pub(super) async fn asc_get(env: &Env, path: &str) -> std::result::Result<Value, String> {
     let token = asc_token(env, 300).await.map_err(|e| e.to_string())?;
     let url = format!("{}{path}", apple::ASC_API);
     let req = json_request(&url, Method::Get, None, Some(&token)).map_err(|e| e.to_string())?;
@@ -256,4 +256,56 @@ pub async fn check(env: &Env) -> Result<Value> {
         }),
     );
     Ok(json!({ "ok": ok, "checks": checks }))
+}
+
+/// `GET /v0/apple/release/archive`: the release's archive, to the same `sign` step that redeemed
+/// its grant, while it signs; see the 2026-11-12 amendment.
+///
+/// # Errors
+///
+/// When D1 or R2 fails; every refusal is a response.
+pub async fn archive(req: Request, env: &Env) -> Result<Response> {
+    let job = match job(&req).await {
+        Ok(job) => job,
+        Err(why) => return Response::error(format!("unauthorized: {why}"), 401),
+    };
+    let rows = d1_rows(env, &crate::iosrelease::signing_row(job.build, &job.commit)).await?;
+    let Some(build) = rows.first().and_then(|r| r["build"].as_u64()) else {
+        return Response::error("no release of this build and commit is signing", 403);
+    };
+    let key = crate::iosrelease::key(&job.commit, build);
+    let Some(object) = env.bucket("CI_LOGS")?.get(key).execute().await? else {
+        return Response::error("the archive is missing", 404);
+    };
+    let Some(body) = object.body() else {
+        return Response::error("the archive is missing", 404);
+    };
+    let mut r = Response::from_stream(body.stream()?)?;
+    r.headers_mut().set("content-type", "application/zip")?;
+    Ok(r)
+}
+
+/// App Store Connect's processing state of release `build`; none until it lists the build.
+///
+/// # Errors
+///
+/// When App Store Connect can't be read.
+pub(super) async fn processing(
+    env: &Env,
+    build: u64,
+) -> std::result::Result<Option<String>, String> {
+    let apps = asc_get(
+        env,
+        &format!("/v1/apps?filter[bundleId]={}", apple::BUNDLE_ID),
+    )
+    .await?;
+    let app = apps["data"][0]["id"]
+        .as_str()
+        .ok_or_else(|| format!("no app for {}", apple::BUNDLE_ID))?;
+    let builds = asc_get(
+        env,
+        &format!("/v1/builds?filter[app]={app}&filter[version]={build}&limit=1"),
+    )
+    .await?;
+    Ok(crate::iosrelease::processing_state(&builds).map(String::from))
 }

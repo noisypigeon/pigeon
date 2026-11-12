@@ -21,6 +21,7 @@ pub mod gitdoor;
 pub mod grants;
 #[cfg(feature = "engines")]
 pub mod instance;
+pub mod iosrelease;
 #[cfg(feature = "engines")]
 pub mod jobs;
 pub mod mandates;

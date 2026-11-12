@@ -147,6 +147,7 @@ fn catalog_names_are_unique_and_dotted() {
             ("sites.build", Effect::Build),
             ("sites.publish", Effect::Apply),
             ("mandate.propose", Effect::Plan),
+            ("ios.release", Effect::Build),
             ("session.end", Effect::Build),
             ("session.start", Effect::Build),
             ("task.claim", Effect::Build),
@@ -441,4 +442,15 @@ fn the_control_plane_runs_apple_check_itself() {
         op.control_plane(),
         "its secrets live only in the control plane's Worker"
     );
+}
+
+#[test]
+fn the_control_plane_runs_ios_releases_itself() {
+    for name in ["ios.release", "ios.status"] {
+        let op = catalog()
+            .iter()
+            .find(|o| o.name == name)
+            .expect("in the catalog");
+        assert!(op.control_plane(), "{name}");
+    }
 }

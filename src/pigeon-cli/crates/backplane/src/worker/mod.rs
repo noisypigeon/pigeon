@@ -10,6 +10,7 @@
 mod api;
 mod apple;
 mod approve;
+mod buildkite;
 mod change;
 mod checker;
 mod elicit;
@@ -60,6 +61,13 @@ async fn fetch(req: Request, env: Env, _ctx: worker::Context) -> Result<Response
     if req.path() == crate::apple::ROUTE {
         return if req.method() == Method::Post {
             apple::release(req, &env).await
+        } else {
+            Response::error("method not allowed", 405)
+        };
+    }
+    if req.path() == format!("{}/archive", crate::apple::ROUTE) {
+        return if req.method() == Method::Get {
+            apple::archive(req, &env).await
         } else {
             Response::error("method not allowed", 405)
         };
@@ -532,6 +540,22 @@ async fn dispatch(
             respond(operation, 200, push::show(env, s, who.human).await?),
         )),
         Routed::AppleCheck => Ok((None, respond(operation, 200, apple::check(env).await?))),
+        Routed::IosRelease | Routed::IosStatus => {
+            let (method, path) = if matches!(routed, Routed::IosRelease) {
+                (Method::Post, "https://main/ios/release")
+            } else {
+                (Method::Get, "https://main/ios/status")
+            };
+            let req = json_request(path, method, None, None)?;
+            let mut r = platform::call(env, &main_stub(env, &s.repo)?, req).await?;
+            let status = r.status_code();
+            let v: Value = if (200..300).contains(&status) {
+                r.json().await?
+            } else {
+                json!({ "error": r.text().await? })
+            };
+            Ok((None, respond(operation, status, v)))
+        }
         Routed::Events { args } => {
             let v = events::wait(env, s, &args, who.human).await?;
             Ok((None, respond(operation, 200, v)))
