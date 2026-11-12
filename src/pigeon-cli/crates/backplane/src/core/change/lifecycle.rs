@@ -66,11 +66,12 @@ impl Change {
             }
             Event::Merged { sha, commit } => self.merged(&sha, commit),
             Event::MergeFailed { sha, reason } => {
-                if self.on_head(&sha) && self.state == State::Approved {
-                    self = self.set_status(MERGE, JobStatus::Failed);
-                    self.violations = vec![reason];
+                if !self.on_head(&sha) || self.state != State::Approved {
+                    return Ok((self, Vec::new()));
                 }
-                Ok((self, Vec::new()))
+                self = self.set_status(MERGE, JobStatus::Failed);
+                self.violations = vec![reason];
+                Ok(self.restack_if_behind())
             }
             Event::Close => {
                 if self.state == State::Merged {

@@ -257,3 +257,26 @@ fn a_first_release_lists_only_its_own_crate() {
     assert!(b.contains("#2") && b.contains("#1"), "{b}");
     assert_eq!(released(&first), ["a", "b"]);
 }
+
+#[test]
+fn a_package_renamed_since_the_last_release_compares_its_own_tree() {
+    let dir = released_repo();
+    let root = dir.path();
+    let renamed = fs::read_to_string(root.join("ws/app/Cargo.toml"))
+        .expect("read")
+        .replace("name = \"app\"", "name = \"pigeon-app\"");
+    write(root, "ws/app/Cargo.toml", &renamed);
+    write(
+        root,
+        "releases.yaml",
+        &CONFIG.replace("package: app }", "package: pigeon-app }"),
+    );
+    let o = change(root, "ws/liba/src/lib.rs", "// a\n", "feat: a (#2)");
+    assert_eq!(
+        released(&o),
+        ["a", "b"],
+        "the rename is in both units' trees"
+    );
+    let a = fs::read_to_string(root.join("ws/liba/CHANGELOG.md")).expect("read");
+    assert!(a.contains("- feat: a ([#2](https://x/pull/2))"), "{a}");
+}

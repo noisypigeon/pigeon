@@ -14,11 +14,25 @@ impl Change {
             return refuse(format!("{} has no head to be behind", self.branch()));
         };
         self.behind = Some(main);
+        Ok(self.start_restack(head))
+    }
+
+    /// A checked or approved head that is `behind`, with no restack or merge running, restacks;
+    /// otherwise nothing; see the 2026-11-12 amendment to the concurrent-sessions ADR.
+    pub(super) fn restack_if_behind(self) -> (Change, Vec<Effect>) {
+        match self.head.clone() {
+            Some(head) if self.behind.is_some() => self.start_restack(head),
+            _ => (self, Vec::new()),
+        }
+    }
+
+    /// The restack job for `head`, keeping an approval to carry.
+    fn start_restack(mut self, head: String) -> (Change, Vec<Effect>) {
         if !matches!(self.state, State::Checked | State::Approved)
             || self.job(RESTACK).is_some_and(Job::open)
             || self.job(MERGE).is_some_and(Job::open)
         {
-            return Ok((self, Vec::new()));
+            return (self, Vec::new());
         }
         self.carried = match (&self.approval, &self.tiers) {
             (Some(a), Some(t)) if self.state == State::Approved => Some(Carried {
@@ -32,7 +46,7 @@ impl Change {
         };
         self.jobs.retain(|j| j.name != RESTACK);
         self.jobs.push(Job::queued(RESTACK, Vec::new()));
-        Ok((self, vec![Effect::Start(RESTACK.into())]))
+        (self, vec![Effect::Start(RESTACK.into())])
     }
 
     /// The restack job's report on head `sha`, then a head held while it ran, if another.

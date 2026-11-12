@@ -70,7 +70,7 @@ impl Change {
             return Ok((self, effects));
         }
         self.state = State::Checked;
-        let (c, more) = self.carry();
+        let (c, more) = self.checked();
         effects.extend(more);
         Ok((c, effects))
     }
@@ -118,9 +118,17 @@ impl Change {
         }
         if gating.all(|j| j.status == JobStatus::Passed) {
             self.state = State::Checked;
-            return self.carry();
+            return self.checked();
         }
         (self, Vec::new())
+    }
+
+    /// A head just checked: a carried approval applies, then a head left `behind` restacks.
+    fn checked(self) -> (Change, Vec<Effect>) {
+        let (c, mut effects) = self.carry();
+        let (c, more) = c.restack_if_behind();
+        effects.extend(more);
+        (c, effects)
     }
 
     pub(super) fn lost(mut self, name: &str, sha: &str) -> Step {

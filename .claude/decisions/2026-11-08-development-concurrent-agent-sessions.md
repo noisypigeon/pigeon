@@ -532,3 +532,23 @@ poll that releases the turn.
 - One more change adds the queue's check of its holder, the `ci_rerun` answer,
   and tests that replay 175's sequence: its merge job lost 3 times without
   starting, the turn handed back, and the change merged again.
+
+### 2026-11-12: A head checked while behind restacks then, and so does a merge refused as behind
+
+!265 and !270 each fell behind while their checks ran. §3 marks such a change
+`behind` and leaves it to its session's next push, but neither session pushed:
+each head was checked, approved and run through its full merge gate, then the
+merge job refused it because `main` had moved past its base. Each refusal cost
+a gate run.
+
+- **A head that reaches `checked` while `behind` restacks then,** as it would
+  have when `main` moved had it been checked. The restack starts after a
+  carried approval is applied, so an approved head carries it again.
+- **A merge refused while `behind` restacks the head,** carrying its approval
+  as the restack of an approved head does. The change is asked to merge again,
+  as after any failed merge.
+- **Nothing else changes:** no new state or event, the restack job and its
+  report are as before, and a push still clears `behind`.
+
+**Execution:** !277, in `core/change` (`bounded`, `settle` and `MergeFailed`),
+with tests for each path.

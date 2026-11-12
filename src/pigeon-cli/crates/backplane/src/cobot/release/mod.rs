@@ -11,8 +11,8 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 use crate::cobot::Error;
 use crate::core::release::lines::{
-    bumped, first_lines, next_lines, read_version, released, setting_lines, tag_rows, tier_text,
-    tree_of, user_only,
+    bumped, first_lines, next_lines, package_manifest, package_name, read_version, released,
+    setting_lines, tag_rows, tier_text, tree_of, user_only,
 };
 
 pub use crate::core::release::*;
@@ -62,6 +62,7 @@ fn dependency_tree(
     root: &Path,
     rev: &str,
     cargo: &CargoTree,
+    package: &str,
     features: &str,
 ) -> Result<(BTreeSet<String>, Vec<String>), Error> {
     let dir = std::env::temp_dir().join(format!(
@@ -96,7 +97,7 @@ fn dependency_tree(
             "--manifest-path".into(),
             manifest.display().to_string(),
             "-p".into(),
-            cargo.package.clone(),
+            package.to_string(),
             "--no-default-features".into(),
             "-e".into(),
             "normal,build,features".into(),
@@ -109,10 +110,24 @@ fn dependency_tree(
         let args: Vec<&str> = args.iter().map(String::as_str).collect();
         let out = tool(&dir, "cargo", &args)?;
         let local = format!(" ({}/", dir.display());
-        Ok(tree_of(&out, &local, &cargo.package))
+        Ok(tree_of(&out, &local, package))
     })();
     let _ = fs::remove_dir_all(&dir);
     result
+}
+
+/// The path, at `rev`, of the manifest of `cargo`'s package, found by its name.
+fn package_path(root: &Path, rev: &str, cargo: &CargoTree) -> Result<Option<String>, Error> {
+    let listed = git::run(
+        root,
+        &["ls-tree", "-r", "--name-only", rev, "--", &cargo.workspace],
+    )?;
+    let manifests: Vec<(String, String)> = listed
+        .lines()
+        .filter(|p| p.ends_with("/Cargo.toml"))
+        .map(|p| (p.to_string(), git::show(root, rev, p)))
+        .collect();
+    Ok(package_manifest(&manifests, &cargo.package).map(str::to_string))
 }
 
 /// Runs `program` in `dir` and returns stdout.
@@ -170,9 +185,17 @@ fn unit_release(
     let mut prefixes = unit.paths.clone();
     let mut dependencies_changed = false;
     if let Some(cargo) = &unit.cargo {
-        let (now, workspace) = dependency_tree(root, to, cargo, &unit.features)?;
+        // By the name its manifest has at each revision, so a renamed package still compares.
+        let manifest = package_path(root, to, cargo)?;
+        let name_at = |rev: &str| {
+            manifest
+                .as_deref()
+                .and_then(|m| package_name(&git::show(root, rev, m)))
+                .unwrap_or_else(|| cargo.package.clone())
+        };
+        let (now, workspace) = dependency_tree(root, to, cargo, &name_at(to), &unit.features)?;
         prefixes.extend(workspace);
-        let (before, _) = dependency_tree(root, last, cargo, &unit.features)?;
+        let (before, _) = dependency_tree(root, last, cargo, &name_at(last), &unit.features)?;
         dependencies_changed = before != now;
     }
     let settings: Vec<&str> = settings_commits(root, config, &range)

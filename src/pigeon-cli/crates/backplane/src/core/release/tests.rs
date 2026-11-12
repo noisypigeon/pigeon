@@ -2,7 +2,8 @@
 
 use super::config::{Config, Tier, Unit};
 use super::lines::{
-    Commit, Released, bumped, first_lines, line, next_lines, read_version, tier_text, tree_of,
+    Commit, Released, bumped, first_lines, line, next_lines, package_manifest, package_name,
+    read_version, tier_text, tree_of,
 };
 
 fn commit(sha: &str, subject: &str, paths: &[&str]) -> Commit {
@@ -194,4 +195,22 @@ fn the_config_refuses_a_tier_with_both_or_neither_and_an_unknown_unit() {
     assert!(Config::parse(&neither).is_err_and(|e| e.contains("exactly one")));
     let retired = format!("{base}tiers: []\nretired: [../CHANGELOG.md]\n");
     assert!(Config::parse(&retired).is_err_and(|e| e.contains("under the root")));
+}
+
+#[test]
+fn a_package_is_found_by_its_name_and_a_rename_shows_in_its_manifest() {
+    let old = "[package]\nname = \"sentinel\"\nversion = \"0.1.16\"\n";
+    let new = "[package]\nname = \"pigeon-sentinel\"\nversion = \"0.1.17\"\n";
+    assert_eq!(package_name(old).as_deref(), Some("sentinel"));
+    assert_eq!(package_name("[workspace]\nmembers = []\n"), None);
+    assert_eq!(package_name("not toml ["), None);
+    let manifests = [
+        ("ws/Cargo.toml".to_string(), "[workspace]\n".to_string()),
+        ("ws/crates/sentinel/Cargo.toml".to_string(), new.to_string()),
+    ];
+    assert_eq!(
+        package_manifest(&manifests, "pigeon-sentinel"),
+        Some("ws/crates/sentinel/Cargo.toml")
+    );
+    assert_eq!(package_manifest(&manifests, "sentinel"), None);
 }

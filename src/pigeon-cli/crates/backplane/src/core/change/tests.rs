@@ -439,3 +439,114 @@ fn a_full_run_asked_for_at_merge_holds_whatever_the_gate() {
         Some("owner asked for the full run")
     );
 }
+
+fn behind_main() -> Event {
+    Event::Behind { main: M.into() }
+}
+
+fn restacks(effects: &[Effect]) -> bool {
+    effects.contains(&Effect::Start(RESTACK.into()))
+}
+
+#[test]
+fn a_head_checked_while_behind_restacks_then() {
+    let c = run(pushed(), vec![behind_main()]);
+    assert_eq!(status(&c, RESTACK), None, "not while its checks run");
+    let (c, effects) = step(&c, bounded(Vec::new())).expect("bounded");
+    assert_eq!(c.state, State::Checked);
+    assert!(restacks(&effects), "{effects:?}");
+    assert_eq!(status(&c, RESTACK), Some(JobStatus::Queued));
+    assert_eq!(c.carried, None, "nothing approved to carry");
+}
+
+#[test]
+fn a_head_whose_last_check_passes_while_behind_restacks_then() {
+    let fmt = Event::Bounded {
+        sha: A.into(),
+        violations: Vec::new(),
+        checks: vec![Check {
+            name: "fmt".into(),
+            argv: Vec::new(),
+        }],
+        full: Vec::new(),
+        tiers: None,
+        gate: None,
+    };
+    let c = run(
+        pushed(),
+        vec![
+            fmt,
+            Event::Started {
+                job: "fmt".into(),
+                sha: A.into(),
+            },
+            behind_main(),
+        ],
+    );
+    let passed = Event::Finished {
+        job: "fmt".into(),
+        sha: A.into(),
+        ok: true,
+    };
+    let (c, effects) = step(&c, passed).expect("settles");
+    assert_eq!(c.state, State::Checked);
+    assert!(restacks(&effects), "{effects:?}");
+}
+
+#[test]
+fn a_head_checked_on_main_does_not_restack() {
+    let (c, effects) = step(&pushed(), bounded(Vec::new())).expect("bounded");
+    assert_eq!(c.state, State::Checked);
+    assert!(!restacks(&effects), "{effects:?}");
+}
+
+#[test]
+fn a_merge_refused_while_behind_restacks_carrying_the_approval() {
+    use crate::core::approval::tiers::{Tier, Tiered, Tiers};
+    let tiered = |tier| Tiered {
+        tier,
+        rule: "r".into(),
+    };
+    let mut c = approved();
+    c.tiers = Some(Tiers {
+        authorize: tiered(Tier::Confirm),
+        merge: tiered(Tier::Code),
+        close: tiered(Tier::Confirm),
+    });
+    let (c, effects) = step(&c, merge()).expect("merges");
+    assert_eq!(effects, vec![Effect::Start(MERGE.into())]);
+    let c = run(
+        c,
+        vec![
+            Event::Started {
+                job: MERGE.into(),
+                sha: A.into(),
+            },
+            behind_main(),
+        ],
+    );
+    assert_eq!(status(&c, RESTACK), None, "not while its merge runs");
+    let refused = Event::MergeFailed {
+        sha: A.into(),
+        reason: "main has moved past its base".into(),
+    };
+    let (c, effects) = step(&c, refused).expect("the refusal applies");
+    assert_eq!(status(&c, MERGE), Some(JobStatus::Failed));
+    assert!(restacks(&effects), "{effects:?}");
+    let carried = c
+        .carried
+        .as_ref()
+        .map(|k| (k.by.as_str(), k.from.as_str(), k.merge));
+    assert_eq!(carried, Some(("owner", A, Tier::Code)));
+}
+
+#[test]
+fn a_merge_refused_on_main_does_not_restack() {
+    let (c, _) = step(&approved(), merge()).expect("merges");
+    let refused = Event::MergeFailed {
+        sha: A.into(),
+        reason: "no".into(),
+    };
+    let (c, effects) = step(&c, refused).expect("the refusal applies");
+    assert_eq!((c.state, effects), (State::Approved, Vec::new()));
+}

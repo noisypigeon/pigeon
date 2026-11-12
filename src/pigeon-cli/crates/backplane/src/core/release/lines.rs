@@ -191,6 +191,22 @@ pub fn read_version(manifest: &str) -> Option<(usize, usize, usize, String)> {
     ))
 }
 
+/// The package name in a `Cargo.toml`'s text: `[package]`'s `name`.
+#[must_use]
+pub fn package_name(manifest: &str) -> Option<String> {
+    let table: toml::Value = manifest.parse().ok()?;
+    Some(table.get("package")?.get("name")?.as_str()?.to_string())
+}
+
+/// Of `manifests`, each a path and its text, the path of the one whose package is `name`.
+#[must_use]
+pub fn package_manifest<'a>(manifests: &'a [(String, String)], name: &str) -> Option<&'a str> {
+    manifests
+        .iter()
+        .find(|(_, text)| package_name(text).as_deref() == Some(name))
+        .map(|(path, _)| path.as_str())
+}
+
 /// `manifest` with the version at `start..end` replaced by `version`.
 #[must_use]
 pub fn bumped(manifest: &str, start: usize, end: usize, version: &str) -> String {
