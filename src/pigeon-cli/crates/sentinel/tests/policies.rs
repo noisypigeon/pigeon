@@ -365,6 +365,46 @@ fn layout_rules() {
     }
 }
 
+/// The layout policy's verdict on a tree with `path` holding `content`.
+fn layout_with(path: &str, content: &str) -> Vec<String> {
+    let root = layout_root(&[], &[]);
+    let file = root.path().join(path);
+    fs::create_dir_all(file.parent().expect("parent")).expect("mkdir");
+    fs::write(&file, content).expect("write");
+    violations("layout", root.path(), None)
+}
+
+#[test]
+fn layout_keeps_backplane_core_pure() {
+    let core = "src/pigeon-cli/crates/backplane/src/core/change/lifecycle.rs";
+    passes(&layout_with(
+        core,
+        "pub fn step(c: &Change) -> Change {\n    c.clone()\n}\n",
+    ));
+    passes(&layout_with(
+        core,
+        "fn pushed(mut self) -> Self {\n    self\n}\n",
+    ));
+    for bad in [
+        "use std::fs;",
+        "let out = std::process::Command::new(\"git\");",
+        "use std::net::TcpStream;",
+        "let r = ureq::get(url);",
+        "worker::console_log!(\"x\");",
+        "let at = SystemTime::now();",
+        "let at = Instant::now();",
+        "fn pushed(&mut self) {}",
+        "let j = &mut self.jobs;",
+    ] {
+        fails(&layout_with(core, bad));
+    }
+    let shell = "src/pigeon-cli/crates/backplane/src/worker/change.rs";
+    passes(&layout_with(
+        shell,
+        "fn apply(&mut self) { std::fs::read(p); }",
+    ));
+}
+
 fn release_changelog(content: &str) -> Vec<String> {
     let root = TempDir::new().expect("tempdir");
     let path = root

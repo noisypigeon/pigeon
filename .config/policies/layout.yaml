@@ -1,4 +1,4 @@
-description: The repository root holds only the agreed areas, and src/ only projects.
+description: The repository root holds only the agreed areas, and src/ only projects; backplane's core does no I/O, reads no clock and takes no `&mut self`, per 2026-11-10-development-factory-crates-functional-core.md §3.
 target: tree
 rules:
   - entries:
@@ -19,3 +19,6 @@ rules:
       dirs: ['^[a-z0-9-]+(\.[a-z0-9-]+)+$']
       files: ['^README\.md$']
       require: [README.md]
+  - find:
+      match: '^src/pigeon-cli/crates/backplane/src/core/change/'
+      forbid_content: 'std::fs|std::process|std::net|ureq|worker::|SystemTime::now|Instant::now|&mut self\b'
