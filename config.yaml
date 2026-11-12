@@ -17,7 +17,7 @@ units:
   sites/docs:
     kind: cloudflare/static-site
     zone: pigeon.dev
-    hosts: [docs]
+    hosts: []
     served_by: { unit: platform/blue, path: /docs }
     template: { name: architecture, version: tree }
     site:
