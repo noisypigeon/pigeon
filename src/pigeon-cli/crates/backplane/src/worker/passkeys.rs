@@ -36,40 +36,48 @@ fn rp_for(env: &Env, host: &str) -> String {
 /// When storage fails.
 pub async fn serve(state: &State, path: &str, body: Value) -> Result<Response> {
     let storage = state.storage();
-    let mut ring: Keyring = storage.get(KEYRING).await?.unwrap_or_default();
+    let ring: Keyring = storage.get(KEYRING).await?.unwrap_or_default();
     let s = |k: &str| body[k].as_str().unwrap_or_default().to_string();
     // A page from before `rp` was sent asks for its own host.
     let rp = Some(s("rp"))
         .filter(|r| !r.is_empty())
         .unwrap_or_else(|| s("host"));
     let bytes = |k: &str| b64url_decode(body[k].as_str().unwrap_or_default()).unwrap_or_default();
-    let answer = match path {
-        "/passkeys/list" => json!({
+    let (ring, answer) = match path {
+        "/passkeys/list" => {
+            let listed = json!({
             "keys": ring.keys.iter().map(|k| json!({
                 "id": k.id, "name": k.name, "created": k.created, "used": k.used,
             })).collect::<Vec<_>>(),
-        }),
+            });
+            (ring, listed)
+        }
         "/passkeys/challenge" => {
             let random = hex(&platform::random_hex(32)?);
-            let challenge = ring.mint(&s("purpose"), &random, now());
+            let (ring, challenge) = ring.mint(&s("purpose"), &random, now());
             let ids: Vec<&str> = ring.keys.iter().map(|k| k.id.as_str()).collect();
-            json!({ "challenge": challenge, "ids": ids, "user": b64url(passkeys::USER) })
+            let answer =
+                json!({ "challenge": challenge, "ids": ids, "user": b64url(passkeys::USER) });
+            (ring, answer)
         }
-        "/passkeys/register" => outcome(ring.register(
-            &s("id"),
-            &s("name"),
-            &bytes("client"),
-            &bytes("authenticator"),
-            &bytes("spki"),
-            &s("host"),
-            &rp,
-            now(),
-        )),
+        "/passkeys/register" => {
+            let (ring, registered) = ring.register(
+                &s("id"),
+                &s("name"),
+                &bytes("client"),
+                &bytes("authenticator"),
+                &bytes("spki"),
+                &s("host"),
+                &rp,
+                now(),
+            );
+            (ring, outcome(registered))
+        }
         "/passkeys/prove" => {
             let mut guard: Guard = storage.get(elicit::GUARD).await?.unwrap_or_default();
             let t = now();
-            let proved = if guard.locked(t) {
-                Err("five failed proofs in the last hour; approvals by proof are locked for up to an hour".to_string())
+            let (ring, proved) = if guard.locked(t) {
+                (ring, Err("five failed proofs in the last hour; approvals by proof are locked for up to an hour".to_string()))
             } else {
                 ring.prove(
                     &s("id"),
@@ -86,10 +94,14 @@ pub async fn serve(state: &State, path: &str, body: Value) -> Result<Response> {
                 guard.failures.push(t);
                 storage.put(elicit::GUARD, &guard).await?;
             }
-            outcome(proved)
+            (ring, outcome(proved))
         }
         "/passkeys/remove" => {
-            json!({ "status": if ring.remove(&s("id")) { "ok" } else { "gone" } })
+            let (ring, removed) = ring.remove(&s("id"));
+            (
+                ring,
+                json!({ "status": if removed { "ok" } else { "gone" } }),
+            )
         }
         _ => return Response::error("not found", 404),
     };

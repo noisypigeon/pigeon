@@ -132,6 +132,24 @@ fn the_rules_and_every_policy_always_need_the_code() {
 }
 
 #[test]
+fn the_approval_core_needs_the_code_as_the_files_it_moved_from_did() {
+    for name in ["tiers", "grants", "mandates", "passkeys", "totp"] {
+        let file = format!("src/pigeon-cli/crates/backplane/src/core/approval/{name}.rs");
+        let tiers = tiers_of(
+            &[file.as_str()],
+            &[file.as_str()],
+            Facts {
+                deploys_worker: false,
+                appends_only: false,
+                adds_secret: false,
+            },
+        );
+        assert!(tiers.authorize.tier >= Tier::Code, "{file}");
+        assert!(tiers.merge.tier >= Tier::Code, "{file}");
+    }
+}
+
+#[test]
 fn an_operation_needs_the_tier_its_head_was_given_and_code_without_one() {
     use backplane::changes::{Change, State};
     let mut c = Change::propose(

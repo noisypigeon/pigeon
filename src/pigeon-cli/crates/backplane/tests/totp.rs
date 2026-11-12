@@ -1,5 +1,9 @@
 //! The owner's authenticator code: RFC 6238, each step once, a lockout after wrong codes.
 
+#[macro_use]
+#[path = "common/kept.rs"]
+mod kept;
+
 use backplane::totp::{self, Guard, LOCKOUT, MAX_FAILURES, STEP};
 
 const SECRET: &[u8] = b"12345678901234567890";
@@ -41,22 +45,25 @@ fn a_code_is_accepted_in_its_window_once() {
     let mut g = Guard::default();
     let code = six(totp::code(SECRET, now / STEP - 1));
     assert_eq!(
-        g.verify(SECRET, &code, now),
+        kept!(g.verify(SECRET, &code, now)),
         Ok(now / STEP - 1),
         "one step back"
     );
-    let again = g.verify(SECRET, &code, now).expect_err("replay");
+    let again = kept!(g.verify(SECRET, &code, now)).expect_err("replay");
     assert!(again.contains("already used"), "{again}");
     let current = six(totp::code(SECRET, now / STEP));
-    assert!(g.verify(SECRET, &current, now).is_ok(), "a later step");
+    assert!(
+        kept!(g.verify(SECRET, &current, now)).is_ok(),
+        "a later step"
+    );
     let mut fresh = Guard::default();
     let stale = six(totp::code(SECRET, now / STEP - 2));
     assert!(
-        fresh.verify(SECRET, &stale, now).is_err(),
+        kept!(fresh.verify(SECRET, &stale, now)).is_err(),
         "outside the window"
     );
-    assert!(fresh.verify(SECRET, " 12a456", now).is_err());
-    assert!(fresh.verify(SECRET, "1234567", now).is_err());
+    assert!(kept!(fresh.verify(SECRET, " 12a456", now)).is_err());
+    assert!(kept!(fresh.verify(SECRET, "1234567", now)).is_err());
 }
 
 #[test]
@@ -66,13 +73,16 @@ fn wrong_codes_lock_approvals_for_an_hour() {
     let wrong = six((totp::code(SECRET, now / STEP) + 1) % 1_000_000);
     let mut g = Guard::default();
     for i in 0..MAX_FAILURES {
-        assert!(g.verify(SECRET, &wrong, now + i as u64).is_err());
+        assert!(kept!(g.verify(SECRET, &wrong, now + i as u64)).is_err());
     }
     assert!(g.locked(now + 10));
-    let why = g.verify(SECRET, &right, now + 10).expect_err("locked");
+    let why = kept!(g.verify(SECRET, &right, now + 10)).expect_err("locked");
     assert!(why.contains("locked"), "{why}");
     let later = now + LOCKOUT + MAX_FAILURES as u64;
     assert!(!g.locked(later));
     let code = six(totp::code(SECRET, later / STEP));
-    assert!(g.verify(SECRET, &code, later).is_ok(), "the lockout ends");
+    assert!(
+        kept!(g.verify(SECRET, &code, later)).is_ok(),
+        "the lockout ends"
+    );
 }

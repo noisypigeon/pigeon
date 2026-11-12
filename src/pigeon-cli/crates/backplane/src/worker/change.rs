@@ -628,13 +628,14 @@ impl DurableObject for ChangeRun {
                 let body: Value = req.json().await?;
                 let operation = body["operation"].as_str().unwrap_or_default();
                 let token = platform::random_hex(32)?;
-                let mut grants: Grants = self.load(GRANTS).await?;
+                let grants: Grants = self.load(GRANTS).await?;
                 let ttl = if body["page"].as_bool() == Some(true) {
                     crate::grants::PAGE_TTL
                 } else {
                     crate::grants::TTL
                 };
-                match grants.mint_for(&change, operation, &token, now(), ttl) {
+                let (grants, minted) = grants.mint_for(&change, operation, &token, now(), ttl);
+                match minted {
                     Ok(grant) => {
                         self.state.storage().put(GRANTS, &grants).await?;
                         Response::from_json(
@@ -663,8 +664,8 @@ impl DurableObject for ChangeRun {
                 let body: Value = req.json().await?;
                 let token = body["token"].as_str().unwrap_or_default();
                 let operation = body["operation"].as_str().unwrap_or_default();
-                let mut grants: Grants = self.load(GRANTS).await?;
-                let redeemed = grants.redeem(token, operation, &change, now());
+                let grants: Grants = self.load(GRANTS).await?;
+                let (grants, redeemed) = grants.redeem(token, operation, &change, now());
                 self.state.storage().put(GRANTS, &grants).await?;
                 if let Ok(g) = &redeemed {
                     self.keep_grant(&change, g, &body).await?;

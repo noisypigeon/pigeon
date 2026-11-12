@@ -308,8 +308,8 @@ pub async fn serve(state: &State, env: &Env, path: &str, body: Value) -> Result<
 async fn verify(state: &State, env: &Env, code: &str) -> Result<std::result::Result<(), String>> {
     let secret = totp::base32_decode(&platform::secret(env, "APPROVER_TOTP")?)?;
     let storage = state.storage();
-    let mut guard: Guard = storage.get(GUARD).await?.unwrap_or_default();
-    let checked = guard.verify(&secret, code, now());
+    let guard: Guard = storage.get(GUARD).await?.unwrap_or_default();
+    let (guard, checked) = guard.verify(&secret, code, now());
     storage.put(GUARD, &guard).await?;
     Ok(checked.map(|_| ()))
 }

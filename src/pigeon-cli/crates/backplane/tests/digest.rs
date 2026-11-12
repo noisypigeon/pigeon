@@ -1,6 +1,10 @@
 //! The owner's digest; see
 //! `.claude/decisions/2026-11-08-development-events-tickets-digest-mandate.md` §4.
 
+#[macro_use]
+#[path = "common/kept.rs"]
+mod kept;
+
 use backplane::approve::Waiting;
 use backplane::mandates::{Mandates, State};
 use backplane::tasks::{DigestInput, STALE, Tasks, digest};
@@ -51,12 +55,11 @@ fn the_digest_names_what_waits_on_the_owner_and_what_merged_without_them() {
     );
     tasks.add("review", 71, None, None, "fresh", STALE);
     let mut mandates = Mandates::default();
-    mandates
-        .propose(ADR, "task", vec!["src/**".into()], false, None, None)
+    kept!(mandates.propose(ADR, "task", vec!["src/**".into()], false, None, None))
         .expect("proposes");
-    mandates.offer(1, "tok", 0, 100).expect("offers");
-    mandates.grant("tok", "owner", 1).expect("grants");
-    mandates.pause_all("the deploy of abc failed");
+    kept!(mandates.offer(1, "tok", 0, 100)).expect("offers");
+    kept!(mandates.grant("tok", "owner", 1)).expect("grants");
+    kept!(mandates.pause_all("the deploy of abc failed"));
     let failed = [("abcdefabcdefabcdef".to_string(), "health".to_string())];
     let merged = [(59, "mandate:1".to_string())];
     let d = digest(

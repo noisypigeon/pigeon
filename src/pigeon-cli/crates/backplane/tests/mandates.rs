@@ -1,6 +1,10 @@
 //! Mandates: proposed, granted once with the code, bounded by scope, budget and expiry; see
 //! `.claude/decisions/2026-11-08-security-tiered-approvals-task-mandates.md` §3.
 
+#[macro_use]
+#[path = "common/kept.rs"]
+mod kept;
+
 use backplane::approvals::{Tier, Tiered, Tiers};
 use backplane::changes::Change;
 use backplane::mandates::{Decision, Mandate, Mandates, State};
@@ -61,34 +65,35 @@ fn a_change_fits_when_each_glob_lies_inside_the_mandates() {
 #[test]
 fn a_grant_is_spent_once_and_the_mandate_lasts_its_hours_and_budget() {
     let mut all = Mandates::default();
-    let m = all
-        .propose(ADR, "task", globs(&["tooling/**"]), false, Some(2), Some(1))
+    let m = kept!(all.propose(ADR, "task", globs(&["tooling/**"]), false, Some(2), Some(1)))
         .expect("proposes");
     assert_eq!(m.id, 1);
     assert!(
         !all.get(1).expect("one").usable(10),
         "proposed is not usable"
     );
-    all.offer(1, "tok", 10, 100).expect("offers");
+    kept!(all.offer(1, "tok", 10, 100)).expect("offers");
     assert_eq!(all.peek("tok", 50).expect("peeks").id, 1);
     assert!(all.peek("tok", 100).is_err(), "expired");
-    let granted = all.grant("tok", "owner@example.com", 50).expect("grants");
+    let granted = kept!(all.grant("tok", "owner@example.com", 50)).expect("grants");
     assert_eq!(granted.state, State::Active);
     assert_eq!(granted.expires, Some(50 + 3600));
     assert_eq!(granted.granted_by.as_deref(), Some("owner@example.com"));
-    assert!(all.grant("tok", "owner@example.com", 51).is_err(), "spent");
+    assert!(
+        kept!(all.grant("tok", "owner@example.com", 51)).is_err(),
+        "spent"
+    );
     let m = all.get(1).expect("one");
     assert!(m.usable(60));
     assert!(!m.usable(50 + 3600), "expired");
-    let ended = all.end(1, "done").expect("ends");
+    let ended = kept!(all.end(1, "done")).expect("ends");
     assert_eq!(ended.state, State::Ended);
     assert!(!all.get(1).expect("one").usable(60));
     assert!(
-        all.offer(1, "again", 60, 200).is_err(),
+        kept!(all.offer(1, "again", 60, 200)).is_err(),
         "an ended mandate isn't granted again"
     );
-    let second = all
-        .propose(ADR, "next", globs(&["tooling/**"]), false, None, None)
+    let second = kept!(all.propose(ADR, "next", globs(&["tooling/**"]), false, None, None))
         .expect("proposes");
     assert_eq!(second.id, 2);
 }
@@ -118,17 +123,17 @@ fn the_grant_page_shows_the_mandate_escaped_and_asks_for_the_code() {
 
 fn active(budget: u32, may_deploy: bool) -> Mandates {
     let mut all = Mandates::default();
-    all.propose(
+    kept!(all.propose(
         ADR,
         "task",
         globs(&["tooling/**"]),
         may_deploy,
         Some(budget),
         None,
-    )
+    ))
     .expect("proposes");
-    all.offer(1, "tok", 0, 100).expect("offers");
-    all.grant("tok", "owner@example.com", 1).expect("grants");
+    kept!(all.offer(1, "tok", 0, 100)).expect("offers");
+    kept!(all.grant("tok", "owner@example.com", 1)).expect("grants");
     all
 }
 
@@ -153,7 +158,9 @@ fn change(scope: &[&str], plan: &str, merge: Option<(Tier, &str)>) -> Change {
 }
 
 fn decision(all: &mut Mandates, c: &Change, op: &str) -> Decision {
-    all.decide(c, op, 10).expect("names a mandate").1
+    let (next, decided) = all.decide(c, op, 10);
+    *all = next;
+    decided.expect("names a mandate").1
 }
 
 #[test]
@@ -244,11 +251,11 @@ fn a_mandate_pauses_when_a_change_reaches_outside_it_or_a_deploy_fails() {
         "a paused mandate approves nothing"
     );
     let mut other = active(5, false);
-    assert_eq!(other.pause_all("the deploy of abc failed"), vec![1]);
+    assert_eq!(kept!(other.pause_all("the deploy of abc failed")), vec![1]);
     assert_eq!(other.get(1).expect("one").state, State::Paused);
     let mut none = Change::propose(8, "y", "feat: y", &plan, globs(&["tooling/**"]), "agent");
     none.mandate = None;
-    assert!(other.decide(&none, "change.merge", 10).is_none());
+    assert!(kept!(other.decide(&none, "change.merge", 10)).is_none());
 }
 
 #[test]

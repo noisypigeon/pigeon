@@ -1,6 +1,10 @@
 //! Passkeys: registering and asserting with ES256; see
 //! `.claude/decisions/2026-11-09-security-approvals-once-passkeys.md` §4.
 
+#[macro_use]
+#[path = "common/kept.rs"]
+mod kept;
+
 use backplane::passkeys::{
     Keyring, Passkey, REGISTER, assert, der_signature, grant_purpose, register, relying_party,
 };
@@ -229,26 +233,24 @@ fn the_keyring_registers_and_proves_only_with_challenges_it_minted_for_that_purp
     let k = key();
     let origin = format!("https://{HOST}");
     let mut ring = Keyring::default();
-    let reg = ring.mint(REGISTER, &[1u8; 32], 100);
+    let reg = kept!(ring.mint(REGISTER, &[1u8; 32], 100));
     let c = client("webauthn.create", &reg, &origin);
     let made = authenticator(HOST, 0x05, 0);
     assert!(
-        ring.register("cred", "phone", &c, &made, &spki(&k), HOST, HOST, 101)
-            .is_ok(),
+        kept!(ring.register("cred", "phone", &c, &made, &spki(&k), HOST, HOST, 101)).is_ok(),
         "registers"
     );
     assert!(
-        ring.register("cred2", "x", &c, &made, &spki(&k), HOST, HOST, 102)
-            .is_err(),
+        kept!(ring.register("cred2", "x", &c, &made, &spki(&k), HOST, HOST, 102)).is_err(),
         "a challenge is used once"
     );
     let purpose = grant_purpose("token-for-change-7");
-    let for_grant = ring.mint(&purpose, &[2u8; 32], 110);
+    let for_grant = kept!(ring.mint(&purpose, &[2u8; 32], 110));
     let got = client("webauthn.get", &for_grant, &origin);
     let a = authenticator(HOST, 0x05, 0);
     let sig = sign(&k, &a, &got);
     assert!(
-        ring.prove(
+        kept!(ring.prove(
             "cred",
             &got,
             &a,
@@ -257,33 +259,31 @@ fn the_keyring_registers_and_proves_only_with_challenges_it_minted_for_that_purp
             HOST,
             HOST,
             111
-        )
+        ))
         .is_err(),
         "another link's purpose"
     );
-    let again = ring.mint(&purpose, &[3u8; 32], 112);
+    let again = kept!(ring.mint(&purpose, &[3u8; 32], 112));
     let got = client("webauthn.get", &again, &origin);
     let sig = sign(&k, &a, &got);
     assert_eq!(
-        ring.prove("cred", &got, &a, &sig, &purpose, HOST, HOST, 113),
+        kept!(ring.prove("cred", &got, &a, &sig, &purpose, HOST, HOST, 113)),
         Ok(())
     );
     assert_eq!(ring.keys[0].used, Some(113));
     assert!(
-        ring.prove("cred", &got, &a, &sig, &purpose, HOST, HOST, 114)
-            .is_err(),
+        kept!(ring.prove("cred", &got, &a, &sig, &purpose, HOST, HOST, 114)).is_err(),
         "a replay"
     );
-    let late = ring.mint(&purpose, &[4u8; 32], 200);
+    let late = kept!(ring.mint(&purpose, &[4u8; 32], 200));
     let got = client("webauthn.get", &late, &origin);
     let sig = sign(&k, &a, &got);
     assert!(
-        ring.prove("cred", &got, &a, &sig, &purpose, HOST, HOST, 200 + 301)
-            .is_err(),
+        kept!(ring.prove("cred", &got, &a, &sig, &purpose, HOST, HOST, 200 + 301)).is_err(),
         "a lapsed challenge"
     );
-    assert!(ring.remove("cred"));
-    assert!(!ring.remove("cred"));
+    assert!(kept!(ring.remove("cred")));
+    assert!(!kept!(ring.remove("cred")));
 }
 
 #[test]
@@ -315,33 +315,33 @@ fn a_passkey_for_the_platform_registers_on_a_stack_and_proves_on_the_live_host()
     let rp = "platform.example.com";
     let (stack, live) = ("blue.platform.example.com", "platform.example.com");
     let mut ring = Keyring::default();
-    let reg = ring.mint(REGISTER, &[1u8; 32], 100);
+    let reg = kept!(ring.mint(REGISTER, &[1u8; 32], 100));
     let c = client("webauthn.create", &reg, &format!("https://{stack}"));
     let made = authenticator(rp, 0x05, 0);
     assert_eq!(
-        ring.register("cred", "phone", &c, &made, &spki(&k), stack, rp, 101),
+        kept!(ring.register("cred", "phone", &c, &made, &spki(&k), stack, rp, 101)),
         Ok(())
     );
     let purpose = grant_purpose("token-for-change-9");
     let a = authenticator(rp, 0x05, 0);
     let got = client(
         "webauthn.get",
-        &ring.mint(&purpose, &[2u8; 32], 110),
+        &kept!(ring.mint(&purpose, &[2u8; 32], 110)),
         &format!("https://{live}"),
     );
     let sig = sign(&k, &a, &got);
     assert_eq!(
-        ring.prove("cred", &got, &a, &sig, &purpose, live, rp, 111),
+        kept!(ring.prove("cred", &got, &a, &sig, &purpose, live, rp, 111)),
         Ok(())
     );
     let other = client(
         "webauthn.get",
-        &ring.mint(&purpose, &[3u8; 32], 112),
+        &kept!(ring.mint(&purpose, &[3u8; 32], 112)),
         &format!("https://{live}"),
     );
     let sig = sign(&k, &a, &other);
     assert!(
-        ring.prove(
+        kept!(ring.prove(
             "cred",
             &other,
             &a,
@@ -350,7 +350,7 @@ fn a_passkey_for_the_platform_registers_on_a_stack_and_proves_on_the_live_host()
             "x.workers.dev",
             "x.workers.dev",
             113
-        )
+        ))
         .is_err(),
         "another site's page"
     );

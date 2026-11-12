@@ -186,10 +186,10 @@ pub async fn pause_all(env: &Env, s: &Settings, why: &str) -> Result<()> {
 /// When storage fails.
 pub async fn serve(state: &State, path: &str, body: Value) -> Result<Response> {
     let storage = state.storage();
-    let mut all: Mandates = storage.get(MANDATES).await?.unwrap_or_default();
+    let all: Mandates = storage.get(MANDATES).await?.unwrap_or_default();
     let n = |k: &str| body[k].as_u64().and_then(|v| u32::try_from(v).ok());
     let s = |k: &str| body[k].as_str().unwrap_or_default().to_string();
-    let answer: std::result::Result<Value, String> = match path {
+    let (all, answer): (Mandates, std::result::Result<Value, String>) = match path {
         "/mandates/propose" => {
             let scope: Vec<String> = body["scope"]
                 .as_array()
@@ -197,46 +197,56 @@ pub async fn serve(state: &State, path: &str, body: Value) -> Result<Response> {
                 .flatten()
                 .filter_map(|v| v.as_str().map(str::to_string))
                 .collect();
-            all.propose(
+            let (all, proposed) = all.propose(
                 &s("adr"),
                 &s("summary"),
                 scope,
                 body["may_deploy"].as_bool() == Some(true),
                 n("budget"),
                 n("hours"),
-            )
-            .map(|m| json!(m))
+            );
+            (all, proposed.map(|m| json!(m)))
         }
         "/mandates/list" => return Response::from_json(&json!({ "mandates": all.list })),
-        "/mandates/offer" => all
-            .offer(
+        "/mandates/offer" => {
+            let (all, offered) = all.offer(
                 n("id").unwrap_or_default(),
                 &s("token"),
                 now(),
                 body["expires"].as_u64().unwrap_or_default(),
-            )
-            .map(|()| json!({ "status": "offered" })),
+            );
+            (all, offered.map(|()| json!({ "status": "offered" })))
+        }
         "/mandates/peek" => {
             return match all.peek(&s("token"), now()) {
                 Ok(m) => Response::from_json(m),
                 Err(why) => Response::error(why, 403),
             };
         }
-        "/mandates/grant" => all.grant(&s("token"), &s("by"), now()).map(|m| json!(m)),
+        "/mandates/grant" => {
+            let (all, granted) = all.grant(&s("token"), &s("by"), now());
+            (all, granted.map(|m| json!(m)))
+        }
         "/mandates/decide" => {
             let change: Change = match serde_json::from_value(body["change"].clone()) {
                 Ok(c) => c,
                 Err(e) => return Response::error(format!("unreadable change: {e}"), 400),
             };
             match all.decide(&change, &s("operation"), now()) {
-                Some((id, d)) => Ok(json!({ "id": id, "decision": d })),
-                None => Err("the change names no mandate".into()),
+                (all, Some((id, d))) => (all, Ok(json!({ "id": id, "decision": d }))),
+                (all, None) => (all, Err("the change names no mandate".into())),
             }
         }
-        "/mandates/pause" => Ok(json!({ "paused": all.pause_all(&s("why")) })),
+        "/mandates/pause" => {
+            let (all, paused) = all.pause_all(&s("why"));
+            (all, Ok(json!({ "paused": paused })))
+        }
         "/mandates/end" => match n("id") {
-            Some(id) => all.end(id, &s("why")).map(|m| json!(m)),
-            None => Err("`id` must be a mandate number".into()),
+            Some(id) => {
+                let (all, ended) = all.end(id, &s("why"));
+                (all, ended.map(|m| json!(m)))
+            }
+            None => (all, Err("`id` must be a mandate number".into())),
         },
         _ => return Response::error("not found", 404),
     };
