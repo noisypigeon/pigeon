@@ -28,13 +28,17 @@ const CODE: [&str; 5] = ["fmt", "clippy", "test", "build", "check"];
 /// The test map's script, as `crate::cobot::scope::test_map` runs it from the workspace.
 pub const TEST_MAP: &str = "../../tooling/ci/test-map.sh";
 
+/// The `ios` check's script, as `crate::cobot::scope` runs it; it needs macOS, which only GitHub
+/// gives; see `.claude/decisions/2026-11-11-release-ios-app-buildkite-testflight.md`.
+pub const IOS_CHECK: &str = "../pigeon-ios/check.sh";
+
 /// Whether a check with `argv` is a code check, run on GitHub: `cargo fmt|clippy|test|build|check`,
-/// or the test map.
+/// the test map, or the `ios` check.
 #[must_use]
 pub fn on_github(argv: &[String]) -> bool {
     match argv {
         [p, v, ..] if p == "cargo" => CODE.contains(&v.as_str()),
-        [p, script] => p == "bash" && script == TEST_MAP,
+        [p, script] => p == "bash" && (script == TEST_MAP || script == IOS_CHECK),
         _ => false,
     }
 }

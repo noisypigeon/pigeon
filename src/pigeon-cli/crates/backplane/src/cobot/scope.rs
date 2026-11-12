@@ -528,7 +528,7 @@ pub fn jobs_with(root: &Path, files: &[String], map: Option<&TestMap>) -> Result
         });
     }
     if files.iter().any(|f| under(f, &IOS)) {
-        out.push(job("ios", &["bash", "../pigeon-ios/check.sh"]));
+        out.push(job("ios", &["bash", crate::actions::IOS_CHECK]));
     }
     out.extend(spikes(&files));
     if files.contains(&TEST_MAP) {
