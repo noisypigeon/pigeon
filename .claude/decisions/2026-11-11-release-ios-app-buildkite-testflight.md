@@ -241,3 +241,55 @@ At the owner's direction, a change's checks and the release's build move to GitH
 3. Step 4, the Apple connection, with `archive_url` and the `willow-graysen` check.
 4. The `ios` check in `ci.yml` and `change.scope`.
 5. The release: `ios.archive`, its copy to R2, `ios_releases`, `ios-sign.sh`, the `ios` deploy unit, and an AppIcon.
+
+### 2026-11-12: The release: on demand, the archive served by the route, and the intermediate in the keychain
+
+With the `ios` check building the app on GitHub (!231, !233, !234) and `apple.check` passing, this settles the release step. It supersedes §4's trigger and `archive_url` in the GitHub/Buildkite amendment; that text stays as written.
+
+#### 1. A release is cut on demand
+
+- **`ios.release`**, a control-plane operation, releases `main`'s mirrored head. It inserts an `ios_releases` row, its `build` one more than the last, in state `queued`.
+- Releasing on every merge needs the paths a push changed, which the Worker doesn't have; it waits for a later amendment.
+- `ios.status` shows the newest releases and their states, with their GitHub and Buildkite links.
+
+#### 2. `MainRun` moves a release on, as it moves the test map
+
+1. **`queued`:** dispatches `ci.yml` on the commit with the one check `ios.archive`, argv `bash ../pigeon-ios/archive.sh <build>`, by the test map's `Actions`; then `archiving`.
+2. **`archiving`:** finds and polls the run. When it passes, copies the run's artifact `Pigeon.xcarchive.zip` to R2 at `builds/<sha>/ios/<build>.xcarchive.zip`; then creates the Buildkite build of `pigeon-ios-release` on `main` at the commit, with `PIGEON_IOS_BUILD=<build>`, records its number, and moves to `archived`.
+3. **`archived`:** waits for the `sign` step to redeem its grant, which moves it to `signing`.
+4. **`signing`:** polls the Buildkite build; passed is `uploaded`, failed or canceled is `failed`.
+5. **`uploaded`:** polls App Store Connect's `GET /v1/builds` for the app and build number until `processingState` is `VALID`: `delivered`. `INVALID` is `failed`.
+
+A failure at any step marks the row `failed` with its reason; the digest names it. Nothing is retried on its own: the owner cuts a new release.
+
+#### 3. The archive, from the route
+
+- **`archive.sh`** archives with `CODE_SIGNING_ALLOWED=NO` and `CURRENT_PROJECT_VERSION=<build>`, and zips `Pigeon.xcarchive`; `ci.yml` uploads it unzipped, as it uploads the test map.
+- **`GET /v0/apple/release/archive`** answers the archive to the same OIDC token `POST /v0/apple/release` takes, checked the same way, for the row of that build and commit in state `signing` only. Access's bypass of `/v0/apple/release` covers it: an unauthenticated `GET /v0/apple/release/x` reached the Worker and answered 404.
+- The `Grant` keeps its fields; no URL is handed out.
+
+#### 4. The sign step
+
+`tooling/ci/buildkite/ios-sign.sh`:
+
+1. stops unless `xcrun --find iTMSTransporter` succeeds;
+2. installs the Rust toolchain `mise.toml` pins, and builds `pigeon` with `--no-default-features --features signing`;
+3. `pigeon backplane signing load`, which now also imports Apple's public WWDR G3 intermediate (from `https://www.apple.com/certificateauthority/AppleWWDRCAG3.cer`, checked against a SHA-256 in the harness) into its keychain, since the `.p12` carries only the leaf to fit the Worker secret's 5.1 kB;
+4. downloads the archive from the route with a second OIDC token, and unzips it;
+5. `xcodebuild -exportArchive` with the plist `load` wrote;
+6. `pigeon backplane signing upload --ipa`;
+7. `pigeon backplane signing clean`, on exit.
+
+#### 5. What was learned
+
+- The App Manager key reads provisioning profiles: `apple.check` found `Pigeon App Store`, active until 2027-11-11.
+- The `.p12` holds the leaf certificate and key only; with the intermediate it exceeded the 5.1 kB limit on a Worker secret.
+- GitHub's `macos-15` runner has Xcode 26.1.1 and bash 3.2; XcodeGen 2.44.1 with it needs `PRODUCT_NAME` set.
+
+#### 6. Execution, from here
+
+1. This amendment.
+2. **`ci`:** `archive.sh`, the `ios.archive` check in `actions::on_github`, and `ci.yml`'s artifact upload.
+3. **`feat(backplane)`:** `ios.release` and `ios.status`, the release's steps in `MainRun`, the Buildkite client, and `GET /v0/apple/release/archive`.
+4. **`feat(backplane)`:** the harness imports the intermediate, and `tooling/ci/buildkite/ios-sign.sh`.
+5. **The owner:** `ios.release`; build 1 reaches the internal group.
