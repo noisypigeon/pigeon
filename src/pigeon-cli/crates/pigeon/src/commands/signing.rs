@@ -10,9 +10,10 @@ use std::time::Duration;
 
 use backplane::push::{b64url, b64url_decode};
 use backplane::signing::{
-    Grant, INTERMEDIATE_URL, Layout, ROUTE, SECURITY, State, Step, check_step, clean_plan,
-    intermediate_ok, load_plan, oidc_argv, parse_search_list, upload_argv,
+    self, Grant, INTERMEDIATE_URL, Layout, ROUTE, SECURITY, State, Step, check_step, clean_plan,
+    intermediate_ok, load_plan, oidc_argv, parse_search_list,
 };
+use serde_json::Value;
 
 use super::{INVALID, SUCCESS, VIOLATION};
 use crate::cli::{SigningArgs, SigningCommand, UploadArgs};
@@ -167,20 +168,146 @@ fn fetch_intermediate() -> Result<Vec<u8>, Failure> {
     }
 }
 
+/// Uploads the IPA through App Store Connect's Build Uploads API with the grant's token; see the
+/// release ADR's 2026-11-12 amendment on the upload.
 fn upload(args: &UploadArgs) -> Result<(), Failure> {
+    if !signing::version_ok(&args.version) {
+        return Err(Failure::Refused(format!(
+            "`{}` isn't a marketing version",
+            args.version
+        )));
+    }
     let dir = job_dir()?;
     let state: State =
         read_state(&dir)?.ok_or_else(|| broken("nothing is loaded; run `load` first"))?;
     let jwt = fs::read_to_string(state.layout.jwt()).map_err(broken)?;
-    let status = Command::new(&upload_argv(&args.ipa, jwt.trim())[0])
-        .args(&upload_argv(&args.ipa, jwt.trim())[1..])
-        .status()
-        .map_err(broken)?;
-    if status.success() {
-        Ok(())
-    } else {
-        Err(Failure::Refused(format!("the upload failed: {status}")))
+    let asc = Asc::new(jwt.trim());
+    let ipa = fs::read(&args.ipa).map_err(|e| broken(format!("{}: {e}", args.ipa.display())))?;
+    let size = ipa.len() as u64;
+    let name = args
+        .ipa
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("Pigeon.ipa");
+
+    let app =
+        signing::app_id(&asc.call("GET", &signing::app_url(), None)?).map_err(Failure::Refused)?;
+    let build = args.build.to_string();
+    let created = asc.call(
+        "POST",
+        &format!("{}/v1/buildUploads", signing::ASC_API),
+        Some(&signing::build_upload(&app, &args.version, &build)),
+    )?;
+    let upload = signing::created_id(&created, "build upload").map_err(Failure::Refused)?;
+    let file = asc.call(
+        "POST",
+        &format!("{}/v1/buildUploadFiles", signing::ASC_API),
+        Some(&signing::upload_file(&upload, name, size)),
+    )?;
+    let file_id = signing::created_id(&file, "build upload file").map_err(Failure::Refused)?;
+    let parts = signing::parts(&file, size).map_err(Failure::Refused)?;
+    for (i, part) in parts.iter().enumerate() {
+        send_part(part, &ipa).map_err(|e| Failure::Refused(format!("part {}: {e}", i + 1)))?;
     }
+    asc.call(
+        "PATCH",
+        &format!("{}/v1/buildUploadFiles/{file_id}", signing::ASC_API),
+        Some(&signing::uploaded(&file_id)),
+    )?;
+    eprintln!(
+        "signing: uploaded {name}, {size} bytes in {} part(s), as build {build} of {}",
+        parts.len(),
+        args.version
+    );
+    Ok(())
+}
+
+/// App Store Connect, called with the grant's upload token.
+struct Asc {
+    agent: ureq::Agent,
+    bearer: String,
+}
+
+impl Asc {
+    fn new(jwt: &str) -> Self {
+        let agent: ureq::Agent = ureq::Agent::config_builder()
+            .http_status_as_error(false)
+            .timeout_global(Some(Duration::from_secs(60)))
+            .build()
+            .into();
+        Self {
+            agent,
+            bearer: format!("Bearer {jwt}"),
+        }
+    }
+
+    /// `method` on `url` with `body`: the answer, or App Store Connect's first error.
+    fn call(&self, method: &str, url: &str, body: Option<&Value>) -> Result<Value, Failure> {
+        let what = url.trim_start_matches(signing::ASC_API);
+        let sent = match (method, body) {
+            ("GET", _) => self
+                .agent
+                .get(url)
+                .header("authorization", &self.bearer)
+                .call(),
+            ("POST", Some(b)) => self
+                .agent
+                .post(url)
+                .header("authorization", &self.bearer)
+                .header("content-type", "application/json")
+                .send(b.to_string()),
+            ("PATCH", Some(b)) => self
+                .agent
+                .patch(url)
+                .header("authorization", &self.bearer)
+                .header("content-type", "application/json")
+                .send(b.to_string()),
+            _ => return Err(broken(format!("{method} {what}: no body"))),
+        };
+        let mut r = sent.map_err(|e| Failure::Refused(format!("{method} {what}: {e}")))?;
+        let status = r.status().as_u16();
+        let text = r.body_mut().read_to_string().unwrap_or_default();
+        let v: Value = serde_json::from_str(&text).unwrap_or(Value::Null);
+        if (200..300).contains(&status) {
+            return Ok(v);
+        }
+        let detail = v["errors"][0]["detail"]
+            .as_str()
+            .or_else(|| v["errors"][0]["title"].as_str())
+            .unwrap_or("no detail");
+        Err(Failure::Refused(format!(
+            "{method} {what}: App Store Connect answered {status}: {detail}"
+        )))
+    }
+}
+
+/// Sends `part` of `ipa` where App Store Connect said, trying three times.
+fn send_part(part: &signing::Part, ipa: &[u8]) -> Result<(), String> {
+    let agent: ureq::Agent = ureq::Agent::config_builder()
+        .http_status_as_error(false)
+        .timeout_global(Some(Duration::from_secs(300)))
+        .build()
+        .into();
+    let start = usize::try_from(part.offset).map_err(|e| e.to_string())?;
+    let end = start + usize::try_from(part.length).map_err(|e| e.to_string())?;
+    let bytes = &ipa[start..end];
+    let mut last = String::new();
+    for attempt in 1..=3 {
+        let mut req = ureq::http::Request::builder()
+            .method(part.method.as_str())
+            .uri(&part.url);
+        for (k, v) in &part.headers {
+            req = req.header(k, v);
+        }
+        let req = req.body(bytes).map_err(|e| e.to_string())?;
+        match agent.run(req) {
+            Ok(r) if r.status().is_success() => return Ok(()),
+            Ok(r) => last = format!("answered {}", r.status()),
+            Err(e) => last = e.to_string(),
+        }
+        std::thread::sleep(Duration::from_secs(2 * attempt));
+    }
+    Err(last)
 }
 
 fn clean() -> Result<(), Failure> {

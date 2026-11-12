@@ -484,21 +484,154 @@ pub fn clean_plan(state: &State) -> Vec<Step> {
     ]
 }
 
-/// `iTMSTransporter`'s argv to upload `ipa` with `jwt`.
+/// App Store Connect's API.
+pub const ASC_API: &str = "https://api.appstoreconnect.apple.com";
+
+/// The app's bundle ID, as the grant carries it.
+pub const BUNDLE_ID: &str = "dev.pigeon.app";
+
+/// The URL listing the app, for its ID.
 #[must_use]
-pub fn upload_argv(ipa: &Path, jwt: &str) -> Vec<String> {
-    [
-        "xcrun",
-        "iTMSTransporter",
-        "-m",
-        "upload",
-        "-assetFile",
-        path(ipa),
-        "-jwt",
-        jwt,
-    ]
-    .map(String::from)
-    .to_vec()
+pub fn app_url() -> String {
+    format!("{ASC_API}/v1/apps?filter[bundleId]={BUNDLE_ID}")
+}
+
+/// The app's ID, from `GET /v1/apps?filter[bundleId]=…`.
+///
+/// # Errors
+///
+/// When App Store Connect lists no app.
+pub fn app_id(v: &serde_json::Value) -> Result<String, String> {
+    v["data"][0]["id"]
+        .as_str()
+        .map(str::to_string)
+        .ok_or_else(|| format!("App Store Connect lists no app for {BUNDLE_ID}"))
+}
+
+/// A created resource's ID.
+///
+/// # Errors
+///
+/// When the answer holds none.
+pub fn created_id(v: &serde_json::Value, what: &str) -> Result<String, String> {
+    v["data"]["id"]
+        .as_str()
+        .map(str::to_string)
+        .ok_or_else(|| format!("App Store Connect created no {what}"))
+}
+
+/// `POST /v1/buildUploads`'s body: build `build` of version `version` of app `app`.
+#[must_use]
+pub fn build_upload(app: &str, version: &str, build: &str) -> serde_json::Value {
+    serde_json::json!({ "data": {
+        "type": "buildUploads",
+        "attributes": {
+            "cfBundleShortVersionString": version,
+            "cfBundleVersion": build,
+            "platform": "IOS",
+        },
+        "relationships": { "app": { "data": { "type": "apps", "id": app } } },
+    } })
+}
+
+/// `POST /v1/buildUploadFiles`'s body: the IPA `name`, of `size` bytes, of build upload `upload`.
+#[must_use]
+pub fn upload_file(upload: &str, name: &str, size: u64) -> serde_json::Value {
+    serde_json::json!({ "data": {
+        "type": "buildUploadFiles",
+        "attributes": {
+            "assetType": "ASSET",
+            "fileName": name,
+            "fileSize": size,
+            "uti": "com.apple.ipa",
+        },
+        "relationships": {
+            "buildUpload": { "data": { "type": "buildUploads", "id": upload } },
+        },
+    } })
+}
+
+/// `PATCH /v1/buildUploadFiles/{file}`'s body: every part was sent.
+#[must_use]
+pub fn uploaded(file: &str) -> serde_json::Value {
+    serde_json::json!({ "data": {
+        "type": "buildUploadFiles",
+        "id": file,
+        "attributes": { "uploaded": true },
+    } })
+}
+
+/// One part of the IPA to send, as App Store Connect's `uploadOperations` names it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Part {
+    /// The HTTP method.
+    pub method: String,
+    /// Where to send it.
+    pub url: String,
+    /// Its first byte in the file.
+    pub offset: u64,
+    /// How many bytes.
+    pub length: u64,
+    /// The headers to send with it.
+    pub headers: Vec<(String, String)>,
+}
+
+/// The parts of a created build upload file, each inside a file of `size` bytes.
+///
+/// # Errors
+///
+/// When the answer lists none, or a part is malformed or reaches past the file.
+pub fn parts(v: &serde_json::Value, size: u64) -> Result<Vec<Part>, String> {
+    let ops = v["data"]["attributes"]["uploadOperations"]
+        .as_array()
+        .filter(|o| !o.is_empty())
+        .ok_or("App Store Connect gave no upload operations")?;
+    ops.iter()
+        .map(|o| {
+            let text = |k: &str| {
+                o[k].as_str()
+                    .map(str::to_string)
+                    .ok_or_else(|| format!("an upload operation has no `{k}`"))
+            };
+            let num = |k: &str| {
+                o[k].as_u64()
+                    .ok_or_else(|| format!("an upload operation has no `{k}`"))
+            };
+            let part = Part {
+                method: text("method")?,
+                url: text("url")?,
+                offset: num("offset")?,
+                length: num("length")?,
+                headers: o["requestHeaders"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|h| Some((h["name"].as_str()?.into(), h["value"].as_str()?.into())))
+                    .collect(),
+            };
+            if !part.url.starts_with("https://") {
+                return Err("an upload operation's URL isn't HTTPS".into());
+            }
+            if part
+                .offset
+                .checked_add(part.length)
+                .is_none_or(|end| end > size)
+            {
+                return Err("an upload operation reaches past the file".into());
+            }
+            Ok(part)
+        })
+        .collect()
+}
+
+/// Whether `version` is a marketing version App Store Connect takes: one to three dot-separated
+/// numbers.
+#[must_use]
+pub fn version_ok(version: &str) -> bool {
+    let n: Vec<&str> = version.split('.').collect();
+    (1..=3).contains(&n.len())
+        && n.iter()
+            .all(|p| !p.is_empty() && p.len() <= 9 && p.bytes().all(|b| b.is_ascii_digit()))
 }
 
 #[cfg(test)]
@@ -700,5 +833,61 @@ mod tests {
                 "300"
             ]
         );
+    }
+
+    #[test]
+    fn a_build_upload_names_the_app_version_and_build() {
+        let b = build_upload("123", "1.0", "3");
+        assert_eq!(b["data"]["type"], "buildUploads");
+        assert_eq!(b["data"]["attributes"]["cfBundleShortVersionString"], "1.0");
+        assert_eq!(b["data"]["attributes"]["cfBundleVersion"], "3");
+        assert_eq!(b["data"]["attributes"]["platform"], "IOS");
+        assert_eq!(b["data"]["relationships"]["app"]["data"]["id"], "123");
+        let f = upload_file("u1", "Pigeon.ipa", 42);
+        assert_eq!(f["data"]["attributes"]["uti"], "com.apple.ipa");
+        assert_eq!(f["data"]["attributes"]["fileSize"], 42);
+        assert_eq!(
+            f["data"]["relationships"]["buildUpload"]["data"]["id"],
+            "u1"
+        );
+        assert_eq!(uploaded("f1")["data"]["attributes"]["uploaded"], true);
+        assert_eq!(
+            app_url(),
+            format!("{ASC_API}/v1/apps?filter[bundleId]=dev.pigeon.app")
+        );
+    }
+
+    #[test]
+    fn upload_operations_become_parts_inside_the_file() {
+        let v = serde_json::json!({ "data": { "id": "f1", "attributes": { "uploadOperations": [
+            { "method": "PUT", "url": "https://upload.example/1", "offset": 0, "length": 6,
+              "requestHeaders": [{ "name": "Content-Type", "value": "application/octet-stream" }] },
+            { "method": "PUT", "url": "https://upload.example/2", "offset": 6, "length": 4 }
+        ] } } });
+        let p = parts(&v, 10).expect("parts");
+        assert_eq!(p.len(), 2);
+        assert_eq!(
+            p[0].headers,
+            [("Content-Type".into(), "application/octet-stream".into())]
+        );
+        assert_eq!((p[1].offset, p[1].length), (6, 4));
+        assert!(parts(&v, 9).is_err(), "a part past the file is refused");
+        let http = serde_json::json!({ "data": { "attributes": { "uploadOperations": [
+            { "method": "PUT", "url": "http://upload.example/1", "offset": 0, "length": 1 }
+        ] } } });
+        assert!(parts(&http, 1).is_err());
+        assert!(parts(&serde_json::json!({}), 1).is_err());
+        assert_eq!(created_id(&v, "file").as_deref(), Ok("f1"));
+        assert!(app_id(&serde_json::json!({ "data": [] })).is_err());
+    }
+
+    #[test]
+    fn marketing_versions_are_dotted_numbers() {
+        for ok in ["1", "1.0", "1.0.3"] {
+            assert!(version_ok(ok), "{ok}");
+        }
+        for bad in ["", "1.0-beta", "1..0", "1.0.0.0", "v1"] {
+            assert!(!version_ok(bad), "{bad}");
+        }
     }
 }

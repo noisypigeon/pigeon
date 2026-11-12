@@ -81,8 +81,34 @@ fn a_malformed_job_id_is_refused() {
 fn upload_with_nothing_loaded_says_so() {
     let tmp = TempDir::new().unwrap();
     signing(&tmp)
-        .args(["upload", "--ipa", "Pigeon.ipa"])
+        .args([
+            "upload",
+            "--ipa",
+            "Pigeon.ipa",
+            "--version",
+            "1.0",
+            "--build",
+            "3",
+        ])
         .assert()
         .code(2)
         .stderr(predicate::str::contains("nothing is loaded"));
+}
+
+#[test]
+fn upload_refuses_a_malformed_version() {
+    let tmp = TempDir::new().unwrap();
+    signing(&tmp)
+        .args([
+            "upload",
+            "--ipa",
+            "Pigeon.ipa",
+            "--version",
+            "1.0-beta",
+            "--build",
+            "3",
+        ])
+        .assert()
+        .code(1)
+        .stderr(predicate::str::contains("isn't a marketing version"));
 }

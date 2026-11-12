@@ -174,4 +174,10 @@ pub struct UploadArgs {
     /// The signed app
     #[arg(long)]
     pub ipa: PathBuf,
+    /// Its marketing version, `CFBundleShortVersionString`
+    #[arg(long)]
+    pub version: String,
+    /// Its build number, `CFBundleVersion`
+    #[arg(long)]
+    pub build: u64,
 }

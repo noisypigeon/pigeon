@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # The release's `sign` step on Buildkite's hosted macOS agent: load the signing identity, export
-# the archive GitHub built, upload it to App Store Connect, and clean up; see the 2026-11-12
-# amendment to .claude/decisions/2026-11-11-release-ios-app-buildkite-testflight.md.
+# the archive GitHub built, upload it through App Store Connect's Build Uploads API, and clean up;
+# see the 2026-11-12 amendments to .claude/decisions/2026-11-11-release-ios-app-buildkite-testflight.md.
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 build="${PIGEON_IOS_BUILD:?the build number}"
@@ -12,7 +12,6 @@ if [ -d "/Applications/Xcode_${want}.app" ]; then
   export DEVELOPER_DIR="/Applications/Xcode_${want}.app/Contents/Developer"
 fi
 xcodebuild -version
-xcrun --find iTMSTransporter >/dev/null || { echo "iTMSTransporter is missing" >&2; exit 1; }
 
 # The harness, from this commit, with the toolchain mise.toml pins; built before any secret is here.
 rust="$(sed -n 's/^rust = { version = "\([^"]*\)".*/\1/p' mise.toml)"
@@ -40,5 +39,8 @@ xcodebuild -exportArchive \
   -archivePath "$work/Pigeon.xcarchive" \
   -exportOptionsPlist "$plist" \
   -exportPath "$work/export"
-"$pigeon" backplane signing upload --ipa "$work/export/Pigeon.ipa"
+version="$(plutil -extract ApplicationProperties.CFBundleShortVersionString raw \
+  "$work/Pigeon.xcarchive/Info.plist")"
+"$pigeon" backplane signing upload --ipa "$work/export/Pigeon.ipa" \
+  --version "$version" --build "$build"
 echo "uploaded build $build"
