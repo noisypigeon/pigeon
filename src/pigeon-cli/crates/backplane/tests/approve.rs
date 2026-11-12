@@ -1,6 +1,10 @@
 //! The approval page: every value escaped, no script, one form back to itself with the
 //! owner's code; see `.claude/decisions/2026-11-08-security-tiered-approvals-task-mandates.md` §4.
 
+#[macro_use]
+#[path = "common/kept.rs"]
+mod kept;
+
 use backplane::approve;
 use backplane::changes::{Change, State};
 use backplane::grants::Grant;
@@ -231,7 +235,7 @@ fn the_inbox_installs_as_a_home_screen_app_for_ios_push() {
 fn a_platform_plan_page_asks_for_the_token_and_an_apply_page_shows_the_changes() {
     use backplane::platforms::{Runs, Stage};
     let mut runs = Runs::default();
-    let run = runs.propose("platform/blue", "tok", 0).expect("proposes");
+    let run = stepped!(runs.propose("platform/blue", "tok", 0)).expect("proposes");
     let page = backplane::approve::platform_page(&run, "tok<");
     assert!(
         page.contains("name=\"account_token\" type=\"password\""),
@@ -239,11 +243,9 @@ fn a_platform_plan_page_asks_for_the_token_and_an_apply_page_shows_the_changes()
     );
     assert!(page.contains("tok&lt;"), "the grant is escaped");
     assert!(!page.contains("name=\"decision\" value=\"refuse\""));
-    runs.grant_plan(1, "tok", "SEALED", "o", 1).expect("grants");
+    stepped!(runs.grant_plan(1, "tok", "SEALED", "o", 1)).expect("grants");
     let change = serde_json::json!({ "action": "update", "address": "module.d1.<x>" });
-    let run = runs
-        .planned(1, Ok(("p1".into(), vec![change])), "t2", 2)
-        .expect("planned");
+    let run = stepped!(runs.planned(1, Ok(("p1".into(), vec![change])), "t2", 2)).expect("planned");
     assert_eq!(run.stage, Stage::Planned);
     let page = backplane::approve::platform_page(&run, "t2");
     assert!(page.contains("update module.d1.&lt;x&gt;"), "{page}");

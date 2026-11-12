@@ -328,20 +328,29 @@ pub async fn serve(state: &State, path: &str, body: &Value) -> Result<Response> 
         .unwrap_or_default();
     let s = |k: &str| body[k].as_str().unwrap_or_default().to_string();
     let t = body["now"].as_u64().unwrap_or_else(now);
-    runs.expire(t);
+    runs = runs.expire(t).0;
     let answer: std::result::Result<Run, String> = match path {
         "list" => {
             store(state, &runs).await?;
             let shown: Vec<Run> = runs.list.iter().rev().take(20).map(Run::shown).collect();
             return Response::from_json(&json!({ "runs": shown }));
         }
-        "propose" => runs.propose(&s("unit"), &s("token"), t),
+        "propose" => {
+            let step = runs.propose(&s("unit"), &s("token"), t);
+            keep(&mut runs, step)
+        }
         "peek" => {
             let at = runs.get(id).map(|r| r.stage).unwrap_or_default();
             runs.peek(id, &s("token"), at, t).map(Run::shown)
         }
-        "grant-plan" => runs.grant_plan(id, &s("token"), &s("sealed"), &s("by"), t),
-        "grant-apply" => runs.grant_apply(id, &s("token"), &s("by"), t),
+        "grant-plan" => {
+            let step = runs.grant_plan(id, &s("token"), &s("sealed"), &s("by"), t);
+            keep(&mut runs, step)
+        }
+        "grant-apply" => {
+            let step = runs.grant_apply(id, &s("token"), &s("by"), t);
+            keep(&mut runs, step)
+        }
         "reoffer" => match runs.list.iter_mut().find(|r| r.id == id) {
             Some(r) if r.stage == Stage::Planned => {
                 r.offer = Some(crate::platforms::hash(&s("token")));
@@ -351,7 +360,10 @@ pub async fn serve(state: &State, path: &str, body: &Value) -> Result<Response> 
                 "platform run {id} has no plan waiting to be applied"
             )),
         },
-        "refuse" => runs.refuse(id, &s("by")),
+        "refuse" => {
+            let step = runs.refuse(id, &s("by"));
+            keep(&mut runs, step)
+        }
         _ => return Response::error("not found", 404),
     };
     store(state, &runs).await?;
@@ -382,8 +394,7 @@ pub async fn running(state: &State) -> Result<bool> {
 ///
 /// When storage fails.
 pub async fn tick(state: &State, env: &Env, sha: Option<&str>) -> Result<()> {
-    let mut runs = load(state).await?;
-    let gone = runs.expire(now());
+    let (mut runs, gone) = load(state).await?.expire(now());
     let jobs: Vec<Run> = runs.running().into_iter().cloned().collect();
     let mut offers: Vec<(Run, &'static str, String)> = Vec::new();
     let mut ended: Vec<u32> = Vec::new();
@@ -414,11 +425,12 @@ pub async fn tick(state: &State, env: &Env, sha: Option<&str>) -> Result<()> {
             Ok(None) => {}
             Err(()) if attempts >= ATTEMPTS => {
                 let why = format!("its job was lost {ATTEMPTS} times");
-                if run.stage == Stage::Planning {
-                    let _ = runs.planned(run.id, Err(why), "", now());
+                let step = if run.stage == Stage::Planning {
+                    runs.planned(run.id, Err(why), "", now())
                 } else {
-                    let _ = runs.applied(run.id, Err(why));
-                }
+                    runs.applied(run.id, Err(why))
+                };
+                let _ = keep(&mut runs, step);
                 ended.push(run.id);
             }
             Err(()) => {
@@ -463,6 +475,17 @@ pub async fn tick(state: &State, env: &Env, sha: Option<&str>) -> Result<()> {
     Ok(())
 }
 
+/// Keeps the runs a transition answered in `runs`, and gives its run, or why it was refused.
+fn keep<T>(
+    runs: &mut Runs,
+    step: std::result::Result<(Runs, T), String>,
+) -> std::result::Result<T, String> {
+    step.map(|(next, out)| {
+        *runs = next;
+        out
+    })
+}
+
 /// Records `run`'s finished job from `r`: the run, the operation to offer next and its token,
 /// when there is one.
 fn finished(runs: &mut Runs, run: &Run, r: &Report) -> Result<Option<(Run, &'static str, String)>> {
@@ -483,13 +506,12 @@ fn finished(runs: &mut Runs, run: &Run, r: &Report) -> Result<Option<(Run, &'sta
     }
     if run.stage == Stage::Planning {
         let token = platform::random_hex(32)?;
-        let next = runs
-            .planned(run.id, result(&v), &token, now())
-            .map_err(worker::Error::RustError)?;
+        let step = runs.planned(run.id, result(&v), &token, now());
+        let next = keep(runs, step).map_err(worker::Error::RustError)?;
         return Ok((next.stage == Stage::Planned).then_some((next, "platform.apply", token)));
     }
-    runs.applied(run.id, result(&v).map(|(_, c)| c))
-        .map_err(worker::Error::RustError)?;
+    let step = runs.applied(run.id, result(&v).map(|(_, c)| c));
+    keep(runs, step).map_err(worker::Error::RustError)?;
     Ok(None)
 }
 

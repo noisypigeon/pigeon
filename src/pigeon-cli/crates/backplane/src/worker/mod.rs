@@ -1025,21 +1025,33 @@ impl DurableObject for Instance {
             _ => None,
         };
         let storage = self.state.storage();
-        let mut queue: Queue = storage.get(QUEUE).await?.unwrap_or_default();
-        let answer = match (method, segments.as_slice(), submitted) {
+        let queue: Queue = storage.get(QUEUE).await?.unwrap_or_default();
+        let (queue, answer) = match (method, segments.as_slice(), submitted) {
             (Method::Get, ["runs"], _) => return Response::from_json(&queue),
             (Method::Post, ["runs"], Some(run)) => match queue.enqueue(run) {
-                Ok(()) => Response::from_json(&queue),
+                Ok(next) => {
+                    let answer = Response::from_json(&next);
+                    (next, answer)
+                }
                 Err(e) => return Response::error(e.to_string(), 409),
             },
-            (Method::Post, ["runs", "start"], _) => Response::from_json(&queue.start().cloned()),
+            (Method::Post, ["runs", "start"], _) => {
+                let (next, running) = queue.start();
+                (next, Response::from_json(&running))
+            }
             (Method::Post, ["runs", id, "finish"], _) => match queue.finish(id) {
-                Ok(run) => Response::from_json(&run),
+                Ok((next, run)) => (next, Response::from_json(&run)),
                 Err(e) => return Response::error(e.to_string(), 409),
             },
             (Method::Post, ["runs", id, "lost"], _) => match queue.lost(id) {
-                Ok(Lost::Retry(run)) => Response::from_json(&serde_json::json!({ "retry": run })),
-                Ok(Lost::Failed(run)) => Response::from_json(&serde_json::json!({ "failed": run })),
+                Ok((next, Lost::Retry(run))) => (
+                    next,
+                    Response::from_json(&serde_json::json!({ "retry": run })),
+                ),
+                Ok((next, Lost::Failed(run))) => (
+                    next,
+                    Response::from_json(&serde_json::json!({ "failed": run })),
+                ),
                 Err(e) => return Response::error(e.to_string(), 409),
             },
             _ => return Response::error("not found", 404),
