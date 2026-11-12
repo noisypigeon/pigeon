@@ -377,6 +377,7 @@ fn layout_with(path: &str, content: &str) -> Vec<String> {
 #[test]
 fn layout_keeps_backplane_core_pure() {
     let core = "src/pigeon-cli/crates/backplane/src/core/change/lifecycle.rs";
+    let approval = "src/pigeon-cli/crates/backplane/src/core/approval/grants.rs";
     passes(&layout_with(
         core,
         "pub fn step(c: &Change) -> Change {\n    c.clone()\n}\n",
@@ -397,6 +398,7 @@ fn layout_keeps_backplane_core_pure() {
         "let j = &mut self.jobs;",
     ] {
         fails(&layout_with(core, bad));
+        fails(&layout_with(approval, bad));
     }
     let shell = "src/pigeon-cli/crates/backplane/src/worker/change.rs";
     passes(&layout_with(

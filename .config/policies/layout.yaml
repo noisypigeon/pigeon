@@ -20,5 +20,5 @@ rules:
       files: ['^README\.md$']
       require: [README.md]
   - find:
-      match: '^src/pigeon-cli/crates/backplane/src/core/change/'
+      match: '^src/pigeon-cli/crates/backplane/src/core/(change|approval)/'
       forbid_content: 'std::fs|std::process|std::net|ureq|worker::|SystemTime::now|Instant::now|&mut self\b'
