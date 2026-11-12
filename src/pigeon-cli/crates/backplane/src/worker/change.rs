@@ -113,15 +113,16 @@ impl ChangeRun {
         .await
     }
 
-    /// Applies `event`, queueing its effects for the alarm; `Cancel` becomes a stop of each
-    /// job on the head it ran on.
+    /// Steps `change` by `event` and keeps the result, queueing its effects for the alarm;
+    /// `Cancel` becomes a stop of each job on the head it ran on. A refusal leaves it unchanged.
     fn apply(
         change: &mut Change,
         event: Event,
         pending: &mut Vec<Pending>,
     ) -> std::result::Result<(), String> {
         let head = change.head.clone();
-        let effects = change.apply(event).map_err(|r| r.0)?;
+        let (next, effects) = crate::changes::step(change, event).map_err(|r| r.0)?;
+        *change = next;
         for e in effects {
             match e {
                 Effect::Start(job) => pending.push(Pending::Start(job)),

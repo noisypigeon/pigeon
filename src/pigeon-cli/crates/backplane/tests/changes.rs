@@ -1,11 +1,15 @@
 //! A change's lifecycle; see
 //! `.claude/decisions/2026-11-05-development-changes-through-pigeon-mcp.md` §1.
 
+#[path = "common/step.rs"]
+mod step;
+
 use backplane::changes::{
     BOUND, Change, Check, Effect, Event, JobStatus, MERGE, MIRROR, State, branch, is_sha,
 };
 use backplane::control;
 use backplane::runs::MAX_ATTEMPTS;
+use step::Apply;
 
 const A: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const B: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";

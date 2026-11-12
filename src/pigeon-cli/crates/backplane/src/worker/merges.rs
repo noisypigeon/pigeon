@@ -203,16 +203,17 @@ async fn start(env: &Env, s: &Settings, mut next: Option<Entry>) -> Result<()> {
 /// When storage fails.
 pub async fn serve(state: &State, path: &str, body: &Value) -> Result<Response> {
     let storage = state.storage();
-    let mut q: MergeQueue = storage.get(MERGES).await?.unwrap_or_default();
+    let q: MergeQueue = storage.get(MERGES).await?.unwrap_or_default();
     let number = body["number"]
         .as_u64()
         .and_then(|n| u32::try_from(n).ok())
         .unwrap_or_default();
-    let answer = match path {
+    let (q, answer) = match path {
         "/merges/enqueue" => {
-            let (resumed, queued) = q.ask(number, body["by"].as_str().unwrap_or_default(), now());
+            let by = body["by"].as_str().unwrap_or_default();
+            let (q, resumed, queued) = merges::ask(&q, number, by, now());
             match queued {
-                Ok(queued) => json!({ "queued": queued, "resumed": resumed }),
+                Ok(queued) => (q, json!({ "queued": queued, "resumed": resumed })),
                 Err(why) => {
                     storage.put(MERGES, &q).await?;
                     let refused = json!({ "error": why, "resumed": resumed });
@@ -220,7 +221,10 @@ pub async fn serve(state: &State, path: &str, body: &Value) -> Result<Response> 
                 }
             }
         }
-        "/merges/done" => json!({ "next": q.done(number, now()) }),
+        "/merges/done" => {
+            let (q, next) = merges::done(&q, number, now());
+            (q, json!({ "next": next }))
+        }
         "/merges/list" => return Response::from_json(&q),
         _ => return Response::error("not found", 404),
     };

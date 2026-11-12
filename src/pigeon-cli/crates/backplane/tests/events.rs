@@ -1,5 +1,8 @@
 //! The event log; see `.claude/decisions/2026-11-08-development-events-tickets-digest-mandate.md` §1.
 
+#[path = "common/step.rs"]
+mod step;
+
 use backplane::events::{Filter, KEEP, KEEP_FOR, Log};
 
 #[test]
@@ -86,6 +89,8 @@ fn the_log_keeps_the_newest_and_drops_the_old() {
 mod of_change {
     use backplane::changes::{Change, Check, Event};
     use backplane::events::of_change;
+
+    use super::step::Apply;
 
     const A: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
     const MAIN: &str = "dddddddddddddddddddddddddddddddddddddddd";

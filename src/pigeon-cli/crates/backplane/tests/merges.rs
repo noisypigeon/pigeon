@@ -1,11 +1,15 @@
 //! The merge queue; see `.claude/decisions/2026-11-08-development-concurrent-agent-sessions.md` §3.
 
+#[path = "common/step.rs"]
+mod step;
+
 use backplane::approvals::{Tier, Tiered, Tiers};
 use backplane::changes::{
     Change, Check, Effect, Event, GATE, MERGE, RESTACK, Relation, Restacked, State,
 };
 use backplane::control;
 use backplane::merges::{MergeQueue, Queued, STUCK};
+use step::{Apply, Queue};
 
 const A: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const B: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";

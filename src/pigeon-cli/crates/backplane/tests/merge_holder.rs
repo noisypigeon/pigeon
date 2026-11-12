@@ -1,11 +1,15 @@
 //! A turn held by no merge is handed back; see the 2026-11-11 amendment to
 //! `.claude/decisions/2026-11-08-development-concurrent-agent-sessions.md`.
 
+#[path = "common/step.rs"]
+mod step;
+
 use backplane::changes::{Change, Effect, Event, GATE, JobStatus, MERGE, RESTACK, State};
 use backplane::control;
 use backplane::merges::{MergeQueue, Queued, SETTLE, holds_turn};
 use backplane::runs::MAX_ATTEMPTS;
 use serde_json::{Value, json};
+use step::{Apply, Queue};
 
 const A: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const MAIN: &str = "dddddddddddddddddddddddddddddddddddddddd";

@@ -764,7 +764,9 @@ pub fn merge_dropped(change: &Change) -> bool {
 /// 2026-11-11 amendment to `.claude/decisions/2026-11-08-development-concurrent-agent-sessions.md`.
 pub fn catch_up(change: &mut Change, journal: &[changes::Event], seen: usize) {
     for e in journal.iter().skip(seen) {
-        let _ = change.apply(e.clone());
+        if let Ok((next, _)) = changes::step(change, e.clone()) {
+            *change = next;
+        }
     }
 }
 

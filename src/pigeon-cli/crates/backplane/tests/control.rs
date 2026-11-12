@@ -1,10 +1,14 @@
 //! The control plane's routing, push events and job reports; see
 //! `.claude/decisions/2026-11-05-development-changes-through-pigeon-mcp.md` §1, §4.
 
+#[path = "common/step.rs"]
+mod step;
+
 use backplane::changes::{BOUND, Change, Check, Event};
 use backplane::control::{self, Outcome, Pipeline, Push, Report, Routed, Target};
 use backplane::wire::Request;
 use serde_json::json;
+use step::Apply;
 
 const A: &str = "0123456789abcdef0123456789abcdef01234567";
 

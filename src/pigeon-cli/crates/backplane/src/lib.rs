@@ -11,6 +11,7 @@ pub mod catalog;
 pub mod changes;
 pub mod cobot;
 pub mod control;
+pub mod core;
 pub mod decisions;
 #[cfg(feature = "engines")]
 pub mod engine;

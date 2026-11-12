@@ -1,0 +1,303 @@
+//! `step` as tables of state, event, next state and effects, with no storage.
+
+use super::*;
+
+const A: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+const M: &str = "dddddddddddddddddddddddddddddddddddddddd";
+
+fn run(c: Change, events: Vec<Event>) -> Change {
+    events
+        .into_iter()
+        .fold(c, |c, e| step(&c, e).expect("steps").0)
+}
+
+fn proposed() -> Change {
+    Change::propose(1, "x", "feat: x", "p", vec!["**".into()], "agent")
+}
+
+fn planned() -> Change {
+    run(
+        proposed(),
+        vec![Event::ApprovePlan {
+            by: "owner".into(),
+            at: 1,
+        }],
+    )
+}
+
+fn pushed() -> Change {
+    run(planned(), vec![Event::Pushed { sha: A.into() }])
+}
+
+fn bounded(full: Vec<Check>) -> Event {
+    Event::Bounded {
+        sha: A.into(),
+        violations: Vec::new(),
+        checks: Vec::new(),
+        full,
+        tiers: None,
+    }
+}
+
+fn checked() -> Change {
+    run(pushed(), vec![bounded(Vec::new())])
+}
+
+fn approved() -> Change {
+    run(
+        checked(),
+        vec![Event::Approve {
+            by: "owner".into(),
+            sha: A.into(),
+            at: 2,
+        }],
+    )
+}
+
+fn merge() -> Event {
+    Event::Merge { by: "owner".into() }
+}
+
+fn current() -> Event {
+    Event::Restacked {
+        sha: A.into(),
+        restack: Restacked {
+            relation: Relation::Current,
+            to: None,
+            same_patch: false,
+            conflicts: Vec::new(),
+            onto: M.into(),
+            context: Vec::new(),
+            messages: String::new(),
+        },
+    }
+}
+
+/// `c` behind `main`, its restack job running.
+fn restacking(c: Change) -> Change {
+    run(
+        c,
+        vec![
+            Event::Behind { main: M.into() },
+            Event::Started {
+                job: RESTACK.into(),
+                sha: A.into(),
+            },
+        ],
+    )
+}
+
+fn conflicting(mut c: Change) -> Change {
+    c.conflict = Some(Conflicted {
+        onto: M.into(),
+        paths: vec!["a.rs".into()],
+        proposal: None,
+        reconcile: None,
+    });
+    c
+}
+
+fn status(c: &Change, name: &str) -> Option<JobStatus> {
+    c.jobs.iter().find(|j| j.name == name).map(|j| j.status)
+}
+
+/// A case: its name, the change, the event, and the next state and effects, or none for a
+/// refusal.
+type Row = (&'static str, Change, Event, Option<(State, Vec<Effect>)>);
+
+#[allow(clippy::too_many_lines)]
+fn table() -> Vec<Row> {
+    let start = |job: &str| Effect::Start(job.into());
+    vec![
+        (
+            "a push before the plan's approval",
+            proposed(),
+            Event::Pushed { sha: A.into() },
+            None,
+        ),
+        (
+            "a plan approved by its proposer",
+            proposed(),
+            Event::ApprovePlan {
+                by: "agent".into(),
+                at: 1,
+            },
+            None,
+        ),
+        (
+            "a push",
+            planned(),
+            Event::Pushed { sha: A.into() },
+            Some((State::Pushed, vec![start(BOUND)])),
+        ),
+        (
+            "a push that is no SHA",
+            planned(),
+            Event::Pushed { sha: "main".into() },
+            None,
+        ),
+        (
+            "a refused head",
+            pushed(),
+            Event::Bounded {
+                sha: A.into(),
+                violations: vec!["no".into()],
+                checks: Vec::new(),
+                full: Vec::new(),
+                tiers: None,
+            },
+            Some((State::Refused, Vec::new())),
+        ),
+        (
+            "a bounded head with a check",
+            pushed(),
+            Event::Bounded {
+                sha: A.into(),
+                violations: Vec::new(),
+                checks: vec![Check {
+                    name: "fmt".into(),
+                    argv: Vec::new(),
+                }],
+                full: Vec::new(),
+                tiers: None,
+            },
+            Some((State::Bounded, vec![start("fmt")])),
+        ),
+        (
+            "a head approved by its proposer",
+            checked(),
+            Event::Approve {
+                by: "agent".into(),
+                sha: A.into(),
+                at: 2,
+            },
+            None,
+        ),
+        (
+            "an approval",
+            checked(),
+            Event::Approve {
+                by: "owner".into(),
+                sha: A.into(),
+                at: 2,
+            },
+            Some((State::Approved, Vec::new())),
+        ),
+        (
+            "a merge",
+            approved(),
+            merge(),
+            Some((State::Approved, vec![start(MERGE)])),
+        ),
+        (
+            "a close",
+            approved(),
+            Event::Close,
+            Some((State::Closed, Vec::new())),
+        ),
+        (
+            "a push after the close",
+            run(approved(), vec![Event::Close]),
+            Event::Pushed { sha: A.into() },
+            None,
+        ),
+    ]
+}
+
+#[test]
+fn each_event_steps_a_change_to_its_next_state_with_its_effects() {
+    for (name, before, event, want) in table() {
+        let got = step(&before, event);
+        match want {
+            Some((state, effects)) => {
+                let (next, got) = got.unwrap_or_else(|r| panic!("{name}: refused: {r}"));
+                assert_eq!((next.state, got), (state, effects), "{name}");
+            }
+            None => assert!(got.is_err(), "{name}: steps"),
+        }
+    }
+}
+
+#[test]
+fn a_held_head_that_is_no_sha_is_dropped_and_the_restack_report_kept() {
+    let c = run(
+        restacking(approved()),
+        vec![Event::Pushed { sha: "main".into() }],
+    );
+    assert_eq!(c.held.as_deref(), Some("main"));
+    let (c, effects) = step(&c, current()).expect("the report applies");
+    assert_eq!(effects, Vec::new());
+    assert_eq!(status(&c, RESTACK), Some(JobStatus::Passed));
+    assert_eq!(
+        (c.held, c.head.as_deref(), c.state, c.behind),
+        (None, Some(A), State::Approved, None)
+    );
+}
+
+#[test]
+fn a_parked_merge_that_cannot_start_after_a_restack_is_dropped_and_the_report_kept() {
+    let c = run(restacking(approved()), vec![merge()]);
+    assert_eq!(c.merge_after.as_deref(), Some("owner"), "parked");
+    let (c, effects) = step(&conflicting(c), current()).expect("the report applies");
+    assert_eq!(effects, Vec::new(), "no merge starts");
+    assert_eq!(c.merge_after, None);
+    assert_eq!(status(&c, RESTACK), Some(JobStatus::Passed));
+}
+
+#[test]
+fn a_parked_merge_that_cannot_start_after_its_gate_is_dropped_and_the_gate_kept() {
+    let fmt = Check {
+        name: "fmt".into(),
+        argv: Vec::new(),
+    };
+    let gated = run(pushed(), vec![bounded(vec![fmt])]);
+    let gated = run(
+        gated,
+        vec![
+            Event::Approve {
+                by: "owner".into(),
+                sha: A.into(),
+                at: 2,
+            },
+            merge(),
+            Event::Started {
+                job: "gate: fmt".into(),
+                sha: A.into(),
+            },
+        ],
+    );
+    assert_eq!(
+        gated.merge_after.as_deref(),
+        Some("owner"),
+        "waits for its gate"
+    );
+    let passed = Event::Finished {
+        job: "gate: fmt".into(),
+        sha: A.into(),
+        ok: true,
+    };
+    let (c, effects) = step(&conflicting(gated), passed).expect("the gate settles");
+    assert_eq!(effects, Vec::new(), "no merge starts");
+    assert_eq!(c.merge_after, None);
+    assert_eq!(status(&c, "gate: fmt"), Some(JobStatus::Passed));
+    assert_eq!(status(&c, MERGE), None);
+}
+
+#[test]
+fn a_refusal_leaves_the_change_as_it_was() {
+    let mut before = pushed();
+    before.jobs.clear();
+    let tiers_before = before.tiers.clone();
+    let event = Event::Bounded {
+        sha: A.into(),
+        violations: Vec::new(),
+        checks: Vec::new(),
+        full: vec![Check {
+            name: "fmt".into(),
+            argv: Vec::new(),
+        }],
+        tiers: None,
+    };
+    assert!(step(&before, event).is_err(), "no bound job");
+    assert_eq!((before.full.len(), before.tiers), (0, tiers_before));
+}
