@@ -14,7 +14,7 @@ targets:
   # Pure Swift: the API's types, the device signature's text, charts and words; see
   # .claude/decisions/2026-11-12-runtime-ios-app-approvals-insights.md §1.
   PigeonCore:
-    type: framework
+    type: framework.static
     platform: iOS
     sources: [PigeonCore]
     settings:
