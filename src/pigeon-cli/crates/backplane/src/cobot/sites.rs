@@ -18,6 +18,9 @@ use crate::cobot::s3::{self, Bucket, Credentials};
 use crate::cobot::static_site;
 use crate::cobot::{Error, WORK_DIR, unit};
 
+pub use crate::core::sites::assemble::*;
+pub use crate::core::sites::layout::*;
+
 /// Where templates live, as `<TEMPLATES>/<name>`.
 pub const TEMPLATES: &str = "src/site-templates";
 /// A template's theme and tag prefix, as `<PREFIX>-<name>`.
@@ -29,8 +32,6 @@ pub const PREFIX: &str = "site-template";
 pub const TREE: &str = "tree";
 /// The post naming rule `YYYY-MM-DD-<slug>.md`.
 pub const DATE_SLUG: &str = "date-slug";
-/// What a contract site's `site/` may hold.
-pub const SITE_DIRS: [&str; 3] = ["posts", "pages", "assets"];
 
 /// A static site, as found under `workloads/`.
 #[derive(Debug, Clone)]
@@ -527,45 +528,18 @@ fn assemble(
     )?;
     let config_path = work.join("config.toml");
     let manifest_path = work.join("static/manifest.json");
-    let mut config: toml::Value =
-        toml::from_str(&fs::read_to_string(&config_path).map_err(io(&config_path))?)
-            .map_err(|e| fail(format!("scaffold/config.toml: {e}")))?;
-    let mut manifest: Value =
-        serde_json::from_str(&fs::read_to_string(&manifest_path).map_err(io(&manifest_path))?)
-            .map_err(|e| fail(format!("scaffold/static/manifest.json: {e}")))?;
-    let mut targets = Vec::new();
-    site_targets(&schema, settings, &mut targets);
-    for (file, key, value) in targets {
-        match file.as_str() {
-            "config.toml" => {
-                let v = toml::Value::try_from(&value).map_err(|e| fail(format!("{key}: {e}")))?;
-                set_toml(&mut config, &key, v).map_err(fail)?;
-            }
-            "static/manifest.json" => set_json(&mut manifest, &key, value).map_err(fail)?,
-            other => return Err(fail(format!("x-site: unknown file `{other}`"))),
-        }
-    }
-    set_toml(&mut config, "theme", toml::Value::String(site.theme())).map_err(fail)?;
-    set_toml(
-        &mut config,
-        "base_url",
-        toml::Value::String(base.to_string()),
+    let (config, manifest) = configure(
+        &schema,
+        settings,
+        &fs::read_to_string(&config_path).map_err(io(&config_path))?,
+        &fs::read_to_string(&manifest_path).map_err(io(&manifest_path))?,
+        &site.theme(),
+        base,
+        features,
     )
     .map_err(fail)?;
-    let flags = features
-        .iter()
-        .map(|(k, v)| (k.clone(), toml::Value::Boolean(*v)))
-        .collect();
-    set_toml(&mut config, "extra.features", toml::Value::Table(flags)).map_err(fail)?;
-    fs::write(
-        &config_path,
-        toml::to_string(&config).map_err(|e| fail(format!("config.toml: {e}")))?,
-    )
-    .map_err(io(&config_path))?;
-    let mut json =
-        serde_json::to_string_pretty(&manifest).map_err(|e| fail(format!("manifest.json: {e}")))?;
-    json.push('\n');
-    fs::write(&manifest_path, json).map_err(io(&manifest_path))?;
+    fs::write(&config_path, config).map_err(io(&config_path))?;
+    fs::write(&manifest_path, manifest).map_err(io(&manifest_path))?;
 
     for dir in SITE_DIRS {
         let from = src.join(dir);
@@ -581,214 +555,70 @@ fn assemble(
     Ok(())
 }
 
-/// `settings` against the tag's schema, with every error.
-fn check_settings(schema: &Value, settings: &Value) -> Result<(), String> {
-    let validator = jsonschema::validator_for(schema).map_err(|e| format!("schema.json: {e}"))?;
-    let errors: Vec<String> = validator
-        .iter_errors(settings)
-        .map(|e| {
-            let at = e.instance_path().to_string();
-            format!("static_site.site{}: {e}", at.replace('/', "."))
-        })
-        .collect();
-    if errors.is_empty() {
-        Ok(())
-    } else {
-        Err(errors.join("; "))
-    }
-}
-
-/// Each `(file, key, value)` the settings write: every set property whose
-/// schema carries `x-site`, at any depth.
-fn site_targets(schema: &Value, value: &Value, out: &mut Vec<(String, String, Value)>) {
-    let Some(props) = schema.get("properties").and_then(Value::as_object) else {
-        return;
-    };
-    for (name, prop) in props {
-        let Some(v) = value.get(name) else { continue };
-        for t in prop
-            .get("x-site")
-            .and_then(Value::as_array)
-            .into_iter()
-            .flatten()
-        {
-            if let (Some(file), Some(key)) = (t["file"].as_str(), t["key"].as_str()) {
-                out.push((file.to_string(), key.to_string(), v.clone()));
-            }
-        }
-        site_targets(prop, v, out);
-    }
-}
-
-/// Sets the dotted `key` in a TOML table, creating tables on the way.
-fn set_toml(doc: &mut toml::Value, key: &str, value: toml::Value) -> Result<(), String> {
-    let mut at = doc;
-    let parts: Vec<&str> = key.split('.').collect();
-    for (i, part) in parts.iter().enumerate() {
-        let table = at
-            .as_table_mut()
-            .ok_or_else(|| format!("config.toml: `{key}` crosses a non-table"))?;
-        if i + 1 == parts.len() {
-            table.insert((*part).to_string(), value);
-            return Ok(());
-        }
-        at = table
-            .entry((*part).to_string())
-            .or_insert_with(|| toml::Value::Table(toml::value::Table::new()));
-    }
-    Ok(())
-}
-
-/// Sets the dotted `key` in a JSON object, creating objects on the way.
-fn set_json(doc: &mut Value, key: &str, value: Value) -> Result<(), String> {
-    let mut at = doc;
-    let parts: Vec<&str> = key.split('.').collect();
-    for (i, part) in parts.iter().enumerate() {
-        let map = at
-            .as_object_mut()
-            .ok_or_else(|| format!("manifest.json: `{key}` crosses a non-object"))?;
-        if i + 1 == parts.len() {
-            map.insert((*part).to_string(), value);
-            return Ok(());
-        }
-        at = map
-            .entry((*part).to_string())
-            .or_insert_with(|| Value::Object(serde_json::Map::new()));
-    }
-    Ok(())
-}
-
-/// Whether `name` may name a data file: `[a-z0-9-]+`.
-#[must_use]
-pub fn is_data_name(name: &str) -> bool {
-    !name.is_empty()
-        && name
-            .bytes()
-            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
-}
-
 /// A site whose template has no content must have no `site/`.
 #[must_use]
 pub fn check_no_content(src: &Path) -> Vec<String> {
-    if src.exists() {
-        vec![format!(
-            "{} must not exist: the site's template has no content",
-            src.display()
-        )]
-    } else {
-        Vec::new()
-    }
+    no_content_problems(&src.display().to_string(), src.exists())
 }
 
-/// Every way a contract site's `site/` breaks the layout: anything but
-/// [`SITE_DIRS`], an `_index.md`, and, with `date_slug`, a misnamed post.
+/// Every way a contract site's `site/` breaks the layout; see [`layout_problems`].
 #[must_use]
 pub fn check_layout(src: &Path, date_slug: bool) -> Vec<String> {
-    let mut out = Vec::new();
-    let Ok(entries) = fs::read_dir(src) else {
-        return vec![format!("{} is missing", src.display())];
-    };
-    for e in entries.flatten() {
-        let name = e.file_name().to_string_lossy().into_owned();
-        let is_dir = e.file_type().is_ok_and(|t| t.is_dir());
-        if !is_dir || !SITE_DIRS.contains(&name.as_str()) {
-            out.push(format!(
-                "`{name}` does not belong in site/, which holds only posts/, pages/ and assets/"
+    layout_problems(&listing(src, date_slug), date_slug)
+}
+
+/// What [`layout_problems`] needs of `src`: its entries, everything under `posts/` and `pages/`,
+/// and, with `date_slug`, each post's text.
+fn listing(src: &Path, date_slug: bool) -> Listing {
+    let top = fs::read_dir(src).ok().map(|entries| {
+        entries
+            .flatten()
+            .map(|e| {
+                (
+                    e.file_name().to_string_lossy().into_owned(),
+                    e.file_type().is_ok_and(|t| t.is_dir()),
+                )
+            })
+            .collect()
+    });
+    let mut nested = Vec::new();
+    for dir in ["posts", "pages"] {
+        walk_sorted(&src.join(dir), dir, &mut nested);
+    }
+    let mut posts = Vec::new();
+    if date_slug && let Ok(entries) = fs::read_dir(src.join("posts")) {
+        let mut entries: Vec<_> = entries.flatten().collect();
+        entries.sort_by_key(fs::DirEntry::file_name);
+        for e in entries {
+            posts.push((
+                e.file_name().to_string_lossy().into_owned(),
+                fs::read_to_string(e.path()).unwrap_or_default(),
             ));
         }
     }
-    for dir in ["posts", "pages"] {
-        indexes(&src.join(dir), dir, &mut out);
+    Listing {
+        shown: src.display().to_string(),
+        top,
+        nested,
+        posts,
     }
-    if date_slug && let Ok(posts) = fs::read_dir(src.join("posts")) {
-        let mut names: Vec<_> = posts.flatten().collect();
-        names.sort_by_key(fs::DirEntry::file_name);
-        for e in names {
-            let name = e.file_name().to_string_lossy().into_owned();
-            if name == "_index.md" {
-                continue;
-            }
-            if let Err(m) = check_post(&name, &fs::read_to_string(e.path()).unwrap_or_default()) {
-                out.push(format!("posts/{name}: {m}"));
-            }
-        }
-    }
-    out
 }
 
-/// The `YYYY-MM-DD` of a name `YYYY-MM-DD-<slug>.md`, its slug lowercase
-/// words of `[a-z0-9]` joined by dashes.
-fn date_prefix(name: &str) -> Option<&str> {
-    let stem = name.strip_suffix(".md")?;
-    let bytes = stem.as_bytes();
-    let dated = bytes.len() > 11
-        && bytes[..10].iter().enumerate().all(|(i, b)| {
-            if i == 4 || i == 7 {
-                *b == b'-'
-            } else {
-                b.is_ascii_digit()
-            }
-        })
-        && bytes[10] == b'-';
-    if !dated {
-        return None;
-    }
-    let slugged = stem[11..].split('-').all(|w| {
-        !w.is_empty()
-            && w.bytes()
-                .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit())
-    });
-    slugged.then(|| &stem[..10])
-}
-
-/// Each `_index.md` under `dir`, at any depth: sections are the scaffold's.
-fn indexes(dir: &Path, at: &str, out: &mut Vec<String>) {
+/// Every entry under `dir`, as `at/<name>…` and whether it is a directory, sorted, depth first.
+fn walk_sorted(dir: &Path, at: &str, out: &mut Vec<(String, bool)>) {
     let Ok(entries) = fs::read_dir(dir) else {
         return;
     };
     let mut entries: Vec<_> = entries.flatten().collect();
     entries.sort_by_key(fs::DirEntry::file_name);
     for e in entries {
-        let name = e.file_name().to_string_lossy().into_owned();
-        let rel = format!("{at}/{name}");
-        if e.file_type().is_ok_and(|t| t.is_dir()) {
-            indexes(&e.path(), &rel, out);
-        } else if name == "_index.md" {
-            out.push(format!("`{rel}`: sections are the template's scaffold"));
+        let rel = format!("{at}/{}", e.file_name().to_string_lossy());
+        let is_dir = e.file_type().is_ok_and(|t| t.is_dir());
+        out.push((rel.clone(), is_dir));
+        if is_dir {
+            walk_sorted(&e.path(), &rel, out);
         }
     }
-}
-
-/// A post's name against `date-slug`: `YYYY-MM-DD-<slug>.md`, its prefix the
-/// date of its `date`, and no `slug` of its own.
-///
-/// # Errors
-///
-/// What is wrong, in a few words.
-pub fn check_post(name: &str, text: &str) -> Result<(), String> {
-    let Some(prefix) = date_prefix(name) else {
-        return Err("is not named YYYY-MM-DD-<slug>.md".into());
-    };
-    let front = text
-        .strip_prefix("+++")
-        .and_then(|rest| rest.split_once("\n+++"))
-        .map(|(f, _)| f)
-        .ok_or("has no +++ TOML front matter")?;
-    let front: toml::Value = toml::from_str(front).map_err(|e| format!("front matter: {e}"))?;
-    if front.get("slug").is_some() {
-        return Err("sets slug; its name after the date is the slug".into());
-    }
-    let date = front
-        .get("date")
-        .map(|d| match d {
-            toml::Value::String(s) => s.clone(),
-            other => other.to_string(),
-        })
-        .ok_or("has no date")?;
-    if date.get(..10) != Some(prefix) {
-        return Err(format!("is prefixed {prefix}, but its date is {date}"));
-    }
-    Ok(())
 }
 
 fn run(command: &mut Command, name: &str) -> Result<(), Error> {
