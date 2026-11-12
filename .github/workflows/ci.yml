@@ -104,8 +104,9 @@ jobs:
           ARGV: ${{ toJSON(matrix.check.argv) }}
         run: |
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          mapfile -t argv < <(jq -r '.[]' <<<"$ARGV")
-          "${argv[@]}"
+          # Bash 3 on macOS has no mapfile, so the argv is unpacked shell-quoted.
+          eval "set -- $(jq -r 'map(@sh) | join(" ")' <<<"$ARGV")"
+          "$@"
       # The test map's output, the unzipped artifact `tests.json`, which the control plane copies
       # beside main's build.
       - if: matrix.check.name == 'test map'
