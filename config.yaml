@@ -38,7 +38,10 @@ units:
       - { name: pigeon-agent, policy: agent, secret_version: 2, previous_secret_expires: "2026-11-06T02:37:43Z" }
       - { name: pigeon-deployer, policy: pigeon-deployer, secret_version: 1, previous_secret_expires: "2026-11-07T03:09:37Z" }
       - { name: pigeon-builds, policy: pigeon-builds, secret_version: 2, previous_secret_expires: "2026-11-08T04:20:01Z" }
-    # Reached without an Access login; the route authenticates its caller itself. See
-    # .claude/decisions/2026-11-11-release-ios-app-buildkite-testflight.md §5.
+    # Reached without an Access login; each route authenticates its caller itself. See
+    # .claude/decisions/2026-11-11-release-ios-app-buildkite-testflight.md §5 and
+    # .claude/decisions/2026-11-12-runtime-ios-app-approvals-insights.md §4.
     public_paths:
       - { name: pigeon-control apple release, paths: [platform.pigeon.dev/v0/apple/release, blue.platform.pigeon.dev/v0/apple/release] }
+      - { name: pigeon-control app api, paths: [platform.pigeon.dev/v0/app, blue.platform.pigeon.dev/v0/app] }
+      - { name: pigeon-control app association, paths: [platform.pigeon.dev/.well-known/apple-app-site-association, blue.platform.pigeon.dev/.well-known/apple-app-site-association] }

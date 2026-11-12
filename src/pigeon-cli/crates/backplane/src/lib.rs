@@ -14,6 +14,7 @@ pub mod cobot;
 pub mod control;
 pub mod core;
 pub mod decisions;
+pub mod devices;
 #[cfg(feature = "engines")]
 pub mod engine;
 pub mod events;

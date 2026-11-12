@@ -4,7 +4,7 @@
 * Model: Claude
 * Author: Willow Graysen (@noisypigeon).
 * Category: runtime
-* Governs: `src/pigeon-ios/Pigeon/**`, `src/pigeon-ios/project.yml`
+* Governs: `src/pigeon-ios/Pigeon/**`, `src/pigeon-ios/project.yml`, `src/pigeon-cli/crates/backplane/src/core/app/**`, `src/pigeon-cli/crates/backplane/src/devices.rs`, `src/pigeon-cli/crates/backplane/src/worker/devices.rs`
 
 ## Context
 
@@ -267,3 +267,35 @@ Steps 3 to 7 each add the backplane files they create to this ADR's
 - **Push:** an approval waiting reaches the phone, and opens its card.
 - **The app:** `PigeonCore`'s tests pass in `ios.check`; build N in TestFlight
   signs in, shows today's insights, and approves a change with Face ID.
+
+## Amendments
+
+### 2026-11-12: Step 3 lands: device sessions, the link page and the association file
+
+- **Paths.** `Governs` gains the files step 3 adds:
+  `src/pigeon-cli/crates/backplane/src/core/app/**`, `devices.rs` and
+  `worker/devices.rs`.
+- **The header** is `X-Pigeon-Device: id=<fingerprint>;t=<unix seconds>;s=<signature>`.
+  The device signs `pigeon-device-v1`, the method, the path, the time and the
+  body's SHA-256, one per line. The signature may be raw `r‖s`, as CryptoKit
+  gives it, or DER.
+- **A device's ID is its key's fingerprint:** the first 16 bytes of the
+  point's SHA-256, hex. The link page shows it, so the owner can check it
+  against the app.
+- **Redeeming a link** signs `pigeon-link-v1` and the code. A code is used up
+  even when the redemption is refused.
+- **`GET /v0/app/whoami`** answers a signed request's device, so the app and a
+  test can check signing end to end before step 4's routes.
+- **Unlinking on `/devices`** takes the code. The passkey there waits for the
+  app's own unlink in step 5.
+
+### 2026-11-12: Step 3 reconciled with the CI window and the docs gate
+
+`main` gained the owner's CI window (!214), the full merge gate on request
+(!256) and the docs site behind a passkey (!280) while step 3 waited.
+
+- **Both sides stand.** `worker/mod.rs` serves `devices`, `ci_window` and
+  `docs` routes side by side, and the `Instance` keeps `/devices/*` beside
+  the rest.
+- **The passkey challenge accepts three purposes besides registering:**
+  `grant:`, the docs view, and `device:` for the link page.

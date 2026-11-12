@@ -316,6 +316,55 @@ Registering or removing one takes the code.</p>",
     shell("Passkeys", &b)
 }
 
+/// `/app/link`: links the device named `name`, whose key has `fingerprint`, once the owner
+/// proves it; see `.claude/decisions/2026-11-12-runtime-ios-app-approvals-insights.md` §2.
+#[must_use]
+pub fn link_page(name: &str, key: &str, fingerprint: &str) -> String {
+    let purpose = format!("device:{fingerprint}");
+    let b = format!(
+        "<h1>Link this iPhone</h1><dl><dt>Device</dt><dd>{}</dd><dt>Key</dt><dd><code>{}</code></dd></dl>\
+<p>Linking lets the Pigeon app read this instance and ask for your passkey to approve. \
+Check the key matches the one the app shows.</p>\
+<form method=\"post\" action=\"/app/link\"><input type=\"hidden\" name=\"name\" value=\"{}\">\
+<input type=\"hidden\" name=\"key\" value=\"{}\">{}{CODE_FIELD}<button type=\"submit\">Link</button></form>\
+<p><small><a href=\"/devices\">Linked devices</a></small></p>",
+        escape(name),
+        escape(fingerprint),
+        escape(name),
+        escape(key),
+        passkey_button(&purpose)
+    );
+    shell("Link this iPhone", &b)
+}
+
+/// `/devices`: the linked devices, each removable with a proof, and `said`.
+#[must_use]
+pub fn devices_page(devices: &[(String, String, u64, u64)], said: Option<&str>) -> String {
+    use std::fmt::Write as _;
+    let mut b = String::from("<h1>Linked devices</h1>");
+    if let Some(said) = said {
+        let _ = write!(b, "<p><strong>{}</strong></p>", escape(said));
+    }
+    if devices.is_empty() {
+        b.push_str("<p>None.</p>");
+    } else {
+        b.push_str("<ul>");
+        for (id, name, linked, seen) in devices {
+            let _ = write!(
+                b,
+                "<li>{} <small>(<code>{}</code>, linked {linked}, last seen {seen})</small>\
+<form method=\"post\" action=\"/devices\"><input type=\"hidden\" name=\"remove\" value=\"{}\">\
+{CODE_FIELD}<button type=\"submit\">Unlink</button></form></li>",
+                escape(name),
+                escape(id),
+                escape(id)
+            );
+        }
+        b.push_str("</ul>");
+    }
+    shell("Linked devices", &b)
+}
+
 /// A page saying how it went.
 #[must_use]
 pub fn outcome(title: &str, message: &str) -> String {

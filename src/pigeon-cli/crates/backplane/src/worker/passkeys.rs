@@ -214,7 +214,11 @@ pub async fn page_serve(
             let body: Value = req.json().await?;
             let purpose = body["purpose"].as_str().unwrap_or_default();
             let viewing = purpose == crate::core::sites::view::PURPOSE;
-            if purpose != passkeys::REGISTER && !purpose.starts_with("grant:") && !viewing {
+            if purpose != passkeys::REGISTER
+                && !purpose.starts_with("grant:")
+                && !purpose.starts_with("device:")
+                && !viewing
+            {
                 return refused(400, "no such purpose");
             }
             let mut v = to_instance(

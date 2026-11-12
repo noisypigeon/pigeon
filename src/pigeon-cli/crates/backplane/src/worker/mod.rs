@@ -14,6 +14,7 @@ mod buildkite;
 mod change;
 mod checker;
 mod ci_window;
+mod devices;
 mod docs;
 mod elicit;
 mod events;
@@ -77,6 +78,14 @@ async fn fetch(req: Request, env: Env, _ctx: worker::Context) -> Result<Response
     if req.path().starts_with(&format!("{}/", crate::apple::ROUTE)) {
         return Response::error("not found", 404);
     }
+    // The app's API and Apple's association file: Access lets them through, and `/v0/app/*`
+    // authenticates each call by its device's signature; see
+    // .claude/decisions/2026-11-12-runtime-ios-app-approvals-insights.md §4.
+    if req.path() == devices::ASSOCIATION || req.path().starts_with(devices::API) {
+        return devices::public(req, &env)
+            .await
+            .unwrap_or_else(|| Response::error("not found", 404));
+    }
     let settings = Settings::from(&env)?;
     let who = match platform::identify(&req, &settings).await {
         Ok(who) => who,
@@ -120,6 +129,7 @@ const SURFACES: &[&[Route]] = &[
     mandates::ROUTES,
     ci_window::ROUTES,
     docs::ROUTES,
+    devices::ROUTES,
 ];
 
 /// The change number of `request`'s `number` argument.
@@ -1012,6 +1022,10 @@ impl DurableObject for Instance {
         if path.starts_with("/mandates/") {
             let body: Value = req.json().await?;
             return mandates::serve(&self.state, &path, body).await;
+        }
+        if path.starts_with("/devices/") {
+            let body: Value = req.json().await?;
+            return devices::serve(&self.state, &path, body).await;
         }
         if path.starts_with("/passkeys/") {
             let body: Value = req.json().await?;
