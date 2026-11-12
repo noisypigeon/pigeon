@@ -20,6 +20,7 @@ xcodebuild archive \
   -destination 'generic/platform=iOS' \
   -archivePath build/Pigeon.xcarchive \
   CODE_SIGN_IDENTITY=- \
+  AD_HOC_CODE_SIGNING_ALLOWED=YES \
   CODE_SIGNING_REQUIRED=NO \
   CODE_SIGN_STYLE=Manual \
   CURRENT_PROJECT_VERSION="$build"
