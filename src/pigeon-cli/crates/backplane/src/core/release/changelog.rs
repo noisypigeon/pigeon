@@ -1,4 +1,4 @@
-//! Reads and writes generated `CHANGELOG.md` tiers.
+//! A generated `CHANGELOG.md` tier's text, parsed and rendered.
 
 const TITLE: &str = "# Changelog";
 
@@ -11,6 +11,7 @@ pub struct Changelog {
 
 impl Changelog {
     /// Parses `text`; anything but section headings and bullets is dropped.
+    #[must_use]
     pub fn parse(text: &str) -> Self {
         let mut log = Self::default();
         for line in text.lines() {
@@ -26,17 +27,19 @@ impl Changelog {
     }
 
     /// Whether any line contains `needle`.
+    #[must_use]
     pub fn mentions(&self, needle: &str) -> bool {
         self.sections
             .iter()
             .any(|(_, lines)| lines.iter().any(|l| l.contains(needle)))
     }
 
-    /// Puts `line` first under the `date` section, keeping dates newest first.
-    pub fn add_dated(&mut self, date: &str, line: String) {
+    /// The log with `line` first under the `date` section, dates kept newest first.
+    #[must_use]
+    pub fn add_dated(mut self, date: &str, line: String) -> Self {
         if let Some((_, lines)) = self.sections.iter_mut().find(|(h, _)| h == date) {
             lines.insert(0, line);
-            return;
+            return self;
         }
         let at = self
             .sections
@@ -44,14 +47,18 @@ impl Changelog {
             .position(|(h, _)| h.as_str() < date)
             .unwrap_or(self.sections.len());
         self.sections.insert(at, (date.to_string(), vec![line]));
+        self
     }
 
-    /// Prepends a section.
-    pub fn prepend(&mut self, heading: String, lines: Vec<String>) {
+    /// The log with a section prepended.
+    #[must_use]
+    pub fn prepend(mut self, heading: String, lines: Vec<String>) -> Self {
         self.sections.insert(0, (heading, lines));
+        self
     }
 
     /// Renders the file.
+    #[must_use]
     pub fn render(&self) -> String {
         let mut out = String::from(TITLE);
         out.push('\n');
@@ -75,11 +82,12 @@ mod tests {
     #[test]
     fn round_trips_and_orders_dates() {
         let text = "# Changelog\n\n## 2026-01-03\n\n- b\n- a\n\n## 2026-01-01\n\n- z\n";
-        let mut log = Changelog::parse(text);
+        let log = Changelog::parse(text);
         assert_eq!(log.render(), text);
-        log.add_dated("2026-01-03", "- c".into());
-        log.add_dated("2026-01-02", "- y".into());
-        log.add_dated("2026-01-04", "- d".into());
+        let log = log
+            .add_dated("2026-01-03", "- c".into())
+            .add_dated("2026-01-02", "- y".into())
+            .add_dated("2026-01-04", "- d".into());
         assert_eq!(
             log.render(),
             "# Changelog\n\n## 2026-01-04\n\n- d\n\n## 2026-01-03\n\n- c\n- b\n- a\n\n## 2026-01-02\n\n- y\n\n## 2026-01-01\n\n- z\n"

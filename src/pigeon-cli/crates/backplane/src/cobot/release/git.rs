@@ -5,18 +5,7 @@ use std::process::Command;
 
 use crate::cobot::Error;
 
-/// One first-parent commit.
-#[derive(Debug, Clone)]
-pub struct Commit {
-    /// Full SHA.
-    pub sha: String,
-    /// UTC commit date, `YYYY-MM-DD`.
-    pub date: String,
-    /// The subject line.
-    pub subject: String,
-    /// Paths the commit changed.
-    pub paths: Vec<String>,
-}
+pub use crate::core::release::Commit;
 
 /// Runs git in `root` and returns stdout.
 pub fn run(root: &Path, args: &[&str]) -> Result<String, Error> {
