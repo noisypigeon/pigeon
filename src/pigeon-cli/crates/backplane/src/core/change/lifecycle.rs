@@ -107,6 +107,7 @@ impl Change {
         c.conflict = None;
         c.violations.clear();
         c.jobs = vec![Job::queued(BOUND, Vec::new())];
+        c.kept.clear();
         c.state = State::Pushed;
         effects.push(Effect::Start(BOUND.into()));
         Ok((c, effects))

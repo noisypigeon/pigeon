@@ -3,7 +3,7 @@
 
 use super::lifecycle::Step;
 use super::types::{
-    Approval, Carried, Change, Conflicted, Effect, Job, JobStatus, MERGE, RESTACK, Relation,
+    Approval, BOUND, Carried, Change, Conflicted, Effect, Job, JobStatus, MERGE, RESTACK, Relation,
     Restacked, State, refuse,
 };
 
@@ -100,9 +100,31 @@ impl Change {
                 }
                 self.tiers = None;
                 self.behind = None;
-                self.pushed(to)
+                let kept = if carries {
+                    self.passed_code()
+                } else {
+                    Vec::new()
+                };
+                let (mut c, effects) = self.pushed(to)?;
+                c.kept = kept;
+                Ok((c, effects))
             }
         }
+    }
+
+    /// The head's passed code checks and gate jobs, which a disjoint, same-patch restack keeps.
+    fn passed_code(&self) -> Vec<Job> {
+        self.jobs
+            .iter()
+            .filter(|j| {
+                j.status == JobStatus::Passed
+                    && j.gates()
+                    && j.name != BOUND
+                    && j.name != MERGE
+                    && j.name != RESTACK
+            })
+            .cloned()
+            .collect()
     }
 
     /// Approves a restacked head that reached `checked` with the approval carried to it, when

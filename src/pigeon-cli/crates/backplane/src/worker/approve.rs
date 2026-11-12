@@ -248,6 +248,10 @@ async fn post(
         && let Some(head) = &grant.head
     {
         args.insert("sha".into(), Value::from(head.clone()));
+        // The box keeps the merge: the approval doesn't queue it.
+        if review {
+            args.insert("hold".into(), Value::from(true));
+        }
     }
     let request = wire::Request {
         operation: grant.operation.clone(),

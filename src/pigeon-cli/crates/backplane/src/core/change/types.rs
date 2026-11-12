@@ -314,6 +314,10 @@ pub struct Change {
     /// The owner's one proof for its remaining stages.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub grant: Option<ChangeGrant>,
+    /// Code checks and gate jobs that passed on the head before a disjoint, same-patch restack,
+    /// carried to the new head; see the factory ADR's 2026-11-12 amendment.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub kept: Vec<Job>,
 }
 
 /// Something that happened to a change.
@@ -522,6 +526,7 @@ impl Change {
             parent: None,
             held: None,
             grant: None,
+            kept: Vec::new(),
         }
     }
 

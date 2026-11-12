@@ -88,19 +88,24 @@ fn tiers(merge: Tier) -> Tiers {
     }
 }
 
-/// Checks head `sha`: bound with `merge`'s tier, then its one check passes.
+/// Checks head `sha`: bound with `merge`'s tier, then its one check passes, unless a disjoint
+/// restack carried it.
 fn check(c: &mut Change, sha: &str, merge: Tier) {
-    c.apply(Event::Bounded {
-        sha: sha.into(),
-        violations: vec![],
-        checks: vec![Check {
-            name: "fmt".into(),
-            argv: vec![],
-        }],
-        full: vec![],
-        tiers: Some(tiers(merge)),
-    })
-    .expect("bounded");
+    let started = c
+        .apply(Event::Bounded {
+            sha: sha.into(),
+            violations: vec![],
+            checks: vec![Check {
+                name: "fmt".into(),
+                argv: vec![],
+            }],
+            full: vec![],
+            tiers: Some(tiers(merge)),
+        })
+        .expect("bounded");
+    if !started.contains(&Effect::Start("fmt".into())) {
+        return;
+    }
     c.apply(Event::Started {
         job: "fmt".into(),
         sha: sha.into(),
@@ -273,15 +278,15 @@ fn only_a_checked_or_approved_head_is_restacked() {
     assert_eq!(c.behind, None);
 }
 
-/// Bounds head `sha` with `merge`'s tier and starts its one check; the check's finish is left
-/// to the caller.
+/// Bounds head `sha` with `merge`'s tier and starts its one check, whose command differs from
+/// the old head's, so no restack carries it; the check's finish is left to the caller.
 fn bound(c: &mut Change, sha: &str, merge: Tier) {
     c.apply(Event::Bounded {
         sha: sha.into(),
         violations: vec![],
         checks: vec![Check {
             name: "fmt".into(),
-            argv: vec![],
+            argv: vec!["new".into()],
         }],
         full: vec![],
         tiers: Some(tiers(merge)),
@@ -368,7 +373,7 @@ fn a_merge_on_a_checked_unapproved_head_is_refused_not_parked() {
         violations: vec![],
         checks: vec![Check {
             name: "fmt".into(),
-            argv: vec![],
+            argv: vec!["new".into()],
         }],
         full: vec![],
         tiers: None,
@@ -834,4 +839,88 @@ fn closing_a_change_gives_its_place_in_the_queue_back() {
     assert!(control::leaves_merge_queue(Some(&before), &after));
     assert!(!control::leaves_merge_queue(Some(&after), &after), "once");
     assert!(!control::leaves_merge_queue(Some(&before), &before));
+}
+
+/// `c`, restacked from `A` onto `C` as `relation`, and its new head bounded with `checks` and
+/// `full`: the effects of the bound job's report.
+fn restacked_onto_c(
+    c: &mut Change,
+    relation: Relation,
+    checks: &[&str],
+    full: &[&str],
+) -> Vec<Effect> {
+    c.apply(Event::Behind { main: MAIN.into() })
+        .expect("behind");
+    c.apply(restacked(relation, Some(C), true))
+        .expect("restacked");
+    c.apply(Event::Bounded {
+        sha: C.into(),
+        violations: vec![],
+        checks: checks.iter().map(|n| named(n)).collect(),
+        full: full.iter().map(|n| named(n)).collect(),
+        tiers: Some(tiers(Tier::Confirm)),
+    })
+    .expect("bounded")
+}
+
+#[test]
+fn a_disjoint_same_patch_restack_carries_its_checks() {
+    let mut c = approved_with(&["fmt", "clippy"], &["fmt", "clippy", "test"]);
+    let effects = restacked_onto_c(
+        &mut c,
+        Relation::Disjoint,
+        &["fmt", "clippy"],
+        &["fmt", "clippy", "test"],
+    );
+    assert!(effects.is_empty(), "nothing runs again: {effects:?}");
+    assert_eq!(c.state, State::Approved, "the approval carries at once");
+    assert_eq!(
+        c.apply(Event::Merge { by: "owner".into() }).expect("gates"),
+        [Effect::Start(gate("test"))],
+        "the gate runs only what never passed"
+    );
+}
+
+#[test]
+fn a_passed_gate_is_carried_and_not_run_again() {
+    let mut c = approved_with(&["fmt"], &["fmt", "test"]);
+    c.apply(Event::Merge { by: "owner".into() }).expect("gates");
+    c.apply(Event::Finished {
+        job: gate("test"),
+        sha: A.into(),
+        ok: true,
+    })
+    .expect("gate passed");
+    c.apply(Event::MergeFailed {
+        sha: A.into(),
+        reason: "main moved".into(),
+    })
+    .expect("merge failed");
+    c.merge_after = None;
+    let effects = restacked_onto_c(&mut c, Relation::Disjoint, &["fmt"], &["fmt", "test"]);
+    assert!(effects.is_empty(), "{effects:?}");
+    assert_eq!(
+        c.apply(Event::Merge { by: "owner".into() })
+            .expect("merges"),
+        [Effect::Start(MERGE.into())],
+        "the full set passed on this patch already"
+    );
+}
+
+#[test]
+fn a_clean_restack_or_changed_patch_runs_its_checks_again() {
+    let mut clean = approved_with(&["fmt"], &["fmt"]);
+    assert_eq!(
+        restacked_onto_c(&mut clean, Relation::Clean, &["fmt"], &["fmt"]),
+        [Effect::Start("fmt".into())],
+        "main changed its files"
+    );
+    let mut changed = approved_with(&["fmt"], &["fmt"]);
+    changed
+        .apply(Event::Behind { main: MAIN.into() })
+        .expect("behind");
+    changed
+        .apply(restacked(Relation::Disjoint, Some(C), false))
+        .expect("restacked");
+    assert!(changed.kept.is_empty(), "another patch keeps nothing");
 }

@@ -54,6 +54,10 @@ const COVERS: &str = "<p><small>This proof also covers the change's later stages
 the code tier, for 24 hours. A head that touches a secret, or destroys anything, still asks.</small></p>\
 <p><label><input type=\"checkbox\" name=\"review\" value=\"1\"> Keep the merge for me to approve</label></p>";
 
+/// What approving a head also does; see the approvals ADR's 2026-11-12 amendment.
+const MERGES_NOTE: &str = "<p><small>Approving this head also queues its merge, unless you keep \
+the merge. A head that changes before it merges asks again.</small></p>";
+
 const CONFIRM_NOTE: &str =
     "<p>This is a low-risk operation, so one tap approves it; no code is needed.</p>";
 
@@ -239,8 +243,13 @@ pub fn page(change: &Change, grant: &Grant, token: &str) -> String {
         escape(&grant.operation),
         if grant.needs_code() && grant.operation != "change.close" {
             format!(
-                "{}{CODE_FIELD}{COVERS}",
-                passkey_button(&crate::passkeys::grant_purpose(token))
+                "{}{CODE_FIELD}{}{COVERS}",
+                passkey_button(&crate::passkeys::grant_purpose(token)),
+                if grant.operation == "change.approve" {
+                    MERGES_NOTE
+                } else {
+                    ""
+                }
             )
         } else if grant.needs_code() {
             format!(

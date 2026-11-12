@@ -271,10 +271,11 @@ const CATALOG: &[Operation] = &[
         name: "change.approve",
         engine: Engine::Backplane,
         effect: Effect::Apply,
-        summary: "Approve a checked change's head for merge (sha?: the head; a person's call without it approves the current head, and a service token's call asks the owner for their code in the card); never by its proposer",
+        summary: "Approve a checked change's head for merge, which queues its merge (sha?: the head; a person's call without it approves the current head, and a service token's call asks the owner for their code in the card; hold?: true approves without queuing the merge); never by its proposer",
         args: &[
             NUMBER,
             arg("sha", false, Kind::String),
+            arg("hold", false, Kind::Text),
             arg("ticket", false, Kind::String),
         ],
     },

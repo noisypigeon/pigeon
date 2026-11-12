@@ -42,13 +42,29 @@ impl Change {
         }
         self.jobs[bound].status = JobStatus::Passed;
         self.state = State::Bounded;
+        let kept = self.kept.split_off(0);
         let mut effects = Vec::new();
         for c in checks {
             if c.name == BOUND || self.jobs.iter().any(|j| j.name == c.name) {
                 continue;
             }
+            // Passed on the head before a disjoint, same-patch restack: not run again.
+            if let Some(k) = kept.iter().find(|k| k.name == c.name && k.argv == c.argv) {
+                self.jobs.push(k.clone());
+                continue;
+            }
             effects.push(Effect::Start(c.name.clone()));
             self.jobs.push(Job::queued(&c.name, c.argv));
+        }
+        // A kept gate job counts toward the merge gate while its check is still in the full set.
+        for k in kept {
+            let in_full = k
+                .name
+                .strip_prefix(GATE)
+                .is_some_and(|n| self.full.iter().any(|f| f.name == n && f.argv == k.argv));
+            if in_full && !self.jobs.iter().any(|j| j.name == k.name) {
+                self.jobs.push(k);
+            }
         }
         if self.jobs.iter().any(|j| j.gates() && j.open()) {
             return Ok((self, effects));

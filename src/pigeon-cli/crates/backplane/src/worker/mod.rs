@@ -420,7 +420,11 @@ async fn run(
     let request = &request;
     let routed =
         control::route(request, &who.subject, now()).map_err(|m| crate::Error::Invalid(vec![m]))?;
-    let outcome = dispatch(env, s, who, op.name, routed).await;
+    let hold = request
+        .args
+        .get("hold")
+        .is_some_and(|v| v.as_bool() == Some(true) || v.as_str() == Some("true"));
+    let outcome = dispatch(env, s, who, op.name, routed, hold).await;
     let (target, result) = match &outcome {
         Ok((t, r)) => (t.clone(), if r.ok { "ok" } else { "refused" }),
         Err(_) => (None, "error"),
@@ -439,6 +443,31 @@ async fn run(
     outcome
         .map(|(_, r)| r)
         .map_err(|e| crate::Error::Invalid(vec![e.to_string()]))
+}
+
+/// `change.approve` on change `number`, then, unless `hold`, its merge asked for as the
+/// approver; see the 2026-11-12 amendment to
+/// `.claude/decisions/2026-11-09-security-approvals-once-passkeys.md`.
+async fn approve(
+    env: &Env,
+    s: &Settings,
+    operation: &str,
+    number: u32,
+    event: &Event,
+    hold: bool,
+) -> Result<(Option<String>, WireResponse)> {
+    let body = serde_json::to_value(event)?;
+    let (status, v) = to_change(env, &s.repo, number, Method::Post, "/event", Some(&body)).await?;
+    let mut result = json!({ "change": v });
+    if let Event::Approve { by, .. } = event
+        && status == 200
+        && !hold
+        && v["state"] == "approved"
+    {
+        let (merge_status, merge) = merges::ask(env, s, number, by).await?;
+        result["merge"] = json!({ "status": merge_status, "result": merge });
+    }
+    Ok((Some(number.to_string()), respond(operation, status, result)))
 }
 
 /// The owner's approved break-glass on change `number`; see
@@ -463,6 +492,7 @@ async fn dispatch(
     who: &Identity,
     operation: &str,
     routed: Routed,
+    hold: bool,
 ) -> Result<(Option<String>, WireResponse)> {
     match routed {
         Routed::Propose {
@@ -487,6 +517,10 @@ async fn dispatch(
             let (status, v) = merges::ask(env, s, number, &by).await?;
             Ok((Some(number.to_string()), respond(operation, status, v)))
         }
+        Routed::Event {
+            number,
+            event: event @ Event::Approve { .. },
+        } => approve(env, s, operation, number, &event, hold).await,
         Routed::Event { number, event } => {
             let body = serde_json::to_value(&event)?;
             let (status, v) =
