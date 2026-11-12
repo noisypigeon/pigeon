@@ -135,6 +135,20 @@ pub fn jobs_with(root: &Path, files: &[String], map: Option<&TestMap>) -> Result
     Ok(jobs_of(&config, &crates(root)?, files, map))
 }
 
+/// How much of the full set the merge gate of a change touching `files` runs, from the
+/// workspace's manifests and `main`'s test map `map`; see [`gate_of`].
+///
+/// # Errors
+///
+/// [`Error::Io`] when the workspace's manifests can't be read.
+pub fn gate(
+    root: &Path,
+    files: &[String],
+    map: Option<&TestMap>,
+) -> Result<crate::core::deploy::gate::Gate, Error> {
+    Ok(gate_of(&crates(root)?, files, map))
+}
+
 impl TestMap {
     /// The map in `path`.
     ///

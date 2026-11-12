@@ -10,6 +10,8 @@ use crate::cobot::release::Config;
 
 mod map;
 
+use super::gate::{Gate, MAX_PACKAGES};
+
 pub use map::{Binary, TestMap};
 
 /// The Rust workspace, from the root.
@@ -320,6 +322,38 @@ fn rust_jobs(crates: &Crates, config: &Config, files: &[&str], map: Option<&Test
     out
 }
 
+/// How much of the full set the merge gate of a change touching `files` runs: scoped when the
+/// test map chose its tests, they span at most [`MAX_PACKAGES`] packages, and no workspace-wide
+/// path changed; full otherwise, saying why. See the 2026-11-12 amendment on the merge gate to
+/// `.claude/decisions/2026-11-10-development-factory-crates-functional-core.md`.
+#[must_use]
+pub fn gate_of(crates: &Crates, files: &[String], map: Option<&TestMap>) -> Gate {
+    let files: Vec<&str> = files
+        .iter()
+        .map(|f| f.trim())
+        .filter(|f| !f.is_empty())
+        .collect();
+    if let Some(f) = files.iter().find(|f| under(f, &EVERYTHING)) {
+        return Gate::Full(format!("{f} runs every check"));
+    }
+    let rust = files
+        .iter()
+        .any(|f| crates.by_dir.keys().any(|d| f.starts_with(d.as_str())));
+    if !rust {
+        return Gate::Scoped;
+    }
+    let Some(map) = map else {
+        return Gate::Full("there is no test map for main's newest build".into());
+    };
+    let Some(picked) = map.select(crates, &files) else {
+        return Gate::Full("the test map can't choose this change's tests".into());
+    };
+    if picked.len() > MAX_PACKAGES {
+        return Gate::Full(format!("its tests span {} packages", picked.len()));
+    }
+    Gate::Scoped
+}
+
 /// `pigeon`'s features, from the release units and its manifest.
 fn all_features(config: &Config, crates: &Crates) -> BTreeSet<String> {
     config
@@ -536,5 +570,65 @@ mod tests {
             "{names:?}"
         );
         assert!(!names.iter().any(|n| n.contains("cobot")), "{names:?}");
+    }
+
+    #[test]
+    fn a_gate_is_scoped_only_when_the_test_map_chose_a_narrow_set() {
+        use super::{Binary, Gate, TestMap, gate_of};
+        let dir = |p: &str| format!("src/pigeon-cli/crates/{p}/");
+        let crates = Crates {
+            by_dir: [
+                (dir("backplane"), "pigeon-backplane".to_string()),
+                (dir("pigeon"), "pigeon".to_string()),
+                (dir("sentinel"), "pigeon-sentinel".to_string()),
+            ]
+            .into(),
+            deps: BTreeMap::default(),
+            features: BTreeMap::default(),
+        };
+        let bin = |package: &str, name: &str, file: &str| Binary {
+            package: package.into(),
+            kind: "test".into(),
+            name: name.into(),
+            files: vec![file.into()],
+        };
+        let a = "src/pigeon-cli/crates/backplane/src/a.rs";
+        let b = "src/pigeon-cli/crates/pigeon/src/b.rs";
+        let c = "src/pigeon-cli/crates/sentinel/src/c.rs";
+        let map = TestMap {
+            sha: "x".into(),
+            binaries: vec![
+                bin("pigeon-backplane", "a", a),
+                bin("pigeon", "b", b),
+                bin("pigeon-sentinel", "c", c),
+                bin("pigeon-backplane", "d", "elsewhere.rs"),
+                bin("pigeon", "e", "elsewhere.rs"),
+                bin("pigeon-sentinel", "f", "elsewhere.rs"),
+                bin("pigeon-backplane", "g", "elsewhere.rs"),
+            ],
+        };
+        let files = |f: &[&str]| f.iter().map(|s| (*s).to_string()).collect::<Vec<_>>();
+        let scoped = |g: &Gate| *g == Gate::Scoped;
+        assert!(scoped(&gate_of(&crates, &files(&[a]), Some(&map))));
+        assert!(
+            scoped(&gate_of(&crates, &files(&[a, b]), Some(&map))),
+            "2 packages"
+        );
+        assert!(
+            scoped(&gate_of(&crates, &files(&["docs/x.md"]), None)),
+            "no Rust"
+        );
+        for (name, f, m) in [
+            ("3 packages", files(&[a, b, c]), Some(&map)),
+            ("no map", files(&[a]), None),
+            (
+                "unknown to the map",
+                files(&["src/pigeon-cli/crates/pigeon/src/new.rs"]),
+                Some(&map),
+            ),
+            ("workspace-wide", files(&[a, "mise.toml"]), Some(&map)),
+        ] {
+            assert!(!scoped(&gate_of(&crates, &f, m)), "{name}");
+        }
     }
 }

@@ -67,6 +67,7 @@ impl Board {
             violations: Vec::new(),
             checks: Vec::new(),
             full: Vec::new(),
+            gate: None,
             merged: None,
             published: Vec::new(),
             workers: Vec::new(),
@@ -112,6 +113,7 @@ pub(crate) fn report(spec: &JobSpec, outcome: Outcome, log: &str) -> Report {
         violations: Vec::new(),
         checks: Vec::new(),
         full: Vec::new(),
+        gate: None,
         merged: None,
         published: Vec::new(),
         workers: Vec::new(),
@@ -516,8 +518,8 @@ fn bound(spec: &JobSpec, dir: &Path, sentinel: &Path) -> Report {
     for v in &violations {
         let _ = writeln!(log, "violation: {v}");
     }
+    let map = violations.is_empty().then(|| test_map(&mut log)).flatten();
     let checks = if violations.is_empty() {
-        let map = test_map(&mut log);
         match crate::cobot::scope::jobs_with(dir, &files, map.as_ref()) {
             Ok(jobs) => jobs
                 .into_iter()
@@ -540,6 +542,7 @@ fn bound(spec: &JobSpec, dir: &Path, sentinel: &Path) -> Report {
         let _ = writeln!(log, "check: {}", c.name);
     }
     let full = full_set(dir, &checks, &mut log);
+    let gate = (!full.is_empty()).then(|| gate(dir, &files, map.as_ref(), &mut log));
     Report {
         id: spec.id.clone(),
         outcome: if violations.is_empty() {
@@ -551,6 +554,7 @@ fn bound(spec: &JobSpec, dir: &Path, sentinel: &Path) -> Report {
         violations,
         checks,
         full,
+        gate,
         merged: None,
         published: Vec::new(),
         workers: Vec::new(),
@@ -580,6 +584,27 @@ fn test_map(log: &mut String) -> Option<crate::cobot::scope::TestMap> {
             None
         }
     }
+}
+
+/// How much of the full set the head's merge gate runs, logged; full when the workspace can't
+/// be read. See the 2026-11-12 amendment on the merge gate to
+/// `.claude/decisions/2026-11-10-development-factory-crates-functional-core.md`.
+fn gate(
+    dir: &Path,
+    files: &[String],
+    map: Option<&crate::cobot::scope::TestMap>,
+    log: &mut String,
+) -> crate::core::deploy::gate::Gate {
+    use crate::core::deploy::gate::Gate;
+    let gate = crate::cobot::scope::gate(dir, files, map)
+        .unwrap_or_else(|e| Gate::Full(format!("the workspace isn't readable ({e})")));
+    match &gate {
+        Gate::Scoped => log.push_str("merge gate: scoped; the test map chose the tests\n"),
+        Gate::Full(why) => {
+            let _ = writeln!(log, "merge gate: full; {why}");
+        }
+    }
+    gate
 }
 
 /// The variable `pigeon-start` exports the test map's path in.

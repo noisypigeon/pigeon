@@ -452,6 +452,10 @@ pub struct Report {
     /// head with no Rust input.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub full: Vec<Check>,
+    /// For the bound job: how much of `full` the merge gate runs; none from a job before the
+    /// 2026-11-12 amendment on the merge gate, which gates in full.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gate: Option<crate::core::deploy::gate::Gate>,
     /// For the merge job: the commit `main` now holds.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub merged: Option<String>,
@@ -490,6 +494,7 @@ impl Report {
             violations: Vec::new(),
             checks: Vec::new(),
             full: Vec::new(),
+            gate: None,
             merged: None,
             published: Vec::new(),
             workers: Vec::new(),

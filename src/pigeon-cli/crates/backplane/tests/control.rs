@@ -169,6 +169,7 @@ fn reports_become_events() {
         log: String::new(),
         violations: violations.into_iter().map(Into::into).collect(),
         full: vec![],
+        gate: None,
         checks: vec![Check {
             name: "fmt".into(),
             argv: vec!["cargo".into()],
@@ -397,6 +398,7 @@ fn deploy_report(outcome: Outcome) -> Report {
         log: String::new(),
         violations: vec![],
         full: vec![],
+        gate: None,
         checks: vec![],
         merged: None,
         published: vec!["sites/docs".into()],
