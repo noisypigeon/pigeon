@@ -1,0 +1,10 @@
+description: The app's prices hold a number or null for each rate, and nothing else, per 2026-11-12-runtime-ios-app-approvals-insights.md §7.
+target: { file: .config/insights.yaml }
+rules:
+  - fields:
+      after: 3
+      pattern: '^(?<key>[a-z_]+): (?<value>[0-9]+(\.[0-9]+)?|null)$'
+      only: true
+      expect:
+        - { key: github_actions_minute, nonempty: true }
+        - { key: buildkite_macos_minute, nonempty: true }

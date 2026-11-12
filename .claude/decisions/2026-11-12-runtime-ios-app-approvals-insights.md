@@ -342,3 +342,10 @@ Steps 3 to 7 each add the backplane files they create to this ADR's
   sends a passkey, even for a confirm-tier grant.
 - **Phase one serves change approvals.** Platform, mandate and CI-window
   grants stay on their pages.
+
+### 2026-11-12: The prices file's policy lands
+
+- **`.config/policies/insights.yaml`** checks that `.config/insights.yaml`
+  holds `github_actions_minute` and `buildkite_macos_minute`, in that order,
+  each a number or `null`, and nothing else after its comments.
+- **The sentinel counts 16 policies,** in `crates/sentinel/tests/policies.rs`.
