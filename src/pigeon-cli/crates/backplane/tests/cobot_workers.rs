@@ -791,6 +791,34 @@ fn a_stack_bound_spec_is_validated_against_every_stack_and_needs_one() {
 }
 
 #[test]
+fn a_static_sites_bucket_is_an_output_derived_from_its_zone_and_name() {
+    let spec = STACK_SPEC.replace(
+        "r2: { CI_LOGS:",
+        "r2: { DOCS: \"$output.sites/docs.bucket\", CI_LOGS:",
+    );
+    let root = fixture(&spec);
+    stacks(root.path());
+    let p = root.path();
+    fs::create_dir_all(p.join("catalog/cloudflare/kinds/static-site")).expect("mkdir");
+    fs::write(
+        p.join("catalog/cloudflare/kinds/static-site/schema.json"),
+        r#"{"type":"object","x-cobot":{"version":"0.1.0","local":true}}"#,
+    )
+    .expect("write");
+    let config = p.join("config.yaml");
+    let site = "  sites/docs:\n    kind: cloudflare/static-site\n    zone: example.dev\n";
+    let text = fs::read_to_string(&config).expect("read");
+    fs::write(&config, format!("{text}{site}")).expect("write");
+    let blue = workers::bind(p, &found(p), "platform/blue").expect("binds");
+    let mut outputs = std::collections::BTreeMap::new();
+    workers::site_buckets(p, &mut outputs);
+    assert_eq!(outputs["sites/docs"]["bucket"], "docs-example-dev");
+    assert!(!outputs.contains_key("platform/blue"), "{outputs:?}");
+    let r = workers::resolve(&blue.spec.bindings.r2["DOCS"], &outputs).expect("resolves");
+    assert_eq!(r, "docs-example-dev");
+}
+
+#[test]
 fn a_nested_setting_binds_by_its_path_and_one_stack_needs_no_name() {
     let spec = STACK_SPEC.replace("$deployment.database_name", "$deployment.database.name");
     let root = fixture(&spec);

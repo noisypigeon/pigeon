@@ -742,6 +742,27 @@ pub fn referenced_units(spec: &Spec) -> BTreeSet<String> {
         .collect()
 }
 
+/// `outputs` with each static site of the manifest at `root` given a `bucket` output: its
+/// bucket's name, derived from its zone and name as the kind names it, so a Worker can bind it
+/// by `$output.<site>.bucket`; see
+/// `.claude/decisions/2026-11-11-runtime-docs-under-platform-passkey.md`, its 2026-11-12 amendment.
+pub fn site_buckets(root: &Path, outputs: &mut BTreeMap<String, Map<String, Value>>) {
+    let Some((manifest, _)) = crate::cobot::manifest::load(root, root) else {
+        return;
+    };
+    for (id, e) in &manifest.units {
+        if e.kind != "cloudflare/static-site" {
+            continue;
+        }
+        let zone = e.settings["zone"].as_str().unwrap_or_default();
+        let bucket = crate::cobot::static_site::bucket_name(zone, crate::cobot::manifest::name(id));
+        outputs
+            .entry(id.clone())
+            .or_default()
+            .insert("bucket".into(), Value::String(bucket));
+    }
+}
+
 /// Whether `s` is `name`, or `name-<suffix>` with a suffix of one segment, as a bucket's
 /// random suffix is.
 fn named(s: &str, name: &str) -> bool {

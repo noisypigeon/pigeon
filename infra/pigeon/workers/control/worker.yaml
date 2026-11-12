@@ -35,6 +35,9 @@ bindings:
     DB: { name: $deployment.database.name, id: $deployment.database_id, migrations: src/pigeon-cli/crates/backplane/migrations }
   r2:
     CI_LOGS: "$deployment.bucket_names[pigeon-ci]"
+    # The architecture site, served at /docs/; see
+    # .claude/decisions/2026-11-11-runtime-docs-under-platform-passkey.md §3.
+    DOCS: "$output.sites/docs.bucket"
   queues:
     consumers: [ { queue: $deployment.queue.name, max_batch_size: 10 } ]
   vars:

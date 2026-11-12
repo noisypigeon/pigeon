@@ -187,6 +187,7 @@ fn state_outputs(
             }
         }
     }
+    workers::site_buckets(&s.at.root, &mut outputs);
     Ok((session, found, outputs))
 }
 

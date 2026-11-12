@@ -159,3 +159,20 @@ whose step 6b (!198) moves the `cobot` crate into `backplane` as
 - **Step 2's `feat(cobot)`** edits those files at their new paths once !198
   merges, and its tests are backplane's `cobot_sites` and `cobot_manifest`.
   `pigeon cobot sites …` is unchanged.
+
+### 2026-11-12: the bucket is bound as a derived output, step 3 is two changes, and style attributes are allowed
+
+- **The Worker binds the site's bucket by `$output.sites/docs.bucket`,** not
+  a `sites` setting on the `pigeon/platform` kind.
+  - A static site's bucket name is derived from its zone and name, so
+    `workers::site_buckets` adds it to the outputs wherever they are loaded:
+    the deploy job's `DEPLOY_OUTPUTS` and `pigeon cobot workers`' state.
+  - The name is never in the repository, and nothing has to be applied or
+    refreshed for the binding to resolve.
+- **Step 3 was two changes:** `core::sites::view`, the pure part (!279), then
+  the Worker's surface (!280), to keep each under the change size limit.
+- **The served pages' policy adds `style-src-attr 'unsafe-inline'`.** The
+  template places the diagram with `style` attributes. Style elements and
+  scripts stay `'self'`.
+- **Until step 5,** the site is built for `platform.pigeon.dev/docs`, so
+  `docs.pigeon.dev`'s page links its assets there, behind Access.

@@ -57,8 +57,9 @@ pub fn workers(
     }
     let get = |k: &str| var(k).unwrap_or_default();
     let deployment = var(workers::DEPLOYMENT_VAR);
-    let outputs: Outputs = serde_json::from_str(&get(ship::OUTPUTS_VAR))
+    let mut outputs: Outputs = serde_json::from_str(&get(ship::OUTPUTS_VAR))
         .map_err(|e| format!("{} is not JSON outputs: {e}", ship::OUTPUTS_VAR))?;
+    workers::site_buckets(dir, &mut outputs);
     let mut images: Images = serde_json::from_str(&get(ship::IMAGES_VAR))
         .map_err(|e| format!("{} is not JSON images: {e}", ship::IMAGES_VAR))?;
     let since_image =
