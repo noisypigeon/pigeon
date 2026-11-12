@@ -4,7 +4,7 @@
 //! `.claude/decisions/2026-11-03-runtime-static-site-config-contract.md`, and
 //! `.claude/decisions/2026-11-05-runtime-architecture-site-through-backplane.md` §1.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -19,7 +19,9 @@ use crate::cobot::static_site;
 use crate::cobot::{Error, WORK_DIR, unit};
 
 pub use crate::core::sites::assemble::*;
+pub use crate::core::sites::checks::*;
 pub use crate::core::sites::layout::*;
+pub use crate::core::sites::publish::*;
 
 /// Where templates live, as `<TEMPLATES>/<name>`.
 pub const TEMPLATES: &str = "src/site-templates";
@@ -635,45 +637,7 @@ fn run(command: &mut Command, name: &str) -> Result<(), Error> {
     })
 }
 
-/// A file's `Content-Type`, from its extension.
-#[must_use]
-pub fn content_type(key: &str) -> &'static str {
-    let ext = key.rsplit_once('.').map(|(_, e)| e.to_ascii_lowercase());
-    match ext.as_deref() {
-        Some("html" | "htm") => "text/html; charset=utf-8",
-        Some("css") => "text/css; charset=utf-8",
-        Some("js" | "mjs") => "text/javascript; charset=utf-8",
-        Some("json" | "map") => "application/json",
-        Some("xml") => "application/xml",
-        Some("txt") => "text/plain; charset=utf-8",
-        Some("svg") => "image/svg+xml",
-        Some("png") => "image/png",
-        Some("jpg" | "jpeg") => "image/jpeg",
-        Some("gif") => "image/gif",
-        Some("webp") => "image/webp",
-        Some("avif") => "image/avif",
-        Some("ico") => "image/x-icon",
-        Some("woff2") => "font/woff2",
-        Some("woff") => "font/woff",
-        Some("ttf") => "font/ttf",
-        Some("pdf") => "application/pdf",
-        Some("mp4") => "video/mp4",
-        Some("webm") => "video/webm",
-        Some("wasm") => "application/wasm",
-        _ => "application/octet-stream",
-    }
-}
-
-/// One object to upload: its body and type.
-#[derive(Debug, Clone)]
-pub struct Upload {
-    /// The body.
-    pub body: Vec<u8>,
-    /// Its `Content-Type`.
-    pub content_type: &'static str,
-}
-
-fn walk(dir: &Path, prefix: &str, out: &mut BTreeMap<String, Upload>) -> Result<(), Error> {
+fn walk(dir: &Path, prefix: &str, out: &mut BTreeMap<String, Vec<u8>>) -> Result<(), Error> {
     for e in fs::read_dir(dir).map_err(io(dir))?.flatten() {
         let name = e.file_name().to_string_lossy().into_owned();
         let key = if prefix.is_empty() {
@@ -684,14 +648,7 @@ fn walk(dir: &Path, prefix: &str, out: &mut BTreeMap<String, Upload>) -> Result<
         if e.file_type().map_err(io(&e.path()))?.is_dir() {
             walk(&e.path(), &key, out)?;
         } else {
-            let body = fs::read(e.path()).map_err(io(&e.path()))?;
-            out.insert(
-                key.clone(),
-                Upload {
-                    body,
-                    content_type: content_type(&key),
-                },
-            );
+            out.insert(key, fs::read(e.path()).map_err(io(&e.path()))?);
         }
     }
     Ok(())
@@ -704,46 +661,12 @@ fn walk(dir: &Path, prefix: &str, out: &mut BTreeMap<String, Upload>) -> Result<
 ///
 /// [`Error::Io`] for an unreadable file, or a file at [`TYPES`].
 pub fn expected(public: &Path) -> Result<BTreeMap<String, Upload>, Error> {
-    let mut out = BTreeMap::new();
-    walk(public, "", &mut out)?;
-    if out.contains_key(TYPES) {
-        return Err(Error::Io {
-            path: public.join(TYPES),
-            message: format!(
-                "`{TYPES}` is cobot's own key in the bucket; a site cannot publish it"
-            ),
-        });
-    }
-    let pages: Vec<(String, Upload)> = out
-        .iter()
-        .filter_map(|(k, v)| {
-            k.strip_suffix("/index.html")
-                .map(|dir| (dir.to_string(), v.clone()))
-        })
-        .collect();
-    for (dir, page) in pages {
-        let html = Upload {
-            body: page.body,
-            content_type: content_type("index.html"),
-        };
-        out.insert(format!("{dir}/"), html.clone());
-        out.insert(dir, html);
-    }
-    Ok(out)
-}
-
-/// The key holding each object's last written `Content-Type`; a site may not use it.
-pub const TYPES: &str = ".cobot/types.json";
-
-/// What a sync did, by key.
-#[derive(Debug, Default, Clone, PartialEq, Eq)]
-pub struct Synced {
-    /// Keys written, new or changed.
-    pub put: Vec<String>,
-    /// Keys left as they were.
-    pub unchanged: usize,
-    /// Keys deleted, no longer expected.
-    pub deleted: Vec<String>,
+    let mut files = BTreeMap::new();
+    walk(public, "", &mut files)?;
+    expected_of(files).map_err(|message| Error::Io {
+        path: public.join(TYPES),
+        message,
+    })
 }
 
 fn now() -> u64 {
@@ -778,65 +701,38 @@ pub fn sync(bucket: &Bucket, expected: &BTreeMap<String, Upload>) -> Result<Sync
     } else {
         BTreeMap::new()
     };
-    let types: BTreeMap<String, String> = expected
-        .iter()
-        .map(|(k, u)| (k.clone(), u.content_type.to_string()))
-        .collect();
-    let mut done = Synced::default();
-    for (key, up) in expected {
-        if have.get(key).is_some_and(|e| *e == s3::md5_hex(&up.body))
-            && written.get(key).is_some_and(|t| t == up.content_type)
-        {
-            done.unchanged += 1;
-            continue;
-        }
+    let plan = sync_plan(expected, &have, &written);
+    for key in &plan.put {
+        let up = &expected[key];
         bucket
             .put(key, &up.body, up.content_type, now())
             .map_err(fail)?;
-        done.put.push(key.clone());
     }
-    if written != types {
-        let body = serde_json::to_vec(&types).unwrap_or_default();
+    if let Some(body) = &plan.types {
         bucket
-            .put(TYPES, &body, content_type(TYPES), now())
+            .put(TYPES, body, content_type(TYPES), now())
             .map_err(fail)?;
     }
-    let keep: BTreeSet<&str> = expected.keys().map(String::as_str).chain([TYPES]).collect();
-    for key in have.keys().filter(|k| !keep.contains(k.as_str())) {
+    for key in &plan.delete {
         bucket.delete(key, now()).map_err(fail)?;
-        done.deleted.push(key.clone());
     }
+    let done = Synced {
+        put: plan.put,
+        unchanged: plan.unchanged,
+        deleted: plan.delete,
+    };
     Ok(done)
 }
 
 /// The site token's credentials and the account id, from `infra/cloudflare`'s
-/// `tofu show -json` state: the live generation's id as the access key, and
-/// the SHA-256 of its value as the secret.
+/// `tofu show -json` state; see [`credentials_of`].
 #[must_use]
 pub fn credentials(
     shown: &str,
     site: &Site,
     today: crate::cobot::generations::Day,
 ) -> Option<(Credentials, String)> {
-    let state: Value = serde_json::from_str(shown).ok()?;
-    let outputs = &state["values"]["outputs"];
-    let token = static_site::token_name(&site.zone, &site.workload);
-    let (g, value) = apex::live_token(outputs, "tokens", &token, today)?;
-    let id = outputs["token_ids"]["value"][g.key(&token)].as_str()?;
-    let account = outputs["account_id"]["value"].as_str()?;
-    Some((
-        Credentials {
-            access_key: id.to_string(),
-            secret_key: s3::sha256_hex(value.as_bytes()),
-        },
-        account.to_string(),
-    ))
-}
-
-/// R2's S3 endpoint for an account, in the EU jurisdiction.
-#[must_use]
-pub fn endpoint(account: &str) -> String {
-    format!("https://{account}.eu.r2.cloudflarestorage.com")
+    credentials_of(shown, &site.zone, &site.workload, today)
 }
 
 /// One live check's result.
@@ -873,56 +769,29 @@ pub fn checks(
     tries: u32,
     wait: Duration,
 ) -> Vec<Check> {
-    let Some(apex_host) = built.site.canonical() else {
-        return Vec::new();
-    };
-    let base = format!("https://{apex_host}");
-    let mut list: Vec<(String, Box<dyn Fn() -> bool>)> = Vec::new();
-    let root = base.clone();
-    list.push((
-        format!("{root}/ returns 200 with <html"),
-        Box::new(move || {
-            fetch(&format!("{root}/")).is_some_and(|(s, _, b)| s == 200 && b.contains("<html"))
-        }),
-    ));
-    if let Some(page) = keys
-        .keys()
-        .find_map(|k| k.strip_suffix("/index.html").map(str::to_string))
-    {
-        for url in [format!("{base}/{page}"), format!("{base}/{page}/")] {
-            list.push((
-                format!("{url} returns 200"),
-                Box::new(move || fetch(&url).is_some_and(|(s, _, _)| s == 200)),
-            ));
+    probes(
+        built.site.canonical(),
+        &built.site.zone,
+        &built.site.hosts,
+        keys.keys(),
+        now(),
+    )
+    .into_iter()
+    .map(|probe| {
+        let passed = (0..tries).any(|i| {
+            if i > 0 {
+                std::thread::sleep(wait);
+            }
+            fetch(probe.url()).is_some_and(|(status, location, body)| {
+                probe.passes(status, location.as_deref(), &body)
+            })
+        });
+        Check {
+            what: probe.what(),
+            passed,
         }
-    }
-    let missing = format!("{base}/cobot-missing-{}/", now());
-    list.push((
-        format!("{missing} returns 404"),
-        Box::new(move || fetch(&missing).is_some_and(|(s, _, _)| s == 404)),
-    ));
-    let www = format!("www.{}", built.site.zone);
-    if built.site.hosts.contains(&built.site.zone) && built.site.hosts.contains(&www) {
-        let from = format!("https://{www}/");
-        let to = format!("https://{}/", built.site.zone);
-        list.push((
-            format!("{from} redirects 301 to {to}"),
-            Box::new(move || {
-                fetch(&from).is_some_and(|(s, l, _)| s == 301 && l.as_deref() == Some(to.as_str()))
-            }),
-        ));
-    }
-    list.into_iter()
-        .map(|(what, check)| {
-            let passed = (0..tries).any(|i| {
-                if i > 0 {
-                    std::thread::sleep(wait);
-                }
-                check()
-            });
-            Check { what, passed }
-        })
-        .collect()
+    })
+    .collect()
 }
 
 #[cfg(test)]
