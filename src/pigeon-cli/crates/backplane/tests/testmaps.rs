@@ -48,11 +48,13 @@ fn a_failed_map_waits_for_the_next_commit_and_keeps_the_last() {
     let mut t = TestMaps::default();
     t.copied(B, "cd");
     t.mirrored(A);
+    t.decided(A, true);
     running(&mut t, 42);
     finish(&mut t, "failure");
     assert!(!t.busy());
     assert!(t.failed.as_deref().is_some_and(|f| f.contains(A)));
     assert_eq!(t.latest_map.as_ref().map(|m| m.sha.as_str()), Some(B));
+    assert_eq!(t.failed_sha.as_deref(), Some(A), "a task is opened for it");
 }
 
 #[test]
@@ -82,4 +84,53 @@ fn only_the_map_of_the_commit_is_kept() {
     assert!(testmaps::invalid(b"PK\x03\x04rest", A).is_some_and(|w| w.contains("zipped")));
     assert!(testmaps::invalid(b"not json", A).is_some());
     assert_eq!(testmaps::key(A), format!("builds/{A}/tests.json"));
+}
+
+const C: &str = "cccccccccccccccccccccccccccccccccccccccc";
+
+#[test]
+fn a_commit_with_no_rust_input_keeps_the_newest_map() {
+    let mut t = TestMaps::default();
+    t.copied(B, "cd");
+    t.mirrored(A);
+    assert!(t.busy(), "it waits to be compared");
+    assert_eq!(t.actions.dispatches.len(), 0);
+    t.decided(A, false);
+    assert!(!t.busy());
+    assert_eq!(t.skipped.as_deref(), Some(A));
+    assert_eq!(t.latest_map.as_ref().map(|m| m.sha.as_str()), Some(B));
+    t.mirrored(C);
+    t.decided(C, true);
+    assert_eq!(t.actions.dispatches.len(), 1, "a Rust change is mapped");
+    assert_eq!(t.actions.dispatches[0].sha, C);
+}
+
+#[test]
+fn rust_inputs_are_sources_manifests_and_toolchains() {
+    let has = |f: &str| testmaps::rust_inputs(&[f.to_string()]);
+    assert!(has("src/pigeon-cli/crates/backplane/src/testmaps.rs"));
+    assert!(has("src/pigeon-cli/Cargo.lock"));
+    assert!(has("src/pigeon-cli/crates/pigeon/Cargo.toml"));
+    assert!(has("src/pigeon-cli/.cargo/config.toml"));
+    assert!(has("mise.toml"));
+    assert!(!has(
+        ".claude/decisions/2026-11-10-development-factory-crates-functional-core.md"
+    ));
+    assert!(!has("src/pigeon-ios/Pigeon/ContentView.swift"));
+    let files = |n: usize| json!({ "files": (0..n).map(|i| json!({ "filename": format!("docs/{i}.md") })).collect::<Vec<_>>() });
+    assert!(!testmaps::rust_since(&files(3)));
+    assert!(
+        testmaps::rust_since(&files(testmaps::COMPARE_FILES)),
+        "a cut listing counts"
+    );
+    assert!(testmaps::rust_since(&json!({})), "an unreadable one counts");
+}
+
+#[test]
+fn a_squash_names_its_change() {
+    assert_eq!(
+        testmaps::merged_change("feat(x): y (!241)\n\nbody"),
+        Some(241)
+    );
+    assert_eq!(testmaps::merged_change("chore: release"), None);
 }

@@ -169,6 +169,41 @@ pub async fn runs(token: &str, owner: &str, repo: &str) -> Result<Value, String>
     call(Method::Get, &path, token, None).await
 }
 
+/// GitHub's compare of `base...head`: its files and commits.
+///
+/// # Errors
+///
+/// When GitHub refuses.
+pub async fn compare(
+    token: &str,
+    owner: &str,
+    repo: &str,
+    base: &str,
+    head: &str,
+) -> Result<Value, String> {
+    let path = format!("/repos/{owner}/{repo}/compare/{base}...{head}?per_page=100");
+    call(Method::Get, &path, token, None).await
+}
+
+/// Commit `sha`'s message.
+///
+/// # Errors
+///
+/// When GitHub refuses.
+pub async fn commit_message(
+    token: &str,
+    owner: &str,
+    repo: &str,
+    sha: &str,
+) -> Result<String, String> {
+    let path = format!("/repos/{owner}/{repo}/commits/{sha}");
+    let v = call(Method::Get, &path, token, None).await?;
+    v["commit"]["message"]
+        .as_str()
+        .map(str::to_string)
+        .ok_or_else(|| format!("commit {sha} has no message"))
+}
+
 /// Run `id` and its jobs.
 ///
 /// # Errors

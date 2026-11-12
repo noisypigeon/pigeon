@@ -56,16 +56,92 @@ pub struct TestMaps {
     /// Why the newest commit has no map.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub failed: Option<String>,
+    /// A mirrored commit waiting to be compared with the newest map's commit.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub deciding: Option<String>,
+    /// The newest commit that changed no Rust input, so the newest map stands for it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub skipped: Option<String>,
+    /// A failed map's commit, until a task is opened for it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub failed_sha: Option<String>,
+}
+
+/// Whether `files` hold a Rust input, whose change can change what the tests run.
+#[must_use]
+pub fn rust_inputs(files: &[String]) -> bool {
+    files.iter().any(|f| {
+        let name = f.rsplit('/').next().unwrap_or(f);
+        std::path::Path::new(f)
+            .extension()
+            .is_some_and(|e| e == "rs")
+            || matches!(name, "Cargo.toml" | "Cargo.lock")
+            || f.contains("/.cargo/")
+            || f == "mise.toml"
+            || f == ".config/releases.yaml"
+    })
+}
+
+/// The most files GitHub's compare lists; a compare that reaches it may hold more.
+pub const COMPARE_FILES: usize = 300;
+
+/// Whether GitHub's compare `v` holds a Rust input: a listing cut at [`COMPARE_FILES`], or one
+/// that can't be read, counts as one.
+#[must_use]
+pub fn rust_since(v: &Value) -> bool {
+    let Some(files) = v["files"].as_array() else {
+        return true;
+    };
+    let names: Vec<String> = files
+        .iter()
+        .filter_map(|f| f["filename"].as_str().map(str::to_string))
+        .collect();
+    files.len() >= COMPARE_FILES || rust_inputs(&names)
+}
+
+/// The change a squash on `main` merged, from its subject's `(!n)`.
+#[must_use]
+pub fn merged_change(message: &str) -> Option<u32> {
+    let subject = message.lines().next()?.trim_end();
+    let open = subject.rfind("(!")?;
+    subject[open + 2..].strip_suffix(')')?.parse().ok()
 }
 
 impl TestMaps {
     /// `main`'s commit `sha` reached GitHub: its map is built, and an older commit's is dropped.
+    ///
+    /// While a map exists, the commit waits in `deciding` to be compared with it; see the factory
+    /// ADR's 2026-11-12 amendment.
     pub fn mirrored(&mut self, sha: &str) {
         if self.latest_map.as_ref().is_some_and(|m| m.sha == sha)
             || self.actions.dispatches.iter().any(|d| d.sha == sha)
+            || self.deciding.as_deref() == Some(sha)
         {
             return;
         }
+        if self.latest_map.is_some() {
+            self.actions.keep_head(None);
+            self.deciding = Some(sha.into());
+            return;
+        }
+        self.map(sha);
+    }
+
+    /// The commit in `deciding`, `sha`, compared: mapped when it changed a Rust input, or else
+    /// recorded as skipped.
+    pub fn decided(&mut self, sha: &str, rust: bool) {
+        if self.deciding.as_deref() != Some(sha) {
+            return;
+        }
+        self.deciding = None;
+        if rust {
+            self.map(sha);
+        } else {
+            self.skipped = Some(sha.into());
+        }
+    }
+
+    fn map(&mut self, sha: &str) {
         self.actions.keep_head(Some(sha));
         self.actions.queue(MAIN, sha, CHECK);
         self.copying = None;
@@ -75,7 +151,7 @@ impl TestMaps {
     /// Whether anything waits on GitHub or a copy.
     #[must_use]
     pub fn busy(&self) -> bool {
-        self.copying.is_some() || !self.actions.dispatches.is_empty()
+        self.copying.is_some() || !self.actions.dispatches.is_empty() || self.deciding.is_some()
     }
 
     /// Entry `n`'s check finished as `f`: a passed one is copied from its run.
@@ -87,6 +163,7 @@ impl TestMaps {
             self.copying = d.run.map(|run| (d.sha.clone(), run));
         } else {
             self.failed = Some(format!("the test map of {} failed", d.sha));
+            self.failed_sha = Some(d.sha.clone());
         }
     }
 
@@ -120,6 +197,8 @@ impl TestMaps {
             "copying": self.copying.as_ref().map(|(sha, _)| sha),
             "latest_map": self.latest_map,
             "failed": self.failed,
+            "deciding": self.deciding,
+            "skipped": self.skipped,
         })
     }
 }

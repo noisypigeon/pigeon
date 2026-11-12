@@ -430,6 +430,30 @@ impl MainRun {
         super::buildkite::create(&self.env, c.build, &c.sha).await
     }
 
+    /// Opens a `test-map-failed` task on the change whose squash `sha` is, for its session.
+    async fn test_map_failed(&self, token: &str, owner: &str, repo: &str, sha: &str) {
+        let made = async {
+            let message = github::commit_message(token, owner, repo, sha).await?;
+            let n = testmaps::merged_change(&message)
+                .ok_or_else(|| format!("{sha} names no change"))?;
+            let s = platform::Settings::from(&self.env).map_err(|e| e.to_string())?;
+            let (_, v) = super::to_change(&self.env, &s.repo, n, Method::Get, "/status", None)
+                .await
+                .map_err(|e| e.to_string())?;
+            let session = v["change"]["session"].as_str().map(str::to_string);
+            let note = format!(
+                "the test map of main at {} failed after !{n} merged; fix main and push",
+                short(sha)
+            );
+            super::tasks::add(&self.env, &s, "test-map-failed", n, None, session, &note)
+                .await
+                .map_err(|e| e.to_string())
+        };
+        if let Err(why) = made.await {
+            worker::console_warn!("the test map of {sha} failed, and no task was opened: {why}");
+        }
+    }
+
     async fn test_maps(&self) -> Result<TestMaps> {
         Ok(self
             .state
@@ -444,8 +468,11 @@ impl MainRun {
     async fn test_map_step(&self) -> Result<()> {
         let mut t = self.test_maps().await?;
         let at = now();
-        let due = t.actions.due(crate::actions::Mirror::Passed, at);
-        if due.is_empty() && t.copying.is_none() {
+        if t.actions.due(crate::actions::Mirror::Passed, at).is_empty()
+            && t.copying.is_none()
+            && t.deciding.is_none()
+            && t.failed_sha.is_none()
+        {
             return Ok(());
         }
         let Some((owner, repo)) =
@@ -461,6 +488,8 @@ impl MainRun {
                 return Ok(());
             }
         };
+        decide(&mut t, &token, &owner, &repo).await;
+        let due = t.actions.due(crate::actions::Mirror::Passed, at);
         for d in due {
             let call = match d {
                 Due::Dispatch(i) => {
@@ -493,6 +522,9 @@ impl MainRun {
             }
         }
         t.prune();
+        if let Some(sha) = t.failed_sha.take() {
+            self.test_map_failed(&token, &owner, &repo, &sha).await;
+        }
         if let Some((sha, run)) = t.copying.clone() {
             let got = github::artifact(&token, &owner, &repo, run, testmaps::ARTIFACT).await;
             match got.and_then(|b| testmaps::invalid(&b, &sha).map_or(Ok(b), Err)) {
@@ -820,6 +852,25 @@ async fn deploy_event(env: &Env, sha: &str, report: &Report) {
 }
 
 /// The first 12 characters of a SHA.
+/// Decides the commit `t` holds: mapped only when it changed a Rust input since the newest
+/// map's commit; see the factory ADR's 2026-11-12 amendment.
+async fn decide(t: &mut TestMaps, token: &str, owner: &str, repo: &str) {
+    let (Some(sha), Some(base)) = (
+        t.deciding.clone(),
+        t.latest_map.as_ref().map(|m| m.sha.clone()),
+    ) else {
+        return;
+    };
+    let rust = match github::compare(token, owner, repo, &base, &sha).await {
+        Ok(v) => testmaps::rust_since(&v),
+        Err(why) => {
+            worker::console_warn!("the test map of {sha} is built: {why}");
+            true
+        }
+    };
+    t.decided(&sha, rust);
+}
+
 fn short(sha: &str) -> &str {
     sha.get(..12).unwrap_or(sha)
 }
