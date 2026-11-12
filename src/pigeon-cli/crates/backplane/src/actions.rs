@@ -32,13 +32,19 @@ pub const TEST_MAP: &str = "../../tooling/ci/test-map.sh";
 /// gives; see `.claude/decisions/2026-11-11-release-ios-app-buildkite-testflight.md`.
 pub const IOS_CHECK: &str = "../pigeon-ios/check.sh";
 
+/// A release's `ios.archive` script, run with the build number; macOS too.
+pub const IOS_ARCHIVE: &str = "../pigeon-ios/archive.sh";
+
 /// Whether a check with `argv` is a code check, run on GitHub: `cargo fmt|clippy|test|build|check`,
-/// the test map, or the `ios` check.
+/// the test map, the `ios` check, or a release's `ios.archive`.
 #[must_use]
 pub fn on_github(argv: &[String]) -> bool {
     match argv {
         [p, v, ..] if p == "cargo" => CODE.contains(&v.as_str()),
         [p, script] => p == "bash" && (script == TEST_MAP || script == IOS_CHECK),
+        [p, script, build] => {
+            p == "bash" && script == IOS_ARCHIVE && build.bytes().all(|b| b.is_ascii_digit())
+        }
         _ => false,
     }
 }

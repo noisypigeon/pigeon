@@ -44,6 +44,8 @@ fn only_code_checks_run_on_github() {
         "cargo fmt --all -- --check",
         "bash ../../tooling/ci/test-map.sh",
         "bash ../pigeon-ios/check.sh",
+        "bash ../pigeon-ios/archive.sh 1",
+        "bash ../pigeon-ios/archive.sh 42",
         "cargo clippy -p pigeon-backplane --all-targets --locked -- -D warnings",
         "cargo test -p pigeon-backplane --locked",
         "cargo build --release",
@@ -57,6 +59,8 @@ fn only_code_checks_run_on_github() {
         "sh ../../spikes/1/run.sh",
         "bash ../../tooling/ci/other.sh",
         "bash ../pigeon-ios/other.sh",
+        "bash ../pigeon-ios/archive.sh x;rm",
+        "bash ../pigeon-ios/archive.sh",
         "fmt",
         "",
     ] {
