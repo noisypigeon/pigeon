@@ -206,10 +206,7 @@ impl MainRun {
     /// to .claude/decisions/2026-11-11-release-ios-app-buildkite-testflight.md.
     async fn ios_release(&self) -> std::result::Result<Value, String> {
         let m = self.mirroring().await.map_err(|e| e.to_string())?;
-        let sha = m
-            .mirrored
-            .clone()
-            .ok_or("main has not reached GitHub yet, so nothing can be archived")?;
+        let sha = iosrelease::release_sha(m.target.as_deref(), m.mirrored.as_deref())?;
         let mut r = self.ios_releases().await.map_err(|e| e.to_string())?;
         if let Some(c) = &r.current {
             return Err(format!("release {} is still in flight", c.build));

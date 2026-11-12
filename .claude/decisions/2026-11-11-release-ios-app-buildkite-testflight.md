@@ -318,3 +318,13 @@ undocumented for Transporter 4, so §6's upload is replaced.
   longer needs `iTMSTransporter`.
 - **What follows is unchanged:** the control plane polls `GET /v1/builds`
   until the build is `VALID`.
+
+### 2026-11-12: A release waits for the mirror
+
+Build 3 archived `5fb462d`, not the newer `d21a230` that `main` had just
+merged: `ios.release` took the newest commit GitHub held, and the mirror
+hadn't caught up.
+
+- **`ios.release` refuses while `main` is ahead of the mirror,** naming both
+  commits, instead of releasing an older one. It is asked again once GitHub
+  holds `main`'s head, usually within a minute.

@@ -99,6 +99,25 @@ pub enum Moved {
     Failed(String),
 }
 
+/// The commit a release archives: `main`'s head, once GitHub holds it. Refused while the mirror
+/// is behind, so a release never takes an older commit; see the release ADR's 2026-11-12
+/// amendment on the release's commit.
+///
+/// # Errors
+///
+/// When nothing is mirrored, or `main` is ahead of what GitHub holds.
+pub fn release_sha(target: Option<&str>, mirrored: Option<&str>) -> Result<String, String> {
+    let mirrored = mirrored.ok_or("main has not reached GitHub yet, so nothing can be archived")?;
+    match target {
+        Some(t) if t != mirrored => Err(format!(
+            "main is at {} but GitHub holds {}; release once the mirror catches up",
+            &t[..t.len().min(12)],
+            &mirrored[..mirrored.len().min(12)]
+        )),
+        _ => Ok(mirrored.to_string()),
+    }
+}
+
 impl IosReleases {
     /// Starts release `build` of `sha`, unless one is in flight.
     ///
@@ -338,6 +357,20 @@ pub fn invalid(body: &[u8]) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_release_waits_for_the_mirror() {
+        let a = "a".repeat(40);
+        let b = "b".repeat(40);
+        assert_eq!(release_sha(Some(&a), Some(&a)).as_deref(), Ok(a.as_str()));
+        assert_eq!(release_sha(None, Some(&a)).as_deref(), Ok(a.as_str()));
+        let behind = release_sha(Some(&b), Some(&a)).expect_err("main is ahead");
+        assert!(
+            behind.contains("bbbbbbbbbbbb") && behind.contains("aaaaaaaaaaaa"),
+            "{behind}"
+        );
+        assert!(release_sha(Some(&a), None).is_err());
+    }
 
     const SHA: &str = "0123456789abcdef0123456789abcdef01234567";
 
