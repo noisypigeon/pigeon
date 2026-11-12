@@ -311,3 +311,55 @@ mod approvals {
         );
     }
 }
+
+mod push {
+    use crate::core::app::push::{gone, link, payload, token_input, token_ok};
+    use crate::core::approval::grants::key;
+    use crate::push::b64url_decode;
+
+    #[test]
+    fn a_notification_links_to_its_card_or_home_and_holds_no_token() {
+        let p = payload(
+            "Approval waiting",
+            "!295",
+            "/approve/295?grant=secret-token",
+        );
+        assert_eq!(
+            p["link"],
+            format!("pigeon://approval/{}", key("secret-token"))
+        );
+        assert!(!p.to_string().contains("secret-token"));
+        assert_eq!(p["aps"]["alert"]["title"], "Approval waiting");
+        assert_eq!(link("/approvals"), "pigeon://home");
+        assert_eq!(link("/platform/19?grant=x"), "pigeon://home");
+    }
+
+    #[test]
+    fn the_provider_token_names_its_key_and_team() {
+        let input = token_input("KEY123", "TEAM45", 1_800_000_000);
+        let (h, c) = input.split_once('.').expect("two parts");
+        let h: serde_json::Value =
+            serde_json::from_slice(&b64url_decode(h).expect("b64")).expect("json");
+        let c: serde_json::Value =
+            serde_json::from_slice(&b64url_decode(c).expect("b64")).expect("json");
+        assert_eq!(
+            (h["alg"].as_str(), h["kid"].as_str()),
+            (Some("ES256"), Some("KEY123"))
+        );
+        assert_eq!(
+            (c["iss"].as_str(), c["iat"].as_u64()),
+            (Some("TEAM45"), Some(1_800_000_000))
+        );
+    }
+
+    #[test]
+    fn gone_tokens_and_token_shapes() {
+        assert!(gone(410, "Unregistered"));
+        assert!(gone(400, "BadDeviceToken"));
+        assert!(!gone(400, "BadTopic"));
+        assert!(!gone(200, ""));
+        assert!(token_ok(&"ab".repeat(32)));
+        assert!(!token_ok("xyz"));
+        assert!(!token_ok(&"zz".repeat(32)));
+    }
+}

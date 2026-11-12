@@ -5,6 +5,7 @@
 * Author: Willow Graysen (@noisypigeon).
 * Category: runtime
 * Governs: `src/pigeon-ios/Pigeon/**`, `src/pigeon-ios/PigeonCore/**`, `src/pigeon-ios/PigeonCoreTests/**`, `src/pigeon-ios/project.yml`, `src/pigeon-cli/crates/backplane/src/core/app/**`, `src/pigeon-cli/crates/backplane/src/devices.rs`, `src/pigeon-cli/crates/backplane/src/worker/devices.rs`, `src/pigeon-cli/crates/backplane/src/core/insights/**`, `src/pigeon-cli/crates/backplane/src/insights.rs`, `src/pigeon-cli/crates/backplane/src/worker/insights.rs`, `src/pigeon-cli/crates/backplane/migrations/0005_insights.sql`, `.config/insights.yaml`, `src/pigeon-cli/crates/backplane/src/worker/app.rs`
+* Governs: `src/pigeon-ios/Pigeon/**`, `src/pigeon-ios/project.yml`, `src/pigeon-cli/crates/backplane/src/core/app/**`, `src/pigeon-cli/crates/backplane/src/devices.rs`, `src/pigeon-cli/crates/backplane/src/worker/devices.rs`, `src/pigeon-cli/crates/backplane/src/core/insights/**`, `src/pigeon-cli/crates/backplane/src/insights.rs`, `src/pigeon-cli/crates/backplane/src/worker/insights.rs`, `src/pigeon-cli/crates/backplane/migrations/0005_insights.sql`, `.config/insights.yaml`, `src/pigeon-cli/crates/backplane/src/worker/app.rs`, `src/pigeon-cli/crates/backplane/src/worker/apns.rs`
 
 ## Context
 
@@ -381,3 +382,20 @@ Steps 3 to 7 each add the backplane files they create to this ADR's
 - **Linking** opens `/app/link` in `ASWebAuthenticationSession`, which keeps
   the Safari session, so a passkey or Access login already there is reused.
 - **The avatar** is the app icon at 240 px, as `Avatar` in the asset catalog.
+
+### 2026-11-12: Step 7 lands: APNs
+
+- **Paths.** `Governs` gains `worker/apns.rs`; the pure part is
+  `core/app/push.rs`.
+- **The secrets are `APNS_KEY` and `APNS_KEY_ID`,** with `APPLE_TEAM_ID` as
+  the issuer. Without them nothing is sent, and Web Push carries on.
+- **The provider token** is signed with the WebCrypto ES256 `worker/apple.rs`
+  already uses, and kept in the `Instance` for 50 minutes; APNs refuses one
+  older than an hour.
+- **Each alert** carries the title, the body and a link: an approval page's
+  path becomes `pigeon://approval/<grant key>`, anything else
+  `pigeon://home`. No grant token leaves the Worker.
+- **`PUT /v0/app/device/push`** sets the signed device's token. A token APNs
+  answers 410, or 400 `BadDeviceToken`, for is dropped.
+- **Production APNs only,** `api.push.apple.com`: TestFlight builds use it,
+  and phase one has no development builds.

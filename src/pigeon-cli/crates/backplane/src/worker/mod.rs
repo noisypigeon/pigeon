@@ -8,6 +8,7 @@
 )]
 
 mod api;
+mod apns;
 mod app;
 mod apple;
 mod approve;
@@ -1051,6 +1052,10 @@ impl DurableObject for Instance {
         {
             let body: Value = req.json().await?;
             return elicit::serve(&self.state, &self.env, &path, body).await;
+        }
+        if path == "/apns/token" {
+            let body: Value = req.json().await?;
+            return apns::serve(&self.state, body).await;
         }
         if path.starts_with("/windows/") {
             let body: Value = req.json().await?;

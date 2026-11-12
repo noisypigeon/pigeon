@@ -40,7 +40,7 @@ async fn promise(v: JsValue) -> Result<JsValue> {
 }
 
 /// `data` signed ES256 with the PKCS#8 P-256 key `der`: the raw `r‖s` JWS takes.
-async fn es256_sign(der: &[u8], data: &[u8]) -> Result<Vec<u8>> {
+pub(super) async fn es256_sign(der: &[u8], data: &[u8]) -> Result<Vec<u8>> {
     let subtle = subtle()?;
     let import_alg = js_sys::Object::new();
     Reflect::set(&import_alg, &"name".into(), &"ECDSA".into())?;

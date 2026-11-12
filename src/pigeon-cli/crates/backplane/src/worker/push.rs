@@ -27,6 +27,9 @@ pub async fn notify(env: &Env, s: &Settings, title: &str, body: &str, path: &str
     if let Err(e) = send(env, s, title, body, path).await {
         worker::console_error!("push: {e}");
     }
+    if let Err(e) = super::apns::notify(env, s, title, body, path).await {
+        worker::console_error!("apns: {e}");
+    }
 }
 
 async fn send(env: &Env, s: &Settings, title: &str, body: &str, path: &str) -> Result<()> {

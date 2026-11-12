@@ -145,11 +145,12 @@ pub async fn public(mut req: Request, env: &Env) -> Option<Result<Response>> {
             } else {
                 req.bytes().await?
             };
-            if let Err(why) = authenticate(env, &s, &req, &bytes).await? {
-                return Response::error(format!("unauthorized: {why}"), 401);
-            }
+            let device = match authenticate(env, &s, &req, &bytes).await? {
+                Ok(d) => d,
+                Err(why) => return Response::error(format!("unauthorized: {why}"), 401),
+            };
             let body: Value = serde_json::from_slice(&bytes).unwrap_or(Value::Null);
-            signed(env, &s, &req, &method, &path, &body).await
+            signed(env, &s, &req, &device, &method, &path, &body).await
         }
         .await,
     )
@@ -177,6 +178,7 @@ async fn signed(
     env: &Env,
     s: &Settings,
     req: &Request,
+    device: &Device,
     method: &Method,
     path: &str,
     body: &Value,
@@ -184,11 +186,21 @@ async fn signed(
     const APPROVALS: &str = "/v0/app/approvals/";
     match (method, path) {
         (Method::Get, "/v0/app/whoami") => {
-            let header = req.headers().get(devices::HEADER)?.unwrap_or_default();
-            let id = devices::parse_header(&header)
-                .map(|(id, _, _)| id)
-                .unwrap_or_default();
-            Response::from_json(&json!({ "device": id }))
+            Response::from_json(&json!({ "device": device.id, "name": device.name }))
+        }
+        (Method::Put, "/v0/app/device/push") => {
+            let token = body["token"].as_str().unwrap_or_default();
+            if !crate::core::app::push::token_ok(token) {
+                return Response::error("not an APNs device token", 400);
+            }
+            to_instance(
+                env,
+                s,
+                "/devices/push",
+                &json!({ "id": device.id, "token": token }),
+            )
+            .await?;
+            Response::from_json(&json!({ "status": "ok" }))
         }
         (Method::Get, "/v0/app/home") => {
             let mut home = super::insights::home(env).await?;
