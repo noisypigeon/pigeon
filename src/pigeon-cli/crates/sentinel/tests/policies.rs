@@ -379,6 +379,7 @@ fn layout_keeps_backplane_core_pure() {
     let core = "src/pigeon-cli/crates/backplane/src/core/change/lifecycle.rs";
     let approval = "src/pigeon-cli/crates/backplane/src/core/approval/grants.rs";
     let deploy = "src/pigeon-cli/crates/backplane/src/core/deploy/ship.rs";
+    let platform = "src/pigeon-cli/crates/backplane/src/core/platform/runs.rs";
     passes(&layout_with(
         core,
         "pub fn step(c: &Change) -> Change {\n    c.clone()\n}\n",
@@ -401,6 +402,7 @@ fn layout_keeps_backplane_core_pure() {
         fails(&layout_with(core, bad));
         fails(&layout_with(approval, bad));
         fails(&layout_with(deploy, bad));
+        fails(&layout_with(platform, bad));
     }
     let shell = "src/pigeon-cli/crates/backplane/src/worker/change.rs";
     passes(&layout_with(
