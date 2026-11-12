@@ -502,7 +502,21 @@ fn platform_blue(extra: &str) -> Value {
         }
         end += line.len();
     }
-    let edited = format!("{}{extra}{}", &config[..end], &config[end..]);
+    // The unit's own `public_paths`, if it declares any, give way to `extra`'s.
+    let mut unit = String::new();
+    let mut skipping = false;
+    for line in config[at..end].split_inclusive('\n') {
+        if line.starts_with("    public_paths:") {
+            skipping = true;
+            continue;
+        }
+        if skipping && line.starts_with("      ") {
+            continue;
+        }
+        skipping = false;
+        unit.push_str(line);
+    }
+    let edited = format!("{}{unit}{extra}{}", &config[..at], &config[end..]);
     let instance = TempDir::new().expect("tempdir");
     write(instance.path(), "config.yaml", &edited);
     let units = backplane::cobot::select_in(
