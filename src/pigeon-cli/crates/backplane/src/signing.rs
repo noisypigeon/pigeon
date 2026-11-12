@@ -166,6 +166,9 @@ pub enum Step {
     Write(PathBuf, Secret),
     /// Run a program; its failure stops a load.
     Run(Cmd),
+    /// Run a program whose failure is only reported: Apple's intermediate, which an image with
+    /// Xcode may already hold, so `security` refuses it as a duplicate.
+    Try(Cmd),
     /// Remove a file, if it is there.
     Remove(PathBuf),
     /// Remove a directory and what it holds, if it is there.
@@ -326,6 +329,13 @@ fn run(argv: &[&str], env: &[(&str, &str)]) -> Step {
     })
 }
 
+fn try_run(argv: &[&str], env: &[(&str, &str)]) -> Step {
+    match run(argv, env) {
+        Step::Run(c) => Step::Try(c),
+        other => other,
+    }
+}
+
 fn path(p: &Path) -> &str {
     p.to_str().unwrap_or_default()
 }
@@ -382,7 +392,7 @@ pub fn load_plan(
         ),
         Step::Remove(p12_once),
         Step::Write(l.intermediate(), Secret(intermediate)),
-        run(
+        try_run(
             &[
                 SECURITY,
                 "import",
@@ -638,9 +648,9 @@ mod tests {
         let leaf = at(
             &|s| matches!(s, Step::Run(c) if c.argv.iter().any(|a| a == "pkcs12") && c.argv[1] == "import"),
         );
-        let cert = at(&|s| matches!(s, Step::Run(c) if c.argv.iter().any(|a| a == "x509")));
+        let cert = at(&|s| matches!(s, Step::Try(c) if c.argv.iter().any(|a| a == "x509")));
         assert!(leaf < cert, "the leaf, then its intermediate");
-        let Step::Run(c) = &p[cert] else {
+        let Step::Try(c) = &p[cert] else {
             unreachable!()
         };
         assert_eq!(c.argv[1], "import");

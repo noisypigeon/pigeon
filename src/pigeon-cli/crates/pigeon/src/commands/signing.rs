@@ -221,20 +221,12 @@ fn apply(step: &Step) -> Result<(), Failure> {
             }
             write(path, &secret.0)
         }
-        Step::Run(cmd) => {
-            let status = Command::new(&cmd.argv[0])
-                .args(&cmd.argv[1..])
-                .envs(cmd.env.iter().map(|(k, v)| (k, v)))
-                .stdin(Stdio::null())
-                .stdout(Stdio::null())
-                .status()
-                .map_err(|e| broken(format!("{}: {e}", cmd.argv[0])))?;
-            if status.success() {
-                Ok(())
-            } else {
-                let what = cmd.argv.get(1).map_or("", String::as_str);
-                Err(broken(format!("{} {what}: {status}", cmd.argv[0])))
+        Step::Run(cmd) => execute(cmd),
+        Step::Try(cmd) => {
+            if let Err(Failure::Broken(why) | Failure::Refused(why)) = execute(cmd) {
+                eprintln!("signing: {why}; carrying on, as the machine may already hold it");
             }
+            Ok(())
         }
         Step::Remove(path) => match fs::remove_file(path) {
             Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(broken(e)),
@@ -244,6 +236,22 @@ fn apply(step: &Step) -> Result<(), Failure> {
             Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(broken(e)),
             _ => Ok(()),
         },
+    }
+}
+
+fn execute(cmd: &backplane::signing::Cmd) -> Result<(), Failure> {
+    let status = Command::new(&cmd.argv[0])
+        .args(&cmd.argv[1..])
+        .envs(cmd.env.iter().map(|(k, v)| (k, v)))
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .status()
+        .map_err(|e| broken(format!("{}: {e}", cmd.argv[0])))?;
+    if status.success() {
+        Ok(())
+    } else {
+        let what = cmd.argv.get(1).map_or("", String::as_str);
+        Err(broken(format!("{} {what}: {status}", cmd.argv[0])))
     }
 }
 
