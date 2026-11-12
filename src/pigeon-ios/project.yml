@@ -11,13 +11,50 @@ settings:
     MARKETING_VERSION: "0.1.0"
     CURRENT_PROJECT_VERSION: "1"
 targets:
+  # Pure Swift: the API's types, the device signature's text, charts and words; see
+  # .claude/decisions/2026-11-12-runtime-ios-app-approvals-insights.md §1.
+  PigeonCore:
+    type: framework
+    platform: iOS
+    sources: [PigeonCore]
+    settings:
+      base:
+        PRODUCT_NAME: PigeonCore
+        PRODUCT_BUNDLE_IDENTIFIER: dev.pigeon.app.core
+        ENABLE_TESTABILITY: YES
+        GENERATE_INFOPLIST_FILE: YES
+        SKIP_INSTALL: YES
+  PigeonCoreTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: [PigeonCoreTests]
+    dependencies:
+      - target: PigeonCore
+    settings:
+      base:
+        PRODUCT_NAME: PigeonCoreTests
+        PRODUCT_BUNDLE_IDENTIFIER: dev.pigeon.app.core-tests
+        GENERATE_INFOPLIST_FILE: YES
   Pigeon:
     type: application
     platform: iOS
     sources: [Pigeon]
-    scheme: {}
+    dependencies:
+      - target: PigeonCore
+    info:
+      path: Pigeon/Info.plist
+      properties:
+        CFBundleURLTypes:
+          - CFBundleURLName: dev.pigeon.app
+            CFBundleURLSchemes: [pigeon]
+    entitlements:
+      path: Pigeon/Pigeon.entitlements
+    scheme:
+      testTargets: [PigeonCoreTests]
     settings:
       base:
+        # Swift 5 mode: AuthenticationServices' delegates aren't annotated for Swift 6's isolation.
+        SWIFT_VERSION: "5.0"
         PRODUCT_NAME: Pigeon
         PRODUCT_BUNDLE_IDENTIFIER: dev.pigeon.app
         TARGETED_DEVICE_FAMILY: "1,2"

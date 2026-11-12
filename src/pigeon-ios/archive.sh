@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# `ios.archive`: a release's unsigned archive, for build number $1, zipped for the control plane;
-# see .claude/decisions/2026-11-11-release-ios-app-buildkite-testflight.md, its 2026-11-12 amendment.
+# `ios.archive`: a release's archive, ad-hoc signed so it carries its entitlements, for build number
+# $1, zipped for the control plane; see .claude/decisions/2026-11-11-release-ios-app-buildkite-testflight.md,
+# its 2026-11-12 amendment, and .claude/decisions/2026-11-12-runtime-ios-app-approvals-insights.md.
 set -euo pipefail
 build="${1:?the build number}"
 [[ "$build" =~ ^[0-9]+$ ]] || { echo "the build number must be digits" >&2; exit 2; }
@@ -18,7 +19,9 @@ xcodebuild archive \
   -configuration Release \
   -destination 'generic/platform=iOS' \
   -archivePath build/Pigeon.xcarchive \
-  CODE_SIGNING_ALLOWED=NO \
+  CODE_SIGN_IDENTITY=- \
+  CODE_SIGNING_REQUIRED=NO \
+  CODE_SIGN_STYLE=Manual \
   CURRENT_PROJECT_VERSION="$build"
 (cd build && ditto -c -k --keepParent Pigeon.xcarchive Pigeon.xcarchive.zip)
 ls -l build/Pigeon.xcarchive.zip

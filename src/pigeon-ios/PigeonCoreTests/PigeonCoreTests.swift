@@ -1,0 +1,85 @@
+// PigeonCore: the signature's text matches the control plane's, the answers decode, and the
+// charts and words come out as the mockup shows.
+
+import CryptoKit
+import Foundation
+import Testing
+
+import PigeonCore
+
+@Suite struct SigningTests {
+    @Test func theCanonicalTextIsTheControlPlanes() {
+        #expect(
+            canonical(method: "get", path: "/v0/app/home", at: 1_800_000_005, body: Data())
+                == "pigeon-device-v1\nGET\n/v0/app/home\n1800000005\n"
+                + "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")
+        #expect(
+            canonical(
+                method: "POST", path: "/v0/app/approvals/x", at: 1,
+                body: Data(#"{"hold":false}"#.utf8))
+                .hasSuffix("a34226fcab925a7c34a043907d0fb0a2732438d32fa2ad25d64d86b5b6c700ad"))
+        #expect(linkMessage(code: "abc") == "pigeon-link-v1\nabc")
+    }
+
+    @Test func base64urlHasNoPaddingAndRoundTrips() {
+        #expect(base64url(Data([0xfb, 0xff, 0x00])) == "-_8A")
+        #expect(fromBase64url("-_8A") == Data([0xfb, 0xff, 0x00]))
+        #expect(headerValue(device: "d", at: 5, signature: Data([0xfb, 0xff, 0x00])) == "id=d;t=5;s=-_8A")
+    }
+
+    @Test func aSignatureVerifiesWithTheKeysPoint() throws {
+        let key = P256.Signing.PrivateKey()
+        let text = canonical(method: "GET", path: "/v0/app/home", at: 7, body: Data())
+        let sig = try key.signature(for: Data(text.utf8))
+        #expect(key.publicKey.isValidSignature(sig, for: Data(text.utf8)))
+        #expect(sig.rawRepresentation.count == 64)
+        let id = fingerprint(x963: key.publicKey.x963Representation)
+        #expect(id.count == 32)
+        #expect(id == fingerprint(x963: key.publicKey.x963Representation))
+    }
+}
+
+@Suite struct ModelTests {
+    @Test func homeDecodesAsTheControlPlaneSendsIt() throws {
+        let json = #"""
+        {"insights":{"cost":{"metric":"cost","source":null,"range":1,"step":3600,"total":1.2,
+        "estimate":true,"legend":[{"name":"buildkite","total":1.2}],
+        "buckets":[{"at":3600,"parts":[{"name":"buildkite","value":1.2}]}]},"errors":null},
+        "approvals":[{"id":"k","number":244,"operation":"change.approve","title":"t","expires":9}],
+        "auto":{"id":1,"hours":4,"started":0,"expires":14400,"used":2,"state":"active","by":"o"}}
+        """#
+        let home = try JSONDecoder.pigeon.decode(Home.self, from: Data(json.utf8))
+        #expect(home.insights.cost?.total == 1.2)
+        #expect(home.insights.errors == nil)
+        #expect(home.approvals.first?.number == 244)
+        #expect(home.auto?.hours == 4)
+    }
+}
+
+@Suite struct ChartTests {
+    let buckets = [
+        Bucket(at: 0, parts: [Part(name: "cloudflare", value: 3), Part(name: "buildkite", value: 1)]),
+        Bucket(at: 3_600, parts: [Part(name: "cloudflare", value: 2), Part(name: "buildkite", value: 0)]),
+    ]
+
+    @Test func segmentsStackFromTheBaselineAndScaleToTheTallest() {
+        let s = segments(of: buckets[0], among: buckets, height: 100)
+        #expect(s.map(\.name) == ["cloudflare", "buildkite"])
+        #expect(s[0].height == 75 && s[0].offset == 0)
+        #expect(s[1].height == 25 && s[1].offset == 75)
+        let t = segments(of: buckets[1], among: buckets, height: 100)
+        #expect(t.count == 1, "a part of 0 draws nothing")
+        #expect(segments(of: Bucket(at: 0, parts: []), among: [], height: 10).isEmpty)
+    }
+
+    @Test func wordsAreTheMockups() {
+        #expect(formatted(1.2, metric: "cost") == "$1.20")
+        #expect(formatted(3.0, metric: "errors") == "3")
+        #expect(label(at: 14 * 3_600, step: 3_600, now: 15 * 3_600) == "14:00")
+        #expect(label(at: 0, step: 86_400, now: 86_400 + 5) == "Yesterday")
+        #expect(remaining(until: 10_000, now: 0) == "2h 46m")
+        #expect(remaining(until: 600, now: 0) == "10m")
+        #expect(sourceName("github") == "GitHub")
+        #expect(tierBadge(nil) == "CODE")
+    }
+}

@@ -4,7 +4,7 @@
 * Model: Claude
 * Author: Willow Graysen (@noisypigeon).
 * Category: runtime
-* Governs: `src/pigeon-ios/Pigeon/**`, `src/pigeon-ios/project.yml`, `src/pigeon-cli/crates/backplane/src/core/app/**`, `src/pigeon-cli/crates/backplane/src/devices.rs`, `src/pigeon-cli/crates/backplane/src/worker/devices.rs`, `src/pigeon-cli/crates/backplane/src/core/insights/**`, `src/pigeon-cli/crates/backplane/src/insights.rs`, `src/pigeon-cli/crates/backplane/src/worker/insights.rs`, `src/pigeon-cli/crates/backplane/migrations/0005_insights.sql`, `.config/insights.yaml`, `src/pigeon-cli/crates/backplane/src/worker/app.rs`
+* Governs: `src/pigeon-ios/Pigeon/**`, `src/pigeon-ios/PigeonCore/**`, `src/pigeon-ios/PigeonCoreTests/**`, `src/pigeon-ios/project.yml`, `src/pigeon-cli/crates/backplane/src/core/app/**`, `src/pigeon-cli/crates/backplane/src/devices.rs`, `src/pigeon-cli/crates/backplane/src/worker/devices.rs`, `src/pigeon-cli/crates/backplane/src/core/insights/**`, `src/pigeon-cli/crates/backplane/src/insights.rs`, `src/pigeon-cli/crates/backplane/src/worker/insights.rs`, `src/pigeon-cli/crates/backplane/migrations/0005_insights.sql`, `.config/insights.yaml`, `src/pigeon-cli/crates/backplane/src/worker/app.rs`
 
 ## Context
 
@@ -365,3 +365,19 @@ Steps 3 to 7 each add the backplane files they create to this ADR's
 - **Starting and ending** each take a passkey for `window:start` or
   `window:end`, through `POST` and `DELETE /v0/app/auto`.
   `GET /v0/app/home` shows the window running or paused.
+### 2026-11-12: Step 8: the app
+
+- **Paths.** `Governs` gains `src/pigeon-ios/PigeonCore/**` and
+  `PigeonCoreTests/**`.
+- **Swift modes.** `PigeonCore` builds in Swift 6. The app target builds in
+  Swift 5 mode, because `AuthenticationServices`' delegates aren't annotated
+  for Swift 6's isolation; it has no logic a test needs.
+- **The archive is ad-hoc signed** (`CODE_SIGN_IDENTITY=-`), not unsigned, so
+  it carries `Pigeon.entitlements`: associated domains for the passkey, and
+  `aps-environment`. The sign step's export re-signs it with the App Store
+  profile, which has both capabilities.
+- **`check.sh` tests `PigeonCore`** on the first iPhone simulator Xcode has,
+  after the unsigned simulator build.
+- **Linking** opens `/app/link` in `ASWebAuthenticationSession`, which keeps
+  the Safari session, so a passkey or Access login already there is reused.
+- **The avatar** is the app icon at 240 px, as `Avatar` in the asset catalog.

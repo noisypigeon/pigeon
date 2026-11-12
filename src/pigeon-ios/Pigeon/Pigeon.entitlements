@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- The passkey's relying party and APNs; see .claude/decisions/2026-11-12-runtime-ios-app-approvals-insights.md §3, §6. -->
+<plist version="1.0">
+<dict>
+	<key>com.apple.developer.associated-domains</key>
+	<array>
+		<string>webcredentials:platform.pigeon.dev</string>
+	</array>
+	<key>aps-environment</key>
+	<string>production</string>
+</dict>
+</plist>
