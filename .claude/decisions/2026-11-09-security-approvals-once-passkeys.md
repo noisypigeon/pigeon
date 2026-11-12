@@ -257,3 +257,30 @@ at today's code tier, three codes each, until step 3 lands.
   phone. A replayed assertion is refused, and so is one for another grant or
   origin. Five failures lock the hour, as codes do.
 - **With the script blocked,** the code field still works.
+
+## Amendments
+
+### 2026-11-12: Approving a head consents to its merge
+
+A change asked the owner to approve its head, then again to merge it. Below
+the `owner` tier the change grant already answered the second; at `owner` it
+asked again for the same head.
+
+- **An approval of a head is consent to merge it.**
+  - Approving enqueues the merge as the approver. The merge still waits for
+    its turn and its gate.
+  - At the `owner` tier, one proof covers approve and merge of the same head.
+    It is still one proof per operation for everything else §2 lists.
+  - `change.merge` on an approved head answers its place in the queue.
+- **The merge asks again only when the head moved under the approval:**
+  - a session push, or a restack that isn't disjoint with the same patch;
+  - a reconcile;
+  - a merge tier higher than the one approved;
+  - an approval older than 24 hours, the page grant's lifetime.
+- **The owner can still hold a merge,** with `hold: true` on the approval
+  page, as `review: true` holds a change grant. A held approval doesn't
+  enqueue.
+
+**Execution:** `approve` sets the merge to start after the gate, unless held;
+`by_grant` and the owner check accept the merge of a head approved by proof,
+under the conditions above; the approval page gains `hold`.

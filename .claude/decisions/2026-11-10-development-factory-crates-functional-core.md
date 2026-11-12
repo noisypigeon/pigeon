@@ -410,3 +410,40 @@ checks to the `Checker` for N hours.
 - **The window's code** adds no check of the `cobot` package: since !209 the
   worker checks are only those of packages the tree has, so a head after
   !198 gets backplane's alone, on GitHub or the `Checker`.
+
+### 2026-11-12: Code checks run once per patch; a disjoint restack carries them
+
+A change's code checks ran at each gate: on its pushes, again on each
+restacked head after approval, then the full set in the merge gate, then the
+`test map` after the merge. A patch that passed rarely fails later unless
+`main` changed what it touches. Checks now run only when the code under test
+changed.
+
+- **A disjoint restack carries the checks.**
+  - When the restack is disjoint and `git patch-id --stable` is the same, the
+    new head keeps the old head's passed code checks and gate jobs. None are
+    dispatched again.
+  - The bound job still runs on the new head. It is cheap, and it sets the
+    tiers.
+  - A clean restack, where `main` changed some of the change's files, runs
+    them all again, as does a reconcile or any session push.
+- **The merge gate runs the full set once per patch.**
+  - It skips a check that passed on this head, or that a disjoint restack
+    carried to it.
+  - So a change approved, restacked disjointly and merged runs the full set
+    once, not once per head.
+- **After the merge, the `test map` runs only when the merge changed Rust
+  inputs**: `.rs` files, `Cargo.toml`, `Cargo.lock`, `build.rs` or `.cargo/`.
+  Otherwise the newest map stands, as the 2026-11-11 amendment already lets it
+  be one merge behind.
+- **What it risks.** A disjoint change can still meet `main` through a file it
+  doesn't touch, such as a renamed function it calls. The `test map` run on
+  `main` catches that after the merge, and a failure there opens a fix task for
+  the session that merged last.
+
+**Execution:**
+
+1. `core/change`: a disjoint, same-patch restack copies the passed code checks
+   and gate jobs to the new head; `gate_missing` counts them.
+2. `MainRun`: the `test map` is dispatched only when the merge's diff has Rust
+   inputs. A failed map opens the fix task.
