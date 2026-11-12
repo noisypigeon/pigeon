@@ -22,33 +22,33 @@ fn finish(t: &mut TestMaps, conclusion: &str) {
         "name": "test map", "status": "completed", "conclusion": conclusion, "id": 9
     }] });
     for f in t.actions.polled(0, &run, &jobs, 100) {
-        t.finished(0, &f);
+        *t = t.finished(0, &f);
     }
-    t.prune();
+    *t = t.prune();
 }
 
 #[test]
 fn a_mirrored_commit_is_mapped_and_its_map_copied() {
     let mut t = TestMaps::default();
-    t.mirrored(A);
+    t = t.mirrored(A);
     assert!(t.busy());
     running(&mut t, 42);
     finish(&mut t, "success");
     assert_eq!(t.copying, Some((A.to_string(), 42)));
     assert_eq!(t.actions.dispatches.len(), 0);
-    t.copied(A, "ab");
+    t = t.copied(A, "ab");
     assert!(!t.busy());
     assert_eq!(t.latest_map.as_ref().map(|m| m.sha.as_str()), Some(A));
-    t.mirrored(A);
+    t = t.mirrored(A);
     assert!(!t.busy(), "a mapped commit isn't mapped again");
 }
 
 #[test]
 fn a_failed_map_waits_for_the_next_commit_and_keeps_the_last() {
     let mut t = TestMaps::default();
-    t.copied(B, "cd");
-    t.mirrored(A);
-    t.decided(A, true);
+    t = t.copied(B, "cd");
+    t = t.mirrored(A);
+    t = t.decided(A, true);
     running(&mut t, 42);
     finish(&mut t, "failure");
     assert!(!t.busy());
@@ -60,8 +60,8 @@ fn a_failed_map_waits_for_the_next_commit_and_keeps_the_last() {
 #[test]
 fn a_newer_commit_replaces_an_older_ones_dispatch() {
     let mut t = TestMaps::default();
-    t.mirrored(A);
-    t.mirrored(B);
+    t = t.mirrored(A);
+    t = t.mirrored(B);
     assert_eq!(t.actions.dispatches.len(), 1);
     assert_eq!(t.actions.dispatches[0].sha, B);
     let body = backplane::actions::dispatch_body(
@@ -91,16 +91,16 @@ const C: &str = "cccccccccccccccccccccccccccccccccccccccc";
 #[test]
 fn a_commit_with_no_rust_input_keeps_the_newest_map() {
     let mut t = TestMaps::default();
-    t.copied(B, "cd");
-    t.mirrored(A);
+    t = t.copied(B, "cd");
+    t = t.mirrored(A);
     assert!(t.busy(), "it waits to be compared");
     assert_eq!(t.actions.dispatches.len(), 0);
-    t.decided(A, false);
+    t = t.decided(A, false);
     assert!(!t.busy());
     assert_eq!(t.skipped.as_deref(), Some(A));
     assert_eq!(t.latest_map.as_ref().map(|m| m.sha.as_str()), Some(B));
-    t.mirrored(C);
-    t.decided(C, true);
+    t = t.mirrored(C);
+    t = t.decided(C, true);
     assert_eq!(t.actions.dispatches.len(), 1, "a Rust change is mapped");
     assert_eq!(t.actions.dispatches[0].sha, C);
 }

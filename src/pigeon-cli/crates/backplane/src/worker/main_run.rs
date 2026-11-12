@@ -164,8 +164,7 @@ impl MainRun {
                     let why = report.violations.first().cloned().unwrap_or_default();
                     m.finished(ok, &why, at);
                     if ok {
-                        let mut t = self.test_maps().await?;
-                        t.mirrored(&sha);
+                        let t = self.test_maps().await?.mirrored(&sha);
                         self.state.storage().put(TEST_MAPS, &t).await?;
                     } else {
                         worker::console_warn!("the mirror of {sha} failed: {why}");
@@ -511,7 +510,7 @@ impl MainRun {
                         .await
                         .map(|(r, jobs)| {
                             for f in t.actions.polled(i, &r, &jobs, at) {
-                                t.finished(i, &f);
+                                t = t.finished(i, &f);
                             }
                         })
                 }
@@ -521,7 +520,7 @@ impl MainRun {
                 t.actions.failed(i, &why, at);
             }
         }
-        t.prune();
+        t = t.prune();
         if let Some(sha) = t.failed_sha.take() {
             self.test_map_failed(&token, &owner, &repo, &sha).await;
         }
@@ -535,11 +534,11 @@ impl MainRun {
                         .put(testmaps::key(&sha), body)
                         .execute()
                         .await?;
-                    t.copied(&sha, &sum);
+                    t = t.copied(&sha, &sum);
                 }
                 Err(why) => {
                     worker::console_warn!("the test map of {sha}: {why}");
-                    t.copy_failed(&sha, &why);
+                    t = t.copy_failed(&sha, &why);
                 }
             }
         }
@@ -868,7 +867,7 @@ async fn decide(t: &mut TestMaps, token: &str, owner: &str, repo: &str) {
             true
         }
     };
-    t.decided(&sha, rust);
+    *t = t.decided(&sha, rust);
 }
 
 fn short(sha: &str) -> &str {
