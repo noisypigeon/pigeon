@@ -179,6 +179,14 @@ pub const LINKS: &[Row] = &[
         &[("worker/main_run.rs", "bucket(\"CI_LOGS\")")],
     ),
     row(
+        "worker_docs",
+        "Worker",
+        "R2",
+        "docs site, behind a passkey",
+        Kind::Store,
+        &[("worker/docs.rs", "env.bucket(BINDING)")],
+    ),
+    row(
         "checker_art",
         "Checker",
         "Artifacts",
