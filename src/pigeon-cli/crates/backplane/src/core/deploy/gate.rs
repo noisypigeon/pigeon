@@ -13,10 +13,18 @@ pub enum Gate {
     Full(String),
 }
 
+impl Gate {
+    /// Why a gate no bound job reported runs in full.
+    #[must_use]
+    pub fn default_reason() -> String {
+        "no gate was reported".into()
+    }
+}
+
 impl Default for Gate {
     /// Full, as every gate was before the amendment.
     fn default() -> Self {
-        Self::Full("no gate was reported".into())
+        Self::Full(Self::default_reason())
     }
 }
 

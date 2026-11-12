@@ -46,10 +46,12 @@ impl Change {
                 checks,
                 full,
                 tiers,
+                gate,
             } => {
                 if self.on_head(&sha) {
                     self.tiers = tiers;
                     self.full = full;
+                    self.gate = gate;
                 }
                 self.bounded(&sha, violations, checks)
             }
@@ -119,6 +121,8 @@ impl Change {
             self.tiers = None;
             self.behind = None;
             self.full.clear();
+            self.gate = None;
+            self.gate_full = None;
         }
         self.pushed(sha)
     }

@@ -584,6 +584,7 @@ pub fn event_of(job: &str, sha: &str, report: &Report) -> Option<Event> {
             checks: report.checks.clone(),
             full: report.full.clone(),
             tiers: report.tiers.clone(),
+            gate: report.gate.clone(),
         });
     }
     Some(Event::Finished {
@@ -1097,6 +1098,7 @@ pub fn with_mirror(event: Event) -> Event {
             mut checks,
             full,
             tiers,
+            gate,
         } => {
             if violations.is_empty() && !checks.iter().any(|c| c.name == MIRROR) {
                 checks.push(Check {
@@ -1110,6 +1112,7 @@ pub fn with_mirror(event: Event) -> Event {
                 checks,
                 full,
                 tiers,
+                gate,
             }
         }
         other => other,

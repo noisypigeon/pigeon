@@ -54,6 +54,7 @@ fn checking(sha: &str) -> Change {
             checks: vec![check("fmt"), check("test")],
             full: vec![],
             tiers: None,
+            gate: None,
         })
         .expect("bounded");
     assert_eq!(
@@ -168,6 +169,7 @@ fn results_for_an_old_head_are_ignored() {
         checks: vec![],
         full: vec![],
         tiers: None,
+        gate: None,
     })
     .expect("ignored");
     assert_eq!(c.state, State::Pushed);
@@ -227,6 +229,7 @@ fn a_refused_head_runs_no_checks_and_a_failure_stops_the_rest() {
             checks: vec![check("fmt")],
             full: vec![],
             tiers: None,
+            gate: None,
         })
         .expect("bounded");
     assert_eq!(effects, []);
@@ -311,6 +314,7 @@ fn a_change_with_no_checks_is_checked_once_bounded() {
         checks: vec![],
         full: vec![],
         tiers: None,
+        gate: None,
     })
     .expect("bounded");
     assert_eq!(c.state, State::Checked);
@@ -456,6 +460,7 @@ fn mirrored(sha: &str, checks: &[&str]) -> (Change, Vec<Effect>) {
             checks: checks.iter().map(|n| check(n)).collect(),
             full: vec![],
             tiers: None,
+            gate: None,
         }))
         .expect("bounded");
     (c, effects)
@@ -522,6 +527,7 @@ fn a_refused_head_never_queues_the_mirror_job() {
             checks: vec![],
             full: vec![],
             tiers: None,
+            gate: None,
         }))
         .expect("refused");
     assert_eq!(effects, []);

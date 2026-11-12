@@ -4,6 +4,8 @@ use super::*;
 
 const A: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const M: &str = "dddddddddddddddddddddddddddddddddddddddd";
+const B: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+const C: &str = "cccccccccccccccccccccccccccccccccccccccc";
 
 fn run(c: Change, events: Vec<Event>) -> Change {
     events
@@ -36,6 +38,7 @@ fn bounded(full: Vec<Check>) -> Event {
         checks: Vec::new(),
         full,
         tiers: None,
+        gate: None,
     }
 }
 
@@ -145,6 +148,7 @@ fn table() -> Vec<Row> {
                 checks: Vec::new(),
                 full: Vec::new(),
                 tiers: None,
+                gate: None,
             },
             Some((State::Refused, Vec::new())),
         ),
@@ -160,6 +164,7 @@ fn table() -> Vec<Row> {
                 }],
                 full: Vec::new(),
                 tiers: None,
+                gate: None,
             },
             Some((State::Bounded, vec![start("fmt")])),
         ),
@@ -297,7 +302,104 @@ fn a_refusal_leaves_the_change_as_it_was() {
             argv: Vec::new(),
         }],
         tiers: None,
+        gate: None,
     };
     assert!(step(&before, event).is_err(), "no bound job");
     assert_eq!((before.full.len(), before.tiers), (0, tiers_before));
+}
+
+fn full_set() -> Vec<Check> {
+    let check = |name: &str, argv: &[&str]| Check {
+        name: name.into(),
+        argv: argv.iter().map(|a| (*a).to_string()).collect(),
+    };
+    vec![
+        check("clippy", &["cargo", "clippy", "--workspace"]),
+        check("test", &["cargo", "test", "--workspace", "--locked"]),
+    ]
+}
+
+/// An approved head whose bound job reported `gate`, with its merge asked for.
+fn gated(gate: Option<crate::core::deploy::gate::Gate>) -> (Change, Vec<Effect>) {
+    let bounded = Event::Bounded {
+        sha: A.into(),
+        violations: Vec::new(),
+        checks: Vec::new(),
+        full: full_set(),
+        tiers: None,
+        gate,
+    };
+    let c = run(
+        pushed(),
+        vec![
+            bounded,
+            Event::Approve {
+                by: "owner".into(),
+                sha: A.into(),
+                at: 2,
+            },
+        ],
+    );
+    step(&c, merge()).expect("merges")
+}
+
+#[test]
+fn a_scoped_gate_leaves_out_the_whole_test_suite_and_a_full_one_keeps_it() {
+    use crate::core::deploy::gate::Gate;
+    let start = |names: &[&str]| -> Vec<Effect> {
+        names.iter().map(|n| Effect::Start((*n).into())).collect()
+    };
+    let (c, effects) = gated(Some(Gate::Scoped));
+    assert_eq!(effects, start(&["gate: clippy"]), "scoped");
+    assert_eq!(c.gate_why(), None);
+    let (c, effects) = gated(Some(Gate::Full("3 packages".into())));
+    assert_eq!(effects, start(&["gate: clippy", "gate: test"]), "full");
+    assert_eq!(c.gate_why().as_deref(), Some("3 packages"));
+    let (_, effects) = gated(None);
+    assert_eq!(
+        effects,
+        start(&["gate: clippy", "gate: test"]),
+        "a head no gate was reported for gates in full"
+    );
+}
+
+#[test]
+fn a_clean_restack_makes_the_gate_full_and_a_session_push_clears_it() {
+    use crate::core::deploy::gate::Gate;
+    let mut c = approved();
+    c.gate = Some(Gate::Scoped);
+    let c = restacking(c);
+    let clean = Event::Restacked {
+        sha: A.into(),
+        restack: Restacked {
+            relation: Relation::Clean,
+            to: Some(B.into()),
+            same_patch: false,
+            conflicts: Vec::new(),
+            onto: M.into(),
+            context: Vec::new(),
+            messages: String::new(),
+        },
+    };
+    let (c, _) = step(&c, clean).expect("the restack applies");
+    assert_eq!(c.head.as_deref(), Some(B));
+    assert!(
+        c.gate_why()
+            .is_some_and(|w| w.contains("main changed its files"))
+    );
+    let rebound = Event::Bounded {
+        sha: B.into(),
+        violations: Vec::new(),
+        checks: Vec::new(),
+        full: Vec::new(),
+        tiers: None,
+        gate: Some(Gate::Scoped),
+    };
+    let (c, _) = step(&c, rebound).expect("bounded");
+    assert!(
+        c.gate_why().is_some(),
+        "a scoped report doesn't undo a clean restack"
+    );
+    let (c, _) = step(&c, Event::Pushed { sha: C.into() }).expect("a session push");
+    assert_eq!(c.gate_full, None);
 }

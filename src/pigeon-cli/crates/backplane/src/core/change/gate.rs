@@ -3,6 +3,7 @@
 
 use super::lifecycle::Step;
 use super::types::{Change, Check, Effect, GATE, Job, JobStatus, MERGE, State, conflicted, refuse};
+use crate::core::deploy::gate::Gate;
 
 impl Change {
     /// The head's full checks not yet passed on it, under their own name or as a gate job.
@@ -12,11 +13,28 @@ impl Change {
                 .iter()
                 .any(|j| j.name == name && j.status == JobStatus::Passed)
         };
+        let scoped = self.gate_full.is_none() && self.gate == Some(Gate::Scoped);
         self.full
             .iter()
+            .filter(|c| !(scoped && whole_suite(c)))
             .filter(|c| !passed(&c.name) && !passed(&format!("{GATE}{}", c.name)))
             .cloned()
             .collect()
+    }
+
+    /// Why the head's merge gate runs the whole test suite; none when it is scoped. See the
+    /// 2026-11-12 amendment on the merge gate to
+    /// `.claude/decisions/2026-11-10-development-factory-crates-functional-core.md`.
+    #[must_use]
+    pub fn gate_why(&self) -> Option<String> {
+        if let Some(why) = &self.gate_full {
+            return Some(why.clone());
+        }
+        match &self.gate {
+            Some(Gate::Scoped) => None,
+            Some(Gate::Full(why)) => Some(why.clone()),
+            None => Some(Gate::default_reason()),
+        }
     }
 
     /// After a gate job settles: a failure fails the change, naming the checks, and drops its
@@ -104,4 +122,9 @@ impl Change {
             Err(_) => (self, Vec::new()),
         }
     }
+}
+
+/// Whether `c` runs the whole workspace's tests, which a scoped gate leaves out.
+fn whole_suite(c: &Check) -> bool {
+    c.argv.get(1).is_some_and(|v| v == "test") && c.argv.iter().any(|a| a == "--workspace")
 }

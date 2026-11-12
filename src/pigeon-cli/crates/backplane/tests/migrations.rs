@@ -308,6 +308,7 @@ fn a_change_closed_after_its_approval_mirrors_without_an_approver() {
             checks: vec![],
             full: vec![],
             tiers: None,
+            gate: None,
         },
         Event::Approve {
             by: "owner".into(),

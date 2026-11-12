@@ -105,6 +105,10 @@ impl Change {
                 } else {
                     Vec::new()
                 };
+                if !carries {
+                    self.gate = None;
+                    self.gate_full = Some(format!("main changed its files at {}", r.onto));
+                }
                 let (mut c, effects) = self.pushed(to)?;
                 c.kept = kept;
                 Ok((c, effects))

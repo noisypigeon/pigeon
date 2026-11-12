@@ -302,6 +302,13 @@ pub struct Change {
     /// Rust input.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub full: Vec<Check>,
+    /// How much of `full` the merge gate runs, as the bound job reported it; none gates in full.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gate: Option<crate::core::deploy::gate::Gate>,
+    /// Why the merge gate runs in full whatever the bound job reports, as after a clean restack;
+    /// cleared by the session's next push.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gate_full: Option<String>,
     /// Its head conflicts with `main`; cleared by its next push.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub conflict: Option<Conflicted>,
@@ -357,6 +364,10 @@ pub enum Event {
         /// The head's approval tiers, shown only for now.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         tiers: Option<crate::approvals::Tiers>,
+        /// How much of `full` the merge gate runs; none from a bound job before the 2026-11-12
+        /// amendment on the merge gate, which gates in full.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        gate: Option<crate::core::deploy::gate::Gate>,
     },
     /// A check finished.
     Finished {
@@ -522,6 +533,8 @@ impl Change {
             carried: None,
             merge_after: None,
             full: Vec::new(),
+            gate: None,
+            gate_full: None,
             conflict: None,
             parent: None,
             held: None,

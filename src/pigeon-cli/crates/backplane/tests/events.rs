@@ -121,6 +121,7 @@ mod of_change {
                 argv: vec![],
             }],
             tiers: None,
+            gate: None,
         })
         .expect("bounded");
         c.apply(Event::Started {
