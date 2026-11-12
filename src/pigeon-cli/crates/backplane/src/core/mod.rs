@@ -4,4 +4,6 @@
 pub mod approval;
 pub mod change;
 pub mod deploy;
+#[cfg(feature = "engines")]
+pub mod infra;
 pub mod platform;
