@@ -7,6 +7,7 @@ pub mod change;
 pub mod deploy;
 #[cfg(feature = "engines")]
 pub mod infra;
+pub mod insights;
 pub mod platform;
 #[cfg(feature = "engines")]
 pub mod release;

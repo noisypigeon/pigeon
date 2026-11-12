@@ -156,6 +156,27 @@ pub async fn public(mut req: Request, env: &Env) -> Option<Result<Response>> {
                     Ok(d) => Response::from_json(&json!({ "device": d.id, "name": d.name })),
                     Err(why) => Response::error(format!("unauthorized: {why}"), 401),
                 },
+                (Method::Get, "/v0/app/home") => match authenticate(env, &s, &req, b"").await? {
+                    Ok(_) => Response::from_json(&super::insights::home(env).await?),
+                    Err(why) => Response::error(format!("unauthorized: {why}"), 401),
+                },
+                (Method::Get, "/v0/app/insights") => {
+                    if let Err(why) = authenticate(env, &s, &req, b"").await? {
+                        return Response::error(format!("unauthorized: {why}"), 401);
+                    }
+                    let url = req.url()?;
+                    let q = |k: &str| {
+                        url.query_pairs()
+                            .find(|(n, _)| n == k)
+                            .map(|(_, v)| v.to_string())
+                            .unwrap_or_default()
+                    };
+                    let range = q("range").parse().unwrap_or(1);
+                    match super::insights::detail(env, &q("metric"), &q("source"), range).await? {
+                        Ok(v) => Response::from_json(&v),
+                        Err(why) => Response::error(why, 400),
+                    }
+                }
                 _ => Response::error("not found", 404),
             }
         }

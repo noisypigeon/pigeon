@@ -4,7 +4,7 @@
 * Model: Claude
 * Author: Willow Graysen (@noisypigeon).
 * Category: runtime
-* Governs: `src/pigeon-ios/Pigeon/**`, `src/pigeon-ios/project.yml`, `src/pigeon-cli/crates/backplane/src/core/app/**`, `src/pigeon-cli/crates/backplane/src/devices.rs`, `src/pigeon-cli/crates/backplane/src/worker/devices.rs`
+* Governs: `src/pigeon-ios/Pigeon/**`, `src/pigeon-ios/project.yml`, `src/pigeon-cli/crates/backplane/src/core/app/**`, `src/pigeon-cli/crates/backplane/src/devices.rs`, `src/pigeon-cli/crates/backplane/src/worker/devices.rs`, `src/pigeon-cli/crates/backplane/src/core/insights/**`, `src/pigeon-cli/crates/backplane/src/insights.rs`, `src/pigeon-cli/crates/backplane/src/worker/insights.rs`, `src/pigeon-cli/crates/backplane/migrations/0005_insights.sql`, `.config/insights.yaml`
 
 ## Context
 
@@ -299,3 +299,29 @@ Steps 3 to 7 each add the backplane files they create to this ADR's
   the rest.
 - **The passkey challenge accepts three purposes besides registering:**
   `grant:`, the docs view, and `device:` for the link page.
+
+### 2026-11-12: Step 4 lands: insights from GitHub and Buildkite, Cloudflare later
+
+- **Paths.** `Governs` gains `core/insights/**`, `insights.rs`,
+  `worker/insights.rs`, `migrations/0005_insights.sql` and
+  `.config/insights.yaml`.
+- **Collection runs on the hourly cron,** beside the digest, not on
+  `MainRun`'s alarm, which only runs while a deploy or release is busy. It
+  fills each complete hour since the newest filled, at most 48, and drops rows
+  older than 90 days. Hourly rows are kept the whole 90 days; there is no
+  separate daily table.
+- **GitHub's errors come from D1's `jobs`,** the table that exists, not the
+  observability ADR's `runs`. Failed and cancelled code checks count; the
+  control plane's own jobs (`bound`, `mirror`, `restack`, `merge`) don't.
+  Dispatch errors aren't recorded anywhere yet, so that kind waits.
+- **Buildkite's errors** come from `ios_releases` that failed on Buildkite,
+  sorted by their error into failed sign steps, cancelled builds and lost
+  agents. Its cost is each sign build's jobs, rounded up to the minute, at
+  `buildkite_macos_minute`: $0.12, the M4 medium agent.
+- **Cloudflare waits for `OBSERVABILITY_TOKEN`.** Its GraphQL fields are
+  checked against the live API when the token is added, in their own change.
+  Until then Cloudflare's rows are gaps, and the app says so.
+- **`.config/insights.yaml`** is flat, `github_actions_minute` and
+  `buildkite_macos_minute`, so a policy can check each is a number or `null`
+  and that nothing else is in it. That policy is a sentinel change, so it
+  follows in its own change, as the factory ADR's §2 requires.

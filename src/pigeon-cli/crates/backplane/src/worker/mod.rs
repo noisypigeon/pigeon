@@ -20,6 +20,7 @@ mod elicit;
 mod events;
 mod gitdoor;
 mod github;
+mod insights;
 mod main_run;
 mod mandates;
 mod merges;
@@ -937,6 +938,9 @@ async fn scheduled(_event: worker::ScheduledEvent, env: Env, _ctx: worker::Sched
     }
     if let Err(e) = push::hourly(&env).await {
         worker::console_error!("digest: {e}");
+    }
+    if let Err(e) = insights::collect(&env).await {
+        worker::console_error!("insights: {e}");
     }
 }
 

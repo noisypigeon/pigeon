@@ -1,0 +1,5 @@
+# Unit prices for the app's cost estimates, in US dollars a minute; public values, no secret.
+# GitHub Actions is free while the repository is public; Buildkite's is the M4 medium agent.
+# See .claude/decisions/2026-11-12-runtime-ios-app-approvals-insights.md §7.
+github_actions_minute: 0
+buildkite_macos_minute: 0.12
