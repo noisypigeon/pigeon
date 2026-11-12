@@ -21,6 +21,8 @@ guarded:
   - src/pigeon-cli/crates/backplane/src/passkeys.rs
   - src/pigeon-cli/crates/backplane/src/worker/passkeys.rs
   - src/pigeon-cli/crates/backplane/src/worker/passkey.js
+  # The approval domain's core; see .claude/decisions/2026-11-10-development-factory-crates-functional-core.md §3.
+  - src/pigeon-cli/crates/backplane/src/core/approval/**
 # The code without a mandate that may deploy; every Worker's inputs count too.
 deploying:
   - infra/**
