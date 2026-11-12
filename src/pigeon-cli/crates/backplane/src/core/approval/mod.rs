@@ -6,6 +6,7 @@ pub mod mandates;
 pub mod passkeys;
 pub mod tiers;
 pub mod totp;
+pub mod windows;
 
 #[cfg(test)]
 mod tests;

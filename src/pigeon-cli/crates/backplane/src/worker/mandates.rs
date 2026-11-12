@@ -10,6 +10,7 @@ use super::{approve as page, elicit};
 use crate::access::Identity;
 use crate::approve::{self, Waiting};
 use crate::changes::Change;
+use crate::core::approval::windows::Windows;
 use crate::mandates::{Decision, Mandate, Mandates};
 
 /// The storage key of every mandate.
@@ -175,7 +176,93 @@ pub async fn approves(
 /// When a binding fails.
 pub async fn pause_all(env: &Env, s: &Settings, why: &str) -> Result<()> {
     to_instance(env, s, "/mandates/pause", &json!({ "why": why })).await?;
+    to_instance(env, s, "/windows/pause", &json!({ "why": why })).await?;
     Ok(())
+}
+
+/// Where the `Instance` keeps the Auto windows.
+const WINDOWS: &str = "windows";
+
+/// The Auto window that allows `operation` on `change`, if one is active and does; see
+/// `.claude/decisions/2026-11-12-runtime-ios-app-approvals-insights.md` §5.
+///
+/// # Errors
+///
+/// When a binding fails.
+pub async fn window_approves(
+    env: &Env,
+    s: &Settings,
+    change: &Change,
+    operation: &str,
+) -> Result<Option<u32>> {
+    let (status, v) = to_instance(
+        env,
+        s,
+        "/windows/decide",
+        &json!({ "change": change, "operation": operation }),
+    )
+    .await?;
+    let id = v["id"].as_u64().and_then(|i| u32::try_from(i).ok());
+    match (
+        status,
+        serde_json::from_value::<Decision>(v["decision"].clone()),
+    ) {
+        (200, Ok(Decision::Allow)) => Ok(id),
+        _ => Ok(None),
+    }
+}
+
+/// `/windows/*` on the `Instance`: `current`, `start`, `end`, `pause` and `decide`.
+///
+/// # Errors
+///
+/// When storage fails.
+pub async fn serve_windows(state: &State, path: &str, body: Value) -> Result<Response> {
+    let storage = state.storage();
+    let all: Windows = storage.get(WINDOWS).await?.unwrap_or_default();
+    let t = now();
+    let all = all.settle(t);
+    let s = |k: &str| body[k].as_str().unwrap_or_default().to_string();
+    let (all, answer): (Windows, std::result::Result<Value, String>) = match path {
+        "/windows/current" => {
+            let current = all.current().cloned();
+            (all, Ok(json!({ "window": current })))
+        }
+        "/windows/start" => {
+            let hours = body["hours"]
+                .as_u64()
+                .and_then(|h| u32::try_from(h).ok())
+                .unwrap_or_default();
+            match all.start(hours, &s("by"), t) {
+                Ok((next, w)) => (next, Ok(json!({ "window": w }))),
+                Err(why) => (all, Err(why)),
+            }
+        }
+        "/windows/end" => match all.end(&s("why")) {
+            Ok((next, w)) => (next, Ok(json!({ "window": w }))),
+            Err(why) => (all, Err(why)),
+        },
+        "/windows/pause" => {
+            let (next, paused) = all.pause_all(&s("why"));
+            (next, Ok(json!({ "paused": paused })))
+        }
+        "/windows/decide" => {
+            let change: Change = match serde_json::from_value(body["change"].clone()) {
+                Ok(c) => c,
+                Err(e) => return Response::error(format!("unreadable change: {e}"), 400),
+            };
+            match all.decide(&change, &s("operation"), t) {
+                (next, Some((id, d))) => (next, Ok(json!({ "id": id, "decision": d }))),
+                (next, None) => (next, Err("no Auto window is active".into())),
+            }
+        }
+        _ => return Response::error("not found", 404),
+    };
+    storage.put(WINDOWS, &all).await?;
+    match answer {
+        Ok(v) => Response::from_json(&v),
+        Err(why) => Response::error(why, 409),
+    }
 }
 
 /// The `Instance` Durable Object's side: `/mandates/propose`, `list`, `offer`, `peek`, `grant`,

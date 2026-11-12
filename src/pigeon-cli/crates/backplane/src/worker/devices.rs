@@ -136,83 +136,92 @@ pub async fn public(mut req: Request, env: &Env) -> Option<Result<Response>> {
     Some(
         async move {
             let s = Settings::from(env)?;
-            match (req.method(), path.as_str()) {
-                (Method::Post, "/v0/app/session") => {
-                    let body: Value = req.json().await.unwrap_or(Value::Null);
-                    let f = |k: &str| body[k].as_str().unwrap_or_default().to_string();
-                    let v = to_instance(
-                        env,
-                        &s,
-                        "/devices/redeem",
-                        &json!({ "code": f("code"), "key": f("key"), "signature": f("signature") }),
-                    )
-                    .await?;
-                    match answered(&v) {
-                        Ok(d) => Response::from_json(&json!({ "device": d.id, "name": d.name })),
-                        Err(why) => Response::error(format!("refused: {why}"), 403),
-                    }
-                }
-                (Method::Get, "/v0/app/whoami") => match authenticate(env, &s, &req, b"").await? {
-                    Ok(d) => Response::from_json(&json!({ "device": d.id, "name": d.name })),
-                    Err(why) => Response::error(format!("unauthorized: {why}"), 401),
-                },
-                (Method::Get, "/v0/app/home") => match authenticate(env, &s, &req, b"").await? {
-                    Ok(_) => {
-                        let mut home = super::insights::home(env).await?;
-                        home["approvals"] = super::app::list(env, &s).await?;
-                        Response::from_json(&home)
-                    }
-                    Err(why) => Response::error(format!("unauthorized: {why}"), 401),
-                },
-                (Method::Get, "/v0/app/approvals") => {
-                    match authenticate(env, &s, &req, b"").await? {
-                        Ok(_) => Response::from_json(&super::app::list(env, &s).await?),
-                        Err(why) => Response::error(format!("unauthorized: {why}"), 401),
-                    }
-                }
-                (Method::Get, p) if p.starts_with("/v0/app/approvals/") => {
-                    if let Err(why) = authenticate(env, &s, &req, b"").await? {
-                        return Response::error(format!("unauthorized: {why}"), 401);
-                    }
-                    super::app::detail(env, &s, p.trim_start_matches("/v0/app/approvals/")).await
-                }
-                (Method::Post, p)
-                    if p == "/v0/app/challenge" || p.starts_with("/v0/app/approvals/") =>
-                {
-                    let bytes = req.bytes().await?;
-                    if let Err(why) = authenticate(env, &s, &req, &bytes).await? {
-                        return Response::error(format!("unauthorized: {why}"), 401);
-                    }
-                    let body: Value = serde_json::from_slice(&bytes).unwrap_or(Value::Null);
-                    if p == "/v0/app/challenge" {
-                        super::app::challenge(env, &s, &body).await
-                    } else {
-                        let id = p.trim_start_matches("/v0/app/approvals/");
-                        super::app::approve(env, &s, id, &body).await
-                    }
-                }
-                (Method::Get, "/v0/app/insights") => {
-                    if let Err(why) = authenticate(env, &s, &req, b"").await? {
-                        return Response::error(format!("unauthorized: {why}"), 401);
-                    }
-                    let url = req.url()?;
-                    let q = |k: &str| {
-                        url.query_pairs()
-                            .find(|(n, _)| n == k)
-                            .map(|(_, v)| v.to_string())
-                            .unwrap_or_default()
-                    };
-                    let range = q("range").parse().unwrap_or(1);
-                    match super::insights::detail(env, &q("metric"), &q("source"), range).await? {
-                        Ok(v) => Response::from_json(&v),
-                        Err(why) => Response::error(why, 400),
-                    }
-                }
-                _ => Response::error("not found", 404),
+            let method = req.method();
+            if (method.clone(), path.as_str()) == (Method::Post, "/v0/app/session") {
+                return session(env, &s, &mut req).await;
             }
+            let bytes = if method == Method::Get {
+                Vec::new()
+            } else {
+                req.bytes().await?
+            };
+            if let Err(why) = authenticate(env, &s, &req, &bytes).await? {
+                return Response::error(format!("unauthorized: {why}"), 401);
+            }
+            let body: Value = serde_json::from_slice(&bytes).unwrap_or(Value::Null);
+            signed(env, &s, &req, &method, &path, &body).await
         }
         .await,
     )
+}
+
+/// `POST /v0/app/session`: redeems a link code for the device that signed it.
+async fn session(env: &Env, s: &Settings, req: &mut Request) -> Result<Response> {
+    let body: Value = req.json().await.unwrap_or(Value::Null);
+    let f = |k: &str| body[k].as_str().unwrap_or_default().to_string();
+    let v = to_instance(
+        env,
+        s,
+        "/devices/redeem",
+        &json!({ "code": f("code"), "key": f("key"), "signature": f("signature") }),
+    )
+    .await?;
+    match answered(&v) {
+        Ok(d) => Response::from_json(&json!({ "device": d.id, "name": d.name })),
+        Err(why) => Response::error(format!("refused: {why}"), 403),
+    }
+}
+
+/// The routes a device's signature has let through.
+async fn signed(
+    env: &Env,
+    s: &Settings,
+    req: &Request,
+    method: &Method,
+    path: &str,
+    body: &Value,
+) -> Result<Response> {
+    const APPROVALS: &str = "/v0/app/approvals/";
+    match (method, path) {
+        (Method::Get, "/v0/app/whoami") => {
+            let header = req.headers().get(devices::HEADER)?.unwrap_or_default();
+            let id = devices::parse_header(&header)
+                .map(|(id, _, _)| id)
+                .unwrap_or_default();
+            Response::from_json(&json!({ "device": id }))
+        }
+        (Method::Get, "/v0/app/home") => {
+            let mut home = super::insights::home(env).await?;
+            home["approvals"] = super::app::list(env, s).await?;
+            home["auto"] = super::app::auto_state(env, s).await?;
+            Response::from_json(&home)
+        }
+        (Method::Get, "/v0/app/approvals") => Response::from_json(&super::app::list(env, s).await?),
+        (Method::Get, p) if p.starts_with(APPROVALS) => {
+            super::app::detail(env, s, p.trim_start_matches(APPROVALS)).await
+        }
+        (Method::Post, "/v0/app/challenge") => super::app::challenge(env, s, body).await,
+        (Method::Post, p) if p.starts_with(APPROVALS) => {
+            super::app::approve(env, s, p.trim_start_matches(APPROVALS), body).await
+        }
+        (Method::Post, "/v0/app/auto") => super::app::auto_start(env, s, body).await,
+        (Method::Delete, "/v0/app/auto") => super::app::auto_end(env, s, body).await,
+        (Method::Get, "/v0/app/insights") => {
+            let url = req.url()?;
+            let q = |k: &str| {
+                url.query_pairs()
+                    .find(|(n, _)| n == k)
+                    .map(|(_, v)| v.to_string())
+                    .unwrap_or_default()
+            };
+            let range = q("range").parse().unwrap_or(1);
+            match super::insights::detail(env, &q("metric"), &q("source"), range).await? {
+                Ok(v) => Response::from_json(&v),
+                Err(why) => Response::error(why, 400),
+            }
+        }
+        _ => Response::error("not found", 404),
+    }
 }
 
 fn association(env: &Env) -> Result<Response> {

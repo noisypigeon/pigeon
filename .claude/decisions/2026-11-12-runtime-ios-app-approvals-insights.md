@@ -349,3 +349,19 @@ Steps 3 to 7 each add the backplane files they create to this ADR's
   holds `github_actions_minute` and `buildkite_macos_minute`, in that order,
   each a number or `null`, and nothing else after its comments.
 - **The sentinel counts 16 policies,** in `crates/sentinel/tests/policies.rs`.
+
+### 2026-11-12: Step 6 lands: Auto windows
+
+- **A window is its own record,** `Windows` in `core/approval/windows.rs`,
+  beside mandates rather than a new kind of `Mandate`: it has no ADR, scope or
+  plan to cite, and only one runs at a time.
+- **What it lets through:** authorize, approve and merge whose tier, by
+  `tier_of`, is below `owner`. The owner tier, break-glass and anything else
+  still ask. Each is run as `window:<id>`, after a change's mandate and before
+  policy.
+- **Its limits:** 1, 4, 8 or 24 hours; 20 merges, after which it ends; a
+  failed deploy pauses it beside mandates. A paused window approves nothing
+  until the owner ends it or starts a new one.
+- **Starting and ending** each take a passkey for `window:start` or
+  `window:end`, through `POST` and `DELETE /v0/app/auto`.
+  `GET /v0/app/home` shows the window running or paused.

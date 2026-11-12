@@ -91,3 +91,87 @@ fn a_registration_uses_its_challenge_up_even_when_refused() {
         "a refusal before the challenge keeps the keyring"
     );
 }
+
+mod windows {
+    use super::super::mandates::{Decision, State};
+    use super::super::tiers::{Tier, Tiered, Tiers};
+    use super::super::windows::{BUDGET, Windows};
+    use crate::core::change::Change;
+
+    const NOW: u64 = 1_800_000_000;
+
+    fn change(merge: Tier) -> Change {
+        let mut c = Change::propose(5, "x", "feat: x", "p", vec!["a/**".into()], "agent");
+        let t = |tier| Tiered {
+            tier,
+            rule: "rule".into(),
+        };
+        c.tiers = Some(Tiers {
+            authorize: t(Tier::Code),
+            merge: t(merge),
+            close: t(Tier::Confirm),
+        });
+        c
+    }
+
+    #[test]
+    fn a_window_starts_for_a_set_length_and_one_at_a_time() {
+        let (w, first) = Windows::default().start(4, "owner", NOW).expect("started");
+        assert_eq!(first.expires, NOW + 4 * 3_600);
+        assert!(w.start(4, "owner", NOW).is_err(), "one at a time");
+        assert!(
+            Windows::default().start(3, "owner", NOW).is_err(),
+            "1, 4, 8 or 24"
+        );
+        let (w, ended) = w.end("owner ended it").expect("ended");
+        assert_eq!(ended.state, State::Ended);
+        assert!(w.current().is_none());
+        assert!(w.end("again").is_err());
+    }
+
+    #[test]
+    fn auto_lets_the_code_tier_through_and_asks_for_the_owner_tier() {
+        let (w, _) = Windows::default().start(1, "owner", NOW).expect("started");
+        for (tier, allowed) in [
+            (Tier::Confirm, true),
+            (Tier::Code, true),
+            (Tier::Owner, false),
+        ] {
+            let (_, d) = w.decide(&change(tier), "change.merge", NOW + 10);
+            assert_eq!(
+                d.map(|(_, d)| d == Decision::Allow),
+                Some(allowed),
+                "{tier:?}"
+            );
+        }
+        let (_, d) = w.decide(&change(Tier::Code), crate::control::BREAK_GLASS, NOW);
+        assert!(matches!(d, Some((_, Decision::Ask(_)))), "break-glass asks");
+        let (_, d) = w.decide(&change(Tier::Code), "change.merge", NOW + 3_600);
+        assert_eq!(d, None, "the window has run its time");
+        let (_, none) = Windows::default().decide(&change(Tier::Code), "change.merge", NOW);
+        assert_eq!(none, None, "no window, no decision");
+    }
+
+    #[test]
+    fn merges_count_against_the_budget_and_a_pause_stops_it() {
+        let (mut w, _) = Windows::default().start(24, "owner", NOW).expect("started");
+        for _ in 0..BUDGET {
+            let (next, d) = w.decide(&change(Tier::Code), "change.merge", NOW);
+            assert!(matches!(d, Some((_, Decision::Allow))));
+            w = next;
+        }
+        assert_eq!(w.list[0].state, State::Ended, "the budget is used");
+        assert_eq!(u32::try_from(w.list[0].merged.len()), Ok(BUDGET));
+
+        let (w, _) = Windows::default().start(1, "owner", NOW).expect("started");
+        let (w, paused) = w.pause_all("the deploy of abc failed");
+        assert_eq!(paused, Some(1));
+        let (_, d) = w.decide(&change(Tier::Code), "change.merge", NOW);
+        assert_eq!(d, None, "a paused window approves nothing");
+        assert!(w.current().is_some(), "it waits for the owner to end it");
+        let (w, _) = w
+            .start(1, "owner", NOW)
+            .expect("a new window ends the paused one");
+        assert_eq!(w.list[0].state, State::Ended);
+    }
+}

@@ -10,6 +10,7 @@ use super::{elicit, run, to_change};
 use crate::access::Identity;
 use crate::changes::Change;
 use crate::core::app::approvals;
+use crate::core::approval::windows;
 use crate::grants::Grant;
 use crate::passkeys;
 use crate::wire;
@@ -66,12 +67,18 @@ pub async fn detail(env: &Env, s: &Settings, id: &str) -> Result<Response> {
 ///
 /// When a binding fails.
 pub async fn challenge(env: &Env, s: &Settings, body: &Value) -> Result<Response> {
-    let id = body["id"].as_str().unwrap_or_default();
-    let waiting = live(env, s).await?;
-    let Some((_, token)) = approvals::find(&waiting, id) else {
-        return Response::error("no such approval waiting", 404);
+    let purpose = match body["op"].as_str() {
+        Some("auto") => windows::START.to_string(),
+        Some("auto-end") => windows::END.to_string(),
+        _ => {
+            let id = body["id"].as_str().unwrap_or_default();
+            let waiting = live(env, s).await?;
+            let Some((_, token)) = approvals::find(&waiting, id) else {
+                return Response::error("no such approval waiting", 404);
+            };
+            passkeys::grant_purpose(token)
+        }
     };
-    let purpose = passkeys::grant_purpose(token);
     let mut v = elicit::inbox(
         env,
         s,
@@ -145,4 +152,74 @@ pub async fn approve(env: &Env, s: &Settings, id: &str, body: &Value) -> Result<
         Ok(r) => Response::error(r.violations.join("\n"), 409),
         Err(e) => Response::error(e.to_string(), 409),
     }
+}
+
+/// The Auto window running or paused, for the app's home.
+///
+/// # Errors
+///
+/// When a binding fails.
+pub async fn auto_state(env: &Env, s: &Settings) -> Result<Value> {
+    let (_, v) = super::mandates::to_instance(env, s, "/windows/current", &json!({})).await?;
+    Ok(v["window"].clone())
+}
+
+/// `POST /v0/app/auto` with `{hours, passkey}`: starts an Auto window, proved by the owner's
+/// passkey for `window:start`.
+///
+/// # Errors
+///
+/// When a binding fails.
+pub async fn auto_start(env: &Env, s: &Settings, body: &Value) -> Result<Response> {
+    let form = approvals::proof_form(body);
+    if let Err(why) =
+        super::passkeys::prove(env, s, &form, windows::START, &relying_party(env)).await?
+    {
+        return Response::error(format!("refused: {why}"), 403);
+    }
+    let owner = secret(env, "APPROVER")?;
+    let hours = body["hours"].as_u64().unwrap_or_default();
+    let (status, v) = super::mandates::to_instance(
+        env,
+        s,
+        "/windows/start",
+        &json!({ "hours": hours, "by": owner }),
+    )
+    .await?;
+    if status != 200 {
+        return Response::error(v.as_str().unwrap_or("Auto didn't start").to_string(), 409);
+    }
+    worker::console_log!("an Auto window started for {hours} hours");
+    Response::from_json(&v)
+}
+
+/// `DELETE /v0/app/auto` with `{passkey}`: ends the Auto window, proved by the owner's passkey
+/// for `window:end`.
+///
+/// # Errors
+///
+/// When a binding fails.
+pub async fn auto_end(env: &Env, s: &Settings, body: &Value) -> Result<Response> {
+    let form = approvals::proof_form(body);
+    if let Err(why) =
+        super::passkeys::prove(env, s, &form, windows::END, &relying_party(env)).await?
+    {
+        return Response::error(format!("refused: {why}"), 403);
+    }
+    let (status, v) = super::mandates::to_instance(
+        env,
+        s,
+        "/windows/end",
+        &json!({ "why": "the owner ended it" }),
+    )
+    .await?;
+    if status != 200 {
+        return Response::error(
+            v.as_str()
+                .unwrap_or("no Auto window is running")
+                .to_string(),
+            409,
+        );
+    }
+    Response::from_json(&v)
 }

@@ -162,6 +162,9 @@ async fn offer(
     if let Some(r) = under_mandate(env, settings, number, request).await? {
         return Response::from_json(&mcp::answer(id, r));
     }
+    if let Some(r) = under_window(env, settings, number, request).await? {
+        return Response::from_json(&mcp::answer(id, r));
+    }
     if let Some(r) = under_policy(env, settings, number, request).await? {
         return Response::from_json(&mcp::answer(id, r));
     }
@@ -245,6 +248,31 @@ async fn under_mandate(
     };
     let who = Identity {
         subject: format!("mandate:{m}"),
+        human: true,
+    };
+    Ok(Some(run(env, s, &who, request).await))
+}
+
+/// Runs `request` on change `number` as `window:<id>`, when the owner's Auto window allows it;
+/// see `.claude/decisions/2026-11-12-runtime-ios-app-approvals-insights.md` §5.
+async fn under_window(
+    env: &Env,
+    s: &Settings,
+    number: u32,
+    request: &wire::Request,
+) -> Result<Option<std::result::Result<WireResponse, crate::Error>>> {
+    let (status, v) = to_change(env, &s.repo, number, Method::Get, "/status", None).await?;
+    if status != 200 {
+        return Ok(None);
+    }
+    let Ok(change) = serde_json::from_value::<Change>(v["change"].clone()) else {
+        return Ok(None);
+    };
+    let Some(id) = mandates::window_approves(env, s, &change, &request.operation).await? else {
+        return Ok(None);
+    };
+    let who = Identity {
+        subject: format!("window:{id}"),
         human: true,
     };
     Ok(Some(run(env, s, &who, request).await))
@@ -1023,6 +1051,10 @@ impl DurableObject for Instance {
         {
             let body: Value = req.json().await?;
             return elicit::serve(&self.state, &self.env, &path, body).await;
+        }
+        if path.starts_with("/windows/") {
+            let body: Value = req.json().await?;
+            return mandates::serve_windows(&self.state, &path, body).await;
         }
         if path.starts_with("/mandates/") {
             let body: Value = req.json().await?;
