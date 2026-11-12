@@ -447,3 +447,57 @@ changed.
    and gate jobs to the new head; `gate_missing` counts them.
 2. `MainRun`: the `test map` is dispatched only when the merge's diff has Rust
    inputs. A failed map opens the fix task.
+
+### 2026-11-12: The merge gate runs the full test suite only when it must
+
+At the owner's request. Since the amendment above, the merge gate skips the
+checks a head already passed, so it holds three clippy runs and `gate: test`,
+`cargo test --workspace`. That run takes about five minutes, holds the merge
+queue, and repeats the tests the test map already chose and passed on the
+head.
+
+- **By default the gate is scoped.** When the test map chose a head's tests
+  and they passed, the gate skips `gate: test`.
+  - It keeps `fmt`, the clippy feature matrix and the wasm build. They take
+    about a minute, and they catch feature and `cfg` breakage that the
+    per-crate checks miss.
+- **The gate runs the full test suite when any of these holds:**
+  - the test map couldn't decide, by §5's fallbacks: no map for `main`'s
+    newest build, a changed build file, a file the map doesn't know, or more
+    than half of its binaries;
+  - the change touches a path that runs every check, such as `mise.toml` or
+    `.config/releases.yaml`;
+  - its tests span more than 2 packages;
+  - a clean restack, where `main` changed files the change touches. A
+    disjoint restack keeps the scoped gate, as it carries the checks;
+  - `main` is red: the last `test map` run after a merge failed. Every gate
+    is full until a later run passes;
+  - someone asks: `full: true` on `change_propose`, on `change_merge` or on
+    the approval page, or `ci_rerun` of `gate: test`.
+- **The run after the merge is the safety net.** The `test map` check runs
+  every test binary on `main` after each merge that changes Rust inputs. Its
+  failure already opens a fix task for the session that merged last. Now it
+  also makes the next gates full.
+- **What it risks.** A change whose own tests pass can break a test it never
+  selected. That shows up minutes after the merge, on `main`, instead of
+  before it. The red-`main` rule keeps a second merge from landing on top of
+  it.
+
+**Execution,** each step its own change:
+
+1. **`core/deploy/scope`** reports why it chose a head's tests: by the map,
+   or by which fallback. It counts the packages they span. This lands on
+   `main` before step 2, since the bound job runs `main`'s `pigeon`.
+2. **`core/change`:**
+   - `Event::Bounded` carries `gate: Scoped | Full(reason)`, and `Change`
+     keeps it. Its serde default is `Full`, so a change stored before the
+     upgrade gates as it did.
+   - A clean restack sets it to `Full`.
+   - `gate_missing` leaves out `test` when the gate is scoped.
+3. **The shell:**
+   - `full` on `change_propose`, `change_merge` and the approval page;
+   - `MainRun` records a red `main`, which the bound job and the restack read;
+   - `change_status` shows the gate and why.
+4. **Tests:** a table of the rules, and replays where a scoped head merges
+   without `gate: test` while a clean restack, a red `main` or a request
+   brings it back.
