@@ -18,6 +18,20 @@ pub const OIDC_LIFETIME: u32 = 300;
 pub const OPENSSL: &str = "/usr/bin/openssl";
 /// macOS's keychain tool.
 pub const SECURITY: &str = "/usr/bin/security";
+/// Apple's public WWDR G3 intermediate, which the `.p12` leaves out to fit a Worker secret; see the
+/// 2026-11-12 amendment to `.claude/decisions/2026-11-11-release-ios-app-buildkite-testflight.md`.
+pub const INTERMEDIATE_URL: &str = "https://www.apple.com/certificateauthority/AppleWWDRCAG3.cer";
+/// Its SHA-256, hex.
+pub const INTERMEDIATE_SHA256: &str =
+    "dcf21878c77f4198e4b4614f03d696d89c66c66008d4244e1b99161aac91601f";
+
+/// Whether `der` is exactly [`INTERMEDIATE_URL`]'s certificate.
+#[must_use]
+pub fn intermediate_ok(der: &[u8]) -> bool {
+    use sha2::Digest;
+    crate::grants::hex(&sha2::Sha256::digest(der)) == INTERMEDIATE_SHA256
+}
+
 /// The prefix of every keychain the harness creates.
 pub const KEYCHAIN_PREFIX: &str = "pigeon-sign-";
 
@@ -237,6 +251,10 @@ impl Layout {
     fn p12_once(&self) -> PathBuf {
         self.dir.join("once.p12")
     }
+
+    fn intermediate(&self) -> PathBuf {
+        self.dir.join("AppleWWDRCAG3.cer")
+    }
 }
 
 /// What `clean` undoes: written before anything else, so a failed load is cleaned too.
@@ -313,21 +331,100 @@ fn path(p: &Path) -> &str {
 }
 
 /// The steps that load `grant`: the `.p12` re-wrapped under `once`, a keychain under
-/// `keychain_password`, the profile, `ExportOptions.plist` and the JWT. `p12` and `profile`
-/// are the grant's decoded bytes. The state file is the caller's, written first.
+/// `keychain_password` holding it and Apple's `intermediate`, the profile, `ExportOptions.plist`
+/// and the JWT. `p12` and `profile` are the grant's decoded bytes; `intermediate` is checked by
+/// [`intermediate_ok`] first. The state file is the caller's, written first.
 #[must_use]
 pub fn load_plan(
     grant: &Grant,
     state: &State,
     p12: Vec<u8>,
     profile: Vec<u8>,
+    intermediate: Vec<u8>,
     keychain_password: &str,
     once: &str,
 ) -> Vec<Step> {
     let l = &state.layout;
-    let (kc, p12_in, pem, p12_once) = (path(&l.keychain), l.p12_in(), l.pem(), l.p12_once());
+    let (kc, p12_once) = (path(&l.keychain), l.p12_once());
     let mut search = vec![SECURITY, "list-keychains", "-d", "user", "-s", kc];
     search.extend(state.search_list.iter().map(String::as_str));
+    let mut steps = rewrap(grant, l, p12, once);
+    steps.extend([
+        run(
+            &[SECURITY, "create-keychain", "-p", keychain_password, kc],
+            &[],
+        ),
+        run(
+            &[SECURITY, "set-keychain-settings", "-lut", "1800", kc],
+            &[],
+        ),
+        run(
+            &[SECURITY, "unlock-keychain", "-p", keychain_password, kc],
+            &[],
+        ),
+        run(
+            &[
+                SECURITY,
+                "import",
+                path(&p12_once),
+                "-k",
+                kc,
+                "-f",
+                "pkcs12",
+                "-P",
+                once,
+                "-T",
+                "/usr/bin/codesign",
+                "-T",
+                SECURITY,
+            ],
+            &[],
+        ),
+        Step::Remove(p12_once),
+        Step::Write(l.intermediate(), Secret(intermediate)),
+        run(
+            &[
+                SECURITY,
+                "import",
+                path(&l.intermediate()),
+                "-k",
+                kc,
+                "-t",
+                "cert",
+                "-f",
+                "x509",
+            ],
+            &[],
+        ),
+        Step::Remove(l.intermediate()),
+        run(
+            &[
+                SECURITY,
+                "set-key-partition-list",
+                "-S",
+                "apple-tool:,apple:",
+                "-s",
+                "-k",
+                keychain_password,
+                kc,
+            ],
+            &[],
+        ),
+        run(&search, &[]),
+        Step::Write(l.profile.clone(), Secret(profile)),
+        Step::Write(
+            l.export_options(),
+            Secret(export_options(grant).into_bytes()),
+        ),
+        Step::Write(l.jwt(), Secret(grant.upload_jwt.clone().into_bytes())),
+    ]);
+    steps
+}
+
+/// The `.p12` re-wrapped under the one-time password `once`, so the long-lived password never
+/// reaches an argv; it leaves only `once.p12`.
+fn rewrap(grant: &Grant, l: &Layout, p12: Vec<u8>, once: &str) -> Vec<Step> {
+    let (p12_in, pem, p12_once) = (l.p12_in(), l.pem(), l.p12_once());
     vec![
         Step::Write(p12_in.clone(), Secret(p12)),
         run(
@@ -360,57 +457,6 @@ pub fn load_plan(
             &[("PIGEON_P12_ONCE", once)],
         ),
         Step::Remove(pem),
-        run(
-            &[SECURITY, "create-keychain", "-p", keychain_password, kc],
-            &[],
-        ),
-        run(
-            &[SECURITY, "set-keychain-settings", "-lut", "1800", kc],
-            &[],
-        ),
-        run(
-            &[SECURITY, "unlock-keychain", "-p", keychain_password, kc],
-            &[],
-        ),
-        run(
-            &[
-                SECURITY,
-                "import",
-                path(&p12_once),
-                "-k",
-                kc,
-                "-f",
-                "pkcs12",
-                "-P",
-                once,
-                "-T",
-                "/usr/bin/codesign",
-                "-T",
-                SECURITY,
-            ],
-            &[],
-        ),
-        Step::Remove(p12_once),
-        run(
-            &[
-                SECURITY,
-                "set-key-partition-list",
-                "-S",
-                "apple-tool:,apple:",
-                "-s",
-                "-k",
-                keychain_password,
-                kc,
-            ],
-            &[],
-        ),
-        run(&search, &[]),
-        Step::Write(l.profile.clone(), Secret(profile)),
-        Step::Write(
-            l.export_options(),
-            Secret(export_options(grant).into_bytes()),
-        ),
-        Step::Write(l.jwt(), Secret(grant.upload_jwt.clone().into_bytes())),
     ]
 }
 
@@ -483,6 +529,7 @@ mod tests {
             &state(),
             b"p12".to_vec(),
             b"profile".to_vec(),
+            b"intermediate".to_vec(),
             "kc-once",
             "p12-once",
         )
@@ -582,6 +629,32 @@ mod tests {
         for secret in [&g.p12, &g.p12_password, &g.upload_jwt, &g.team_id] {
             assert!(!shown.contains(secret.as_str()), "{secret}");
         }
+    }
+
+    #[test]
+    fn the_intermediate_joins_the_keychain_and_only_apples_is_accepted() {
+        let p = plan();
+        let at = |pred: &dyn Fn(&Step) -> bool| p.iter().position(pred).expect("a step");
+        let leaf = at(
+            &|s| matches!(s, Step::Run(c) if c.argv.iter().any(|a| a == "pkcs12") && c.argv[1] == "import"),
+        );
+        let cert = at(&|s| matches!(s, Step::Run(c) if c.argv.iter().any(|a| a == "x509")));
+        assert!(leaf < cert, "the leaf, then its intermediate");
+        let Step::Run(c) = &p[cert] else {
+            unreachable!()
+        };
+        assert_eq!(c.argv[1], "import");
+        assert!(
+            c.argv
+                .windows(2)
+                .any(|w| w[0] == "-k" && w[1].ends_with(".keychain-db"))
+        );
+        assert!(
+            p.iter()
+                .any(|s| matches!(s, Step::Remove(f) if f.ends_with("AppleWWDRCAG3.cer")))
+        );
+        assert!(!intermediate_ok(b"not apple's certificate"));
+        assert_eq!(INTERMEDIATE_SHA256.len(), 64);
     }
 
     #[test]

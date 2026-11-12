@@ -10,8 +10,8 @@ use std::time::Duration;
 
 use backplane::push::{b64url, b64url_decode};
 use backplane::signing::{
-    Grant, Layout, ROUTE, SECURITY, State, Step, check_step, clean_plan, load_plan, oidc_argv,
-    parse_search_list, upload_argv,
+    Grant, INTERMEDIATE_URL, Layout, ROUTE, SECURITY, State, Step, check_step, clean_plan,
+    intermediate_ok, load_plan, oidc_argv, parse_search_list, upload_argv,
 };
 
 use super::{INVALID, SUCCESS, VIOLATION};
@@ -94,7 +94,16 @@ fn load(args: &SigningArgs) -> Result<(), Failure> {
         b64url_decode(&grant.p12).map_err(|e| Failure::Refused(format!("the grant's p12: {e}")))?;
     let profile = b64url_decode(&grant.profile)
         .map_err(|e| Failure::Refused(format!("the grant's profile: {e}")))?;
-    let plan = load_plan(&grant, &state, p12, profile, &random()?, &random()?);
+    let intermediate = fetch_intermediate()?;
+    let plan = load_plan(
+        &grant,
+        &state,
+        p12,
+        profile,
+        intermediate,
+        &random()?,
+        &random()?,
+    );
     for step in plan {
         if let Err(e) = apply(&step) {
             let _ = clean();
@@ -133,6 +142,29 @@ fn exchange(platform: &str, token: &str) -> Result<Grant, Failure> {
         .map_err(|e| Failure::Refused(format!("POST {ROUTE}: {e}")))?;
     serde_json::from_str(&body)
         .map_err(|_| Failure::Refused(format!("POST {ROUTE}: the answer isn't a grant")))
+}
+
+/// Apple's WWDR G3 intermediate, refused unless it is exactly the pinned certificate.
+fn fetch_intermediate() -> Result<Vec<u8>, Failure> {
+    let agent: ureq::Agent = ureq::Agent::config_builder()
+        .timeout_global(Some(Duration::from_secs(30)))
+        .build()
+        .into();
+    let mut r = agent
+        .get(INTERMEDIATE_URL)
+        .call()
+        .map_err(|e| broken(format!("Apple's intermediate: {e}")))?;
+    let der = r
+        .body_mut()
+        .read_to_vec()
+        .map_err(|e| broken(format!("Apple's intermediate: {e}")))?;
+    if intermediate_ok(&der) {
+        Ok(der)
+    } else {
+        Err(Failure::Refused(
+            "Apple's intermediate isn't the pinned certificate".into(),
+        ))
+    }
 }
 
 fn upload(args: &UploadArgs) -> Result<(), Failure> {
