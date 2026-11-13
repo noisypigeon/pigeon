@@ -178,6 +178,11 @@ impl ChangeRun {
         let change = &change;
         storage.put(CHANGE, change).await?;
         super::events::changed(&self.env, before.as_ref(), change).await;
+        if let Some(ended) = crate::reconcile::gone(before.as_ref(), change)
+            && let Err(e) = super::merges::retire(&self.env, change.number, ended).await
+        {
+            worker::console_error!("retire for !{}: {e}", change.number);
+        }
         if control::leaves_merge_queue(before.as_ref(), change) {
             self.released(change).await;
             super::merges::ended(&self.env, change, None).await?;

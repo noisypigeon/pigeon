@@ -6,7 +6,7 @@ use std::fmt::Write as _;
 
 use serde::{Deserialize, Serialize};
 
-use crate::changes::{Change, Restacked};
+use crate::changes::{Change, Restacked, State};
 
 /// The ADR that decides reconciliation, which every plan cites.
 pub const ADR: &str = ".claude/decisions/2026-11-08-development-concurrent-agent-sessions.md";
@@ -192,6 +192,33 @@ pub fn existing(open: &[crate::sessions::Open], slug: &str) -> Option<u32> {
         .filter(|o| o.slug == slug)
         .map(|o| o.number)
         .min()
+}
+
+/// Whether change `after`'s generated changes lost their reason since `before`: `Some(true)`
+/// when it merged or closed, which retires its reconciliation and its reviews, `Some(false)`
+/// when only its conflict cleared, which retires its reconciliation; see
+/// `.claude/decisions/2026-11-12-development-grants-applies-rescue-yield.md` §4 F2.
+#[must_use]
+pub fn gone(before: Option<&Change>, after: &Change) -> Option<bool> {
+    let done = |c: &Change| matches!(c.state, State::Merged | State::Closed);
+    let before = before?;
+    if !done(before) && done(after) {
+        return Some(true);
+    }
+    (before.conflict.is_some() && after.conflict.is_none() && !done(after)).then_some(false)
+}
+
+/// The open generated changes of change `number` to close, never pushed: its reconciliation,
+/// and with `ended` the reviews of it.
+#[must_use]
+pub fn retired(open: &[crate::sessions::Open], number: u32, ended: bool) -> Vec<u32> {
+    let reconcile = format!("reconcile-{number}");
+    let review = format!("review-{number}-");
+    open.iter()
+        .filter(|o| matches!(o.state.as_str(), "proposed" | "planned"))
+        .filter(|o| o.slug == reconcile || (ended && o.slug.starts_with(&review)))
+        .map(|o| o.number)
+        .collect()
 }
 
 fn short(sha: &str) -> &str {

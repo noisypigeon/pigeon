@@ -178,6 +178,33 @@ pub async fn reconcile(
     Ok(number)
 }
 
+/// Closes change `number`'s generated changes whose reason is gone, as
+/// [`crate::reconcile::retired`] chooses; each never pushed, so the close loses nothing.
+///
+/// # Errors
+///
+/// When a binding fails.
+pub async fn retire(env: &Env, number: u32, ended: bool) -> Result<()> {
+    let s = Settings::from(env)?;
+    let open =
+        control::open_rows(&platform::d1_rows(env, &control::open(&s.instance, &s.repo)).await?);
+    let close = serde_json::to_value(Event::Close)?;
+    for n in crate::reconcile::retired(&open, number, ended) {
+        let (status, v) = to_change(env, &s.repo, n, Method::Post, "/event", Some(&close)).await?;
+        if status != 200 {
+            worker::console_warn!("retire !{n}: {v}");
+            continue;
+        }
+        super::tasks::close_for(env, &s, n).await?;
+        let why = format!("!{n} closed: its reason on !{number} is gone");
+        let added = super::events::append(env, &s, "reconcile.retired", Some(n), None, &why, false);
+        if let Err(e) = added.await {
+            worker::console_error!("reconcile.retired: {e}");
+        }
+    }
+    Ok(())
+}
+
 async fn merge(env: &Env, s: &Settings, number: u32, by: &str) -> Result<(u16, Value)> {
     let body = serde_json::to_value(Event::Merge { by: by.to_string() })?;
     to_change(env, &s.repo, number, Method::Post, "/event", Some(&body)).await

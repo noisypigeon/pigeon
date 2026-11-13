@@ -866,3 +866,21 @@ and come after them.
     parent's `change_status`.
 - **Execution:** one `fix(backplane)` change, with a test that replays
   !255's duplicates onto one change.
+
+### 2026-11-13: F2 lands: a generated change closes when its reason is gone
+
+- **When a change's saved state shows its reason gone, its generated changes
+  close.** The reason is gone when:
+  - the change merged or closed, which closes its `reconcile-<n>` and every
+    `review-<n>-*`;
+  - or its conflict cleared, by a clean restack or its session's push, which
+    closes its `reconcile-<n>`.
+- **Only never-pushed changes close** (`proposed` or `planned`). Their tasks
+  close with them, and each close appends `reconcile.retired`.
+  - A close of a change that never pushed is auto (approvals ADR §2).
+  - A pushed reconciliation is real work, and is left to its session.
+- **A review whose merged side is the change ending is left,** because that
+  merge is what made it. It closes when its open side merges or closes.
+- **Not yet:** generated changes left open before this lands, such as !203.
+  They close the next time their parent's state moves. A one-off sweep waits
+  for the eviction ADR's hourly job (F4).

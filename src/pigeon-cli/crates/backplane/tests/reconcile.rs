@@ -5,7 +5,7 @@
 mod step;
 
 use backplane::changes::{Change, ConflictContext, Event, Relation, Restacked, State};
-use backplane::reconcile::{ADR, adrs, conflict, existing, review};
+use backplane::reconcile::{ADR, adrs, conflict, existing, gone, retired, review};
 use backplane::sessions::Open;
 use step::Apply;
 
@@ -171,5 +171,49 @@ fn a_change_that_conflicts_again_reuses_its_open_reconciliation() {
         existing(&[generated(204, "review-61-59")], "review-61-59"),
         Some(204),
         "a review of the same pair"
+    );
+}
+
+#[test]
+fn a_change_ending_or_its_conflict_clearing_retires_what_it_generated() {
+    let open = change("no ADR");
+    let mut conflicted = open.clone();
+    conflicted.conflict = Some(backplane::changes::Conflicted {
+        onto: MAIN.into(),
+        paths: vec!["src/a.rs".into()],
+        proposal: None,
+        reconcile: Some(70),
+    });
+    assert_eq!(gone(None, &open), None, "a new change");
+    assert_eq!(gone(Some(&open), &open), None, "nothing moved");
+    assert_eq!(
+        gone(Some(&conflicted), &open),
+        Some(false),
+        "the conflict cleared"
+    );
+    let mut closed = conflicted.clone();
+    closed.state = State::Closed;
+    assert_eq!(gone(Some(&conflicted), &closed), Some(true), "closed");
+    let mut merged = open.clone();
+    merged.state = State::Merged;
+    assert_eq!(gone(Some(&open), &merged), Some(true), "merged");
+    assert_eq!(gone(Some(&merged), &merged), None, "already ended");
+
+    let mut pushed = generated(73, "reconcile-60");
+    pushed.state = "pushed".into();
+    let mut planned = generated(74, "review-60-59");
+    planned.state = "planned".into();
+    let all = [
+        generated(70, "reconcile-60"),
+        generated(71, "review-61-60"),
+        generated(72, "reconcile-600"),
+        pushed,
+        planned,
+    ];
+    assert_eq!(retired(&all, 60, false), [70], "only its reconciliation");
+    assert_eq!(
+        retired(&all, 60, true),
+        [70, 74],
+        "and the reviews of it, never a pushed one"
     );
 }
