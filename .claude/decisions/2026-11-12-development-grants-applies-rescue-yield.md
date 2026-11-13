@@ -1051,3 +1051,28 @@ The first, the ledger:
   against `main`. A forecast with no such path is no conflict.
 - **ADRs merge by union in a forecast, as in a restack.** So two amendments
   to one ADR no longer make one change yield to the other.
+
+### 2026-11-13: Step 1c begins: the minting core, and where `granter` comes from
+
+- **1c lands in two changes.**
+  - The pure core, `core::minting`.
+  - Then the Worker wiring: the `granter` binding, `grant.*` and
+    `/grants/<id>`, at owner tier.
+- **`token_body` builds the account-token body,** as the `api-token` module
+  does.
+  - Each permission must match exactly one of the account's permission
+    groups in its scope.
+  - Otherwise nothing is minted, and the error lists the names the account
+    does have. So a wrong catalog name, as 1b's could be, fails before any
+    token exists.
+- **`Mint.zones` names the zones a zone-scoped capability is minted on.**
+  Bucket scope isn't minted yet.
+- **`settle` decides each step's outcome.**
+  - A token minted before a failed put or verify is revoked.
+  - The old one stays.
+- **`granter` is created by the owner in the Secrets Store, in the
+  dashboard.** It isn't pasted on a page, because a Worker can only write the
+  store with a token that `granter` itself would mint.
+  - `/grants/granter` checks instead that the binding resolves, and that
+    `/tokens/verify` calls the token active.
+  - This amends §1's "set once on the owner's approval page".

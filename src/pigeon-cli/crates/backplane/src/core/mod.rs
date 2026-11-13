@@ -10,6 +10,7 @@ pub mod infra;
 pub mod insights;
 pub mod ledger;
 pub mod macos;
+pub mod minting;
 pub mod platform;
 #[cfg(feature = "engines")]
 pub mod release;

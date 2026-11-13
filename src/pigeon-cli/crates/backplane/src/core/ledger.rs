@@ -49,6 +49,9 @@ pub struct Mint {
     /// How old it grows before the hourly cron re-mints it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rotate: Option<String>,
+    /// The zones a zone-scoped capability is minted on, by name.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub zones: Vec<String>,
 }
 
 /// A mint's capabilities: named, or its unit's.
@@ -280,6 +283,7 @@ mod tests {
                 capabilities: Capabilities::Named(caps.iter().map(|c| (*c).to_string()).collect()),
                 ttl: ttl.into(),
                 rotate: rotate.map(str::to_string),
+                zones: Vec::new(),
             }),
             generate: None,
             derive: None,
