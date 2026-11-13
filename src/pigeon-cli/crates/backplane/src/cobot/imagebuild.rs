@@ -350,6 +350,11 @@ fn build_args(root: &Path, addr: &str, image: &Image, names: &[String]) -> Vec<S
         format!("context={}", context.display()),
         "--local".into(),
         format!("dockerfile={}", context.display()),
+        // The repository's `.config/`, which the Dockerfile's `config` stage stands for.
+        "--local".into(),
+        format!("config={}", root.join(".config").display()),
+        "--opt".into(),
+        "context:config=local:config".into(),
         "--opt".into(),
         format!(
             "filename={}",

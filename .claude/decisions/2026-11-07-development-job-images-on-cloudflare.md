@@ -345,3 +345,25 @@ Each step is its own change, in this order:
 - **A rollout lags.** Cloudflare moves Container instances to a new image
   over several minutes, so the jobs started just after a deploy may still run
   the previous image.
+
+### 2026-11-13: The image build passes the repository's `.config/` as a named context
+
+- **What broke.** The deploy of `main` at edf855f (!385) failed to build the
+  `ci` image, and every deploy after it would have too:
+  `core/macos/mod.rs` and `core/insights/mod.rs` `include_str!` the
+  repository's `.config/macos.yaml` and `.config/insights.yaml`, but the
+  build's context is `src/pigeon-cli`. The last image was built before those
+  includes existed, so nothing failed until a change to the workspace forced
+  a rebuild.
+- **The fix, without moving the files:**
+  - `imagebuild::build_args` passes `<root>/.config` as the local `config`
+    and names it as the context `config`;
+  - the Dockerfile's empty `FROM scratch AS config` stage stands for it, and
+    the build stage copies the two files to `/.config/`, where the includes
+    resolve from `/src`.
+- **Checked:** the build stage's `COPY --from=config` runs with
+  `--build-context config=.config`. The workspace compiles offline in the
+  `rust:1.99.1` image with `/.config` present, and fails with the deploy's
+  two errors without it.
+- **Execution:** one change. A new `include_str!` that leaves
+  `src/pigeon-cli` needs its file in the Dockerfile's copy too.

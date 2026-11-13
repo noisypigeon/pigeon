@@ -2,9 +2,14 @@
 # See .claude/decisions/2026-11-02-release-crate-units-and-images.md,
 # .claude/decisions/2026-11-03-release-cobot-image-in-workflows.md
 # and .claude/decisions/2026-11-03-development-backplane-platform-composition-layer.md.
+# The repository's `.config/`, which `include_str!` reads at `/.config/`: the build passes it as
+# the named context `config`, which replaces this empty stage (job images ADR, 2026-11-13).
+FROM scratch AS config
+
 FROM docker.io/library/rust:1.99.1-slim-bookworm@sha256:24707e70a4f1e23d9a7b25202ec43126d28a52294b96aad5c670df1fd1f1d400 AS build
 ARG FEATURES
 WORKDIR /src
+COPY --from=config macos.yaml insights.yaml /.config/
 COPY . .
 RUN cargo build --release --locked -p pigeon --no-default-features --features "$FEATURES"
 
