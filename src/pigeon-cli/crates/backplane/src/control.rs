@@ -42,6 +42,8 @@ pub enum Routed {
         resumes: Option<u32>,
         /// The open change it is built on, if any.
         after: Option<u32>,
+        /// What it asks the owner at its plan approval.
+        asks: Vec<crate::core::change::asks::Ask>,
     },
     /// Apply an event to change `number`; `by` is filled in from Access.
     Event {
@@ -193,6 +195,20 @@ fn slug_ok(slug: &str) -> bool {
     changes::branch(&format!("change/1-{slug}")).is_some()
 }
 
+/// `change.authorize`'s event: with the owner's answers when the redeemer added them.
+fn authorize(a: &Map<String, Value>, by: &str, at: u64) -> Event {
+    let answers = crate::core::change::asks::answers_of(a.get("answers"));
+    if answers.is_empty() {
+        Event::ApprovePlan { by: by.into(), at }
+    } else {
+        Event::ApprovePlanAnswered {
+            by: by.into(),
+            at,
+            answers,
+        }
+    }
+}
+
 /// `change.propose`'s arguments as a route.
 fn propose_route(a: &Map<String, Value>) -> Result<Routed, String> {
     let slug = need(a, "slug")?;
@@ -230,6 +246,7 @@ fn propose_route(a: &Map<String, Value>) -> Result<Routed, String> {
         full: flag(a, "full"),
         resumes: number_arg(a, "resumes")?,
         after: number_arg(a, "after")?,
+        asks: crate::core::change::asks::parse(&text(a, "asks").unwrap_or_default())?,
     })
 }
 
@@ -292,7 +309,7 @@ pub fn route(request: &Request, by: &str, at: u64) -> Result<Routed, String> {
             number: number(a)?,
             off: flag(a, "off"),
         }),
-        "change.authorize" => event(Event::ApprovePlan { by: by.into(), at }),
+        "change.authorize" => event(authorize(a, by, at)),
         "change.pushed" => event(Event::Pushed {
             sha: need(a, "sha")?,
         }),

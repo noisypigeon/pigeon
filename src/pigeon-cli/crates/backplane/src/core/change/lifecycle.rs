@@ -2,6 +2,8 @@
 //! `.claude/decisions/2026-11-05-development-changes-through-pigeon-mcp.md` §1 and
 //! `.claude/decisions/2026-11-10-development-factory-crates-functional-core.md` §3.
 
+use std::collections::BTreeMap;
+
 use super::types::{
     Approval, BOUND, Change, Effect, Event, Job, JobStatus, MERGE, RESTACK, Refusal, State, is_sha,
     refuse,
@@ -29,7 +31,8 @@ impl Change {
             ));
         }
         match event {
-            Event::ApprovePlan { by, at } => self.approve_plan(by, at),
+            Event::ApprovePlan { by, at } => self.approve_plan(by, at, BTreeMap::new()),
+            Event::ApprovePlanAnswered { by, at, answers } => self.approve_plan(by, at, answers),
             Event::Pushed { sha } => {
                 if !self.on_head(&sha) && self.job(RESTACK).is_some_and(Job::open) {
                     self.held = Some(sha);
@@ -87,13 +90,17 @@ impl Change {
         }
     }
 
-    fn approve_plan(mut self, by: String, at: u64) -> Step {
+    fn approve_plan(mut self, by: String, at: u64, answers: BTreeMap<String, String>) -> Step {
         if self.state != State::Proposed {
             return refuse(format!("{}'s plan is already approved", self.branch()));
         }
         if by == self.proposer {
             return refuse("a plan is approved by someone other than its proposer");
         }
+        if let Err(why) = super::asks::check(&self.asks, &answers) {
+            return refuse(format!("{}'s asks: {why}", self.branch()));
+        }
+        self.answers = answers;
         self.plan_approval = Some(Approval { by, sha: None, at });
         self.state = State::Planned;
         Ok((self, Vec::new()))

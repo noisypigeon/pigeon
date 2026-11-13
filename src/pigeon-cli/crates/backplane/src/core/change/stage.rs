@@ -181,6 +181,11 @@ pub fn of(c: &Change, cx: &Context) -> Stage {
     match c.state {
         State::Merged => merged(&cx.deploy),
         State::Closed => at("closed", Needs::None, "nothing"),
+        State::Proposed if !c.asks.is_empty() => at(
+            "proposed",
+            Needs::Owner,
+            "answer its asks and authorize the plan",
+        ),
         State::Proposed => ask(
             "proposed",
             covered,

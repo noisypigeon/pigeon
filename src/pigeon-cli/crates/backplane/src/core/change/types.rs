@@ -375,6 +375,13 @@ pub struct Change {
     /// `.claude/decisions/2026-11-12-development-grants-applies-rescue-yield.md` §5.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub after: Option<After>,
+    /// What it asks the owner at its plan approval; see
+    /// `.claude/decisions/2026-11-13-security-approvals-ask-owner-inputs.md`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub asks: Vec<super::asks::Ask>,
+    /// The owner's answers, given with the plan's approval.
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub answers: std::collections::BTreeMap<String, String>,
 }
 
 /// Something that happened to a change.
@@ -387,6 +394,15 @@ pub enum Event {
         by: String,
         /// When.
         at: u64,
+    },
+    /// The owner approved its plan, answering its asks.
+    ApprovePlanAnswered {
+        /// Who.
+        by: String,
+        /// When.
+        at: u64,
+        /// The answers, by ask key.
+        answers: std::collections::BTreeMap<String, String>,
     },
     /// Its branch was pushed.
     Pushed {
@@ -600,6 +616,8 @@ impl Change {
             evicted: None,
             yielded: None,
             after: None,
+            asks: Vec::new(),
+            answers: std::collections::BTreeMap::new(),
         }
     }
 

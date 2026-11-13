@@ -178,17 +178,24 @@ pub(super) async fn ask(
     number: u32,
     request: &wire::Request,
 ) -> Result<std::result::Result<WireResponse, crate::Error>> {
-    if let Some(r) = under_mandate(env, settings, number, request).await? {
-        return Ok(r);
+    if request.args.contains_key("answers") {
+        return Ok(Err(crate::Error::Invalid(vec![
+            "answers come only from the owner, on the approval page or in the app".into(),
+        ])));
     }
-    if let Some(r) = under_window(env, settings, number, request).await? {
-        return Ok(r);
-    }
-    if let Some(r) = under_policy(env, settings, number, request).await? {
-        return Ok(r);
-    }
-    if let Some(r) = under_change_grant(env, settings, number, request).await? {
-        return Ok(r);
+    if !asks_owner(env, settings, number, request).await? {
+        if let Some(r) = under_mandate(env, settings, number, request).await? {
+            return Ok(r);
+        }
+        if let Some(r) = under_window(env, settings, number, request).await? {
+            return Ok(r);
+        }
+        if let Some(r) = under_policy(env, settings, number, request).await? {
+            return Ok(r);
+        }
+        if let Some(r) = under_change_grant(env, settings, number, request).await? {
+            return Ok(r);
+        }
     }
     let host = env
         .var(crate::cobot::ship_wire::HOST_VAR)
@@ -271,6 +278,17 @@ async fn under_mandate(
 
 /// Runs `request` on change `number` as `window:<id>`, when the owner's Auto window allows it;
 /// see `.claude/decisions/2026-11-12-runtime-ios-app-approvals-insights.md` §5.
+/// Whether `request` authorizes a change that asks the owner for inputs, which only the owner
+/// answers; see `.claude/decisions/2026-11-13-security-approvals-ask-owner-inputs.md` §3.
+async fn asks_owner(env: &Env, s: &Settings, number: u32, request: &wire::Request) -> Result<bool> {
+    if request.operation != "change.authorize" {
+        return Ok(false);
+    }
+    let (status, v) = to_change(env, &s.repo, number, Method::Get, "/status", None).await?;
+    Ok(status == 200
+        && serde_json::from_value::<Change>(v["change"].clone()).is_ok_and(|c| !c.asks.is_empty()))
+}
+
 async fn under_window(
     env: &Env,
     s: &Settings,
@@ -566,6 +584,7 @@ async fn dispatch(
             full,
             resumes,
             after,
+            asks,
         } => {
             let built = match after {
                 Some(n) => match built_on(env, s, n).await? {
@@ -588,6 +607,7 @@ async fn dispatch(
             change.affects = affects;
             change.full_asked = full.then(|| who.subject.clone());
             change.after.clone_from(&built);
+            change.asks = asks;
             let proposed = propose(env, s, operation, change).await?;
             if let Some(n) = resumes {
                 tasks::close_for(env, s, n).await?;

@@ -76,6 +76,7 @@ fn operations_route_to_events_with_the_access_identity() {
             full: false,
             resumes: None,
             after: None,
+            asks: Vec::new(),
         })
     );
     assert!(
