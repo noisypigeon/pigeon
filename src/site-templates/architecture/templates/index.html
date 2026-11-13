@@ -115,9 +115,14 @@
             {%- endif %}{% endfor %}{% endfor %}
           </svg>
           {%- for b in d.boxes %}{% for p in net.parts %}{% if p.id == b.id %}
-          <div class="box kind-{{ p.kind }}{% if p.many %} many{% endif %}" id="part-{{ p.id }}" style="left: {{ b.x }}px; top: {{ b.y + 60 }}px; width: {{ b.w }}px; height: {{ b.h }}px"{% if back and p.id == back.to %} data-rail-to{% endif %}>
+          <div class="box kind-{{ p.kind }}{% if p.many %} many{% endif %}" id="part-{{ p.id }}" style="left: {{ b.x }}px; top: {{ b.y + 60 }}px; width: {{ b.w }}px; height: {{ b.h }}px; --o: {{ b.y * 10000 + b.x }}"{% if back and p.id == back.to %} data-rail-to{% endif %}>
             <div class="box-h"><span class="dot"></span><span class="grow">{{ p.id }}</span><span class="pill">{% if p.kind == "object" %}Durable Object{% elif p.kind == "container" %}Container{% else %}{{ p.kind }}{% endif %}</span></div>
             <span class="role">{{ p.role }}{% if p.many %} (one per change){% endif %}</span>
+            <ul class="out">
+              {%- for l in net.links %}{% if l.from == p.id %}
+              <li><span class="swatch k-{{ l.kind }}"></span><span>{{ l.label }}</span><span class="mono">→ {{ l.to }}</span></li>
+              {%- endif %}{% endfor -%}
+            </ul>
           </div>
           {%- endif %}{% endfor %}{% endfor %}
         </div>

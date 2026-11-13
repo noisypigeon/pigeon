@@ -342,3 +342,25 @@ Steps, each its own change:
 2. `version: tree` in cobot's sites, for a template in the instance's tree.
 3. The template: `index.html`, `main.css` and `rail.js`.
 4. `config.yaml`: `sites/docs` pins `version: tree`.
+
+### 2026-11-13: On narrow screens the network diagram stacks top to bottom
+
+On a phone, the connection diagram (§3's "Motion and width", and the
+2026-11-11 amendment's links) scrolled inside its frame, and its lines and
+the GitHub rail ran off the right edge. The page now reads top to bottom at
+every width from 360px, with no sideways scroll in any frame.
+
+- **At 640px and below** the diagram's boxes flow in one column, in
+  `layout`'s order: top to bottom, then left to right.
+- **Each box lists its outgoing links in words:** the kind's swatch, the
+  label, and `→` the part it reaches. The SVG lines, the bus into the
+  Durable Objects and `rail.js`'s line are not drawn. The Actions card still
+  says the way back from GitHub in words.
+- **Wider screens are unchanged:** the drawn diagram, which still scrolls in
+  its frame between 641px and its own width.
+- The page still never places a part or writes a label `describe` didn't
+  return; the column's order comes from `layout`'s coordinates.
+
+Steps:
+
+1. The template: `index.html` and `main.css`.
