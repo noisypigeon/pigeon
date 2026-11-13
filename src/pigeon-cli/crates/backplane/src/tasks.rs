@@ -200,6 +200,42 @@ pub struct Digest {
     /// Why the GitHub mirror needs the owner.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mirror: Option<String>,
+    /// Each session with open changes: shown, never pushed; see
+    /// `.claude/decisions/2026-11-13-development-session-stages-subscriptions-breaker.md` §5.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub sessions: Vec<SessionLine>,
+}
+
+/// A session with open changes, as the digest shows it.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SessionLine {
+    /// Its label, the session's URL.
+    pub label: String,
+    /// Whether it polled its events in the last two minutes.
+    pub listening: bool,
+    /// Its open changes: the number, the stage and who it needs.
+    pub changes: Vec<(u32, String, String)>,
+}
+
+impl SessionLine {
+    /// The line the digest shows: the label's last part, whether it listens, and its changes,
+    /// those needing the agent first.
+    #[must_use]
+    pub fn line(&self) -> String {
+        let short = self.label.rsplit('/').next().unwrap_or(&self.label);
+        let mut changes = self.changes.clone();
+        changes.sort_by_key(|(n, _, needs)| (needs != "agent", *n));
+        let shown: Vec<String> = changes
+            .iter()
+            .map(|(n, stage, needs)| format!("!{n} {stage} ({needs})"))
+            .collect();
+        let ear = if self.listening {
+            "listening"
+        } else {
+            "not listening"
+        };
+        format!("session {short}: {ear}; {}", shown.join(", "))
+    }
 }
 
 impl Digest {
@@ -219,9 +255,17 @@ impl Digest {
         !self.needs_owner() && self.merged_without_owner.is_empty()
     }
 
-    /// One line per item, for a push or a page.
+    /// One line per item, for a page: [`Self::owner_lines`], then the sessions.
     #[must_use]
     pub fn lines(&self) -> Vec<String> {
+        let mut out = self.owner_lines();
+        out.extend(self.sessions.iter().map(SessionLine::line));
+        out
+    }
+
+    /// One line per item for the owner, for a push: everything but the sessions.
+    #[must_use]
+    pub fn owner_lines(&self) -> Vec<String> {
         let mut out: Vec<String> = self
             .approvals
             .iter()
@@ -285,5 +329,6 @@ pub fn digest(input: &DigestInput<'_>, now: u64) -> Digest {
         failed_deploys: input.failed_deploys.to_vec(),
         merged_without_owner: input.merged_without_owner.to_vec(),
         mirror: input.mirror.map(str::to_string),
+        sessions: Vec::new(),
     }
 }

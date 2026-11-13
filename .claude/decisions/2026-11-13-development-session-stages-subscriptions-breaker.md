@@ -560,3 +560,26 @@ step 2 was live.
 - **A passed deploy no longer wakes every session.** Deploy events carry no
   session, so each passed deploy woke every listening session. A failed one
   still does. A session sees its own merge reach `done` in its stage.
+
+### 2026-11-13: Long polls fit under a 30-second cut, and step 8: sessions in the digest
+
+- **A request is cut at about 30 seconds on its way to the control plane,**
+  answering 502 "upstream request failed". Measured from a session:
+  `seconds=25` answers at 25.4 s, `seconds=29` and `35` fail at 30.2 s.
+  `events.wait` and `task.wait` waited up to 50 seconds, so each poll with
+  nothing new failed: the follower's "5 failed polls in a row" all day, for
+  every session. Another session reported it in a note on !346. !365: both
+  wait at most 25 seconds; `session.py` asks for `seconds=25` (it had sent
+  `wait=50`, which nothing reads).
+- **A cursor never passes the log's last event** (!365). A probe with
+  `after=999999` had moved this session's cursor out of reach of every later
+  event; one past the end is now pulled back.
+- **Step 8.** The digest gains `sessions`: each session with open changes,
+  whether it listens, and each change's stage and who it needs, those needing
+  the agent first. `lines()` shows them, so `/approvals` and `digest_show` do;
+  `owner_lines()` leaves them out, and the hourly push hashes and sends only
+  those, so a session's movement alone never pushes. Attended changes join it
+  with step 6.
+- **Merges by an Auto window now reach the digest.** "Merged without you"
+  counted approvals by `mandate:`, `policy:` and `grant:`, not `window:`, so
+  no window merge was listed, though the iOS ADR §5 says each is.

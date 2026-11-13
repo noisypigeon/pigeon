@@ -127,3 +127,26 @@ fn a_mirror_behind_needs_the_owner() {
     assert!(d.needs_owner());
     assert_eq!(d.lines(), ["mirror: GitHub has been behind for 25 hours"]);
 }
+
+#[test]
+fn sessions_are_shown_but_never_pushed() {
+    use backplane::tasks::{Digest, SessionLine};
+    let d = Digest {
+        sessions: vec![SessionLine {
+            label: "https://claude.ai/code/session_abc".into(),
+            listening: false,
+            changes: vec![
+                (5, "checked".into(), "owner".into()),
+                (9, "failed".into(), "agent".into()),
+            ],
+        }],
+        ..Digest::default()
+    };
+    assert_eq!(
+        d.lines(),
+        ["session session_abc: not listening; !9 failed (agent), !5 checked (owner)"],
+        "the changes needing the agent first"
+    );
+    assert_eq!(d.owner_lines(), Vec::<String>::new());
+    assert!(!d.needs_owner(), "a session alone pushes nothing");
+}

@@ -118,12 +118,14 @@ pub async fn build(env: &Env, s: &Settings) -> Result<(Digest, u64)> {
         .filter(|x| x.kind == "change.approved")
         .filter_map(|x| {
             let by = x.summary.rsplit_once(" by ")?.1;
-            (by.starts_with("mandate:") || by.starts_with("policy:") || by.starts_with("grant:"))
+            ["mandate:", "policy:", "grant:", "window:"]
+                .iter()
+                .any(|p| by.starts_with(p))
                 .then(|| (x.change.unwrap_or_default(), by.to_string()))
         })
         .collect();
     let behind = mirror_behind(env, s).await;
-    let d = digest(
+    let mut d = digest(
         &DigestInput {
             waiting: &waiting,
             tasks: Some(&tasks),
@@ -134,7 +136,42 @@ pub async fn build(env: &Env, s: &Settings) -> Result<(Digest, u64)> {
         },
         now(),
     );
+    d.sessions = sessions(env, s).await?;
     Ok((d, last))
+}
+
+/// Each session with open changes, with whether it listens and each change's stage.
+async fn sessions(env: &Env, s: &Settings) -> Result<Vec<crate::tasks::SessionLine>> {
+    let rows = platform::d1_rows(env, &crate::control::open(&s.instance, &s.repo)).await?;
+    let mut by: std::collections::BTreeMap<String, Vec<u32>> = std::collections::BTreeMap::new();
+    for o in crate::control::open_rows(&rows) {
+        if let Some(label) = o.session {
+            by.entry(label).or_default().push(o.number);
+        }
+    }
+    let q = super::stages::queue(env, s).await;
+    let mut out = Vec::new();
+    for (label, numbers) in by {
+        let (_, cursor) =
+            to_instance(env, s, "/events/cursor", &json!({ "session": label })).await?;
+        let mut changes = Vec::new();
+        for n in numbers {
+            let (_, view) = super::to_change(env, &s.repo, n, Method::Get, "/status", None).await?;
+            let Ok(c) = serde_json::from_value::<crate::changes::Change>(view["change"].clone())
+            else {
+                continue;
+            };
+            let st = super::stages::stage(env, s, &c, &q).await;
+            let needs = serde_json::to_value(st.needs)?;
+            changes.push((n, st.stage, needs.as_str().unwrap_or_default().to_string()));
+        }
+        out.push(crate::tasks::SessionLine {
+            label,
+            listening: cursor["listening"].as_bool() == Some(true),
+            changes,
+        });
+    }
+    Ok(out)
 }
 
 /// Why the GitHub mirror needs the owner, per `MainRun`; none when it can't be asked.
@@ -169,7 +206,7 @@ pub async fn show(env: &Env, s: &Settings, owner: bool) -> Result<Value> {
 pub async fn hourly(env: &Env) -> Result<()> {
     let s = Settings::from(env)?;
     let (d, last) = build(env, &s).await?;
-    let lines = d.lines();
+    let lines = d.owner_lines();
     let hash = super::super::grants::hex(&Sha256::digest(lines.join("\n").as_bytes()));
     let (_, cursor) = to_instance(env, &s, "/digest/cursor", &json!({})).await?;
     if d.needs_owner() && cursor["pushed"].as_str() != Some(hash.as_str()) {
