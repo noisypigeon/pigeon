@@ -249,3 +249,19 @@ Each step is a change through the pipeline, in this order:
   every other path by the Worker itself. `/healthz` answers 503 unless D1 and
   `MainRun` answer and the version is known.
 - **What remains:** §5, `pigeon` from `builds/`, then §6.
+
+### 2026-11-13: A deployed head never deploys again unasked, and a failed deploy says why
+
+- **On 2026-11-13 `5c5ba52` deployed and passed (event 10243).** Six minutes
+  later, as !320's merge pushed `fab2ad6`, a second deploy of `5c5ba52` ran
+  and failed with no reason (event 10304), which paused Auto window 1. No
+  `deploy_retry` was asked.
+  - `Pipeline::start` refuses the deployed head, but the alarm starts
+    whatever the `starting` slot holds without asking it.
+  - The likely source of the stale slot is a write across the Worker's own
+    redeploy.
+- **The alarm drops a `starting` head that is already `deployed`,** and starts
+  the newest push instead. `deploy_retry` still redeploys, since it clears
+  `deployed` first.
+- **A failed deploy always records a reason:** the report's first violation,
+  else its log's last non-empty line. The `deploy.failed` event shows it.

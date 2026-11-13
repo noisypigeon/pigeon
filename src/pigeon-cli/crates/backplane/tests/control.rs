@@ -1041,3 +1041,38 @@ fn an_eviction_job_runs_on_mains_head_with_its_candidates_and_one_id_an_hour() {
     assert_eq!(held, candidates);
     assert_eq!(spec.env.len(), 1, "no credential rides with it");
 }
+
+#[test]
+fn a_failed_deploy_always_says_why_and_the_deployed_head_never_starts_again() {
+    use backplane::control::{Outcome, Pipeline, Report, failure};
+    let sha = "0123456789abcdef0123456789abcdef01234567";
+    let mut p = Pipeline::default();
+    p.pushed(sha);
+    assert_eq!(p.start().as_deref(), Some(sha));
+    p.finished(
+        &Report::of(
+            "d",
+            Outcome::Failed,
+            "built\nwrangler: 10021 the script is too large\n\n",
+        ),
+        1,
+    );
+    assert_eq!(
+        p.history[0].violations,
+        ["wrangler: 10021 the script is too large"],
+        "the log's last line"
+    );
+    let mut said = Report::of("d", Outcome::Failed, "noise");
+    said.violations = vec!["the image is missing".into()];
+    assert_eq!(failure(&said), "the image is missing", "a violation first");
+    assert_eq!(
+        failure(&Report::of("d", Outcome::Failed, "")),
+        "the deploy failed with no output"
+    );
+    // Passed, the head is deployed, and a push of it starts nothing.
+    p.pushed(sha);
+    p.start();
+    p.finished(&Report::of("d", Outcome::Passed, ""), 2);
+    p.pushed(sha);
+    assert_eq!(p.start(), None);
+}

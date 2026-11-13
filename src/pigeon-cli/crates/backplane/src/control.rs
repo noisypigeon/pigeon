@@ -1293,6 +1293,27 @@ pub struct Deployed {
     pub violations: Vec<String>,
 }
 
+/// Why a failed job failed: its first violation, else its log's last non-empty line; see
+/// `.claude/decisions/2026-11-07-development-control-plane-deploys-itself.md`'s 2026-11-13
+/// amendment.
+#[must_use]
+pub fn failure(report: &Report) -> String {
+    report
+        .violations
+        .first()
+        .cloned()
+        .or_else(|| {
+            report
+                .log
+                .lines()
+                .rev()
+                .map(str::trim)
+                .find(|l| !l.is_empty())
+                .map(str::to_string)
+        })
+        .unwrap_or_else(|| "the deploy failed with no output".into())
+}
+
 /// `main`'s pipeline: at most one deploy at a time, always of the newest push, and only after
 /// the last one ended; the `MainRun` Durable Object keeps it.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -1405,7 +1426,11 @@ impl Pipeline {
             at,
             published: report.published.clone(),
             workers: report.workers.clone(),
-            violations: report.violations.clone(),
+            violations: if report.outcome == Outcome::Failed {
+                vec![failure(report)]
+            } else {
+                report.violations.clone()
+            },
         });
     }
 

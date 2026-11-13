@@ -881,7 +881,14 @@ impl DurableObject for MainRun {
         let starting: Option<String> = self.state.storage().get(STARTING).await?;
         let mut next: Option<String> = None;
         let mut wait = false;
-        if let Some(sha) = starting {
+        if let Some(sha) = starting
+            .as_deref()
+            .filter(|s| p.deployed.as_deref() == Some(*s))
+        {
+            // A stale slot never redeploys what's deployed; `deploy_retry` clears `deployed`.
+            worker::console_warn!("{sha} is already deployed; its deploy is dropped");
+            next = p.start();
+        } else if let Some(sha) = starting {
             let secret = secret(&self.env, crate::cobot::ship_wire::IMAGES_VAR)
                 .ok()
                 .and_then(|v| serde_json::from_str(&v).ok());
@@ -958,10 +965,7 @@ async fn deploy_event(env: &Env, sha: &str, report: &Report) {
     } else {
         (
             "deploy.failed",
-            format!(
-                "failed: {}",
-                report.violations.first().cloned().unwrap_or_default()
-            ),
+            format!("failed: {}", control::failure(report)),
         )
     };
     let summary = format!("the deploy of {} {how}", sha.get(..12).unwrap_or(sha));
