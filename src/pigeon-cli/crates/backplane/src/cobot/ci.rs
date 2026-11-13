@@ -104,6 +104,16 @@ pub fn changed(dir: &Path, base: &str, sha: &str) -> Result<Vec<String>, Error> 
         .collect())
 }
 
+/// Fetches `branch` into the checkout as `refs/remotes/origin/<branch>`, for [`changed`].
+///
+/// # Errors
+///
+/// [`Error::Git`] when the fetch fails.
+pub fn fetch_branch(dir: &Path, remote: &str, token: &str, branch: &str) -> Result<(), Error> {
+    let spec = format!("+refs/heads/{branch}:refs/remotes/origin/{branch}");
+    git(dir, remote, token, &["fetch", "-q", remote, &spec]).map(|_| ())
+}
+
 /// The file at `path` on the checkout's fetched `base`, if it exists there.
 #[must_use]
 pub fn base_file(dir: &Path, base: &str, path: &str) -> Option<String> {
@@ -684,6 +694,7 @@ fn commit_tree(dir: &Path, tree: &str, parent: &str, message: &str) -> Result<St
 /// # Errors
 ///
 /// [`Error::Git`] when git fails, or the push loses to a newer head.
+#[expect(clippy::too_many_arguments, reason = "the job's spec, spelled out")]
 pub fn restack(
     dir: &Path,
     remote: &str,
@@ -691,6 +702,7 @@ pub fn restack(
     base: &str,
     branch: &str,
     sha: &str,
+    since: Option<&str>,
     union: &[&str],
 ) -> Result<Restack, Error> {
     let attributes = union.iter().fold(String::new(), |mut a, g| {
@@ -746,11 +758,15 @@ pub fn restack(
         r.landed = true;
         return Ok(r);
     }
+    // Built on another change: its own commits start past that change's last head.
+    let from = since
+        .filter(|s| git(dir, "", "", &["merge-base", "--is-ancestor", s, sha]).is_ok())
+        .unwrap_or(&fork);
     let commits = git(
         dir,
         "",
         "",
-        &["rev-list", "--reverse", &format!("{fork}..{sha}")],
+        &["rev-list", "--reverse", &format!("{from}..{sha}")],
     )?;
     let first = commits.lines().next().unwrap_or(sha);
     let message = git(dir, "", "", &["log", "-1", "--format=%B", first])?;

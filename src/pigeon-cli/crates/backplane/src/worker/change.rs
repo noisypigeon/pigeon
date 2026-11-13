@@ -155,7 +155,13 @@ impl ChangeRun {
         let next = if let Some(session) = body["session"].as_str() {
             change.hand_to(session)
         } else if body["off"].as_bool() == Some(true) {
-            change.unyield()
+            match body["ended"].as_u64().and_then(|n| u32::try_from(n).ok()) {
+                Some(to) => {
+                    let head = body["head"].as_str().map(str::to_string);
+                    change.unyield().after_ended(to, head)
+                }
+                None => change.unyield(),
+            }
         } else {
             let to = body["to"]
                 .as_u64()
@@ -324,6 +330,14 @@ impl ChangeRun {
                 .map_err(|e| e.to_string())?;
             spec.env
                 .insert(control::OVERLAPS.into(), overlaps.to_string());
+            if let Some(b) = change.built_on() {
+                spec.env.insert(control::AFTER.into(), b.to_string());
+            }
+        }
+        if job == crate::changes::RESTACK
+            && let Some(h) = change.after.as_ref().and_then(|a| a.head.clone())
+        {
+            spec.env.insert(control::AFTER_HEAD.into(), h);
         }
         if job == control::MIRROR {
             let (to, to_token) = self.github().await?;

@@ -998,3 +998,19 @@ Each fix is its own change.
 - **Two sessions on clashing work become one ordering and one
   reconciliation,** instead of both rebasing after every merge.
 - **Still to come:** `after`, for a change built on another's branch.
+
+### 2026-11-13: Step 7 ends: changes built on another (`after`)
+
+- **`change_propose` takes `after: <n>`, an open change the new one is built on.**
+  - The new change records it.
+  - It yields to it ("built on !n"), so its merge waits as for any yield.
+- **While it waits, its bound job counts its files from that change's branch, not `main`.**
+  - So its scope and checks are its own.
+  - Its rules and policies still come from `main`.
+  - A branch that doesn't fetch is counted from `main`, and the log says so.
+- **When that change merges or closes, the release keeps its last head on the waiting change.**
+  - At the waiting change's merge turn, its restack onto `main` takes its commit message from its own first commit past that head.
+  - The restack then forgets `after`: the change now stands on `main`.
+  - Its patch differs from the one approved, so it is approved again after the restack.
+- **A change built on one that closes unmerged is left to its session.** The session gets the `yield-ended` task, and the bound job counts from `main` again.
+- **Step 7 is done.** Next, by §9's order: step 1's grants.

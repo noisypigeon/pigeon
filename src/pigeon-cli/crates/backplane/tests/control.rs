@@ -75,6 +75,7 @@ fn operations_route_to_events_with_the_access_identity() {
             affects: Vec::new(),
             full: false,
             resumes: None,
+            after: None,
         })
     );
     assert!(
@@ -1147,9 +1148,17 @@ fn a_pin_and_a_resumed_proposal_are_routed() {
         Ok(Routed::Propose { resumes, .. }) => assert_eq!(resumes, Some(79)),
         other => panic!("{other:?}"),
     }
-    let mut bad = propose;
+    let mut bad = propose.clone();
     bad["resumes"] = serde_json::json!("seventy");
     assert!(control::route(&req("change.propose", bad), "agent", 1).is_err());
+    let mut after = propose;
+    after["after"] = serde_json::json!("80");
+    match control::route(&req("change.propose", after.clone()), "agent", 1) {
+        Ok(Routed::Propose { after, .. }) => assert_eq!(after, Some(80)),
+        other => panic!("{other:?}"),
+    }
+    after["after"] = serde_json::json!("eighty");
+    assert!(control::route(&req("change.propose", after), "agent", 1).is_err());
 }
 
 #[test]

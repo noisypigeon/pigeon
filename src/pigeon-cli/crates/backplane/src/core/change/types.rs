@@ -200,6 +200,19 @@ pub struct ConflictContext {
     pub change_diff: String,
 }
 
+/// The open change a change is built on: its number, its branch, and its last head once it
+/// ended; see `.claude/decisions/2026-11-12-development-grants-applies-rescue-yield.md` §5.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct After {
+    /// The change built on.
+    pub number: u32,
+    /// Its branch.
+    pub branch: String,
+    /// Its last head, once it merged or closed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub head: Option<String>,
+}
+
 /// A yield: the change waited for, who asked, why and when.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Yielded {
@@ -358,6 +371,10 @@ pub struct Change {
     /// `.claude/decisions/2026-11-12-development-grants-applies-rescue-yield.md` §5.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub yielded: Option<Yielded>,
+    /// The open change it is built on, by `change.propose`'s `after`; see
+    /// `.claude/decisions/2026-11-12-development-grants-applies-rescue-yield.md` §5.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub after: Option<After>,
 }
 
 /// Something that happened to a change.
@@ -582,6 +599,7 @@ impl Change {
             landed: None,
             evicted: None,
             yielded: None,
+            after: None,
         }
     }
 
@@ -615,6 +633,24 @@ impl Change {
     pub fn unyield(mut self) -> Self {
         self.yielded = None;
         self
+    }
+
+    /// `self` after change `to` ended at `head`: the change it is built on keeps that head, for
+    /// the restack onto `main`.
+    #[must_use]
+    pub fn after_ended(mut self, to: u32, head: Option<String>) -> Self {
+        if let Some(a) = self.after.as_mut().filter(|a| a.number == to) {
+            a.head = head;
+        }
+        self
+    }
+
+    /// The branch of the open change `self` is built on, while it still waits for it.
+    #[must_use]
+    pub fn built_on(&self) -> Option<&str> {
+        let a = self.after.as_ref()?;
+        let waits = self.yielded.as_ref().is_some_and(|y| y.to == a.number);
+        (waits && a.head.is_none()).then_some(a.branch.as_str())
     }
 
     /// `self` handed to `session`, which took it; see

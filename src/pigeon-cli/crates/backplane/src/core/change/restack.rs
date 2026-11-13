@@ -88,6 +88,10 @@ impl Change {
             return Ok((self, Vec::new()));
         }
         self = self.set_status(RESTACK, JobStatus::Passed);
+        // Restacked past the change it was built on, which has ended: it stands on `main` now.
+        if self.after.as_ref().is_some_and(|a| a.head.is_some()) {
+            self.after = None;
+        }
         // Checks carry only when disjoint; an approval also across a clean restack of the same
         // patch, its head checked in full again.
         let carries = r.relation == Relation::Disjoint && r.same_patch;

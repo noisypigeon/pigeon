@@ -223,7 +223,7 @@ const CATALOG: &[Operation] = &[
         name: "change.propose",
         engine: Engine::Backplane,
         effect: Effect::Plan,
-        summary: "Propose a change: its slug, Conventional Commit title, plan and scope (globs, one per line), and optionally the `mandate` it is carried out under, the `session` proposing it, for a design change the globs its ADR `affects`, `full` true to run the whole test suite in its merge gate, and `resumes` an evicted change's number to finish it; returns its number, its branch, change/<number>-<slug>, and the open changes it `overlaps`",
+        summary: "Propose a change: its slug, Conventional Commit title, plan and scope (globs, one per line), and optionally the `mandate` it is carried out under, the `session` proposing it, for a design change the globs its ADR `affects`, `full` true to run the whole test suite in its merge gate, `resumes` an evicted change's number to finish it, and `after` an open change's number to build on its branch (the new change waits for it, and restacks onto main when it merges); returns its number, its branch, change/<number>-<slug>, and the open changes it `overlaps`",
         args: &[
             arg("slug", true, Kind::String),
             arg("title", true, Kind::String),
@@ -235,6 +235,7 @@ const CATALOG: &[Operation] = &[
             arg("ticket", false, Kind::String),
             arg("full", false, Kind::Text),
             arg("resumes", false, Kind::Text),
+            arg("after", false, Kind::Text),
         ],
     },
     Operation {

@@ -432,6 +432,7 @@ fn restack(spec: &JobSpec, dir: &Path) -> Report {
         &spec.base,
         &spec.branch,
         &spec.sha,
+        spec.env.get(crate::control::AFTER_HEAD).map(String::as_str),
         &[UNION],
     ) {
         Ok(r) => {
@@ -482,7 +483,8 @@ fn restack(spec: &JobSpec, dir: &Path) -> Report {
 /// The bound job: the change and pull-request policies, with the change's approved scope and
 /// its plan as the body, then the checks its paths need.
 fn bound(spec: &JobSpec, dir: &Path, sentinel: &Path) -> Report {
-    let files = match crate::cobot::ci::changed(dir, &spec.base, &spec.sha) {
+    let (since, built) = built_on(spec, dir);
+    let files = match crate::cobot::ci::changed(dir, since, &spec.sha) {
         Ok(f) => f,
         Err(e) => {
             let mut r = report(spec, Outcome::Failed, &e.to_string());
@@ -493,7 +495,7 @@ fn bound(spec: &JobSpec, dir: &Path, sentinel: &Path) -> Report {
     let exe =
         std::env::current_exe().map_or_else(|_| "unknown".into(), |p| p.display().to_string());
     let mut log = format!(
-        "pigeon: {exe}\n{} file(s) changed:\n{}\n",
+        "pigeon: {exe}\n{built}{} file(s) changed:\n{}\n",
         files.len(),
         files.join("\n")
     );
@@ -797,6 +799,25 @@ fn eviction(spec: &JobSpec, dir: &Path, sentinel: &Path) -> Report {
     Report {
         evictions: verdicts,
         ..report(spec, Outcome::Passed, &log)
+    }
+}
+
+/// The branch the head's files are counted from: [`crate::control::AFTER`]'s, fetched, for a
+/// change built on another, else the base; and a line saying which; see
+/// `.claude/decisions/2026-11-12-development-grants-applies-rescue-yield.md` §5.
+fn built_on<'a>(spec: &'a JobSpec, dir: &Path) -> (&'a str, String) {
+    let Some(after) = spec.env.get(crate::control::AFTER) else {
+        return (&spec.base, String::new());
+    };
+    match crate::cobot::ci::fetch_branch(dir, &spec.remote, &spec.token, after) {
+        Ok(()) => (after, format!("built on {after}\n")),
+        Err(e) => (
+            &spec.base,
+            format!(
+                "built on {after}, which didn't fetch ({e}); counted from {}\n",
+                spec.base
+            ),
+        ),
     }
 }
 

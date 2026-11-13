@@ -40,6 +40,8 @@ pub enum Routed {
         full: bool,
         /// The evicted change it resumes, if any.
         resumes: Option<u32>,
+        /// The open change it is built on, if any.
+        after: Option<u32>,
     },
     /// Apply an event to change `number`; `by` is filled in from Access.
     Event {
@@ -226,15 +228,21 @@ fn propose_route(a: &Map<String, Value>) -> Result<Routed, String> {
         session,
         affects,
         full: flag(a, "full"),
-        resumes: match text(a, "resumes") {
-            Some(r) if !r.trim().is_empty() => Some(
-                r.trim()
-                    .parse::<u32>()
-                    .map_err(|_| format!("`resumes` must be a change number, not `{r}`"))?,
-            ),
-            _ => None,
-        },
+        resumes: number_arg(a, "resumes")?,
+        after: number_arg(a, "after")?,
     })
+}
+
+/// The change number in argument `k`, if given.
+fn number_arg(a: &Map<String, Value>, k: &str) -> Result<Option<u32>, String> {
+    match text(a, k) {
+        Some(r) if !r.trim().is_empty() => r
+            .trim()
+            .parse::<u32>()
+            .map(Some)
+            .map_err(|_| format!("`{k}` must be a change number, not `{r}`")),
+        _ => Ok(None),
+    }
 }
 
 /// Routes a validated control-plane request, as `by` at `at`.
@@ -1055,6 +1063,13 @@ pub fn deploy_spec(
 /// The bound job's variable holding the open changes whose scope meets the head's, as a JSON
 /// array of `{number, branch, state}`; see the 2026-11-12 ADR §5's conflict forecasts.
 pub const OVERLAPS: &str = "OVERLAPS";
+
+/// The bound job's env: the branch of the open change the head is built on; see
+/// `.claude/decisions/2026-11-12-development-grants-applies-rescue-yield.md` §5.
+pub const AFTER: &str = "AFTER";
+
+/// The restack job's env: the last head of the ended change the head was built on.
+pub const AFTER_HEAD: &str = "AFTER_HEAD";
 
 /// The job that judges eviction candidates with `main`'s eviction policies; see
 /// `.claude/decisions/2026-11-10-development-change-slot-eviction-policy.md` §4-§5.

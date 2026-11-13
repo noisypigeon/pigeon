@@ -4,7 +4,7 @@
 use std::path::Path;
 use std::process::Command;
 
-use backplane::cobot::ci::{Relation, checkout, forecast, restack};
+use backplane::cobot::ci::{Relation, changed, checkout, fetch_branch, forecast, restack};
 
 fn git(dir: &Path, args: &[&str]) -> String {
     let out = Command::new("git")
@@ -77,7 +77,17 @@ fn diverge(work: &Path, url: &str, files: &[(&str, &str)], moved: &[(&str, &str)
 fn run(url: &str, head: &str) -> (tempfile::TempDir, backplane::cobot::ci::Restack) {
     let job = tempfile::tempdir().expect("tmp");
     checkout(job.path(), url, "", "main", "change/1-x", head).expect("checks out");
-    let r = restack(job.path(), url, "", "main", "change/1-x", head, &["*.md"]).expect("restacks");
+    let r = restack(
+        job.path(),
+        url,
+        "",
+        "main",
+        "change/1-x",
+        head,
+        None,
+        &["*.md"],
+    )
+    .expect("restacks");
     (job, r)
 }
 
@@ -249,5 +259,63 @@ fn a_forecast_names_the_branches_a_head_would_conflict_with_and_pushes_nothing()
         git(&work, &["rev-parse", "r/change/1-x"]),
         head,
         "nothing pushed"
+    );
+}
+
+#[test]
+fn a_change_built_on_another_counts_its_own_files_and_restacks_with_its_own_message() {
+    let (_t, url, work) = remote();
+    // change/1-x edits a.txt; change/2-y is built on it and edits b.txt.
+    let parent = diverge(
+        &work,
+        &url,
+        &[("a.txt", "ONE\ntwo\nthree\nfour\nfive\nsix\n")],
+        &[],
+    );
+    git(&work, &["checkout", "-q", "-B", "change/2-y", &parent]);
+    write(&work, "b.txt", "B\n");
+    git(&work, &["commit", "-qam", "feat: y\n\nChange-Scope: b.txt"]);
+    let head = git(&work, &["rev-parse", "HEAD"]);
+    git(&work, &["push", "-q", &url, "HEAD:refs/heads/change/2-y"]);
+
+    let job = tempfile::tempdir().expect("tmp");
+    checkout(job.path(), &url, "", "main", "change/2-y", &head).expect("checks out");
+    assert_eq!(changed(job.path(), "main", &head).expect("diff").len(), 2);
+    fetch_branch(job.path(), &url, "", "change/1-x").expect("fetches");
+    assert_eq!(
+        changed(job.path(), "change/1-x", &head).expect("diff"),
+        ["b.txt"],
+        "only its own files"
+    );
+
+    // change/1-x merges as a squash; change/2-y restacks past its last head.
+    git(&work, &["checkout", "-q", "main"]);
+    write(&work, "a.txt", "ONE\ntwo\nthree\nfour\nfive\nsix\n");
+    git(&work, &["commit", "-qam", "feat: x (!1)"]);
+    git(&work, &["push", "-q", &url, "HEAD:refs/heads/main"]);
+    let job = tempfile::tempdir().expect("tmp");
+    checkout(job.path(), &url, "", "main", "change/2-y", &head).expect("checks out");
+    let r = restack(
+        job.path(),
+        &url,
+        "",
+        "main",
+        "change/2-y",
+        &head,
+        Some(&parent),
+        &["*.md"],
+    )
+    .expect("restacks");
+    let to = r.to.expect("pushed");
+    let message = git(job.path(), &["log", "-1", "--format=%B", &to]);
+    assert!(message.starts_with("feat: y"), "{message}");
+    git(
+        &work,
+        &["fetch", "-q", &url, "+refs/heads/*:refs/remotes/r/*"],
+    );
+    assert_eq!(
+        git(&work, &["diff", "--name-only", "r/main", &to]),
+        "b.txt",
+        "on main, only its own change"
     );
 }

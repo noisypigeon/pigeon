@@ -695,6 +695,46 @@ fn a_yielded_change_waits_for_its_change_and_is_freed_when_that_ends() {
 }
 
 #[test]
+fn a_change_built_on_another_counts_from_its_branch_until_it_ends_then_stands_on_main() {
+    let mut c = approved();
+    c.after = Some(After {
+        number: 80,
+        branch: "change/80-x".into(),
+        head: None,
+    });
+    assert_eq!(c.built_on(), None, "only while it waits for it");
+    let c = c.yield_to(80, "s-a", "built on !80", 1).expect("yields");
+    assert_eq!(c.built_on(), Some("change/80-x"));
+    let other = c.clone().unyield().after_ended(81, Some(M.into()));
+    assert_eq!(
+        other.after.and_then(|a| a.head),
+        None,
+        "another change ended"
+    );
+    let c = c.unyield().after_ended(80, Some(M.into()));
+    assert_eq!(c.after.as_ref().and_then(|a| a.head.as_deref()), Some(M));
+    assert_eq!(c.built_on(), None);
+    let restacked = Event::Restacked {
+        sha: A.into(),
+        restack: Restacked {
+            relation: Relation::Clean,
+            to: Some(B.into()),
+            same_patch: false,
+            conflicts: Vec::new(),
+            onto: M.into(),
+            context: Vec::new(),
+            messages: String::new(),
+            landed: false,
+        },
+    };
+    let (c, _) = step(&restacking(c), restacked).expect("restacked");
+    assert_eq!(c.after, None, "on main now");
+    let old: Change =
+        serde_json::from_value(serde_json::to_value(approved()).expect("json")).expect("reads");
+    assert_eq!(old.after, None, "the version before reads as none");
+}
+
+#[test]
 fn a_handed_change_is_the_taking_sessions() {
     let mut c = approved();
     c.session = Some("s-a".into());

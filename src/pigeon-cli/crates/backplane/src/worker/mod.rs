@@ -565,7 +565,15 @@ async fn dispatch(
             affects,
             full,
             resumes,
+            after,
         } => {
+            let built = match after {
+                Some(n) => match built_on(env, s, n).await? {
+                    Ok(a) => Some(a),
+                    Err(why) => return Ok((None, respond(operation, 409, json!(why)))),
+                },
+                None => None,
+            };
             let plan = match resumes {
                 Some(n) => match resumed(env, s, n).await? {
                     Ok(before) => format!("{before}\n\n{plan}"),
@@ -579,9 +587,16 @@ async fn dispatch(
             change.session = session;
             change.affects = affects;
             change.full_asked = full.then(|| who.subject.clone());
+            change.after.clone_from(&built);
             let proposed = propose(env, s, operation, change).await?;
             if let Some(n) = resumes {
                 tasks::close_for(env, s, n).await?;
+            }
+            if let (Some(a), Some(number)) =
+                (built, proposed.0.as_deref().and_then(|n| n.parse().ok()))
+            {
+                let reason = format!("built on !{}", a.number);
+                set_yield(env, s, number, a.number, &who.subject, &reason).await?;
             }
             Ok(proposed)
         }
@@ -1341,7 +1356,7 @@ pub(super) async fn release_yields(env: &Env, c: &Change) -> Result<()> {
     let s = Settings::from(env)?;
     let (_, v) = mandates::to_instance(env, &s, "/yields/take", &json!({ "to": c.number })).await?;
     let waiting: Vec<u32> = serde_json::from_value(v).unwrap_or_default();
-    let off = json!({ "off": true });
+    let off = json!({ "off": true, "ended": c.number, "head": c.head });
     for n in waiting {
         let (status, v) = to_change(env, &s.repo, n, Method::Post, "/yield", Some(&off)).await?;
         if status != 200 {
@@ -1445,6 +1460,32 @@ async fn act_on_evictions(env: &Env, s: &Settings) -> Result<()> {
 
 /// The opening of a plan that resumes evicted change `n`: what it did and has left; refused
 /// unless `n` was evicted.
+/// The open change `n` a new change is built on; see
+/// `.claude/decisions/2026-11-12-development-grants-applies-rescue-yield.md` §5.
+async fn built_on(
+    env: &Env,
+    s: &Settings,
+    n: u32,
+) -> Result<std::result::Result<crate::changes::After, String>> {
+    let (status, v) = to_change(env, &s.repo, n, Method::Get, "/status", None).await?;
+    let open = (status == 200)
+        .then(|| serde_json::from_value::<Change>(v["change"].clone()).ok())
+        .flatten()
+        .filter(|c| {
+            !matches!(
+                c.state,
+                crate::changes::State::Merged | crate::changes::State::Closed
+            )
+        });
+    Ok(open
+        .map(|c| crate::changes::After {
+            number: n,
+            branch: c.branch(),
+            head: None,
+        })
+        .ok_or_else(|| format!("!{n} is not an open change to build on")))
+}
+
 async fn resumed(env: &Env, s: &Settings, n: u32) -> Result<std::result::Result<String, String>> {
     let (status, v) = to_change(env, &s.repo, n, Method::Get, "/status", None).await?;
     let change = (status == 200)
