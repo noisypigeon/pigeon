@@ -206,6 +206,57 @@ pub struct Preset {
     pub claims: Vec<ClaimSpec>,
     /// Its records by short key.
     pub records: BTreeMap<String, RecordSpec>,
+    /// Where it may be placed; both when absent.
+    pub placements: Option<Vec<Placement>>,
+    /// The vendor's page for its per-domain values.
+    pub docs: Option<String>,
+}
+
+/// Where a service sits; see `.claude/decisions/2026-11-13-runtime-zone-vendor-dns-placements.md`.
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum Placement {
+    /// At the zone's `@`.
+    Apex,
+    /// At a name under it.
+    Subdomain,
+}
+
+/// A service's preset (its key by default), its `at` (`@` by default) and its inputs.
+fn placed<'a>(service: &'a str, cfg: &'a Value) -> (&'a str, &'a str, Value) {
+    let preset = cfg["preset"].as_str().unwrap_or(service);
+    let at = cfg["at"].as_str().unwrap_or("@");
+    let mut inputs = cfg.clone();
+    if let Some(o) = inputs.as_object_mut() {
+        o.remove("preset");
+        o.remove("at");
+    }
+    (preset, at, inputs)
+}
+
+/// Checks a service's `at`: `@`, or a relative host with no wildcard or `_` label.
+fn check_at(at: &str, zone: &str) -> Result<(), String> {
+    if at == "@" {
+        return Ok(());
+    }
+    if !HOST.is_match(at) || at.contains('*') || at.split('.').any(|l| l.starts_with('_')) {
+        return Err(format!(
+            "`{at}` is not a host name without a wildcard or `_` label"
+        ));
+    }
+    if at.ends_with(&format!(".{zone}")) {
+        return Err(format!("`{at}` must be relative to the zone"));
+    }
+    Ok(())
+}
+
+/// A preset's name placed at `at`.
+fn rebase(name: &str, at: &str) -> String {
+    match (name, at) {
+        (n, "@") => n.to_string(),
+        ("@", a) => a.to_string(),
+        (n, a) => format!("{n}.{a}"),
+    }
 }
 
 /// One preset input.
@@ -355,14 +406,15 @@ pub fn published_values(config: &Value, home: &Path) -> std::collections::BTreeS
         .filter_map(|(_, zone)| zone["services"].as_object())
         .flatten();
     for (service, cfg) in services {
-        let Ok(preset) = load_preset(home, service) else {
+        let (name, _, inputs) = placed(service, cfg);
+        let Ok(preset) = load_preset(home, name) else {
             continue;
         };
         for (path, spec) in &preset.inputs {
             if !spec.published {
                 continue;
             }
-            let value = path.split('.').try_fold(cfg, |v, k| v.get(k));
+            let value = path.split('.').try_fold(&inputs, |v, k| v.get(k));
             if let Some(Value::String(s)) = value {
                 out.insert(s.clone());
             }
@@ -375,7 +427,18 @@ pub fn published_values(config: &Value, home: &Path) -> std::collections::BTreeS
 #[must_use]
 pub fn check_preset(service: &str, p: &Preset) -> Vec<String> {
     let mut out = Vec::new();
+    if p.placements.as_ref().is_some_and(Vec::is_empty) {
+        out.push(format!("preset `{service}`: placements is empty"));
+    }
+    if p.docs.as_ref().is_some_and(|d| !d.starts_with("https://")) {
+        out.push(format!("preset `{service}`: docs is not an https:// link"));
+    }
     for (path, spec) in &p.inputs {
+        if matches!(path.split('.').next(), Some("preset" | "at")) {
+            out.push(format!(
+                "preset `{service}`: input `{path}` uses a reserved name"
+            ));
+        }
         if !INPUT.is_match(path) {
             out.push(format!(
                 "preset `{service}`: input `{path}` is not a dotted name"
@@ -482,7 +545,10 @@ fn resolve(
         };
         match value {
             None if spec.optional => {}
-            None => problems.push(format!("{at}: is required")),
+            None => problems.push(match &p.docs {
+                Some(d) => format!("{at}: is required; see {d}"),
+                None => format!("{at}: is required"),
+            }),
             Some(v) => {
                 if let Some(k) = as_secret(&v) {
                     if spec.secret {
@@ -670,32 +736,65 @@ struct Expansion {
 }
 
 impl Expansion {
-    /// Each enabled preset's records and claims.
-    fn services(&mut self, config: &Value, home: &Path) {
+    /// Each enabled service: its preset's records and claims, placed at its `at`.
+    fn services(&mut self, config: &Value, home: &Path, zone: &str) {
         for (service, cfg) in config["services"].as_object().into_iter().flatten() {
             self.prefixes.push(format!("{service}-"));
-            let preset = match load_preset(home, service) {
+            for key in ["preset", "at"] {
+                if !cfg[key].is_null() && !cfg[key].is_string() {
+                    self.problems
+                        .push(format!("services.{service}.{key}: must be a string"));
+                }
+            }
+            let (name, at, inputs) = placed(service, cfg);
+            if let Err(e) = check_at(at, zone) {
+                self.problems.push(format!("services.{service}.at: {e}"));
+                continue;
+            }
+            let preset = match load_preset(home, name) {
                 Ok(p) => p,
                 Err(e) => {
                     self.problems.push(format!("services.{service}: {e}"));
                     continue;
                 }
             };
-            self.problems.extend(check_preset(service, &preset));
-            let values = resolve(service, &preset, cfg, &mut self.problems);
+            let place = if at == "@" {
+                Placement::Apex
+            } else {
+                Placement::Subdomain
+            };
+            if let Some(ps) = preset.placements.as_ref().filter(|ps| !ps.contains(&place)) {
+                let ps: Vec<String> = ps.iter().map(|p| format!("{p:?}").to_lowercase()).collect();
+                self.problems.push(format!(
+                    "services.{service}: preset {name} allows only {}",
+                    ps.join(", ")
+                ));
+                continue;
+            }
+            self.problems.extend(check_preset(name, &preset));
+            let values = resolve(service, &preset, &inputs, &mut self.problems);
             for c in &preset.claims {
                 if c.when.as_ref().is_none_or(|w| values.contains_key(w)) {
-                    self.claims.push((c.name.clone(), c.kind, service.clone()));
+                    self.claims
+                        .push((rebase(&c.name, at), c.kind, service.clone()));
                 }
             }
             for (key, r) in &preset.records {
                 if let Some(content) = fill(&r.content, &values) {
                     let raw = fill_raw(&r.content, &values, &self.secrets);
+                    let k = format!("{service}-{key}");
+                    if let Some(prev) = self.recs.get(&k) {
+                        self.problems.push(format!(
+                            "record key `{k}` is made by both {} and {service}",
+                            prev.owner
+                        ));
+                        continue;
+                    }
                     self.recs.insert(
-                        format!("{service}-{key}"),
+                        k,
                         Rec {
                             owner: service.clone(),
-                            name: r.name.clone(),
+                            name: rebase(&r.name, at),
                             kind: r.kind.clone(),
                             content,
                             raw,
@@ -965,7 +1064,7 @@ fn expand_zone(
         ..Expansion::default()
     };
     bad_secrets(config, "config", &mut e.problems);
-    e.services(config, home);
+    e.services(config, home, zone);
     e.hosts(config, site, zone);
     e.records(config);
     e.finish(zone)
@@ -1046,6 +1145,10 @@ fn check_record(r: &Rec, zone: &str) -> Result<(), String> {
     }
     if !HOST.is_match(&r.name) {
         return Err(format!("name `{}` is not a DNS name", r.name));
+    }
+    let full = fqdn(&r.name, zone);
+    if full.len() > 253 || full.split('.').any(|l| l.len() > 63) {
+        return Err(format!("name `{}` is too long for DNS", r.name));
     }
     if !RECORD_TYPES.contains(&r.kind.as_str()) {
         return Err(format!("type `{}` is not one of {RECORD_TYPES:?}", r.kind));

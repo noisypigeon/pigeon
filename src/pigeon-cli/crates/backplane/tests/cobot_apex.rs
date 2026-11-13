@@ -1959,3 +1959,61 @@ fn a_contract_site_rejects_what_breaks_the_contract() {
     let err = build(&CONTRACT.replace("1.0.0", "0.9.0"));
     assert!(err.contains("predates the config contract"), "{err}");
 }
+
+#[test]
+fn a_service_is_a_preset_placed_at_any_name() {
+    let placed = PROTON.replace(
+        "records: {}",
+        "  aliases:\n    preset: proton\n    at: mail\n    verification: { pm: { secret: pm_verification } }\n    dmarc: default\nrecords: {}",
+    );
+    let repo = repo(&placed);
+    assert_eq!(problems(repo.path()), Vec::<String>::new());
+    let got = records(repo.path());
+    assert_eq!(rec(&got, "proton-mx1")["name"], "noisypigeon.com");
+    for (key, name) in [
+        ("aliases-mx1", "mail.noisypigeon.com"),
+        ("aliases-spf", "mail.noisypigeon.com"),
+        ("aliases-dkim02", "dkim02._domainkey.mail.noisypigeon.com"),
+        ("aliases-dmarc", "_dmarc.mail.noisypigeon.com"),
+    ] {
+        assert_eq!(rec(&got, key)["name"], name, "{key}");
+    }
+    assert!(rec(&got, "aliases-verification-protonmail").is_null());
+
+    for (at, want) in [
+        ("\"*.mail\"", "without a wildcard"),
+        ("_mail", "without a wildcard"),
+        ("mail.noisypigeon.com", "relative to the zone"),
+        (&"a".repeat(64), "too long for DNS"),
+    ] {
+        let repo = self::repo(&placed.replace("at: mail", &format!("at: {at}")));
+        assert_fails(repo.path(), want);
+    }
+
+    let repo = self::repo(&placed);
+    let proton = repo.path().join("catalog/cloudflare/presets/proton.yaml");
+    let text = fs::read_to_string(&proton).expect("read");
+    fs::write(&proton, format!("{text}placements: [apex]\n")).expect("write");
+    assert_fails(
+        repo.path(),
+        "services.aliases: preset proton allows only apex",
+    );
+    fs::write(&proton, format!("{text}docs: http://x.example\n")).expect("write");
+    assert_fails(repo.path(), "docs is not an https:// link");
+    fs::write(&proton, text.replace("dmarc:\n", "at:\n")).expect("write");
+    assert_fails(repo.path(), "input `at` uses a reserved name");
+
+    let repo = self::repo(&PROTON.replace(
+        "records: {}",
+        "  proton-verification: { preset: p }\nrecords: {}",
+    ));
+    write(
+        repo.path(),
+        "catalog/cloudflare/presets/p.yaml",
+        "description: x.\nrecords:\n  pm: { name: t, type: TXT, content: x }\n",
+    );
+    assert_fails(
+        repo.path(),
+        "record key `proton-verification-pm` is made by both",
+    );
+}
