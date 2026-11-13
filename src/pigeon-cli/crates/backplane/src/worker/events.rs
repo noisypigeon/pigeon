@@ -15,8 +15,10 @@ use crate::events::{After, Cursors, Filter, Log};
 /// The storage key of the log.
 const LOG: &str = "events";
 
-/// How long `events.wait` and `GET /v0/events` wait at most, in seconds.
-pub const WAIT_MAX: u64 = 50;
+/// How long `events.wait` and `GET /v0/events` wait at most, in seconds: under the 30 seconds
+/// after which a request is cut on its way; see
+/// `.claude/decisions/2026-11-13-development-session-stages-subscriptions-breaker.md`.
+pub const WAIT_MAX: u64 = 25;
 
 /// How often a long poll looks.
 const LOOK: Duration = Duration::from_secs(5);

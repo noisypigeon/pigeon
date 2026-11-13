@@ -117,7 +117,7 @@ pub struct Cursors(pub std::collections::BTreeMap<String, Cursor>);
 impl Cursors {
     /// Records `label`'s poll at `now` and answers where it starts: its cursor for
     /// [`After::Session`] (the log's `last` for a session never seen), else the number given,
-    /// which moves the cursor forward.
+    /// which moves the cursor forward. The cursor never passes `last`.
     pub fn poll(&mut self, label: &str, asked: After, last: u64, now: u64) -> u64 {
         self.0
             .retain(|_, c| now.saturating_sub(c.polled) <= KEEP_FOR);
@@ -126,10 +126,11 @@ impl Cursors {
             polled: now,
         });
         c.polled = now;
+        c.after = c.after.min(last);
         match asked {
             After::Session => c.after,
             After::At(n) => {
-                c.after = c.after.max(n);
+                c.after = c.after.max(n.min(last));
                 n
             }
         }

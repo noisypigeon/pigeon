@@ -6,8 +6,8 @@ use serde::{Deserialize, Serialize};
 /// How long a task waits for its own session before any session may take it, in seconds.
 pub const OWN: u64 = 30 * 60;
 
-/// The longest `task.wait` waits, in seconds.
-pub const WAIT_MAX: u64 = 50;
+/// The longest `task.wait` waits, in seconds: under the 30-second cut, as `events.wait`.
+pub const WAIT_MAX: u64 = 25;
 
 /// One task.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

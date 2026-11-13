@@ -14,7 +14,7 @@ import time
 HOST = os.environ.get("PIGEON_HOST", "platform.pigeon.dev")
 SESSION = os.path.expanduser("~/.config/pigeon/session.json")
 CACHE = os.path.expanduser("~/.cache/pigeon/status.json")
-WAIT = 50
+WAIT = 25  # under the 30 seconds after which a request is cut on its way
 STALE = 10 * 60
 BRIEF = 10
 
@@ -92,7 +92,7 @@ def follow():
         return 1
     after, bad = "session", 0
     while True:
-        d = get(f"/v0/events?session={quote(me)}&after={after}&wake=agent&wait={WAIT}", WAIT + 20)
+        d = get(f"/v0/events?session={quote(me)}&after={after}&wake=agent&seconds={WAIT}", WAIT + 15)
         if d is None:
             bad += 1
             if bad == 5:

@@ -239,6 +239,12 @@ fn a_session_resumes_from_its_cursor_and_a_new_one_from_now() {
     assert_eq!((cursor.after, cursor.polled, listening), (45, 130, true));
     assert!(!c.listening("s", 130 + 121).expect("kept").1);
     assert_eq!(c.listening("other", 130), None);
-    c.poll("t", After::Session, 0, 130 + KEEP_FOR + 1);
+    assert_eq!(c.poll("s", After::At(999_999), 60, 140), 999_999);
+    assert_eq!(
+        c.poll("s", After::Session, 60, 150),
+        60,
+        "a number past the log never moves the cursor past its last event"
+    );
+    c.poll("t", After::Session, 0, 150 + KEEP_FOR + 1);
     assert_eq!(c.listening("s", 0), None, "a week unpolled is dropped");
 }

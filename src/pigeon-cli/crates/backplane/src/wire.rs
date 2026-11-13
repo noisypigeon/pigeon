@@ -445,7 +445,7 @@ const CATALOG: &[Operation] = &[
         name: "events.wait",
         engine: Engine::Backplane,
         effect: Effect::Read,
-        summary: "The instance's events after `after` (an event number, or `session` to resume from the session's cursor, which each numbered poll moves forward), for `session` and `change` (numbers, comma-separated) if named, only those the agent must act on when `wake` is `agent`, waiting up to `seconds` (at most 50) for one; answers `last` and `events`",
+        summary: "The instance's events after `after` (an event number, or `session` to resume from the session's cursor, which each numbered poll moves forward), for `session` and `change` (numbers, comma-separated) if named, only those the agent must act on when `wake` is `agent`, waiting up to `seconds` (at most 25) for one; answers `last` and `events`",
         args: &[
             arg("after", false, Kind::Text),
             arg("session", false, Kind::String),
@@ -465,7 +465,7 @@ const CATALOG: &[Operation] = &[
         name: "task.wait",
         engine: Engine::Backplane,
         effect: Effect::Read,
-        summary: "Waits up to `seconds` (at most 50) for an unclaimed task `session` may take, then lists them",
+        summary: "Waits up to `seconds` (at most 25) for an unclaimed task `session` may take, then lists them",
         args: &[
             arg("session", false, Kind::String),
             arg("seconds", false, Kind::Text),
