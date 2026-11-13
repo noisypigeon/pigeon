@@ -183,6 +183,13 @@ impl Change {
         if by.is_empty() {
             return refuse("a merge names who asked for it");
         }
+        if let Some(y) = &self.yielded {
+            return refuse(format!(
+                "{} yielded to !{}; it merges once that one has",
+                self.branch(),
+                y.to
+            ));
+        }
         let restacking = self.state == State::Approved && self.job(RESTACK).is_some_and(Job::open);
         // A head carrying an approval waits for the carry, whatever its checks have reached; see
         // the 2026-11-11 amendment to the concurrent-sessions ADR.

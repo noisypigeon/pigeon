@@ -940,3 +940,23 @@ Each fix is its own change.
    restack of the same patch keeps its approval (same amendment). This is
    §5's turn-time restack. §5's conflict forecasts, yields and the loop
    breaker are still to come.
+
+### 2026-11-13: Step 7 begins: `change_yield`
+
+- **`change_yield {number, to, reason}`** parks a session's own change behind
+  open change `to`. It is auto tier, under the session's ticket.
+  - The change records `yielded` (to, by, reason, when), an optional field.
+  - The `Instance` keeps the map of yields.
+  - The event log records `change.yielded`.
+- **A yielded change isn't merged:** a merge asked for is refused, naming the
+  change it waits for. It restacks only at its merge turn, as every change
+  has since !333.
+- **When `to` merges or closes, every change yielded to it is freed.** Its
+  session gets a `yield-ended` task and a `change.unyielded` event. `off`
+  ends a yield early.
+- **The loop breaker isn't built here.**
+  [`2026-11-13-development-session-stages-subscriptions-breaker.md`](2026-11-13-development-session-stages-subscriptions-breaker.md)
+  §4's B7 replaces §5's `loop` task, and its `yielded` stage reads this
+  field.
+- **Still to come:** conflict forecasts that yield automatically, `after`,
+  `change_handoff` and `change_note`.

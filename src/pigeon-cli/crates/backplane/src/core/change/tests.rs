@@ -668,3 +668,28 @@ fn an_approval_carries_across_a_clean_restack_of_the_same_patch_only() {
     let (changed, _) = step(&base, clean(false)).expect("restacked");
     assert_eq!(changed.carried, None, "a changed patch asks again");
 }
+
+#[test]
+fn a_yielded_change_waits_for_its_change_and_is_freed_when_that_ends() {
+    let c = approved()
+        .yield_to(80, "s-a", "it lands the same file", 5)
+        .expect("yields");
+    let y = c.yielded.clone().expect("parked");
+    assert_eq!((y.to, y.by.as_str(), y.at), (80, "s-a", 5));
+    let refused = step(&c, merge()).expect_err("waits");
+    assert!(refused.0.contains("yielded to !80"), "{}", refused.0);
+    let c = c.unyield();
+    assert_eq!(c.yielded, None);
+    assert!(step(&c, merge()).is_ok(), "merges once freed");
+    let own = approved().number;
+    assert!(
+        approved().yield_to(own, "s-a", "", 1).is_err(),
+        "not to itself"
+    );
+    let mut closed = approved();
+    closed.state = State::Closed;
+    assert!(
+        closed.yield_to(80, "s-a", "", 1).is_err(),
+        "nothing to yield"
+    );
+}

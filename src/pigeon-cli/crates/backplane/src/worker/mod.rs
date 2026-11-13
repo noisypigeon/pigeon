@@ -647,6 +647,12 @@ async fn dispatch(
                     .await?;
             Ok((None, respond(operation, 200, json!({ "changes": rows }))))
         }
+        Routed::Yield {
+            number,
+            to,
+            reason,
+            off,
+        } => change_yield(env, s, who, operation, number, to, &reason, off).await,
         Routed::Pin { number, off } => {
             let body = json!({ "number": number, "off": off });
             let (status, v) = mandates::to_instance(env, s, "/pins/set", &body).await?;
@@ -775,6 +781,70 @@ async fn propose(
             json!("no change number was free; try again"),
         ),
     ))
+}
+
+/// `change.yield`: checks the change waited for is open, then parks `number` behind it, or
+/// ends its yield with `off`.
+#[allow(clippy::too_many_arguments)]
+async fn change_yield(
+    env: &Env,
+    s: &Settings,
+    who: &Identity,
+    operation: &str,
+    number: u32,
+    to: Option<u32>,
+    reason: &str,
+    off: bool,
+) -> Result<(Option<String>, WireResponse)> {
+    let key = Some(number.to_string());
+    if off {
+        let (status, v) = to_change(
+            env,
+            &s.repo,
+            number,
+            Method::Post,
+            "/yield",
+            Some(&json!({ "off": true })),
+        )
+        .await?;
+        mandates::to_instance(env, s, "/yields/clear", &json!({ "from": number })).await?;
+        return Ok((key, respond(operation, status, v)));
+    }
+    let Some(to) = to else {
+        return Ok((
+            key,
+            respond(operation, 400, json!("`to` names the change to yield to")),
+        ));
+    };
+    let (status, v) = to_change(env, &s.repo, to, Method::Get, "/status", None).await?;
+    let open = status == 200 && !matches!(v["change"]["state"].as_str(), Some("merged" | "closed"));
+    if !open {
+        return Ok((
+            key,
+            respond(
+                operation,
+                409,
+                json!(format!("!{to} is not an open change")),
+            ),
+        ));
+    }
+    let body = json!({ "to": to, "by": who.subject, "reason": reason });
+    let (status, v) = to_change(env, &s.repo, number, Method::Post, "/yield", Some(&body)).await?;
+    if status == 200 {
+        mandates::to_instance(env, s, "/yields/set", &json!({ "from": number, "to": to })).await?;
+        let said = format!("!{number} yields to !{to}: {reason}");
+        events::append(
+            env,
+            s,
+            "change.yielded",
+            Some(number),
+            v["session"].as_str().map(str::to_string),
+            &said,
+            false,
+        )
+        .await?;
+    }
+    Ok((key, respond(operation, status, v)))
 }
 
 /// Each open change as an eviction candidate, from D1, the tickets, the merge queue and the
@@ -1088,6 +1158,87 @@ async fn scheduled(_event: worker::ScheduledEvent, env: Env, _ctx: worker::Sched
     }
 }
 
+/// The `Instance`'s tickets, yields and pins.
+async fn sessions_store(state: &State, path: &str, body: &Value) -> Result<Response> {
+    if path.starts_with("/tickets/") {
+        tickets::serve(state, path, body).await
+    } else if path.starts_with("/pins/") {
+        pins(state, path, body).await
+    } else {
+        yields(state, path, body).await
+    }
+}
+
+/// The `Instance`'s yields, each change to the one it waits for: `/yields/set` (`from`, `to`),
+/// `/yields/clear` (`from`), and `/yields/take` (`to`), which answers and forgets the changes
+/// waiting for `to`.
+async fn yields(state: &State, path: &str, body: &Value) -> Result<Response> {
+    const YIELDS: &str = "yields";
+    let storage = state.storage();
+    let mut all: std::collections::BTreeMap<u32, u32> =
+        storage.get(YIELDS).await?.unwrap_or_default();
+    let n = |k: &str| body[k].as_u64().and_then(|n| u32::try_from(n).ok());
+    let answer: Vec<u32> = match (path, n("from"), n("to")) {
+        ("/yields/set", Some(from), Some(to)) => {
+            all.insert(from, to);
+            Vec::new()
+        }
+        ("/yields/clear", Some(from), _) => {
+            all.remove(&from);
+            Vec::new()
+        }
+        ("/yields/take", _, Some(to)) => {
+            let waiting: Vec<u32> = all
+                .iter()
+                .filter(|(_, t)| **t == to)
+                .map(|(f, _)| *f)
+                .collect();
+            all.retain(|_, t| *t != to);
+            waiting
+        }
+        _ => return Response::error("a yield names its changes", 400),
+    };
+    storage.put(YIELDS, &all).await?;
+    Response::from_json(&answer)
+}
+
+/// Ends every yield to `c`, which merged or closed: each waiting change is unyielded and its
+/// session told, to restack at its next merge turn.
+///
+/// # Errors
+///
+/// When a binding fails.
+pub(super) async fn release_yields(env: &Env, c: &Change) -> Result<()> {
+    let s = Settings::from(env)?;
+    let (_, v) = mandates::to_instance(env, &s, "/yields/take", &json!({ "to": c.number })).await?;
+    let waiting: Vec<u32> = serde_json::from_value(v).unwrap_or_default();
+    let off = json!({ "off": true });
+    for n in waiting {
+        let (status, v) = to_change(env, &s.repo, n, Method::Post, "/yield", Some(&off)).await?;
+        if status != 200 {
+            continue;
+        }
+        let session = v["session"].as_str().map(str::to_string);
+        let note = format!(
+            "!{} {}, so !{n}'s yield to it ended; merge !{n} when ready",
+            c.number,
+            c.state.name()
+        );
+        events::append(
+            env,
+            &s,
+            "change.unyielded",
+            Some(n),
+            session.clone(),
+            &note,
+            false,
+        )
+        .await?;
+        tasks::add(env, &s, "yield-ended", n, Some(c.number), session, &note).await?;
+    }
+    Ok(())
+}
+
 /// The `Instance`'s pins: the changes the owner holds from eviction; `/pins/list` and
 /// `/pins/set` (`number`, `off`).
 async fn pins(state: &State, path: &str, body: &Value) -> Result<Response> {
@@ -1305,13 +1456,12 @@ impl DurableObject for Instance {
             let body: Value = req.json().await?;
             return passkeys::serve(&self.state, &path, body).await;
         }
-        if path.starts_with("/tickets/") {
-            let body: Value = req.json().await?;
-            return tickets::serve(&self.state, &path, &body).await;
-        }
-        if path.starts_with("/pins/") {
+        if ["/tickets/", "/yields/", "/pins/"]
+            .iter()
+            .any(|p| path.starts_with(p))
+        {
             let body: Value = req.json().await.unwrap_or(Value::Null);
-            return pins(&self.state, &path, &body).await;
+            return sessions_store(&self.state, &path, &body).await;
         }
         if path.starts_with("/push/") || path.starts_with("/digest/") {
             let body: Value = req.json().await?;

@@ -143,6 +143,31 @@ impl ChangeRun {
 
     /// `POST /event`: applies `event`, and journals it for an alarm already running, which
     /// would otherwise save over it.
+    /// A yield set, with `to`, `by` and `reason`, or cleared with `off`; see
+    /// `.claude/decisions/2026-11-12-development-grants-applies-rescue-yield.md` §5.
+    async fn park(&self, existing: Option<Change>, body: Value) -> Result<Response> {
+        let Some(change) = existing else {
+            return Response::error("no such change", 404);
+        };
+        let next = if body["off"].as_bool() == Some(true) {
+            change.unyield()
+        } else {
+            let to = body["to"]
+                .as_u64()
+                .and_then(|n| u32::try_from(n).ok())
+                .unwrap_or_default();
+            let by = body["by"].as_str().unwrap_or_default();
+            let reason = body["reason"].as_str().unwrap_or_default();
+            match change.yield_to(to, by, reason, now()) {
+                Ok(c) => c,
+                Err(why) => return Response::error(why, 409),
+            }
+        };
+        let pending: Vec<Pending> = self.load(PENDING).await?;
+        self.save(&next, &pending).await?;
+        Response::from_json(&next)
+    }
+
     /// The control plane's eviction: recorded, then an ordinary close; see the eviction ADR's
     /// 2026-11-13 amendment on acting.
     async fn evict(&self, existing: Option<Change>, body: Value) -> Result<Response> {
@@ -192,10 +217,16 @@ impl ChangeRun {
         let change = &change;
         storage.put(CHANGE, change).await?;
         super::events::changed(&self.env, before.as_ref(), change).await;
-        if let Some(ended) = crate::reconcile::gone(before.as_ref(), change)
+        let gone = crate::reconcile::gone(before.as_ref(), change);
+        if let Some(ended) = gone
             && let Err(e) = super::merges::retire(&self.env, change.number, ended).await
         {
             worker::console_error!("retire for !{}: {e}", change.number);
+        }
+        if gone == Some(true)
+            && let Err(e) = super::release_yields(&self.env, change).await
+        {
+            worker::console_error!("yields to !{}: {e}", change.number);
         }
         if control::leaves_merge_queue(before.as_ref(), change) {
             self.released(change).await;
@@ -773,6 +804,7 @@ impl DurableObject for ChangeRun {
                 None => Response::error("no such change", 404),
             },
             (Method::Post, "evict") => self.evict(existing, req.json().await?).await,
+            (Method::Post, "yield") => self.park(existing, req.json().await?).await,
             _ => Response::error("not found", 404),
         }
     }

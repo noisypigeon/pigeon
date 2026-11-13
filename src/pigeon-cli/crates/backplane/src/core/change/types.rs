@@ -200,6 +200,20 @@ pub struct ConflictContext {
     pub change_diff: String,
 }
 
+/// A yield: the change waited for, who asked, why and when.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Yielded {
+    /// The change it waits behind.
+    pub to: u32,
+    /// Who asked.
+    pub by: String,
+    /// Why.
+    #[serde(default)]
+    pub reason: String,
+    /// When, in Unix seconds.
+    pub at: u64,
+}
+
 /// A head that conflicts with `main`, and the reconciliation planned for it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Conflicted {
@@ -340,6 +354,10 @@ pub struct Change {
     /// `.claude/decisions/2026-11-10-development-change-slot-eviction-policy.md` §5-§6.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub evicted: Option<super::eviction::Evicted>,
+    /// The open change this one waits behind, by its session's yield; see
+    /// `.claude/decisions/2026-11-12-development-grants-applies-rescue-yield.md` §5.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub yielded: Option<Yielded>,
 }
 
 /// Something that happened to a change.
@@ -563,7 +581,40 @@ impl Change {
             kept: Vec::new(),
             landed: None,
             evicted: None,
+            yielded: None,
         }
+    }
+
+    /// `self` parked behind open change `to`, as `by` asked at `at`.
+    ///
+    /// # Errors
+    ///
+    /// When it has ended, or `to` is itself.
+    pub fn yield_to(mut self, to: u32, by: &str, reason: &str, at: u64) -> Result<Self, String> {
+        if matches!(self.state, State::Merged | State::Closed) {
+            return Err(format!(
+                "{} is {}; it has nothing to yield",
+                self.branch(),
+                self.state.name()
+            ));
+        }
+        if to == self.number {
+            return Err("a change can't yield to itself".into());
+        }
+        self.yielded = Some(Yielded {
+            to,
+            by: by.to_string(),
+            reason: reason.to_string(),
+            at,
+        });
+        Ok(self)
+    }
+
+    /// `self` no longer parked.
+    #[must_use]
+    pub fn unyield(mut self) -> Self {
+        self.yielded = None;
+        self
     }
 
     /// `self` recorded as evicted under `policy` at `at`, keeping its head and what remains; the

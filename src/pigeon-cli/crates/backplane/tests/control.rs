@@ -1113,3 +1113,48 @@ fn a_pin_and_a_resumed_proposal_are_routed() {
     bad["resumes"] = serde_json::json!("seventy");
     assert!(control::route(&req("change.propose", bad), "agent", 1).is_err());
 }
+
+#[test]
+fn a_yield_names_the_change_it_waits_for_unless_it_ends() {
+    let req = |args: serde_json::Value| backplane::wire::Request {
+        operation: "change.yield".into(),
+        args: args.as_object().cloned().unwrap_or_default(),
+    };
+    let y = control::route(
+        &req(serde_json::json!({ "number": 79, "to": "80", "reason": "same file" })),
+        "s",
+        1,
+    );
+    assert!(
+        matches!(
+            &y,
+            Ok(Routed::Yield {
+                number: 79,
+                to: Some(80),
+                off: false,
+                ..
+            })
+        ),
+        "{y:?}"
+    );
+    let off = control::route(
+        &req(serde_json::json!({ "number": 79, "off": "true" })),
+        "s",
+        1,
+    );
+    assert!(
+        matches!(
+            off,
+            Ok(Routed::Yield {
+                to: None,
+                off: true,
+                ..
+            })
+        ),
+        "{off:?}"
+    );
+    assert!(
+        control::route(&req(serde_json::json!({ "number": 79 })), "s", 1).is_err(),
+        "names `to`"
+    );
+}

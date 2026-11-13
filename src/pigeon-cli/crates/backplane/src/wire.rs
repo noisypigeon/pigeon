@@ -463,6 +463,19 @@ const CATALOG: &[Operation] = &[
         ],
     },
     Operation {
+        name: "change.yield",
+        engine: Engine::Backplane,
+        effect: Effect::Build,
+        summary: "Park your change `number` behind open change `to`, saying why (`reason`): it isn't merged until `to` merges or closes, then restacks at its next merge; `off` true ends the yield",
+        args: &[
+            NUMBER,
+            arg("to", false, Kind::Text),
+            arg("reason", false, Kind::String),
+            arg("off", false, Kind::Text),
+            arg("ticket", false, Kind::String),
+        ],
+    },
+    Operation {
         name: "task.claim",
         engine: Engine::Backplane,
         effect: Effect::Build,

@@ -71,6 +71,17 @@ pub enum Routed {
     },
     /// `change.evictable`: each open change as an eviction candidate.
     Evictable,
+    /// `change.yield`: a session parks its change behind another, or ends the yield.
+    Yield {
+        /// The change.
+        number: u32,
+        /// The change it waits for; none with `off`.
+        to: Option<u32>,
+        /// Why.
+        reason: String,
+        /// End the yield instead.
+        off: bool,
+    },
     /// `change.pin`: the owner pins a change against eviction, or unpins it.
     Pin {
         /// The change.
@@ -220,6 +231,24 @@ pub fn route(request: &Request, by: &str, at: u64) -> Result<Routed, String> {
     };
     match request.operation.as_str() {
         "change.propose" => propose_route(a),
+        "change.yield" => {
+            let off = flag(a, "off");
+            let to = match text(a, "to") {
+                Some(t) if !t.trim().is_empty() => Some(
+                    t.trim()
+                        .parse::<u32>()
+                        .map_err(|_| format!("`to` must be a change number, not `{t}`"))?,
+                ),
+                _ if off => None,
+                _ => return Err("`to` names the change to yield to".into()),
+            };
+            Ok(Routed::Yield {
+                number: number(a)?,
+                to,
+                reason: text(a, "reason").unwrap_or_default(),
+                off,
+            })
+        }
         "change.pin" => Ok(Routed::Pin {
             number: number(a)?,
             off: flag(a, "off"),
