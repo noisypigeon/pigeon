@@ -137,6 +137,7 @@ fn catalog_names_are_unique_and_dotted() {
         changing,
         [
             ("change.propose", Effect::Plan),
+            ("change.pin", Effect::Apply),
             ("change.authorize", Effect::Apply),
             ("change.pushed", Effect::Build),
             ("change.approve", Effect::Apply),

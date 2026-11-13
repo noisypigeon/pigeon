@@ -1,6 +1,9 @@
 //! Open changes as eviction candidates; see
 //! `.claude/decisions/2026-11-10-development-change-slot-eviction-policy.md` §4.
 
+#[path = "common/step.rs"]
+mod step;
+
 use backplane::core::change::eviction::{Facts, Holds, Session, candidate, kind};
 
 const NOW: u64 = 1_000_000;
@@ -106,4 +109,81 @@ fn what_holds_a_change_is_carried() {
         ),
         ("true", "true", "true")
     );
+}
+
+mod acting {
+    use super::step::Apply;
+    use backplane::changes::{Change, Event, State};
+    use backplane::core::change::eviction::{PER_RUN, incomplete, pick, remains};
+    use serde_json::json;
+
+    const A: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+
+    fn proposed() -> Change {
+        Change::propose(
+            79,
+            "x",
+            "feat(x): y",
+            "Do x.\nThen y.",
+            vec!["a/**".into()],
+            "agent",
+        )
+    }
+
+    fn pushed() -> Change {
+        let mut c = proposed();
+        c.apply(Event::ApprovePlan {
+            by: "owner".into(),
+            at: 1,
+        })
+        .expect("authorized");
+        c.apply(Event::Pushed { sha: A.into() }).expect("pushed");
+        c
+    }
+
+    #[test]
+    fn what_remains_follows_where_the_change_stopped() {
+        let r = remains(&proposed());
+        assert_eq!(r.left, ["the whole plan: nothing was pushed"]);
+        assert_eq!(r.done[0], "plan: Do x.");
+        assert!(r.resume.contains("`resumes: 79`"), "{}", r.resume);
+        assert!(!incomplete(&proposed()), "only a plan");
+        let p = pushed();
+        assert!(incomplete(&p));
+        let r = remains(&p);
+        assert!(r.done.iter().any(|d| d.contains(A)), "{:?}", r.done);
+        let mut behind = p.clone();
+        behind.behind = Some("main".into());
+        assert_eq!(remains(&behind).left, ["rebase onto main and push"]);
+    }
+
+    #[test]
+    fn an_eviction_is_recorded_then_closed_keeping_its_head() {
+        let c = pushed().evict("policy:eviction-session-gone", 9);
+        let e = c.evicted.clone().expect("recorded");
+        assert_eq!(
+            (e.policy.as_str(), e.at, e.head.as_deref()),
+            ("policy:eviction-session-gone", 9, Some(A))
+        );
+        let mut c = c;
+        c.apply(Event::Close).expect("closes");
+        assert_eq!(c.state, State::Closed);
+        assert!(c.evicted.is_some(), "the record survives the close");
+    }
+
+    #[test]
+    fn at_most_six_granted_lowest_first_and_only_from_fresh_verdicts() {
+        let verdicts: Vec<serde_json::Value> = (1..=9)
+            .rev()
+            .map(|n| json!({ "number": n, "granted": if n == 5 { serde_json::Value::Null } else { json!("eviction-x") } }))
+            .collect();
+        let picked = pick(&verdicts, 100, 200);
+        assert_eq!(picked.len(), PER_RUN);
+        assert_eq!(
+            picked.iter().map(|(n, _)| *n).collect::<Vec<_>>(),
+            [1, 2, 3, 4, 6, 7],
+            "lowest first, the refused one skipped"
+        );
+        assert_eq!(pick(&verdicts, 100, 100 + 2 * 3600 + 1), vec![], "stale");
+    }
 }

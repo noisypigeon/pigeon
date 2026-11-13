@@ -264,3 +264,37 @@ Steps 2 and 3 landed there as F1, F2 and the family slot.
   candidates and the last verdicts.
 - **No verdict is acted on yet.** Step 5's last part applies them. Until
   then, and until step 6's policies merge, the verdicts are a dry run.
+
+### 2026-11-13: Step 5 ends: the control plane acts on what a policy grants; pins and resumes
+
+- **Each hour the cron first acts on the last run's verdicts, then judges
+  again.**
+  - It takes at most 6 changes a policy granted, lowest number first, and
+    nothing from a verdict older than 2 hours.
+  - Each one must still be open, unpinned, unqueued and without an approval
+    page. Each is evicted, and the event log records `change.evicted` with
+    the policy.
+- **An eviction is a recorded close.** `Change.evicted` holds:
+  - the policy, as `policy:<name>`;
+  - when;
+  - the head;
+  - `remains`: what was done, what is left, and how to resume.
+
+  It is set just before the ordinary `Close`, so no new event variant is
+  stored, and the version before reads the record.
+- **The work stays on the change's own branch,** which a close leaves in
+  place, and in `evicted.head`. This replaces §5's `refs/evicted/*`, which
+  would need a git job to write and a front-door rule to guard, for no gain.
+- **Incomplete work** (authorized or pushed) gets a `resume` task and a push
+  to the owner, asking whether a new session should finish it.
+- **`change_propose` with `resumes: <n>`:**
+  - is refused unless `n` was evicted;
+  - opens the new plan with what `n` did and has left;
+  - names `n` as its parent;
+  - closes `n`'s resume task.
+
+  The session fetches `n`'s branch and pushes its head to the new branch.
+- **`change_pin`** (`off` to unpin) is `owner` tier each time, and offered as
+  a grant on an open change. Pins are a set in the `Instance`, and the
+  candidates read them as `pinned`.
+- **Nothing is evicted until step 6's policies merge.**

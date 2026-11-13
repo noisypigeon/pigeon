@@ -336,6 +336,10 @@ pub struct Change {
     /// see `.claude/decisions/2026-11-12-development-grants-applies-rescue-yield.md` §4 F3.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub landed: Option<String>,
+    /// Why the control plane evicted it, and what remains; see
+    /// `.claude/decisions/2026-11-10-development-change-slot-eviction-policy.md` §5-§6.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub evicted: Option<super::eviction::Evicted>,
 }
 
 /// Something that happened to a change.
@@ -558,7 +562,21 @@ impl Change {
             grant: None,
             kept: Vec::new(),
             landed: None,
+            evicted: None,
         }
+    }
+
+    /// `self` recorded as evicted under `policy` at `at`, keeping its head and what remains; the
+    /// close that ends it follows as an ordinary `Close`.
+    #[must_use]
+    pub fn evict(mut self, policy: &str, at: u64) -> Self {
+        self.evicted = Some(super::eviction::Evicted {
+            policy: policy.to_string(),
+            at,
+            head: self.head.clone(),
+            remains: super::eviction::remains(&self),
+        });
+        self
     }
 
     /// Its branch.

@@ -143,6 +143,20 @@ impl ChangeRun {
 
     /// `POST /event`: applies `event`, and journals it for an alarm already running, which
     /// would otherwise save over it.
+    /// The control plane's eviction: recorded, then an ordinary close; see the eviction ADR's
+    /// 2026-11-13 amendment on acting.
+    async fn evict(&self, existing: Option<Change>, body: Value) -> Result<Response> {
+        let Some(change) = existing else {
+            return Response::error("no such change", 404);
+        };
+        let policy = body["policy"].as_str().unwrap_or_default();
+        if policy.is_empty() {
+            return Response::error("an eviction names its policy", 400);
+        }
+        self.on_event(change.evict(policy, now()), Event::Close)
+            .await
+    }
+
     async fn on_event(&self, mut change: Change, event: Event) -> Result<Response> {
         let mut pending: Vec<Pending> = self.load(PENDING).await?;
         if let Err(why) = Self::apply(&mut change, event.clone(), &mut pending) {
@@ -758,6 +772,7 @@ impl DurableObject for ChangeRun {
                 Some(change) => self.on_event(change, req.json().await?).await,
                 None => Response::error("no such change", 404),
             },
+            (Method::Post, "evict") => self.evict(existing, req.json().await?).await,
             _ => Response::error("not found", 404),
         }
     }

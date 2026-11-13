@@ -563,13 +563,26 @@ async fn dispatch(
             session,
             affects,
             full,
+            resumes,
         } => {
+            let plan = match resumes {
+                Some(n) => match resumed(env, s, n).await? {
+                    Ok(before) => format!("{before}\n\n{plan}"),
+                    Err(why) => return Ok((None, respond(operation, 409, json!(why)))),
+                },
+                None => plan,
+            };
             let mut change = Change::propose(0, &slug, &title, &plan, scope, &who.subject);
+            change.parent = resumes;
             change.mandate = mandate;
             change.session = session;
             change.affects = affects;
             change.full_asked = full.then(|| who.subject.clone());
-            propose(env, s, operation, change).await
+            let proposed = propose(env, s, operation, change).await?;
+            if let Some(n) = resumes {
+                tasks::close_for(env, s, n).await?;
+            }
+            Ok(proposed)
         }
         Routed::Event {
             number,
@@ -633,6 +646,14 @@ async fn dispatch(
                 platform::d1_rows(env, &control::list(&s.instance, &s.repo, state.as_deref()))
                     .await?;
             Ok((None, respond(operation, 200, json!({ "changes": rows }))))
+        }
+        Routed::Pin { number, off } => {
+            let body = json!({ "number": number, "off": off });
+            let (status, v) = mandates::to_instance(env, s, "/pins/set", &body).await?;
+            Ok((
+                Some(number.to_string()),
+                respond(operation, status, json!({ "pinned": v })),
+            ))
         }
         Routed::Evictable => {
             let req = json_request("https://main/evictions/last", Method::Get, None, None)?;
@@ -767,6 +788,8 @@ async fn evictable(env: &Env, s: &Settings) -> Result<Vec<Value>> {
     let queue: crate::merges::MergeQueue = serde_json::from_value(q).unwrap_or_default();
     let mut queued: Vec<u32> = queue.waiting.iter().map(|e| e.number).collect();
     queued.extend(queue.merging.as_ref().map(|e| e.number));
+    let (_, pins) = mandates::to_instance(env, s, "/pins/list", &json!({})).await?;
+    let pinned: Vec<u32> = serde_json::from_value(pins).unwrap_or_default();
     let waiting: Vec<crate::approve::Waiting> =
         serde_json::from_value(elicit::inbox(env, s, "/approvals/list", &json!({})).await?)
             .unwrap_or_default();
@@ -788,7 +811,7 @@ async fn evictable(env: &Env, s: &Settings) -> Result<Vec<Value>> {
                 updated: r["updated"].as_u64().unwrap_or_default(),
                 session,
                 holds: Holds {
-                    pinned: false,
+                    pinned: pinned.contains(&number),
                     approval_open: waiting.iter().any(|w| w.number == number),
                     queued: queued.contains(&number),
                 },
@@ -1054,9 +1077,112 @@ async fn scheduled(_event: worker::ScheduledEvent, env: Env, _ctx: worker::Sched
     }
     // Every open change judged by main's eviction policies; see
     // .claude/decisions/2026-11-10-development-change-slot-eviction-policy.md §5.
+    // Act on the last run's verdicts first, then judge again for the next hour.
+    if let Ok(s) = Settings::from(&env)
+        && let Err(e) = act_on_evictions(&env, &s).await
+    {
+        worker::console_error!("evictions: {e}");
+    }
     if let Err(e) = judge_evictions(&env).await {
         worker::console_error!("evictions: {e}");
     }
+}
+
+/// The `Instance`'s pins: the changes the owner holds from eviction; `/pins/list` and
+/// `/pins/set` (`number`, `off`).
+async fn pins(state: &State, path: &str, body: &Value) -> Result<Response> {
+    const PINS: &str = "pins";
+    let storage = state.storage();
+    let mut pinned: std::collections::BTreeSet<u32> = storage.get(PINS).await?.unwrap_or_default();
+    if path == "/pins/set" {
+        let Some(n) = body["number"].as_u64().and_then(|n| u32::try_from(n).ok()) else {
+            return Response::error("a pin names a change", 400);
+        };
+        if body["off"].as_bool() == Some(true) {
+            pinned.remove(&n);
+        } else {
+            pinned.insert(n);
+        }
+        storage.put(PINS, &pinned).await?;
+    }
+    Response::from_json(&pinned)
+}
+
+/// Acts on the last verdicts: each change a policy granted, still as it was judged, is evicted;
+/// see `.claude/decisions/2026-11-10-development-change-slot-eviction-policy.md` §5-§6.
+async fn act_on_evictions(env: &Env, s: &Settings) -> Result<()> {
+    use crate::core::change::eviction::{incomplete, pick};
+    let req = json_request("https://main/evictions/last", Method::Get, None, None)?;
+    let mut r = platform::call(env, &main_stub(env, &s.repo)?, req).await?;
+    let e: control::Evictions = r.json().await.unwrap_or_default();
+    let Some(judged) = e.last.filter(|j| j.passed) else {
+        return Ok(());
+    };
+    let still: Vec<Value> = evictable(env, s).await?;
+    for (n, policy) in pick(&judged.verdicts, judged.at, now()) {
+        // Judged as it still is: open, unpinned, unqueued, no page waiting.
+        let fresh = still
+            .iter()
+            .find(|c| c["number"].as_u64() == Some(u64::from(n)));
+        let holds = |k: &str| fresh.is_some_and(|c| c["fields"][k] == "true");
+        if fresh.is_none() || holds("pinned") || holds("queued") || holds("approval_open") {
+            continue;
+        }
+        let (status, v) = to_change(env, &s.repo, n, Method::Get, "/status", None).await?;
+        let Some(change) = (status == 200)
+            .then(|| serde_json::from_value::<Change>(v["change"].clone()).ok())
+            .flatten()
+        else {
+            continue;
+        };
+        let body = json!({ "policy": format!("policy:{policy}") });
+        let (status, _) = to_change(env, &s.repo, n, Method::Post, "/evict", Some(&body)).await?;
+        if status != 200 {
+            continue;
+        }
+        let said = format!("!{n} `{}` was evicted under {policy}", change.title);
+        events::append(
+            env,
+            s,
+            "change.evicted",
+            Some(n),
+            change.session.clone(),
+            &said,
+            false,
+        )
+        .await?;
+        if incomplete(&change) {
+            let left = crate::core::change::eviction::remains(&change)
+                .left
+                .join("; ");
+            let note = format!("{said}. Left: {left}. Should a new session finish it?");
+            tasks::add(env, s, "resume", n, None, None, &note).await?;
+            push::notify(env, s, "Evicted, unfinished", &note, "/approvals").await;
+        }
+    }
+    Ok(())
+}
+
+/// The opening of a plan that resumes evicted change `n`: what it did and has left; refused
+/// unless `n` was evicted.
+async fn resumed(env: &Env, s: &Settings, n: u32) -> Result<std::result::Result<String, String>> {
+    let (status, v) = to_change(env, &s.repo, n, Method::Get, "/status", None).await?;
+    let change = (status == 200)
+        .then(|| serde_json::from_value::<Change>(v["change"].clone()).ok())
+        .flatten();
+    let Some(e) = change.as_ref().and_then(|c| c.evicted.clone()) else {
+        return Ok(Err(format!(
+            "!{n} was not evicted, so there is nothing to resume"
+        )));
+    };
+    let branch = change.map(|c| c.branch()).unwrap_or_default();
+    Ok(Ok(format!(
+        "Resumes !{n}, evicted under {}; its head {} is kept on {branch}.\n\nDone: {}\n\nLeft: {}",
+        e.policy,
+        e.head.as_deref().unwrap_or("(none)"),
+        e.remains.done.join("; "),
+        e.remains.left.join("; ")
+    )))
 }
 
 /// Sends every open change's candidate to `MainRun`'s eviction job.
@@ -1182,6 +1308,10 @@ impl DurableObject for Instance {
         if path.starts_with("/tickets/") {
             let body: Value = req.json().await?;
             return tickets::serve(&self.state, &path, &body).await;
+        }
+        if path.starts_with("/pins/") {
+            let body: Value = req.json().await.unwrap_or(Value::Null);
+            return pins(&self.state, &path, &body).await;
         }
         if path.starts_with("/push/") || path.starts_with("/digest/") {
             let body: Value = req.json().await?;

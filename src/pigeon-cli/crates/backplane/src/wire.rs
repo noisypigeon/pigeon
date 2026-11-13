@@ -223,7 +223,7 @@ const CATALOG: &[Operation] = &[
         name: "change.propose",
         engine: Engine::Backplane,
         effect: Effect::Plan,
-        summary: "Propose a change: its slug, Conventional Commit title, plan and scope (globs, one per line), and optionally the `mandate` it is carried out under, the `session` proposing it, for a design change the globs its ADR `affects`, and `full` true to run the whole test suite in its merge gate; returns its number, its branch, change/<number>-<slug>, and the open changes it `overlaps`",
+        summary: "Propose a change: its slug, Conventional Commit title, plan and scope (globs, one per line), and optionally the `mandate` it is carried out under, the `session` proposing it, for a design change the globs its ADR `affects`, `full` true to run the whole test suite in its merge gate, and `resumes` an evicted change's number to finish it; returns its number, its branch, change/<number>-<slug>, and the open changes it `overlaps`",
         args: &[
             arg("slug", true, Kind::String),
             arg("title", true, Kind::String),
@@ -234,6 +234,18 @@ const CATALOG: &[Operation] = &[
             arg("affects", false, Kind::String),
             arg("ticket", false, Kind::String),
             arg("full", false, Kind::Text),
+            arg("resumes", false, Kind::Text),
+        ],
+    },
+    Operation {
+        name: "change.pin",
+        engine: Engine::Backplane,
+        effect: Effect::Apply,
+        summary: "The owner's: pin an open change against eviction, or with `off` true unpin it",
+        args: &[
+            NUMBER,
+            arg("off", false, Kind::Text),
+            arg("ticket", false, Kind::String),
         ],
     },
     Operation {

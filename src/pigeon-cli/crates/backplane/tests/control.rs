@@ -74,6 +74,7 @@ fn operations_route_to_events_with_the_access_identity() {
             session: None,
             affects: Vec::new(),
             full: false,
+            resumes: None,
         })
     );
     assert!(
@@ -1075,4 +1076,40 @@ fn a_failed_deploy_always_says_why_and_the_deployed_head_never_starts_again() {
     p.finished(&Report::of("d", Outcome::Passed, ""), 2);
     p.pushed(sha);
     assert_eq!(p.start(), None);
+}
+
+#[test]
+fn a_pin_and_a_resumed_proposal_are_routed() {
+    let req = |op: &str, args: serde_json::Value| backplane::wire::Request {
+        operation: op.into(),
+        args: args.as_object().cloned().unwrap_or_default(),
+    };
+    let pin = control::route(
+        &req(
+            "change.pin",
+            serde_json::json!({ "number": 79, "off": "true" }),
+        ),
+        "owner",
+        1,
+    );
+    assert!(
+        matches!(
+            pin,
+            Ok(Routed::Pin {
+                number: 79,
+                off: true
+            })
+        ),
+        "{pin:?}"
+    );
+    let propose = serde_json::json!({
+        "slug": "x", "title": "feat(x): y", "plan": "p", "scope": "a/**", "resumes": "79",
+    });
+    match control::route(&req("change.propose", propose.clone()), "agent", 1) {
+        Ok(Routed::Propose { resumes, .. }) => assert_eq!(resumes, Some(79)),
+        other => panic!("{other:?}"),
+    }
+    let mut bad = propose;
+    bad["resumes"] = serde_json::json!("seventy");
+    assert!(control::route(&req("change.propose", bad), "agent", 1).is_err());
 }

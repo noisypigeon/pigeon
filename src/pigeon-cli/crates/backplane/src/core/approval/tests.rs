@@ -229,3 +229,15 @@ fn closing_a_landed_head_is_code_and_an_auto_window_approves_it_but_not_another_
         "an ended window"
     );
 }
+
+#[test]
+fn a_pin_is_the_owners_each_time_and_offered_only_on_an_open_change() {
+    use super::grants::offerable;
+    use super::tiers::{Tier, tier_of};
+    let c = checked();
+    assert_eq!(tier_of(&c, "change.pin"), Tier::Owner);
+    assert!(offerable(&c, "change.pin").is_ok());
+    let mut closed = checked();
+    closed.state = ChangeState::Closed;
+    assert!(offerable(&closed, "change.pin").is_err());
+}

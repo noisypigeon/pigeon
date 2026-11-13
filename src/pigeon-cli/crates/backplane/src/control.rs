@@ -38,6 +38,8 @@ pub enum Routed {
         affects: Vec<String>,
         /// Whether its merge gate runs the full test suite whatever its scope.
         full: bool,
+        /// The evicted change it resumes, if any.
+        resumes: Option<u32>,
     },
     /// Apply an event to change `number`; `by` is filled in from Access.
     Event {
@@ -69,6 +71,13 @@ pub enum Routed {
     },
     /// `change.evictable`: each open change as an eviction candidate.
     Evictable,
+    /// `change.pin`: the owner pins a change against eviction, or unpins it.
+    Pin {
+        /// The change.
+        number: u32,
+        /// Unpin instead.
+        off: bool,
+    },
     /// `digest.show`: the owner's digest now.
     Digest,
     /// `apple.check`: the Apple connection's health.
@@ -150,6 +159,52 @@ fn slug_ok(slug: &str) -> bool {
     changes::branch(&format!("change/1-{slug}")).is_some()
 }
 
+/// `change.propose`'s arguments as a route.
+fn propose_route(a: &Map<String, Value>) -> Result<Routed, String> {
+    let slug = need(a, "slug")?;
+    if !slug_ok(&slug) {
+        return Err(format!(
+            "slug `{slug}` must be lowercase words joined by `-`"
+        ));
+    }
+    let globs = |s: &str| -> Vec<String> {
+        s.lines()
+            .map(str::trim)
+            .filter(|l| !l.is_empty())
+            .map(str::to_string)
+            .collect()
+    };
+    let scope = globs(&need(a, "scope")?);
+    let affects = globs(&text(a, "affects").unwrap_or_default());
+    let session = crate::sessions::session(text(a, "session").as_deref())?;
+    let mandate = match text(a, "mandate") {
+        Some(m) if !m.trim().is_empty() => Some(
+            m.trim()
+                .parse::<u32>()
+                .map_err(|_| format!("`mandate` must be a mandate number, not `{m}`"))?,
+        ),
+        _ => None,
+    };
+    Ok(Routed::Propose {
+        slug,
+        title: need(a, "title")?,
+        plan: need(a, "plan")?,
+        scope,
+        mandate,
+        session,
+        affects,
+        full: flag(a, "full"),
+        resumes: match text(a, "resumes") {
+            Some(r) if !r.trim().is_empty() => Some(
+                r.trim()
+                    .parse::<u32>()
+                    .map_err(|_| format!("`resumes` must be a change number, not `{r}`"))?,
+            ),
+            _ => None,
+        },
+    })
+}
+
 /// Routes a validated control-plane request, as `by` at `at`.
 ///
 /// # Errors
@@ -164,42 +219,11 @@ pub fn route(request: &Request, by: &str, at: u64) -> Result<Routed, String> {
         })
     };
     match request.operation.as_str() {
-        "change.propose" => {
-            let slug = need(a, "slug")?;
-            if !slug_ok(&slug) {
-                return Err(format!(
-                    "slug `{slug}` must be lowercase words joined by `-`"
-                ));
-            }
-            let globs = |s: &str| -> Vec<String> {
-                s.lines()
-                    .map(str::trim)
-                    .filter(|l| !l.is_empty())
-                    .map(str::to_string)
-                    .collect()
-            };
-            let scope = globs(&need(a, "scope")?);
-            let affects = globs(&text(a, "affects").unwrap_or_default());
-            let session = crate::sessions::session(text(a, "session").as_deref())?;
-            let mandate = match text(a, "mandate") {
-                Some(m) if !m.trim().is_empty() => Some(
-                    m.trim()
-                        .parse::<u32>()
-                        .map_err(|_| format!("`mandate` must be a mandate number, not `{m}`"))?,
-                ),
-                _ => None,
-            };
-            Ok(Routed::Propose {
-                slug,
-                title: need(a, "title")?,
-                plan: need(a, "plan")?,
-                scope,
-                mandate,
-                session,
-                affects,
-                full: flag(a, "full"),
-            })
-        }
+        "change.propose" => propose_route(a),
+        "change.pin" => Ok(Routed::Pin {
+            number: number(a)?,
+            off: flag(a, "off"),
+        }),
         "change.authorize" => event(Event::ApprovePlan { by: by.into(), at }),
         "change.pushed" => event(Event::Pushed {
             sha: need(a, "sha")?,
