@@ -1,0 +1,6 @@
+# Where macOS jobs run, first available first; see .claude/decisions/2026-11-12-development-macos-builds-provider-failover.md.
+order: [github, bitrise, buildkite]
+start_within_minutes: 10
+github_monthly_minutes: null
+bitrise_monthly_minutes: 450
+buildkite_monthly_minutes: 150

@@ -27,6 +27,7 @@ pub mod instance;
 pub mod iosrelease;
 #[cfg(feature = "engines")]
 pub mod jobs;
+pub mod macos;
 pub mod mandates;
 pub mod mcp;
 pub mod merges;
