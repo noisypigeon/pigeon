@@ -52,11 +52,99 @@ pub struct Filter {
     pub changes: Vec<u32>,
     /// The reader is the owner, so owner-only events are included.
     pub owner: bool,
+    /// Only what the agent must act on ([`wakes`]); see
+    /// `.claude/decisions/2026-11-13-development-session-stages-subscriptions-breaker.md` §2.
+    pub wake: bool,
+}
+
+/// Kinds that need the agent whatever stage they carry.
+const WAKING: &[&str] = &[
+    "change.merged",
+    "change.closed",
+    "change.conflicted",
+    "change.evicted",
+    "change.handed",
+    "change.note",
+    "change.yielded",
+    "change.unyielded",
+    "merge.released",
+    "task.made",
+    "deploy.passed",
+    "deploy.failed",
+    "auto.paused",
+    "session.replaced",
+];
+
+/// Whether `e` needs the agent: its change's stage does, or the change is done, closed, its
+/// deploy failed or it was attended, or its kind is in [`WAKING`].
+#[must_use]
+pub fn wakes(e: &Event) -> bool {
+    use crate::core::change::stage::Needs;
+    e.stage.as_ref().is_some_and(|s| {
+        s.needs == Needs::Agent
+            || ["done", "closed", "deploy-failed", "attended"].contains(&s.stage.as_str())
+    }) || WAKING.contains(&e.kind.as_str())
+}
+
+/// How long a session counts as listening after its last poll, in seconds.
+pub const LISTENING: u64 = 2 * 60;
+
+/// Where a session's reading of the log is.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Cursor {
+    /// The highest `after` it polled with: what it has seen.
+    pub after: u64,
+    /// When it last polled, in Unix seconds.
+    pub polled: u64,
+}
+
+/// Where a poll starts: from the session's cursor, or a number.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum After {
+    /// From the session's cursor.
+    Session,
+    /// After this event.
+    At(u64),
+}
+
+/// Each session's cursor, by label; kept [`KEEP_FOR`] after its last poll.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Cursors(pub std::collections::BTreeMap<String, Cursor>);
+
+impl Cursors {
+    /// Records `label`'s poll at `now` and answers where it starts: its cursor for
+    /// [`After::Session`] (the log's `last` for a session never seen), else the number given,
+    /// which moves the cursor forward.
+    pub fn poll(&mut self, label: &str, asked: After, last: u64, now: u64) -> u64 {
+        self.0
+            .retain(|_, c| now.saturating_sub(c.polled) <= KEEP_FOR);
+        let c = self.0.entry(label.to_string()).or_insert(Cursor {
+            after: last,
+            polled: now,
+        });
+        c.polled = now;
+        match asked {
+            After::Session => c.after,
+            After::At(n) => {
+                c.after = c.after.max(n);
+                n
+            }
+        }
+    }
+
+    /// `label`'s cursor, and whether it polled within [`LISTENING`] of `now`.
+    #[must_use]
+    pub fn listening(&self, label: &str, now: u64) -> Option<(Cursor, bool)> {
+        self.0
+            .get(label)
+            .map(|c| (*c, now.saturating_sub(c.polled) <= LISTENING))
+    }
 }
 
 impl Filter {
     fn wants(&self, e: &Event) -> bool {
         e.id > self.after
+            && (!self.wake || wakes(e))
             && (self.owner || !e.owner)
             && (self.changes.is_empty() || e.change.is_some_and(|c| self.changes.contains(&c)))
             && match (&self.session, &e.session) {

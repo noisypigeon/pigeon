@@ -176,3 +176,61 @@ fn an_event_keeps_its_changes_stage_and_one_without_reads_as_before() {
     assert_eq!(e.stage.as_ref().map(|s| s.stage.as_str()), Some("checked"));
     assert_eq!(serde_json::to_value(&e).expect("writes"), staged);
 }
+
+#[test]
+fn wake_lets_through_only_what_the_agent_acts_on() {
+    let stage = |stage: &str, needs: &str| {
+        Some(
+            serde_json::from_value(serde_json::json!({
+                "stage": stage, "needs": needs, "next": "x"
+            }))
+            .expect("a stage"),
+        )
+    };
+    let mut log = Log::default();
+    log.append("job.started", Some(1), None, "a check starts", false, 1);
+    log.append("change.failed", Some(1), None, "a check failed", false, 2);
+    log.append("change.checked", Some(1), None, "owner approves", false, 3);
+    log.append("deploy.passed", None, None, "deployed", false, 4);
+    log.append("task.made", Some(2), None, "reconcile", false, 5);
+    log.list[0].stage = stage("checking 0/2", "provider");
+    log.list[1].stage = stage("failed", "agent");
+    log.list[2].stage = stage("checked", "owner");
+    let woken: Vec<u64> = log
+        .since(&Filter {
+            wake: true,
+            ..Filter::default()
+        })
+        .iter()
+        .map(|e| e.id)
+        .collect();
+    assert_eq!(woken, [2, 4, 5]);
+}
+
+#[test]
+fn a_session_resumes_from_its_cursor_and_a_new_one_from_now() {
+    use backplane::events::{After, Cursors};
+    let mut c = Cursors::default();
+    assert_eq!(
+        c.poll("s", After::Session, 40, 100),
+        40,
+        "a new session starts now"
+    );
+    assert_eq!(c.poll("s", After::At(45), 50, 110), 45);
+    assert_eq!(
+        c.poll("s", After::At(42), 50, 120),
+        42,
+        "an older number is answered"
+    );
+    assert_eq!(
+        c.poll("s", After::Session, 60, 130),
+        45,
+        "but the cursor keeps the highest seen"
+    );
+    let (cursor, listening) = c.listening("s", 130 + 60).expect("kept");
+    assert_eq!((cursor.after, cursor.polled, listening), (45, 130, true));
+    assert!(!c.listening("s", 130 + 121).expect("kept").1);
+    assert_eq!(c.listening("other", 130), None);
+    c.poll("t", After::Session, 0, 130 + KEEP_FOR + 1);
+    assert_eq!(c.listening("s", 0), None, "a week unpolled is dropped");
+}

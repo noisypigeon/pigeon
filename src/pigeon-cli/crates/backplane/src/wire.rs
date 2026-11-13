@@ -421,7 +421,7 @@ const CATALOG: &[Operation] = &[
         name: "session.status",
         engine: Engine::Backplane,
         effect: Effect::Read,
-        summary: "Session `session`'s open changes, oldest first, each with its stage (`stage`, `needs`, `waits_on`, `next`, `since`), and its tasks",
+        summary: "Session `session`'s open changes, oldest first, each with its stage (`stage`, `needs`, `waits_on`, `next`, `since`), its tasks, and its event cursor: `after`, `polled` and whether it is `listening` (polled within two minutes)",
         args: &[arg("session", true, Kind::String)],
     },
     Operation {
@@ -445,11 +445,12 @@ const CATALOG: &[Operation] = &[
         name: "events.wait",
         engine: Engine::Backplane,
         effect: Effect::Read,
-        summary: "The instance's events after `after` (an event number), for `session` and `change` (numbers, comma-separated) if named, waiting up to `seconds` (at most 50) for one; answers `last` and `events`",
+        summary: "The instance's events after `after` (an event number, or `session` to resume from the session's cursor, which each numbered poll moves forward), for `session` and `change` (numbers, comma-separated) if named, only those the agent must act on when `wake` is `agent`, waiting up to `seconds` (at most 50) for one; answers `last` and `events`",
         args: &[
             arg("after", false, Kind::Text),
             arg("session", false, Kind::String),
             arg("change", false, Kind::Text),
+            arg("wake", false, Kind::String),
             arg("seconds", false, Kind::Text),
         ],
     },

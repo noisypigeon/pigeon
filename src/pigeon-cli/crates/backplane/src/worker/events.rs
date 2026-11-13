@@ -10,7 +10,7 @@ use worker::{Env, Response, Result, State};
 
 use super::mandates::to_instance;
 use super::platform::{Settings, now};
-use crate::events::{Filter, Log};
+use crate::events::{After, Cursors, Filter, Log};
 
 /// The storage key of the log.
 const LOG: &str = "events";
@@ -93,8 +93,13 @@ pub async fn wait(
         .split(',')
         .filter_map(|c| c.trim().parse().ok())
         .collect();
+    let after = match text("after") {
+        Some(a) if a == "session" => json!("session"),
+        a => json!(a.and_then(|a| a.parse::<u64>().ok()).unwrap_or_default()),
+    };
     let body = json!({
-        "after": text("after").and_then(|a| a.parse::<u64>().ok()).unwrap_or_default(),
+        "after": after,
+        "wake": text("wake").as_deref() == Some("agent"),
         "session": text("session").filter(|v| !v.trim().is_empty()),
         "changes": changes,
         "owner": owner,
@@ -110,7 +115,10 @@ pub async fn wait(
     }
 }
 
-/// The `Instance` Durable Object's side: `/events/add` and `/events/since`.
+/// The storage key of the sessions' cursors.
+const CURSORS: &str = "event-cursors";
+
+/// The `Instance` Durable Object's side: `/events/add`, `/events/since` and `/events/cursor`.
 ///
 /// # Errors
 ///
@@ -135,9 +143,27 @@ pub async fn serve(state: &State, path: &str, body: &Value) -> Result<Response> 
             Response::from_json(&json!({ "id": id }))
         }
         "/events/since" => {
+            let session = body["session"].as_str().map(str::to_string);
+            let asked = match body["after"].as_str() {
+                Some("session") => After::Session,
+                _ => After::At(body["after"].as_u64().unwrap_or_default()),
+            };
+            let after = match &session {
+                Some(label) => {
+                    let mut cursors: Cursors = storage.get(CURSORS).await?.unwrap_or_default();
+                    let after = cursors.poll(label, asked, log.last, now());
+                    storage.put(CURSORS, &cursors).await?;
+                    after
+                }
+                None => match asked {
+                    After::Session => log.last,
+                    After::At(n) => n,
+                },
+            };
             let filter = Filter {
-                after: body["after"].as_u64().unwrap_or_default(),
-                session: body["session"].as_str().map(str::to_string),
+                after,
+                wake: body["wake"].as_bool() == Some(true),
+                session,
                 changes: body["changes"]
                     .as_array()
                     .into_iter()
@@ -147,6 +173,16 @@ pub async fn serve(state: &State, path: &str, body: &Value) -> Result<Response> 
                 owner: body["owner"].as_bool() == Some(true),
             };
             Response::from_json(&json!({ "last": log.last, "events": log.since(&filter) }))
+        }
+        "/events/cursor" => {
+            let cursors: Cursors = storage.get(CURSORS).await?.unwrap_or_default();
+            let label = body["session"].as_str().unwrap_or_default();
+            Response::from_json(&match cursors.listening(label, now()) {
+                Some((c, listening)) => {
+                    json!({ "after": c.after, "polled": c.polled, "listening": listening })
+                }
+                None => json!({ "listening": false }),
+            })
         }
         _ => Response::error("not found", 404),
     }

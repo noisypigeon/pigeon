@@ -171,8 +171,9 @@ pub async fn session(env: &Env, s: &Settings, args: &Map<String, Value>) -> Resu
         .flatten()
         .filter(|t| t["session"].as_str() == Some(label) || t["claimed_by"].as_str() == Some(label))
         .collect();
+    let (_, cursor) = to_instance(env, s, "/events/cursor", &json!({ "session": label })).await?;
     Ok((
         200,
-        json!({ "session": label, "changes": changes, "tasks": mine }),
+        json!({ "session": label, "changes": changes, "tasks": mine, "events": cursor }),
     ))
 }

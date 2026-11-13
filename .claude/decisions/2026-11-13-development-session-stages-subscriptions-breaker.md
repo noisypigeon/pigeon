@@ -437,3 +437,31 @@ the yield ADR's step 7 lands; until then B1 to B6 trip alone.
   and the next push's deploy carried it. Its stage answers `merged`, not
   `done`, because its push reached the code from before `pushes`; merges from
   now on follow their deploy.
+
+### 2026-11-13: Step 2 lands: cursors, `wake=agent` and listening
+
+- **The family filter needed nothing new.** A generated `reconcile-<n>` or
+  `review-<n>-<m>` change takes its parent's session, a handed change takes
+  its new session, and an event of no session, such as a deploy's, reaches
+  every session. So `session=<label>` already reads the family. A change
+  yielded to another session's change sees only its own `change.yielded` and
+  `change.unyielded`, not the other change's events.
+- **The cursor is the control plane's.** The `Instance` keeps, per label, the
+  highest numbered `after` it polled with and the time of its last poll
+  (`events::Cursors`, under `event-cursors`, dropped a week after its last
+  poll).
+  - `after=session` resumes from it; a label never seen starts at the log's
+    last event, not at its start.
+  - A numbered `after` moves it forward. The follower sends the last id it
+    printed, so a lost answer is read again: at least once, never lost.
+- **`wake=agent`** answers only what the agent acts on (`events::wakes`): an
+  event whose stage needs the agent, or is `done`, `closed`, `deploy-failed`
+  or `attended`; or one of the kinds that need the agent whatever their stage:
+  merged, closed, conflicted, evicted, handed, a note, yielded and unyielded,
+  a released merge turn, a task made, a deploy's end, an Auto window paused,
+  and a replaced ticket.
+- **Listening.** `session.status` answers `events`: the cursor, its last poll
+  and `listening`, a poll within two minutes. The digest's Sessions line waits
+  for step 8.
+- **Step 3** writes `tooling/session/follow.py` on these:
+  `after=session` on (re)arm, then the last id, with `wake=agent`.
