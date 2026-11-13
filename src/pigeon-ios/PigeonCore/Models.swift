@@ -78,6 +78,47 @@ public struct CheckRun: Codable, Equatable, Sendable {
     public let status: String
 }
 
+/// A value a change asks the owner for with its plan's approval; see
+/// `.claude/decisions/2026-11-13-security-approvals-ask-owner-inputs.md` §5.
+public struct ApprovalAsk: Codable, Equatable, Sendable {
+    public let key: String
+    public let label: String
+    public let help: String?
+    public let chars: String
+    public let min: Int
+    public let max: Int
+
+    public init(key: String, label: String, help: String?, chars: String, min: Int, max: Int) {
+        self.key = key
+        self.label = label
+        self.help = help
+        self.chars = chars
+        self.min = min
+        self.max = max
+    }
+
+    /// Whether `value` is within its character set and length, as the control plane checks.
+    public func admits(_ value: String) -> Bool {
+        let scalars = Array(value.unicodeScalars)
+        guard min <= max, (min...max).contains(scalars.count) else { return false }
+        let digits: ClosedRange<Unicode.Scalar> = "0"..."9"
+        let lowers: ClosedRange<Unicode.Scalar> = "a"..."z"
+        let uppers: ClosedRange<Unicode.Scalar> = "A"..."Z"
+        let hexLetters: ClosedRange<Unicode.Scalar> = "a"..."f"
+        return scalars.allSatisfy { s in
+            let digit = digits.contains(s)
+            let lower = lowers.contains(s)
+            let upper = uppers.contains(s)
+            switch chars {
+            case "hex": return digit || hexLetters.contains(s)
+            case "lower": return lower
+            case "alnum": return digit || lower || upper
+            default: return digit || lower || upper || "._:=+/-".unicodeScalars.contains(s)
+            }
+        }
+    }
+}
+
 /// One approval's card.
 public struct ApprovalDetail: Codable, Equatable, Sendable {
     public let id: String?
@@ -93,10 +134,14 @@ public struct ApprovalDetail: Codable, Equatable, Sendable {
     public let tier: String?
     public let rule: String?
     public let expires: Int
+    public let asks: [ApprovalAsk]?
+
+    /// What the plan's approval asks for; none when the control plane sends no `asks`.
+    public var asked: [ApprovalAsk] { asks ?? [] }
 
     enum CodingKeys: String, CodingKey {
         case id, number, operation, title, branch, head, state, scope, plan, checks, tier, rule,
-            expires
+            expires, asks
     }
 }
 

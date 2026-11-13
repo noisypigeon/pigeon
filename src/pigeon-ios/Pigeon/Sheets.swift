@@ -143,6 +143,7 @@ struct ApprovalSheet: View {
     @State private var detail: ApprovalDetail?
     @State private var failed: String?
     @State private var hold = false
+    @State private var answers: [String: String] = [:]
     @State private var showChecks = false
     @State private var done = false
 
@@ -213,12 +214,13 @@ struct ApprovalSheet: View {
             .font(.footnote)
             .padding(14)
             .block()
+            if !d.asked.isEmpty { asks(d.asked) }
             if d.operation == "change.approve" {
                 Toggle("Keep the merge for me", isOn: $hold).tint(Theme.accent)
             }
             if let e = store.error { Text(e).font(.footnote).foregroundStyle(Theme.accent) }
             Button {
-                Task { done = await store.approve(id, hold: hold) }
+                Task { done = await store.approve(id, hold: hold, answers: given(d.asked)) }
             } label: {
                 Label(
                     hold || d.operation != "change.approve"
@@ -231,8 +233,50 @@ struct ApprovalSheet: View {
             }
             .background(RoundedRectangle(cornerRadius: 12).fill(Theme.accent))
             .background(RoundedRectangle(cornerRadius: 12).fill(Theme.shadow).offset(x: 3, y: 3))
-            .disabled(store.busy)
+            .disabled(store.busy || !answered(d.asked))
         }
+    }
+
+    /// The fields for the plan's asks, under the note that their answers are public.
+    private func asks(_ asked: [ApprovalAsk]) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(
+                "This change asks for values. Each answer is committed to the public repository; never enter a secret."
+            )
+            .font(.footnote).foregroundStyle(Theme.ink2)
+            ForEach(asked, id: \.key) { a in
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(a.label).font(.footnote.weight(.semibold))
+                    TextField(
+                        a.label,
+                        text: Binding(
+                            get: { answers[a.key, default: ""] }, set: { answers[a.key] = $0 })
+                    )
+                    .font(Theme.mono(13))
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .padding(10)
+                    .block()
+                    if let help = a.help, !help.isEmpty {
+                        Text(help).font(.caption).foregroundStyle(Theme.muted)
+                    }
+                }
+            }
+        }
+    }
+
+    /// The typed answers, trimmed, for the asked keys only.
+    private func given(_ asked: [ApprovalAsk]) -> [String: String] {
+        Dictionary(
+            uniqueKeysWithValues: asked.map {
+                ($0.key, (answers[$0.key] ?? "").trimmingCharacters(in: .whitespacesAndNewlines))
+            })
+    }
+
+    /// Whether every ask has an answer within its set and length.
+    private func answered(_ asked: [ApprovalAsk]) -> Bool {
+        let g = given(asked)
+        return asked.allSatisfy { $0.admits(g[$0.key] ?? "") }
     }
 
     private var approved: some View {

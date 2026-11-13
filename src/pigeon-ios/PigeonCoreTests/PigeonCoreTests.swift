@@ -56,6 +56,44 @@ import PigeonCore
     }
 }
 
+@Suite struct AskTests {
+    @Test func aDetailDecodesWithAndWithoutAsks() throws {
+        let plain = #"""
+        {"id":"k","number":9,"operation":"change.approve","title":"t","branch":"change/9-x",
+        "head":null,"state":"checked","scope":["a"],"plan":"p","checks":[],"tier":"code",
+        "rule":"r","expires":9}
+        """#
+        let d = try JSONDecoder.pigeon.decode(ApprovalDetail.self, from: Data(plain.utf8))
+        #expect(d.asked.isEmpty)
+        let asked = #"""
+        {"id":"k","number":9,"operation":"change.authorize","title":"t","branch":"change/9-x",
+        "head":null,"state":"proposed","scope":["a"],"plan":"p","checks":[],"tier":"confirm",
+        "rule":"r","expires":9,"asks":[{"key":"pm_verification","label":"pm-verification code",
+        "help":"Proton Pass","chars":"lower","min":20,"max":40},
+        {"key":"protonmail_verification","label":"code","chars":"hex","min":40,"max":40}]}
+        """#
+        let a = try JSONDecoder.pigeon.decode(ApprovalDetail.self, from: Data(asked.utf8))
+        #expect(a.asked.map(\.key) == ["pm_verification", "protonmail_verification"])
+        #expect(a.asked[1].help == nil)
+    }
+
+    @Test func anAnswerIsAdmittedOnlyInItsSetAndLength() {
+        let lower = ApprovalAsk(key: "k", label: "l", help: nil, chars: "lower", min: 3, max: 5)
+        #expect(lower.admits("abc"))
+        #expect(!lower.admits("ab"))
+        #expect(!lower.admits("abcdef"))
+        #expect(!lower.admits("abC"))
+        #expect(!lower.admits("ab é"))
+        let hex = ApprovalAsk(key: "k", label: "l", help: nil, chars: "hex", min: 1, max: 9)
+        #expect(hex.admits("0af9"))
+        #expect(!hex.admits("0ag"))
+        let token = ApprovalAsk(key: "k", label: "l", help: nil, chars: "token", min: 1, max: 99)
+        #expect(token.admits("A.b:c=d+e/f-0_9"))
+        #expect(!token.admits("a b"))
+        #expect(!token.admits("a\"b"))
+    }
+}
+
 @Suite struct ChartTests {
     let buckets = [
         Bucket(at: 0, parts: [Part(name: "cloudflare", value: 3), Part(name: "buildkite", value: 1)]),

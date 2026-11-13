@@ -62,13 +62,14 @@ final class Store: ObservableObject {
         try await api().call("GET", "/v0/app/approvals/\(id)", as: ApprovalDetail.self)
     }
 
-    /// Approves `id` with the owner's passkey; `hold` keeps the merge.
-    func approve(_ id: String, hold: Bool) async -> Bool {
+    /// Approves `id` with the owner's passkey; `hold` keeps the merge, and `answers` answer
+    /// the plan's asks.
+    func approve(_ id: String, hold: Bool, answers: [String: String] = [:]) async -> Bool {
         await run {
             let answer = try await self.proof(["id": id])
-            try await self.api().send(
-                "POST", "/v0/app/approvals/\(id)",
-                body: ["passkey": answer.json, "hold": hold])
+            var body: [String: Any] = ["passkey": answer.json, "hold": hold]
+            if !answers.isEmpty { body["answers"] = answers }
+            try await self.api().send("POST", "/v0/app/approvals/\(id)", body: body)
             await self.refresh()
         }
     }
