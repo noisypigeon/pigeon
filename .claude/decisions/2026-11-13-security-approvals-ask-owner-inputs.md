@@ -192,3 +192,16 @@ the grant.
 - The app's detail lists the asks, and its approve with answers authorizes.
 - The card on a change with asks points to the page and redeems nothing.
 - A change without asks behaves exactly as before.
+
+## Amendments
+
+### 2026-11-13: Reconciled with the breaker in `core/change/mod.rs`
+
+- **The conflict.** !363 (step 2) and
+  [`2026-11-13-development-session-stages-subscriptions-breaker.md`](2026-11-13-development-session-stages-subscriptions-breaker.md)'s
+  !361 each added a module at the same line of `core/change/mod.rs`:
+  `asks` and `breaker`.
+- **Both stand.** The two are independent, so the file declares both, and
+  neither decision changes.
+- **How it was carried.** !363 merges `main` rather than rebasing onto it,
+  since its branch is only fast-forwarded.
