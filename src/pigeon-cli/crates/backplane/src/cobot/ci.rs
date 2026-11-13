@@ -477,7 +477,8 @@ pub struct Restack {
     /// The new head pushed to its branch; none when current or conflicting.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub to: Option<String>,
-    /// Whether the change's own diff is the same, by `git patch-id --stable`.
+    /// Whether the change's own diff is the same: by `git patch-id --stable`, or its added and
+    /// removed lines, blank lines aside, with no binary file ([`own_lines`]).
     #[serde(default)]
     pub same_patch: bool,
     /// The paths git couldn't merge.
@@ -552,6 +553,40 @@ fn conflict_context(
     args.extend(paths.iter().map(String::as_str));
     let messages = cut(&git(dir, "", "", &args)?, CONTEXT_MAX);
     Ok((context, messages))
+}
+
+/// The lines `from..to` adds and removes, by file, without context or blank lines: what an
+/// approver approved, which a union merge's or a neighbour's lines don't change; none when a
+/// binary file changed. See the concurrent-sessions ADR's 2026-11-13 amendment on carries.
+///
+/// # Errors
+///
+/// When git fails.
+pub fn own_lines(dir: &Path, from: &str, to: &str) -> Result<Option<Vec<String>>, Error> {
+    let diff = git(
+        dir,
+        "",
+        "",
+        &["diff", "-U0", "--no-color", "--no-ext-diff", from, to],
+    )?;
+    let mut out = Vec::new();
+    for line in diff.lines() {
+        if line.starts_with("Binary files ") || line == "GIT binary patch" {
+            return Ok(None);
+        }
+        if line.starts_with("diff --git ") {
+            out.push(line.to_string());
+            continue;
+        }
+        if line.starts_with("+++") || line.starts_with("---") {
+            continue;
+        }
+        let own = line.starts_with('+') || line.starts_with('-');
+        if own && !line[1..].trim().is_empty() {
+            out.push(line.to_string());
+        }
+    }
+    Ok(Some(out))
 }
 
 fn patch_id(dir: &Path, from: &str, to: &str) -> Result<String, Error> {
@@ -809,7 +844,9 @@ pub fn restack(
     } else {
         Relation::Disjoint
     };
-    r.same_patch = patch_id(dir, &fork, sha)? == patch_id(dir, &onto, &new)?;
+    let mine = own_lines(dir, &fork, sha)?;
+    r.same_patch = patch_id(dir, &fork, sha)? == patch_id(dir, &onto, &new)?
+        || (mine.is_some() && mine == own_lines(dir, &onto, &new)?);
     let lease = format!("--force-with-lease=refs/heads/{branch}:{sha}");
     let refspec = format!("{new}:refs/heads/{branch}");
     git(

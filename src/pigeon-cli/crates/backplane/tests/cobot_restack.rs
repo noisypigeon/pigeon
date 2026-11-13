@@ -196,6 +196,38 @@ fn two_amendments_to_one_adr_merge_by_union() {
 }
 
 #[test]
+fn an_amendment_restacked_under_another_keeps_its_patch() {
+    // !371 and !372 each lost their approval to a union merge's shared blank line; see the
+    // concurrent-sessions ADR's 2026-11-13 amendment on carries.
+    let (_t, url, work) = remote();
+    let head = diverge(
+        &work,
+        &url,
+        &[("adr.md", "# ADR\n\nbody\n\n### B\n\n- b\n")],
+        &[("adr.md", "# ADR\n\nbody\n\n### A\n\n- a\n")],
+    );
+    let (_j, r) = run(&url, &head);
+    assert_eq!(r.relation, Relation::Clean);
+    assert!(r.same_patch, "its own lines are unchanged");
+}
+
+#[test]
+fn a_changed_line_is_a_changed_patch() {
+    let (_t, url, work) = remote();
+    let head = diverge(
+        &work,
+        &url,
+        &[("a.txt", "ONE\ntwo\nthree\nfour\nfive\nsix\n")],
+        &[("a.txt", "one\ntwo\nthree\nfour\nfive\nSIX\n")],
+    );
+    let (j, r) = run(&url, &head);
+    assert!(r.same_patch, "a distant line of main's leaves it");
+    let base = git(j.path(), &["rev-parse", "HEAD"]);
+    let own = backplane::cobot::ci::own_lines(j.path(), &base, &base).expect("diff");
+    assert_eq!(own, Some(Vec::new()));
+}
+
+#[test]
 fn a_change_whose_patch_already_landed_on_main_is_reported_and_left_alone() {
     let (_t, url, work) = remote();
     let edit = ("a.txt", "ONE\ntwo\nthree\nfour\nfive\nsix\n");

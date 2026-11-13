@@ -603,3 +603,30 @@ approved again after every merge ahead of them, and !327's restack was lost
     the new head is checked again, with the full gate after a clean restack.
   - Checks still carry only across a disjoint restack.
   - A changed patch asks again, as before.
+
+### 2026-11-13: An approval carries when the change's own lines are unchanged, blank lines aside
+
+- **What went wrong.** After !369 merged, !372 and then !371 were restacked
+  clean, and their approvals didn't carry. Each gave its turn back ("checked
+  and carries no approval"), was approved again by window:3, and went to the
+  back of the queue. So the queue rotated without merging. Later, !371's
+  restack over an ADR-only merge did carry (event 12812), which made the loop
+  look timing-dependent.
+- **Why:** `git patch-id --stable` hashes context lines. Two cases changed it
+  though the change's own lines hadn't:
+  - a neighbour's line in `main` within three lines of a hunk;
+  - two amendments appended to one ADR. The union driver joins their shared
+    leading blank line, so the restacked change adds one blank line fewer.
+- **The carry rule (2026-11-13's) now also accepts the same own lines.** The
+  restack job's `same_patch` holds when either:
+  - the patch-ids match, as before;
+  - or `cobot::ci::own_lines` match: the lines the change adds and removes,
+    file by file, in order, with no context and no blank lines.
+  
+  A binary file in the change keeps the patch-id rule alone. Checks still
+  carry only across a disjoint restack, and a clean restack's head runs the
+  full gate, so the approver's lines are checked where they now sit.
+- **Unchanged:** a change whose own lines differ asks again at its tier. The
+  window still acts only when asked, per the session-stages ADR's 2026-11-13
+  amendment. Re-approving automatically on `checked` is a tier decision for
+  the approvals ADRs, not this one.

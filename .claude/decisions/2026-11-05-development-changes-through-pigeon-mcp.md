@@ -229,3 +229,10 @@ What changes:
 
   D1's audit keeps who approved.
 - **Commits already on `main`** keep their author and trailer. Rewriting them is the owner's break-glass decision, outside the change flow.
+
+### 2026-11-13: The restack job compares a change's own lines as well as its patch-id
+
+- **`cobot::ci::restack`'s `same_patch` also holds** when the change's added
+  and removed lines, blank lines aside, are the same before and after
+  (`own_lines`). The rule, and why, is the concurrent-sessions ADR's
+  2026-11-13 amendment on carries.
