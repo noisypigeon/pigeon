@@ -638,6 +638,7 @@ async fn dispatch(
             let rows =
                 platform::d1_rows(env, &control::list(&s.instance, &s.repo, state.as_deref()))
                     .await?;
+            let rows = stages::list(env, s, rows).await?;
             Ok((None, respond(operation, 200, json!({ "changes": rows }))))
         }
         Routed::Note { number, text } => {

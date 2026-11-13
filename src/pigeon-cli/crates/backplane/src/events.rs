@@ -35,6 +35,10 @@ pub struct Event {
     /// Shown only to the owner, as an approval's link is.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub owner: bool,
+    /// The change's stage as the event was appended; see
+    /// `.claude/decisions/2026-11-13-development-session-stages-subscriptions-breaker.md` §1.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stage: Option<crate::core::change::stage::Stage>,
 }
 
 /// Which events a reader wants.
@@ -93,6 +97,7 @@ impl Log {
             session,
             summary: summary.to_string(),
             owner,
+            stage: None,
         });
         while self.list.len() > KEEP
             || self

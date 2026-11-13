@@ -54,18 +54,14 @@ pub async fn changed(
     let Ok(s) = Settings::from(env) else {
         return;
     };
+    let q = super::stages::queue(env, &s).await;
+    let stage = super::stages::stage(env, &s, after, &q).await;
     for (kind, summary) in found {
-        if let Err(e) = append(
-            env,
-            &s,
-            &kind,
-            Some(after.number),
-            after.session.clone(),
-            &summary,
-            false,
-        )
-        .await
-        {
+        let body = json!({
+            "kind": kind, "change": after.number, "session": after.session,
+            "summary": summary, "owner": false, "stage": stage,
+        });
+        if let Err(e) = to_instance(env, &s, "/events/add", &body).await {
             worker::console_error!("event {kind}: {e}");
         }
     }
@@ -132,6 +128,9 @@ pub async fn serve(state: &State, path: &str, body: &Value) -> Result<Response> 
                 body["owner"].as_bool() == Some(true),
                 now(),
             );
+            if let Some(e) = log.list.back_mut().filter(|e| e.id == id) {
+                e.stage = serde_json::from_value(body["stage"].clone()).ok();
+            }
             storage.put(LOG, &log).await?;
             Response::from_json(&json!({ "id": id }))
         }

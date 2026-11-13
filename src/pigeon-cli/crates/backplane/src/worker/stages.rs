@@ -66,8 +66,16 @@ async fn since(env: &Env, s: &Settings, number: u32) -> Option<u64> {
     last
 }
 
-/// Change `c`'s stage, with its place in `queue`.
+/// Change `c`'s stage, with its place in `queue` and its `since`.
 pub async fn of(env: &Env, s: &Settings, c: &Change, queue: &MergeQueue) -> Stage {
+    Stage {
+        since: since(env, s, c.number).await,
+        ..stage(env, s, c, queue).await
+    }
+}
+
+/// Change `c`'s stage, with its place in `queue`, without `since`: an event carries its own time.
+pub async fn stage(env: &Env, s: &Settings, c: &Change, queue: &MergeQueue) -> Stage {
     let deploy = match (&c.state, &c.merged_as) {
         (State::Merged, Some(sha)) => carrying(env, s, sha).await,
         _ => Deploy::Unknown,
@@ -77,10 +85,43 @@ pub async fn of(env: &Env, s: &Settings, c: &Change, queue: &MergeQueue) -> Stag
         deploy,
         covered: covered(env, s, c).await,
     };
-    Stage {
-        since: since(env, s, c.number).await,
-        ..stage::of(c, &cx)
+    stage::of(c, &cx)
+}
+
+/// `change.list`'s rows with their stages: an open change's in full, a merged or closed one's
+/// from its row, `since` its last update.
+///
+/// # Errors
+///
+/// When a binding fails.
+pub async fn list(env: &Env, s: &Settings, mut rows: Vec<Value>) -> Result<Vec<Value>> {
+    let merges = queue(env, s).await;
+    for row in &mut rows {
+        let state = row["state"].as_str().unwrap_or_default().to_string();
+        let number = row["number"].as_u64().and_then(|n| u32::try_from(n).ok());
+        let st = match (state.as_str(), number) {
+            ("merged" | "closed", _) | (_, None) => Stage {
+                stage: state.clone(),
+                needs: stage::Needs::None,
+                waits_on: None,
+                next: "nothing".into(),
+                since: row["updated"].as_u64(),
+            },
+            (_, Some(number)) => {
+                let (_, view) =
+                    super::to_change(env, &s.repo, number, Method::Get, "/status", None).await?;
+                match serde_json::from_value::<Change>(view["change"].clone()) {
+                    Ok(c) => Stage {
+                        since: row["updated"].as_u64(),
+                        ..stage(env, s, &c, &merges).await
+                    },
+                    Err(_) => continue,
+                }
+            }
+        };
+        row["stage"] = serde_json::to_value(st)?;
     }
+    Ok(rows)
 }
 
 /// The merge queue; empty when it can't be read.
@@ -124,8 +165,14 @@ pub async fn session(env: &Env, s: &Settings, args: &Map<String, Value>) -> Resu
         changes.push(json!({ "number": n, "title": c.title, "stage": st }));
     }
     let (_, tasks) = to_instance(env, s, "/tasks/list", &json!({ "session": label })).await?;
+    let mine: Vec<&Value> = tasks["tasks"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|t| t["session"].as_str() == Some(label) || t["claimed_by"].as_str() == Some(label))
+        .collect();
     Ok((
         200,
-        json!({ "session": label, "changes": changes, "tasks": tasks["tasks"] }),
+        json!({ "session": label, "changes": changes, "tasks": mine }),
     ))
 }

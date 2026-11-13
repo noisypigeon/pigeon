@@ -220,6 +220,9 @@ pub fn of(c: &Change, cx: &Context) -> Stage {
         }
         State::Bounded => {
             let all: Vec<&Job> = checks(c).collect();
+            if all.is_empty() {
+                return at("checking", Needs::Provider, "the checks start");
+            }
             let done = all.iter().filter(|j| j.status == JobStatus::Passed).count();
             let waiting = names(all.iter().copied().filter(|j| j.open()));
             at(
@@ -465,5 +468,11 @@ mod tests {
             let s = of(&change(State::Merged), &cx);
             assert_eq!((s.stage.as_str(), s.needs), (stage, needs), "{deploy:?}");
         }
+    }
+
+    #[test]
+    fn a_bounded_head_without_its_checks_yet_is_checking() {
+        let s = of(&change(State::Bounded), &Context::default());
+        assert_eq!((s.stage.as_str(), s.needs), ("checking", Needs::Provider));
     }
 }

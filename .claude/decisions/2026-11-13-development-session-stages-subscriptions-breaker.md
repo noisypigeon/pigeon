@@ -419,3 +419,21 @@ the yield ADR's step 7 lands; until then B1 to B6 trip alone.
 - **Step 1c:** `stage` on `change.list` and on each event. A list reads D1
   rows without jobs, and an event is appended by `ChangeRun`, which doesn't
   hold the queue, so each needs its own source of the stage.
+
+### 2026-11-13: Step 1c lands, and step 1 is done
+
+- **Each event a change produces carries its stage** as it was appended:
+  `Event.stage`, read as none from an event logged before, as the events
+  ADR's log keeps them. It has no `since`; the event's `at` is that time.
+- **`change.list`'s rows carry `stage`.** An open change's is derived in full,
+  as `change.status` derives it; a merged or closed change's is its state.
+  `since` is the row's last update.
+- **`session.status` lists only the session's tasks:** those for it first,
+  or claimed by it. It listed every open task before, 24 of them from other
+  sessions, back to !81.
+- **A bounded head whose checks aren't listed yet** answers `checking`, not
+  `checking 0/0`.
+- **Seen live after step 1b:** the deploy of !340 failed on Cloudflare's 500,
+  and the next push's deploy carried it. Its stage answers `merged`, not
+  `done`, because its push reached the code from before `pushes`; merges from
+  now on follow their deploy.

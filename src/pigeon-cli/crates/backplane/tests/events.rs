@@ -160,3 +160,19 @@ mod of_change {
         assert_eq!(of_change(Some(&c), &c), [], "nothing new, nothing said");
     }
 }
+
+#[test]
+fn an_event_keeps_its_changes_stage_and_one_without_reads_as_before() {
+    let old: backplane::events::Event = serde_json::from_value(serde_json::json!({
+        "id": 1, "at": 2, "kind": "change.checked", "change": 3, "summary": "s"
+    }))
+    .expect("an event from before stages reads");
+    assert_eq!(old.stage, None);
+    let staged = serde_json::json!({
+        "id": 1, "at": 2, "kind": "change.checked", "change": 3, "summary": "s",
+        "stage": { "stage": "checked", "needs": "agent", "next": "ask" }
+    });
+    let e: backplane::events::Event = serde_json::from_value(staged.clone()).expect("reads");
+    assert_eq!(e.stage.as_ref().map(|s| s.stage.as_str()), Some("checked"));
+    assert_eq!(serde_json::to_value(&e).expect("writes"), staged);
+}
