@@ -182,3 +182,18 @@ Each step is one change.
 - **Harness:** after step 5, a fresh session's `brief` comes from the Rust
   binary within the hook's 20 s, and with `~/.cache/pigeon` removed and the
   network blocked, the hooks fall back to `session.py` and exit 0.
+
+### 2026-11-13: Review of !373 (grants) against this ADR
+
+!373 carries out step 1c of
+[`2026-11-12-development-grants-applies-rescue-yield.md`](2026-11-12-development-grants-applies-rescue-yield.md).
+In `events.rs`, it adds one kind to those that wake an agent:
+`grant.failed`.
+
+- **The two agree.** This ADR decides how the follower reaches the event log
+  and prints what wakes it. It doesn't decide which kinds wake. A
+  `grant.failed` line prints in §2's format like any other.
+- **A `grant.failed` event names no change and no session.** So a follower
+  asking for one session's events doesn't see it. It reaches the owner, the
+  digest and `grant-failed` tasks, as the grants ADR intends.
+- **Nothing in !373 changes this ADR.**
