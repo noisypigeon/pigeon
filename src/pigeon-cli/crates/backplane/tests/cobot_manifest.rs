@@ -788,3 +788,43 @@ fn a_released_pin_still_reads_its_tag() {
     let sites = backplane::cobot::sites::find_in(inst.path(), platform.path(), &[]).expect("found");
     assert_eq!(sites[0].revision(), "site-template-blog/v1.0.2");
 }
+
+#[test]
+fn a_zone_claims_its_platforms_domains_and_yields_to_inner_zones() {
+    let platform = platform();
+    let at_platform = served_manifest()
+        .replace("domains: [platform.example.dev, blue.platform.example.dev]", &format!("domains: [platform.{ZONE}, blue.platform.{ZONE}]"))
+        .replace("    records: {}\n  sites/blog:", "      aliases: { preset: proton, at: platform, dmarc: default }\n    records: {}\n  sites/blog:");
+    let inst = instance(&at_platform);
+    let got = problems(inst.path(), platform.path());
+    assert!(got.is_empty(), "{got:?}");
+    let rendered = render(inst.path(), platform.path(), "zones/noisypigeon.com");
+    let recs = items(&rendered, "dns_records");
+    assert_eq!(
+        recs[&format!("{ZONE}:aliases-mx1")]["name"],
+        format!("platform.{ZONE}")
+    );
+
+    let inst = instance(&at_platform.replace(
+        "    records: {}\n  sites/blog:",
+        "    records:\n      web: { name: platform, type: CNAME, content: x.example }\n  sites/blog:",
+    ));
+    let got = problems(inst.path(), platform.path());
+    assert!(
+        got.iter()
+            .any(|p| p
+                .contains("platform ADDRESS is claimed by platform platform/blue and records.web")),
+        "{got:?}"
+    );
+
+    let inst = instance(&at_platform.replace(
+        "  sites/blog:",
+        &format!("  zones/platform.{ZONE}:\n    kind: cloudflare/zone\n    services: {{}}\n    records: {{}}\n  sites/blog:"),
+    ));
+    let got = problems(inst.path(), platform.path());
+    assert!(
+        got.iter()
+            .any(|p| p.contains(&format!("platform.{ZONE} is its own zone unit"))),
+        "{got:?}"
+    );
+}

@@ -29,6 +29,8 @@ pub const PLACEHOLDER_TOKEN: &str = "0000000000000000000000000000000000000000";
 /// See [`PLACEHOLDER_TOKEN`].
 pub const PLACEHOLDER_ZONE_ID: &str = "00000000000000000000000000000000";
 
+/// The kind whose `domains` a zone claims; see `.claude/decisions/2026-11-13-runtime-zone-vendor-dns-placements.md` §4.
+const PLATFORM_KIND: &str = "pigeon/platform";
 const RECORD_TYPES: [&str; 5] = ["A", "AAAA", "CNAME", "MX", "TXT"];
 const ADDRESS_TYPES: [&str; 3] = ["A", "AAAA", "CNAME"];
 
@@ -93,6 +95,45 @@ impl Site {
             Some(m) => m.apex_config(zone),
             None => workload_config(&self.root, zone, APEX).unwrap_or(Value::Null),
         }
+    }
+
+    /// The `pigeon/platform` units' domains in `zone`, as `(unit, name relative to the zone)`.
+    #[must_use]
+    pub fn platform_domains(&self, zone: &str) -> Vec<(String, String)> {
+        let Some(m) = &self.manifest else {
+            return Vec::new();
+        };
+        let suffix = format!(".{zone}");
+        m.units
+            .iter()
+            .filter(|(_, e)| e.kind == PLATFORM_KIND)
+            .flat_map(|(id, e)| {
+                e.settings["domains"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .filter_map(Value::as_str)
+                    .filter_map(|d| match d.strip_suffix(&suffix) {
+                        _ if d == zone => Some("@".to_string()),
+                        Some(rel) => Some(rel.to_string()),
+                        None => None,
+                    })
+                    .map(|rel| (id.clone(), rel))
+                    .collect::<Vec<_>>()
+            })
+            .collect()
+    }
+
+    /// The zone unit, other than `zone`, that holds `host`, if the manifest has one.
+    #[must_use]
+    pub fn inner_zone(&self, zone: &str, host: &str) -> Option<String> {
+        let m = self.manifest.as_ref()?;
+        m.units
+            .iter()
+            .filter(|(_, e)| e.role == crate::cobot::manifest::Role::Zone)
+            .map(|(id, _)| crate::cobot::manifest::name(id))
+            .find(|z| *z != zone && (host == *z || host.ends_with(&format!(".{z}"))))
+            .map(str::to_string)
     }
 
     /// A zone unit's config as an apex composes it, under `zones.<zone>`; any other config as is.
@@ -737,7 +778,7 @@ struct Expansion {
 
 impl Expansion {
     /// Each enabled service: its preset's records and claims, placed at its `at`.
-    fn services(&mut self, config: &Value, home: &Path, zone: &str) {
+    fn services(&mut self, config: &Value, home: &Path, site: &Site, zone: &str) {
         for (service, cfg) in config["services"].as_object().into_iter().flatten() {
             self.prefixes.push(format!("{service}-"));
             for key in ["preset", "at"] {
@@ -749,6 +790,12 @@ impl Expansion {
             let (name, at, inputs) = placed(service, cfg);
             if let Err(e) = check_at(at, zone) {
                 self.problems.push(format!("services.{service}.at: {e}"));
+                continue;
+            }
+            if let Some(z) = site.inner_zone(zone, &fqdn(at, zone)) {
+                self.problems.push(format!(
+                    "services.{service}.at: {z} is its own zone unit; place the service there at @"
+                ));
                 continue;
             }
             let preset = match load_preset(home, name) {
@@ -1064,7 +1111,11 @@ fn expand_zone(
         ..Expansion::default()
     };
     bad_secrets(config, "config", &mut e.problems);
-    e.services(config, home, zone);
+    e.services(config, home, site, zone);
+    for (unit, name) in site.platform_domains(zone) {
+        e.claims
+            .push((name, ClaimType::Address, format!("platform {unit}")));
+    }
     e.hosts(config, site, zone);
     e.records(config);
     e.finish(zone)
