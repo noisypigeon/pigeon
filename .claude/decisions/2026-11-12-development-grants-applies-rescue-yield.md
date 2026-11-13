@@ -1014,3 +1014,29 @@ Each fix is its own change.
   - Its patch differs from the one approved, so it is approved again after the restack.
 - **A change built on one that closes unmerged is left to its session.** The session gets the `yield-ended` task, and the bound job counts from `main` again.
 - **Step 7 is done.** Next, by §9's order: step 1's grants.
+
+### 2026-11-13: Step 1 begins: the ledger
+
+Step 1 lands in four changes, since its parts sit at different tiers:
+
+- **1a, the ledger:** code tier, with no secret in it.
+- **1b, the new capabilities:** owner tier, as `catalog/cloudflare/capabilities.yaml` is on the `secrets:` list.
+- **1c, the operations and their page:** owner tier.
+- **1d, sentinel's `grant` target and `grants-rotate`:** a sentinel change of its own.
+
+The first, the ledger:
+
+- **`.config/grants.yaml` is the ledger.** It starts with no grants. The
+  first grants arrive with 1b's capabilities.
+- **`core::ledger` checks each grant.** A grant has:
+  - exactly one source;
+  - exactly one route;
+  - a key in upper snake case for a Worker or store, and none for a job;
+  - a `ttl`, and a `rotate` shorter than it;
+  - only capabilities a catalog declares;
+  - a `job` route only for a minted token.
+
+  Unknown fields are refused, so a typo can't widen a grant.
+- **`Instance::load` reports the ledger's problems with the manifest's,** so
+  `mise run backplane` and every command that loads the instance refuses a
+  bad ledger.

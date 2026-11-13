@@ -194,6 +194,9 @@ impl Instance {
                 "{MANIFEST}: no paths.providers, and the platform has no `{DEFAULT_PROVIDERS}`"
             ));
         }
+        if let Err(p) = crate::core::ledger::read(&self.root, self.platform_root()) {
+            problems.extend(p);
+        }
         problems
     }
 }

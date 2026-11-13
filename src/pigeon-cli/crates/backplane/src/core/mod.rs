@@ -8,6 +8,7 @@ pub mod deploy;
 #[cfg(feature = "engines")]
 pub mod infra;
 pub mod insights;
+pub mod ledger;
 pub mod macos;
 pub mod platform;
 #[cfg(feature = "engines")]
