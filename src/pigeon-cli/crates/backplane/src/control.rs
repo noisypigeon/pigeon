@@ -591,6 +591,10 @@ pub struct Report {
     /// For the eviction job: each candidate's verdict, `{number, granted, results}`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub evictions: Vec<serde_json::Value>,
+    /// For the bound job: each overlapping open change the head would conflict with,
+    /// `{number, paths}`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub forecast: Vec<serde_json::Value>,
 }
 
 impl Report {
@@ -614,6 +618,7 @@ impl Report {
             restack: None,
             platform: None,
             evictions: Vec::new(),
+            forecast: Vec::new(),
         }
     }
 }
@@ -1046,6 +1051,10 @@ pub fn deploy_spec(
         env,
     }
 }
+
+/// The bound job's variable holding the open changes whose scope meets the head's, as a JSON
+/// array of `{number, branch, state}`; see the 2026-11-12 ADR §5's conflict forecasts.
+pub const OVERLAPS: &str = "OVERLAPS";
 
 /// The job that judges eviction candidates with `main`'s eviction policies; see
 /// `.claude/decisions/2026-11-10-development-change-slot-eviction-policy.md` §4-§5.

@@ -26,6 +26,8 @@ const BOUND_LOG: &str = "bound_log";
 const GRANTS: &str = "grants";
 /// The storage key of the change's dispatches to GitHub Actions.
 const ACTIONS: &str = "actions";
+/// The bound job's last conflict forecast, applied once its events are.
+const FORECAST: &str = "forecast";
 
 /// How long an Actions token is reused, in seconds: GitHub's last an hour.
 const TOKEN_REUSE: u64 = 50 * 60;
@@ -316,6 +318,13 @@ impl ChangeRun {
                 .await
                 .map_err(|e| e.to_string())?;
         let mut spec = control::spec(change, job, &remote, &token)?;
+        if job == crate::changes::BOUND {
+            let overlaps = super::overlapping(&self.env, change)
+                .await
+                .map_err(|e| e.to_string())?;
+            spec.env
+                .insert(control::OVERLAPS.into(), overlaps.to_string());
+        }
         if job == control::MIRROR {
             let (to, to_token) = self.github().await?;
             spec.env.insert(control::MIRROR_TO.into(), to);
@@ -656,6 +665,9 @@ impl ChangeRun {
                 if report.outcome != Outcome::Running {
                     self.keep_log(job, &id, &report).await?;
                 }
+                if job == crate::changes::BOUND && !report.forecast.is_empty() {
+                    self.state.storage().put(FORECAST, &report.forecast).await?;
+                }
                 let event = control::event_of(job, &sha, &report);
                 Ok(if super::github::mirror(&self.env).is_some() {
                     event.map(control::with_mirror)
@@ -669,6 +681,16 @@ impl ChangeRun {
             })),
             _ => Ok(None),
         }
+    }
+
+    /// The bound job's kept forecast, applied to `change` once; see the 2026-11-12 ADR §5.
+    async fn forecast_step(&self, change: Change) -> Result<Change> {
+        let forecast: Vec<Value> = self.load(FORECAST).await?;
+        if forecast.is_empty() {
+            return Ok(change);
+        }
+        self.state.storage().delete(FORECAST).await?;
+        super::apply_forecast(&self.env, change, &forecast).await
     }
 
     async fn keep_log(&self, job: &str, id: &str, report: &Report) -> Result<()> {
@@ -894,6 +916,7 @@ impl DurableObject for ChangeRun {
         self.state.storage().put(ACTIONS, &github).await?;
         let journal: Vec<Event> = self.load(JOURNAL).await?;
         control::catch_up(&mut change, &journal, seen);
+        change = self.forecast_step(change).await?;
         let stored: Vec<Pending> = self.load(PENDING).await?;
         next.extend(stored.into_iter().skip(took));
         self.state

@@ -702,3 +702,22 @@ fn a_handed_change_is_the_taking_sessions() {
     assert_eq!(c.session.as_deref(), Some("s-b"));
     assert_eq!(c.state, State::Approved, "nothing else moves");
 }
+
+#[test]
+fn of_two_changes_forecast_to_conflict_the_one_less_far_along_yields() {
+    use super::forecast::yields;
+    assert!(
+        yields((90, "bounded"), (80, "approved")),
+        "theirs is further along"
+    );
+    assert!(!yields((90, "approved"), (80, "bounded")), "mine is");
+    assert!(
+        yields((90, "checked"), (80, "checked")),
+        "as far along: the newer yields"
+    );
+    assert!(!yields((80, "checked"), (90, "checked")));
+    assert!(
+        yields((90, "pushed"), (80, "bounded")),
+        "pushed and bounded rank alike"
+    );
+}

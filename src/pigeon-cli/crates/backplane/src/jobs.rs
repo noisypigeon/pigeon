@@ -77,6 +77,7 @@ impl Board {
             restack: None,
             platform: None,
             evictions: Vec::new(),
+            forecast: Vec::new(),
         };
         self.set(running.clone());
         let board = Arc::clone(self);
@@ -124,6 +125,7 @@ pub(crate) fn report(spec: &JobSpec, outcome: Outcome, log: &str) -> Report {
         restack: None,
         platform: None,
         evictions: Vec::new(),
+        forecast: Vec::new(),
     }
 }
 
@@ -549,6 +551,7 @@ fn bound(spec: &JobSpec, dir: &Path, sentinel: &Path) -> Report {
     }
     let full = full_set(dir, &checks, &mut log);
     let gate = (!full.is_empty()).then(|| gate(dir, &files, map.as_ref(), &mut log));
+    let predicted = forecast(spec, dir, &mut log);
     Report {
         id: spec.id.clone(),
         outcome: if violations.is_empty() {
@@ -570,6 +573,7 @@ fn bound(spec: &JobSpec, dir: &Path, sentinel: &Path) -> Report {
         restack: None,
         platform: None,
         evictions: Vec::new(),
+        forecast: predicted,
     }
 }
 
@@ -794,6 +798,29 @@ fn eviction(spec: &JobSpec, dir: &Path, sentinel: &Path) -> Report {
         evictions: verdicts,
         ..report(spec, Outcome::Passed, &log)
     }
+}
+
+/// The open changes in [`crate::control::OVERLAPS`] the head would conflict with, each with its
+/// paths; never a violation; see the 2026-11-12 ADR §5's conflict forecasts.
+fn forecast(spec: &JobSpec, dir: &Path, log: &mut String) -> Vec<Value> {
+    let others: Vec<(u32, String)> = spec
+        .env
+        .get(crate::control::OVERLAPS)
+        .and_then(|t| serde_json::from_str::<Vec<Value>>(t).ok())
+        .unwrap_or_default()
+        .iter()
+        .filter_map(|o| {
+            let n = u32::try_from(o["number"].as_u64()?).ok()?;
+            Some((n, o["branch"].as_str()?.to_string()))
+        })
+        .collect();
+    crate::cobot::ci::forecast(dir, &spec.remote, &spec.token, &spec.sha, &others)
+        .into_iter()
+        .map(|(n, paths)| {
+            let _ = writeln!(log, "forecast: conflicts with !{n} in {}", paths.join(", "));
+            serde_json::json!({ "number": n, "paths": paths })
+        })
+        .collect()
 }
 
 /// The base's policy directory, as the base's manifest names it, written under the checkout's

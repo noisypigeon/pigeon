@@ -2,6 +2,7 @@
 //! queue, as transitions; see `.claude/decisions/2026-11-10-development-factory-crates-functional-core.md` §3.
 
 pub mod eviction;
+pub mod forecast;
 mod gate;
 mod jobs;
 mod lifecycle;

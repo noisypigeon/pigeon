@@ -583,6 +583,32 @@ fn patch_id(dir: &Path, from: &str, to: &str) -> Result<String, Error> {
         .to_string())
 }
 
+/// The open changes in `others` (number, branch) whose heads would conflict with `sha`, each
+/// with the paths: fetched read-only and merged with `git merge-tree`, nothing pushed; a branch
+/// that can't be fetched or merged is skipped; see
+/// `.claude/decisions/2026-11-12-development-grants-applies-rescue-yield.md` §5.
+#[must_use]
+pub fn forecast(
+    dir: &Path,
+    remote: &str,
+    token: &str,
+    sha: &str,
+    others: &[(u32, String)],
+) -> Vec<(u32, Vec<String>)> {
+    let mut out = Vec::new();
+    for (n, branch) in others {
+        let local = format!("refs/forecast/{n}");
+        let spec = format!("+refs/heads/{branch}:{local}");
+        if git(dir, remote, token, &["fetch", "-q", remote, &spec]).is_err() {
+            continue;
+        }
+        if let Ok(Err(paths)) = merge_tree(dir, sha, &local) {
+            out.push((*n, paths));
+        }
+    }
+    out
+}
+
 /// `ours` and `theirs` merged in `dir`'s work tree: the tree, or the paths in conflict.
 fn merge_tree(dir: &Path, ours: &str, theirs: &str) -> Result<Result<String, Vec<String>>, Error> {
     let out = command("", "")

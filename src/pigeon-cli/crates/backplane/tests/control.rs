@@ -185,6 +185,7 @@ fn reports_become_events() {
         restack: None,
         platform: None,
         evictions: vec![],
+        forecast: vec![],
     };
     assert_eq!(
         control::event_of("fmt", A, &report(Outcome::Running, vec![])),
@@ -414,6 +415,7 @@ fn deploy_report(outcome: Outcome) -> Report {
         restack: None,
         platform: None,
         evictions: vec![],
+        forecast: vec![],
     }
 }
 

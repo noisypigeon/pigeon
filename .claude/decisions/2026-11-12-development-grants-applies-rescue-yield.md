@@ -976,3 +976,25 @@ Each fix is its own change.
   - Until then the change stays with its first session.
 - **Still to come:** conflict forecasts that yield automatically, and
   `after`.
+
+### 2026-11-13: Step 7 continues: conflict forecasts
+
+- **The bound job forecasts conflicts.**
+  - It receives the open changes whose scope meets the head's and that have
+    pushed (`OVERLAPS`).
+  - It fetches each one's branch read-only and runs `git merge-tree` against
+    the head. Nothing is pushed.
+  - It reports the changes the head would conflict with, and the paths. A
+    branch it can't fetch is skipped, and a forecast never fails the job.
+- **For the first forecast conflict, the change less far along yields,** by
+  `forecast`, naming the paths.
+  - Further along means approved, then checked, then bounded or pushed.
+  - Between equals, the newer change yields.
+  - When the new head is the one less far along, it yields as its events
+    apply. Otherwise the other change is asked to.
+  - A change that already waits on one isn't yielded again.
+- **A session may end a forecast's yield with `change_yield off`.** The next
+  push forecasts again.
+- **Two sessions on clashing work become one ordering and one
+  reconciliation,** instead of both rebasing after every merge.
+- **Still to come:** `after`, for a change built on another's branch.

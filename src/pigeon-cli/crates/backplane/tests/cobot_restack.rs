@@ -4,7 +4,7 @@
 use std::path::Path;
 use std::process::Command;
 
-use backplane::cobot::ci::{Relation, checkout, restack};
+use backplane::cobot::ci::{Relation, checkout, forecast, restack};
 
 fn git(dir: &Path, args: &[&str]) -> String {
     let out = Command::new("git")
@@ -203,5 +203,51 @@ fn a_change_whose_patch_already_landed_on_main_is_reported_and_left_alone() {
         git(&work, &["rev-parse", "r/change/1-x"]),
         head,
         "the branch keeps its head"
+    );
+}
+
+#[test]
+fn a_forecast_names_the_branches_a_head_would_conflict_with_and_pushes_nothing() {
+    let (_t, url, work) = remote();
+    // change/1-x edits a.txt's first line.
+    let head = diverge(
+        &work,
+        &url,
+        &[("a.txt", "ONE\ntwo\nthree\nfour\nfive\nsix\n")],
+        &[],
+    );
+    // change/2-y edits the same line differently; change/3-z another file.
+    let other = |branch: &str, file: &str, text: &str| {
+        git(&work, &["checkout", "-q", "-B", branch, "main"]);
+        write(&work, file, text);
+        git(&work, &["commit", "-qam", branch]);
+        git(
+            &work,
+            &["push", "-q", &url, &format!("HEAD:refs/heads/{branch}")],
+        );
+    };
+    other("change/2-y", "a.txt", "uno\ntwo\nthree\nfour\nfive\nsix\n");
+    other("change/3-z", "b.txt", "bee\n");
+    let job = tempfile::tempdir().expect("tmp");
+    checkout(job.path(), &url, "", "main", "change/1-x", &head).expect("checks out");
+    let others = [
+        (2, "change/2-y".to_string()),
+        (3, "change/3-z".to_string()),
+        (4, "change/4-gone".to_string()),
+    ];
+    let found = forecast(job.path(), &url, "", &head, &others);
+    assert_eq!(
+        found,
+        [(2, vec!["a.txt".to_string()])],
+        "only the conflicting one; a missing branch is skipped"
+    );
+    git(
+        &work,
+        &["fetch", "-q", &url, "+refs/heads/*:refs/remotes/r/*"],
+    );
+    assert_eq!(
+        git(&work, &["rev-parse", "r/change/1-x"]),
+        head,
+        "nothing pushed"
     );
 }

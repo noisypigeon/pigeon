@@ -820,6 +820,113 @@ async fn propose(
     ))
 }
 
+/// Parks change `from` behind `to`, as `by` for `reason`: on the change, in the Instance's yield
+/// map, and in the event log.
+///
+/// # Errors
+///
+/// When a binding fails.
+pub(super) async fn set_yield(
+    env: &Env,
+    s: &Settings,
+    from: u32,
+    to: u32,
+    by: &str,
+    reason: &str,
+) -> Result<(u16, Value)> {
+    let body = json!({ "to": to, "by": by, "reason": reason });
+    let (status, v) = to_change(env, &s.repo, from, Method::Post, "/yield", Some(&body)).await?;
+    if status == 200 {
+        let session = v["session"].as_str().map(str::to_string);
+        recorded_yield(env, s, from, to, reason, session).await?;
+    }
+    Ok((status, v))
+}
+
+/// A yield of `from` to `to`, already on the change, kept in the Instance and logged.
+async fn recorded_yield(
+    env: &Env,
+    s: &Settings,
+    from: u32,
+    to: u32,
+    reason: &str,
+    session: Option<String>,
+) -> Result<()> {
+    mandates::to_instance(env, s, "/yields/set", &json!({ "from": from, "to": to })).await?;
+    let said = format!("!{from} yields to !{to}: {reason}");
+    events::append(env, s, "change.yielded", Some(from), session, &said, false).await
+}
+
+/// The open changes whose scope meets `c`'s and that have pushed, as the bound job's
+/// [`control::OVERLAPS`]; see the 2026-11-12 ADR §5's conflict forecasts.
+///
+/// # Errors
+///
+/// When a binding fails.
+pub(super) async fn overlapping(env: &Env, c: &Change) -> Result<Value> {
+    let s = Settings::from(env)?;
+    let rows = platform::d1_rows(env, &control::open(&s.instance, &s.repo)).await?;
+    let mine: Vec<&String> = c.scope.iter().chain(&c.affects).collect();
+    let others: Vec<Value> = control::open_rows(&rows)
+        .into_iter()
+        .filter(|o| o.number != c.number && !matches!(o.state.as_str(), "proposed" | "planned"))
+        .filter(|o| {
+            o.scope
+                .iter()
+                .chain(&o.affects)
+                .any(|g| mine.iter().any(|m| crate::sessions::meet(m, g)))
+        })
+        .map(|o| json!({ "number": o.number, "branch": format!("change/{}-{}", o.number, o.slug), "state": o.state }))
+        .collect();
+    Ok(Value::Array(others))
+}
+
+/// `c` after its bound job's `forecast`: for the first conflict, `c` yields when it is less far
+/// along, or the other change is asked to; nothing when `c` already waits on one.
+///
+/// # Errors
+///
+/// When a binding fails.
+pub(super) async fn apply_forecast(env: &Env, c: Change, forecast: &[Value]) -> Result<Change> {
+    use crate::core::change::forecast::yields;
+    let s = Settings::from(env)?;
+    if c.yielded.is_some() {
+        return Ok(c);
+    }
+    for f in forecast {
+        let Some(n) = f["number"].as_u64().and_then(|n| u32::try_from(n).ok()) else {
+            continue;
+        };
+        let (status, v) = to_change(env, &s.repo, n, Method::Get, "/status", None).await?;
+        let state = v["change"]["state"]
+            .as_str()
+            .unwrap_or_default()
+            .to_string();
+        if status != 200 || matches!(state.as_str(), "merged" | "closed") {
+            continue;
+        }
+        let paths: Vec<&str> = f["paths"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_str)
+            .collect();
+        let reason = format!("forecast: they conflict in {}", paths.join(", "));
+        if yields((c.number, c.state.name()), (n, &state)) {
+            let Ok(parked) = c.clone().yield_to(n, "forecast", &reason, now()) else {
+                continue;
+            };
+            recorded_yield(env, &s, c.number, n, &reason, c.session.clone()).await?;
+            return Ok(parked);
+        }
+        if v["change"]["yielded"].is_null() {
+            set_yield(env, &s, n, c.number, "forecast", &reason).await?;
+        }
+        return Ok(c);
+    }
+    Ok(c)
+}
+
 /// `change.yield`: checks the change waited for is open, then parks `number` behind it, or
 /// ends its yield with `off`.
 #[allow(clippy::too_many_arguments)]
@@ -865,22 +972,7 @@ async fn change_yield(
             ),
         ));
     }
-    let body = json!({ "to": to, "by": who.subject, "reason": reason });
-    let (status, v) = to_change(env, &s.repo, number, Method::Post, "/yield", Some(&body)).await?;
-    if status == 200 {
-        mandates::to_instance(env, s, "/yields/set", &json!({ "from": number, "to": to })).await?;
-        let said = format!("!{number} yields to !{to}: {reason}");
-        events::append(
-            env,
-            s,
-            "change.yielded",
-            Some(number),
-            v["session"].as_str().map(str::to_string),
-            &said,
-            false,
-        )
-        .await?;
-    }
+    let (status, v) = set_yield(env, s, number, to, &who.subject, reason).await?;
     Ok((key, respond(operation, status, v)))
 }
 
