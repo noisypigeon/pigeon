@@ -620,6 +620,10 @@ pub struct Report {
     /// `{number, paths}`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub forecast: Vec<serde_json::Value>,
+    /// For the deploy job: `main`'s grants ledger, resolved; see
+    /// `.claude/decisions/2026-11-12-development-grants-applies-rescue-yield.md` §1.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ledger: Option<crate::core::minting::Resolved>,
 }
 
 impl Report {
@@ -644,6 +648,7 @@ impl Report {
             platform: None,
             evictions: Vec::new(),
             forecast: Vec::new(),
+            ledger: None,
         }
     }
 }

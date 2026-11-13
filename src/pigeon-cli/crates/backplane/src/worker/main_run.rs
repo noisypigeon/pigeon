@@ -24,6 +24,8 @@ const STARTING: &str = "starting";
 const TEST_MAPS: &str = "test_maps";
 const IOS_RELEASES: &str = "ios_releases";
 const EVICTIONS: &str = "evictions";
+/// The grants ledger the last passed deploy reported.
+const LEDGER: &str = "ledger";
 
 /// How long an eviction job may run before it counts as lost.
 const EVICTION_DEADLINE: u64 = 30 * 60;
@@ -862,6 +864,14 @@ impl DurableObject for MainRun {
                 }
             }
             (Method::Get, "evictions/last") => Response::from_json(&self.evictions().await?),
+            (Method::Get, "ledger") => {
+                let l: Option<crate::core::minting::Resolved> =
+                    self.state.storage().get(LEDGER).await?;
+                match l {
+                    Some(l) => Response::from_json(&l),
+                    None => Response::error("no deploy has reported a grants ledger yet", 404),
+                }
+            }
             (Method::Post, "carrying") => {
                 let body: Value = req.json().await?;
                 let sha = body["sha"].as_str().unwrap_or_default();
@@ -914,6 +924,11 @@ impl DurableObject for MainRun {
             match self.poll(&sha).await? {
                 Ok(Some(report)) => {
                     p.finished(&report, now());
+                    if report.outcome == Outcome::Passed
+                        && let Some(l) = &report.ledger
+                    {
+                        self.state.storage().put(LEDGER, l).await?;
+                    }
                     deploy_event(&self.env, &sha, &report).await;
                     if report.outcome == Outcome::Failed {
                         let why = format!("the deploy of {sha} failed");

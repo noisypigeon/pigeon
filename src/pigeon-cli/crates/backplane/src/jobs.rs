@@ -78,6 +78,7 @@ impl Board {
             platform: None,
             evictions: Vec::new(),
             forecast: Vec::new(),
+            ledger: None,
         };
         self.set(running.clone());
         let board = Arc::clone(self);
@@ -126,6 +127,7 @@ pub(crate) fn report(spec: &JobSpec, outcome: Outcome, log: &str) -> Report {
         platform: None,
         evictions: Vec::new(),
         forecast: Vec::new(),
+        ledger: None,
     }
 }
 
@@ -320,6 +322,13 @@ fn deploy(spec: &JobSpec, dir: &Path) -> Report {
             None
         }
     };
+    let ledger = match crate::core::ledger::resolve(dir, dir, &spec.sha) {
+        Ok(l) => l,
+        Err(problems) => {
+            let _ = writeln!(log, "grants ledger not kept: {}", problems.join("; "));
+            None
+        }
+    };
     let violations: Vec<String> = violations.iter().map(|v| scrub(v)).collect();
     for v in &violations {
         let _ = writeln!(log, "violation: {v}");
@@ -329,6 +338,7 @@ fn deploy(spec: &JobSpec, dir: &Path) -> Report {
         workers,
         build,
         images,
+        ledger,
         violations: violations.clone(),
         ..report(
             spec,
@@ -576,6 +586,7 @@ fn bound(spec: &JobSpec, dir: &Path, sentinel: &Path) -> Report {
         platform: None,
         evictions: Vec::new(),
         forecast: predicted,
+        ledger: None,
     }
 }
 

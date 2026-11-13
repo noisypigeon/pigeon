@@ -139,6 +139,66 @@ fn near(p: &str, groups: &[Group]) -> String {
     }
 }
 
+/// A capability's provider permissions and scope, as a catalog declares it.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+pub struct Declared {
+    /// The provider's permission names.
+    pub permissions: Vec<String>,
+    /// `account`, `zone` or `bucket`.
+    pub scope: String,
+}
+
+/// `main`'s ledger as a deploy found it, with each capability it names resolved.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
+pub struct Resolved {
+    /// The commit deployed.
+    pub sha: String,
+    /// The ledger.
+    pub ledger: Ledger,
+    /// Each capability the ledger names, by catalog name.
+    #[serde(default)]
+    pub capabilities: BTreeMap<String, Declared>,
+}
+
+impl Resolved {
+    /// What grant `name` mints.
+    ///
+    /// # Errors
+    ///
+    /// An undeclared grant, one that mints nothing, a capability no catalog declares, or
+    /// `from-unit`, which unit runs resolve.
+    pub fn wanted(&self, name: &str) -> Result<Vec<Wanted>, String> {
+        let g = self
+            .ledger
+            .grants
+            .get(name)
+            .ok_or_else(|| format!("`{name}` is not in the ledger at {}", self.sha))?;
+        let m = g
+            .mint
+            .as_ref()
+            .ok_or_else(|| format!("`{name}` is not minted"))?;
+        let super::ledger::Capabilities::Named(names) = &m.capabilities else {
+            return Err(format!(
+                "`{name}` takes its unit's capabilities, which a unit run mints"
+            ));
+        };
+        names
+            .iter()
+            .map(|c| {
+                let d = self
+                    .capabilities
+                    .get(c)
+                    .ok_or_else(|| format!("`{name}`'s capability `{c}` is in no catalog"))?;
+                Ok(Wanted {
+                    name: c.clone(),
+                    permissions: d.permissions.clone(),
+                    scope: d.scope.clone(),
+                })
+            })
+            .collect()
+    }
+}
+
 /// What the owner is asked to do to a grant.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "lowercase")]
@@ -469,6 +529,63 @@ mod tests {
         assert_eq!(
             settle(Err("mint".into()), ok(), ok(), None),
             Settled::Failed { why: "mint".into() }
+        );
+    }
+
+    #[test]
+    fn a_resolved_ledger_names_what_each_grant_mints() {
+        let grant = |caps: Capabilities| Grant {
+            mint: Some(Mint {
+                capabilities: caps,
+                ttl: "1h".into(),
+                rotate: None,
+                zones: Vec::new(),
+            }),
+            generate: None,
+            derive: None,
+            route: Route::default(),
+        };
+        let r = Resolved {
+            sha: "abc".into(),
+            ledger: Ledger {
+                grants: [
+                    (
+                        "ok".to_string(),
+                        grant(Capabilities::Named(vec!["r2.write".into()])),
+                    ),
+                    (
+                        "odd".to_string(),
+                        grant(Capabilities::Named(vec!["nope".into()])),
+                    ),
+                    (
+                        "unit".to_string(),
+                        grant(Capabilities::Unit("from-unit".into())),
+                    ),
+                ]
+                .into(),
+            },
+            capabilities: [(
+                "r2.write".to_string(),
+                Declared {
+                    permissions: vec!["Workers R2 Storage Write".into()],
+                    scope: "account".into(),
+                },
+            )]
+            .into(),
+        };
+        assert_eq!(
+            r.wanted("ok"),
+            Ok(vec![wanted(
+                "r2.write",
+                "Workers R2 Storage Write",
+                "account"
+            )])
+        );
+        assert!(r.wanted("odd").is_err_and(|e| e.contains("`nope`")));
+        assert!(r.wanted("unit").is_err_and(|e| e.contains("unit run")));
+        assert!(
+            r.wanted("absent")
+                .is_err_and(|e| e.contains("not in the ledger at abc"))
         );
     }
 

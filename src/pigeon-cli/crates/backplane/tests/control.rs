@@ -188,6 +188,7 @@ fn reports_become_events() {
         platform: None,
         evictions: vec![],
         forecast: vec![],
+        ledger: None,
     };
     assert_eq!(
         control::event_of("fmt", A, &report(Outcome::Running, vec![])),
@@ -418,6 +419,7 @@ fn deploy_report(outcome: Outcome) -> Report {
         platform: None,
         evictions: vec![],
         forecast: vec![],
+        ledger: None,
     }
 }
 

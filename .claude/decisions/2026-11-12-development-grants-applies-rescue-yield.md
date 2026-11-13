@@ -1097,3 +1097,15 @@ The first, the ledger:
 - **If the account already has a store and refuses a second,** the plan
   says so. The existing store is then adopted (`pigeon cobot adopt`) rather
   than a second one made.
+### 2026-11-13: The Worker's ledger is the one main deployed
+
+- **The deploy job resolves `main`'s ledger and reports it** (`Report.ledger`).
+  - The resolved ledger carries each named capability's permissions and
+    scope, from the catalogs.
+  - `MainRun` keeps the ledger of the last passed deploy and answers it at
+    `GET /ledger`.
+- **So `grant.*` acts on the ledger exactly as deployed.** It never reads a
+  branch, and no repository file is read in the Worker.
+- **A ledger that doesn't resolve is logged, never a failed deploy.** The
+  instance's checks refuse a bad ledger before it merges.
+- **`from-unit` mints wait for step 4's unit runs,** which know their unit.

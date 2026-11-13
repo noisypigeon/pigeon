@@ -261,6 +261,50 @@ pub fn read(
     }
 }
 
+/// [`read`], with each capability the ledger names resolved from the catalogs under
+/// `platform`, as deployed at `sha`: none when the instance has no ledger.
+///
+/// # Errors
+///
+/// As [`read`].
+#[cfg(feature = "engines")]
+pub fn resolve(
+    root: &std::path::Path,
+    platform: &std::path::Path,
+    sha: &str,
+) -> Result<Option<super::minting::Resolved>, Vec<String>> {
+    let Some(ledger) = read(root, platform)? else {
+        return Ok(None);
+    };
+    let named: BTreeSet<&String> = ledger
+        .grants
+        .values()
+        .filter_map(|g| match g.mint.as_ref().map(|m| &m.capabilities) {
+            Some(Capabilities::Named(c)) => Some(c),
+            _ => None,
+        })
+        .flatten()
+        .collect();
+    let (catalogs, _) = crate::cobot::catalog::capabilities_in(root, platform);
+    let capabilities = catalogs
+        .into_iter()
+        .flat_map(|c| c.capabilities)
+        .filter(|(name, _)| named.contains(name))
+        .map(|(name, c)| {
+            let declared = super::minting::Declared {
+                permissions: c.permissions,
+                scope: c.scope,
+            };
+            (name, declared)
+        })
+        .collect();
+    Ok(Some(super::minting::Resolved {
+        sha: sha.to_string(),
+        ledger,
+        capabilities,
+    }))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
