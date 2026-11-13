@@ -520,3 +520,11 @@ The fix:
 - [`2026-11-13-development-session-stages-subscriptions-breaker.md`](2026-11-13-development-session-stages-subscriptions-breaker.md)
   §2 replaces the recipe with `tooling/session/follow.py`, which uses the same
   host.
+
+### 2026-11-13: The long poll's hold is `seconds`, under the proxy's cut
+
+- `GET /v0/events` reads `seconds`, not `wait`, at most 25 (!365). A cloud
+  session's proxy cuts a request at ~30 s.
+- [`2026-11-13-development-rust-session-event-follower.md`](2026-11-13-development-rust-session-event-follower.md)
+  §1 has the follower ask 20 and the server keep an exact deadline, with no
+  heartbeat.

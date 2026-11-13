@@ -583,3 +583,10 @@ step 2 was live.
 - **Merges by an Auto window now reach the digest.** "Merged without you"
   counted approvals by `mandate:`, `policy:` and `grant:`, not `window:`, so
   no window merge was listed, though the iOS ADR §5 says each is.
+### 2026-11-13: The follower and the hooks move to `pigeon session`
+
+- [`2026-11-13-development-rust-session-event-follower.md`](2026-11-13-development-rust-session-event-follower.md)
+  supersedes §2's follower script and §3's scripts: `pigeon session
+  follow|brief|statusline|stop`, run through `tooling/session/session.sh`,
+  which falls back to `session.py`.
+- What §2 and §3 show, and when, stays. The follower prints the same lines.
