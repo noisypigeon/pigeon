@@ -47,8 +47,12 @@ targets:
         CFBundleURLTypes:
           - CFBundleURLName: dev.pigeon.app
             CFBundleURLSchemes: [pigeon]
+    # XcodeGen writes this file from `properties` on every run; a bare `path` signs with none.
     entitlements:
       path: Pigeon/Pigeon.entitlements
+      properties:
+        com.apple.developer.associated-domains: ["webcredentials:platform.pigeon.dev"]
+        aps-environment: production
     scheme:
       testTargets: [PigeonCoreTests]
     settings:

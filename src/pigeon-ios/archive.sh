@@ -12,6 +12,11 @@ if [ -d "/Applications/Xcode_${want}.app" ]; then
 fi
 xcodebuild -version
 xcodegen generate --spec project.yml
+# The app is signed with its passkey and push entitlements, or not built.
+for k in com.apple.developer.associated-domains:0 aps-environment; do
+  /usr/libexec/PlistBuddy -c "Print :$k" Pigeon/Pigeon.entitlements >/dev/null \
+    || { echo "Pigeon/Pigeon.entitlements lacks $k" >&2; exit 1; }
+done
 rm -rf build/Pigeon.xcarchive build/Pigeon.xcarchive.zip
 xcodebuild archive \
   -project Pigeon.xcodeproj \
