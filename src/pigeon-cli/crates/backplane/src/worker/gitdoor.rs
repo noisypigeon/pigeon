@@ -48,6 +48,12 @@ pub async fn serve(mut req: Request, env: &Env, s: &Settings, who: &Identity) ->
     } else {
         None
     };
+    if service == Service::ReceivePack && gitdoor::is_probe(body.as_deref().unwrap_or_default()) {
+        let headers = Headers::new();
+        headers.set("content-type", "application/x-git-receive-pack-result")?;
+        headers.set("cache-control", "no-cache")?;
+        return Ok(Response::empty()?.with_headers(headers));
+    }
     if service == Service::ReceivePack {
         let bytes = body.as_deref().unwrap_or_default();
         let push = match gitdoor::commands(bytes) {

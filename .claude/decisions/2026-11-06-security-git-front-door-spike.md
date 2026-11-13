@@ -216,3 +216,15 @@ Access application as `/mcp`:
   and pushes over minutes.
 - **The change.** `worker/platform.rs` `credentials` takes the TTL from its
   caller.
+
+### 2026-11-13: The front door answers git's flush probe
+
+- **Before a pack larger than `http.postBuffer`, git POSTs a lone flush
+  packet (`0000`) to `git-receive-pack`, and goes on only on a 200.**
+  - The front door read it as a push with no ref update and answered 400.
+  - So a session's first, large push failed with "the remote end hung up
+    unexpectedly".
+  - !322 worked around it in `CLAUDE.md` with a large `http.postBuffer`.
+- **A lone flush is now answered 200,** with an empty
+  `application/x-git-receive-pack-result`. Nothing is forwarded or audited,
+  since it updates nothing. Every real push is judged as before.

@@ -181,3 +181,16 @@ fn a_refusal_reports_every_ref_ng_on_the_side_band_when_asked() {
     assert_eq!(&banded[5..len], inner);
     assert_eq!(&banded[len..], b"0000");
 }
+
+#[test]
+fn a_lone_flush_is_gits_probe_before_a_large_push() {
+    assert!(gitdoor::is_probe(b"0000"));
+    let push = format!(
+        "{}0000",
+        pkt(&format!("{ZERO} {A} refs/heads/change/7-x\0report-status"))
+    );
+    assert!(!gitdoor::is_probe(push.as_bytes()), "a command list");
+    assert!(!gitdoor::is_probe(b""), "an empty body");
+    assert!(!gitdoor::is_probe(b"00000000"), "two flushes");
+    assert!(gitdoor::commands(b"0000").is_err(), "and it is no push");
+}

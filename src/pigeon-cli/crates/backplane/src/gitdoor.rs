@@ -87,6 +87,13 @@ fn lines(body: &[u8]) -> Option<Vec<&[u8]>> {
     }
 }
 
+/// Whether `body` is git's probe before a large push: a lone flush packet, which wants a 200;
+/// see `.claude/decisions/2026-11-06-security-git-front-door-spike.md`'s 2026-11-13 amendment.
+#[must_use]
+pub fn is_probe(body: &[u8]) -> bool {
+    body == b"0000"
+}
+
 /// The ref updates at the start of a `git-receive-pack` request's body.
 ///
 /// # Errors
