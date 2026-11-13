@@ -594,7 +594,20 @@ async fn dispatch(
         Routed::BreakGlass { number } => break_glass(env, s, operation, number).await,
         Routed::CiWindow { hours } => Ok(answered(operation, ci_window::run(env, s, hours).await?)),
         Routed::Status { number } => {
-            let (status, v) = to_change(env, &s.repo, number, Method::Get, "/status", None).await?;
+            let (status, mut v) =
+                to_change(env, &s.repo, number, Method::Get, "/status", None).await?;
+            if let Ok(c) = serde_json::from_value::<Change>(v["change"].clone()) {
+                let q = mandates::to_instance(env, s, "/merges/list", &json!({}))
+                    .await
+                    .ok()
+                    .and_then(|(_, q)| serde_json::from_value(q).ok())
+                    .unwrap_or_default();
+                let stage = crate::core::change::stage::of(
+                    &c,
+                    crate::core::change::stage::place(&q, number),
+                );
+                v["stage"] = serde_json::to_value(stage)?;
+            }
             Ok((Some(number.to_string()), respond(operation, status, v)))
         }
         Routed::DeployRetry => {

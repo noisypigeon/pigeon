@@ -7,6 +7,7 @@ mod jobs;
 mod lifecycle;
 pub mod queue;
 mod restack;
+pub mod stage;
 mod types;
 
 pub use lifecycle::{Step, step};

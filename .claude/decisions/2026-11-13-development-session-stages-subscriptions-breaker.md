@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: development
-* Governs: `src/pigeon-cli/crates/backplane/src/core/change/lifecycle.rs`, `src/pigeon-cli/crates/backplane/src/core/approval/windows.rs`, `src/pigeon-cli/crates/backplane/src/sessions.rs`, `src/pigeon-cli/crates/backplane/src/worker/tasks.rs`
+* Governs: `src/pigeon-cli/crates/backplane/src/core/change/lifecycle.rs`, `src/pigeon-cli/crates/backplane/src/core/change/stage.rs`, `src/pigeon-cli/crates/backplane/src/core/approval/windows.rs`, `src/pigeon-cli/crates/backplane/src/sessions.rs`, `src/pigeon-cli/crates/backplane/src/worker/tasks.rs`
 
 ## Context
 
@@ -368,3 +368,26 @@ the yield ADR's step 7 lands; until then B1 to B6 trip alone.
     proposal copying an attended change is refused, naming it;
   - Resume reopens the branch, and the session's follower prints the
     owner's hint as a note.
+
+## Amendments
+
+### 2026-11-13: Step 1 splits in two; its first half lands on `change.status`
+
+- **Paths.** `Governs` gains `core/change/stage.rs`.
+- **Why two halves.** `change.status` reads the change and the merge queue,
+  which is enough for every stage up to `merged`. `change.list` reads D1 rows
+  without jobs; `deploying`, `done` and `deploy-failed` need `MainRun` to say
+  which deploy carries a merge commit; events need the stage when they are
+  appended; `since` needs the event log. Those come together in step 1b.
+- **Step 1a, this change:**
+  - `stage::of(change, place)`, pure, and `stage::place(queue, number)`;
+  - `change.status` answers `stage`: `stage`, `needs`, `waits_on` for
+    `needs: change`, and `next`;
+  - until 1b, a merged change answers `merged`, `needs: none`.
+- **Step 1b:** `since`; the deploy stages; `stage` on `change.list` and on
+  every event; `session.status`; and `needs: platform` for `proposed` and
+  `checked` when a window or mandate covers the change.
+- **One case the table didn't have,** seen live on !322: an approved change
+  whose merge job failed and whose turn was released, with no merge asked
+  again. It answers `approved`, `needs: agent`, and `next` names the failure
+  and says to ask to merge again.
