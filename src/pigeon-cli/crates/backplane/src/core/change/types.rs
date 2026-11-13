@@ -617,6 +617,14 @@ impl Change {
         self
     }
 
+    /// `self` handed to `session`, which took it; see
+    /// `.claude/decisions/2026-11-12-development-grants-applies-rescue-yield.md` §5.
+    #[must_use]
+    pub fn hand_to(mut self, session: &str) -> Self {
+        self.session = Some(session.to_string());
+        self
+    }
+
     /// `self` recorded as evicted under `policy` at `at`, keeping its head and what remains; the
     /// close that ends it follows as an ordinary `Close`.
     #[must_use]

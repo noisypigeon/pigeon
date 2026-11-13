@@ -693,3 +693,12 @@ fn a_yielded_change_waits_for_its_change_and_is_freed_when_that_ends() {
         "nothing to yield"
     );
 }
+
+#[test]
+fn a_handed_change_is_the_taking_sessions() {
+    let mut c = approved();
+    c.session = Some("s-a".into());
+    let c = c.hand_to("s-b");
+    assert_eq!(c.session.as_deref(), Some("s-b"));
+    assert_eq!(c.state, State::Approved, "nothing else moves");
+}

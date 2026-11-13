@@ -143,13 +143,16 @@ impl ChangeRun {
 
     /// `POST /event`: applies `event`, and journals it for an alarm already running, which
     /// would otherwise save over it.
-    /// A yield set, with `to`, `by` and `reason`, or cleared with `off`; see
+    /// A yield set, with `to`, `by` and `reason`, or cleared with `off`; or, with `session`, the
+    /// change handed to that session; see
     /// `.claude/decisions/2026-11-12-development-grants-applies-rescue-yield.md` §5.
     async fn park(&self, existing: Option<Change>, body: Value) -> Result<Response> {
         let Some(change) = existing else {
             return Response::error("no such change", 404);
         };
-        let next = if body["off"].as_bool() == Some(true) {
+        let next = if let Some(session) = body["session"].as_str() {
+            change.hand_to(session)
+        } else if body["off"].as_bool() == Some(true) {
             change.unyield()
         } else {
             let to = body["to"]
@@ -804,7 +807,7 @@ impl DurableObject for ChangeRun {
                 None => Response::error("no such change", 404),
             },
             (Method::Post, "evict") => self.evict(existing, req.json().await?).await,
-            (Method::Post, "yield") => self.park(existing, req.json().await?).await,
+            (Method::Post, "yield" | "session") => self.park(existing, req.json().await?).await,
             _ => Response::error("not found", 404),
         }
     }

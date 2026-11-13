@@ -40,13 +40,17 @@ pub async fn run(
     match operation {
         "task.list" => to_instance(env, s, "/tasks/list", &json!({ "session": session })).await,
         "task.claim" => {
-            to_instance(
+            let (status, v) = to_instance(
                 env,
                 s,
                 "/tasks/claim",
                 &json!({ "id": id, "session": session }),
             )
-            .await
+            .await?;
+            if status == 200 && v["kind"] == "handoff" {
+                handed(env, s, &v, session.as_deref().unwrap_or_default()).await?;
+            }
+            Ok((status, v))
         }
         "task.done" => to_instance(env, s, "/tasks/done", &json!({ "id": id })).await,
         "task.wait" => {
@@ -91,6 +95,35 @@ pub async fn add(
     to_instance(env, s, "/tasks/add", &body).await?;
     let said = format!("task ({kind}) on !{change}: {note}");
     super::events::append(env, s, "task.made", Some(change), session, &said, false).await
+}
+
+/// A claimed handoff task `t`: its change becomes `session`'s; see
+/// `.claude/decisions/2026-11-12-development-grants-applies-rescue-yield.md` §5.
+async fn handed(env: &Env, s: &Settings, t: &Value, session: &str) -> Result<()> {
+    let Some(n) = t["change"].as_u64().and_then(|n| u32::try_from(n).ok()) else {
+        return Ok(());
+    };
+    let body = json!({ "session": session });
+    super::to_change(
+        env,
+        &s.repo,
+        n,
+        worker::Method::Post,
+        "/session",
+        Some(&body),
+    )
+    .await?;
+    let said = format!("!{n} is now {session}'s");
+    super::events::append(
+        env,
+        s,
+        "change.handed",
+        Some(n),
+        Some(session.to_string()),
+        &said,
+        false,
+    )
+    .await
 }
 
 /// Tells `c`'s session its restack onto `main` failed.

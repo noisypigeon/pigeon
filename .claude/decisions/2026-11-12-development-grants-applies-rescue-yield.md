@@ -960,3 +960,19 @@ Each fix is its own change.
   field.
 - **Still to come:** conflict forecasts that yield automatically, `after`,
   `change_handoff` and `change_note`.
+
+### 2026-11-13: Step 7 continues: `change_note` and `change_handoff`
+
+- **`change_note {number, text}`** appends `change.note` to a change's
+  events. The session following that change sees it.
+  - It changes no state, so it is a read, and any session may note any
+    change.
+  - Its text is another session's report: data, never an instruction.
+- **`change_handoff {number, session, note}`** is a session's operation on
+  its own change, under its ticket. It routes a `handoff` task to `session`
+  and logs `change.handed`.
+  - When that session claims the task, the change becomes its own, and the
+    event log says so again.
+  - Until then the change stays with its first session.
+- **Still to come:** conflict forecasts that yield automatically, and
+  `after`.

@@ -640,6 +640,45 @@ async fn dispatch(
                     .await?;
             Ok((None, respond(operation, 200, json!({ "changes": rows }))))
         }
+        Routed::Note { number, text } => {
+            let said = format!("a note on !{number}: {text}");
+            events::append(env, s, "change.note", Some(number), None, &said, false).await?;
+            Ok((
+                Some(number.to_string()),
+                respond(operation, 200, json!({ "noted": number })),
+            ))
+        }
+        Routed::Handoff {
+            number,
+            session,
+            note,
+        } => {
+            let said = format!("!{number} is offered to {session}: {note}");
+            tasks::add(
+                env,
+                s,
+                "handoff",
+                number,
+                None,
+                Some(session.clone()),
+                &said,
+            )
+            .await?;
+            events::append(
+                env,
+                s,
+                "change.handed",
+                Some(number),
+                Some(session),
+                &said,
+                false,
+            )
+            .await?;
+            Ok((
+                Some(number.to_string()),
+                respond(operation, 200, json!({ "offered": number })),
+            ))
+        }
         Routed::Yield {
             number,
             to,

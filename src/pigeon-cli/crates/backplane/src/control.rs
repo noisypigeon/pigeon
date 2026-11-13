@@ -71,6 +71,22 @@ pub enum Routed {
     },
     /// `change.evictable`: each open change as an eviction candidate.
     Evictable,
+    /// `change.note`: a note on a change, for the session that follows it.
+    Note {
+        /// The change.
+        number: u32,
+        /// The note.
+        text: String,
+    },
+    /// `change.handoff`: a session offers its change to another.
+    Handoff {
+        /// The change.
+        number: u32,
+        /// The session offered it.
+        session: String,
+        /// What to know.
+        note: String,
+    },
     /// `change.yield`: a session parks its change behind another, or ends the yield.
     Yield {
         /// The change.
@@ -236,6 +252,16 @@ pub fn route(request: &Request, by: &str, at: u64) -> Result<Routed, String> {
     };
     match request.operation.as_str() {
         "change.propose" => propose_route(a),
+        "change.note" => Ok(Routed::Note {
+            number: number(a)?,
+            text: need(a, "text")?,
+        }),
+        "change.handoff" => Ok(Routed::Handoff {
+            number: number(a)?,
+            session: crate::sessions::session(Some(&need(a, "session")?))?
+                .ok_or("`session` names the session to offer it to")?,
+            note: text(a, "note").unwrap_or_default(),
+        }),
         "change.yield" => {
             let off = flag(a, "off");
             let to = match text(a, "to") {

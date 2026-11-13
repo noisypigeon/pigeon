@@ -1194,3 +1194,47 @@ fn a_yield_names_the_change_it_waits_for_unless_it_ends() {
         "names `to`"
     );
 }
+
+#[test]
+fn a_note_and_a_handoff_are_routed() {
+    let req = |op: &str, args: serde_json::Value| backplane::wire::Request {
+        operation: op.into(),
+        args: args.as_object().cloned().unwrap_or_default(),
+    };
+    let note = control::route(
+        &req(
+            "change.note",
+            serde_json::json!({ "number": 79, "text": "I rebased onto !80" }),
+        ),
+        "s",
+        1,
+    );
+    assert!(
+        matches!(&note, Ok(Routed::Note { number: 79, text }) if text == "I rebased onto !80"),
+        "{note:?}"
+    );
+    let hand = control::route(
+        &req(
+            "change.handoff",
+            serde_json::json!({ "number": 79, "session": "https://claude.ai/code/session_b" }),
+        ),
+        "s",
+        1,
+    );
+    assert!(
+        matches!(&hand, Ok(Routed::Handoff { number: 79, session, .. }) if session.ends_with("session_b")),
+        "{hand:?}"
+    );
+    assert!(
+        control::route(
+            &req(
+                "change.handoff",
+                serde_json::json!({ "number": 79, "session": " " })
+            ),
+            "s",
+            1
+        )
+        .is_err(),
+        "names a session"
+    );
+}
