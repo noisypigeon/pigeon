@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: development
-* Governs: `src/pigeon-cli/crates/backplane/src/core/change/lifecycle.rs`, `src/pigeon-cli/crates/backplane/src/core/change/stage.rs`, `src/pigeon-cli/crates/backplane/src/worker/stages.rs`, `src/pigeon-cli/crates/backplane/src/core/approval/windows.rs`, `src/pigeon-cli/crates/backplane/src/sessions.rs`, `src/pigeon-cli/crates/backplane/src/worker/tasks.rs`
+* Governs: `src/pigeon-cli/crates/backplane/src/core/change/lifecycle.rs`, `src/pigeon-cli/crates/backplane/src/core/change/stage.rs`, `src/pigeon-cli/crates/backplane/src/worker/stages.rs`, `src/pigeon-cli/crates/backplane/src/core/approval/windows.rs`, `src/pigeon-cli/crates/backplane/src/sessions.rs`, `src/pigeon-cli/crates/backplane/src/worker/tasks.rs`, `tooling/session/session.py`, `.claude/settings.json`
 
 ## Context
 
@@ -514,3 +514,22 @@ step 2 was live.
   and pushed the change itself rather than ask a third time, which is the
   breaker's rule (§4) kept by hand until step 6. Why the restack didn't fire
   is left to the concurrent-sessions ADR.
+
+### 2026-11-13: Step 4: `.claude/settings.json`
+
+- **Paths.** `Governs` gains `tooling/session/session.py` and
+  `.claude/settings.json`.
+- **The settings** run `session.py` from `$CLAUDE_PROJECT_DIR`, with
+  `python3 -I`:
+  - `SessionStart`, matching `startup|resume|compact`: `brief`, with a
+    20-second timeout. `brief` asks the control plane for at most 10 seconds,
+    then falls back to the cache, so a slow control plane never holds up a
+    session's start;
+  - `Stop`: `stop`, with a 10-second timeout, which never answers `block`;
+  - `statusLine`: `statusline`, which reads only the cache.
+- **Nothing in them grants or decides anything.** They show the control
+  plane's answers to the session and to whoever watches its terminal; the
+  approvals ADR's 2026-11-06 amendment holds, since the agent's own
+  repository writes them.
+- **The file is guarded and in `secrets:`,** so this change is the owner's,
+  with the code, and no window or mandate covers it.

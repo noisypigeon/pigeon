@@ -16,6 +16,7 @@ SESSION = os.path.expanduser("~/.config/pigeon/session.json")
 CACHE = os.path.expanduser("~/.cache/pigeon/status.json")
 WAIT = 50
 STALE = 10 * 60
+BRIEF = 10
 
 START = """No pigeon session yet. Per CLAUDE.md:
 1. `git remote add artifacts https://platform.pigeon.dev/git/pigeon/pigeon.git`; fetch its main and branch from it.
@@ -59,9 +60,9 @@ def run(operation, args, timeout=30):
         return None
 
 
-def status(me):
+def status(me, timeout=30):
     """The session's status, fresh, saved for the status line; None when unreachable."""
-    s = run("session.status", {"session": me})
+    s = run("session.status", {"session": me}, timeout)
     if s is not None:
         s["at"] = int(time.time())
         os.makedirs(os.path.dirname(CACHE), exist_ok=True)
@@ -125,7 +126,7 @@ def brief():
     if not me:
         print(START)
         return 0
-    s = status(me) or cached()
+    s = status(me, BRIEF) or cached()
     if s is None:
         print(f"pigeon session {me}: the control plane didn't answer; `session_status` when it does.")
         return 0
