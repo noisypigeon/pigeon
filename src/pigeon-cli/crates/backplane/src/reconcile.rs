@@ -183,6 +183,17 @@ pub fn review(
     })
 }
 
+/// The open change already carrying a generated change's `slug`, the lowest-numbered when
+/// several do, so a change that conflicts again reuses it; see
+/// `.claude/decisions/2026-11-12-development-grants-applies-rescue-yield.md` §4 F1.
+#[must_use]
+pub fn existing(open: &[crate::sessions::Open], slug: &str) -> Option<u32> {
+    open.iter()
+        .filter(|o| o.slug == slug)
+        .map(|o| o.number)
+        .min()
+}
+
 fn short(sha: &str) -> &str {
     sha.get(..12).unwrap_or(sha)
 }

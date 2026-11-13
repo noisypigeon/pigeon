@@ -43,6 +43,9 @@ pub struct Open {
     /// Its plan.
     #[serde(default)]
     pub plan: String,
+    /// Its slug.
+    #[serde(default)]
+    pub slug: String,
 }
 
 /// An open change a proposal overlaps.

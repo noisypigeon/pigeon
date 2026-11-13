@@ -73,6 +73,7 @@ fn open(number: u32, session: Option<&str>) -> Open {
         scope: vec!["a/**".into()],
         affects: vec![],
         plan: String::new(),
+        slug: String::new(),
     }
 }
 

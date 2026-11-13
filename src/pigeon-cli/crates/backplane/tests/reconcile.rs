@@ -5,7 +5,8 @@
 mod step;
 
 use backplane::changes::{Change, ConflictContext, Event, Relation, Restacked, State};
-use backplane::reconcile::{ADR, adrs, conflict, review};
+use backplane::reconcile::{ADR, adrs, conflict, existing, review};
+use backplane::sessions::Open;
 use step::Apply;
 
 const A: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -141,5 +142,34 @@ fn a_review_is_planned_only_when_the_open_change_cites_another_adr() {
     assert_eq!(
         review(61, &format!("Per {OLD}."), 59, "no ADR", &globs),
         None
+    );
+}
+
+fn generated(number: u32, slug: &str) -> Open {
+    Open {
+        number,
+        state: "proposed".into(),
+        session: Some("s-a".into()),
+        scope: vec![],
+        affects: vec![],
+        plan: String::new(),
+        slug: slug.into(),
+    }
+}
+
+#[test]
+fn a_change_that_conflicts_again_reuses_its_open_reconciliation() {
+    let p = conflict(&change("no ADR"), &conflicting(&["src/a.rs"], ""));
+    assert_eq!(existing(&[], &p.slug), None, "nothing open: propose");
+    let others = [generated(70, "reconcile-61"), generated(71, "x")];
+    assert_eq!(existing(&others, &p.slug), None, "another change's");
+    // !255's seventeen: once one is open, every later conflict lands on the lowest.
+    let mut open = vec![generated(90, "x")];
+    open.extend((260..=289).map(|n| generated(n, "reconcile-60")));
+    assert_eq!(existing(&open, &p.slug), Some(260));
+    assert_eq!(
+        existing(&[generated(204, "review-61-59")], "review-61-59"),
+        Some(204),
+        "a review of the same pair"
     );
 }

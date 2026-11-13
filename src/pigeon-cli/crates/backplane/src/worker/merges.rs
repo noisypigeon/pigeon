@@ -151,6 +151,17 @@ pub async fn reconcile(
     p: Proposal,
 ) -> Result<Option<u32>> {
     let s = Settings::from(env)?;
+    let open =
+        control::open_rows(&platform::d1_rows(env, &control::open(&s.instance, &s.repo)).await?);
+    if let Some(n) = crate::reconcile::existing(&open, &p.slug) {
+        let why = format!("!{parent} conflicted again; it reuses !{n}, `{}`", p.slug);
+        let added =
+            super::events::append(env, &s, "reconcile.reused", Some(n), session, &why, false);
+        if let Err(e) = added.await {
+            worker::console_error!("reconcile.reused: {e}");
+        }
+        return Ok(Some(n));
+    }
     let mut change = Change::propose(0, &p.slug, &p.title, &p.plan, p.scope, PROPOSER);
     change.session = session;
     change.parent = Some(parent);

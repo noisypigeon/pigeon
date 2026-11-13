@@ -17,6 +17,7 @@ fn open(number: u32, session: Option<&str>, scope: &[&str], affects: &[&str]) ->
         scope: globs(scope),
         affects: globs(affects),
         plan: String::new(),
+        slug: String::new(),
     }
 }
 

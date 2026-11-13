@@ -848,3 +848,21 @@ and come after them.
     `pigeon-rescue`'s `workers.deploy` restores it;
   - `rescue.run` refuses a script whose digest differs from the approved
     one.
+
+## Amendments
+
+### 2026-11-13: F1 lands as reuse; the reused plan's update waits two releases
+
+- **A change that conflicts again reuses its open reconciliation.**
+  - `merges::reconcile` reads the open changes first.
+  - When one already carries the proposal's slug (`reconcile-<n>`, or
+    `review-<n>-<m>` for the same pair), it proposes nothing and appends
+    `reconcile.reused`. The conflict then points at that change.
+  - The open changes' D1 query gains `slug`, which `sessions::Open` carries.
+- **The reused change keeps its first plan.**
+  - Updating it needs a new stored event variant, which the blue-green ADR's
+    rule ships over two releases.
+  - Until then, a session claiming the task reads the newest conflict in the
+    parent's `change_status`.
+- **Execution:** one `fix(backplane)` change, with a test that replays
+  !255's duplicates onto one change.

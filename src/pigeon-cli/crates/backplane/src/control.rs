@@ -830,7 +830,7 @@ pub fn release_reason(change: &Change) -> String {
 #[must_use]
 pub fn open(instance: &str, repo: &str) -> Statement {
     Statement {
-        sql: "SELECT number, state, session, scope, affects, plan FROM changes
+        sql: "SELECT number, state, session, scope, affects, plan, slug FROM changes
               WHERE instance = ?1 AND repo = ?2 AND state NOT IN ('merged', 'closed')
               ORDER BY number LIMIT 100",
         params: vec![instance.into(), repo.into()],
@@ -854,6 +854,7 @@ pub fn open_rows(rows: &[serde_json::Value]) -> Vec<crate::sessions::Open> {
                 scope: globs(&r["scope"]),
                 affects: globs(&r["affects"]),
                 plan: r["plan"].as_str().unwrap_or_default().to_string(),
+                slug: r["slug"].as_str().unwrap_or_default().to_string(),
             })
         })
         .collect()
