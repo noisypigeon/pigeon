@@ -1,5 +1,8 @@
-# Proton Mail; see .claude/decisions/2026-11-02-runtime-workloads-zone-apex.md.
-description: Proton Mail at the zone apex.
+# Proton's alias domains; see .claude/decisions/2026-11-02-runtime-workloads-zone-apex.md and
+# .claude/decisions/2026-11-13-runtime-zone-vendor-dns-placements.md.
+description: Proton's alias domains (alias.proton.me) at a zone apex or subdomain.
+docs: https://proton.me/support/pass-email-alias
+placements: [apex, subdomain]
 inputs:
   verification.protonmail: { type: string, secret: true, published: true, optional: true }
   verification.pm: { type: string, secret: true, published: true, optional: true }

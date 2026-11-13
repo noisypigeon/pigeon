@@ -15,7 +15,7 @@
       "pattern": "^[a-z0-9-]+(\\.[a-z0-9-]+)+$"
     },
     "services": {
-      "description": "Presets by name, each catalog/cloudflare/presets/<name>.yaml.",
+      "description": "Services by name, each a preset placed in the zone: `preset` (defaults to the name) is catalog/cloudflare/presets/<preset>.yaml, and `at` (defaults to @) is where it sits; see .claude/decisions/2026-11-13-runtime-zone-vendor-dns-placements.md.",
       "type": "object",
       "propertyNames": {
         "$ref": "#/$defs/key"

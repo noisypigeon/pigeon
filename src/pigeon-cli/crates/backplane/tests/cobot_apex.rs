@@ -1993,12 +1993,12 @@ fn a_service_is_a_preset_placed_at_any_name() {
     let repo = self::repo(&placed);
     let proton = repo.path().join("catalog/cloudflare/presets/proton.yaml");
     let text = fs::read_to_string(&proton).expect("read");
-    fs::write(&proton, format!("{text}placements: [apex]\n")).expect("write");
+    fs::write(&proton, text.replace("[apex, subdomain]", "[apex]")).expect("write");
     assert_fails(
         repo.path(),
         "services.aliases: preset proton allows only apex",
     );
-    fs::write(&proton, format!("{text}docs: http://x.example\n")).expect("write");
+    fs::write(&proton, text.replace("docs: https://", "docs: http://")).expect("write");
     assert_fails(repo.path(), "docs is not an https:// link");
     fs::write(&proton, text.replace("dmarc:\n", "at:\n")).expect("write");
     assert_fails(repo.path(), "input `at` uses a reserved name");
