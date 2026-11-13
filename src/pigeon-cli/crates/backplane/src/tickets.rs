@@ -146,6 +146,13 @@ impl Tickets {
         }
     }
 
+    /// The class `label` declared with its latest ticket, live or lapsed; none for a label
+    /// never started.
+    #[must_use]
+    pub fn class(&self, label: &str) -> Option<crate::sessions::Class> {
+        self.0.get(label).map(|i| i.declared.model)
+    }
+
     /// `label`'s live ticket, if any.
     #[must_use]
     pub fn live(&self, label: &str, now: u64) -> Option<Issued> {

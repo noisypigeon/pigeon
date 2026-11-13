@@ -279,7 +279,7 @@ const CATALOG: &[Operation] = &[
         name: "change.list",
         engine: Engine::Backplane,
         effect: Effect::Read,
-        summary: "Every change, newest first (args: state?)",
+        summary: "Every change, newest first, each with its stage and its session's model class (`model`) (args: state?)",
         args: &[arg("state", false, Kind::String)],
     },
     Operation {

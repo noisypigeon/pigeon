@@ -124,6 +124,16 @@ fn a_ticket_keeps_its_class_and_a_replacement_may_declare_another() {
 }
 
 #[test]
+fn a_label_s_class_outlives_its_ticket_and_an_unknown_label_has_none() {
+    let mut t = Tickets::default();
+    let sonnet = declare(Some("sonnet"), Some("https://claude.ai/code/p"), Some("b1")).expect("ok");
+    t.start_as(A, false, 0, sonnet).expect("issues");
+    assert!(t.end(A, 5));
+    assert_eq!(t.class(A), Some(Class::Sonnet), "lapsed, still known");
+    assert_eq!(t.class("https://claude.ai/code/unknown"), None);
+}
+
+#[test]
 fn a_ticket_stored_before_classes_reads_as_opus() {
     let t: Tickets = serde_json::from_str(
         r#"{"https://claude.ai/code/session_a":{"generation":2,"expires":9}}"#,

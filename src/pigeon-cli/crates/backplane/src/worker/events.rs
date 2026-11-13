@@ -138,8 +138,15 @@ pub async fn serve(state: &State, path: &str, body: &Value) -> Result<Response> 
                 body["owner"].as_bool() == Some(true),
                 now(),
             );
+            let tickets: crate::tickets::Tickets = storage
+                .get(super::tickets::TICKETS)
+                .await
+                .ok()
+                .flatten()
+                .unwrap_or_default();
             if let Some(e) = log.list.back_mut().filter(|e| e.id == id) {
                 e.stage = serde_json::from_value(body["stage"].clone()).ok();
+                e.model = e.session.as_deref().and_then(|l| tickets.class(l));
             }
             storage.put(LOG, &log).await?;
             Response::from_json(&json!({ "id": id }))

@@ -12,7 +12,8 @@ use super::to_change;
 use crate::tickets::{Tickets, require, sign};
 use crate::wire;
 
-const TICKETS: &str = "tickets";
+/// The `Instance` storage key the tickets live under.
+pub const TICKETS: &str = "tickets";
 
 /// The header a push through the git front door carries its ticket in.
 pub const HEADER: &str = "x-pigeon-ticket";

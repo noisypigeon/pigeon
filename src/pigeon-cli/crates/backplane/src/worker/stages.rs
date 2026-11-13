@@ -88,15 +88,20 @@ pub async fn stage(env: &Env, s: &Settings, c: &Change, queue: &MergeQueue) -> S
     stage::of(c, &cx)
 }
 
-/// `change.list`'s rows with their stages: an open change's in full, a merged or closed one's
-/// from its row, `since` its last update.
+/// `change.list`'s rows with their stages, an open change's in full, a merged or closed one's
+/// from its row, `since` its last update; and each row's session's class as `model`.
 ///
 /// # Errors
 ///
 /// When a binding fails.
 pub async fn list(env: &Env, s: &Settings, mut rows: Vec<Value>) -> Result<Vec<Value>> {
     let merges = queue(env, s).await;
+    let (_, t) = to_instance(env, s, "/tickets/list", &json!({})).await?;
+    let tickets: crate::tickets::Tickets = serde_json::from_value(t).unwrap_or_default();
     for row in &mut rows {
+        if let Some(class) = row["session"].as_str().and_then(|l| tickets.class(l)) {
+            row["model"] = serde_json::to_value(class)?;
+        }
         let state = row["state"].as_str().unwrap_or_default().to_string();
         let number = row["number"].as_u64().and_then(|n| u32::try_from(n).ok());
         let st = match (state.as_str(), number) {

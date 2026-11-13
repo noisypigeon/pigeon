@@ -248,3 +248,16 @@ fn a_session_resumes_from_its_cursor_and_a_new_one_from_now() {
     c.poll("t", After::Session, 0, 150 + KEEP_FOR + 1);
     assert_eq!(c.listening("s", 0), None, "a week unpolled is dropped");
 }
+
+#[test]
+fn an_event_carries_its_session_s_class_and_an_older_one_reads_without() {
+    let old: backplane::events::Event = serde_json::from_str(
+        r#"{"id":1,"at":2,"kind":"change.checked","session":"s","summary":"checked"}"#,
+    )
+    .expect("an event logged before classes");
+    assert_eq!(old.model, None);
+    let mut e = old;
+    e.model = Some(backplane::sessions::Class::Haiku);
+    let v = serde_json::to_value(&e).expect("json");
+    assert_eq!(v["model"], "haiku");
+}

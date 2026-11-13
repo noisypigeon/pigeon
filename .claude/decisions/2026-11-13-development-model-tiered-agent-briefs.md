@@ -393,6 +393,7 @@ first to be split into briefs, as the trial of this ADR.
   - `session.status` answers `model`, `role`, `planner` and `brief`;
   - `tooling/session/models.json` maps each class to its model ID.
 - **Step 1b:** `model` on `change_list`'s rows and on each event.
+
 ### 2026-11-13: Reviewed against !386 and !387: they agree, and briefs' tasks are never swept
 
 This reviews !386 and !387 against this ADR. Both cite
@@ -418,3 +419,16 @@ changes, as !386 itself now plans: one per session and ADR.
   the change, its session and how long the session has been quiet. When §7
   shows each session's class, the stall line can carry it too. That is §7's
   step, not !387's.
+
+### 2026-11-13: Step 1b lands, and step 1 is done
+
+- **Each event carries `model`,** its session's class when it was appended.
+  The `Instance` appends events and holds the tickets, so it fills the class
+  in at append time, at no extra request. An event of no session, or of a
+  label never started, has none. An event logged before reads as none.
+- **`change_list`'s rows carry `model`,** looked up from the tickets once per
+  list. A lapsed ticket's class is still known for the week a ticket is
+  remembered, so a change outliving its session keeps its class.
+- **The class is the session's latest.** A session that replaced its ticket
+  with another class shows the new one on its older changes too. Briefs
+  (step 2) record the class that carried each one out.

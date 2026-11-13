@@ -39,6 +39,10 @@ pub struct Event {
     /// `.claude/decisions/2026-11-13-development-session-stages-subscriptions-breaker.md` §1.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub stage: Option<crate::core::change::stage::Stage>,
+    /// Its session's model class as the event was appended; see
+    /// `.claude/decisions/2026-11-13-development-model-tiered-agent-briefs.md` §1.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<crate::sessions::Class>,
 }
 
 /// Which events a reader wants.
@@ -191,6 +195,7 @@ impl Log {
             summary: summary.to_string(),
             owner,
             stage: None,
+            model: None,
         });
         while self.list.len() > KEEP
             || self
