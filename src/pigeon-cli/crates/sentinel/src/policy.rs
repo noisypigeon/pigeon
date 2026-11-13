@@ -42,6 +42,9 @@ pub enum NamedTarget {
     Change,
     /// The repository's directories, for `entries` rules.
     Tree,
+    /// A change the control plane may evict, by its record's fields; see
+    /// `.claude/decisions/2026-11-10-development-change-slot-eviction-policy.md` §4.
+    Eviction,
 }
 
 /// One file.
@@ -340,6 +343,34 @@ pub struct FieldRule {
     pub within: Option<PrField>,
     /// The most non-empty lines.
     pub max_lines: Option<usize>,
+    /// The field is a whole number no less than this.
+    pub at_least: Option<u64>,
+    /// The field is a whole number no more than this.
+    pub at_most: Option<u64>,
+    /// The field is exactly this, compared as text.
+    pub equals: Option<Scalar>,
+}
+
+/// A literal a field equals: a string, a whole number or a boolean.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(untagged)]
+pub enum Scalar {
+    /// `true` or `false`.
+    Bool(bool),
+    /// A whole number.
+    Number(u64),
+    /// Text.
+    Text(String),
+}
+
+impl std::fmt::Display for Scalar {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Bool(b) => write!(f, "{b}"),
+            Self::Number(n) => write!(f, "{n}"),
+            Self::Text(t) => f.write_str(t),
+        }
+    }
 }
 
 /// A pull-request field.
@@ -358,6 +389,46 @@ pub enum PrField {
     Branch,
     /// A change's scope: path globs, one per line.
     Scope,
+    /// An eviction candidate's kind: `change`, `reconcile` or `review`.
+    Kind,
+    /// An eviction candidate's state.
+    State,
+    /// Whether it pushed.
+    Pushed,
+    /// Whether its session holds a live ticket.
+    #[serde(rename = "session_live")]
+    SessionLive,
+    /// Seconds since its session's ticket lapsed.
+    #[serde(rename = "session_gone_for")]
+    SessionGoneFor,
+    /// Seconds since its last event.
+    Idle,
+    /// Whether the owner pinned it.
+    Pinned,
+    /// Whether an owner approval page is open for it.
+    #[serde(rename = "approval_open")]
+    ApprovalOpen,
+    /// Whether it waits in the merge queue.
+    Queued,
+}
+
+impl PrField {
+    /// Whether only the `eviction` target has this field.
+    #[must_use]
+    pub fn eviction_only(self) -> bool {
+        matches!(
+            self,
+            Self::Kind
+                | Self::State
+                | Self::Pushed
+                | Self::SessionLive
+                | Self::SessionGoneFor
+                | Self::Idle
+                | Self::Pinned
+                | Self::ApprovalOpen
+                | Self::Queued
+        )
+    }
 }
 
 /// See [`Rule::Contains`].
@@ -368,6 +439,22 @@ pub struct ContainsRule {
     pub file: PathBuf,
     /// The literal, after interpolation.
     pub text: String,
+}
+
+/// Whether `r` fits the `eviction` target: one of its fields, with one kind of check.
+fn eviction_field(r: &FieldRule) -> Result<(), &'static str> {
+    if !(r.name.eviction_only() || matches!(r.name, PrField::Number)) {
+        return Err("`eviction` has only the candidate's fields");
+    }
+    let kinds = usize::from(r.matches.is_some() || r.not.is_some())
+        + usize::from(r.at_least.is_some() || r.at_most.is_some())
+        + usize::from(r.equals.is_some());
+    if kinds != 1 || r.references.is_some() || r.within.is_some() || r.max_lines.is_some() {
+        return Err(
+            "`field` on `eviction` takes one of `at_least`/`at_most`, `equals`, or `matches` and/or `not`",
+        );
+    }
+    Ok(())
 }
 
 impl Policy {
@@ -392,9 +479,16 @@ impl Policy {
         );
         let change = matches!(self.target, Target::Named(NamedTarget::Change));
         let tree = matches!(self.target, Target::Named(NamedTarget::Tree));
+        let eviction = matches!(self.target, Target::Named(NamedTarget::Eviction));
         for (i, rule) in self.rules.iter().enumerate() {
             let at = |m: &str| Err(format!("rule {}: {m}", i + 1));
             match rule {
+                Rule::Field(r) if eviction => {
+                    if let Err(m) = eviction_field(r) {
+                        return at(m);
+                    }
+                }
+                _ if eviction => return at("only `field` applies to `eviction`"),
                 Rule::Entries(_) | Rule::Find(_) if !tree => {
                     return at("`entries` and `find` need the `tree` target");
                 }
@@ -407,11 +501,16 @@ impl Policy {
                     let kinds = usize::from(r.matches.is_some() || r.not.is_some())
                         + usize::from(r.references.is_some())
                         + usize::from(r.within.is_some())
-                        + usize::from(r.max_lines.is_some());
+                        + usize::from(r.max_lines.is_some())
+                        + usize::from(r.at_least.is_some() || r.at_most.is_some())
+                        + usize::from(r.equals.is_some());
                     if kinds != 1 {
                         return at(
-                            "`field` takes one of `references`, `within`, `max_lines`, or `matches` and/or `not`",
+                            "`field` takes one of `references`, `within`, `max_lines`, `at_least`/`at_most`, `equals`, or `matches` and/or `not`",
                         );
+                    }
+                    if r.name.eviction_only() || r.within.is_some_and(PrField::eviction_only) {
+                        return at("the candidate's fields need the `eviction` target");
                     }
                     if !change
                         && (matches!(r.name, PrField::Branch | PrField::Scope)

@@ -1,6 +1,6 @@
 //! Evaluates rules against a document or a pull request.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fs;
 use std::path::Path;
 
@@ -148,6 +148,34 @@ pub fn run_pull_request(
             Rule::Field(r) => field(&mut ctx, root, r),
             Rule::Contains(r) => contains(&mut ctx, root, r),
             _ => {}
+        }
+    }
+}
+
+/// Runs an `eviction` policy's `field` rules against `candidate`; a field the policy names that
+/// the candidate lacks is a violation, so missing data never grants an eviction.
+pub fn run_eviction(
+    loaded: &LoadedPolicy,
+    candidate: &BTreeMap<String, String>,
+    out: &mut Vec<Violation>,
+) {
+    let mut ctx = Ctx {
+        policy: &loaded.name,
+        path: "eviction".into(),
+        vars: candidate
+            .iter()
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect(),
+        out,
+    };
+    for rule in &loaded.policy.rules {
+        if let Rule::Field(r) = rule {
+            let name = field_name(r.name);
+            if ctx.vars.contains_key(name) {
+                field(&mut ctx, Path::new("."), r);
+            } else {
+                ctx.push(None, format!("`{name}` is not set"));
+            }
         }
     }
 }
@@ -611,6 +639,15 @@ fn field_name(f: PrField) -> &'static str {
         PrField::Files => "files",
         PrField::Branch => "branch",
         PrField::Scope => "scope",
+        PrField::Kind => "kind",
+        PrField::State => "state",
+        PrField::Pushed => "pushed",
+        PrField::SessionLive => "session_live",
+        PrField::SessionGoneFor => "session_gone_for",
+        PrField::Idle => "idle",
+        PrField::Pinned => "pinned",
+        PrField::ApprovalOpen => "approval_open",
+        PrField::Queued => "queued",
     }
 }
 
@@ -635,6 +672,33 @@ fn glob(glob: &str) -> Option<Regex> {
     }
     re.push('$');
     Regex::new(&re).ok()
+}
+
+/// `field`'s `at_least`, `at_most` and `equals` checks of `value`.
+fn bounds(ctx: &mut Ctx, name: &str, value: &str, r: &FieldRule) {
+    if r.at_least.is_some() || r.at_most.is_some() {
+        match value.trim().parse::<u64>() {
+            Ok(n) => {
+                if let Some(min) = r.at_least
+                    && n < min
+                {
+                    ctx.push(None, format!("`{name}` is {n}; at least {min}"));
+                }
+                if let Some(max) = r.at_most
+                    && n > max
+                {
+                    ctx.push(None, format!("`{name}` is {n}; at most {max}"));
+                }
+            }
+            Err(_) => ctx.push(None, format!("`{name}` `{value}` is not a whole number")),
+        }
+    }
+    if let Some(want) = &r.equals {
+        let want = want.to_string();
+        if value.trim() != want {
+            ctx.push(None, format!("`{name}` is `{value}`, not `{want}`"));
+        }
+    }
 }
 
 fn field(ctx: &mut Ctx, root: &Path, r: &FieldRule) {
@@ -664,6 +728,7 @@ fn field(ctx: &mut Ctx, root: &Path, r: &FieldRule) {
             ),
         );
     }
+    bounds(ctx, name, &value, r);
     if let Some(max) = r.max_lines {
         let n = value.lines().filter(|l| !l.trim().is_empty()).count();
         if n > max {

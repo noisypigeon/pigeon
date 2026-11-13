@@ -77,6 +77,49 @@ pub struct PullRequest {
     pub scope: Option<String>,
 }
 
+/// An eviction candidate: each field the control plane read from the change's record and its
+/// session's ticket, as text; see
+/// `.claude/decisions/2026-11-10-development-change-slot-eviction-policy.md` §4.
+pub type Candidate = std::collections::BTreeMap<String, String>;
+
+/// One eviction policy's verdict on a candidate.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct Verdict {
+    /// The policy.
+    pub policy: String,
+    /// Why it doesn't grant; none means it does.
+    pub violations: Vec<String>,
+}
+
+/// Each `eviction` policy's verdict on `candidate`, in file-name order, and the first that
+/// grants it, which is the grant: no violations.
+#[must_use]
+pub fn evict(policies: &[LoadedPolicy], candidate: &Candidate) -> (Vec<Verdict>, Option<String>) {
+    let mut verdicts: Vec<Verdict> = policies
+        .iter()
+        .filter(|p| {
+            matches!(
+                p.policy.target,
+                policy::Target::Named(policy::NamedTarget::Eviction)
+            )
+        })
+        .map(|p| {
+            let mut out = Vec::new();
+            rules::run_eviction(p, candidate, &mut out);
+            Verdict {
+                policy: p.name.clone(),
+                violations: out.iter().map(|v| v.message.clone()).collect(),
+            }
+        })
+        .collect();
+    verdicts.sort_by(|a, b| a.policy.cmp(&b.policy));
+    let granted = verdicts
+        .iter()
+        .find(|v| v.violations.is_empty())
+        .map(|v| v.policy.clone());
+    (verdicts, granted)
+}
+
 /// Loads and validates one policy file.
 ///
 /// # Errors
@@ -199,6 +242,7 @@ pub fn describe(policies: &[LoadedPolicy]) -> serde_json::Value {
                     Target::Named(NamedTarget::PullRequest) => ("pull-request", Vec::new()),
                     Target::Named(NamedTarget::Change) => ("change", Vec::new()),
                     Target::Named(NamedTarget::Tree) => ("tree", Vec::new()),
+                    Target::Named(NamedTarget::Eviction) => ("eviction", Vec::new()),
                     Target::File(f) => ("file", vec![shown(&f.file)]),
                     Target::Files(f) => ("files", f.files.iter().map(|p| shown(p)).collect()),
                     Target::Dir(d) => ("dir", vec![shown(&d.dir)]),

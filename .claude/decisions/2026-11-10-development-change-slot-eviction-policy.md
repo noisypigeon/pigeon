@@ -191,3 +191,33 @@ The owner's direction:
   - no session-held token or MCP tool evicts;
   - the seventh candidate in an hour waits for the next run.
 - **Incomplete work.** An evicted incomplete change creates a `resume` task and one owner question. "Yes" gives a prompt that a fresh session follows to finish the change.
+
+## Amendments
+
+### 2026-11-13: Step 4 lands: the `eviction` target and `pigeon-sentinel evict`
+
+Carried out as F4 of
+[`2026-11-12-development-grants-applies-rescue-yield.md`](2026-11-12-development-grants-applies-rescue-yield.md).
+Steps 2 and 3 landed there as F1, F2 and the family slot.
+
+- **The `eviction` target takes only `field` rules,** over the candidate's
+  fields:
+  - `number`, `kind`, `state`, `pushed`;
+  - `session_live`, `session_gone_for`, `idle`;
+  - `pinned`, `approval_open`, `queued`.
+
+  Those fields apply to no other target.
+- **`field` gains `at_least` and `at_most`** (a whole number, together one
+  kind of check) **and `equals`** (a string, number or boolean, compared as
+  text). They apply on any target.
+- **A field the candidate lacks is a violation,** so missing data never
+  grants an eviction.
+- **`sentinel::evict` answers each eviction policy's verdict, in name order.**
+  The first with no violations is the grant.
+- **The CLI:** `pigeon-sentinel evict --candidate JSON` prints
+  `{granted, results}`. It exits 0 when an eviction is granted, and 1 when
+  none is.
+- **`check` skips eviction policies,** as it skips a change policy without a
+  branch.
+- **Nothing is evicted yet.** No eviction policy exists until step 6, and
+  the hourly job is step 5.
