@@ -820,19 +820,24 @@ impl DurableObject for ChangeRun {
             .filter(|j| j.status == JobStatus::Running && !github.owns(&head, &j.name))
             .map(|j| j.name.clone())
             .collect();
-        let mut restack_failed = false;
+        let restack_status = |c: &Change| {
+            c.jobs
+                .iter()
+                .find(|j| j.name == crate::changes::RESTACK)
+                .map(|j| j.status)
+        };
+        let restack_before = restack_status(&change);
         for job in running {
-            if let Some(event) = self.poll(&change, &job).await? {
-                if let Event::Finished { job, ok: false, .. } = &event
-                    && job == crate::changes::RESTACK
-                {
-                    restack_failed = true;
-                }
-                if Self::apply(&mut change, event.clone(), &mut next).is_ok() {
-                    applied.push(event);
-                }
+            if let Some(event) = self.poll(&change, &job).await?
+                && Self::apply(&mut change, event.clone(), &mut next).is_ok()
+            {
+                applied.push(event);
             }
         }
+        // Finished failing or lost on its last attempt; see the 2026-11-13 amendment of
+        // .claude/decisions/2026-11-08-development-concurrent-agent-sessions.md.
+        let restack_failed = restack_before != Some(JobStatus::Failed)
+            && restack_status(&change) == Some(JobStatus::Failed);
         let ended = control::merge_ended_by(&applied, &change);
         self.github_step(&mut change, &mut github, &mut next)
             .await?;

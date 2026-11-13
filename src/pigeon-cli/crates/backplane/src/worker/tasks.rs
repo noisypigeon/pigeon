@@ -104,6 +104,22 @@ pub async fn restack_failed(env: &Env, c: &crate::changes::Change) -> Result<()>
         "{}'s restack onto main failed; rebase it onto main and push",
         c.branch()
     );
+    let why = c
+        .violations
+        .last()
+        .map_or(note.clone(), |v| format!("{note}: {v}"));
+    let said = super::events::append(
+        env,
+        &s,
+        "restack.failed",
+        Some(c.number),
+        c.session.clone(),
+        &why,
+        false,
+    );
+    if let Err(e) = said.await {
+        worker::console_error!("restack.failed: {e}");
+    }
     add(
         env,
         &s,

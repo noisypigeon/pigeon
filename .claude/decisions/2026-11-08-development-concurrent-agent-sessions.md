@@ -552,3 +552,26 @@ a gate run.
 
 **Execution:** !277, in `core/change` (`bounded`, `settle` and `MergeFailed`),
 with tests for each path.
+
+### 2026-11-13: A restack lost on its last attempt ends as a failed one
+
+!327's restack job was lost 3 times on a branch that merged cleanly, and nothing
+said so. A lost restack fell through to `settle`, which does nothing on a
+checked or approved change, so:
+
+- a push held while it ran was never applied;
+- a merge parked behind it kept its turn until the queue's 2-minute hand-back;
+- it recorded no violation;
+- no `restack-failed` task was raised, since that came only from a restack
+  that finished failing.
+
+The fix:
+
+- **A restack lost on its last attempt ends as a failed restack does.** Its
+  held push applies, and its violation says the Container was lost.
+- **A failed restack, lost or not, gives its parked merge's turn back** at
+  once.
+- **The `restack-failed` task is raised however the job failed,** and
+  `restack.failed` joins the event log with the reason.
+- **The change stays `behind`,** so the next merge restacks it again, or the
+  session rebases and pushes.

@@ -585,3 +585,59 @@ fn a_restack_that_finds_the_patch_on_main_records_it_and_releases_the_merge() {
     );
     assert_eq!(c.state, State::Approved, "it waits for its close");
 }
+
+/// `c` with its restack job lost on every attempt.
+fn restack_lost(mut c: Change) -> Change {
+    for _ in 0..10 {
+        if !matches!(
+            status(&c, RESTACK),
+            Some(JobStatus::Queued | JobStatus::Running)
+        ) {
+            break;
+        }
+        let lost = Event::Lost {
+            job: RESTACK.into(),
+            sha: A.into(),
+        };
+        c = step(&c, lost).expect("lost applies").0;
+        if status(&c, RESTACK) == Some(JobStatus::Queued) {
+            let started = Event::Started {
+                job: RESTACK.into(),
+                sha: A.into(),
+            };
+            c = step(&c, started).expect("started").0;
+        }
+    }
+    c
+}
+
+#[test]
+fn a_restack_lost_on_its_last_attempt_applies_its_held_push_and_says_why() {
+    let c = restacking(approved());
+    let (c, _) = step(&c, Event::Pushed { sha: C.into() }).expect("held");
+    assert_eq!(c.held.as_deref(), Some(C));
+    let c = restack_lost(c);
+    assert_eq!(
+        c.head.as_deref(),
+        Some(C),
+        "the held head applied, with its own jobs"
+    );
+    assert_eq!(status(&c, RESTACK), None);
+    assert_eq!(c.held, None);
+}
+
+#[test]
+fn a_restack_lost_on_its_last_attempt_gives_back_a_parked_merge() {
+    let mut c = restacking(approved());
+    c.merge_after = Some("owner".into());
+    let c = restack_lost(c);
+    assert_eq!(c.merge_after, None, "its turn goes back");
+    assert!(
+        c.violations
+            .iter()
+            .any(|v| v.contains("restack job's Container was lost")),
+        "{:?}",
+        c.violations
+    );
+    assert_eq!(c.head.as_deref(), Some(A), "nothing else moved");
+}

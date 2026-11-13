@@ -87,6 +87,10 @@ impl Change {
         if name == RESTACK {
             self = self.set_status(RESTACK, status);
             self.carried = None;
+            if !ok {
+                // A parked merge can't start on a head that didn't restack; its turn goes back.
+                self.merge_after = None;
+            }
             return Ok(match self.held.take() {
                 Some(h) => self.push_held(h),
                 None => (self, Vec::new()),
@@ -144,6 +148,13 @@ impl Change {
         if self.jobs[i].attempts < MAX_ATTEMPTS {
             self.jobs[i].status = JobStatus::Queued;
             return Ok((self, vec![Effect::Start(name.to_string())]));
+        }
+        if name == RESTACK {
+            let (mut c, effects) = self.finished(RESTACK, sha, false)?;
+            c.violations.push(format!(
+                "the restack job's Container was lost {MAX_ATTEMPTS} times; rebase onto main and push, or it restacks after the next merge"
+            ));
+            return Ok((c, effects));
         }
         self.jobs[i].status = JobStatus::Failed;
         if name == MERGE {
