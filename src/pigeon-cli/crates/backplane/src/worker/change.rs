@@ -21,6 +21,9 @@ const PENDING: &str = "pending";
 const JOURNAL: &str = "journal";
 const LOGS: &str = "logs";
 const FAILURES: &str = "failures";
+
+/// The storage key of the change's breaker.
+const BREAKER: &str = "breaker";
 /// The storage key of the last bound job's log tail, shown in its status.
 const BOUND_LOG: &str = "bound_log";
 const GRANTS: &str = "grants";
@@ -205,6 +208,45 @@ impl ChangeRun {
         Response::from_json(&change)
     }
 
+    /// Notes `change` in its breaker and logs each signal that would trip, once, as
+    /// `breaker.would_trip`; in shadow it acts on nothing. See
+    /// `.claude/decisions/2026-11-13-development-session-stages-subscriptions-breaker.md` §4.
+    async fn breaker(&self, change: &Change) -> Result<()> {
+        use crate::core::change::breaker;
+        let failures: Map<String, Value> = self.load(FAILURES).await?;
+        let tails: std::collections::BTreeMap<String, String> = failures
+            .iter()
+            .filter_map(|(job, f)| Some((job.clone(), f["log"].as_str()?.to_string())))
+            .collect();
+        let storage = self.state.storage();
+        let b: breaker::Breaker = storage.get(BREAKER).await?.unwrap_or_default();
+        let b = breaker::observe(&b, change, &tails, now());
+        let (b, trips) = breaker::fresh(&b, now());
+        storage.put(BREAKER, &b).await?;
+        let Ok(s) = Settings::from(&self.env) else {
+            return Ok(());
+        };
+        for t in trips {
+            let said = format!(
+                "!{} would leave Auto ({}): {}",
+                change.number, t.signal, t.why
+            );
+            let session = change.session.clone();
+            let n = Some(change.number);
+            super::events::append(
+                &self.env,
+                &s,
+                "breaker.would_trip",
+                n,
+                session,
+                &said,
+                false,
+            )
+            .await?;
+        }
+        Ok(())
+    }
+
     async fn save(&self, change: &Change, pending: &[Pending]) -> Result<()> {
         self.save_after(change, pending, false).await
     }
@@ -228,6 +270,9 @@ impl ChangeRun {
         let change = &change;
         storage.put(CHANGE, change).await?;
         super::events::changed(&self.env, before.as_ref(), change).await;
+        if let Err(e) = self.breaker(change).await {
+            worker::console_error!("breaker for !{}: {e}", change.number);
+        }
         let gone = crate::reconcile::gone(before.as_ref(), change);
         if let Some(ended) = gone
             && let Err(e) = super::merges::retire(&self.env, change.number, ended).await

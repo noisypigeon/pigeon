@@ -208,7 +208,11 @@ fn wake_lets_through_only_what_the_agent_acts_on() {
         .iter()
         .map(|e| e.id)
         .collect();
-    assert_eq!(woken, [2, 4, 5, 7], "never a job's event");
+    assert_eq!(
+        woken,
+        [2, 5, 7],
+        "never a job's event, nor every passed deploy"
+    );
 }
 
 #[test]

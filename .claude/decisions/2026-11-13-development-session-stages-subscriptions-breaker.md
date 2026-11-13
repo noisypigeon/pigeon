@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: development
-* Governs: `src/pigeon-cli/crates/backplane/src/core/change/lifecycle.rs`, `src/pigeon-cli/crates/backplane/src/core/change/stage.rs`, `src/pigeon-cli/crates/backplane/src/worker/stages.rs`, `src/pigeon-cli/crates/backplane/src/core/approval/windows.rs`, `src/pigeon-cli/crates/backplane/src/sessions.rs`, `src/pigeon-cli/crates/backplane/src/worker/tasks.rs`, `tooling/session/session.py`, `.claude/settings.json`
+* Governs: `src/pigeon-cli/crates/backplane/src/core/change/lifecycle.rs`, `src/pigeon-cli/crates/backplane/src/core/change/stage.rs`, `src/pigeon-cli/crates/backplane/src/worker/stages.rs`, `src/pigeon-cli/crates/backplane/src/core/change/breaker.rs`, `src/pigeon-cli/crates/backplane/src/core/approval/windows.rs`, `src/pigeon-cli/crates/backplane/src/sessions.rs`, `src/pigeon-cli/crates/backplane/src/worker/tasks.rs`, `tooling/session/session.py`, `.claude/settings.json`
 
 ## Context
 
@@ -533,3 +533,30 @@ step 2 was live.
   repository writes them.
 - **The file is guarded and in `secrets:`,** so this change is the owner's,
   with the code, and no window or mandate covers it.
+
+### 2026-11-13: Step 5 lands: the breaker in shadow
+
+- **Paths.** `Governs` gains `core/change/breaker.rs`.
+- **What it counts.** `ChangeRun` keeps a `Breaker` beside each change (under
+  `breaker`): its last 10 heads, each with the checks that failed on it, their
+  fingerprints (from the failure log tails `ChangeRun` already keeps), the
+  policy that refused it, each job's dispatches and whether it reached
+  `checked`. Every save updates it (`breaker::observe`).
+- **The signals**, with §4's thresholds as constants: B1 (one check failing
+  on 3 heads in a row), B2 (one fingerprint on 2 heads), B3 (one policy
+  refusing 3 heads in a row), B4 (8 heads since one reached `checked`), B5
+  (a job dispatched 3 times on one head), B6 (3 or more unchecked heads over
+  3 hours). B7 waits for the yield ADR's loop breaker.
+- **A fingerprint** is the tail's first error line (one that starts with
+  `error`, or holds `panicked` or ` failed`), else its last line, with digits
+  as `#`, hashes as `<hash>` and paths as `<path>`.
+- **Shadow.** Each signal is logged once as `breaker.would_trip`, under the
+  change's session: "!n would leave Auto (B2): …". It doesn't wake a
+  session, and nothing acts on it. After 48 hours the thresholds are tuned
+  from what it logged, in an amendment, and step 6 makes it act.
+- **B5 counts a lost Container's redispatch** as a run, as `attempts` does. If
+  the shadow shows that tripping on platform failures, B5 counts only
+  `ci_rerun`s.
+- **A passed deploy no longer wakes every session.** Deploy events carry no
+  session, so each passed deploy woke every listening session. A failed one
+  still does. A session sees its own merge reach `done` in its stage.

@@ -69,7 +69,6 @@ const WAKING: &[&str] = &[
     "change.unyielded",
     "merge.released",
     "task.made",
-    "deploy.passed",
     "deploy.failed",
     "auto.paused",
     "session.replaced",
