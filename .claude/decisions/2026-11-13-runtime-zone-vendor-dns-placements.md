@@ -257,3 +257,25 @@ type needs an amendment here first.
   - `at` inside another zone unit of the manifest;
   - a service at a name that a site serves through a `CNAME`.
 - **The live checks** in execution step 6.
+
+## Amendments
+
+### 2026-11-13: The verification codes are asked at the config change's plan approval
+
+[`2026-11-13-security-approvals-ask-owner-inputs.md`](2026-11-13-security-approvals-ask-owner-inputs.md)
+lets a change's plan approval ask the owner for inputs, on the approval page
+and in the app. Execution steps 4 and 5 change accordingly.
+
+- **Step 4:** the owner still adds `platform.pigeon.dev` in Proton Pass and
+  checks Cloudflare, but sends nothing in chat.
+- **Step 5:** the agent proposes the config change with two asks:
+  - `protonmail_verification`, labelled "protonmail-verification code";
+  - `pm_verification`, labelled "pm-verification code";
+
+  each with help naming Proton Pass's Settings → Aliases →
+  `platform.pigeon.dev` → Info.
+- **The owner authorizes the plan in the app,** typing both codes there.
+- **The agent reads them from `change_status`'s `answers`,** writes them into
+  `zones/pigeon.dev.services.platform-aliases.verification`, and pushes.
+- **Steps 2 to 4 of the asks ADR come first.** Until they've landed, step 5
+  waits.
