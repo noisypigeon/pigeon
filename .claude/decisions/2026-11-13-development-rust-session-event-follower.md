@@ -197,3 +197,24 @@ In `events.rs`, it adds one kind to those that wake an agent:
   asking for one session's events doesn't see it. It reaches the owner, the
   digest and `grant-failed` tasks, as the grants ADR intends.
 - **Nothing in !373 changes this ADR.**
+
+### 2026-11-13: Review of !383 (the exact deadline) against the model-tiered briefs ADR
+
+!374 merged
+[`2026-11-13-development-model-tiered-agent-briefs.md`](2026-11-13-development-model-tiered-agent-briefs.md),
+which also governs `tooling/session/session.py`. !383 is this ADR's step 2.
+
+- **!383 and that ADR agree.** !383 changes only the long poll's hold and the
+  server's deadline. Neither ADR's classes, briefs or roles depend on them.
+- **Its step 4 adds `session.py executor`.** It isn't one of §3's four
+  commands, so it stays in `session.py`. Step 6 here keeps `install` and
+  `executor`, and drops only `follow`, `brief`, `statusline` and `stop`.
+- **Its §7 has `session.py brief` warn** when the `SessionStart` hook's
+  model isn't in the ticket's class. `brief` moves to Rust (§3), so
+  whichever lands second carries the warning across:
+  - in Rust, `core::session::brief` takes the hook's model and the class from
+    `session.status`, and `tooling/session/models.json` maps one to the
+    other;
+  - `pigeon session brief` reads the hook's input instead of discarding it.
+- **Its `model` on events** changes no follower line. §2's line format stays
+  as it is.
