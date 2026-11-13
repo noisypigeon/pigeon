@@ -8,6 +8,8 @@ mod backplane;
 mod cobot;
 #[cfg(feature = "sentinel")]
 mod sentinel;
+#[cfg(feature = "session")]
+mod session;
 
 #[cfg(any(feature = "backplane", feature = "signing"))]
 pub use backplane::*;
@@ -15,6 +17,8 @@ pub use backplane::*;
 pub use cobot::*;
 #[cfg(feature = "sentinel")]
 pub use sentinel::*;
+#[cfg(feature = "session")]
+pub use session::*;
 
 /// The pigeon command-line tool.
 #[derive(Parser, Debug)]
@@ -41,4 +45,8 @@ pub enum Commands {
     #[cfg(any(feature = "backplane", feature = "signing"))]
     #[command(subcommand, version = ::backplane::VERSION)]
     Backplane(BackplaneCommand),
+    /// Follow this agent session's events, brief it, and feed its status line
+    #[cfg(feature = "session")]
+    #[command(subcommand)]
+    Session(SessionCommand),
 }

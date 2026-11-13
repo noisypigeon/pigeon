@@ -9,13 +9,16 @@ repository.workspace = true
 publish.workspace = true
 
 [features]
-default = ["sentinel", "cobot", "backplane", "signing"]
+default = ["sentinel", "cobot", "backplane", "signing", "session"]
 sentinel = []
 cobot = ["dep:backplane", "backplane/engines", "dep:serde", "dep:serde_json"]
 backplane = ["cobot", "dep:backplane", "backplane/engines", "dep:serde", "dep:serde_json", "dep:signal-hook"]
 # `pigeon backplane signing` alone, for Buildkite's `macos-sign` agents; see
 # .claude/decisions/2026-11-11-release-ios-app-buildkite-testflight.md §6.
 signing = ["dep:backplane", "dep:serde_json", "dep:ureq"]
+# `pigeon session`, for cloud agent sessions; see
+# .claude/decisions/2026-11-13-development-rust-session-event-follower.md §2.
+session = ["dep:backplane", "dep:serde_json", "dep:signal-hook", "dep:ureq"]
 
 [dependencies]
 backplane = { workspace = true, optional = true }

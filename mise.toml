@@ -40,6 +40,7 @@ run = [
   "cargo clippy -p pigeon --all-targets --locked --no-default-features --features cobot -- -D warnings",
   "cargo clippy -p pigeon --all-targets --locked --no-default-features --features backplane -- -D warnings",
   "cargo clippy -p pigeon --all-targets --locked --no-default-features --features signing -- -D warnings",
+  "cargo clippy -p pigeon --all-targets --locked --no-default-features --features session -- -D warnings",
   "cargo clippy -p pigeon-backplane --lib --locked --no-default-features --features worker --target wasm32-unknown-unknown -- -D warnings",
 ]
 

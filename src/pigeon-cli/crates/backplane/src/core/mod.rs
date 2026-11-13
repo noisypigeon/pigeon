@@ -14,4 +14,5 @@ pub mod minting;
 pub mod platform;
 #[cfg(feature = "engines")]
 pub mod release;
+pub mod session;
 pub mod sites;

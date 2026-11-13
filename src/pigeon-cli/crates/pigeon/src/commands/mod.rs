@@ -6,6 +6,8 @@ pub mod backplane;
 pub mod cobot;
 #[cfg(feature = "sentinel")]
 pub mod sentinel;
+#[cfg(feature = "session")]
+pub mod session;
 #[cfg(feature = "signing")]
 pub mod signing;
 #[cfg(feature = "cobot")]
@@ -27,11 +29,12 @@ pub const INVALID: i32 = 2;
         feature = "sentinel",
         feature = "cobot",
         feature = "backplane",
-        feature = "signing"
+        feature = "signing",
+        feature = "session"
     )),
     expect(
         clippy::needless_pass_by_value,
-        reason = "only `sentinel`, `cobot`, `backplane` and `signing` carry arguments"
+        reason = "only `sentinel`, `cobot`, `backplane`, `signing` and `session` carry arguments"
     )
 )]
 pub fn dispatch(command: Commands) -> i32 {
@@ -44,5 +47,7 @@ pub fn dispatch(command: Commands) -> i32 {
         Commands::Backplane(c) => backplane::run(c),
         #[cfg(all(feature = "signing", not(feature = "backplane")))]
         Commands::Backplane(crate::cli::BackplaneCommand::Signing(c)) => signing::run(c),
+        #[cfg(feature = "session")]
+        Commands::Session(c) => session::run(&c),
     }
 }

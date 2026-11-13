@@ -8,7 +8,8 @@ use pigeon::cli::Cli;
         feature = "sentinel",
         feature = "cobot",
         feature = "backplane",
-        feature = "signing"
+        feature = "signing",
+        feature = "session"
     )),
     expect(unreachable_code, reason = "no subcommands are built")
 )]

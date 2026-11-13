@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: development
-* Governs: `tooling/session/session.py`, `.claude/settings.json`, `src/pigeon-cli/crates/backplane/src/worker/events.rs`
+* Governs: `tooling/session/session.py`, `.claude/settings.json`, `src/pigeon-cli/crates/backplane/src/worker/events.rs`, `src/pigeon-cli/crates/backplane/src/core/session/*.rs`, `src/pigeon-cli/crates/pigeon/src/cli/session.rs`, `src/pigeon-cli/crates/pigeon/src/commands/session.rs`
 
 ## Context
 
