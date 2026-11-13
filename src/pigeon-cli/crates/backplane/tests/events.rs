@@ -193,9 +193,13 @@ fn wake_lets_through_only_what_the_agent_acts_on() {
     log.append("change.checked", Some(1), None, "owner approves", false, 3);
     log.append("deploy.passed", None, None, "deployed", false, 4);
     log.append("task.made", Some(2), None, "reconcile", false, 5);
+    log.append("job.passed", Some(1), None, "a check passed", false, 6);
+    log.append("change.approved", Some(1), None, "by window:3", false, 7);
     log.list[0].stage = stage("checking 0/2", "provider");
     log.list[1].stage = stage("failed", "agent");
     log.list[2].stage = stage("checked", "owner");
+    log.list[5].stage = stage("checked", "agent");
+    log.list[6].stage = stage("approved", "agent");
     let woken: Vec<u64> = log
         .since(&Filter {
             wake: true,
@@ -204,7 +208,7 @@ fn wake_lets_through_only_what_the_agent_acts_on() {
         .iter()
         .map(|e| e.id)
         .collect();
-    assert_eq!(woken, [2, 4, 5]);
+    assert_eq!(woken, [2, 4, 5, 7], "never a job's event");
 }
 
 #[test]

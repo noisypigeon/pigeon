@@ -76,10 +76,14 @@ const WAKING: &[&str] = &[
 ];
 
 /// Whether `e` needs the agent: its change's stage does, or the change is done, closed, its
-/// deploy failed or it was attended, or its kind is in [`WAKING`].
+/// deploy failed or it was attended, or its kind is in [`WAKING`]; never a job's event, which
+/// comes with its change's own.
 #[must_use]
 pub fn wakes(e: &Event) -> bool {
     use crate::core::change::stage::Needs;
+    if e.kind.starts_with("job.") {
+        return false;
+    }
     e.stage.as_ref().is_some_and(|s| {
         s.needs == Needs::Agent
             || ["done", "closed", "deploy-failed", "attended"].contains(&s.stage.as_str())
