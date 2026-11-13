@@ -503,6 +503,9 @@ pub struct Report {
     /// .claude/decisions/2026-11-08-runtime-blue-green-self-standup.md, step 4's amendment.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub platform: Option<serde_json::Value>,
+    /// For the eviction job: each candidate's verdict, `{number, granted, results}`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub evictions: Vec<serde_json::Value>,
 }
 
 impl Report {
@@ -525,6 +528,7 @@ impl Report {
             tiers: None,
             restack: None,
             platform: None,
+            evictions: Vec::new(),
         }
     }
 }
@@ -955,6 +959,73 @@ pub fn deploy_spec(
         approver: None,
         since: since.map(str::to_string),
         env,
+    }
+}
+
+/// The job that judges eviction candidates with `main`'s eviction policies; see
+/// `.claude/decisions/2026-11-10-development-change-slot-eviction-policy.md` §4-§5.
+pub const EVICTION: &str = "eviction";
+
+/// The variable holding an eviction job's candidates, as a JSON array of `{number, fields}`.
+pub const CANDIDATES: &str = "CANDIDATES";
+
+/// The eviction job's ID for `main` at `sha` in the hour `hour` (Unix hours): one a run.
+#[must_use]
+pub fn eviction_id(sha: &str, hour: u64) -> String {
+    format!("main-{}-{EVICTION}-{hour}", &sha[..12.min(sha.len())])
+}
+
+/// The spec for judging `candidates` against `main`'s policies at `sha`.
+#[must_use]
+pub fn eviction_spec(
+    remote: &str,
+    token: &str,
+    sha: &str,
+    candidates: &serde_json::Value,
+    hour: u64,
+) -> JobSpec {
+    JobSpec {
+        id: eviction_id(sha, hour),
+        job: EVICTION.into(),
+        env: std::collections::BTreeMap::from([(CANDIDATES.to_string(), candidates.to_string())]),
+        ..deploy_spec(remote, token, sha, None, std::collections::BTreeMap::new())
+    }
+}
+
+/// The eviction runs `MainRun` keeps: the one running, and the last verdicts.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Evictions {
+    /// The job running, and when it started.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub running: Option<(String, u64)>,
+    /// When the last run ended, the head it judged, and each candidate's verdict.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last: Option<Judged>,
+}
+
+/// One eviction run's verdicts.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Judged {
+    /// When it ended, in Unix seconds.
+    pub at: u64,
+    /// The job.
+    pub id: String,
+    /// Whether it judged; a failed run grants nothing.
+    pub passed: bool,
+    /// Each candidate's verdict.
+    #[serde(default)]
+    pub verdicts: Vec<serde_json::Value>,
+}
+
+impl Judged {
+    /// The candidates a policy would evict.
+    #[must_use]
+    pub fn granted(&self) -> Vec<u64> {
+        self.verdicts
+            .iter()
+            .filter(|v| v["granted"].is_string())
+            .filter_map(|v| v["number"].as_u64())
+            .collect()
     }
 }
 
@@ -1426,6 +1497,7 @@ pub fn class_of(job: &str) -> Class {
         || job == PLATFORM
         || job == MIRROR
         || job == UNMIRROR
+        || job == EVICTION
     {
         Class::Runner
     } else {

@@ -610,3 +610,80 @@ fn a_sentinel_binary_that_cant_judge_is_an_error_not_a_pass() {
         .is_err()
     );
 }
+
+/// An eviction job on the remote's `main`, judging `candidates`.
+fn eviction_job(tmp: &Path, candidates: &serde_json::Value) -> JobSpec {
+    let (bare, _) = remote(tmp, &["x.txt"]);
+    let main = git(&bare, &["rev-parse", "main"]);
+    backplane::control::eviction_spec(
+        &format!("file://{}", bare.display()),
+        "a-token-never-shown",
+        &main,
+        candidates,
+        1,
+    )
+}
+
+#[test]
+fn the_eviction_job_asks_mains_sentinel_about_each_candidate() {
+    let tmp = TempDir::new().expect("tempdir");
+    let candidates = serde_json::json!([
+        { "number": 79, "fields": { "number": "79", "state": "pushed" } },
+        { "number": 80, "fields": { "number": "80", "state": "approved" } },
+    ]);
+    let spec = eviction_job(tmp.path(), &candidates);
+    assert_eq!(
+        backplane::control::class_of(&spec.job),
+        backplane::control::Class::Runner
+    );
+    let bin = stand_in(
+        tmp.path(),
+        r#"case "$*" in
+  *'"number":"79"'*) printf '{"granted":"eviction-session-gone","results":[]}'; exit 0;;
+  *) printf '{"granted":null,"results":[{"policy":"eviction-session-gone","violations":["approved"]}]}'; exit 1;;
+esac"#,
+    );
+    let r = jobs::run_judged(&spec, &tmp.path().join("job"), &bin);
+    assert_eq!(r.outcome, Outcome::Passed, "{}", r.log);
+    let granted: Vec<(u64, serde_json::Value)> = r
+        .evictions
+        .iter()
+        .map(|v| {
+            (
+                v["number"].as_u64().unwrap_or_default(),
+                v["granted"].clone(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        granted,
+        [
+            (79, serde_json::json!("eviction-session-gone")),
+            (80, serde_json::Value::Null)
+        ]
+    );
+    let judged = backplane::control::Judged {
+        verdicts: r.evictions,
+        passed: true,
+        ..Default::default()
+    };
+    assert_eq!(judged.granted(), [79]);
+}
+
+#[test]
+fn an_eviction_job_whose_judge_cant_answer_fails_and_grants_nothing() {
+    let tmp = TempDir::new().expect("tempdir");
+    let candidates = serde_json::json!([{ "number": 79, "fields": {} }]);
+    let spec = eviction_job(tmp.path(), &candidates);
+    let bad = stand_in(tmp.path(), "echo 'eviction-x.yaml: bad' >&2; exit 2");
+    let r = jobs::run_judged(&spec, &tmp.path().join("job"), &bad);
+    assert_eq!(r.outcome, Outcome::Failed);
+    assert_eq!(r.evictions.len(), 0);
+    assert!(r.log.contains("eviction-x.yaml: bad"), "{}", r.log);
+    let mut garbled = spec.clone();
+    garbled
+        .env
+        .insert(backplane::control::CANDIDATES.into(), "not json".into());
+    let r = jobs::run_judged(&garbled, &tmp.path().join("job2"), &bad);
+    assert_eq!(r.outcome, Outcome::Failed);
+}

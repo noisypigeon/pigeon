@@ -248,3 +248,19 @@ Steps 2 and 3 landed there as F1, F2 and the family slot.
   - The judging: the hourly eviction job, which runs `pigeon-sentinel evict`
     against `main`'s policies, is the next part.
   - Acting on a verdict, which is step 5's last part.
+
+### 2026-11-13: Step 5 continues: the hourly eviction job judges; nothing is evicted
+
+- **Each hour the cron sends every open change's candidate to `MainRun`.**
+  - `MainRun` starts an `eviction` job on a Runner, on `main`'s deployed
+    head, unless one is running. The candidates ride in its `CANDIDATES`
+    variable, and no credential goes with them.
+  - The job takes `main`'s policy directory as the bound job does, and asks
+    `pigeon-sentinel evict` about each candidate.
+- **A judge that can't answer fails the job,** and a failed or lost job
+  grants nothing. A job running past 30 minutes counts as lost.
+- **`MainRun` keeps the last verdicts.** Each run appends `eviction.judged`,
+  naming the changes a policy would evict. `change_evictable` answers the
+  candidates and the last verdicts.
+- **No verdict is acted on yet.** Step 5's last part applies them. Until
+  then, and until step 6's policies merge, the verdicts are a dry run.

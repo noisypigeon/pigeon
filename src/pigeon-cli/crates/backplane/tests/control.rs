@@ -183,6 +183,7 @@ fn reports_become_events() {
         tiers: None,
         restack: None,
         platform: None,
+        evictions: vec![],
     };
     assert_eq!(
         control::event_of("fmt", A, &report(Outcome::Running, vec![])),
@@ -411,6 +412,7 @@ fn deploy_report(outcome: Outcome) -> Report {
         tiers: None,
         restack: None,
         platform: None,
+        evictions: vec![],
     }
 }
 
@@ -1023,4 +1025,19 @@ fn a_full_merge_gate_can_be_asked_for_at_proposal_and_at_merge() {
             ..
         })
     ));
+}
+
+#[test]
+fn an_eviction_job_runs_on_mains_head_with_its_candidates_and_one_id_an_hour() {
+    let sha = "0123456789abcdef0123456789abcdef01234567";
+    let candidates = serde_json::json!([{ "number": 79, "fields": { "state": "pushed" } }]);
+    let spec = control::eviction_spec("https://r", "t", sha, &candidates, 492_000);
+    assert_eq!(spec.id, "main-0123456789ab-eviction-492000");
+    assert_eq!((spec.branch.as_str(), spec.sha.as_str()), ("main", sha));
+    assert_eq!(spec.job, control::EVICTION);
+    assert_eq!(control::class_of(&spec.job), control::Class::Runner);
+    let held: serde_json::Value =
+        serde_json::from_str(&spec.env[control::CANDIDATES]).expect("JSON");
+    assert_eq!(held, candidates);
+    assert_eq!(spec.env.len(), 1, "no credential rides with it");
 }

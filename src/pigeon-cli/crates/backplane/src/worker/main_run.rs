@@ -23,6 +23,10 @@ const MIRRORING: &str = "mirroring";
 const STARTING: &str = "starting";
 const TEST_MAPS: &str = "test_maps";
 const IOS_RELEASES: &str = "ios_releases";
+const EVICTIONS: &str = "evictions";
+
+/// How long an eviction job may run before it counts as lost.
+const EVICTION_DEADLINE: u64 = 30 * 60;
 
 /// How often a running deploy is asked how it went.
 const POLL: Duration = Duration::from_secs(20);
@@ -573,6 +577,116 @@ impl MainRun {
         Ok(json!({ "mirror": self.mirroring().await? }))
     }
 
+    async fn evictions(&self) -> Result<control::Evictions> {
+        Ok(self
+            .state
+            .storage()
+            .get(EVICTIONS)
+            .await?
+            .unwrap_or_default())
+    }
+
+    /// Starts the eviction job on `main`'s deployed head with `candidates`, unless one runs; see
+    /// `.claude/decisions/2026-11-10-development-change-slot-eviction-policy.md` §5.
+    async fn evictions_run(&self, candidates: &Value) -> std::result::Result<Value, String> {
+        let mut e = self.evictions().await.map_err(|e| e.to_string())?;
+        if let Some((id, _)) = &e.running {
+            return Ok(json!({ "running": id }));
+        }
+        let p = self.pipeline().await.map_err(|e| e.to_string())?;
+        let Some(sha) = p.deployed.clone() else {
+            return Err("main has no deploy yet".into());
+        };
+        let (remote, token) =
+            platform::credentials(&self.env, false, crate::cobot::artifacts_wire::TOKEN_TTL)
+                .await
+                .map_err(|e| e.to_string())?;
+        let spec = control::eviction_spec(&remote, &token, &sha, candidates, now() / 3600);
+        let body = serde_json::to_value(&spec).map_err(|e| e.to_string())?;
+        let req = json_request("https://checker/start", Method::Post, Some(&body), None)
+            .map_err(|e| e.to_string())?;
+        let mut r = job_stub(&self.env, control::class_of(control::EVICTION), &spec.id)
+            .map_err(|e| e.to_string())?
+            .fetch_with_request(req)
+            .await
+            .map_err(|e| e.to_string())?;
+        if !(200..300).contains(&r.status_code()) {
+            return Err(r.text().await.unwrap_or_default());
+        }
+        e.running = Some((spec.id.clone(), now()));
+        let storage = self.state.storage();
+        storage
+            .put(EVICTIONS, &e)
+            .await
+            .map_err(|e| e.to_string())?;
+        if storage
+            .get_alarm()
+            .await
+            .map_err(|e| e.to_string())?
+            .is_none()
+        {
+            storage.set_alarm(POLL).await.map_err(|e| e.to_string())?;
+        }
+        Ok(json!({ "started": spec.id }))
+    }
+
+    /// Polls the running eviction job; when it ends, keeps its verdicts and says so in the log.
+    async fn eviction_step(&self) -> Result<bool> {
+        let mut e = self.evictions().await?;
+        let Some((id, started)) = e.running.clone() else {
+            return Ok(false);
+        };
+        let ended = |passed: bool, verdicts: Vec<Value>| control::Judged {
+            at: now(),
+            id: id.clone(),
+            passed,
+            verdicts,
+        };
+        let judged = match self.poll_job(&id, control::EVICTION).await? {
+            Ok(Some(report)) => Some(ended(report.outcome == Outcome::Passed, report.evictions)),
+            Ok(None) if now().saturating_sub(started) > EVICTION_DEADLINE => {
+                Some(ended(false, Vec::new()))
+            }
+            Ok(None) => None,
+            Err(()) => Some(ended(false, Vec::new())),
+        };
+        let Some(j) = judged else {
+            return Ok(true);
+        };
+        let summary = if j.passed {
+            let granted: Vec<String> = j.granted().iter().map(|n| format!("!{n}")).collect();
+            format!(
+                "{} candidate(s) judged; a policy would evict: {}",
+                j.verdicts.len(),
+                if granted.is_empty() {
+                    "none".into()
+                } else {
+                    granted.join(", ")
+                }
+            )
+        } else {
+            "the eviction job failed; nothing is granted".into()
+        };
+        if let Ok(s) = platform::Settings::from(&self.env)
+            && let Err(err) = super::events::append(
+                &self.env,
+                &s,
+                "eviction.judged",
+                None,
+                None,
+                &summary,
+                false,
+            )
+            .await
+        {
+            worker::console_error!("eviction event: {err}");
+        }
+        e.running = None;
+        e.last = Some(j);
+        self.state.storage().put(EVICTIONS, &e).await?;
+        Ok(false)
+    }
+
     /// Starts the deploy of `sha` in a job Container, referencing `images`.
     async fn start(
         &self,
@@ -740,6 +854,14 @@ impl DurableObject for MainRun {
                 Err(why) => Response::error(why, 409),
             },
             (Method::Get, "ios/status") => Response::from_json(&self.ios_status().await?),
+            (Method::Post, "evictions/run") => {
+                let body: Value = req.json().await?;
+                match self.evictions_run(&body["candidates"]).await {
+                    Ok(v) => Response::from_json(&v),
+                    Err(why) => Response::error(why, 409),
+                }
+            }
+            (Method::Get, "evictions/last") => Response::from_json(&self.evictions().await?),
             (Method::Post, "reconcile") => match self.reconcile().await {
                 Ok(v) => Response::from_json(&v),
                 Err(e) => Response::error(format!("reconcile: {e}"), 502),
@@ -809,8 +931,15 @@ impl DurableObject for MainRun {
         if let Err(e) = self.ios_step().await {
             worker::console_error!("ios release: {e}");
         }
+        let evicting = match self.eviction_step().await {
+            Ok(running) => running,
+            Err(e) => {
+                worker::console_error!("eviction: {e}");
+                true
+            }
+        };
         let storage = self.state.storage();
-        if super::platforms::running(&self.state).await? {
+        if super::platforms::running(&self.state).await? || evicting {
             // The earliest alarm wins: the mirror's may be an hour away.
             let poll_at = i64::try_from((now() + super::platforms::POLL.as_secs()) * 1000)
                 .unwrap_or(i64::MAX);

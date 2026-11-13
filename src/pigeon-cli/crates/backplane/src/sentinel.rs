@@ -148,6 +148,30 @@ pub fn describe(binary: &Path, policies: &Path) -> Result<Vec<Described>, Failur
         .collect())
 }
 
+/// Each eviction policy's verdict on `candidate`, a JSON object of its fields, and the one that
+/// grants its eviction: `pigeon-sentinel evict`'s `{granted, results}`.
+///
+/// # Errors
+///
+/// When the binary is missing or refuses.
+pub fn evict(
+    binary: &Path,
+    root: &Path,
+    policies: &Path,
+    candidate: &Value,
+) -> Result<Value, Failure> {
+    let args = [
+        "evict".to_string(),
+        "--root".into(),
+        root.display().to_string(),
+        "--policies".into(),
+        policies.display().to_string(),
+        "--candidate".into(),
+        candidate.to_string(),
+    ];
+    run(binary, &args, &[])
+}
+
 /// The binary's version, as `pigeon-sentinel --version` prints it; none when it doesn't run.
 #[must_use]
 pub fn version(binary: &Path) -> Option<String> {

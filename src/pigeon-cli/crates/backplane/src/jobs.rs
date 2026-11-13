@@ -76,6 +76,7 @@ impl Board {
             tiers: None,
             restack: None,
             platform: None,
+            evictions: Vec::new(),
         };
         self.set(running.clone());
         let board = Arc::clone(self);
@@ -122,6 +123,7 @@ pub(crate) fn report(spec: &JobSpec, outcome: Outcome, log: &str) -> Report {
         tiers: None,
         restack: None,
         platform: None,
+        evictions: Vec::new(),
     }
 }
 
@@ -170,6 +172,9 @@ pub fn run_judged(spec: &JobSpec, dir: &Path, sentinel: &Path) -> Report {
     }
     if spec.job == BOUND {
         return bound(spec, dir, sentinel);
+    }
+    if spec.job == crate::control::EVICTION {
+        return eviction(spec, dir, sentinel);
     }
     if spec.job == MERGE {
         return merge(spec, dir);
@@ -564,6 +569,7 @@ fn bound(spec: &JobSpec, dir: &Path, sentinel: &Path) -> Report {
         tiers,
         restack: None,
         platform: None,
+        evictions: Vec::new(),
     }
 }
 
@@ -746,6 +752,48 @@ pub fn judge_with(
     crate::sentinel::check(binary, dir, policies, Some(&pr))
         .map(|r| r.violations)
         .map_err(|e| e.to_string())
+}
+
+/// The eviction job: each candidate in [`crate::control::CANDIDATES`] judged by `sentinel`
+/// against `main`'s policies; a judge that can't answer fails the job, so nothing is granted;
+/// see `.claude/decisions/2026-11-10-development-change-slot-eviction-policy.md` §4-§5.
+fn eviction(spec: &JobSpec, dir: &Path, sentinel: &Path) -> Report {
+    let failed = |why: String| Report {
+        violations: vec![why.clone()],
+        ..report(spec, Outcome::Failed, &why)
+    };
+    let Some(text) = spec.env.get(crate::control::CANDIDATES) else {
+        return failed("an eviction job names its candidates".into());
+    };
+    let candidates: Vec<Value> = match serde_json::from_str(text) {
+        Ok(c) => c,
+        Err(e) => return failed(format!("its candidates aren't a JSON array: {e}")),
+    };
+    let policies = match base_policies(spec, dir) {
+        Ok(Some(p)) => p,
+        Ok(None) => return report(spec, Outcome::Passed, "main names no policies\n"),
+        Err(e) => return failed(e),
+    };
+    let mut log = String::new();
+    let mut verdicts = Vec::new();
+    for c in &candidates {
+        let number = c["number"].clone();
+        match crate::sentinel::evict(sentinel, dir, &policies, &c["fields"]) {
+            Ok(v) => {
+                let _ = writeln!(log, "!{number}: {}", v["granted"]);
+                verdicts.push(serde_json::json!({
+                    "number": number,
+                    "granted": v["granted"],
+                    "results": v["results"],
+                }));
+            }
+            Err(e) => return failed(e.to_string()),
+        }
+    }
+    Report {
+        evictions: verdicts,
+        ..report(spec, Outcome::Passed, &log)
+    }
 }
 
 /// The base's policy directory, as the base's manifest names it, written under the checkout's

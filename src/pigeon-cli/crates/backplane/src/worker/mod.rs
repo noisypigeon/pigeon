@@ -621,14 +621,17 @@ async fn dispatch(
                     .await?;
             Ok((None, respond(operation, 200, json!({ "changes": rows }))))
         }
-        Routed::Evictable => Ok((
-            None,
-            respond(
-                operation,
-                200,
-                json!({ "candidates": evictable(env, s).await? }),
-            ),
-        )),
+        Routed::Evictable => {
+            let req = json_request("https://main/evictions/last", Method::Get, None, None)?;
+            let mut r = platform::call(env, &main_stub(env, &s.repo)?, req).await?;
+            let judged: Value = r.json().await.unwrap_or(Value::Null);
+            let result = json!({
+                "candidates": evictable(env, s).await?,
+                "judged": judged,
+                "evicts": "nothing yet: verdicts only",
+            });
+            Ok((None, respond(operation, 200, result)))
+        }
         Routed::SessionEnd { args } => Ok(answered(operation, tickets::end(env, s, &args).await?)),
         Routed::SessionStart { args } => {
             Ok(answered(operation, tickets::start(env, s, &args).await?))
@@ -1036,6 +1039,32 @@ async fn scheduled(_event: worker::ScheduledEvent, env: Env, _ctx: worker::Sched
     if let Err(e) = insights::collect(&env).await {
         worker::console_error!("insights: {e}");
     }
+    // Every open change judged by main's eviction policies; see
+    // .claude/decisions/2026-11-10-development-change-slot-eviction-policy.md §5.
+    if let Err(e) = judge_evictions(&env).await {
+        worker::console_error!("evictions: {e}");
+    }
+}
+
+/// Sends every open change's candidate to `MainRun`'s eviction job.
+async fn judge_evictions(env: &Env) -> Result<()> {
+    let s = Settings::from(env)?;
+    let candidates = evictable(env, &s).await?;
+    if candidates.is_empty() {
+        return Ok(());
+    }
+    let body = json!({ "candidates": candidates });
+    let req = json_request(
+        "https://main/evictions/run",
+        Method::Post,
+        Some(&body),
+        None,
+    )?;
+    let mut r = platform::call(env, &main_stub(env, &s.repo)?, req).await?;
+    if !(200..300).contains(&r.status_code()) {
+        return Err(r.text().await.unwrap_or_default().into());
+    }
+    Ok(())
 }
 
 async fn reconcile_mirror(env: &Env) -> Result<()> {
