@@ -15,7 +15,8 @@ work on its `main`. Per the concurrent-sessions ADR's
 3. `session_start` (the session's URL as `label`), then `change_propose`
    with the ticket, before writing the change.
 4. Push only `change/<n>-<slug>`, to `artifacts`, with
-   `git -c http.extraHeader="X-Pigeon-Ticket: <ticket>"`.
+   `git -c http.postBuffer=524288000 -c http.extraHeader="X-Pigeon-Ticket: <ticket>"`;
+   without the buffer, git's probe before a large pack is refused with a 400.
 
 ## Comments are terse; ADRs hold the reasoning
 
@@ -110,7 +111,8 @@ Where each check runs:
   claimed, and after its branch is restacked runs `git fetch` and resets to
   it before pushing again. A session starts with `session_start` (its URL as
   `label`) and passes the ticket as `ticket` on every change operation and as
-  `git -c http.extraHeader="X-Pigeon-Ticket: <ticket>"` on its pushes; a
+  `git -c http.postBuffer=524288000 -c http.extraHeader="X-Pigeon-Ticket: <ticket>"`
+  on its pushes; a
   ticketed label is refused without it, and `session_end` frees it. Calls to
   the `Instance`, `ChangeRun` and `MainRun` objects name the Worker's
   version, and an older object resets itself, per

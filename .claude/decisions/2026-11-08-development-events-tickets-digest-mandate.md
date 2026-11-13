@@ -506,3 +506,17 @@ The fix:
 - **Rollout.** After this deploy, the owner's monitors pause for a minute so
   the pre-handshake `Instance` idles out. From then on, the handshake
   resets it.
+
+### 2026-11-13: The follower uses `platform.pigeon.dev`
+
+- **`pigeon-control.pigeon-dev.workers.dev` now answers Cloudflare's error
+  1042.** Step 4 of
+  [`2026-11-10-runtime-platform-hostname-dashboard-observability.md`](2026-11-10-runtime-platform-hostname-dashboard-observability.md)
+  §1 turned `workers.dev` off. The step-2 amendment's recipe still names it,
+  so a session that copies it gets no events: its loop reads the error page as
+  bad JSON and retries for ever, silently.
+- **The recipe's host is `platform.pigeon.dev`:** `HOST=platform.pigeon.dev`,
+  and nothing else changes. The agent's proxy already authenticates that host.
+- [`2026-11-13-development-session-stages-subscriptions-breaker.md`](2026-11-13-development-session-stages-subscriptions-breaker.md)
+  §2 replaces the recipe with `tooling/session/follow.py`, which uses the same
+  host.
