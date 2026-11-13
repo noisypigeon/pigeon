@@ -289,7 +289,7 @@ fn changelog_rules() {
 #[test]
 fn every_policy_is_valid() {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../../.config/policies");
-    assert_eq!(sentinel::load_dir(&dir).expect("loads").len(), 16);
+    assert_eq!(sentinel::load_dir(&dir).expect("loads").len(), 19);
 }
 
 fn layout_root(skip: &[&str], extra: &[&str]) -> TempDir {

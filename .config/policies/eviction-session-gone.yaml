@@ -1,0 +1,10 @@
+description: A change whose session has had no live ticket for two hours, idle as long, is evicted; see .claude/decisions/2026-11-10-development-change-slot-eviction-policy.md §3.
+target: eviction
+rules:
+  - field: { name: session_live, equals: false }
+  - field: { name: session_gone_for, at_least: 7200 }
+  - field: { name: idle, at_least: 7200 }
+  - field: { name: pinned, equals: false }
+  - field: { name: approval_open, equals: false }
+  - field: { name: queued, equals: false }
+  - field: { name: state, not: '^(approved|merged|closed)$' }

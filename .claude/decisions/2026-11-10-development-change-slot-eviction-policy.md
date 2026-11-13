@@ -298,3 +298,17 @@ Steps 2 and 3 landed there as F1, F2 and the family slot.
   a grant on an open change. Pins are a set in the `Instance`, and the
   candidates read them as `pinned`.
 - **Nothing is evicted until step 6's policies merge.**
+### 2026-11-13: Step 6 lands: three eviction policies; stale-conflicted waits for a field
+
+- **`eviction-session-gone`:** no live ticket for 2 hours, and idle 2 hours.
+- **`eviction-stale-proposed`:** never authorized, no live ticket, and idle a
+  day.
+- **`eviction-stale-pushed`:** pushed, no live ticket, and idle 3 days.
+- **Each also requires** the change to be unpinned, with no approval page,
+  not queued, and, except for `stale-proposed`, short of `approved`.
+- **§3's `stale-conflicted` isn't written,** because the candidate carries no
+  `behind` or `conflicted` field. `stale-pushed` reaches such a change after
+  3 days. A later change adds the fields and the policy.
+- **Verdicts start at the first hourly run after this merges.** Changes are
+  evicted only once step 5's last part (!335) is deployed. `change_evictable`
+  shows the verdicts before then.

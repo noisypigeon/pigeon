@@ -1,0 +1,10 @@
+description: A pushed change idle three days, short of approved, whose session holds no live ticket, is evicted; see .claude/decisions/2026-11-10-development-change-slot-eviction-policy.md §3.
+target: eviction
+rules:
+  - field: { name: pushed, equals: true }
+  - field: { name: session_live, equals: false }
+  - field: { name: idle, at_least: 259200 }
+  - field: { name: pinned, equals: false }
+  - field: { name: approval_open, equals: false }
+  - field: { name: queued, equals: false }
+  - field: { name: state, not: '^(approved|merged|closed)$' }
