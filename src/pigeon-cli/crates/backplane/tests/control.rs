@@ -448,6 +448,42 @@ fn main_deploys_one_at_a_time_and_always_the_newest_push() {
 }
 
 #[test]
+fn a_merge_is_carried_by_the_deploys_of_it_and_later_pushes() {
+    use backplane::core::change::stage::Deploy;
+    let mut p = Pipeline::default();
+    assert_eq!(p.carrying(A), Deploy::Unknown, "a push not kept");
+    p.pushed(A);
+    assert_eq!(p.carrying(A), Deploy::Pending);
+    p.start();
+    p.pushed(B);
+    p.pushed(C);
+    assert_eq!(p.carrying(A), Deploy::Running);
+    assert_eq!(p.carrying(B), Deploy::Pending, "A's deploy doesn't carry B");
+    p.finished(&deploy_report(Outcome::Passed), 10);
+    assert_eq!(p.carrying(A), Deploy::Passed);
+    p.start();
+    assert_eq!(p.carrying(B), Deploy::Running, "C's deploy carries B");
+    p.finished(&deploy_report(Outcome::Failed), 11);
+    assert!(matches!(p.carrying(B), Deploy::Failed(_)));
+    assert_eq!(
+        p.carrying(A),
+        Deploy::Passed,
+        "a later failure doesn't undo A"
+    );
+    p.pushed(C);
+    assert_eq!(p.pushes.len(), 3, "the same push twice is kept once");
+    for i in 0..control::PUSHES {
+        p.pushed(&format!("{i:040x}"));
+    }
+    assert_eq!(p.pushes.len(), control::PUSHES);
+    assert_eq!(
+        p.carrying(A),
+        Deploy::Unknown,
+        "the oldest pushes are dropped"
+    );
+}
+
+#[test]
 fn the_newest_build_a_deploy_stored_is_what_jobs_run() {
     let build = |sha: &str| backplane::control::Build {
         sha: sha.into(),

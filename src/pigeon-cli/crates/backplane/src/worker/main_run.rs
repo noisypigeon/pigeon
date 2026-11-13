@@ -862,6 +862,11 @@ impl DurableObject for MainRun {
                 }
             }
             (Method::Get, "evictions/last") => Response::from_json(&self.evictions().await?),
+            (Method::Post, "carrying") => {
+                let body: Value = req.json().await?;
+                let sha = body["sha"].as_str().unwrap_or_default();
+                Response::from_json(&self.pipeline().await?.carrying(sha))
+            }
             (Method::Post, "reconcile") => match self.reconcile().await {
                 Ok(v) => Response::from_json(&v),
                 Err(e) => Response::error(format!("reconcile: {e}"), 502),

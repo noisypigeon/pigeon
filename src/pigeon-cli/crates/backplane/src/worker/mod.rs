@@ -30,6 +30,7 @@ mod passkeys;
 mod platform;
 mod platforms;
 mod push;
+mod stages;
 mod tasks;
 mod tickets;
 
@@ -610,16 +611,8 @@ async fn dispatch(
             let (status, mut v) =
                 to_change(env, &s.repo, number, Method::Get, "/status", None).await?;
             if let Ok(c) = serde_json::from_value::<Change>(v["change"].clone()) {
-                let q = mandates::to_instance(env, s, "/merges/list", &json!({}))
-                    .await
-                    .ok()
-                    .and_then(|(_, q)| serde_json::from_value(q).ok())
-                    .unwrap_or_default();
-                let stage = crate::core::change::stage::of(
-                    &c,
-                    crate::core::change::stage::place(&q, number),
-                );
-                v["stage"] = serde_json::to_value(stage)?;
+                let q = stages::queue(env, s).await;
+                v["stage"] = serde_json::to_value(stages::of(env, s, &c, &q).await)?;
             }
             Ok((Some(number.to_string()), respond(operation, status, v)))
         }
@@ -671,6 +664,10 @@ async fn dispatch(
                 "evicts": "nothing yet: verdicts only",
             });
             Ok((None, respond(operation, 200, result)))
+        }
+        Routed::SessionStatus { args } => {
+            let (status, v) = stages::session(env, s, &args).await?;
+            Ok((None, respond(operation, status, v)))
         }
         Routed::SessionEnd { args } => Ok(answered(operation, tickets::end(env, s, &args).await?)),
         Routed::SessionStart { args } => {

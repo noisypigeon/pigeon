@@ -1,5 +1,6 @@
-//! A change's stage: where it is, who acts next and what that is, derived from its record and
-//! its place in the merge queue; see
+//! A change's stage: where it is, who acts next and what that is, derived from its record, its
+//! place in the merge queue, the deploy carrying its merge and whether a window or mandate covers
+//! it; see
 //! `.claude/decisions/2026-11-13-development-session-stages-subscriptions-breaker.md` §1.
 
 use serde::{Deserialize, Serialize};
@@ -37,6 +38,39 @@ pub struct Stage {
     pub waits_on: Option<u32>,
     /// What acting next is, in a line.
     pub next: String,
+    /// When it entered the stage, in Unix seconds: its last event that isn't a job's; the
+    /// Worker fills it from the event log.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub since: Option<u64>,
+}
+
+/// Where the deploy carrying a merged change stands.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "deploy", content = "why", rename_all = "snake_case")]
+pub enum Deploy {
+    /// Unknown: the merge is older than the pushes the pipeline keeps.
+    #[default]
+    Unknown,
+    /// No deploy carrying it has started.
+    Pending,
+    /// A deploy carrying it runs.
+    Running,
+    /// A deploy carrying it passed.
+    Passed,
+    /// The last deploy carrying it failed, with why, and none has passed since.
+    Failed(String),
+}
+
+/// What a change's stage is derived from, besides its record.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Context {
+    /// Its place in the merge queue.
+    pub place: Option<Place>,
+    /// For a merged change: the deploy carrying it.
+    pub deploy: Deploy,
+    /// The window or mandate that would allow its next authorization or approval, as
+    /// `window:<id>` or `mandate:<id>`.
+    pub covered: Option<String>,
 }
 
 /// A change's place in the merge queue.
@@ -78,6 +112,7 @@ fn at(stage: impl Into<String>, needs: Needs, next: impl Into<String>) -> Stage 
         needs,
         waits_on: None,
         next: next.into(),
+        since: None,
     }
 }
 
@@ -107,17 +142,50 @@ fn names<'a>(jobs: impl Iterator<Item = &'a Job>) -> String {
         .join(", ")
 }
 
-/// Change `c`'s stage, given its place in the merge queue.
-#[must_use]
-pub fn of(c: &Change, place: Option<Place>) -> Stage {
-    let branch = c.branch();
-    match c.state {
-        State::Merged => at("merged", Needs::None, "nothing"),
-        State::Closed => at("closed", Needs::None, "nothing"),
-        State::Proposed => at(
-            "proposed",
+/// A covered change waits on its session: a window or mandate acts only when asked.
+fn ask(stage: &str, covered: Option<&String>, tool: &str, owner: &str) -> Stage {
+    match covered {
+        Some(by) => at(
+            stage,
+            Needs::Agent,
+            format!("ask (`{tool}`); {by} allows it"),
+        ),
+        None => at(stage, Needs::Owner, owner),
+    }
+}
+
+fn merged(deploy: &Deploy) -> Stage {
+    match deploy {
+        Deploy::Unknown => at("merged", Needs::None, "nothing"),
+        Deploy::Pending => at(
+            "deploying",
+            Needs::Platform,
+            "main's next deploy carries it",
+        ),
+        Deploy::Running => at("deploying", Needs::Platform, "the deploy carrying it runs"),
+        Deploy::Passed => at("done", Needs::None, "nothing"),
+        Deploy::Failed(why) => at(
+            "deploy-failed",
             Needs::Owner,
-            "authorize the plan, unless a window or mandate covers it",
+            format!("deploy again (`deploy_retry`) once fixed: {why}"),
+        ),
+    }
+}
+
+/// Change `c`'s stage, given `cx`.
+#[must_use]
+pub fn of(c: &Change, cx: &Context) -> Stage {
+    let branch = c.branch();
+    let place = cx.place;
+    let covered = cx.covered.as_ref();
+    match c.state {
+        State::Merged => merged(&cx.deploy),
+        State::Closed => at("closed", Needs::None, "nothing"),
+        State::Proposed => ask(
+            "proposed",
+            covered,
+            "change_authorize",
+            "authorize the plan",
         ),
         State::Planned => at("authorized", Needs::Agent, format!("push `{branch}`")),
         _ if c.conflict.is_some() => {
@@ -160,11 +228,7 @@ pub fn of(c: &Change, place: Option<Place>) -> Stage {
                 format!("the checks finish: {waiting}"),
             )
         }
-        State::Checked => at(
-            "checked",
-            Needs::Owner,
-            "approve the head, unless a window or mandate covers it",
-        ),
+        State::Checked => ask("checked", covered, "change_approve", "approve the head"),
         State::Approved => match place {
             Some(Place::Waiting { turn, of, holder }) => Stage {
                 stage: format!("queued {turn}/{of}"),
@@ -178,6 +242,7 @@ pub fn of(c: &Change, place: Option<Place>) -> Stage {
                     Some(h) => format!("!{h} merges or gives its turn back"),
                     None => "its merge starts".into(),
                 },
+                since: None,
             },
             _ if c.merge_after.is_some() => at(
                 "approved",
@@ -218,6 +283,13 @@ mod tests {
         j
     }
 
+    fn with(place: Option<Place>) -> Context {
+        Context {
+            place,
+            ..Context::default()
+        }
+    }
+
     fn entry(number: u32) -> Entry {
         Entry {
             number,
@@ -238,7 +310,7 @@ mod tests {
             (State::Closed, "closed", Needs::None),
         ];
         for (state, stage, needs) in cases {
-            let s = of(&change(state), None);
+            let s = of(&change(state), &Context::default());
             assert_eq!((s.stage.as_str(), s.needs), (stage, needs), "{state:?}");
         }
     }
@@ -253,7 +325,7 @@ mod tests {
             job("test", JobStatus::Running),
             job("wasm", JobStatus::Queued),
         ];
-        let s = of(&c, None);
+        let s = of(&c, &Context::default());
         assert_eq!(s.stage, "checking 1/3");
         assert_eq!(s.needs, Needs::Provider);
         assert_eq!(s.next, "the checks finish: `test`, `wasm`");
@@ -267,7 +339,7 @@ mod tests {
             job("clippy", JobStatus::Failed),
             job("test", JobStatus::Passed),
         ];
-        let s = of(&c, None);
+        let s = of(&c, &Context::default());
         assert_eq!((s.stage.as_str(), s.needs), ("failed", Needs::Agent));
         assert_eq!(s.next, "fix and push: `clippy` failed");
     }
@@ -276,7 +348,10 @@ mod tests {
     fn a_refusal_names_its_first_violation() {
         let mut c = change(State::Refused);
         c.violations = vec!["outside its scope: a.rs".into(), "b".into()];
-        assert_eq!(of(&c, None).next, "fix and push: outside its scope: a.rs");
+        assert_eq!(
+            of(&c, &Context::default()).next,
+            "fix and push: outside its scope: a.rs"
+        );
     }
 
     #[test]
@@ -288,7 +363,7 @@ mod tests {
             proposal: None,
             reconcile: Some(9),
         });
-        let s = of(&c, None);
+        let s = of(&c, &Context::default());
         assert_eq!((s.stage.as_str(), s.needs), ("conflicted", Needs::Agent));
         assert_eq!(s.next, "carry out !9, which reconciles it");
     }
@@ -297,11 +372,11 @@ mod tests {
     fn a_restack_or_merge_in_flight_is_the_platforms() {
         let mut c = change(State::Approved);
         c.jobs = vec![job(RESTACK, JobStatus::Running)];
-        assert_eq!(of(&c, None).stage, "restacking");
+        assert_eq!(of(&c, &Context::default()).stage, "restacking");
         c.jobs = vec![job(MERGE, JobStatus::Queued)];
-        assert_eq!(of(&c, None).stage, "merging");
+        assert_eq!(of(&c, &Context::default()).stage, "merging");
         c.jobs.clear();
-        assert_eq!(of(&c, Some(Place::Merging)).stage, "merging");
+        assert_eq!(of(&c, &with(Some(Place::Merging))).stage, "merging");
     }
 
     #[test]
@@ -319,7 +394,7 @@ mod tests {
                 holder: Some(3)
             })
         );
-        let s = of(&change(State::Approved), p);
+        let s = of(&change(State::Approved), &with(p));
         assert_eq!(s.stage, "queued 3/3");
         assert_eq!((s.needs, s.waits_on), (Needs::Change, Some(3)));
         assert_eq!(place(&q, 3), Some(Place::Merging));
@@ -336,7 +411,7 @@ mod tests {
         });
         c.jobs = vec![job(MERGE, JobStatus::Failed)];
         c.violations = vec!["main has moved past its base".into()];
-        let s = of(&c, None);
+        let s = of(&c, &Context::default());
         assert_eq!((s.stage.as_str(), s.needs), ("approved", Needs::Agent));
         assert_eq!(
             s.next,
@@ -348,6 +423,47 @@ mod tests {
     fn a_parked_merge_waits_on_the_platform() {
         let mut c = change(State::Approved);
         c.merge_after = Some("owner".into());
-        assert_eq!(of(&c, None).needs, Needs::Platform);
+        assert_eq!(of(&c, &Context::default()).needs, Needs::Platform);
+    }
+
+    #[test]
+    fn a_covered_change_asks_its_window() {
+        let cx = Context {
+            covered: Some("window:2".into()),
+            ..Context::default()
+        };
+        let s = of(&change(State::Checked), &cx);
+        assert_eq!((s.stage.as_str(), s.needs), ("checked", Needs::Agent));
+        assert_eq!(s.next, "ask (`change_approve`); window:2 allows it");
+        let s = of(&change(State::Proposed), &cx);
+        assert_eq!(s.next, "ask (`change_authorize`); window:2 allows it");
+        let s = of(&change(State::Checked), &Context::default());
+        assert_eq!(
+            (s.needs, s.next.as_str()),
+            (Needs::Owner, "approve the head")
+        );
+    }
+
+    #[test]
+    fn a_merged_change_follows_its_deploy() {
+        let cases = [
+            (Deploy::Unknown, "merged", Needs::None),
+            (Deploy::Pending, "deploying", Needs::Platform),
+            (Deploy::Running, "deploying", Needs::Platform),
+            (Deploy::Passed, "done", Needs::None),
+            (
+                Deploy::Failed("smoke".into()),
+                "deploy-failed",
+                Needs::Owner,
+            ),
+        ];
+        for (deploy, stage, needs) in cases {
+            let cx = Context {
+                deploy: deploy.clone(),
+                ..Context::default()
+            };
+            let s = of(&change(State::Merged), &cx);
+            assert_eq!((s.stage.as_str(), s.needs), (stage, needs), "{deploy:?}");
+        }
     }
 }

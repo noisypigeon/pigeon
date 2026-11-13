@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: development
-* Governs: `src/pigeon-cli/crates/backplane/src/core/change/lifecycle.rs`, `src/pigeon-cli/crates/backplane/src/core/change/stage.rs`, `src/pigeon-cli/crates/backplane/src/core/approval/windows.rs`, `src/pigeon-cli/crates/backplane/src/sessions.rs`, `src/pigeon-cli/crates/backplane/src/worker/tasks.rs`
+* Governs: `src/pigeon-cli/crates/backplane/src/core/change/lifecycle.rs`, `src/pigeon-cli/crates/backplane/src/core/change/stage.rs`, `src/pigeon-cli/crates/backplane/src/worker/stages.rs`, `src/pigeon-cli/crates/backplane/src/core/approval/windows.rs`, `src/pigeon-cli/crates/backplane/src/sessions.rs`, `src/pigeon-cli/crates/backplane/src/worker/tasks.rs`
 
 ## Context
 
@@ -391,3 +391,31 @@ the yield ADR's step 7 lands; until then B1 to B6 trip alone.
   whose merge job failed and whose turn was released, with no merge asked
   again. It answers `approved`, `needs: agent`, and `next` names the failure
   and says to ask to merge again.
+
+### 2026-11-13: Step 1b lands on `change.status` and `session.status`; lists and events are step 1c
+
+- **Paths.** `Governs` gains `worker/stages.rs`.
+- **A window or mandate acts only when asked.** Seen on !312 and !322: a
+  change Auto window 1 covered sat at `checked` until the session called
+  `change_approve`, and was then approved as `window:1`. So a covered
+  `proposed` or `checked` change answers `needs: agent`, with `next` naming
+  the tool to call and the window or mandate that allows it, not
+  `needs: platform` as §1's table had it. An uncovered one answers
+  `needs: owner`. Coverage is asked of the window with the same `decide` the
+  operation would use, which spends nothing for an authorization or an
+  approval.
+- **The deploy carrying a merge, without git.** `MainRun`'s `Pipeline` keeps
+  the last 100 pushes to `main` in order (`pushes`, not shown by
+  `deploy.status`). A deploy of a push at or after the merge's carries it:
+  - `done` once the last deploy that passed carries it;
+  - `deploying` while a deploy carrying it runs, or before one starts;
+  - `deploy-failed`, `needs: owner`, when a deploy carrying it failed and none
+    has passed since;
+  - `merged` for a merge older than the pushes kept, as before.
+- **`since`** is the time of the change's last event that isn't a job's.
+- **`session.status` (MCP `session_status`)** answers each open change of a
+  session, oldest first, with its stage, and the session's tasks. Listening
+  comes with step 2.
+- **Step 1c:** `stage` on `change.list` and on each event. A list reads D1
+  rows without jobs, and an event is appended by `ChangeRun`, which doesn't
+  hold the queue, so each needs its own source of the stage.

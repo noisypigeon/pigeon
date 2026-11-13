@@ -270,7 +270,7 @@ const CATALOG: &[Operation] = &[
         name: "change.status",
         engine: Engine::Backplane,
         effect: Effect::Read,
-        summary: "A change's state, head, approvals, violations and each job's result",
+        summary: "A change's state, head, approvals, violations, each job's result, and its stage: `stage`, who `needs` to act, `waits_on`, `next` and `since`",
         args: &[NUMBER],
     },
     Operation {
@@ -415,6 +415,13 @@ const CATALOG: &[Operation] = &[
         effect: Effect::Read,
         summary: "The owner's digest now: approvals waiting, tasks unclaimed two hours, paused mandates, failed deploys and changes merged without the owner; `needs_owner` says whether it would be pushed",
         args: &[],
+    },
+    Operation {
+        name: "session.status",
+        engine: Engine::Backplane,
+        effect: Effect::Read,
+        summary: "Session `session`'s open changes, oldest first, each with its stage (`stage`, `needs`, `waits_on`, `next`, `since`), and its tasks",
+        args: &[arg("session", true, Kind::String)],
     },
     Operation {
         name: "session.end",

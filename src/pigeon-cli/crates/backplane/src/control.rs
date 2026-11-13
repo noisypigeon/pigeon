@@ -97,6 +97,11 @@ pub enum Routed {
     IosRelease,
     /// `ios.status`: the iOS releases.
     IosStatus,
+    /// `session.status`, with its arguments.
+    SessionStatus {
+        /// Its arguments.
+        args: serde_json::Map<String, Value>,
+    },
     /// `session.end`, with its arguments.
     SessionEnd {
         /// Its arguments.
@@ -296,6 +301,7 @@ pub fn route(request: &Request, by: &str, at: u64) -> Result<Routed, String> {
         "ios.status" => Ok(Routed::IosStatus),
         "session.start" => Ok(Routed::SessionStart { args: a.clone() }),
         "session.end" => Ok(Routed::SessionEnd { args: a.clone() }),
+        "session.status" => Ok(Routed::SessionStatus { args: a.clone() }),
         "task.list" | "task.wait" | "task.claim" | "task.done" => Ok(Routed::Task {
             operation: request.operation.clone(),
             args: a.clone(),
@@ -1392,16 +1398,59 @@ pub struct Pipeline {
     /// The `DEPLOY_IMAGES` secret as last seen; a different one is the owner's push, and wins.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub images_seed: Option<Images>,
+    /// The last pushes to `main`, oldest first, which order its commits without git; see
+    /// `.claude/decisions/2026-11-13-development-session-stages-subscriptions-breaker.md` §1.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub pushes: Vec<String>,
 }
 
 /// How many deploys `deploy.status` keeps.
 pub const HISTORY: usize = 20;
+
+/// How many pushes to `main` the pipeline keeps in order.
+pub const PUSHES: usize = 100;
 
 impl Pipeline {
     /// `main` moved to `sha`.
     pub fn pushed(&mut self, sha: &str) {
         if changes::is_sha(sha) {
             self.target = Some(sha.to_string());
+            if self.pushes.last().map(String::as_str) != Some(sha) {
+                self.pushes.push(sha.to_string());
+                let over = self.pushes.len().saturating_sub(PUSHES);
+                self.pushes.drain(..over);
+            }
+        }
+    }
+
+    /// Where the deploy carrying `merged`, a commit of `main`, stands; `Unknown` when it is
+    /// older than the pushes kept.
+    #[must_use]
+    pub fn carrying(&self, merged: &str) -> crate::core::change::stage::Deploy {
+        use crate::core::change::stage::Deploy;
+        let order = |sha: &str| self.pushes.iter().position(|p| p == sha);
+        let Some(at) = order(merged) else {
+            return Deploy::Unknown;
+        };
+        let carries = |sha: &str| order(sha).is_some_and(|i| i >= at);
+        if self.deployed.as_deref().is_some_and(carries) {
+            return Deploy::Passed;
+        }
+        if self.running.as_ref().is_some_and(|(sha, _)| carries(sha)) {
+            return Deploy::Running;
+        }
+        match self
+            .history
+            .iter()
+            .find(|d| carries(&d.sha) && d.outcome == Outcome::Failed)
+        {
+            Some(d) => Deploy::Failed(
+                d.violations
+                    .first()
+                    .cloned()
+                    .unwrap_or_else(|| "the deploy failed".into()),
+            ),
+            None => Deploy::Pending,
         }
     }
 
@@ -1445,6 +1494,7 @@ impl Pipeline {
         Self {
             images: hide(&self.images),
             images_seed: hide(&self.images_seed),
+            pushes: Vec::new(),
             ..self.clone()
         }
     }
