@@ -621,6 +621,14 @@ async fn dispatch(
                     .await?;
             Ok((None, respond(operation, 200, json!({ "changes": rows }))))
         }
+        Routed::Evictable => Ok((
+            None,
+            respond(
+                operation,
+                200,
+                json!({ "candidates": evictable(env, s).await? }),
+            ),
+        )),
         Routed::SessionEnd { args } => Ok(answered(operation, tickets::end(env, s, &args).await?)),
         Routed::SessionStart { args } => {
             Ok(answered(operation, tickets::start(env, s, &args).await?))
@@ -730,6 +738,48 @@ async fn propose(
             json!("no change number was free; try again"),
         ),
     ))
+}
+
+/// Each open change as an eviction candidate, from D1, the tickets, the merge queue and the
+/// waiting approvals; see `.claude/decisions/2026-11-10-development-change-slot-eviction-policy.md` §4.
+async fn evictable(env: &Env, s: &Settings) -> Result<Vec<Value>> {
+    use crate::core::change::eviction::{Facts, Holds, Session, candidate};
+    let rows = platform::d1_rows(env, &control::evictable(&s.instance, &s.repo)).await?;
+    let (_, t) = mandates::to_instance(env, s, "/tickets/list", &json!({})).await?;
+    let tickets: crate::tickets::Tickets = serde_json::from_value(t).unwrap_or_default();
+    let (_, q) = mandates::to_instance(env, s, "/merges/list", &json!({})).await?;
+    let queue: crate::merges::MergeQueue = serde_json::from_value(q).unwrap_or_default();
+    let mut queued: Vec<u32> = queue.waiting.iter().map(|e| e.number).collect();
+    queued.extend(queue.merging.as_ref().map(|e| e.number));
+    let waiting: Vec<crate::approve::Waiting> =
+        serde_json::from_value(elicit::inbox(env, s, "/approvals/list", &json!({})).await?)
+            .unwrap_or_default();
+    let t = now();
+    Ok(rows
+        .iter()
+        .filter_map(|r| {
+            let number = u32::try_from(r["number"].as_u64()?).ok()?;
+            let session = r["session"].as_str().map(|label| Session {
+                label: label.to_string(),
+                live: tickets.live(label, t).is_some(),
+                gone_for: tickets.gone_for(label, t),
+            });
+            let f = Facts {
+                number,
+                slug: r["slug"].as_str().unwrap_or_default().to_string(),
+                state: r["state"].as_str().unwrap_or_default().to_string(),
+                head: r["head"].as_str().map(str::to_string),
+                updated: r["updated"].as_u64().unwrap_or_default(),
+                session,
+                holds: Holds {
+                    pinned: false,
+                    approval_open: waiting.iter().any(|w| w.number == number),
+                    queued: queued.contains(&number),
+                },
+            };
+            Some(json!({ "number": number, "fields": candidate(&f, t) }))
+        })
+        .collect())
 }
 
 /// An operation's answer from a `(status, value)` pair.

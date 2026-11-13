@@ -269,6 +269,13 @@ const CATALOG: &[Operation] = &[
         args: &[arg("state", false, Kind::String)],
     },
     Operation {
+        name: "change.evictable",
+        engine: Engine::Backplane,
+        effect: Effect::Read,
+        summary: "Each open change as an eviction candidate: the fields an eviction policy judges (no change is evicted yet)",
+        args: &[],
+    },
+    Operation {
         name: "change.approve",
         engine: Engine::Backplane,
         effect: Effect::Apply,

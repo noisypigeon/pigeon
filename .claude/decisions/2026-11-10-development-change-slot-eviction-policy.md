@@ -221,3 +221,30 @@ Steps 2 and 3 landed there as F1, F2 and the family slot.
   branch.
 - **Nothing is evicted yet.** No eviction policy exists until step 6, and
   the hourly job is step 5.
+
+### 2026-11-13: Step 5 begins: `change_evictable` lists each open change as a candidate
+
+- **`change.evictable` (read) answers each open change's candidate fields.**
+  It builds them from D1, the tickets, the merge queue and the waiting
+  approvals, in `core::change::eviction`, a pure module.
+- **The fields:**
+  - `kind` comes from the slug (`reconcile-<n>`, `review-<n>-<m>`, or a
+    change);
+  - `session_live` is false for a change with no session;
+  - `session_gone_for` is the change's idle time when it has no session, 0
+    while its session is live, and otherwise how long since its ticket
+    lapsed. When that isn't known, the field is left out, so no policy
+    needing it grants;
+  - `pinned` is false until `change_pin`.
+- **A lapsed ticket is kept 7 days** (`REMEMBER`), so the control plane can
+  tell how long a session has gone.
+  - Starting a label refuses only a live ticket.
+  - A lapsed label starts again at generation 1, as before, since an old
+    ticket carries its own expiry.
+- **Not yet:**
+  - `session_end` still forgets the ticket at once, so a session that ended
+    itself has no `session_gone_for`, and only the `stale-*` policies reach
+    its changes. A follow-up makes `session_end` remember when it ended.
+  - The judging: the hourly eviction job, which runs `pigeon-sentinel evict`
+    against `main`'s policies, is the next part.
+  - Acting on a verdict, which is step 5's last part.

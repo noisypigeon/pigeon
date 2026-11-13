@@ -67,6 +67,8 @@ pub enum Routed {
         /// The state.
         state: Option<String>,
     },
+    /// `change.evictable`: each open change as an eviction candidate.
+    Evictable,
     /// `digest.show`: the owner's digest now.
     Digest,
     /// `apple.check`: the Apple connection's health.
@@ -248,6 +250,7 @@ pub fn route(request: &Request, by: &str, at: u64) -> Result<Routed, String> {
         "change.list" => Ok(Routed::List {
             state: text(a, "state"),
         }),
+        "change.evictable" => Ok(Routed::Evictable),
         other => Err(format!("`{other}` is not a control-plane operation")),
     }
 }
@@ -824,6 +827,18 @@ pub fn release_reason(change: &Change) -> String {
         "it is {} and carries no approval, so its merge can't start",
         change.state.name()
     )
+}
+
+/// Every open change's facts for eviction: its number, slug, state, session, head and when its
+/// record last changed.
+#[must_use]
+pub fn evictable(instance: &str, repo: &str) -> Statement {
+    Statement {
+        sql: "SELECT number, slug, state, session, head, updated FROM changes
+              WHERE instance = ?1 AND repo = ?2 AND state NOT IN ('merged', 'closed')
+              ORDER BY number LIMIT 100",
+        params: vec![instance.into(), repo.into()],
+    }
 }
 
 /// Every open change: neither merged nor closed.

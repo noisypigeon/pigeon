@@ -13,6 +13,10 @@ use crate::push::{b64url, b64url_decode};
 /// How long a ticket lives, in seconds.
 pub const TTL: u64 = 24 * 60 * 60;
 
+/// How long a lapsed ticket is remembered, so eviction can tell how long its session has gone;
+/// see `.claude/decisions/2026-11-10-development-change-slot-eviction-policy.md` §3.
+pub const REMEMBER: u64 = 7 * 24 * 60 * 60;
+
 fn mac(key: &[u8], text: &str) -> Vec<u8> {
     let mut m = Hmac::<Sha256>::new_from_slice(key).unwrap_or_else(|_| unreachable!());
     m.update(text.as_bytes());
@@ -89,15 +93,16 @@ impl Tickets {
     ///
     /// When `label` holds a live ticket and `replace` is false.
     pub fn start(&mut self, label: &str, replace: bool, now: u64) -> Result<Issued, String> {
-        self.0.retain(|_, i| i.expires > now);
+        self.0.retain(|_, i| i.expires + REMEMBER > now);
+        let live = self.live(label, now).is_some();
         let generation = match self.0.get(label) {
-            Some(_) if !replace => {
+            Some(_) if live && !replace => {
                 return Err(format!(
                     "session {label} holds a live ticket; start it with `replace` to revoke that one"
                 ));
             }
-            Some(i) => i.generation + 1,
-            None => 1,
+            Some(i) if live => i.generation + 1,
+            _ => 1,
         };
         let issued = Issued {
             generation,
@@ -116,6 +121,16 @@ impl Tickets {
     #[must_use]
     pub fn live(&self, label: &str, now: u64) -> Option<Issued> {
         self.0.get(label).filter(|i| i.expires > now).copied()
+    }
+
+    /// How long `label` has had no live ticket at `now`: since its last one lapsed, while that is
+    /// remembered; none while it is live, or when it isn't known.
+    #[must_use]
+    pub fn gone_for(&self, label: &str, now: u64) -> Option<u64> {
+        self.0
+            .get(label)
+            .filter(|i| i.expires <= now)
+            .map(|i| now - i.expires)
     }
 }
 

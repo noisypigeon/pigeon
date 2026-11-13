@@ -1,6 +1,6 @@
 //! Session tickets; see `.claude/decisions/2026-11-08-development-events-tickets-digest-mandate.md` §5.
 
-use backplane::tickets::{TTL, Tickets, require, sign, verify};
+use backplane::tickets::{REMEMBER, TTL, Tickets, require, sign, verify};
 
 const KEY: &[u8] = b"a session key for the tests only";
 const A: &str = "https://claude.ai/code/session_a";
@@ -78,4 +78,21 @@ fn ending_a_ticket_frees_its_label() {
     assert!(!t.end(A), "a second end is a no-op");
     assert_eq!(require(KEY, &t, &[A.to_string()], None, 1), Ok(()));
     assert_eq!(t.start(A, false, 1).expect("anew").generation, 1);
+}
+
+#[test]
+fn a_lapsed_ticket_is_remembered_a_week_to_say_how_long_its_session_has_gone() {
+    let mut t = Tickets::default();
+    let issued = t.start(A, false, 0).expect("starts");
+    assert_eq!(t.gone_for(A, 10), None, "live");
+    assert_eq!(t.gone_for(A, issued.expires + 60), Some(60));
+    assert!(t.live(A, issued.expires + 60).is_none());
+    // A lapsed ticket doesn't block a new start, which begins anew.
+    let again = t.start(A, false, issued.expires + 60).expect("restarts");
+    assert_eq!(again.generation, 1);
+    // Past the week, another label's start forgets it.
+    let later = again.expires + REMEMBER;
+    t.start("https://claude.ai/code/session_b", false, later)
+        .expect("starts");
+    assert_eq!(t.gone_for(A, later), None, "forgotten");
 }
