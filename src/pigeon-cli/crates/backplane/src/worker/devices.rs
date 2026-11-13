@@ -5,7 +5,7 @@
 use serde_json::{Value, json};
 use worker::{Env, Method, Request, Response, Result, State};
 
-use super::approve::{html, refused};
+use super::approve::{html, html_with, refused};
 use super::elicit;
 use super::platform::{self, Settings, now, random_hex};
 use crate::access::Identity;
@@ -247,6 +247,10 @@ fn association(env: &Env) -> Result<Response> {
 
 // The pages, behind Access.
 
+/// `/app/link`'s policy: the proof pages' (`/passkey.js`), and its form may return to the app as
+/// `pigeon://linked`; see `.claude/decisions/2026-11-12-runtime-ios-app-approvals-insights.md` §2.
+const LINK_CSP: &str = "default-src 'none'; style-src 'unsafe-inline'; script-src 'self'; connect-src 'self'; form-action 'self' pigeon:; frame-ancestors 'none'; base-uri 'none'";
+
 /// Serves `/app/link` and `/devices` for `who`.
 ///
 /// # Errors
@@ -280,13 +284,14 @@ pub async fn page_serve(
             };
             let key = q("key");
             match devices::key_point(&key) {
-                Ok(p) => html(
+                Ok(p) => html_with(
                     200,
                     &page::link_page(
                         &devices::clean_name(&q("name")),
                         &key,
                         &devices::fingerprint(&p),
                     ),
+                    LINK_CSP,
                 ),
                 Err(why) => refused(400, &why),
             }
