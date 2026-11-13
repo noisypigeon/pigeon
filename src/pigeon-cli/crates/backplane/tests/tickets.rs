@@ -1,5 +1,6 @@
 //! Session tickets; see `.claude/decisions/2026-11-08-development-events-tickets-digest-mandate.md` §5.
 
+use backplane::sessions::{Class, declare};
 use backplane::tickets::{REMEMBER, TTL, Tickets, require, sign, verify};
 
 const KEY: &[u8] = b"a session key for the tests only";
@@ -105,4 +106,28 @@ fn an_ended_ticket_is_remembered_from_its_end() {
     assert!(t.live(A, 101).is_none(), "ended");
     assert_eq!(t.gone_for(A, 7300), Some(7200), "gone since its end");
     assert!(t.start(A, false, 7300).is_ok(), "and it may start again");
+}
+
+#[test]
+fn a_ticket_keeps_its_class_and_a_replacement_may_declare_another() {
+    let mut t = Tickets::default();
+    assert_eq!(
+        t.start(A, false, 0).expect("issues").declared.model,
+        Class::Opus
+    );
+    let haiku = declare(Some("haiku"), Some("https://claude.ai/code/p"), Some("b3")).expect("ok");
+    let second = t.start_as(A, true, 1, haiku).expect("replaces");
+    assert_eq!(second.generation, 2);
+    let live = t.live(A, 2).expect("live");
+    assert_eq!(live.declared.model, Class::Haiku);
+    assert_eq!(live.declared.brief.as_deref(), Some("b3"));
+}
+
+#[test]
+fn a_ticket_stored_before_classes_reads_as_opus() {
+    let t: Tickets = serde_json::from_str(
+        r#"{"https://claude.ai/code/session_a":{"generation":2,"expires":9}}"#,
+    )
+    .expect("an older record");
+    assert_eq!(t.live(A, 1).expect("live").declared.model, Class::Opus);
 }

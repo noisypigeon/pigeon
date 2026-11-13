@@ -2,7 +2,7 @@
 //! `.claude/decisions/2026-11-08-development-concurrent-agent-sessions.md` §2.
 
 use backplane::control::open_rows;
-use backplane::sessions::{Open, overlaps, session};
+use backplane::sessions::{Class, Open, declare, overlaps, session};
 use serde_json::json;
 
 fn globs(list: &[&str]) -> Vec<String> {
@@ -85,4 +85,49 @@ fn open_rows_read_d1s_json_columns() {
     assert_eq!(open[0].scope, ["a/**"]);
     assert_eq!(open[1].affects, ["c/**"]);
     assert_eq!(open[1].session, None);
+}
+
+#[test]
+fn a_session_declares_a_class_and_opus_is_the_default() {
+    let d = declare(None, None, None).expect("opus by default");
+    assert_eq!((d.model, d.model.role()), (Class::Opus, "planner"));
+    let d = declare(
+        Some(" Sonnet "),
+        Some("https://claude.ai/code/p"),
+        Some("b7"),
+    )
+    .expect("an executor with its planner and brief");
+    assert_eq!(d.model, Class::Sonnet);
+    assert_eq!(d.model.role(), "executor");
+    assert_eq!(d.brief.as_deref(), Some("b7"));
+    assert_eq!(
+        serde_json::to_value(d.model).expect("json"),
+        json!("sonnet")
+    );
+}
+
+#[test]
+fn an_executor_names_its_planner_and_brief_and_a_planner_names_neither() {
+    let p = Some("https://claude.ai/code/p");
+    for (model, planner, brief, why) in [
+        (Some("haiku"), None, Some("b1"), "planner"),
+        (Some("haiku"), p, None, "brief"),
+        (Some("opus"), p, None, "executor's"),
+        (None, None, Some("b1"), "executor's"),
+        (Some("gpt"), None, None, "class"),
+        (Some("sonnet"), p, Some("7"), "b<n>"),
+        (Some("sonnet"), p, Some("b0"), "b<n>"),
+    ] {
+        let err = declare(model, planner, brief).expect_err("refused");
+        assert!(err.contains(why), "{model:?} {brief:?}: {err}");
+    }
+}
+
+#[test]
+fn a_class_covers_its_own_work_and_less_capable_classes() {
+    assert!(Class::Opus.covers(Class::Haiku));
+    assert!(Class::Sonnet.covers(Class::Haiku));
+    assert!(Class::Sonnet.covers(Class::Sonnet));
+    assert!(!Class::Haiku.covers(Class::Sonnet));
+    assert!(!Class::Sonnet.covers(Class::Opus));
 }

@@ -1,5 +1,7 @@
-//! Several agent sessions at once: what a proposal overlaps among the open changes; see
-//! `.claude/decisions/2026-11-08-development-concurrent-agent-sessions.md` §1, §2.
+//! Several agent sessions at once: what a proposal overlaps among the open changes, and the
+//! model class each declares; see
+//! `.claude/decisions/2026-11-08-development-concurrent-agent-sessions.md` §1, §2, and
+//! `.claude/decisions/2026-11-13-development-model-tiered-agent-briefs.md` §1, §2.
 
 use serde::{Deserialize, Serialize};
 
@@ -23,6 +25,124 @@ pub fn session(label: Option<&str>) -> Result<Option<String>, String> {
         ));
     }
     Ok(Some(label.to_string()))
+}
+
+/// A session's model class, least capable first; never a model ID.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Class {
+    /// Carries out `haiku` briefs.
+    Haiku,
+    /// Carries out `sonnet` and `haiku` briefs.
+    Sonnet,
+    /// Plans; a session that declares none.
+    #[default]
+    Opus,
+}
+
+impl Class {
+    /// The class `name` names, or [`Class::Opus`] for none.
+    ///
+    /// # Errors
+    ///
+    /// When it names no class.
+    pub fn parse(name: Option<&str>) -> Result<Self, String> {
+        match name.map(str::trim).filter(|n| !n.is_empty()) {
+            None => Ok(Self::Opus),
+            Some(n) => match n.to_ascii_lowercase().as_str() {
+                "haiku" => Ok(Self::Haiku),
+                "sonnet" => Ok(Self::Sonnet),
+                "opus" => Ok(Self::Opus),
+                _ => Err("`model` is a class: `haiku`, `sonnet` or `opus`".into()),
+            },
+        }
+    }
+
+    /// Its name.
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Haiku => "haiku",
+            Self::Sonnet => "sonnet",
+            Self::Opus => "opus",
+        }
+    }
+
+    /// Its role: `planner` for opus, `executor` otherwise.
+    #[must_use]
+    pub const fn role(self) -> &'static str {
+        match self {
+            Self::Opus => "planner",
+            Self::Haiku | Self::Sonnet => "executor",
+        }
+    }
+
+    /// Whether it may carry out work meant for `needed`.
+    #[must_use]
+    pub fn covers(self, needed: Self) -> bool {
+        self >= needed
+    }
+}
+
+/// What a session declares at start: its class, the planner that started it, and its brief.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Declared {
+    /// Its class.
+    #[serde(default)]
+    pub model: Class,
+    /// The label of the session that started it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub planner: Option<String>,
+    /// The brief it carries out: `b<n>`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub brief: Option<String>,
+}
+
+/// A brief's id, trimmed: `b<n>`, or none.
+///
+/// # Errors
+///
+/// When it isn't `b` and a number.
+pub fn brief(id: Option<&str>) -> Result<Option<String>, String> {
+    let Some(id) = id.map(str::trim).filter(|i| !i.is_empty()) else {
+        return Ok(None);
+    };
+    match id.strip_prefix('b').map(str::parse::<u32>) {
+        Some(Ok(n)) if n > 0 => Ok(Some(format!("b{n}"))),
+        _ => Err("`brief` is a brief's id: `b<n>`".into()),
+    }
+}
+
+/// What a session declares, from `model`, `planner` and `brief`: an executor names its planner
+/// and brief, and a planner names neither.
+///
+/// # Errors
+///
+/// Which one is wrong or missing.
+pub fn declare(
+    model: Option<&str>,
+    planner: Option<&str>,
+    brief_id: Option<&str>,
+) -> Result<Declared, String> {
+    let model = Class::parse(model)?;
+    let planner = session(planner).map_err(|_| {
+        format!("`planner` is the label of the session that started this one: one line of at most {MAX_SESSION} characters")
+    })?;
+    let brief = brief(brief_id)?;
+    if model == Class::Opus && (planner.is_some() || brief.is_some()) {
+        return Err("an opus session plans; `planner` and `brief` are an executor's".into());
+    }
+    if model != Class::Opus && (planner.is_none() || brief.is_none()) {
+        return Err(format!(
+            "a {} session executes a brief: name its `planner` and its `brief`",
+            model.name()
+        ));
+    }
+    Ok(Declared {
+        model,
+        planner,
+        brief,
+    })
 }
 
 /// An open change, as D1 mirrors it.

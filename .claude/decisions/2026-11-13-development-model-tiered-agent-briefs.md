@@ -5,6 +5,7 @@
 * Author: Willow Graysen (@noisypigeon).
 * Category: development
 * Governs: `src/pigeon-cli/crates/backplane/src/sessions.rs`, `src/pigeon-cli/crates/backplane/src/tasks.rs`, `tooling/session/session.py`
+* Governs: `src/pigeon-cli/crates/backplane/src/sessions.rs`, `src/pigeon-cli/crates/backplane/src/tasks.rs`, `tooling/session/session.py`, `tooling/session/models.json`
 
 ## Context
 
@@ -369,3 +370,26 @@ first to be split into briefs, as the trial of this ADR.
   `haiku` brief, starts two sessions with `create_session`, and both changes
   merge after review. Every decision in both diffs traces to a line of a
   brief.
+
+## Amendments
+
+### 2026-11-13: Step 1 splits in two; its first half lands on `session.start` and `session.status`
+
+- **Paths.** `Governs` gains `tooling/session/models.json`.
+- **Why two halves.** A session's class lives in the `Instance`, beside its
+  ticket. `session.start` and `session.status` read it there. `change_list`
+  reads D1 rows, and an event is appended by whichever object acts, so each
+  needs the class carried to it. Those come together in step 1b.
+- **Step 1a, this change:**
+  - `sessions::Class`: `haiku`, `sonnet` and `opus`, ordered by capability,
+    `opus` by default, each with its role and `covers`;
+  - `sessions::declare`: an executor must name its `planner` and its `brief`
+    (`b<n>`), and an opus session may name neither. A brief's existence
+    isn't checked until step 2 makes briefs;
+  - `tickets::Issued` keeps what was declared, read as `opus` from a ticket
+    stored before, so live sessions keep working;
+  - `session.start` takes `model`, `planner` and `brief`, answers `model` and
+    `role`, and its event names the class;
+  - `session.status` answers `model`, `role`, `planner` and `brief`;
+  - `tooling/session/models.json` maps each class to its model ID.
+- **Step 1b:** `model` on `change_list`'s rows and on each event.

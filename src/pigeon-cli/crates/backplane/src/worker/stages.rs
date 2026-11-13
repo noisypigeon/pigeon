@@ -172,8 +172,24 @@ pub async fn session(env: &Env, s: &Settings, args: &Map<String, Value>) -> Resu
         .filter(|t| t["session"].as_str() == Some(label) || t["claimed_by"].as_str() == Some(label))
         .collect();
     let (_, cursor) = to_instance(env, s, "/events/cursor", &json!({ "session": label })).await?;
+    let (_, t) = to_instance(env, s, "/tickets/list", &json!({})).await?;
+    let tickets: crate::tickets::Tickets = serde_json::from_value(t).unwrap_or_default();
+    let declared = tickets
+        .0
+        .get(label)
+        .map(|i| i.declared.clone())
+        .unwrap_or_default();
     Ok((
         200,
-        json!({ "session": label, "changes": changes, "tasks": mine, "events": cursor }),
+        json!({
+            "session": label,
+            "model": declared.model,
+            "role": declared.model.role(),
+            "planner": declared.planner,
+            "brief": declared.brief,
+            "changes": changes,
+            "tasks": mine,
+            "events": cursor,
+        }),
     ))
 }

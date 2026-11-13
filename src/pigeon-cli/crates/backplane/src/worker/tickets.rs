@@ -1,6 +1,7 @@
 //! Session tickets in the control plane: `session.start`, the `Instance` object's record of
 //! them, and the guard on agents' operations; see
-//! `.claude/decisions/2026-11-08-development-events-tickets-digest-mandate.md` §5.
+//! `.claude/decisions/2026-11-08-development-events-tickets-digest-mandate.md` §5, and, for the
+//! class a session declares, `.claude/decisions/2026-11-13-development-model-tiered-agent-briefs.md` §1.
 
 use serde_json::{Value, json};
 use worker::{Env, Method, Response, Result, State};
@@ -37,11 +38,16 @@ pub async fn start(
     };
     let replace = matches!(args.get("replace"), Some(Value::Bool(true)))
         || args.get("replace").and_then(Value::as_str) == Some("true");
+    let text = |k: &str| args.get(k).and_then(Value::as_str);
+    let declared = match crate::sessions::declare(text("model"), text("planner"), text("brief")) {
+        Ok(d) => d,
+        Err(why) => return Ok((400, json!(why))),
+    };
     let (status, v) = to_instance(
         env,
         s,
         "/tickets/start",
-        &json!({ "label": label, "replace": replace }),
+        &json!({ "label": label, "replace": replace, "declared": declared }),
     )
     .await?;
     if status != 200 {
@@ -55,11 +61,24 @@ pub async fn start(
     } else {
         "session.started"
     };
-    let said = format!("session {label} has ticket {generation}");
+    let class = declared.model;
+    let said = format!(
+        "session {label} has ticket {generation}, as {} ({})",
+        class.name(),
+        class.role()
+    );
     super::events::append(env, s, kind, None, Some(label.clone()), &said, false).await?;
     Ok((
         200,
-        json!({ "label": label, "ticket": sign(&key(env)?, &label, generation, expires), "expires": expires }),
+        json!({
+            "label": label,
+            "ticket": sign(&key(env)?, &label, generation, expires),
+            "expires": expires,
+            "model": class,
+            "role": class.role(),
+            "planner": declared.planner,
+            "brief": declared.brief,
+        }),
     ))
 }
 
@@ -193,7 +212,13 @@ pub async fn serve(state: &State, path: &str, body: &Value) -> Result<Response> 
     match path {
         "/tickets/start" => {
             let label = body["label"].as_str().unwrap_or_default();
-            match all.start(label, body["replace"].as_bool() == Some(true), now()) {
+            let declared = serde_json::from_value(body["declared"].clone()).unwrap_or_default();
+            match all.start_as(
+                label,
+                body["replace"].as_bool() == Some(true),
+                now(),
+                declared,
+            ) {
                 Ok(issued) => {
                     storage.put(TICKETS, &all).await?;
                     Response::from_json(&issued)

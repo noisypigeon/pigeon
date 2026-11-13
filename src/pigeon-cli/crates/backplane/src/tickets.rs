@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use sha2::Sha256;
 
 use crate::push::{b64url, b64url_decode};
+use crate::sessions::Declared;
 
 /// How long a ticket lives, in seconds.
 pub const TTL: u64 = 24 * 60 * 60;
@@ -72,13 +73,17 @@ pub fn verify(key: &[u8], ticket: &str, now: u64) -> Result<(String, u32), Strin
     Ok((label, generation))
 }
 
-/// One label's ticket as issued: its generation and expiry.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+/// One label's ticket as issued: its generation, expiry, and what its session declared.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Issued {
     /// Rises each time the label is started, so an older ticket stops working.
     pub generation: u32,
     /// When it expires, in Unix seconds.
     pub expires: u64,
+    /// Its class, planner and brief; see
+    /// `.claude/decisions/2026-11-13-development-model-tiered-agent-briefs.md` §1.
+    #[serde(default)]
+    pub declared: Declared,
 }
 
 /// Every label's ticket as issued.
@@ -86,13 +91,29 @@ pub struct Issued {
 pub struct Tickets(pub BTreeMap<String, Issued>);
 
 impl Tickets {
-    /// Issues `label` a ticket at `now`: refused while a live one exists unless `replace`,
-    /// which revokes it.
+    /// Issues `label` a ticket at `now`, as an opus session: refused while a live one exists
+    /// unless `replace`, which revokes it.
     ///
     /// # Errors
     ///
     /// When `label` holds a live ticket and `replace` is false.
     pub fn start(&mut self, label: &str, replace: bool, now: u64) -> Result<Issued, String> {
+        self.start_as(label, replace, now, Declared::default())
+    }
+
+    /// As [`Tickets::start`], for a session that declared `declared`; a replacement may declare
+    /// another class.
+    ///
+    /// # Errors
+    ///
+    /// When `label` holds a live ticket and `replace` is false.
+    pub fn start_as(
+        &mut self,
+        label: &str,
+        replace: bool,
+        now: u64,
+        declared: Declared,
+    ) -> Result<Issued, String> {
         self.0.retain(|_, i| i.expires + REMEMBER > now);
         let live = self.live(label, now).is_some();
         let generation = match self.0.get(label) {
@@ -107,8 +128,9 @@ impl Tickets {
         let issued = Issued {
             generation,
             expires: now + TTL,
+            declared,
         };
-        self.0.insert(label.to_string(), issued);
+        self.0.insert(label.to_string(), issued.clone());
         Ok(issued)
     }
 
@@ -127,7 +149,7 @@ impl Tickets {
     /// `label`'s live ticket, if any.
     #[must_use]
     pub fn live(&self, label: &str, now: u64) -> Option<Issued> {
-        self.0.get(label).filter(|i| i.expires > now).copied()
+        self.0.get(label).filter(|i| i.expires > now).cloned()
     }
 
     /// How long `label` has had no live ticket at `now`: since its last one lapsed, while that is

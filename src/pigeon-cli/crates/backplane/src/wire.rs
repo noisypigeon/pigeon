@@ -459,7 +459,7 @@ const CATALOG: &[Operation] = &[
         name: "session.status",
         engine: Engine::Backplane,
         effect: Effect::Read,
-        summary: "Session `session`'s open changes, oldest first, each with its stage (`stage`, `needs`, `waits_on`, `next`, `since`), its tasks, and its event cursor: `after`, `polled` and whether it is `listening` (polled within two minutes)",
+        summary: "Session `session`'s class (`model`, `role`, and an executor's `planner` and `brief`), its open changes, oldest first, each with its stage (`stage`, `needs`, `waits_on`, `next`, `since`), its tasks, and its event cursor: `after`, `polled` and whether it is `listening` (polled within two minutes)",
         args: &[arg("session", true, Kind::String)],
     },
     Operation {
@@ -473,10 +473,13 @@ const CATALOG: &[Operation] = &[
         name: "session.start",
         engine: Engine::Backplane,
         effect: Effect::Build,
-        summary: "A ticket for session `label` (its URL), lasting 24 hours; pass it as `ticket` on every change it proposes and acts on, and as the X-Pigeon-Ticket header on its pushes. A label already holding a live ticket is refused unless `replace`, which revokes that one",
+        summary: "A ticket for session `label` (its URL), lasting 24 hours; pass it as `ticket` on every change it proposes and acts on, and as the X-Pigeon-Ticket header on its pushes. A label already holding a live ticket is refused unless `replace`, which revokes that one. `model` is the session's class, `haiku`, `sonnet` or `opus` (the default); an executor (haiku or sonnet) names its `planner`'s label and its `brief` (`b<n>`)",
         args: &[
             arg("label", true, Kind::String),
             arg("replace", false, Kind::Text),
+            arg("model", false, Kind::String),
+            arg("planner", false, Kind::String),
+            arg("brief", false, Kind::String),
         ],
     },
     Operation {
