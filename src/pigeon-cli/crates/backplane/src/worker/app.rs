@@ -189,7 +189,11 @@ pub async fn auto_start(env: &Env, s: &Settings, body: &Value) -> Result<Respons
     if status != 200 {
         return Response::error(v.as_str().unwrap_or("Auto didn't start").to_string(), 409);
     }
-    worker::console_log!("an Auto window started for {hours} hours");
+    let said = format!(
+        "Auto window {} started for {hours} hours",
+        v["window"]["id"].as_u64().unwrap_or_default()
+    );
+    let _ = super::events::append(env, s, "auto.started", None, None, &said, false).await;
     Response::from_json(&v)
 }
 
@@ -221,5 +225,10 @@ pub async fn auto_end(env: &Env, s: &Settings, body: &Value) -> Result<Response>
             409,
         );
     }
+    let said = format!(
+        "Auto window {} ended by the owner",
+        v["window"]["id"].as_u64().unwrap_or_default()
+    );
+    let _ = super::events::append(env, s, "auto.ended", None, None, &said, false).await;
     Response::from_json(&v)
 }

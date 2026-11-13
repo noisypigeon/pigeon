@@ -176,7 +176,11 @@ pub async fn approves(
 /// When a binding fails.
 pub async fn pause_all(env: &Env, s: &Settings, why: &str) -> Result<()> {
     to_instance(env, s, "/mandates/pause", &json!({ "why": why })).await?;
-    to_instance(env, s, "/windows/pause", &json!({ "why": why })).await?;
+    let (_, v) = to_instance(env, s, "/windows/pause", &json!({ "why": why })).await?;
+    if let Some(id) = v["paused"].as_u64() {
+        let said = format!("Auto window {id} paused: {why}");
+        let _ = super::events::append(env, s, "auto.paused", None, None, &said, false).await;
+    }
     Ok(())
 }
 
