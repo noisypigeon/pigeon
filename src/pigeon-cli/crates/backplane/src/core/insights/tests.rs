@@ -5,7 +5,7 @@ use serde_json::json;
 use super::{
     AGENT_LOST, BUILDKITE, CANCELLED_BUILDS, CANCELLED_RUNS, CATCH_UP, DAY, FAILED_CHECKS,
     FAILED_SIGN, GITHUB, HOUR, MACOS_MINUTES, Row, buildkite, due, github, job_minutes,
-    macos_minute, price, stacks, unix,
+    macos_minute, note, price, stacks, unix,
 };
 
 const NOW: u64 = 1_800_003_600 + 25 * 60;
@@ -137,4 +137,17 @@ fn buildkite_minutes_are_each_jobs_run_rounded_up() {
         { "started_at": null, "finished_at": null }
     ] });
     assert_eq!(job_minutes(&build), 10.0);
+}
+
+#[test]
+fn an_empty_range_totals_plus_zero_and_says_why_a_source_is_empty() {
+    let cf = stacks(&[], "cost", Some(super::CLOUDFLARE), 1, NOW).expect("a day");
+    let total = cf["total"].as_f64().expect("a number");
+    assert!(total == 0.0 && total.is_sign_positive(), "not -0.0");
+    assert_eq!(cf["legend"], json!([]));
+    assert_eq!(cf["note"], note("cost", super::CLOUDFLARE).expect("a note"));
+    let all = stacks(&[], "errors", None, 1, NOW).expect("a day");
+    assert!(all["note"].is_null(), "the tiles carry no note");
+    assert!(note("cost", BUILDKITE).is_none());
+    assert!(note("cost", GITHUB).is_some());
 }

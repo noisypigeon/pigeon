@@ -84,12 +84,12 @@ struct Block: ViewModifier {
 
     func body(content: Content) -> some View {
         content
+            .background(RoundedRectangle(cornerRadius: radius).fill(Theme.card))
             .background(
                 RoundedRectangle(cornerRadius: radius)
                     .fill(shadow)
                     .offset(x: 3, y: 3)
             )
-            .background(RoundedRectangle(cornerRadius: radius).fill(Theme.card))
     }
 }
 

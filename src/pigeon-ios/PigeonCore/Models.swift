@@ -44,10 +44,12 @@ public struct Stacks: Codable, Equatable, Sendable {
     public let estimate: Bool
     public let legend: [LegendEntry]
     public let buckets: [Bucket]
+    /// Why the source has no rows, or only some kinds, for the metric.
+    public let note: String?
 
     public init(
         metric: String, source: String?, range: Int, step: Int, total: Double, estimate: Bool,
-        legend: [LegendEntry], buckets: [Bucket]
+        legend: [LegendEntry], buckets: [Bucket], note: String? = nil
     ) {
         self.metric = metric
         self.source = source
@@ -57,6 +59,7 @@ public struct Stacks: Codable, Equatable, Sendable {
         self.estimate = estimate
         self.legend = legend
         self.buckets = buckets
+        self.note = note
     }
 }
 

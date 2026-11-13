@@ -49,6 +49,10 @@ struct ChartSheet: View {
                     Text("Estimated from usage at published prices.")
                         .font(.caption).foregroundStyle(Theme.muted)
                 }
+                if let note = stacks?.note {
+                    Label(note, systemImage: "info.circle")
+                        .font(.caption).foregroundStyle(Theme.ink2)
+                }
                 bars.frame(height: 220).padding(14).block()
                 legend
                 Spacer()
@@ -105,6 +109,7 @@ struct ChartSheet: View {
                     }
                 }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
             .overlay(alignment: .bottom) { Rectangle().fill(Theme.ink).frame(height: 2) }
             .overlay {
                 if (stacks?.buckets ?? []).allSatisfy({ $0.total == 0 }) {

@@ -320,8 +320,7 @@ pub fn stacks(
                     let v: f64 = picked
                         .iter()
                         .filter(|r| r.hour >= at && r.hour < at + step && part(r) == *n)
-                        .map(|r| r.value)
-                        .sum();
+                        .fold(0.0, |a, r| a + r.value);
                     json!({ "name": n, "value": v })
                 })
                 .collect();
@@ -334,14 +333,27 @@ pub fn stacks(
             let total: f64 = picked
                 .iter()
                 .filter(|r| part(r) == *n)
-                .map(|r| r.value)
-                .sum();
+                .fold(0.0, |a, r| a + r.value);
             json!({ "name": n, "total": total })
         })
         .collect();
-    let total: f64 = picked.iter().map(|r| r.value).sum();
+    // From +0.0: `f64`'s `Sum` starts at -0.0, which the app would show as `$-0.00`.
+    let total = picked.iter().fold(0.0, |a, r| a + r.value);
     Ok(json!({
         "metric": metric, "source": source, "range": range, "step": step,
         "total": total, "estimate": metric == "cost", "legend": legend, "buckets": buckets,
+        "note": source.and_then(|s| note(metric, s)),
     }))
+}
+
+/// Why `source` has no rows, or only some kinds, for `metric`: what the app shows beside
+/// its chart. See the ADR's 2026-11-13 amendment.
+#[must_use]
+pub fn note(metric: &str, source: &str) -> Option<&'static str> {
+    match (metric, source) {
+        (_, CLOUDFLARE) => Some("Not collected yet: Cloudflare waits for the observability token."),
+        ("cost", GITHUB) => Some("GitHub Actions is free while the repository is public."),
+        ("errors", GITHUB) => Some("Dispatch errors aren't recorded yet."),
+        _ => None,
+    }
 }

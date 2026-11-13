@@ -75,11 +75,23 @@ import PigeonCore
     @Test func wordsAreTheMockups() {
         #expect(formatted(1.2, metric: "cost") == "$1.20")
         #expect(formatted(3.0, metric: "errors") == "3")
+        #expect(formatted(-0.0, metric: "cost") == "$0.00", "never $-0.00")
         #expect(label(at: 14 * 3_600, step: 3_600, now: 15 * 3_600) == "14:00")
         #expect(label(at: 0, step: 86_400, now: 86_400 + 5) == "Yesterday")
         #expect(remaining(until: 10_000, now: 0) == "2h 46m")
         #expect(remaining(until: 600, now: 0) == "10m")
         #expect(sourceName("github") == "GitHub")
         #expect(tierBadge(nil) == "CODE")
+    }
+
+    @Test func aSourcesNoteIsReadAndOptional() throws {
+        let json = """
+            {"metric":"cost","source":"cloudflare","range":1,"step":3600,"total":0,
+             "estimate":true,"legend":[],"buckets":[],"note":"Not collected yet."}
+            """
+        let s = try JSONDecoder.pigeon.decode(Stacks.self, from: Data(json.utf8))
+        #expect(s.note == "Not collected yet.")
+        let bare = json.replacingOccurrences(of: ",\"note\":\"Not collected yet.\"", with: "")
+        #expect(try JSONDecoder.pigeon.decode(Stacks.self, from: Data(bare.utf8)).note == nil)
     }
 }

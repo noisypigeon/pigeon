@@ -399,3 +399,13 @@ Steps 3 to 7 each add the backplane files they create to this ADR's
   answers 410, or 400 `BadDeviceToken`, for is dropped.
 - **Production APNs only,** `api.push.apple.com`: TestFlight builds use it,
   and phase one has no development builds.
+
+### 2026-11-13: A source says why it's empty
+
+- **`GET /v0/app/insights` answers `note`** when a source isn't collected,
+  or only partly, for the metric: Cloudflare until `OBSERVABILITY_TOKEN`;
+  GitHub's cost, $0 while the repository is public; GitHub's dispatch errors,
+  not yet recorded. The chart shows it under the total. Home's tiles carry
+  none.
+- **Totals sum from +0.0.** An empty range read `$-0.00`, because `f64`'s
+  `Sum` starts at -0.0.

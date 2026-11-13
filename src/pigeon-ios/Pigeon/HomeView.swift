@@ -207,6 +207,7 @@ struct MiniBars: View {
                     }
                 }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
             .overlay(alignment: .bottom) { Rectangle().fill(Theme.ink).frame(height: 2) }
         }
         .accessibilityHidden(true)

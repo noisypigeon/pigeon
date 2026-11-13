@@ -28,7 +28,9 @@ public func segments(
 }
 
 /// A metric's value in words: dollars to the cent for cost, a whole count for errors.
+/// Never `-0`: a sum of nothing may be -0.0.
 public func formatted(_ value: Double, metric: String) -> String {
+    let value = value == 0 ? 0 : value
     if metric == "cost" {
         return String(format: "$%.2f", value)
     }
