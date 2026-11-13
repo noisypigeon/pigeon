@@ -575,3 +575,31 @@ The fix:
   `restack.failed` joins the event log with the reason.
 - **The change stays `behind`,** so the next merge restacks it again, or the
   session rebases and pushes.
+
+### 2026-11-13: A change restacks when its merge turn comes; an approval carries across a clean restack of the same patch
+
+Every merge restacked every other checked or approved change: up to 19
+restack jobs on the `Runner`'s 8 Containers. And an approval carried only
+across a disjoint restack. So on 2026-11-13, !316, !320 and !323 were each
+approved again after every merge ahead of them, and !327's restack was lost
+3 times in the burst.
+
+- **A merge marks the other open changes `behind`, and restacks none of
+  them.** A change restacks only when a merge waits on it:
+  - **`change_merge` on an approved head that is behind** parks the merge,
+    and restacks first, instead of starting a merge gate that the merge job
+    would refuse.
+  - **A merge refused while behind** restacks and merges again under the
+    head's approval, instead of asking for the merge again.
+  - **A head checked while behind** restacks then only when a merge waits on
+    it.
+
+  Overlap and conflicts are therefore found when a change's turn comes, not
+  after every merge. The 2026-11-12 ADR's §5 conflict forecasts will bring
+  that warning back early, without a push or checks.
+- **An approval carries across a clean restack, not only a disjoint one,**
+  when `git patch-id --stable` is unchanged and the merge tier is no higher.
+  - This amends §3's rule. The approver's diff is exactly what merges, and
+    the new head is checked again, with the full gate after a clean restack.
+  - Checks still carry only across a disjoint restack.
+  - A changed patch asks again, as before.

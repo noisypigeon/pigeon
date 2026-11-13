@@ -77,8 +77,9 @@ fn current() -> Event {
     }
 }
 
-/// `c` behind `main`, its restack job running.
-fn restacking(c: Change) -> Change {
+/// `c` behind `main` with a merge waiting on it, its restack job running.
+fn restacking(mut c: Change) -> Change {
+    c.merge_after = Some("owner".into());
     run(
         c,
         vec![
@@ -226,10 +227,11 @@ fn each_event_steps_a_change_to_its_next_state_with_its_effects() {
 
 #[test]
 fn a_held_head_that_is_no_sha_is_dropped_and_the_restack_report_kept() {
-    let c = run(
+    let mut c = run(
         restacking(approved()),
         vec![Event::Pushed { sha: "main".into() }],
     );
+    c.merge_after = None;
     assert_eq!(c.held.as_deref(), Some("main"));
     let (c, effects) = step(&c, current()).expect("the report applies");
     assert_eq!(effects, Vec::new());
@@ -451,48 +453,39 @@ fn restacks(effects: &[Effect]) -> bool {
 }
 
 #[test]
-fn a_head_checked_while_behind_restacks_then() {
+fn a_head_checked_while_behind_waits_for_its_merge_turn_then_restacks() {
     let c = run(pushed(), vec![behind_main()]);
     assert_eq!(status(&c, RESTACK), None, "not while its checks run");
     let (c, effects) = step(&c, bounded(Vec::new())).expect("bounded");
     assert_eq!(c.state, State::Checked);
+    assert!(!restacks(&effects), "no merge waits: {effects:?}");
+    let approve = Event::Approve {
+        by: "owner".into(),
+        sha: A.into(),
+        at: 1,
+    };
+    let (c, effects) = step(&c, approve).expect("approved");
+    assert!(!restacks(&effects), "approving alone restacks nothing");
+    let (c, effects) = step(&c, merge()).expect("its turn");
     assert!(restacks(&effects), "{effects:?}");
-    assert_eq!(status(&c, RESTACK), Some(JobStatus::Queued));
-    assert_eq!(c.carried, None, "nothing approved to carry");
+    assert_eq!(
+        c.merge_after.as_deref(),
+        Some("owner"),
+        "the merge waits, parked"
+    );
+    assert_eq!(
+        status(&c, MERGE),
+        None,
+        "no gate on a head that would be refused"
+    );
 }
 
 #[test]
-fn a_head_whose_last_check_passes_while_behind_restacks_then() {
-    let fmt = Event::Bounded {
-        sha: A.into(),
-        violations: Vec::new(),
-        checks: vec![Check {
-            name: "fmt".into(),
-            argv: Vec::new(),
-        }],
-        full: Vec::new(),
-        tiers: None,
-        gate: None,
-    };
-    let c = run(
-        pushed(),
-        vec![
-            fmt,
-            Event::Started {
-                job: "fmt".into(),
-                sha: A.into(),
-            },
-            behind_main(),
-        ],
-    );
-    let passed = Event::Finished {
-        job: "fmt".into(),
-        sha: A.into(),
-        ok: true,
-    };
-    let (c, effects) = step(&c, passed).expect("settles");
-    assert_eq!(c.state, State::Checked);
-    assert!(restacks(&effects), "{effects:?}");
+fn a_merge_behind_main_marks_others_behind_without_restacking_them() {
+    let (c, effects) = step(&approved(), behind_main()).expect("behind");
+    assert_eq!(c.behind.as_deref(), Some(M));
+    assert_eq!(effects, Vec::new());
+    assert_eq!(status(&c, RESTACK), None);
 }
 
 #[test]
@@ -640,4 +633,38 @@ fn a_restack_lost_on_its_last_attempt_gives_back_a_parked_merge() {
         c.violations
     );
     assert_eq!(c.head.as_deref(), Some(A), "nothing else moved");
+}
+
+#[test]
+fn an_approval_carries_across_a_clean_restack_of_the_same_patch_only() {
+    let clean = |same_patch: bool| Event::Restacked {
+        sha: A.into(),
+        restack: Restacked {
+            relation: Relation::Clean,
+            to: Some(B.into()),
+            same_patch,
+            conflicts: Vec::new(),
+            onto: M.into(),
+            context: Vec::new(),
+            messages: String::new(),
+            landed: false,
+        },
+    };
+    let mut c = approved();
+    c.tiers = serde_json::from_value(serde_json::json!({
+        "authorize": { "rule": "routine", "tier": "confirm" },
+        "merge": { "rule": "deploys", "tier": "code" },
+        "close": { "rule": "close", "tier": "confirm" },
+    }))
+    .ok();
+    assert!(c.tiers.is_some());
+    let base = restacking(c);
+    let (same, _) = step(&base, clean(true)).expect("restacked");
+    assert_eq!(same.head.as_deref(), Some(B));
+    assert!(
+        same.carried.is_some(),
+        "the same patch carries its approval"
+    );
+    let (changed, _) = step(&base, clean(false)).expect("restacked");
+    assert_eq!(changed.carried, None, "a changed patch asks again");
 }

@@ -110,13 +110,15 @@ fn a_merge_on_its_way_keeps_its_turn() {
     apply(&mut gate, merge());
     assert!(holds_turn(&gate), "a gate check queued, its merge parked");
 
+    // Behind, it waits for its turn; the merge restacks it first, parked.
     let mut restack = approved_175();
+    assert_eq!(apply(&mut restack, behind()), []);
+    assert!(!holds_turn(&restack), "behind, nothing asked");
     assert_eq!(
-        apply(&mut restack, behind()),
+        apply(&mut restack, merge()),
         [Effect::Start(RESTACK.into())]
     );
-    assert!(holds_turn(&restack), "a restack queued");
-    apply(&mut restack, merge());
+    assert!(holds_turn(&restack), "a restack queued for its merge");
     assert!(restack.merge_after.is_some(), "a merge parked");
 
     let mut merging = approved_175();

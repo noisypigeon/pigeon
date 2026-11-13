@@ -161,9 +161,7 @@ fn restacked(relation: Relation, to: Option<&str>, same_patch: bool) -> Event {
 #[test]
 fn an_approved_disjoint_head_is_restacked_and_keeps_its_approval() {
     let mut c = approved();
-    let effects = c
-        .apply(Event::Behind { main: MAIN.into() })
-        .expect("behind");
+    let effects = behind_for_turn(&mut c);
     assert_eq!(effects, [Effect::Start(RESTACK.into())]);
     c.apply(restacked(Relation::Disjoint, Some(C), true))
         .expect("restacked");
@@ -183,8 +181,7 @@ fn an_approved_disjoint_head_is_restacked_and_keeps_its_approval() {
 #[test]
 fn a_push_during_a_restack_is_held_until_the_restack_reports() {
     let mut c = approved();
-    c.apply(Event::Behind { main: MAIN.into() })
-        .expect("behind");
+    behind_for_turn(&mut c);
     assert_eq!(
         c.apply(Event::Pushed { sha: C.into() }).expect("held"),
         [],
@@ -205,8 +202,7 @@ fn a_push_during_a_restack_is_held_until_the_restack_reports() {
 #[test]
 fn a_sessions_push_during_a_failed_restack_becomes_the_head() {
     let mut c = approved();
-    c.apply(Event::Behind { main: MAIN.into() })
-        .expect("behind");
+    behind_for_turn(&mut c);
     c.apply(Event::Started {
         job: RESTACK.into(),
         sha: A.into(),
@@ -314,8 +310,7 @@ fn finish(c: &mut Change, sha: &str) -> Vec<Effect> {
 #[test]
 fn a_merge_asked_for_while_restacking_starts_once_the_approval_carries() {
     let mut c = approved();
-    c.apply(Event::Behind { main: MAIN.into() })
-        .expect("behind");
+    behind_for_turn(&mut c);
     let asked = c.apply(Event::Merge { by: "owner".into() }).expect("merge");
     assert_eq!(asked, [], "it waits for the restack");
     assert_eq!(c.merge_after.as_deref(), Some("owner"));
@@ -667,8 +662,7 @@ fn a_merge_offered_at_any_point_of_a_restack_keeps_the_turn_and_gates_once_carri
                 );
             }
         };
-        c.apply(Event::Behind { main: MAIN.into() })
-            .expect("behind");
+        behind_for_turn(&mut c);
         offer(&mut c, 0);
         c.apply(restacked(Relation::Disjoint, Some(C), true))
             .expect("restacked");
@@ -741,8 +735,8 @@ fn an_alarm_catches_up_on_events_applied_while_it_ran() {
 fn a_restacked_head_with_nothing_left_to_check_carries_its_approval_at_bound() {
     // !185: an ADR change's restacked head went to checked at bound, its approval never carried.
     let mut c = approved_with(&[], &[]);
-    c.apply(Event::Behind { main: MAIN.into() })
-        .expect("behind");
+    behind_for_turn(&mut c);
+    c.merge_after = None;
     c.apply(restacked(Relation::Disjoint, Some(C), true))
         .expect("restacked");
     c.apply(Event::Bounded {
@@ -765,8 +759,7 @@ fn a_restacked_head_with_nothing_left_to_check_carries_its_approval_at_bound() {
 fn an_approved_head_with_a_carry_left_over_merges_and_a_parked_merge_starts_on_approval() {
     // !181: approved by hand while its carry was pending; its merge parked forever.
     let mut c = approved_with(&[], &[]);
-    c.apply(Event::Behind { main: MAIN.into() })
-        .expect("behind");
+    behind_for_turn(&mut c);
     c.apply(restacked(Relation::Disjoint, Some(C), true))
         .expect("restacked");
     c.apply(Event::Merge { by: "owner".into() })
@@ -789,8 +782,7 @@ fn an_approved_head_with_a_carry_left_over_merges_and_a_parked_merge_starts_on_a
     );
 
     let mut c = approved_with(&["fmt"], &[]);
-    c.apply(Event::Behind { main: MAIN.into() })
-        .expect("behind");
+    behind_for_turn(&mut c);
     c.apply(restacked(Relation::Disjoint, Some(C), true))
         .expect("restacked");
     c.apply(Event::Bounded {
@@ -858,8 +850,9 @@ fn restacked_onto_c(
     checks: &[&str],
     full: &[&str],
 ) -> Vec<Effect> {
-    c.apply(Event::Behind { main: MAIN.into() })
-        .expect("behind");
+    behind_for_turn(c);
+    // The merge that asked for the restack is left out, so its carry is seen alone.
+    c.merge_after = None;
     c.apply(restacked(relation, Some(C), true))
         .expect("restacked");
     c.apply(Event::Bounded {
@@ -933,4 +926,15 @@ fn a_clean_restack_or_changed_patch_runs_its_checks_again() {
         .apply(restacked(Relation::Disjoint, Some(C), false))
         .expect("restacked");
     assert!(changed.kept.is_empty(), "another patch keeps nothing");
+}
+
+/// `c` marked behind `main`, then its merge turn: the restack starts for the parked merge; see
+/// the concurrent-sessions ADR's 2026-11-13 amendment on turn-time restacks.
+fn behind_for_turn(c: &mut Change) -> Vec<Effect> {
+    let none = c
+        .apply(Event::Behind { main: MAIN.into() })
+        .expect("behind");
+    assert_eq!(none, [], "behind alone restacks nothing");
+    c.apply(Event::Merge { by: "owner".into() })
+        .expect("its turn")
 }

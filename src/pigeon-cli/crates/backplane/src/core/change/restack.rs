@@ -14,15 +14,31 @@ impl Change {
             return refuse(format!("{} has no head to be behind", self.branch()));
         };
         self.behind = Some(main);
+        // Restacked when its merge turn comes; see the concurrent-sessions ADR's 2026-11-13
+        // amendment on turn-time restacks.
+        if self.merge_after.is_none() {
+            return Ok((self, Vec::new()));
+        }
         Ok(self.start_restack(head))
     }
 
-    /// A checked or approved head that is `behind`, with no restack or merge running, restacks;
-    /// otherwise nothing; see the 2026-11-12 amendment to the concurrent-sessions ADR.
+    /// A head that is `behind` with a merge waiting on it, and no restack or merge running,
+    /// restacks; otherwise nothing.
     pub(super) fn restack_if_behind(self) -> (Change, Vec<Effect>) {
         match self.head.clone() {
-            Some(head) if self.behind.is_some() => self.start_restack(head),
+            Some(head) if self.behind.is_some() && self.merge_after.is_some() => {
+                self.start_restack(head)
+            }
             _ => (self, Vec::new()),
+        }
+    }
+
+    /// A merge asked for on a head that is `behind`: it waits, parked, while the head restacks.
+    pub(super) fn restack_for_merge(mut self, by: &str) -> (Change, Vec<Effect>) {
+        self.merge_after = Some(by.to_string());
+        match self.head.clone() {
+            Some(head) => self.start_restack(head),
+            None => (self, Vec::new()),
         }
     }
 
@@ -72,7 +88,11 @@ impl Change {
             return Ok((self, Vec::new()));
         }
         self = self.set_status(RESTACK, JobStatus::Passed);
+        // Checks carry only when disjoint; an approval also across a clean restack of the same
+        // patch, its head checked in full again.
         let carries = r.relation == Relation::Disjoint && r.same_patch;
+        let approval_carries =
+            matches!(r.relation, Relation::Disjoint | Relation::Clean) && r.same_patch;
         if r.landed {
             self.behind = None;
             self.carried = None;
@@ -115,7 +135,7 @@ impl Change {
             }
             (_, Some(to)) => {
                 self.carried = match self.carried.take() {
-                    Some(mut c) if carries && c.from == sha => {
+                    Some(mut c) if approval_carries && c.from == sha => {
                         c.to = Some(to.clone());
                         Some(c)
                     }

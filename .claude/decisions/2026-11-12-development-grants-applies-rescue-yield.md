@@ -917,3 +917,26 @@ and that an Auto window from the app approves it.
   `!79 (+!85 +!86)`.
 - **This completes the eviction ADR's §2,** after F1 and F2. Its §3 to §7
   follow as F4's next changes.
+
+### 2026-11-13: The factory bugs found while landing F1 to F4
+
+Each fix is its own change.
+
+1. **The front door answered git's flush probe with 400.** Before a large
+   pack, git POSTs a lone `0000` and needs a 200. It is now answered 200
+   (front-door ADR, 2026-11-13). This, not shallow clones, was why a
+   session's first large push failed.
+2. **A stale `starting` slot redeployed a deployed head,** which failed with
+   no reason and paused Auto. A deployed head is now dropped from the slot,
+   and a failed deploy always records why (deploys-itself ADR, 2026-11-13).
+3. **A restack lost on its last attempt did nothing.** Now:
+   - its held push applies;
+   - its parked merge's turn goes back;
+   - the session gets a `restack-failed` task and event.
+
+   See the concurrent-sessions ADR, 2026-11-13.
+4. **Every merge restacked every change, and approvals didn't carry across
+   clean restacks.** Restacks now happen at the merge turn, and a clean
+   restack of the same patch keeps its approval (same amendment). This is
+   §5's turn-time restack. §5's conflict forecasts, yields and the loop
+   breaker are still to come.

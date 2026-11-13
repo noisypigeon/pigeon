@@ -71,7 +71,11 @@ impl Change {
                 }
                 self = self.set_status(MERGE, JobStatus::Failed);
                 self.violations = vec![reason];
-                Ok(self.restack_if_behind())
+                // Behind, it restacks and merges again under its approval.
+                match self.approval.as_ref().map(|a| a.by.clone()) {
+                    Some(by) if self.behind.is_some() => Ok(self.restack_for_merge(&by)),
+                    _ => Ok((self, Vec::new())),
+                }
             }
             Event::Close => {
                 if self.state == State::Merged {
@@ -190,6 +194,9 @@ impl Change {
         if restacking || carrying {
             self.merge_after = Some(by.to_string());
             return Ok((self, Vec::new()));
+        }
+        if self.state == State::Approved && self.behind.is_some() {
+            return Ok(self.restack_for_merge(by));
         }
         self.start_merge(by)
     }
