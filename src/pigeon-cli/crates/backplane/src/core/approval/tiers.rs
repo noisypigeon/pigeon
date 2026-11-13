@@ -277,6 +277,9 @@ pub fn tier_of(change: &crate::changes::Change, operation: &str) -> Tier {
             tiers.map_or(Tier::Code, |t| at_least_confirm(&t.merge))
         }
         // Closing a pushed change throws its work away; see the 2026-11-09 approvals ADR §2.
+        // Unless its patch already landed on main: then nothing is lost; see the 2026-11-12
+        // grants ADR §4 F3.
+        "change.close" if change.head.is_some() && change.landed == change.head => Tier::Code,
         "change.close" if change.head.is_some() => Tier::Owner,
         "change.close" => tiers.map_or(Tier::Confirm, |t| at_least_confirm(&t.close)),
         // Moving checks off GitHub is break-glass; see the code-checks ADR §5.

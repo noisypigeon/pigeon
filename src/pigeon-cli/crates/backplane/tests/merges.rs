@@ -153,6 +153,7 @@ fn restacked(relation: Relation, to: Option<&str>, same_patch: bool) -> Event {
             onto: MAIN.into(),
             context: vec![],
             messages: String::new(),
+            landed: false,
         },
     }
 }

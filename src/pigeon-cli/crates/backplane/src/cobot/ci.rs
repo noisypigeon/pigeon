@@ -480,6 +480,9 @@ pub struct Restack {
     /// the changes merged and the ADRs they cite.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub messages: String,
+    /// The head adds nothing to the base: its patch already landed, so nothing was pushed.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub landed: bool,
 }
 
 /// One conflicting path's changes on both sides, each diff cut to [`CONTEXT_MAX`] bytes.
@@ -691,6 +694,7 @@ pub fn restack(
         conflicts: Vec::new(),
         context: Vec::new(),
         messages: String::new(),
+        landed: false,
     };
     if fork == onto {
         return Ok(r);
@@ -709,6 +713,13 @@ pub fn restack(
             return Ok(r);
         }
     };
+    // A merge that leaves the base's tree as it was adds nothing: the patch already landed.
+    if tree == git(dir, "", "", &["rev-parse", &format!("{onto}^{{tree}}")])? {
+        r.relation = Relation::Clean;
+        r.same_patch = false;
+        r.landed = true;
+        return Ok(r);
+    }
     let commits = git(
         dir,
         "",

@@ -884,3 +884,26 @@ and come after them.
 - **Not yet:** generated changes left open before this lands, such as !203.
   They close the next time their parent's state moves. A one-off sweep waits
   for the eviction ADR's hourly job (F4).
+
+### 2026-11-13: F3 lands: a change whose patch is on main asks to close; Auto approves it
+
+The owner chose that closing a superseded change asks for approval by default,
+and that an Auto window from the app approves it.
+
+- **Detected by the restack job.** When the head merges into `main` and the
+  tree equals `main`'s, the patch has already landed. The report says
+  `landed`, and nothing is pushed.
+- **Recorded on the change.** `landed` holds the head found on `main`. It is
+  an optional field, so the version before reads it. The change gets a
+  violation saying so, gives back any merge turn, and isn't reconciled.
+- **The close's tier is `code` while `landed` names the current head.**
+  - The patch is already on `main` and nothing is lost, so this amends
+    [`2026-11-09-security-approvals-once-passkeys.md`](2026-11-09-security-approvals-once-passkeys.md)
+    §2 for this one case.
+  - A newer push changes the head, and the close is `owner` again.
+- **The control plane asks for the close itself,** through the same chain a
+  session's request takes:
+  - a mandate, an Auto window, a policy or the change's grant approves it;
+  - otherwise it waits on the approval page, with a push to the owner.
+- **Auto windows approve `change.close` at the code tier or lower.** An
+  `owner` close still asks.

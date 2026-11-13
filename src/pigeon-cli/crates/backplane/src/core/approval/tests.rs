@@ -175,3 +175,57 @@ mod windows {
         assert_eq!(w.list[0].state, State::Ended);
     }
 }
+
+#[test]
+fn closing_a_landed_head_is_code_and_an_auto_window_approves_it_but_not_another_pushed_close() {
+    use super::mandates::Decision;
+    use super::tiers::{Tier, tier_of};
+    use super::windows::{Window, decide};
+    let window = Window {
+        id: 3,
+        hours: 4,
+        started: 0,
+        expires: 100,
+        used: 0,
+        state: State::Active,
+        by: "owner".into(),
+        why: None,
+        merged: Vec::new(),
+    };
+    let pushed = checked();
+    let mut landed = checked();
+    landed.landed = Some(HEAD.into());
+    let mut pushed_since = landed.clone();
+    pushed_since.head = Some("2222222222222222222222222222222222222222".into());
+    let unpushed = Change::propose(2, "y", "feat: y", "p", vec!["**".into()], "agent");
+    let table: Vec<(&str, &Change, Tier, bool)> = vec![
+        (
+            "a pushed change throws its work away",
+            &pushed,
+            Tier::Owner,
+            false,
+        ),
+        ("its head is already on main", &landed, Tier::Code, true),
+        (
+            "a push since moved the head",
+            &pushed_since,
+            Tier::Owner,
+            false,
+        ),
+        ("nothing was pushed", &unpushed, Tier::Confirm, true),
+    ];
+    for (name, c, tier, allowed) in table {
+        assert_eq!(tier_of(c, "change.close"), tier, "{name}");
+        let d = decide(&window, c, "change.close", 10);
+        assert_eq!(d == Decision::Allow, allowed, "{name}: {d:?}");
+    }
+    let ended = Window {
+        expires: 5,
+        ..window
+    };
+    assert_ne!(
+        decide(&ended, &landed, "change.close", 10),
+        Decision::Allow,
+        "an ended window"
+    );
+}

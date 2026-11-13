@@ -73,6 +73,18 @@ impl Change {
         }
         self = self.set_status(RESTACK, JobStatus::Passed);
         let carries = r.relation == Relation::Disjoint && r.same_patch;
+        if r.landed {
+            self.behind = None;
+            self.carried = None;
+            self.merge_after = None;
+            self.landed.clone_from(&self.head);
+            self.violations = vec![format!(
+                "{}'s patch is already on main at {}; it closes once the close is approved",
+                self.branch(),
+                r.onto.get(..12).unwrap_or(&r.onto)
+            )];
+            return Ok((self, Vec::new()));
+        }
         match (&r.relation, r.to.clone()) {
             (Relation::Current, _) => {
                 self.behind = None;

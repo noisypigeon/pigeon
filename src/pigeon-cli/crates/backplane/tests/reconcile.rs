@@ -38,6 +38,7 @@ fn conflicting(paths: &[&str], messages: &str) -> Restacked {
             })
             .collect(),
         messages: messages.into(),
+        landed: false,
     }
 }
 

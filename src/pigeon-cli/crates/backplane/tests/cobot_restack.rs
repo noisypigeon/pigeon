@@ -184,3 +184,24 @@ fn two_amendments_to_one_adr_merge_by_union() {
     );
     assert!(adr.contains("### A") && adr.contains("### B"), "{adr}");
 }
+
+#[test]
+fn a_change_whose_patch_already_landed_on_main_is_reported_and_left_alone() {
+    let (_t, url, work) = remote();
+    let edit = ("a.txt", "ONE\ntwo\nthree\nfour\nfive\nsix\n");
+    // main took the same edit, as a squash of another change carrying it does.
+    let head = diverge(&work, &url, &[edit], &[edit, ("b.txt", "B\n")]);
+    let (_j, r) = run(&url, &head);
+    assert!(r.landed);
+    assert_eq!(r.relation, Relation::Clean);
+    assert_eq!(r.to, None, "nothing pushed");
+    git(
+        &work,
+        &["fetch", "-q", &url, "+refs/heads/*:refs/remotes/r/*"],
+    );
+    assert_eq!(
+        git(&work, &["rev-parse", "r/change/1-x"]),
+        head,
+        "the branch keeps its head"
+    );
+}

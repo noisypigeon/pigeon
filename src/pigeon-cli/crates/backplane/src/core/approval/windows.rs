@@ -63,8 +63,8 @@ pub struct Windows {
     pub next: u32,
 }
 
-/// Whether `w` lets `operation` on `change` through at `now`: authorizing, approving and
-/// merging at the code tier or lower. The owner tier and break-glass still ask.
+/// Whether `w` lets `operation` on `change` through at `now`: authorizing, approving, merging
+/// and closing at the code tier or lower. The owner tier and break-glass still ask.
 #[must_use]
 pub fn decide(w: &Window, change: &crate::changes::Change, operation: &str, now: u64) -> Decision {
     if !w.usable(now) {
@@ -72,11 +72,11 @@ pub fn decide(w: &Window, change: &crate::changes::Change, operation: &str, now:
     }
     if !matches!(
         operation,
-        "change.authorize" | "change.approve" | "change.merge"
+        "change.authorize" | "change.approve" | "change.merge" | "change.close"
     ) {
         return Decision::Ask(format!("`{operation}` isn't something Auto approves"));
     }
-    if operation != "change.authorize" && change.tiers.is_none() {
+    if matches!(operation, "change.approve" | "change.merge") && change.tiers.is_none() {
         return Decision::Ask(format!("change {}'s head has no tiers yet", change.number));
     }
     match tier_of(change, operation) {

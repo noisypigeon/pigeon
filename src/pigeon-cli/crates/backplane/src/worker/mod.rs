@@ -160,17 +160,34 @@ async fn offer(
     if let Err(why) = tickets::guard(env, settings, request).await? {
         return refused(why);
     }
+    let answer = ask(env, settings, number, request).await?;
+    Response::from_json(&mcp::answer(id, answer))
+}
+
+/// Asks for `request` on change `number` as someone who can't approve it: run under a mandate,
+/// an Auto window, a policy or the change's grant when one approves it, else pending, with the
+/// approval page's link, an event and a push to the owner. The control plane asks this way too.
+///
+/// # Errors
+///
+/// When a binding fails.
+pub(super) async fn ask(
+    env: &Env,
+    settings: &Settings,
+    number: u32,
+    request: &wire::Request,
+) -> Result<std::result::Result<WireResponse, crate::Error>> {
     if let Some(r) = under_mandate(env, settings, number, request).await? {
-        return Response::from_json(&mcp::answer(id, r));
+        return Ok(r);
     }
     if let Some(r) = under_window(env, settings, number, request).await? {
-        return Response::from_json(&mcp::answer(id, r));
+        return Ok(r);
     }
     if let Some(r) = under_policy(env, settings, number, request).await? {
-        return Response::from_json(&mcp::answer(id, r));
+        return Ok(r);
     }
     if let Some(r) = under_change_grant(env, settings, number, request).await? {
-        return Response::from_json(&mcp::answer(id, r));
+        return Ok(r);
     }
     let host = env
         .var(crate::cobot::ship_wire::HOST_VAR)
@@ -210,22 +227,19 @@ async fn offer(
                 true,
             )
             .await;
-            Response::from_json(&mcp::answer(
-                id,
-                Ok(wire::Response {
-                    operation: request.operation.clone(),
-                    ok: false,
-                    result: json!({
-                        "pending": { "operation": request.operation, "number": number, "link": link, "expires": expires }
-                    }),
-                    violations: vec![format!(
-                        "waiting for the owner: `{}` on change {number} is approved at {link} with the authenticator code, or in the card `approval_wait` shows",
-                        request.operation
-                    )],
+            Ok(Ok(wire::Response {
+                operation: request.operation.clone(),
+                ok: false,
+                result: json!({
+                    "pending": { "operation": request.operation, "number": number, "link": link, "expires": expires }
                 }),
-            ))
+                violations: vec![format!(
+                    "waiting for the owner: `{}` on change {number} is approved at {link} with the authenticator code, or in the card `approval_wait` shows",
+                    request.operation
+                )],
+            }))
         }
-        Err(why) => refused(why),
+        Err(why) => Ok(Err(crate::Error::Invalid(vec![why]))),
     }
 }
 

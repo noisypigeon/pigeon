@@ -202,7 +202,46 @@ impl ChangeRun {
         } else if open || !pending.is_empty() {
             storage.set_alarm(POLL).await?;
         }
-        self.mirror(change).await
+        self.mirror(change).await?;
+        let found = before.as_ref().and_then(|b| b.landed.as_ref());
+        if change.landed.is_some() && found != change.landed.as_ref() {
+            self.close_landed(change).await;
+        }
+        Ok(())
+    }
+
+    /// Asks to close `change`, whose patch already landed on `main`: an Auto window approves it,
+    /// otherwise the owner does on the approval page; see
+    /// `.claude/decisions/2026-11-12-development-grants-applies-rescue-yield.md` §4 F3.
+    async fn close_landed(&self, change: &Change) {
+        let Ok(s) = Settings::from(&self.env) else {
+            return;
+        };
+        let n = change.number;
+        let said = format!("!{n}'s patch is already on main; asking to close it");
+        let added = super::events::append(
+            &self.env,
+            &s,
+            "change.landed",
+            Some(n),
+            change.session.clone(),
+            &said,
+            false,
+        );
+        if let Err(e) = added.await {
+            worker::console_error!("change.landed: {e}");
+        }
+        let mut args = Map::new();
+        args.insert("number".into(), json!(n));
+        let request = crate::wire::Request {
+            operation: "change.close".into(),
+            args,
+        };
+        match super::ask(&self.env, &s, n, &request).await {
+            Ok(Ok(_)) => {}
+            Ok(Err(e)) => worker::console_warn!("close of landed !{n}: {e}"),
+            Err(e) => worker::console_error!("close of landed !{n}: {e}"),
+        }
     }
 
     /// Records `merge.released`: `change` gave its merge turn back without merging.

@@ -72,6 +72,7 @@ fn current() -> Event {
             onto: M.into(),
             context: Vec::new(),
             messages: String::new(),
+            landed: false,
         },
     }
 }
@@ -379,6 +380,7 @@ fn a_clean_restack_makes_the_gate_full_and_a_session_push_clears_it() {
             onto: M.into(),
             context: Vec::new(),
             messages: String::new(),
+            landed: false,
         },
     };
     let (c, _) = step(&c, clean).expect("the restack applies");
@@ -549,4 +551,37 @@ fn a_merge_refused_on_main_does_not_restack() {
     };
     let (c, effects) = step(&c, refused).expect("the refusal applies");
     assert_eq!((c.state, effects), (State::Approved, Vec::new()));
+}
+
+#[test]
+fn a_restack_that_finds_the_patch_on_main_records_it_and_releases_the_merge() {
+    let mut c = restacking(approved());
+    c.merge_after = Some("owner".into());
+    let landed = Event::Restacked {
+        sha: A.into(),
+        restack: Restacked {
+            relation: Relation::Clean,
+            to: None,
+            same_patch: false,
+            conflicts: Vec::new(),
+            onto: M.into(),
+            context: Vec::new(),
+            messages: String::new(),
+            landed: true,
+        },
+    };
+    let (c, effects) = step(&c, landed).expect("the report applies");
+    assert_eq!(effects, Vec::new());
+    assert_eq!(c.landed.as_deref(), Some(A), "the head is recorded");
+    assert_eq!(
+        (c.behind.as_deref(), c.merge_after.as_deref()),
+        (None, None)
+    );
+    assert_eq!(c.conflict, None, "not a conflict: nothing to reconcile");
+    assert!(
+        c.violations[0].contains("already on main"),
+        "{:?}",
+        c.violations
+    );
+    assert_eq!(c.state, State::Approved, "it waits for its close");
 }

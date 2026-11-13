@@ -179,6 +179,9 @@ pub struct Restacked {
     /// For a conflict: the messages of `main`'s commits that touched the paths.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub messages: String,
+    /// The head adds nothing to `main`: its patch already landed.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub landed: bool,
 }
 
 /// One conflicting path's changes on both sides.
@@ -329,6 +332,10 @@ pub struct Change {
     /// carried to the new head; see the factory ADR's 2026-11-12 amendment.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub kept: Vec<Job>,
+    /// The head whose patch a restack found already on `main`; closing it then loses nothing;
+    /// see `.claude/decisions/2026-11-12-development-grants-applies-rescue-yield.md` §4 F3.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub landed: Option<String>,
 }
 
 /// Something that happened to a change.
@@ -550,6 +557,7 @@ impl Change {
             held: None,
             grant: None,
             kept: Vec::new(),
+            landed: None,
         }
     }
 
