@@ -12,8 +12,9 @@ work on its `main`. Per the concurrent-sessions ADR's
 1. `git remote add artifacts https://platform.pigeon.dev/git/pigeon/pigeon.git`,
    then `git fetch artifacts main`.
 2. Branch from `artifacts/main`, never the checkout's `HEAD`.
-3. `session_start` (the session's URL as `label`), then `change_propose`
-   with the ticket, before writing the change.
+3. `session_start` (the session's URL as `label`), writing `{"label", "ticket"}`
+   to `~/.config/pigeon/session.json`, then `change_propose` with the ticket,
+   before writing the change.
 4. Push only `change/<n>-<slug>`, to `artifacts`, with
    `git -c http.postBuffer=524288000 -c http.extraHeader="X-Pigeon-Ticket: <ticket>"`;
    without the buffer, git's probe before a large pack is refused with a 400.
@@ -121,10 +122,18 @@ Where each check runs:
   version, and an older object resets itself, per
   [`2026-11-08-development-concurrent-agent-sessions.md`](.claude/decisions/2026-11-08-development-concurrent-agent-sessions.md).
 - Sessions follow events instead of polling: `GET /v0/events` (and the MCP
-  tool `events_wait`) long-polls the instance's event log after an event
-  number, for a session or changes. Arm `Monitor` with a `curl` loop over
-  it that prints one line per event, and act on each line rather than
-  calling `change_status` on a timer. The owner is pushed to (Web Push, from
+  tool `events_wait`) long-polls the instance's event log, for a session or
+  changes; `after=session` resumes from the session's cursor, which the
+  control plane keeps, and `wake=agent` answers only what the agent must act
+  on. Arm `Monitor` (30 minutes, re-armed on expiry) with
+  `python3 -I tooling/session/session.py follow` and act on each line rather
+  than calling `change_status` on a timer; each change's `stage` says who acts
+  next (`needs`) and what that is (`next`), and `session_status` lists them
+  for a session. The control plane alone pushes to the owner; a session uses
+  `PushNotification` only when an ADR's execution is done or it stops with
+  work left, per
+  [`2026-11-13-development-session-stages-subscriptions-breaker.md`](.claude/decisions/2026-11-13-development-session-stages-subscriptions-breaker.md).
+  The owner is pushed to (Web Push, from
   `/approvals`, with `PUSH_VAPID_KEY` from `pigeon backplane vapid-key`)
   only when an approval waits, a mandate pauses, a deploy fails or the
   hourly digest (`digest_show`) needs them, per

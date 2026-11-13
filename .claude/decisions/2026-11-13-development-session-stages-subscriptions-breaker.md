@@ -465,3 +465,28 @@ the yield ADR's step 7 lands; until then B1 to B6 trip alone.
   for step 8.
 - **Step 3** writes `tooling/session/follow.py` on these:
   `after=session` on (re)arm, then the last id, with `wake=agent`.
+
+### 2026-11-13: Step 3 lands: one script, `tooling/session/session.py`
+
+- **One stdlib script with four commands,** not four scripts: `follow`,
+  `brief`, `statusline` and `stop`. `python3 -I` keeps the script's own
+  directory off the import path, so four scripts couldn't share their code.
+  - `follow` long-polls `after=session&wake=agent`, then the last id it
+    printed, and prints `<id> !<n> <stage> needs=<who> <kind>: <summary>`.
+    After each answer it saves `session.status` to `~/.cache/pigeon/status.json`.
+    Five failed polls in a row print one line, and it keeps trying.
+  - `brief` prints the session's changes, those needing the agent first, its
+    tasks, and whether it follows events; with no
+    `~/.config/pigeon/session.json`, CLAUDE.md's start steps.
+  - `statusline` reads only the cache.
+  - `stop` prints a `systemMessage` when a change needs the session and it
+    isn't listening, and never blocks.
+  - Every command but `follow` exits 0 on any error.
+- **CLAUDE.md** says to write the session file after `session_start`, to arm
+  `Monitor` with `follow`, what `stage` and `session_status` answer, and who
+  pushes to the owner.
+- **The `change_attend` rule waits for step 6,** which adds the tool.
+- **Found while following !346:** an approval's event carries the stage from
+  just before its merge is queued, `approved`, `needs: agent`, "ask to
+  merge", so it wakes the session once for nothing. A later change computes
+  the stage after queuing.
