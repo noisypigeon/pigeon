@@ -311,7 +311,8 @@ impl ChangeRun {
             control::release_reason(change)
         );
         let n = Some(change.number);
-        let added = super::events::append(&self.env, &s, "merge.released", n, None, &why, false);
+        let session = change.session.clone();
+        let added = super::events::append(&self.env, &s, "merge.released", n, session, &why, false);
         if let Err(e) = added.await {
             worker::console_error!("merge.released: {e}");
         }

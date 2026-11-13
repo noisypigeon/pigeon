@@ -658,7 +658,9 @@ async fn dispatch(
         }
         Routed::Note { number, text } => {
             let said = format!("a note on !{number}: {text}");
-            events::append(env, s, "change.note", Some(number), None, &said, false).await?;
+            let (_, view) = to_change(env, &s.repo, number, Method::Get, "/status", None).await?;
+            let session = view["change"]["session"].as_str().map(str::to_string);
+            events::append(env, s, "change.note", Some(number), session, &said, false).await?;
             Ok((
                 Some(number.to_string()),
                 respond(operation, 200, json!({ "noted": number })),

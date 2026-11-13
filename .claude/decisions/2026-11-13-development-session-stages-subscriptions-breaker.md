@@ -490,3 +490,27 @@ the yield ADR's step 7 lands; until then B1 to B6 trip alone.
   just before its merge is queued, `approved`, `needs: agent`, "ask to
   merge", so it wakes the session once for nothing. A later change computes
   the stage after queuing.
+
+### 2026-11-13: What following its own changes showed, and three fixes
+
+This session followed !347 and !354 with `session.py follow` from the moment
+step 2 was live.
+
+- **It woke when it had to act, and only then, once two leaks were closed:**
+  - **job events** carried their change's stage, so a stage needing the
+    agent woke the session once per job as well. !354: `wakes` never answers
+    a `job.*` event; a job's end that matters comes with its change's own.
+    An approval still wakes: after a restack whose merge isn't asked again, it
+    is the only signal;
+  - **`merge.released` and `change.note` were logged with no session,** so
+    they reached and woke every session: this one was woken for another
+    session's !349. They now carry the change's session. `merge.skipped`
+    doesn't wake, so it stays as it is.
+- **!347's merge was refused twice as behind, and nothing restacked it.** The
+  concurrent-sessions ADR's 2026-11-12 amendment says a merge refused while
+  behind restacks the head; on !347 it didn't. `session.status` named it at
+  once (`approved`, `needs: agent`, "ask to merge again: main has moved past
+  its base"). Asking again was refused the same way, so the session rebased
+  and pushed the change itself rather than ask a third time, which is the
+  breaker's rule (§4) kept by hand until step 6. Why the restack didn't fire
+  is left to the concurrent-sessions ADR.

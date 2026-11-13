@@ -75,7 +75,8 @@ async fn hand_back_idle(env: &Env, s: &Settings) -> Result<()> {
         "!{n} gave its merge turn back: {}",
         control::release_reason(&c)
     );
-    let added = super::events::append(env, s, "merge.released", Some(n), None, &why, false);
+    let session = c.session.clone();
+    let added = super::events::append(env, s, "merge.released", Some(n), session, &why, false);
     if let Err(e) = added.await {
         worker::console_error!("merge.released: {e}");
     }
