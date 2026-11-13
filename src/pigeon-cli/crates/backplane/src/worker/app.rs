@@ -108,6 +108,19 @@ pub async fn approve(env: &Env, s: &Settings, id: &str, body: &Value) -> Result<
     if let Err(why) = super::passkeys::prove(env, s, &form, &purpose, &rp).await? {
         return Response::error(format!("refused: {why}"), 403);
     }
+    let answers = if entry.operation == "change.authorize" {
+        let (_, st) = to_change(env, &s.repo, number, Method::Get, "/status", None).await?;
+        let Ok(change) = serde_json::from_value::<Change>(st["change"].clone()) else {
+            return Response::error("the change was unreadable", 500);
+        };
+        let answers = approvals::answers(&change, body);
+        if let Err(why) = crate::core::change::asks::check(&change.asks, &answers) {
+            return Response::error(why, 400);
+        }
+        answers
+    } else {
+        std::collections::BTreeMap::new()
+    };
     let owner = secret(env, "APPROVER")?;
     let hold = body["hold"].as_bool().unwrap_or(false);
     let redeem =
@@ -129,6 +142,9 @@ pub async fn approve(env: &Env, s: &Settings, id: &str, body: &Value) -> Result<
     };
     let mut args = Map::new();
     args.insert("number".into(), Value::from(number));
+    if !answers.is_empty() {
+        args.insert("answers".into(), json!(answers));
+    }
     if grant.operation == "change.approve"
         && let Some(head) = &grant.head
     {

@@ -58,6 +58,52 @@ the code tier, for 24 hours. A head that touches a secret, or destroys anything,
 const MERGES_NOTE: &str = "<p><small>Approving this head also queues its merge, unless you keep \
 the merge. A head that changes before it merges asks again.</small></p>";
 
+/// Above a change's asks; see `.claude/decisions/2026-11-13-security-approvals-ask-owner-inputs.md` §4.
+const ASKS_NOTE: &str = "<p><strong>This change asks for values.</strong> Each answer is stored on \
+the change in plain text and will be committed to the public repository. Never enter a secret.</p>";
+
+/// The fields for `change`'s asks, when `grant` authorizes its plan; empty otherwise.
+#[must_use]
+pub fn asks_fields(change: &Change, grant: &Grant) -> String {
+    if grant.operation != "change.authorize" || change.asks.is_empty() {
+        return String::new();
+    }
+    let mut b = String::from(ASKS_NOTE);
+    for a in &change.asks {
+        let _ = write!(
+            b,
+            "<p><label>{}<br><input name=\"ask_{}\" required autocomplete=\"off\" \
+spellcheck=\"false\" minlength=\"{}\" maxlength=\"{}\" pattern=\"{}\"></label>{}</p>",
+            escape(&a.label),
+            escape(&a.key),
+            a.min,
+            a.max,
+            escape(&a.pattern()),
+            if a.help.is_empty() {
+                String::new()
+            } else {
+                format!("<br><small>{}</small>", escape(&a.help))
+            }
+        );
+    }
+    b
+}
+
+/// The answers a form posts for `change`'s asks, by key.
+#[must_use]
+pub fn answers_from(change: &Change, form: &str) -> std::collections::BTreeMap<String, String> {
+    change
+        .asks
+        .iter()
+        .filter_map(|a| {
+            Some((
+                a.key.clone(),
+                field(form, &format!("ask_{}", a.key))?.trim().to_string(),
+            ))
+        })
+        .collect()
+}
+
 const CONFIRM_NOTE: &str =
     "<p>This is a low-risk operation, so one tap approves it; no code is needed.</p>";
 
@@ -241,32 +287,38 @@ pub fn page(change: &Change, grant: &Grant, token: &str) -> String {
         "</dl><form method=\"post\" action=\"/approve/{n}\">\
 <input type=\"hidden\" name=\"grant\" value=\"{}\">\
 <input type=\"hidden\" name=\"operation\" value=\"{}\">\
-{}<button type=\"submit\">{}</button></form>\
+{}{}<button type=\"submit\">{}</button></form>\
 <p><small>This link works once, for this head only, until it expires. \
 <a href=\"/approvals\">Everything waiting</a></small></p>",
         escape(token),
         escape(&grant.operation),
-        if grant.needs_code() && grant.operation != "change.close" {
-            format!(
-                "{}{CODE_FIELD}{}{COVERS}",
-                passkey_button(&crate::passkeys::grant_purpose(token)),
-                if grant.operation == "change.approve" {
-                    MERGES_NOTE
-                } else {
-                    ""
-                }
-            )
-        } else if grant.needs_code() {
-            format!(
-                "{}{CODE_FIELD}",
-                passkey_button(&crate::passkeys::grant_purpose(token))
-            )
-        } else {
-            CONFIRM_NOTE.to_string()
-        },
+        asks_fields(change, grant),
+        proof_fields(grant, token),
         escape(verb(&grant.operation))
     );
     shell(&format!("{} — change {n}", verb(&grant.operation)), &b)
+}
+
+/// The page's proof: a passkey or the code at the code tier, a note at the confirm tier.
+fn proof_fields(grant: &Grant, token: &str) -> String {
+    if grant.needs_code() && grant.operation != "change.close" {
+        format!(
+            "{}{CODE_FIELD}{}{COVERS}",
+            passkey_button(&crate::passkeys::grant_purpose(token)),
+            if grant.operation == "change.approve" {
+                MERGES_NOTE
+            } else {
+                ""
+            }
+        )
+    } else if grant.needs_code() {
+        format!(
+            "{}{CODE_FIELD}",
+            passkey_button(&crate::passkeys::grant_purpose(token))
+        )
+    } else {
+        CONFIRM_NOTE.to_string()
+    }
 }
 
 /// The button that proves the owner with a passkey instead of the code, for `purpose`; hidden

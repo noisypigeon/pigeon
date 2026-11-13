@@ -70,7 +70,21 @@ pub fn detail(w: &Waiting, change: &Change, grant: &Grant) -> Value {
         "checks": checks, "tier": tier.map(|t| &t.tier), "rule": tier.map(|t| &t.rule),
         "proposer": change.proposer, "expires": w.expires,
         "needs_proof": grant.needs_code(),
+        "asks": if w.operation == "change.authorize" { change.asks.as_slice() } else { &[] },
     })
+}
+
+/// The answers in the app's body for `change`'s asks, by key; anything else is dropped.
+#[must_use]
+pub fn answers(change: &Change, body: &Value) -> std::collections::BTreeMap<String, String> {
+    change
+        .asks
+        .iter()
+        .filter_map(|a| {
+            let v = body["answers"][&a.key].as_str()?;
+            Some((a.key.clone(), v.trim().to_string()))
+        })
+        .collect()
 }
 
 /// The passkey answer's fields as the approval form posts them, from the app's JSON.

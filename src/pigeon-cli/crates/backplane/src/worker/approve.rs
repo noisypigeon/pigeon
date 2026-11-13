@@ -218,6 +218,18 @@ async fn post(
     let Ok(peeked) = serde_json::from_value::<Grant>(v["grant"].clone()) else {
         return refused(500, "the grant was unreadable");
     };
+    let asked = serde_json::from_value::<Change>(v["change"].clone())
+        .ok()
+        .filter(|c| peeked.operation == "change.authorize" && !c.asks.is_empty());
+    let answers = asked
+        .as_ref()
+        .map(|c| approve::answers_from(c, &form))
+        .unwrap_or_default();
+    if let Some(c) = &asked
+        && let Err(why) = crate::core::change::asks::check(&c.asks, &answers)
+    {
+        return refused(400, &why);
+    }
     if peeked.needs_code() {
         let proved = if super::passkeys::answered(&form) {
             let purpose = crate::passkeys::grant_purpose(&token);
@@ -249,6 +261,9 @@ async fn post(
     };
     let mut args = Map::new();
     args.insert("number".into(), Value::from(n));
+    if !answers.is_empty() {
+        args.insert("answers".into(), json!(answers));
+    }
     if grant.operation == "change.approve"
         && let Some(head) = &grant.head
     {

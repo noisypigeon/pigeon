@@ -93,6 +93,20 @@ pub async fn card(
     operation: String,
 ) -> std::result::Result<Response, String> {
     let s = Settings::from(&env).map_err(|e| e.to_string())?;
+    if operation == "change.authorize" {
+        let (_, st) = to_change(&env, &s.repo, number, Method::Get, "/status", None)
+            .await
+            .map_err(|e| e.to_string())?;
+        if st["change"]["asks"]
+            .as_array()
+            .is_some_and(|a| !a.is_empty())
+        {
+            return Err(
+                "this approval asks for inputs; answer it on the approval page or in the app"
+                    .into(),
+            );
+        }
+    }
     let body = json!({ "operation": operation });
     let (status, v) = to_change(&env, &s.repo, number, Method::Post, "/grant", Some(&body))
         .await
