@@ -45,6 +45,11 @@ pub async fn ask(env: &Env, s: &Settings, number: u32, by: &str) -> Result<(u16,
         let message = format!("change {number} merges after {place} other merge(s)");
         return Ok((202, json!({ "queued": place, "message": message })));
     }
+    if let Ok(Queued::Yielded { place, to }) = serde_json::from_value(v["queued"].clone()) {
+        let message =
+            format!("change {number} keeps place {place}; it merges once its yield to !{to} ends");
+        return Ok((202, json!({ "queued": place, "message": message })));
+    }
     let (status, v) = merge(env, s, number, by).await?;
     if status != 200 {
         let (_, next) = to_instance(env, s, "/merges/done", &json!({ "number": number })).await?;
@@ -52,6 +57,17 @@ pub async fn ask(env: &Env, s: &Settings, number: u32, by: &str) -> Result<(u16,
         return Ok((status, v));
     }
     Ok((status, json!({ "change": v })))
+}
+
+/// Starts the next merge whose yield ended, if none runs; see the yield ADR's 2026-11-13
+/// amendment on the queue keeping a yielded change's place.
+///
+/// # Errors
+///
+/// When a binding fails.
+pub async fn resume(env: &Env, s: &Settings) -> Result<()> {
+    let (_, v) = to_instance(env, s, "/merges/resume", &json!({})).await?;
+    start(env, s, serde_json::from_value(v["next"].clone()).ok()).await
 }
 
 /// Hands back the turn of a holder with no merge on its way, recording `merge.released`; see the
@@ -235,14 +251,15 @@ async fn start(env: &Env, s: &Settings, mut next: Option<Entry>) -> Result<()> {
     Ok(())
 }
 
-/// The `Instance` Durable Object's side: `/merges/enqueue`, `done` and `list`.
+/// The `Instance` Durable Object's side: `/merges/enqueue`, `done`, `resume` and `list`.
 ///
 /// # Errors
 ///
 /// When storage fails.
 pub async fn serve(state: &State, path: &str, body: &Value) -> Result<Response> {
     let storage = state.storage();
-    let q: MergeQueue = storage.get(MERGES).await?.unwrap_or_default();
+    let mut q: MergeQueue = storage.get(MERGES).await?.unwrap_or_default();
+    q.yielded = storage.get(super::YIELDS).await?.unwrap_or_default();
     let number = body["number"]
         .as_u64()
         .and_then(|n| u32::try_from(n).ok())
@@ -262,6 +279,10 @@ pub async fn serve(state: &State, path: &str, body: &Value) -> Result<Response> 
         }
         "/merges/done" => {
             let (q, next) = merges::done(&q, number, now());
+            (q, json!({ "next": next }))
+        }
+        "/merges/resume" => {
+            let (q, next) = merges::advance(q, now());
             (q, json!({ "next": next }))
         }
         "/merges/list" => return Response::from_json(&q),

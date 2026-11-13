@@ -1143,3 +1143,44 @@ The first, the ledger:
 - **The token API's names are checked at mint time.** So step 1b's
   capabilities can be corrected from the first mint's refusal, which lists
   the account's real group names.
+
+### 2026-11-13: The queue keeps a yielded change's place, and merges it when the yield ends
+
+- **What went wrong.** The merge queue didn't know about yields. A change
+  queued ahead of the change it yields to had its merge refused when its turn
+  came, and left the queue (`merge.skipped`). It came back only if its session
+  asked again after its `yield-ended` task. Live: !374, queue 4/5, yields to
+  !364, queue 5/5. An unattended session's change stalled there for good.
+- **The queue reads the `Instance`'s yields** (`MergeQueue.yielded`, read in
+  from the same object's `yields` map, never stored with the queue).
+  - A merge asked for while yielded is queued, not refused: `Queued::Yielded`,
+    "keeps place k; it merges once its yield to !n ends".
+  - When a turn frees, the oldest waiting change that yields to none starts. A
+    yielded one is passed over and keeps its place.
+- **When a yield ends** (`to` merges or closes, or `change_yield off`), the
+  queue resumes (`/merges/resume`): the first waiting change free of yields
+  starts, if nothing merges. For a merge, the yields are released before the
+  turn is, so the freed change goes next, ahead of those queued after it.
+- **Its stage says so:** a queued, yielded change answers `queued k/n`,
+  `needs: change`, `waits_on` the change it yields to, "it keeps its place".
+- **Unchanged:** a yielded change still isn't merged, restacked or reconciled
+  (§5). One whose restack at its turn loses its approval leaves the queue, as
+  any change does (the concurrent-sessions ADR's 2026-11-11 amendment).
+- **Execution:** one `fix(backplane)` change, with tests replaying !374 and
+  !364. Two more follow, each with its amendment: generated work and tasks
+  that follow their parent's own record (the concurrent-sessions ADR), and a
+  digest that names changes stalled on a session that isn't listening (the
+  session-stages ADR).
+
+### 2026-11-13: A yield never closes a cycle, and a forecast skips a change's own stack
+
+- **Seen live (event 13012).** !376 is built on !375, so it yields to it. The
+  bound job's forecast then made !375 yield to !376, because a child holds its
+  parent's lines and always "conflicts" with it. Neither could ever merge. The
+  coordinating session ended it by hand with `change_yield off`.
+- **A forecast skips a change it is built on, and one built on it.**
+- **The `Instance` refuses a yield that would close a cycle**
+  (`merges::closes_cycle`): `to` already waits on `from`, directly or through
+  others, or `to` is `from`. It records the yield before the change does, so
+  a refused yield touches neither. `change_yield` answers 409, naming the
+  cycle, and a forecast passes on to its next conflict.

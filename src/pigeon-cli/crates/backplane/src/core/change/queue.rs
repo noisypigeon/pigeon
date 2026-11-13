@@ -2,7 +2,7 @@
 //! `.claude/decisions/2026-11-08-development-concurrent-agent-sessions.md` §3. Each transition
 //! answers the next queue; the `Merges` Durable Object stores it.
 
-use std::collections::VecDeque;
+use std::collections::{BTreeMap, VecDeque};
 
 use serde::{Deserialize, Serialize};
 
@@ -26,6 +26,23 @@ pub fn holds_turn(c: &Change) -> bool {
         })
 }
 
+/// Whether `from` yielding to `to` closes a cycle in `yields`: `to` already waits on `from`,
+/// directly or through others, so neither would ever merge.
+#[must_use]
+pub fn closes_cycle(yields: &BTreeMap<u32, u32>, from: u32, to: u32) -> bool {
+    let mut at = to;
+    for _ in 0..=yields.len() {
+        if at == from {
+            return true;
+        }
+        match yields.get(&at) {
+            Some(&next) => at = next,
+            None => return false,
+        }
+    }
+    true
+}
+
 /// A merge asked for.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Entry {
@@ -45,6 +62,13 @@ pub enum Queued {
     Start,
     /// It waits behind this many merges.
     Behind(usize),
+    /// It keeps this place, passed over until its yield to `to` ends.
+    Yielded {
+        /// Its place.
+        place: usize,
+        /// The change it yields to.
+        to: u32,
+    },
 }
 
 /// One repository's merges: the one running and those waiting, oldest first.
@@ -56,6 +80,10 @@ pub struct MergeQueue {
     /// The merges waiting.
     #[serde(default)]
     pub waiting: VecDeque<Entry>,
+    /// The Instance's yields, each change to the one it waits for: read in, never stored; see
+    /// the yield ADR's 2026-11-13 amendment on the queue keeping a yielded change's place.
+    #[serde(skip)]
+    pub yielded: BTreeMap<u32, u32>,
 }
 
 impl MergeQueue {
@@ -95,6 +123,11 @@ pub fn enqueue(
         at: now,
     };
     let mut next = q.clone();
+    if let Some(&to) = q.yielded.get(&number) {
+        next.waiting.push_back(entry);
+        let place = next.waiting.len() + usize::from(next.merging.is_some());
+        return Ok((next, Queued::Yielded { place, to }));
+    }
     if next.merging.is_none() {
         next.merging = Some(entry);
         return Ok((next, Queued::Start));
@@ -147,12 +180,21 @@ pub fn unstick(q: &MergeQueue, now: u64) -> (MergeQueue, Option<Entry>) {
     advance(next, now)
 }
 
-/// `q` with its oldest waiting merge started when none runs, and that merge.
-fn advance(mut q: MergeQueue, now: u64) -> (MergeQueue, Option<Entry>) {
+/// `q` with its oldest waiting merge that yields to none started when none runs, and that
+/// merge; a yielded one keeps its place.
+#[must_use]
+pub fn advance(mut q: MergeQueue, now: u64) -> (MergeQueue, Option<Entry>) {
     if q.merging.is_some() {
         return (q, None);
     }
-    let Some(mut e) = q.waiting.pop_front() else {
+    let Some(i) = q
+        .waiting
+        .iter()
+        .position(|e| !q.yielded.contains_key(&e.number))
+    else {
+        return (q, None);
+    };
+    let Some(mut e) = q.waiting.remove(i) else {
         return (q, None);
     };
     e.at = now;

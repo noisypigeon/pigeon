@@ -45,6 +45,65 @@ fn a_change_closed_while_waiting_leaves_the_queue() {
 }
 
 #[test]
+fn a_yielded_change_keeps_its_place_and_merges_when_its_yield_ends() {
+    // !374 asked to merge ahead of !364, which it yields to; see the yield ADR's 2026-11-13
+    // amendment on the queue keeping a yielded change's place.
+    let mut q = MergeQueue::default();
+    q.yielded.insert(374, 364);
+    q.enqueue(371, "owner", 1).expect("starts");
+    let queued = q.enqueue(374, "owner", 2);
+    assert_eq!(queued, Ok(Queued::Yielded { place: 2, to: 364 }));
+    q.enqueue(364, "owner", 3).expect("waits");
+    q.enqueue(375, "owner", 4).expect("waits");
+    assert_eq!(
+        q.done(371, 5).map(|e| e.number),
+        Some(364),
+        "374 is passed over"
+    );
+    assert_eq!(
+        q.waiting.front().map(|e| e.number),
+        Some(374),
+        "and keeps its place"
+    );
+    q.yielded.clear();
+    assert_eq!(q.done(364, 6).map(|e| e.number), Some(374), "ahead of 375");
+    let (_, none) = backplane::merges::advance(q.clone(), 7);
+    assert_eq!(none, None, "nothing starts while one merges");
+}
+
+#[test]
+fn a_yield_that_closes_a_cycle_is_found() {
+    // !376, built on !375, yielded to it; the forecast then yielded !375 to !376.
+    use backplane::merges::closes_cycle;
+    let mut y = std::collections::BTreeMap::new();
+    y.insert(376, 375);
+    assert!(closes_cycle(&y, 375, 376));
+    assert!(closes_cycle(&y, 375, 375), "nor to itself");
+    assert!(!closes_cycle(&y, 377, 376), "a chain is no cycle");
+    y.insert(377, 376);
+    assert!(closes_cycle(&y, 375, 377), "through others too");
+}
+
+#[test]
+fn a_yielded_change_waits_even_with_nothing_merging() {
+    let mut q = MergeQueue::default();
+    q.yielded.insert(374, 364);
+    assert_eq!(
+        q.enqueue(374, "owner", 1),
+        Ok(Queued::Yielded { place: 1, to: 364 })
+    );
+    assert_eq!(q.merging, None);
+    q.yielded.clear();
+    let (q, next) = backplane::merges::advance(q, 2);
+    assert_eq!(
+        next.map(|e| e.number),
+        Some(374),
+        "it starts once its yield ends"
+    );
+    assert!(q.waiting.is_empty());
+}
+
+#[test]
 fn a_stuck_merge_is_moved_past() {
     let mut q = MergeQueue::default();
     q.enqueue(60, "owner", 100).expect("starts");

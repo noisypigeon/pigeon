@@ -237,39 +237,51 @@ pub fn of(c: &Change, cx: &Context) -> Stage {
             )
         }
         State::Checked => ask("checked", covered, "change_approve", "approve the head"),
-        State::Approved => match place {
-            Some(Place::Waiting { turn, of, holder }) => Stage {
-                stage: format!("queued {turn}/{of}"),
-                needs: if holder.is_some() {
-                    Needs::Change
-                } else {
-                    Needs::Platform
-                },
-                waits_on: holder,
-                next: match holder {
-                    Some(h) => format!("!{h} merges or gives its turn back"),
-                    None => "its merge starts".into(),
-                },
-                since: None,
-            },
-            _ if c.merge_after.is_some() => at(
-                "approved",
-                Needs::Platform,
-                "its merge is parked until its approval carries and its gate passes",
-            ),
-            _ if failed(c, MERGE) => {
-                let why = c
-                    .violations
-                    .first()
-                    .map_or("the merge job failed", String::as_str);
-                at(
-                    "approved",
-                    Needs::Agent,
-                    format!("ask to merge again (`change_merge`): {why}"),
-                )
-            }
-            _ => at("approved", Needs::Agent, "ask to merge (`change_merge`)"),
+        State::Approved => approved(c, place),
+    }
+}
+
+/// An approved change's stage, given its place in the merge queue.
+fn approved(c: &Change, place: Option<Place>) -> Stage {
+    match place {
+        Some(Place::Waiting { turn, of, .. }) if let Some(y) = &c.yielded => Stage {
+            stage: format!("queued {turn}/{of}"),
+            needs: Needs::Change,
+            waits_on: Some(y.to),
+            next: format!("!{} merges or closes; it keeps its place", y.to),
+            since: None,
         },
+        Some(Place::Waiting { turn, of, holder }) => Stage {
+            stage: format!("queued {turn}/{of}"),
+            needs: if holder.is_some() {
+                Needs::Change
+            } else {
+                Needs::Platform
+            },
+            waits_on: holder,
+            next: match holder {
+                Some(h) => format!("!{h} merges or gives its turn back"),
+                None => "its merge starts".into(),
+            },
+            since: None,
+        },
+        _ if c.merge_after.is_some() => at(
+            "approved",
+            Needs::Platform,
+            "its merge is parked until its approval carries and its gate passes",
+        ),
+        _ if failed(c, MERGE) => {
+            let why = c
+                .violations
+                .first()
+                .map_or("the merge job failed", String::as_str);
+            at(
+                "approved",
+                Needs::Agent,
+                format!("ask to merge again (`change_merge`): {why}"),
+            )
+        }
+        _ => at("approved", Needs::Agent, "ask to merge (`change_merge`)"),
     }
 }
 
@@ -392,6 +404,7 @@ mod tests {
         let q = MergeQueue {
             merging: Some(entry(3)),
             waiting: [entry(5), entry(7)].into(),
+            ..MergeQueue::default()
         };
         let p = place(&q, 7);
         assert_eq!(
@@ -407,6 +420,23 @@ mod tests {
         assert_eq!((s.needs, s.waits_on), (Needs::Change, Some(3)));
         assert_eq!(place(&q, 3), Some(Place::Merging));
         assert_eq!(place(&q, 8), None);
+    }
+
+    #[test]
+    fn a_queued_yielded_change_waits_on_the_change_it_yields_to() {
+        let mut c = change(State::Approved);
+        c = c
+            .yield_to(9, "forecast", "they conflict", 1)
+            .expect("yields");
+        let p = Some(Place::Waiting {
+            turn: 2,
+            of: 3,
+            holder: Some(3),
+        });
+        let s = of(&c, &with(p));
+        assert_eq!(s.stage, "queued 2/3");
+        assert_eq!((s.needs, s.waits_on), (Needs::Change, Some(9)));
+        assert!(s.next.contains("keeps its place"), "{}", s.next);
     }
 
     #[test]

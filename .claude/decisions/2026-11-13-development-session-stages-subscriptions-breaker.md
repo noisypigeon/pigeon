@@ -590,3 +590,12 @@ step 2 was live.
   follow|brief|statusline|stop`, run through `tooling/session/session.sh`,
   which falls back to `session.py`.
 - What §2 and §3 show, and when, stays. The follower prints the same lines.
+
+### 2026-11-13: A queued, yielded change waits on the change it yields to
+
+- **`stage::approved`** answers a queued change that yields `queued k/n`,
+  `needs: change`, `waits_on` the change it yields to, "it keeps its place",
+  not the turn's holder. The queue now keeps a yielded change's place (the
+  yield ADR's 2026-11-13 amendment on the queue).
+- **The approved arm moved into its own function,** so `stage::of` stays under
+  clippy's line limit.

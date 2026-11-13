@@ -877,16 +877,29 @@ pub(super) async fn set_yield(
     by: &str,
     reason: &str,
 ) -> Result<(u16, Value)> {
+    if let Some(refused) = reserve(env, s, from, to).await? {
+        return Ok((409, refused));
+    }
     let body = json!({ "to": to, "by": by, "reason": reason });
     let (status, v) = to_change(env, &s.repo, from, Method::Post, "/yield", Some(&body)).await?;
     if status == 200 {
         let session = v["session"].as_str().map(str::to_string);
         recorded_yield(env, s, from, to, reason, session).await?;
+    } else {
+        mandates::to_instance(env, s, "/yields/clear", &json!({ "from": from })).await?;
     }
     Ok((status, v))
 }
 
-/// A yield of `from` to `to`, already on the change, kept in the Instance and logged.
+/// Keeps a yield of `from` to `to` in the Instance first: the refusal, when it would close a
+/// cycle; see the yield ADR's 2026-11-13 amendment on the queue.
+async fn reserve(env: &Env, s: &Settings, from: u32, to: u32) -> Result<Option<Value>> {
+    let body = json!({ "from": from, "to": to });
+    let (status, v) = mandates::to_instance(env, s, "/yields/set", &body).await?;
+    Ok((status != 200).then_some(v))
+}
+
+/// A yield of `from` to `to`, already on the change and in the Instance, logged.
 async fn recorded_yield(
     env: &Env,
     s: &Settings,
@@ -895,7 +908,6 @@ async fn recorded_yield(
     reason: &str,
     session: Option<String>,
 ) -> Result<()> {
-    mandates::to_instance(env, s, "/yields/set", &json!({ "from": from, "to": to })).await?;
     let said = format!("!{from} yields to !{to}: {reason}");
     events::append(env, s, "change.yielded", Some(from), session, &said, false).await
 }
@@ -945,7 +957,11 @@ pub(super) async fn apply_forecast(env: &Env, c: Change, forecast: &[Value]) -> 
             .as_str()
             .unwrap_or_default()
             .to_string();
-        if status != 200 || matches!(state.as_str(), "merged" | "closed") {
+        let theirs = v["change"]["after"]["number"].as_u64();
+        let chained =
+            c.after.as_ref().is_some_and(|a| a.number == n) || theirs == Some(u64::from(c.number));
+        // A change built on another holds its lines: they always "conflict".
+        if status != 200 || chained || matches!(state.as_str(), "merged" | "closed") {
             continue;
         }
         let paths: Vec<&str> = f["paths"]
@@ -959,6 +975,9 @@ pub(super) async fn apply_forecast(env: &Env, c: Change, forecast: &[Value]) -> 
             let Ok(parked) = c.clone().yield_to(n, "forecast", &reason, now()) else {
                 continue;
             };
+            if reserve(env, &s, c.number, n).await?.is_some() {
+                continue;
+            }
             recorded_yield(env, &s, c.number, n, &reason, c.session.clone()).await?;
             return Ok(parked);
         }
@@ -995,6 +1014,7 @@ async fn change_yield(
         )
         .await?;
         mandates::to_instance(env, s, "/yields/clear", &json!({ "from": number })).await?;
+        merges::resume(env, s).await?;
         return Ok((key, respond(operation, status, v)));
     }
     let Some(to) = to else {
@@ -1341,17 +1361,23 @@ async fn sessions_store(state: &State, path: &str, body: &Value) -> Result<Respo
     }
 }
 
+/// The storage key of the `Instance`'s yields, which the merge queue reads.
+pub(super) const YIELDS: &str = "yields";
+
 /// The `Instance`'s yields, each change to the one it waits for: `/yields/set` (`from`, `to`),
 /// `/yields/clear` (`from`), and `/yields/take` (`to`), which answers and forgets the changes
 /// waiting for `to`.
 async fn yields(state: &State, path: &str, body: &Value) -> Result<Response> {
-    const YIELDS: &str = "yields";
     let storage = state.storage();
     let mut all: std::collections::BTreeMap<u32, u32> =
         storage.get(YIELDS).await?.unwrap_or_default();
     let n = |k: &str| body[k].as_u64().and_then(|n| u32::try_from(n).ok());
     let answer: Vec<u32> = match (path, n("from"), n("to")) {
         ("/yields/set", Some(from), Some(to)) => {
+            if crate::merges::closes_cycle(&all, from, to) {
+                let why = format!("!{to} already waits on !{from}; yielding would close a cycle");
+                return Response::error(why, 409);
+            }
             all.insert(from, to);
             Vec::new()
         }
@@ -1392,7 +1418,7 @@ pub(super) async fn release_yields(env: &Env, c: &Change) -> Result<()> {
         }
         let session = v["session"].as_str().map(str::to_string);
         let note = format!(
-            "!{} {}, so !{n}'s yield to it ended; merge !{n} when ready",
+            "!{} {}, so !{n}'s yield to it ended; a merge it asked for goes on in its place",
             c.number,
             c.state.name()
         );
@@ -1408,7 +1434,7 @@ pub(super) async fn release_yields(env: &Env, c: &Change) -> Result<()> {
         .await?;
         tasks::add(env, &s, "yield-ended", n, Some(c.number), session, &note).await?;
     }
-    Ok(())
+    merges::resume(env, &s).await
 }
 
 /// The `Instance`'s pins: the changes the owner holds from eviction; `/pins/list` and
