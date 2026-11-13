@@ -74,10 +74,10 @@ fn a_ticketed_label_needs_its_current_ticket_and_others_need_none() {
 fn ending_a_ticket_frees_its_label() {
     let mut t = Tickets::default();
     t.start(A, false, 0).expect("issues");
-    assert!(t.end(A));
-    assert!(!t.end(A), "a second end is a no-op");
-    assert_eq!(require(KEY, &t, &[A.to_string()], None, 1), Ok(()));
-    assert_eq!(t.start(A, false, 1).expect("anew").generation, 1);
+    assert!(t.end(A, 2));
+    assert!(!t.end(A, 3), "a second end is a no-op");
+    assert_eq!(require(KEY, &t, &[A.to_string()], None, 3), Ok(()));
+    assert_eq!(t.start(A, false, 3).expect("anew").generation, 1);
 }
 
 #[test]
@@ -95,4 +95,14 @@ fn a_lapsed_ticket_is_remembered_a_week_to_say_how_long_its_session_has_gone() {
     t.start("https://claude.ai/code/session_b", false, later)
         .expect("starts");
     assert_eq!(t.gone_for(A, later), None, "forgotten");
+}
+
+#[test]
+fn an_ended_ticket_is_remembered_from_its_end() {
+    let mut t = Tickets::default();
+    t.start(A, false, 0).expect("starts");
+    assert!(t.end(A, 100));
+    assert!(t.live(A, 101).is_none(), "ended");
+    assert_eq!(t.gone_for(A, 7300), Some(7200), "gone since its end");
+    assert!(t.start(A, false, 7300).is_ok(), "and it may start again");
 }

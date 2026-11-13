@@ -312,3 +312,16 @@ Steps 2 and 3 landed there as F1, F2 and the family slot.
 - **Verdicts start at the first hourly run after this merges.** Changes are
   evicted only once step 5's last part (!335) is deployed. `change_evictable`
   shows the verdicts before then.
+
+### 2026-11-13: Step 7 lands: `session_end` answers what remains; a session that stops says so
+
+- **`session_end` keeps the ended ticket, lapsed,** for the 7 days lapsed
+  tickets are remembered.
+  - `session_gone_for` then counts from the end, so a session that ended
+    itself reaches `eviction-session-gone` like one that lapsed.
+  - This replaces the forgetting that step 5's first part left.
+- **`session_end` answers, for each open change the session still holds,**
+  its number, title and `remains`.
+- **`CLAUDE.md` gains §6's rule.** A session that stops with work unfinished
+  says in its last message what is done and what remains, and asks whether a
+  new session should finish it.

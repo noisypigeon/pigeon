@@ -94,7 +94,36 @@ pub async fn end(
         )
         .await?;
     }
-    Ok((200, json!({ "label": label, "ended": v["ended"] })))
+    Ok((
+        200,
+        json!({ "label": label, "ended": v["ended"], "holds": held(env, s, &label).await? }),
+    ))
+}
+
+/// Each open change `label` holds: its number, title and what it has left; see
+/// `.claude/decisions/2026-11-10-development-change-slot-eviction-policy.md` §6.
+async fn held(env: &Env, s: &Settings, label: &str) -> Result<Vec<Value>> {
+    let rows = super::platform::d1_rows(env, &crate::control::open(&s.instance, &s.repo)).await?;
+    let mut out = Vec::new();
+    for o in crate::control::open_rows(&rows) {
+        if o.session.as_deref() != Some(label) {
+            continue;
+        }
+        let (status, v) =
+            super::to_change(env, &s.repo, o.number, worker::Method::Get, "/status", None).await?;
+        let Some(c) = (status == 200)
+            .then(|| serde_json::from_value::<crate::changes::Change>(v["change"].clone()).ok())
+            .flatten()
+        else {
+            continue;
+        };
+        out.push(json!({
+            "number": c.number,
+            "title": c.title,
+            "remains": crate::core::change::eviction::remains(&c),
+        }));
+    }
+    Ok(out)
 }
 
 /// Whether `ticket` lets an agent act for `labels` now.
@@ -174,7 +203,7 @@ pub async fn serve(state: &State, path: &str, body: &Value) -> Result<Response> 
         }
         "/tickets/list" => Response::from_json(&all),
         "/tickets/end" => {
-            let ended = all.end(body["label"].as_str().unwrap_or_default());
+            let ended = all.end(body["label"].as_str().unwrap_or_default(), now());
             storage.put(TICKETS, &all).await?;
             Response::from_json(&json!({ "ended": ended }))
         }

@@ -112,9 +112,16 @@ impl Tickets {
         Ok(issued)
     }
 
-    /// Ends `label`'s ticket, if it holds one: whether it did.
-    pub fn end(&mut self, label: &str) -> bool {
-        self.0.remove(label).is_some()
+    /// Ends `label`'s live ticket at `now`, if it holds one: whether it did. The ticket is kept,
+    /// lapsed, for [`REMEMBER`], so the control plane can tell how long the session has gone.
+    pub fn end(&mut self, label: &str, now: u64) -> bool {
+        match self.0.get_mut(label) {
+            Some(i) if i.expires > now => {
+                i.expires = now;
+                true
+            }
+            _ => false,
+        }
     }
 
     /// `label`'s live ticket, if any.

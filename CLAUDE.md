@@ -113,7 +113,10 @@ Where each check runs:
   `label`) and passes the ticket as `ticket` on every change operation and as
   `git -c http.postBuffer=524288000 -c http.extraHeader="X-Pigeon-Ticket: <ticket>"`
   on its pushes; a
-  ticketed label is refused without it, and `session_end` frees it. Calls to
+  ticketed label is refused without it, and `session_end` frees it,
+  answering what each change it still holds has left; a session that stops
+  with work unfinished says in its last message what is done and what
+  remains, and asks whether a new session should finish it. Calls to
   the `Instance`, `ChangeRun` and `MainRun` objects name the Worker's
   version, and an older object resets itself, per
   [`2026-11-08-development-concurrent-agent-sessions.md`](.claude/decisions/2026-11-08-development-concurrent-agent-sessions.md).
