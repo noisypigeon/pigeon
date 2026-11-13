@@ -256,8 +256,9 @@ fn relative(root: &Path, p: &Path) -> String {
 
 /// The instance's manifest sites a change to `main` touching `files` must publish, by unit; `files` of `None`
 /// means every site, as on a first deploy. A site's inputs are its unit (the instance's
-/// `config.yaml` for a manifest unit, else its directory), its content, and, on the
-/// `architecture` template, everything that template draws.
+/// `config.yaml` for a manifest unit, else its directory), its content, its template's
+/// directory when it pins `tree`, and, on the `architecture` template, everything that
+/// template draws.
 ///
 /// # Errors
 ///
@@ -282,6 +283,9 @@ pub fn deploys(root: &Path, files: Option<&[String]>) -> Result<Vec<String>, Err
             };
             let content = format!("{}/", relative(root, &s.content));
             let mut inputs = vec![unit, content];
+            if s.version == crate::cobot::sites::TREE {
+                inputs.push(format!("{}/", s.project()));
+            }
             if s.template == "architecture" {
                 inputs.extend(DESCRIBED.iter().map(|p| (*p).to_string()));
             }

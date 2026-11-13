@@ -203,6 +203,28 @@ fn deploys_name_the_sites_a_change_to_main_publishes() {
     let got = backplane::cobot::scope::deploys(
         &root,
         Some(&files(&[
+            "src/site-templates/architecture/static/assets/css/main.css",
+        ])),
+    )
+    .expect("finds");
+    assert_eq!(
+        got,
+        ["sites/docs"],
+        "a site pinning `tree` publishes its template's changes"
+    );
+    let got = backplane::cobot::scope::deploys(
+        &root,
+        Some(&files(&["src/site-templates/blog/templates/index.html"])),
+    )
+    .expect("finds");
+    assert_eq!(
+        got,
+        Vec::<String>::new(),
+        "a template no site pins as `tree` publishes nothing"
+    );
+    let got = backplane::cobot::scope::deploys(
+        &root,
+        Some(&files(&[
             "src/pigeon-cli/crates/backplane/src/cobot/git.rs",
             "CLAUDE.md",
         ])),
