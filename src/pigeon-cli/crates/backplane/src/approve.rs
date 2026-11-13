@@ -72,6 +72,9 @@ fn verb(operation: &str) -> &'static str {
         crate::control::BREAK_GLASS => "Run its code checks on Cloudflare",
         "mandate.grant" => "Grant the mandate",
         crate::ci_window::OPERATION => "Move code checks to Cloudflare",
+        "grant.request" => "Make the grant",
+        "grant.rotate" => "Rotate the grant",
+        "grant.revoke" => "Revoke the grant",
         _ => "Confirm",
     }
 }
@@ -464,6 +467,47 @@ code.</p><form method=\"post\" action=\"/mandate/{}\">\
         escape(token)
     );
     shell(&format!("Grant mandate {}", m.id), &b)
+}
+
+/// The page running grant request `o` on the ledger's `entry`, posting `token` back to
+/// `/grants/<id>` with the code; see
+/// `.claude/decisions/2026-11-12-development-grants-applies-rescue-yield.md` §1.
+#[must_use]
+pub fn grant_page(
+    o: &crate::core::minting::Offer,
+    entry: Option<&crate::core::ledger::Grant>,
+    token: &str,
+) -> String {
+    use crate::core::minting::Kind;
+    let (title, what) = match o.kind {
+        Kind::Request => (
+            format!("Make grant `{}`", o.name),
+            "The control plane mints or generates it, puts it at its route, verifies it and records it. Its value is never shown or kept.",
+        ),
+        Kind::Rotate => (
+            format!("Rotate grant `{}`", o.name),
+            "A new value is made, put and verified; then the old token is revoked. If any step fails, the old one stays.",
+        ),
+        Kind::Revoke => (
+            format!("Revoke grant `{}`", o.name),
+            "Its token is revoked and its value removed from its route.",
+        ),
+    };
+    let spec = entry
+        .and_then(|e| serde_json::to_string_pretty(e).ok())
+        .unwrap_or_else(|| "(not in the deployed ledger)".into());
+    let b = format!(
+        "<h1>{}</h1><p>{}</p><pre>{}</pre><form method=\"post\" action=\"/grants/{}\">\
+<input type=\"hidden\" name=\"grant\" value=\"{}\">{CODE_FIELD}\
+<button type=\"submit\">Approve</button></form>\
+<p><small><a href=\"/approvals\">Everything waiting</a></small></p>",
+        escape(&title),
+        escape(what),
+        escape(&spec),
+        o.id,
+        escape(token)
+    );
+    shell(&title, &b)
 }
 
 /// The page granting CI window offer `o`, posting `token` back to `/ci-window/<id>` with the

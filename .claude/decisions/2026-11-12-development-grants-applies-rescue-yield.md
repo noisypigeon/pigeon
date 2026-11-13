@@ -1109,3 +1109,37 @@ The first, the ledger:
 - **A ledger that doesn't resolve is logged, never a failed deploy.** The
   instance's checks refuse a bad ledger before it merges.
 - **`from-unit` mints wait for step 4's unit runs,** which know their unit.
+
+### 2026-11-13: Step 1c ends: the grant operations and their page
+
+- **Four operations:**
+  - `grant.list` is a read.
+  - `grant.request`, `grant.rotate` and `grant.revoke` each answer at once
+    with the link to `/grants/<id>`, as `ci.window` does.
+- **Only a grant in the deployed ledger is asked for.** An undeclared spec on
+  the page waits for a later change.
+- **The page runs the grant on the owner's code, in the Worker:**
+  1. read `granter` from the `GRANTER` Secrets Store binding;
+  2. resolve the capabilities against the account's permission groups;
+  3. mint or generate;
+  4. put;
+  5. verify;
+  6. `settle`.
+
+  It answers with the result. A failure is a `grant.failed` event and a
+  `grant-failed` task. A token minted before a failure is revoked. On a
+  rotation, the old token is revoked only once the new one verifies.
+- **A Worker route is put by a helper token.** It has Workers Scripts Write,
+  lasts five minutes, is minted by `granter`, and is revoked straight after.
+  `granter` itself never writes a Worker.
+- **Not yet supported, each refused with a plain reason:**
+  - `store` and `job` routes (step 4's runs);
+  - `p256` and `age` keys;
+  - `derive`.
+- **The `GRANTER` binding in `worker.yaml` comes in its own change.** Until
+  then, the page says the binding is missing. It lands after:
+  - the owner applies the store (!368);
+  - the owner creates `granter` in it.
+- **The token API's names are checked at mint time.** So step 1b's
+  capabilities can be corrected from the first mint's refusal, which lists
+  the account's real group names.

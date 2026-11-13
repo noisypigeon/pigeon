@@ -349,6 +349,43 @@ const CATALOG: &[Operation] = &[
         ],
     },
     Operation {
+        name: "grant.list",
+        engine: Engine::Backplane,
+        effect: Effect::Read,
+        summary: "The grants: the deployed ledger, and each grant's route, token ID, capabilities and expiry, never a value",
+        args: &[],
+    },
+    Operation {
+        name: "grant.request",
+        engine: Engine::Backplane,
+        effect: Effect::Plan,
+        summary: "Ask the owner to mint or generate grant `name` from the deployed ledger and put it at its route; answers with the page's link, where the code runs it",
+        args: &[
+            arg("name", true, Kind::String),
+            arg("ticket", false, Kind::String),
+        ],
+    },
+    Operation {
+        name: "grant.rotate",
+        engine: Engine::Backplane,
+        effect: Effect::Plan,
+        summary: "Ask the owner to make grant `name` anew, put and verify it, then revoke the old; answers with the page's link",
+        args: &[
+            arg("name", true, Kind::String),
+            arg("ticket", false, Kind::String),
+        ],
+    },
+    Operation {
+        name: "grant.revoke",
+        engine: Engine::Backplane,
+        effect: Effect::Plan,
+        summary: "Ask the owner to revoke grant `name` and remove its value; answers with the page's link",
+        args: &[
+            arg("name", true, Kind::String),
+            arg("ticket", false, Kind::String),
+        ],
+    },
+    Operation {
         name: "git.tokens",
         engine: Engine::Backplane,
         effect: Effect::Read,

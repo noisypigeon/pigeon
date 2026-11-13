@@ -26,6 +26,7 @@ mod insights;
 mod main_run;
 mod mandates;
 mod merges;
+mod minting;
 mod passkeys;
 mod platform;
 mod platforms;
@@ -132,6 +133,7 @@ const SURFACES: &[&[Route]] = &[
     platforms::ROUTES,
     mandates::ROUTES,
     ci_window::ROUTES,
+    minting::ROUTES,
     docs::ROUTES,
     devices::ROUTES,
 ];
@@ -642,6 +644,10 @@ async fn dispatch(
         }
         Routed::BreakGlass { number } => break_glass(env, s, operation, number).await,
         Routed::CiWindow { hours } => Ok(answered(operation, ci_window::run(env, s, hours).await?)),
+        Routed::Grant {
+            operation: op,
+            name,
+        } => Ok(answered(operation, minting::run(env, s, &op, &name).await?)),
         Routed::Status { number } => {
             let (status, mut v) =
                 to_change(env, &s.repo, number, Method::Get, "/status", None).await?;
@@ -1618,6 +1624,7 @@ impl DurableObject for Instance {
         Self { state, env }
     }
 
+    #[expect(clippy::too_many_lines, reason = "one branch per Instance path")]
     async fn fetch(&self, mut req: Request) -> Result<Response> {
         let path = req.path();
         if path == "/version" {
@@ -1666,6 +1673,10 @@ impl DurableObject for Instance {
         if path.starts_with("/tasks/") {
             let body: Value = req.json().await?;
             return tasks::serve(&self.state, &path, &body).await;
+        }
+        if path.starts_with("/grant-requests/") || path.starts_with("/grant-registry/") {
+            let body: Value = req.json().await?;
+            return minting::serve(&self.state, &path, &body).await;
         }
         if path.starts_with("/ci-window/") {
             let body: Value = req.json().await?;

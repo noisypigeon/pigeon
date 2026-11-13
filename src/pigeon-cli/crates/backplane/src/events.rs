@@ -70,6 +70,7 @@ const WAKING: &[&str] = &[
     "merge.released",
     "task.made",
     "deploy.failed",
+    "grant.failed",
     "auto.paused",
     "session.replaced",
 ];

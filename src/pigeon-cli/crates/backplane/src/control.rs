@@ -146,6 +146,14 @@ pub enum Routed {
         /// Its arguments.
         args: serde_json::Map<String, Value>,
     },
+    /// A `grant.*` operation on grant `name` (empty for `grant.list`); see
+    /// `.claude/decisions/2026-11-12-development-grants-applies-rescue-yield.md` §1.
+    Grant {
+        /// The operation.
+        operation: String,
+        /// The grant.
+        name: String,
+    },
     /// `ci.window` for `hours`, 0 closing it; see
     /// `.claude/decisions/2026-11-10-development-code-checks-github-actions.md`, its 2026-11-11
     /// amendment.
@@ -262,6 +270,28 @@ fn number_arg(a: &Map<String, Value>, k: &str) -> Result<Option<u32>, String> {
     }
 }
 
+/// A `grant.*` request: `grant.list`, or an operation on the grant `name` names.
+fn grant(request: &Request) -> Result<Routed, String> {
+    let operation = request.operation.clone();
+    if operation == "grant.list" {
+        return Ok(Routed::Grant {
+            operation,
+            name: String::new(),
+        });
+    }
+    let name = need(&request.args, "name")?;
+    if name.is_empty()
+        || !name
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+    {
+        return Err(format!(
+            "`name` must be a grant's name, [a-z0-9-]+, not `{name}`"
+        ));
+    }
+    Ok(Routed::Grant { operation, name })
+}
+
 /// Routes a validated control-plane request, as `by` at `at`.
 ///
 /// # Errors
@@ -340,6 +370,7 @@ pub fn route(request: &Request, by: &str, at: u64) -> Result<Routed, String> {
             args: a.clone(),
         }),
         "git.tokens" => Ok(Routed::GitTokens),
+        "grant.list" | "grant.request" | "grant.rotate" | "grant.revoke" => grant(request),
         "approval.wait" => Err("`approval.wait` shows a card, so it is called over MCP".into()),
         "mandate.propose" | "mandate.status" | "mandate.end" => Ok(Routed::Mandate {
             operation: request.operation.clone(),

@@ -1252,3 +1252,25 @@ fn a_note_and_a_handoff_are_routed() {
         "names a session"
     );
 }
+
+#[test]
+fn a_grant_operation_names_its_grant() {
+    for op in ["grant.request", "grant.rotate", "grant.revoke"] {
+        assert_eq!(
+            control::route(&request(op, &json!({ "name": "vapid" })), "a", 1),
+            Ok(Routed::Grant {
+                operation: op.into(),
+                name: "vapid".into()
+            })
+        );
+        assert!(control::route(&request(op, &json!({ "name": "Bad Name" })), "a", 1).is_err());
+        assert!(control::route(&request(op, &json!({})), "a", 1).is_err());
+    }
+    assert_eq!(
+        control::route(&request("grant.list", &json!({})), "a", 1),
+        Ok(Routed::Grant {
+            operation: "grant.list".into(),
+            name: String::new()
+        })
+    );
+}
