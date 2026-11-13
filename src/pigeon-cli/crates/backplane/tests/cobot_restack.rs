@@ -245,7 +245,7 @@ fn a_forecast_names_the_branches_a_head_would_conflict_with_and_pushes_nothing()
         (3, "change/3-z".to_string()),
         (4, "change/4-gone".to_string()),
     ];
-    let found = forecast(job.path(), &url, "", &head, &others);
+    let found = forecast(job.path(), &url, "", "main", &head, &others, &["*.md"]);
     assert_eq!(
         found,
         [(2, vec!["a.txt".to_string()])],
@@ -317,5 +317,57 @@ fn a_change_built_on_another_counts_its_own_files_and_restacks_with_its_own_mess
         git(&work, &["diff", "--name-only", "r/main", &to]),
         "b.txt",
         "on main, only its own change"
+    );
+}
+
+#[test]
+fn main_drift_under_an_older_branch_is_not_forecast() {
+    let (_t, url, work) = remote();
+    // change/2-y is cut from main, then main rewrites b.txt's line.
+    git(&work, &["checkout", "-q", "-B", "change/2-y", "main"]);
+    write(&work, "b.txt", "bee\n");
+    git(&work, &["commit", "-qam", "change/2-y"]);
+    git(&work, &["push", "-q", &url, "HEAD:refs/heads/change/2-y"]);
+    git(&work, &["checkout", "-q", "main"]);
+    write(&work, "b.txt", "BEE\n");
+    git(&work, &["commit", "-qam", "main moves"]);
+    git(&work, &["push", "-q", &url, "HEAD:refs/heads/main"]);
+    // change/1-x, cut from the new main, edits only a.txt.
+    let head = diverge(
+        &work,
+        &url,
+        &[("a.txt", "ONE\ntwo\nthree\nfour\nfive\nsix\n")],
+        &[],
+    );
+    let job = tempfile::tempdir().expect("tmp");
+    checkout(job.path(), &url, "", "main", "change/1-x", &head).expect("checks out");
+    let others = [(2, "change/2-y".to_string())];
+    assert_eq!(
+        forecast(job.path(), &url, "", "main", &head, &others, &["*.md"]),
+        Vec::<(u32, Vec<String>)>::new(),
+        "b.txt is main's conflict with !2, not !1's"
+    );
+}
+
+#[test]
+fn two_amendments_to_one_adr_are_not_forecast_to_conflict() {
+    let (_t, url, work) = remote();
+    git(&work, &["checkout", "-q", "-B", "change/2-y", "main"]);
+    write(&work, "adr.md", "# ADR\n\nbody\n\n## y\n");
+    git(&work, &["commit", "-qam", "change/2-y"]);
+    git(&work, &["push", "-q", &url, "HEAD:refs/heads/change/2-y"]);
+    let head = diverge(&work, &url, &[("adr.md", "# ADR\n\nbody\n\n## x\n")], &[]);
+    let job = tempfile::tempdir().expect("tmp");
+    checkout(job.path(), &url, "", "main", "change/1-x", &head).expect("checks out");
+    let others = [(2, "change/2-y".to_string())];
+    assert_eq!(
+        forecast(job.path(), &url, "", "main", &head, &others, &["*.md"]),
+        Vec::<(u32, Vec<String>)>::new(),
+        "appends merge by union"
+    );
+    assert_eq!(
+        forecast(job.path(), &url, "", "main", &head, &others, &[]),
+        [(2, vec!["adr.md".to_string()])],
+        "and conflict without it"
     );
 }

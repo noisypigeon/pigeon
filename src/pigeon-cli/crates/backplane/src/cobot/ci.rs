@@ -593,18 +593,53 @@ fn patch_id(dir: &Path, from: &str, to: &str) -> Result<String, Error> {
         .to_string())
 }
 
-/// The open changes in `others` (number, branch) whose heads would conflict with `sha`, each
-/// with the paths: fetched read-only and merged with `git merge-tree`, nothing pushed; a branch
-/// that can't be fetched or merged is skipped; see
+/// Has git merge paths matching each `union` glob by union in `dir`.
+fn merge_by_union(dir: &Path, union: &[&str]) -> Result<(), Error> {
+    let attributes = union.iter().fold(String::new(), |mut a, g| {
+        let _ = writeln!(a, "{g} merge=union");
+        a
+    });
+    let info = dir.join(".git/info");
+    std::fs::create_dir_all(&info)
+        .and_then(|()| std::fs::write(info.join("attributes"), attributes))
+        .map_err(|e| Error::Io {
+            path: info.clone(),
+            message: e.to_string(),
+        })
+}
+
+/// The open changes in `others` (number, branch) whose heads would conflict with `sha` in paths
+/// both edit against `base`, each with those paths: fetched read-only and merged with
+/// `git merge-tree`, paths matching a `union` glob by union as a restack would, nothing pushed;
+/// a branch that can't be fetched or merged is skipped; see
 /// `.claude/decisions/2026-11-12-development-grants-applies-rescue-yield.md` §5.
 #[must_use]
 pub fn forecast(
     dir: &Path,
     remote: &str,
     token: &str,
+    base: &str,
     sha: &str,
     others: &[(u32, String)],
+    union: &[&str],
 ) -> Vec<(u32, Vec<String>)> {
+    if merge_by_union(dir, union).is_err() {
+        return Vec::new();
+    }
+    let main = format!("refs/remotes/origin/{base}");
+    let edits = |head: &str| -> Option<Vec<String>> {
+        let out = git(
+            dir,
+            "",
+            "",
+            &["diff", "--name-only", &format!("{main}...{head}")],
+        )
+        .ok()?;
+        Some(out.lines().map(str::to_string).collect())
+    };
+    let Some(mine) = edits(sha) else {
+        return Vec::new();
+    };
     let mut out = Vec::new();
     for (n, branch) in others {
         let local = format!("refs/forecast/{n}");
@@ -612,8 +647,16 @@ pub fn forecast(
         if git(dir, remote, token, &["fetch", "-q", remote, &spec]).is_err() {
             continue;
         }
-        if let Ok(Err(paths)) = merge_tree(dir, sha, &local) {
-            out.push((*n, paths));
+        let (Ok(Err(paths)), Some(theirs)) = (merge_tree(dir, sha, &local), edits(&local)) else {
+            continue;
+        };
+        // `main`'s drift under an older branch isn't the two changes' conflict.
+        let both: Vec<String> = paths
+            .into_iter()
+            .filter(|p| mine.contains(p) && theirs.contains(p))
+            .collect();
+        if !both.is_empty() {
+            out.push((*n, both));
         }
     }
     out
@@ -705,17 +748,7 @@ pub fn restack(
     since: Option<&str>,
     union: &[&str],
 ) -> Result<Restack, Error> {
-    let attributes = union.iter().fold(String::new(), |mut a, g| {
-        let _ = writeln!(a, "{g} merge=union");
-        a
-    });
-    let info = dir.join(".git/info");
-    std::fs::create_dir_all(&info)
-        .and_then(|()| std::fs::write(info.join("attributes"), attributes))
-        .map_err(|e| Error::Io {
-            path: info.clone(),
-            message: e.to_string(),
-        })?;
+    merge_by_union(dir, union)?;
     let onto = git(
         dir,
         "",

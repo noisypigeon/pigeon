@@ -1040,3 +1040,14 @@ The first, the ledger:
 - **`Instance::load` reports the ledger's problems with the manifest's,** so
   `mise run backplane` and every command that loads the instance refuses a
   bad ledger.
+### 2026-11-13: A forecast counts only the two changes' own paths
+
+- **What went wrong:** a conflict forecast merged the head with another
+  change's branch at their merge base. When that branch sat on an older
+  `main`, `main`'s later commits showed as conflicts, in paths neither change
+  edits. Live, !349 was forecast to conflict with !191 in `Cargo.lock` and
+  `.config/releases.yaml`.
+- **The fix:** a forecast now keeps a path only when both changes edit it
+  against `main`. A forecast with no such path is no conflict.
+- **ADRs merge by union in a forecast, as in a restack.** So two amendments
+  to one ADR no longer make one change yield to the other.

@@ -835,13 +835,21 @@ fn forecast(spec: &JobSpec, dir: &Path, log: &mut String) -> Vec<Value> {
             Some((n, o["branch"].as_str()?.to_string()))
         })
         .collect();
-    crate::cobot::ci::forecast(dir, &spec.remote, &spec.token, &spec.sha, &others)
-        .into_iter()
-        .map(|(n, paths)| {
-            let _ = writeln!(log, "forecast: conflicts with !{n} in {}", paths.join(", "));
-            serde_json::json!({ "number": n, "paths": paths })
-        })
-        .collect()
+    crate::cobot::ci::forecast(
+        dir,
+        &spec.remote,
+        &spec.token,
+        &spec.base,
+        &spec.sha,
+        &others,
+        &[UNION],
+    )
+    .into_iter()
+    .map(|(n, paths)| {
+        let _ = writeln!(log, "forecast: conflicts with !{n} in {}", paths.join(", "));
+        serde_json::json!({ "number": n, "paths": paths })
+    })
+    .collect()
 }
 
 /// The base's policy directory, as the base's manifest names it, written under the checkout's
