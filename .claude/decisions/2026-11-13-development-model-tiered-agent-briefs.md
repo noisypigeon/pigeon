@@ -393,3 +393,28 @@ first to be split into briefs, as the trial of this ADR.
   - `session.status` answers `model`, `role`, `planner` and `brief`;
   - `tooling/session/models.json` maps each class to its model ID.
 - **Step 1b:** `model` on `change_list`'s rows and on each event.
+### 2026-11-13: Reviewed against !386 and !387: they agree, and briefs' tasks are never swept
+
+This reviews !386 and !387 against this ADR. Both cite
+[`2026-11-08-development-concurrent-agent-sessions.md`](2026-11-08-development-concurrent-agent-sessions.md)
+and
+[`2026-11-10-development-change-slot-eviction-policy.md`](2026-11-10-development-change-slot-eviction-policy.md),
+and work in `tasks.rs`, which this ADR governs. One review covers both
+changes, as !386 itself now plans: one per session and ADR.
+
+- **They agree.**
+  - !386 adds `Tasks::sweep`, which closes tasks on changes no longer open.
+  - !387 adds the digest's `stalled`.
+  - Neither changes a task's routing, its claim rules or its kinds, which
+    §3 and §5 extend by class.
+- **One point to keep: `tasks::SWEPT`.** The hourly sweep closes only
+  `reconcile`, `review`, `restack-failed`, `yield-ended` and `handoff` tasks.
+  - §3's `brief`, and §5's `brief-review` and `escalation`, aren't listed,
+    so they are never swept.
+  - A brief's task outlives the change it was written in. It names a brief,
+    and its own change may not exist yet.
+  - The step that adds those kinds leaves them out of `SWEPT`.
+- **The digest's stalls and §7's classes fit together.** A stall line names
+  the change, its session and how long the session has been quiet. When §7
+  shows each session's class, the stall line can carry it too. That is §7's
+  step, not !387's.
