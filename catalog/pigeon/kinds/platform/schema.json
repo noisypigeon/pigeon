@@ -232,6 +232,13 @@
           "name": "$config.queue.name"
         }
       },
+      "secrets_store": {
+        "module": "cloudflare/secrets-store",
+        "inputs": {
+          "account_id": "$module.account.id",
+          "name": "$config.worker"
+        }
+      },
       "owners": {
         "module": "cloudflare/access-policy",
         "inputs": {
@@ -308,7 +315,8 @@
       "bucket_names": "$module.buckets[*].name",
       "queue_name": "$module.queue.name",
       "access_aud": "$module.application.aud",
-      "service_token_ids": "$module.service_tokens[*].client_id"
+      "service_token_ids": "$module.service_tokens[*].client_id",
+      "secrets_store_id": "$module.secrets_store.id"
     }
   }
 }

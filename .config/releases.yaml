@@ -72,6 +72,10 @@ units:
     manifest: catalog/cloudflare/modules/queue/module.yaml
     paths: [catalog/cloudflare/modules/queue/]
     exclude: ['*.md']
+  infra-cloudflare-secrets-store:
+    manifest: catalog/cloudflare/modules/secrets-store/module.yaml
+    paths: [catalog/cloudflare/modules/secrets-store/]
+    exclude: ['*.md']
   infra-cloudflare-access-application:
     manifest: catalog/cloudflare/modules/access-application/module.yaml
     paths: [catalog/cloudflare/modules/access-application/]
@@ -177,6 +181,7 @@ tiers:
   - { file: catalog/cloudflare/modules/d1-database/CHANGELOG.md, unit: infra-cloudflare-d1-database }
   - { file: catalog/cloudflare/modules/worker/CHANGELOG.md, unit: infra-cloudflare-worker }
   - { file: catalog/cloudflare/modules/queue/CHANGELOG.md, unit: infra-cloudflare-queue }
+  - { file: catalog/cloudflare/modules/secrets-store/CHANGELOG.md, unit: infra-cloudflare-secrets-store }
   - { file: catalog/cloudflare/modules/access-application/CHANGELOG.md, unit: infra-cloudflare-access-application }
   - { file: catalog/cloudflare/modules/access-policy/CHANGELOG.md, unit: infra-cloudflare-access-policy }
   - { file: catalog/cloudflare/modules/access-service-token/CHANGELOG.md, unit: infra-cloudflare-access-service-token }

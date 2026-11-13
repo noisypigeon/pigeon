@@ -1076,3 +1076,24 @@ The first, the ledger:
   - `/grants/granter` checks instead that the binding resolves, and that
     `/tokens/verify` calls the token active.
   - This amends §1's "set once on the owner's approval page".
+
+### 2026-11-13: `granter` lives in the platform's own Secrets Store
+
+- **Option A: `granter` lives in a Secrets Store, never as a Worker
+  secret.**
+  - The new `cloudflare/secrets-store` module makes one store.
+  - The `pigeon/platform` kind holds it as a singleton, named after the
+    stack's Worker, and outputs `secrets_store_id`.
+  - A `worker.yaml` binds it as `$deployment.secrets_store_id`.
+- **The order:**
+  1. The owner applies `platform/blue` (`platform_plan`, then
+     `platform_apply`). That creates the store.
+  2. The owner creates `granter` in it from the dashboard.
+  3. 1c's last change binds `GRANTER` in `worker.yaml` and adds `grant.*`
+     and `/grants/<id>`.
+
+  A binding to a store that doesn't exist yet would fail the deploy, so the
+  binding comes last.
+- **If the account already has a store and refuses a second,** the plan
+  says so. The existing store is then adopted (`pigeon cobot adopt`) rather
+  than a second one made.
