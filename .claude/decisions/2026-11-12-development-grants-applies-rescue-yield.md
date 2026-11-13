@@ -907,3 +907,13 @@ and that an Auto window from the app approves it.
   - otherwise it waits on the approval page, with a push to the owner.
 - **Auto windows approve `change.close` at the code tier or lower.** An
   `owner` close still asks.
+### 2026-11-13: F4 begins: a family holds one slot
+
+- **A change and its unpushed generated changes hold one slot.**
+  - A `reconcile-<n>` or `review-<n>-<m>` that never pushed counts toward
+    neither limit.
+  - Once pushed, it counts, being real work.
+- **A refusal names the counted changes,** each with its family beside it:
+  `!79 (+!85 +!86)`.
+- **This completes the eviction ADR's §2,** after F1 and F2. Its §3 to §7
+  follow as F4's next changes.

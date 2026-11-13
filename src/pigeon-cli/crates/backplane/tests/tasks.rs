@@ -1,7 +1,7 @@
 //! Tasks and session limits; see
 //! `.claude/decisions/2026-11-08-development-concurrent-agent-sessions.md` §5, §6.
 
-use backplane::sessions::{MAX_OPEN, MAX_PER_SESSION, Open, limit};
+use backplane::sessions::{MAX_OPEN, MAX_PER_SESSION, Open, family, limit};
 use backplane::tasks::{KEPT, OWN, Tasks};
 
 #[test]
@@ -92,4 +92,43 @@ fn a_session_holds_at_most_five_open_changes_and_the_instance_twenty() {
     let full: Vec<Open> = (1..=20).map(|n| open(n, None)).collect();
     assert_eq!(MAX_OPEN, 20);
     assert!(limit(&full, None).is_err());
+}
+
+fn generated(number: u32, slug: &str, state: &str) -> Open {
+    Open {
+        slug: slug.into(),
+        state: state.into(),
+        ..open(number, Some("s-a"))
+    }
+}
+
+#[test]
+fn a_change_and_its_unpushed_generated_changes_hold_one_slot() {
+    assert_eq!(family("reconcile-79"), Some(79));
+    assert_eq!(family("review-61-59"), Some(61));
+    assert_eq!(family("reconcile-x"), None);
+    assert_eq!(family("feature-79"), None);
+    // !79 and four others fill four slots; ten unpushed reconciliations and reviews of !79 add none.
+    let mut open_now: Vec<Open> = (1..=3).map(|n| open(n, Some("s-a"))).collect();
+    open_now.push(open(79, Some("s-a")));
+    for n in 85..90 {
+        open_now.push(generated(n, "reconcile-79", "proposed"));
+    }
+    for n in 100..105 {
+        open_now.push(generated(n, &format!("review-79-{n}"), "planned"));
+    }
+    assert_eq!(limit(&open_now, Some("s-a")), Ok(()), "four slots held");
+    // Once one is pushed it is real work, and the fifth slot is taken.
+    open_now.push(generated(110, "reconcile-79", "pushed"));
+    let why = limit(&open_now, Some("s-a")).expect_err("full");
+    assert!(why.contains("!79 (+!85 +!86"), "{why}");
+    assert!(why.contains("!110"), "{why}");
+    let many: Vec<Open> = (1..=40)
+        .map(|n| generated(n, &format!("reconcile-{}", n + 100), "proposed"))
+        .collect();
+    assert_eq!(
+        limit(&many, None),
+        Ok(()),
+        "the instance counts none of them"
+    );
 }

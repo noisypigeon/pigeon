@@ -112,28 +112,57 @@ pub const MAX_PER_SESSION: usize = 5;
 /// The most open changes an instance holds.
 pub const MAX_OPEN: usize = 20;
 
-/// Whether a proposal for `session` fits beside the `open` changes.
+/// The change a generated change was made for, from its slug: `reconcile-<n>` and
+/// `review-<n>-<m>` belong to `n`; none for any other change.
+#[must_use]
+pub fn family(slug: &str) -> Option<u32> {
+    let rest = slug
+        .strip_prefix("reconcile-")
+        .or_else(|| slug.strip_prefix("review-"))?;
+    rest.split('-').next()?.parse().ok()
+}
+
+/// Whether `o` takes a slot: every change but a generated one that never pushed, which holds
+/// its parent's; see `.claude/decisions/2026-11-10-development-change-slot-eviction-policy.md` §2.
+fn counts(o: &Open) -> bool {
+    family(&o.slug).is_none() || !matches!(o.state.as_str(), "proposed" | "planned")
+}
+
+/// Whether a proposal for `session` fits beside the `open` changes. A change and its unpushed
+/// generated changes hold one slot.
 ///
 /// # Errors
 ///
-/// Which limit it passes, naming the open changes.
+/// Which limit it passes, naming the changes that count, each with its unpushed family.
 pub fn limit(open: &[Open], session: Option<&str>) -> Result<(), String> {
     let numbers = |o: &[&Open]| {
         o.iter()
-            .map(|o| format!("!{}", o.number))
+            .map(|o| {
+                let kin: Vec<String> = open
+                    .iter()
+                    .filter(|g| !counts(g) && family(&g.slug) == Some(o.number))
+                    .map(|g| format!("+!{}", g.number))
+                    .collect();
+                if kin.is_empty() {
+                    format!("!{}", o.number)
+                } else {
+                    format!("!{} ({})", o.number, kin.join(" "))
+                }
+            })
             .collect::<Vec<_>>()
             .join(", ")
     };
-    if open.len() >= MAX_OPEN {
-        let all: Vec<&Open> = open.iter().collect();
+    let counted: Vec<&Open> = open.iter().filter(|o| counts(o)).collect();
+    if counted.len() >= MAX_OPEN {
         return Err(format!(
             "{MAX_OPEN} changes are open ({}); merge or close one first",
-            numbers(&all)
+            numbers(&counted)
         ));
     }
     if let Some(s) = session {
-        let mine: Vec<&Open> = open
+        let mine: Vec<&Open> = counted
             .iter()
+            .copied()
             .filter(|o| o.session.as_deref() == Some(s))
             .collect();
         if mine.len() >= MAX_PER_SESSION {
