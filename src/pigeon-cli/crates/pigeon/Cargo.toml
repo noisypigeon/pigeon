@@ -12,7 +12,7 @@ publish.workspace = true
 default = ["sentinel", "cobot", "backplane", "signing", "session"]
 sentinel = []
 cobot = ["dep:backplane", "backplane/engines", "dep:serde", "dep:serde_json"]
-backplane = ["cobot", "dep:backplane", "backplane/engines", "dep:serde", "dep:serde_json", "dep:signal-hook"]
+backplane = ["cobot", "session", "dep:backplane", "backplane/engines", "dep:serde", "dep:serde_json", "dep:signal-hook"]
 # `pigeon backplane signing` alone, for Buildkite's `macos-sign` agents; see
 # .claude/decisions/2026-11-11-release-ios-app-buildkite-testflight.md §6.
 signing = ["dep:backplane", "dep:serde_json", "dep:ureq"]

@@ -228,3 +228,11 @@ which also governs `tooling/session/session.py`. !383 is this ADR's step 2.
 - `events::wait` keeps its deadline in milliseconds. A poll of `seconds=s`
   answers by `s` plus one call's latency, not `s + 1` plus one more look.
 - `session.py` asks `seconds=20`.
+### 2026-11-13: The pipeline's build has `session` too (!397)
+
+- **Main's pipeline builds `pigeon` with `--no-default-features --features
+  backplane`,** the build job Containers run. `session` was only in the
+  defaults, so `/builds/<sha>/pigeon` had no `pigeon session`, and
+  `session.sh` fell back to `session.py`, as §4 intends.
+- **`backplane` now includes `session`,** so the build `session.py install`
+  fetches has it. `--features session` alone is still checked.
