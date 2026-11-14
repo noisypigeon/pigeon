@@ -375,3 +375,30 @@ fn a_briefs_change_is_refused_only_the_planners_tiers() {
     let both = refused(&t("guarded: src/approve.rs", "guarded: src/approve.rs"));
     assert_eq!(both.len(), 1, "one rule named on both tiers is said once");
 }
+
+#[test]
+fn an_executor_takes_only_tasks_on_its_briefs_changes() {
+    use backplane::core::brief::executor::claim_refused;
+    let code = vec!["src/sessions.rs".to_string()];
+    let adr = vec![
+        "src/sessions.rs".to_string(),
+        ".claude/decisions/2026-11-13-development-model-tiered-agent-briefs.md".to_string(),
+    ];
+    assert_eq!(
+        claim_refused("brief", None, &[]),
+        None,
+        "a brief task is gated by class"
+    );
+    assert_eq!(
+        claim_refused("yield-ended", Some("b4"), &code),
+        None,
+        "its own brief's change"
+    );
+    assert_eq!(claim_refused("restack-failed", Some("b4"), &code), None);
+    let planner = claim_refused("handoff", None, &code).expect("a planner's change");
+    assert!(planner.contains("carries no brief"), "{planner}");
+    let review = claim_refused("review", None, &adr[1..]).expect("a review");
+    assert!(review.contains("names an ADR"), "{review}");
+    let reconcile = claim_refused("reconcile", Some("b4"), &adr).expect("an ADR amendment");
+    assert!(reconcile.contains("names an ADR"), "{reconcile}");
+}

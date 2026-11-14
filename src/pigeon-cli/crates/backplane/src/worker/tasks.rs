@@ -36,6 +36,52 @@ async fn class(env: &Env, s: &Settings, session: Option<&str>) -> Result<Class> 
     Ok(tickets.class(label).unwrap_or_default())
 }
 
+/// Why an executor of `class` may not take task `id`, from its kind and its change's brief and
+/// scope; see `.claude/decisions/2026-11-13-development-model-tiered-agent-briefs.md` §2.
+async fn executor_refused(
+    env: &Env,
+    settings: &Settings,
+    session: Option<&str>,
+    class: Class,
+    id: Option<u32>,
+) -> Result<Option<String>> {
+    use crate::core::brief::executor::claim_refused;
+    let body = json!({ "session": session, "class": class });
+    let (_, listed) = to_instance(env, settings, "/tasks/list", &body).await?;
+    let Some(task) = listed["tasks"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .find(|t| t["id"].as_u64().and_then(|n| u32::try_from(n).ok()) == id)
+    else {
+        return Ok(None);
+    };
+    let kind = task["kind"].as_str().unwrap_or_default();
+    let number = task["change"]
+        .as_u64()
+        .and_then(|n| u32::try_from(n).ok())
+        .filter(|n| *n > 0);
+    let Some(number) = number else {
+        return Ok(claim_refused(kind, None, &[]));
+    };
+    let (_, status) = super::to_change(
+        env,
+        &settings.repo,
+        number,
+        worker::Method::Get,
+        "/status",
+        None,
+    )
+    .await?;
+    let scope: Vec<String> =
+        serde_json::from_value(status["change"]["scope"].clone()).unwrap_or_default();
+    Ok(claim_refused(
+        kind,
+        status["change"]["brief"].as_str(),
+        &scope,
+    ))
+}
+
 /// Runs `operation` with `args`: its status and answer.
 ///
 /// # Errors
@@ -56,6 +102,11 @@ pub async fn run(
             to_instance(env, s, "/tasks/list", &body).await
         }
         "task.claim" => {
+            if class != Class::Opus
+                && let Some(why) = executor_refused(env, s, session.as_deref(), class, id).await?
+            {
+                return Ok((403, json!(why)));
+            }
             let (status, v) = to_instance(
                 env,
                 s,

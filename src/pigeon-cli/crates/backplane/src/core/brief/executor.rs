@@ -129,3 +129,24 @@ pub fn refused(t: &Tiers) -> Vec<String> {
     }
     out
 }
+
+/// Why an executor may not take a task of `kind` on a change carrying `brief`, with `scope`: a
+/// change with no brief, or one whose scope names an ADR, is the planner's work. A `brief` task
+/// is gated by class instead (`Task::for_class`).
+#[must_use]
+pub fn claim_refused(kind: &str, brief: Option<&str>, scope: &[String]) -> Option<String> {
+    if kind == "brief" {
+        return None;
+    }
+    if let Some(adr) = scope.iter().find(|s| s.starts_with(".claude/decisions/")) {
+        return Some(format!(
+            "this {kind} task's change names an ADR (`{adr}`); the planner takes it"
+        ));
+    }
+    if brief.is_none() {
+        return Some(format!(
+            "this {kind} task's change carries no brief, so it is the planner's work"
+        ));
+    }
+    None
+}

@@ -591,3 +591,32 @@ changes, as !386 itself now plans: one per session and ADR.
   ID is the last segment of its label.
 - **The prompt arms the follower with `session.py follow`,** which works in
   any session whether or not `pigeon session` is installed there.
+### 2026-11-14: Step 3c lands: an executor claims only tasks on its brief's changes
+
+- **One rule, at `task.claim`.** Handoffs, reconciliations, reviews and
+  resumes all reach a session as a task it claims. So an executor's claim
+  of any task other than a `brief` task reads the task's change and is
+  refused (`core::brief::executor::claim_refused`, 403) when:
+  - **the change carries no brief:** it is the planner's work. That covers a
+    planner's change handed over (`change_handoff`), and every generated
+    `reconcile` and `review` change;
+  - **the change's scope names an ADR.** A `review`'s scope is always the
+    later ADR, and a `reconcile`'s includes it exactly when its rule is to
+    amend one. That is §2's "a reconciliation whose rule requires an ADR
+    amendment", read from the change, not its plan's text.
+
+  An executor still takes tasks on its own brief's change, such as
+  `yield-ended` or `restack-failed`. A `brief` task stays gated by class.
+- **Offering a handoff isn't refused;** taking it is. That keeps one
+  enforcement point.
+- **A conflict on an executor's change goes to its planner.** The
+  `reconcile` task is routed to the executor's session first, which can't
+  take it. Any opus session may then take it after `OWN` (30 minutes). Step
+  5's escalation should route it to the brief's planner at once.
+- **Still to do from §2:**
+  - **`mandate.propose` from an executor:** `mandates.rs` and
+    `worker/mandates.rs` are guarded, so this is a small change of its own
+    at the owner's code;
+  - **`change_attend`'s Resume by an executor:** `change_attend` doesn't
+    exist yet. It comes with the session-stages ADR's step 6, which should
+    refuse an executor's Resume.
