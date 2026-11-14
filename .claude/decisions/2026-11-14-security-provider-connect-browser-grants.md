@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: security
-* Governs: `src/pigeon-cli/crates/backplane/src/core/minting.rs`, `src/pigeon-cli/crates/backplane/src/worker/minting.rs`
+* Governs: `src/pigeon-cli/crates/backplane/src/core/minting.rs`, `src/pigeon-cli/crates/backplane/src/worker/minting.rs`, `src/pigeon-cli/crates/backplane/src/core/connect/**`, `catalog/*/connect.yaml`
 
 ## Context
 
@@ -528,3 +528,93 @@ adds it to `Governs` in the same change.
   - the callback page is reachable without Access, and does nothing without
     a live `state`.
 - **`mise run ci` passes at every step.**
+
+## Amendments
+
+### 2026-11-14: Steps 3 and 4 land; step 5 waits on instance granters and the OAuth client
+
+- **Step 3 landed as !431,** from brief b5 (haiku):
+  - `catalog/cloudflare/connect.yaml`;
+  - four fake response fixtures under
+    `src/pigeon-cli/crates/backplane/tests/fixtures/connect/`.
+- **Step 4 landed as !430,** from brief b3 (sonnet): `core::connect`.
+  - It holds the flow's statuses and transitions, the ceiling check, the
+    PKCE `S256` challenge, and a public view that never carries `state`,
+    the verifier or the credential.
+  - It has 39 tests.
+- **`Governs` gains `core/connect/**` and `catalog/*/connect.yaml`,** now
+  that they exist.
+- **The adapter trait moves to step 5.** Its methods call the provider, so
+  they live with the Worker's HTTP shell, beside `worker/minting.rs`.
+  `core::connect` keeps only the pure parts.
+- **Step 5 waits on two things:**
+  1. **Where a connected granter is stored.** That is D1 `grants` under
+     `GRANT_KEY`, with `instance_accounts`, which the non-platform-profiles
+     ADR's steps 3 and 4 build. Neither `GRANT_KEY` nor those tables is on
+     `main` yet. Step 5 writes through them; it doesn't build a second
+     store.
+  2. **The OAuth client.** This is §9 step 2, the owner's. Until it exists,
+     the `oauth` shape can't be tried. The `key` shape needs only (1).
+- **Step 5 starts when (1) lands.** Its `oauth` half is turned on once (2)
+  is recorded here.
+
+### 2026-11-14: Model variance
+
+Two briefs ran, against this ADR's steps 3 and 4. A *head* is a commit the
+control plane checked on the change's branch.
+
+| | b3 | b5 |
+|---|---|---|
+| Class | sonnet | haiku |
+| Brief | `core::connect` (§9 step 4): signatures and rules given exactly; tests described | five files (§9 step 3), every byte given |
+| Change | !430 | !431 |
+| Heads | 2: `118cbe0` pushed; `759574b` the control plane's restack, its approval carried | 2: `0226550`, then `bf757ad`, the same patch rebased under r2 |
+| Revisions | r1 only | r1, then r2 answering the escalation |
+| Escalations | 0 | 1 (below) |
+| Review | accepted at first review | accepted at first review, and again unchanged after the rebase |
+| Started to merged | 17:33 to 21:47 UTC, about 4 hours | 17:33 to 23:00 UTC, about 5.5 hours |
+
+**Findings:**
+
+- **Fidelity was exact for both.**
+  - b3's module has every signature and rule as written. It has 39 tests
+    against a minimum of 30. fmt, clippy `-D warnings` and the tests pass,
+    and it touches nothing outside its two files.
+  - b5's five files are byte-identical to the brief's.
+  - Neither needed a `revise`.
+- **The work itself was never the slow part.** Both executors finished
+  their steps in minutes. The hours went to the harness:
+  - **The authorize prompt.** Each sat about an hour on its own session's
+    tool-permission prompt for `change_authorize`, until the owner asked
+    for the call again and approved it. !438 now allows the pigeon tools
+    for new sessions.
+  - **A bound job that never ran.** b5's bound job stayed `queued` with 0
+    attempts, while !421 sat the same way. `change_pushed` and `ci_rerun`
+    didn't move it, and `ci_rerun` refuses a job that has never finished.
+    A rebased head was bound at once.
+- **b5 escalated correctly.**
+  - It tried `change_pushed` twice and `ci_rerun` once.
+  - It didn't rebase on its own, since its brief didn't say to, and
+    escalated with what it had tried.
+  - The planner first answered with `task_done`, which doesn't lift the
+    hold. Only `brief_amend` does, so r2 answered and reopened the
+    branch. That cost one extra round trip, and it is the planner's
+    finding, not the executor's.
+- **The classes read one rule's edge differently.** CLAUDE.md says an
+  executor "never calls an owner operation".
+  - b3 (sonnet) called `change_approve` itself under the owner's window,
+    as `next` said to.
+  - b5 (haiku) read the call as an owner operation and stopped at
+    `checked` to ask. It went on once told that asking under a window is
+    the session's step and the window is the approval.
+
+  The stricter reading was safe and cost one exchange. A brief can name
+  the call when its executor should make it.
+- **Brief-writing lessons for this planner:**
+  - Give a fresh container's toolchain setup as the first check. It needs
+    rustc 1.99.1 with `rustfmt`, `clippy` and `wasm32-unknown-unknown`.
+    Neither executor had to ask, because both briefs said so.
+  - Dry-run a haiku brief's literal files through `cobot scope --run`
+    before handing it over, as was done for b5.
+  - In `do` and `done_when`, avoid the open-choice words the validator
+    refuses. A function was named `pick` for that reason.
