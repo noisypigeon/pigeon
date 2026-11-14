@@ -1368,12 +1368,15 @@ async fn sessions_store(state: &State, path: &str, body: &Value) -> Result<Respo
 pub(super) const YIELDS: &str = "yields";
 
 /// The `Instance`'s yields, each change to the one it waits for: `/yields/set` (`from`, `to`),
-/// `/yields/clear` (`from`), and `/yields/take` (`to`), which answers and forgets the changes
-/// waiting for `to`.
+/// `/yields/clear` (`from`), `/yields/take` (`to`), which answers and forgets the changes
+/// waiting for `to`, and `/yields/list`.
 async fn yields(state: &State, path: &str, body: &Value) -> Result<Response> {
     let storage = state.storage();
     let mut all: std::collections::BTreeMap<u32, u32> =
         storage.get(YIELDS).await?.unwrap_or_default();
+    if path == "/yields/list" {
+        return Response::from_json(&all);
+    }
     let n = |k: &str| body[k].as_u64().and_then(|n| u32::try_from(n).ok());
     let answer: Vec<u32> = match (path, n("from"), n("to")) {
         ("/yields/set", Some(from), Some(to)) => {

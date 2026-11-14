@@ -528,3 +528,9 @@ The fix:
 - [`2026-11-13-development-rust-session-event-follower.md`](2026-11-13-development-rust-session-event-follower.md)
   §1 has the follower ask 20 and the server keep an exact deadline, with no
   heartbeat.
+### 2026-11-13: The digest pushes changes stalled on an unattended session
+
+- **§4's digest gains `stalled`:** each open change that needs its session
+  while that session hasn't polled for 30 minutes.
+- **It is pushed,** since nothing automatic resolves it. See the
+  session-stages ADR's 2026-11-13 amendment on stalls.

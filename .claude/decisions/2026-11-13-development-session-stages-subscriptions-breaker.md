@@ -599,3 +599,25 @@ step 2 was live.
   yield ADR's 2026-11-13 amendment on the queue).
 - **The approved arm moved into its own function,** so `stage::of` stays under
   clippy's line limit.
+
+### 2026-11-13: The digest names changes stalled on a session that isn't listening, and pushes them
+
+- **What went wrong.** !364, !371 and !373, and !313, !321 and !324, each
+  waited on a session that wasn't listening. The breaker couldn't see it,
+  since nothing failed. Step 8's Sessions section showed "not listening", but
+  never pushed. So nobody acted, and the changes yielded to them waited too.
+- **A stall** is an open change that needs the agent while its session hasn't
+  polled for `STALL` (30 minutes), or never has (`tasks::stalled`).
+- **The digest lists each stall** (`Digest.stalled`), with:
+  - its stage and what its session must do;
+  - how long the session has been quiet;
+  - the open changes yielded to it (`/yields/list`);
+  - the owner's way out: start a session to take it over, or close it.
+- **Stalls are in `owner_lines()` and `needs_owner()`.** Nothing automatic
+  moves a stalled change, so the hourly push carries them. The push sends a
+  set of lines once, as before.
+- **This is not the breaker,** and doesn't take the change out of Auto. A
+  session that polls again clears its stalls at the next digest.
+- **Execution:** one `feat(backplane)` change, built on the queue fix and the
+  generated-work fix (the yield ADR's and the concurrent-sessions ADR's
+  2026-11-13 amendments).

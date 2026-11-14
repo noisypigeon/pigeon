@@ -150,3 +150,36 @@ fn sessions_are_shown_but_never_pushed() {
     assert_eq!(d.owner_lines(), Vec::<String>::new());
     assert!(!d.needs_owner(), "a session alone pushes nothing");
 }
+
+#[test]
+fn a_change_needing_a_session_that_isnt_listening_is_pushed_as_stalled() {
+    // !364 waited on its unattended session, and !374 on it; see the session-stages ADR's
+    // 2026-11-13 amendment on stalls.
+    use backplane::tasks::{STALL, Stall, stalled};
+    assert_eq!(stalled(Some(0), "agent", STALL - 1), None, "not yet");
+    assert_eq!(stalled(Some(0), "agent", STALL), Some(Some(STALL)));
+    assert_eq!(stalled(None, "agent", 0), Some(None), "never polled");
+    assert_eq!(
+        stalled(None, "owner", 0),
+        None,
+        "the owner's turn is no stall"
+    );
+    let mut d = digest(&DigestInput::default(), 100);
+    assert!(!d.needs_owner());
+    d.stalled.push(Stall {
+        number: 364,
+        session: "https://claude.ai/code/session_x".into(),
+        stage: "approved".into(),
+        next: "ask to merge (`change_merge`)".into(),
+        quiet: Some(3 * 3600 + 5 * 60),
+        waiting: vec![374],
+    });
+    assert!(d.needs_owner(), "a stall is pushed");
+    assert_eq!(
+        d.owner_lines(),
+        [
+            "stalled: !364 approved needs session session_x (quiet 3h05m): ask to merge \
+          (`change_merge`); !374 waits on it; start a session to take it over, or close it"
+        ]
+    );
+}

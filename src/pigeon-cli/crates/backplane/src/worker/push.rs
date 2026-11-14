@@ -136,12 +136,16 @@ pub async fn build(env: &Env, s: &Settings) -> Result<(Digest, u64)> {
         },
         now(),
     );
-    d.sessions = sessions(env, s).await?;
+    (d.sessions, d.stalled) = sessions(env, s).await?;
     Ok((d, last))
 }
 
-/// Each session with open changes, with whether it listens and each change's stage.
-async fn sessions(env: &Env, s: &Settings) -> Result<Vec<crate::tasks::SessionLine>> {
+/// Each session with open changes, with whether it listens and each change's stage, and the
+/// changes stalled on a session that isn't listening.
+async fn sessions(
+    env: &Env,
+    s: &Settings,
+) -> Result<(Vec<crate::tasks::SessionLine>, Vec<crate::tasks::Stall>)> {
     let rows = platform::d1_rows(env, &crate::control::open(&s.instance, &s.repo)).await?;
     let mut by: std::collections::BTreeMap<String, Vec<u32>> = std::collections::BTreeMap::new();
     for o in crate::control::open_rows(&rows) {
@@ -150,10 +154,16 @@ async fn sessions(env: &Env, s: &Settings) -> Result<Vec<crate::tasks::SessionLi
         }
     }
     let q = super::stages::queue(env, s).await;
+    let (_, y) = to_instance(env, s, "/yields/list", &json!({})).await?;
+    let yields: std::collections::BTreeMap<u32, u32> =
+        serde_json::from_value(y).unwrap_or_default();
     let mut out = Vec::new();
+    let mut stalls = Vec::new();
     for (label, numbers) in by {
         let (_, cursor) =
             to_instance(env, s, "/events/cursor", &json!({ "session": label })).await?;
+        let listening = cursor["listening"].as_bool() == Some(true);
+        let polled = cursor["polled"].as_u64();
         let mut changes = Vec::new();
         for n in numbers {
             let (_, view) = super::to_change(env, &s.repo, n, Method::Get, "/status", None).await?;
@@ -163,15 +173,30 @@ async fn sessions(env: &Env, s: &Settings) -> Result<Vec<crate::tasks::SessionLi
             };
             let st = super::stages::stage(env, s, &c, &q).await;
             let needs = serde_json::to_value(st.needs)?;
-            changes.push((n, st.stage, needs.as_str().unwrap_or_default().to_string()));
+            let needs = needs.as_str().unwrap_or_default().to_string();
+            if !listening && let Some(quiet) = crate::tasks::stalled(polled, &needs, now()) {
+                stalls.push(crate::tasks::Stall {
+                    number: n,
+                    session: label.clone(),
+                    stage: st.stage.clone(),
+                    next: st.next.clone(),
+                    quiet,
+                    waiting: yields
+                        .iter()
+                        .filter(|(_, t)| **t == n)
+                        .map(|(f, _)| *f)
+                        .collect(),
+                });
+            }
+            changes.push((n, st.stage, needs));
         }
         out.push(crate::tasks::SessionLine {
             label,
-            listening: cursor["listening"].as_bool() == Some(true),
+            listening,
             changes,
         });
     }
-    Ok(out)
+    Ok((out, stalls))
 }
 
 /// Why the GitHub mirror needs the owner, per `MainRun`; none when it can't be asked.

@@ -226,6 +226,69 @@ pub struct Digest {
     /// `.claude/decisions/2026-11-13-development-session-stages-subscriptions-breaker.md` §5.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub sessions: Vec<SessionLine>,
+    /// Changes that need a session that isn't listening: pushed, as nothing automatic moves
+    /// them.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub stalled: Vec<Stall>,
+}
+
+/// How long a session goes without polling before a change that needs it stalls, in seconds;
+/// see the session-stages ADR's 2026-11-13 amendment on stalls.
+pub const STALL: u64 = 30 * 60;
+
+/// How long `polled`'s session has been quiet at `now`, when a change of `needs` stalls on it:
+/// `Some(None)` for a session that never polled.
+#[must_use]
+#[allow(clippy::option_option)]
+pub fn stalled(polled: Option<u64>, needs: &str, now: u64) -> Option<Option<u64>> {
+    if needs != "agent" {
+        return None;
+    }
+    match polled {
+        None => Some(None),
+        Some(at) => (now.saturating_sub(at) >= STALL).then(|| Some(now.saturating_sub(at))),
+    }
+}
+
+/// A change that needs its session, which isn't listening.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Stall {
+    /// The change.
+    pub number: u32,
+    /// Its session's label.
+    pub session: String,
+    /// Its stage.
+    pub stage: String,
+    /// What its session must do.
+    pub next: String,
+    /// How long its session has been quiet, in seconds; none if it never polled.
+    pub quiet: Option<u64>,
+    /// The open changes yielded to it.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub waiting: Vec<u32>,
+}
+
+impl Stall {
+    /// The line the digest shows, and pushes.
+    #[must_use]
+    pub fn line(&self) -> String {
+        let short = self.session.rsplit('/').next().unwrap_or(&self.session);
+        let quiet = self.quiet.map_or("never polled".into(), |q| {
+            format!("quiet {}h{:02}m", q / 3600, q % 3600 / 60)
+        });
+        let waiting: Vec<String> = self.waiting.iter().map(|n| format!("!{n}")).collect();
+        let behind = if waiting.is_empty() {
+            String::new()
+        } else {
+            let verb = if waiting.len() == 1 { "waits" } else { "wait" };
+            format!("; {} {verb} on it", waiting.join(", "))
+        };
+        format!(
+            "stalled: !{} {} needs session {short} ({quiet}): {}{behind}; start a session to \
+             take it over, or close it",
+            self.number, self.stage, self.next
+        )
+    }
 }
 
 /// A session with open changes, as the digest shows it.
@@ -268,6 +331,7 @@ impl Digest {
             && self.stale_tasks.is_empty()
             && self.paused.is_empty()
             && self.failed_deploys.is_empty()
+            && self.stalled.is_empty()
             && self.mirror.is_none())
     }
 
@@ -314,6 +378,7 @@ impl Digest {
                 .iter()
                 .map(|(n, by)| format!("merged without you: change {n}, by {by}")),
         );
+        out.extend(self.stalled.iter().map(Stall::line));
         out.extend(self.mirror.clone());
         out
     }
@@ -352,5 +417,6 @@ pub fn digest(input: &DigestInput<'_>, now: u64) -> Digest {
         merged_without_owner: input.merged_without_owner.to_vec(),
         mirror: input.mirror.map(str::to_string),
         sessions: Vec::new(),
+        stalled: Vec::new(),
     }
 }
