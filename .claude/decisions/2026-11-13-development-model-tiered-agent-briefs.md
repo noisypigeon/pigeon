@@ -569,3 +569,25 @@ changes, as !386 itself now plans: one per session and ADR.
   - `change_handoff` to one;
   - an executor's `task_claim` of a `reconcile` or `review` task whose rule
     is an ADR amendment.
+
+### 2026-11-14: Step 4 lands: `session.py executor` and CLAUDE.md's "Briefs and model classes"
+
+- **`python3 -I tooling/session/session.py executor b<n>`** reads the brief
+  with `brief.show` and prints `create_session`'s arguments as JSON:
+  - `model`: its class's ID, from `tooling/session/models.json`;
+  - `title`: `pigeon b<n> (<class>): <title>`;
+  - `prompt`: the start steps (§7) and the rules (§4), naming the brief's
+    latest revision and its planner.
+
+  It refuses an unknown brief, or one whose class no executor carries out.
+- **It stays in `session.py`,** as the Rust-follower ADR's review of this one
+  agreed, so a planner runs it directly. `session.sh` would run
+  `pigeon session`, which has no `executor` command.
+- **CLAUDE.md gains "Briefs and model classes":** the classes, the planner's
+  duties, and §4's executor rules, in six lines.
+- **Escalation is a `send_message` to the planner until step 5.** §4 names
+  `brief_escalate`, which step 5 adds; until then, the prompt and CLAUDE.md
+  tell an executor to message its planner's session. The planner's session
+  ID is the last segment of its label.
+- **The prompt arms the follower with `session.py follow`,** which works in
+  any session whether or not `pigeon session` is installed there.

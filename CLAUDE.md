@@ -51,6 +51,33 @@ belong in the ADR, never in the file.
   gets only its own secrets and minted tokens.
 - A session never evicts a change; the control plane alone does.
 
+## Briefs and model classes
+
+Per
+[`2026-11-13-development-model-tiered-agent-briefs.md`](.claude/decisions/2026-11-13-development-model-tiered-agent-briefs.md):
+
+- `session_start` takes `model`: `haiku`, `sonnet` or `opus` (the default).
+  Opus plans; Haiku and Sonnet execute briefs, and decide nothing.
+- **A planner (opus)** writes ADRs and briefs (`brief_create`, `brief_amend`),
+  starts an executor per brief with `create_session`, taking its arguments
+  from `python3 -I tooling/session/session.py executor b<n>` (run directly,
+  not through `session.sh`), and reviews each executor's change before it
+  merges.
+- **An executor (haiku or sonnet)** starts with `model`, `planner` and
+  `brief`, claims its brief's task, and proposes with `brief`, which writes
+  the change's title, plan and scope. Then it:
+  1. does the brief's steps in order, and only them, touching only each
+     step's files;
+  2. after each step, checks its `done_when`, and tries once more within the
+     step if it fails;
+  3. on a second failure, a `stop_if`, or anything the brief doesn't cover,
+     stops and tells its planner (`send_message`), and never works around
+     it, changes the brief's decisions, or widens the scope;
+  4. runs the brief's `checks` before every push;
+  5. never writes or amends an ADR, and never calls an owner operation;
+  6. ends its session (`session_end`) when its change merges or the planner
+     takes the brief back.
+
 ## Commands
 
 `mise run ci` must pass before every change is pushed.

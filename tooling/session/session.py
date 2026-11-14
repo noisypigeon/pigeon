@@ -2,9 +2,11 @@
 """A session's view of the control plane: follow its events, brief it, show its status line.
 
 Stdlib only; run as `python3 -I tooling/session/session.py <follow|brief|statusline|stop|install>`,
-through `tooling/session/session.sh`, which prefers `pigeon session`.
-See .claude/decisions/2026-11-13-development-session-stages-subscriptions-breaker.md §2 and §3, and
-.claude/decisions/2026-11-13-development-rust-session-event-follower.md §4.
+through `tooling/session/session.sh`, which prefers `pigeon session`; `executor b<n>` is run here
+directly, since `pigeon session` has none.
+See .claude/decisions/2026-11-13-development-session-stages-subscriptions-breaker.md §2 and §3,
+.claude/decisions/2026-11-13-development-rust-session-event-follower.md §4, and
+.claude/decisions/2026-11-13-development-model-tiered-agent-briefs.md §7.
 """
 
 import hashlib
@@ -201,8 +203,63 @@ def install():
     return 0
 
 
+EXECUTOR = """You are an executor session for pigeon, of class {model}, carrying out brief {brief} \
+(revision {revision}), which planner session {planner} wrote. The brief has made every decision: \
+follow it exactly, and CLAUDE.md's "Briefs and model classes" section.
+
+1. Per CLAUDE.md: add the `artifacts` remote, fetch its `main`, and branch from `artifacts/main`.
+2. `session_start` with this session's URL as `label`, `model` "{model}", `planner` "{planner}" and \
+`brief` "{brief}". Write {{"label", "ticket"}} to ~/.config/pigeon/session.json, then arm `Monitor` \
+with `python3 -I tooling/session/session.py follow`.
+3. `brief_show` {brief}, then `task_list` and `task_claim` the `brief` task for {brief}.
+4. `change_propose` with a slug, `brief` "{brief}", `session` and `ticket`; the brief writes its \
+title, plan and scope. Authorize it as CLAUDE.md says.
+5. Do the brief's steps in order, and only them, touching only each step's files. After each step, \
+check its `done_when`; if it fails, try once more within the step. Run the brief's `checks` before \
+every push, and push as CLAUDE.md says.
+6. On a second failure, a `stop_if`, a contradiction, or anything the brief doesn't cover: stop, and \
+tell the planner with `send_message` to session {planner_id}: what you tried and what blocks you. \
+Never work around it, change the brief's decisions, or widen the scope.
+7. Never write or amend an ADR, and never call an owner operation. When your change merges, or the \
+planner takes the brief back, `session_end`."""
+
+
+def executor():
+    """Prints `create_session`'s arguments for an executor of brief `b<n>`: its model ID, title and
+    prompt; see the model-tiered ADR §7."""
+    if len(sys.argv) < 3:
+        print("usage: session.py executor b<n>", file=sys.stderr)
+        return 2
+    want = sys.argv[2].strip()
+    b = run("brief.show", {"id": want})
+    if not isinstance(b, dict) or not b.get("revisions"):
+        print(f"no brief `{want}`", file=sys.stderr)
+        return 1
+    draft = b["revisions"][-1]["draft"]
+    model = draft.get("model", "")
+    with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "models.json")) as f:
+        ids = json.load(f)
+    if model not in ("haiku", "sonnet") or model not in ids:
+        print(f"brief {b['id']} is for `{model}`, which no executor carries out", file=sys.stderr)
+        return 1
+    planner = b.get("planner", "")
+    prompt = EXECUTOR.format(
+        model=model,
+        brief=b["id"],
+        revision=len(b["revisions"]),
+        planner=planner,
+        planner_id=planner.rstrip("/").rsplit("/", 1)[-1],
+    )
+    out = {"model": ids[model], "title": f"pigeon {b['id']} ({model}): {draft.get('title', '')}", "prompt": prompt}
+    print(json.dumps(out, indent=2))
+    return 0
+
+
 def main():
-    commands = {"follow": follow, "brief": brief, "statusline": statusline, "stop": stop, "install": install}
+    commands = {
+        "follow": follow, "brief": brief, "statusline": statusline, "stop": stop, "install": install,
+        "executor": executor,
+    }
     name = sys.argv[1] if len(sys.argv) > 1 else ""
     if name not in commands:
         print(f"usage: session.py {'|'.join(commands)}", file=sys.stderr)
@@ -212,7 +269,7 @@ def main():
     except KeyboardInterrupt:
         return 0
     except Exception:  # noqa: BLE001 - a hook never stops a session
-        return 0 if name != "follow" else 1
+        return 0 if name not in ("follow", "executor") else 1
 
 
 if __name__ == "__main__":
