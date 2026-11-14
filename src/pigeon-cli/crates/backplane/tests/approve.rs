@@ -243,6 +243,10 @@ fn a_platform_plan_page_asks_for_the_token_and_an_apply_page_shows_the_changes()
     );
     assert!(page.contains("tok&lt;"), "the grant is escaped");
     assert!(!page.contains("name=\"decision\" value=\"refuse\""));
+    let ours = "<script src=\"/passkey.js\" defer></script>";
+    assert_eq!(page.matches(ours).count(), 1, "{page}");
+    assert!(!page.replace(ours, "").contains("<script"), "{page}");
+    assert!(page.contains("data-passkey=\"prove\" data-purpose=\"grant:"));
     stepped!(runs.grant_plan(1, "tok", "SEALED", "o", 1)).expect("grants");
     let change = serde_json::json!({ "action": "update", "address": "module.d1.<x>" });
     let run = stepped!(runs.planned(1, Ok(("p1".into(), vec![change])), "t2", 2)).expect("planned");
@@ -294,4 +298,23 @@ fn the_passkeys_page_adds_with_a_passkey_and_removes_with_one() {
         "the add form asks no code"
     );
     assert!(adding.contains("data-passkey=\"register\""));
+}
+
+// See `.claude/decisions/2026-11-14-security-passkey-only-owner-proofs.md` §1.
+#[test]
+fn the_devices_page_unlinks_each_device_with_a_passkey_or_the_code() {
+    let ours = "<script src=\"/passkey.js\" defer></script>";
+    let none = approve::devices_page(&[], None);
+    assert!(!none.contains("<script"), "{none}");
+    let devices = [
+        ("ab12".to_string(), "<phone>".to_string(), 1, 2),
+        ("cd34".to_string(), "pad".to_string(), 3, 4),
+    ];
+    let html = approve::devices_page(&devices, Some("Unlinked."));
+    assert_eq!(html.matches(ours).count(), 1, "{html}");
+    assert!(!html.replace(ours, "").contains("<script"), "{html}");
+    assert!(html.contains("&lt;phone&gt;"));
+    assert!(html.contains("data-purpose=\"device:ab12\""));
+    assert!(html.contains("data-purpose=\"device:cd34\""));
+    assert_eq!(html.matches("name=\"code\"").count(), 2);
 }

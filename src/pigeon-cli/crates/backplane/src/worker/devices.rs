@@ -5,7 +5,7 @@
 use serde_json::{Value, json};
 use worker::{Env, Method, Request, Response, Result, State};
 
-use super::approve::{html, html_with, refused};
+use super::approve::{html_with, refused};
 use super::elicit;
 use super::platform::{self, Settings, now, random_hex};
 use crate::access::Identity;
@@ -307,7 +307,9 @@ pub async fn page_serve(
                 return refused(400, "the key isn't a P-256 key");
             };
             let purpose = format!("device:{}", devices::fingerprint(&point));
-            if let Err(why) = prove(env, s, &form, &purpose, &host).await? {
+            let proved =
+                super::passkeys::on_page(env, s, &form, &purpose, &host, "/app/link").await?;
+            if let Err(why) = proved {
                 return refused(403, &why);
             }
             let code = random_hex(16)?;
@@ -331,29 +333,16 @@ pub async fn page_serve(
         (Method::Post, "/devices") => {
             let form = req.text().await?;
             let id = page::field(&form, "remove").unwrap_or_default();
-            if let Err(why) = prove(env, s, &form, &format!("device:{id}"), &host).await? {
+            let purpose = format!("device:{id}");
+            let proved =
+                super::passkeys::on_page(env, s, &form, &purpose, &host, "/devices").await?;
+            if let Err(why) = proved {
                 return refused(403, &why);
             }
             to_instance(env, s, "/devices/remove", &json!({ "id": id })).await?;
             list(env, s, Some("Unlinked.")).await
         }
         _ => refused(404, "not found"),
-    }
-}
-
-/// The owner's proof on a page: a passkey answer for `purpose`, or the code.
-async fn prove(
-    env: &Env,
-    s: &Settings,
-    form: &str,
-    purpose: &str,
-    host: &str,
-) -> Result<std::result::Result<(), String>> {
-    if super::passkeys::answered(form) {
-        super::passkeys::prove(env, s, form, purpose, host).await
-    } else {
-        let code = page::field(form, "code").unwrap_or_default();
-        elicit::check_code(env, s, code.trim()).await
     }
 }
 
@@ -364,7 +353,7 @@ async fn list(env: &Env, s: &Settings, said: Option<&str>) -> Result<Response> {
         .into_iter()
         .map(|d| (d.id, d.name, d.linked, d.seen))
         .collect();
-    html(200, &page::devices_page(&rows, said))
+    html_with(200, &page::devices_page(&rows, said), page::PROOF_CSP)
 }
 
 /// The routes this surface serves.

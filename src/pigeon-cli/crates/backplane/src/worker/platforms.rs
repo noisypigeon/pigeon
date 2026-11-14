@@ -43,7 +43,12 @@ fn main_stub(env: &Env, s: &Settings) -> Result<worker::Stub> {
 }
 
 /// Calls `MainRun`'s platform `path` with `body`: its status and JSON.
-async fn to_main(env: &Env, s: &Settings, path: &str, body: &Value) -> Result<(u16, Value)> {
+pub(super) async fn to_main(
+    env: &Env,
+    s: &Settings,
+    path: &str,
+    body: &Value,
+) -> Result<(u16, Value)> {
     let req = json_request(
         &format!("https://main/platform/{path}"),
         Method::Post,

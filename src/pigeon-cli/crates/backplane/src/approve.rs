@@ -455,13 +455,15 @@ pub fn devices_page(devices: &[(String, String, u64, u64)], said: Option<&str>) 
                 b,
                 "<li>{} <small>(<code>{}</code>, linked {linked}, last seen {seen})</small>\
 <form method=\"post\" action=\"/devices\"><input type=\"hidden\" name=\"remove\" value=\"{}\">\
-{CODE_FIELD}<button type=\"submit\">Unlink</button></form></li>",
+{}{CODE_FIELD}<button type=\"submit\">Unlink</button></form></li>",
                 escape(name),
                 escape(id),
-                escape(id)
+                escape(id),
+                proof_button(&format!("device:{id}"), "Unlink with a passkey")
             );
         }
         b.push_str("</ul>");
+        b.push_str(PASSKEY_SCRIPT);
     }
     shell("Linked devices", &b)
 }
@@ -596,14 +598,15 @@ pub fn grant_page(
         .unwrap_or_else(|| "(not in the deployed ledger)".into());
     let b = format!(
         "<h1>{}</h1><p>{}</p><pre>{}</pre><form method=\"post\" action=\"/grants/{}\">\
-<input type=\"hidden\" name=\"grant\" value=\"{}\">{CODE_FIELD}\
+<input type=\"hidden\" name=\"grant\" value=\"{}\">{}{CODE_FIELD}\
 <button type=\"submit\">Approve</button></form>\
 <p><small><a href=\"/approvals\">Everything waiting</a></small></p>",
         escape(&title),
         escape(what),
         escape(&spec),
         o.id,
-        escape(token)
+        escape(token),
+        passkey_button(&crate::passkeys::grant_purpose(token))
     );
     shell(&title, &b)
 }
@@ -629,13 +632,14 @@ pub fn ci_window_page(o: &crate::ci_window::Offer, token: &str) -> String {
     };
     let b = format!(
         "<h1>{}</h1><p>{}</p><form method=\"post\" action=\"/ci-window/{}\">\
-<input type=\"hidden\" name=\"grant\" value=\"{}\">{CODE_FIELD}\
+<input type=\"hidden\" name=\"grant\" value=\"{}\">{}{CODE_FIELD}\
 <button type=\"submit\">Approve</button></form>\
 <p><small><a href=\"/approvals\">Everything waiting</a></small></p>",
         escape(&title),
         escape(&what),
         o.id,
-        escape(token)
+        escape(token),
+        passkey_button(&crate::passkeys::grant_purpose(token))
     );
     shell(&title, &b)
 }
@@ -688,9 +692,10 @@ destroyed (a plan that destroys is refused before it reaches you).</p><pre>",
     let _ = write!(
         b,
         "<form method=\"post\" action=\"/platform/{}\">\
-<input type=\"hidden\" name=\"grant\" value=\"{}\">{CODE_FIELD}",
+<input type=\"hidden\" name=\"grant\" value=\"{}\">{}{CODE_FIELD}",
         run.id,
-        escape(token)
+        escape(token),
+        passkey_button(&crate::passkeys::grant_purpose(token))
     );
     if planning {
         b.push_str(

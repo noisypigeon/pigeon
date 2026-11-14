@@ -22,6 +22,14 @@ const KEYRING: &str = "passkeys";
 /// Where the `Instance` keeps until when a proven owner may add a passkey.
 const ADDING: &str = "passkey-adding";
 
+/// The grant pages whose grant the `Instance` keeps: each path prefix, its peek, and the
+/// operation its proof is bound to.
+const INSTANCE_PAGES: [(&str, &str, &str); 3] = [
+    ("/mandate/", "/mandates/peek", "mandate.grant"),
+    ("/grants/", "/grant-requests/peek", "grant.request"),
+    ("/ci-window/", "/ci-window/peek", "ci.window"),
+];
+
 /// The fewest passkeys a removal leaves, until the cutover raises it to two.
 const MIN_KEYS: usize = 1;
 
@@ -232,7 +240,7 @@ async fn bound_for(env: &Env, s: &Settings, path: &str) -> Result<Option<(Option
     let (path, query) = path.split_once('?').unwrap_or((path, ""));
     let token = page::field(query, "grant").unwrap_or_default();
     let purpose = Some(passkeys::grant_purpose(&token));
-    if path == "/passkeys" {
+    if ["/passkeys", "/devices", "/app/link"].contains(&path) {
         return Ok(Some((None, Bound::default())));
     }
     if let Some(n) = path
@@ -254,19 +262,30 @@ async fn bound_for(env: &Env, s: &Settings, path: &str) -> Result<Option<(Option
             (purpose, bound)
         }));
     }
-    if let Some(id) = path.strip_prefix("/mandate/") {
-        let v = to_instance(env, s, "/mandates/peek", &json!({ "token": token })).await?;
+    let shown = |operation: &str, id: &str, v: &Value| {
         let named = v["id"].as_u64().map(|n| n.to_string());
-        if !v.is_object() || named.as_deref() != Some(id) {
-            return Ok(None);
+        (v.is_object() && named.as_deref() == Some(id)).then(|| {
+            let bound = Bound {
+                operation: operation.to_string(),
+                target: id.to_string(),
+                head: crate::grants::hex(&sha2::Sha256::digest(v.to_string().as_bytes())),
+            };
+            (purpose.clone(), bound)
+        })
+    };
+    for (prefix, peek, operation) in INSTANCE_PAGES {
+        if let Some(id) = path.strip_prefix(prefix) {
+            let v = to_instance(env, s, peek, &json!({ "token": token })).await?;
+            return Ok(shown(operation, id, &v));
         }
-        let shown = sha2::Sha256::digest(v.to_string().as_bytes());
-        let bound = Bound {
-            operation: "mandate.grant".into(),
-            target: id.to_string(),
-            head: crate::grants::hex(&shown),
+    }
+    if let Some(id) = path.strip_prefix("/platform/") {
+        let Ok(n) = id.parse::<u32>() else {
+            return Ok(None);
         };
-        return Ok(Some((purpose, bound)));
+        let asked = json!({ "id": n, "token": token });
+        let (status, v) = super::platforms::to_main(env, s, "peek", &asked).await?;
+        return Ok(shown("platform.run", id, &v).filter(|_| status == 200));
     }
     Ok(None)
 }
