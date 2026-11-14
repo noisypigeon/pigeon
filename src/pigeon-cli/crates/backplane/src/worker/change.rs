@@ -204,14 +204,67 @@ impl ChangeRun {
 
     async fn on_event(&self, mut change: Change, event: Event) -> Result<Response> {
         let mut pending: Vec<Pending> = self.load(PENDING).await?;
+        let asked = change.merge_after.clone();
         if let Err(why) = Self::apply(&mut change, event.clone(), &mut pending) {
             return Response::error(why, 409);
         }
         let mut journal: Vec<Event> = self.load(JOURNAL).await?;
         journal.push(event);
+        if let Some(by) = asked {
+            journal.extend(self.reapprove(&mut change, &by, &mut pending).await);
+        }
         self.state.storage().put(JOURNAL, &journal).await?;
         self.save(&change, &pending).await?;
         Response::from_json(&change)
+    }
+
+    /// A restacked head that reached `checked` without its approval carrying, approved again by
+    /// the policy or Auto window that would approve it now, and its merge, asked by `asked`, kept
+    /// in its turn: the events applied, none when neither would; see the session-stages ADR's
+    /// 2026-11-14 amendment.
+    async fn reapprove(
+        &self,
+        change: &mut Change,
+        asked: &str,
+        pending: &mut Vec<Pending>,
+    ) -> Vec<Event> {
+        let dropped = change.state == crate::changes::State::Checked
+            && change.approval.is_none()
+            && change.merge_after.is_none();
+        let Some(head) = change.head.clone().filter(|_| dropped) else {
+            return Vec::new();
+        };
+        let by = if let Some(rule) = crate::approvals::by_policy(change, "change.approve") {
+            format!("policy:{rule}")
+        } else {
+            let Ok(s) = Settings::from(&self.env) else {
+                return Vec::new();
+            };
+            let window = super::mandates::window_approves(&self.env, &s, change, "change.approve");
+            let Ok(Some(id)) = window.await else {
+                return Vec::new();
+            };
+            format!("window:{id}")
+        };
+        let events = vec![
+            Event::Approve {
+                by,
+                sha: head,
+                at: now(),
+            },
+            Event::Merge {
+                by: asked.to_string(),
+            },
+        ];
+        let (mut next, mut p) = (change.clone(), pending.clone());
+        for e in &events {
+            if Self::apply(&mut next, e.clone(), &mut p).is_err() {
+                return Vec::new();
+            }
+        }
+        *change = next;
+        *pending = p;
+        events
     }
 
     /// Notes `change` in its breaker and logs each signal that would trip, once, as

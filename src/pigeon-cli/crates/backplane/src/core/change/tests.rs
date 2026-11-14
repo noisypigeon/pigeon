@@ -952,3 +952,62 @@ fn an_executor_escalates_only_a_briefs_change_and_its_planner_reopens_it() {
     assert_eq!(open.escalated, None);
     assert_eq!(of(&open, &Context::default()).stage, "in-review");
 }
+
+#[test]
+fn a_dropped_merge_is_kept_when_a_window_approves_the_restacked_head_again() {
+    let changed = Event::Restacked {
+        sha: A.into(),
+        restack: Restacked {
+            relation: Relation::Clean,
+            to: Some(B.into()),
+            same_patch: false,
+            conflicts: Vec::new(),
+            onto: M.into(),
+            context: Vec::new(),
+            messages: String::new(),
+            landed: false,
+        },
+    };
+    let checked_b = |c: Change| {
+        run(
+            c,
+            vec![Event::Bounded {
+                sha: B.into(),
+                violations: Vec::new(),
+                checks: Vec::new(),
+                full: Vec::new(),
+                tiers: None,
+                gate: None,
+            }],
+        )
+    };
+    let dropped = checked_b(
+        step(&restacking(approved()), changed.clone())
+            .expect("restacked")
+            .0,
+    );
+    assert_eq!(dropped.state, State::Checked);
+    assert_eq!(
+        (dropped.approval.is_none(), dropped.merge_after.is_none()),
+        (true, true)
+    );
+    let again = Event::Approve {
+        by: "window:6".into(),
+        sha: B.into(),
+        at: 9,
+    };
+    let (approved_b, _) = step(&dropped, again.clone()).expect("the window approves again");
+    let (merging, effects) = step(&approved_b, merge()).expect("the merge goes on");
+    assert_eq!(merging.state, State::Approved);
+    assert!(
+        effects.contains(&Effect::Start(MERGE.into())),
+        "{effects:?}"
+    );
+    let mut briefed = approved();
+    briefed.brief = Some("b4".into());
+    let held = checked_b(step(&restacking(briefed), changed).expect("restacked").0);
+    assert!(
+        step(&held, again).is_err(),
+        "a brief's head still waits for its planner"
+    );
+}

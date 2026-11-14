@@ -717,3 +717,32 @@ step 2 was live.
   2. One `chore(claude)` change with the settings, approved by the owner.
   3. A haiku executor, seeded on a one-step brief, calls `change_authorize`
      under a window. That shows auto mode no longer refuses it.
+
+### 2026-11-14: An Auto window re-approves a restacked head, unasked
+
+- **The owner decided** that Auto windows should re-approve restacked
+  changes automatically. The decision was relayed by the session that fixed
+  the restack loop, and the owner authorizes this change with their code.
+- **What happens.** A restack whose approval doesn't carry leaves the change
+  `checked`, unapproved, with its parked merge dropped, so its turn goes
+  back (`merge.released`). Now, in the same event, `ChangeRun` asks whether
+  the head would be approved now:
+  - first by policy (`approvals::by_policy`);
+  - then by the Auto window (`window_approves`, the same `decide` an asked
+    approval uses).
+
+  If one would, it applies `Approve` as `policy:<rule>` or `window:<n>`, then
+  the parked `Merge`, and journals both. The change keeps its turn, and no
+  `merge.released` is logged.
+- **It is a narrow exception** to the 2026-11-13 amendment's "a window or
+  mandate acts only when asked": only for a merge already asked, whose
+  approval a restack took. A head that first reaches `checked` is still
+  approved only when asked.
+- **What still refuses it:**
+  - a paused window, or one that doesn't cover the head's tier, answers none,
+    and the merge drops as before;
+  - the model-tiered briefs ADR's review gate: a brief's head awaiting its
+    planner's review is refused, so it drops, and comes back once accepted.
+- **Mandates aren't asked yet:** a mandate's coverage is per change and
+  per operation in `mandates.rs`, which is guarded. Re-approving under a
+  mandate is a separate, owner-tier change.
