@@ -785,3 +785,15 @@ changes, as !386 itself now plans: one per session and ADR.
     kept per change.
 - **Step 7b:** the digest's and `session_status`'s classes, and per-step
   counts by class (§7).
+
+### 2026-11-14: Step 7b lands: the digest names each session's class
+
+- **Step 7a merged as !434:** the breaker counts a brief's change at its
+  class's thresholds, in shadow.
+- **Step 7b, this change.** The digest's session and stall lines carry the
+  session's class, read once from the tickets, as `change_list`'s rows are
+  (step 1b): "session `<id>` (haiku): listening; …". A session with no known
+  class reads as before.
+- **Step 7c:** each brief's state, and per ADR step the heads, reviews and
+  escalations by class (§7). Those need the briefs and their changes
+  together, so the digest reads `/briefs/list` beside the D1 rows.

@@ -159,9 +159,12 @@ async fn sessions(
     let (_, y) = to_instance(env, s, "/yields/list", &json!({})).await?;
     let yields: std::collections::BTreeMap<u32, u32> =
         serde_json::from_value(y).unwrap_or_default();
+    let (_, held) = to_instance(env, s, "/tickets/list", &json!({})).await?;
+    let tickets: crate::tickets::Tickets = serde_json::from_value(held).unwrap_or_default();
     let mut out = Vec::new();
     let mut stalls = Vec::new();
     for (label, numbers) in by {
+        let model = tickets.class(&label);
         let (_, cursor) =
             to_instance(env, s, "/events/cursor", &json!({ "session": label })).await?;
         let listening = cursor["listening"].as_bool() == Some(true);
@@ -188,6 +191,7 @@ async fn sessions(
                         .filter(|(_, t)| **t == n)
                         .map(|(f, _)| *f)
                         .collect(),
+                    model,
                 });
             }
             changes.push((n, st.stage, needs));
@@ -196,6 +200,7 @@ async fn sessions(
             label,
             listening,
             changes,
+            model,
         });
     }
     Ok((out, stalls))

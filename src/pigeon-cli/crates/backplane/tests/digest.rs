@@ -154,6 +154,7 @@ fn sessions_are_shown_but_never_pushed() {
                 (5, "checked".into(), "owner".into()),
                 (9, "failed".into(), "agent".into()),
             ],
+            model: None,
         }],
         ..Digest::default()
     };
@@ -188,6 +189,7 @@ fn a_change_needing_a_session_that_isnt_listening_is_pushed_as_stalled() {
         next: "ask to merge (`change_merge`)".into(),
         quiet: Some(3 * 3600 + 5 * 60),
         waiting: vec![374],
+        model: None,
     });
     assert!(d.needs_owner(), "a stall is pushed");
     assert_eq!(
@@ -195,6 +197,43 @@ fn a_change_needing_a_session_that_isnt_listening_is_pushed_as_stalled() {
         [
             "stalled: !364 approved needs session session_x (quiet 3h05m): ask to merge \
           (`change_merge`); !374 waits on it; start a session to take it over, or close it"
+        ]
+    );
+}
+
+#[test]
+fn a_sessions_class_is_named_on_its_lines() {
+    // See the model-tiered briefs ADR §7.
+    use backplane::sessions::Class;
+    use backplane::tasks::{Digest, SessionLine, Stall};
+    let d = Digest {
+        sessions: vec![SessionLine {
+            label: "https://claude.ai/code/session_h".into(),
+            listening: true,
+            changes: vec![(7, "in-review".into(), "agent".into())],
+            model: Some(Class::Haiku),
+        }],
+        stalled: vec![Stall {
+            number: 8,
+            session: "https://claude.ai/code/session_s".into(),
+            stage: "failed".into(),
+            next: "fix it".into(),
+            quiet: None,
+            waiting: Vec::new(),
+            model: Some(Class::Sonnet),
+        }],
+        ..Digest::default()
+    };
+    let lines = d.lines();
+    assert!(
+        lines.contains(&"session session_h (haiku): listening; !7 in-review (agent)".to_string()),
+        "{lines:?}"
+    );
+    assert_eq!(
+        d.owner_lines(),
+        [
+            "stalled: !8 failed needs session session_s (sonnet) (never polled): fix it; start \
+             a session to take it over, or close it"
         ]
     );
 }

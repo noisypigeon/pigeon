@@ -345,6 +345,14 @@ pub struct Stall {
     /// The open changes yielded to it.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub waiting: Vec<u32>,
+    /// Its session's class, when its ticket is known.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<Class>,
+}
+
+/// `short`, with its session's class after it when known.
+fn named(short: &str, model: Option<Class>) -> String {
+    model.map_or_else(|| short.to_string(), |m| format!("{short} ({})", m.name()))
 }
 
 impl Stall {
@@ -363,9 +371,12 @@ impl Stall {
             format!("; {} {verb} on it", waiting.join(", "))
         };
         format!(
-            "stalled: !{} {} needs session {short} ({quiet}): {}{behind}; start a session to \
-             take it over, or close it",
-            self.number, self.stage, self.next
+            "stalled: !{} {} needs session {} ({quiet}): {}{behind}; start a session to take \
+             it over, or close it",
+            self.number,
+            self.stage,
+            named(short, self.model),
+            self.next
         )
     }
 }
@@ -379,6 +390,9 @@ pub struct SessionLine {
     pub listening: bool,
     /// Its open changes: the number, the stage and who it needs.
     pub changes: Vec<(u32, String, String)>,
+    /// Its class, when its ticket is known.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<Class>,
 }
 
 impl SessionLine {
@@ -398,7 +412,11 @@ impl SessionLine {
         } else {
             "not listening"
         };
-        format!("session {short}: {ear}; {}", shown.join(", "))
+        format!(
+            "session {}: {ear}; {}",
+            named(short, self.model),
+            shown.join(", ")
+        )
     }
 }
 
