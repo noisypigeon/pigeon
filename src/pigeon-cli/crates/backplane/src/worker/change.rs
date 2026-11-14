@@ -33,6 +33,10 @@ const ACTIONS: &str = "actions";
 const FORECAST: &str = "forecast";
 /// The commit of the change this one is built on that its bound job last saw it on.
 const AFTER_SEEN: &str = "after-seen";
+/// The head's `ios` check as a macOS job.
+const MACOS: &str = "macos";
+
+mod macos_check;
 
 /// How long an Actions token is reused, in seconds: GitHub's last an hour.
 const TOKEN_REUSE: u64 = 50 * 60;
@@ -496,6 +500,17 @@ impl ChangeRun {
         Ok(t)
     }
 
+    /// The head's code checks on GitHub, then its `ios` check wherever it runs.
+    async fn ci_step(
+        &self,
+        change: &mut Change,
+        github: &mut Actions,
+        next: &mut Vec<Pending>,
+    ) -> Result<()> {
+        self.github_step(change, github, next).await?;
+        self.macos_step(change, github, next).await
+    }
+
     /// Carries out what `github` says is due: re-runs the mirror job, dispatches `ci.yml`, finds
     /// and polls runs, and applies each finished check with its log; see
     /// `.claude/decisions/2026-11-10-development-code-checks-github-actions.md` §3–§5.
@@ -610,6 +625,7 @@ impl ChangeRun {
                 return Ok(());
             }
         };
+        self.macos_github_polled(github, i, &jobs).await?;
         for f in github.polled(i, &r, &jobs, at) {
             let log = match f.job {
                 Some(id) => super::github::job_log(gh.token, gh.owner, gh.repo, id)
@@ -850,7 +866,9 @@ impl DurableObject for ChangeRun {
                 let failures: Map<String, Value> = self.load(FAILURES).await?;
                 let bound_log: Option<String> = self.state.storage().get(BOUND_LOG).await?;
                 let github: Actions = self.load(ACTIONS).await?;
+                let macos: Option<crate::macos::Job> = self.load(MACOS).await?;
                 Response::from_json(&json!({
+                    "macos": macos.as_ref().map(crate::macos::view),
                     "change": change,
                     "branch": change.branch(),
                     "failures": failures,
@@ -965,6 +983,10 @@ impl DurableObject for ChangeRun {
                         Ok(()) => {}
                     }
                 }
+                Pending::Start(job) if mirrors && macos_check::is_ios(&change, &job) => {
+                    self.macos_start(&mut change, &mut github, window_open, &mut next)
+                        .await?;
+                }
                 Pending::Start(job)
                     if control::to_github(&change, &job, mirrors, window_open)
                         && !github.on_cloudflare(change.head.as_deref().unwrap_or_default()) =>
@@ -1009,8 +1031,7 @@ impl DurableObject for ChangeRun {
         let restack_failed = restack_before != Some(JobStatus::Failed)
             && restack_status(&change) == Some(JobStatus::Failed);
         let ended = control::merge_ended_by(&applied, &change);
-        self.github_step(&mut change, &mut github, &mut next)
-            .await?;
+        self.ci_step(&mut change, &mut github, &mut next).await?;
         self.state.storage().put(ACTIONS, &github).await?;
         let journal: Vec<Event> = self.load(JOURNAL).await?;
         control::catch_up(&mut change, &journal, seen);
@@ -1022,17 +1043,34 @@ impl DurableObject for ChangeRun {
             .put(JOURNAL, &Vec::<Event>::new())
             .await?;
         self.save_after(&change, &next, wait).await?;
-        if restack_failed && let Err(e) = super::tasks::restack_failed(&self.env, &change).await {
+        self.alarm_done(&change, restack_failed, ended).await;
+        Response::ok("ok")
+    }
+}
+
+impl ChangeRun {
+    /// After an alarm saved `change`: a failed restack's task, and the merge queue told when its
+    /// merge ended.
+    #[allow(
+        clippy::option_option,
+        reason = "`control::merge_ended_by`'s answer, passed on"
+    )]
+    async fn alarm_done(
+        &self,
+        change: &Change,
+        restack_failed: bool,
+        ended: Option<Option<String>>,
+    ) {
+        if restack_failed && let Err(e) = super::tasks::restack_failed(&self.env, change).await {
             worker::console_error!("restack task: {e}");
         }
         if control::released_without_merge(ended.as_ref()) {
-            self.released(&change).await;
+            self.released(change).await;
         }
         if let Some(merged) = ended
-            && let Err(e) = super::merges::ended(&self.env, &change, merged.as_deref()).await
+            && let Err(e) = super::merges::ended(&self.env, change, merged.as_deref()).await
         {
             worker::console_error!("merge queue: {e}");
         }
-        Response::ok("ok")
     }
 }

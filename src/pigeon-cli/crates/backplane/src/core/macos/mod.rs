@@ -9,8 +9,13 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
+mod job;
+#[cfg(test)]
+mod job_tests;
 #[cfg(test)]
 mod tests;
+
+pub use job::*;
 
 /// The reviewed order, start time and caps.
 pub const CONFIG: &str = include_str!("../../../../../../../.config/macos.yaml");
@@ -609,4 +614,72 @@ pub fn config_digest(text: &str) -> String {
 #[must_use]
 pub fn same_config(held: &str, ours: &str) -> bool {
     config_digest(held) == config_digest(ours)
+}
+
+/// The digest's macOS lines: each `ci.moved` and `macos.provider` event's summary, then each
+/// provider past 80% of its cap.
+#[must_use]
+pub fn digest_lines(events: &[(String, String)], cfg: &Config, usage: &Usage) -> Vec<String> {
+    let mut out: Vec<String> = events
+        .iter()
+        .filter(|(kind, _)| kind == "ci.moved" || kind == "macos.provider")
+        .map(|(_, summary)| summary.clone())
+        .collect();
+    for p in Provider::ALL {
+        let used = usage.get(&p).copied().unwrap_or(0);
+        if let Some(cap) = cfg.cap(p).filter(|&c| near_cap(used, Some(c))) {
+            out.push(format!("{}: {used} of {cap} minutes this month", p.name()));
+        }
+    }
+    out
+}
+
+/// What `deploy_status` shows of each provider: its health and its minutes against its cap.
+#[must_use]
+pub fn status(cfg: &Config, health: &Health, usage: &Usage, now: u64) -> Value {
+    let providers: Vec<Value> = cfg
+        .order
+        .iter()
+        .map(|&p| {
+            let h = health.get(&p).cloned().unwrap_or_default();
+            let state = match availability(&h, now) {
+                Availability::Up => "up".to_string(),
+                Availability::Probe => "down, due a probe".to_string(),
+                Availability::Down { until } => format!(
+                    "down for {} more minutes",
+                    until.saturating_sub(now).div_ceil(60).max(1)
+                ),
+            };
+            serde_json::json!({
+                "provider": p.name(),
+                "health": state,
+                "minutes": usage.get(&p).copied().unwrap_or(0),
+                "cap": cfg.cap(p),
+            })
+        })
+        .collect();
+    serde_json::json!({ "providers": providers })
+}
+
+/// The `macos.provider` event's summary when `p`'s health went from `before` to `after`.
+#[must_use]
+pub fn health_event(
+    p: Provider,
+    before: &ProviderHealth,
+    after: &ProviderHealth,
+) -> Option<String> {
+    let name = p.name();
+    match (&before.down, &after.down) {
+        (None, Some(d)) => Some(format!(
+            "{name} is down for macOS jobs: {MOVES_DOWN} moved away within {} minutes; a job probes it in {} minutes",
+            WINDOW / 60,
+            d.wait / 60
+        )),
+        (Some(_), None) => Some(format!("{name} takes macOS jobs again: its probe ran")),
+        (Some(b), Some(d)) if b.wait != d.wait => Some(format!(
+            "{name}'s probe gave no machine; it is probed again in {} minutes",
+            d.wait / 60
+        )),
+        _ => None,
+    }
 }

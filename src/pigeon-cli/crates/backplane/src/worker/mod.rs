@@ -12,6 +12,7 @@ mod apns;
 mod app;
 mod apple;
 mod approve;
+mod bitrise;
 mod briefs;
 mod buildkite;
 mod change;
@@ -24,6 +25,7 @@ mod events;
 mod gitdoor;
 mod github;
 mod insights;
+mod macos;
 mod main_run;
 mod mandates;
 mod merges;
@@ -839,6 +841,11 @@ async fn deploy_status(
     let mut v: Value = r.json().await?;
     v["pipeline"]["last_log"] = json!(last_log(env, &v).await?);
     v["ci_window"] = json!(ci_window::current(env, s).await?);
+    if let Ok(cfg) = crate::macos::config() {
+        let health = macos::health(env, s).await;
+        let usage = macos::usage(env).await.unwrap_or_default();
+        v["macos"] = crate::macos::status(&cfg, &health, &usage, platform::now());
+    }
     Ok((None, respond(operation, r.status_code(), v)))
 }
 
@@ -1824,6 +1831,10 @@ impl DurableObject for Instance {
         if path.starts_with("/ci-window/") {
             let body: Value = req.json().await?;
             return ci_window::serve(&self.state, &path, &body).await;
+        }
+        if path.starts_with("/macos/") {
+            let body: Value = req.json().await?;
+            return macos::serve(&self.state, &path, &body).await;
         }
         if path.starts_with("/merges/") {
             let body: Value = req.json().await?;

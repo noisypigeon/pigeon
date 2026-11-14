@@ -277,6 +277,9 @@ pub struct DigestInput<'a> {
     pub merged_without_owner: &'a [(u32, String)],
     /// Why the GitHub mirror needs the owner, if it does.
     pub mirror: Option<&'a str>,
+    /// macOS jobs moved, providers down, and providers near their monthly cap; see
+    /// `.claude/decisions/2026-11-12-development-macos-builds-provider-failover.md` §5.
+    pub macos: &'a [String],
 }
 
 /// The owner's digest.
@@ -303,6 +306,9 @@ pub struct Digest {
     /// them.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub stalled: Vec<Stall>,
+    /// macOS jobs moved, providers down, and providers near their cap.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub macos: Vec<String>,
 }
 
 /// How long a session goes without polling before a change that needs it stalls, in seconds;
@@ -411,7 +417,7 @@ impl Digest {
     /// Whether it holds anything at all.
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        !self.needs_owner() && self.merged_without_owner.is_empty()
+        !self.needs_owner() && self.merged_without_owner.is_empty() && self.macos.is_empty()
     }
 
     /// One line per item, for a page: [`Self::owner_lines`], then the sessions.
@@ -453,6 +459,7 @@ impl Digest {
         );
         out.extend(self.stalled.iter().map(Stall::line));
         out.extend(self.mirror.clone());
+        out.extend(self.macos.iter().map(|l| format!("macOS: {l}")));
         out
     }
 }
@@ -491,5 +498,6 @@ pub fn digest(input: &DigestInput<'_>, now: u64) -> Digest {
         mirror: input.mirror.map(str::to_string),
         sessions: Vec::new(),
         stalled: Vec::new(),
+        macos: input.macos.to_vec(),
     }
 }

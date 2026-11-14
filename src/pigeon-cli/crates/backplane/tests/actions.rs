@@ -300,3 +300,17 @@ fn a_head_the_owner_moved_to_cloudflare_stays_there_until_a_new_head() {
         "a new head goes back to GitHub"
     );
 }
+
+#[test]
+fn a_moved_check_is_dropped_and_the_heads_others_go_on() {
+    let mut a = Actions::default();
+    a.queue(7, A, "fmt");
+    a.queue(7, A, "ios");
+    a.drop_check(A, "ios");
+    assert!(!a.owns(A, "ios") && a.owns(A, "fmt"));
+    assert_eq!(a.due(Mirror::Passed, 10), [Due::Dispatch(0)]);
+    let mut only = Actions::default();
+    only.queue(7, A, "ios");
+    only.drop_check(A, "ios");
+    assert_eq!(only.due(Mirror::Passed, 10), [], "nothing left to dispatch");
+}

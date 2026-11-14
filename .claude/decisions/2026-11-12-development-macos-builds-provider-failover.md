@@ -228,3 +228,27 @@ Each step is its own change, behind the one before.
    - The `ci.moved` and `macos.provider` events.
 9. **`feat(backplane)`: what the owner sees** (§5): the Bitrise source and the new error kinds in insights, the digest's lines, and `deploy_status`. This ADR's minutes are replaced with a month of measured ones, by amendment.
 10. **The owner: the drill** of §7.
+
+## Amendments
+
+### 2026-11-13: Steps 5 to 9 as built: the order, one change for the Worker, and what waits
+
+The owner asked for the feature to be built end to end, then tested and tuned together. What differs from §8:
+
+- **Step 6 came before step 5.** Step 5's policy needs `.config/macos.yaml`, which step 6 adds, and its target is optional, so either order holds. Step 5 also bumps the sentinel's count of policies and tests the new one (!321, replacing !317, whose scope missed the test).
+- **`insights.yaml` doesn't gain `bitrise_macos_minute` yet.** Its policy's `fields` rule is `only` and in order, so neither the file nor the policy can change first. And a sentinel change holds only policies, so they can't change together. Until the owner decides how to pair them, Bitrise's cost rows are left out (`insights::rate_of` is none), which matches its $0 with Pay-As-You-Go off.
+- **Steps 7, 8 and 9 are one change.** The clients have no caller until failover exists, and `clippy -D warnings` refuses dead code. That change holds:
+  - `core::macos::job`: a job's attempts, `settle` and `place`, and the `macos_jobs` rows;
+  - `worker/bitrise.rs`, and `pigeon-ios-build` in `worker/buildkite.rs`;
+  - `worker/macos.rs`: health on `Instance`, `drive`, `abandon` and the archive's download;
+  - `0006_macos_jobs.sql`;
+  - `MainRun`'s archive across providers;
+  - `ChangeRun`'s `ios` check as a macOS job (`worker/change/macos_check.rs`), and `Actions::drop_check`;
+  - the digest's `macOS:` lines;
+  - `deploy_status`'s `macos`;
+  - insights' Bitrise source, and each provider's `No machine`, `Lost machine` and `Refused` errors.
+- **The `ios` check moves only when the head is mirrored.** Every provider clones from the GitHub mirror (§3). Without a mirror, it runs on a Container as before.
+- **Later changes:**
+  - **The owner's overrides.** These are `ci_rerun on: github|bitrise|buildkite` and `ios.release on`, owner tier through the approval code. Until then, the CI window sends `ios` past GitHub, and a reviewed change to `order` sends archives elsewhere.
+  - **The app's Bitrise source.** It needs a colour, which `Theme.swift` checks for colour-blind separation.
+  - **Measured minutes** (step 9's last item), after a month.

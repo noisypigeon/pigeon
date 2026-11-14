@@ -1,13 +1,15 @@
-//! An iOS release, as `MainRun` moves it on: GitHub archives it, the control plane copies the
-//! archive to R2, Buildkite signs and uploads it, and App Store Connect processes it; see the
-//! 2026-11-12 amendment to `.claude/decisions/2026-11-11-release-ios-app-buildkite-testflight.md`.
+//! An iOS release, as `MainRun` moves it on: a macOS provider archives it, the control plane
+//! copies the archive to R2, Buildkite signs and uploads it, and App Store Connect processes it;
+//! see the 2026-11-12 amendment to `.claude/decisions/2026-11-11-release-ios-app-buildkite-testflight.md`
+//! and `.claude/decisions/2026-11-12-development-macos-builds-provider-failover.md` §2.
 
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
-use crate::actions::{self, Actions, Finished};
+use crate::actions::{self, Actions};
 use crate::changes::Check;
 use crate::control::Statement;
+use crate::macos::{Job, Kind, Provider};
 
 /// The check that archives a release, as `ci.yml` runs it.
 pub const CHECK: &str = "ios.archive";
@@ -50,7 +52,7 @@ pub fn number(build: u64) -> u32 {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Stage {
-    /// GitHub archives it.
+    /// A macOS provider archives it.
     Archiving,
     /// Its archive is copied to R2, then its Buildkite build created.
     Copying,
@@ -72,6 +74,9 @@ pub struct Current {
     /// The GitHub run that archived it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub run: Option<u64>,
+    /// The provider that archived it, and its run or build there.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub archive: Option<(Provider, String)>,
     /// Its Buildkite build's number.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub buildkite: Option<u64>,
@@ -88,6 +93,9 @@ pub struct IosReleases {
     /// The release in flight.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub current: Option<Current>,
+    /// Its archive's macOS job, across providers.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub macos: Option<Job>,
 }
 
 /// What became of the release in flight, for D1 and the event log.
@@ -133,16 +141,26 @@ impl IosReleases {
             ));
         }
         self.actions = Actions::default();
-        self.actions.queue(number(build), sha, CHECK);
+        self.macos = Some(Job::new(Kind::Archive, build, sha, now, None, Vec::new()));
         self.current = Some(Current {
             build,
             sha: sha.into(),
             stage: Stage::Archiving,
             run: None,
+            archive: None,
             buildkite: None,
             since: now,
         });
         Ok(())
+    }
+
+    /// The archive was placed on GitHub: one dispatch of [`CHECK`], afresh.
+    pub fn on_github(&mut self) {
+        let Some(c) = &self.current else {
+            return;
+        };
+        self.actions = Actions::default();
+        self.actions.queue(number(c.build), &c.sha, CHECK);
     }
 
     /// Whether the alarm should come back soon.
@@ -151,21 +169,18 @@ impl IosReleases {
         self.current.is_some()
     }
 
-    /// The archive check finished as `f`.
-    pub fn archived(&mut self, n: usize, f: &Finished, now: u64) -> Moved {
-        let run = self.actions.dispatches.get(n).and_then(|d| d.run);
+    /// The archive passed on `provider`, as its run or build `id`: it is copied next.
+    pub fn archived_on(&mut self, provider: Provider, id: &str, now: u64) -> Moved {
         let Some(c) = self.current.as_mut() else {
             return Moved::Failed("no release is in flight".into());
         };
-        if f.ok {
-            c.stage = Stage::Copying;
-            c.run = run;
-            c.since = now;
-            Moved::To("archiving")
-        } else {
-            self.current = None;
-            Moved::Failed("GitHub's archive failed".into())
-        }
+        c.stage = Stage::Copying;
+        c.run = (provider == Provider::Github)
+            .then(|| id.parse().ok())
+            .flatten();
+        c.archive = Some((provider, id.into()));
+        c.since = now;
+        Moved::To("archiving")
     }
 
     /// The archive was copied and Buildkite build `number` created.
@@ -222,10 +237,12 @@ impl IosReleases {
                 "sha": c.sha,
                 "stage": stage_name(c.stage),
                 "run": c.run,
+                "archive": c.archive.as_ref().map(|(p, id)| json!({ "provider": p.name(), "id": id })),
                 "buildkite": c.buildkite,
                 "since": c.since,
             })),
             "dispatches": self.actions.view(),
+            "macos": self.macos.as_ref().map(crate::macos::view),
         })
     }
 }
@@ -303,6 +320,16 @@ pub fn set_state(build: u64, state: &str, buildkite: Option<u64>, now: u64) -> S
     }
 }
 
+/// Records where release `build` was archived: the provider, and its run or build there.
+#[must_use]
+pub fn set_archive(build: u64, provider: Provider, id: &str, now: u64) -> Statement {
+    Statement {
+        sql: "UPDATE ios_releases SET archive_provider = ?2, archive_build = ?3, updated_at = ?4 \
+              WHERE build = ?1",
+        params: vec![json!(build), json!(provider.name()), json!(id), json!(now)],
+    }
+}
+
 /// The state of release `build`.
 #[must_use]
 pub fn state_of(build: u64) -> Statement {
@@ -374,22 +401,30 @@ mod tests {
 
     const SHA: &str = "0123456789abcdef0123456789abcdef01234567";
 
-    fn finished(ok: bool) -> Finished {
-        Finished {
-            name: CHECK.into(),
-            ok,
-            job: Some(1),
-        }
-    }
-
     #[test]
     fn a_release_moves_from_archive_to_delivery() {
         let mut r = IosReleases::default();
         r.start(3, SHA, 10).expect("starts");
+        assert!(r.actions.dispatches.is_empty(), "nothing until placed");
+        assert_eq!(r.macos.as_ref().map(|j| j.number), Some(3));
+        r.on_github();
         assert_eq!(r.actions.dispatches.len(), 1);
         assert!(r.actions.dispatches[0].id.starts_with("1000003-"));
-        assert_eq!(r.archived(0, &finished(true), 20), Moved::To("archiving"));
-        assert_eq!(r.current.as_ref().map(|c| c.stage), Some(Stage::Copying));
+        assert_eq!(
+            r.archived_on(Provider::Github, "43316598157", 20),
+            Moved::To("archiving")
+        );
+        let c = r.current.as_ref().expect("in flight");
+        assert_eq!(c.stage, Stage::Copying);
+        assert_eq!(c.run, Some(43_316_598_157));
+        let mut b = IosReleases::default();
+        b.start(4, SHA, 10).expect("starts");
+        b.archived_on(Provider::Bitrise, "slug-1", 20);
+        let c = b.current.as_ref().expect("in flight");
+        assert_eq!(
+            (c.run, c.archive.clone()),
+            (None, Some((Provider::Bitrise, "slug-1".into())))
+        );
         assert_eq!(r.signing(77, 30), Moved::To("archived"));
         assert_eq!(r.current.as_ref().and_then(|c| c.buildkite), Some(77));
         assert_eq!(r.signed("running", "signing", 40), None);
@@ -415,7 +450,7 @@ mod tests {
         let mut r = IosReleases::default();
         r.start(1, SHA, 0).expect("starts");
         assert!(matches!(
-            r.archived(0, &finished(false), 1),
+            r.fail("github's archive failed"),
             Moved::Failed(_)
         ));
         assert!(!r.busy());

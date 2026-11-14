@@ -70,6 +70,7 @@ fn the_digest_names_what_waits_on_the_owner_and_what_merged_without_them() {
             failed_deploys: &failed,
             merged_without_owner: &merged,
             mirror: None,
+            macos: &[],
         },
         STALE + 10,
     );
@@ -113,6 +114,20 @@ fn only_merges_without_the_owner_are_news_but_not_a_push() {
     );
     assert!(!d.is_empty());
     assert!(!d.needs_owner());
+}
+
+#[test]
+fn macos_moves_are_news_but_not_a_push() {
+    let lines = ["!300 ios moved: github gave no machine".to_string()];
+    let d = digest(
+        &DigestInput {
+            macos: &lines,
+            ..DigestInput::default()
+        },
+        0,
+    );
+    assert!(!d.is_empty() && !d.needs_owner());
+    assert_eq!(d.lines(), ["macOS: !300 ios moved: github gave no machine"]);
 }
 
 #[test]

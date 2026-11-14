@@ -150,4 +150,34 @@ fn an_empty_range_totals_plus_zero_and_says_why_a_source_is_empty() {
     assert!(all["note"].is_null(), "the tiles carry no note");
     assert!(note("cost", BUILDKITE).is_none());
     assert!(note("cost", GITHUB).is_some());
+    assert!(note("cost", super::BITRISE).is_some());
+}
+
+#[test]
+fn macos_attempts_count_by_provider_and_outcome() {
+    let attempts = vec![
+        json!({ "provider": "github", "outcome": "unassigned", "minutes": null }),
+        json!({ "provider": "github", "outcome": "unassigned", "minutes": null }),
+        json!({ "provider": "bitrise", "outcome": "passed", "minutes": 7 }),
+        json!({ "provider": "bitrise", "outcome": "lost", "minutes": 3 }),
+        json!({ "provider": "buildkite", "outcome": "refused", "minutes": null }),
+        json!({ "provider": "buildkite", "outcome": "passed", "minutes": 6 }),
+    ];
+    let rows = super::macos(HOUR, &attempts);
+    let of = |source: &str, kind: &str| {
+        rows.iter()
+            .find(|r| r.source == source && r.kind == kind)
+            .map_or(-1.0, |r| r.value)
+    };
+    assert_eq!(of("github", super::NO_MACHINE), 2.0);
+    assert_eq!(of("bitrise", super::LOST_MACHINE), 1.0);
+    assert_eq!(of("buildkite", super::REFUSED), 1.0);
+    assert_eq!(super::minutes_of(&attempts, "bitrise"), 10.0);
+    assert_eq!(super::minutes_of(&attempts, "buildkite"), 6.0);
+    assert_eq!(
+        super::rate_of("bitrise"),
+        None,
+        "until insights.yaml holds a rate"
+    );
+    assert!(rows.iter().all(|r| r.metric == "errors"));
 }

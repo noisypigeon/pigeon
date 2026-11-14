@@ -211,6 +211,17 @@ impl Actions {
             .retain(|d| d.dispatched_at.is_some() || !d.checks.is_empty());
     }
 
+    /// Stops following `check` on `sha` here: its macOS job moved to another provider, and the
+    /// head's other checks go on as they were; see
+    /// `.claude/decisions/2026-11-12-development-macos-builds-provider-failover.md` §2.
+    pub fn drop_check(&mut self, sha: &str, check: &str) {
+        for d in self.dispatches.iter_mut().filter(|d| d.sha == sha) {
+            if d.checks.iter().any(|c| c == check) && !d.reported.iter().any(|c| c == check) {
+                d.reported.push(check.to_string());
+            }
+        }
+    }
+
     /// Whether `check` on `sha` waits on GitHub, not a Container.
     #[must_use]
     pub fn owns(&self, sha: &str, check: &str) -> bool {

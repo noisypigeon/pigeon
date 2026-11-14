@@ -204,6 +204,16 @@ pub async fn commit_message(
         .ok_or_else(|| format!("commit {sha} has no message"))
 }
 
+/// Cancels run `id`, as when a release's archive moved to another provider.
+///
+/// # Errors
+///
+/// When GitHub refuses.
+pub async fn cancel(token: &str, owner: &str, repo: &str, id: u64) -> Result<(), String> {
+    let path = format!("/repos/{owner}/{repo}/actions/runs/{id}/cancel");
+    call(Method::Post, &path, token, None).await.map(drop)
+}
+
 /// Run `id` and its jobs.
 ///
 /// # Errors

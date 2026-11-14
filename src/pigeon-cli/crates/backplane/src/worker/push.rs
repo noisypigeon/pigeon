@@ -125,6 +125,7 @@ pub async fn build(env: &Env, s: &Settings) -> Result<(Digest, u64)> {
         })
         .collect();
     let behind = mirror_behind(env, s).await;
+    let macos = macos_lines(env, &events).await;
     let mut d = digest(
         &DigestInput {
             waiting: &waiting,
@@ -133,6 +134,7 @@ pub async fn build(env: &Env, s: &Settings) -> Result<(Digest, u64)> {
             failed_deploys: &failed,
             merged_without_owner: &merged,
             mirror: behind.as_deref(),
+            macos: &macos,
         },
         now(),
     );
@@ -197,6 +199,19 @@ async fn sessions(
         });
     }
     Ok((out, stalls))
+}
+
+/// The digest's macOS lines, from the events since the last digest and this month's minutes.
+async fn macos_lines(env: &Env, events: &[crate::events::Event]) -> Vec<String> {
+    let Ok(cfg) = crate::macos::config() else {
+        return Vec::new();
+    };
+    let usage = super::macos::usage(env).await.unwrap_or_default();
+    let pairs: Vec<(String, String)> = events
+        .iter()
+        .map(|x| (x.kind.clone(), x.summary.clone()))
+        .collect();
+    crate::macos::digest_lines(&pairs, &cfg, &usage)
 }
 
 /// Why the GitHub mirror needs the owner, per `MainRun`; none when it can't be asked.

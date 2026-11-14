@@ -25,9 +25,19 @@ pub async fn collect(env: &Env) -> Result<()> {
             Ok(jobs) => rows.extend(insights::github(hour, &jobs)),
             Err(e) => worker::console_warn!("insights: GitHub's rows for {hour}: {e}"),
         }
+        let attempts = match d1_rows(env, &crate::macos::ended_in(hour)).await {
+            Ok(a) => {
+                rows.extend(insights::macos(hour, &a));
+                a
+            }
+            Err(e) => {
+                worker::console_warn!("insights: macOS rows for {hour}: {e}");
+                Vec::new()
+            }
+        };
         match d1_rows(env, &insights::releases_in(hour)).await {
             Ok(releases) => {
-                let mut minutes = 0.0;
+                let mut minutes = insights::minutes_of(&attempts, insights::BUILDKITE);
                 for r in &releases {
                     let Some(number) = r["buildkite_build"].as_u64() else {
                         continue;
@@ -109,7 +119,9 @@ pub async fn detail(
         return Ok(Err("metric must be cost or errors".into()));
     }
     if !insights::SOURCES.contains(&source) {
-        return Ok(Err("source must be cloudflare, github or buildkite".into()));
+        return Ok(Err(
+            "source must be cloudflare, github, bitrise or buildkite".into(),
+        ));
     }
     let r = rows(env, metric, range).await?;
     Ok(insights::stacks(&r, metric, Some(source), range, now()))

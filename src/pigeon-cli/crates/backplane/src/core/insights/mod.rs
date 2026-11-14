@@ -20,13 +20,22 @@ pub const KEEP: u64 = 90 * DAY;
 pub const CATCH_UP: u64 = 48;
 
 /// The sources, in the app's order.
-pub const SOURCES: [&str; 3] = [CLOUDFLARE, GITHUB, BUILDKITE];
+pub const SOURCES: [&str; 4] = [CLOUDFLARE, GITHUB, BITRISE, BUILDKITE];
 /// Cloudflare.
 pub const CLOUDFLARE: &str = "cloudflare";
 /// GitHub.
 pub const GITHUB: &str = "github";
 /// Buildkite.
 pub const BUILDKITE: &str = "buildkite";
+/// Bitrise, which takes macOS jobs GitHub gives no machine; see
+/// `.claude/decisions/2026-11-12-development-macos-builds-provider-failover.md` §5.
+pub const BITRISE: &str = "bitrise";
+/// A macOS job a provider gave no machine.
+pub const NO_MACHINE: &str = "No machine";
+/// A macOS job whose machine went away.
+pub const LOST_MACHINE: &str = "Lost machine";
+/// A macOS job a provider refused.
+pub const REFUSED: &str = "Refused";
 
 /// GitHub's kinds of error.
 pub const FAILED_CHECKS: &str = "Failed checks";
@@ -159,6 +168,58 @@ pub fn buildkite(hour: u64, releases: &[Value], minutes: f64, rate: Option<f64>)
         rows.push(row(hour, "cost", BUILDKITE, MACOS_MINUTES, minutes * rate));
     }
     rows
+}
+
+/// The rate of `source`'s macOS minutes, when the owner has set one: Bitrise's
+/// `bitrise_macos_minute` once `.config/insights.yaml` holds it.
+#[must_use]
+pub fn rate_of(source: &str) -> Option<f64> {
+    match source {
+        BITRISE => price(PRICES, "bitrise_macos_minute"),
+        BUILDKITE => macos_minute(),
+        _ => None,
+    }
+}
+
+/// macOS failover's rows for `hour`, from `macos_jobs` attempts (`provider`, `outcome`,
+/// `minutes`) that ended in it: each provider's attempts that gave no machine, lost it or were
+/// refused, and Bitrise's minutes at its rate. Buildkite's minutes join its sign steps' cost.
+#[must_use]
+pub fn macos(hour: u64, attempts: &[Value]) -> Vec<Row> {
+    let mut rows = Vec::new();
+    for source in [GITHUB, BITRISE, BUILDKITE] {
+        let of = |outcome: &str| {
+            let n = attempts
+                .iter()
+                .filter(|a| a["provider"] == source && a["outcome"] == outcome)
+                .count();
+            f64::from(u32::try_from(n).unwrap_or(u32::MAX))
+        };
+        rows.push(row(hour, "errors", source, NO_MACHINE, of("unassigned")));
+        rows.push(row(hour, "errors", source, LOST_MACHINE, of("lost")));
+        rows.push(row(hour, "errors", source, REFUSED, of("refused")));
+    }
+    if let Some(rate) = rate_of(BITRISE) {
+        rows.push(row(
+            hour,
+            "cost",
+            BITRISE,
+            MACOS_MINUTES,
+            minutes_of(attempts, BITRISE) * rate,
+        ));
+    }
+    rows
+}
+
+/// `source`'s macOS minutes among `attempts`.
+#[must_use]
+pub fn minutes_of(attempts: &[Value], source: &str) -> f64 {
+    attempts
+        .iter()
+        .filter(|a| a["provider"] == source)
+        .filter_map(|a| a["minutes"].as_u64())
+        .map(|m| f64::from(u32::try_from(m).unwrap_or(u32::MAX)))
+        .sum()
 }
 
 /// Unix seconds of an RFC 3339 UTC time such as `2026-11-12T07:48:33.611Z`.
@@ -353,6 +414,7 @@ pub fn note(metric: &str, source: &str) -> Option<&'static str> {
     match (metric, source) {
         (_, CLOUDFLARE) => Some("Not collected yet: Cloudflare waits for the observability token."),
         ("cost", GITHUB) => Some("GitHub Actions is free while the repository is public."),
+        ("cost", BITRISE) => Some("Bitrise is free on Hobby with Pay-As-You-Go off."),
         ("errors", GITHUB) => Some("Dispatch errors aren't recorded yet."),
         _ => None,
     }

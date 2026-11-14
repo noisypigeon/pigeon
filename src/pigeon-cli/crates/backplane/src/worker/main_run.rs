@@ -15,6 +15,7 @@ use super::platform::{self, job_stub, json_request, now, secret};
 use crate::actions::Due;
 use crate::control::{self, Outcome, Pipeline, Report};
 use crate::iosrelease::{self, IosReleases, Moved};
+use crate::macos::{self, Placed, Provider, Settled};
 use crate::mirroring::{self, Mirroring};
 use crate::testmaps::{self, TestMaps};
 
@@ -348,77 +349,269 @@ impl MainRun {
         Ok(())
     }
 
-    /// Dispatches, finds and polls the release's `ios.archive` run.
+    /// Moves the release's archive on, across macOS providers: drives the attempt in flight,
+    /// settles it, and places the job on the next provider when it moved; see
+    /// `.claude/decisions/2026-11-12-development-macos-builds-provider-failover.md` §2.
     async fn ios_archive_step(&self, r: &mut IosReleases, at: u64) -> Result<()> {
         let Some(c) = r.current.clone() else {
             return Ok(());
         };
-        let due = r.actions.due(crate::actions::Mirror::Passed, at);
-        let Some((owner, repo)) =
-            github::mirror(&self.env).and_then(|to| mirroring::github_repo(&to))
-        else {
-            return Ok(());
-        };
-        let request = mirroring::actions_token_request(&repo);
-        let token = match github::installation_token(&self.env, &owner, &repo, &request).await {
-            Ok(token) => token,
+        let cfg = match macos::config() {
+            Ok(cfg) => cfg,
             Err(why) => {
-                worker::console_warn!("iOS build {} waits: {why}", c.build);
+                worker::console_error!(".config/macos.yaml: {why}");
                 return Ok(());
             }
         };
-        let check = iosrelease::check(c.build);
-        let mut ended: Option<Moved> = None;
-        for d in due {
-            let call = match d {
-                Due::Dispatch(i) => {
-                    let body = crate::actions::dispatch_body(
-                        &r.actions.dispatches[i],
-                        iosrelease::number(c.build),
-                        std::slice::from_ref(&check),
-                    );
-                    github::dispatch(&token, &owner, &repo, &body)
-                        .await
-                        .map(|()| drop(r.actions.dispatched(i, at)))
-                }
-                Due::Find(i) => github::runs(&token, &owner, &repo)
+        let s = platform::Settings::from(&self.env)?;
+        let before = r.macos.clone().unwrap_or_else(|| {
+            macos::Job::new(
+                macos::Kind::Archive,
+                c.build,
+                &c.sha,
+                c.since,
+                None,
+                Vec::new(),
+            )
+        });
+        let mut job = before.clone();
+        if let Some(a) = job.current().cloned() {
+            job = if a.provider == Provider::Github {
+                self.ios_archive_github(r, &job, &a, cfg.start_within, at)
                     .await
-                    .map(|listed| r.actions.found(i, &listed, at)),
-                Due::Poll(i) => {
-                    let run = r.actions.dispatches[i].run.unwrap_or_default();
-                    github::run(&token, &owner, &repo, run)
-                        .await
-                        .map(|(run, jobs)| {
-                            for f in r.actions.polled(i, &run, &jobs, at) {
-                                if f.name == iosrelease::CHECK {
-                                    ended = Some(r.archived(i, &f, at));
-                                }
-                            }
-                        })
-                }
-                Due::Mirror => Ok(()),
+            } else {
+                super::macos::drive(&self.env, &job, crate::apple::BRANCH, cfg.start_within, at)
+                    .await
             };
-            if let (Err(why), Due::Dispatch(i) | Due::Find(i) | Due::Poll(i)) = (call, d) {
-                r.actions.failed(i, &why, at);
+        }
+        let (settled_job, settled) = macos::settle(&job);
+        job = settled_job;
+        self.ios_settled(r, &c, &job, settled, &s, at).await?;
+        if job.result.is_none() {
+            let health = super::macos::health(&self.env, &s).await;
+            let usage = super::macos::usage(&self.env).await.unwrap_or_default();
+            let (placed_job, placed) = macos::place(&job, &cfg, &health, &usage, at);
+            job = placed_job;
+            match placed {
+                Placed::Run { provider, probe } => {
+                    if probe {
+                        super::macos::report(&self.env, &s, provider, "probing").await;
+                    }
+                    if provider == Provider::Github {
+                        r.on_github();
+                    }
+                }
+                Placed::Wait { why } => {
+                    if before.waiting.as_deref() != Some(why.as_str()) {
+                        self.ios_event(
+                            "ios.release",
+                            &format!("iOS build {} waits: {why}", c.build),
+                        )
+                        .await;
+                    }
+                }
+                Placed::GaveUp { why } => {
+                    let m = r.fail(&why);
+                    self.ios_moved(c.build, &m, None).await?;
+                }
+                Placed::Nothing => {}
             }
         }
-        if let Some(Moved::Failed(why)) = &ended {
-            self.ios_moved(c.build, &Moved::Failed(why.clone()), None)
-                .await?;
+        let rows: Vec<_> = job
+            .attempts
+            .iter()
+            .filter(|a| !before.attempts.contains(a))
+            .map(|a| macos::record(&job, a))
+            .collect();
+        if !rows.is_empty() {
+            platform::d1(&self.env, &rows).await?;
+        }
+        r.macos = Some(job);
+        Ok(())
+    }
+
+    /// Acts on what became of the archive's attempt: copies it, fails the release, or records
+    /// the move and stops the attempt left behind.
+    async fn ios_settled(
+        &self,
+        r: &mut IosReleases,
+        c: &iosrelease::Current,
+        job: &macos::Job,
+        settled: Settled,
+        s: &platform::Settings,
+        at: u64,
+    ) -> Result<()> {
+        match settled {
+            Settled::Pending => {}
+            Settled::Ran { provider, passed } => {
+                super::macos::report(&self.env, s, provider, "ran").await;
+                let id = job
+                    .attempts
+                    .last()
+                    .and_then(|a| a.id.clone())
+                    .unwrap_or_default();
+                if passed {
+                    let m = r.archived_on(provider, &id, at);
+                    platform::d1(
+                        &self.env,
+                        &[iosrelease::set_archive(c.build, provider, &id, at)],
+                    )
+                    .await?;
+                    self.ios_moved(c.build, &m, None).await?;
+                } else {
+                    let m = r.fail(&format!("{}'s archive failed", provider.name()));
+                    self.ios_moved(c.build, &m, None).await?;
+                }
+            }
+            Settled::Moved { from, why } => {
+                super::macos::report(&self.env, s, from, "moved").await;
+                let id = job.attempts.last().and_then(|a| a.id.clone());
+                match (from, id) {
+                    (Provider::Github, _) => self.ios_cancel_github(r).await,
+                    (p, Some(id)) => super::macos::abandon(&self.env, p, &id).await,
+                    (_, None) => {}
+                }
+                self.ios_event(
+                    "ci.moved",
+                    &format!("iOS build {}'s archive moved: {why}", c.build),
+                )
+                .await;
+            }
+            Settled::Failed { why } => {
+                let m = r.fail(&why);
+                self.ios_moved(c.build, &m, None).await?;
+            }
         }
         Ok(())
     }
 
-    /// Copies the release's archive from its GitHub run to R2, and creates its Buildkite build:
-    /// that build's number.
-    async fn ios_copy(&self, c: &iosrelease::Current) -> std::result::Result<u64, String> {
-        let run = c.run.ok_or("the archive's run is unknown")?;
-        let (owner, repo) = github::mirror(&self.env)
-            .and_then(|to| mirroring::github_repo(&to))
-            .ok_or("no GitHub mirror")?;
+    /// The release's GitHub attempt: dispatches, finds and polls its `ios.archive` run, and
+    /// reads the job's outcome from GitHub's answer.
+    async fn ios_archive_github(
+        &self,
+        r: &mut IosReleases,
+        job: &macos::Job,
+        a: &macos::Attempt,
+        start_within: u64,
+        at: u64,
+    ) -> macos::Job {
+        let mut job = job.clone();
+        let due = r.actions.due(crate::actions::Mirror::Passed, at);
+        let Some((owner, repo)) =
+            github::mirror(&self.env).and_then(|to| mirroring::github_repo(&to))
+        else {
+            return macos::dispatch_failed(&job, "this Worker has no GitHub mirror", at);
+        };
         let request = mirroring::actions_token_request(&repo);
-        let token = github::installation_token(&self.env, &owner, &repo, &request).await?;
-        let body = github::artifact(&token, &owner, &repo, run, iosrelease::ARTIFACT).await?;
+        let token = match github::installation_token(&self.env, &owner, &repo, &request).await {
+            Ok(token) => token,
+            Err(why) => return macos::dispatch_failed(&job, &why, at),
+        };
+        let check = iosrelease::check(job.number);
+        for d in due {
+            match d {
+                Due::Dispatch(i) => {
+                    let body = crate::actions::dispatch_body(
+                        &r.actions.dispatches[i],
+                        iosrelease::number(job.number),
+                        std::slice::from_ref(&check),
+                    );
+                    match github::dispatch(&token, &owner, &repo, &body).await {
+                        Ok(()) => drop(r.actions.dispatched(i, at)),
+                        Err(why) => {
+                            r.actions.failed(i, &why, at);
+                            job = macos::dispatch_failed(&job, &why, at);
+                        }
+                    }
+                }
+                Due::Find(i) => match github::runs(&token, &owner, &repo).await {
+                    Ok(listed) => {
+                        r.actions.found(i, &listed, at);
+                        if let Some(run) = r.actions.dispatches[i].run {
+                            let url = r.actions.dispatches[i].url.clone();
+                            job = macos::dispatched(&job, &run.to_string(), url.as_deref());
+                        }
+                    }
+                    Err(why) => r.actions.failed(i, &why, at),
+                },
+                Due::Poll(i) => {
+                    let run = r.actions.dispatches[i].run.unwrap_or_default();
+                    match github::run(&token, &owner, &repo, run).await {
+                        Ok((_, jobs)) => {
+                            let ours = jobs["jobs"]
+                                .as_array()
+                                .into_iter()
+                                .flatten()
+                                .find(|j| j["name"] == iosrelease::CHECK)
+                                .cloned()
+                                .unwrap_or_default();
+                            let o = macos::github(
+                                &ours,
+                                iosrelease::CHECK,
+                                a.queued_at,
+                                at,
+                                start_within,
+                            );
+                            r.actions.dispatches[i].next_at = Some(at + crate::actions::POLL);
+                            job = macos::observed(&job, o, at);
+                        }
+                        Err(why) => r.actions.failed(i, &why, at),
+                    }
+                }
+                Due::Mirror => {}
+            }
+        }
+        let found = r.actions.dispatches.iter().any(|d| d.run.is_some());
+        if !found && job.current().is_some() {
+            let o = macos::github(
+                &Value::Null,
+                iosrelease::CHECK,
+                a.queued_at,
+                at,
+                start_within,
+            );
+            job = macos::observed(&job, o, at);
+        }
+        job
+    }
+
+    /// Cancels the release's GitHub run, once its archive moved away.
+    async fn ios_cancel_github(&self, r: &IosReleases) {
+        let Some(run) = r.actions.dispatches.iter().find_map(|d| d.run) else {
+            return;
+        };
+        let Some((owner, repo)) =
+            github::mirror(&self.env).and_then(|to| mirroring::github_repo(&to))
+        else {
+            return;
+        };
+        let request = mirroring::actions_token_request(&repo);
+        let cancelled = match github::installation_token(&self.env, &owner, &repo, &request).await {
+            Ok(token) => github::cancel(&token, &owner, &repo, run).await,
+            Err(why) => Err(why),
+        };
+        if let Err(why) = cancelled {
+            worker::console_warn!("cancelling run {run}: {why}");
+        }
+    }
+
+    /// Copies the release's archive from the provider that built it to R2, and creates its
+    /// Buildkite build: that build's number.
+    async fn ios_copy(&self, c: &iosrelease::Current) -> std::result::Result<u64, String> {
+        let body = match &c.archive {
+            Some((p, id)) if *p != Provider::Github => {
+                super::macos::archive(&self.env, *p, id).await?
+            }
+            _ => {
+                let run = c.run.ok_or("the archive's run is unknown")?;
+                let (owner, repo) = github::mirror(&self.env)
+                    .and_then(|to| mirroring::github_repo(&to))
+                    .ok_or("no GitHub mirror")?;
+                let request = mirroring::actions_token_request(&repo);
+                let token = github::installation_token(&self.env, &owner, &repo, &request).await?;
+                github::artifact(&token, &owner, &repo, run, iosrelease::ARTIFACT).await?
+            }
+        };
         if let Some(why) = iosrelease::invalid(&body) {
             return Err(why);
         }
