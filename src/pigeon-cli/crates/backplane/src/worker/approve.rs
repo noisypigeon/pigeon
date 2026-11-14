@@ -231,13 +231,9 @@ async fn post(
         return refused(400, &why);
     }
     if peeked.needs_code() {
-        let proved = if super::passkeys::answered(&form) {
-            let purpose = crate::passkeys::grant_purpose(&token);
-            super::passkeys::prove(env, s, &form, &purpose, host).await?
-        } else {
-            let code = approve::field(&form, "code").unwrap_or_default();
-            elicit::check_code(env, s, code.trim()).await?
-        };
+        let purpose = crate::passkeys::grant_purpose(&token);
+        let shown = format!("/approve/{n}?grant={token}");
+        let proved = super::passkeys::on_page(env, s, &form, &purpose, host, &shown).await?;
         if let Err(why) = proved {
             return refused(403, &why);
         }

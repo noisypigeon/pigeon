@@ -477,6 +477,9 @@ fn a_bound_proof_checks_only_for_the_head_it_was_minted_for_and_leaves_evidence(
 
     let plain = kept!(ring.mint(&purpose, &[5u8; 32], 120));
     let c = client("webauthn.get", &plain, &origin);
+    assert!(!ring.bound(&c), "minted plain");
+    let minted = kept!(ring.mint_bound(&purpose, &approving("aaa"), &[6u8; 32], 120));
+    assert!(ring.bound(&client("webauthn.get", &minted, &origin)));
     let sig = sign(&k, &a, &c);
     assert!(
         kept!(ring.prove_bound(

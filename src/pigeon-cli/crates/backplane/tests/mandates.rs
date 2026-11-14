@@ -118,7 +118,10 @@ fn the_grant_page_shows_the_mandate_escaped_and_asks_for_the_code() {
     assert!(html.contains("value=\"tok&quot;x\""));
     assert!(html.contains("4 merges"));
     assert!(html.contains("12 hours"));
-    assert!(!html.contains("<script"));
+    let ours = "<script src=\"/passkey.js\" defer></script>";
+    assert_eq!(html.matches(ours).count(), 1, "{html}");
+    assert!(!html.replace(ours, "").contains("<script"), "{html}");
+    assert!(html.contains("data-passkey=\"prove\""));
 }
 
 fn active(budget: u32, may_deploy: bool) -> Mandates {

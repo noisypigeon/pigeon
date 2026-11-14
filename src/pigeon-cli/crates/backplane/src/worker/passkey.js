@@ -18,7 +18,7 @@
     const r = await fetch("/passkeys/challenge", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ purpose }),
+      body: JSON.stringify({ purpose, page: location.pathname + location.search }),
     });
     if (!r.ok) throw new Error(await r.text());
     return r.json();

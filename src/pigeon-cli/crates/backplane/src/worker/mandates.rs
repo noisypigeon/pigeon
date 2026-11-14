@@ -382,7 +382,7 @@ pub async fn page_serve(
                 to_instance(env, s, "/mandates/peek", &json!({ "token": token })).await?;
             match serde_json::from_value::<Mandate>(v.clone()) {
                 Ok(m) if status == 200 && m.id == id => {
-                    page::html(200, &approve::mandate_page(&m, &token))
+                    page::html_with(200, &approve::mandate_page(&m, &token), approve::PROOF_CSP)
                 }
                 _ => page::refused(403, v.as_str().unwrap_or("this link is not valid")),
             }
@@ -397,8 +397,10 @@ pub async fn page_serve(
             let Some(token) = approve::field(&form, "grant") else {
                 return page::refused(400, "the form is missing its grant");
             };
-            let code = approve::field(&form, "code").unwrap_or_default();
-            if let Err(why) = elicit::check_code(env, s, code.trim()).await? {
+            let purpose = crate::passkeys::grant_purpose(&token);
+            let shown = format!("/mandate/{id}?grant={token}");
+            let proved = super::passkeys::on_page(env, s, &form, &purpose, &host, &shown).await?;
+            if let Err(why) = proved {
                 return page::refused(403, &why);
             }
             let (status, v) = to_instance(

@@ -378,6 +378,19 @@ impl Keyring {
         (next, challenge)
     }
 
+    /// Whether the challenge `client` answers was minted by [`Self::mint_bound`].
+    #[must_use]
+    pub fn bound(&self, client: &[u8]) -> bool {
+        serde_json::from_slice::<serde_json::Value>(client)
+            .ok()
+            .and_then(|v| v["challenge"].as_str().map(str::to_string))
+            .is_some_and(|answered| {
+                self.challenges
+                    .iter()
+                    .any(|c| c.challenge == answered && c.nonce.is_some())
+            })
+    }
+
     /// Whether passkey `id` is registered here.
     #[must_use]
     pub fn holds(&self, id: &str) -> bool {

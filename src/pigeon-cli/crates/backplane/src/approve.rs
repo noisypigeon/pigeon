@@ -324,49 +324,94 @@ fn proof_fields(grant: &Grant, token: &str) -> String {
 /// The button that proves the owner with a passkey instead of the code, for `purpose`; hidden
 /// until `/passkey.js` finds `WebAuthn`.
 fn passkey_button(purpose: &str) -> String {
+    format!("{}{PASSKEY_SCRIPT}", proof_button(purpose, "Use a passkey"))
+}
+
+/// The proof pages' one script.
+const PASSKEY_SCRIPT: &str = "<script src=\"/passkey.js\" defer></script>";
+
+/// A passkey button labelled `label` for `purpose`, without the script, for a page with several.
+fn proof_button(purpose: &str, label: &str) -> String {
     format!(
-        "<p><button type=\"button\" data-passkey=\"prove\" data-purpose=\"{}\" hidden>Use a passkey</button> \
-<small data-passkey-status></small></p><script src=\"/passkey.js\" defer></script>",
-        escape(purpose)
+        "<p><button type=\"button\" data-passkey=\"prove\" data-purpose=\"{}\" hidden>{}</button> \
+<small data-passkey-status></small></p>",
+        escape(purpose),
+        escape(label)
     )
 }
 
-/// `/passkeys`: the owner's passkeys, a form to register one with the code, and `said`.
+/// A passkey as `/passkeys` lists it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Listed {
+    /// Its credential ID.
+    pub id: String,
+    /// Its name.
+    pub name: String,
+    /// When it was registered.
+    pub created: u64,
+    /// When it last proved the owner.
+    pub used: Option<u64>,
+    /// Whether it is synced; unknown for older ones.
+    pub synced: Option<bool>,
+}
+
+/// `/passkeys`: the owner's passkeys, each removed with a proof, and a form to add one, proven by
+/// an existing passkey (`adding`, once it has been) or the code; and `said`. See
+/// `.claude/decisions/2026-11-14-security-passkey-only-owner-proofs.md` §3.
 #[must_use]
-pub fn passkeys_page(keys: &[(String, String, u64, Option<u64>)], said: Option<&str>) -> String {
+pub fn passkeys_page(keys: &[Listed], said: Option<&str>, adding: bool) -> String {
     use std::fmt::Write as _;
     let mut b = String::from("<h1>Passkeys</h1>");
     if let Some(said) = said {
         let _ = write!(b, "<p><strong>{}</strong></p>", escape(said));
     }
     b.push_str(
-        "<p>A passkey approves wherever the authenticator code does on these pages. \
-Registering or removing one takes the code.</p>",
+        "<p>A passkey approves on these pages. Adding one takes an existing passkey or the \
+authenticator code; removing one takes either.</p>",
     );
     if keys.is_empty() {
         b.push_str("<p>None yet.</p>");
     } else {
         b.push_str("<ul>");
-        for (id, name, created, used) in keys {
+        for k in keys {
+            let kind = match k.synced {
+                Some(true) => ", synced",
+                Some(false) => ", this device only",
+                None => "",
+            };
             let _ = write!(
                 b,
-                "<li>{} <small>(registered {created}{})</small>\
+                "<li>{} <small>(registered {}{}{kind})</small>\
 <form method=\"post\" action=\"/passkeys\"><input type=\"hidden\" name=\"remove\" value=\"{}\">\
-{CODE_FIELD}<button type=\"submit\">Remove</button></form></li>",
-                escape(name),
-                used.map_or(String::new(), |u| format!(", last used {u}")),
-                escape(id)
+{}{CODE_FIELD}<button type=\"submit\">Remove</button></form></li>",
+                escape(&k.name),
+                k.created,
+                k.used.map_or(String::new(), |u| format!(", last used {u}")),
+                escape(&k.id),
+                proof_button(
+                    &crate::passkeys::remove_purpose(&k.id),
+                    "Remove with a passkey"
+                )
             );
         }
         b.push_str("</ul>");
     }
+    b.push_str("<h2>Add a passkey</h2>");
+    if !keys.is_empty() && !adding {
+        let _ = write!(
+            b,
+            "<form method=\"post\" action=\"/passkeys\"><input type=\"hidden\" name=\"add\" value=\"1\">{}</form>",
+            proof_button(crate::passkeys::ADD, "Prove with an existing passkey first")
+        );
+    }
     let _ = write!(
         b,
-        "<h2>Register this device</h2><form method=\"post\" action=\"/passkeys\">\
-<p><label>Name<br><input name=\"name\" maxlength=\"64\" required></label></p>{CODE_FIELD}\
+        "<form method=\"post\" action=\"/passkeys\">\
+<p><label>Name<br><input name=\"name\" maxlength=\"64\" required></label></p>{}\
 <p><button type=\"button\" data-passkey=\"register\" data-purpose=\"{}\" hidden>Create a passkey</button> \
-<small data-passkey-status></small></p></form><script src=\"/passkey.js\" defer></script>\
+<small data-passkey-status></small></p></form>{PASSKEY_SCRIPT}\
 <p><small><a href=\"/approvals\">Everything waiting</a></small></p>",
+        if adding { "" } else { CODE_FIELD },
         escape(crate::passkeys::REGISTER)
     );
     shell("Passkeys", &b)
@@ -512,11 +557,12 @@ pub fn mandate_page(m: &crate::mandates::Mandate, token: &str) -> String {
         "</dl><p>Changes inside this scope are authorized, approved and merged without asking \
 you, until the budget is used or it expires. The approval rules and policies always need your \
 code.</p><form method=\"post\" action=\"/mandate/{}\">\
-<input type=\"hidden\" name=\"grant\" value=\"{}\">{CODE_FIELD}\
+<input type=\"hidden\" name=\"grant\" value=\"{}\">{}{CODE_FIELD}\
 <button type=\"submit\">Grant the mandate</button></form>\
 <p><small><a href=\"/approvals\">Everything waiting</a></small></p>",
         m.id,
-        escape(token)
+        escape(token),
+        passkey_button(&crate::passkeys::grant_purpose(token))
     );
     shell(&format!("Grant mandate {}", m.id), &b)
 }

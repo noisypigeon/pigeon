@@ -253,3 +253,45 @@ fn a_platform_plan_page_asks_for_the_token_and_an_apply_page_shows_the_changes()
     assert!(!page.contains("account_token"));
     assert!(!page.contains("SEALED"));
 }
+
+// See `.claude/decisions/2026-11-14-security-passkey-only-owner-proofs.md` §3.
+#[test]
+fn the_passkeys_page_adds_with_a_passkey_and_removes_with_one() {
+    let key = |id: &str, synced| approve::Listed {
+        id: id.into(),
+        name: format!("<{id}>"),
+        created: 1,
+        used: None,
+        synced,
+    };
+    let ours = "<script src=\"/passkey.js\" defer></script>";
+
+    let none = approve::passkeys_page(&[], None, false);
+    assert!(!none.contains("passkey:add"), "nothing to prove with yet");
+    assert_eq!(none.matches("name=\"code\"").count(), 1, "{none}");
+
+    let keys = [key("a", Some(true)), key("b", Some(false))];
+    let html = approve::passkeys_page(&keys, Some("<said>"), false);
+    assert_eq!(html.matches(ours).count(), 1, "{html}");
+    assert!(!html.replace(ours, "").contains("<script"), "{html}");
+    assert!(html.contains("&lt;a&gt;") && html.contains("&lt;said&gt;"));
+    assert!(html.contains(", synced") && html.contains(", this device only"));
+    assert!(html.contains("data-purpose=\"passkey:remove:a\""));
+    assert!(html.contains("data-purpose=\"passkey:remove:b\""));
+    assert!(html.contains("data-purpose=\"passkey:add\""));
+    assert!(html.contains("name=\"add\""));
+    assert_eq!(
+        html.matches("name=\"code\"").count(),
+        3,
+        "two removals, one add"
+    );
+
+    let adding = approve::passkeys_page(&keys, None, true);
+    assert!(!adding.contains("passkey:add"), "already proven");
+    assert_eq!(
+        adding.matches("name=\"code\"").count(),
+        2,
+        "the add form asks no code"
+    );
+    assert!(adding.contains("data-passkey=\"register\""));
+}
