@@ -7,6 +7,7 @@
     reason = "`durable_object` generates undocumented wasm-bindgen items"
 )]
 
+mod account;
 mod api;
 mod apns;
 mod app;
@@ -1796,6 +1797,10 @@ impl DurableObject for Instance {
         if path.starts_with("/mandates/") {
             let body: Value = req.json().await?;
             return mandates::serve(&self.state, &path, body).await;
+        }
+        if path.starts_with("/accounts/") {
+            let body: Value = req.json().await?;
+            return account::serve(&self.state, &path, body).await;
         }
         if path.starts_with("/devices/") {
             let body: Value = req.json().await?;

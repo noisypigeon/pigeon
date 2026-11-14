@@ -16,7 +16,7 @@ use crate::passkeys;
 use crate::wire;
 
 /// The relying party the app's passkey answers for; its client data's origin is this host.
-fn relying_party(env: &Env) -> String {
+pub(super) fn relying_party(env: &Env) -> String {
     env.var("PASSKEY_RP_ID")
         .map_or_else(|_| "platform.pigeon.dev".into(), |v| v.to_string())
 }
@@ -70,6 +70,17 @@ pub async fn challenge(env: &Env, s: &Settings, body: &Value) -> Result<Response
     let purpose = match body["op"].as_str() {
         Some("auto") => windows::START.to_string(),
         Some("auto-end") => windows::END.to_string(),
+        Some(op @ ("unlink" | "passkey:remove")) => {
+            let id = body["id"].as_str().unwrap_or_default();
+            if id.is_empty() {
+                return Response::error("the id is empty", 400);
+            }
+            if op == "unlink" {
+                crate::core::account::unlink_purpose(id)
+            } else {
+                crate::core::account::passkey_remove_purpose(id)
+            }
+        }
         _ => {
             let id = body["id"].as_str().unwrap_or_default();
             let waiting = live(env, s).await?;

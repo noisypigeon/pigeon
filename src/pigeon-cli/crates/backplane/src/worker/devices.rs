@@ -14,7 +14,7 @@ use crate::devices::{self, Device, Devices};
 use crate::push::{b64url, b64url_decode};
 
 /// Where the `Instance` keeps the devices.
-const DEVICES: &str = "devices";
+pub(super) const DEVICES: &str = "devices";
 
 /// The app's API, served before Access.
 pub const API: &str = "/v0/app/";
@@ -231,6 +231,9 @@ async fn signed(
                 Ok(v) => Response::from_json(&v),
                 Err(why) => Response::error(why, 400),
             }
+        }
+        (m, p) if super::account::handles(p) => {
+            super::account::route(env, s, device, m, p, body).await
         }
         _ => Response::error("not found", 404),
     }

@@ -36,6 +36,9 @@ pub struct Device {
     /// Its APNs token, once it has one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub push: Option<String>,
+    /// The account it belongs to; empty until stamped.
+    #[serde(default)]
+    pub account: String,
 }
 
 /// A link the owner proved, waiting for the device to redeem it.
@@ -236,6 +239,7 @@ impl Devices {
             linked: now,
             seen: now,
             push: None,
+            account: String::new(),
         };
         d.devices.retain(|x| x.id != device.id);
         d.devices.push(device.clone());
