@@ -292,3 +292,29 @@ secret and security steps. Briefs go to executors per
   `cloudflared` is pending.
 - **Removal.** No file names `totp`, `APPROVER_TOTP` or `/code/verify`, and
   `mise run ci` passes.
+
+## Amendments
+
+### 2026-11-14: Reviewed against !424, the approving account: they agree
+
+[`2026-11-14-runtime-accounts-profiles-instances.md`](2026-11-14-runtime-accounts-profiles-instances.md)'s
+amendment "Every approval names the account that gave it" (!424) and this ADR
+agree. Both sessions settled the points below by message before either merged.
+
+- **§5's "an operation runs as the account proven"** is recorded as that
+  amendment's fields:
+  - `by`, the proven account's ID (`acct_…`, created by
+    `Accounts::ensure_owner`, and also the WebAuthn user handle);
+  - `via`, the surface;
+  - `proof`, this ADR's evidence: the passkey's ID, the nonce, the client
+    data, the authenticator data and the signature. `proof` is absent for
+    window, mandate and policy approvals.
+- **One mapping function turns a proof into an account.** Its Access-identity
+  and code branches stand only until steps 10 and 11, which delete them there,
+  in one place.
+- **`via: card` ends at step 5.** Step 5 sets the card's approver through
+  that function. The accounts ADR's step 6 doesn't edit `worker/elicit.rs`.
+- **Order:** the accounts ADR's step 6 waits for step 2's lookup from a
+  passkey to its keyring.
+
+Nothing in this ADR's steps changes.
