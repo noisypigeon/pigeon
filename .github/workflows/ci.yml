@@ -34,9 +34,6 @@ env:
   # The test map's coverage tool, built from its crates.io release.
   LLVM_COV_VERSION: 0.9.1
   LLVM_COV_SHA256: 5e00647cc92940c4dd82249c480fe08fd3809767e89f056bcec46d8a7962ea5b
-  # The `ios` check's project generator, as src/pigeon-ios/mise.toml pins it.
-  XCODEGEN_VERSION: 2.44.1
-  XCODEGEN_SHA256: a2e905fb68446e9bb4008cdfe2e13e3f176d0cbcca828b71770f8e53fca91b73
 defaults:
   run:
     shell: bash
@@ -67,15 +64,6 @@ jobs:
           printf '%s  tofu.tar.gz\n%s  zola.tar.gz\n' "$TOFU_SHA256" "$ZOLA_SHA256" | sha256sum -c -
           tar -xzf tofu.tar.gz -C /usr/local/bin tofu
           tar -xzf zola.tar.gz -C /usr/local/bin zola
-      - name: XcodeGen
-        if: runner.os == 'macOS'
-        run: |
-          cd "$RUNNER_TEMP"
-          curl -fsSLo xcodegen.zip "https://github.com/yonaskolb/XcodeGen/releases/download/${XCODEGEN_VERSION}/xcodegen.zip"
-          printf '%s  xcodegen.zip\n' "$XCODEGEN_SHA256" | shasum -a 256 -c -
-          unzip -q xcodegen.zip
-          PREFIX="$RUNNER_TEMP/xcodegen-install" xcodegen/install.sh
-          echo "$RUNNER_TEMP/xcodegen-install/bin" >> "$GITHUB_PATH"
       - name: Coverage tools
         if: matrix.check.name == 'test map'
         run: |
@@ -102,10 +90,20 @@ jobs:
         working-directory: src/pigeon-cli
         env:
           ARGV: ${{ toJSON(matrix.check.argv) }}
+          SHA: ${{ inputs.sha }}
         run: |
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           # Bash 3 on macOS has no mapfile, so the argv is unpacked shell-quoted.
           eval "set -- $(jq -r 'map(@sh) | join(" ")' <<<"$ARGV")"
+          # macOS checks run through ci.sh, as on every provider; see
+          # .claude/decisions/2026-11-12-development-macos-builds-provider-failover.md §3.
+          if [ "$RUNNER_OS" = macOS ]; then
+            case "$#:$*" in
+              "2:bash ../pigeon-ios/check.sh") set -- bash ../pigeon-ios/ci.sh check "$SHA" ;;
+              "3:bash ../pigeon-ios/archive.sh "*) set -- bash ../pigeon-ios/ci.sh archive "$SHA" "$3" ;;
+              *) echo "not a macOS check: $*" >&2; exit 2 ;;
+            esac
+          fi
           "$@"
       # A release's archive, unzipped as uploaded, which the control plane copies to R2.
       - if: matrix.check.name == 'ios.archive'

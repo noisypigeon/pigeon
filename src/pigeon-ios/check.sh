@@ -1,12 +1,9 @@
 #!/usr/bin/env bash
 # The `ios` code check: generate the project, build it for the simulator unsigned, and test PigeonCore; see
 # .claude/decisions/2026-11-11-release-ios-app-buildkite-testflight.md §3 and its amendments.
+# Run through ci.sh, which checks the commit and selects the pinned Xcode.
 set -euo pipefail
 cd "$(dirname "$0")"
-want="$(tr -d '[:space:]' < .xcode-version)"
-if [ -d "/Applications/Xcode_${want}.app" ]; then
-  export DEVELOPER_DIR="/Applications/Xcode_${want}.app/Contents/Developer"
-fi
 xcodebuild -version
 xcodegen generate --spec project.yml
 # The app is signed with its passkey and push entitlements, or not built.

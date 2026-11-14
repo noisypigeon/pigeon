@@ -1,0 +1,36 @@
+# The pigeon app's bitrise.yml, pasted by the owner and stored on bitrise.io, never read from a
+# checkout; the control plane triggers a workflow with PIGEON_SHA (and PIGEON_IOS_BUILD) at that
+# commit and checks this file's SHA-256 before each build. It holds no secret. See
+# .claude/decisions/2026-11-12-development-macos-builds-provider-failover.md §3.
+format_version: "13"
+default_step_lib_source: https://github.com/bitrise-io/bitrise-steplib.git
+project_type: other
+meta:
+  bitrise.io:
+    # The stack with .xcode-version's Xcode; ci.sh stops on any other.
+    stack: osx-xcode-26.1.x
+    machine_type_id: g2.mac.medium
+workflows:
+  ios-check:
+    steps:
+      - git-clone@8: {}
+      - script@1:
+          title: ci.sh check
+          inputs:
+            - content: |-
+                set -euo pipefail
+                bash src/pigeon-ios/ci.sh check "$PIGEON_SHA"
+  ios-archive:
+    steps:
+      - git-clone@8: {}
+      - script@1:
+          title: ci.sh archive
+          inputs:
+            - content: |-
+                set -euo pipefail
+                bash src/pigeon-ios/ci.sh archive "$PIGEON_SHA" "$PIGEON_IOS_BUILD"
+      - deploy-to-bitrise-io@2:
+          inputs:
+            - deploy_path: src/pigeon-ios/build/Pigeon.xcarchive.zip
+            - is_compress: "false"
+            - notify_user_groups: none

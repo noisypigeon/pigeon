@@ -2,14 +2,11 @@
 # `ios.archive`: a release's archive, ad-hoc signed so it carries its entitlements, for build number
 # $1, zipped for the control plane; see .claude/decisions/2026-11-11-release-ios-app-buildkite-testflight.md,
 # its 2026-11-12 amendment, and .claude/decisions/2026-11-12-runtime-ios-app-approvals-insights.md.
+# Run through ci.sh, which checks the commit and selects the pinned Xcode.
 set -euo pipefail
 build="${1:?the build number}"
 [[ "$build" =~ ^[0-9]+$ ]] || { echo "the build number must be digits" >&2; exit 2; }
 cd "$(dirname "$0")"
-want="$(tr -d '[:space:]' < .xcode-version)"
-if [ -d "/Applications/Xcode_${want}.app" ]; then
-  export DEVELOPER_DIR="/Applications/Xcode_${want}.app/Contents/Developer"
-fi
 xcodebuild -version
 xcodegen generate --spec project.yml
 # The app is signed with its passkey and push entitlements, or not built.

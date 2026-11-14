@@ -34,6 +34,11 @@ curl -fsS -H "Authorization: Bearer $token" -o "$work/archive.zip" \
   https://platform.pigeon.dev/v0/apple/release/archive
 unset token
 ditto -x -k "$work/archive.zip" "$work"
+# Whichever provider archived it, the app was built with the pinned Xcode: DTXcode 2611 is 26.1.1.
+IFS=. read -r major minor patch <<<"$want"
+pin="$(printf '%02d' "$major")${minor:-}${patch:-}"
+built="$(plutil -extract DTXcode raw "$work/Pigeon.xcarchive/Products/Applications/Pigeon.app/Info.plist")"
+[[ "$built" == "$pin"* ]] || { echo "the archive was built with DTXcode $built, not Xcode $want" >&2; exit 1; }
 
 xcodebuild -exportArchive \
   -archivePath "$work/Pigeon.xcarchive" \

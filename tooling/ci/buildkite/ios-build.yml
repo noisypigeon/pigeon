@@ -1,0 +1,12 @@
+# Pipeline `pigeon-ios-build`'s one step, fixed in its settings by the owner, never uploaded from a
+# checkout; the control plane creates its builds with PIGEON_JOB (check or archive) and
+# PIGEON_IOS_BUILD, and checks these steps' SHA-256 before each. It holds no secret. See
+# .claude/decisions/2026-11-12-development-macos-builds-provider-failover.md §3.
+steps:
+  - label: ios build
+    key: build
+    agents:
+      queue: macos-build
+    timeout_in_minutes: 60
+    command: bash src/pigeon-ios/ci.sh "$$PIGEON_JOB" "$$BUILDKITE_COMMIT" $${PIGEON_IOS_BUILD:-}
+    artifact_paths: src/pigeon-ios/build/Pigeon.xcarchive.zip
