@@ -669,3 +669,51 @@ step 2 was live.
      - `stages::since` skipping nudges;
      - `/events/nudge` on the `Instance`;
      - `events::nudge`, called from `scheduled`.
+
+### 2026-11-14: The settings let a session act on the owner's grant, and ask before destructive actions
+
+- **Why.** The briefs ADR's amendment of the same date sets the rule: under
+  the owner's window or mandate, a brief runs end to end, and only
+  destructive actions stop. Claude Code's auto mode put its own classifier
+  in front of the pigeon tools, and it refused `change_authorize` under
+  window 6. Its documentation says a call matching an allow, ask or deny rule
+  resolves before the classifier runs. Auto mode drops only broad
+  code-execution allow rules, and an MCP tool's rule isn't one. A cloud
+  session with one repository reads the committed `.claude/settings.json`.
+- **`permissions.allow`** names each pigeon tool whose effect the control
+  plane itself bounds by a window, mandate, tier or review. It doesn't use a
+  wildcard, so a new tool is asked about until it's listed:
+  - changes: `change_propose`, `change_authorize`, `change_approve`,
+    `change_merge`, `change_pushed`, `change_status`, `change_list`,
+    `change_scope`, `change_note`, `change_handoff`, `change_yield`,
+    `change_evictable`, `ci_rerun`, `approval_wait`;
+  - briefs, tasks and sessions: `brief_create`, `brief_amend`,
+    `brief_review`, `brief_escalate`, `brief_show`, `brief_list`, `task_claim`,
+    `task_done`, `task_list`, `task_wait`,
+    `session_start`, `session_status`, `session_end`, `events_wait`;
+  - reads and proposals the owner grants: `mandate_propose`,
+    `mandate_status`, `mandate_end`, `deploy_status`, `digest_show`,
+    `instance_show`, `architecture_describe`, `policy_check`,
+    `platform_status`, `ios_status`, `infra_validate`, `sites_build`.
+- **`permissions.ask`** names the destructive ones, so they prompt even under
+  auto mode: `change_close`, `change_pin`, `grant_revoke`, `grant_rotate`,
+  `grant_request`, `git_tokens`, `platform_apply`, `infra_apply`,
+  `deploy_retry`, `sites_publish`, `ios_release`. Tools in neither list,
+  such as `ci_window`, stay with the classifier.
+- **The control plane still decides.** An allowed call that the window,
+  mandate or tier doesn't cover is refused or asks the owner, as before.
+  `change_authorize` is never by its proposer, and a brief's head awaiting
+  review refuses windows and mandates.
+- **`next` names the grant.** `stage::ask` names the window's or mandate's
+  grantor and its expiry: "ask now (`change_authorize`): window:6, the
+  owner's, until 19:40 UTC, approves it". The session building the
+  2026-11-14 amendment's `stage::ask` text adds it, so `next` has one
+  author.
+- **This step is the owner's.** The file is guarded and in `secrets:`. The
+  owner approves the settings with their passkey, and no window or mandate
+  covers them, as for step 4.
+- **Execution.**
+  1. This amendment, with the briefs ADR's, as one `docs(adr)` change.
+  2. One `chore(claude)` change with the settings, approved by the owner.
+  3. A haiku executor, seeded on a one-step brief, calls `change_authorize`
+     under a window. That shows auto mode no longer refuses it.

@@ -4,8 +4,8 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: development
-* Governs: `src/pigeon-cli/crates/backplane/src/sessions.rs`, `src/pigeon-cli/crates/backplane/src/tasks.rs`, `tooling/session/session.py`, `tooling/session/models.json`, `src/pigeon-cli/crates/backplane/src/core/brief/**`, `src/pigeon-cli/crates/backplane/src/briefs.rs`, `src/pigeon-cli/crates/backplane/src/worker/briefs.rs`
-* Governs: `src/pigeon-cli/crates/backplane/src/sessions.rs`, `src/pigeon-cli/crates/backplane/src/tasks.rs`, `tooling/session/session.py`, `tooling/session/models.json`, `src/pigeon-cli/crates/backplane/src/core/brief/**`, `src/pigeon-cli/crates/backplane/src/briefs.rs`, `src/pigeon-cli/crates/backplane/src/worker/briefs.rs`
+* Governs: `src/pigeon-cli/crates/backplane/src/sessions.rs`, `src/pigeon-cli/crates/backplane/src/tasks.rs`, `tooling/session/session.py`, `tooling/session/models.json`, `src/pigeon-cli/crates/backplane/src/core/brief/**`, `src/pigeon-cli/crates/backplane/src/briefs.rs`, `src/pigeon-cli/crates/backplane/src/worker/briefs.rs`, `src/pigeon-cli/crates/backplane/src/worker/merges.rs`, `src/pigeon-cli/crates/backplane/src/worker/tickets.rs`
+* Governs: `src/pigeon-cli/crates/backplane/src/sessions.rs`, `src/pigeon-cli/crates/backplane/src/tasks.rs`, `tooling/session/session.py`, `tooling/session/models.json`, `src/pigeon-cli/crates/backplane/src/core/brief/**`, `src/pigeon-cli/crates/backplane/src/briefs.rs`, `src/pigeon-cli/crates/backplane/src/worker/briefs.rs`, `src/pigeon-cli/crates/backplane/src/worker/merges.rs`, `src/pigeon-cli/crates/backplane/src/worker/tickets.rs`
 
 ## Context
 
@@ -702,3 +702,59 @@ changes, as !386 itself now plans: one per session and ADR.
 - **Step 7 starts in shadow.** The per-class thresholds of §6 are counted
   in `core/change/breaker.rs` and logged as `breaker.would_trip` with the
   class. A trip becomes `escalated` once the breaker leaves shadow.
+### 2026-11-14: Under an Auto window, a brief runs end to end; only destructive actions stop
+
+- **What went wrong.** Window 6, the owner's Auto window, was open, and the
+  stage said `needs: agent`, `next` "ask (`change_authorize`); window:6
+  allows it". Even so:
+  - the executors' own permission layer, Claude Code's auto mode, refused
+    `change_authorize` on !421 once and on !423 twice. It also refused the
+    planner's `brief_amend` once, when the brief told the executor to
+    authorize;
+  - `review !423 against !420` (!425) went to !423's executor, which may not
+    write ADRs;
+  - the executor's `change_handoff` of !425 to its planner was refused:
+    "this change is session `<planner>`'s";
+  - the planner's `task_claim` of the review task (85) was refused: "task 85
+    is its own session's for now".
+
+  The planner unblocked !423 by `brief_review take`, authorizing it and
+  handing it back. That is a workaround.
+- **The rule.** Under an owner's window or mandate, a brief progresses from
+  proposal to merge without a person. The control plane is the oversight: the
+  window or mandate the owner granted, the tiers, `bound`, the sentinel
+  policies, the planner's review (§5) and the breaker. The agent's own
+  permission layer doesn't second-guess an operation the control plane
+  accepts or refuses on its own terms.
+- **Destructive actions still stop for a person:**
+  - closing a change, pinning it, or evicting it;
+  - revoking or rotating a grant, or anything else that destroys or exposes a
+    secret, or lists tokens;
+  - applies (`platform_apply`, `infra_apply`, `tofu apply`) and deploys
+    outside `MainRun`'s pipeline (`deploy_retry`, `sites_publish`,
+    `ios_release`);
+  - force-pushing to another session's branch.
+
+  The session-stages ADR's amendment of the same date puts this line into
+  `.claude/settings.json`.
+- **A review goes to the brief's planner.** When a merge plans a review of an
+  open change carrying a brief (`worker/merges.rs`), the review change and its
+  `review` task belong to the brief's planner, read from `/briefs/show`, not
+  to the change's executor. A change without a brief keeps its own session.
+  The executor never writes or amends an ADR (§2), and the task's
+  `for_session` now names a session that may claim it.
+- **`change_handoff`'s guard checks the caller, not the recipient.**
+  `tickets::guard` adds the `session` argument to the labels whose ticket it
+  wants. For `change.handoff`, `session` is the recipient, so the caller's
+  ticket was checked against the recipient's label. The guard now leaves
+  `session` out for `change.handoff`; the change's own session is still
+  required, so only its holder offers it.
+- **`next` names the grant.** The session-stages ADR's amendment of the same
+  date covers it.
+- **Paths.** `Governs` gains `worker/merges.rs` and `worker/tickets.rs`.
+- **Execution.**
+  1. This amendment and the session-stages ADR's, as one `docs(adr)` change.
+  2. One `fix(backplane)` change, after it: the review's planner in
+     `worker/merges.rs`, and the guard in `worker/tickets.rs`, with the
+     guard's label choice tested.
+  3. The settings, as the session-stages ADR's amendment says.
