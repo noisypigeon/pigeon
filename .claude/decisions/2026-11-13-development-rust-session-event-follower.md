@@ -183,6 +183,8 @@ Each step is one change.
   binary within the hook's 20 s, and with `~/.cache/pigeon` removed and the
   network blocked, the hooks fall back to `session.py` and exit 0.
 
+## Amendments
+
 ### 2026-11-13: Review of !373 (grants) against this ADR
 
 !373 carries out step 1c of
@@ -218,3 +220,11 @@ which also governs `tooling/session/session.py`. !383 is this ADR's step 2.
   - `pigeon session brief` reads the hook's input instead of discarding it.
 - **Its `model` on events** changes no follower line. §2's line format stays
   as it is.
+
+### 2026-11-13: Step 2 lands: the exact deadline
+
+- `events::look(now, until, every)` is a long poll's next sleep in
+  milliseconds: at most a look (5 s), never past the deadline.
+- `events::wait` keeps its deadline in milliseconds. A poll of `seconds=s`
+  answers by `s` plus one call's latency, not `s + 1` plus one more look.
+- `session.py` asks `seconds=20`.

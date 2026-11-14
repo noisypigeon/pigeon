@@ -94,6 +94,13 @@ pub fn wakes(e: &Event) -> bool {
     }) || WAKING.contains(&e.kind.as_str())
 }
 
+/// A long poll's next sleep, in milliseconds: at most `every`, never past `until`; `None` once
+/// `now` reaches it. See `.claude/decisions/2026-11-13-development-rust-session-event-follower.md` §1.
+#[must_use]
+pub fn look(now: u64, until: u64, every: u64) -> Option<u64> {
+    (now < until).then(|| every.min(until - now))
+}
+
 /// How long a session counts as listening after its last poll, in seconds.
 pub const LISTENING: u64 = 2 * 60;
 

@@ -3,7 +3,7 @@
 #[path = "common/step.rs"]
 mod step;
 
-use backplane::events::{Filter, KEEP, KEEP_FOR, Log};
+use backplane::events::{Filter, KEEP, KEEP_FOR, Log, look};
 
 #[test]
 fn a_reader_gets_what_came_after_its_last_event_for_its_session_and_changes() {
@@ -260,4 +260,19 @@ fn an_event_carries_its_session_s_class_and_an_older_one_reads_without() {
     e.model = Some(backplane::sessions::Class::Haiku);
     let v = serde_json::to_value(&e).expect("json");
     assert_eq!(v["model"], "haiku");
+}
+
+#[test]
+fn a_long_poll_sleeps_a_look_at_most_and_never_past_its_deadline() {
+    let until = 20_000;
+    for (now, want) in [
+        (0, Some(5_000)),
+        (15_000, Some(5_000)),
+        (17_500, Some(2_500)),
+        (19_999, Some(1)),
+        (20_000, None),
+        (21_000, None),
+    ] {
+        assert_eq!(look(now, until, 5_000), want, "at {now}");
+    }
 }

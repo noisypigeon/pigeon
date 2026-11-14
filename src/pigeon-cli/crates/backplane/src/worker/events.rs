@@ -20,8 +20,8 @@ const LOG: &str = "events";
 /// `.claude/decisions/2026-11-13-development-session-stages-subscriptions-breaker.md`.
 pub const WAIT_MAX: u64 = 25;
 
-/// How often a long poll looks.
-const LOOK: Duration = Duration::from_secs(5);
+/// How often a long poll looks, in milliseconds.
+const LOOK_MS: u64 = 5_000;
 
 /// Appends an event to the instance's log; `owner` keeps it from agents.
 ///
@@ -70,7 +70,7 @@ pub async fn changed(
 }
 
 /// The events after `after` that the filter in `args` wants, waiting up to `seconds` (at most
-/// [`WAIT_MAX`]) for one: the last event's number and the events.
+/// [`WAIT_MAX`]) for one, to the millisecond: the last event's number and the events.
 ///
 /// # Errors
 ///
@@ -106,14 +106,16 @@ pub async fn wait(
         "changes": changes,
         "owner": owner,
     });
-    let until = now() + seconds;
+    let until = worker::Date::now().as_millis() + seconds * 1000;
     loop {
         let (_, v) = to_instance(env, s, "/events/since", &body).await?;
-        let any = v["events"].as_array().is_some_and(|e| !e.is_empty());
-        if any || now() >= until {
+        if v["events"].as_array().is_some_and(|e| !e.is_empty()) {
             return Ok(v);
         }
-        worker::Delay::from(LOOK).await;
+        match crate::events::look(worker::Date::now().as_millis(), until, LOOK_MS) {
+            Some(ms) => worker::Delay::from(Duration::from_millis(ms)).await,
+            None => return Ok(v),
+        }
     }
 }
 

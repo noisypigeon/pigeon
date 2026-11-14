@@ -14,7 +14,7 @@ import time
 HOST = os.environ.get("PIGEON_HOST", "platform.pigeon.dev")
 SESSION = os.path.expanduser("~/.config/pigeon/session.json")
 CACHE = os.path.expanduser("~/.cache/pigeon/status.json")
-WAIT = 25  # under the 30 seconds after which a request is cut on its way
+WAIT = 20  # under the proxy's ~30 s cut; see 2026-11-13-development-rust-session-event-follower.md §1
 STALE = 10 * 60
 BRIEF = 10
 
