@@ -45,7 +45,7 @@ async fn covered(env: &Env, s: &Settings, c: &Change) -> Option<String> {
         .map(|id| format!("window:{id}"))
 }
 
-/// When change `number` last moved: its last event that isn't a job's.
+/// When change `number` last moved: its last event that isn't a job's or a nudge.
 async fn since(env: &Env, s: &Settings, number: u32) -> Option<u64> {
     let mut after = 0;
     let mut last = None;
@@ -55,7 +55,7 @@ async fn since(env: &Env, s: &Settings, number: u32) -> Option<u64> {
         let events = v["events"].as_array()?;
         for e in events {
             after = e["id"].as_u64().unwrap_or(after);
-            if !e["kind"].as_str().unwrap_or_default().starts_with("job.") {
+            if crate::events::moves(e["kind"].as_str().unwrap_or_default()) {
                 last = e["at"].as_u64().or(last);
             }
         }

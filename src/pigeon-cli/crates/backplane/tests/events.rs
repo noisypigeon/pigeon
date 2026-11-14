@@ -3,7 +3,10 @@
 #[path = "common/step.rs"]
 mod step;
 
-use backplane::events::{Filter, KEEP, KEEP_FOR, Log, look};
+use backplane::core::change::stage::{Needs, Stage};
+use backplane::events::{
+    Filter, KEEP, KEEP_FOR, Log, NUDGE_AFTER, NUDGE_EVERY, NUDGED, due, look, moves, wakes,
+};
 
 #[test]
 fn a_reader_gets_what_came_after_its_last_event_for_its_session_and_changes() {
@@ -275,4 +278,68 @@ fn a_long_poll_sleeps_a_look_at_most_and_never_past_its_deadline() {
     ] {
         assert_eq!(look(now, until, 5_000), want, "at {now}");
     }
+}
+
+fn needing(needs: Needs, since: u64) -> Stage {
+    Stage {
+        stage: "checked".into(),
+        needs,
+        waits_on: None,
+        next: "ask now (`change_approve`): window:6, the owner's, approves it".into(),
+        since: Some(since),
+    }
+}
+
+#[test]
+fn a_change_is_due_a_nudge_once_it_has_needed_its_session_for_long_enough() {
+    let at = 1_000;
+    assert!(!due(&needing(Needs::Agent, at), at + NUDGE_AFTER - 1));
+    assert!(due(&needing(Needs::Agent, at), at + NUDGE_AFTER));
+    assert!(!due(&needing(Needs::Owner, at), at + NUDGE_AFTER * 10));
+    let unknown = Stage {
+        since: None,
+        ..needing(Needs::Agent, at)
+    };
+    assert!(!due(&unknown, at + NUDGE_AFTER * 10));
+}
+
+#[test]
+fn a_nudge_wakes_its_session_at_most_once_an_hour_per_change() {
+    let mut log = Log::default();
+    let t = 10_000;
+    let stage = needing(Needs::Agent, t - 2 * 3600 - 600);
+    let first = log.nudge(419, Some("s-a".into()), stage.clone(), t);
+    assert!(first.is_some());
+    let e = log.list.back().unwrap();
+    assert_eq!(e.kind, NUDGED);
+    assert!(wakes(e));
+    assert_eq!(
+        e.summary,
+        "!419 has needed its session for 2h10m: ask now (`change_approve`): window:6, the owner's, approves it"
+    );
+    let wake = Filter {
+        session: Some("s-a".into()),
+        wake: true,
+        ..Filter::default()
+    };
+    assert_eq!(log.since(&wake).len(), 1);
+    assert_eq!(
+        log.nudge(419, Some("s-a".into()), stage.clone(), t + NUDGE_EVERY - 1),
+        None
+    );
+    assert!(
+        log.nudge(420, Some("s-a".into()), stage.clone(), t + 1)
+            .is_some()
+    );
+    assert!(
+        log.nudge(419, Some("s-a".into()), stage, t + NUDGE_EVERY)
+            .is_some()
+    );
+}
+
+#[test]
+fn a_nudge_does_not_move_its_change() {
+    assert!(!moves(NUDGED));
+    assert!(!moves("job.passed"));
+    assert!(moves("change.checked"));
 }

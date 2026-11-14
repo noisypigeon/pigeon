@@ -94,6 +94,44 @@ pub fn wakes(e: &Event) -> bool {
     }) || WAKING.contains(&e.kind.as_str())
 }
 
+/// How long a change needs its session before it is nudged, in seconds; see the session-stages
+/// ADR's 2026-11-14 amendment.
+pub const NUDGE_AFTER: u64 = 15 * 60;
+
+/// The least time between two nudges of one change, in seconds.
+pub const NUDGE_EVERY: u64 = 60 * 60;
+
+/// The kind of a nudge.
+pub const NUDGED: &str = "change.nudged";
+
+/// Whether an event of `kind` moves its change, for its stage's `since`: not a job's, nor a nudge.
+#[must_use]
+pub fn moves(kind: &str) -> bool {
+    !kind.starts_with("job.") && kind != NUDGED
+}
+
+/// Whether a change at `stage` is due a nudge at `now`: it has needed its session for at least
+/// [`NUDGE_AFTER`].
+#[must_use]
+pub fn due(stage: &crate::core::change::stage::Stage, now: u64) -> bool {
+    stage.needs == crate::core::change::stage::Needs::Agent
+        && stage
+            .since
+            .is_some_and(|at| now.saturating_sub(at) >= NUDGE_AFTER)
+}
+
+/// A nudge's summary: how long change `number` has needed its session, and what to do.
+#[must_use]
+pub fn nudge_summary(number: u32, stage: &crate::core::change::stage::Stage, now: u64) -> String {
+    let waited = now.saturating_sub(stage.since.unwrap_or(now)) / 60;
+    format!(
+        "!{number} has needed its session for {}h{:02}m: {}",
+        waited / 60,
+        waited % 60,
+        stage.next
+    )
+}
+
 /// A long poll's next sleep, in milliseconds: at most `every`, never past `until`; `None` once
 /// `now` reaches it. See `.claude/decisions/2026-11-13-development-rust-session-event-follower.md` §1.
 #[must_use]
@@ -213,6 +251,29 @@ impl Log {
             self.list.pop_front();
         }
         self.last
+    }
+
+    /// Appends a nudge of `change` at `stage`, unless one was appended within [`NUDGE_EVERY`] of
+    /// `now`: its number, if appended.
+    pub fn nudge(
+        &mut self,
+        change: u32,
+        session: Option<String>,
+        stage: crate::core::change::stage::Stage,
+        now: u64,
+    ) -> Option<u64> {
+        let recent = self.list.iter().any(|e| {
+            e.kind == NUDGED && e.change == Some(change) && now.saturating_sub(e.at) < NUDGE_EVERY
+        });
+        if recent {
+            return None;
+        }
+        let summary = nudge_summary(change, &stage, now);
+        let id = self.append(NUDGED, Some(change), session, &summary, false, now);
+        if let Some(e) = self.list.back_mut().filter(|e| e.id == id) {
+            e.stage = Some(stage);
+        }
+        Some(id)
     }
 
     /// The events `f` wants, oldest first, at most [`PAGE`].

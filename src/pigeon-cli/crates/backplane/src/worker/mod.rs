@@ -1433,6 +1433,10 @@ async fn scheduled(_event: worker::ScheduledEvent, env: Env, _ctx: worker::Sched
     if let Err(e) = push::hourly(&env).await {
         worker::console_error!("digest: {e}");
     }
+    // A change that needs its session is nudged; see the session-stages ADR's 2026-11-14 amendment.
+    if let Err(e) = events::nudge(&env).await {
+        worker::console_error!("nudges: {e}");
+    }
     if let Err(e) = insights::collect(&env).await {
         worker::console_error!("insights: {e}");
     }

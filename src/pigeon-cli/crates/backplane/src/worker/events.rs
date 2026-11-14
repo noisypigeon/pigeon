@@ -72,6 +72,34 @@ pub async fn changed(
     }
 }
 
+/// Nudges each open change whose stage has needed its session for [`crate::events::NUDGE_AFTER`]
+/// or more; see the session-stages ADR's 2026-11-14 amendment.
+///
+/// # Errors
+///
+/// When a binding fails.
+pub async fn nudge(env: &Env) -> Result<()> {
+    let s = Settings::from(env)?;
+    let rows = super::platform::d1_rows(env, &crate::control::open(&s.instance, &s.repo)).await?;
+    let q = super::stages::queue(env, &s).await;
+    for o in crate::control::open_rows(&rows) {
+        let Some(session) = o.session else {
+            continue;
+        };
+        let (_, view) =
+            super::to_change(env, &s.repo, o.number, worker::Method::Get, "/status", None).await?;
+        let Ok(c) = serde_json::from_value::<crate::changes::Change>(view["change"].clone()) else {
+            continue;
+        };
+        let stage = super::stages::of(env, &s, &c, &q).await;
+        if crate::events::due(&stage, now()) {
+            let body = json!({ "change": o.number, "session": session, "stage": stage });
+            to_instance(env, &s, "/events/nudge", &body).await?;
+        }
+    }
+    Ok(())
+}
+
 /// The events after `after` that the filter in `args` wants, waiting up to `seconds` (at most
 /// [`WAIT_MAX`]) for one, to the millisecond: the last event's number and the events.
 ///
@@ -125,7 +153,8 @@ pub async fn wait(
 /// The storage key of the sessions' cursors.
 const CURSORS: &str = "event-cursors";
 
-/// The `Instance` Durable Object's side: `/events/add`, `/events/since` and `/events/cursor`.
+/// The `Instance` Durable Object's side: `/events/add`, `/events/nudge`, `/events/since` and
+/// `/events/cursor`.
 ///
 /// # Errors
 ///
@@ -154,6 +183,20 @@ pub async fn serve(state: &State, path: &str, body: &Value) -> Result<Response> 
                 e.model = e.session.as_deref().and_then(|l| tickets.class(l));
             }
             storage.put(LOG, &log).await?;
+            Response::from_json(&json!({ "id": id }))
+        }
+        "/events/nudge" => {
+            let (Some(change), Ok(at)) = (
+                body["change"].as_u64().and_then(|c| u32::try_from(c).ok()),
+                serde_json::from_value(body["stage"].clone()),
+            ) else {
+                return Response::error("change and stage are required", 400);
+            };
+            let session = body["session"].as_str().map(str::to_string);
+            let id = log.nudge(change, session, at, now());
+            if id.is_some() {
+                storage.put(LOG, &log).await?;
+            }
             Response::from_json(&json!({ "id": id }))
         }
         "/events/since" => {

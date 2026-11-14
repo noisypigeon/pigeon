@@ -148,7 +148,7 @@ fn ask(stage: &str, covered: Option<&String>, tool: &str, owner: &str) -> Stage 
         Some(by) => at(
             stage,
             Needs::Agent,
-            format!("ask (`{tool}`); {by} allows it"),
+            format!("ask now (`{tool}`): {by}, the owner's, approves it"),
         ),
         None => at(stage, Needs::Owner, owner),
     }
@@ -488,9 +488,15 @@ mod tests {
         };
         let s = of(&change(State::Checked), &cx);
         assert_eq!((s.stage.as_str(), s.needs), ("checked", Needs::Agent));
-        assert_eq!(s.next, "ask (`change_approve`); window:2 allows it");
+        assert_eq!(
+            s.next,
+            "ask now (`change_approve`): window:2, the owner's, approves it"
+        );
         let s = of(&change(State::Proposed), &cx);
-        assert_eq!(s.next, "ask (`change_authorize`); window:2 allows it");
+        assert_eq!(
+            s.next,
+            "ask now (`change_authorize`): window:2, the owner's, approves it"
+        );
         let s = of(&change(State::Checked), &Context::default());
         assert_eq!(
             (s.needs, s.next.as_str()),
