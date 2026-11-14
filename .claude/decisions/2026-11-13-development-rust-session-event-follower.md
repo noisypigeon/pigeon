@@ -260,3 +260,17 @@ which also governs `tooling/session/session.py`. !383 is this ADR's step 2.
   shim, installing first, finished in 5 s, inside the hook's 20.
 - **The start text and the brief's hint** in both the core and `session.py`
   now name `sh tooling/session/session.sh follow`, as CLAUDE.md does.
+
+### 2026-11-14: Step 5 lands: `.claude/settings.json` through `session.sh`
+
+- **The hooks and the status line run `session.sh`,** with the same
+  timeouts: `brief` on `SessionStart`, `stop` on `Stop`, and `statusline`.
+- **Verified live in a cloud session,** on main's build `80cb788` (!397):
+  - from an empty cache, `session.sh brief` installed the build and briefed
+    the session in 5 s;
+  - `session.sh statusline` ran only `pigeon`, no Python;
+  - `session.sh follow` armed in `Monitor` showed as listening in
+    `session_status`;
+  - `seconds=20` answered in 20.2 s and `seconds=99` in 25.5 s.
+- **Step 6** comes 7 days after this lands: `session.py` keeps `install` and
+  `executor` only.

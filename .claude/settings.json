@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 -I \"$CLAUDE_PROJECT_DIR/tooling/session/session.py\" brief",
+            "command": "sh \"$CLAUDE_PROJECT_DIR/tooling/session/session.sh\" brief",
             "timeout": 20
           }
         ]
@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 -I \"$CLAUDE_PROJECT_DIR/tooling/session/session.py\" stop",
+            "command": "sh \"$CLAUDE_PROJECT_DIR/tooling/session/session.sh\" stop",
             "timeout": 10
           }
         ]
@@ -26,6 +26,6 @@
   },
   "statusLine": {
     "type": "command",
-    "command": "python3 -I \"$CLAUDE_PROJECT_DIR/tooling/session/session.py\" statusline"
+    "command": "sh \"$CLAUDE_PROJECT_DIR/tooling/session/session.sh\" statusline"
   }
 }
