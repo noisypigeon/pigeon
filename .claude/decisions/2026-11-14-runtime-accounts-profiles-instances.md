@@ -220,3 +220,18 @@ So a session can't tell the owner's approval from another user's. From this amen
 - a test that each surface records the same `by` for the owner.
 
 It follows step 3, which adds `core/account`, and !417's step 2, which adds the lookup from a passkey to its keyring.
+
+### 2026-11-14: Reviewed against the session-stages ADR's 2026-11-14 amendment (!420): they agree
+
+!420 amended
+[`2026-11-13-development-session-stages-subscriptions-breaker.md`](2026-11-13-development-session-stages-subscriptions-breaker.md)
+over `worker/mod.rs`, and step 3 (!423) works there too. They don't
+conflict:
+
+- **!423 only adds an `/accounts/` dispatch** to the `Instance`, beside
+  `/devices/`. !420's `change.nudged` event and its `next` wording, built in
+  !422, touch other paths in that file.
+- **!420's rule governs how this ADR's executors move:** a session stops only
+  for `needs: owner`, and the owner's window is their approval.
+
+Nothing in this ADR changes.
