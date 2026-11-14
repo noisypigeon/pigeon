@@ -50,6 +50,11 @@ belong in the ADR, never in the file.
 - `infra/` secret keys are break-glass and never handed to a workload, which
   gets only its own secrets and minted tokens.
 - A session never evicts a change; the control plane alone does.
+- A session stops only for `needs: owner`; on `needs: agent` it does `next`
+  now. An Auto window or mandate the owner opened is their approval, so a
+  seed's "wait for the owner's approval" is met when `next` names one, unless
+  it says "even under a window". See the session-stages ADR's 2026-11-14
+  amendment.
 
 ## Briefs and model classes
 

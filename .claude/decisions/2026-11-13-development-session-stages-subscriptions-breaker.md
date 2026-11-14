@@ -621,3 +621,51 @@ step 2 was live.
 - **Execution:** one `feat(backplane)` change, built on the queue fix and the
   generated-work fix (the yield ADR's and the concurrent-sessions ADR's
   2026-11-13 amendments).
+
+### 2026-11-14: A window or mandate the owner granted is their approval, and a change that needs its session is nudged until it acts
+
+- **What went wrong.** !419, a planner's ADR change, reached `checked` at
+  about 06:10 UTC on 2026-11-14 with `needs: agent`, `next` "ask
+  (`change_approve`); window:6 allows it". Window 6 was the owner's Auto
+  window. The planner's seed said to stop for the owner's approval of the
+  design, and it read that as excluding the window. It never asked, and sat
+  idle for about 12 hours while its follower stayed armed. Its follower
+  delivered nothing: `wakes` answers the one event that moved the change into
+  its stage, and nothing after it until main moved (`change.behind`).
+- **The rule.** A session stops only when `needs` is `owner`. When `needs`
+  is `agent`, it does `next` now. Any other `needs` waits on someone else, and
+  the follower says when that changes.
+  - An Auto window or a mandate the owner opened is the owner's approval of
+    what it covers.
+  - A seed's or brief's "stop for", or "wait for", "the owner's approval" is
+    met when `next` names a `window:<id>` or `mandate:<id>`. The exception is
+    a seed or brief that says "even under a window" (or "mandate").
+  - `CLAUDE.md` says so in its Rules.
+- **`next` says it.** `stage::ask` answers "ask now (`<tool>`): `<by>`, the
+  owner's, approves it", in place of "ask (`<tool>`); `<by>` allows it".
+- **A nudge.** `change.nudged` re-wakes a session that missed or misread its
+  change's transition.
+  - **When.** Each hourly run (`scheduled`) nudges every open change whose
+    stage needs the agent and has done so for at least `NUDGE_AFTER`
+    (15 minutes) (`events::due`).
+  - **What.** The event carries the stage, so `wake=agent` answers it. Its
+    summary reads "!n has needed its session for 2h10m: `<next>`". It goes to
+    the session whether it listens or not. The digest's stalls stay as they
+    are, for a session that doesn't listen.
+  - **At most one per change per hour.** The `Instance` appends it only when
+    the log holds no `change.nudged` for that change within the last
+    `NUDGE_EVERY` (an hour) (`Log::nudge`). So a doubled cron run nudges once.
+  - **A nudge isn't a move.** `since` skips `change.nudged`, as it skips a
+    job's events (`events::moves`), so the time waited keeps growing.
+  - **The hourly cron sets the delay.** A change is first nudged 15 to
+    75 minutes after it starts needing the agent. A finer cron would run the
+    digest, insights and evictions more often too, so this stays hourly.
+- **Execution.**
+  1. This amendment and `CLAUDE.md`'s line, as one `docs(claude)` change.
+  2. One `feat(backplane)` change, after it, with:
+     - `events::{due, moves, NUDGE_AFTER, NUDGE_EVERY}` and `Log::nudge`,
+       tested in the core;
+     - `stage::ask`'s text;
+     - `stages::since` skipping nudges;
+     - `/events/nudge` on the `Instance`;
+     - `events::nudge`, called from `scheduled`.
