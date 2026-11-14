@@ -136,3 +136,15 @@ Built as phase E1 of [`2026-11-05-development-changes-through-pigeon-mcp.md`](20
 - **`deploy` checks secrets but doesn't set them:** it names each declared secret the deployed Worker lacks, and `secrets put` sets it from stdin.
 - **node and wrangler** are pinned in `mise.toml` with `worker-build`, but not added to the cobot image yet: until phase 4, deploys run on the owner's machine. They join the image, and §5's version test, with the `workers.*` operations.
 - **`teardown`** runs `wrangler delete --force`, then deletes each Container application named after the Worker. wrangler's listing holds IDs, so it's read but never printed.
+
+### 2026-11-14: A tool whose program is busy being written is spawned again
+
+- **Seen on !399's merge gate:** `images_push_logs_in_with_minted_credentials_on_stdin_and_logs_out`
+  failed with `Text file busy (os error 26)`. The test writes a fake `docker`
+  and runs it. Meanwhile another test thread's fork held the file open until
+  it exec'd, so the exec failed with ETXTBSY.
+- **`Tools::run` retries a spawn that fails as `ExecutableFileBusy`:** up to
+  20 times, 25 ms apart, as Go's `os/exec` and Cargo do. Any other error, or
+  a busy program that stays busy, fails as before.
+- **Deployed tools are never written while they run,** so this changes nothing
+  outside tests.

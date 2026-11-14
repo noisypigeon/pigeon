@@ -1301,22 +1301,24 @@ impl Tools {
         input: Option<&str>,
     ) -> Result<String, Error> {
         let shown = format!("{} {}", program.display(), args.join(" "));
-        let mut child = Command::new(program)
-            .args(args)
-            .current_dir(dir)
-            .envs(self.env.iter().map(|(k, v)| (k, v)))
-            .stdin(if input.is_some() {
-                Stdio::piped()
-            } else {
-                Stdio::null()
-            })
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .map_err(|e| Error::Tool {
-                command: self.scrubbed(&shown),
-                message: e.to_string(),
-            })?;
+        let spawn = || {
+            Command::new(program)
+                .args(args)
+                .current_dir(dir)
+                .envs(self.env.iter().map(|(k, v)| (k, v)))
+                .stdin(if input.is_some() {
+                    Stdio::piped()
+                } else {
+                    Stdio::null()
+                })
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
+                .spawn()
+        };
+        let mut child = spawn_retrying_busy(spawn).map_err(|e| Error::Tool {
+            command: self.scrubbed(&shown),
+            message: e.to_string(),
+        })?;
         if let (Some(i), Some(mut stdin)) = (input, child.stdin.take()) {
             let _ = stdin.write_all(i.as_bytes());
         }
@@ -1706,4 +1708,22 @@ pub fn teardown(found: &Found, tools: &Tools, dir: &Path) -> Result<Vec<String>,
         }
     }
     Ok(done)
+}
+
+/// Runs `spawn`, again after a short wait while the program is busy being written: another
+/// thread's fork can hold a just-written program open until it execs (ETXTBSY), as Go's
+/// `os/exec` and Cargo retry.
+fn spawn_retrying_busy(
+    spawn: impl Fn() -> std::io::Result<std::process::Child>,
+) -> std::io::Result<std::process::Child> {
+    let mut tries = 0;
+    loop {
+        match spawn() {
+            Err(e) if e.kind() == std::io::ErrorKind::ExecutableFileBusy && tries < 20 => {
+                tries += 1;
+                std::thread::sleep(std::time::Duration::from_millis(25));
+            }
+            other => return other,
+        }
+    }
 }
