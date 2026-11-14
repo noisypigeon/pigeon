@@ -34,6 +34,9 @@ pub const MAX_OPEN_INVITES: usize = 10;
 /// The `admitted_by` of the seeded administrator.
 pub const SEED: &str = "seed";
 
+/// The `Instance` storage key the members are kept under.
+pub const STORE: &str = "members";
+
 /// A member's role.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -239,6 +242,17 @@ pub fn match_code(token: &str, public_key: &[u8]) -> String {
     format!("{n:06}")
 }
 
+/// What an account may see of the members: its own row, and an administrator's whole roster.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct View {
+    /// The caller's active membership.
+    pub me: Option<Membership>,
+    /// Every active membership, for an administrator.
+    pub members: Vec<Membership>,
+    /// Every open or enrolled invitation, for an administrator.
+    pub invitations: Vec<Invitation>,
+}
+
 fn open(s: InviteStatus) -> bool {
     matches!(s, InviteStatus::Open | InviteStatus::Enrolled)
 }
@@ -250,6 +264,36 @@ impl Members {
         self.memberships
             .iter()
             .find(|m| m.account == account && m.status == Status::Active)
+    }
+
+    /// What `account` may see: its own row, and for an administrator every active member and
+    /// open invitation.
+    #[must_use]
+    pub fn view(&self, account: &str) -> View {
+        let me = self.active(account).cloned();
+        if me.as_ref().is_some_and(|m| m.role == Role::Administrator) {
+            View {
+                me,
+                members: self
+                    .memberships
+                    .iter()
+                    .filter(|m| m.status == Status::Active)
+                    .cloned()
+                    .collect(),
+                invitations: self
+                    .invitations
+                    .iter()
+                    .filter(|i| open(i.status))
+                    .cloned()
+                    .collect(),
+            }
+        } else {
+            View {
+                me,
+                members: Vec::new(),
+                invitations: Vec::new(),
+            }
+        }
     }
 
     /// How many active administrators there are.

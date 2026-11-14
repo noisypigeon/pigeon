@@ -29,6 +29,7 @@ mod insights;
 mod macos;
 mod main_run;
 mod mandates;
+mod members;
 mod merges;
 mod minting;
 mod passkeys;
@@ -1815,6 +1816,10 @@ impl DurableObject for Instance {
         if path.starts_with("/accounts/") {
             let body: Value = req.json().await?;
             return account::serve(&self.state, &path, body).await;
+        }
+        if path.starts_with("/members/") {
+            let body: Value = req.json().await?;
+            return members::serve(&self.state, &path, body).await;
         }
         if path.starts_with("/devices/") {
             let body: Value = req.json().await?;

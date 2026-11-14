@@ -232,6 +232,7 @@ async fn signed(
                 Err(why) => Response::error(why, 400),
             }
         }
+        (Method::Get, super::members::PATH) => super::members::route(env, s, device).await,
         (m, p) if super::account::handles(p) => {
             super::account::route(env, s, device, m, p, body).await
         }

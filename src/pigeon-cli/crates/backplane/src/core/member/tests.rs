@@ -410,3 +410,53 @@ fn check_refuses_ones_own_membership() {
     r.subject = Some("bob");
     assert!(check(&roles(), &m, &r).is_ok());
 }
+
+#[test]
+fn view_shows_a_non_member_nothing() {
+    let v = with_bob().view("stranger");
+    assert_eq!(v.me, None);
+    assert_eq!(v.members, Vec::<Membership>::new());
+    assert_eq!(v.invitations, Vec::<Invitation>::new());
+}
+
+#[test]
+fn view_shows_a_user_only_their_own_row() {
+    let (m, _) = with_bob()
+        .invite("t2", "c@example.com", Role::User, "root", 200)
+        .unwrap();
+    let v = m.view("bob");
+    assert_eq!(v.me.as_ref().map(|m| m.account.as_str()), Some("bob"));
+    assert_eq!(v.members, Vec::<Membership>::new());
+    assert_eq!(v.invitations, Vec::<Invitation>::new());
+}
+
+#[test]
+fn view_shows_an_administrator_every_active_member_and_open_invitation() {
+    let (m, _) = with_bob()
+        .invite("t2", "c@example.com", Role::User, "root", 200)
+        .unwrap();
+    let (m, _) = m
+        .invite("t3", "d@example.com", Role::User, "root", 200)
+        .unwrap();
+    let (m, _) = m.enrol("t3", "dee", "pk2", b"key2", 201).unwrap();
+    let v = m.view("root");
+    assert_eq!(v.me.as_ref().map(|m| m.account.as_str()), Some("root"));
+    let accounts: Vec<&str> = v.members.iter().map(|m| m.account.as_str()).collect();
+    assert_eq!(accounts, ["root", "bob"]);
+    let statuses: Vec<InviteStatus> = v.invitations.iter().map(|i| i.status).collect();
+    assert_eq!(statuses, [InviteStatus::Open, InviteStatus::Enrolled]);
+}
+
+#[test]
+fn view_hides_ended_memberships_and_closed_invitations() {
+    let (m, inv) = with_bob()
+        .invite("t2", "c@example.com", Role::User, "root", 200)
+        .unwrap();
+    let m = m.revoke(&inv.id, "root").unwrap();
+    let m = m.remove("bob", "root", 300).unwrap();
+    let v = m.view("root");
+    let accounts: Vec<&str> = v.members.iter().map(|m| m.account.as_str()).collect();
+    assert_eq!(accounts, ["root"]);
+    assert_eq!(v.invitations, Vec::<Invitation>::new());
+    assert_eq!(m.view("bob").me, None);
+}
