@@ -1,0 +1,7 @@
+{
+  "access_token": "fixture-access-token-not-real",
+  "token_type": "bearer",
+  "expires_in": 3600,
+  "refresh_token": "fixture-refresh-token-not-real",
+  "scope": "account-api-tokens.write zone.read dns.write"
+}

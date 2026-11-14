@@ -1,0 +1,17 @@
+# How pigeon connects a Cloudflare account; see
+# .claude/decisions/2026-11-14-security-provider-connect-browser-grants.md §2.
+provider: cloudflare
+shapes: [oauth, key]
+oauth:
+  authorize: https://dash.cloudflare.com/oauth2/auth
+  token: https://dash.cloudflare.com/oauth2/token
+  revoke: https://dash.cloudflare.com/oauth2/revoke
+  pkce: S256
+  client: { kind: public, id_secret: OAUTH_CLOUDFLARE_CLIENT }
+  scopes: { from: capabilities, add: [account-api-tokens.write] }
+key:
+  page: "https://dash.cloudflare.com/?to=/:account/api-tokens&permissionGroupKeys={groups}&name={name}"
+  groups: from-capabilities
+  verify: "https://api.cloudflare.com/client/v4/accounts/{account}/tokens/verify"
+accounts: https://api.cloudflare.com/client/v4/accounts
+narrow: mint-granter

@@ -1,0 +1,16 @@
+{
+  "success": true,
+  "errors": [],
+  "messages": [
+    {
+      "code": 10000,
+      "message": "This API Token is valid and active",
+      "type": null
+    }
+  ],
+  "result": {
+    "id": "00000000000000000000000000000009",
+    "status": "active",
+    "expires_on": "2027-02-12T00:00:00Z"
+  }
+}
