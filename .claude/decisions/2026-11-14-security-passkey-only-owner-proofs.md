@@ -318,3 +318,24 @@ agree. Both sessions settled the points below by message before either merged.
   passkey to its keyring.
 
 Nothing in this ADR's steps changes.
+
+### 2026-11-14: Step 3 (!432) reviewed against the accounts ADR's "every approval names its account"
+
+Reviewed against the 2026-11-14 amendment of
+[`2026-11-14-runtime-accounts-profiles-instances.md`](2026-11-14-runtime-accounts-profiles-instances.md)
+(!424), which governs `worker/approve.rs` and `worker/mandates.rs`.
+
+- **The two agree.** !432 changes only how those two pages take the proof:
+  each calls `on_page` instead of checking the code or the passkey itself. It
+  doesn't change what is recorded as `by`, so the accounts ADR's step 6 still
+  owns that.
+- **Where step 6 meets it:**
+  - `on_page` is the one place a page's proof is taken, so the mapping from a
+    proof to an account is called beside it, once per page.
+  - The `Instance` already answers a bound proof's evidence. `on_page` drops
+    it for now; step 6 has it returned, as the approval's `proof`.
+  - The code is the fallback inside `on_page`, so it maps to the owner's
+    account there until steps 10 and 11.
+- **Order:** !432 merges first. Step 6 then edits the two pages on top of it.
+
+Nothing in !432 changes.
