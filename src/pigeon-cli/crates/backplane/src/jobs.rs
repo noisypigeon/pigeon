@@ -78,6 +78,7 @@ impl Board {
             platform: None,
             evictions: Vec::new(),
             forecast: Vec::new(),
+            built_on: None,
             ledger: None,
         };
         self.set(running.clone());
@@ -127,6 +128,7 @@ pub(crate) fn report(spec: &JobSpec, outcome: Outcome, log: &str) -> Report {
         platform: None,
         evictions: Vec::new(),
         forecast: Vec::new(),
+        built_on: None,
         ledger: None,
     }
 }
@@ -564,6 +566,9 @@ fn bound(spec: &JobSpec, dir: &Path, sentinel: &Path) -> Report {
     let full = full_set(dir, &checks, &mut log);
     let gate = (!full.is_empty()).then(|| gate(dir, &files, map.as_ref(), &mut log));
     let predicted = forecast(spec, dir, &mut log);
+    let seen = (since != spec.base)
+        .then(|| crate::cobot::ci::built_on_head(dir, since, &spec.sha).ok())
+        .flatten();
     Report {
         id: spec.id.clone(),
         outcome: if violations.is_empty() {
@@ -586,6 +591,7 @@ fn bound(spec: &JobSpec, dir: &Path, sentinel: &Path) -> Report {
         platform: None,
         evictions: Vec::new(),
         forecast: predicted,
+        built_on: seen,
         ledger: None,
     }
 }

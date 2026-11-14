@@ -1184,3 +1184,21 @@ The first, the ledger:
   others, or `to` is `from`. It records the yield before the change does, so
   a refused yield touches neither. `change_yield` answers 409, naming the
   cycle, and a forecast passes on to its next conflict.
+
+### 2026-11-14: A change built on another restacks past the commit it was built on
+
+- **What went wrong.** !386 was built on !384, and !384 restacked at its own
+  turn before merging. The release then recorded !384's restacked head, which
+  isn't in !386's history. So !386's restack fell back to the fork point and
+  took !384's first commit message, Change-Scope trailers included. The tree
+  was right. !387, built on !386, would do the same.
+- **The bound job records what a change is built on.** While a change waits
+  on the change it's built on, its bound job already fetches that branch. It
+  now also reports their merge base (`cobot::ci::built_on_head`), the report's
+  `built_on`. The change's object keeps it (`after-seen`).
+- **The restack starts past that commit.** `AFTER_HEAD` is the commit last
+  seen, and falls back to the ended change's last head only when no bound job
+  saw one. The restack's message is then the change's own first commit.
+- **Nothing on the change's record changes.** The value is the object's own
+  storage, not a field of `Change` or an event, so it needs no two-release
+  step.

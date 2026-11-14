@@ -188,6 +188,7 @@ fn reports_become_events() {
         platform: None,
         evictions: vec![],
         forecast: vec![],
+        built_on: None,
         ledger: None,
     };
     assert_eq!(
@@ -419,6 +420,7 @@ fn deploy_report(outcome: Outcome) -> Report {
         platform: None,
         evictions: vec![],
         forecast: vec![],
+        built_on: None,
         ledger: None,
     }
 }

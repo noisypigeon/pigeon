@@ -31,6 +31,8 @@ const GRANTS: &str = "grants";
 const ACTIONS: &str = "actions";
 /// The bound job's last conflict forecast, applied once its events are.
 const FORECAST: &str = "forecast";
+/// The commit of the change this one is built on that its bound job last saw it on.
+const AFTER_SEEN: &str = "after-seen";
 
 /// How long an Actions token is reused, in seconds: GitHub's last an hour.
 const TOKEN_REUSE: u64 = 50 * 60;
@@ -405,10 +407,14 @@ impl ChangeRun {
                 spec.env.insert(control::AFTER.into(), b.to_string());
             }
         }
-        if job == crate::changes::RESTACK
-            && let Some(h) = change.after.as_ref().and_then(|a| a.head.clone())
-        {
-            spec.env.insert(control::AFTER_HEAD.into(), h);
+        // Past the commit the bound job saw it built on, which survives a restack of the change
+        // it is built on; else that change's last head. See the yield ADR's 2026-11-14 amendment.
+        if job == crate::changes::RESTACK && change.after.is_some() {
+            let seen: Option<String> = self.state.storage().get(AFTER_SEEN).await.ok().flatten();
+            let last = change.after.as_ref().and_then(|a| a.head.clone());
+            if let Some(h) = seen.or(last) {
+                spec.env.insert(control::AFTER_HEAD.into(), h);
+            }
         }
         if job == control::MIRROR {
             let (to, to_token) = self.github().await?;
@@ -752,6 +758,11 @@ impl ChangeRun {
                 }
                 if job == crate::changes::BOUND && !report.forecast.is_empty() {
                     self.state.storage().put(FORECAST, &report.forecast).await?;
+                }
+                if job == crate::changes::BOUND
+                    && let Some(seen) = &report.built_on
+                {
+                    self.state.storage().put(AFTER_SEEN, seen).await?;
                 }
                 let event = control::event_of(job, &sha, &report);
                 Ok(if super::github::mirror(&self.env).is_some() {

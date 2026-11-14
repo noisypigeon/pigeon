@@ -4,7 +4,9 @@
 use std::path::Path;
 use std::process::Command;
 
-use backplane::cobot::ci::{Relation, changed, checkout, fetch_branch, forecast, restack};
+use backplane::cobot::ci::{
+    Relation, built_on_head, changed, checkout, fetch_branch, forecast, restack,
+};
 
 fn git(dir: &Path, args: &[&str]) -> String {
     let out = Command::new("git")
@@ -402,4 +404,57 @@ fn two_amendments_to_one_adr_are_not_forecast_to_conflict() {
         [(2, vec!["adr.md".to_string()])],
         "and conflict without it"
     );
+}
+
+#[test]
+fn a_change_built_on_one_restacked_before_merging_keeps_its_own_message() {
+    // !386 was built on !384, which restacked at its turn before merging; !386's restack then
+    // took !384's message. See the yield ADR's 2026-11-14 amendment on `after`.
+    let (_t, url, work) = remote();
+    let parent = diverge(
+        &work,
+        &url,
+        &[("a.txt", "ONE\ntwo\nthree\nfour\nfive\nsix\n")],
+        &[],
+    );
+    git(&work, &["checkout", "-q", "-B", "change/2-y", &parent]);
+    write(&work, "b.txt", "B\n");
+    git(&work, &["commit", "-qam", "feat: y\n\nChange-Scope: b.txt"]);
+    let head = git(&work, &["rev-parse", "HEAD"]);
+    git(&work, &["push", "-q", &url, "HEAD:refs/heads/change/2-y"]);
+    // The bound job of change/2-y sees what it is built on.
+    let job = tempfile::tempdir().expect("tmp");
+    checkout(job.path(), &url, "", "main", "change/2-y", &head).expect("checks out");
+    fetch_branch(job.path(), &url, "", "change/1-x").expect("fetches");
+    let seen = built_on_head(job.path(), "change/1-x", &head).expect("merge base");
+    assert_eq!(seen, parent);
+    // main moves; change/1-x restacks onto it, then merges as a squash.
+    git(&work, &["checkout", "-q", "main"]);
+    write(&work, "c.txt", "C\n");
+    git(&work, &["add", "c.txt"]);
+    git(&work, &["commit", "-qm", "chore: c"]);
+    git(&work, &["checkout", "-q", "change/1-x"]);
+    git(&work, &["rebase", "-q", "main"]);
+    let restacked = git(&work, &["rev-parse", "HEAD"]);
+    assert_ne!(restacked, parent);
+    git(&work, &["checkout", "-q", "main"]);
+    write(&work, "a.txt", "ONE\ntwo\nthree\nfour\nfive\nsix\n");
+    git(&work, &["commit", "-qam", "feat: x (!1)"]);
+    git(&work, &["push", "-q", &url, "HEAD:refs/heads/main"]);
+    let job = tempfile::tempdir().expect("tmp");
+    checkout(job.path(), &url, "", "main", "change/2-y", &head).expect("checks out");
+    let r = restack(
+        job.path(),
+        &url,
+        "",
+        "main",
+        "change/2-y",
+        &head,
+        Some(&seen),
+        &["*.md"],
+    )
+    .expect("restacks");
+    let to = r.to.expect("pushed");
+    let message = git(job.path(), &["log", "-1", "--format=%B", &to]);
+    assert!(message.starts_with("feat: y"), "{message}");
 }

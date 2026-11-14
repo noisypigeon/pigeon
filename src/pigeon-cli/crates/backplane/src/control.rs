@@ -651,6 +651,9 @@ pub struct Report {
     /// `{number, paths}`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub forecast: Vec<serde_json::Value>,
+    /// For the bound job of a change built on another: the commit of that change it is built on.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub built_on: Option<String>,
     /// For the deploy job: `main`'s grants ledger, resolved; see
     /// `.claude/decisions/2026-11-12-development-grants-applies-rescue-yield.md` §1.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -679,6 +682,7 @@ impl Report {
             platform: None,
             evictions: Vec::new(),
             forecast: Vec::new(),
+            built_on: None,
             ledger: None,
         }
     }

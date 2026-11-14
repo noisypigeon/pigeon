@@ -114,6 +114,18 @@ pub fn fetch_branch(dir: &Path, remote: &str, token: &str, branch: &str) -> Resu
     git(dir, remote, token, &["fetch", "-q", remote, &spec]).map(|_| ())
 }
 
+/// The commit of fetched `branch` that `sha` is built on, their merge base: where a restack
+/// starts once that branch has merged, even if it was restacked before merging; see the yield
+/// ADR's 2026-11-14 amendment on `after`.
+///
+/// # Errors
+///
+/// When git fails.
+pub fn built_on_head(dir: &Path, branch: &str, sha: &str) -> Result<String, Error> {
+    let fetched = format!("refs/remotes/origin/{branch}");
+    git(dir, "", "", &["merge-base", &fetched, sha])
+}
+
 /// The file at `path` on the checkout's fetched `base`, if it exists there.
 #[must_use]
 pub fn base_file(dir: &Path, base: &str, path: &str) -> Option<String> {

@@ -236,3 +236,10 @@ What changes:
   and removed lines, blank lines aside, are the same before and after
   (`own_lines`). The rule, and why, is the concurrent-sessions ADR's
   2026-11-13 amendment on carries.
+
+### 2026-11-14: The bound job reports the commit a change is built on
+
+- **For a change built on another, the bound job's report carries
+  `built_on`:** the merge base of the head and the branch it's built on. The
+  restack starts past it. See the yield ADR's 2026-11-14 amendment on
+  `after`.
