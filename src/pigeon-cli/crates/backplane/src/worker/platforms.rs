@@ -246,8 +246,9 @@ async fn decide(
     if status != 200 {
         return page::refused(403, "this link is not valid");
     }
+    let by = super::account::approver(env, s).await?;
     if approve::field(form, "decision").as_deref() == Some("refuse") {
-        let _ = to_main(env, s, "refuse", &json!({ "id": id, "by": who.subject })).await?;
+        let _ = to_main(env, s, "refuse", &json!({ "id": id, "by": by })).await?;
         let said = format!("platform run {id} of {} was refused", run.unit);
         let _ = super::events::append(env, s, "platform.failed", None, None, &said, false).await;
         return page::html(200, &approve::outcome("Refused", &said));
@@ -266,12 +267,12 @@ async fn decide(
         let sealed = platform::seal(&key, account).await?;
         (
             "grant-plan",
-            json!({ "id": id, "token": token, "sealed": sealed, "by": who.subject, "now": now() }),
+            json!({ "id": id, "token": token, "sealed": sealed, "by": by, "now": now() }),
         )
     } else {
         (
             "grant-apply",
-            json!({ "id": id, "token": token, "by": who.subject, "now": now() }),
+            json!({ "id": id, "token": token, "by": by, "now": now() }),
         )
     };
     let (status, v) = to_main(env, s, path, &body).await?;

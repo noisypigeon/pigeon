@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: runtime
-* Governs: `src/pigeon-ios/Pigeon/HomeView.swift`, `src/pigeon-ios/Pigeon/Sheets.swift`, `src/pigeon-ios/PigeonCore/Models.swift`, `src/pigeon-cli/crates/backplane/src/core/app/devices.rs`, `src/pigeon-cli/crates/backplane/src/worker/devices.rs`
+* Governs: `src/pigeon-ios/Pigeon/HomeView.swift`, `src/pigeon-ios/Pigeon/Sheets.swift`, `src/pigeon-ios/PigeonCore/Models.swift`, `src/pigeon-cli/crates/backplane/src/core/app/devices.rs`, `src/pigeon-cli/crates/backplane/src/worker/devices.rs`, `src/pigeon-cli/crates/backplane/src/core/account/**`, `src/pigeon-cli/crates/backplane/src/worker/account.rs`
 
 ## Context
 
@@ -235,3 +235,19 @@ conflict:
   for `needs: owner`, and the owner's window is their approval.
 
 Nothing in this ADR changes.
+
+### 2026-11-14: Step 3 lands, and step 6 lands in part as 6a
+
+- **Paths.** `Governs` gains `core/account/**` and `worker/account.rs`, which step 3 (!423) added.
+- **Step 3's two gaps.** `GET /v0/app/profile` answers the account record, and the profile edit takes `PATCH`, as §3 says. The planner fixed both in its review, before merge.
+- **Step 6a: `by` is the owner's account wherever a person approves.**
+  - The surfaces: the approval page, the app (approvals and starting Auto), mandates, the CI window, platform runs and push subscriptions.
+  - `worker::account::approver` maps the proof to the account. It asks the `Instance` for `/accounts/owner`, the account `ensure_owner` keeps.
+  - Owner-ness is still decided by the identity being a person, as before. The proposer check still holds, since a proposer is a service token.
+- **Automatic approvals keep `by: window:<n>`, `mandate:<n>` and `policy:<id>`.** The change lifecycle and push tell an automatic approval from a person's by that prefix. The window's own record names the account that started it.
+- **Step 6b, a later change:**
+  - `via` and `proof` on the approval records;
+  - the evidence that `passkeys::on_page` drops today;
+  - a test that every surface records the same `by`.
+- **The MCP card** still records the `APPROVER` secret until the passkey-only ADR's step 5 sets it through `approver`.
+

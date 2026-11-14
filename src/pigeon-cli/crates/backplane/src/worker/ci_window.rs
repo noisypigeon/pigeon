@@ -174,7 +174,7 @@ pub async fn page_serve(
             if let Err(why) = elicit::check_code(env, s, code.trim()).await? {
                 return page::refused(403, &why);
             }
-            let body = json!({ "token": token, "by": who.subject });
+            let body = json!({ "token": token, "by": super::account::approver(env, s).await? });
             let (status, v) = to_instance(env, s, "/ci-window/grant", &body).await?;
             let _ = elicit::inbox(
                 env,

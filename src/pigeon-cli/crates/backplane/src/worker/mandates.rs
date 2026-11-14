@@ -407,7 +407,7 @@ pub async fn page_serve(
                 env,
                 s,
                 "/mandates/grant",
-                &json!({ "token": token, "by": who.subject }),
+                &json!({ "token": token, "by": super::account::approver(env, s).await? }),
             )
             .await?;
             let _ = elicit::inbox(

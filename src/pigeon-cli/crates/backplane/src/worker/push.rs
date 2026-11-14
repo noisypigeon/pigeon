@@ -385,7 +385,8 @@ pub async fn page_serve(
                 return Response::error("subscribed only from its own page", 403);
             }
             let body: Value = req.json().await?;
-            let add = json!({ "endpoint": body["endpoint"], "by": who.subject });
+            let by = super::account::approver(env, s).await?;
+            let add = json!({ "endpoint": body["endpoint"], "by": by });
             let (status, v) = to_instance(env, s, "/push/add", &add).await?;
             Ok(Response::from_json(&v)?.with_status(status))
         }

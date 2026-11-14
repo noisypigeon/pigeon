@@ -36,6 +36,11 @@ pub async fn serve(state: &State, path: &str, body: Value) -> Result<Response> {
     let t = now();
     let (accounts, owner) = accounts.ensure_owner(&platform::random_hex(16)?, t);
     let mut devices = account::stamp(devices, &owner.id);
+    if path == "/accounts/owner" {
+        storage.put(account::STORE, &accounts).await?;
+        storage.put(DEVICES, &devices).await?;
+        return Response::from_json(&json!({ "id": owner.id }));
+    }
     let id = body["device"].as_str().unwrap_or_default().to_string();
     let Some(caller) = devices.devices.iter().find(|d| d.id == id).cloned() else {
         storage.put(account::STORE, &accounts).await?;
@@ -137,6 +142,21 @@ fn listed(devices: &Devices, acct: &str, current: &str) -> Vec<Value> {
 }
 
 // The public side.
+
+/// The account an owner's proof maps to: the owner's, the only person account until the
+/// passkey-only ADR's per-account keyrings; see the accounts ADR's amendment "Every approval
+/// names the account that gave it".
+///
+/// # Errors
+///
+/// When the binding fails, or the `Instance` answers no account.
+pub async fn approver(env: &Env, s: &Settings) -> Result<String> {
+    let v = elicit::inbox(env, s, "/accounts/owner", &json!({})).await?;
+    match v["id"].as_str() {
+        Some(id) if id.starts_with(account::PREFIX) => Ok(id.to_string()),
+        _ => Err(worker::Error::RustError("no owner account".into())),
+    }
+}
 
 /// Whether `path` is one this surface serves.
 #[must_use]

@@ -5,7 +5,7 @@ use serde_json::{Map, Value, json};
 use worker::{Env, Method, Response, Result};
 
 use super::approve::live;
-use super::platform::{Settings, secret};
+use super::platform::Settings;
 use super::{elicit, run, to_change};
 use crate::access::Identity;
 use crate::changes::Change;
@@ -132,7 +132,7 @@ pub async fn approve(env: &Env, s: &Settings, id: &str, body: &Value) -> Result<
     } else {
         std::collections::BTreeMap::new()
     };
-    let owner = secret(env, "APPROVER")?;
+    let owner = super::account::approver(env, s).await?;
     let hold = body["hold"].as_bool().unwrap_or(false);
     let redeem =
         json!({ "token": token, "operation": entry.operation, "by": owner, "review": hold });
@@ -204,7 +204,7 @@ pub async fn auto_start(env: &Env, s: &Settings, body: &Value) -> Result<Respons
     {
         return Response::error(format!("refused: {why}"), 403);
     }
-    let owner = secret(env, "APPROVER")?;
+    let owner = super::account::approver(env, s).await?;
     let hours = body["hours"].as_u64().unwrap_or_default();
     let (status, v) = super::mandates::to_instance(
         env,

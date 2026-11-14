@@ -239,6 +239,10 @@ async fn post(
         }
     }
     let review = approve::field(&form, "review").as_deref() == Some("1");
+    let who = &Identity {
+        subject: super::account::approver(env, s).await?,
+        human: who.human,
+    };
     let body =
         json!({ "token": token, "operation": operation, "by": who.subject, "review": review });
     let (status, v) = to_change(env, &s.repo, n, Method::Post, "/redeem", Some(&body)).await?;
