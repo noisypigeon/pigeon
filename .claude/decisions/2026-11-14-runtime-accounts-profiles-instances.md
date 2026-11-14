@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: runtime
-* Governs: `src/pigeon-ios/Pigeon/HomeView.swift`, `src/pigeon-ios/Pigeon/Sheets.swift`, `src/pigeon-ios/PigeonCore/Models.swift`, `src/pigeon-cli/crates/backplane/src/core/app/devices.rs`, `src/pigeon-cli/crates/backplane/src/worker/devices.rs`, `src/pigeon-cli/crates/backplane/src/core/account/**`, `src/pigeon-cli/crates/backplane/src/worker/account.rs`
+* Governs: `src/pigeon-ios/Pigeon/HomeView.swift`, `src/pigeon-ios/Pigeon/Sheets.swift`, `src/pigeon-ios/PigeonCore/Models.swift`, `src/pigeon-cli/crates/backplane/src/core/app/devices.rs`, `src/pigeon-cli/crates/backplane/src/worker/devices.rs`, `src/pigeon-cli/crates/backplane/src/core/account/**`, `src/pigeon-cli/crates/backplane/src/worker/account.rs`, `src/pigeon-ios/Pigeon/ProfileSheet.swift`
 
 ## Context
 
@@ -273,3 +273,12 @@ Planner-direct, by rule: the ADR and its amendments (!419, !424, !427 and !425's
   - control-plane routing: reviews of a brief's change, `change_handoff`'s ownership check, and the stored `macos` record that stalled `bound`.
 
   Each refusal cost a take-back. The executor's commit then came to the planner as a patch, because a taken change can't be handed back.
+
+### 2026-11-14: Steps 2 and 4 land
+
+- **Step 2 (!421) and step 4 (!450) are on `main`.** The app shows an instance chip and a Profile sheet, and keeps its appearance in the profile. `Governs` gains `ProfileSheet.swift`.
+- **The model variance amendment gains one finding for b9.** The ios check found that the app built PigeonCore's `Me` with a memberwise initializer, which is internal to its module. The planner added a public `init` (18e7f0d). The planner's review had missed it, having no Swift compiler. So b9 merged with two planner fixes, not one. For a sonnet brief across Swift modules, the brief names each initializer the app needs.
+- **What remains:**
+  - step 6b: `via`, `proof` and the cross-surface test;
+  - the non-platform ADR's step 3, under this ADR's names, still gated on the grants ADR's steps 1b and 1d.
+
