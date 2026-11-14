@@ -291,7 +291,17 @@ impl ChangeRun {
         });
         let storage = self.state.storage();
         let b: breaker::Breaker = storage.get(BREAKER).await?.unwrap_or_default();
+        let known = b.heads.back().map(|h| h.sha.clone());
         let b = breaker::observe(&b, change, &tails, now());
+        if let (Some((id, _, _)), Some(s)) = (brief, &s)
+            && b.heads.back().map(|h| h.sha.clone()) != known
+        {
+            let by = crate::core::brief::report::Tally {
+                heads: 1,
+                ..Default::default()
+            };
+            super::briefs::count(&self.env, s, id, by).await;
+        }
         let (b, trips) = breaker::fresh(&b, now(), &limits);
         storage.put(BREAKER, &b).await?;
         let Some(s) = s else {

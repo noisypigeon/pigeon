@@ -5,6 +5,7 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
+use crate::core::brief::report::Tally;
 use crate::core::brief::{Brief, Draft};
 
 /// Every brief of an instance.
@@ -77,6 +78,19 @@ impl Briefs {
         if !b.changes.contains(&change) {
             b.changes.push(change);
         }
+        Ok(b)
+    }
+
+    /// Adds `by` to brief `id`'s tally.
+    ///
+    /// # Errors
+    ///
+    /// When there's no such brief.
+    pub fn tally(&mut self, id: &str, by: Tally) -> Result<&Brief, String> {
+        let b = number(id)
+            .and_then(|n| self.briefs.get_mut(&n))
+            .ok_or_else(|| format!("no brief `{id}`"))?;
+        b.tally = b.tally.plus(by);
         Ok(b)
     }
 

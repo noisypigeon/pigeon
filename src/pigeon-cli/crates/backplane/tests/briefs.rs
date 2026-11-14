@@ -406,3 +406,61 @@ fn an_executor_takes_only_tasks_on_its_briefs_changes() {
     let reconcile = claim_refused("reconcile", Some("b4"), &adr).expect("an ADR amendment");
     assert!(reconcile.contains("names an ADR"), "{reconcile}");
 }
+
+mod report {
+    use std::collections::BTreeMap;
+
+    use super::{Class, PLANNER, draft};
+    use backplane::briefs::Briefs;
+    use backplane::core::brief::report::{RECENT, Tally, lines};
+
+    #[test]
+    fn the_digest_shows_active_briefs_and_each_steps_briefs_by_class() {
+        let mut all = Briefs::default();
+        all.create(PLANNER, draft(Class::Haiku), 10).expect("b1");
+        all.create(PLANNER, draft(Class::Haiku), 10).expect("b2");
+        all.create(PLANNER, draft(Class::Sonnet), 10).expect("b3");
+        all.bind("b1", 21).expect("bound");
+        all.bind("b2", 22).expect("bound");
+        let two_heads = Tally {
+            heads: 2,
+            reviews: 1,
+            revised: 1,
+            ..Tally::default()
+        };
+        all.tally("b1", two_heads).expect("counted");
+        all.tally(
+            "b2",
+            Tally {
+                heads: 1,
+                escalations: 1,
+                ..Tally::default()
+            },
+        )
+        .expect("counted");
+        let open = BTreeMap::from([(21, "in-review".to_string())]);
+        let briefs: Vec<_> = all.list(None).into_iter().cloned().collect();
+        assert_eq!(
+            lines(&briefs, &open, 20),
+            [
+                "brief b3 (sonnet, development-model-tiered-agent-briefs step 1): unclaimed",
+                "brief b1 (haiku, development-model-tiered-agent-briefs step 1): !21 in-review",
+                "step development-model-tiered-agent-briefs 1: haiku 2 brief(s), 3 head(s), 1 \
+                 review(s) (1 revised), 1 escalation(s); sonnet 1 brief(s), 0 head(s), 0 \
+                 review(s) (0 revised), 0 escalation(s)",
+            ],
+            "b2's change isn't open, so it's no longer active, but its step still counts it"
+        );
+        let later = lines(&briefs, &open, 10 + RECENT + 1);
+        assert_eq!(later.len(), 3, "active briefs keep their step: {later:?}");
+        assert!(
+            later[2].contains("haiku 1 brief(s)"),
+            "an ended brief past RECENT drops out: {later:?}"
+        );
+    }
+
+    #[test]
+    fn an_unknown_brief_takes_no_tally() {
+        assert!(Briefs::default().tally("b9", Tally::default()).is_err());
+    }
+}

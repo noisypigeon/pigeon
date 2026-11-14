@@ -309,6 +309,10 @@ pub struct Digest {
     /// macOS jobs moved, providers down, and providers near their cap.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub macos: Vec<String>,
+    /// Each brief carried out now, and each recent ADR step's briefs by class: shown, never
+    /// pushed; see the model-tiered briefs ADR §7.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub briefs: Vec<String>,
 }
 
 /// How long a session goes without polling before a change that needs it stalls, in seconds;
@@ -438,11 +442,12 @@ impl Digest {
         !self.needs_owner() && self.merged_without_owner.is_empty() && self.macos.is_empty()
     }
 
-    /// One line per item, for a page: [`Self::owner_lines`], then the sessions.
+    /// One line per item, for a page: [`Self::owner_lines`], then the sessions and briefs.
     #[must_use]
     pub fn lines(&self) -> Vec<String> {
         let mut out = self.owner_lines();
         out.extend(self.sessions.iter().map(SessionLine::line));
+        out.extend(self.briefs.iter().cloned());
         out
     }
 
@@ -517,5 +522,6 @@ pub fn digest(input: &DigestInput<'_>, now: u64) -> Digest {
         sessions: Vec::new(),
         stalled: Vec::new(),
         macos: input.macos.to_vec(),
+        briefs: Vec::new(),
     }
 }

@@ -139,6 +139,13 @@ pub async fn build(env: &Env, s: &Settings) -> Result<(Digest, u64)> {
         now(),
     );
     (d.sessions, d.stalled) = sessions(env, s).await?;
+    let open: std::collections::BTreeMap<u32, String> = d
+        .sessions
+        .iter()
+        .flat_map(|l| l.changes.iter().map(|(n, stage, _)| (*n, stage.clone())))
+        .collect();
+    let briefs = super::briefs::all(env, s).await;
+    d.briefs = crate::core::brief::report::lines(&briefs, &open, now());
     Ok((d, last))
 }
 

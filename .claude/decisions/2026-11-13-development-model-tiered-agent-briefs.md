@@ -797,3 +797,31 @@ changes, as !386 itself now plans: one per session and ADR.
 - **Step 7c:** each brief's state, and per ADR step the heads, reviews and
   escalations by class (§7). Those need the briefs and their changes
   together, so the digest reads `/briefs/list` beside the D1 rows.
+
+### 2026-11-14: Step 7c lands, and step 7 is done: the digest shows briefs and each step's cost by class
+
+- **Step 7b merged as !445:** the digest's session and stall lines name the
+  class.
+- **A brief keeps a tally** (`core::brief::report::Tally`): the heads its
+  changes reached, its planner's reviews and how many asked a revision, and
+  its executors' escalations. The tally is a running count, kept on the brief
+  in the `Instance`, since the digest reads events only since its last run.
+  - **Heads** are counted where the breaker sees a new head, so a restack's
+    head counts, as it does for the breaker (step 7a);
+  - **reviews** where `brief_review` records a verdict;
+  - **escalations** where `brief_escalate` records one.
+
+  A failed count is logged, never answered: it is only the digest's.
+- **The digest's brief lines,** shown and never pushed, as sessions are:
+  - one per brief being carried out: no change yet ("unclaimed"), or its
+    latest change open, with that change's stage;
+  - one per ADR step with such a brief, or a revision within the last 7
+    days (`RECENT`), counting by class the briefs, heads, reviews (revised)
+    and escalations.
+
+  The owner sees from these whether a class suits a kind of step, as §7 asks.
+  Tuning §2's table stays an amendment here.
+- **`session_status` is unchanged.** It already shows a session's class, and
+  its changes' stages show a brief's change in review or escalated.
+- **What's left of the plan:** the breaker acting on executors (§6), with
+  `change_attend` (the session-stages ADR's step 6).

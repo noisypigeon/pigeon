@@ -182,6 +182,12 @@ async fn review(env: &Env, s: &Settings, args: &Map<String, Value>) -> Result<(u
         "brief.reviewed"
     };
     super::events::append(env, s, kind, Some(n), executor, &said, false).await?;
+    let by = crate::core::brief::report::Tally {
+        reviews: 1,
+        revised: u32::from(verdict == "revise"),
+        ..Default::default()
+    };
+    count(env, s, &id, by).await;
     let body = json!({ "session": label, "class": Class::Opus });
     let (_, open) = to_instance(env, s, "/tasks/list", &body).await?;
     for t in open["tasks"].as_array().into_iter().flatten() {
@@ -227,6 +233,11 @@ async fn escalate(env: &Env, s: &Settings, args: &Map<String, Value>) -> Result<
     let planner = brief["planner"].as_str().map(str::to_string);
     let note = format!("!{n} escalates to {id}'s planner: {asked}");
     super::tasks::add(env, s, "escalation", n, None, planner, &note).await?;
+    let by = crate::core::brief::report::Tally {
+        escalations: 1,
+        ..Default::default()
+    };
+    count(env, s, &id, by).await;
     Ok((200, json!({ "change": n, "brief": id, "escalated": asked })))
 }
 
@@ -248,6 +259,23 @@ async fn reopen(env: &Env, s: &Settings, n: u32, by: &str, why: &str) -> Result<
         }
     }
     Ok(())
+}
+
+/// Adds `by` to brief `id`'s tally; a failure is logged, never answered, as the count is only
+/// the digest's.
+pub async fn count(env: &Env, s: &Settings, id: &str, by: crate::core::brief::report::Tally) {
+    let body = json!({ "id": id, "tally": by });
+    if let Err(e) = to_instance(env, s, "/briefs/tally", &body).await {
+        worker::console_error!("tally for {id}: {e}");
+    }
+}
+
+/// Every brief, newest first; none when they can't be read.
+pub async fn all(env: &Env, s: &Settings) -> Vec<crate::core::brief::Brief> {
+    match to_instance(env, s, "/briefs/all", &json!({})).await {
+        Ok((200, v)) => serde_json::from_value(v).unwrap_or_default(),
+        _ => Vec::new(),
+    }
 }
 
 /// Brief `id`'s latest draft; none when there is no such brief, or it can't be read.
@@ -295,8 +323,8 @@ pub async fn review_needed(
     super::tasks::add(env, s, "brief-review", after.number, None, planner, &note).await
 }
 
-/// The `Instance` Durable Object's side: `/briefs/create`, `/briefs/amend`, `/briefs/show` and
-/// `/briefs/list`.
+/// The `Instance` Durable Object's side: `/briefs/create`, `/briefs/amend`, `/briefs/show`,
+/// `/briefs/list`, `/briefs/all` and `/briefs/tally`.
 ///
 /// # Errors
 ///
@@ -330,6 +358,14 @@ pub async fn serve(state: &State, path: &str, body: &Value) -> Result<Response> 
                 })
                 .collect();
             return Response::from_json(&json!({ "briefs": rows }));
+        }
+        "/briefs/all" => {
+            let every: Vec<&crate::core::brief::Brief> = all.list(None);
+            return Response::from_json(&every);
+        }
+        "/briefs/tally" => {
+            let by = serde_json::from_value(body["tally"].clone()).unwrap_or_default();
+            all.tally(id, by).cloned().map_err(|e| vec![e])
         }
         "/briefs/create" => draft().and_then(|d| all.create(planner, d, now())),
         "/briefs/bind" => {

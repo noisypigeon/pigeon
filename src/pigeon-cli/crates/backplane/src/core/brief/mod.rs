@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use crate::sessions::Class;
 
 pub mod executor;
+pub mod report;
 
 /// The most paths a brief may touch.
 pub const MAX_SCOPE: usize = 12;
@@ -143,6 +144,9 @@ pub struct Brief {
     /// The changes proposed to carry it out, oldest first.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub changes: Vec<u32>,
+    /// What carrying it out has cost so far.
+    #[serde(default, skip_serializing_if = "report::Tally::is_zero")]
+    pub tally: report::Tally,
 }
 
 impl Brief {
@@ -168,6 +172,7 @@ impl Brief {
                 reason: "created".into(),
             }],
             changes: Vec::new(),
+            tally: report::Tally::default(),
         })
     }
 
