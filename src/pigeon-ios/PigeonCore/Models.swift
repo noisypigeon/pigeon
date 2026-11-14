@@ -187,6 +187,91 @@ public struct PasskeyChallenge: Codable, Equatable, Sendable {
     public let rp: String
 }
 
+/// How the app is drawn: the profile's appearance, kept on the control plane.
+public enum Appearance: String, Codable, CaseIterable, Identifiable, Equatable, Sendable {
+    case system, light, dark
+
+    public var id: String { rawValue }
+    public var label: String { rawValue.capitalized }
+
+    /// The appearance to use now, and the one to upload once: the remote value wins when set.
+    public static func resolve(local: Appearance?, remote: Appearance) -> (use: Appearance, upload: Appearance?) {
+        if remote != .system { return (remote, nil) }
+        if let local, local != .system { return (local, local) }
+        return (.system, nil)
+    }
+}
+
+/// An account; see the accounts, profiles and instances ADR §4.
+public struct Account: Codable, Equatable, Sendable {
+    public let id: String
+    public let kind: String
+    public let created: Int
+}
+
+/// An account's profile.
+public struct Profile: Codable, Equatable, Sendable {
+    public let account: String
+    public let name: String
+    public let appearance: Appearance
+    public let avatar: String?
+    public let updated: Int
+
+    /// `s` without control characters or outer whitespace, at most 64 characters; nil when empty.
+    public static func validName(_ s: String) -> String? {
+        var kept = String.UnicodeScalarView()
+        for scalar in s.unicodeScalars where scalar.properties.generalCategory != .control {
+            kept.append(scalar)
+        }
+        let trimmed = String(kept).trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : String(trimmed.prefix(64))
+    }
+}
+
+/// A passkey on the account.
+public struct PasskeyRow: Codable, Equatable, Identifiable, Sendable {
+    public let id: String
+    public let name: String
+    public let created: Int
+    public let used: Int?
+}
+
+/// A linked device.
+public struct DeviceRow: Codable, Equatable, Identifiable, Sendable {
+    public let id: String
+    public let name: String
+    public let linked: Int
+    public let seen: Int
+    public let current: Bool
+}
+
+/// `GET /v0/app/profile`.
+public struct Me: Codable, Equatable, Sendable {
+    public let account: Account
+    public let profile: Profile
+    public let passkeys: [PasskeyRow]
+    public let devices: [DeviceRow]
+
+    /// The app rebuilds one when a profile edit answers with only the profile.
+    public init(account: Account, profile: Profile, passkeys: [PasskeyRow], devices: [DeviceRow]) {
+        self.account = account
+        self.profile = profile
+        self.passkeys = passkeys
+        self.devices = devices
+    }
+}
+
+/// `PATCH`, `PUT` and `DELETE` on the profile answer with it.
+public struct ProfileAnswer: Codable, Equatable, Sendable {
+    public let profile: Profile
+}
+
+/// The fewest passkeys an account keeps.
+public let minimumPasskeys = 1
+
+/// Whether one of `count` passkeys can be removed.
+public func canRemovePasskey(count: Int) -> Bool { count > minimumPasskeys }
+
 extension JSONDecoder {
     /// A decoder for the control plane's JSON.
     public static var pigeon: JSONDecoder { JSONDecoder() }

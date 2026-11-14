@@ -1,15 +1,12 @@
 // The Pigeon app: links this iPhone, then shows Home; see
 // .claude/decisions/2026-11-12-runtime-ios-app-approvals-insights.md.
 
+import PigeonCore
 import SwiftUI
 import UIKit
 import UserNotifications
 
-/// Where the owner set Appearance: following the device unless they chose.
-enum Appearance: String, CaseIterable, Identifiable {
-    case system, light, dark
-    var id: String { rawValue }
-    var label: String { rawValue.capitalized }
+extension Appearance {
     var scheme: ColorScheme? {
         switch self {
         case .system: return nil

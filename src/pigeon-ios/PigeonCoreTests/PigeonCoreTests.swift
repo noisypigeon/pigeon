@@ -135,3 +135,58 @@ import PigeonCore
         #expect(try JSONDecoder.pigeon.decode(Stacks.self, from: Data(bare.utf8)).note == nil)
     }
 }
+
+@Suite struct ProfileTests {
+    @Test func validNameTrimsAndDropsControls() {
+        #expect(Profile.validName(" A\u{7}da ") == "Ada")
+    }
+
+    @Test func validNameRefusesEmpty() {
+        #expect(Profile.validName("") == nil)
+        #expect(Profile.validName("  ") == nil)
+        #expect(Profile.validName("\u{7}\n") == nil)
+    }
+
+    @Test func validNameKeeps64() {
+        #expect(Profile.validName(String(repeating: "x", count: 100))?.count == 64)
+    }
+
+    @Test func resolveKeepsRemoteWhenSet() {
+        let r = Appearance.resolve(local: .dark, remote: .light)
+        #expect(r.use == .light)
+        #expect(r.upload == nil)
+    }
+
+    @Test func resolveUploadsLocalOnce() {
+        let r = Appearance.resolve(local: .dark, remote: .system)
+        #expect(r.use == .dark)
+        #expect(r.upload == .dark)
+    }
+
+    @Test func resolveDefaultsToSystem() {
+        for local in [nil, Appearance.system] {
+            let r = Appearance.resolve(local: local, remote: .system)
+            #expect(r.use == .system)
+            #expect(r.upload == nil)
+        }
+    }
+
+    @Test func canRemovePasskeyOnlyAboveMinimum() {
+        #expect(!canRemovePasskey(count: 0))
+        #expect(!canRemovePasskey(count: 1))
+        #expect(canRemovePasskey(count: 2))
+    }
+
+    @Test func meDecodes() throws {
+        let json = """
+            {"account":{"id":"acct_x","kind":"person","created":1},
+             "profile":{"account":"acct_x","name":"Owner","appearance":"system","updated":1},
+             "passkeys":[{"id":"p","name":"iPhone","created":1}],
+             "devices":[{"id":"d","name":"iPhone","linked":1,"seen":2,"current":true}]}
+            """
+        let me = try JSONDecoder.pigeon.decode(Me.self, from: Data(json.utf8))
+        #expect(me.profile.avatar == nil)
+        #expect(me.passkeys[0].used == nil)
+        #expect(me.devices[0].current)
+    }
+}

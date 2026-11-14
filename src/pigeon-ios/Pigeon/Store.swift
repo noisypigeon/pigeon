@@ -10,6 +10,8 @@ final class Store: ObservableObject {
     @Published var home: Home?
     @Published var error: String?
     @Published var busy = false
+    @Published var me: Me?
+    @Published var avatar: Data?
 
     private let auth = Auth()
     private var device: DeviceKey?
@@ -93,6 +95,104 @@ final class Store: ObservableObject {
         }
     }
 
+    /// Loads the profile and its avatar; the first time, moves a local appearance into it.
+    func loadProfile() async {
+        guard linked else { return }
+        do {
+            let api = try api()
+            let me = try await api.call("GET", "/v0/app/profile", as: Me.self)
+            let defaults = UserDefaults.standard
+            var appearance = me.profile.appearance
+            if !defaults.bool(forKey: "appearanceMigrated") {
+                let local = defaults.string(forKey: "appearance").flatMap(Appearance.init(rawValue:))
+                let r = Appearance.resolve(local: local, remote: me.profile.appearance)
+                if let upload = r.upload {
+                    try await api.send("PATCH", "/v0/app/profile", body: ["appearance": upload.rawValue])
+                }
+                defaults.set(true, forKey: "appearanceMigrated")
+                appearance = r.use
+            }
+            defaults.set(appearance.rawValue, forKey: "appearance")
+            self.me = try await api.call("GET", "/v0/app/profile", as: Me.self)
+            do {
+                avatar = try await api.send("GET", "/v0/app/profile/avatar")
+            } catch let e as APIError where e.status == 404 {
+                avatar = nil
+            }
+            error = nil
+        } catch let e as APIError where e.status == 401 {
+            unlink(because: e)
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+
+    /// Renames the profile.
+    func rename(_ name: String) async -> Bool {
+        await patch(["name": name])
+    }
+
+    /// Sets the profile's appearance.
+    func setAppearance(_ a: Appearance) async -> Bool {
+        await patch(["appearance": a.rawValue])
+    }
+
+    private func patch(_ body: [String: Any]) async -> Bool {
+        await run {
+            let answer = try await self.api().call(
+                "PATCH", "/v0/app/profile", body: body, as: ProfileAnswer.self)
+            if let me = self.me {
+                self.me = Me(
+                    account: me.account, profile: answer.profile, passkeys: me.passkeys,
+                    devices: me.devices)
+            }
+            UserDefaults.standard.set(answer.profile.appearance.rawValue, forKey: "appearance")
+        }
+    }
+
+    /// Sets the avatar from JPEG bytes.
+    func setAvatar(jpeg: Data) async -> Bool {
+        await run {
+            try await self.api().send(
+                "PUT", "/v0/app/profile/avatar", body: ["jpeg": base64url(jpeg)])
+            await self.loadProfile()
+        }
+    }
+
+    /// Removes the avatar.
+    func removeAvatar() async -> Bool {
+        await run {
+            try await self.api().send("DELETE", "/v0/app/profile/avatar")
+            await self.loadProfile()
+        }
+    }
+
+    /// Unlinks device `id` with a passkey; unlinking this iPhone signs it out.
+    func unlinkDevice(_ id: String) async -> Bool {
+        let current = me?.devices.first { $0.id == id }?.current ?? false
+        let done = await run {
+            let answer = try await self.proof(["op": "unlink", "id": id])
+            try await self.api().send(
+                "DELETE", "/v0/app/devices/\(id)", body: ["passkey": answer.json])
+            if !current { await self.loadProfile() }
+        }
+        // After `run`, which clears `error`, so the sign-out's reason stays shown.
+        if done && current {
+            unlink(because: APIError(status: 0, message: "This iPhone was unlinked."))
+        }
+        return done
+    }
+
+    /// Removes passkey `id` with a passkey.
+    func removePasskey(_ id: String) async -> Bool {
+        await run {
+            let answer = try await self.proof(["op": "passkey:remove", "id": id])
+            try await self.api().send(
+                "DELETE", "/v0/app/passkeys/\(id)", body: ["passkey": answer.json])
+            await self.loadProfile()
+        }
+    }
+
     /// Hands the control plane this device's APNs token.
     func registerPush(_ token: Data) async {
         guard linked else { return }
@@ -109,6 +209,8 @@ final class Store: ObservableObject {
         UserDefaults.standard.set(false, forKey: Self.linkedKey)
         linked = false
         home = nil
+        me = nil
+        avatar = nil
         error = "This iPhone needs linking again: \(e.localizedDescription)"
     }
 

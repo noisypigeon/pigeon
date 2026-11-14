@@ -1,5 +1,5 @@
 // The cards that open over Home: one metric's chart by source and kind, an approval, Auto's
-// length, and Instances with Settings.
+// length, and Instances.
 
 import PigeonCore
 import SwiftUI
@@ -366,73 +366,24 @@ struct AutoSheet: View {
     }
 }
 
-/// Instances: Platform alone today, and Settings; see the accounts, profiles and instances ADR §4.
+/// Instances: Platform alone today; see the accounts, profiles and instances ADR §4.
 struct InstancesSheet: View {
-    @AppStorage("appearance") private var appearance = Appearance.system.rawValue
-    @State private var settings = false
-
     var body: some View {
         ZStack {
             Theme.background.ignoresSafeArea()
             VStack(alignment: .leading, spacing: 14) {
-                if settings {
-                    Button {
-                        settings = false
-                    } label: {
-                        Label("Instances", systemImage: "chevron.left")
+                Text("Instances").font(Theme.display(22))
+                HStack(spacing: 12) {
+                    Image("Avatar").resizable().frame(width: 44, height: 44).clipShape(Circle())
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Platform").font(.headline)
+                        Text(API.host).font(.footnote).foregroundStyle(Theme.muted)
                     }
-                    .foregroundStyle(Theme.accent)
-                    Text("Settings").font(Theme.display(22))
-                    Eyebrow(text: "Appearance")
-                    HStack(spacing: 10) {
-                        ForEach(Appearance.allCases) { a in
-                            Button {
-                                appearance = a.rawValue
-                            } label: {
-                                Text(a.label)
-                                    .font(.subheadline.weight(.semibold))
-                                    .frame(maxWidth: .infinity, minHeight: 48)
-                                    .foregroundStyle(
-                                        appearance == a.rawValue ? Theme.onAccent : Theme.ink)
-                                    .background(
-                                        RoundedRectangle(cornerRadius: 12)
-                                            .fill(appearance == a.rawValue ? Theme.accent : Theme.card))
-                                    .background(
-                                        RoundedRectangle(cornerRadius: 12).fill(Theme.shadow)
-                                            .offset(x: 3, y: 3))
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityAddTraits(appearance == a.rawValue ? .isSelected : [])
-                        }
-                    }
-                } else {
-                    Text("Instances").font(Theme.display(22))
-                    HStack(spacing: 12) {
-                        Image("Avatar").resizable().frame(width: 44, height: 44).clipShape(Circle())
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Platform").font(.headline)
-                            Text(API.host).font(.footnote).foregroundStyle(Theme.muted)
-                        }
-                        Spacer()
-                        Image(systemName: "checkmark").foregroundStyle(Theme.accent)
-                    }
-                    .padding(12)
-                    .block(shadow: Theme.accent)
-                    Button {
-                        settings = true
-                    } label: {
-                        HStack(spacing: 12) {
-                            Image(systemName: "gearshape")
-                            Text("Settings").font(.headline)
-                            Spacer()
-                            Image(systemName: "chevron.right").foregroundStyle(Theme.muted)
-                        }
-                        .padding(.horizontal, 14)
-                        .frame(minHeight: 52)
-                        .block()
-                    }
-                    .buttonStyle(.plain)
+                    Spacer()
+                    Image(systemName: "checkmark").foregroundStyle(Theme.accent)
                 }
+                .padding(12)
+                .block(shadow: Theme.accent)
                 Spacer()
             }
             .foregroundStyle(Theme.ink)
