@@ -2,7 +2,11 @@
 //! `.claude/decisions/2026-11-13-development-model-tiered-agent-briefs.md` §2, §4.
 
 use super::Brief;
+use crate::approvals::Tiers;
 use crate::sessions::Class;
+
+/// The tier rules a brief's change may never carry: they are the planner's work.
+const PLANNERS: [&str; 3] = ["guarded:", "secrets:", "sentinel:"];
 
 /// The parts of a proposal the check reads.
 #[derive(Debug, Clone, Copy)]
@@ -108,4 +112,20 @@ pub fn commit(b: &Brief) -> (String, String) {
         d.step
     );
     (d.commit.title.clone(), plan)
+}
+
+/// Why a brief's change, classified as `t`, is refused: each of its rules that names a guarded,
+/// secret or sentinel path, or a secret it adds. `deploys` isn't one: it also covers a Worker's
+/// own inputs, which an executor may change.
+#[must_use]
+pub fn refused(t: &Tiers) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for rule in [&t.authorize.rule, &t.merge.rule] {
+        let planners = PLANNERS.iter().any(|p| rule.starts_with(p)) || rule == "adds a secret";
+        let said = format!("a brief's change never touches this; the planner does: `{rule}`");
+        if planners && !out.contains(&said) {
+            out.push(said);
+        }
+    }
+    out
 }

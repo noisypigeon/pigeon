@@ -341,3 +341,37 @@ mod executor {
         assert!(plan.contains("Carries out brief b4 r1 (haiku)"), "{plan}");
     }
 }
+
+#[test]
+fn a_briefs_change_is_refused_only_the_planners_tiers() {
+    use backplane::approvals::{Tier, Tiered, Tiers};
+    use backplane::core::brief::executor::refused;
+    let t = |authorize: &str, merge: &str| Tiers {
+        authorize: Tiered {
+            tier: Tier::Confirm,
+            rule: authorize.into(),
+        },
+        merge: Tiered {
+            tier: Tier::Code,
+            rule: merge.into(),
+        },
+        close: Tiered {
+            tier: Tier::Confirm,
+            rule: "close".into(),
+        },
+    };
+    assert_eq!(refused(&t("routine", "deploys")), Vec::<String>::new());
+    assert_eq!(refused(&t("routine", "routine")), Vec::<String>::new());
+    for rule in [
+        "guarded: .mcp.json",
+        "secrets: a/secrets.config.yaml",
+        "sentinel: s.rs",
+        "adds a secret",
+    ] {
+        let r = refused(&t("routine", rule));
+        assert_eq!(r.len(), 1, "{rule}: {r:?}");
+        assert!(r[0].contains(rule), "{r:?}");
+    }
+    let both = refused(&t("guarded: src/approve.rs", "guarded: src/approve.rs"));
+    assert_eq!(both.len(), 1, "one rule named on both tiers is said once");
+}

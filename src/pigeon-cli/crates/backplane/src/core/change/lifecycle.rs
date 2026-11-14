@@ -45,7 +45,7 @@ impl Change {
             Event::Started { job, sha } => self.started(&job, &sha),
             Event::Bounded {
                 sha,
-                violations,
+                mut violations,
                 checks,
                 full,
                 tiers,
@@ -55,6 +55,13 @@ impl Change {
                     self.tiers = tiers;
                     self.full = full;
                     self.gate = gate;
+                    // A brief's change never reaches guarded, secret or sentinel paths; see
+                    // `.claude/decisions/2026-11-13-development-model-tiered-agent-briefs.md` §2.
+                    if self.brief.is_some()
+                        && let Some(t) = &self.tiers
+                    {
+                        violations.extend(crate::core::brief::executor::refused(t));
+                    }
                 }
                 self.bounded(&sha, violations, checks)
             }

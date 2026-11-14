@@ -761,3 +761,57 @@ fn of_two_changes_forecast_to_conflict_the_one_less_far_along_yields() {
         "pushed and bounded rank alike"
     );
 }
+
+fn tiered(rule: &str) -> crate::approvals::Tiers {
+    let t = |r: &str| crate::approvals::Tiered {
+        tier: crate::approvals::Tier::Code,
+        rule: r.into(),
+    };
+    crate::approvals::Tiers {
+        authorize: t("routine"),
+        merge: t(rule),
+        close: t("close"),
+    }
+}
+
+fn bounded_with(tiers: crate::approvals::Tiers) -> Event {
+    Event::Bounded {
+        sha: A.into(),
+        violations: Vec::new(),
+        checks: Vec::new(),
+        full: Vec::new(),
+        tiers: Some(tiers),
+        gate: None,
+    }
+}
+
+#[test]
+fn a_briefs_change_on_a_guarded_path_is_refused_at_bound() {
+    let mut briefed = pushed();
+    briefed.brief = Some("b4".into());
+    let refused = run(
+        briefed.clone(),
+        vec![bounded_with(tiered("guarded: src/x/approve.rs"))],
+    );
+    assert_eq!(refused.state, State::Refused);
+    assert!(
+        refused.violations[0].contains("guarded: src/x/approve.rs"),
+        "{:?}",
+        refused.violations
+    );
+    let fine = run(briefed, vec![bounded_with(tiered("deploys"))]);
+    assert_eq!(
+        fine.state,
+        State::Checked,
+        "a Worker input is an executor's to change"
+    );
+    let planner = run(
+        pushed(),
+        vec![bounded_with(tiered("guarded: src/x/approve.rs"))],
+    );
+    assert_eq!(
+        planner.state,
+        State::Checked,
+        "a change with no brief is the planner's"
+    );
+}

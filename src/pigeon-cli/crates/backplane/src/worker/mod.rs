@@ -619,6 +619,7 @@ async fn dispatch(
             change.full_asked = full.then(|| who.subject.clone());
             change.after.clone_from(&built);
             change.asks = asks;
+            change.brief.clone_from(&brief);
             let proposed = propose(env, s, operation, change).await?;
             if let (Some(id), Some(number)) = (
                 &brief,

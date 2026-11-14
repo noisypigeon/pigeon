@@ -543,3 +543,29 @@ changes, as !386 itself now plans: one per session and ADR.
   - `mandate.propose`, `change_attend`'s Resume, `change_handoff` to an
     executor, and the `reconcile` and `review` claim refusals of §2, which
     come with step 3b.
+
+### 2026-11-14: Step 3b lands: a brief's change is refused the planner's paths at bound
+
+- **The change keeps its brief.** `Change.brief` is set at `change.propose`
+  (serde default, so a stored change reads as none).
+- **At bound, a change with a brief is refused** when its tiers name a
+  `guarded:`, `secrets:` or `sentinel:` rule, or `adds a secret`
+  (`core::brief::executor::refused`). The bound job's violations gain one
+  line per rule, so the head is `refused` like any policy refusal, and the
+  breaker counts it (B3).
+  - The check runs in the pure lifecycle, on the tiers the bound job
+    already reports, so the Worker needn't read `.config/approvals.yaml`.
+  - A change without a brief is the planner's, and isn't checked.
+- **The `deploying` list isn't refused yet.** Its tier rule is `deploys`,
+  the same rule a Worker's own inputs get (`facts.deploys_worker`), and an
+  executor may change those: most backplane work deploys the Worker.
+  - Refusing `infra/**`, the Dockerfile and migrations needs a separate rule
+    name for the list in `core/approval/tiers.rs`.
+  - That file is guarded, so the change is the owner's: one with the code,
+    never under a window or mandate.
+- **Step 3c:** §2's other refusals:
+  - `mandate.propose` from an executor;
+  - `change_attend`'s Resume by one;
+  - `change_handoff` to one;
+  - an executor's `task_claim` of a `reconcile` or `review` task whose rule
+    is an ADR amendment.

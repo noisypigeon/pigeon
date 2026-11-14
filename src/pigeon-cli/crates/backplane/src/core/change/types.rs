@@ -382,6 +382,10 @@ pub struct Change {
     /// The owner's answers, given with the plan's approval.
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub answers: std::collections::BTreeMap<String, String>,
+    /// The brief it carries out, by `change.propose`'s `brief`; see
+    /// `.claude/decisions/2026-11-13-development-model-tiered-agent-briefs.md` §4.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub brief: Option<String>,
 }
 
 /// Something that happened to a change.
@@ -618,6 +622,7 @@ impl Change {
             after: None,
             asks: Vec::new(),
             answers: std::collections::BTreeMap::new(),
+            brief: None,
         }
     }
 
