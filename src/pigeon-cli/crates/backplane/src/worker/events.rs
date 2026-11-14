@@ -67,6 +67,9 @@ pub async fn changed(
             worker::console_error!("event {kind}: {e}");
         }
     }
+    if let Err(e) = super::briefs::review_needed(env, &s, before, after).await {
+        worker::console_error!("brief review for !{}: {e}", after.number);
+    }
 }
 
 /// The events after `after` that the filter in `args` wants, waiting up to `seconds` (at most

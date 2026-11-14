@@ -138,6 +138,9 @@ pub fn claim_refused(kind: &str, brief: Option<&str>, scope: &[String]) -> Optio
     if kind == "brief" {
         return None;
     }
+    if kind == "brief-review" {
+        return Some("a brief-review task is its planner's".into());
+    }
     if let Some(adr) = scope.iter().find(|s| s.starts_with(".claude/decisions/")) {
         return Some(format!(
             "this {kind} task's change names an ADR (`{adr}`); the planner takes it"

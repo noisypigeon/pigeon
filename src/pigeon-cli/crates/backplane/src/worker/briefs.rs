@@ -2,7 +2,7 @@
 //! store of them; see `.claude/decisions/2026-11-13-development-model-tiered-agent-briefs.md` §3.
 
 use serde_json::{Map, Value, json};
-use worker::{Env, Response, Result, State};
+use worker::{Env, Method, Response, Result, State};
 
 use super::mandates::to_instance;
 use super::platform::{Settings, now};
@@ -109,8 +109,102 @@ pub async fn run(
             }
             Ok((status, v))
         }
+        "brief.review" => review(env, s, args).await,
         other => Ok((404, json!(format!("`{other}` is not a brief operation")))),
     }
+}
+
+/// `brief.review`: the brief's planner accepts, revises or takes back an executor's change; see
+/// `.claude/decisions/2026-11-13-development-model-tiered-agent-briefs.md` §5.
+async fn review(env: &Env, s: &Settings, args: &Map<String, Value>) -> Result<(u16, Value)> {
+    let label = match planner(env, s, args).await? {
+        Ok(l) => l,
+        Err(why) => return Ok((403, json!(why))),
+    };
+    let Some(n) = text(args, "change").and_then(|c| c.trim_start_matches('!').parse::<u32>().ok())
+    else {
+        return Ok((400, json!("`change` is the executor's change number")));
+    };
+    let (_, view) = super::to_change(env, &s.repo, n, Method::Get, "/status", None).await?;
+    let Some(id) = view["change"]["brief"].as_str().map(str::to_string) else {
+        return Ok((409, json!(format!("!{n} carries out no brief"))));
+    };
+    let (_, brief) = to_instance(env, s, "/briefs/show", &json!({ "id": id })).await?;
+    if brief["planner"].as_str() != Some(label.as_str()) {
+        return Ok((403, json!(format!("only {id}'s planner reviews !{n}"))));
+    }
+    let notes = text(args, "notes").unwrap_or_default();
+    let executor = view["change"]["session"].as_str().map(str::to_string);
+    let verdict = text(args, "verdict").unwrap_or_default();
+    let said = match verdict.as_str() {
+        "accept" => {
+            let Some(head) = text(args, "head") else {
+                return Ok((400, json!("`head` is the head reviewed")));
+            };
+            let body = json!({ "type": "accept", "by": label, "sha": head });
+            let (status, v) =
+                super::to_change(env, &s.repo, n, Method::Post, "/event", Some(&body)).await?;
+            if status != 200 {
+                return Ok((status, v));
+            }
+            format!("!{n}'s head {head} is accepted against {id}")
+        }
+        "revise" => format!("{id}'s planner asks !{n} for a revision: {notes}"),
+        "take" => {
+            let note = format!("!{n} is taken back by {id}'s planner: {notes}");
+            super::tasks::add(env, s, "handoff", n, None, Some(label.clone()), &note).await?;
+            note
+        }
+        _ => return Ok((400, json!("`verdict` is accept, revise or take"))),
+    };
+    let kind = if verdict == "revise" {
+        "change.note"
+    } else {
+        "brief.reviewed"
+    };
+    super::events::append(env, s, kind, Some(n), executor, &said, false).await?;
+    let body = json!({ "session": label, "class": Class::Opus });
+    let (_, open) = to_instance(env, s, "/tasks/list", &body).await?;
+    for t in open["tasks"].as_array().into_iter().flatten() {
+        if t["kind"] == "brief-review" && t["change"].as_u64() == Some(u64::from(n)) {
+            to_instance(env, s, "/tasks/done", &json!({ "id": t["id"] })).await?;
+        }
+    }
+    Ok((200, json!({ "change": n, "brief": id, "verdict": verdict })))
+}
+
+/// When `after` carries a brief and a head newly checked awaits review: a `brief-review` task
+/// for its planner, which wakes its follower.
+///
+/// # Errors
+///
+/// When a binding fails.
+pub async fn review_needed(
+    env: &Env,
+    s: &Settings,
+    before: Option<&crate::changes::Change>,
+    after: &crate::changes::Change,
+) -> Result<()> {
+    use crate::changes::State as Stage;
+    let newly = after.state == Stage::Checked
+        && before.is_none_or(|b| b.state != Stage::Checked || b.head != after.head);
+    let Some(id) = after
+        .brief
+        .as_deref()
+        .filter(|_| newly && after.awaits_review())
+    else {
+        return Ok(());
+    };
+    let (status, brief) = to_instance(env, s, "/briefs/show", &json!({ "id": id })).await?;
+    if status != 200 {
+        return Ok(());
+    }
+    let planner = brief["planner"].as_str().map(str::to_string);
+    let note = format!(
+        "review !{} ({}) against {id}: `brief_review` with accept, revise or take",
+        after.number, after.title
+    );
+    super::tasks::add(env, s, "brief-review", after.number, None, planner, &note).await
 }
 
 /// The `Instance` Durable Object's side: `/briefs/create`, `/briefs/amend`, `/briefs/show` and

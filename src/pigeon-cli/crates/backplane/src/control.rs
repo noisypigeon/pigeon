@@ -400,7 +400,7 @@ pub fn route(request: &Request, by: &str, at: u64) -> Result<Routed, String> {
         "session.start" => Ok(Routed::SessionStart { args: a.clone() }),
         "session.end" => Ok(Routed::SessionEnd { args: a.clone() }),
         "session.status" => Ok(Routed::SessionStatus { args: a.clone() }),
-        "brief.create" | "brief.amend" | "brief.show" | "brief.list" => Ok(Routed::Brief {
+        op if op.starts_with("brief.") => Ok(Routed::Brief {
             operation: request.operation.clone(),
             args: a.clone(),
         }),

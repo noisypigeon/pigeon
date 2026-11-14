@@ -620,3 +620,39 @@ changes, as !386 itself now plans: one per session and ADR.
   - **`change_attend`'s Resume by an executor:** `change_attend` doesn't
     exist yet. It comes with the session-stages ADR's step 6, which should
     refuse an executor's Resume.
+
+### 2026-11-14: Step 5 splits in two; its first part lands: the planner reviews before Auto approves
+
+- **Step 5a, this change: the review gate.**
+  - `Change.accepted` holds the head its brief's planner accepted, set by a
+    new lifecycle event, `Accept`, only for a change with a brief and only
+    for its head.
+  - **A head awaiting review** (`Change::awaits_review`: a brief, and no
+    acceptance of this head) refuses any approver whose name starts with
+    `window:`, `mandate:` or `policy:`. The owner's own approval is
+    unchanged: approving without a review is theirs to do.
+  - **Acceptance carries over a restack exactly when an approval does**:
+    the same patch, disjoint or clean. A changed patch is reviewed again.
+  - **A checked head awaiting review is `in-review`,** whose `next` names the
+    brief and `brief_review`. It uses `needs: agent`, because a new `Needs`
+    value would be a new stored variant, which takes two releases. The
+    executor's follower wakes once and finds nothing for it to do.
+- **The planner hears through a task.** When such a head first reaches
+  `checked`, `events::changed` adds a `brief-review` task routed to the
+  brief's planner. Its `task.made` event wakes the planner's follower.
+  Executors are refused the task at claim.
+- **`brief.review {change, verdict, head?, notes?}`, by the brief's planner
+  only:**
+  - `accept` (with the `head` reviewed) sends `Accept`;
+  - `revise` sends `notes` to the executor as a `change.note`, and the
+    planner amends the brief with `brief_amend`;
+  - `take` offers the change back to the planner, as a `handoff` task.
+
+  Each verdict closes the review task and logs `brief.reviewed`.
+- **Step 6 is mostly done here.** The gate sits in the lifecycle, where every
+  approval passes, so neither `windows.rs` nor `mandates.rs` needs changing
+  for Auto to skip a change in review. Step 6 now holds only what remains of
+  its plan: the session-stages ADR's two-attended pause, and the amendments
+  to the iOS and tiered-approvals ADRs.
+- **Step 5b:** `brief.escalate`, the `escalated` stage, and refusing an
+  escalated change's pushes.

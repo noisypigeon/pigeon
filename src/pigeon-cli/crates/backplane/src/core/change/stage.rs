@@ -236,6 +236,14 @@ pub fn of(c: &Change, cx: &Context) -> Stage {
                 format!("the checks finish: {waiting}"),
             )
         }
+        State::Checked if c.awaits_review() => at(
+            "in-review",
+            Needs::Agent,
+            format!(
+                "its planner reviews it against {} (`brief_review`)",
+                c.brief.as_deref().unwrap_or_default()
+            ),
+        ),
         State::Checked => ask("checked", covered, "change_approve", "approve the head"),
         State::Approved => approved(c, place),
     }

@@ -138,6 +138,9 @@ impl Change {
                 Ok((self, Vec::new()))
             }
             (_, Some(to)) => {
+                if approval_carries && self.accepted.as_deref() == Some(sha) {
+                    self.accepted = Some(to.clone());
+                }
                 self.carried = match self.carried.take() {
                     Some(mut c) if approval_carries && c.from == sha => {
                         c.to = Some(to.clone());

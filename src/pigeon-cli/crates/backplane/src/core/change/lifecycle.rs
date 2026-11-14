@@ -21,6 +21,10 @@ pub fn step(change: &Change, event: Event) -> Step {
     change.clone().on(event)
 }
 
+/// Approvers that act for the owner without being asked each time: they wait for a brief's
+/// planner to accept the head.
+const AUTOMATIC: [&str; 3] = ["window:", "mandate:", "policy:"];
+
 impl Change {
     fn on(mut self, event: Event) -> Step {
         if self.state.done() && event != Event::Close {
@@ -68,6 +72,7 @@ impl Change {
             Event::Finished { job, sha, ok } => self.finished(&job, &sha, ok),
             Event::Lost { job, sha } => self.lost(&job, &sha),
             Event::Rerun { job } => self.rerun(&job),
+            Event::Accept { by, sha } => self.accept(&by, sha),
             Event::Approve { by, sha, at } => self.approve(by, sha, at),
             Event::Merge { by } => self.merge(&by),
             Event::MergeFull { by } => {
@@ -159,6 +164,26 @@ impl Change {
         }
     }
 
+    /// Whether its head carries out a brief its planner hasn't accepted.
+    #[must_use]
+    pub fn awaits_review(&self) -> bool {
+        self.brief.is_some() && (self.accepted.is_none() || self.accepted != self.head)
+    }
+
+    fn accept(mut self, by: &str, sha: String) -> Step {
+        if self.brief.is_none() {
+            return refuse(format!("{} carries out no brief", self.branch()));
+        }
+        if !self.on_head(&sha) {
+            return refuse(format!("{sha} is not {}'s head", self.branch()));
+        }
+        if by.is_empty() {
+            return refuse("an acceptance names its planner");
+        }
+        self.accepted = Some(sha);
+        Ok((self, Vec::new()))
+    }
+
     fn approve(mut self, by: String, sha: String, at: u64) -> Step {
         if let Some(c) = &self.conflict {
             return refuse(super::types::conflicted(&self.branch(), c));
@@ -178,6 +203,13 @@ impl Change {
         }
         if by == self.proposer {
             return refuse("a change is approved by someone other than its proposer");
+        }
+        if self.awaits_review() && AUTOMATIC.iter().any(|p| by.starts_with(p)) {
+            return refuse(format!(
+                "{} carries out {}; its planner reviews the head first (`brief_review`)",
+                self.branch(),
+                self.brief.as_deref().unwrap_or_default()
+            ));
         }
         self.approval = Some(Approval {
             by,

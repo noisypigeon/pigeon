@@ -815,3 +815,109 @@ fn a_briefs_change_on_a_guarded_path_is_refused_at_bound() {
         "a change with no brief is the planner's"
     );
 }
+
+fn briefed_checked() -> Change {
+    let mut c = checked();
+    c.brief = Some("b4".into());
+    c
+}
+
+fn approve_by(by: &str) -> Event {
+    Event::Approve {
+        by: by.into(),
+        sha: A.into(),
+        at: 3,
+    }
+}
+
+#[test]
+fn a_briefs_head_waits_for_its_planner_before_any_automatic_approval() {
+    let c = briefed_checked();
+    for auto in ["window:6", "mandate:2", "policy:ADR amendment"] {
+        let refused = step(&c, approve_by(auto)).expect_err("waits for review");
+        assert!(refused.0.contains("brief_review"), "{auto}: {}", refused.0);
+    }
+    let (owner, _) = step(&c, approve_by("owner")).expect("the owner may approve");
+    assert_eq!(owner.state, State::Approved);
+    assert!(
+        step(
+            &c,
+            Event::Accept {
+                by: "p".into(),
+                sha: B.into()
+            }
+        )
+        .is_err(),
+        "not the head"
+    );
+    assert!(
+        step(
+            &checked(),
+            Event::Accept {
+                by: "p".into(),
+                sha: A.into()
+            }
+        )
+        .is_err(),
+        "no brief"
+    );
+    let (accepted, _) = step(
+        &c,
+        Event::Accept {
+            by: "p".into(),
+            sha: A.into(),
+        },
+    )
+    .expect("accepts");
+    assert_eq!(accepted.accepted.as_deref(), Some(A));
+    let (approved, _) = step(&accepted, approve_by("window:6")).expect("then a window approves");
+    assert_eq!(approved.state, State::Approved);
+}
+
+#[test]
+fn a_briefs_checked_head_is_in_review_until_accepted() {
+    use super::stage::{Context, Needs, of};
+    let c = briefed_checked();
+    let s = of(&c, &Context::default());
+    assert_eq!((s.stage.as_str(), s.needs), ("in-review", Needs::Agent));
+    assert!(s.next.contains("b4"), "{}", s.next);
+    let (accepted, _) = step(
+        &c,
+        Event::Accept {
+            by: "p".into(),
+            sha: A.into(),
+        },
+    )
+    .expect("accepts");
+    assert_eq!(of(&accepted, &Context::default()).stage, "checked");
+}
+
+#[test]
+fn an_acceptance_follows_its_head_across_a_same_patch_restack_only() {
+    let clean = |same_patch: bool| Event::Restacked {
+        sha: A.into(),
+        restack: Restacked {
+            relation: Relation::Clean,
+            to: Some(B.into()),
+            same_patch,
+            conflicts: Vec::new(),
+            onto: M.into(),
+            context: Vec::new(),
+            messages: String::new(),
+            landed: false,
+        },
+    };
+    let mut c = approved();
+    c.brief = Some("b4".into());
+    c.accepted = Some(A.into());
+    let base = restacking(c);
+    let (same, _) = step(&base, clean(true)).expect("restacked");
+    assert_eq!(
+        same.accepted.as_deref(),
+        Some(B),
+        "the same patch keeps its acceptance"
+    );
+    assert!(!same.awaits_review());
+    let (changed, _) = step(&base, clean(false)).expect("restacked");
+    assert!(changed.awaits_review(), "a changed patch is reviewed again");
+}

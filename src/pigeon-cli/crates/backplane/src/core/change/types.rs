@@ -386,6 +386,9 @@ pub struct Change {
     /// `.claude/decisions/2026-11-13-development-model-tiered-agent-briefs.md` §4.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub brief: Option<String>,
+    /// The head its brief's planner accepted; a window, mandate or policy approves only that.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub accepted: Option<String>,
 }
 
 /// Something that happened to a change.
@@ -459,6 +462,14 @@ pub enum Event {
     Rerun {
         /// The job.
         job: String,
+    },
+    /// Its brief's planner accepted head `sha`; see
+    /// `.claude/decisions/2026-11-13-development-model-tiered-agent-briefs.md` §5.
+    Accept {
+        /// Who.
+        by: String,
+        /// The head accepted.
+        sha: String,
     },
     /// The owner approved its head.
     Approve {
@@ -623,6 +634,7 @@ impl Change {
             asks: Vec::new(),
             answers: std::collections::BTreeMap::new(),
             brief: None,
+            accepted: None,
         }
     }
 

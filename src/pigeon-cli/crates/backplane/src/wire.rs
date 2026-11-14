@@ -522,6 +522,20 @@ const CATALOG: &[Operation] = &[
         ],
     },
     Operation {
+        name: "brief.review",
+        engine: Engine::Backplane,
+        effect: Effect::Build,
+        summary: "As the planner `session` of the brief change `change` carries out: `verdict` `accept` (with the `head` reviewed; only then may a window, mandate or policy approve it), `revise` (`notes` go to the executor; amend the brief with `brief_amend`), or `take` (the change is offered back to you)",
+        args: &[
+            arg("change", true, Kind::Text),
+            arg("verdict", true, Kind::String),
+            arg("head", false, Kind::String),
+            arg("notes", false, Kind::String),
+            arg("session", true, Kind::String),
+            arg("ticket", false, Kind::String),
+        ],
+    },
+    Operation {
         name: "brief.show",
         engine: Engine::Backplane,
         effect: Effect::Read,
