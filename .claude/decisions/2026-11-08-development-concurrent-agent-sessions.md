@@ -630,3 +630,39 @@ approved again after every merge ahead of them, and !327's restack was lost
   window still acts only when asked, per the session-stages ADR's 2026-11-13
   amendment. Re-approving automatically on `checked` is a tier decision for
   the approvals ADRs, not this one.
+### 2026-11-13: Generated work follows its parent's own record, not D1's
+
+- **What went wrong.** !191 was closed in its own record, but its D1 row
+  still said `approved`, as did !180's and !181's. D1 is written last in a
+  change's save, so an error earlier in the save skips it.
+  - Every merge of an ADR read !191 as open, and its `src/pigeon-cli/**` scope
+    met the ADR's `affects`. So each one proposed another `review-191-<m>`:
+    !306, !307, !318, !350, !359 and !362.
+  - !191's own record never moved again, so nothing retired them (the yield
+    ADR's F2).
+  - Tasks 1 to 23 outlived their changes: a task closed when its change
+    merged, never when it closed.
+- **D1 is written first.** A change's save mirrors its row before the work
+  that reads D1, such as retiring, releasing yields or the queue.
+- **A change's end closes its tasks,** merged or closed, with its yields and
+  its generated changes.
+- **A review is planned only for a change open in its own record.** Before
+  proposing a review, `ended` asks the change itself. A change D1 shows open
+  but whose record is merged or closed is **healed** (`POST /heal`): its row
+  is written again, its generated changes retire, its yields are released and
+  its tasks close. No review is planned for it.
+- **A generated change is never reviewed itself** (`reconcile::generated`),
+  so a review can't breed reviews.
+- **One review per session and ADR at each merge.** !372's merge made three
+  reviews, !380, !381 and !382, one for each of !374, !375 and !376. Those are
+  one session's stack, all citing one ADR. `ended` now plans the first and
+  skips the others: one session amends one ADR once.
+- **The hourly cron sweeps** (`sweep_ended`): it asks each change D1 shows
+  open, heals those that ended, then closes every open task whose change isn't
+  open (`Tasks::sweep`). It sweeps only the kinds whose work ends with their
+  change (`tasks::SWEPT`): `reconcile`, `review`, `restack-failed`,
+  `yield-ended` and `handoff`. A `resume` or `test-map-failed` task is meant
+  to outlive its change, and so are the model-tiered ADR's brief tasks. Its first run closes !191's reviews and their tasks,
+  and tasks 1 to 23.
+- **Unchanged:** a generated change that pushed is still left to its session
+  (F2), and a session never closes another session's change.

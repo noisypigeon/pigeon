@@ -269,6 +269,9 @@ impl ChangeRun {
         }
         let change = &change;
         storage.put(CHANGE, change).await?;
+        // D1 first: what follows reads it; see the concurrent-sessions ADR's 2026-11-13 amendment
+        // on generated work following its parent's own record.
+        self.mirror(change).await?;
         super::events::changed(&self.env, before.as_ref(), change).await;
         if let Err(e) = self.breaker(change).await {
             worker::console_error!("breaker for !{}: {e}", change.number);
@@ -280,9 +283,9 @@ impl ChangeRun {
             worker::console_error!("retire for !{}: {e}", change.number);
         }
         if gone == Some(true)
-            && let Err(e) = super::release_yields(&self.env, change).await
+            && let Err(e) = self.ended_effects(change).await
         {
-            worker::console_error!("yields to !{}: {e}", change.number);
+            worker::console_error!("ended !{}: {e}", change.number);
         }
         if control::leaves_merge_queue(before.as_ref(), change) {
             self.released(change).await;
@@ -303,12 +306,34 @@ impl ChangeRun {
         } else if open || !pending.is_empty() {
             storage.set_alarm(POLL).await?;
         }
-        self.mirror(change).await?;
         let found = before.as_ref().and_then(|b| b.landed.as_ref());
         if change.landed.is_some() && found != change.landed.as_ref() {
             self.close_landed(change).await;
         }
         Ok(())
+    }
+
+    /// What a merged or closed `change` ends: its yields, its generated changes, and its tasks.
+    async fn ended_effects(&self, change: &Change) -> Result<()> {
+        super::release_yields(&self.env, change).await?;
+        let s = Settings::from(&self.env)?;
+        super::tasks::close_for(&self.env, &s, change.number).await
+    }
+
+    /// `POST /heal`: a merged or closed change's D1 row and endings again, for a row D1 still
+    /// shows open; see the concurrent-sessions ADR's 2026-11-13 amendment.
+    async fn heal(&self, existing: Option<Change>) -> Result<Response> {
+        let done = |c: &Change| {
+            use crate::changes::State as S;
+            matches!(c.state, S::Merged | S::Closed)
+        };
+        let Some(change) = existing.filter(done) else {
+            return Response::error("not a merged or closed change", 409);
+        };
+        self.mirror(&change).await?;
+        super::merges::retire(&self.env, change.number, true).await?;
+        self.ended_effects(&change).await?;
+        Response::from_json(&change)
     }
 
     /// Asks to close `change`, whose patch already landed on `main`: an Auto window approves it,
@@ -793,6 +818,7 @@ impl DurableObject for ChangeRun {
         }
     }
 
+    #[expect(clippy::too_many_lines, reason = "one arm per route")]
     async fn fetch(&self, mut req: Request) -> Result<Response> {
         self.rearm().await?;
         let path = req.path();
@@ -889,6 +915,7 @@ impl DurableObject for ChangeRun {
                 None => Response::error("no such change", 404),
             },
             (Method::Post, "evict") => self.evict(existing, req.json().await?).await,
+            (Method::Post, "heal") => self.heal(existing).await,
             (Method::Post, "yield" | "session") => self.park(existing, req.json().await?).await,
             _ => Response::error("not found", 404),
         }

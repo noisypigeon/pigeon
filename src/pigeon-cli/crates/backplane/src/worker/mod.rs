@@ -1348,6 +1348,9 @@ async fn scheduled(_event: worker::ScheduledEvent, env: Env, _ctx: worker::Sched
     if let Err(e) = judge_evictions(&env).await {
         worker::console_error!("evictions: {e}");
     }
+    if let Err(e) = sweep_ended(&env).await {
+        worker::console_error!("sweep: {e}");
+    }
 }
 
 /// The `Instance`'s tickets, yields and pins.
@@ -1558,6 +1561,21 @@ async fn resumed(env: &Env, s: &Settings, n: u32) -> Result<std::result::Result<
         e.remains.done.join("; "),
         e.remains.left.join("; ")
     )))
+}
+
+/// Heals each change D1 shows open that its record says merged or closed, then closes the tasks
+/// on changes no longer open; see the concurrent-sessions ADR's 2026-11-13 amendment.
+async fn sweep_ended(env: &Env) -> Result<()> {
+    let s = Settings::from(env)?;
+    let rows = platform::d1_rows(env, &control::open(&s.instance, &s.repo)).await?;
+    let mut open = std::collections::BTreeSet::new();
+    for o in control::open_rows(&rows) {
+        if merges::still_open(env, o.number).await? {
+            open.insert(o.number);
+        }
+    }
+    mandates::to_instance(env, &s, "/tasks/sweep", &json!({ "open": open })).await?;
+    Ok(())
 }
 
 /// Sends every open change's candidate to `MainRun`'s eviction job.

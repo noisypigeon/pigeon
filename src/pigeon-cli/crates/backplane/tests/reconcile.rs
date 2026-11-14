@@ -218,3 +218,12 @@ fn a_change_ending_or_its_conflict_clearing_retires_what_it_generated() {
         "and the reviews of it, never a pushed one"
     );
 }
+
+#[test]
+fn a_generated_change_is_known_by_its_slug_and_is_never_reviewed() {
+    use backplane::reconcile::generated as is_generated;
+    assert!(is_generated("review-191-360"));
+    assert!(is_generated("reconcile-363"));
+    assert!(!is_generated("remove-gantry"));
+    assert!(!is_generated("reviewer-tools"));
+}

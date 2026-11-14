@@ -65,6 +65,26 @@ fn a_task_is_done_by_hand_or_when_its_change_merges() {
     assert_eq!(t.list.len(), 1, "done tasks are kept a day");
 }
 
+#[test]
+fn a_sweep_closes_the_tasks_on_changes_no_longer_open() {
+    // Tasks 1 to 23 outlived their changes; see the concurrent-sessions ADR's 2026-11-13
+    // amendment on generated work following its parent's own record.
+    let mut t = Tasks::default();
+    t.add("review", 306, Some(191), None, "a", 0);
+    t.add("yield-ended", 374, Some(364), None, "b", 0);
+    t.add("restack-failed", 181, None, None, "c", 0);
+    t.add("resume", 336, None, None, "d", 0);
+    t.add("test-map-failed", 369, None, None, "e", 0);
+    let open = [374].into_iter().collect();
+    assert_eq!(t.sweep(&open), [1, 3]);
+    assert_eq!(
+        t.visible(None, 0).len(),
+        3,
+        "the open change's task stays, and so do those that outlive their change"
+    );
+    assert!(t.sweep(&open).is_empty(), "a second sweep closes nothing");
+}
+
 fn open(number: u32, session: Option<&str>) -> Open {
     Open {
         number,

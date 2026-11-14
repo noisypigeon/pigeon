@@ -116,6 +116,8 @@ pub async fn ended(env: &Env, c: &Change, merged: Option<&str>) -> Result<()> {
         let body = serde_json::to_value(Event::Behind {
             main: main.to_string(),
         })?;
+        // One review per session and ADR: a stack of changes citing it shares one.
+        let mut reviewed = std::collections::BTreeSet::new();
         for open in control::open_rows(&rows) {
             if open.number == c.number {
                 continue;
@@ -140,11 +142,15 @@ pub async fn ended(env: &Env, c: &Change, merged: Option<&str>) -> Result<()> {
                 })
                 .cloned()
                 .collect();
-            if globs.is_empty() {
+            if globs.is_empty()
+                || crate::reconcile::generated(&open.slug)
+                || !still_open(env, open.number).await?
+            {
                 continue;
             }
             if let Some(p) =
                 crate::reconcile::review(open.number, &open.plan, c.number, &c.plan, &globs)
+                && reviewed.insert((open.session.clone(), p.scope.clone()))
                 && let Err(e) = reconcile(env, open.number, open.session.clone(), p).await
             {
                 worker::console_error!("review of change {}: {e}", open.number);
@@ -153,6 +159,25 @@ pub async fn ended(env: &Env, c: &Change, merged: Option<&str>) -> Result<()> {
     }
     let (_, v) = to_instance(env, &s, "/merges/done", &json!({ "number": c.number })).await?;
     start(env, &s, serde_json::from_value(v["next"].clone()).ok()).await
+}
+
+/// Whether change `n`, open in D1, is open in its own record; a merged or closed one is healed:
+/// its D1 row and endings are run again.
+///
+/// # Errors
+///
+/// When a binding fails.
+pub async fn still_open(env: &Env, n: u32) -> Result<bool> {
+    let repo = Settings::from(env)?.repo;
+    let (status, v) = to_change(env, &repo, n, Method::Get, "/status", None).await?;
+    if status != 200 || !matches!(v["change"]["state"].as_str(), Some("merged" | "closed")) {
+        return Ok(true);
+    }
+    let (status, v) = to_change(env, &repo, n, Method::Post, "/heal", Some(&json!({}))).await?;
+    if status != 200 {
+        worker::console_warn!("heal !{n}: {v}");
+    }
+    Ok(false)
 }
 
 /// Proposes reconciliation `p` of change `parent`, for its `session`: the new change's

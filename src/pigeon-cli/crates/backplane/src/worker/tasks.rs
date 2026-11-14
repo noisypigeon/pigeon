@@ -176,7 +176,8 @@ pub async fn close_for(env: &Env, s: &Settings, n: u32) -> Result<()> {
         .map(|_| ())
 }
 
-/// The `Instance` Durable Object's side: `/tasks/add`, `list`, `claim`, `done` and `close`.
+/// The `Instance` Durable Object's side: `/tasks/add`, `list`, `claim`, `done`, `close` and
+/// `sweep`.
 ///
 /// # Errors
 ///
@@ -209,6 +210,10 @@ pub async fn serve(state: &State, path: &str, body: &Value) -> Result<Response> 
             None => Err("`id` must be a task number".into()),
         },
         "/tasks/close" => Ok(json!({ "closed": all.close_for(n("change").unwrap_or_default()) })),
+        "/tasks/sweep" => {
+            let open = serde_json::from_value(body["open"].clone()).unwrap_or_default();
+            Ok(json!({ "closed": all.sweep(&open) }))
+        }
         _ => return Response::error("not found", 404),
     };
     storage.put(TASKS, &all).await?;

@@ -53,6 +53,16 @@ impl Task {
     }
 }
 
+/// The task kinds whose work ends with their change, which the hourly sweep closes; a
+/// `resume` or `test-map-failed` task outlives its change, as a brief's tasks will.
+pub const SWEPT: [&str; 5] = [
+    "reconcile",
+    "review",
+    "restack-failed",
+    "yield-ended",
+    "handoff",
+];
+
 /// Every task of an instance; done ones are kept a day.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Tasks {
@@ -155,6 +165,18 @@ impl Tasks {
         self.list
             .iter_mut()
             .filter(|t| !t.done && t.change == n)
+            .map(|t| {
+                t.done = true;
+                t.id
+            })
+            .collect()
+    }
+
+    /// Marks every open task of a [`SWEPT`] kind done whose change isn't in `open`: their ids.
+    pub fn sweep(&mut self, open: &std::collections::BTreeSet<u32>) -> Vec<u32> {
+        self.list
+            .iter_mut()
+            .filter(|t| !t.done && SWEPT.contains(&t.kind.as_str()) && !open.contains(&t.change))
             .map(|t| {
                 t.done = true;
                 t.id

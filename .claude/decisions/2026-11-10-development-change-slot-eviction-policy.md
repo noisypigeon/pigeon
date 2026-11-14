@@ -325,3 +325,13 @@ Steps 2 and 3 landed there as F1, F2 and the family slot.
 - **`CLAUDE.md` gains §6's rule.** A session that stops with work unfinished
   says in its last message what is done and what remains, and asks whether a
   new session should finish it.
+
+### 2026-11-13: §2's self-closing generated changes close from the change's own record
+
+- **§2's closes waited on D1, which can lag.** A close that D1 missed left
+  !191's reviews open.
+- **The concurrent-sessions ADR's 2026-11-13 amendment** heals such a change:
+  when a merge reads it, and in the hourly cron. Its reviews and tasks then
+  close as §2 says.
+- **This is not an eviction.** It closes only never-pushed generated changes
+  and tasks on changes that have ended.

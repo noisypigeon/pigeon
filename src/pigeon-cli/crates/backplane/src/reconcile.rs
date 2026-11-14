@@ -208,6 +208,13 @@ pub fn gone(before: Option<&Change>, after: &Change) -> Option<bool> {
     (before.conflict.is_some() && after.conflict.is_none() && !done(after)).then_some(false)
 }
 
+/// Whether `slug` is a generated change's: a reconciliation or a review, which is never
+/// reviewed itself.
+#[must_use]
+pub fn generated(slug: &str) -> bool {
+    slug.starts_with("reconcile-") || slug.starts_with("review-")
+}
+
 /// The open generated changes of change `number` to close, never pushed: its reconciliation,
 /// and with `ended` the reviews of it.
 #[must_use]
