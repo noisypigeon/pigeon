@@ -746,3 +746,13 @@ step 2 was live.
 - **Mandates aren't asked yet:** a mandate's coverage is per change and
   per operation in `mandates.rs`, which is guarded. Re-approving under a
   mandate is a separate, owner-tier change.
+
+### 2026-11-14: A brief's change trips at its class's thresholds
+
+- **§4's thresholds are opus's.** A change carrying out a brief counts at the
+  model-tiered briefs ADR's §6 thresholds for the brief's class, plus the
+  brief's budget, as `breaker::Limits`. They are still constants in
+  `breaker.rs`, and still tested.
+- **In shadow,** its trips log `breaker.would_trip` as "would escalate to
+  its planner". Step 6 makes them act. Such a change becomes `escalated` to
+  its planner, not `attended`, per that ADR's §6.

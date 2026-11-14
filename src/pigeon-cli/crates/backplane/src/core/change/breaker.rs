@@ -7,6 +7,8 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use serde::{Deserialize, Serialize};
 
 use super::types::{BOUND, Change, JobStatus, MERGE, MIRROR, RESTACK, State};
+use crate::core::brief::Budget;
+use crate::sessions::Class;
 
 /// How many heads are kept.
 pub const HEADS: usize = 10;
@@ -31,6 +33,49 @@ pub const STUCK_FOR: u64 = 3 * 60 * 60;
 
 /// B6's heads.
 pub const STUCK_HEADS: usize = 3;
+
+/// The thresholds that differ by class: an opus session's, or a brief's; see
+/// `.claude/decisions/2026-11-13-development-model-tiered-agent-briefs.md` §6.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Limits {
+    /// B1's heads.
+    pub same_check: usize,
+    /// B2's heads.
+    pub same_failure: usize,
+    /// B4's heads.
+    pub unchecked: usize,
+    /// The brief's budget, for an executor's change.
+    pub budget: Option<Budget>,
+}
+
+impl Default for Limits {
+    fn default() -> Self {
+        Self {
+            same_check: SAME_CHECK,
+            same_failure: SAME_FAILURE,
+            unchecked: UNCHECKED,
+            budget: None,
+        }
+    }
+}
+
+impl Limits {
+    /// A brief's change's, carried out by `model` within `budget`.
+    #[must_use]
+    pub const fn brief(model: Class, budget: Budget) -> Self {
+        let (same_check, unchecked) = match model {
+            Class::Haiku => (2, 3),
+            Class::Sonnet => (2, 4),
+            Class::Opus => (SAME_CHECK, UNCHECKED),
+        };
+        Self {
+            same_check,
+            same_failure: SAME_FAILURE,
+            unchecked,
+            budget: Some(budget),
+        }
+    }
+}
 
 /// What one head showed.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -157,17 +202,18 @@ pub fn observe(b: &Breaker, after: &Change, tails: &BTreeMap<String, String>, no
     b
 }
 
-/// The signals `b` trips at `now`.
+/// The signals `b` trips at `now`, under `limits`.
 #[must_use]
-pub fn signals(b: &Breaker, now: u64) -> Vec<Trip> {
+pub fn signals(b: &Breaker, now: u64, limits: &Limits) -> Vec<Trip> {
     let mut out = Vec::new();
     let trip = |signal: &str, why: String| Trip {
         signal: signal.into(),
         why,
     };
     let recent: Vec<&Head> = b.heads.iter().rev().collect();
-    if recent.len() >= SAME_CHECK {
-        let last = &recent[..SAME_CHECK];
+    let same_check = limits.same_check;
+    if recent.len() >= same_check {
+        let last = &recent[..same_check];
         if let Some(job) = last[0]
             .failed
             .iter()
@@ -175,7 +221,7 @@ pub fn signals(b: &Breaker, now: u64) -> Vec<Trip> {
         {
             out.push(trip(
                 "B1",
-                format!("`{job}` failed on {SAME_CHECK} heads in a row"),
+                format!("`{job}` failed on {same_check} heads in a row"),
             ));
         }
     }
@@ -185,7 +231,7 @@ pub fn signals(b: &Breaker, now: u64) -> Vec<Trip> {
             *seen.entry(p.as_str()).or_default() += 1;
         }
     }
-    if let Some((p, n)) = seen.iter().find(|(_, n)| **n >= SAME_FAILURE) {
+    if let Some((p, n)) = seen.iter().find(|(_, n)| **n >= limits.same_failure) {
         out.push(trip("B2", format!("the same failure on {n} heads: {p}")));
     }
     if recent.len() >= SAME_REFUSAL {
@@ -200,7 +246,7 @@ pub fn signals(b: &Breaker, now: u64) -> Vec<Trip> {
         }
     }
     let unchecked: Vec<&Head> = recent.iter().copied().take_while(|h| !h.checked).collect();
-    if unchecked.len() >= UNCHECKED {
+    if unchecked.len() >= limits.unchecked {
         out.push(trip(
             "B4",
             format!(
@@ -229,14 +275,37 @@ pub fn signals(b: &Breaker, now: u64) -> Vec<Trip> {
             ),
         ));
     }
+    if let Some(budget) = limits.budget {
+        out.extend(spent(b, now, budget));
+    }
     out
 }
 
-/// The trips in `b` at `now` not yet reported, and the breaker with them marked reported.
+/// The budget's trip: more heads than it allows, or its hours gone with the last head unchecked.
+fn spent(b: &Breaker, now: u64, budget: Budget) -> Option<Trip> {
+    let heads = b.heads.len();
+    let why = if heads > budget.heads as usize {
+        format!("{heads} heads, over the brief's {}", budget.heads)
+    } else {
+        let first = b.heads.front()?;
+        let hours = now.saturating_sub(first.at) / 3600;
+        if b.heads.back().is_some_and(|h| h.checked) || hours < u64::from(budget.hours) {
+            return None;
+        }
+        format!("{hours} hours, over the brief's {}", budget.hours)
+    };
+    Some(Trip {
+        signal: "budget".into(),
+        why,
+    })
+}
+
+/// The trips in `b` at `now`, under `limits`, not yet reported, and the breaker with them marked
+/// reported.
 #[must_use]
-pub fn fresh(b: &Breaker, now: u64) -> (Breaker, Vec<Trip>) {
+pub fn fresh(b: &Breaker, now: u64, limits: &Limits) -> (Breaker, Vec<Trip>) {
     let mut b = b.clone();
-    let new: Vec<Trip> = signals(&b, now)
+    let new: Vec<Trip> = signals(&b, now, limits)
         .into_iter()
         .filter(|t| b.reported.insert(format!("{} {}", t.signal, t.why)))
         .collect();
@@ -292,11 +361,15 @@ mod tests {
         let failed = [("clippy", JobStatus::Failed, 1)];
         let mut b = Breaker::default();
         b = observe(&b, &change("a", State::Failed, &failed), &tail, 0);
-        assert_eq!(signals(&b, 0), Vec::<Trip>::new(), "one head is no loop");
+        assert_eq!(
+            signals(&b, 0, &Limits::default()),
+            Vec::<Trip>::new(),
+            "one head is no loop"
+        );
         b = observe(&b, &change("b", State::Failed, &failed), &tail, 10);
-        assert_eq!(names(&signals(&b, 10)), ["B2"]);
+        assert_eq!(names(&signals(&b, 10, &Limits::default())), ["B2"]);
         b = observe(&b, &change("c", State::Failed, &failed), &tail, 20);
-        assert_eq!(names(&signals(&b, 20)), ["B1", "B2"]);
+        assert_eq!(names(&signals(&b, 20, &Limits::default())), ["B1", "B2"]);
     }
 
     #[test]
@@ -307,7 +380,7 @@ mod tests {
             let tail = tails("test", &format!("error: case {sha} differs"));
             b = observe(&b, &change(sha, State::Failed, &failed), &tail, i as u64);
         }
-        assert_eq!(signals(&b, 2), Vec::<Trip>::new());
+        assert_eq!(signals(&b, 2, &Limits::default()), Vec::<Trip>::new());
     }
 
     #[test]
@@ -318,7 +391,7 @@ mod tests {
             c.violations = vec![format!("outside its scope: src/{sha}.rs")];
             b = observe(&b, &c, &BTreeMap::new(), i as u64);
         }
-        assert_eq!(names(&signals(&b, 3)), ["B3"]);
+        assert_eq!(names(&signals(&b, 3, &Limits::default())), ["B3"]);
     }
 
     #[test]
@@ -328,9 +401,9 @@ mod tests {
             let sha = format!("h{i}");
             b = observe(&b, &change(&sha, State::Bounded, &[]), &BTreeMap::new(), 0);
         }
-        assert!(names(&signals(&b, 0)).contains(&"B4"));
+        assert!(names(&signals(&b, 0, &Limits::default())).contains(&"B4"));
         b = observe(&b, &change("h7", State::Checked, &[]), &BTreeMap::new(), 0);
-        assert!(!names(&signals(&b, 0)).contains(&"B4"));
+        assert!(!names(&signals(&b, 0, &Limits::default())).contains(&"B4"));
     }
 
     #[test]
@@ -341,7 +414,7 @@ mod tests {
             &BTreeMap::new(),
             0,
         );
-        assert_eq!(names(&signals(&b, 0)), ["B5"]);
+        assert_eq!(names(&signals(&b, 0, &Limits::default())), ["B5"]);
         let mirror = observe(
             &Breaker::default(),
             &change("a", State::Bounded, &[(MIRROR, JobStatus::Running, 3)]),
@@ -349,7 +422,7 @@ mod tests {
             0,
         );
         assert!(
-            signals(&mirror, 0).is_empty(),
+            signals(&mirror, 0, &Limits::default()).is_empty(),
             "the mirror isn't the change's"
         );
     }
@@ -365,8 +438,11 @@ mod tests {
                 i as u64,
             );
         }
-        assert_eq!(signals(&b, STUCK_FOR - 1), Vec::<Trip>::new());
-        assert_eq!(names(&signals(&b, STUCK_FOR)), ["B6"]);
+        assert_eq!(
+            signals(&b, STUCK_FOR - 1, &Limits::default()),
+            Vec::<Trip>::new()
+        );
+        assert_eq!(names(&signals(&b, STUCK_FOR, &Limits::default())), ["B6"]);
     }
 
     #[test]
@@ -377,8 +453,78 @@ mod tests {
             &BTreeMap::new(),
             0,
         );
-        let (b, first) = fresh(&b, 0);
+        let (b, first) = fresh(&b, 0, &Limits::default());
         assert_eq!(names(&first), ["B5"]);
-        assert_eq!(fresh(&b, 0).1, Vec::<Trip>::new());
+        assert_eq!(fresh(&b, 0, &Limits::default()).1, Vec::<Trip>::new());
+    }
+
+    #[test]
+    fn an_executors_change_trips_sooner_by_class() {
+        let haiku = Limits::brief(Class::Haiku, Budget::default_for(Class::Haiku));
+        let sonnet = Limits::brief(Class::Sonnet, Budget::default_for(Class::Sonnet));
+        let failed = [("clippy", JobStatus::Failed, 1)];
+        let mut b = Breaker::default();
+        for (i, sha) in ["a", "b"].iter().enumerate() {
+            let tail = tails("clippy", &format!("error: case {sha} differs"));
+            b = observe(&b, &change(sha, State::Failed, &failed), &tail, i as u64);
+        }
+        assert_eq!(names(&signals(&b, 2, &haiku)), ["B1"]);
+        assert_eq!(names(&signals(&b, 2, &sonnet)), ["B1"]);
+        assert_eq!(
+            signals(&b, 2, &Limits::default()),
+            Vec::<Trip>::new(),
+            "opus takes 3"
+        );
+        b = observe(&b, &change("c", State::Bounded, &[]), &BTreeMap::new(), 3);
+        assert!(names(&signals(&b, 3, &haiku)).contains(&"B4"));
+        assert!(!names(&signals(&b, 3, &sonnet)).contains(&"B4"));
+        b = observe(&b, &change("d", State::Bounded, &[]), &BTreeMap::new(), 4);
+        assert!(names(&signals(&b, 4, &sonnet)).contains(&"B4"));
+    }
+
+    #[test]
+    fn a_briefs_budget_trips_past_its_heads_or_its_hours() {
+        let budget = Budget { heads: 3, hours: 2 };
+        let limits = Limits {
+            budget: Some(budget),
+            ..Limits::default()
+        };
+        let mut b = Breaker::default();
+        for (i, sha) in ["a", "b", "c"].iter().enumerate() {
+            b = observe(
+                &b,
+                &change(sha, State::Checked, &[]),
+                &BTreeMap::new(),
+                i as u64,
+            );
+        }
+        assert_eq!(
+            signals(&b, 3, &limits),
+            Vec::<Trip>::new(),
+            "three heads are within it"
+        );
+        b = observe(&b, &change("d", State::Checked, &[]), &BTreeMap::new(), 4);
+        assert_eq!(names(&signals(&b, 4, &limits)), ["budget"]);
+
+        let mut slow = Breaker::default();
+        slow = observe(
+            &slow,
+            &change("a", State::Bounded, &[]),
+            &BTreeMap::new(),
+            0,
+        );
+        assert_eq!(signals(&slow, 2 * 3600 - 1, &limits), Vec::<Trip>::new());
+        assert_eq!(names(&signals(&slow, 2 * 3600, &limits)), ["budget"]);
+        slow = observe(
+            &slow,
+            &change("a", State::Checked, &[]),
+            &BTreeMap::new(),
+            2 * 3600,
+        );
+        assert_eq!(
+            signals(&slow, 3 * 3600, &limits),
+            Vec::<Trip>::new(),
+            "a checked head waits on its planner, not its executor"
+        );
     }
 }
