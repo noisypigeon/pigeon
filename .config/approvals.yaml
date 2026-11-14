@@ -23,6 +23,8 @@ guarded:
   - src/pigeon-cli/crates/backplane/src/worker/passkey.js
   # The approval domain's core; see .claude/decisions/2026-11-10-development-factory-crates-functional-core.md §3.
   - src/pigeon-cli/crates/backplane/src/core/approval/**
+  # Each role's capabilities; see .claude/decisions/2026-11-14-security-instance-members-roles-invitations.md §2.
+  - .config/roles.yaml
 # The code without a mandate that may deploy; every Worker's inputs count too.
 deploying:
   - infra/**
@@ -51,6 +53,8 @@ secrets:
   - src/pigeon-cli/crates/backplane/src/signing.rs
   - src/pigeon-cli/crates/pigeon/src/commands/signing.rs
   - tooling/ci/buildkite/ios-sign.sh
+  # What each role may do; see .claude/decisions/2026-11-14-security-instance-members-roles-invitations.md §2.
+  - .config/roles.yaml
 # Files whose `secrets:` list a head may not lengthen without the owner.
 secret_lists:
   - "**/worker.yaml"

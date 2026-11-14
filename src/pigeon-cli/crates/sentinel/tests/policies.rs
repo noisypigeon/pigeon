@@ -289,7 +289,7 @@ fn changelog_rules() {
 #[test]
 fn every_policy_is_valid() {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../../.config/policies");
-    assert_eq!(sentinel::load_dir(&dir).expect("loads").len(), 20);
+    assert_eq!(sentinel::load_dir(&dir).expect("loads").len(), 21);
 }
 
 fn layout_root(skip: &[&str], extra: &[&str]) -> TempDir {
@@ -645,6 +645,36 @@ fn macos_holds_the_order_start_time_and_caps_only() {
         good.replace("# Where", "Where"),
         format!("{good}extra: 1\n"),
         good.replace("github_monthly_minutes: null\n", ""),
+    ] {
+        fails(&check(&bad));
+    }
+}
+
+#[test]
+fn roles_holds_three_explicit_capability_lists_only() {
+    let good = "# Each role's capabilities.\nroles:\n  administrator: [read, propose, approve, approve.owner, auto, mandates, platform, members]\n  user: []\n  service: [read, propose]\n";
+    let check = |content: &str| {
+        violations(
+            "roles",
+            tree_root(&[(".config/roles.yaml", content)]).path(),
+            None,
+        )
+    };
+    passes(&check(good));
+    passes(&check(&good.replace("user: []", "user: [read]")));
+    passes(&check(
+        &good.replace("service: [read, propose]", "service: []"),
+    ));
+    passes(&violations("roles", tree_root(&[]).path(), None));
+    for bad in [
+        good.replace(", members]", "]"),
+        good.replace("user: []", "user: [*]"),
+        good.replace("user: []", "user: [everything]"),
+        good.replace("service: [read, propose]", "service: [read, approve]"),
+        good.replace("  user: []\n", ""),
+        good.replace("# Each", "Each"),
+        good.replace("roles:\n", "members:\n"),
+        format!("{good}  owner: [read]\n"),
     ] {
         fails(&check(&bad));
     }

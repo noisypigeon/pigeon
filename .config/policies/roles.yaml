@@ -1,0 +1,15 @@
+description: Each role's capabilities are a comment, then exactly three explicit lists, with no wildcard, per 2026-11-14-security-instance-members-roles-invitations.md §2.
+target:
+  files: [.config/roles.yaml]
+  optional: true
+rules:
+  - line: { at: 1, matches: '^# ' }
+  - line: { at: 2, matches: '^roles:$' }
+  - fields:
+      after: 2
+      pattern: '^  (?<key>[a-z]+): (?<value>\[.*\])$'
+      only: true
+      expect:
+        - { key: administrator, matches: '^\[read, propose, approve, approve\.owner, auto, mandates, platform, members\]$' }
+        - { key: user, matches: '^\[((read|propose|approve|approve\.owner|auto|mandates|platform|members)(, (read|propose|approve|approve\.owner|auto|mandates|platform|members))*)?\]$' }
+        - { key: service, matches: '^\[(read(, propose)?|propose)?\]$' }

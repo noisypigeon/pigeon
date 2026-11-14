@@ -419,3 +419,22 @@ for the passkey-only ADR's enrolment.
 - **Shadow:** for step 5's day, the new check and the old agree on every
   real request, or each difference is explained in the step's amendment.
 - `mise run ci` passes at every step.
+
+## Amendments
+
+### 2026-11-14: Step 3 splits in two; the rules land before the file
+
+- **Sentinel's paths take a change of their own** (the factory ADR §2), so
+  `.config/roles.yaml` can't land with its policy and its guards.
+  - **3a:** `.config/policies/roles.yaml`, and `.config/roles.yaml` in
+    `guarded` and `secrets` of `.config/approvals.yaml`.
+  - **3b:** `.config/roles.yaml` itself, `owner` tier from its first line.
+- **The policy checks lines, not the core.** Sentinel reads no Rust, so the
+  policy states §2's check as patterns: a comment, `roles:`, and exactly
+  `administrator` (the whole vocabulary, in order), `user` (names from the
+  vocabulary) and `service` (`read` and `propose` only). `core/member`'s
+  `check_roles` (step 2, brief b4) is the same check for the Worker; a test
+  in step 5 holds the two to one set of vectors.
+- **Paths.** `Governs` gains `.config/roles.yaml`,
+  `.config/policies/roles.yaml` and
+  `src/pigeon-cli/crates/backplane/src/core/member/**` as each lands.
