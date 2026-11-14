@@ -825,3 +825,36 @@ changes, as !386 itself now plans: one per session and ADR.
   its changes' stages show a brief's change in review or escalated.
 - **What's left of the plan:** the breaker acting on executors (§6), with
   `change_attend` (the session-stages ADR's step 6).
+### 2026-11-14: Under an Auto window, the control plane authorizes and approves a brief's change itself
+
+- **What went wrong.** The same day's settings (`.claude/settings.json`,
+  !438) didn't help. Seeded cloud sessions don't apply a project's
+  `permissions.allow`. At 21:32 a sonnet executor on !450 started from a
+  checkout holding the rule, and its `change_authorize` was still refused by
+  its classifier. The settings' ask list still applies wherever settings
+  apply.
+- **The rule.** An executor never asks for approval of its brief's change.
+  The owner's Auto window approves the change on its own, when the window
+  covers it:
+  - **at proposal:** once a change carrying a brief is proposed, the control
+    plane runs `change.authorize` on it as `window:<id>`;
+  - **at acceptance:** once the brief's planner accepts a head (§5) that is
+    `checked`, the control plane runs `change.approve` on that head as
+    `window:<id>`, which queues its merge, as an approval does.
+
+  Each runs through the path an agent's call takes (`under_window`), so the
+  window's checks hold unchanged: it is active, within its budget, and the
+  tier is below the owner's. A change that asks the owner for inputs is left
+  to the owner. When no window covers it, nothing runs and the stage says who
+  acts, as before.
+- **Why the window may.** The planner wrote the brief and reviews the head
+  before approval (§5). The owner opened the window to approve exactly this.
+  The executor's call added no check; it only carried the window's approval.
+- **Unchanged.** The owner tier, break-glass and every destructive operation
+  still ask. A restacked head is approved again as the session-stages ADR's
+  2026-11-14 amendment says (`reapprove`). A change without a brief is
+  authorized and approved by its session's call, as before.
+- **Execution.** One `feat(backplane)` change:
+  - `briefs::by_window` in `worker/briefs.rs`;
+  - `under_window` and `asks_owner` in `worker/mod.rs` become `pub(super)`;
+  - a call after a brief's change is proposed, and one after `accept`.
