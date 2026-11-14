@@ -251,3 +251,25 @@ Nothing in this ADR changes.
   - a test that every surface records the same `by`.
 - **The MCP card** still records the `APPROVER` secret until the passkey-only ADR's step 5 sets it through `approver`.
 
+
+### 2026-11-14: Model variance
+
+How this ADR's execution split between classes, per the model-tiered briefs ADR, and how each class fit.
+
+| Brief | Class | Step | Change | Heads to merge | Escalations | Planner's review findings |
+| --- | --- | --- | --- | --- | --- | --- |
+| b1 | haiku | 2: the Swift rename | !421 | 1 (2fbf7c6). The planner rebased it unchanged to cdf9f8d. | 1: its own `change_authorize` was refused by its permission layer; and the `Change-Scope` trailer format, which no file documented | none: all 11 literal replacements exact; both `done_when` held |
+| b2 | sonnet | 3: accounts and profiles in the backplane | !423 | 1 (5133721), plus 1 planner fix (d2d0bf5) | 2: the disk ran out under the scoped check; `change_authorize` refused twice; a review change (!425) was routed to it | 2 gaps against §3, both from the brief not spelling them out: the account record, and `PATCH` |
+| b9 | sonnet | 4: the app's Profile | !450 | 1 (18283df), plus 1 planner fix (e6dadba) | 1: `change_authorize` refused | 1: `run` cleared the unlink message. The executor flagged it itself and kept to the brief. |
+
+Planner-direct, by rule: the ADR and its amendments (!419, !424, !427 and !425's review) and step 6a (!451), which edits guarded approval paths.
+
+**Did each class fit?**
+- **Haiku fit the literal rename exactly.** It needed no judgement, and it asked rather than guessed on the one process detail the brief left out.
+- **Sonnet fit both implement-to-an-interface steps.** It wrote the bodies and tests to the named signatures. It fixed two lints in scope without widening it, and it reported a defect in the brief instead of deviating. Both review findings in b2 were the planner's: a sonnet brief must spell out every route's method and answer shape.
+- **No escalation came from the class.** Every one came from:
+  - the executor's permission layer refusing a window-allowed `change_authorize`, since a project's allow rule isn't applied in these cloud sessions;
+  - the environment (disk, no `mise`, no Swift toolchain);
+  - control-plane routing: reviews of a brief's change, `change_handoff`'s ownership check, and the stored `macos` record that stalled `bound`.
+
+  Each refusal cost a take-back. The executor's commit then came to the planner as a patch, because a taken change can't be handed back.
