@@ -438,3 +438,22 @@ for the passkey-only ADR's enrolment.
 - **Paths.** `Governs` gains `.config/roles.yaml`,
   `.config/policies/roles.yaml` and
   `src/pigeon-cli/crates/backplane/src/core/member/**` as each lands.
+
+### 2026-11-14: Step 2 lands; memberships live in the Instance's storage, not D1
+
+- **Step 2 landed as !428,** brief b4 (sonnet): `core/member/`, with 34
+  tests. `Governs` gains `src/pigeon-cli/crates/backplane/src/core/member/**`.
+- **§5's tables become one value.** Memberships and invitations are
+  `core::member::Members`, kept by the instance's `Instance` Durable Object
+  under the key `members`, as the accounts ADR keeps `accounts` there.
+  - Each instance has its own `Instance`, so the store is per instance
+    already.
+  - A transition reads and writes that one value inside the object, which
+    is the single order §5 asks for. D1 would need a second lock.
+  - There is no migration, and a rollback leaves the key unread.
+  - A service account's credentials (§6) join the same value in step 9.
+- **Step 4 is therefore:** the store, the seed of the owner's account as
+  the first administrator, and `GET /v0/app/members`, which answers the
+  caller's own row, and every member and open invitation to an
+  administrator. `member.list` and `member.show` over MCP move to step 5,
+  with the gate that decides who may call them.
