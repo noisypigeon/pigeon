@@ -287,7 +287,12 @@ async fn under_mandate(
 /// see `.claude/decisions/2026-11-12-runtime-ios-app-approvals-insights.md` §5.
 /// Whether `request` authorizes a change that asks the owner for inputs, which only the owner
 /// answers; see `.claude/decisions/2026-11-13-security-approvals-ask-owner-inputs.md` §3.
-async fn asks_owner(env: &Env, s: &Settings, number: u32, request: &wire::Request) -> Result<bool> {
+pub(super) async fn asks_owner(
+    env: &Env,
+    s: &Settings,
+    number: u32,
+    request: &wire::Request,
+) -> Result<bool> {
     if request.operation != "change.authorize" {
         return Ok(false);
     }
@@ -296,7 +301,7 @@ async fn asks_owner(env: &Env, s: &Settings, number: u32, request: &wire::Reques
         && serde_json::from_value::<Change>(v["change"].clone()).is_ok_and(|c| !c.asks.is_empty()))
 }
 
-async fn under_window(
+pub(super) async fn under_window(
     env: &Env,
     s: &Settings,
     number: u32,
@@ -650,6 +655,11 @@ async fn dispatch(
                     &json!({ "id": id, "change": number }),
                 )
                 .await?;
+            }
+            if brief.is_some()
+                && let Some(number) = proposed.0.as_deref().and_then(|n| n.parse::<u32>().ok())
+            {
+                briefs::by_window(env, s, number, "change.authorize", None).await;
             }
             if let Some(n) = resumes {
                 tasks::close_for(env, s, n).await?;

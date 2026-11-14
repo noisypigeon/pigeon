@@ -165,6 +165,9 @@ async fn review(env: &Env, s: &Settings, args: &Map<String, Value>) -> Result<(u
             if status != 200 {
                 return Ok((status, v));
             }
+            if v["state"] == "checked" {
+                by_window(env, s, n, "change.approve", Some(&head)).await;
+            }
             format!("!{n}'s head {head} is accepted against {id}")
         }
         "revise" => format!("{id}'s planner asks !{n} for a revision: {notes}"),
@@ -239,6 +242,31 @@ async fn escalate(env: &Env, s: &Settings, args: &Map<String, Value>) -> Result<
     };
     count(env, s, &id, by).await;
     Ok((200, json!({ "change": n, "brief": id, "escalated": asked })))
+}
+
+/// Runs `operation` on brief change `n` (at `sha`, for an approval) as the owner's Auto window,
+/// when one covers it, with no agent asking; a refusal is logged and leaves the stage to say who
+/// acts. See the 2026-11-14 amendment on the window authorizing and approving a brief's change.
+pub(super) async fn by_window(env: &Env, s: &Settings, n: u32, operation: &str, sha: Option<&str>) {
+    let mut args = Map::new();
+    args.insert("number".into(), json!(n));
+    if let Some(sha) = sha {
+        args.insert("sha".into(), json!(sha));
+    }
+    let request = crate::wire::Request {
+        operation: operation.into(),
+        args,
+    };
+    let ran = match super::asks_owner(env, s, n, &request).await {
+        Ok(true) => return,
+        Ok(false) => Box::pin(super::under_window(env, s, n, &request)).await,
+        Err(e) => Err(e),
+    };
+    match ran {
+        Ok(None | Some(Ok(_))) => {}
+        Ok(Some(Err(e))) => worker::console_warn!("`{operation}` on !{n} by window: {e}"),
+        Err(e) => worker::console_error!("`{operation}` on !{n} by window: {e}"),
+    }
 }
 
 /// Clears change `n`'s open escalation, as its brief's planner `by`, telling its executor `why`.
