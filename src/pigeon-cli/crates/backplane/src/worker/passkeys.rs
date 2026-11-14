@@ -12,6 +12,7 @@ use super::elicit;
 use super::platform::{self, Settings, now};
 use crate::access::Identity;
 use crate::approve as page;
+use crate::core::approval::enroll::Enrolments;
 use crate::passkeys::{self, Bound, Keyring};
 use crate::push::{b64url, b64url_decode};
 use crate::totp::Guard;
@@ -29,6 +30,12 @@ const INSTANCE_PAGES: [(&str, &str, &str); 3] = [
     ("/grants/", "/grant-requests/peek", "grant.request"),
     ("/ci-window/", "/ci-window/peek", "ci.window"),
 ];
+
+/// Where the `Instance` keeps the enrolments used and the wrong tokens tried.
+const ENROLMENTS: &str = "passkey-enrolments";
+
+/// The Worker secret an enrolment's token is checked against.
+const ENROLL_SECRET: &str = "PASSKEY_ENROLL";
 
 /// The fewest passkeys a removal leaves, until the cutover raises it to two.
 const MIN_KEYS: usize = 1;
@@ -111,6 +118,7 @@ pub async fn serve(state: &State, path: &str, body: Value) -> Result<Response> {
             (ring, outcome(registered))
         }
         "/passkeys/prove" => proving(state, ring, &body, &rp).await?,
+        "/passkeys/enroll" => return enrolling(state, ring, &body, &rp).await,
         "/passkeys/remove" if body["min"].is_u64() => {
             let min = usize::try_from(body["min"].as_u64().unwrap_or_default()).unwrap_or(1);
             let (ring, removed) = ring.remove_keeping(&s("id"), min);
@@ -178,6 +186,40 @@ async fn proving(state: &State, ring: Keyring, body: &Value, rp: &str) -> Result
         storage.put(elicit::GUARD, &guard).await?;
     }
     Ok((ring, outcome(proved)))
+}
+
+/// `/passkeys/enroll`: redeems `body.token` against `body.secret`, then registers the passkey,
+/// after dropping the others when `body.replace`; nothing is kept unless both pass.
+async fn enrolling(state: &State, ring: Keyring, body: &Value, rp: &str) -> Result<Response> {
+    let storage = state.storage();
+    let s = |k: &str| body[k].as_str().unwrap_or_default().to_string();
+    let bytes = |k: &str| b64url_decode(body[k].as_str().unwrap_or_default()).unwrap_or_default();
+    let all: Enrolments = storage.get(ENROLMENTS).await?.unwrap_or_default();
+    let (all, redeemed) = all.redeem(body["secret"].as_str(), &s("token"), now());
+    if redeemed.is_err() {
+        storage.put(ENROLMENTS, &all).await?;
+        return Response::from_json(&outcome(redeemed));
+    }
+    let ring = if body["replace"].as_bool() == Some(true) {
+        ring.cleared()
+    } else {
+        ring
+    };
+    let (ring, registered) = ring.register(
+        &s("id"),
+        &s("name"),
+        &bytes("client"),
+        &bytes("authenticator"),
+        &bytes("spki"),
+        &s("host"),
+        rp,
+        now(),
+    );
+    if registered.is_ok() {
+        storage.put(ENROLMENTS, &all).await?;
+        storage.put(KEYRING, &ring).await?;
+    }
+    Response::from_json(&outcome(registered))
 }
 
 fn outcome(r: std::result::Result<(), String>) -> Value {
@@ -420,50 +462,94 @@ pub async fn page_serve(
             Response::from_json(&v)
         }
         (Method::Get, "/passkeys") => list(env, s, None).await,
+        (Method::Get, "/passkeys/enroll") => {
+            html_with(200, &page::enroll_page(None), page::PROOF_CSP)
+        }
+        (Method::Post, "/passkeys/enroll") => {
+            let form = req.text().await?;
+            let said = enrol(env, s, who, &form, &host).await?;
+            html_with(200, &page::enroll_page(Some(&said)), page::PROOF_CSP)
+        }
         (Method::Post, "/passkeys") => {
             let form = req.text().await?;
-            let f = |k: &str| page::field(&form, k).unwrap_or_default();
-            let said = if let Some(id) = page::field(&form, "remove") {
-                let purpose = passkeys::remove_purpose(&id);
-                if let Err(why) = on_page(env, s, &form, &purpose, &host, "/passkeys").await? {
-                    return refused(403, &why);
-                }
-                let asked = json!({ "id": id, "min": MIN_KEYS });
-                let v = to_instance(env, s, "/passkeys/remove", &asked).await?;
-                said_of(&v, "Removed.")
-            } else if page::field(&form, "add").is_some() {
-                if !answered(&form) {
-                    return refused(403, "adding a passkey this way takes an existing passkey");
-                }
-                let proved = prove_with(env, s, &form, passkeys::ADD, &host, "/passkeys").await?;
-                if let Err(why) = proved {
-                    return refused(403, &why);
-                }
-                to_instance(env, s, "/passkeys/allow", &json!({})).await?;
-                "Proven. Create the new passkey within five minutes.".to_string()
-            } else {
-                let code = f("code");
-                let coded = !code.trim().is_empty();
-                if coded && let Err(why) = elicit::check_code(env, s, code.trim()).await? {
-                    return refused(403, &why);
-                }
-                let v = to_instance(
-                    env,
-                    s,
-                    "/passkeys/register",
-                    &json!({
-                        "id": f("pk_id"), "name": f("name"), "client": f("pk_client"),
-                        "authenticator": f("pk_authenticator"), "spki": f("pk_spki"), "host": host,
-                        "rp": rp_for(env, &host), "coded": coded,
-                    }),
-                )
-                .await?;
-                said_of(&v, "Registered. It now approves on these pages.")
-            };
-            list(env, s, Some(&said)).await
+            managing(env, s, &form, &host).await
         }
         _ => refused(404, "not found"),
     }
+}
+
+/// `POST /passkeys`: removes a passkey, proves the owner so one may be added, or registers one.
+async fn managing(env: &Env, s: &Settings, form: &str, host: &str) -> Result<Response> {
+    let f = |k: &str| page::field(form, k).unwrap_or_default();
+    let said = if let Some(id) = page::field(form, "remove") {
+        let purpose = passkeys::remove_purpose(&id);
+        if let Err(why) = on_page(env, s, form, &purpose, host, "/passkeys").await? {
+            return refused(403, &why);
+        }
+        let asked = json!({ "id": id, "min": MIN_KEYS });
+        let v = to_instance(env, s, "/passkeys/remove", &asked).await?;
+        said_of(&v, "Removed.")
+    } else if page::field(form, "add").is_some() {
+        if !answered(form) {
+            return refused(403, "adding a passkey this way takes an existing passkey");
+        }
+        let proved = prove_with(env, s, form, passkeys::ADD, host, "/passkeys").await?;
+        if let Err(why) = proved {
+            return refused(403, &why);
+        }
+        to_instance(env, s, "/passkeys/allow", &json!({})).await?;
+        "Proven. Create the new passkey within five minutes.".to_string()
+    } else {
+        let code = f("code");
+        let coded = !code.trim().is_empty();
+        if coded && let Err(why) = elicit::check_code(env, s, code.trim()).await? {
+            return refused(403, &why);
+        }
+        let v = to_instance(
+            env,
+            s,
+            "/passkeys/register",
+            &json!({
+                "id": f("pk_id"), "name": f("name"), "client": f("pk_client"),
+                "authenticator": f("pk_authenticator"), "spki": f("pk_spki"), "host": host,
+                "rp": rp_for(env, host), "coded": coded,
+            }),
+        )
+        .await?;
+        said_of(&v, "Registered. It now approves on these pages.")
+    };
+    list(env, s, Some(&said)).await
+}
+
+/// Enrols the passkey posted as `form` with its token: what the page says. An enrolment is
+/// logged and pushed.
+async fn enrol(env: &Env, s: &Settings, who: &Identity, form: &str, host: &str) -> Result<String> {
+    let f = |k: &str| page::field(form, k).unwrap_or_default();
+    let replace = f("replace") == "1";
+    let asked = json!({
+        "secret": platform::secret(env, ENROLL_SECRET).ok(), "token": f("token"),
+        "replace": replace, "id": f("pk_id"), "name": f("name"), "client": f("pk_client"),
+        "authenticator": f("pk_authenticator"), "spki": f("pk_spki"), "host": host,
+        "rp": rp_for(env, host),
+    });
+    let v = to_instance(env, s, "/passkeys/enroll", &asked).await?;
+    if v["status"] == "ok" {
+        let said = format!(
+            "a passkey was enrolled by break-glass by {}{}",
+            who.subject,
+            if replace {
+                ", replacing every other"
+            } else {
+                ""
+            }
+        );
+        let _ = super::events::append(env, s, "passkey.enrolled", None, None, &said, true).await;
+        super::push::notify(env, s, "Passkey enrolled", &said, "/passkeys").await;
+    }
+    Ok(said_of(
+        &v,
+        "Enrolled. This passkey now approves on these pages.",
+    ))
 }
 
 /// What the page says of the `Instance`'s answer `v`: `done`, or why it was refused.
@@ -504,6 +590,7 @@ pub(super) const ROUTES: &[super::Route] = &[
         crate::routes::Path::Exact("/passkeys/challenge"),
         serve_route,
     ),
+    super::Route::any(crate::routes::Path::Exact("/passkeys/enroll"), serve_route),
     super::Route::any(crate::routes::Path::Exact("/passkey.js"), serve_route),
 ];
 

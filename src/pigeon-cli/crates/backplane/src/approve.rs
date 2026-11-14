@@ -417,6 +417,33 @@ authenticator code; removing one takes either.</p>",
     shell("Passkeys", &b)
 }
 
+/// `/passkeys/enroll`: registers one passkey with a one-time enrolment token, and `said`; see
+/// `.claude/decisions/2026-11-14-security-passkey-only-owner-proofs.md` §3.
+#[must_use]
+pub fn enroll_page(said: Option<&str>) -> String {
+    use std::fmt::Write as _;
+    let mut b = String::from("<h1>Enrol a passkey</h1>");
+    if let Some(said) = said {
+        let _ = write!(b, "<p><strong>{}</strong></p>", escape(said));
+    }
+    let _ = write!(
+        b,
+        "<p>For when no passkey is left. <code>pigeon backplane enroll-secret</code> prints a \
+token that works once, for at most an hour, after its other line is put as the \
+<code>PASSKEY_ENROLL</code> secret.</p>\
+<form method=\"post\" action=\"/passkeys/enroll\">\
+<p><label>Enrolment token<br><input name=\"token\" type=\"password\" autocomplete=\"off\" \
+minlength=\"32\" required></label></p>\
+<p><label>Name<br><input name=\"name\" maxlength=\"64\" required></label></p>\
+<p><label><input type=\"checkbox\" name=\"replace\" value=\"1\"> Remove every existing passkey</label></p>\
+<p><button type=\"button\" data-passkey=\"register\" data-purpose=\"{}\" hidden>Create a passkey</button> \
+<small data-passkey-status></small></p></form>{PASSKEY_SCRIPT}\
+<p><small><a href=\"/passkeys\">Passkeys</a></small></p>",
+        escape(crate::passkeys::REGISTER)
+    );
+    shell("Enrol a passkey", &b)
+}
+
 /// `/app/link`: links the device named `name`, whose key has `fingerprint`, once the owner
 /// proves it; see `.claude/decisions/2026-11-12-runtime-ios-app-approvals-insights.md` §2.
 #[must_use]

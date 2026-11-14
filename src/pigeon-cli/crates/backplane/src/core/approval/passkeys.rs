@@ -391,6 +391,16 @@ impl Keyring {
             })
     }
 
+    /// The keyring without its passkeys, its challenges kept: for an enrolment that replaces
+    /// them all.
+    #[must_use]
+    pub fn cleared(&self) -> Self {
+        Self {
+            keys: Vec::new(),
+            challenges: self.challenges.clone(),
+        }
+    }
+
     /// Whether passkey `id` is registered here.
     #[must_use]
     pub fn holds(&self, id: &str) -> bool {

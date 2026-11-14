@@ -318,3 +318,18 @@ fn the_devices_page_unlinks_each_device_with_a_passkey_or_the_code() {
     assert!(html.contains("data-purpose=\"device:cd34\""));
     assert_eq!(html.matches("name=\"code\"").count(), 2);
 }
+
+// See `.claude/decisions/2026-11-14-security-passkey-only-owner-proofs.md` §3.
+#[test]
+fn the_enrolment_page_takes_a_token_and_no_code() {
+    let ours = "<script src=\"/passkey.js\" defer></script>";
+    let html = approve::enroll_page(Some("<refused>"));
+    assert_eq!(html.matches(ours).count(), 1, "{html}");
+    assert!(!html.replace(ours, "").contains("<script"), "{html}");
+    assert!(html.contains("&lt;refused&gt;"));
+    assert!(html.contains("action=\"/passkeys/enroll\""));
+    assert!(html.contains("name=\"token\" type=\"password\""));
+    assert!(html.contains("name=\"replace\""));
+    assert!(html.contains("data-passkey=\"register\""));
+    assert!(!html.contains("name=\"code\""));
+}
