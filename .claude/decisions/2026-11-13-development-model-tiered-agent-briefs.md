@@ -4,8 +4,8 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: development
-* Governs: `src/pigeon-cli/crates/backplane/src/sessions.rs`, `src/pigeon-cli/crates/backplane/src/tasks.rs`, `tooling/session/session.py`
-* Governs: `src/pigeon-cli/crates/backplane/src/sessions.rs`, `src/pigeon-cli/crates/backplane/src/tasks.rs`, `tooling/session/session.py`, `tooling/session/models.json`
+* Governs: `src/pigeon-cli/crates/backplane/src/sessions.rs`, `src/pigeon-cli/crates/backplane/src/tasks.rs`, `tooling/session/session.py`, `tooling/session/models.json`, `src/pigeon-cli/crates/backplane/src/core/brief/**`
+* Governs: `src/pigeon-cli/crates/backplane/src/sessions.rs`, `src/pigeon-cli/crates/backplane/src/tasks.rs`, `tooling/session/session.py`, `tooling/session/models.json`, `src/pigeon-cli/crates/backplane/src/core/brief/**`
 
 ## Context
 
@@ -432,3 +432,34 @@ changes, as !386 itself now plans: one per session and ADR.
 - **The class is the session's latest.** A session that replaced its ticket
   with another class shows the new one on its older changes too. Briefs
   (step 2) record the class that carried each one out.
+
+### 2026-11-14: Step 2 splits in three; its first part lands: the brief and its validation
+
+- **Paths.** `Governs` gains `core/brief/**`, and `tooling/session/models.json`
+  again: step 1a added it, and !375's restack dropped that line edit.
+- **Why three parts.** The pure model can land alone, with no Worker code,
+  and nothing else edits its files. Storage and the MCP tools come next, then
+  tasks routed by class, which touch `tasks.rs` after !386's sweep.
+- **Step 2a, this change:** `core::brief`, pure and tested:
+  - `Draft`: §3's fields, a step's `do` serialized as `do`, and a `budget`
+    defaulting by class (`haiku` 3 heads, `sonnet` 4, both 2 hours, at most
+    8 of each);
+  - `validate` answers every problem at once, not the first;
+  - a brief is never for `opus`;
+  - `scope` holds exact relative paths, no glob, 1 to 12 (`haiku` 5), and a
+    step's `files` lie in it;
+  - a `haiku` step carries `content`;
+  - `do` and `done_when` refuse `OPEN_CHOICE`'s phrases as whole words,
+    ignoring case. `content` is the planner's literal text, so it isn't
+    checked;
+  - `base` is 7 to 40 hex digits. Whether it is on `main` needs git, so step
+    2b checks it;
+  - `commit.title` is a Conventional Commit title;
+  - a draft is at most 16 KiB serialized.
+- **A brief is append-only:** `Brief::create` makes revision 1, and
+  `Brief::amend` appends one, by its planner only, with a reason. No revision
+  is rewritten.
+- **Step 2b:** the `Instance`'s store; `brief_create`, `brief_show`,
+  `brief_amend` and `brief_list`; `base` checked against `main`; and `scope`
+  checked against the planner's ADR.
+- **Step 2c:** `brief` tasks, routed and claimed by class.

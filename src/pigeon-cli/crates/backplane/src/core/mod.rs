@@ -3,6 +3,7 @@
 
 pub mod app;
 pub mod approval;
+pub mod brief;
 pub mod change;
 pub mod deploy;
 #[cfg(feature = "engines")]
