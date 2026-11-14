@@ -457,3 +457,96 @@ for the passkey-only ADR's enrolment.
   caller's own row, and every member and open invitation to an
   administrator. `member.list` and `member.show` over MCP move to step 5,
   with the gate that decides who may call them.
+
+### 2026-11-14: Steps 4 and 8 land; steps 5 to 9 are replanned on the accounts and passkey-only ADRs
+
+- **Step 4 landed as !442,** brief b6 (sonnet): the `Instance` keeps
+  `Members` under `members`, seeds the owner's account as the first
+  administrator, and `GET /v0/app/members` answers the caller's view.
+  `Governs` gains `src/pigeon-cli/crates/backplane/src/worker/members.rs`.
+- **Step 8's app half is !443,** brief b7 (haiku): the approval card's badge
+  and Auto's banner say "administrator". It waits for its `ios` check as
+  this is written.
+- **§9's order can't hold.** The gate names a person by account, and two
+  parts of that are other ADRs' steps, not yet on `main`:
+  - a passkey doesn't yet name its account
+    ([`2026-11-14-security-passkey-only-owner-proofs.md`](2026-11-14-security-passkey-only-owner-proofs.md) §5);
+  - approvals naming the approving account, where they read `APPROVER`, is
+    the accounts ADR's (!424).
+
+  Nor does a person on a page have an account until the sign-in cookie of
+  §8 exists, so a shadow run of the whole check has nothing to compare for
+  pages before then.
+- **The steps that remain, in the order they can land:**
+
+  | # | Step | Waits on | Who |
+  |---|---|---|---|
+  | 5a | The deployed roles reach the Worker: the deploy job reports `main`'s `.config/roles.yaml` beside the ledger, `MainRun` keeps it, and one test holds `check_roles` and the sentinel policy to the same vectors | nothing | planner |
+  | 5b | `core/member`: each operation's capability, as a table with a test that every operation is in it | nothing | sonnet |
+  | 5c | The check in shadow for what already has an account: app routes by device, and service tokens once 9a lands. It logs and decides nothing | 5a, 5b | planner |
+  | 6a | The pages' sign-in cookie (§8 step 1) | the passkey-only ADR's step 3 | planner |
+  | 6b | Invitations: `member.invite`, `/join/<token>` and its public path, the match code, `member.admit`, with enrolment by the passkey-only ADR's `/passkeys/enroll` | 6a, and that ADR's step 6 | planner |
+  | 6c | `member.role`, `member.remove`, `member.leave` and their effects (§5), and the Access group with its grant | 6b | planner |
+  | 6d | The app's `/v0/app/members` writes over `core/member`, and push to every administrator | 6b | sonnet |
+  | 5d | The check decides: it replaces `access::authorize`, and the approval pages' wording changes with it | 5c's day of shadow, 6a, and passkeys naming their account | planner |
+  | 7 | The app: Members, the invite sheet, joining from a link, Home by role | 6d | sonnet |
+  | 8b | Wording outside guarded files: `CLAUDE.md` and `wire.rs`'s summaries | 5d | haiku |
+  | 9a | Service accounts: the seeded `agent`, credentials in `Members`, `service.create`, `service.suspend`, `service.remove` | 5b | planner |
+  | 9b | Tickets record their service account | 9a | sonnet |
+
+- **Nothing above is started.** `core/member::check` and
+  `.config/roles.yaml` are on `main` and nothing calls or reads them yet, so
+  every operation is still decided as before this ADR.
+
+### 2026-11-14: Model variance
+
+The planner ran on Claude Fable 5.2, declared to the control plane as class
+`opus`. Each executor ran on the model its brief named, with no fallback
+(`last_served_model` at start and at review).
+
+| Brief | Step | Class, model | Revisions | Heads | Escalations | Review |
+|---|---|---|---|---|---|---|
+| b4 | 2, `core/member` | sonnet, Claude Sonnet 5.5 | 2 | 1 (!428) | 1 | accepted, no finding |
+| b6 | 4, the store and view | sonnet, Claude Sonnet 5.5 | 1 | 1 (!442) | 1 | accepted, no finding |
+| b7 | 8, the app's wording | haiku, Claude Haiku 5.5 | 1 | 1 (!443) | 1 | the patch is as briefed; its `ios` check is pending |
+
+- **No executor pushed a head.** Each one's `change_authorize` was refused
+  by its own harness (auto mode, "Undermining Oversight"), so its plan
+  stayed unauthorized and its push was refused. The planner's own
+  `change_authorize` calls were not refused. The control plane refuses a
+  planner's ticket on an executor's change, so the planner couldn't
+  authorize for them either.
+  - Each escalated instead of working around it, as the brief rules say.
+  - The route used three times: the executor sends
+    `git format-patch --stdout`, the planner takes the change
+    (`brief_review`, `take`), authorizes it, applies the patch, and checks
+    each file's blob hash against the patch's index line. Every file
+    matched, so each head is the executor's code.
+  - A permission rule for `change_authorize` in executor sessions, or an
+    operation that lets a planner authorize its brief's change, would remove
+    the relay. !438 on `main` didn't.
+- **Review findings on the code: none.** Both sonnet changes kept every
+  decision, signature, error string and test name. b6's executor reported
+  rewriting five assertions of its own that clippy refused, inside its
+  step.
+- **Findings on relaying:**
+  - b6's executor first sent a summary of its patch, then the patch with
+    one file's diff missing and a malformed tail, then a correction with
+    that diff. The hash check is what made the result trustworthy.
+  - b4's and b7's patches were complete the first time.
+- **The planner's own errors, which the executors or the checks caught:**
+  - b7's `stop_if` said "more than 9 changed lines" for edits that come to
+    11. The haiku executor stopped and asked, as it should.
+  - !429's first head failed sentinel's count of policies, which the
+    planner hadn't run in full locally.
+  - b4's first revision didn't say that authorizing is the executor's own
+    step; revision 2 did, and it changed nothing, because the refusal was
+    the harness's.
+- **What planning on Fable 5.2 changed:** nothing this run can show. There
+  is no opus-planned run of the same task to compare with, and the briefs
+  were validated by the same `core/brief` rules. What differed between
+  planner and executors was their harness's refusal of `change_authorize`,
+  which follows the session's role and not its model.
+- **For tuning the briefs ADR:** a brief's `stop_if` that counts lines
+  should be computed, not typed; and a brief should say how its executor
+  hands back work it can't push, since all three needed to.
