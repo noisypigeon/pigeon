@@ -1,18 +1,18 @@
-// Home: the avatar for Profiles, Insights (Cost and Errors today), and Approvals with
+// Home: the avatar for Instances, Insights (Cost and Errors today), and Approvals with
 // Accept edits / Auto; every card opens over Home. See the ADR's context.
 
 import PigeonCore
 import SwiftUI
 
 enum Sheet: Identifiable {
-    case profiles
+    case instances
     case chart(String)
     case approval(String)
     case auto
 
     var id: String {
         switch self {
-        case .profiles: return "profiles"
+        case .instances: return "instances"
         case .chart(let m): return "chart-\(m)"
         case .approval(let id): return "approval-\(id)"
         case .auto: return "auto"
@@ -57,7 +57,7 @@ struct HomeView: View {
         }
         .sheet(item: $sheet) { which in
             switch which {
-            case .profiles: ProfilesSheet()
+            case .instances: InstancesSheet()
             case .chart(let metric): ChartSheet(metric: metric)
             case .approval(let id): ApprovalSheet(id: id)
             case .auto: AutoSheet()
@@ -68,7 +68,7 @@ struct HomeView: View {
     private var header: some View {
         HStack {
             Button {
-                sheet = .profiles
+                sheet = .instances
             } label: {
                 Image("Avatar")
                     .resizable()
@@ -77,7 +77,7 @@ struct HomeView: View {
                     .overlay(Circle().stroke(Theme.card, lineWidth: 2))
                     .background(Circle().fill(Theme.shadow).offset(x: 2, y: 2))
             }
-            .accessibilityLabel("Profile: Platform. Switch profile")
+            .accessibilityLabel("Instance: Platform. Switch instance")
             Spacer()
         }
         .padding(.top, 8)

@@ -1,5 +1,5 @@
 // The cards that open over Home: one metric's chart by source and kind, an approval, Auto's
-// length, and Profiles with Settings.
+// length, and Instances with Settings.
 
 import PigeonCore
 import SwiftUI
@@ -366,8 +366,8 @@ struct AutoSheet: View {
     }
 }
 
-/// Profiles: Platform alone in phase one, and Settings.
-struct ProfilesSheet: View {
+/// Instances: Platform alone today, and Settings; see the accounts, profiles and instances ADR §4.
+struct InstancesSheet: View {
     @AppStorage("appearance") private var appearance = Appearance.system.rawValue
     @State private var settings = false
 
@@ -379,7 +379,7 @@ struct ProfilesSheet: View {
                     Button {
                         settings = false
                     } label: {
-                        Label("Profiles", systemImage: "chevron.left")
+                        Label("Instances", systemImage: "chevron.left")
                     }
                     .foregroundStyle(Theme.accent)
                     Text("Settings").font(Theme.display(22))
@@ -406,7 +406,7 @@ struct ProfilesSheet: View {
                         }
                     }
                 } else {
-                    Text("Profiles").font(Theme.display(22))
+                    Text("Instances").font(Theme.display(22))
                     HStack(spacing: 12) {
                         Image("Avatar").resizable().frame(width: 44, height: 44).clipShape(Circle())
                         VStack(alignment: .leading, spacing: 2) {
