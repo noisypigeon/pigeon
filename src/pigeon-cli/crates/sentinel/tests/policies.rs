@@ -289,7 +289,7 @@ fn changelog_rules() {
 #[test]
 fn every_policy_is_valid() {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../../.config/policies");
-    assert_eq!(sentinel::load_dir(&dir).expect("loads").len(), 19);
+    assert_eq!(sentinel::load_dir(&dir).expect("loads").len(), 20);
 }
 
 fn layout_root(skip: &[&str], extra: &[&str]) -> TempDir {
@@ -623,6 +623,30 @@ fn migrations_only_expand() {
         files.push((file.as_str(), sql));
         let v = violations("migrations", tree_root(&files).path(), None);
         assert!(v.iter().any(|m| m.starts_with(&file)), "{sql}: {v:?}");
+    }
+}
+
+#[test]
+fn macos_holds_the_order_start_time_and_caps_only() {
+    let good = "# Where macOS jobs run.\norder: [github, bitrise, buildkite]\nstart_within_minutes: 10\ngithub_monthly_minutes: null\nbitrise_monthly_minutes: 450\nbuildkite_monthly_minutes: 150\n";
+    let check = |content: &str| {
+        violations(
+            "macos",
+            tree_root(&[(".config/macos.yaml", content)]).path(),
+            None,
+        )
+    };
+    passes(&check(good));
+    passes(&violations("macos", tree_root(&[]).path(), None));
+    for bad in [
+        good.replace("[github, bitrise, buildkite]", "[github, circle]"),
+        good.replace("start_within_minutes: 10", "start_within_minutes: 0"),
+        good.replace("450", "lots"),
+        good.replace("# Where", "Where"),
+        format!("{good}extra: 1\n"),
+        good.replace("github_monthly_minutes: null\n", ""),
+    ] {
+        fails(&check(&bad));
     }
 }
 

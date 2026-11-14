@@ -1,0 +1,16 @@
+description: Where macOS jobs run is a comment, then the order, start time and monthly caps, and nothing else, per 2026-11-12-development-macos-builds-provider-failover.md §2.
+target:
+  files: [.config/macos.yaml]
+  optional: true
+rules:
+  - line: { at: 1, matches: '^# ' }
+  - fields:
+      after: 1
+      pattern: '^(?<key>[a-z_]+): (?<value>.+)$'
+      only: true
+      expect:
+        - { key: order, matches: '^\[(github|bitrise|buildkite)(, (github|bitrise|buildkite))*\]$' }
+        - { key: start_within_minutes, matches: '^[1-9][0-9]*$' }
+        - { key: github_monthly_minutes, matches: '^([0-9]+|null)$' }
+        - { key: bitrise_monthly_minutes, matches: '^([0-9]+|null)$' }
+        - { key: buildkite_monthly_minutes, matches: '^([0-9]+|null)$' }
