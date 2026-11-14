@@ -73,7 +73,8 @@ public func sourceName(_ source: String) -> String {
     }
 }
 
-/// A tier as the card's badge shows it.
+/// A tier as the card's badge shows it; the `owner` tier reads as who approves it.
 public func tierBadge(_ tier: String?) -> String {
-    (tier ?? "code").uppercased()
+    let name = tier ?? "code"
+    return (name == "owner" ? "administrator" : name).uppercased()
 }

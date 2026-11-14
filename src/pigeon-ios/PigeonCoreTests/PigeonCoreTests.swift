@@ -120,6 +120,8 @@ import PigeonCore
         #expect(remaining(until: 600, now: 0) == "10m")
         #expect(sourceName("github") == "GitHub")
         #expect(tierBadge(nil) == "CODE")
+        #expect(tierBadge("owner") == "ADMINISTRATOR")
+        #expect(tierBadge("confirm") == "CONFIRM")
     }
 
     @Test func aSourcesNoteIsReadAndOptional() throws {

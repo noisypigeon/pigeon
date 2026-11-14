@@ -214,7 +214,7 @@ struct MiniBars: View {
     }
 }
 
-/// Auto's banner: when it ends, and that the owner tier still asks.
+/// Auto's banner: when it ends, and that an administrator still approves the owner tier.
 struct AutoBanner: View {
     @EnvironmentObject private var store: Store
     let window: AutoWindow
@@ -232,7 +232,7 @@ struct AutoBanner: View {
                 Text(
                     window.state == "paused"
                         ? (window.why ?? "")
-                        : "\(remaining(until: window.expires, now: now)) left · owner tier still asks"
+                        : "\(remaining(until: window.expires, now: now)) left · an administrator approves the rest"
                 )
                 .font(Theme.mono(12))
                 .foregroundStyle(Theme.muted)
