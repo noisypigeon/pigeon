@@ -758,3 +758,30 @@ changes, as !386 itself now plans: one per session and ADR.
      `worker/merges.rs`, and the guard in `worker/tickets.rs`, with the
      guard's label choice tested.
   3. The settings, as the session-stages ADR's amendment says.
+
+### 2026-11-14: Step 7 splits in two; its first part lands: the breaker counts a brief's change by its class, in shadow
+
+- **Why two parts.** §6's thresholds need nothing else and run in shadow at
+  once. The digest's classes (§7) touch the digest, which reads D1 rows, not
+  briefs.
+- **Step 7a, this change:**
+  - `breaker::Limits`: B1's, B2's and B4's heads, and a brief's budget. Its
+    default is the session-stages ADR's opus thresholds, and
+    `Limits::brief(model, budget)` is §6's column for the class;
+  - `ChangeRun` reads a change's brief (`briefs::latest`) on each save, and
+    counts it at the brief's `model`, which is the class it was written for;
+  - **the budget is its own signal, `budget`:** a head beyond its `heads`,
+    or its `hours` gone, from the first head, while the last head isn't
+    `checked`. A checked head waits on its planner, not its executor;
+  - each trip logs `breaker.would_trip`, naming the class and the brief, as
+    "would escalate to its planner".
+- **It still acts on nothing.** A trip becomes `Escalate` only when the
+  breaker leaves shadow. That is the session-stages ADR's step 6, beside
+  `change_attend`.
+- **Known in shadow:**
+  - a restack's head counts against the budget and B4, as it does for B4
+    today. The shadow run shows whether to leave them out;
+  - hours run from the first head, not the brief's claim. A claim isn't
+    kept per change.
+- **Step 7b:** the digest's and `session_status`'s classes, and per-step
+  counts by class (§7).

@@ -268,8 +268,10 @@ impl ChangeRun {
     }
 
     /// Notes `change` in its breaker and logs each signal that would trip, once, as
-    /// `breaker.would_trip`; in shadow it acts on nothing. See
-    /// `.claude/decisions/2026-11-13-development-session-stages-subscriptions-breaker.md` §4.
+    /// `breaker.would_trip`, at its brief's class's thresholds when it carries one; in shadow it
+    /// acts on nothing. See
+    /// `.claude/decisions/2026-11-13-development-session-stages-subscriptions-breaker.md` §4 and
+    /// the model-tiered briefs ADR's §6.
     async fn breaker(&self, change: &Change) -> Result<()> {
         use crate::core::change::breaker;
         let failures: Map<String, Value> = self.load(FAILURES).await?;
@@ -277,19 +279,38 @@ impl ChangeRun {
             .iter()
             .filter_map(|(job, f)| Some((job.clone(), f["log"].as_str()?.to_string())))
             .collect();
+        let s = Settings::from(&self.env).ok();
+        let brief = match (change.brief.as_deref(), &s) {
+            (Some(id), Some(s)) => super::briefs::latest(&self.env, s, id)
+                .await
+                .map(|d| (id, d.model, d.budget())),
+            _ => None,
+        };
+        let limits = brief.map_or_else(breaker::Limits::default, |(_, model, budget)| {
+            breaker::Limits::brief(model, budget)
+        });
         let storage = self.state.storage();
         let b: breaker::Breaker = storage.get(BREAKER).await?.unwrap_or_default();
         let b = breaker::observe(&b, change, &tails, now());
-        let (b, trips) = breaker::fresh(&b, now());
+        let (b, trips) = breaker::fresh(&b, now(), &limits);
         storage.put(BREAKER, &b).await?;
-        let Ok(s) = Settings::from(&self.env) else {
+        let Some(s) = s else {
             return Ok(());
         };
         for t in trips {
-            let said = format!(
-                "!{} would leave Auto ({}): {}",
-                change.number, t.signal, t.why
-            );
+            let said = match brief {
+                Some((id, model, _)) => format!(
+                    "!{} ({}, {id}) would escalate to its planner ({}): {}",
+                    change.number,
+                    model.name(),
+                    t.signal,
+                    t.why
+                ),
+                None => format!(
+                    "!{} would leave Auto ({}): {}",
+                    change.number, t.signal, t.why
+                ),
+            };
             let session = change.session.clone();
             let n = Some(change.number);
             super::events::append(

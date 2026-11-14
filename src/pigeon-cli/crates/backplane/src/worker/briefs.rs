@@ -250,6 +250,17 @@ async fn reopen(env: &Env, s: &Settings, n: u32, by: &str, why: &str) -> Result<
     Ok(())
 }
 
+/// Brief `id`'s latest draft; none when there is no such brief, or it can't be read.
+pub async fn latest(env: &Env, s: &Settings, id: &str) -> Option<Draft> {
+    let (status, brief) = to_instance(env, s, "/briefs/show", &json!({ "id": id }))
+        .await
+        .ok()?;
+    let brief: crate::core::brief::Brief = serde_json::from_value(brief)
+        .ok()
+        .filter(|_| status == 200)?;
+    Some(brief.latest().draft.clone())
+}
+
 /// When `after` carries a brief and a head newly checked awaits review: a `brief-review` task
 /// for its planner, which wakes its follower.
 ///
