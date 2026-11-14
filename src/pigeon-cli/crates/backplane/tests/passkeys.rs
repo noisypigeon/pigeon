@@ -6,7 +6,8 @@
 mod kept;
 
 use backplane::passkeys::{
-    Keyring, Passkey, REGISTER, assert, der_signature, grant_purpose, register, relying_party,
+    ADD, Bound, Keyring, LOCK_AFTER, MAX_KEYS, Passkey, REGISTER, assert, bound_challenge,
+    der_signature, grant_purpose, register, relying_party, remove_purpose,
 };
 use backplane::push::b64url;
 use p256::ecdsa::signature::Signer as _;
@@ -89,6 +90,8 @@ fn registered(counter: u32) -> Passkey {
         name: "laptop".into(),
         created: 0,
         used: None,
+        synced: None,
+        failures: Vec::new(),
     }
 }
 
@@ -354,4 +357,218 @@ fn a_passkey_for_the_platform_registers_on_a_stack_and_proves_on_the_live_host()
         .is_err(),
         "another site's page"
     );
+}
+
+/// A keyring holding passkeys named by `ids`, each registered with `k` and `flags`.
+fn ring_of(k: &SigningKey, ids: &[&str], flags: u8) -> Keyring {
+    let origin = format!("https://{HOST}");
+    let mut ring = Keyring::default();
+    for (n, id) in ids.iter().enumerate() {
+        let at = 10 + u64::try_from(n).expect("few");
+        let reg = kept!(ring.mint(REGISTER, &[9u8; 32], at));
+        let c = client("webauthn.create", &reg, &origin);
+        let made = authenticator(HOST, flags, 0);
+        assert_eq!(
+            kept!(ring.register(id, id, &c, &made, &spki(k), HOST, HOST, at)),
+            Ok(())
+        );
+    }
+    ring
+}
+
+fn approving(head: &str) -> Bound {
+    Bound {
+        operation: "change.approve".into(),
+        target: "7".into(),
+        head: head.into(),
+    }
+}
+
+// See `.claude/decisions/2026-11-14-security-passkey-only-owner-proofs.md` §2.
+#[test]
+fn a_bound_challenge_changes_with_each_thing_it_binds() {
+    let b = approving("aaa");
+    let base = bound_challenge("grant:k", &b, &[1u8; 32]);
+    assert_eq!(base, bound_challenge("grant:k", &b, &[1u8; 32]));
+    assert_ne!(base, bound_challenge("grant:other", &b, &[1u8; 32]));
+    assert_ne!(
+        base,
+        bound_challenge("grant:k", &approving("bbb"), &[1u8; 32])
+    );
+    assert_ne!(base, bound_challenge("grant:k", &b, &[2u8; 32]));
+    let merge = Bound {
+        operation: "change.merge".into(),
+        ..b.clone()
+    };
+    assert_ne!(base, bound_challenge("grant:k", &merge, &[1u8; 32]));
+    let other = Bound {
+        target: "8".into(),
+        ..b
+    };
+    assert_ne!(base, bound_challenge("grant:k", &other, &[1u8; 32]));
+}
+
+#[test]
+fn a_bound_proof_checks_only_for_the_head_it_was_minted_for_and_leaves_evidence() {
+    let k = key();
+    let origin = format!("https://{HOST}");
+    let mut ring = ring_of(&k, &["cred"], 0x05);
+    let purpose = grant_purpose("token");
+    let a = authenticator(HOST, 0x05, 0);
+
+    let minted = kept!(ring.mint_bound(&purpose, &approving("aaa"), &[3u8; 32], 100));
+    let c = client("webauthn.get", &minted, &origin);
+    let sig = sign(&k, &a, &c);
+    let moved = approving("bbb");
+    assert!(
+        kept!(ring.prove_bound("cred", &c, &a, &sig, &purpose, &moved, HOST, HOST, 101)).is_err(),
+        "the head moved"
+    );
+    assert!(
+        kept!(ring.prove_bound(
+            "cred",
+            &c,
+            &a,
+            &sig,
+            &purpose,
+            &approving("aaa"),
+            HOST,
+            HOST,
+            102
+        ))
+        .is_err(),
+        "the challenge was used up"
+    );
+
+    let minted = kept!(ring.mint_bound(&purpose, &approving("aaa"), &[4u8; 32], 110));
+    let c = client("webauthn.get", &minted, &origin);
+    let sig = sign(&k, &a, &c);
+    let evidence = kept!(ring.prove_bound(
+        "cred",
+        &c,
+        &a,
+        &sig,
+        &purpose,
+        &approving("aaa"),
+        HOST,
+        HOST,
+        111
+    ))
+    .expect("proves");
+    assert_eq!(evidence.passkey, "cred");
+    assert_eq!(evidence.nonce, b64url(&[4u8; 32]));
+    assert_eq!(evidence.client, b64url(&c));
+    assert_eq!(ring.keys[0].used, Some(111));
+    assert!(
+        kept!(ring.prove_bound(
+            "cred",
+            &c,
+            &a,
+            &sig,
+            &purpose,
+            &approving("aaa"),
+            HOST,
+            HOST,
+            112
+        ))
+        .is_err(),
+        "a replay"
+    );
+
+    let plain = kept!(ring.mint(&purpose, &[5u8; 32], 120));
+    let c = client("webauthn.get", &plain, &origin);
+    let sig = sign(&k, &a, &c);
+    assert!(
+        kept!(ring.prove_bound(
+            "cred",
+            &c,
+            &a,
+            &sig,
+            &purpose,
+            &approving("aaa"),
+            HOST,
+            HOST,
+            121
+        ))
+        .is_err(),
+        "an unbound challenge"
+    );
+}
+
+#[test]
+fn five_refused_assertions_lock_that_passkey_and_no_other() {
+    let k = key();
+    let stranger = SigningKey::from_slice(&[8u8; 32]).expect("a scalar");
+    let origin = format!("https://{HOST}");
+    let mut ring = ring_of(&k, &["one", "two"], 0x05);
+    let a = authenticator(HOST, 0x05, 0);
+    let b = Bound::default();
+    for n in 0..LOCK_AFTER {
+        let at = 100 + u64::try_from(n).expect("few");
+        let minted = kept!(ring.mint_bound(ADD, &b, &[u8::try_from(n).expect("few"); 32], at));
+        let c = client("webauthn.get", &minted, &origin);
+        let bad = sign(&stranger, &a, &c);
+        assert!(kept!(ring.prove_bound("one", &c, &a, &bad, ADD, &b, HOST, HOST, at)).is_err());
+    }
+    assert!(ring.keys[0].locked(200));
+    let prove = |ring: &mut Keyring, id: &str, at: u64| {
+        let (next, minted) = ring.mint_bound(ADD, &b, &[77u8; 32], at);
+        let c = client("webauthn.get", &minted, &origin);
+        let sig = sign(&k, &a, &c);
+        let (next, out) = next.prove_bound(id, &c, &a, &sig, ADD, &b, HOST, HOST, at);
+        *ring = next;
+        out
+    };
+    assert!(prove(&mut ring, "one", 201).is_err(), "locked");
+    assert!(
+        prove(&mut ring, "two", 202).is_ok(),
+        "the other still proves"
+    );
+    assert!(prove(&mut ring, "nobody", 203).is_err(), "unknown");
+    assert!(
+        ring.keys
+            .iter()
+            .all(|k| k.id != "two" || k.failures.is_empty())
+    );
+    assert!(
+        prove(&mut ring, "one", 100 + 3600 + 10).is_ok(),
+        "an hour on"
+    );
+    assert_eq!(ring.keys[0].failures, Vec::<u64>::new());
+}
+
+#[test]
+fn a_keyring_records_synced_passkeys_holds_eight_and_keeps_a_minimum() {
+    let k = key();
+    let ids = ["a", "b", "c", "d", "e", "f", "g", "h"];
+    assert_eq!(ids.len(), MAX_KEYS);
+    let mut ring = ring_of(&k, &ids, 0x0d);
+    assert_eq!(ring.keys[0].synced, Some(true));
+    assert_eq!(ring_of(&k, &["x"], 0x05).keys[0].synced, Some(false));
+    let origin = format!("https://{HOST}");
+    let reg = kept!(ring.mint(REGISTER, &[9u8; 32], 50));
+    let c = client("webauthn.create", &reg, &origin);
+    let made = authenticator(HOST, 0x05, 0);
+    assert!(
+        kept!(ring.register("i", "ninth", &c, &made, &spki(&k), HOST, HOST, 51)).is_err(),
+        "a ninth"
+    );
+    assert!(ring.holds("a") && !ring.holds("i"));
+    assert_eq!(remove_purpose("a"), "passkey:remove:a");
+
+    let mut two = ring_of(&k, &["a", "b"], 0x05);
+    assert!(kept!(two.remove_keeping("a", 2)).is_err(), "below two");
+    assert!(kept!(two.remove_keeping("z", 1)).is_err(), "not here");
+    assert_eq!(kept!(two.remove_keeping("a", 1)), Ok(()));
+    assert!(kept!(two.remove_keeping("b", 1)).is_err(), "the last");
+}
+
+#[test]
+fn a_keyring_stored_before_these_fields_still_reads() {
+    let old = r#"{"keys":[{"id":"c","key":"k","counter":0,"name":"n","created":1}],
+        "challenges":[{"challenge":"x","purpose":"register","expires":9}]}"#;
+    let ring: Keyring = serde_json::from_str(old).expect("reads");
+    assert_eq!(ring.keys[0].synced, None);
+    assert_eq!(ring.keys[0].failures, Vec::<u64>::new());
+    assert_eq!(ring.challenges[0].nonce, None);
 }

@@ -19,6 +19,17 @@ const SPKI_PREFIX: [u8; 26] = [
 const USER_PRESENT: u8 = 0x01;
 /// The authenticator data's user-verified flag.
 const USER_VERIFIED: u8 = 0x04;
+/// The authenticator data's backup-eligible flag: the passkey is synced.
+const BACKUP_ELIGIBLE: u8 = 0x08;
+
+/// The most passkeys a keyring holds; see
+/// `.claude/decisions/2026-11-14-security-passkey-only-owner-proofs.md` §3.
+pub const MAX_KEYS: usize = 8;
+
+/// How many refused assertions lock a passkey, and for how long, in seconds; see that ADR's §2.
+pub const LOCK_AFTER: usize = 5;
+/// The window those refusals are counted in.
+pub const LOCK_WINDOW: u64 = 60 * 60;
 
 /// A registered passkey.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -37,6 +48,24 @@ pub struct Passkey {
     /// When it last proved the owner.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub used: Option<u64>,
+    /// Whether it is synced (backup-eligible) rather than device-bound; unknown for older ones.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub synced: Option<bool>,
+    /// When its bound assertions were refused, within [`LOCK_WINDOW`].
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub failures: Vec<u64>,
+}
+
+impl Passkey {
+    /// Whether [`LOCK_AFTER`] refusals in the last [`LOCK_WINDOW`] lock it at `now`.
+    #[must_use]
+    pub fn locked(&self, now: u64) -> bool {
+        self.failures
+            .iter()
+            .filter(|at| **at + LOCK_WINDOW > now)
+            .count()
+            >= LOCK_AFTER
+    }
 }
 
 /// What the authenticator data says.
@@ -230,6 +259,61 @@ pub fn grant_purpose(token: &str) -> String {
     format!("grant:{}", super::grants::key(token))
 }
 
+/// What adding a passkey is proven for, by an existing one.
+pub const ADD: &str = "passkey:add";
+
+/// The purpose removing passkey `id` is proven for.
+#[must_use]
+pub fn remove_purpose(id: &str) -> String {
+    format!("passkey:remove:{id}")
+}
+
+/// What a proof approves: the grant's operation, its target and the head or digest of what the
+/// page shows; empty for a purpose without a grant.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Bound {
+    /// The operation, such as `change.approve`.
+    pub operation: String,
+    /// What it acts on, such as a change's number.
+    pub target: String,
+    /// The head SHA, or the SHA-256 of what is approved.
+    pub head: String,
+}
+
+/// The challenge a passkey signs for `purpose` and `bound` with `nonce`, base64url; see
+/// `.claude/decisions/2026-11-14-security-passkey-only-owner-proofs.md` §2.
+#[must_use]
+pub fn bound_challenge(purpose: &str, bound: &Bound, nonce: &[u8]) -> String {
+    let mut h = Sha256::new();
+    for part in [
+        "pigeon-proof-v1",
+        purpose,
+        &bound.operation,
+        &bound.target,
+        &bound.head,
+    ] {
+        h.update(part.as_bytes());
+        h.update(b"\n");
+    }
+    h.update(nonce);
+    crate::push::b64url(&h.finalize())
+}
+
+/// What a bound proof leaves behind, each part base64url, for anyone holding the public key.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Evidence {
+    /// The passkey's credential ID.
+    pub passkey: String,
+    /// The challenge's nonce.
+    pub nonce: String,
+    /// The client data.
+    pub client: String,
+    /// The authenticator data.
+    pub authenticator: String,
+    /// The signature, DER.
+    pub signature: String,
+}
+
 /// A challenge minted for one purpose.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Minted {
@@ -239,6 +323,9 @@ pub struct Minted {
     pub purpose: String,
     /// When it lapses.
     pub expires: u64,
+    /// A bound challenge's nonce, base64url.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub nonce: Option<String>,
 }
 
 /// The owner's passkeys and their open challenges, as the `Instance` keeps them.
@@ -264,8 +351,37 @@ impl Keyring {
             challenge: challenge.clone(),
             purpose: purpose.to_string(),
             expires: now + CHALLENGE_TTL,
+            nonce: None,
         });
         (next, challenge)
+    }
+
+    /// Mints a challenge for `purpose` bound to `bound`, with `random` as its nonce, dropping
+    /// lapsed ones: the next keyring, and the challenge's base64url.
+    #[must_use]
+    pub fn mint_bound(
+        &self,
+        purpose: &str,
+        bound: &Bound,
+        random: &[u8],
+        now: u64,
+    ) -> (Self, String) {
+        let mut next = self.clone();
+        next.challenges.retain(|c| c.expires > now);
+        let challenge = bound_challenge(purpose, bound, random);
+        next.challenges.push(Minted {
+            challenge: challenge.clone(),
+            purpose: purpose.to_string(),
+            expires: now + CHALLENGE_TTL,
+            nonce: Some(crate::push::b64url(random)),
+        });
+        (next, challenge)
+    }
+
+    /// Whether passkey `id` is registered here.
+    #[must_use]
+    pub fn holds(&self, id: &str) -> bool {
+        self.keys.iter().any(|k| k.id == id)
     }
 
     /// Uses up the challenge `client` answers, which must be for `purpose`: the keyring without
@@ -309,6 +425,15 @@ impl Keyring {
         if id.is_empty() || next.keys.iter().any(|k| k.id == id) {
             return (next, Err("this passkey is already registered".into()));
         }
+        if next.keys.len() >= MAX_KEYS {
+            return (
+                next,
+                Err(format!("at most {MAX_KEYS} passkeys; remove one first")),
+            );
+        }
+        let synced = auth_data(authenticator)
+            .ok()
+            .map(|d| d.flags & BACKUP_ELIGIBLE != 0);
         next.keys.push(Passkey {
             id: id.to_string(),
             key: crate::push::b64url(&key),
@@ -316,6 +441,8 @@ impl Keyring {
             name: name.trim().chars().take(64).collect(),
             created: now,
             used: None,
+            synced,
+            failures: Vec::new(),
         });
         (next, Ok(()))
     }
@@ -359,6 +486,108 @@ impl Keyring {
             }
             Err(why) => (next, Err(why)),
         }
+    }
+
+    /// Checks a `webauthn.get` answer from passkey `id` to a challenge minted by
+    /// [`Self::mint_bound`] for `purpose`, against `bound` as it is now: the next keyring, whose
+    /// challenge is used up even when the answer is refused, and the proof's evidence or why it
+    /// was refused. A refused signature counts toward that passkey's lock, and no other's.
+    #[allow(clippy::too_many_arguments)]
+    pub fn prove_bound(
+        &self,
+        id: &str,
+        client: &[u8],
+        authenticator: &[u8],
+        signature: &[u8],
+        purpose: &str,
+        bound: &Bound,
+        host: &str,
+        rp: &str,
+        now: u64,
+    ) -> (Self, Result<Evidence, String>) {
+        let nonce = serde_json::from_slice::<serde_json::Value>(client)
+            .ok()
+            .and_then(|v| v["challenge"].as_str().map(str::to_string))
+            .and_then(|answered| {
+                self.challenges
+                    .iter()
+                    .find(|c| c.challenge == answered && c.purpose == purpose)
+                    .and_then(|c| c.nonce.clone())
+            });
+        let (mut next, challenge) = match self.take(client, purpose, now) {
+            Ok(taken) => taken,
+            Err(why) => return (self.clone(), Err(why)),
+        };
+        let Some(nonce) = nonce else {
+            return (
+                next,
+                Err("this challenge isn't bound; reload the page".into()),
+            );
+        };
+        let raw = crate::push::b64url_decode(&nonce).unwrap_or_default();
+        if bound_challenge(purpose, bound, &raw) != challenge {
+            return (
+                next,
+                Err("what this passkey signed for has changed; reload the page".into()),
+            );
+        }
+        let Some(i) = next.keys.iter().position(|k| k.id == id) else {
+            return (next, Err("this passkey isn't registered here".into()));
+        };
+        next.keys[i].failures.retain(|at| *at + LOCK_WINDOW > now);
+        if next.keys[i].locked(now) {
+            return (
+                next,
+                Err("this passkey is locked for an hour; use another".into()),
+            );
+        }
+        let checked = assert(
+            &next.keys[i],
+            client,
+            authenticator,
+            signature,
+            &challenge,
+            host,
+            rp,
+        );
+        match checked {
+            Ok(counter) => {
+                next.keys[i].counter = counter;
+                next.keys[i].used = Some(now);
+                next.keys[i].failures.clear();
+                let evidence = Evidence {
+                    passkey: id.to_string(),
+                    nonce,
+                    client: crate::push::b64url(client),
+                    authenticator: crate::push::b64url(authenticator),
+                    signature: crate::push::b64url(signature),
+                };
+                (next, Ok(evidence))
+            }
+            Err(why) => {
+                next.keys[i].failures.push(now);
+                (next, Err(why))
+            }
+        }
+    }
+
+    /// Removes passkey `id` unless fewer than `min` would be left: the next keyring, and why it
+    /// was refused.
+    pub fn remove_keeping(&self, id: &str, min: usize) -> (Self, Result<(), String>) {
+        if !self.holds(id) {
+            return (
+                self.clone(),
+                Err("this passkey isn't registered here".into()),
+            );
+        }
+        if self.keys.len() <= min {
+            return (
+                self.clone(),
+                Err(format!("at least {min} passkeys stay; add another first")),
+            );
+        }
+        let (next, _) = self.remove(id);
+        (next, Ok(()))
     }
 
     /// Removes passkey `id`: the next keyring, and whether it was there.
