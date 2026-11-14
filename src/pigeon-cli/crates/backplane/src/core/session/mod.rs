@@ -32,7 +32,7 @@ pub const EXIT_REFUSED: i32 = 3;
 pub const START: &str = "No pigeon session yet. Per CLAUDE.md:
 1. `git remote add artifacts https://platform.pigeon.dev/git/pigeon/pigeon.git`; fetch its main and branch from it.
 2. `session_start` with this session's URL, then write {\"label\": ..., \"ticket\": ...} to ~/.config/pigeon/session.json.
-3. `change_propose` with the ticket before writing the change; follow with `session.py follow`.";
+3. `change_propose` with the ticket before writing the change; follow with `sh tooling/session/session.sh follow`.";
 
 /// One event, as the follower reads it; unknown fields are ignored.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -429,7 +429,7 @@ pub fn brief(label: &str, status: Option<&Status>) -> String {
         )
     });
     let follow = (!s.listening()).then(|| {
-        "- not following events: arm Monitor with `python3 -I tooling/session/session.py follow`"
+        "- not following events: arm Monitor with `sh tooling/session/session.sh follow`"
             .to_string()
     });
     [format!("pigeon session {label}:")]

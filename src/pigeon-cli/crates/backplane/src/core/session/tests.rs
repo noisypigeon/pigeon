@@ -263,7 +263,7 @@ fn the_brief_puts_what_needs_the_agent_first() {
 - !2 two: failed, needs agent: fix clippy
 - !1 one: queued 2/3, needs change: !9 merges
 - task 4 (reconcile) on !2: rebase
-- not following events: arm Monitor with `python3 -I tooling/session/session.py follow`"
+- not following events: arm Monitor with `sh tooling/session/session.sh follow`"
     );
     assert_eq!(
         brief("s", Some(&status(r#"{"events":{"listening":true}}"#))),

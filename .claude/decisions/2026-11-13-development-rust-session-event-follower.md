@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: development
-* Governs: `tooling/session/session.py`, `.claude/settings.json`, `src/pigeon-cli/crates/backplane/src/worker/events.rs`, `src/pigeon-cli/crates/backplane/src/core/session/*.rs`, `src/pigeon-cli/crates/pigeon/src/cli/session.rs`, `src/pigeon-cli/crates/pigeon/src/commands/session.rs`
+* Governs: `tooling/session/session.py`, `.claude/settings.json`, `src/pigeon-cli/crates/backplane/src/worker/events.rs`, `src/pigeon-cli/crates/backplane/src/core/session/*.rs`, `src/pigeon-cli/crates/pigeon/src/cli/session.rs`, `src/pigeon-cli/crates/pigeon/src/commands/session.rs`, `tooling/session/session.sh`
 
 ## Context
 
@@ -236,3 +236,27 @@ which also governs `tooling/session/session.py`. !383 is this ADR's step 2.
   `session.sh` fell back to `session.py`, as §4 intends.
 - **`backplane` now includes `session`,** so the build `session.py install`
   fetches has it. `--features session` alone is still checked.
+
+### 2026-11-13: Step 3 lands: `pigeon session` (!385)
+
+- **The core** is `backplane::core::session`: `classify`, `path`,
+  `event_line`, `backoff`, `step` and the `brief`, `statusline` and `stop`
+  renderings, with 14 table tests and no network. The shell is `pigeon`'s
+  `session` feature, in the defaults.
+- **A proxy that refuses `CONNECT`,** such as for a host it doesn't allow,
+  fails in the transport, not with an HTTP status. So it is `Unreachable`:
+  the follower says so at the 5th failure and keeps trying. It doesn't stop
+  as it would after 10 minutes of `Refused`.
+- **Measured in a cloud session:** `brief` answers in under a second; 75 s
+  of `follow` with nothing new prints nothing; SIGTERM exits 0. Event lines
+  match `session.py`'s for the same events.
+
+### 2026-11-13: Step 4 lands: `session.sh` and `session.py install`
+
+- **`session.sh`** runs the first of the cached build, `pigeon` on `PATH`
+  and `session.py`, as §4 has it. A build without `session` falls through.
+- **`session.py install`** fetched the 20 MB build and checked it in about a
+  second; with the build current, it returns at once. `brief` through the
+  shim, installing first, finished in 5 s, inside the hook's 20.
+- **The start text and the brief's hint** in both the core and `session.py`
+  now name `sh tooling/session/session.sh follow`, as CLAUDE.md does.

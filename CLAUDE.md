@@ -126,7 +126,7 @@ Where each check runs:
   changes; `after=session` resumes from the session's cursor, which the
   control plane keeps, and `wake=agent` answers only what the agent must act
   on. Arm `Monitor` (30 minutes, re-armed on expiry) with
-  `python3 -I tooling/session/session.py follow` and act on each line rather
+  `sh tooling/session/session.sh follow` and act on each line rather
   than calling `change_status` on a timer; each change's `stage` says who acts
   next (`needs`) and what that is (`next`), and `session_status` lists them
   for a session. The control plane alone pushes to the owner; a session uses
