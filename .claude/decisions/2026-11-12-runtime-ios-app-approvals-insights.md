@@ -421,3 +421,22 @@ behind Home's avatar.
 - **Appearance moves** from the phone's storage to the profile.
 - **Name, avatar and appearance** take only the device signature. Every
   other write still asks for a passkey, as §3 decides.
+
+### 2026-11-14: A window never approves a brief's head awaiting review, or escalated
+
+Per
+[`2026-11-13-development-model-tiered-agent-briefs.md`](2026-11-13-development-model-tiered-agent-briefs.md)
+§5 and §6:
+
+- **A change carrying out a brief** is approved by a window only once its
+  brief's planner has accepted that head (`brief_review` with `accept`). It
+  is never approved by one while it is escalated to the planner.
+- **The gate is in the lifecycle,** not in `windows.rs`. `Change::approve`
+  refuses any approver named `window:`, `mandate:` or `policy:` for such a
+  head. A window that would allow it approves nothing, and the head stays
+  `in-review` or `escalated`.
+- **Once the head is accepted,** a window approves it as any other: on the
+  next ask, or by re-approving it after a restack, per the session-stages
+  ADR's 2026-11-14 amendment.
+- **The owner's own approval is unchanged.** Approving without a review is
+  theirs to do.

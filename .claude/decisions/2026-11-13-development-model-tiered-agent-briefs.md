@@ -683,3 +683,22 @@ changes, as !386 itself now plans: one per session and ADR.
 - **Not yet:** step 6's breaker for executors, whose tripped changes become
   `escalated` rather than `attended`. That waits for the session-stages
   ADR's `change_attend` (its step 6), and is this ADR's step 7.
+
+### 2026-11-14: Step 6 is done: the approval ADRs say Auto skips a brief's unreviewed head
+
+- **Step 5a's gate already does step 6's work.** No change to `windows.rs`
+  or `mandates.rs` was needed.
+- **The amendments this step listed land:**
+  - the iOS ADR's (windows):
+    [`2026-11-12-runtime-ios-app-approvals-insights.md`](2026-11-12-runtime-ios-app-approvals-insights.md);
+  - the tiered-approvals ADR's (mandates and policy):
+    [`2026-11-08-security-tiered-approvals-task-mandates.md`](2026-11-08-security-tiered-approvals-task-mandates.md).
+
+  Each says that a brief's head awaiting review, or escalated, is never
+  approved by a window, mandate or policy.
+- **The session-stages ADR's two-attended pause** waits for `change_attend`
+  (its step 6), which doesn't exist yet. That step amends the session-stages
+  ADR for executors, and refuses an executor's Resume (§2).
+- **Step 7 starts in shadow.** The per-class thresholds of §6 are counted
+  in `core/change/breaker.rs` and logged as `breaker.would_trip` with the
+  class. A trip becomes `escalated` once the breaker leaves shadow.

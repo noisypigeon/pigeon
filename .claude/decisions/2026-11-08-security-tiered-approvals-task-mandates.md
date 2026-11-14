@@ -391,3 +391,23 @@ approved at the code tier:
   - A redeemed grant is kept, marked `used`, until it expires, which is
     when minting prunes it.
   - It still can't be used twice.
+
+### 2026-11-14: A mandate or policy never approves a brief's head awaiting review, or escalated
+
+Per
+[`2026-11-13-development-model-tiered-agent-briefs.md`](2026-11-13-development-model-tiered-agent-briefs.md)
+§5 and §6:
+
+- **A change carrying out a brief** is approved under a mandate or by policy
+  only once its brief's planner has accepted that head (`brief_review` with
+  `accept`). It is never approved by either while it is escalated to the
+  planner.
+- **The gate is in the lifecycle,** not in `mandates.rs` or `approvals.rs`.
+  `Change::approve` refuses any approver named `mandate:`, `window:` or
+  `policy:` for such a head. A mandate's `allow` approves nothing, and the
+  head stays `in-review` or `escalated`.
+- **Few such changes reach a mandate.** An executor may not name one on
+  `change.propose`. A planner's change may name both a brief and a mandate,
+  and the gate holds for it too.
+- **Not yet:** refusing an executor `mandate.propose`. `mandates.rs` is
+  guarded, so that is a change at the owner's code.
