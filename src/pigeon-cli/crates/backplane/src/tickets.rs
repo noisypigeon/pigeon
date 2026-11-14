@@ -170,6 +170,20 @@ impl Tickets {
     }
 }
 
+/// The sessions whose ticket an agent's `operation` needs: its `session` argument, unless it
+/// names a recipient, and the session of the change it acts on; see
+/// `.claude/decisions/2026-11-13-development-model-tiered-agent-briefs.md`, 2026-11-14.
+#[must_use]
+pub fn guarded(operation: &str, session: Option<&str>, change: Option<&str>) -> Vec<String> {
+    let recipient = operation == "change.handoff";
+    session
+        .filter(|_| !recipient)
+        .into_iter()
+        .chain(change)
+        .map(str::to_string)
+        .collect()
+}
+
 /// Whether an agent's operation naming `labels` may go ahead with `ticket` at `now`: a label
 /// holding a live ticket needs that ticket, of its current generation; others need none.
 ///

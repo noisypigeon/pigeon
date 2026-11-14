@@ -1,7 +1,7 @@
 //! Session tickets; see `.claude/decisions/2026-11-08-development-events-tickets-digest-mandate.md` §5.
 
 use backplane::sessions::{Class, declare};
-use backplane::tickets::{REMEMBER, TTL, Tickets, require, sign, verify};
+use backplane::tickets::{REMEMBER, TTL, Tickets, guarded, require, sign, verify};
 
 const KEY: &[u8] = b"a session key for the tests only";
 const A: &str = "https://claude.ai/code/session_a";
@@ -140,4 +140,12 @@ fn a_ticket_stored_before_classes_reads_as_opus() {
     )
     .expect("an older record");
     assert_eq!(t.live(A, 1).expect("live").declared.model, Class::Opus);
+}
+
+#[test]
+fn a_handoff_needs_the_change_holders_ticket_not_the_recipients() {
+    const P: &str = "https://claude.ai/code/session_planner";
+    assert_eq!(guarded("change.handoff", Some(P), Some(A)), vec![A]);
+    assert_eq!(guarded("change.note", Some(P), Some(A)), vec![P, A]);
+    assert_eq!(guarded("task.claim", Some(P), None), vec![P]);
 }

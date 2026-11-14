@@ -148,10 +148,19 @@ pub async fn ended(env: &Env, c: &Change, merged: Option<&str>) -> Result<()> {
             {
                 continue;
             }
-            if let Some(p) =
+            let Some(p) =
                 crate::reconcile::review(open.number, &open.plan, c.number, &c.plan, &globs)
-                && reviewed.insert((open.session.clone(), p.scope.clone()))
-                && let Err(e) = reconcile(env, open.number, open.session.clone(), p).await
+            else {
+                continue;
+            };
+            let session = reviewer(env, &s, open.number, open.session.clone())
+                .await
+                .unwrap_or_else(|e| {
+                    worker::console_error!("reviewer of change {}: {e}", open.number);
+                    open.session.clone()
+                });
+            if reviewed.insert((session.clone(), p.scope.clone()))
+                && let Err(e) = reconcile(env, open.number, session, p).await
             {
                 worker::console_error!("review of change {}: {e}", open.number);
             }
@@ -159,6 +168,28 @@ pub async fn ended(env: &Env, c: &Change, merged: Option<&str>) -> Result<()> {
     }
     let (_, v) = to_instance(env, &s, "/merges/done", &json!({ "number": c.number })).await?;
     start(env, &s, serde_json::from_value(v["next"].clone()).ok()).await
+}
+
+/// Who reviews open change `n` of `session`: its brief's planner when it carries a brief, which
+/// an executor may not write; see
+/// `.claude/decisions/2026-11-13-development-model-tiered-agent-briefs.md`, 2026-11-14.
+///
+/// # Errors
+///
+/// When a binding fails.
+async fn reviewer(
+    env: &Env,
+    s: &Settings,
+    n: u32,
+    session: Option<String>,
+) -> Result<Option<String>> {
+    let (_, v) = to_change(env, &s.repo, n, Method::Get, "/status", None).await?;
+    let Some(id) = v["change"]["brief"].as_str() else {
+        return Ok(session);
+    };
+    let (status, brief) = to_instance(env, s, "/briefs/show", &json!({ "id": id })).await?;
+    let planner = brief["planner"].as_str().filter(|_| status == 200);
+    Ok(planner.map(str::to_string).or(session))
 }
 
 /// Whether change `n`, open in D1, is open in its own record; a merged or closed one is healed:

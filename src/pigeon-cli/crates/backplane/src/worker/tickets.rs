@@ -9,7 +9,7 @@ use worker::{Env, Method, Response, Result, State};
 use super::mandates::to_instance;
 use super::platform::{self, Settings, now};
 use super::to_change;
-use crate::tickets::{Tickets, require, sign};
+use crate::tickets::{Tickets, guarded, require, sign};
 use crate::wire;
 
 /// The `Instance` storage key the tickets live under.
@@ -183,7 +183,6 @@ pub async fn guard(
             .and_then(Value::as_str)
             .map(str::to_string)
     };
-    let mut labels: Vec<String> = text("session").into_iter().collect();
     let number = request.args.get("number").and_then(|v| match v {
         Value::String(n) => n.parse::<u32>().ok(),
         other => other.as_u64().and_then(|n| u32::try_from(n).ok()),
@@ -191,14 +190,18 @@ pub async fn guard(
     let scoped = request.operation.starts_with("change.")
         || request.operation == "ci.rerun"
         || request.operation == crate::control::BREAK_GLASS;
+    let mut owner = None;
     if let (Some(n), true) = (number, scoped) {
         let (status, v) = to_change(env, &s.repo, n, Method::Get, "/status", None).await?;
-        if status == 200
-            && let Some(l) = v["change"]["session"].as_str()
-        {
-            labels.push(l.to_string());
+        if status == 200 {
+            owner = v["change"]["session"].as_str().map(str::to_string);
         }
     }
+    let labels = guarded(
+        &request.operation,
+        text("session").as_deref(),
+        owner.as_deref(),
+    );
     allows(env, s, &labels, text("ticket").as_deref()).await
 }
 
