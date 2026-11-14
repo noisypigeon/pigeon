@@ -152,3 +152,66 @@ fn a_change_and_its_unpushed_generated_changes_hold_one_slot() {
         "the instance counts none of them"
     );
 }
+
+#[test]
+fn a_brief_task_goes_to_its_own_class_first_and_never_to_a_lesser_one() {
+    use backplane::sessions::Class;
+    use backplane::tasks::{OWN, Tasks};
+    let mut t = Tasks::default();
+    let id = t.add_brief("b3", Class::Sonnet, "b3 (sonnet): covers", 100);
+    assert_eq!(
+        t.add_brief("b3", Class::Sonnet, "again", 101),
+        id,
+        "one open task per brief"
+    );
+    let task = &t.list[0];
+    assert_eq!(
+        (task.kind.as_str(), task.brief.as_deref(), task.model),
+        ("brief", Some("b3"), Some(Class::Sonnet))
+    );
+
+    let seen = |t: &Tasks, c: Class, at: u64| t.visible_as(Some("s"), c, at).len();
+    assert_eq!(seen(&t, Class::Sonnet, 100), 1, "its own class at once");
+    assert_eq!(seen(&t, Class::Opus, 100), 0, "a more capable class waits");
+    assert_eq!(seen(&t, Class::Haiku, 100 + OWN), 0, "a lesser class never");
+    assert_eq!(
+        seen(&t, Class::Opus, 100 + OWN),
+        1,
+        "a more capable class after OWN"
+    );
+
+    let mut early = t.clone();
+    let why = early
+        .claim_as(id, "o", Class::Opus, 101)
+        .expect_err("too early");
+    assert!(why.contains("for a sonnet session for now"), "{why}");
+    let why = t
+        .claim_as(id, "h", Class::Haiku, 100 + OWN)
+        .expect_err("lesser");
+    assert!(why.contains("a haiku session can't take it"), "{why}");
+    let got = t
+        .claim_as(id, "s", Class::Sonnet, 101)
+        .expect("its own class");
+    assert_eq!(got.claimed_by.as_deref(), Some("s"));
+    assert_eq!(
+        t.visible_as(Some("s"), Class::Sonnet, 102).len(),
+        1,
+        "the claimer still sees it"
+    );
+}
+
+#[test]
+fn tasks_without_a_class_keep_their_rules_and_brief_tasks_are_never_swept() {
+    use backplane::sessions::Class;
+    use backplane::tasks::Tasks;
+    let mut t = Tasks::default();
+    let r = t.add("reconcile", 9, Some(8), None, "fix", 1);
+    t.add_brief("b1", Class::Haiku, "b1", 1);
+    assert_eq!(t.visible_as(None, Class::Haiku, 1).len(), 2);
+    assert!(
+        t.claim_as(r, "h", Class::Haiku, 1).is_ok(),
+        "any class takes an unclassed task"
+    );
+    let swept = t.sweep(&std::collections::BTreeSet::new());
+    assert_eq!(swept, vec![r], "the brief task outlives the sweep");
+}

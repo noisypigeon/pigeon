@@ -8,6 +8,7 @@ use worker::{Env, Response, Result, State};
 
 use super::mandates::to_instance;
 use super::platform::{Settings, now};
+use crate::sessions::Class;
 use crate::tasks::{Tasks, WAIT_MAX};
 
 /// The storage key of every task.
@@ -24,6 +25,17 @@ fn text(args: &Map<String, Value>, k: &str) -> Option<String> {
     }
 }
 
+/// `session`'s class, from its ticket: opus for none or a label never started; see
+/// `.claude/decisions/2026-11-13-development-model-tiered-agent-briefs.md` §3.
+async fn class(env: &Env, s: &Settings, session: Option<&str>) -> Result<Class> {
+    let Some(label) = session else {
+        return Ok(Class::Opus);
+    };
+    let (_, t) = to_instance(env, s, "/tickets/list", &json!({})).await?;
+    let tickets: crate::tickets::Tickets = serde_json::from_value(t).unwrap_or_default();
+    Ok(tickets.class(label).unwrap_or_default())
+}
+
 /// Runs `operation` with `args`: its status and answer.
 ///
 /// # Errors
@@ -37,14 +49,18 @@ pub async fn run(
 ) -> Result<(u16, Value)> {
     let session = text(args, "session").filter(|v| !v.trim().is_empty());
     let id = text(args, "id").and_then(|i| i.parse::<u32>().ok());
+    let class = class(env, s, session.as_deref()).await?;
     match operation {
-        "task.list" => to_instance(env, s, "/tasks/list", &json!({ "session": session })).await,
+        "task.list" => {
+            let body = json!({ "session": session, "class": class });
+            to_instance(env, s, "/tasks/list", &body).await
+        }
         "task.claim" => {
             let (status, v) = to_instance(
                 env,
                 s,
                 "/tasks/claim",
-                &json!({ "id": id, "session": session }),
+                &json!({ "id": id, "session": session, "class": class }),
             )
             .await?;
             if status == 200 && v["kind"] == "handoff" {
@@ -60,8 +76,8 @@ pub async fn run(
                 .min(WAIT_MAX);
             let until = now() + seconds;
             loop {
-                let (status, v) =
-                    to_instance(env, s, "/tasks/list", &json!({ "session": session })).await?;
+                let body = json!({ "session": session, "class": class });
+                let (status, v) = to_instance(env, s, "/tasks/list", &body).await?;
                 let open = v["tasks"]
                     .as_array()
                     .is_some_and(|t| t.iter().any(|t| t["claimed_by"].is_null()));
@@ -187,7 +203,17 @@ pub async fn serve(state: &State, path: &str, body: &Value) -> Result<Response> 
     let mut all: Tasks = storage.get(TASKS).await?.unwrap_or_default();
     let n = |k: &str| body[k].as_u64().and_then(|v| u32::try_from(v).ok());
     let session = body["session"].as_str();
+    let class: Class = serde_json::from_value(body["class"].clone()).unwrap_or_default();
     let answer: std::result::Result<Value, String> = match path {
+        "/tasks/add-brief" => match (
+            body["brief"].as_str(),
+            serde_json::from_value(body["model"].clone()),
+        ) {
+            (Some(b), Ok(m)) => Ok(
+                json!({ "id": all.add_brief(b, m, body["note"].as_str().unwrap_or_default(), now()) }),
+            ),
+            _ => Err("a brief task names its `brief` and `model`".into()),
+        },
         "/tasks/add" => Ok(json!({ "id": all.add(
             body["kind"].as_str().unwrap_or("task"),
             n("change").unwrap_or_default(),
@@ -197,11 +223,11 @@ pub async fn serve(state: &State, path: &str, body: &Value) -> Result<Response> 
             now(),
         ) })),
         "/tasks/list" => {
-            return Response::from_json(&json!({ "tasks": all.visible(session, now()) }));
+            return Response::from_json(&json!({ "tasks": all.visible_as(session, class, now()) }));
         }
         "/tasks/claim" => match n("id") {
             Some(id) => all
-                .claim(id, session.unwrap_or_default(), now())
+                .claim_as(id, session.unwrap_or_default(), class, now())
                 .map(|t| json!(t)),
             None => Err("`id` must be a task number".into()),
         },

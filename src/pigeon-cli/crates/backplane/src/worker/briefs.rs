@@ -91,6 +91,12 @@ pub async fn run(
                 "planner": label, "draft": d, "id": text(args, "id"), "reason": text(args, "reason"),
             });
             let (status, v) = to_instance(env, s, path, &body).await?;
+            if status == 200 && operation == "brief.create" {
+                let id = v["id"].as_str().unwrap_or_default();
+                let note = format!("{id} ({}): {}", d.model.name(), d.title);
+                let task = json!({ "brief": id, "model": d.model, "note": note });
+                to_instance(env, s, "/tasks/add-brief", &task).await?;
+            }
             if status == 200 {
                 let said = format!(
                     "{} r{} ({}): {}",

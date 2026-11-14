@@ -3,6 +3,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::sessions::Class;
+
 /// How long a task waits for its own session before any session may take it, in seconds.
 pub const OWN: u64 = 30 * 60;
 
@@ -34,9 +36,27 @@ pub struct Task {
     /// Whether it is done.
     #[serde(default)]
     pub done: bool,
+    /// For a `brief` task, the brief's id; see
+    /// `.claude/decisions/2026-11-13-development-model-tiered-agent-briefs.md` §3.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub brief: Option<String>,
+    /// For a `brief` task, the class it is for.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<Class>,
 }
 
 impl Task {
+    /// Whether a session of `class` may take it at `now`: any class when it names none; its own
+    /// class at once; a more capable one once it has waited [`OWN`]; a less capable one never.
+    #[must_use]
+    pub fn for_class(&self, class: Class, now: u64) -> bool {
+        match self.model {
+            None => true,
+            Some(m) if class == m => true,
+            Some(m) => class.covers(m) && now.saturating_sub(self.created) >= OWN,
+        }
+    }
+
     /// Whether `session` may see and take it at `now`: its own session at once, any session
     /// once it has waited [`OWN`], and the one that took it.
     #[must_use]
@@ -108,16 +128,43 @@ impl Tasks {
             created: now,
             claimed_by: None,
             done: false,
+            brief: None,
+            model: None,
         });
         self.last
     }
 
-    /// The open tasks `session` may see at `now`.
+    /// Adds the `brief` task for brief `id`, for `model`, unless an open one exists: its id.
+    pub fn add_brief(&mut self, id: &str, model: Class, note: &str, now: u64) -> u32 {
+        if let Some(t) = self
+            .list
+            .iter()
+            .find(|t| !t.done && t.kind == "brief" && t.brief.as_deref() == Some(id))
+        {
+            return t.id;
+        }
+        let n = self.add("brief", 0, None, None, note, now);
+        if let Some(t) = self.list.iter_mut().find(|t| t.id == n) {
+            t.brief = Some(id.to_string());
+            t.model = Some(model);
+        }
+        n
+    }
+
+    /// The open tasks `session` may see at `now`, as an opus session.
     #[must_use]
     pub fn visible(&self, session: Option<&str>, now: u64) -> Vec<&Task> {
+        self.visible_as(session, Class::Opus, now)
+    }
+
+    /// The open tasks `session`, of `class`, may see at `now`.
+    #[must_use]
+    pub fn visible_as(&self, session: Option<&str>, class: Class, now: u64) -> Vec<&Task> {
         self.list
             .iter()
-            .filter(|t| t.for_session(session, now))
+            .filter(|t| {
+                t.for_session(session, now) && (t.claimed_by.is_some() || t.for_class(class, now))
+            })
             .collect()
     }
 
@@ -127,6 +174,21 @@ impl Tasks {
     ///
     /// When there is no such open task, it is another session's for now, or taken.
     pub fn claim(&mut self, id: u32, session: &str, now: u64) -> Result<Task, String> {
+        self.claim_as(id, session, Class::Opus, now)
+    }
+
+    /// `session`, of `class`, takes task `id`.
+    ///
+    /// # Errors
+    ///
+    /// As [`Tasks::claim`], and when it is for another class.
+    pub fn claim_as(
+        &mut self,
+        id: u32,
+        session: &str,
+        class: Class,
+        now: u64,
+    ) -> Result<Task, String> {
         let t = self
             .list
             .iter_mut()
@@ -139,6 +201,17 @@ impl Tasks {
             return Err(match &t.claimed_by {
                 Some(by) => format!("task {id} is taken by {by}"),
                 None => format!("task {id} is its own session's for now"),
+            });
+        }
+        if t.claimed_by.is_none() && !t.for_class(class, now) {
+            let m = t.model.map_or("", Class::name);
+            return Err(if class.covers(t.model.unwrap_or_default()) {
+                format!("task {id} is for a {m} session for now")
+            } else {
+                format!(
+                    "task {id} is for a {m} session; a {} session can't take it",
+                    class.name()
+                )
             });
         }
         t.claimed_by = Some(session.to_string());

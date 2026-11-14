@@ -492,3 +492,24 @@ changes, as !386 itself now plans: one per session and ADR.
 
   A later step may check both in the bound job, which has the repository.
 - **Step 2c:** `brief` tasks, routed and claimed by class.
+
+### 2026-11-14: Step 2c lands, and step 2 is done: brief tasks claimed by class
+
+- **`brief.create` makes the brief's task** (`Tasks::add_brief`): kind
+  `brief`, with the brief's id and class, on no change. There is one open
+  task per brief. `brief` isn't in `SWEPT`, so the sweep never closes it, as
+  the 2026-11-13 review here asked.
+- **Who may take it, by the session's ticket class:**
+  - its own class at once;
+  - a more capable class once it has waited 30 minutes unclaimed (`OWN`);
+  - a less capable class never.
+
+  §3 said "at least the brief's `model`" at once. That would let opus
+  sessions take Haiku's work before any Haiku session looked, so a more
+  capable class waits.
+- **`task.list`, `task.wait` and `task.claim` read the session's class** and
+  show or allow only what that class may take. A task with no class keeps
+  today's rules for every class. A claimed task stays visible to its claimer.
+- **Not yet:** checking that a session's declared `brief` (§1) matches the
+  task it claims. That comes with step 3, which binds an executor's proposal
+  to its brief.
