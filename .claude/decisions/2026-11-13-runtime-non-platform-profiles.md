@@ -307,3 +307,24 @@ Then each use case is its own ADR: noisypigeon's sites onto its managed profile,
   - teardown removes every resource it created.
 - **The app:** `PigeonCore` tests the form's checks and each enrolment state's transitions; the clipboard is overwritten after a paste.
 - `mise run ci` passes at every step.
+
+## Amendments
+
+### 2026-11-14: A profile is now an instance
+
+[`2026-11-14-runtime-accounts-profiles-instances.md`](2026-11-14-runtime-accounts-profiles-instances.md)
+frees "profile" for the signed-in person. From now on, every "profile" in
+this ADR means an **instance**, and its names follow that ADR's §5 table:
+
+- the ledger is `.config/instances.yaml`, keyed `instances:`, and its policy
+  is `.config/policies/instances.yaml`;
+- D1's tables are `instances` and `instance_accounts`;
+- the operations are `instance.list`, `instance.enroll`, `instance.remove`,
+  `instance.check`, `instance.grant`, `instance.standup` and
+  `instance.teardown`, and the events are `instance.*`;
+- `profile.show <p>` is `instance.show` with `name`;
+- the routes are `/v0/app/instances/…` and `/grants/instances/<p>/<provider>`;
+- the grants ledger's field and `change_propose`'s argument are `instance`;
+- the app's **Add profile** is **Add instance**.
+
+Step 3 builds under these names from the start, so nothing is renamed twice.

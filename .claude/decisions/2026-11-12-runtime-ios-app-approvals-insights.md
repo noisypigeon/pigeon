@@ -409,3 +409,15 @@ Steps 3 to 7 each add the backplane files they create to this ADR's
   none.
 - **Totals sum from +0.0.** An empty range read `$-0.00`, because `f64`'s
   `Sum` starts at -0.0.
+
+### 2026-11-14: §8's profiles are instances
+
+[`2026-11-14-runtime-accounts-profiles-instances.md`](2026-11-14-runtime-accounts-profiles-instances.md)
+renames §8's "profiles" to **instances**: `/v0/app/instances`, and the
+**Instances** sheet, opened from Home's instance chip. "Profile" now means
+the signed-in person's own: name, avatar, appearance, passkeys and devices,
+behind Home's avatar.
+
+- **Appearance moves** from the phone's storage to the profile.
+- **Name, avatar and appearance** take only the device signature. Every
+  other write still asks for a passkey, as §3 decides.
