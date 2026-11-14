@@ -650,7 +650,7 @@ const CATALOG: &[Operation] = &[
         name: "approval.wait",
         engine: Engine::Backplane,
         effect: Effect::Build,
-        summary: "Show the owner's code card for a pending approval of `operation` (change.authorize, change.approve, change.merge or change.close) on change `number`, on a client that shows forms; the page's link works meanwhile",
+        summary: "Show the link to the owner's approval page for a pending approval of `operation` (change.authorize, change.approve, change.merge or change.close) on change `number`: a card that opens it on a client that shows such cards, text otherwise; it answers at once",
         args: &[NUMBER, arg("operation", true, Kind::String)],
     },
     Operation {

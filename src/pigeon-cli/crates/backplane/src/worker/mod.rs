@@ -151,7 +151,7 @@ fn number_arg(request: &wire::Request) -> Option<u32> {
 }
 
 /// A service token's call of an owner's operation: pending, with a link to the approval page,
-/// at once; `approval.wait` shows the card on a client that shows forms; see
+/// at once; `approval.wait` shows that link as a card; see
 /// `.claude/decisions/2026-11-08-security-tiered-approvals-task-mandates.md` §4.
 async fn offer(
     env: &Env,
@@ -248,7 +248,7 @@ pub(super) async fn ask(
                     "pending": { "operation": request.operation, "number": number, "link": link, "expires": expires }
                 }),
                 violations: vec![format!(
-                    "waiting for the owner: `{}` on change {number} is approved at {link} with the authenticator code, or in the card `approval_wait` shows",
+                    "waiting for the owner: `{}` on change {number} is approved at {link} with a passkey or the authenticator code; `approval_wait` shows the link as a card",
                     request.operation
                 )],
             }))
@@ -368,8 +368,9 @@ async fn under_change_grant(
     Ok(Some(run(env, s, &who, request).await))
 }
 
-/// `approval.wait`: the owner's code card for `operation` on change `number`, when the client
-/// shows forms.
+/// `approval.wait`: the link to the owner's approval page for `operation` on change `number`,
+/// as a URL card when the client shows them, else as text; see
+/// `.claude/decisions/2026-11-14-security-passkey-only-owner-proofs.md` §2.
 async fn wait(
     env: &Env,
     session: &mcp::Session,
@@ -390,15 +391,28 @@ async fn wait(
     if !grants::OPERATIONS.contains(&operation.as_str()) {
         return refused(format!("`{operation}` isn't approved by the owner"));
     }
-    if !session.form_elicitation {
-        return refused(
-            "this client doesn't show forms; the owner approves at the page's link".into(),
-        );
+    let s = Settings::from(env)?;
+    let host = env
+        .var(crate::cobot::ship_wire::HOST_VAR)
+        .map(|v| v.to_string())
+        .unwrap_or_default();
+    let waiting = approve::live(env, &s).await?;
+    let link = match waiting
+        .iter()
+        .find(|w| w.number == number && w.operation == operation)
+    {
+        Some(w) => format!("https://{host}{}", w.path),
+        None => match approve::pending(env, &s, &host, number, &operation).await {
+            Ok((link, _)) => link,
+            Err(why) => return refused(why),
+        },
+    };
+    let message = format!("`{operation}` on change {number} waits for the owner's passkey");
+    if session.url_elicitation {
+        let key = format!("{}{number}-{operation}", mcp::ELICIT);
+        return Response::from_json(&mcp::elicit_url(id, &key, &link, &message));
     }
-    match elicit::card(env.clone(), id.clone(), number, operation).await {
-        Ok(r) => Ok(r),
-        Err(why) => refused(why),
-    }
+    refused(format!("{message}: {link}"))
 }
 
 fn change_stub(env: &Env, repo: &str, number: u32) -> Result<worker::Stub> {

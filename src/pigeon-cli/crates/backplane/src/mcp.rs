@@ -31,6 +31,8 @@ pub mod code {
     pub const METHOD_NOT_FOUND: i64 = -32601;
     /// Bad parameters, or an unknown tool.
     pub const INVALID_PARAMS: i64 = -32602;
+    /// The client must open a URL-mode elicitation first.
+    pub const URL_ELICITATION_REQUIRED: i64 = -32042;
 }
 
 /// What a client declared at `initialize`, carried in its session ID.
@@ -310,31 +312,20 @@ pub fn answer(id: &Value, outcome: Result<Response, Error>) -> Value {
     }
 }
 
-/// The `elicitation/create` request asking for a form: `message` above `schema`'s fields.
+/// The error that asks the client to open `url`: a URL-mode elicitation, under `message`; see
+/// `.claude/decisions/2026-11-14-security-passkey-only-owner-proofs.md` §2.
 #[must_use]
-pub fn elicit_form(id: &str, message: &str, schema: &Value) -> Value {
+pub fn elicit_url(id: &Value, elicitation: &str, url: &str, message: &str) -> Value {
     json!({
         "jsonrpc": "2.0",
         "id": id,
-        "method": "elicitation/create",
-        "params": { "mode": "form", "message": message, "requestedSchema": schema },
-    })
-}
-
-/// The form asking for the owner's 6-digit authenticator code.
-#[must_use]
-pub fn code_schema() -> Value {
-    json!({
-        "type": "object",
-        "properties": { "code": {
-            "type": "string",
-            "title": "Authenticator code",
-            "description": "The 6-digit code from your authenticator app for pigeon",
-            "minLength": 6,
-            "maxLength": 6,
-            "pattern": "^[0-9]{6}$",
-        } },
-        "required": ["code"],
+        "error": {
+            "code": code::URL_ELICITATION_REQUIRED,
+            "message": message,
+            "data": { "elicitations": [{
+                "mode": "url", "elicitationId": elicitation, "url": url, "message": message,
+            }] },
+        },
     })
 }
 
