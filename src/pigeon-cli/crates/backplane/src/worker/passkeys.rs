@@ -13,7 +13,7 @@ use super::platform::{self, Settings, now};
 use crate::access::Identity;
 use crate::approve as page;
 use crate::core::approval::enroll::Enrolments;
-use crate::passkeys::{self, Bound, Keyring};
+use crate::passkeys::{self, Bound, Keyring, Proofs};
 use crate::push::{b64url, b64url_decode};
 use crate::totp::Guard;
 
@@ -30,6 +30,9 @@ const INSTANCE_PAGES: [(&str, &str, &str); 3] = [
     ("/grants/", "/grant-requests/peek", "grant.request"),
     ("/ci-window/", "/ci-window/peek", "ci.window"),
 ];
+
+/// Where the `Instance` keeps what it has seen proven with a passkey.
+const PROOFS: &str = "passkey-proofs";
 
 /// Where the `Instance` keeps the enrolments used and the wrong tokens tried.
 const ENROLMENTS: &str = "passkey-enrolments";
@@ -69,12 +72,16 @@ pub async fn serve(state: &State, path: &str, body: Value) -> Result<Response> {
     let (ring, answer) = match path {
         "/passkeys/list" => {
             let adding: u64 = storage.get(ADDING).await?.unwrap_or_default();
+            let proofs: Proofs = storage.get(PROOFS).await?.unwrap_or_default();
             let listed = json!({
             "keys": ring.keys.iter().map(|k| json!({
                 "id": k.id, "name": k.name, "created": k.created, "used": k.used,
                 "synced": k.synced,
             })).collect::<Vec<_>>(),
             "adding": adding > now(),
+            "proofs": {
+                "missing": proofs.missing(&ring, now()), "cutover": proofs.cutover,
+            },
             });
             (ring, listed)
         }
@@ -96,7 +103,8 @@ pub async fn serve(state: &State, path: &str, body: Value) -> Result<Response> {
             (ring, json!({ "status": "ok" }))
         }
         "/passkeys/register" => {
-            if body["coded"].as_bool() != Some(true) {
+            let coded = body["coded"].as_bool() == Some(true);
+            if !coded {
                 let adding: u64 = storage.get(ADDING).await?.unwrap_or_default();
                 if adding <= now() {
                     return Response::from_json(&outcome(Err(
@@ -115,6 +123,9 @@ pub async fn serve(state: &State, path: &str, body: Value) -> Result<Response> {
                 &rp,
                 now(),
             );
+            if registered.is_ok() && !coded {
+                seen(state, "added").await?;
+            }
             (ring, outcome(registered))
         }
         "/passkeys/prove" => proving(state, ring, &body, &rp).await?,
@@ -160,7 +171,10 @@ async fn proving(state: &State, ring: Keyring, body: &Value, rp: &str) -> Result
             now(),
         );
         let answer = match proved {
-            Ok(evidence) => json!({ "status": "ok", "evidence": evidence }),
+            Ok(evidence) => {
+                seen(state, &s("surface")).await?;
+                json!({ "status": "ok", "evidence": evidence })
+            }
             Err(why) => json!({ "status": "refused", "why": why }),
         };
         return Ok((ring, answer));
@@ -184,6 +198,9 @@ async fn proving(state: &State, ring: Keyring, body: &Value, rp: &str) -> Result
     if proved.is_err() && !guard.locked(t) {
         guard.failures.push(t);
         storage.put(elicit::GUARD, &guard).await?;
+    }
+    if proved.is_ok() {
+        seen(state, &s("surface")).await?;
     }
     Ok((ring, outcome(proved)))
 }
@@ -218,8 +235,19 @@ async fn enrolling(state: &State, ring: Keyring, body: &Value, rp: &str) -> Resu
     if registered.is_ok() {
         storage.put(ENROLMENTS, &all).await?;
         storage.put(KEYRING, &ring).await?;
+        seen(state, "enrolled").await?;
     }
     Response::from_json(&outcome(registered))
+}
+
+/// Records `surface` as proven with a passkey now; an empty or unknown one records nothing.
+async fn seen(state: &State, surface: &str) -> Result<()> {
+    if surface.is_empty() {
+        return Ok(());
+    }
+    let storage = state.storage();
+    let proofs: Proofs = storage.get(PROOFS).await?.unwrap_or_default();
+    storage.put(PROOFS, &proofs.seen(surface, now())).await
 }
 
 fn outcome(r: std::result::Result<(), String>) -> Value {
@@ -263,6 +291,7 @@ pub async fn prove(
             "id": f("pk_id"), "client": f("pk_client"), "authenticator": f("pk_authenticator"),
             "signature": f("pk_signature"), "purpose": purpose, "host": host,
             "rp": rp_for(env, host),
+            "surface": if purpose.starts_with("grant:") { "app" } else { "" },
         }),
     )
     .await?;
@@ -350,6 +379,9 @@ async fn prove_with(
     });
     if let Some((_, bound)) = bound_for(env, s, path).await? {
         asked["bound"] = json!(bound);
+    }
+    if path.starts_with("/approve/") {
+        asked["surface"] = json!("page");
     }
     let v = to_instance(env, s, "/passkeys/prove", &asked).await?;
     Ok(if v["status"] == "ok" {
@@ -576,9 +608,15 @@ async fn list(env: &Env, s: &Settings, said: Option<&str>) -> Result<Response> {
         })
         .collect();
     let adding = v["adding"].as_bool().unwrap_or(false);
+    let missing: Vec<String> =
+        serde_json::from_value(v["proofs"]["missing"].clone()).unwrap_or_default();
+    let cutover = page::Cutover {
+        missing: &missing,
+        since: v["proofs"]["cutover"].as_u64(),
+    };
     html_with(
         200,
-        &page::passkeys_page(&keys, said, adding),
+        &page::passkeys_page(&keys, said, adding, &cutover),
         page::PROOF_CSP,
     )
 }

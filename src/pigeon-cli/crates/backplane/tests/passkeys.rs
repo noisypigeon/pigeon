@@ -6,8 +6,8 @@
 mod kept;
 
 use backplane::passkeys::{
-    ADD, Bound, Keyring, LOCK_AFTER, MAX_KEYS, Passkey, REGISTER, assert, bound_challenge,
-    der_signature, grant_purpose, register, relying_party, remove_purpose,
+    ADD, Bound, Keyring, LOCK_AFTER, MAX_KEYS, Passkey, Proofs, RECENT, REGISTER, assert,
+    bound_challenge, der_signature, grant_purpose, register, relying_party, remove_purpose,
 };
 use backplane::push::b64url;
 use p256::ecdsa::signature::Signer as _;
@@ -574,4 +574,50 @@ fn a_keyring_stored_before_these_fields_still_reads() {
     assert_eq!(ring.keys[0].synced, None);
     assert_eq!(ring.keys[0].failures, Vec::<u64>::new());
     assert_eq!(ring.challenges[0].nonce, None);
+}
+
+// See `.claude/decisions/2026-11-14-security-passkey-only-owner-proofs.md` §4.
+#[test]
+fn the_cutover_is_made_only_when_asked_and_nothing_is_missing_and_is_never_undone() {
+    let k = key();
+    let now = 10_000_000;
+    let mut ring = ring_of(&k, &["phone"], 0x0d);
+    let mut proofs = Proofs::default();
+    assert_eq!(proofs.missing(&ring, now).len(), 7, "everything");
+    assert!(!kept!(proofs.cutover(true, &ring, now)), "nothing proven");
+
+    for surface in ["page", "app", "added", "enrolled", "nonsense"] {
+        proofs = proofs.seen(surface, now);
+    }
+    assert_eq!(
+        proofs.missing(&ring, now),
+        [
+            "two passkeys (there are 1)",
+            "a device-bound passkey, such as a security key",
+            "two passkeys used in the last 14 days (there are 0)",
+        ]
+    );
+
+    ring.keys.extend(ring_of(&k, &["key"], 0x05).keys);
+    ring.keys[0].used = Some(now - 10);
+    ring.keys[1].used = Some(now - RECENT);
+    assert_eq!(
+        proofs.missing(&ring, now),
+        ["two passkeys used in the last 14 days (there are 1)"]
+    );
+    ring.keys[1].used = Some(now - 20);
+    assert_eq!(proofs.missing(&ring, now), Vec::<String>::new());
+
+    assert!(!kept!(proofs.cutover(false, &ring, now)), "not asked");
+    assert_eq!(proofs.cutover, None);
+    assert!(kept!(proofs.cutover(true, &ring, now)));
+    assert_eq!(proofs.cutover, Some(now));
+    let none = Keyring::default();
+    assert!(
+        kept!(proofs.cutover(false, &none, now + 99)),
+        "never undone"
+    );
+    assert_eq!(proofs.cutover, Some(now));
+    let old: Proofs = serde_json::from_str("{}").expect("reads");
+    assert_eq!(old, Proofs::default());
 }

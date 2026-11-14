@@ -270,12 +270,27 @@ fn the_passkeys_page_adds_with_a_passkey_and_removes_with_one() {
     };
     let ours = "<script src=\"/passkey.js\" defer></script>";
 
-    let none = approve::passkeys_page(&[], None, false);
+    let lacks = ["two passkeys (there are 0)".to_string(), "<b>".to_string()];
+    let lacking = approve::Cutover {
+        missing: &lacks,
+        since: None,
+    };
+    let ready = approve::Cutover {
+        missing: &[],
+        since: None,
+    };
+    let made = approve::Cutover {
+        missing: &lacks,
+        since: Some(77),
+    };
+    let none = approve::passkeys_page(&[], None, false, &lacking);
+    assert!(none.contains("<li>two passkeys (there are 0)</li><li>&lt;b&gt;</li>"));
     assert!(!none.contains("passkey:add"), "nothing to prove with yet");
     assert_eq!(none.matches("name=\"code\"").count(), 1, "{none}");
 
     let keys = [key("a", Some(true)), key("b", Some(false))];
-    let html = approve::passkeys_page(&keys, Some("<said>"), false);
+    let html = approve::passkeys_page(&keys, Some("<said>"), false, &ready);
+    assert!(html.contains("Ready: everything the cutover needs is on record."));
     assert_eq!(html.matches(ours).count(), 1, "{html}");
     assert!(!html.replace(ours, "").contains("<script"), "{html}");
     assert!(html.contains("&lt;a&gt;") && html.contains("&lt;said&gt;"));
@@ -290,7 +305,9 @@ fn the_passkeys_page_adds_with_a_passkey_and_removes_with_one() {
         "two removals, one add"
     );
 
-    let adding = approve::passkeys_page(&keys, None, true);
+    let adding = approve::passkeys_page(&keys, None, true, &made);
+    assert!(adding.contains("Codes are refused since 77"));
+    assert!(!adding.contains("still needed"));
     assert!(!adding.contains("passkey:add"), "already proven");
     assert_eq!(
         adding.matches("name=\"code\"").count(),

@@ -622,3 +622,97 @@ impl Keyring {
         (next, removed)
     }
 }
+
+/// How recently a passkey must have proven the owner to count toward the cutover, in seconds.
+pub const RECENT: u64 = 14 * 24 * 60 * 60;
+
+/// What the `Instance` has seen proven with a passkey, each with when, and when codes were first
+/// refused; see `.claude/decisions/2026-11-14-security-passkey-only-owner-proofs.md` §4.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Proofs {
+    /// A change approved on its page.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub page: Option<u64>,
+    /// A change approved in the app.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub app: Option<u64>,
+    /// A passkey added with a passkey.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub added: Option<u64>,
+    /// A passkey enrolled with a one-time enrolment.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub enrolled: Option<u64>,
+    /// When the cutover was made; never unset.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cutover: Option<u64>,
+}
+
+impl Proofs {
+    /// These proofs with `surface` (`page`, `app`, `added` or `enrolled`) seen at `now`; any
+    /// other surface changes nothing.
+    #[must_use]
+    pub fn seen(&self, surface: &str, now: u64) -> Self {
+        let mut next = self.clone();
+        match surface {
+            "page" => next.page = Some(now),
+            "app" => next.app = Some(now),
+            "added" => next.added = Some(now),
+            "enrolled" => next.enrolled = Some(now),
+            _ => {}
+        }
+        next
+    }
+
+    /// What the cutover still lacks at `now`, one line each; nothing when it may be made.
+    #[must_use]
+    pub fn missing(&self, ring: &Keyring, now: u64) -> Vec<String> {
+        let mut out = Vec::new();
+        if ring.keys.len() < 2 {
+            out.push(format!("two passkeys (there are {})", ring.keys.len()));
+        }
+        if !ring.keys.iter().any(|k| k.synced == Some(false)) {
+            out.push("a device-bound passkey, such as a security key".to_string());
+        }
+        let recent = ring
+            .keys
+            .iter()
+            .filter(|k| k.used.is_some_and(|at| at + RECENT > now))
+            .count();
+        if recent < 2 {
+            out.push(format!(
+                "two passkeys used in the last 14 days (there are {recent})"
+            ));
+        }
+        let wanted = [
+            (self.page, "a change approved with a passkey on its page"),
+            (self.app, "a change approved with a passkey in the app"),
+            (self.added, "a passkey added with a passkey"),
+            (
+                self.enrolled,
+                "an enrolment drill with `pigeon backplane enroll-secret`",
+            ),
+        ];
+        out.extend(
+            wanted
+                .iter()
+                .filter(|(at, _)| at.is_none())
+                .map(|(_, what)| (*what).to_string()),
+        );
+        out
+    }
+
+    /// Whether codes are refused at `now`: once made, always; else only when `asked` and nothing
+    /// is missing, which makes it. The next proofs, and the answer.
+    #[must_use]
+    pub fn cutover(&self, asked: bool, ring: &Keyring, now: u64) -> (Self, bool) {
+        if self.cutover.is_some() {
+            return (self.clone(), true);
+        }
+        if asked && self.missing(ring, now).is_empty() {
+            let mut next = self.clone();
+            next.cutover = Some(now);
+            return (next, true);
+        }
+        (self.clone(), false)
+    }
+}

@@ -340,6 +340,15 @@ fn proof_button(purpose: &str, label: &str) -> String {
     )
 }
 
+/// Where the passkey-only cutover stands: what it still lacks, and since when codes are refused.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Cutover<'a> {
+    /// What is still needed before codes are refused, one line each.
+    pub missing: &'a [String],
+    /// When codes were first refused.
+    pub since: Option<u64>,
+}
+
 /// A passkey as `/passkeys` lists it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Listed {
@@ -359,7 +368,12 @@ pub struct Listed {
 /// an existing passkey (`adding`, once it has been) or the code; and `said`. See
 /// `.claude/decisions/2026-11-14-security-passkey-only-owner-proofs.md` §3.
 #[must_use]
-pub fn passkeys_page(keys: &[Listed], said: Option<&str>, adding: bool) -> String {
+pub fn passkeys_page(
+    keys: &[Listed],
+    said: Option<&str>,
+    adding: bool,
+    cutover: &Cutover,
+) -> String {
     use std::fmt::Write as _;
     let mut b = String::from("<h1>Passkeys</h1>");
     if let Some(said) = said {
@@ -395,6 +409,28 @@ authenticator code; removing one takes either.</p>",
             );
         }
         b.push_str("</ul>");
+    }
+    b.push_str("<h2>Passkey-only</h2>");
+    match (cutover.since, cutover.missing.is_empty()) {
+        (Some(at), _) => {
+            let _ = write!(
+                b,
+                "<p>Codes are refused since {at}; a passkey is the only proof.</p>"
+            );
+        }
+        (None, true) => b.push_str(
+            "<p>Ready: everything the cutover needs is on record. Codes still work until it is \
+made.</p>",
+        ),
+        (None, false) => {
+            b.push_str(
+                "<p>Codes still work. Before they can be refused, this is still needed:</p><ul>",
+            );
+            for line in cutover.missing {
+                let _ = write!(b, "<li>{}</li>", escape(line));
+            }
+            b.push_str("</ul>");
+        }
     }
     b.push_str("<h2>Add a passkey</h2>");
     if !keys.is_empty() && !adding {
