@@ -149,7 +149,9 @@ impl ChangeRun {
             {
                 self.macos_abandon(github, &before, a).await;
             }
-            return self.state.storage().put(MACOS, &None::<Job>).await;
+            // Deleted: storage refuses `put` of `None`, which becomes `undefined`.
+            self.state.storage().delete(MACOS).await?;
+            return Ok(());
         }
         let Ok(cfg) = macos::config() else {
             return Ok(());

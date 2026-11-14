@@ -1093,7 +1093,9 @@ impl DurableObject for ChangeRun {
         let running: Vec<String> = change
             .jobs
             .iter()
+            // A mirrored head's `ios` check is its macOS job's, never a Container's.
             .filter(|j| j.status == JobStatus::Running && !github.owns(&head, &j.name))
+            .filter(|j| !(mirrors && macos_check::is_ios(&change, &j.name)))
             .map(|j| j.name.clone())
             .collect();
         let restack_status = |c: &Change| {
