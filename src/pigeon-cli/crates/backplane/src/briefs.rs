@@ -65,6 +65,21 @@ impl Briefs {
         Ok(next)
     }
 
+    /// Records change `change` as carrying out brief `id`.
+    ///
+    /// # Errors
+    ///
+    /// When there's no such brief.
+    pub fn bind(&mut self, id: &str, change: u32) -> Result<&Brief, String> {
+        let b = number(id)
+            .and_then(|n| self.briefs.get_mut(&n))
+            .ok_or_else(|| format!("no brief `{id}`"))?;
+        if !b.changes.contains(&change) {
+            b.changes.push(change);
+        }
+        Ok(b)
+    }
+
     /// Brief `id`.
     #[must_use]
     pub fn get(&self, id: &str) -> Option<&Brief> {

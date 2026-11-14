@@ -513,3 +513,33 @@ changes, as !386 itself now plans: one per session and ADR.
 - **Not yet:** checking that a session's declared `brief` (§1) matches the
   task it claims. That comes with step 3, which binds an executor's proposal
   to its brief.
+
+### 2026-11-14: Step 3 splits in two; its first part lands: an executor proposes only its brief's change
+
+- **Why two parts.** Refusing an executor the `guarded`, `secrets`,
+  `deploying` and `sentinel` paths needs `.config/approvals.yaml`'s lists,
+  which the bound job reads, not the Worker at propose time. They come in
+  step 3b, from the bound job's tiers.
+- **Step 3a, this change:** `core::brief::executor::check`, pure. It reads
+  the session's ticket (class and declared brief), the brief, and the open
+  change already carrying the brief:
+  - an opus session proposes as before, and may name a brief too;
+  - an executor must name a brief that exists, that its class covers, and
+    that matches its declared one;
+  - it may name no `affects`, no mandate, and no scope under
+    `.claude/decisions/`;
+  - its scope, if given, is exactly the brief's;
+  - **one open change per brief:** a second one is refused, naming the first.
+- **The brief writes the change.** With `brief`, `change.propose` takes its
+  title from the brief's `commit`. Its plan is the brief's plan plus a line
+  citing the brief, its revision, class, ADR and step. Its scope is the
+  brief's. Without `brief`, title, plan and scope are required as before.
+  The brief records each change proposed for it (`/briefs/bind`).
+- **A brief never names an ADR in its scope:** validation refuses it, since
+  only the planner writes ADRs.
+- **Not in this part:**
+  - the `Brief:` commit trailer (§4), which is the executor's to write by
+    `CLAUDE.md`'s rules in step 4;
+  - `mandate.propose`, `change_attend`'s Resume, `change_handoff` to an
+    executor, and the `reconcile` and `review` claim refusals of §2, which
+    come with step 3b.

@@ -44,6 +44,8 @@ pub enum Routed {
         after: Option<u32>,
         /// What it asks the owner at its plan approval.
         asks: Vec<crate::core::change::asks::Ask>,
+        /// The brief it carries out, if any; its title, plan and scope then come from it.
+        brief: Option<String>,
     },
     /// Apply an event to change `number`; `by` is filled in from Access.
     Event {
@@ -240,7 +242,12 @@ fn propose_route(a: &Map<String, Value>) -> Result<Routed, String> {
             .map(str::to_string)
             .collect()
     };
-    let scope = globs(&need(a, "scope")?);
+    let brief = text(a, "brief").filter(|b| !b.trim().is_empty());
+    let given = |k: &str| match &brief {
+        Some(_) => Ok(text(a, k).unwrap_or_default()),
+        None => need(a, k),
+    };
+    let scope = globs(&given("scope")?);
     let affects = globs(&text(a, "affects").unwrap_or_default());
     let session = crate::sessions::session(text(a, "session").as_deref())?;
     let mandate = match text(a, "mandate") {
@@ -253,8 +260,8 @@ fn propose_route(a: &Map<String, Value>) -> Result<Routed, String> {
     };
     Ok(Routed::Propose {
         slug,
-        title: need(a, "title")?,
-        plan: need(a, "plan")?,
+        title: given("title")?,
+        plan: given("plan")?,
         scope,
         mandate,
         session,
@@ -263,6 +270,7 @@ fn propose_route(a: &Map<String, Value>) -> Result<Routed, String> {
         resumes: number_arg(a, "resumes")?,
         after: number_arg(a, "after")?,
         asks: crate::core::change::asks::parse(&text(a, "asks").unwrap_or_default())?,
+        brief,
     })
 }
 

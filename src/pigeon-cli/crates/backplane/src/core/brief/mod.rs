@@ -5,6 +5,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::sessions::Class;
 
+pub mod executor;
+
 /// The most paths a brief may touch.
 pub const MAX_SCOPE: usize = 12;
 
@@ -138,6 +140,9 @@ pub struct Brief {
     pub planner: String,
     /// Its revisions.
     pub revisions: Vec<Revision>,
+    /// The changes proposed to carry it out, oldest first.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub changes: Vec<u32>,
 }
 
 impl Brief {
@@ -162,6 +167,7 @@ impl Brief {
                 at,
                 reason: "created".into(),
             }],
+            changes: Vec::new(),
         })
     }
 
@@ -292,6 +298,11 @@ fn scope(draft: &Draft, out: &mut Vec<String>) {
         if bad {
             out.push(format!(
                 "`scope` path `{p}` is an exact relative path, with no glob"
+            ));
+        }
+        if p.starts_with(".claude/decisions/") {
+            out.push(format!(
+                "`scope` path `{p}` is an ADR; the planner writes ADRs"
             ));
         }
     }

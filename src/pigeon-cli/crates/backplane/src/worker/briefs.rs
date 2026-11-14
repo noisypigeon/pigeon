@@ -150,6 +150,13 @@ pub async fn serve(state: &State, path: &str, body: &Value) -> Result<Response> 
             return Response::from_json(&json!({ "briefs": rows }));
         }
         "/briefs/create" => draft().and_then(|d| all.create(planner, d, now())),
+        "/briefs/bind" => {
+            let change = body["change"]
+                .as_u64()
+                .and_then(|c| u32::try_from(c).ok())
+                .unwrap_or_default();
+            all.bind(id, change).cloned().map_err(|e| vec![e])
+        }
         "/briefs/amend" => {
             let reason = body["reason"].as_str().unwrap_or_default();
             draft().and_then(|d| all.amend(id, planner, d, reason, now()))

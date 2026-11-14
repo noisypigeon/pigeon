@@ -588,7 +588,15 @@ async fn dispatch(
             resumes,
             after,
             asks,
+            brief,
         } => {
+            let (title, plan, scope, brief) =
+                match executes(env, s, session.as_deref(), brief, &scope, &affects, mandate).await?
+                {
+                    Ok(None) => (title, plan, scope, None),
+                    Ok(Some((t, p, sc, id))) => (t, p, sc, Some(id)),
+                    Err(why) => return Ok((None, respond(operation, 403, json!(why)))),
+                };
             let built = match after {
                 Some(n) => match built_on(env, s, n).await? {
                     Ok(a) => Some(a),
@@ -612,6 +620,18 @@ async fn dispatch(
             change.after.clone_from(&built);
             change.asks = asks;
             let proposed = propose(env, s, operation, change).await?;
+            if let (Some(id), Some(number)) = (
+                &brief,
+                proposed.0.as_deref().and_then(|n| n.parse::<u32>().ok()),
+            ) {
+                mandates::to_instance(
+                    env,
+                    s,
+                    "/briefs/bind",
+                    &json!({ "id": id, "change": number }),
+                )
+                .await?;
+            }
             if let Some(n) = resumes {
                 tasks::close_for(env, s, n).await?;
             }
@@ -866,6 +886,72 @@ async fn propose(
             json!("no change number was free; try again"),
         ),
     ))
+}
+
+/// Whether `session` may propose a change naming `brief`, with `scope`, `affects` and `mandate`:
+/// nothing to fill when it names none and plans; else the brief's title, plan, scope and id; see
+/// `.claude/decisions/2026-11-13-development-model-tiered-agent-briefs.md` §4.
+#[allow(clippy::type_complexity)]
+async fn executes(
+    env: &Env,
+    s: &Settings,
+    session: Option<&str>,
+    brief: Option<String>,
+    scope: &[String],
+    affects: &[String],
+    mandate: Option<u32>,
+) -> Result<std::result::Result<Option<(String, String, Vec<String>, String)>, String>> {
+    use crate::core::brief::{
+        Brief,
+        executor::{self, Proposal, Proposer},
+    };
+    let (_, t) = mandates::to_instance(env, s, "/tickets/list", &json!({})).await?;
+    let tickets: crate::tickets::Tickets = serde_json::from_value(t).unwrap_or_default();
+    let declared = session
+        .and_then(|l| tickets.0.get(l))
+        .map(|i| i.declared.clone())
+        .unwrap_or_default();
+    let found: Option<Brief> = match &brief {
+        Some(id) => {
+            let (status, v) =
+                mandates::to_instance(env, s, "/briefs/show", &json!({ "id": id })).await?;
+            (status == 200)
+                .then(|| serde_json::from_value(v).ok())
+                .flatten()
+        }
+        None => None,
+    };
+    let open: Option<u32> = match &found {
+        Some(b) if !b.changes.is_empty() => {
+            let rows = platform::d1_rows(env, &control::open(&s.instance, &s.repo)).await?;
+            let open = control::open_rows(&rows);
+            b.changes
+                .iter()
+                .rev()
+                .copied()
+                .find(|n| open.iter().any(|o| o.number == *n))
+        }
+        _ => None,
+    };
+    let who = Proposer {
+        class: declared.model,
+        declared: declared.brief.as_deref(),
+    };
+    let p = Proposal {
+        scope,
+        affects,
+        mandate,
+        brief: brief.as_deref(),
+    };
+    let problems = executor::check(who, p, found.as_ref(), open);
+    if !problems.is_empty() {
+        return Ok(Err(problems.join("; ")));
+    }
+    Ok(Ok(found.map(|b| {
+        let (title, plan) = executor::commit(&b);
+        let scope = b.latest().draft.scope.clone();
+        (title, plan, scope, b.id)
+    })))
 }
 
 /// Parks change `from` behind `to`, as `by` for `reason`: on the change, in the Instance's yield

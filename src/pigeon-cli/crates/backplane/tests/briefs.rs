@@ -234,3 +234,110 @@ fn the_store_numbers_briefs_and_amends_only_by_their_planner() {
     let every: Vec<&str> = all.list(None).iter().map(|b| b.id.as_str()).collect();
     assert_eq!(every, ["b2", "b1"], "newest first");
 }
+
+#[test]
+fn a_brief_never_touches_an_adr() {
+    let mut d = draft(Class::Sonnet);
+    let adr = ".claude/decisions/2026-11-13-development-model-tiered-agent-briefs.md";
+    d.scope.push(adr.into());
+    assert!(has(&validate(&d), "the planner writes ADRs"));
+}
+
+mod executor {
+    use super::{Class, PLANNER, draft};
+    use backplane::core::brief::Brief;
+    use backplane::core::brief::executor::{Proposal, Proposer, check, commit};
+
+    fn brief(model: Class) -> Brief {
+        Brief::create(4, PLANNER, draft(model), 1).expect("valid")
+    }
+
+    fn p<'a>(scope: &'a [String], brief: Option<&'a str>) -> Proposal<'a> {
+        Proposal {
+            scope,
+            affects: &[],
+            mandate: None,
+            brief,
+        }
+    }
+
+    fn who(class: Class, declared: Option<&str>) -> Proposer<'_> {
+        Proposer { class, declared }
+    }
+
+    #[test]
+    fn a_planner_proposes_freely_and_an_executor_only_its_brief() {
+        let none: Vec<String> = Vec::new();
+        assert_eq!(
+            check(who(Class::Opus, None), p(&[], None), None, None),
+            none
+        );
+        let refused = check(who(Class::Haiku, Some("b4")), p(&[], None), None, None);
+        assert!(refused[0].contains("executes a brief"), "{refused:?}");
+        let b = brief(Class::Haiku);
+        let own = check(
+            who(Class::Haiku, Some("b4")),
+            p(&[], Some("b4")),
+            Some(&b),
+            None,
+        );
+        assert_eq!(own, none);
+    }
+
+    #[test]
+    fn an_executor_is_refused_what_its_brief_doesnt_allow() {
+        let b = brief(Class::Sonnet);
+        let has = |v: &[String], s: &str| v.iter().any(|x| x.contains(s));
+        let v = check(who(Class::Haiku, None), p(&[], Some("b4")), Some(&b), None);
+        assert!(has(&v, "a haiku session can't carry it out"), "{v:?}");
+        let v = check(
+            who(Class::Sonnet, Some("b9")),
+            p(&[], Some("b4")),
+            Some(&b),
+            None,
+        );
+        assert!(has(&v, "declared brief b9"), "{v:?}");
+        let other = vec!["src/other.rs".to_string()];
+        let v = check(
+            who(Class::Sonnet, None),
+            p(&other, Some("b4")),
+            Some(&b),
+            None,
+        );
+        assert!(has(&v, "the scope is b4's"), "{v:?}");
+        let adr = vec![".claude/decisions/x.md".to_string()];
+        let v = check(
+            who(Class::Sonnet, None),
+            p(&adr, Some("b4")),
+            Some(&b),
+            None,
+        );
+        assert!(has(&v, "never writes an ADR"), "{v:?}");
+        let affects = vec!["src/**".to_string()];
+        let q = Proposal {
+            scope: &[],
+            affects: &affects,
+            mandate: Some(3),
+            brief: Some("b4"),
+        };
+        let v = check(who(Class::Sonnet, None), q, Some(&b), None);
+        assert!(has(&v, "no `affects`") && has(&v, "not a mandate"), "{v:?}");
+        let v = check(
+            who(Class::Sonnet, None),
+            p(&[], Some("b4")),
+            Some(&b),
+            Some(410),
+        );
+        assert!(has(&v, "already has open change !410"), "{v:?}");
+        let v = check(who(Class::Sonnet, None), p(&[], Some("b5")), None, None);
+        assert!(has(&v, "no brief `b5`"), "{v:?}");
+    }
+
+    #[test]
+    fn an_executors_change_carries_the_briefs_commit_and_revision() {
+        let b = brief(Class::Haiku);
+        let (title, plan) = commit(&b);
+        assert_eq!(title, "feat(backplane): Class::covers");
+        assert!(plan.contains("Carries out brief b4 r1 (haiku)"), "{plan}");
+    }
+}

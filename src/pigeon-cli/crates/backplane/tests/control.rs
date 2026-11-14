@@ -77,6 +77,7 @@ fn operations_route_to_events_with_the_access_identity() {
             resumes: None,
             after: None,
             asks: Vec::new(),
+            brief: None,
         })
     );
     assert!(
@@ -1274,5 +1275,38 @@ fn a_grant_operation_names_its_grant() {
             operation: "grant.list".into(),
             name: String::new()
         })
+    );
+}
+
+#[test]
+fn a_proposal_naming_a_brief_may_leave_title_plan_and_scope_to_it() {
+    let routed = control::route(
+        &request(
+            "change.propose",
+            &json!({ "slug": "b4-covers", "brief": "b4" }),
+        ),
+        "agent",
+        1,
+    );
+    match routed {
+        Ok(Routed::Propose {
+            brief,
+            title,
+            scope,
+            ..
+        }) => {
+            assert_eq!(brief.as_deref(), Some("b4"));
+            assert!(title.is_empty() && scope.is_empty());
+        }
+        other => panic!("{other:?}"),
+    }
+    let without = control::route(
+        &request("change.propose", &json!({ "slug": "x" })),
+        "agent",
+        1,
+    );
+    assert!(
+        without.is_err(),
+        "title, plan and scope are needed without a brief"
     );
 }
