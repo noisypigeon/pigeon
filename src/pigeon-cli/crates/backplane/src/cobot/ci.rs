@@ -740,6 +740,30 @@ fn merge_tree(dir: &Path, ours: &str, theirs: &str) -> Result<Result<String, Vec
     }
 }
 
+/// `merge_tree` of `ours` and `theirs` with `base` as their merge base: each tree recommitted
+/// on a root commit of `base`'s tree, as `merge-tree --merge-base` would on git 2.40.
+fn merge_from(
+    dir: &Path,
+    base: &str,
+    ours: &str,
+    theirs: &str,
+) -> Result<Result<String, Vec<String>>, Error> {
+    let tree = |c: &str| git(dir, "", "", &["rev-parse", &format!("{c}^{{tree}}")]);
+    let who = [
+        "-c",
+        "user.name=pigeon",
+        "-c",
+        "user.email=pigeon@users.noreply.pigeon.dev",
+    ];
+    let root = tree(base)?;
+    let mut args = who.to_vec();
+    args.extend(["commit-tree", root.as_str(), "-m", "base"]);
+    let b = git(dir, "", "", &args)?;
+    let o = commit_tree(dir, &tree(ours)?, &b, "ours")?;
+    let t = commit_tree(dir, &tree(theirs)?, &b, "theirs")?;
+    merge_tree(dir, &o, &t)
+}
+
 /// A commit of `tree` on `parent` with `message`, by pigeon.
 fn commit_tree(dir: &Path, tree: &str, parent: &str, message: &str) -> Result<String, Error> {
     let commit = command("", "")
@@ -821,7 +845,18 @@ pub fn restack(
     let theirs = changed_since(dir, &fork, &onto)?;
     let detached = ["-c", "advice.detachedHead=false", "checkout", "-q", &onto];
     git(dir, "", "", &detached)?;
-    let tree = match merge_tree(dir, &onto, sha)? {
+    // Built on another change: its own commits start past that change's last head, which is
+    // also the merge's base, so lines that change added and this one edits merge as edits; see
+    // the yield ADR's 2026-11-14 amendment on restacks from the change built on.
+    let from = since
+        .filter(|s| git(dir, "", "", &["merge-base", "--is-ancestor", s, sha]).is_ok())
+        .unwrap_or(&fork);
+    let merged = if from == fork {
+        merge_tree(dir, &onto, sha)?
+    } else {
+        merge_from(dir, from, &onto, sha)?
+    };
+    let tree = match merged {
         Ok(tree) => tree,
         Err(conflicts) => {
             (r.context, r.messages) = conflict_context(dir, &fork, &onto, sha, &conflicts)?;
@@ -838,10 +873,6 @@ pub fn restack(
         r.landed = true;
         return Ok(r);
     }
-    // Built on another change: its own commits start past that change's last head.
-    let from = since
-        .filter(|s| git(dir, "", "", &["merge-base", "--is-ancestor", s, sha]).is_ok())
-        .unwrap_or(&fork);
     let commits = git(
         dir,
         "",

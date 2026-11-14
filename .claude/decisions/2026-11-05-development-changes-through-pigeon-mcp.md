@@ -243,3 +243,9 @@ What changes:
   `built_on`:** the merge base of the head and the branch it's built on. The
   restack starts past it. See the yield ADR's 2026-11-14 amendment on
   `after`.
+### 2026-11-14: The restack merges a change built on another from that change's head
+
+- **`cobot::ci::restack`** merges a change built on another with that
+  change's head as the merge base (`merge_from`), not `main`'s fork. So an
+  edit to a file the other change added survives. See the yield ADR's
+  2026-11-14 amendment on merging from the change built on.

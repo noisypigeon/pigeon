@@ -1202,3 +1202,23 @@ The first, the ledger:
 - **Nothing on the change's record changes.** The value is the object's own
   storage, not a field of `Change` or an event, so it needs no two-release
   step.
+### 2026-11-14: A change built on another merges from that change's head, not main's fork
+
+- **Seen live on !375,** built on !374, which added the model-tiered ADR.
+  !375 edited that ADR's `* Governs:` line and appended an amendment. Its
+  restacked head kept the amendment but not its line edit.
+- **Why.** The restack merged the head with `main` from their fork, the
+  `main` from before !374. The ADR didn't exist there, so git saw an add/add,
+  and the union driver kept `main`'s version of the line beside or over the
+  change's own. Locally, an add/add like this keeps both lines. An approved
+  change's content changed, and no conflict was reported.
+- **The fix.** When a change is built on another and that change's last head
+  is in its history, the restack merges with that head as the base. Lines the
+  parent added and the child edits then merge as edits.
+  - git 2.39, in the job image, has no `merge-tree --merge-base`. So
+    `cobot::ci::merge_from` recommits both trees on a root commit of the
+    base's tree, and merges those.
+  - A change on `main` merges from the fork, as before.
+- **Paired with the amendment on `after-seen`:** the base is the commit the
+  bound job last saw the change built on. So this also holds when the parent
+  restacked before merging.

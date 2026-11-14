@@ -180,6 +180,53 @@ fn a_conflict_is_reported_and_nothing_is_pushed() {
 }
 
 #[test]
+fn a_change_built_on_the_one_that_added_a_file_keeps_its_edits_to_it() {
+    // !375, built on !374, edited a line of the ADR !374 added; restacked from main's fork, the
+    // ADR was an add/add, and the union driver kept main's line beside or over its own.
+    let (_t, url, work) = remote();
+    let adr = "# ADR\n\n* Governs: `a`\n\nbody\n\n## Amendments\n\n### one\n\n- 1\n";
+    let parent = diverge(&work, &url, &[("adr.md", adr)], &[]);
+    git(&work, &["checkout", "-q", "-B", "change/2-y", &parent]);
+    let edited = adr.replace("`a`", "`a`, `b`") + "\n### two\n\n- 2\n";
+    write(&work, "adr.md", &edited);
+    git(
+        &work,
+        &["commit", "-qam", "feat: y\n\nChange-Scope: adr.md"],
+    );
+    let head = git(&work, &["rev-parse", "HEAD"]);
+    git(&work, &["push", "-q", &url, "HEAD:refs/heads/change/2-y"]);
+    // change/1-x merges as a squash, then another amendment lands on main.
+    git(&work, &["checkout", "-q", "main"]);
+    write(&work, "adr.md", adr);
+    git(&work, &["add", "adr.md"]);
+    git(&work, &["commit", "-qm", "feat: x (!1)"]);
+    write(&work, "adr.md", &format!("{adr}\n### three\n\n- 3\n"));
+    git(&work, &["commit", "-qam", "docs: three (!3)"]);
+    git(&work, &["push", "-q", &url, "HEAD:refs/heads/main"]);
+    let job = tempfile::tempdir().expect("tmp");
+    checkout(job.path(), &url, "", "main", "change/2-y", &head).expect("checks out");
+    let r = restack(
+        job.path(),
+        &url,
+        "",
+        "main",
+        "change/2-y",
+        &head,
+        Some(&parent),
+        &["*.md"],
+    )
+    .expect("restacks");
+    let to = r.to.expect("pushed");
+    let merged = git(job.path(), &["show", &format!("{to}:adr.md")]);
+    let governs: Vec<&str> = merged.lines().filter(|l| l.contains("Governs")).collect();
+    assert_eq!(governs, ["* Governs: `a`, `b`"], "{merged}");
+    assert!(
+        merged.contains("### two") && merged.contains("### three"),
+        "{merged}"
+    );
+}
+
+#[test]
 fn two_amendments_to_one_adr_merge_by_union() {
     let (_t, url, work) = remote();
     let head = diverge(
