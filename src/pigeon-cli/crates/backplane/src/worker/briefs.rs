@@ -105,11 +105,29 @@ pub async fn run(
                     d.model.name(),
                     d.title
                 );
-                super::events::append(env, s, kind, None, Some(label), &said, false).await?;
+                super::events::append(env, s, kind, None, Some(label.clone()), &said, false)
+                    .await?;
+            }
+            if status == 200 && operation == "brief.amend" {
+                let changes: Vec<u32> =
+                    serde_json::from_value(v["changes"].clone()).unwrap_or_default();
+                let id = v["id"].as_str().unwrap_or_default();
+                let r = v["revisions"].as_array().map_or(0, Vec::len);
+                for n in changes {
+                    reopen(
+                        env,
+                        s,
+                        n,
+                        &label,
+                        &format!("{id} r{r} answers the escalation"),
+                    )
+                    .await?;
+                }
             }
             Ok((status, v))
         }
         "brief.review" => review(env, s, args).await,
+        "brief.escalate" => escalate(env, s, args).await,
         other => Ok((404, json!(format!("`{other}` is not a brief operation")))),
     }
 }
@@ -153,6 +171,7 @@ async fn review(env: &Env, s: &Settings, args: &Map<String, Value>) -> Result<(u
         "take" => {
             let note = format!("!{n} is taken back by {id}'s planner: {notes}");
             super::tasks::add(env, s, "handoff", n, None, Some(label.clone()), &note).await?;
+            reopen(env, s, n, &label, &note).await?;
             note
         }
         _ => return Ok((400, json!("`verdict` is accept, revise or take"))),
@@ -171,6 +190,64 @@ async fn review(env: &Env, s: &Settings, args: &Map<String, Value>) -> Result<(u
         }
     }
     Ok((200, json!({ "change": n, "brief": id, "verdict": verdict })))
+}
+
+/// `brief.escalate`: the executor of change `change` asks its brief's planner `question`, having
+/// `tried`; its branch takes no push until the planner answers; see
+/// `.claude/decisions/2026-11-13-development-model-tiered-agent-briefs.md` §6.
+async fn escalate(env: &Env, s: &Settings, args: &Map<String, Value>) -> Result<(u16, Value)> {
+    let Some(label) = text(args, "session") else {
+        return Ok((400, json!("`session` is the executor's label")));
+    };
+    let Some(n) = text(args, "change").and_then(|c| c.trim_start_matches('!').parse::<u32>().ok())
+    else {
+        return Ok((400, json!("`change` is your change number")));
+    };
+    let Some(question) = text(args, "question") else {
+        return Ok((400, json!("`question` says what the brief doesn't settle")));
+    };
+    let (_, view) = super::to_change(env, &s.repo, n, Method::Get, "/status", None).await?;
+    if view["change"]["session"].as_str() != Some(label.as_str()) {
+        return Ok((403, json!(format!("!{n} isn't session {label}'s"))));
+    }
+    let Some(id) = view["change"]["brief"].as_str().map(str::to_string) else {
+        return Ok((409, json!(format!("!{n} carries out no brief"))));
+    };
+    let asked = match text(args, "tried") {
+        Some(t) => format!("{question} (tried: {t})"),
+        None => question,
+    };
+    let body = json!({ "type": "escalate", "by": label, "question": asked, "at": now() });
+    let (status, v) =
+        super::to_change(env, &s.repo, n, Method::Post, "/event", Some(&body)).await?;
+    if status != 200 {
+        return Ok((status, v));
+    }
+    let (_, brief) = to_instance(env, s, "/briefs/show", &json!({ "id": id })).await?;
+    let planner = brief["planner"].as_str().map(str::to_string);
+    let note = format!("!{n} escalates to {id}'s planner: {asked}");
+    super::tasks::add(env, s, "escalation", n, None, planner, &note).await?;
+    Ok((200, json!({ "change": n, "brief": id, "escalated": asked })))
+}
+
+/// Clears change `n`'s open escalation, as its brief's planner `by`, telling its executor `why`.
+async fn reopen(env: &Env, s: &Settings, n: u32, by: &str, why: &str) -> Result<()> {
+    let (_, view) = super::to_change(env, &s.repo, n, Method::Get, "/status", None).await?;
+    if view["change"]["escalated"].is_null() {
+        return Ok(());
+    }
+    let body = json!({ "type": "reopen", "by": by });
+    super::to_change(env, &s.repo, n, Method::Post, "/event", Some(&body)).await?;
+    let executor = view["change"]["session"].as_str().map(str::to_string);
+    super::events::append(env, s, "change.note", Some(n), executor, why, false).await?;
+    let body = json!({ "session": by, "class": Class::Opus });
+    let (_, open) = to_instance(env, s, "/tasks/list", &body).await?;
+    for t in open["tasks"].as_array().into_iter().flatten() {
+        if t["kind"] == "escalation" && t["change"].as_u64() == Some(u64::from(n)) {
+            to_instance(env, s, "/tasks/done", &json!({ "id": t["id"] })).await?;
+        }
+    }
+    Ok(())
 }
 
 /// When `after` carries a brief and a head newly checked awaits review: a `brief-review` task

@@ -218,8 +218,9 @@ title, plan and scope. Authorize it as CLAUDE.md says.
 check its `done_when`; if it fails, try once more within the step. Run the brief's `checks` before \
 every push, and push as CLAUDE.md says.
 6. On a second failure, a `stop_if`, a contradiction, or anything the brief doesn't cover: stop, and \
-tell the planner with `send_message` to session {planner_id}: what you tried and what blocks you. \
-Never work around it, change the brief's decisions, or widen the scope.
+`brief_escalate` your change with the `question` and what you `tried`. Your branch takes no push \
+until the planner answers; wait for it. Never work around it, change the brief's decisions, or \
+widen the scope.
 7. Never write or amend an ADR, and never call an owner operation. When your change merges, or the \
 planner takes the brief back, `session_end`."""
 
@@ -248,7 +249,6 @@ def executor():
         brief=b["id"],
         revision=len(b["revisions"]),
         planner=planner,
-        planner_id=planner.rstrip("/").rsplit("/", 1)[-1],
     )
     out = {"model": ids[model], "title": f"pigeon {b['id']} ({model}): {draft.get('title', '')}", "prompt": prompt}
     print(json.dumps(out, indent=2))

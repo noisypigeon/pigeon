@@ -194,3 +194,22 @@ fn a_lone_flush_is_gits_probe_before_a_large_push() {
     assert!(!gitdoor::is_probe(b"00000000"), "two flushes");
     assert!(gitdoor::commands(b"0000").is_err(), "and it is no push");
 }
+
+#[test]
+fn an_escalated_changes_branch_takes_no_push_until_its_planner_answers() {
+    let branch = "refs/heads/change/18-front-door";
+    let mut c = change(State::Failed);
+    c.brief = Some("b4".into());
+    c.escalated = Some(backplane::changes::Escalated {
+        by: "https://claude.ai/code/executor".into(),
+        question: "the brief names no error type".into(),
+        at: 1,
+    });
+    let why = gitdoor::judge(&update(branch, A), Some(&c)).expect_err("escalated");
+    assert!(
+        why.contains("escalated") && why.contains("no error type"),
+        "{why}"
+    );
+    c.escalated = None;
+    assert_eq!(gitdoor::judge(&update(branch, A), Some(&c)), Ok(()));
+}

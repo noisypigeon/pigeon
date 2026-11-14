@@ -656,3 +656,30 @@ changes, as !386 itself now plans: one per session and ADR.
   to the iOS and tiered-approvals ADRs.
 - **Step 5b:** `brief.escalate`, the `escalated` stage, and refusing an
   escalated change's pushes.
+
+### 2026-11-14: Step 5b lands, and step 5 is done: an executor escalates instead of improvising
+
+- **`Change.escalated`** holds an executor's open question to its brief's
+  planner: who asked, what, and when. New lifecycle events: `Escalate` (only
+  for a change with a brief, open, with a question) and `Reopen`.
+- **While escalated:**
+  - the front door refuses pushes to the branch (`gitdoor::judge`), naming
+    the question;
+  - no window, mandate or policy approves the head;
+  - its stage is `escalated`, whose `next` names how the planner answers.
+- **`brief.escalate {change, question, tried?}`** is the change's own
+  session's to call, on a change with a brief. It records the escalation,
+  and adds an `escalation` task routed to the brief's planner, whose
+  `task.made` wakes the planner. Executors are refused the task at claim.
+- **The planner answers by:**
+  - **`brief_amend`:** each of the brief's changes that is escalated
+    reopens, and its executor gets a `change.note` naming the new revision;
+  - **`brief_review` with `take`:** the change reopens too, so the planner
+    can push to it.
+
+  Either one closes the `escalation` task.
+- **CLAUDE.md and `session.py executor`'s prompt** now say `brief_escalate`
+  where step 4 had them `send_message` the planner.
+- **Not yet:** step 6's breaker for executors, whose tripped changes become
+  `escalated` rather than `attended`. That waits for the session-stages
+  ADR's `change_attend` (its step 6), and is this ADR's step 7.

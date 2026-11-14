@@ -158,6 +158,7 @@ fn catalog_names_are_unique_and_dotted() {
             ("brief.create", Effect::Build),
             ("brief.amend", Effect::Build),
             ("brief.review", Effect::Build),
+            ("brief.escalate", Effect::Build),
             ("change.handoff", Effect::Build),
             ("change.yield", Effect::Build),
             ("task.claim", Effect::Build),

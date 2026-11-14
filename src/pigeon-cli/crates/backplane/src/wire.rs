@@ -536,6 +536,19 @@ const CATALOG: &[Operation] = &[
         ],
     },
     Operation {
+        name: "brief.escalate",
+        engine: Engine::Backplane,
+        effect: Effect::Build,
+        summary: "As the executor `session` of change `change`, ask its brief's planner `question` (what the brief doesn't settle), saying what you `tried`; the branch takes no push until the planner answers with `brief_amend`, or takes the change back",
+        args: &[
+            arg("change", true, Kind::Text),
+            arg("question", true, Kind::String),
+            arg("tried", false, Kind::String),
+            arg("session", true, Kind::String),
+            arg("ticket", false, Kind::String),
+        ],
+    },
+    Operation {
         name: "brief.show",
         engine: Engine::Backplane,
         effect: Effect::Read,

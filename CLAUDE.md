@@ -71,8 +71,9 @@ Per
   2. after each step, checks its `done_when`, and tries once more within the
      step if it fails;
   3. on a second failure, a `stop_if`, or anything the brief doesn't cover,
-     stops and tells its planner (`send_message`), and never works around
-     it, changes the brief's decisions, or widens the scope;
+     stops and asks its planner (`brief_escalate`), which holds its branch
+     until the planner answers, and never works around it, changes the
+     brief's decisions, or widens the scope;
   4. runs the brief's `checks` before every push;
   5. never writes or amends an ADR, and never calls an owner operation;
   6. ends its session (`session_end`) when its change merges or the planner

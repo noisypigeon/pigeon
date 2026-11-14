@@ -242,6 +242,17 @@ pub struct Conflicted {
     pub reconcile: Option<u32>,
 }
 
+/// An executor's open question to its brief's planner.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Escalated {
+    /// The executor session that asked.
+    pub by: String,
+    /// What it asks, with what it tried.
+    pub question: String,
+    /// When, in Unix seconds.
+    pub at: u64,
+}
+
 /// An approval to carry onto a restacked head, if its patch and merge tier hold.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Carried {
@@ -389,6 +400,10 @@ pub struct Change {
     /// The head its brief's planner accepted; a window, mandate or policy approves only that.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub accepted: Option<String>,
+    /// Its executor's question to the brief's planner, while unanswered: no push, no automatic
+    /// approval; see `.claude/decisions/2026-11-13-development-model-tiered-agent-briefs.md` §6.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub escalated: Option<Escalated>,
 }
 
 /// Something that happened to a change.
@@ -462,6 +477,21 @@ pub enum Event {
     Rerun {
         /// The job.
         job: String,
+    },
+    /// Its executor asked its brief's planner `question`, at `at`; see
+    /// `.claude/decisions/2026-11-13-development-model-tiered-agent-briefs.md` §6.
+    Escalate {
+        /// The executor session.
+        by: String,
+        /// What it asks, with what it tried.
+        question: String,
+        /// When.
+        at: u64,
+    },
+    /// Its brief's planner answered its escalation.
+    Reopen {
+        /// The planner session.
+        by: String,
     },
     /// Its brief's planner accepted head `sha`; see
     /// `.claude/decisions/2026-11-13-development-model-tiered-agent-briefs.md` §5.
@@ -635,6 +665,7 @@ impl Change {
             answers: std::collections::BTreeMap::new(),
             brief: None,
             accepted: None,
+            escalated: None,
         }
     }
 

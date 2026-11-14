@@ -73,6 +73,11 @@ impl Change {
             Event::Lost { job, sha } => self.lost(&job, &sha),
             Event::Rerun { job } => self.rerun(&job),
             Event::Accept { by, sha } => self.accept(&by, sha),
+            Event::Escalate { by, question, at } => self.escalate(by, question, at),
+            Event::Reopen { .. } => {
+                self.escalated = None;
+                Ok((self, Vec::new()))
+            }
             Event::Approve { by, sha, at } => self.approve(by, sha, at),
             Event::Merge { by } => self.merge(&by),
             Event::MergeFull { by } => {
@@ -170,6 +175,20 @@ impl Change {
         self.brief.is_some() && (self.accepted.is_none() || self.accepted != self.head)
     }
 
+    fn escalate(mut self, by: String, question: String, at: u64) -> Step {
+        if self.brief.is_none() {
+            return refuse(format!("{} carries out no brief", self.branch()));
+        }
+        if matches!(self.state, State::Merged | State::Closed) {
+            return refuse(format!("{} is {}", self.branch(), self.state.name()));
+        }
+        if question.trim().is_empty() {
+            return refuse("an escalation says what it asks");
+        }
+        self.escalated = Some(super::types::Escalated { by, question, at });
+        Ok((self, Vec::new()))
+    }
+
     fn accept(mut self, by: &str, sha: String) -> Step {
         if self.brief.is_none() {
             return refuse(format!("{} carries out no brief", self.branch()));
@@ -204,7 +223,9 @@ impl Change {
         if by == self.proposer {
             return refuse("a change is approved by someone other than its proposer");
         }
-        if self.awaits_review() && AUTOMATIC.iter().any(|p| by.starts_with(p)) {
+        if (self.awaits_review() || self.escalated.is_some())
+            && AUTOMATIC.iter().any(|p| by.starts_with(p))
+        {
             return refuse(format!(
                 "{} carries out {}; its planner reviews the head first (`brief_review`)",
                 self.branch(),

@@ -192,6 +192,14 @@ pub fn of(c: &Change, cx: &Context) -> Stage {
             "change_authorize",
             "authorize the plan",
         ),
+        _ if c.escalated.is_some() => at(
+            "escalated",
+            Needs::Agent,
+            format!(
+                "its planner answers {} (`brief_amend`, or `brief_review` take)",
+                c.brief.as_deref().unwrap_or_default()
+            ),
+        ),
         State::Planned => at("authorized", Needs::Agent, format!("push `{branch}`")),
         _ if c.conflict.is_some() => {
             let next = match c.conflict.as_ref().and_then(|x| x.reconcile) {

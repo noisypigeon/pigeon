@@ -397,6 +397,8 @@ fn an_executor_takes_only_tasks_on_its_briefs_changes() {
     assert_eq!(claim_refused("restack-failed", Some("b4"), &code), None);
     let review = claim_refused("brief-review", Some("b4"), &code).expect("the planner's");
     assert!(review.contains("planner"), "{review}");
+    let asked = claim_refused("escalation", Some("b4"), &code).expect("the planner's");
+    assert!(asked.contains("planner"), "{asked}");
     let planner = claim_refused("handoff", None, &code).expect("a planner's change");
     assert!(planner.contains("carries no brief"), "{planner}");
     let review = claim_refused("review", None, &adr[1..]).expect("a review");

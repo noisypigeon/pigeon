@@ -158,6 +158,12 @@ pub fn judge(update: &RefUpdate, change: Option<&Change>) -> Result<(), String> 
     if change.slug != slug {
         return Err(format!("change {number}'s branch is {}", change.branch()));
     }
+    if let Some(e) = &change.escalated {
+        return Err(format!(
+            "change {number} is escalated to its brief's planner ({}); it takes pushes again once they answer",
+            e.question
+        ));
+    }
     match change.state {
         State::Proposed => Err(format!("change {number}'s plan is not approved")),
         State::Merged | State::Closed => Err(format!("change {number} is {}", change.state.name())),

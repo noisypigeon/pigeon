@@ -921,3 +921,34 @@ fn an_acceptance_follows_its_head_across_a_same_patch_restack_only() {
     let (changed, _) = step(&base, clean(false)).expect("restacked");
     assert!(changed.awaits_review(), "a changed patch is reviewed again");
 }
+
+fn escalate(question: &str) -> Event {
+    Event::Escalate {
+        by: "https://claude.ai/code/executor".into(),
+        question: question.into(),
+        at: 9,
+    }
+}
+
+#[test]
+fn an_executor_escalates_only_a_briefs_change_and_its_planner_reopens_it() {
+    use super::stage::{Context, of};
+    assert!(step(&checked(), escalate("why?")).is_err(), "no brief");
+    let c = briefed_checked();
+    assert!(step(&c, escalate("  ")).is_err(), "says what it asks");
+    let (up, _) = step(&c, escalate("the brief names no error type")).expect("escalates");
+    assert_eq!(of(&up, &Context::default()).stage, "escalated");
+    let mut accepted = up.clone();
+    accepted.accepted = Some(A.into());
+    let refused = step(&accepted, approve_by("window:6")).expect_err("no Auto while escalated");
+    assert!(refused.0.contains("brief_review"), "{}", refused.0);
+    let (open, _) = step(
+        &up,
+        Event::Reopen {
+            by: "planner".into(),
+        },
+    )
+    .expect("reopens");
+    assert_eq!(open.escalated, None);
+    assert_eq!(of(&open, &Context::default()).stage, "in-review");
+}
