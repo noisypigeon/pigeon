@@ -184,3 +184,39 @@ Each step is one change. Steps 2 and 3 run in parallel; step 4 waits for both.
 - **Rename:** `grep -rn 'Profile' src/pigeon-ios/Pigeon/HomeView.swift src/pigeon-ios/Pigeon/Sheets.swift` finds only the person's profile.
 - **The app:** `PigeonCore` tests `validName` and `Appearance.resolve`. A TestFlight build shows the instance chip and the avatar, edits the name, and removes a second passkey with Face ID.
 - `mise run ci` passes at every step.
+
+## Amendments
+
+### 2026-11-14: Every approval names the account that gave it
+
+The owner's approvals are recorded under a different identity on each surface:
+
+- the approval page records Access's subject, an email;
+- the app and the MCP card record the `APPROVER` secret;
+- windows and mandates record `window:<n>` or `mandate:<n>`.
+
+So a session can't tell the owner's approval from another user's. From this amendment on:
+
+- **`by` is an account ID** (`acct_…`) on every approval, authorization, merge, grant, window and mandate the control plane records from now on.
+- **`via` says how it was given:**
+  - `page` for the approval page, `app` for the app, `card` for the MCP card;
+  - `window:<n>` and `mandate:<n>` when one of them approved it.
+
+  A window or mandate records, at its start, the account that granted it, and each approval it gives names that account.
+- **`proof` holds a passkey proof's evidence,** as the passkey-only ADR (!417) records it: the passkey's ID, the nonce, the client data, the authenticator data and the signature. It is absent for `window:<n>`, `mandate:<n>` and policy approvals.
+- **One function maps a proof to an account.**
+  - A passkey assertion maps to its passkey's account, through the passkey-only ADR's per-account keyrings.
+  - Until those land, an Access identity or the `APPROVER` code maps to the owner's account, found by `Accounts::ensure_owner`. It is the only person account. Both branches sit in that one function, so !417's cutover and removal steps delete them in one place.
+  - `via: card` ends with !417's step 5, when the card becomes a link to the page.
+  - Access's email stays a gate (§1). It is never recorded as `by` again.
+- **`change_status`, events and the digest** show `by` with the profile's name beside it, for example `Owner (acct_…) via app`. An approval by any other account then stands out.
+- **Records written before this amendment keep their `by`.** Nothing is rewritten.
+
+**Execution: step 6.** One planner change, with no brief, because it edits guarded paths: `worker/approve.rs` and `worker/mandates.rs`. It doesn't edit `worker/elicit.rs`, which !417's steps 5 and 11 rewrite; !417's step 5 sets the card's approver through this function. It also touches:
+
+- the approval core;
+- `worker/app.rs`, `worker/ci_window.rs` and `worker/platforms.rs`;
+- `worker/push.rs`, where the `by` of a push subscription becomes the account;
+- a test that each surface records the same `by` for the owner.
+
+It follows step 3, which adds `core/account`, and !417's step 2, which adds the lookup from a passkey to its keyring.
