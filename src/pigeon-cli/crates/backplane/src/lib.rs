@@ -6,6 +6,7 @@ pub mod apple;
 pub mod approvals;
 pub mod approve;
 pub mod architecture;
+pub mod briefs;
 #[cfg(feature = "engines")]
 pub mod catalog;
 pub mod changes;

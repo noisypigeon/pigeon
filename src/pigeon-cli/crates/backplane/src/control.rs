@@ -138,6 +138,14 @@ pub enum Routed {
         /// Its arguments.
         args: serde_json::Map<String, Value>,
     },
+    /// A brief operation, with its arguments; see
+    /// `.claude/decisions/2026-11-13-development-model-tiered-agent-briefs.md` §3.
+    Brief {
+        /// The operation.
+        operation: String,
+        /// Its arguments.
+        args: serde_json::Map<String, Value>,
+    },
     /// A task operation, with its arguments; see
     /// `.claude/decisions/2026-11-08-development-concurrent-agent-sessions.md` §5.
     Task {
@@ -384,6 +392,10 @@ pub fn route(request: &Request, by: &str, at: u64) -> Result<Routed, String> {
         "session.start" => Ok(Routed::SessionStart { args: a.clone() }),
         "session.end" => Ok(Routed::SessionEnd { args: a.clone() }),
         "session.status" => Ok(Routed::SessionStatus { args: a.clone() }),
+        "brief.create" | "brief.amend" | "brief.show" | "brief.list" => Ok(Routed::Brief {
+            operation: request.operation.clone(),
+            args: a.clone(),
+        }),
         "task.list" | "task.wait" | "task.claim" | "task.done" => Ok(Routed::Task {
             operation: request.operation.clone(),
             args: a.clone(),

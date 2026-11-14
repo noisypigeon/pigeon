@@ -163,6 +163,7 @@ impl Operation {
             || self.name.starts_with("git.")
             || self.name.starts_with("mandate.")
             || self.name.starts_with("task.")
+            || self.name.starts_with("brief.")
             || self.name.starts_with("events.")
             || self.name.starts_with("digest.")
             || self.name.starts_with("session.")
@@ -494,6 +495,44 @@ const CATALOG: &[Operation] = &[
             arg("wake", false, Kind::String),
             arg("seconds", false, Kind::Text),
         ],
+    },
+    Operation {
+        name: "brief.create",
+        engine: Engine::Backplane,
+        effect: Effect::Build,
+        summary: "As opus planner `session`, store `draft`, a brief as JSON text (title, adr, step, model `haiku` or `sonnet`, base, scope, decisions, steps of do/files/content/done_when, checks, stop_if, budget?, commit) as brief `b<n>`; refused with every problem when it leaves the executor a choice",
+        args: &[
+            arg("session", true, Kind::String),
+            arg("draft", true, Kind::Text),
+            arg("ticket", false, Kind::String),
+        ],
+    },
+    Operation {
+        name: "brief.amend",
+        engine: Engine::Backplane,
+        effect: Effect::Build,
+        summary: "As brief `id`'s planner `session`, append `draft` as its next revision, saying why (`reason`); earlier revisions are never rewritten",
+        args: &[
+            arg("id", true, Kind::String),
+            arg("session", true, Kind::String),
+            arg("draft", true, Kind::Text),
+            arg("reason", true, Kind::String),
+            arg("ticket", false, Kind::String),
+        ],
+    },
+    Operation {
+        name: "brief.show",
+        engine: Engine::Backplane,
+        effect: Effect::Read,
+        summary: "Brief `id` (`b<n>`) with every revision, oldest first; an executor works on the latest",
+        args: &[arg("id", true, Kind::String)],
+    },
+    Operation {
+        name: "brief.list",
+        engine: Engine::Backplane,
+        effect: Effect::Read,
+        summary: "Every brief, newest first, by `planner` when named: id, revision, model, title, ADR and step",
+        args: &[arg("planner", false, Kind::String)],
     },
     Operation {
         name: "task.list",

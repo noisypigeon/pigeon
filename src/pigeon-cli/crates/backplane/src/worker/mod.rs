@@ -12,6 +12,7 @@ mod apns;
 mod app;
 mod apple;
 mod approve;
+mod briefs;
 mod buildkite;
 mod change;
 mod checker;
@@ -785,6 +786,10 @@ async fn dispatch(
             operation: op,
             args,
         } => Ok(answered(operation, tasks::run(env, s, &op, &args).await?)),
+        Routed::Brief {
+            operation: op,
+            args,
+        } => Ok(answered(operation, briefs::run(env, s, &op, &args).await?)),
         Routed::Mandate {
             operation: op,
             args,
@@ -1720,6 +1725,10 @@ impl DurableObject for Instance {
         if path.starts_with("/tasks/") {
             let body: Value = req.json().await?;
             return tasks::serve(&self.state, &path, &body).await;
+        }
+        if path.starts_with("/briefs/") {
+            let body: Value = req.json().await?;
+            return briefs::serve(&self.state, &path, &body).await;
         }
         if path.starts_with("/grant-requests/") || path.starts_with("/grant-registry/") {
             let body: Value = req.json().await?;

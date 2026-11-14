@@ -4,8 +4,8 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: development
-* Governs: `src/pigeon-cli/crates/backplane/src/sessions.rs`, `src/pigeon-cli/crates/backplane/src/tasks.rs`, `tooling/session/session.py`, `tooling/session/models.json`, `src/pigeon-cli/crates/backplane/src/core/brief/**`
-* Governs: `src/pigeon-cli/crates/backplane/src/sessions.rs`, `src/pigeon-cli/crates/backplane/src/tasks.rs`, `tooling/session/session.py`, `tooling/session/models.json`, `src/pigeon-cli/crates/backplane/src/core/brief/**`
+* Governs: `src/pigeon-cli/crates/backplane/src/sessions.rs`, `src/pigeon-cli/crates/backplane/src/tasks.rs`, `tooling/session/session.py`, `tooling/session/models.json`, `src/pigeon-cli/crates/backplane/src/core/brief/**`, `src/pigeon-cli/crates/backplane/src/briefs.rs`, `src/pigeon-cli/crates/backplane/src/worker/briefs.rs`
+* Governs: `src/pigeon-cli/crates/backplane/src/sessions.rs`, `src/pigeon-cli/crates/backplane/src/tasks.rs`, `tooling/session/session.py`, `tooling/session/models.json`, `src/pigeon-cli/crates/backplane/src/core/brief/**`, `src/pigeon-cli/crates/backplane/src/briefs.rs`, `src/pigeon-cli/crates/backplane/src/worker/briefs.rs`
 
 ## Context
 
@@ -462,4 +462,33 @@ changes, as !386 itself now plans: one per session and ADR.
 - **Step 2b:** the `Instance`'s store; `brief_create`, `brief_show`,
   `brief_amend` and `brief_list`; `base` checked against `main`; and `scope`
   checked against the planner's ADR.
+- **Step 2c:** `brief` tasks, routed and claimed by class.
+
+### 2026-11-14: Step 2b lands: the store and the `brief.*` operations
+
+- **Paths.** `Governs` gains `briefs.rs` and `worker/briefs.rs`.
+- **The `Instance` keeps every brief** (`backplane::briefs::Briefs`, under
+  `briefs`), numbered `b<n>`. A refused brief takes no number.
+- **Four operations,** as MCP tools:
+  - `brief.create {session, draft}`: `draft` is the brief as JSON text, since
+    an argument is text;
+  - `brief.amend {id, session, draft, reason}`: appends a revision, by its
+    planner only;
+  - `brief.show {id}`: every revision, oldest first;
+  - `brief.list {planner?}`: newest first, one row each.
+
+  Each write answers every problem at once (422), and logs `brief.created`
+  or `brief.amended` for the planner's session.
+- **Only an opus session writes a brief.** The class is its ticket's (§1),
+  and a label never started counts as opus, as at `session.start`. An
+  executor is refused with 403. The ticket guard already covers the writes,
+  since each names its `session`.
+- **Two of §3's checks are left out,** because the Worker reads neither
+  `main`'s history nor its files when asked:
+  - whether `base` is on `main`. An executor rebases onto `main` anyway, and
+    §8's `stale` covers a base that falls behind;
+  - whether `scope` lies in the planner's ADR area. §5's review sees every
+    path the executor touched.
+
+  A later step may check both in the bound job, which has the repository.
 - **Step 2c:** `brief` tasks, routed and claimed by class.

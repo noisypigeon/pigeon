@@ -190,3 +190,47 @@ fn a_brief_round_trips_with_do_as_its_step_field() {
     let back: Brief = serde_json::from_value(v).expect("reads back");
     assert_eq!(back, b);
 }
+
+#[test]
+fn the_store_numbers_briefs_and_amends_only_by_their_planner() {
+    use backplane::briefs::{Briefs, number};
+    let mut all = Briefs::default();
+    let a = all.create(PLANNER, draft(Class::Haiku), 1).expect("b1");
+    let b = all
+        .create("https://claude.ai/code/other", draft(Class::Sonnet), 2)
+        .expect("b2");
+    assert_eq!((a.id.as_str(), b.id.as_str()), ("b1", "b2"));
+    assert!(all.create(PLANNER, draft(Class::Opus), 3).is_err());
+    assert_eq!(all.last, 2, "a refused brief takes no number");
+    assert_eq!(
+        (number("b7"), number("7"), number("b0"), number("x")),
+        (Some(7), Some(7), None, None)
+    );
+    assert!(
+        all.amend(
+            "b1",
+            "https://claude.ai/code/other",
+            draft(Class::Haiku),
+            "why",
+            4
+        )
+        .is_err()
+    );
+    assert!(
+        all.amend("b9", PLANNER, draft(Class::Haiku), "why", 4)
+            .is_err()
+    );
+    let r2 = all
+        .amend("1", PLANNER, draft(Class::Haiku), "tighter content", 4)
+        .expect("amends");
+    assert_eq!(r2.revision(), 2);
+    assert_eq!(all.get("b1").map(Brief::revision), Some(2));
+    let mine: Vec<&str> = all
+        .list(Some(PLANNER))
+        .iter()
+        .map(|b| b.id.as_str())
+        .collect();
+    assert_eq!(mine, ["b1"]);
+    let every: Vec<&str> = all.list(None).iter().map(|b| b.id.as_str()).collect();
+    assert_eq!(every, ["b2", "b1"], "newest first");
+}
