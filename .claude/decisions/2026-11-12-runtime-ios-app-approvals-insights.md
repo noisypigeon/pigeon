@@ -671,3 +671,56 @@ recorded answer in the tests; the migration; the Worker's collection and the
 note at read time; and `worker.yaml`. After it deploys, the first
 cron run's note shows whether the live API accepted each field. A field it
 refuses is fixed in a follow-up `fix` change.
+### 2026-11-15: Glanceable tracker cards, and silent sessions hidden
+
+The owner approved a mockup
+(https://claude.ai/artifact/Hx2pDQgMo2VU9rt7c6m2oY): each card answers what a
+change is, where it is on the rail, and whether it needs the owner, at a
+look; the rest moves behind a tap. The tracker route is unchanged; the app
+derives all of it in `PigeonCore`.
+
+**A card.**
+
+- Its header is the session's model badge and a dot: filled when it is
+  listening, hollow when not. The label isn't shown.
+- **A row** is a status pill, a note, the time in its stage and a chevron;
+  then the title's scope as a tag and its subject, wrapped in full, never
+  truncated; then the rail.
+  - The pill is a glyph and a word: `Needs you` when `needs` is `owner`,
+    else `Failed`, `Stalled`, `Held` or `Done` by `mark`, else the stage,
+    capitalised (`Checking 7/8`, `Queued 3/4`, `Restacking`).
+  - Only `Needs you` is filled, in the accent, with a "Review and approve"
+    button that opens its approval, as the needs chip did.
+  - The note: `after !<n>` when it waits on a change, `until a deploy
+    passes` when held, `its agent is quiet` when stalled; else none.
+  - A `done` row is one line: the pill and the title.
+- **A tap opens the change's sheet:** its number and scope; the whole title;
+  a **Progress** section, in the soft accent, listing the ten stops with the
+  current one and its time; a **Next** section, who acts and `next`; the
+  session's class, role and whether it listens, and the brief; and **Open
+  session in Claude**, which opens the session's label, its claude.ai URL,
+  as a universal link.
+
+**Silent sessions.**
+
+- **A session is silent when none of its changes needs anyone:** each has
+  `needs` `none` (merged or done), or it has no change. Listening doesn't
+  matter. A change that is stalled, failed, held or needs the owner is
+  never silent, since each of those needs someone.
+- **Silent sessions are hidden by default.** A chip after the filter chips,
+  `◌ <n> silent`, shows them, filled while on, as the filters are; a line
+  under the cards, `<n> silent sessions hidden · Show`, does the same. It
+  resets when the app starts.
+- Shown, they sort last and draw outlined, without a shadow. The title's
+  counts are of the cards shown.
+- An executor that hasn't proposed yet is silent until it does; its
+  planner's card shows its work.
+
+The rail's `held` mark at stop 5 already ships with the hold amendment's
+step 3 (!494).
+
+**Execution,** one change after this amendment, then an `ios.release`:
+
+1. `PigeonCore`: `isSilent`, `RowStatus` (pill word, kind, note),
+   `scopeAndSubject`, and `visible(_:by:showSilent:)`, with tests; the app:
+   `TrackerView`'s cards, the chip and line, and the change sheet.
