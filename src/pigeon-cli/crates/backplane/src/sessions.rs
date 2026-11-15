@@ -239,8 +239,9 @@ pub fn overlaps(scope: &[String], affects: &[String], open: &[Open]) -> Vec<Over
 /// amendment.
 pub const MAX_PER_SESSION: usize = 5;
 
-/// The most open changes an instance holds.
-pub const MAX_OPEN: usize = 20;
+/// The most open changes an instance holds; see the concurrent-sessions ADR's 2026-11-15
+/// amendment.
+pub const MAX_OPEN: usize = 50;
 
 /// The change a generated change was made for, from its slug: `reconcile-<n>` and
 /// `review-<n>-<m>` belong to `n`; none for any other change.

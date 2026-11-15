@@ -739,3 +739,25 @@ approved again after every merge ahead of them, and !327's restack was lost
 place and the protected turn; `control::keeps_turn`; `merge.kept`; the
 stale-base refusal treated as `behind`; the worker's re-ask; and tests that
 replay !546's, !549's, !481's and !543's sequences.
+### 2026-11-15: The instance holds 50 open changes, raised in steps toward no cap
+
+- **Why.** At 20, sessions waited on `wait: 20 changes are open` while the
+  queue held 19 approved changes, so proposals starved. The 2026-11-10
+  condition is met: a change and its unpushed generated changes hold one slot
+  (`sessions::counts`).
+- **The limit:** `MAX_OPEN` is 50. `MAX_PER_SESSION` stays 5; the two are
+  independent.
+- **The owner's intent:** the cap is raised in steps, each after its cost is
+  read, toward no cap at all.
+- **What each step watches,** the hour before against the first hour after:
+
+  | Cost | Where |
+  |---|---|
+  | CI minutes per hour, GitHub Actions | Insights (Cost); `deploy_status` dispatches |
+  | macOS provider minutes | `deploy_status` `macos.providers` |
+  | Job Container starts and failed starts | Insights; the digest's stops and stalled jobs |
+  | Restack load per merge | `change.behind` events per `change.merged` in the event log; Insights' merge queue |
+  | Workers and Durable Object requests | Insights (Cost), from Cloudflare's analytics |
+
+- **Execution:** `backplane::sessions::MAX_OPEN` and its test in
+  `backplane/tests/tasks.rs`; `CLAUDE.md` names the new limit.

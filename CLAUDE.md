@@ -166,7 +166,7 @@ Where each check runs:
   open change, proposes a `reconcile-<n>` or `review-<n>-<m>` change and a
   task for the session; `task_wait`, `task_list`, `task_claim` and
   `task_done` handle tasks; a session holds at most 5 open changes, the
-  instance 20. A session acts only on changes it proposed or tasks it
+  instance 50. A session acts only on changes it proposed or tasks it
   claimed, and after its branch is restacked runs `git fetch` and resets to
   it before pushing again. A session starts with `session_start` (its URL as
   `label`) and passes the ticket as `ticket` on every change operation and as

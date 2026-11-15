@@ -98,7 +98,7 @@ fn open(number: u32, session: Option<&str>) -> Open {
 }
 
 #[test]
-fn a_session_holds_at_most_five_open_changes_and_the_instance_twenty() {
+fn a_session_holds_at_most_five_open_changes_and_the_instance_fifty() {
     let four: Vec<Open> = (1..=4).map(|n| open(n, Some("s-a"))).collect();
     assert_eq!(limit(&four, Some("s-a")), Ok(()));
     let five: Vec<Open> = (1..=5).map(|n| open(n, Some("s-a"))).collect();
@@ -107,10 +107,10 @@ fn a_session_holds_at_most_five_open_changes_and_the_instance_twenty() {
     assert_eq!(MAX_PER_SESSION, 5);
     assert_eq!(limit(&five, Some("s-b")), Ok(()));
     assert_eq!(limit(&five, None), Ok(()));
-    let nineteen: Vec<Open> = (1..=19).map(|n| open(n, None)).collect();
-    assert_eq!(limit(&nineteen, None), Ok(()));
-    let full: Vec<Open> = (1..=20).map(|n| open(n, None)).collect();
-    assert_eq!(MAX_OPEN, 20);
+    let forty_nine: Vec<Open> = (1..=49).map(|n| open(n, None)).collect();
+    assert_eq!(limit(&forty_nine, None), Ok(()));
+    let full: Vec<Open> = (1..=50).map(|n| open(n, None)).collect();
+    assert_eq!(MAX_OPEN, 50);
     assert!(limit(&full, None).is_err());
 }
 
