@@ -1156,6 +1156,15 @@ fn a_pin_and_a_resumed_proposal_are_routed() {
         ),
         "{pin:?}"
     );
+    let front = control::route(
+        &req("change.front", serde_json::json!({ "number": 585 })),
+        "owner",
+        1,
+    );
+    assert!(
+        matches!(&front, Ok(Routed::Front { number: 585, by }) if by == "owner"),
+        "{front:?}"
+    );
     let propose = serde_json::json!({
         "slug": "x", "title": "feat(x): y", "plan": "p", "scope": "a/**", "resumes": "79",
     });

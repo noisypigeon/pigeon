@@ -115,6 +115,7 @@ fn verb(operation: &str) -> &'static str {
         "change.merge" => "Merge",
         "change.close" => "Close unmerged",
         "change.pin" => "Pin it against eviction",
+        "change.front" => "Move it to the front of the merge queue",
         crate::control::BREAK_GLASS => "Run its code checks on Cloudflare",
         "mandate.grant" => "Grant the mandate",
         crate::ci_window::OPERATION => "Move code checks to Cloudflare",

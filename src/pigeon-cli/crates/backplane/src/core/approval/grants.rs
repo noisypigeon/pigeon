@@ -17,13 +17,14 @@ pub const TTL: u64 = 15 * 60;
 pub const PAGE_TTL: u64 = 24 * 60 * 60;
 
 /// The operations a grant offers: those only a person runs on a change.
-pub const OPERATIONS: [&str; 6] = [
+pub const OPERATIONS: [&str; 7] = [
     "change.authorize",
     "change.approve",
     "change.merge",
     "change.close",
     crate::control::BREAK_GLASS,
     "change.pin",
+    "change.front",
 ];
 
 /// What a grant lets its redeemer do.
@@ -82,6 +83,7 @@ pub fn offerable(change: &Change, operation: &str) -> Result<(), String> {
         "change.merge" => change.state == State::Approved,
         "change.close" => !matches!(change.state, State::Merged | State::Closed),
         "change.pin" => !matches!(change.state, State::Merged | State::Closed),
+        "change.front" => !matches!(change.state, State::Merged | State::Closed),
         crate::control::BREAK_GLASS => {
             !matches!(change.state, State::Merged | State::Closed)
                 && crate::control::code_unpassed(change)

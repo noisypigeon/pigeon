@@ -254,6 +254,13 @@ const CATALOG: &[Operation] = &[
         ],
     },
     Operation {
+        name: "change.front",
+        engine: Engine::Backplane,
+        effect: Effect::Apply,
+        summary: "The owner's: move a queued change to the front of the merge queue, behind the merge running; it skips no check",
+        args: &[NUMBER, arg("ticket", false, Kind::String)],
+    },
+    Operation {
         name: "change.authorize",
         engine: Engine::Backplane,
         effect: Effect::Apply,

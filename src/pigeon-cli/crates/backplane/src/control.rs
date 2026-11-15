@@ -111,6 +111,13 @@ pub enum Routed {
         /// Unpin instead.
         off: bool,
     },
+    /// `change.front`: the owner moves a queued change to the front of the merge queue.
+    Front {
+        /// The change.
+        number: u32,
+        /// Who moved it.
+        by: String,
+    },
     /// `digest.show`: the owner's digest now.
     Digest,
     /// `apple.check`: the Apple connection's health.
@@ -367,6 +374,10 @@ pub fn route(request: &Request, by: &str, at: u64) -> Result<Routed, String> {
         "change.pin" => Ok(Routed::Pin {
             number: number(a)?,
             off: flag(a, "off"),
+        }),
+        "change.front" => Ok(Routed::Front {
+            number: number(a)?,
+            by: by.to_string(),
         }),
         "change.authorize" => event(authorize(a, by, at)),
         "change.pushed" => event(Event::Pushed {

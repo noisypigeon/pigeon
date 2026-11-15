@@ -284,7 +284,7 @@ pub fn tier_of(change: &crate::changes::Change, operation: &str) -> Tier {
         "change.close" => tiers.map_or(Tier::Confirm, |t| at_least_confirm(&t.close)),
         // Moving checks off GitHub is break-glass (the code-checks ADR §5); a pin holds a change
         // from eviction (the eviction ADR §3).
-        crate::control::BREAK_GLASS | "change.pin" => Tier::Owner,
+        crate::control::BREAK_GLASS | "change.pin" | "change.front" => Tier::Owner,
         _ => Tier::Code,
     }
 }

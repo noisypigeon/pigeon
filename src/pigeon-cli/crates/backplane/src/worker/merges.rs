@@ -118,6 +118,33 @@ pub async fn kept(env: &Env, change: &Change) -> Result<()> {
     .await
 }
 
+/// `change.front` on change `number`, by the owner `by`: moved to the front of the queue's
+/// waiting line, recorded as `merge.fronted`; see the concurrent-sessions ADR's 2026-11-15
+/// amendment on the owner moving a change to the front.
+///
+/// # Errors
+///
+/// When a binding fails.
+pub async fn front(env: &Env, s: &Settings, number: u32, by: &str) -> Result<(u16, Value)> {
+    let (status, answer) =
+        to_instance(env, s, "/merges/front", &json!({ "number": number })).await?;
+    if status != 200 {
+        return Ok((409, answer["error"].clone()));
+    }
+    let (place, of) = (&answer["left"][0], &answer["left"][1]);
+    let why =
+        format!("!{number} was moved to the front of the merge queue by {by}, from {place}/{of}");
+    let added = super::events::append(env, s, "merge.fronted", Some(number), None, &why, false);
+    if let Err(e) = added.await {
+        worker::console_error!("merge.fronted: {e}");
+    }
+    resume(env, s).await?;
+    Ok((
+        200,
+        json!({ "fronted": number, "from": answer["left"], "message": why }),
+    ))
+}
+
 /// Hands back the turn of a holder with no merge on its way, recording `merge.released`; see the
 /// 2026-11-11 amendment on a turn held by no merge.
 async fn hand_back_idle(env: &Env, s: &Settings) -> Result<()> {
@@ -356,7 +383,7 @@ async fn start(env: &Env, s: &Settings, mut next: Option<Entry>) -> Result<()> {
     Ok(())
 }
 
-/// The `Instance` Durable Object's side: `/merges/enqueue`, `done`, `keep`, `release`, `resume` and `list`.
+/// The `Instance` Durable Object's side: `/merges/enqueue`, `done`, `keep`, `release`, `front`, `resume` and `list`.
 ///
 /// # Errors
 ///
@@ -386,6 +413,13 @@ pub async fn serve(state: &State, path: &str, body: &Value) -> Result<Response> 
             let (q, next) = merges::done(&q, number, now());
             (q, json!({ "next": next }))
         }
+        "/merges/front" => match merges::front(&q, number) {
+            Ok((q, left)) => (q, json!({ "left": left })),
+            Err(why) => {
+                let refused = json!({ "error": why });
+                return Ok(Response::from_json(&refused)?.with_status(409));
+            }
+        },
         "/merges/release" => {
             let (q, next) = merges::release(&q, number, now());
             (q, json!({ "next": next }))

@@ -338,6 +338,10 @@ pub struct Digest {
     /// `.claude/decisions/2026-11-15-security-standing-auto-owner-flags.md` §4.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub items: Vec<String>,
+    /// The owner's moves in the merge queue since the last digest: shown, never pushed; see the
+    /// concurrent-sessions ADR's 2026-11-15 amendment on the owner moving a change to the front.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub queue: Vec<String>,
 }
 
 /// The digest's archive lines: each `session.archived` summary, then each clean end not archived,
@@ -506,6 +510,7 @@ impl Digest {
         out.extend(self.sessions.iter().map(SessionLine::line));
         out.extend(self.briefs.iter().cloned());
         out.extend(self.stops.clone());
+        out.extend(self.queue.iter().cloned());
         out.extend(self.archives.iter().cloned());
         out
     }
@@ -655,7 +660,18 @@ pub fn digest(input: &DigestInput<'_>, now: u64) -> Digest {
         archives: Vec::new(),
         unlisted: Vec::new(),
         items: Vec::new(),
+        queue: Vec::new(),
     }
+}
+
+/// The digest's queue lines: each owner's move to the front, `merge.fronted`, in `events`.
+#[must_use]
+pub fn queue_lines(events: &[crate::events::Event]) -> Vec<String> {
+    events
+        .iter()
+        .filter(|e| e.kind == "merge.fronted")
+        .map(|e| format!("queue: {}", e.summary))
+        .collect()
 }
 
 /// The stops in `events`, by kind, as the digest's line, or none when there are none: what the

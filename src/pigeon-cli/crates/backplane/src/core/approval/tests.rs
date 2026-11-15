@@ -387,3 +387,15 @@ fn a_pin_is_the_owners_each_time_and_offered_only_on_an_open_change() {
     closed.state = ChangeState::Closed;
     assert!(offerable(&closed, "change.pin").is_err());
 }
+
+#[test]
+fn a_move_to_the_front_is_the_owners_each_time_and_offered_only_on_an_open_change() {
+    use super::grants::offerable;
+    use super::tiers::{Tier, tier_of};
+    let c = checked();
+    assert_eq!(tier_of(&c, "change.front"), Tier::Owner);
+    assert!(offerable(&c, "change.front").is_ok());
+    let mut merged = checked();
+    merged.state = ChangeState::Merged;
+    assert!(offerable(&merged, "change.front").is_err());
+}

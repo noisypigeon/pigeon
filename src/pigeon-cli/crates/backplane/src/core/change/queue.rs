@@ -237,6 +237,42 @@ pub fn keep(q: &MergeQueue, number: u32, now: u64) -> MergeQueue {
     next
 }
 
+/// The owner moves waiting change `number` to the front of the line, behind the merge running
+/// and any kept change: the next queue, and the place it left, as `(place, of)`. See the
+/// concurrent-sessions ADR's 2026-11-15 amendment on the owner moving a change to the front.
+///
+/// # Errors
+///
+/// When it is merging, isn't queued, or yields to another; the queue is then unchanged.
+pub fn front(q: &MergeQueue, number: u32) -> Result<(MergeQueue, (usize, usize)), String> {
+    if q.merging.as_ref().is_some_and(|e| e.number == number) {
+        return Err(format!("change {number} is already being merged"));
+    }
+    if let Some(to) = q.yielded.get(&number) {
+        return Err(format!(
+            "change {number} yields to !{to}; its yield decides its place"
+        ));
+    }
+    let Some(i) = q.waiting.iter().position(|e| e.number == number) else {
+        return Err(format!(
+            "change {number} isn't in the merge queue; ask to merge it first"
+        ));
+    };
+    let running = usize::from(q.merging.is_some());
+    let left = (i + 1 + running, q.waiting.len() + running);
+    let mut next = q.clone();
+    let Some(entry) = next.waiting.remove(i) else {
+        return Err(format!("change {number} isn't in the merge queue"));
+    };
+    let ahead = next
+        .waiting
+        .iter()
+        .take_while(|e| q.kept.contains_key(&e.number))
+        .count();
+    next.waiting.insert(ahead, entry);
+    Ok((next, left))
+}
+
 /// Change `number`'s kept turn is no longer reserved, as when its merge asked again waits for
 /// the owner: the next queue, and the next merge to start, if any; a protected turn still holds.
 #[must_use]

@@ -761,3 +761,29 @@ replay !546's, !549's, !481's and !543's sequences.
 
 - **Execution:** `backplane::sessions::MAX_OPEN` and its test in
   `backplane/tests/tasks.rs`; `CLAUDE.md` names the new limit.
+
+### 2026-11-15: The owner moves a queued change to the front
+
+- **Why.** The owner asked to move !585 from 16th of 16 to the front. No
+  operation did that: `change_pin` only protects a change against eviction.
+- **`change_front`** (`change.front`, the change's number): moves a waiting
+  change to the head of the queue's waiting line (`merges::front`).
+  - It is the owner's: tier `owner`, offered as a grant, never covered by a
+    window, mandate or policy. An agent's call answers with the approval
+    page, and the owner approves it with a passkey, as for `change_pin`.
+  - It reorders only. It never preempts the merge running, and the change
+    still restacks, is gated and merges as any other; no check is skipped.
+  - It is refused when the change is merging, isn't queued, or yields to
+    another (its yield decides its place).
+  - A change that keeps its turn (the amendment above) still goes first,
+    since it held the turn.
+- **It is recorded** as `merge.fronted`, with who moved it and the place it
+  left ("from 17/17"); the digest shows each one since the last digest as a
+  `queue` line, never pushed alone. Each change's `queued n/m` follows from the
+  new order.
+- **Not chosen: `change_pin` with `front: true`.** A pin outlives the queue
+  and is about eviction; a move to the front is one act on one queue.
+
+**Execution,** in one change (!591), built on !585: `merges::front`, the
+`change.front` operation, its tier and grant, `merge.fronted` and the digest
+line, with tests.

@@ -151,6 +151,7 @@ pub async fn build(env: &Env, s: &Settings) -> Result<(Digest, u64)> {
     }
     d.stops = crate::tasks::stops(&events);
     d.items = super::owner_items::lines(env, s).await?;
+    d.queue = crate::tasks::queue_lines(&events);
     let open: std::collections::BTreeMap<u32, String> = d
         .sessions
         .iter()

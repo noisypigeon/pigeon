@@ -875,6 +875,10 @@ async fn dispatch(
                 respond(operation, status, json!({ "pinned": v })),
             ))
         }
+        Routed::Front { number, by } => {
+            let (status, v) = merges::front(env, s, number, &by).await?;
+            Ok((Some(number.to_string()), respond(operation, status, v)))
+        }
         Routed::Evictable => {
             let req = json_request("https://main/evictions/last", Method::Get, None, None)?;
             let mut r = platform::call(env, &main_stub(env, &s.repo)?, req).await?;

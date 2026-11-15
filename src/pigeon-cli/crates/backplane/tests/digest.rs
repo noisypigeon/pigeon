@@ -451,3 +451,25 @@ fn an_open_owner_item_is_pushed_first_and_counted_in_the_stops() {
         )
     );
 }
+
+#[test]
+fn the_digest_shows_each_move_to_the_front() {
+    use backplane::events::Event;
+    let e = |id: u64, kind: &str, summary: &str| Event {
+        id,
+        at: id,
+        kind: kind.into(),
+        change: Some(585),
+        session: None,
+        summary: summary.into(),
+        owner: false,
+        stage: None,
+        model: None,
+    };
+    let moved = "!585 was moved to the front of the merge queue by owner, from 17/17";
+    let lines = backplane::tasks::queue_lines(&[
+        e(1, "merge.kept", "!9 keeps its merge turn"),
+        e(2, "merge.fronted", moved),
+    ]);
+    assert_eq!(lines, [format!("queue: {moved}")]);
+}
