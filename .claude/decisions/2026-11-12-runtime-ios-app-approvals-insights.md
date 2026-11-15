@@ -738,3 +738,27 @@ supersedes §5's length and budget, and step 6's "its limits":
   with Pause and Resume, each by passkey, and the hours sheet goes.
 
 Everything else in §5 and its amendments stands, the hold included.
+
+### 2026-11-15: A filter that matches nothing falls back to all
+
+On TestFlight build 16 the Tracker read `0 sessions · 0 changes`, `Nothing
+running.` and `4 silent` while about 13 changes were queued, merging or
+checking. The route and the silent rule were sound: a filter chip chosen
+earlier (`need you` or `stalled`) stayed in force after its count fell to 0,
+its chip then disappeared, and nothing was left to clear it. The silent count
+was taken over every session, so it disagreed with the empty list.
+
+- **The filter in force is the chosen one while it keeps a session, else
+  `all`.** Its chip draws on only while it is in force, so a chip that is
+  shown always says what the list is filtered by.
+- **The silent chip, the hidden line and the title count the sessions the
+  filter in force keeps**, so they agree with the cards.
+- Queued (`needs: change`), restacking, merging and proposed (`platform`)
+  and checking (`provider`) changes keep their session shown, as the silent
+  rule already says; tests pin it against a snapshot of that evening's queue.
+
+**Execution,** one change, then an `ios.release`:
+
+1. `PigeonCore`: `effectiveFilter(_:_:)`, `silentCount(_:by:)` and
+   `visible(_:by:showSilent:)` through it, with tests; `TrackerView` uses
+   them for the chips, the list and the counts.

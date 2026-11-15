@@ -209,20 +209,25 @@ public func railLabel(_ c: TrackedChange) -> String {
     }
 }
 
+/// `f`, or `.all` when `f` keeps no session, so a filter whose chip has gone can't hide every card.
+public func effectiveFilter(_ t: Tracker, _ f: TrackerFilter) -> TrackerFilter {
+    f == .all || !filtered(t, by: f).isEmpty ? f : .all
+}
+
 /// A session none of whose changes needs anyone: each is merged or done, or it has none; see the
 /// ADR's "Glanceable tracker cards" amendment.
 public func isSilent(_ s: TrackedSession) -> Bool {
     s.changes.allSatisfy { $0.needs == "none" }
 }
 
-/// How many of the tracker's sessions are silent.
-public func silentCount(_ t: Tracker) -> Int {
-    t.sessions.filter(isSilent).count
+/// How many of the sessions `f` keeps are silent.
+public func silentCount(_ t: Tracker, by f: TrackerFilter = .all) -> Int {
+    filtered(t, by: effectiveFilter(t, f)).filter(isSilent).count
 }
 
 /// The sessions `f` keeps; silent ones only when `showSilent`, and then last.
 public func visible(_ t: Tracker, by f: TrackerFilter, showSilent: Bool) -> [TrackedSession] {
-    let kept = filtered(t, by: f)
+    let kept = filtered(t, by: effectiveFilter(t, f))
     let loud = kept.filter { !isSilent($0) }
     return showSilent ? loud + kept.filter(isSilent) : loud
 }

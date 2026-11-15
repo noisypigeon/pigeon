@@ -203,6 +203,59 @@ import PigeonCore
         #expect(visible(t, by: .owner, showSilent: true).map(\.label) == ["owed"])
     }
 
+    /// Tonight's queue (15 Nov, build 16): changes queued behind !570, !570 merging, !584 checking,
+    /// and sessions with only merged changes or none.
+    static let tonight = Tracker(
+        sessions: [
+            session("hostnames", [
+                change(570, stage: "merging", needs: "platform"),
+                change(571, stage: "queued 4/14", needs: "change", waitsOn: 570),
+                change(580, stage: "queued 5/14", needs: "change", waitsOn: 570),
+            ]),
+            session("standing", [
+                change(546, stage: "queued 13/14", needs: "change", waitsOn: 570),
+                change(547, stage: "queued 2/14", needs: "change", waitsOn: 546),
+            ]),
+            session("learner", [
+                change(568, stage: "queued 11/14", needs: "change", waitsOn: 570),
+                change(579, stage: "proposed", needs: "platform"),
+            ]),
+            session("noisypigeon", [change(584, stage: "checking 1/2", needs: "provider")]),
+            session("restacked", [change(590, stage: "restacking", needs: "platform")]),
+            session("merged", [change(565, stage: "merged")]),
+            session("ended", [change(549, stage: "merged")]),
+            session("ticket-only", []),
+            session("idle", [], listening: false),
+        ],
+        counts: TrackerCounts(owner: 0, stalled: 0, provider: 1))
+
+    @Test func queuedRestackingCheckingAndMergingChangesKeepTheirSessionShown() {
+        for (stage, needs) in [
+            ("queued 3/14", "change"), ("restacking", "platform"), ("checking 1/2", "provider"),
+            ("merging", "platform"), ("proposed", "platform"),
+        ] {
+            let s = Self.session("s", [Self.change(1, stage: stage, needs: needs)])
+            #expect(!isSilent(s), "\(stage)")
+        }
+        let shown = visible(Self.tonight, by: .all, showSilent: false)
+        #expect(
+            shown.map(\.label) == ["hostnames", "standing", "learner", "noisypigeon", "restacked"])
+        #expect(shown.reduce(0) { $0 + $1.changes.count } == 9)
+        #expect(silentCount(Self.tonight) == 4)
+    }
+
+    @Test func aFilterThatMatchesNothingFallsBackToAll() {
+        let t = Self.tonight
+        #expect(effectiveFilter(t, .owner) == .all)
+        #expect(effectiveFilter(t, .stalled) == .all)
+        #expect(effectiveFilter(t, .provider) == .provider)
+        #expect(
+            visible(t, by: .stalled, showSilent: false) == visible(t, by: .all, showSilent: false))
+        #expect(silentCount(t, by: .stalled) == 4)
+        #expect(visible(t, by: .provider, showSilent: false).map(\.label) == ["noisypigeon"])
+        #expect(silentCount(t, by: .provider) == 0)
+    }
+
     @Test func aRowsPillSaysWhoActsAndWhy() {
         #expect(
             rowStatus(Self.change(1, needs: "owner")) == RowStatus(kind: .owner, word: "Needs you"))

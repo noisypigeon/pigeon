@@ -63,7 +63,12 @@ struct TrackerView: View {
     }
 
     private var silent: Int {
-        store.tracker.map(silentCount) ?? 0
+        store.tracker.map { silentCount($0, by: filter) } ?? 0
+    }
+
+    /// The filter in force: `.all` once the chosen one matches nothing.
+    private var active: TrackerFilter {
+        store.tracker.map { effectiveFilter($0, filter) } ?? .all
     }
 
     private var title: some View {
@@ -88,7 +93,7 @@ struct TrackerView: View {
     }
 
     private func chip(_ text: String, _ f: TrackerFilter) -> some View {
-        let on = filter == f
+        let on = active == f
         return Button {
             filter = on ? .all : f
         } label: {
