@@ -179,3 +179,27 @@ the new stage `held`.
     rather than adds.
 - **Paths.** `Governs` gains `core/approval/listed.rs` and
   `worker/listed.rs`.
+
+### 2026-11-15: A change built on another compares its patch from that change's head
+
+The owner chose to fix this before step 4.
+
+- **Found on !492.** It was built `after` !490, and it lost its approval when
+  !490 merged, though its own patch was unchanged.
+  - `cobot::ci::restack` compared patch-ids from the change's fork with
+    `main`.
+  - For a change built on another, that span holds the base change's commits
+    too. Once the base is squashed onto `main`, the ids never match.
+- **The rule.** For a change built on another, two patch-ids count from that
+  change's last head, as the restack's merge already does
+  ([`2026-11-12-development-grants-applies-rescue-yield.md`](2026-11-12-development-grants-applies-rescue-yield.md)'s
+  2026-11-14 amendment on restacks):
+  - the restack's same-patch test, where an approval carries across a
+    restack (§4);
+  - the bound job's head patch-id, where an approval carries to a session's
+    push (the earlier amendment on session pushes).
+
+  Every other change counts from its fork with `main`, as now.
+- **Execution:** one `feat(backplane)` change to `cobot/ci.rs` and `jobs.rs`.
+  Its test is a change built on another whose base squash-merges, and whose
+  approval then carries.
