@@ -1123,15 +1123,20 @@ impl DurableObject for MainRun {
                         self.state.storage().put(LEDGER, l).await?;
                     }
                     deploy_event(&self.env, &sha, &report).await;
-                    if report.outcome == Outcome::Failed {
-                        let why = format!("the deploy of {sha} failed");
-                        let paused = match platform::Settings::from(&self.env) {
-                            Ok(s) => super::mandates::pause_all(&self.env, &s, &why).await,
-                            Err(e) => Err(e),
-                        };
-                        if let Err(e) = paused {
-                            worker::console_error!("mandates: {e}");
+                    // A failed deploy holds Auto, and a passed one resumes it; see the iOS
+                    // approvals ADR's 2026-11-15 amendment.
+                    let auto = match platform::Settings::from(&self.env) {
+                        Ok(s) if report.outcome == Outcome::Passed => {
+                            super::mandates::resume_all(&self.env, &s, &sha).await
                         }
+                        Ok(s) => {
+                            let why = control::failure(&report);
+                            super::mandates::hold_all(&self.env, &s, &sha, &why).await
+                        }
+                        Err(e) => Err(e),
+                    };
+                    if let Err(e) = auto {
+                        worker::console_error!("auto: {e}");
                     }
                     next = p.start();
                 }

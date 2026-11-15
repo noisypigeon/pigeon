@@ -10,7 +10,7 @@ use super::{approve as page, elicit};
 use crate::access::Identity;
 use crate::approve::{self, Waiting};
 use crate::changes::Change;
-use crate::core::approval::windows::Windows;
+use crate::core::approval::windows::{BUDGET, Window, Windows};
 use crate::mandates::{Decision, Mandate, Mandates};
 
 /// The storage key of every mandate.
@@ -124,8 +124,19 @@ async fn offer(env: &Env, s: &Settings, m: &Mandate) -> Result<String> {
     Ok(format!("https://{host}{path}"))
 }
 
-/// Whether the mandate `change` names approves `operation` on it: the mandate's number, when
-/// it does; none, saying why in the log, when the owner is asked as usual.
+/// What a window or mandate says of an operation, as the Worker acts on it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Verdict {
+    /// Run it as `window:<id>` or `mandate:<id>`.
+    Allow(u32),
+    /// A hold defers it, saying what it waits on; nobody is asked.
+    Held(String),
+    /// Ask the owner as usual.
+    No,
+}
+
+/// Whether the mandate `change` names approves `operation` on it; the owner is asked as usual,
+/// saying why in the log, when it doesn't.
 ///
 /// # Errors
 ///
@@ -135,9 +146,9 @@ pub async fn approves(
     s: &Settings,
     change: &Change,
     operation: &str,
-) -> Result<Option<u32>> {
+) -> Result<Verdict> {
     if change.mandate.is_none() {
-        return Ok(None);
+        return Ok(Verdict::No);
     }
     let (status, v) = to_instance(
         env,
@@ -151,35 +162,100 @@ pub async fn approves(
         status,
         serde_json::from_value::<Decision>(v["decision"].clone()),
     ) {
-        (200, Ok(Decision::Allow)) => Ok(id),
+        (200, Ok(Decision::Allow)) => Ok(id.map_or(Verdict::No, Verdict::Allow)),
+        (200, Ok(Decision::Hold(why))) => Ok(Verdict::Held(why)),
         (200, Ok(Decision::Pause(why))) => {
             worker::console_log!("mandate paused: {why}");
             let body = format!("mandate {}: {why}", change.mandate.unwrap_or_default());
             super::push::notify(env, s, "Mandate paused", &body, "/approvals").await;
-            Ok(None)
+            Ok(Verdict::No)
         }
         (200, Ok(Decision::Ask(why))) => {
             worker::console_log!("mandate: the owner approves {operation}: {why}");
-            Ok(None)
+            Ok(Verdict::No)
         }
         _ => {
             worker::console_warn!("mandate: {v}");
-            Ok(None)
+            Ok(Verdict::No)
         }
     }
 }
 
-/// Pauses every active mandate, saying `why`.
+/// Tells the event log and the owner of `kind` (`auto.held`, `auto.resumed` or `auto.ended`).
+async fn tell(env: &Env, s: &Settings, kind: &str, title: &str, said: &str) {
+    if let Err(e) = super::events::append(env, s, kind, None, None, said, true).await {
+        worker::console_error!("{kind}: {e}");
+    }
+    super::push::notify(env, s, title, said, "/approvals").await;
+}
+
+/// Holds every active window and mandate after the deploy of `sha` failed for `why`; see the
+/// iOS approvals ADR's 2026-11-15 amendment.
 ///
 /// # Errors
 ///
 /// When a binding fails.
-pub async fn pause_all(env: &Env, s: &Settings, why: &str) -> Result<()> {
-    to_instance(env, s, "/mandates/pause", &json!({ "why": why })).await?;
-    let (_, v) = to_instance(env, s, "/windows/pause", &json!({ "why": why })).await?;
-    if let Some(id) = v["paused"].as_u64() {
-        let said = format!("Auto window {id} paused: {why}");
-        let _ = super::events::append(env, s, "auto.paused", None, None, &said, false).await;
+pub async fn hold_all(env: &Env, s: &Settings, sha: &str, why: &str) -> Result<()> {
+    let body = json!({ "sha": sha, "why": why });
+    let short = sha.get(..12).unwrap_or(sha);
+    let (_, v) = to_instance(env, s, "/windows/hold", &body).await?;
+    if let Some(id) = v["window"].as_u64() {
+        if v["ended"].as_bool() == Some(true) {
+            let said = format!("Auto window {id} ended: the deploy of {short} failed again: {why}");
+            tell(env, s, "auto.ended", "Auto ended", &said).await;
+        } else {
+            let said = format!(
+                "Auto window {id} held: the deploy of {short} failed: {why}; it resumes when a deploy passes"
+            );
+            tell(env, s, "auto.held", "Auto held", &said).await;
+        }
+    }
+    let (_, v) = to_instance(env, s, "/mandates/hold", &body).await?;
+    for (key, kind, title, how) in [
+        (
+            "held",
+            "auto.held",
+            "Mandate held",
+            "held until a deploy passes",
+        ),
+        (
+            "ended",
+            "auto.ended",
+            "Mandate ended",
+            "ended: its hold is spent",
+        ),
+    ] {
+        for id in v[key].as_array().into_iter().flatten() {
+            let said = format!("mandate {id} {how}: the deploy of {short} failed: {why}");
+            tell(env, s, kind, title, &said).await;
+        }
+    }
+    Ok(())
+}
+
+/// Resumes every held window and mandate after the deploy of `sha` passed.
+///
+/// # Errors
+///
+/// When a binding fails.
+pub async fn resume_all(env: &Env, s: &Settings, sha: &str) -> Result<()> {
+    let short = sha.get(..12).unwrap_or(sha);
+    let (_, v) = to_instance(env, s, "/windows/resume", &json!({})).await?;
+    if let Ok(w) = serde_json::from_value::<Window>(v["window"].clone()) {
+        let left = w.expires.saturating_sub(now()) / 60;
+        let said = format!(
+            "Auto window {} resumed: the deploy of {short} passed; {}h{:02}m and {} merges left",
+            w.id,
+            left / 60,
+            left % 60,
+            BUDGET.saturating_sub(w.used)
+        );
+        tell(env, s, "auto.resumed", "Auto resumed", &said).await;
+    }
+    let (_, v) = to_instance(env, s, "/mandates/resume", &json!({})).await?;
+    for id in v["resumed"].as_array().into_iter().flatten() {
+        let said = format!("mandate {id} resumed: the deploy of {short} passed");
+        let _ = super::events::append(env, s, "auto.resumed", None, None, &said, true).await;
     }
     Ok(())
 }
@@ -199,6 +275,23 @@ pub async fn window_approves(
     change: &Change,
     operation: &str,
 ) -> Result<Option<u32>> {
+    Ok(match window_verdict(env, s, change, operation).await? {
+        Verdict::Allow(id) => Some(id),
+        _ => None,
+    })
+}
+
+/// What the Auto window says of `operation` on `change`.
+///
+/// # Errors
+///
+/// When a binding fails.
+pub async fn window_verdict(
+    env: &Env,
+    s: &Settings,
+    change: &Change,
+    operation: &str,
+) -> Result<Verdict> {
     let (status, v) = to_instance(
         env,
         s,
@@ -211,12 +304,14 @@ pub async fn window_approves(
         status,
         serde_json::from_value::<Decision>(v["decision"].clone()),
     ) {
-        (200, Ok(Decision::Allow)) => Ok(id),
-        _ => Ok(None),
+        (200, Ok(Decision::Allow)) => Ok(id.map_or(Verdict::No, Verdict::Allow)),
+        (200, Ok(Decision::Hold(why))) => Ok(Verdict::Held(why)),
+        _ => Ok(Verdict::No),
     }
 }
 
-/// `/windows/*` on the `Instance`: `current`, `start`, `end`, `pause` and `decide`.
+/// `/windows/*` on the `Instance`: `current`, `start`, `end`, `pause`, `hold`, `resume` and
+/// `decide`.
 ///
 /// # Errors
 ///
@@ -250,6 +345,15 @@ pub async fn serve_windows(state: &State, path: &str, body: Value) -> Result<Res
             let (next, paused) = all.pause_all(&s("why"));
             (next, Ok(json!({ "paused": paused })))
         }
+        "/windows/hold" => {
+            let (next, held) = all.hold_all(&s("sha"), &s("why"), t);
+            let (id, ended) = held.unzip();
+            (next, Ok(json!({ "window": id, "ended": ended })))
+        }
+        "/windows/resume" => {
+            let (next, resumed) = all.resume_all(t);
+            (next, Ok(json!({ "window": resumed })))
+        }
         "/windows/decide" => {
             let change: Change = match serde_json::from_value(body["change"].clone()) {
                 Ok(c) => c,
@@ -270,7 +374,7 @@ pub async fn serve_windows(state: &State, path: &str, body: Value) -> Result<Res
 }
 
 /// The `Instance` Durable Object's side: `/mandates/propose`, `list`, `offer`, `peek`, `grant`,
-/// `end`, `decide` and `pause`.
+/// `end`, `decide`, `pause`, `hold` and `resume`.
 ///
 /// # Errors
 ///
@@ -278,6 +382,7 @@ pub async fn serve_windows(state: &State, path: &str, body: Value) -> Result<Res
 pub async fn serve(state: &State, path: &str, body: Value) -> Result<Response> {
     let storage = state.storage();
     let all: Mandates = storage.get(MANDATES).await?.unwrap_or_default();
+    let (all, _) = all.settle(now());
     let n = |k: &str| body[k].as_u64().and_then(|v| u32::try_from(v).ok());
     let s = |k: &str| body[k].as_str().unwrap_or_default().to_string();
     let (all, answer): (Mandates, std::result::Result<Value, String>) = match path {
@@ -331,6 +436,14 @@ pub async fn serve(state: &State, path: &str, body: Value) -> Result<Response> {
         "/mandates/pause" => {
             let (all, paused) = all.pause_all(&s("why"));
             (all, Ok(json!({ "paused": paused })))
+        }
+        "/mandates/hold" => {
+            let (all, held, ended) = all.hold_all(&s("sha"), &s("why"), now());
+            (all, Ok(json!({ "held": held, "ended": ended })))
+        }
+        "/mandates/resume" => {
+            let (all, resumed) = all.resume_all(now());
+            (all, Ok(json!({ "resumed": resumed })))
         }
         "/mandates/end" => match n("id") {
             Some(id) => {

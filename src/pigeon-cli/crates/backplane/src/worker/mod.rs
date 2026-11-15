@@ -274,14 +274,30 @@ async fn under_mandate(
     let Ok(change) = serde_json::from_value::<Change>(v["change"].clone()) else {
         return Ok(None);
     };
-    let Some(m) = mandates::approves(env, s, &change, &request.operation).await? else {
-        return Ok(None);
+    let m = match mandates::approves(env, s, &change, &request.operation).await? {
+        mandates::Verdict::Allow(m) => m,
+        mandates::Verdict::Held(why) => return Ok(Some(Ok(held(number, request, &why)))),
+        mandates::Verdict::No => return Ok(None),
     };
     let who = Identity {
         subject: format!("mandate:{m}"),
         human: true,
     };
     Ok(Some(run(env, s, &who, request).await))
+}
+
+/// The answer to `request` on change `number` when a hold defers it: nothing runs, and nobody is
+/// asked; see the iOS approvals ADR's 2026-11-15 amendment.
+fn held(number: u32, request: &wire::Request, why: &str) -> WireResponse {
+    wire::Response {
+        operation: request.operation.clone(),
+        ok: false,
+        result: json!({ "held": why }),
+        violations: vec![format!(
+            "held: `{}` on change {number} {why}",
+            request.operation
+        )],
+    }
 }
 
 /// Runs `request` on change `number` as `window:<id>`, when the owner's Auto window allows it;
@@ -315,8 +331,10 @@ pub(super) async fn under_window(
     let Ok(change) = serde_json::from_value::<Change>(v["change"].clone()) else {
         return Ok(None);
     };
-    let Some(id) = mandates::window_approves(env, s, &change, &request.operation).await? else {
-        return Ok(None);
+    let id = match mandates::window_verdict(env, s, &change, &request.operation).await? {
+        mandates::Verdict::Allow(id) => id,
+        mandates::Verdict::Held(why) => return Ok(Some(Ok(held(number, request, &why)))),
+        mandates::Verdict::No => return Ok(None),
     };
     let who = Identity {
         subject: format!("window:{id}"),
