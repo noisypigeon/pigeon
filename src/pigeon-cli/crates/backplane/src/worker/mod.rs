@@ -25,6 +25,7 @@ mod elicit;
 mod events;
 mod gitdoor;
 mod github;
+mod hosts;
 mod insights;
 mod listed;
 mod macos;
@@ -66,6 +67,11 @@ const QUEUE: &str = "queue";
 
 #[event(fetch)]
 async fn fetch(req: Request, env: Env, _ctx: worker::Context) -> Result<Response> {
+    // A standalone's host under the platform's zone, before any other route; see
+    // .claude/decisions/2026-11-15-runtime-standalone-hostnames-platform-zone.md §3.
+    if let Some(host) = hosts::ours(&req, &env) {
+        return hosts::serve(req, &env, &host).await;
+    }
     // Builds of public code, for any identity Access let through; each job checks the SHA-256
     // its Worker gave it; see .claude/decisions/2026-11-07-development-job-images-on-cloudflare.md §3.
     if req.method() == Method::Get && req.path().starts_with("/builds/") {
@@ -1902,6 +1908,10 @@ impl DurableObject for Instance {
         if path.starts_with("/members/") {
             let body: Value = req.json().await?;
             return members::serve(&self.state, &path, body).await;
+        }
+        if path == hosts::ORIGIN {
+            let body: Value = req.json().await?;
+            return hosts::serve_origin(&self.state, &body).await;
         }
         if path.starts_with("/devices/") {
             let body: Value = req.json().await?;

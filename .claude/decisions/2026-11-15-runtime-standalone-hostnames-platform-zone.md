@@ -239,3 +239,16 @@ which it leaves unchanged.
 - **Order.** The proxy (step 3's Worker half) and these hooks build after
   5b. Step 4 turns the route on only once the proxy is deployed, so no
   `*.pigeon.dev` request reaches the platform's own routes.
+
+### 2026-11-15: the proxy lives in `worker/hosts.rs`, and asks `Instance` at `/hosts/origin`
+
+- This amendment adds `src/pigeon-cli/crates/backplane/src/worker/hosts.rs` to
+  what this ADR governs.
+- The `Instance` operation that answers a host's `origin` is `/hosts/origin`,
+  not `/instances/host`, so it never meets the learner ADR's `/instances/`
+  operations. It reads `instances.private` and answers `{origin}` or `{}`.
+- **Any host under `INSTANCE_ZONE`** but the platform's own goes to the proxy,
+  so a reserved or unknown name is a bare 404, never the platform's routes.
+- Until step 4 sets `INSTANCE_ZONE`, the dispatch does nothing; until the
+  hooks after the learner ADR's step 5b add `host` and `origin`, every host is
+  a 404.
