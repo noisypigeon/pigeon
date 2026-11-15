@@ -139,6 +139,9 @@ impl Change {
                 self.jobs.push(k);
             }
         }
+        let (c, early) = self.early_gate();
+        self = c;
+        effects.extend(early);
         if self.jobs.iter().any(|j| j.gates() && j.open()) {
             return Ok((self, effects));
         }

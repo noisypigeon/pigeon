@@ -139,6 +139,21 @@ fn checks(c: &Change) -> impl Iterator<Item = &Job> {
         .filter(|j| ![BOUND, MIRROR, RESTACK, MERGE].contains(&j.name.as_str()))
 }
 
+/// What a merge holding its turn waits on: the merge job, else its head's open checks and gate
+/// jobs; see the 2026-11-15 merge-turn amendment to
+/// `.claude/decisions/2026-11-15-development-code-checks-by-reach.md`.
+fn merging_next(c: &Change) -> String {
+    let squash = "the merge job squashes it onto main";
+    if open(c, MERGE) {
+        return squash.into();
+    }
+    let waiting = names(checks(c).filter(|j| j.open()));
+    if waiting.is_empty() {
+        return squash.into();
+    }
+    format!("{waiting} finish, then {squash}")
+}
+
 fn names<'a>(jobs: impl Iterator<Item = &'a Job>) -> String {
     jobs.map(|j| format!("`{}`", j.name))
         .collect::<Vec<_>>()
@@ -223,11 +238,9 @@ pub fn of(c: &Change, cx: &Context) -> Stage {
             at("conflicted", Needs::Agent, next)
         }
         _ if open(c, RESTACK) => at("restacking", Needs::Platform, "the restack reports"),
-        _ if open(c, MERGE) || place == Some(Place::Merging) => at(
-            "merging",
-            Needs::Platform,
-            "the merge job squashes it onto main",
-        ),
+        _ if open(c, MERGE) || place == Some(Place::Merging) => {
+            at("merging", Needs::Platform, merging_next(c))
+        }
         State::Pushed => at(
             "bounding",
             Needs::Platform,
@@ -429,6 +442,12 @@ mod tests {
         assert_eq!(of(&c, &Context::default()).stage, "merging");
         c.jobs.clear();
         assert_eq!(of(&c, &with(Some(Place::Merging))).stage, "merging");
+        c.jobs = vec![job("gate: test", JobStatus::Running)];
+        let s = of(&c, &with(Some(Place::Merging)));
+        assert_eq!(
+            s.next,
+            "`gate: test` finish, then the merge job squashes it onto main"
+        );
     }
 
     #[test]

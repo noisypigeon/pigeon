@@ -242,3 +242,48 @@ re-ran six clippy jobs in the gate, as §4 worded it.
 **Execution:** one change. It holds this amendment, `rerun_carried` in
 `core/change/gate.rs`, and a test in `tests/merges.rs` where a carried head
 re-runs its crate clippy and not a feature one.
+
+### 2026-11-15: The merge turn's wait is the full gate after the checks, so it runs beside them
+
+Reported by the status session: on !546 and !598 the stage read `merging`
+for about 6 minutes before the merge job ran, and the whole queue waited.
+
+**What the event log shows.**
+
+- **The merge job started 5 s after `gate: test` passed:** !546 at
+  20:07:35 → 20:07:40, !598 at 22:55:46 → 22:55:51. No job sat
+  undispatched, and no `job.redispatched` or `job.retrying` fired. The
+  dispatch of the job-start ADR
+  (`2026-11-15-development-job-start-failures-backoff.md`) is not at fault.
+- **The 5.5 minutes are `gate: test`,** `cargo test --workspace`. !598's
+  turn-time restack was clean, so §3 made its gate full.
+- **The gate started only after the checks.** !598's restacked head ran
+  its checks from 22:44:45 to 22:50:11. The window approved it at 22:50:11,
+  and `gate: test` ran from 22:50:13 to 22:55:46. The checks and the gate ran
+  one after the other, in about 11 minutes, while the turn was held.
+- **The stage hid it.** A change holding the turn read `merging`, next "the
+  merge job squashes it onto main", through its checks and its gate.
+
+**Decisions.**
+
+- **A head with a merge parked on it and a full gate queues `gate: test` at
+  `Bounded`,** beside its checks (`early_gate`).
+  - It counts as a check: its failure fails the head.
+  - `start_merge` finds it passed, so the merge starts with the approval.
+  - A head with no merge parked on it is unchanged. Its gate runs when its
+    turn comes, since `main` may move before then.
+- **`merging`'s `next` names what the merge waits on:** the open checks and
+  gate jobs, then the merge job.
+
+**What it risks.** A head whose check fails also spends a `gate: test`
+Container. The checks and the gate share the change's 6 running jobs.
+
+**Execution:** one change. It holds this amendment, `early_gate` in
+`core/change/gate.rs`, its call in `bounded`, `merging_next` in
+`core/change/stage.rs`, and `tests/merge_gate_early.rs`, which replays
+!546 (approval carried) and !598 (approval given again by the window).
+
+**Verification.** The time from a turn-time restack's checks passing to its
+merge starting falls from about 5.5 minutes to the merge's own start, as
+measured from `job.passed` and `job.started` events on the next full-gate
+merges.

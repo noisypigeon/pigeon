@@ -48,6 +48,10 @@ impl Change {
     /// After a gate job settles: a failure fails the change, naming the checks, and drops its
     /// merge; the last pass starts the merge.
     pub(super) fn gate_settled(mut self) -> (Change, Vec<Effect>) {
+        // An early gate job settles as a check; see `early_gate`.
+        if self.state == State::Bounded {
+            return self.settle();
+        }
         if self.state != State::Approved {
             return (self, Vec::new());
         }
@@ -125,6 +129,25 @@ impl Change {
 
     /// A merge asked for meanwhile, started now, or dropped when it can't start; its refusal
     /// comes before any change, so the change is as it was.
+    /// A head with a merge parked on it and a full gate: the gate's whole-suite run, queued
+    /// beside its checks; see the 2026-11-15 merge-turn amendment to
+    /// `.claude/decisions/2026-11-15-development-code-checks-by-reach.md`.
+    pub(super) fn early_gate(mut self) -> (Change, Vec<Effect>) {
+        if self.merge_after.is_none() || self.gate_why().is_none() {
+            return (self, Vec::new());
+        }
+        let mut effects = Vec::new();
+        for c in self.full.iter().filter(|c| whole_suite(c)) {
+            let name = format!("{GATE}{}", c.name);
+            if self.jobs.iter().any(|j| j.name == name || j.name == c.name) {
+                continue;
+            }
+            effects.push(Effect::Start(name.clone()));
+            self.jobs.push(Job::queued(&name, c.argv.clone()));
+        }
+        (self, effects)
+    }
+
     pub(super) fn start_merge_or_drop(self, by: &str) -> (Change, Vec<Effect>) {
         match self.clone().start_merge(by) {
             Ok(next) => next,
