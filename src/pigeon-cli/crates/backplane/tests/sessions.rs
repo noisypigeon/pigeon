@@ -131,3 +131,11 @@ fn a_class_covers_its_own_work_and_less_capable_classes() {
     assert!(!Class::Haiku.covers(Class::Sonnet));
     assert!(!Class::Sonnet.covers(Class::Opus));
 }
+
+#[test]
+fn a_session_id_is_its_labels_last_segment() {
+    assert_eq!(
+        backplane::sessions::session_id("https://claude.ai/code/session_015X/"),
+        "session_015X"
+    );
+}

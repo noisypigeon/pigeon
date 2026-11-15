@@ -325,6 +325,29 @@ pub struct Digest {
     /// `.claude/decisions/2026-11-15-development-sessions-stop-only-for-oversight.md` §5.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub stops: Option<String>,
+    /// Each archiver's report since the last digest, and each session that ended clean an hour
+    /// ago or more and isn't archived: shown, never pushed; see
+    /// `.claude/decisions/2026-11-15-development-archive-cleanly-ended-sessions.md` §4.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub archives: Vec<String>,
+}
+
+/// The digest's archive lines: each `session.archived` summary, then each clean end not archived,
+/// by session ID and its archiver's.
+#[must_use]
+pub fn archive_lines(reports: &[String], unarchived: &[(String, Option<String>)]) -> Vec<String> {
+    let id = crate::sessions::session_id;
+    reports
+        .iter()
+        .map(|r| format!("session: {r}"))
+        .chain(unarchived.iter().map(|(l, by)| {
+            format!(
+                "ended clean, not archived: {} (archiver {})",
+                id(l),
+                by.as_deref().map_or("none", id)
+            )
+        }))
+        .collect()
 }
 
 /// How long a session goes without polling before a change that needs it stalls, in seconds;
@@ -465,6 +488,7 @@ impl Digest {
         out.extend(self.sessions.iter().map(SessionLine::line));
         out.extend(self.briefs.iter().cloned());
         out.extend(self.stops.clone());
+        out.extend(self.archives.iter().cloned());
         out
     }
 
@@ -581,6 +605,7 @@ pub fn digest(input: &DigestInput<'_>, now: u64) -> Digest {
         briefs: Vec::new(),
         containers: None,
         stops: None,
+        archives: Vec::new(),
     }
 }
 

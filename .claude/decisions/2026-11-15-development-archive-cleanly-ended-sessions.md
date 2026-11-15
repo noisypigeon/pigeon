@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: development
-* Governs: `src/pigeon-cli/crates/backplane/src/worker/tickets.rs`, `src/pigeon-cli/crates/backplane/src/tickets.rs`, `src/pigeon-cli/crates/backplane/src/sessions.rs`
+* Governs: `src/pigeon-cli/crates/backplane/src/worker/tickets.rs`, `src/pigeon-cli/crates/backplane/src/tickets.rs`, `src/pigeon-cli/crates/backplane/src/sessions.rs`, `src/pigeon-cli/crates/backplane/src/worker/push.rs`
 
 ## Context
 
@@ -146,3 +146,29 @@ The digest gains two shown, never-pushed lists. Neither changes `needs_owner`:
 3. Verify live. After the Worker deploys, an executor's clean end is archived
    by its planner, and the next hourly digest lists it. Recorded here as an
    amendment. (planner)
+
+## Amendments
+
+### 2026-11-15: Step 2 lands: `parent`, the clean end, `session_archived` and the digest's lines
+
+- **Paths.** `Governs` gains `worker/push.rs`. `events.rs` and `wire.rs`, which
+  step 2 named, stay with the ADRs that rule them: this change adds one kind and
+  one operation there, and decides nothing else in them.
+- `parent` lives on the ticket record, `Issued.parent`, not on `Declared` as
+  §1 said. `Declared` is built as a literal outside the ticket code, so adding a
+  field there broke those builds. `Issued::archiver()` is the parent, else
+  `declared.planner`. `Tickets::parented` records the parent at
+  `/tickets/start`. `sessions::session_id` is a label's last segment.
+- `tickets::clean`, `Tickets::record_end`, `record_archive` and
+  `unarchived`. The `Instance` serves them as `/tickets/ended` and
+  `/tickets/archived`.
+- `session.end` answers `clean` and `archiver`. `session.archivable` is in
+  `WAKING`.
+- `session.archived` is `Effect::Build`. The general ticket guard checks its
+  `session` argument, the archiver's, and `record_archive` checks the rest.
+- The digest's `archives` lines are built by `tasks::archive_lines`.
+- `control::route` carries `#[expect(clippy::too_many_lines)]`, as
+  `worker::mod`'s dispatcher does: one arm per operation.
+- **Not yet.** Sessions started before the deploy declare no `parent`, so
+  they have no archiver. An executor still gets one from its `planner`. Step
+  3 verifies live.

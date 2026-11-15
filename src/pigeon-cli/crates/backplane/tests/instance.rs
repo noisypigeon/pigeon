@@ -154,6 +154,7 @@ fn catalog_names_are_unique_and_dotted() {
             ("mandate.propose", Effect::Plan),
             ("ios.release", Effect::Build),
             ("session.end", Effect::Build),
+            ("session.archived", Effect::Build),
             ("session.start", Effect::Build),
             ("brief.create", Effect::Build),
             ("brief.amend", Effect::Build),

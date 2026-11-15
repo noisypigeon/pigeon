@@ -343,3 +343,27 @@ fn a_nudge_does_not_move_its_change() {
     assert!(!moves("job.passed"));
     assert!(moves("change.checked"));
 }
+
+#[test]
+fn a_clean_end_wakes_its_archiver() {
+    let mut log = Log::default();
+    log.append("session.ended", None, Some("a".into()), "ended", false, 1);
+    log.append(
+        "session.archivable",
+        None,
+        Some("p".into()),
+        "archive a",
+        false,
+        2,
+    );
+    let woken: Vec<u64> = log
+        .since(&Filter {
+            wake: true,
+            session: Some("p".into()),
+            ..Filter::default()
+        })
+        .iter()
+        .map(|e| e.id)
+        .collect();
+    assert_eq!(woken, vec![2]);
+}

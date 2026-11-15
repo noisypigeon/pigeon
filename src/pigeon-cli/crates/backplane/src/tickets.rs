@@ -84,7 +84,69 @@ pub struct Issued {
     /// `.claude/decisions/2026-11-13-development-model-tiered-agent-briefs.md` §1.
     #[serde(default)]
     pub declared: Declared,
+    /// The label of the session that created it; see
+    /// `.claude/decisions/2026-11-15-development-archive-cleanly-ended-sessions.md` §1.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent: Option<String>,
+    /// How its session ended, once it did.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ended: Option<Ended>,
+    /// Its archiver's report, once made.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub archived: Option<Archived>,
 }
+
+impl Issued {
+    /// The session that archives it once it ends clean: its parent, else its planner.
+    #[must_use]
+    pub fn archiver(&self) -> Option<&str> {
+        self.parent.as_deref().or(self.declared.planner.as_deref())
+    }
+}
+
+/// How a session ended; see
+/// `.claude/decisions/2026-11-15-development-archive-cleanly-ended-sessions.md` §2.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Ended {
+    /// When, in Unix seconds.
+    pub at: u64,
+    /// Whether it left nothing but hand-offs.
+    pub clean: bool,
+    /// The session that archives it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub archiver: Option<String>,
+}
+
+/// An archiver's report on an ended session; see the archive ADR §3.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Archived {
+    /// When, in Unix seconds.
+    pub at: u64,
+    /// The archiver's label.
+    pub by: String,
+    /// `archived` or `skipped`.
+    pub outcome: String,
+    /// Why, in a line.
+    pub why: String,
+}
+
+/// Whether `label`'s end is clean: each change it holds has an open, unclaimed `handoff` task
+/// for another session; see the archive ADR §2.
+#[must_use]
+pub fn clean(label: &str, held: &[u32], tasks: &[crate::tasks::Task]) -> bool {
+    held.iter().all(|n| {
+        tasks.iter().any(|t| {
+            t.kind == "handoff"
+                && t.change == *n
+                && !t.done
+                && t.claimed_by.is_none()
+                && t.session.as_deref().is_some_and(|to| to != label)
+        })
+    })
+}
+
+/// How long after a clean end the digest names a session not yet archived, and until when.
+pub const UNARCHIVED: (u64, u64) = (60 * 60, 24 * 60 * 60);
 
 /// Every label's ticket as issued.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -129,6 +191,9 @@ impl Tickets {
             generation,
             expires: now + TTL,
             declared,
+            parent: None,
+            ended: None,
+            archived: None,
         };
         self.0.insert(label.to_string(), issued.clone());
         Ok(issued)
@@ -144,6 +209,82 @@ impl Tickets {
             }
             _ => false,
         }
+    }
+
+    /// Records `parent` as the session that created `label`'s.
+    pub fn parented(&mut self, label: &str, parent: Option<String>) {
+        if let Some(i) = self.0.get_mut(label) {
+            i.parent = parent;
+        }
+    }
+
+    /// Records how `label`'s session ended, judged by [`clean`]; its archiver is what it declared.
+    pub fn record_end(&mut self, label: &str, clean: bool, now: u64) -> Option<Ended> {
+        let i = self.0.get_mut(label)?;
+        let ended = Ended {
+            at: now,
+            clean,
+            archiver: i.archiver().map(str::to_string),
+        };
+        i.ended = Some(ended.clone());
+        Some(ended)
+    }
+
+    /// Records `by`'s report on `label` at `now`: only `label`'s archiver, while its own ticket
+    /// is live, after `label` ended clean, and once.
+    ///
+    /// # Errors
+    ///
+    /// Why the report is refused.
+    pub fn record_archive(
+        &mut self,
+        label: &str,
+        by: &str,
+        outcome: &str,
+        why: &str,
+        now: u64,
+    ) -> Result<Archived, String> {
+        if !["archived", "skipped"].contains(&outcome) {
+            return Err("`outcome` is archived or skipped".into());
+        }
+        if self.live(by, now).is_none() {
+            return Err(format!("session {by} holds no live ticket"));
+        }
+        let Some(i) = self.0.get_mut(label) else {
+            return Err(format!("session {label} isn't known"));
+        };
+        match &i.ended {
+            Some(e) if e.clean && e.archiver.as_deref() == Some(by) => {}
+            Some(e) if e.clean => return Err(format!("session {label}'s archiver isn't {by}")),
+            _ => return Err(format!("session {label} hasn't ended clean")),
+        }
+        if i.archived.is_some() {
+            return Err(format!("session {label}'s archive is already recorded"));
+        }
+        let a = Archived {
+            at: now,
+            by: by.to_string(),
+            outcome: outcome.to_string(),
+            why: why.to_string(),
+        };
+        i.archived = Some(a.clone());
+        Ok(a)
+    }
+
+    /// Each label that ended clean within [`UNARCHIVED`] of `now` with no report, and its archiver.
+    #[must_use]
+    pub fn unarchived(&self, now: u64) -> Vec<(String, Option<String>)> {
+        self.0
+            .iter()
+            .filter(|(_, i)| i.archived.is_none())
+            .filter_map(|(l, i)| {
+                let e = i.ended.as_ref().filter(|e| e.clean)?;
+                let age = now.saturating_sub(e.at);
+                (UNARCHIVED.0..UNARCHIVED.1)
+                    .contains(&age)
+                    .then(|| (l.clone(), e.archiver.clone()))
+            })
+            .collect()
     }
 
     /// The class `label` declared with its latest ticket, live or lapsed; none for a label

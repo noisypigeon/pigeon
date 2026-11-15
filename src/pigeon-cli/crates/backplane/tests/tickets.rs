@@ -149,3 +149,121 @@ fn a_handoff_needs_the_change_holders_ticket_not_the_recipients() {
     assert_eq!(guarded("change.note", Some(P), Some(A)), vec![P, A]);
     assert_eq!(guarded("task.claim", Some(P), None), vec![P]);
 }
+
+const P: &str = "https://claude.ai/code/session_planner";
+
+fn handoff(change: u32, to: &str, claimed: Option<&str>) -> backplane::tasks::Task {
+    serde_json::from_value(serde_json::json!({
+        "id": change, "kind": "handoff", "change": change, "session": to,
+        "note": "offered", "created": 0, "claimed_by": claimed,
+    }))
+    .expect("a task")
+}
+
+#[test]
+fn an_end_is_clean_only_when_every_held_change_is_offered_to_another_session() {
+    use backplane::tickets::clean;
+    assert!(clean(A, &[], &[]), "nothing held");
+    assert!(clean(A, &[7], &[handoff(7, P, None)]));
+    assert!(!clean(A, &[7], &[]), "held with no hand-off");
+    assert!(
+        !clean(A, &[7, 8], &[handoff(7, P, None)]),
+        "one not offered"
+    );
+    assert!(!clean(A, &[7], &[handoff(7, A, None)]), "offered to itself");
+    assert!(
+        !clean(A, &[7], &[handoff(7, P, Some(P))]),
+        "claimed, so no longer an offer it holds"
+    );
+}
+
+#[test]
+fn only_the_archiver_reports_once_on_a_clean_end_while_its_ticket_lives() {
+    let exec = declare(Some("haiku"), Some(P), Some("b3")).expect("an executor");
+    let mut t = Tickets::default();
+    t.start(P, false, 0).expect("planner");
+    t.start_as(A, false, 0, exec).expect("executor");
+    assert!(
+        t.record_archive(A, P, "archived", "merged", 1)
+            .expect_err("not ended")
+            .contains("hasn't ended clean")
+    );
+    t.end(A, 1);
+    let e = t.record_end(A, true, 1).expect("known");
+    assert_eq!(e.archiver.as_deref(), Some(P), "an executor's planner");
+    assert!(
+        t.record_archive(A, A, "archived", "x", 2).is_err(),
+        "not itself"
+    );
+    assert!(
+        t.record_archive(A, P, "gone", "x", 2).is_err(),
+        "an outcome"
+    );
+    let a = t
+        .record_archive(A, P, "archived", "!9 merged", 2)
+        .expect("its archiver");
+    assert_eq!((a.by.as_str(), a.outcome.as_str()), (P, "archived"));
+    assert!(
+        t.record_archive(A, P, "archived", "again", 3).is_err(),
+        "once"
+    );
+    t.end(P, 4);
+    assert!(
+        t.record_archive(A, P, "archived", "x", 4)
+            .expect_err("its ticket ended")
+            .contains("no live ticket")
+    );
+    t.start(P, false, 5).expect("the planner again");
+    t.start(A, true, 5).expect("anew");
+    t.end(A, 6);
+    t.record_end(A, true, 6);
+    assert!(
+        t.record_archive(A, P, "archived", "x", 7)
+            .expect_err("no archiver now")
+            .contains("isn't"),
+        "a planner with no parent has no archiver"
+    );
+}
+
+#[test]
+fn an_unclean_end_is_never_archived_nor_listed() {
+    let mut t = Tickets::default();
+    t.start(P, false, 0).expect("planner");
+    t.start(A, false, 0).expect("child");
+    t.parented(A, Some(P.into()));
+    t.end(A, 1);
+    t.record_end(A, false, 1);
+    assert!(t.record_archive(A, P, "archived", "x", 2).is_err());
+    assert_eq!(
+        t.unarchived(1 + 2 * 60 * 60),
+        Vec::new(),
+        "unclean, so never listed"
+    );
+}
+
+#[test]
+fn a_clean_end_is_listed_unarchived_from_an_hour_to_a_day() {
+    use backplane::tickets::UNARCHIVED;
+    let mut t = Tickets::default();
+    t.start(A, false, 0).expect("issues");
+    t.end(A, 10);
+    t.record_end(A, true, 10);
+    assert!(t.unarchived(10 + UNARCHIVED.0 - 1).is_empty(), "too soon");
+    assert_eq!(t.unarchived(10 + UNARCHIVED.0), vec![(A.to_string(), None)]);
+    assert!(t.unarchived(10 + UNARCHIVED.1).is_empty(), "too late");
+}
+
+#[test]
+fn a_session_is_archived_by_its_parent_else_its_planner() {
+    let mut t = Tickets::default();
+    let exec = declare(Some("sonnet"), Some(P), Some("b1")).expect("executor");
+    let i = t.start_as(A, false, 0, exec).expect("issues");
+    assert_eq!(i.archiver(), Some(P));
+    let o = t.start(P, false, 0).expect("issues");
+    assert_eq!(o.archiver(), None, "the owner's own sessions name none");
+    t.parented(P, Some("https://claude.ai/code/session_s".into()));
+    assert_eq!(
+        t.live(P, 1).expect("live").archiver(),
+        Some("https://claude.ai/code/session_s")
+    );
+}

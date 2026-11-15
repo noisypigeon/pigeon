@@ -124,6 +124,11 @@ pub enum Routed {
         /// Its arguments.
         args: serde_json::Map<String, Value>,
     },
+    /// `session.archived`, with its arguments.
+    SessionArchived {
+        /// Its arguments.
+        args: serde_json::Map<String, Value>,
+    },
     /// `session.end`, with its arguments.
     SessionEnd {
         /// Its arguments.
@@ -313,6 +318,7 @@ fn grant(request: &Request) -> Result<Routed, String> {
 /// # Errors
 ///
 /// A message for an argument the catalog's types allow but the change rules don't.
+#[expect(clippy::too_many_lines, reason = "one arm per control-plane operation")]
 pub fn route(request: &Request, by: &str, at: u64) -> Result<Routed, String> {
     let a = &request.args;
     let event = |event| {
@@ -399,6 +405,7 @@ pub fn route(request: &Request, by: &str, at: u64) -> Result<Routed, String> {
         "ios.status" => Ok(Routed::IosStatus),
         "session.start" => Ok(Routed::SessionStart { args: a.clone() }),
         "session.end" => Ok(Routed::SessionEnd { args: a.clone() }),
+        "session.archived" => Ok(Routed::SessionArchived { args: a.clone() }),
         "session.status" => Ok(Routed::SessionStatus { args: a.clone() }),
         op if op.starts_with("brief.") => Ok(Routed::Brief {
             operation: request.operation.clone(),

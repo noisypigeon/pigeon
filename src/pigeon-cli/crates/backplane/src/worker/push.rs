@@ -156,6 +156,14 @@ pub async fn build(env: &Env, s: &Settings) -> Result<(Digest, u64)> {
         .collect();
     let briefs = super::briefs::all(env, s).await;
     d.briefs = crate::core::brief::report::lines(&briefs, &open, now());
+    let reports: Vec<String> = events
+        .iter()
+        .filter(|x| x.kind == "session.archived")
+        .map(|x| x.summary.clone())
+        .collect();
+    let (_, t) = to_instance(env, s, "/tickets/list", &json!({})).await?;
+    let tickets: crate::tickets::Tickets = serde_json::from_value(t).unwrap_or_default();
+    d.archives = crate::tasks::archive_lines(&reports, &tickets.unarchived(now()));
     Ok((d, last))
 }
 

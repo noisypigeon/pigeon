@@ -353,3 +353,24 @@ fn the_digest_counts_stops_by_kind_and_shows_none_without_them() {
         )
     );
 }
+
+#[test]
+fn the_digest_shows_archives_and_clean_ends_not_archived_without_pushing() {
+    let lines = backplane::tasks::archive_lines(
+        &["session_a archived by session_p: !9 merged".into()],
+        &[("https://claude.ai/code/session_b".into(), None)],
+    );
+    assert_eq!(
+        lines,
+        vec![
+            "session: session_a archived by session_p: !9 merged".to_string(),
+            "ended clean, not archived: session_b (archiver none)".to_string(),
+        ]
+    );
+    let d = backplane::tasks::Digest {
+        archives: lines,
+        ..backplane::tasks::Digest::default()
+    };
+    assert!(!d.needs_owner(), "shown, never pushed");
+    assert_eq!(d.lines().len(), 2);
+}

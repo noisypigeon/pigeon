@@ -44,11 +44,17 @@ pub async fn start(
         Ok(d) => d,
         Err(why) => return Ok((400, json!(why))),
     };
+    let Ok(parent) = crate::sessions::session(text("parent")) else {
+        return Ok((
+            400,
+            json!("`parent` is the label of the session that created this one"),
+        ));
+    };
     let (status, v) = to_instance(
         env,
         s,
         "/tickets/start",
-        &json!({ "label": label, "replace": replace, "declared": declared }),
+        &json!({ "label": label, "replace": replace, "declared": declared, "parent": parent }),
     )
     .await?;
     if status != 200 {
@@ -101,8 +107,28 @@ pub async fn end(
         return Ok((400, json!("`label` names the session")));
     };
     let (_, v) = to_instance(env, s, "/tickets/end", &json!({ "label": label })).await?;
+    let holds = held(env, s, &label).await?;
+    let mut clean = false;
+    let mut archiver = Value::Null;
     if v["ended"] == true {
-        let said = format!("session {label}'s ticket ended");
+        let numbers: Vec<u32> = holds
+            .iter()
+            .filter_map(|h| h["number"].as_u64().and_then(|n| u32::try_from(n).ok()))
+            .collect();
+        let (_, t) = to_instance(env, s, "/tasks/list", &json!({})).await?;
+        let tasks: Vec<crate::tasks::Task> =
+            serde_json::from_value(t["tasks"].clone()).unwrap_or_default();
+        clean = crate::tickets::clean(&label, &numbers, &tasks);
+        let (_, e) = to_instance(
+            env,
+            s,
+            "/tickets/ended",
+            &json!({ "label": label, "clean": clean }),
+        )
+        .await?;
+        archiver = e["archiver"].clone();
+        let how = if clean { "clean" } else { "with work left" };
+        let said = format!("session {label}'s ticket ended, {how}");
         super::events::append(
             env,
             s,
@@ -113,11 +139,74 @@ pub async fn end(
             false,
         )
         .await?;
+        if let (true, Some(by)) = (clean, archiver.as_str()) {
+            let said = format!(
+                "session {label} ended clean; archive {} (`session_archived` after)",
+                crate::sessions::session_id(&label)
+            );
+            super::events::append(
+                env,
+                s,
+                "session.archivable",
+                None,
+                Some(by.to_string()),
+                &said,
+                false,
+            )
+            .await?;
+        }
     }
     Ok((
         200,
-        json!({ "label": label, "ended": v["ended"], "holds": held(env, s, &label).await? }),
+        json!({ "label": label, "ended": v["ended"], "holds": holds, "clean": clean, "archiver": archiver }),
     ))
+}
+
+/// `session.archived`: archiver `session`'s report on ended `label`; see
+/// `.claude/decisions/2026-11-15-development-archive-cleanly-ended-sessions.md` §3.
+///
+/// # Errors
+///
+/// When a binding fails.
+pub async fn archived(
+    env: &Env,
+    s: &Settings,
+    args: &serde_json::Map<String, Value>,
+) -> Result<(u16, Value)> {
+    let text = |k: &str| {
+        args.get(k)
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .trim()
+    };
+    let (label, by, outcome, why) = (text("label"), text("session"), text("outcome"), text("why"));
+    if label.is_empty() || by.is_empty() {
+        return Ok((
+            400,
+            json!("`label` names the ended session, `session` its archiver"),
+        ));
+    }
+    let body = json!({ "label": label, "by": by, "outcome": outcome, "why": why });
+    let (status, v) = to_instance(env, s, "/tickets/archived", &body).await?;
+    if status != 200 {
+        return Ok((409, v));
+    }
+    let id = crate::sessions::session_id(label);
+    let said = format!(
+        "session {id} {outcome} by {}: {why}",
+        crate::sessions::session_id(by)
+    );
+    super::events::append(
+        env,
+        s,
+        "session.archived",
+        None,
+        Some(label.to_string()),
+        &said,
+        false,
+    )
+    .await?;
+    Ok((200, v))
 }
 
 /// Each open change `label` holds: its number, title and what it has left; see
@@ -223,7 +312,10 @@ pub async fn serve(state: &State, path: &str, body: &Value) -> Result<Response> 
                 now(),
                 declared,
             ) {
-                Ok(issued) => {
+                Ok(mut issued) => {
+                    let parent = body["parent"].as_str().map(str::to_string);
+                    all.parented(label, parent.clone());
+                    issued.parent = parent;
                     storage.put(TICKETS, &all).await?;
                     Response::from_json(&issued)
                 }
@@ -231,6 +323,28 @@ pub async fn serve(state: &State, path: &str, body: &Value) -> Result<Response> 
             }
         }
         "/tickets/list" => Response::from_json(&all),
+        "/tickets/ended" => {
+            let label = body["label"].as_str().unwrap_or_default();
+            let ended = all.record_end(label, body["clean"].as_bool() == Some(true), now());
+            storage.put(TICKETS, &all).await?;
+            Response::from_json(&json!({ "archiver": ended.and_then(|e| e.archiver) }))
+        }
+        "/tickets/archived" => {
+            let text = |k: &str| body[k].as_str().unwrap_or_default();
+            match all.record_archive(
+                text("label"),
+                text("by"),
+                text("outcome"),
+                text("why"),
+                now(),
+            ) {
+                Ok(a) => {
+                    storage.put(TICKETS, &all).await?;
+                    Response::from_json(&a)
+                }
+                Err(why) => Response::error(why, 409),
+            }
+        }
         "/tickets/end" => {
             let ended = all.end(body["label"].as_str().unwrap_or_default(), now());
             storage.put(TICKETS, &all).await?;

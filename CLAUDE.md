@@ -73,7 +73,9 @@ Per
 [`2026-11-13-development-model-tiered-agent-briefs.md`](.claude/decisions/2026-11-13-development-model-tiered-agent-briefs.md):
 
 - `session_start` takes `model`: `haiku`, `sonnet` or `opus` (the default).
-  Opus plans; Haiku and Sonnet execute briefs, and decide nothing.
+  Opus plans; Haiku and Sonnet execute briefs, and decide nothing. A session
+  another session created also passes `parent`:
+  `https://claude.ai/code/<parent_session_id>`, from its own `get_session`.
 - **A planner (opus)** writes ADRs and briefs (`brief_create`, `brief_amend`),
   starts an executor per brief with `create_session`, taking its arguments
   from `sh tooling/session/session.sh executor b<n>`, and reviews each
@@ -93,6 +95,15 @@ Per
   5. never writes or amends an ADR, and never calls an owner operation;
   6. ends its session (`session_end`) when its change merges or the planner
      takes the brief back.
+- **Archiving**, per
+  [`2026-11-15-development-archive-cleanly-ended-sessions.md`](.claude/decisions/2026-11-15-development-archive-cleanly-ended-sessions.md):
+  a clean `session_end` (nothing held but hand-offs) wakes its archiver, its
+  `parent` or planner, with `session.archivable`. The archiver calls
+  `get_session` and `archive_session` only on its own child
+  (`parent_session_id`), never an `ios` or `desktop_app` origin, and not while
+  it is working (it looks once more within 10 minutes). It then reports with
+  `session_archived` (`archived` or `skipped`, and why). A session never
+  archives itself.
 
 ## Commands
 

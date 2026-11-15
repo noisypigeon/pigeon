@@ -864,6 +864,9 @@ async fn dispatch(
             Ok((None, respond(operation, status, v)))
         }
         Routed::SessionEnd { args } => Ok(answered(operation, tickets::end(env, s, &args).await?)),
+        Routed::SessionArchived { args } => {
+            Ok(answered(operation, tickets::archived(env, s, &args).await?))
+        }
         Routed::SessionStart { args } => {
             Ok(answered(operation, tickets::start(env, s, &args).await?))
         }

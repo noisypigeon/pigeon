@@ -98,6 +98,16 @@ pub struct Declared {
     pub brief: Option<String>,
 }
 
+/// A Claude Code Remote session's ID from its label, the label's last path segment.
+#[must_use]
+pub fn session_id(label: &str) -> &str {
+    label
+        .trim_end_matches('/')
+        .rsplit('/')
+        .next()
+        .unwrap_or(label)
+}
+
 /// A brief's id, trimmed: `b<n>`, or none.
 ///
 /// # Errors
