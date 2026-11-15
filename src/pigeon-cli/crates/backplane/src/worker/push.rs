@@ -227,7 +227,9 @@ async fn sessions(
             let st = super::stages::stage(env, s, &c, &q).await;
             let needs = serde_json::to_value(st.needs)?;
             let needs = needs.as_str().unwrap_or_default().to_string();
-            if !listening && let Some(quiet) = crate::tasks::stalled(polled, &needs, now()) {
+            if !listening
+                && let Some(quiet) = crate::tasks::stalled(polled, st.since, &needs, now())
+            {
                 stalls.push(crate::tasks::Stall {
                     number: n,
                     session: label.clone(),

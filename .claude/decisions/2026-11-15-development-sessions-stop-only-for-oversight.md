@@ -345,3 +345,23 @@ go through until a deploy passes.
   non-fix merge would go through that path. !521 fixes it: during a hold, a
   window's or mandate's approval is made with `hold`, so it doesn't queue the
   merge, and the change is `held` until a deploy passes.
+
+### 2026-11-15: A change is stalled only once its session has been quiet since the change last moved
+
+- **What went wrong.** The digest named !542, !543 and !544 `stalled`, with
+  "start a session to take it over, or close it", about five minutes after
+  their plans were authorized. Their sessions were writing the code at the
+  time. `tasks::stalled` measured quiet only from the session's last poll:
+  - a session that had never polled was stalled at once;
+  - !544 showed "quiet 8h15m" because its session had slept until a
+    scheduled task, then proposed it.
+- **The rule.** A session's quiet starts at whichever is later: its last poll
+  or its change's last move, the stage's `since`. A change is stalled once
+  that quiet reaches `STALL` (30 minutes). A just-authorized change therefore
+  has `STALL` to see a push before it's named, and an old poll never makes a
+  fresh change look abandoned.
+- **Where.** `tasks::stalled` takes `since`. The digest
+  (`worker/push.rs::sessions`) and the app's tracker
+  (`core/app/tracker.rs`) both pass the change's `stage.since`. The tests
+  replay tonight's case in `tests/digest.rs` and the tracker's tests.
+- **Execution.** One `fix(backplane)` change, with this amendment.

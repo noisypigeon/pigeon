@@ -221,7 +221,7 @@ pub fn build(sessions: &[SessionIn], changes: &[ChangeIn], briefs: &[Brief], now
             .filter(|c| c.session.as_deref() == Some(label))
         {
             let needs = needs_name(c.stage.needs);
-            let stalled = crate::tasks::stalled(polled, needs, now).is_some();
+            let stalled = crate::tasks::stalled(polled, c.stage.since, needs, now).is_some();
             let Some((stop, mark)) = rail(&c.stage.stage, stalled) else {
                 continue;
             };

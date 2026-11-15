@@ -358,15 +358,23 @@ pub fn archive_lines(reports: &[String], unarchived: &[(String, Option<String>)]
 /// see the session-stages ADR's 2026-11-13 amendment on stalls.
 pub const STALL: u64 = 30 * 60;
 
-/// How long `polled`'s session has been quiet at `now`, when a change of `needs` stalls on it:
-/// `Some(None)` for a session that never polled.
+/// How long a session has been quiet at `now`, from its last poll or its change's last move
+/// (`since`), whichever is later, when a change of `needs` stalls on it: `Some(None)` when
+/// neither is known; see
+/// `.claude/decisions/2026-11-15-development-sessions-stop-only-for-oversight.md`'s 2026-11-15
+/// amendment on stalls.
 #[must_use]
 #[allow(clippy::option_option)]
-pub fn stalled(polled: Option<u64>, needs: &str, now: u64) -> Option<Option<u64>> {
+pub fn stalled(
+    polled: Option<u64>,
+    since: Option<u64>,
+    needs: &str,
+    now: u64,
+) -> Option<Option<u64>> {
     if needs != "agent" {
         return None;
     }
-    match polled {
+    match polled.max(since) {
         None => Some(None),
         Some(at) => (now.saturating_sub(at) >= STALL).then(|| Some(now.saturating_sub(at))),
     }

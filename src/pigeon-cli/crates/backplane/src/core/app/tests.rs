@@ -392,6 +392,12 @@ mod tracker {
         }
     }
 
+    /// `c`, last moved an hour ago.
+    fn old(mut c: ChangeIn) -> ChangeIn {
+        c.stage.since = Some(NOW - 3600);
+        c
+    }
+
     fn session(label: &str, polled: Option<u64>, listening: bool) -> SessionIn {
         SessionIn {
             label: label.into(),
@@ -486,12 +492,24 @@ mod tracker {
     fn a_change_needing_a_quiet_agent_is_stalled() {
         let t = build(
             &[session("a", Some(NOW - 3600), false)],
-            &[change(1, "a", "authorized", Needs::Agent)],
+            &[old(change(1, "a", "authorized", Needs::Agent))],
             &[],
             NOW,
         );
         assert_eq!(only(&t).mark, Mark::Stalled);
         assert_eq!(t.counts.stalled, 1);
+    }
+
+    #[test]
+    fn a_change_authorized_minutes_ago_is_not_stalled() {
+        let t = build(
+            &[session("a", Some(NOW - 8 * 3600), false)],
+            &[change(1, "a", "authorized", Needs::Agent)],
+            &[],
+            NOW,
+        );
+        assert_ne!(only(&t).mark, Mark::Stalled);
+        assert_eq!(t.counts.stalled, 0);
     }
 
     #[test]
@@ -573,7 +591,7 @@ mod tracker {
         let t = build(
             &[session("a", None, false), session("b", Some(NOW), true)],
             &[
-                change(1, "a", "authorized", Needs::Agent),
+                old(change(1, "a", "authorized", Needs::Agent)),
                 change(2, "b", "checked", Needs::Owner),
                 change(3, "b", "checking 1/2", Needs::Provider),
                 change(4, "b", "closed", Needs::None),

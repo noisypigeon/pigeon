@@ -172,11 +172,11 @@ fn a_change_needing_a_session_that_isnt_listening_is_pushed_as_stalled() {
     // !364 waited on its unattended session, and !374 on it; see the session-stages ADR's
     // 2026-11-13 amendment on stalls.
     use backplane::tasks::{STALL, Stall, stalled};
-    assert_eq!(stalled(Some(0), "agent", STALL - 1), None, "not yet");
-    assert_eq!(stalled(Some(0), "agent", STALL), Some(Some(STALL)));
-    assert_eq!(stalled(None, "agent", 0), Some(None), "never polled");
+    assert_eq!(stalled(Some(0), None, "agent", STALL - 1), None, "not yet");
+    assert_eq!(stalled(Some(0), None, "agent", STALL), Some(Some(STALL)));
+    assert_eq!(stalled(None, None, "agent", 0), Some(None), "never polled");
     assert_eq!(
-        stalled(None, "owner", 0),
+        stalled(None, None, "owner", 0),
         None,
         "the owner's turn is no stall"
     );
@@ -373,4 +373,36 @@ fn the_digest_shows_archives_and_clean_ends_not_archived_without_pushing() {
     };
     assert!(!d.needs_owner(), "shown, never pushed");
     assert_eq!(d.lines().len(), 2);
+}
+
+// !542, !543 and !544 were named stalled minutes after their plans were authorized, while their
+// sessions wrote the code; see
+// `.claude/decisions/2026-11-15-development-sessions-stop-only-for-oversight.md`'s 2026-11-15
+// amendment on stalls.
+#[test]
+fn a_change_authorized_minutes_ago_is_not_stalled_whatever_its_sessions_last_poll() {
+    use backplane::tasks::{STALL, stalled};
+    let now = 100_000;
+    let authorized = now - 5 * 60;
+    assert_eq!(
+        stalled(None, Some(authorized), "agent", now),
+        None,
+        "never polled"
+    );
+    let slept = now - (8 * 3600 + 15 * 60);
+    assert_eq!(
+        stalled(Some(slept), Some(authorized), "agent", now),
+        None,
+        "an old poll, a fresh move"
+    );
+    assert_eq!(
+        stalled(None, Some(now - STALL), "agent", now),
+        Some(Some(STALL)),
+        "a grace of STALL from the move"
+    );
+    assert_eq!(
+        stalled(Some(now - 60), Some(now - 2 * STALL), "agent", now),
+        None,
+        "a recent poll"
+    );
 }
