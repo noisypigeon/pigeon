@@ -541,3 +541,71 @@ with its pure part in the core and tested there.
    deep link, built on 3.
 
 Then an `ios.release`.
+
+### 2026-11-15: A failed deploy holds Auto, and a passed deploy resumes it
+
+The owner asked that a failed deploy stop ending Auto's usefulness: work that
+could make things worse waits, the fix goes through, and Auto resumes by
+itself. §5's "it pauses itself… a deploy fails or rolls back" and step 6's
+"a failed deploy pauses it" are replaced by a **hold**.
+
+- **`held` is a state of its own,** beside `active`, `paused` and `ended`, with
+  a `hold`: the failed SHA, why, when it began, and how many deploys have
+  failed in it. A failed or rolled-back deploy of `main` holds every active
+  window and mandate. A paused one stays paused.
+- **During a hold, only merges wait.** A merge is the one operation that
+  deploys.
+  - Authorizing, approving and closing go through as before, so work reaches
+    `approved` and is ready.
+  - A merge goes through only for a change whose title's type is `fix` or
+    `revert`. `MainRun` deploys the newest push, so that merge is the next
+    deploy.
+  - Any other merge answers `held`: it isn't run, isn't listed for the owner,
+    and its change's stage says it waits on a deploy.
+  - Merges already queued when the hold begins still run; they were approved
+    before the failure.
+  - Why the title: it is deterministic and already checked by policy, and
+    agents already name fixes so. The window trusts the agent at the code tier
+    anyway, so a mislabelled change gains nothing a window doesn't already
+    grant. The digest names every merge made during a hold.
+  - Why not "paths in the failed deploy's diff": a fix often lies elsewhere,
+    such as a token or a Worker binding, and tonight's needed no code at all.
+- **Any passed deploy of `main` resumes every held window and mandate,** a
+  `deploy_retry` with no new code included.
+  - It is the same window, with its budget and merges untouched.
+  - Its expiry moves later by the time it was held. The owner bought hours of
+    unattended work, and a hold gives none, so the hold costs nothing. The cap
+    below bounds the stretch.
+- **A hold ends the window or mandate when it reaches 6 hours or 3 failed
+  deploys,** whichever comes first, pushing why. A main that can't deploy for
+  that long needs the owner, not more fixes.
+- **Time doesn't run during a hold.** A held window never expires; its expiry
+  is moved on resume. The budget running out still ends it.
+- **Unchanged:**
+  - the `owner` tier always asks, held or not;
+  - the owner may end a held window (`DELETE /v0/app/auto`), and starting a
+    new one ends a held one, as it does a paused one;
+  - only a deploy failure holds. A check failing twice on one head isn't
+    implemented yet; when it is, it pauses, since it is one change's fault,
+    not `main`'s.
+- **The owner is told.**
+  - On a hold, a push, "Auto held": "window `<id>` held: the deploy of `<sha>`
+    failed: `<why>`; it resumes when a deploy passes".
+  - On a resume, "Auto resumed", with the time held and what is left.
+  - On a capped end, "Auto ended".
+  - Events `auto.held`, `auto.resumed` and `auto.ended`, and a digest line for
+    each held window or mandate.
+- **The app** gets `state: "held"` and `hold` on `GET /v0/app/home`'s window
+  and shows "Held". The tracker's rail maps the stage `held` to stop 5,
+  approved, with a `held` mark.
+
+**Execution,** each its own change, at the owner's tier:
+
+1. Core: `State::Held`, `Hold`, `Decision::Hold`, hold, resume and the cap in
+   `windows.rs` and `mandates.rs`, with tests for the hold, the fix's merge,
+   the resume, repeated failure and expiry.
+2. Worker: `hold_all` and `resume_all` in `worker/mandates.rs`, called from
+   `MainRun` on a failed and a passed deploy; a `held` decision answers the
+   agent without listing an approval; the pushes and events.
+3. Stages and digest: the `held` stage, `auto.resumed` waking agents, the
+   digest's held lines, and the rail's mark.

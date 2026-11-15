@@ -265,3 +265,12 @@ Each step is a change through the pipeline, in this order:
   `deployed` first.
 - **A failed deploy always records a reason:** the report's first violation,
   else its log's last non-empty line. The `deploy.failed` event shows it.
+
+### 2026-11-15: A deploy's outcome holds or resumes Auto
+
+- **When a deploy of `main` fails,** `MainRun` holds every active window and
+  mandate, in place of pausing them.
+- **When one passes,** it resumes every held one. This includes a
+  `deploy_retry` of the same SHA.
+- See the iOS approvals ADR's 2026-11-15 amendment,
+  [`2026-11-12-runtime-ios-app-approvals-insights.md`](2026-11-12-runtime-ios-app-approvals-insights.md).

@@ -756,3 +756,22 @@ step 2 was live.
 - **In shadow,** its trips log `breaker.would_trip` as "would escalate to
   its planner". Step 6 makes them act. Such a change becomes `escalated` to
   its planner, not `attended`, per that ADR's §6.
+
+### 2026-11-15: A change whose merge a hold defers is `held`
+
+Per the iOS approvals ADR's 2026-11-15 amendment, a failed deploy holds Auto
+windows and mandates, and their merges wait for a deploy to pass.
+
+- **A new stage, `held`,** is for an approved change whose window or mandate
+  is held and whose title isn't `fix` or `revert`. It has `needs: platform`
+  and `next`: "merges once a deploy of main passes: the deploy of `<sha>`
+  failed: `<why>`".
+  - Nothing is listed for the owner, and it is never nudged.
+  - `Context` gains `held`, the hold's reason when one defers this change's
+    merge. `worker/stages.rs` fills it from the window or mandate.
+- **`auto.resumed` wakes agents,** so a `held` change goes back to "ask to
+  merge" and its session asks. `auto.held` and `auto.ended` wake them too,
+  since a session waiting on Auto must know.
+- **The digest** shows each held window or mandate: "held: window `<id>` since
+  `<time>`, `<n>` failed deploys: `<why>`; resumes when a deploy passes".
+  A merge made during a hold is shown as merged without the owner, as now.

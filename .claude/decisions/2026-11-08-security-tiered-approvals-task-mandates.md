@@ -419,3 +419,19 @@ Per
   pushes it, and re-issues it on a new head or before expiry. An agent's call
   reuses the listed approval. See
   [`2026-11-15-security-owner-approvals-always-listed.md`](2026-11-15-security-owner-approvals-always-listed.md).
+
+### 2026-11-15: A failed deploy holds a mandate, and a passed deploy resumes it
+
+Per the iOS approvals ADR's 2026-11-15 amendment,
+[`2026-11-12-runtime-ios-app-approvals-insights.md`](2026-11-12-runtime-ios-app-approvals-insights.md):
+
+- **"A deploy fails or rolls back" no longer pauses a mandate; it holds it.**
+  While held, a mandate authorizes and approves as before. It merges only a
+  change titled `fix` or `revert`, still within its scope and its other rules.
+- **A passed deploy resumes it unasked,** its budget kept and its expiry moved
+  later by the time held. §2's "resuming after a pause is code" still holds
+  for a pause. A hold takes no power away: it defers merges until `main`
+  deploys, so ending it needs no proof.
+- **The cap ends it:** 6 hours held, or 3 failed deploys in one hold.
+- **A change reaching outside the scope still pauses it,** and only the owner
+  resumes it.
