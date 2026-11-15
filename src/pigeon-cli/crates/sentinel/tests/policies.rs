@@ -637,6 +637,11 @@ fn macos_holds_the_order_start_time_and_caps_only() {
         )
     };
     passes(&check(good));
+    passes(&check(
+        &good
+            .replace(", members, learner]", ", members]")
+            .replace("user: [learner]", "user: []"),
+    ));
     passes(&violations("macos", tree_root(&[]).path(), None));
     for bad in [
         good.replace("[github, bitrise, buildkite]", "[github, circle]"),
@@ -652,7 +657,7 @@ fn macos_holds_the_order_start_time_and_caps_only() {
 
 #[test]
 fn roles_holds_three_explicit_capability_lists_only() {
-    let good = "# Each role's capabilities.\nroles:\n  administrator: [read, propose, approve, approve.owner, auto, mandates, platform, members]\n  user: []\n  service: [read, propose]\n";
+    let good = "# Each role's capabilities.\nroles:\n  administrator: [read, propose, approve, approve.owner, auto, mandates, platform, members, learner]\n  user: [learner]\n  service: [read, propose]\n";
     let check = |content: &str| {
         violations(
             "roles",
@@ -661,17 +666,19 @@ fn roles_holds_three_explicit_capability_lists_only() {
         )
     };
     passes(&check(good));
-    passes(&check(&good.replace("user: []", "user: [read]")));
+    passes(&check(
+        &good.replace("user: [learner]", "user: [read, learner]"),
+    ));
     passes(&check(
         &good.replace("service: [read, propose]", "service: []"),
     ));
     passes(&violations("roles", tree_root(&[]).path(), None));
     for bad in [
-        good.replace(", members]", "]"),
-        good.replace("user: []", "user: [*]"),
-        good.replace("user: []", "user: [everything]"),
+        good.replace(", members, learner]", "]"),
+        good.replace("user: [learner]", "user: [*]"),
+        good.replace("user: [learner]", "user: [everything]"),
         good.replace("service: [read, propose]", "service: [read, approve]"),
-        good.replace("  user: []\n", ""),
+        good.replace("  user: [learner]\n", ""),
         good.replace("# Each", "Each"),
         good.replace("roles:\n", "members:\n"),
         format!("{good}  owner: [read]\n"),

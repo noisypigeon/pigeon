@@ -10,6 +10,6 @@ rules:
       pattern: '^  (?<key>[a-z]+): (?<value>\[.*\])$'
       only: true
       expect:
-        - { key: administrator, matches: '^\[read, propose, approve, approve\.owner, auto, mandates, platform, members\]$' }
-        - { key: user, matches: '^\[((read|propose|approve|approve\.owner|auto|mandates|platform|members)(, (read|propose|approve|approve\.owner|auto|mandates|platform|members))*)?\]$' }
+        - { key: administrator, matches: '^\[read, propose, approve, approve\.owner, auto, mandates, platform, members(, learner)?\]$' }
+        - { key: user, matches: '^\[((read|propose|approve|approve\.owner|auto|mandates|platform|members|learner)(, (read|propose|approve|approve\.owner|auto|mandates|platform|members|learner))*)?\]$' }
         - { key: service, matches: '^\[(read(, propose)?|propose)?\]$' }
