@@ -11,12 +11,12 @@ final class PageScanner: NSObject, ObservableObject, AVCaptureVideoDataOutputSam
     @Published var denied = false
     let session = AVCaptureSession()
     private let queue = DispatchQueue(label: "learner.scan")
-    private let circles: [String: [PlacedCircle]]
+    private let circles: (Int, Int) -> [PlacedCircle]?
     private var last: PageReading?
     private var done = false
 
-    /// `circles` is LearnerStore's, keyed as its `pageKey`.
-    init(circles: [String: [PlacedCircle]]) {
+    /// `circles` gives the circles a form's page was printed with, as `LearnerLedger.pageCircles`.
+    init(circles: @escaping (Int, Int) -> [PlacedCircle]?) {
         self.circles = circles
         super.init()
     }
@@ -60,7 +60,7 @@ final class PageScanner: NSObject, ObservableObject, AVCaptureVideoDataOutputSam
     ) {
         guard !done, let buffer = CMSampleBufferGetImageBuffer(sampleBuffer), let image = Self.luma(buffer)
         else { return }
-        guard let read = readPage(image, circles: { self.circles["\($0)-\($1)"] }) else {
+        guard let read = readPage(image, circles: circles) else {
             last = nil
             return
         }
@@ -115,7 +115,8 @@ struct LearnerScanView: View {
 
     init(learner: LearnerStore) {
         self.learner = learner
-        _scanner = StateObject(wrappedValue: PageScanner(circles: learner.circles))
+        let ledger = learner.ledger
+        _scanner = StateObject(wrappedValue: PageScanner { ledger.pageCircles(form: $0, page: $1) })
     }
 
     var body: some View {
@@ -169,7 +170,9 @@ struct ScanReviewView: View {
             DotGrid()
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
-                    Eyebrow(text: formLabel(reading.form) + " · page \(reading.page + 1)")
+                    Eyebrow(
+                        text: isSample(reading.form)
+                            ? "Sample page · not saved" : formLabel(reading.form) + " · page \(reading.page + 1)")
                     Text("Check the marks").font(Theme.display(22)).foregroundStyle(Theme.ink)
                     Text(
                         reading.unclear.isEmpty

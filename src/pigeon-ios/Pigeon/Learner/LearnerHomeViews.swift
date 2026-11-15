@@ -11,6 +11,7 @@ struct LearnerHomeView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var entering = false
     @State private var scanning = false
+    @State private var trying = false
 
     var body: some View {
         NavigationStack {
@@ -29,6 +30,12 @@ struct LearnerHomeView: View {
                             .disabled(learner.forms.isEmpty)
                         Button { entering = true } label: { learnerSecondary("Enter answers") }
                             .disabled(learner.forms.isEmpty)
+                        Button { trying = true } label: {
+                            Text("Try a sample page")
+                                .font(.footnote.weight(.semibold))
+                                .foregroundStyle(Theme.accent)
+                                .frame(maxWidth: .infinity, minHeight: 44)
+                        }
                     }
                     .padding(.horizontal, 20)
                     .padding(.vertical, 16)
@@ -39,6 +46,7 @@ struct LearnerHomeView: View {
             }
             .navigationDestination(isPresented: $entering) { AnswerEntryView(learner: learner) }
             .navigationDestination(isPresented: $scanning) { LearnerScanView(learner: learner) }
+            .navigationDestination(isPresented: $trying) { LearnerSampleView(learner: learner) }
         }
     }
 

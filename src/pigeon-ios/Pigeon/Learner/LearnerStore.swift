@@ -1,15 +1,13 @@
-// The learner's practice on this iPhone: the bank, printed forms with each page's circles, and scored
-// pages, kept until the learner's instance holds them; see
-// .claude/decisions/2026-11-15-runtime-learner-practice-standalone-app.md step 2.
+// The learner's practice on this iPhone: the bank, and PigeonCore's ledger of printed forms, each page's
+// circles and scored pages, kept until the learner's instance holds them; the sample is never saved; see
+// .claude/decisions/2026-11-15-runtime-learner-practice-standalone-app.md step 2 and its sample amendment.
 
 import Foundation
 import PigeonCore
 
 @MainActor
 final class LearnerStore: ObservableObject {
-    @Published private(set) var forms: [Form] = []
-    @Published private(set) var attempts: [Attempt] = []
-    @Published private(set) var circles: [String: [PlacedCircle]] = [:]
+    @Published private(set) var ledger = LearnerLedger()
     let bank: [Question]
 
     private let folder: URL
@@ -20,44 +18,42 @@ final class LearnerStore: ObservableObject {
         folder = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("learner", isDirectory: true)
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        forms = load("forms.json") ?? []
-        attempts = load("attempts.json") ?? []
-        circles = load("circles.json") ?? [:]
+        ledger = LearnerLedger(
+            forms: load("forms.json") ?? [], attempts: load("attempts.json") ?? [],
+            circles: load("circles.json") ?? [:])
     }
 
-    /// The key a printed page's circles are kept under.
-    static func pageKey(form: Int, page: Int) -> String { "\(form)-\(page)" }
+    var forms: [Form] { ledger.forms }
+    var attempts: [Attempt] { ledger.attempts }
 
     /// The best score so far, or nil before the first.
-    var best: Int? { attempts.map(\.correct).max() }
+    var best: Int? { ledger.best }
 
-    /// The newest form with `number`.
-    func form(_ number: Int) -> Form? { forms.last { $0.number == number } }
+    /// Form `number`, the sample's included.
+    func form(_ number: Int) -> Form? { ledger.form(number) }
+
+    /// The questions an attempt's IDs come from.
+    func questions(for attempt: Attempt) -> [Question] { isSample(attempt.form) ? sampleQuestions : bank }
 
     /// A new form of `count` questions, weighted to the topics missed most, as a PDF to print.
     func printNew(count: Int) -> Data {
-        let number = ((forms.map(\.number).max() ?? 16) + 1) % 1024
         let form = makeForm(
-            bank: bank, number: number, count: count,
-            missRates: missRates(attempts: attempts, bank: bank))
+            bank: bank, number: ledger.nextFormNumber, count: count,
+            missRates: missRates(attempts: ledger.attempts, bank: bank))
         let rendered = LearnerPDF.render(form: form, bank: bank)
-        forms.append(form)
-        for (page, list) in rendered.circles.enumerated() {
-            circles[Self.pageKey(form: number, page: page)] = list
-        }
+        ledger.add(form, circles: rendered.circles)
         save()
         return rendered.data
     }
 
-    /// Scores `marks` (each question's filled circles) for a printed page, and keeps the attempt.
+    /// Scores `marks` (each question's filled circles) for a printed page; only what the ledger keeps
+    /// is saved, so a sample leaves nothing behind.
     func record(form number: Int, page: Int, marks: [[Int]], now: Date = Date()) -> Attempt? {
-        guard let f = form(number) else { return nil }
-        let slice = pageSlice(f, page: page)
-        let attempt = Attempt(
-            id: UUID().uuidString, form: number, page: page, date: Int(now.timeIntervalSince1970),
-            questionIDs: slice.ids, marks: marks, results: score(key: slice.key, marks: marks))
-        attempts.append(attempt)
-        save()
+        let before = ledger
+        let attempt = ledger.record(
+            form: number, page: page, marks: marks, id: UUID().uuidString,
+            date: Int(now.timeIntervalSince1970))
+        if ledger != before { save() }
         return attempt
     }
 
@@ -68,8 +64,10 @@ final class LearnerStore: ObservableObject {
 
     private func save() {
         let e = JSONEncoder()
-        try? e.encode(forms).write(to: folder.appendingPathComponent("forms.json"), options: .atomic)
-        try? e.encode(attempts).write(to: folder.appendingPathComponent("attempts.json"), options: .atomic)
-        try? e.encode(circles).write(to: folder.appendingPathComponent("circles.json"), options: .atomic)
+        try? e.encode(ledger.forms).write(to: folder.appendingPathComponent("forms.json"), options: .atomic)
+        try? e.encode(ledger.attempts).write(
+            to: folder.appendingPathComponent("attempts.json"), options: .atomic)
+        try? e.encode(ledger.circles).write(
+            to: folder.appendingPathComponent("circles.json"), options: .atomic)
     }
 }

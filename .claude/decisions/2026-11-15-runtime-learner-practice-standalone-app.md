@@ -163,3 +163,35 @@ Steps 1 to 3 need nothing else; the rest wait on the members ADR's steps 5a to 6
     `minutesText`, `barHeights`) leave this ADR's names free.
 - **The two agree, and neither changes.** This ADR's `PigeonCore` work adds
   files beside these and reuses none of them.
+
+### 2026-11-15: a sample page, form 1023, that runs the whole flow and keeps nothing
+
+The owner wants to try print, scan, check marks and score on someone else's
+phone without that person sitting a real test.
+
+- **Form 1023 is the sample.** Its code strip is all ten form bits set, page 0.
+  A real form never takes it: new form numbers wrap modulo 1023, not 1024.
+- **Its questions are plainly not the test.** 25 fixed questions in
+  `PigeonCore`, topic `Sample`, each starting "Sample <n>:", such as "Sample 1:
+  Which colour is the sky?". None comes from the bank or from ICBC.
+- **Its circles never move.** The sample page is laid out without wrapping, so
+  its circles are the same on every device, and the reader takes them from
+  `PigeonCore` rather than from a stored form (the first amendment's rule is
+  for real forms, whose text wraps).
+- **Two printings.** A blank sample to fill by hand, and a filled-in one whose
+  circles are already marked (21 right, 2 wrong, one double and one blank), so
+  the scanner can be tried with nobody filling it in. Both print through
+  AirPrint and can be saved as a PDF from the app. Each is headed "SAMPLE PAGE"
+  and says it is not a real test.
+- **It runs every step.** The camera finds its anchors, straightens it, reads
+  its code strip and its circles; the check-marks screen, the score and the
+  study tips follow, each labelled as a sample.
+- **Nothing is kept.** A sample is scored in memory and discarded: no stored
+  form or circles, no attempt, no progress by topic, no weighting of the next
+  form, nothing in the score chart. `PigeonCore`'s `LearnerLedger` holds the
+  rule, so it is tested; the app saves only what the ledger keeps.
+- **Where it is.** "Try a sample page", a quiet link under the learner home's
+  buttons, opens a screen to print either sheet, save its PDF, and scan it. A
+  sample scanned from "Scan a page" is recognised by its code strip the same way.
+- **Tests:** the filled-in sample, drawn as a camera sees it, reads back to its
+  marks and scores 21; recording a sample leaves the ledger unchanged.

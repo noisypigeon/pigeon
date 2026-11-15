@@ -34,11 +34,12 @@ struct ResultView: View {
         let count = attempt.results.count
         let pass = attempt.correct >= passMark(count)
         let missed = count - attempt.correct
+        let sample = isSample(attempt.form)
         return ZStack {
             DotGrid()
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
-                    Eyebrow(text: formLabel(attempt.form))
+                    Eyebrow(text: sample ? "Sample page" : formLabel(attempt.form))
                     VStack(spacing: 8) {
                         HStack(alignment: .firstTextBaseline, spacing: 4) {
                             Text("\(attempt.correct)").font(Theme.mono(64, .bold)).foregroundStyle(Theme.ink)
@@ -51,7 +52,10 @@ struct ResultView: View {
                             .padding(.horizontal, 14)
                             .padding(.vertical, 4)
                             .background(Capsule().fill(pass ? Theme.good : Theme.kind(1)))
-                        Text(encouragement(score: attempt.correct, count: count, previousBest: previousBest))
+                        Text(
+                            sample
+                                ? "This was a sample page, so nothing was kept."
+                                : encouragement(score: attempt.correct, count: count, previousBest: previousBest))
                             .font(.callout)
                             .foregroundStyle(Theme.ink2)
                             .multilineTextAlignment(.center)
@@ -73,7 +77,9 @@ struct ResultView: View {
                     }
                     .padding(16)
                     .block()
-                    Label("Saved to your progress", systemImage: "checkmark")
+                    Label(
+                        sample ? "A sample: not saved, and not in your progress" : "Saved to your progress",
+                        systemImage: sample ? "xmark" : "checkmark")
                         .font(.footnote)
                         .foregroundStyle(Theme.ink2)
                     if missed > 0 {
@@ -87,7 +93,7 @@ struct ResultView: View {
             }
         }
         .navigationDestination(isPresented: $showHints) {
-            HintsView(hints: hints(attempt: attempt, bank: learner.bank))
+            HintsView(hints: hints(attempt: attempt, bank: learner.questions(for: attempt)))
         }
     }
 }

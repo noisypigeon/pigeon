@@ -57,6 +57,19 @@ enum LearnerPDF {
         return (data, circles)
     }
 
+    /// The sample page as a PDF: blank to fill by hand, or `filledIn` with its marks already made.
+    static func renderSample(filledIn: Bool) -> Data {
+        let renderer = UIGraphicsPDFRenderer(bounds: CGRect(origin: .zero, size: pagePoints))
+        return renderer.pdfData { pdf in
+            pdf.beginPage()
+            let c = pdf.cgContext
+            draw(page: 0, of: 1, form: sampleForm, count: questionsPerPage, layout: sampleLayout, in: c)
+            if filledIn {
+                for circle in sampleFills { filled(c, circle.x, circle.y) }
+            }
+        }
+    }
+
     private static func rect(_ b: PageBox) -> CGRect {
         CGRect(x: b.x * pt, y: b.y * pt, width: b.w * pt, height: b.h * pt)
     }
@@ -168,12 +181,16 @@ enum LearnerPDF {
             }
         }
         stroke(c, rect(LearnerPage.codeFrame), ink, 0.25)
-        text("BC Class 7L Practice Test", x: 20, y: 14.6, size: 4.4, bold: true)
+        let sample = isSample(form.number)
+        text(sample ? "SAMPLE PAGE" : "BC Class 7L Practice Test", x: 20, y: 14.6, size: 4.4, bold: true)
         let first = page * questionsPerPage + 1
-        text(
-            pages > 1
+        let subtitle =
+            sample
+            ? "Not a real test  ·  nothing is saved"
+            : pages > 1
                 ? "Questions \(first)–\(first + count - 1)  ·  Page \(page + 1) of \(pages)"
-                : "\(count) questions", x: 105, y: 14.6, size: 2.4, color: mid)
+                : "\(count) questions"
+        text(subtitle, x: 105, y: 14.6, size: 2.4, color: mid)
         text(String(format: "F%03d", form.number), x: 165.5, y: 14.3, size: 2.6, bold: true, trailing: true)
         text("Date", x: 20, y: 23.6, size: 2.5, bold: true)
         stroke(c, rect(PageBox(x: 28, y: 19.5, w: 30, h: 5.6)), boxLine, 0.25, radius: 0.5)
@@ -190,5 +207,10 @@ enum LearnerPDF {
             text(t.text, x: t.x, y: t.y, size: t.size, bold: t.bold, trailing: t.trailing)
         }
         for circle in layout.circles { bubble(c, circle.x, circle.y, choiceLetters[circle.choice]) }
+        if sample {
+            text(
+                "Sample questions only, not the knowledge test. A score from this page is never saved.",
+                x: LearnerPage.width / 2, y: 268.6, size: 2.4, color: mid, centered: true)
+        }
     }
 }
