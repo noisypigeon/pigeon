@@ -17,6 +17,7 @@ pub mod member;
 pub mod minting;
 pub mod owner;
 pub mod platform;
+pub mod pool;
 #[cfg(feature = "engines")]
 pub mod release;
 pub mod session;

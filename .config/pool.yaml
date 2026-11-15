@@ -1,0 +1,22 @@
+# Capacity pools, their hard caps and task budgets; see
+# .claude/decisions/2026-11-15-development-capacity-pools-hard-spend-cap.md.
+# Dollars are decimals. A price list is input, cache write 5m, cache write 1h, cache read and
+# output, in USD per million tokens; a long list starts with the prompt tokens it applies above.
+order: [anthropic]
+prefer: subscription
+subscription_slots: 3
+drain_days: 7
+anthropic.enabled: false
+anthropic.gateway: anthropic-messages
+anthropic.harness: claude-code
+anthropic.credit_usd: 100
+anthropic.month_limit_usd: 50
+anthropic.cycle_day: null
+anthropic.concurrency: 2
+anthropic.price.claude-sonnet-5-5: [2, 2.5, 4, 0.1, 10]
+anthropic.price.claude-haiku-5-5: [0.1, 0.125, 0.2, 0.01, 0.5]
+anthropic.long.claude-haiku-5-5: [100000, 0.5, 0.625, 1, 0.05, 2.5]
+budget.haiku: [0.75, 3000000, 120, 30]
+budget.sonnet: [4, 3000000, 200, 40]
+max.haiku: [2, 45]
+max.sonnet: [8, 60]
