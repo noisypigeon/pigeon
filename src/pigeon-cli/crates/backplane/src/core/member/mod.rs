@@ -11,7 +11,7 @@ use sha2::{Digest as _, Sha256};
 mod tests;
 
 /// Every capability an operation may require.
-pub const CAPABILITIES: [&str; 8] = [
+pub const CAPABILITIES: [&str; 9] = [
     "read",
     "propose",
     "approve",
@@ -20,6 +20,7 @@ pub const CAPABILITIES: [&str; 8] = [
     "mandates",
     "platform",
     "members",
+    "learner",
 ];
 
 /// The capabilities a service account may hold.
@@ -87,6 +88,37 @@ impl Roles {
     #[must_use]
     pub fn capabilities(&self, role: Role) -> &[String] {
         self.roles.get(role.name()).map_or(&[], Vec::as_slice)
+    }
+
+    /// `.config/roles.yaml`'s text, in the one shape its sentinel policy allows: a comment,
+    /// `roles:`, then `  <role>: [<cap>, ...]` lines.
+    ///
+    /// # Errors
+    /// A line in any other shape.
+    pub fn parse_file(text: &str) -> Result<Self, String> {
+        let mut roles = BTreeMap::new();
+        for (i, line) in text.lines().enumerate() {
+            if line.starts_with('#') || line == "roles:" || line.trim().is_empty() {
+                continue;
+            }
+            let bad = || format!("line {}: not `  <role>: [<capability>, ...]`", i + 1);
+            let (name, list) = line
+                .strip_prefix("  ")
+                .and_then(|l| l.split_once(": "))
+                .ok_or_else(bad)?;
+            let list = list
+                .strip_prefix('[')
+                .and_then(|l| l.strip_suffix(']'))
+                .ok_or_else(bad)?;
+            let caps = list
+                .split(',')
+                .map(str::trim)
+                .filter(|c| !c.is_empty())
+                .map(str::to_owned)
+                .collect();
+            roles.insert(name.to_owned(), caps);
+        }
+        Ok(Self { roles })
     }
 }
 

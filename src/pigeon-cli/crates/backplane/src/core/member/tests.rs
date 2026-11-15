@@ -1,6 +1,6 @@
 use super::*;
 
-const ROLES: &str = r#"{"roles": {"administrator": ["read", "propose", "approve", "approve.owner", "auto", "mandates", "platform", "members"], "user": [], "service": ["read", "propose"]}}"#;
+const ROLES: &str = r#"{"roles": {"administrator": ["read", "propose", "approve", "approve.owner", "auto", "mandates", "platform", "members", "learner"], "user": ["learner"], "service": ["read", "propose"]}}"#;
 
 fn roles() -> Roles {
     serde_json::from_str(ROLES).unwrap()
@@ -326,9 +326,10 @@ fn check_refuses_a_non_member() {
 }
 
 #[test]
-fn check_refuses_a_user_every_capability() {
+fn check_refuses_a_user_every_capability_but_learner() {
     let m = with_bob();
-    for c in CAPABILITIES {
+    assert!(check(&roles(), &m, &req("bob", "learner")).is_ok());
+    for c in CAPABILITIES.into_iter().filter(|c| *c != "learner") {
         assert_eq!(
             check(&roles(), &m, &req("bob", c)),
             Err(Refusal::Capability),
@@ -459,4 +460,19 @@ fn view_hides_ended_memberships_and_closed_invitations() {
     assert_eq!(accounts, ["root"]);
     assert_eq!(v.invitations, Vec::<Invitation>::new());
     assert_eq!(m.view("bob").me, None);
+}
+
+#[test]
+fn the_repository_roles_file_parses_and_passes() {
+    let text = include_str!("../../../../../../../.config/roles.yaml");
+    let r = Roles::parse_file(text).unwrap();
+    assert_eq!(r, roles());
+    assert_eq!(check_roles(&r), Vec::<String>::new());
+    assert_eq!(r.capabilities(Role::User), ["learner".to_owned()]);
+}
+
+#[test]
+fn parse_file_refuses_another_shape() {
+    assert!(Roles::parse_file("roles:\n  user: learner\n").is_err());
+    assert!(Roles::parse_file("roles:\nuser: [learner]\n").is_err());
 }

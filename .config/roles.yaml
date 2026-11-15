@@ -1,5 +1,5 @@
 # Each role's capabilities; see .claude/decisions/2026-11-14-security-instance-members-roles-invitations.md §2.
 roles:
-  administrator: [read, propose, approve, approve.owner, auto, mandates, platform, members]
-  user: []
+  administrator: [read, propose, approve, approve.owner, auto, mandates, platform, members, learner]
+  user: [learner]
   service: [read, propose]
