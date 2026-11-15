@@ -15,6 +15,8 @@ struct API {
     static let base = URL(string: "https://\(host)")!
 
     let device: DeviceKey
+    /// The instance it calls: the platform, or a standalone's `workers.dev` host.
+    var base: URL = API.base
 
     /// A signed request's answer, decoded.
     func call<T: Decodable>(
@@ -31,7 +33,7 @@ struct API {
         let at = Int(Date().timeIntervalSince1970)
         let pathOnly = path.split(separator: "?", maxSplits: 1).first.map(String.init) ?? path
         let signature = try device.sign(canonical(method: method, path: pathOnly, at: at, body: bytes))
-        var request = URLRequest(url: URL(string: path, relativeTo: Self.base)!)
+        var request = URLRequest(url: URL(string: path, relativeTo: base)!)
         request.httpMethod = method
         request.setValue(
             headerValue(device: device.id, at: at, signature: signature),

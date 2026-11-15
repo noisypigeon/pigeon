@@ -25,6 +25,7 @@ struct LearnerHomeView: View {
                         }
                         chart
                         topics
+                        if learner.linked { saved }
                         Button { printTest() } label: { learnerPrimary("Print a new test") }
                         Button { scanning = true } label: { learnerSecondary("Scan a page") }
                             .disabled(learner.forms.isEmpty)
@@ -48,6 +49,20 @@ struct LearnerHomeView: View {
             .navigationDestination(isPresented: $scanning) { LearnerScanView(learner: learner) }
             .navigationDestination(isPresented: $trying) { LearnerSampleView(learner: learner) }
         }
+    }
+
+    /// Whether the instance holds everything practised on this iPhone.
+    private var saved: some View {
+        Label(
+            learner.carried
+                ? "Your practice is saved online"
+                : learner.syncError == nil
+                    ? "Saving your practice online…" : "Not saved online yet; it stays on this iPhone until it is",
+            systemImage: learner.carried ? "checkmark.icloud" : "icloud.and.arrow.up"
+        )
+        .font(.footnote)
+        .foregroundStyle(learner.carried ? Theme.good : Theme.muted)
+        .task { await learner.sync() }
     }
 
     private var chart: some View {
