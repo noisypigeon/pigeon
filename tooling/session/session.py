@@ -207,6 +207,9 @@ EXECUTOR = """You are an executor session for pigeon, of class {model}, carrying
 (revision {revision}), which planner session {planner} wrote. The brief has made every decision: \
 follow it exactly, and CLAUDE.md's "Briefs and model classes" section.
 
+0. Check first: the working directory is a git checkout of pigeon holding CLAUDE.md, and ToolSearch \
+finds `session_start`. If either is missing, `send_message` your planner's session, `{planner_session}`, \
+saying which is missing, and stop. Never `add_repo`, clone, or work around a missing tool.
 1. Per CLAUDE.md: add the `artifacts` remote, fetch its `main`, and branch from `artifacts/main`.
 2. `session_start` with this session's URL as `label`, `model` "{model}", `planner` "{planner}" and \
 `brief` "{brief}". Write {{"label", "ticket"}} to ~/.config/pigeon/session.json, then arm `Monitor` \
@@ -225,13 +228,38 @@ widen the scope.
 planner takes the brief back, `session_end`."""
 
 
-def executor():
-    """Prints `create_session`'s arguments for an executor of brief `b<n>`: its model ID, title and
-    prompt; see the model-tiered ADR §7."""
-    if len(sys.argv) < 3:
-        print("usage: session.py executor b<n>", file=sys.stderr)
+def repository():
+    """The repository the instance mirrors: `config.yaml`'s `repository`, or None."""
+    root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    try:
+        with open(os.path.join(root, "config.yaml")) as f:
+            for row in f:
+                if row.startswith("repository:"):
+                    return row.split(":", 1)[1].strip().strip("'\"") or None
+    except OSError:
+        pass
+    return None
+
+
+def executor(argv=None):
+    """Prints `create_session`'s arguments for an executor of brief `b<n>`: its model ID, title,
+    prompt, `source_url` and tags; see the model-tiered ADR §7 and its 2026-11-15 amendment."""
+    argv = sys.argv[2:] if argv is None else argv
+    usage = "usage: session.py executor b<n> [--tag TAG]..."
+    if not argv or argv[0].startswith("-"):
+        print(usage, file=sys.stderr)
         return 2
-    want = sys.argv[2].strip()
+    want, extra, rest = argv[0].strip(), [], argv[1:]
+    while rest:
+        if rest[0] != "--tag" or len(rest) < 2:
+            print(usage, file=sys.stderr)
+            return 2
+        extra.append(rest[1])
+        rest = rest[2:]
+    source = repository()
+    if not source:
+        print("config.yaml names no `repository`, so an executor would start with no checkout", file=sys.stderr)
+        return 1
     b = run("brief.show", {"id": want})
     if not isinstance(b, dict) or not b.get("revisions"):
         print(f"no brief `{want}`", file=sys.stderr)
@@ -249,8 +277,20 @@ def executor():
         brief=b["id"],
         revision=len(b["revisions"]),
         planner=planner,
+        planner_session=planner.rstrip("/").rsplit("/", 1)[-1],
     )
-    out = {"model": ids[model], "title": f"pigeon {b['id']} ({model}): {draft.get('title', '')}", "prompt": prompt}
+    tags = [f"pigeon:brief-{b['id']}"]
+    adr = os.path.basename(draft.get("adr") or "")
+    if adr.endswith(".md"):
+        tags.append(f"pigeon:adr-{adr[:-3]}")
+    tags += [t for t in extra if t not in tags]
+    out = {
+        "model": ids[model],
+        "title": f"pigeon {b['id']} ({model}): {draft.get('title', '')}",
+        "prompt": prompt,
+        "source_url": source,
+        "tags": tags,
+    }
     print(json.dumps(out, indent=2))
     return 0
 

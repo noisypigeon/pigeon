@@ -858,3 +858,43 @@ changes, as !386 itself now plans: one per session and ADR.
   - `briefs::by_window` in `worker/briefs.rs`;
   - `under_window` and `asks_owner` in `worker/mod.rs` become `pub(super)`;
   - a call after a brief's change is proposed, and one after `accept`.
+
+### 2026-11-15: An executor starts with the repository checked out and the pigeon tools, or stops
+
+- **What went wrong.** On 15 Nov b12's first executor started in an empty
+  `/workspace`, with no checkout and no pigeon tools. `session.py executor`
+  printed only `model`, `title` and `prompt`, so `create_session` got no
+  `source_url`. b1–b11 worked only because their planners added it by hand.
+  The pigeon MCP server reaches a session through the checkout's `.mcp.json`,
+  which is read only at start. A clone made later brought the files but
+  never the tools. The executor then tried `add_repo`, which its classifier
+  refused.
+- **The rule.** An executor is always created with the repository checked
+  out. That checkout brings `.mcp.json`, and with it the pigeon tools.
+  `session.py executor b<n> [--tag T]…` prints, besides `model`, `title`
+  and `prompt`:
+  - `source_url`: `config.yaml`'s `repository`, the repository the
+    instance mirrors;
+  - `tags`: `pigeon:brief-b<n>`, `pigeon:adr-<stem>` for the brief's ADR,
+    and each `--tag`, such as the planner's own workstream tag.
+
+  It prints no `environment_id`. The executor inherits its planner's
+  environment, which holds the proxy's credentials for the control plane.
+  It refuses to print anything without a `repository`.
+- **The executor checks before it acts.** The prompt's first step checks
+  that the working directory is a git checkout of pigeon holding
+  `CLAUDE.md`, and that ToolSearch finds `session_start`. If either is
+  missing, the executor sends its planner's session a `send_message` naming
+  what is missing, then stops. That session ID is the last segment of the
+  planner's label. The executor never calls `add_repo`, clones, or works
+  around a missing tool.
+- **The planner checks too.** Right after `create_session`, the planner calls
+  `get_session` on the new session. If `session_context.sources` lacks the
+  repository, it archives that session and creates a new one from
+  `session.py executor`'s output.
+- **Tests.** `tooling/session/test_session.py` holds stdlib `unittest` tests
+  of the printed arguments, with `brief.show` stubbed. Run it as
+  `python3 -I tooling/session/test_session.py`. A change to
+  `tooling/session/` runs it before every push. `cobot scope` doesn't select
+  it yet. Wiring it into `mise run ci` needs `mise.toml`, which is among the
+  job image's inputs, so that is a follow-up for the owner.
