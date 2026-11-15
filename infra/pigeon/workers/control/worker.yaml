@@ -13,6 +13,9 @@ workers_dev: false
 routes:
   - custom_domain: $deployment.domains[0]
   - custom_domain: $deployment.domains[1]
+  # Standalones' hosts under the zone; see
+  # .claude/decisions/2026-11-15-runtime-standalone-hostnames-platform-zone.md §1.
+  - subdomains_of: $deployment.instance_zone
 durable_objects:
   classes: [Instance, ChangeRun, Checker, Runner, MainRun]
   migrations:

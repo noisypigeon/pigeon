@@ -11,7 +11,10 @@ units:
   zones/pigeon.dev:
     kind: cloudflare/zone
     services: {}
-    records: {}
+    # Every standalone's host, proxied by the control Worker's route; see
+    # .claude/decisions/2026-11-15-runtime-standalone-hostnames-platform-zone.md §1.
+    records:
+      instances: { name: "*", type: AAAA, content: "100::", proxied: true }
   # The architecture site, built from architecture.describe; see
   # .claude/decisions/2026-11-05-runtime-architecture-site-through-backplane.md.
   sites/docs:
@@ -28,6 +31,7 @@ units:
     worker: pigeon-control
     hostname: pigeon-control.pigeon-dev.workers.dev
     domains: [platform.pigeon.dev, blue.platform.pigeon.dev]
+    instance_zone: pigeon.dev
     instance: pigeon
     change_floor: 12
     database: { name: pigeon }
