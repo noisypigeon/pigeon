@@ -4,7 +4,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::mandates::{Decision, State};
+use super::mandates::{Decision, Hold, State, defers};
 use super::tiers::{Tier, tier_of};
 
 /// The lengths a window may have, in hours.
@@ -42,13 +42,26 @@ pub struct Window {
     /// The changes merged under it.
     #[serde(default)]
     pub merged: Vec<u32>,
+    /// Why it is held, while it is.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hold: Option<Hold>,
 }
 
 impl Window {
-    /// Whether it may approve now: active, unexpired and within its budget.
+    /// Whether it may approve now: active and unexpired, or held, and within its budget.
     #[must_use]
     pub fn usable(&self, now: u64) -> bool {
-        self.state == State::Active && now < self.expires && self.used < BUDGET
+        let live = match self.state {
+            State::Active => now < self.expires,
+            State::Held => true,
+            _ => false,
+        };
+        live && self.used < BUDGET
+    }
+
+    /// Whether it is running: active, held or paused.
+    fn running(&self) -> bool {
+        matches!(self.state, State::Active | State::Held | State::Paused)
     }
 }
 
@@ -64,9 +77,19 @@ pub struct Windows {
 }
 
 /// Whether `w` lets `operation` on `change` through at `now`: authorizing, approving, merging
-/// and closing at the code tier or lower. The owner tier and break-glass still ask.
+/// and closing at the code tier or lower. The owner tier and break-glass still ask, and a hold
+/// defers what it would allow.
 #[must_use]
 pub fn decide(w: &Window, change: &crate::changes::Change, operation: &str, now: u64) -> Decision {
+    match judge(w, change, operation, now) {
+        Decision::Allow => {
+            defers(w.hold.as_ref(), change, operation).map_or(Decision::Allow, Decision::Hold)
+        }
+        d => d,
+    }
+}
+
+fn judge(w: &Window, change: &crate::changes::Change, operation: &str, now: u64) -> Decision {
     if !w.usable(now) {
         return Decision::Ask(format!("Auto window {} has ended or paused", w.id));
     }
@@ -89,20 +112,21 @@ pub fn decide(w: &Window, change: &crate::changes::Change, operation: &str, now:
 }
 
 impl Windows {
-    /// The window that is active or paused, if any.
+    /// The window that is active, held or paused, if any.
     #[must_use]
     pub fn current(&self) -> Option<&Window> {
-        self.list
-            .iter()
-            .rev()
-            .find(|w| matches!(w.state, State::Active | State::Paused))
+        self.list.iter().rev().find(|w| w.running())
     }
 
-    /// Ends a window whose time or budget has run out.
+    /// Ends a window whose time, budget or hold has run out.
     #[must_use]
     pub fn settle(&self, now: u64) -> Self {
         let mut next = self.clone();
         for w in &mut next.list {
+            let spent = w.hold.as_ref().and_then(|h| h.spent(now));
+            if let (State::Held, Some(end)) = (w.state, spent) {
+                (w.state, w.why, w.hold) = (State::Ended, Some(end), None);
+            }
             if w.state == State::Active && (now >= w.expires || w.used >= BUDGET) {
                 w.state = State::Ended;
                 w.why = Some(if w.used >= BUDGET {
@@ -139,11 +163,9 @@ impl Windows {
         if next.list.iter().any(|w| w.state == State::Active) {
             return Err("an Auto window is already running".into());
         }
-        for w in &mut next.list {
-            if w.state == State::Paused {
-                w.state = State::Ended;
-                w.why = Some("a new window started".into());
-            }
+        for w in next.list.iter_mut().filter(|w| w.running()) {
+            (w.state, w.hold) = (State::Ended, None);
+            w.why = Some("a new window started".into());
         }
         next.next += 1;
         let w = Window {
@@ -156,6 +178,7 @@ impl Windows {
             by: by.to_string(),
             why: None,
             merged: Vec::new(),
+            hold: None,
         };
         next.list.push(w.clone());
         Ok((next, w))
@@ -168,16 +191,10 @@ impl Windows {
     /// When none is active or paused.
     pub fn end(&self, why: &str) -> Result<(Self, Window), String> {
         let mut next = self.clone();
-        let Some(w) = next
-            .list
-            .iter_mut()
-            .rev()
-            .find(|w| matches!(w.state, State::Active | State::Paused))
-        else {
+        let Some(w) = next.list.iter_mut().rev().find(|w| w.running()) else {
             return Err("no Auto window is running".into());
         };
-        w.state = State::Ended;
-        w.why = Some(why.to_string());
+        (w.state, w.why, w.hold) = (State::Ended, Some(why.to_string()), None);
         let w = w.clone();
         Ok((next, w))
     }
@@ -198,7 +215,45 @@ impl Windows {
         (next, paused)
     }
 
-    /// Decides `operation` on `change` under the active window, recording a merge: the next
+    /// Holds the active or held window after the deploy of `sha` failed for `why` at `now`,
+    /// ending it when its hold is spent: the next windows, and the window and whether it ended.
+    #[must_use]
+    pub fn hold_all(&self, sha: &str, why: &str, now: u64) -> (Self, Option<(u32, bool)>) {
+        let mut next = self.settle(now);
+        let Some(w) = next
+            .list
+            .iter_mut()
+            .find(|w| matches!(w.state, State::Active | State::Held))
+        else {
+            return (next, None);
+        };
+        let h = Hold::after(w.hold.as_ref(), sha, why, now);
+        let ended = h.spent(now);
+        (w.state, w.why, w.hold) = match ended.clone() {
+            Some(end) => (State::Ended, Some(end), None),
+            None => (State::Held, Some(h.waits()), Some(h)),
+        };
+        let id = w.id;
+        (next, Some((id, ended.is_some())))
+    }
+
+    /// Resumes the held window at `now`, its expiry moved later by the time held: the next
+    /// windows, and the window resumed.
+    #[must_use]
+    pub fn resume_all(&self, now: u64) -> (Self, Option<Window>) {
+        let mut next = self.settle(now);
+        let Some(w) = next.list.iter_mut().find(|w| w.state == State::Held) else {
+            return (next, None);
+        };
+        if let Some(h) = w.hold.take() {
+            w.expires += now.saturating_sub(h.since);
+        }
+        (w.state, w.why) = (State::Active, None);
+        let w = w.clone();
+        (next, Some(w))
+    }
+
+    /// Decides `operation` on `change` under the active or held window, recording a merge: the next
     /// windows, and the window and decision, or none when no window is active.
     #[must_use]
     pub fn decide(
@@ -208,7 +263,11 @@ impl Windows {
         now: u64,
     ) -> (Self, Option<(u32, Decision)>) {
         let mut next = self.settle(now);
-        let Some(w) = next.list.iter_mut().find(|w| w.state == State::Active) else {
+        let Some(w) = next
+            .list
+            .iter_mut()
+            .find(|w| matches!(w.state, State::Active | State::Held))
+        else {
             return (next, None);
         };
         let d = decide(w, change, operation, now);

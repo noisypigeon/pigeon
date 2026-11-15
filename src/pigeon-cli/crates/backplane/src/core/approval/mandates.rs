@@ -18,6 +18,10 @@ pub const MAX_HOURS: u32 = 72;
 pub const DEFAULT_HOURS: u32 = 24;
 /// Where ADRs live; a mandate executes one.
 pub const DECISIONS: &str = ".claude/decisions/";
+/// How long a hold lasts before it ends its window or mandate, in seconds.
+pub const HOLD_MAX: u64 = 6 * 3_600;
+/// How many failed deploys in one hold end its window or mandate.
+pub const HOLD_FAILURES: u32 = 3;
 
 /// Where a mandate is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -29,8 +33,84 @@ pub enum State {
     Active,
     /// Stopped by itself; the owner resumes it or lets it end.
     Paused,
+    /// A deploy of `main` failed: only a fix merges, and a passed deploy resumes it; see the iOS
+    /// approvals ADR's 2026-11-15 amendment.
+    Held,
     /// Done, expired, used up, or ended.
     Ended,
+}
+
+/// Why a window or mandate is held: the deploys of `main` that failed since it was.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Hold {
+    /// The SHA whose deploy failed last.
+    pub sha: String,
+    /// Why it failed.
+    pub why: String,
+    /// When the hold began, in Unix seconds.
+    pub since: u64,
+    /// The deploys that failed in it.
+    pub failures: u32,
+}
+
+impl Hold {
+    /// The hold after the deploy of `sha` failed for `why` at `now`, extending `prior`.
+    #[must_use]
+    pub fn after(prior: Option<&Self>, sha: &str, why: &str, now: u64) -> Self {
+        Self {
+            sha: sha.to_string(),
+            why: why.to_string(),
+            since: prior.map_or(now, |h| h.since),
+            failures: prior.map_or(0, |h| h.failures) + 1,
+        }
+    }
+
+    /// Why it ends its window or mandate at `now`: past [`HOLD_MAX`] or [`HOLD_FAILURES`].
+    #[must_use]
+    pub fn spent(&self, now: u64) -> Option<String> {
+        if self.failures >= HOLD_FAILURES {
+            Some(format!(
+                "{} deploys failed while it was held",
+                self.failures
+            ))
+        } else if now.saturating_sub(self.since) >= HOLD_MAX {
+            Some("it was held 6 hours".into())
+        } else {
+            None
+        }
+    }
+
+    /// What a deferred merge waits on.
+    #[must_use]
+    pub fn waits(&self) -> String {
+        format!(
+            "merges once a deploy of main passes: the deploy of {} failed: {}",
+            self.sha.get(..12).unwrap_or(&self.sha),
+            self.why
+        )
+    }
+}
+
+/// Whether `change`'s title is a `fix` or `revert`, which a hold lets merge.
+#[must_use]
+pub fn fixes(change: &crate::changes::Change) -> bool {
+    ["fix", "revert"].iter().any(|t| {
+        change
+            .title
+            .strip_prefix(t)
+            .is_some_and(|r| r.starts_with([':', '(', '!']))
+    })
+}
+
+/// Why `hold` defers `operation` on `change`: a merge of anything but a fix.
+#[must_use]
+pub fn defers(
+    hold: Option<&Hold>,
+    change: &crate::changes::Change,
+    operation: &str,
+) -> Option<String> {
+    let h = hold?;
+    (operation == "change.merge" && !fixes(change)).then(|| h.waits())
 }
 
 /// A task approved once.
@@ -67,6 +147,9 @@ pub struct Mandate {
     /// The changes merged under it.
     #[serde(default)]
     pub merged: Vec<u32>,
+    /// Why it is held, while it is.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hold: Option<Hold>,
 }
 
 /// The literal part of `glob` before its first wildcard.
@@ -131,6 +214,7 @@ impl Mandate {
             granted_by: None,
             why: None,
             merged: Vec::new(),
+            hold: None,
         })
     }
 
@@ -152,12 +236,15 @@ impl Mandate {
             })
     }
 
-    /// Whether it may approve now: active, unexpired and within its budget.
+    /// Whether it may approve now: active and unexpired, or held, and within its budget.
     #[must_use]
     pub fn usable(&self, now: u64) -> bool {
-        self.state == State::Active
-            && self.expires.is_some_and(|e| now < e)
-            && self.used < self.budget
+        let live = match self.state {
+            State::Active => self.expires.is_some_and(|e| now < e),
+            State::Held => true,
+            _ => false,
+        };
+        live && self.used < self.budget
     }
 }
 
@@ -293,8 +380,7 @@ impl Mandates {
         };
         let mut next = self.clone();
         let m = &mut next.list[i];
-        m.state = State::Ended;
-        m.why = Some(why.to_string());
+        (m.state, m.why, m.hold) = (State::Ended, Some(why.to_string()), None);
         let ended = m.clone();
         (next, Ok(ended))
     }
@@ -310,14 +396,26 @@ pub enum Decision {
     Ask(String),
     /// Ask the owner, and pause the mandate, saying why.
     Pause(String),
+    /// Not now: a hold defers it until a deploy passes, saying what it waits on; nobody is asked.
+    Hold(String),
 }
 
-/// Whether `m` approves `operation` on `change` at `now`.
+/// Whether `m` approves `operation` on `change` at `now`; a hold defers what it would allow.
+#[must_use]
+pub fn decide(m: &Mandate, change: &crate::changes::Change, operation: &str, now: u64) -> Decision {
+    match judge(m, change, operation, now) {
+        Decision::Allow => {
+            defers(m.hold.as_ref(), change, operation).map_or(Decision::Allow, Decision::Hold)
+        }
+        d => d,
+    }
+}
+
+/// Whether `m` approves `operation` on `change` at `now`, held or not.
 /// - It must be usable, cited by the change's plan, and cover the change's scope.
 /// - Approving and merging also need the head classified, never by a guarded or sentinel path,
 ///   and at most confirm, or code only because it deploys and the mandate may deploy.
-#[must_use]
-pub fn decide(m: &Mandate, change: &crate::changes::Change, operation: &str, now: u64) -> Decision {
+fn judge(m: &Mandate, change: &crate::changes::Change, operation: &str, now: u64) -> Decision {
     use crate::approvals::Tier;
     if !m.usable(now) {
         return Decision::Ask(format!(
@@ -409,6 +507,56 @@ impl Mandates {
             _ => {}
         }
         (next, Some((id, d)))
+    }
+
+    /// Holds every active or held mandate after the deploy of `sha` failed for `why` at `now`,
+    /// ending one whose hold is spent: the next mandates, the ones held and the ones ended.
+    #[must_use]
+    pub fn hold_all(&self, sha: &str, why: &str, now: u64) -> (Self, Vec<u32>, Vec<u32>) {
+        let (mut next, mut held, mut ended) = (self.clone(), Vec::new(), Vec::new());
+        for m in &mut next.list {
+            if !matches!(m.state, State::Active | State::Held) {
+                continue;
+            }
+            let h = Hold::after(m.hold.as_ref(), sha, why, now);
+            if let Some(end) = h.spent(now) {
+                (m.state, m.why, m.hold) = (State::Ended, Some(end), None);
+                ended.push(m.id);
+            } else {
+                (m.state, m.why, m.hold) = (State::Held, Some(h.waits()), Some(h));
+                held.push(m.id);
+            }
+        }
+        (next, held, ended)
+    }
+
+    /// Resumes every held mandate at `now`, its expiry moved later by the time held: the next
+    /// mandates and the ones resumed.
+    #[must_use]
+    pub fn resume_all(&self, now: u64) -> (Self, Vec<u32>) {
+        let (mut next, mut resumed) = (self.clone(), Vec::new());
+        for m in &mut next.list {
+            if let (State::Held, Some(h)) = (m.state, m.hold.take()) {
+                m.expires = m.expires.map(|e| e + now.saturating_sub(h.since));
+                (m.state, m.why) = (State::Active, None);
+                resumed.push(m.id);
+            }
+        }
+        (next, resumed)
+    }
+
+    /// Ends every mandate whose hold is spent at `now`: the next mandates and the ones ended.
+    #[must_use]
+    pub fn settle(&self, now: u64) -> (Self, Vec<u32>) {
+        let (mut next, mut ended) = (self.clone(), Vec::new());
+        for m in &mut next.list {
+            let spent = m.hold.as_ref().and_then(|h| h.spent(now));
+            if let (State::Held, Some(end)) = (m.state, spent) {
+                (m.state, m.why, m.hold) = (State::Ended, Some(end), None);
+                ended.push(m.id);
+            }
+        }
+        (next, ended)
     }
 
     /// Pauses every active mandate, saying `why`, as when a deploy fails: the next mandates, and

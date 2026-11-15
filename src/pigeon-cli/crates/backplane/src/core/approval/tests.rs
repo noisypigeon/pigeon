@@ -174,6 +174,119 @@ mod windows {
             .expect("a new window ends the paused one");
         assert_eq!(w.list[0].state, State::Ended);
     }
+
+    fn titled(title: &str) -> Change {
+        Change {
+            title: title.into(),
+            ..change(Tier::Code)
+        }
+    }
+
+    #[test]
+    fn a_failed_deploy_holds_merges_but_a_fix_and_a_passed_deploy_resumes_it() {
+        let (w, _) = Windows::default().start(1, "owner", NOW).expect("started");
+        let (w, held) = w.hold_all("abc", "token", NOW + 600);
+        assert_eq!(held, Some((1, false)));
+        let late = NOW + 2 * 3_600;
+        for op in ["change.authorize", "change.approve", "change.close"] {
+            let (_, d) = w.decide(&titled("feat: x"), op, late);
+            assert_eq!(d, Some((1, Decision::Allow)), "{op}: time stops while held");
+        }
+        let (_, d) = w.decide(&titled("feat: x"), "change.merge", late);
+        assert!(matches!(d, Some((1, Decision::Hold(_)))), "{d:?}");
+        let (_, d) = w.decide(&change(Tier::Owner), "change.merge", late);
+        assert!(
+            matches!(d, Some((1, Decision::Ask(_)))),
+            "the owner tier still asks: {d:?}"
+        );
+        for fix in ["fix: x", "fix(infra): x", "revert: x"] {
+            let (_, d) = w.decide(&titled(fix), "change.merge", late);
+            assert_eq!(d, Some((1, Decision::Allow)), "{fix}");
+        }
+        let (w, _) = w.decide(&titled("fix: x"), "change.merge", late);
+        let (w, resumed) = w.resume_all(late);
+        let r = resumed.expect("resumed");
+        assert_eq!(r.state, State::Active);
+        assert_eq!(
+            r.expires,
+            NOW + 3_600 + (late - NOW - 600),
+            "the hold is added back"
+        );
+        assert_eq!(r.used, 1, "the budget is kept");
+        let (_, d) = w.decide(&titled("feat: x"), "change.merge", late + 60);
+        assert_eq!(d, Some((1, Decision::Allow)));
+    }
+
+    #[test]
+    fn a_hold_ends_after_three_failed_deploys_or_six_hours() {
+        let (w, _) = Windows::default().start(1, "owner", NOW).expect("started");
+        let (w, _) = w.hold_all("a", "x", NOW);
+        let (w, again) = w.hold_all("b", "y", NOW + 60);
+        assert_eq!(again, Some((1, false)));
+        assert_eq!(
+            w.list[0].hold.as_ref().map(|h| (h.failures, h.since)),
+            Some((2, NOW))
+        );
+        let (ended, third) = w.hold_all("c", "z", NOW + 120);
+        assert_eq!(third, Some((1, true)));
+        assert_eq!(ended.list[0].state, State::Ended);
+        let timed = w.settle(NOW + super::super::mandates::HOLD_MAX);
+        assert_eq!(timed.list[0].state, State::Ended);
+        assert!(timed.current().is_none());
+        let (_, none) = timed.resume_all(NOW + 7 * 3_600);
+        assert!(none.is_none(), "an ended window never resumes");
+        let (w, _) = w
+            .start(4, "owner", NOW + 180)
+            .expect("a new window ends the held one");
+        assert_eq!(w.list[0].state, State::Ended);
+    }
+}
+
+#[test]
+fn a_failed_deploy_holds_a_mandate_and_a_passed_one_resumes_it() {
+    use super::mandates::{Decision, Mandates, State as M};
+    use super::tiers::{Tier, Tiered, Tiers};
+    let (all, m) = Mandates::default().propose(
+        ".claude/decisions/x.md",
+        "x",
+        vec!["**".into()],
+        false,
+        None,
+        Some(1),
+    );
+    let mut all = all;
+    let m = m.expect("proposed");
+    (all.list[0].state, all.list[0].expires) = (M::Active, Some(100));
+    let (paused, _) = all.pause_all("scope");
+    let (held, ids, ended) = all.hold_all("abc", "token", 50);
+    assert_eq!((ids, ended), (vec![m.id], Vec::new()));
+    let mut c = checked();
+    (c.plan, c.mandate) = (".claude/decisions/x.md".into(), Some(m.id));
+    let t = |tier| Tiered {
+        tier,
+        rule: "rule".into(),
+    };
+    c.tiers = Some(Tiers {
+        authorize: t(Tier::Confirm),
+        merge: t(Tier::Confirm),
+        close: t(Tier::Confirm),
+    });
+    let (_, d) = held.decide(&c, "change.authorize", 500);
+    assert!(matches!(d, Some((_, Decision::Allow))), "{d:?}");
+    let (_, d) = held.decide(&c, "change.merge", 500);
+    assert!(matches!(d, Some((_, Decision::Hold(_)))), "{d:?}");
+    let (resumed, ids) = held.resume_all(500);
+    assert_eq!(ids, vec![m.id]);
+    assert_eq!(
+        resumed.list[0].expires,
+        Some(550),
+        "expiry moves by the hold"
+    );
+    assert_eq!(resumed.list[0].state, M::Active);
+    let (p2, _, _) = paused.hold_all("abc", "token", 50);
+    assert_eq!(p2.list[0].state, M::Paused, "a pause stays the owner's");
+    let (spent, ended) = held.settle(50 + super::mandates::HOLD_MAX);
+    assert_eq!((spent.list[0].state, ended), (M::Ended, vec![m.id]));
 }
 
 #[test]
@@ -191,6 +304,7 @@ fn closing_a_landed_head_is_code_and_an_auto_window_approves_it_but_not_another_
         by: "owner".into(),
         why: None,
         merged: Vec::new(),
+        hold: None,
     };
     let pushed = checked();
     let mut landed = checked();
