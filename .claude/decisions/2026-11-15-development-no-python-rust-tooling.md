@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: development
-* Governs: `tooling/session/session.sh`, `tooling/session/models.json`, `src/pigeon-cli/crates/backplane/src/core/session/*.rs`, `src/pigeon-cli/crates/pigeon/src/cli/session.rs`, `src/pigeon-cli/crates/pigeon/src/commands/session.rs`
+* Governs: `tooling/session/session.sh`, `tooling/session/models.json`, `.config/policies/no-python.yaml`, `src/pigeon-cli/crates/backplane/src/core/session/*.rs`, `src/pigeon-cli/crates/pigeon/src/cli/session.rs`, `src/pigeon-cli/crates/pigeon/src/commands/session.rs`
 
 ## Context
 
@@ -197,3 +197,12 @@ brief would have to spell out line by line.
 - `Governs` here drops `tooling/session/*.py`. The model-tiered,
   Rust-follower and stages ADRs' `Governs` drop `session.py`, each with an
   amendment.
+
+### 2026-11-15: Step 3b: the policy
+
+- `.config/policies/no-python.yaml` holds §4's four `find` rules, and
+  `Governs` gains it. The word rule matches `python` only as a command word,
+  not joined by `-`, so this ADR's own filename passes.
+- Checked on a scratch tree: a `.py` file, a Python shebang, `python3` in
+  `mise.toml` and `/usr/bin/python3.12` in a workflow each fail; Python in
+  Markdown prose passes.

@@ -289,7 +289,7 @@ fn changelog_rules() {
 #[test]
 fn every_policy_is_valid() {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../../.config/policies");
-    assert_eq!(sentinel::load_dir(&dir).expect("loads").len(), 21);
+    assert_eq!(sentinel::load_dir(&dir).expect("loads").len(), 22);
 }
 
 fn layout_root(skip: &[&str], extra: &[&str]) -> TempDir {
@@ -719,5 +719,39 @@ fn sentinel_actions_keeps_sentinel_read_only() {
             v.iter().any(|m| m.starts_with(&format!("{file}:1:"))),
             "{file}: {v:?}"
         );
+    }
+}
+
+#[test]
+fn no_python_fails_python_files_shebangs_and_invocations() {
+    let spawn = format!("let c = Command::new(\"{}\");\n", "python3");
+    let ok = [
+        (
+            "tooling/session/session.sh",
+            "#!/bin/sh\n# see 2026-11-15-development-no-python-rust-tooling.md\n",
+        ),
+        ("mise.toml", "[tasks.ci]\nrun = \"cargo test\"\n"),
+        ("docs/notes.md", "Prose may say python3 -I x.\n"),
+        ("src/a.rs", "let c = Command::new(\"cargo\");\n"),
+        ("src/x/target/gen.py", ""),
+        (".config/policies/no-python.yaml", "match: python3\n"),
+    ];
+    passes(&violations("no-python", tree_root(&ok).path(), None));
+    for (path, content) in [
+        ("tooling/x.py", ""),
+        ("pyproject.toml", ""),
+        ("tooling/requirements-dev.txt", ""),
+        ("tooling/run", "#!/usr/bin/env python3\n"),
+        ("mise.toml", "[tasks.x]\nrun = \"python3 -I x\"\n"),
+        (".github/workflows/ci.yml", "run: /usr/bin/python3.12 y\n"),
+        (".claude/settings.json", "{\"command\": \"python tool\"}\n"),
+        (
+            "src/pigeon-cli/Dockerfile",
+            "RUN python3 -m pip install x\n",
+        ),
+        ("src/a.rs", spawn.as_str()),
+    ] {
+        let v = violations("no-python", tree_root(&[(path, content)]).path(), None);
+        assert!(v.iter().any(|m| m.contains(path)), "{path}: {v:#?}");
     }
 }
