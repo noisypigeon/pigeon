@@ -1254,3 +1254,11 @@ The first, the ledger:
      as `{ store: $deployment.secrets_store_id, secret: granter }`.
   4. `/grants/granter` checks the binding and the token.
 - **A platform run's token needs only Secrets Store Read** for this module.
+
+### 2026-11-15: `platform/blue` reads the store, and `GRANTER` is bound
+
+- **Run #28 applied `platform/blue`.** It updated the D1 database and added
+  the `secrets_store_id` output, and created no store.
+- **The control plane's `worker.yaml` binds `GRANTER`** to `granter` in that
+  store, as `$deployment.secrets_store_id`.
+- **The rescue Worker isn't bound yet.** It gets the binding with §6.
