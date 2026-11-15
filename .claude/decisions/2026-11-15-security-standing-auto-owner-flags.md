@@ -326,3 +326,20 @@ other's views or types. !547 needs no change.
   cleared by `owner.answered`.
 - **`owner.withdrawn`** is the event of a session's withdrawal; it wakes no
   one.
+
+### 2026-11-15: Reviewed against !596: they agree
+
+[`2026-11-15-runtime-ios-app-now-tab.md`](2026-11-15-runtime-ios-app-now-tab.md)
+(!596) merges the Tracker and Approvals into one tab, Now, and builds on
+!547.
+
+- **Auto's state** is §5's card as !547 draws it: on, held or paused, with
+  why, and Pause or Resume by passkey. Now moves it, and changes nothing in
+  it.
+- **Owner items** (§4) are counted in Now's "Needs me", beside approvals and
+  `needs: owner` stages, from `GET /v0/app/home`'s `items` (!546), and are
+  answered as §4 says, from the owner's device.
+- **`ApprovalsView` goes** in !596's app change, after !547. §5's `Accept
+  edits` removal holds: Now has no such switch.
+
+!547 needs no change.
