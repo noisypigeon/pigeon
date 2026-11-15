@@ -343,3 +343,13 @@ other's views or types. !547 needs no change.
   edits` removal holds: Now has no such switch.
 
 !547 needs no change.
+
+### 2026-11-15: Reconciled with !606: both routes stand
+
+!606 (step 2 of
+[`2026-11-15-runtime-ios-app-now-tab.md`](2026-11-15-runtime-ios-app-now-tab.md))
+and !546 each added a line to `worker/devices.rs`'s signed routes: §4's
+`POST /v0/app/items/<id>` and `home`'s `items`, and the Now tab's
+`GET /v0/app/changes/<n>`, a shim over `change.status`. They touch different
+paths and decide nothing about each other, so both stand. Main's file is
+already right; !606 rebases onto it and keeps both.
