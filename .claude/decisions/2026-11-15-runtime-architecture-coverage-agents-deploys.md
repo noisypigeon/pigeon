@@ -161,3 +161,26 @@ coverage test fails on a part of the code the diagram lacks.
 The standalone hostnames planner's `subdomains_of` route and the noisypigeon
 instance's parts land through §1's derivations; the coverage test tells
 either change what it lacks.
+
+## Amendments
+
+### 2026-11-15: Reviewed against !588: they agree, and the pool's parts are drawn by §1's derivations
+
+[`2026-11-15-development-capacity-pools-hard-spend-cap.md`](2026-11-15-development-capacity-pools-hard-spend-cap.md)
+(!588) adds parts to the Worker that this ADR's coverage test will ask for.
+
+- **Different files today.** !588 is an ADR alone. The code it plans touches
+  `jobs.rs` for a `pool` job branch, and this ADR's §1 reads `jobs.rs` only
+  for what it already reads. Neither changes what the other decides.
+- **What the pool's step 3 brings, and how this ADR draws it:**
+  - **The gateway route `/v0/pool/<pool>/v1/messages`.** `fetch` serves it
+    before the router, for the pool's Access service token alone. It is a
+    path a job Container calls, so it belongs to §1's `ci` client.
+  - **The `Pool` Durable Object** (`v4`) comes in through `durable_objects`,
+    as the others do.
+  - **Its four secrets** come in as part of the secret count, never by name
+    (§2's privacy).
+  - **Its outbound host, the Claude Platform API,** is a `SERVICES` row:
+    "Claude Platform API: metered pool requests".
+- **Who adds each.** Whichever change lands second adds the route to the `ci`
+  client and the `SERVICES` row. The coverage test names what it lacks.
