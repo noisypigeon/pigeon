@@ -35,6 +35,9 @@ const FORECAST: &str = "forecast";
 const AFTER_SEEN: &str = "after-seen";
 /// The head's `ios` check as a macOS job.
 const MACOS: &str = "macos";
+/// When each job queued with no attempt was first seen; see the job-start ADR's yield-end
+/// amendment.
+const QUEUED: &str = "queued";
 
 mod macos_check;
 
@@ -379,7 +382,14 @@ impl ChangeRun {
             }
         }
         let change = &change;
+        let mut pending = pending.to_vec();
+        if control::unmirror_due(before.as_ref(), change) {
+            pending.push(Pending::Start(control::UNMIRROR.into()));
+        }
+        let pending = &pending;
+        // With the change, before any await: a start queued meanwhile is not saved over.
         storage.put(CHANGE, change).await?;
+        storage.put(PENDING, pending).await?;
         // D1 first: what follows reads it; see the concurrent-sessions ADR's 2026-11-13 amendment
         // on generated work following its parent's own record.
         self.mirror(change).await?;
@@ -407,12 +417,6 @@ impl ChangeRun {
             self.released(change).await;
             super::merges::ended(&self.env, change, None).await?;
         }
-        let mut pending = pending.to_vec();
-        if control::unmirror_due(before.as_ref(), change) {
-            pending.push(Pending::Start(control::UNMIRROR.into()));
-        }
-        let pending = &pending;
-        storage.put(PENDING, pending).await?;
         let open = change
             .jobs
             .iter()
@@ -771,6 +775,72 @@ impl ChangeRun {
         Ok(())
     }
 
+    /// Each queued job with no start pending, and each queued [`crate::changes::STALL_SECS`] with
+    /// no attempt, started again and recorded as `job.redispatched`; see the job-start ADR's
+    /// yield-end amendment.
+    async fn redispatch(
+        &self,
+        change: &Change,
+        github: &Actions,
+        mirrors: bool,
+        pending: &mut Vec<Pending>,
+    ) -> Result<()> {
+        let head = change.head.clone().unwrap_or_default();
+        let elsewhere =
+            |j: &str| github.owns(&head, j) || (mirrors && macos_check::is_ios(change, j));
+        let named: Vec<&str> = pending
+            .iter()
+            .filter_map(|p| match p {
+                Pending::Start(j) | Pending::StartAt(j, _) => Some(j.as_str()),
+                _ => None,
+            })
+            .collect();
+        let missing = crate::changes::undispatched(change, &named, elsewhere);
+        let since: std::collections::BTreeMap<String, u64> = self.load(QUEUED).await?;
+        let (since, stalled) = crate::changes::stalled(change, &since, now());
+        self.state.storage().put(QUEUED, &since).await?;
+        let n = change.number;
+        let mut notes = Vec::new();
+        for j in stalled {
+            if missing.contains(&j) || elsewhere(&j) {
+                continue;
+            }
+            pending.retain(|p| !matches!(p, Pending::Start(x) | Pending::StartAt(x, _) if *x == j));
+            let mins = crate::changes::STALL_SECS / 60;
+            notes.push(format!(
+                "!{n} job `{j}` sat queued {mins} min with no attempt; dispatched again"
+            ));
+            pending.push(Pending::Start(j));
+        }
+        for j in missing {
+            notes.push(format!(
+                "!{n} job `{j}` was queued with no start pending; dispatched again"
+            ));
+            pending.push(Pending::Start(j));
+        }
+        if notes.is_empty() {
+            return Ok(());
+        }
+        let s = Settings::from(&self.env)?;
+        for note in notes {
+            worker::console_warn!("{note}");
+            let session = change.session.clone();
+            let added = super::events::append(
+                &self.env,
+                &s,
+                "job.redispatched",
+                Some(n),
+                session,
+                &note,
+                false,
+            );
+            if let Err(e) = added.await {
+                worker::console_error!("job.redispatched: {e}");
+            }
+        }
+        Ok(())
+    }
+
     /// Starts `job`'s Container, applying `Started`, or `Lost` when it didn't start, which joins
     /// `applied`; false when it waits for a free Container, queued again.
     async fn start_container(
@@ -1117,6 +1187,8 @@ impl DurableObject for ChangeRun {
         let mut github: Actions = self.load(ACTIONS).await?;
         github.keep_head(change.head.as_deref());
         let mirrors = super::github::mirror(&self.env).is_some();
+        self.redispatch(&change, &github, mirrors, &mut pending)
+            .await?;
         let window_open = mirrors
             && pending.iter().any(
                 |p| matches!(p, Pending::Start(j) if control::to_github(&change, j, true, false)),
@@ -1192,6 +1264,9 @@ impl DurableObject for ChangeRun {
         let journal: Vec<Event> = self.load(JOURNAL).await?;
         control::catch_up(&mut change, &journal, seen);
         change = self.forecast_step(change).await?;
+        // Events applied while the forecast awaited.
+        let later: Vec<Event> = self.load(JOURNAL).await?;
+        control::catch_up(&mut change, &later, journal.len());
         let stored: Vec<Pending> = self.load(PENDING).await?;
         next.extend(stored.into_iter().skip(took));
         self.state
