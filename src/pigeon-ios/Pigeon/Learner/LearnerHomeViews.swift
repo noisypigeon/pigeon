@@ -10,6 +10,7 @@ struct LearnerHomeView: View {
     @StateObject private var learner = LearnerStore()
     @Environment(\.dismiss) private var dismiss
     @State private var entering = false
+    @State private var scanning = false
 
     var body: some View {
         NavigationStack {
@@ -24,6 +25,8 @@ struct LearnerHomeView: View {
                         chart
                         topics
                         Button { printTest() } label: { learnerPrimary("Print a new test") }
+                        Button { scanning = true } label: { learnerSecondary("Scan a page") }
+                            .disabled(learner.forms.isEmpty)
                         Button { entering = true } label: { learnerSecondary("Enter answers") }
                             .disabled(learner.forms.isEmpty)
                     }
@@ -35,6 +38,7 @@ struct LearnerHomeView: View {
                 ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() } }
             }
             .navigationDestination(isPresented: $entering) { AnswerEntryView(learner: learner) }
+            .navigationDestination(isPresented: $scanning) { LearnerScanView(learner: learner) }
         }
     }
 
@@ -45,7 +49,7 @@ struct LearnerHomeView: View {
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(Theme.ink)
             if recent.isEmpty {
-                Text("Print a test, take it with a pencil, then enter your answers here.")
+                Text("Print a test, take it with a pencil, then scan it or enter your answers.")
                     .font(.footnote)
                     .foregroundStyle(Theme.muted)
             } else {
