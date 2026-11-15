@@ -440,3 +440,104 @@ Per
   ADR's 2026-11-14 amendment.
 - **The owner's own approval is unchanged.** Approving without a review is
   theirs to do.
+
+### 2026-11-15: Three tabs: Tracker, Approvals and Insights
+
+The owner approved a mockup of three tabs and an approval push's deep link.
+Home's single screen becomes a `TabView`:
+
+| Tab | What it shows | Route |
+|---|---|---|
+| **Tracker**, the default | each live session and its changes, each on a stage rail | `GET /v0/app/tracker`, live by `GET /v0/app/events` |
+| **Approvals** | Accept edits / Auto, everything waiting on the owner, today's history | `GET /v0/app/home`, unchanged |
+| **Insights** | deploys, the merge queue, providers, throughput, approval wait, failed jobs, cost and errors | `GET /v0/app/ops`, and `GET /v0/app/insights` for cost and errors |
+
+Each route is an `Instance` operation per §4, behind the device signature,
+with its pure part in the core and tested there.
+
+**The rail.** A change's stage maps to one of ten stops:
+
+| Stop | Stages |
+|---|---|
+| 0 proposed | `proposed` |
+| 1 authorized | `authorized` |
+| 2 pushed | `bounding`, `conflicted`, `restacking`, `refused` |
+| 3 checking | `checking`, `checking n/m`, `failed` |
+| 4 checked | `checked`, `in-review`, `escalated` |
+| 5 approved | `approved` |
+| 6 queued | `queued n/m` |
+| 7 merging | `merging` |
+| 8 merged | `merged` |
+| 9 deploying | `deploying`, `done`, `deploy-failed` |
+
+- **Each rail answers `stop`, `stage` and a `mark`:**
+  - `failed`, for `refused`, `failed` and `deploy-failed`;
+  - `stalled`, when `needs` is `agent` and the session hasn't polled for
+    30 minutes (`tasks::stalled`);
+  - `done`, for `done`;
+  - `ok` otherwise.
+
+  The app draws a mark with a shape and a word as well as a colour.
+- **`closed` changes are left out.** A merged change stays on its session's
+  card until its stage is `done`, at most an hour after its merge.
+- **A row carries:**
+  - from the stage: `number`, `title`, `needs`, `waits_on`, `next` and
+    `since`;
+  - from `briefs::all`: its brief's `id`, `title`, `adr` and `step`.
+- **A session carries `label`, `model`, `role`, `planner`, `brief` and
+  `listening`,** from `push::build`'s session lines and the tickets.
+  - A live session with no open change is shown, so an executor that hasn't
+    proposed yet is visible.
+- **`counts`** sums the changes that need the owner, the stalled ones and
+  those waiting on a provider. The chips at the top filter by them.
+
+**Live.**
+
+- `GET /v0/app/events?after=&seconds=` calls `events::wait` as the owner.
+  - It passes no `session`, so no agent's cursor moves.
+  - `seconds` is at most 25. It answers `{events, after}`.
+- The app long-polls it while the Tracker is on screen. On any event it
+  reads `/v0/app/tracker` again, at most once every 2 seconds.
+- On an error it falls back to reading the tracker every 30 seconds. It also
+  reads again when the app returns to the foreground.
+
+**Operational insights: `GET /v0/app/ops?range=1|7|30`.**
+
+| Panel | Answer | Source |
+|---|---|---|
+| Deploys | passed of total in range; the newest 5 with `sha`, `outcome`, `at` | `MainRun`'s `Pipeline.history`; no durations are kept |
+| Merge queue | `depth` now and the holder; minutes from `change.approved` to `change.merged` per merge, with p50 and max | the `Instance`'s queue; the event log |
+| Approval wait | minutes from `change.checked` to an owner's `change.approved`, with p50 and p95 and how many | the event log |
+| Throughput | merges per day; proposed-to-merged p50; merges by approver: `owner`, `window`, `mandate`, `policy` | D1 `changes` |
+| Providers | each macOS provider's health, minutes and cap | `macos::status`, as `deploy_status.macos` |
+| Failed jobs | failed and cancelled jobs, newest 10, with `name`, `change` and `at`; macOS jobs `lost`, `unassigned` or `refused` | D1 `jobs` and `macos_jobs` |
+
+- **The event log keeps seven days.** A 30-day range answers the queue and
+  approval panels over seven, with a `note` saying so.
+- **GitHub Actions minutes aren't recorded,** so the GitHub provider row
+  shows health alone.
+- **Worker errors and Cloudflare's cost** stay gaps until the grants ADR's
+  `observability` grant puts `OBSERVABILITY_TOKEN`.
+- **Job Containers that fail to start** join the failed jobs once the
+  reliability ADR (!469) records them. Until then they aren't counted.
+
+**The deep link.**
+
+- A push tap is handled by `AppDelegate`, which keeps the link until the
+  tabs are on screen, so a cold start doesn't drop it.
+- `pigeon://approval/<id>` selects Approvals and opens that card.
+  `pigeon://home` selects Tracker.
+- The card stays passkey-only, as the passkey-only cutover requires.
+
+**Execution, as `sonnet` briefs, each its own change, in order:**
+
+1. The tracker and events routes: `core/app/tracker.rs`, `worker/app.rs`
+   and `worker/devices.rs`.
+2. The ops route: `core/insights/ops.rs`, `worker/insights.rs` and
+   `worker/devices.rs`, built on 1.
+3. `PigeonCore`: the tracker's and ops' models, the rail, and
+   `PigeonCoreTests`.
+4. The app: the tabs, the Tracker and Insights views, live updates and the
+   deep link, built on 3.
+
+Then an `ios.release`.
