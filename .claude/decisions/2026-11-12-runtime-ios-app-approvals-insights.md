@@ -4,7 +4,7 @@
 * Model: Claude
 * Author: Willow Graysen (@noisypigeon).
 * Category: runtime
-* Governs: `src/pigeon-ios/Pigeon/**`, `src/pigeon-ios/PigeonCore/**`, `src/pigeon-ios/PigeonCoreTests/**`, `src/pigeon-ios/project.yml`, `src/pigeon-cli/crates/backplane/src/core/app/**`, `src/pigeon-cli/crates/backplane/src/devices.rs`, `src/pigeon-cli/crates/backplane/src/worker/devices.rs`, `src/pigeon-cli/crates/backplane/src/core/insights/**`, `src/pigeon-cli/crates/backplane/src/insights.rs`, `src/pigeon-cli/crates/backplane/src/worker/insights.rs`, `src/pigeon-cli/crates/backplane/migrations/0005_insights.sql`, `.config/insights.yaml`, `src/pigeon-cli/crates/backplane/src/worker/app.rs`
+* Governs: `src/pigeon-ios/Pigeon/**`, `src/pigeon-ios/PigeonCore/**`, `src/pigeon-ios/PigeonCoreTests/**`, `src/pigeon-ios/project.yml`, `src/pigeon-cli/crates/backplane/src/core/app/**`, `src/pigeon-cli/crates/backplane/src/devices.rs`, `src/pigeon-cli/crates/backplane/src/worker/devices.rs`, `src/pigeon-cli/crates/backplane/src/core/insights/**`, `src/pigeon-cli/crates/backplane/src/insights.rs`, `src/pigeon-cli/crates/backplane/src/worker/insights.rs`, `src/pigeon-cli/crates/backplane/migrations/0005_insights.sql`, `src/pigeon-cli/crates/backplane/migrations/0007_insights_sources.sql`, `.config/insights.yaml`, `src/pigeon-cli/crates/backplane/src/worker/app.rs`
 * Governs: `src/pigeon-ios/Pigeon/**`, `src/pigeon-ios/project.yml`, `src/pigeon-cli/crates/backplane/src/core/app/**`, `src/pigeon-cli/crates/backplane/src/devices.rs`, `src/pigeon-cli/crates/backplane/src/worker/devices.rs`, `src/pigeon-cli/crates/backplane/src/core/insights/**`, `src/pigeon-cli/crates/backplane/src/insights.rs`, `src/pigeon-cli/crates/backplane/src/worker/insights.rs`, `src/pigeon-cli/crates/backplane/migrations/0005_insights.sql`, `.config/insights.yaml`, `src/pigeon-cli/crates/backplane/src/worker/app.rs`, `src/pigeon-cli/crates/backplane/src/worker/apns.rs`
 
 ## Context
@@ -609,3 +609,65 @@ itself. §5's "it pauses itself… a deploy fails or rolls back" and step 6's
    agent without listing an approval; the pushes and events.
 3. Stages and digest: the `held` stage, `auto.resumed` waking agents, the
    digest's held lines, and the rail's mark.
+
+### 2026-11-15: Cloudflare is collected, and a source's note says what happened
+
+The `observability` grant put `OBSERVABILITY_TOKEN` on `pigeon-control` at
+04:41 UTC, but the app still said Cloudflare waits for it. Step 4's amendment
+deferred Cloudflare's collection to "its own change, when the token is added",
+and that change was never made. `note` returned a constant, and nothing read
+the token. Redeploying couldn't fix it. This amendment is that change.
+
+- **Collection.** The hourly cron reads Cloudflare's GraphQL Analytics
+  (`/client/v4/graphql`) with `OBSERVABILITY_TOKEN`, for the account the
+  `ARTIFACTS_TOKEN` sees. It sends one query per dataset, so a field the live
+  API refuses fails only that dataset:
+
+  | Dataset | Rows |
+  |---|---|
+  | `workersInvocationsAdaptive`: `requests`, `cpuTimeUs` by `status` | errors: `Worker exceptions` (`scriptThrewException`), `CPU limit exceeded` (`exceededResources`); cost: `Workers` |
+  | `durableObjectsInvocationsAdaptiveGroups`: `requests`; `durableObjectsPeriodicGroups`: `activeTime` | cost: `Durable Objects` |
+  | `d1AnalyticsAdaptiveGroups`: `rowsRead`, `rowsWritten` | cost: `R2 and D1` |
+  | `r2OperationsAdaptiveGroups`: `requests` by `actionType` | cost: `R2 and D1` |
+
+  - Cloudflare fills its own hours, from the newest hour it filled, at most
+    48. An hour fills with the datasets that answer, and the run records the
+    ones that failed. If none answers, the hour stays due and the next run
+    retries it.
+  - Not yet counted, and said so in the note: 5xx responses on the platform
+    hostname, which need Zone Analytics; Containers; storage; and the plan's
+    included amounts. The cost is gross usage times the unit prices, an
+    estimate as §7 says, and it reads high while usage is inside the plan.
+- **Prices.** The Workers Paid list prices, in dollars per million units, are
+  a constant in `core/insights/cloudflare.rs`: `cloudflare_workers_requests`,
+  `cloudflare_workers_cpu_ms`, `cloudflare_do_requests`,
+  `cloudflare_do_gb_seconds`, `cloudflare_d1_rows_read`,
+  `cloudflare_d1_rows_written`, `cloudflare_r2_class_a` and
+  `cloudflare_r2_class_b`. They aren't in
+  `.config/insights.yaml`, because that file's policy (`only: true`) refuses
+  new keys. Changing the policy is a sentinel change of its own, and whichever
+  of the two merged first would leave `main` failing it. Moving the prices
+  there is a follow-up. Durable Objects' duration bills at 128 MB, so
+  GB-seconds are active seconds × 0.125.
+- **Each run's outcome is kept.** Migration `0007_insights_sources.sql` adds
+  `insights_sources`: `source`, `at`, the newest `hour` filled, and `failed`,
+  the datasets that failed and Cloudflare's words, scrubbed of the token.
+  This is expand-only.
+- **The note is the truth at read time,** in this order:
+  - no `OBSERVABILITY_TOKEN` on the Worker: "Not collected: the Worker has no
+    OBSERVABILITY_TOKEN.";
+  - the token is present but no run has finished: "Token present; the first
+    collection runs at :17 past the hour.";
+  - the newest run failed: "Token present; Cloudflare's analytics query failed
+    at HH:MM UTC: <datasets: why>.";
+  - otherwise, what isn't counted, from the list above.
+- **`OBSERVABILITY_TOKEN` is declared** in `worker.yaml`'s `secrets`, beside
+  the others. The grant puts it, so `secrets put` is never needed for it.
+- **The app is unchanged.** It shows whatever `note` the route answers, so no
+  TestFlight build is needed.
+
+**Execution:** one change. The core's query, parse, pricing and note, with a
+recorded answer in the tests; the migration; the Worker's collection and the
+note at read time; and `worker.yaml`. After it deploys, the first
+cron run's note shows whether the live API accepted each field. A field it
+refuses is fixed in a follow-up `fix` change.

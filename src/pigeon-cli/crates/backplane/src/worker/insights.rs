@@ -6,11 +6,12 @@ use std::collections::BTreeSet;
 use serde_json::{Value, json};
 use worker::{Env, Fetch, Method, Result};
 
-use super::platform::{Settings, d1, d1_rows, json_request, now, secret};
-use crate::insights::{self, Row, ops};
+use super::platform::{Settings, account, d1, d1_rows, json_request, now, secret};
+use crate::insights::cloudflare::{self, Collected, Dataset, Usage};
+use crate::insights::{self, CLOUDFLARE, Row, ops};
 
-/// Fills each hour due: GitHub's and Buildkite's rows, each source failing alone. Cloudflare's
-/// wait for `OBSERVABILITY_TOKEN`; see the ADR's 2026-11-12 amendment on step 4.
+/// Fills each hour due: GitHub's, macOS's and Buildkite's rows, then Cloudflare's, each source
+/// failing alone; see the ADR's 2026-11-15 amendment "Cloudflare is collected".
 ///
 /// # Errors
 ///
@@ -61,7 +62,109 @@ pub async fn collect(env: &Env) -> Result<()> {
         let statements: Vec<_> = rows.iter().map(insights::upsert).collect();
         d1(env, &statements).await?;
     }
+    if let Err(e) = collect_cloudflare(env, t).await {
+        worker::console_warn!("insights: Cloudflare: {e}");
+    }
     d1(env, &[insights::prune(t)]).await
+}
+
+/// Fills Cloudflare's due hours from GraphQL Analytics, a query per dataset, and records the run;
+/// an hour fills with the datasets that answer. Nothing runs without the token.
+async fn collect_cloudflare(env: &Env, t: u64) -> Result<()> {
+    let Ok(token) = secret(env, cloudflare::TOKEN) else {
+        return Ok(());
+    };
+    let newest = d1_rows(env, &cloudflare::record_of(CLOUDFLARE))
+        .await?
+        .first()
+        .and_then(|r| r["hour"].as_u64());
+    let due = insights::due(newest, t);
+    if due.is_empty() {
+        return Ok(());
+    }
+    let acct = match secret(env, "ARTIFACTS_TOKEN") {
+        Ok(a) => account(&a).await,
+        Err(e) => Err(e),
+    };
+    let acct = match acct {
+        Ok(a) => a,
+        Err(e) => {
+            let why = format!("looking up the account: {e}");
+            return d1(env, &[cloudflare::record(CLOUDFLARE, t, None, Some(&why))]).await;
+        }
+    };
+    let mut filled = None;
+    let mut failed = BTreeSet::new();
+    for hour in due {
+        let mut usage = Usage::default();
+        let mut ok = Vec::new();
+        for d in Dataset::ALL {
+            match graphql(&token, &acct, d, hour).await {
+                Ok(groups) => {
+                    usage.add(d, &groups);
+                    ok.push(d);
+                }
+                Err(e) => {
+                    failed.insert(cloudflare::why(d, &e.replace(token.as_str(), "[token]")));
+                }
+            }
+        }
+        if ok.is_empty() {
+            break;
+        }
+        let rows = cloudflare::rows(hour, &usage, &ok);
+        let statements: Vec<_> = rows.iter().map(insights::upsert).collect();
+        d1(env, &statements).await?;
+        filled = Some(hour);
+    }
+    let failed = (!failed.is_empty()).then(|| failed.into_iter().collect::<Vec<_>>().join("; "));
+    if let Some(why) = &failed {
+        worker::console_warn!("insights: Cloudflare: {why}");
+    }
+    d1(
+        env,
+        &[cloudflare::record(CLOUDFLARE, t, filled, failed.as_deref())],
+    )
+    .await
+}
+
+/// Dataset `d`'s groups over `hour`, or Cloudflare's words for why not.
+async fn graphql(
+    token: &str,
+    acct: &str,
+    d: Dataset,
+    hour: u64,
+) -> std::result::Result<Vec<Value>, String> {
+    let body = cloudflare::body(d, acct, hour);
+    let req = json_request(cloudflare::ENDPOINT, Method::Post, Some(&body), Some(token))
+        .map_err(|e| e.to_string())?;
+    let mut r = Fetch::Request(req)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+    let status = r.status_code();
+    let v: Value = r
+        .json()
+        .await
+        .map_err(|_| format!("Cloudflare answered {status}, not JSON"))?;
+    let groups = cloudflare::groups(&v);
+    if (200..300).contains(&status) {
+        groups
+    } else {
+        Err(groups
+            .err()
+            .unwrap_or_else(|| format!("Cloudflare answered {status}")))
+    }
+}
+
+/// What Cloudflare's newest collection did, for its note.
+async fn collected(env: &Env) -> Collected {
+    let token = secret(env, cloudflare::TOKEN).is_ok();
+    let record = d1_rows(env, &cloudflare::record_of(CLOUDFLARE))
+        .await
+        .ok()
+        .and_then(|r| r.into_iter().next());
+    Collected::from(token, record.as_ref())
 }
 
 /// Buildkite signing build `number`, with its jobs' times.
@@ -101,7 +204,8 @@ pub async fn home(env: &Env) -> Result<Value> {
     let mut tiles = json!({});
     for metric in ["cost", "errors"] {
         let r = rows(env, metric, 1).await?;
-        tiles[metric] = insights::stacks(&r, metric, None, 1, t).unwrap_or(Value::Null);
+        tiles[metric] =
+            insights::stacks(&r, metric, None, 1, t, &Collected::NoToken).unwrap_or(Value::Null);
     }
     Ok(json!({ "insights": tiles }))
 }
@@ -126,7 +230,19 @@ pub async fn detail(
         ));
     }
     let r = rows(env, metric, range).await?;
-    Ok(insights::stacks(&r, metric, Some(source), range, now()))
+    let cf = if source == CLOUDFLARE {
+        collected(env).await
+    } else {
+        Collected::NoToken
+    };
+    Ok(insights::stacks(
+        &r,
+        metric,
+        Some(source),
+        range,
+        now(),
+        &cf,
+    ))
 }
 
 /// The most pages of the event log one answer reads.

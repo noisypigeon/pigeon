@@ -4,8 +4,8 @@ use serde_json::json;
 
 use super::{
     AGENT_LOST, BUILDKITE, CANCELLED_BUILDS, CANCELLED_RUNS, CATCH_UP, DAY, FAILED_CHECKS,
-    FAILED_SIGN, GITHUB, HOUR, MACOS_MINUTES, Row, buildkite, due, github, job_minutes,
-    macos_minute, note, price, stacks, unix,
+    FAILED_SIGN, GITHUB, HOUR, MACOS_MINUTES, Row, buildkite, cloudflare::Collected, due, github,
+    job_minutes, macos_minute, note, price, stacks, unix,
 };
 
 const NOW: u64 = 1_800_003_600 + 25 * 60;
@@ -104,7 +104,7 @@ fn stacks_bucket_by_hour_for_a_day_and_by_day_beyond() {
         r(h - HOUR, BUILDKITE, FAILED_SIGN, 1.0),
         r(h - 3 * DAY, GITHUB, CANCELLED_RUNS, 4.0),
     ];
-    let day = stacks(&rows, "errors", None, 1, NOW).expect("a day");
+    let day = stacks(&rows, "errors", None, 1, NOW, &Collected::NoToken).expect("a day");
     assert_eq!(day["buckets"].as_array().map(Vec::len), Some(24));
     assert_eq!(day["total"], 3.0, "only the last 24 hours");
     assert_eq!(
@@ -115,13 +115,13 @@ fn stacks_bucket_by_hour_for_a_day_and_by_day_beyond() {
     assert_eq!(last["at"], h);
     assert_eq!(last["parts"][0]["value"], 2.0);
 
-    let week = stacks(&rows, "errors", Some(GITHUB), 7, NOW).expect("a week");
+    let week = stacks(&rows, "errors", Some(GITHUB), 7, NOW, &Collected::NoToken).expect("a week");
     assert_eq!(week["buckets"].as_array().map(Vec::len), Some(7));
     assert_eq!(week["total"], 6.0);
     assert_eq!(week["step"], DAY);
-    assert!(stacks(&rows, "errors", None, 3, NOW).is_err());
+    assert!(stacks(&rows, "errors", None, 3, NOW, &Collected::NoToken).is_err());
     assert_eq!(
-        stacks(&rows, "cost", None, 1, NOW).expect("cost")["estimate"],
+        stacks(&rows, "cost", None, 1, NOW, &Collected::NoToken).expect("cost")["estimate"],
         true
     );
 }
@@ -141,16 +141,20 @@ fn buildkite_minutes_are_each_jobs_run_rounded_up() {
 
 #[test]
 fn an_empty_range_totals_plus_zero_and_says_why_a_source_is_empty() {
-    let cf = stacks(&[], "cost", Some(super::CLOUDFLARE), 1, NOW).expect("a day");
+    let none = Collected::NoToken;
+    let cf = stacks(&[], "cost", Some(super::CLOUDFLARE), 1, NOW, &none).expect("a day");
     let total = cf["total"].as_f64().expect("a number");
     assert!(total == 0.0 && total.is_sign_positive(), "not -0.0");
     assert_eq!(cf["legend"], json!([]));
-    assert_eq!(cf["note"], note("cost", super::CLOUDFLARE).expect("a note"));
-    let all = stacks(&[], "errors", None, 1, NOW).expect("a day");
+    assert_eq!(
+        cf["note"],
+        note("cost", super::CLOUDFLARE, &none).expect("a note")
+    );
+    let all = stacks(&[], "errors", None, 1, NOW, &none).expect("a day");
     assert!(all["note"].is_null(), "the tiles carry no note");
-    assert!(note("cost", BUILDKITE).is_none());
-    assert!(note("cost", GITHUB).is_some());
-    assert!(note("cost", super::BITRISE).is_some());
+    assert!(note("cost", BUILDKITE, &none).is_none());
+    assert!(note("cost", GITHUB, &none).is_some());
+    assert!(note("cost", super::BITRISE, &none).is_some());
 }
 
 #[test]

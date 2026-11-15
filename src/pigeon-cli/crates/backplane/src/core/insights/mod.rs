@@ -7,6 +7,7 @@ use serde_json::{Value, json};
 use crate::control::Statement;
 use crate::core::change::{BOUND, MERGE, MIRROR, RESTACK};
 
+pub mod cloudflare;
 pub mod ops;
 
 #[cfg(test)]
@@ -330,7 +331,8 @@ pub fn releases_in(hour: u64) -> Statement {
 pub const RANGES: [u64; 3] = [1, 7, 30];
 
 /// The app's stacks of `metric` over `range` days to `now`, from `rows`: by source, or by kind
-/// when `source` is named. One day is 24 hours; longer ranges are by day.
+/// when `source` is named. One day is 24 hours; longer ranges are by day. `cf` is what Cloudflare's newest
+/// collection did, for its note.
 ///
 /// # Errors
 ///
@@ -341,6 +343,7 @@ pub fn stacks(
     source: Option<&str>,
     range: u64,
     now: u64,
+    cf: &cloudflare::Collected,
 ) -> Result<Value, String> {
     if !RANGES.contains(&range) {
         return Err(format!("range must be 1, 7 or 30, not {range}"));
@@ -405,19 +408,21 @@ pub fn stacks(
     Ok(json!({
         "metric": metric, "source": source, "range": range, "step": step,
         "total": total, "estimate": metric == "cost", "legend": legend, "buckets": buckets,
-        "note": source.and_then(|s| note(metric, s)),
+        "note": source.and_then(|s| note(metric, s, cf)),
     }))
 }
 
 /// Why `source` has no rows, or only some kinds, for `metric`: what the app shows beside
-/// its chart. See the ADR's 2026-11-13 amendment.
+/// its chart; Cloudflare's says what `cf`, its newest collection, did. See the ADR's 2026-11-13
+/// amendment, and its 2026-11-15 amendment "Cloudflare is collected".
 #[must_use]
-pub fn note(metric: &str, source: &str) -> Option<&'static str> {
-    match (metric, source) {
-        (_, CLOUDFLARE) => Some("Not collected yet: Cloudflare waits for the observability token."),
+pub fn note(metric: &str, source: &str, cf: &cloudflare::Collected) -> Option<String> {
+    let fixed = match (metric, source) {
+        (_, CLOUDFLARE) => return Some(cloudflare::note(metric, cf)),
         ("cost", GITHUB) => Some("GitHub Actions is free while the repository is public."),
         ("cost", BITRISE) => Some("Bitrise is free on Hobby with Pay-As-You-Go off."),
         ("errors", GITHUB) => Some("Dispatch errors aren't recorded yet."),
         _ => None,
-    }
+    };
+    fixed.map(str::to_string)
 }
