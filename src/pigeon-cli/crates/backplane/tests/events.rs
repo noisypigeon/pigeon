@@ -368,3 +368,35 @@ fn a_clean_end_wakes_its_archiver() {
         .collect();
     assert_eq!(woken, vec![2]);
 }
+
+// !559, "review !549 against !555", which the control plane proposed, stayed `proposed` under
+// the owner's window; see
+// `.claude/decisions/2026-11-15-development-sessions-stop-only-for-oversight.md`'s 2026-11-15
+// amendment on generated changes.
+#[test]
+fn a_control_plane_review_awaiting_its_plan_is_due_the_windows_authorization() {
+    use backplane::changes::{Approval, Change, State};
+    use backplane::events::authorize_due;
+    let mut review = Change::propose(
+        559,
+        "review-549-555",
+        "docs(adr): review !549 against !555",
+        "p",
+        vec![".claude/decisions/**".into()],
+        "pigeon",
+    );
+    review.parent = Some(549);
+    review.session = Some("https://claude.ai/code/session_x".into());
+    assert!(authorize_due(&review), "proposed, whoever proposed it");
+    let mut planned = review.clone();
+    planned.plan_approval = Some(Approval {
+        by: "window:9".into(),
+        sha: None,
+        at: 1,
+    });
+    planned.state = State::Planned;
+    assert!(!authorize_due(&planned), "already authorized");
+    let mut closed = review;
+    closed.state = State::Closed;
+    assert!(!authorize_due(&closed));
+}

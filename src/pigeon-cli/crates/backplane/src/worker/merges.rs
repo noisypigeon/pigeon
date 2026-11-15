@@ -247,6 +247,7 @@ pub async fn reconcile(
     if let Some(n) = number {
         let kind = p.slug.split('-').next().unwrap_or("reconcile");
         super::tasks::add(env, &s, kind, n, Some(parent), session, &p.title).await?;
+        super::briefs::by_window(env, &s, n, "change.authorize", None).await;
     }
     Ok(number)
 }

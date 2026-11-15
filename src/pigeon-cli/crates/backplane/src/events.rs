@@ -114,6 +114,15 @@ pub fn moves(kind: &str) -> bool {
     !kind.starts_with("job.") && kind != NUDGED
 }
 
+/// Whether the hourly run asks the owner's window to authorize `c`: a plan no one has approved,
+/// whoever proposed it, the control plane's reviews and reconciliations too; see
+/// `.claude/decisions/2026-11-15-development-sessions-stop-only-for-oversight.md`'s 2026-11-15
+/// amendment on generated changes.
+#[must_use]
+pub fn authorize_due(c: &crate::changes::Change) -> bool {
+    c.state == crate::changes::State::Proposed && c.plan_approval.is_none()
+}
+
 /// Whether a change at `stage` is due a nudge at `now`: it has needed its session for at least
 /// [`NUDGE_AFTER`].
 #[must_use]

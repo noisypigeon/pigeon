@@ -379,3 +379,25 @@ builds on §1 without changing it:
   owner pauses it. Agents still never call `change_authorize` or
   `change_approve` under it.
 - **Step 4's settings edit** is filed as an owner item (`kind: action`).
+### 2026-11-15: The control plane's own changes are authorized under the window too, and no stage asks a session to authorize
+
+- **What went wrong.** !559 ("review !549 against !555") and !550 earlier, review
+  changes the control plane proposes (proposer `pigeon`), stayed `proposed`
+  under window 9. Their `next` read "ask now (`change_authorize`)", which §2
+  and `CLAUDE.md` forbid under a window, so the claiming session held a
+  committed review it couldn't push. `worker/merges.rs` proposes generated
+  changes through the inner `propose`, which skips §2's authorization at
+  proposal.
+- **The rule.**
+  - A generated change (`review-…`, `reconcile-…`) is authorized by the
+    owner's window at proposal, as a session's is (`briefs::by_window`).
+  - The hourly run (`events::nudge`) asks the window once more for every open
+    change still `proposed` with no plan approval (`events::authorize_due`),
+    whoever proposed it. That covers a change proposed before its window
+    opened, and any already stuck, such as !559.
+  - A covered `proposed` change's stage is `needs: platform`, `next`
+    "window:N, the owner's, authorizes it in the control plane within the
+    hour". This replaces §2's one exception, so no stage ever names
+    `change_authorize` to a session.
+- **Execution.** One `fix(backplane)` change, with this amendment and a test
+  that replays !559.

@@ -145,15 +145,18 @@ fn names<'a>(jobs: impl Iterator<Item = &'a Job>) -> String {
         .join(", ")
 }
 
-/// A covered change waits on its session: a window or mandate acts only when asked.
-fn ask(stage: &str, covered: Option<&String>, tool: &str, owner: &str) -> Stage {
+/// A proposed plan: a covered one is authorized by the control plane, at proposal or on the
+/// hourly run, never by its session; see
+/// `.claude/decisions/2026-11-15-development-sessions-stop-only-for-oversight.md`'s 2026-11-15
+/// amendment on generated changes.
+fn authorize(covered: Option<&String>) -> Stage {
     match covered {
         Some(by) => at(
-            stage,
-            Needs::Agent,
-            format!("ask now (`{tool}`): {by}, the owner's, approves it"),
+            "proposed",
+            Needs::Platform,
+            format!("{by}, the owner's, authorizes it in the control plane within the hour"),
         ),
-        None => at(stage, Needs::Owner, owner),
+        None => at("proposed", Needs::Owner, "authorize the plan"),
     }
 }
 
@@ -202,12 +205,7 @@ pub fn of(c: &Change, cx: &Context) -> Stage {
             Needs::Owner,
             "answer its asks and authorize the plan",
         ),
-        State::Proposed => ask(
-            "proposed",
-            covered,
-            "change_authorize",
-            "authorize the plan",
-        ),
+        State::Proposed => authorize(covered),
         _ if c.escalated.is_some() => at(
             "escalated",
             Needs::Agent,
@@ -532,8 +530,11 @@ mod tests {
         );
         let s = of(&change(State::Proposed), &cx);
         assert_eq!(
-            s.next,
-            "ask now (`change_authorize`): window:2, the owner's, approves it"
+            (s.needs, s.next.as_str()),
+            (
+                Needs::Platform,
+                "window:2, the owner's, authorizes it in the control plane within the hour"
+            )
         );
         let s = of(&change(State::Checked), &Context::default());
         assert_eq!(

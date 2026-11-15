@@ -83,11 +83,19 @@ pub async fn nudge(env: &Env) -> Result<()> {
     let rows = super::platform::d1_rows(env, &crate::control::open(&s.instance, &s.repo)).await?;
     let q = super::stages::queue(env, &s).await;
     for o in crate::control::open_rows(&rows) {
+        let (_, mut view) =
+            super::to_change(env, &s.repo, o.number, worker::Method::Get, "/status", None).await?;
+        let authorize = serde_json::from_value::<crate::changes::Change>(view["change"].clone())
+            .is_ok_and(|c| crate::events::authorize_due(&c));
+        if authorize {
+            super::briefs::by_window(env, &s, o.number, "change.authorize", None).await;
+            (_, view) =
+                super::to_change(env, &s.repo, o.number, worker::Method::Get, "/status", None)
+                    .await?;
+        }
         let Some(session) = o.session else {
             continue;
         };
-        let (_, view) =
-            super::to_change(env, &s.repo, o.number, worker::Method::Get, "/status", None).await?;
         let Ok(c) = serde_json::from_value::<crate::changes::Change>(view["change"].clone()) else {
             continue;
         };
