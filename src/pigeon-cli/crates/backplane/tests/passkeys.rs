@@ -581,9 +581,9 @@ fn a_keyring_stored_before_these_fields_still_reads() {
 fn the_cutover_is_made_only_when_asked_and_nothing_is_missing_and_is_never_undone() {
     let k = key();
     let now = 10_000_000;
-    let mut ring = ring_of(&k, &["phone"], 0x0d);
+    let mut ring = ring_of(&k, &["synced"], 0x0d);
     let mut proofs = Proofs::default();
-    assert_eq!(proofs.missing(&ring, now).len(), 7, "everything");
+    assert_eq!(proofs.missing(&ring, now).len(), 4, "everything");
     assert!(!kept!(proofs.cutover(true, &ring, now)), "nothing proven");
 
     for surface in ["page", "app", "added", "enrolled", "nonsense"] {
@@ -591,22 +591,26 @@ fn the_cutover_is_made_only_when_asked_and_nothing_is_missing_and_is_never_undon
     }
     assert_eq!(
         proofs.missing(&ring, now),
-        [
-            "two passkeys (there are 1)",
-            "a device-bound passkey, such as a security key",
-            "two passkeys used in the last 14 days (there are 0)",
-        ]
+        ["a passkey used in the last 14 days"]
     );
-
-    ring.keys.extend(ring_of(&k, &["key"], 0x05).keys);
-    ring.keys[0].used = Some(now - 10);
-    ring.keys[1].used = Some(now - RECENT);
+    ring.keys[0].used = Some(now - RECENT);
+    assert_eq!(proofs.missing(&ring, now).len(), 1, "too long ago");
+    ring.keys[0].used = Some(now - 20);
     assert_eq!(
         proofs.missing(&ring, now),
-        ["two passkeys used in the last 14 days (there are 1)"]
+        Vec::<String>::new(),
+        "one synced passkey is enough"
     );
-    ring.keys[1].used = Some(now - 20);
-    assert_eq!(proofs.missing(&ring, now), Vec::<String>::new());
+    let unadded = Proofs {
+        added: None,
+        ..proofs.clone()
+    };
+    assert_eq!(unadded.missing(&ring, now), Vec::<String>::new());
+    let undrilled = Proofs {
+        enrolled: None,
+        ..proofs.clone()
+    };
+    assert_eq!(undrilled.missing(&ring, now).len(), 1, "the drill stays");
 
     assert!(!kept!(proofs.cutover(false, &ring, now)), "not asked");
     assert_eq!(proofs.cutover, None);

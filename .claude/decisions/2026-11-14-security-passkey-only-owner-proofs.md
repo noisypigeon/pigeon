@@ -339,3 +339,31 @@ Reviewed against the 2026-11-14 amendment of
 - **Order:** !432 merges first. Step 6 then edits the two pages on top of it.
 
 Nothing in !432 changes.
+
+### 2026-11-15: The owner's decision: one passkey is enough for the cutover
+
+The owner decided, and confirmed in the planner's session, that the cutover
+needs one passkey per Administrator, not two, and that a synced one counts.
+Their passkey is in a password manager, which syncs it.
+
+- **§4's stage 2 becomes:**
+  - one passkey, synced or device-bound, used in the last 14 days;
+  - a change approved on the page, and one in the app;
+  - an enrolment drill with `enroll-secret`.
+- **No longer required:** a second passkey, a device-bound one, and a passkey
+  added with a passkey, which one passkey can't show.
+- **§3's removal rule becomes:** a removal that would leave no passkey is
+  refused, before and after the cutover. That is what `/passkeys` already
+  does.
+- **§5:** an account added later starts with one passkey.
+- **What the owner gives up.** With one synced passkey, losing the password
+  manager's account loses every proof at once. The only way back is §3's
+  enrolment, which needs the Cloudflare account's credential and the CLI.
+  That is why the drill stays required: it is proven to work before codes are
+  refused.
+- **Unchanged:** several passkeys are still allowed, up to 8, and `/passkeys`
+  still shows which are synced.
+
+**Execution:** `Proofs::missing` asks for one passkey used in the last 14
+days and drops the three items above, in the change that carries this
+amendment. Steps 9 to 13 are otherwise unchanged.

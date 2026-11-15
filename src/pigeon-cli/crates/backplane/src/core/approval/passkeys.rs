@@ -663,30 +663,21 @@ impl Proofs {
         next
     }
 
-    /// What the cutover still lacks at `now`, one line each; nothing when it may be made.
+    /// What the cutover still lacks at `now`, one line each; nothing when it may be made. One
+    /// passkey is enough, per the ADR's 2026-11-15 amendment.
     #[must_use]
     pub fn missing(&self, ring: &Keyring, now: u64) -> Vec<String> {
         let mut out = Vec::new();
-        if ring.keys.len() < 2 {
-            out.push(format!("two passkeys (there are {})", ring.keys.len()));
-        }
-        if !ring.keys.iter().any(|k| k.synced == Some(false)) {
-            out.push("a device-bound passkey, such as a security key".to_string());
-        }
         let recent = ring
             .keys
             .iter()
-            .filter(|k| k.used.is_some_and(|at| at + RECENT > now))
-            .count();
-        if recent < 2 {
-            out.push(format!(
-                "two passkeys used in the last 14 days (there are {recent})"
-            ));
+            .any(|k| k.used.is_some_and(|at| at + RECENT > now));
+        if !recent {
+            out.push("a passkey used in the last 14 days".to_string());
         }
         let wanted = [
             (self.page, "a change approved with a passkey on its page"),
             (self.app, "a change approved with a passkey in the app"),
-            (self.added, "a passkey added with a passkey"),
             (
                 self.enrolled,
                 "an enrolment drill with `pigeon backplane enroll-secret`",
