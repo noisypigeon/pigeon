@@ -411,3 +411,11 @@ Per
   and the gate holds for it too.
 - **Not yet:** refusing an executor `mandate.propose`. `mandates.rs` is
   guarded, so that is a change at the owner's code.
+
+### 2026-11-15: The control plane lists and pushes a pending approval, not the agent
+
+- §4 and §5's "the agent passes it on" is replaced. Whenever a change's stage
+  is `needs: owner`, `ChangeRun` lists the approval for the current head,
+  pushes it, and re-issues it on a new head or before expiry. An agent's call
+  reuses the listed approval. See
+  [`2026-11-15-security-owner-approvals-always-listed.md`](2026-11-15-security-owner-approvals-always-listed.md).
