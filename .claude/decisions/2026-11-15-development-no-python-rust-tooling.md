@@ -206,3 +206,21 @@ brief would have to spell out line by line.
 - Checked on a scratch tree: a `.py` file, a Python shebang, `python3` in
   `mise.toml` and `/usr/bin/python3.12` in a workflow each fail; Python in
   Markdown prose passes.
+
+### 2026-11-15: Step 4: verified in a fresh cloud session with no Python
+
+- **The order it landed in:** !479 (this ADR), !481 (step 2), !488 (step
+  3a), !497 (step 3b). !489 was closed: its scope missed sentinel's
+  policy test, which pins the policy count.
+- **A fresh cloud session at `e953a4d`,** cloned from the mirror, with
+  `python` and `python3` shadowed by stubs that log and fail, passed:
+  - the `SessionStart` hook, which fetched main's build;
+  - `brief`, `statusline` and `stop`, each exiting 0;
+  - `install` twice, the second doing nothing;
+  - `executor b9 --tag pigeon:verify`: keys in order, the mirror's
+    `source_url`, and the brief, ADR and extra tags;
+  - `follow` under `Monitor`, which `session_status` showed listening;
+  - with `~/.cache/pigeon` removed, `brief` fetching the build again in
+    2.25 s.
+
+  The stubs logged nothing.
