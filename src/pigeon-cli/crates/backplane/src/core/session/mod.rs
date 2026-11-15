@@ -6,6 +6,8 @@ use serde_json::Value;
 
 use crate::core::change::stage::{Needs, Stage};
 
+pub mod launch;
+
 #[cfg(test)]
 mod tests;
 
@@ -168,7 +170,7 @@ pub fn path(label: &str, cursor: Cursor, hold: u64) -> String {
     )
 }
 
-/// The line an event prints, as `session.py` prints it.
+/// The line an event prints.
 #[must_use]
 pub fn event_line(e: &Event) -> String {
     let n = e.change.map(|c| format!("!{c} ")).unwrap_or_default();

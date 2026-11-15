@@ -898,3 +898,21 @@ changes, as !386 itself now plans: one per session and ADR.
   `tooling/session/` runs it before every push. `cobot scope` doesn't select
   it yet. Wiring it into `mise run ci` needs `mise.toml`, which is among the
   job image's inputs, so that is a follow-up for the owner.
+
+### 2026-11-15: `executor` is `pigeon session executor`
+
+Per
+[`2026-11-15-development-no-python-rust-tooling.md`](2026-11-15-development-no-python-rust-tooling.md)
+§1:
+
+- **A planner runs `sh tooling/session/session.sh executor b<n> [--tag T]…`,**
+  which runs `pigeon session executor`. It prints the same arguments, keys
+  and values as `session.py executor`, except that the prompt arms `Monitor`
+  with `sh tooling/session/session.sh follow`. `--tag` adds each tag once.
+- **`models.json` stays** the one place model IDs live, read at run time
+  from the checkout.
+- **Tests.** `test_session.py`'s tests are `core::session::launch`'s unit
+  tests and `backplane/tests/session_launch.rs`, run by
+  `cargo test --workspace`, so by `mise run ci` and the code checks.
+- `CLAUDE.md`'s planner line, and deleting `session.py`, are that ADR's step
+  3, the owner's.

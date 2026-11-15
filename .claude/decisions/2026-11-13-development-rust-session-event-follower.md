@@ -274,3 +274,17 @@ which also governs `tooling/session/session.py`. !383 is this ADR's step 2.
   - `seconds=20` answered in 20.2 s and `seconds=99` in 25.5 s.
 - **Step 6** comes 7 days after this lands: `session.py` keeps `install` and
   `executor` only.
+
+### 2026-11-15: `install` is `pigeon session install`, and `session.sh` bootstraps in sh
+
+Per
+[`2026-11-15-development-no-python-rust-tooling.md`](2026-11-15-development-no-python-rust-tooling.md)
+§2, which supersedes §4's Python fallback and step 6:
+
+- **`session.sh` runs no Python.** It execs the first working
+  `pigeon session` (`~/.cache/pigeon/bin/pigeon`, then `PATH`).
+- **`session.sh install`** runs `pigeon session install`, else a POSIX sh
+  bootstrap (`curl`, `sed`, SHA-256), and `brief` runs it first, bounded to
+  10 s, as before.
+- **With no binary,** the hooks print a degraded line and exit 0; `follow`,
+  `executor` and `install` fall back to `cargo run`.

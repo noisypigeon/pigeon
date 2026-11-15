@@ -169,3 +169,21 @@ brief would have to spell out line by line.
 - With `~/.cache/pigeon` removed, `session.sh brief` bootstraps a binary
   within 10 s; with it removed and the control plane unreachable, the hooks
   print their degraded lines and exit 0.
+
+## Amendments
+
+### 2026-11-15: Step 2 lands
+
+- `core::session::launch` holds `executor`, `repository`, `latest_build`
+  and `verified`; the shell finds the root, reads the two files, and calls
+  `brief.show` and `deploy.status`.
+- `session.sh latest` is the bootstrap's parsing, on stdin, so
+  `pigeon/tests/session_sh.rs` tests it, and the degraded hooks, with no
+  network.
+- **Checked live** from a cloud session with a fresh `HOME` and `python`,
+  `python3` shadowed by logging stubs: the sh bootstrap fetched and checked
+  main's build in 2.7 s; `brief`, `statusline` and `stop` answered;
+  `pigeon session install` fetched the same build, did nothing when current,
+  and refetched when `pigeon.sha` differed; the stubs logged nothing.
+- **`executor` matched `session.py executor`** for brief b9 with `--tag`,
+  byte for byte, but for the prompt's `Monitor` line.
