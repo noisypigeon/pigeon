@@ -157,6 +157,19 @@ fn ask(stage: &str, covered: Option<&String>, tool: &str, owner: &str) -> Stage 
     }
 }
 
+/// A checked head: a covered one is asked to merge by its session and approved in the control
+/// plane; see `.claude/decisions/2026-11-15-development-sessions-stop-only-for-oversight.md` §2.
+fn ask_merge(covered: Option<&String>) -> Stage {
+    match covered {
+        Some(by) => at(
+            "checked",
+            Needs::Agent,
+            format!("ask to merge now (`change_merge`): {by}, the owner's, approves the head"),
+        ),
+        None => at("checked", Needs::Owner, "approve the head"),
+    }
+}
+
 fn merged(deploy: &Deploy) -> Stage {
     match deploy {
         Deploy::Unknown => at("merged", Needs::None, "nothing"),
@@ -255,7 +268,7 @@ pub fn of(c: &Change, cx: &Context) -> Stage {
                 c.brief.as_deref().unwrap_or_default()
             ),
         ),
-        State::Checked => ask("checked", covered, "change_approve", "approve the head"),
+        State::Checked => ask_merge(covered),
         State::Approved => approved(c, place, cx.held.as_deref()),
     }
 }
@@ -515,7 +528,7 @@ mod tests {
         assert_eq!((s.stage.as_str(), s.needs), ("checked", Needs::Agent));
         assert_eq!(
             s.next,
-            "ask now (`change_approve`): window:2, the owner's, approves it"
+            "ask to merge now (`change_merge`): window:2, the owner's, approves the head"
         );
         let s = of(&change(State::Proposed), &cx);
         assert_eq!(
@@ -556,5 +569,36 @@ mod tests {
     fn a_bounded_head_without_its_checks_yet_is_checking() {
         let s = of(&change(State::Bounded), &Context::default());
         assert_eq!((s.stage.as_str(), s.needs), ("checking", Needs::Provider));
+    }
+
+    #[test]
+    fn no_stage_of_a_briefs_change_asks_its_session_to_approve_or_authorize() {
+        let cx = Context {
+            covered: Some("window:9".into()),
+            ..Context::default()
+        };
+        let states = [
+            State::Planned,
+            State::Pushed,
+            State::Bounded,
+            State::Refused,
+            State::Checked,
+            State::Failed,
+            State::Approved,
+            State::Merged,
+            State::Closed,
+        ];
+        for state in states {
+            for accepted in [None, Some("a".repeat(40))] {
+                let mut c = change(state);
+                c.brief = Some("b13".into());
+                c.head = Some("a".repeat(40));
+                c.accepted = accepted;
+                let s = of(&c, &cx);
+                for tool in ["change_approve", "change_authorize"] {
+                    assert!(!s.next.contains(tool), "{state:?}: {}", s.next);
+                }
+            }
+        }
     }
 }

@@ -191,6 +191,7 @@ pub(super) async fn ask(
             "answers come only from the owner, on the approval page or in the app".into(),
         ])));
     }
+    let request = &merge_asks_approval(env, settings, number, request).await?;
     if !asks_owner(env, settings, number, request).await? {
         if let Some(r) = under_mandate(env, settings, number, request).await? {
             return Ok(r);
@@ -257,6 +258,33 @@ pub(super) async fn ask(
         }
         Err(why) => Ok(Err(crate::Error::Invalid(vec![why]))),
     }
+}
+
+/// `request`, or, for `change.merge` on a checked head no one has approved, `change.approve` of
+/// it, whose approval queues the merge; see
+/// `.claude/decisions/2026-11-15-development-sessions-stop-only-for-oversight.md` §2.
+async fn merge_asks_approval(
+    env: &Env,
+    s: &Settings,
+    number: u32,
+    request: &wire::Request,
+) -> Result<wire::Request> {
+    if request.operation != "change.merge" {
+        return Ok(request.clone());
+    }
+    let (status, v) = to_change(env, &s.repo, number, Method::Get, "/status", None).await?;
+    let unapproved = status == 200
+        && serde_json::from_value::<Change>(v["change"].clone())
+            .is_ok_and(|c| c.state == crate::changes::State::Checked && c.approval.is_none());
+    if !unapproved {
+        return Ok(request.clone());
+    }
+    let mut args = request.args.clone();
+    args.remove("full");
+    Ok(wire::Request {
+        operation: "change.approve".into(),
+        args,
+    })
 }
 
 /// Runs `request` on change `number` as its mandate, when the mandate approves it; see
@@ -691,9 +719,7 @@ async fn dispatch(
                 )
                 .await?;
             }
-            if brief.is_some()
-                && let Some(number) = proposed.0.as_deref().and_then(|n| n.parse::<u32>().ok())
-            {
+            if let Some(number) = proposed.0.as_deref().and_then(|n| n.parse::<u32>().ok()) {
                 briefs::by_window(env, s, number, "change.authorize", None).await;
             }
             if let Some(n) = resumes {

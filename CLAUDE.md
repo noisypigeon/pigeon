@@ -63,6 +63,9 @@ belong in the ADR, never in the file.
   it. A `wait:` refusal, a dependency or a choice the rules settle is never a
   question for the owner. See
   [`2026-11-15-development-sessions-stop-only-for-oversight.md`](.claude/decisions/2026-11-15-development-sessions-stop-only-for-oversight.md).
+- Under a window a session never calls `change_authorize` or
+  `change_approve`: it asks to merge (`change_merge`), and the control plane
+  approves, per the same ADR's §2.
 
 ## Briefs and model classes
 

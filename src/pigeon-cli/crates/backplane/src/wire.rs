@@ -257,7 +257,7 @@ const CATALOG: &[Operation] = &[
         name: "change.authorize",
         engine: Engine::Backplane,
         effect: Effect::Apply,
-        summary: "Approve a proposed change's plan, so its branch may be pushed; never by its proposer",
+        summary: "The owner's or a reviewer's approval of a proposed change's plan, so its branch may be pushed; never by its proposer. Under the owner's Auto window or mandate the control plane authorizes it at proposal, so a session doesn't call this",
         args: &[NUMBER, arg("ticket", false, Kind::String)],
     },
     Operation {
@@ -296,7 +296,7 @@ const CATALOG: &[Operation] = &[
         name: "change.approve",
         engine: Engine::Backplane,
         effect: Effect::Apply,
-        summary: "Approve a checked change's head for merge, which queues its merge (sha?: the head; a person's call without it approves the current head, and a service token's call waits for the owner's passkey on the approval page; hold?: true approves without queuing the merge); never by its proposer",
+        summary: "The owner's or a reviewer's approval of a checked change's head, which queues its merge (sha?: the head; a person's call without it approves the current head; hold?: true approves without queuing the merge); never by its proposer. A session never calls it on its own change: it asks to merge (`change_merge`), and the owner's window, mandate or policy approves in the control plane",
         args: &[
             NUMBER,
             arg("sha", false, Kind::String),
@@ -308,7 +308,7 @@ const CATALOG: &[Operation] = &[
         name: "change.merge",
         engine: Engine::Backplane,
         effect: Effect::Apply,
-        summary: "Merge an approved change: its head is squashed onto main as `<title> (!<number>)` and its branch deleted; main must be an ancestor of the head (args: full?, true to run the whole test suite in its merge gate)",
+        summary: "Ask to merge your change: an approved head is squashed onto main as `<title> (!<number>)` and its branch deleted; a checked head is first approved by the owner's window, mandate or policy that covers it, else waits, listed, for the owner, whose approval queues the merge (args: full?, true to run the whole test suite in its merge gate)",
         args: &[
             NUMBER,
             arg("ticket", false, Kind::String),
@@ -526,7 +526,7 @@ const CATALOG: &[Operation] = &[
         name: "brief.review",
         engine: Engine::Backplane,
         effect: Effect::Build,
-        summary: "As the planner `session` of the brief change `change` carries out: `verdict` `accept` (with the `head` reviewed; only then may a window, mandate or policy approve it), `revise` (`notes` go to the executor; amend the brief with `brief_amend`), or `take` (the change is offered back to you)",
+        summary: "As the planner `session` of the brief change `change` carries out: `verdict` `accept` (with the `head` reviewed; only then may a window, mandate or policy approve it, and under a window the control plane approves it at once, so don't call `change_approve`), `revise` (`notes` go to the executor; amend the brief with `brief_amend`), or `take` (the change is offered back to you)",
         args: &[
             arg("change", true, Kind::Text),
             arg("verdict", true, Kind::String),
@@ -651,7 +651,7 @@ const CATALOG: &[Operation] = &[
         name: "approval.wait",
         engine: Engine::Backplane,
         effect: Effect::Build,
-        summary: "Show the link to the owner's approval page for a pending approval of `operation` (change.authorize, change.approve, change.merge or change.close) on change `number`: a card that opens it on a client that shows such cards, text otherwise; it answers at once",
+        summary: "The link to the owner's approval page for a pending approval of `operation` (change.authorize, change.approve, change.merge or change.close) on change `number`, listed on /approvals and pushed; it answers at once, and the stage moves when the owner approves",
         args: &[NUMBER, arg("operation", true, Kind::String)],
     },
     Operation {
