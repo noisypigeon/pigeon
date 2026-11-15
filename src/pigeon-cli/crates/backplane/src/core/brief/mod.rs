@@ -67,7 +67,7 @@ impl Budget {
         Self {
             heads: match model {
                 Class::Haiku => 3,
-                Class::Sonnet | Class::Opus => 4,
+                Class::Sonnet | Class::Opus | Class::Fable => 4,
             },
             hours: 2,
         }
@@ -248,7 +248,7 @@ pub fn validate(draft: &Draft) -> Vec<String> {
     if !is_commit(&draft.base) {
         out.push("`base` is a commit on `main`: 7 to 40 hex digits".into());
     }
-    if draft.model == Class::Opus {
+    if matches!(draft.model, Class::Opus | Class::Fable) {
         out.push("a brief is for `haiku` or `sonnet`; an opus session plans".into());
     }
     if !is_conventional(&draft.commit.title) {

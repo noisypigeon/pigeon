@@ -141,6 +141,35 @@ pub struct Counts {
     pub provider: u32,
 }
 
+/// A change in the merge queue; see `.claude/decisions/2026-11-15-runtime-ios-app-now-tab.md` §4.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Queued {
+    /// Its number.
+    pub number: u32,
+    /// Its title.
+    pub title: String,
+    /// Its session's label.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session: Option<String>,
+    /// Its session's class.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<crate::sessions::Class>,
+    /// Its stage.
+    pub stage: String,
+    /// 0 while it merges, else its place in the queue.
+    pub position: u32,
+    /// Who acts next.
+    pub needs: Needs,
+    /// For `Needs::Change`: the change it waits on.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub waits_on: Option<u32>,
+    /// What acting next is.
+    pub next: String,
+    /// When it entered its stage.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub since: Option<u64>,
+}
+
 /// The tracker.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Tracker {
@@ -148,6 +177,9 @@ pub struct Tracker {
     pub sessions: Vec<Session>,
     /// Its counts.
     pub counts: Counts,
+    /// The merge queue: the change merging, then each queued, in order.
+    #[serde(default)]
+    pub queue: Vec<Queued>,
 }
 
 /// A session's inputs.
@@ -157,6 +189,8 @@ pub struct SessionIn {
     pub label: String,
     /// What its ticket declares; none without a live ticket.
     pub declared: Option<crate::sessions::Declared>,
+    /// The class its latest ticket declared, live or lapsed.
+    pub class: Option<crate::sessions::Class>,
     /// When it last polled.
     pub polled: Option<u64>,
     /// Whether it is waiting on events now.
@@ -214,6 +248,9 @@ pub fn build(sessions: &[SessionIn], changes: &[ChangeIn], briefs: &[Brief], now
     for label in labels {
         let known = sessions.iter().find(|s| s.label == label);
         let declared = known.and_then(|s| s.declared.as_ref());
+        let class = declared
+            .map(|d| d.model)
+            .or_else(|| known.and_then(|s| s.class));
         let polled = known.and_then(|s| s.polled);
         let mut rows = Vec::new();
         for c in changes
@@ -258,8 +295,8 @@ pub fn build(sessions: &[SessionIn], changes: &[ChangeIn], briefs: &[Brief], now
         rows.sort_by_key(|r| r.number);
         out.push(Session {
             label: label.to_string(),
-            model: declared.map(|d| d.model),
-            role: declared.map(|d| d.model.role().to_string()),
+            model: class,
+            role: class.map(|c| c.role().to_string()),
             planner: declared.and_then(|d| d.planner.clone()),
             brief: declared.and_then(|d| d.brief.clone()),
             listening: known.is_some_and(|s| s.listening),
@@ -273,8 +310,49 @@ pub fn build(sessions: &[SessionIn], changes: &[ChangeIn], briefs: &[Brief], now
             s.label.clone(),
         )
     });
+    let queue = queue(changes, &out);
     Tracker {
         sessions: out,
         counts,
+        queue,
     }
+}
+
+/// A change's place in the merge queue: 0 while `merging`, `n` at `queued n/m`; none otherwise.
+#[must_use]
+pub fn position(stage: &str) -> Option<u32> {
+    if stage == "merging" {
+        return Some(0);
+    }
+    let rest = stage.strip_prefix("queued ")?;
+    rest.split_once('/').map_or(rest, |(n, _)| n).parse().ok()
+}
+
+/// The merge queue in order, each change with its session's class from `sessions`.
+fn queue(changes: &[ChangeIn], sessions: &[Session]) -> Vec<Queued> {
+    let mut out: Vec<Queued> = changes
+        .iter()
+        .filter_map(|c| {
+            let position = position(&c.stage.stage)?;
+            let model = c
+                .session
+                .as_deref()
+                .and_then(|l| sessions.iter().find(|s| s.label == l))
+                .and_then(|s| s.model);
+            Some(Queued {
+                number: c.number,
+                title: c.title.clone(),
+                session: c.session.clone(),
+                model,
+                stage: c.stage.stage.clone(),
+                position,
+                needs: c.stage.needs,
+                waits_on: c.stage.waits_on,
+                next: c.stage.next.clone(),
+                since: c.stage.since,
+            })
+        })
+        .collect();
+    out.sort_by_key(|q| (q.position, q.number));
+    out
 }

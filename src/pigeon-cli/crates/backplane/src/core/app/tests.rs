@@ -402,6 +402,7 @@ mod tracker {
         SessionIn {
             label: label.into(),
             declared: None,
+            class: None,
             polled,
             listening,
         }
@@ -603,5 +604,63 @@ mod tracker {
             (t.counts.owner, t.counts.stalled, t.counts.provider),
             (1, 1, 1)
         );
+    }
+
+    #[test]
+    fn the_queue_is_the_merging_change_then_each_queued_in_order() {
+        let first = "https://claude.ai/code/a";
+        let second = "https://claude.ai/code/b";
+        let mut lone = change(9, first, "queued 2/4", Needs::Change);
+        lone.session = None;
+        let changes = [
+            change(5, first, "queued 4/4", Needs::Change),
+            change(3, second, "checking 1/2", Needs::Provider),
+            change(7, first, "merging", Needs::Platform),
+            change(8, second, "queued 3/4", Needs::Change),
+            lone,
+        ];
+        let mut planner = session(first, None, false);
+        planner.class = Some(Class::Fable);
+        let t = build(&[planner], &changes, &[], NOW);
+        let order: Vec<(u32, u32)> = t.queue.iter().map(|q| (q.position, q.number)).collect();
+        assert_eq!(order, [(0, 7), (2, 9), (3, 8), (4, 5)]);
+        assert_eq!(
+            t.queue[0].model,
+            Some(Class::Fable),
+            "a lapsed ticket's class"
+        );
+        assert_eq!(
+            t.queue[1].session, None,
+            "a change with no session still queues"
+        );
+        assert_eq!(t.queue[2].model, None);
+    }
+
+    #[test]
+    fn a_session_takes_its_lapsed_ticket_class_and_a_live_one_wins() {
+        let a = "https://claude.ai/code/a";
+        let mut s = session(a, None, false);
+        s.class = Some(Class::Sonnet);
+        let t = build(&[s.clone()], &[], &[], NOW);
+        assert_eq!(t.sessions[0].model, Some(Class::Sonnet));
+        assert_eq!(t.sessions[0].role.as_deref(), Some("executor"));
+        s.declared = Some(Declared {
+            model: Class::Fable,
+            planner: None,
+            brief: None,
+        });
+        let t = build(&[s], &[], &[], NOW);
+        assert_eq!(t.sessions[0].model, Some(Class::Fable));
+        assert_eq!(t.sessions[0].role.as_deref(), Some("planner"));
+    }
+
+    #[test]
+    fn a_position_is_read_from_the_stage() {
+        use crate::core::app::tracker::position;
+        assert_eq!(position("merging"), Some(0));
+        assert_eq!(position("queued 9/14"), Some(9));
+        assert_eq!(position("queued 3"), Some(3));
+        assert_eq!(position("approved"), None);
+        assert_eq!(position("queued x/2"), None);
     }
 }

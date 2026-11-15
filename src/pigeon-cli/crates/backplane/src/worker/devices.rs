@@ -185,6 +185,7 @@ async fn signed(
 ) -> Result<Response> {
     const APPROVALS: &str = "/v0/app/approvals/";
     const ITEMS: &str = "/v0/app/items/";
+    const CHANGES: &str = "/v0/app/changes/";
     match (method, path) {
         (Method::Get, "/v0/app/whoami") => {
             Response::from_json(&json!({ "device": device.id, "name": device.name }))
@@ -222,6 +223,9 @@ async fn signed(
         (Method::Delete, "/v0/app/auto") => super::app::auto_end(env, s, body).await,
         (Method::Post, p) if p.starts_with(ITEMS) => {
             super::owner_items::answer(env, s, p.trim_start_matches(ITEMS), body).await
+        }
+        (Method::Get, p) if p.starts_with(CHANGES) => {
+            super::app::change_sheet(env, s, p.trim_start_matches(CHANGES)).await
         }
         (Method::Get, "/v0/app/tracker") => {
             Response::from_json(&super::app::tracker(env, s).await?)

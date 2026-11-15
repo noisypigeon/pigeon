@@ -791,7 +791,21 @@ async fn dispatch(
                 to_change(env, &s.repo, number, Method::Get, "/status", None).await?;
             if let Ok(c) = serde_json::from_value::<Change>(v["change"].clone()) {
                 let q = stages::queue(env, s).await;
-                v["stage"] = serde_json::to_value(stages::of(env, s, &c, &q).await)?;
+                let stage = stages::of(env, s, &c, &q).await;
+                // The Now tab's sheet; see .claude/decisions/2026-11-15-runtime-ios-app-now-tab.md §4.
+                let (_, t) = mandates::to_instance(env, s, "/tickets/list", &json!({})).await?;
+                let tickets: crate::tickets::Tickets =
+                    serde_json::from_value(t).unwrap_or_default();
+                let waiting = approve::live(env, s).await?;
+                v["position"] = json!(crate::core::app::tracker::position(&stage.stage));
+                v["model"] = json!(c.session.as_deref().and_then(|l| tickets.class(l)));
+                v["approval"] = json!(
+                    waiting
+                        .iter()
+                        .filter(|w| w.number == number)
+                        .find_map(crate::core::app::approvals::id)
+                );
+                v["stage"] = serde_json::to_value(stage)?;
             }
             Ok((Some(number.to_string()), respond(operation, status, v)))
         }

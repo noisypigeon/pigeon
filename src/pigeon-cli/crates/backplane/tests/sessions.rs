@@ -139,3 +139,25 @@ fn a_session_id_is_its_labels_last_segment() {
         "session_015X"
     );
 }
+
+#[test]
+fn fable_is_a_planner_and_a_model_name_or_id_names_its_class() {
+    for (name, class) in [
+        ("fable", Class::Fable),
+        ("claude-fable-5-2", Class::Fable),
+        ("Opus 5.5", Class::Opus),
+        ("claude-sonnet-5-5", Class::Sonnet),
+        ("HAIKU", Class::Haiku),
+    ] {
+        assert_eq!(Class::parse(Some(name)), Ok(class), "{name}");
+    }
+    assert!(Class::parse(Some("gpt-5")).is_err());
+    let d = declare(Some("fable"), None, None).expect("a fable planner");
+    assert_eq!(d.model.role(), "planner");
+    assert!(declare(Some("fable"), Some("https://claude.ai/code/p"), Some("b1")).is_err());
+    assert!(Class::Fable.covers(Class::Opus));
+    assert_eq!(
+        serde_json::to_value(Class::Fable).expect("json"),
+        json!("fable")
+    );
+}

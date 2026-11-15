@@ -184,3 +184,23 @@ Then `ios.release`, and the TestFlight build goes to the owner.
 - Needs me counts an approval and its change's `needs: owner` stage once.
 - Pause and Resume work from the Now tab.
 - A push opens the Now tab with its approval's card.
+
+## Amendments
+
+### 2026-11-15: A change's sheet is `change.status`, and its route a shim
+
+The single-entry-point planner moves the app onto backplane operations
+(`wire::CATALOG`) served through `/mcp`, so the Now tab adds no read of its
+own:
+
+- **`change.status` gains `position`, `model` and `approval`:** the change's
+  place in the merge queue (0 while it merges), its session's class from its
+  latest ticket, and the app's id of its listed approval, if any. It already
+  answers the stage, jobs and GitHub runs, so it is the sheet.
+- **`GET /v0/app/changes/<n>` is a thin shim:** device-signed, it runs
+  `change.status` as the owner through `run()` and answers its result
+  unchanged. It goes when the app reads operations itself.
+- The tracker's `queue` and a lapsed ticket's class are fields of the
+  existing tracker read, which the single-entry-point ADR names
+  `tracker.show`; its result keeps this shape when it becomes that
+  operation.

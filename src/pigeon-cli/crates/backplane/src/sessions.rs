@@ -38,24 +38,29 @@ pub enum Class {
     /// Plans; a session that declares none.
     #[default]
     Opus,
+    /// Plans; see `.claude/decisions/2026-11-15-runtime-ios-app-now-tab.md` §2.
+    Fable,
 }
 
 impl Class {
-    /// The class `name` names, or [`Class::Opus`] for none.
+    /// Every class, least capable first.
+    pub const ALL: [Self; 4] = [Self::Haiku, Self::Sonnet, Self::Opus, Self::Fable];
+
+    /// The class `name` names, or [`Class::Opus`] for none: a class, or a model's name or ID
+    /// holding one (`claude-opus-5-5`, `Opus 5.5`), case-blind.
     ///
     /// # Errors
     ///
     /// When it names no class.
     pub fn parse(name: Option<&str>) -> Result<Self, String> {
-        match name.map(str::trim).filter(|n| !n.is_empty()) {
-            None => Ok(Self::Opus),
-            Some(n) => match n.to_ascii_lowercase().as_str() {
-                "haiku" => Ok(Self::Haiku),
-                "sonnet" => Ok(Self::Sonnet),
-                "opus" => Ok(Self::Opus),
-                _ => Err("`model` is a class: `haiku`, `sonnet` or `opus`".into()),
-            },
-        }
+        let Some(n) = name.map(str::trim).filter(|n| !n.is_empty()) else {
+            return Ok(Self::Opus);
+        };
+        let n = n.to_ascii_lowercase();
+        Self::ALL
+            .into_iter()
+            .find(|c| n.contains(c.name()))
+            .ok_or_else(|| "`model` is a class: `haiku`, `sonnet`, `opus` or `fable`".into())
     }
 
     /// Its name.
@@ -65,14 +70,15 @@ impl Class {
             Self::Haiku => "haiku",
             Self::Sonnet => "sonnet",
             Self::Opus => "opus",
+            Self::Fable => "fable",
         }
     }
 
-    /// Its role: `planner` for opus, `executor` otherwise.
+    /// Its role: `planner` for opus and fable, `executor` otherwise.
     #[must_use]
     pub const fn role(self) -> &'static str {
         match self {
-            Self::Opus => "planner",
+            Self::Opus | Self::Fable => "planner",
             Self::Haiku | Self::Sonnet => "executor",
         }
     }
@@ -139,10 +145,13 @@ pub fn declare(
         format!("`planner` is the label of the session that started this one: one line of at most {MAX_SESSION} characters")
     })?;
     let brief = brief(brief_id)?;
-    if model == Class::Opus && (planner.is_some() || brief.is_some()) {
-        return Err("an opus session plans; `planner` and `brief` are an executor's".into());
+    let plans = model.role() == "planner";
+    if plans && (planner.is_some() || brief.is_some()) {
+        return Err(
+            "an opus or fable session plans; `planner` and `brief` are an executor's".into(),
+        );
     }
-    if model != Class::Opus && (planner.is_none() || brief.is_none()) {
+    if !plans && (planner.is_none() || brief.is_none()) {
         return Err(format!(
             "a {} session executes a brief: name its `planner` and its `brief`",
             model.name()

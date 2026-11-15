@@ -335,6 +335,7 @@ pub async fn tracker(env: &Env, s: &Settings) -> Result<Value> {
                 .await?;
         sessions.push(tracker::SessionIn {
             declared: tickets.live(&label, now).map(|i| i.declared),
+            class: tickets.class(&label),
             polled: cursor["polled"].as_u64(),
             listening: cursor["listening"].as_bool() == Some(true),
             label,
@@ -344,6 +345,30 @@ pub async fn tracker(env: &Env, s: &Settings) -> Result<Value> {
     Ok(serde_json::to_value(tracker::build(
         &sessions, &changes, &briefs, now,
     ))?)
+}
+
+/// `GET /v0/app/changes/<n>`: a shim that runs `change.status` as the owner, until the app reads
+/// operations itself; see .claude/decisions/2026-11-15-runtime-ios-app-now-tab.md §4.
+///
+/// # Errors
+///
+/// When a binding fails.
+pub async fn change_sheet(env: &Env, s: &Settings, number: &str) -> Result<Response> {
+    let mut args = Map::new();
+    args.insert("number".into(), Value::from(number));
+    let request = wire::Request {
+        operation: "change.status".into(),
+        args,
+    };
+    let who = Identity {
+        subject: super::account::approver(env, s).await?,
+        human: true,
+    };
+    match run(env, s, &who, &request).await {
+        Ok(r) if r.ok => Response::from_json(&r.result),
+        Ok(r) => Response::error(r.violations.join("\n"), 404),
+        Err(e) => Response::error(e.to_string(), 400),
+    }
 }
 
 /// `GET /v0/app/events`: the event log as the owner, from `after`, waiting up to `seconds`; no

@@ -66,7 +66,7 @@ impl Limits {
         let (same_check, unchecked) = match model {
             Class::Haiku => (2, 3),
             Class::Sonnet => (2, 4),
-            Class::Opus => (SAME_CHECK, UNCHECKED),
+            Class::Opus | Class::Fable => (SAME_CHECK, UNCHECKED),
         };
         Self {
             same_check,
