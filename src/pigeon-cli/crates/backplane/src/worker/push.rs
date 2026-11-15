@@ -148,6 +148,7 @@ pub async fn build(env: &Env, s: &Settings) -> Result<(Digest, u64)> {
         let line = crate::tasks::held_line(&format!("Auto window {id}"), h, now());
         d.held.insert(0, line);
     }
+    d.stops = crate::tasks::stops(&events);
     let open: std::collections::BTreeMap<u32, String> = d
         .sessions
         .iter()

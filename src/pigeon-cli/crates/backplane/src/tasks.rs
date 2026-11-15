@@ -321,6 +321,10 @@ pub struct Digest {
     /// `.claude/decisions/2026-11-15-development-job-start-failures-backoff.md` §3.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub containers: Option<String>,
+    /// The stops since the last digest, by kind: shown, never pushed; see
+    /// `.claude/decisions/2026-11-15-development-sessions-stop-only-for-oversight.md` §5.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stops: Option<String>,
 }
 
 /// How long a session goes without polling before a change that needs it stalls, in seconds;
@@ -460,6 +464,7 @@ impl Digest {
         let mut out = self.owner_lines();
         out.extend(self.sessions.iter().map(SessionLine::line));
         out.extend(self.briefs.iter().cloned());
+        out.extend(self.stops.clone());
         out
     }
 
@@ -575,5 +580,51 @@ pub fn digest(input: &DigestInput<'_>, now: u64) -> Digest {
         macos: input.macos.to_vec(),
         briefs: Vec::new(),
         containers: None,
+        stops: None,
     }
+}
+
+/// The stops in `events`, by kind, as the digest's line, or none when there are none: what the
+/// owner was asked (`approval.pending` by operation, `grant.requested`, `deploy.failed`), changes
+/// nudged because their session didn't act, and escalations to a planner; see
+/// `.claude/decisions/2026-11-15-development-sessions-stop-only-for-oversight.md` §5.
+#[must_use]
+pub fn stops(events: &[crate::events::Event]) -> Option<String> {
+    let mut owner: std::collections::BTreeMap<String, u32> = std::collections::BTreeMap::new();
+    let (mut nudged, mut escalated) = (0, 0);
+    for e in events {
+        let kind = match e.kind.as_str() {
+            "approval.pending" => e
+                .summary
+                .split('`')
+                .nth(1)
+                .map_or("other", |op| op.strip_prefix("change.").unwrap_or(op))
+                .to_string(),
+            "grant.requested" => "grant".into(),
+            "deploy.failed" => "deploy".into(),
+            crate::events::NUDGED => {
+                nudged += 1;
+                continue;
+            }
+            "task.made" if e.summary.starts_with("task (escalation)") => {
+                escalated += 1;
+                continue;
+            }
+            _ => continue,
+        };
+        *owner.entry(kind).or_default() += 1;
+    }
+    let asked: u32 = owner.values().sum();
+    if asked + nudged + escalated == 0 {
+        return None;
+    }
+    let by: Vec<String> = owner.iter().map(|(k, n)| format!("{k} {n}")).collect();
+    let by = if by.is_empty() {
+        String::new()
+    } else {
+        format!(" ({})", by.join(", "))
+    };
+    Some(format!(
+        "stops since last digest: owner {asked}{by}; agent nudged {nudged}; escalated {escalated}"
+    ))
 }

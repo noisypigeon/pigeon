@@ -275,7 +275,7 @@ pub fn limit(open: &[Open], session: Option<&str>) -> Result<(), String> {
     let counted: Vec<&Open> = open.iter().filter(|o| counts(o)).collect();
     if counted.len() >= MAX_OPEN {
         return Err(format!(
-            "{MAX_OPEN} changes are open ({}); merge or close one first",
+            "wait: {MAX_OPEN} changes are open ({}); one merging or closing wakes you (`change.merged`, `change.closed`), then propose again",
             numbers(&counted)
         ));
     }
@@ -287,7 +287,7 @@ pub fn limit(open: &[Open], session: Option<&str>) -> Result<(), String> {
             .collect();
         if mine.len() >= MAX_PER_SESSION {
             return Err(format!(
-                "session {s} holds {MAX_PER_SESSION} open changes ({}); merge or close one first",
+                "wait: session {s} holds {MAX_PER_SESSION} open changes ({}); merge or close one of yours, then propose again",
                 numbers(&mine)
             ));
         }

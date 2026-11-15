@@ -304,3 +304,52 @@ fn failed_starts_and_lost_containers_are_counted_in_a_line_that_is_never_pushed_
     assert!(!d.is_empty());
     assert_eq!(d.lines(), vec![line]);
 }
+
+// See `.claude/decisions/2026-11-15-development-sessions-stop-only-for-oversight.md` §5.
+#[test]
+fn the_digest_counts_stops_by_kind_and_shows_none_without_them() {
+    use backplane::events::Event;
+    let e = |id: u64, kind: &str, summary: &str| Event {
+        id,
+        at: id,
+        kind: kind.into(),
+        change: Some(1),
+        session: None,
+        summary: summary.into(),
+        owner: false,
+        stage: None,
+        model: None,
+    };
+    assert_eq!(backplane::tasks::stops(&[]), None);
+    assert_eq!(
+        backplane::tasks::stops(&[e(1, "change.checked", "x")]),
+        None
+    );
+    let events = [
+        e(
+            1,
+            "approval.pending",
+            "`change.approve` on !1 waits for the owner",
+        ),
+        e(
+            2,
+            "approval.pending",
+            "`change.approve` on !2 waits for the owner",
+        ),
+        e(
+            3,
+            "approval.pending",
+            "`change.authorize` on !3 waits for the owner",
+        ),
+        e(4, "grant.requested", "grant observability asked"),
+        e(5, "change.nudged", "!4 has needed its session for 1h"),
+        e(6, "task.made", "task (escalation) on !5: wait?"),
+        e(7, "task.made", "task (review) on !6: x"),
+    ];
+    assert_eq!(
+        backplane::tasks::stops(&events).as_deref(),
+        Some(
+            "stops since last digest: owner 4 (approve 2, authorize 1, grant 1); agent nudged 1; escalated 1"
+        )
+    );
+}
