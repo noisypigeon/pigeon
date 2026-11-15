@@ -4,7 +4,7 @@
 use serde_json::{Map, Value, json};
 use worker::{Env, Method, Result};
 
-use super::mandates::{to_instance, window_approves};
+use super::mandates::{Verdict, to_instance, window_verdict};
 use super::platform::{self, Settings, json_request};
 use crate::changes::{Change, State};
 use crate::core::change::stage::{self, Context, Deploy, Stage};
@@ -38,11 +38,10 @@ async fn covered(env: &Env, s: &Settings, c: &Change) -> Option<String> {
     if let Some(m) = c.mandate {
         return Some(format!("mandate:{m}"));
     }
-    window_approves(env, s, c, operation)
-        .await
-        .ok()
-        .flatten()
-        .map(|id| format!("window:{id}"))
+    match window_verdict(env, s, c, operation).await.ok()? {
+        Verdict::Allow(id) | Verdict::ApproveHeld(id, _) => Some(format!("window:{id}")),
+        _ => None,
+    }
 }
 
 /// What a hold defers approved `c`'s merge on, when its mandate or the Auto window is held.

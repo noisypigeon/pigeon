@@ -10,7 +10,7 @@ use super::{approve as page, elicit};
 use crate::access::Identity;
 use crate::approve::{self, Waiting};
 use crate::changes::Change;
-use crate::core::approval::windows::{BUDGET, Window, Windows};
+use crate::core::approval::windows::{self, BUDGET, Window, Windows};
 use crate::mandates::{Decision, Mandate, Mandates};
 
 /// The storage key of every mandate.
@@ -129,6 +129,9 @@ async fn offer(env: &Env, s: &Settings, m: &Mandate) -> Result<String> {
 pub enum Verdict {
     /// Run it as `window:<id>` or `mandate:<id>`.
     Allow(u32),
+    /// Approve it as `window:<id>` or `mandate:<id>` without queuing its merge, which a hold
+    /// defers, saying what the merge waits on.
+    ApproveHeld(u32, String),
     /// A hold defers it, saying what it waits on; nobody is asked.
     Held(String),
     /// Ask the owner as usual.
@@ -162,7 +165,7 @@ pub async fn approves(
         status,
         serde_json::from_value::<Decision>(v["decision"].clone()),
     ) {
-        (200, Ok(Decision::Allow)) => Ok(id.map_or(Verdict::No, Verdict::Allow)),
+        (200, Ok(Decision::Allow)) => Ok(allowed(id, operation, &v)),
         (200, Ok(Decision::Hold(why))) => Ok(Verdict::Held(why)),
         (200, Ok(Decision::Pause(why))) => {
             worker::console_log!("mandate paused: {why}");
@@ -178,6 +181,26 @@ pub async fn approves(
             worker::console_warn!("mandate: {v}");
             Ok(Verdict::No)
         }
+    }
+}
+
+/// An allowed `operation` under `id`: an approval whose merge `decided` says a hold defers is
+/// approved without queuing it.
+fn allowed(id: Option<u32>, operation: &str, decided: &Value) -> Verdict {
+    match (id, decided["held"].as_str()) {
+        (None, _) => Verdict::No,
+        (Some(id), Some(why)) if operation == "change.approve" => {
+            Verdict::ApproveHeld(id, why.to_string())
+        }
+        (Some(id), _) => Verdict::Allow(id),
+    }
+}
+
+/// What a hold defers a merge of `change` on under `decided`, if anything.
+fn held_merge(decided: crate::mandates::Decision) -> Option<String> {
+    match decided {
+        Decision::Hold(why) => Some(why),
+        _ => None,
     }
 }
 
@@ -304,7 +327,7 @@ pub async fn window_verdict(
         status,
         serde_json::from_value::<Decision>(v["decision"].clone()),
     ) {
-        (200, Ok(Decision::Allow)) => Ok(id.map_or(Verdict::No, Verdict::Allow)),
+        (200, Ok(Decision::Allow)) => Ok(allowed(id, operation, &v)),
         (200, Ok(Decision::Hold(why))) => Ok(Verdict::Held(why)),
         _ => Ok(Verdict::No),
     }
@@ -359,8 +382,13 @@ pub async fn serve_windows(state: &State, path: &str, body: Value) -> Result<Res
                 Ok(c) => c,
                 Err(e) => return Response::error(format!("unreadable change: {e}"), 400),
             };
+            let held = all
+                .current()
+                .and_then(|w| held_merge(windows::decide(w, &change, "change.merge", t)));
             match all.decide(&change, &s("operation"), t) {
-                (next, Some((id, d))) => (next, Ok(json!({ "id": id, "decision": d }))),
+                (next, Some((id, d))) => {
+                    (next, Ok(json!({ "id": id, "decision": d, "held": held })))
+                }
                 (next, None) => (next, Err("no Auto window is active".into())),
             }
         }
@@ -428,8 +456,11 @@ pub async fn serve(state: &State, path: &str, body: Value) -> Result<Response> {
                 Ok(c) => c,
                 Err(e) => return Response::error(format!("unreadable change: {e}"), 400),
             };
+            let held = change.mandate.and_then(|id| all.get(id)).and_then(|m| {
+                held_merge(crate::mandates::decide(m, &change, "change.merge", now()))
+            });
             match all.decide(&change, &s("operation"), now()) {
-                (all, Some((id, d))) => (all, Ok(json!({ "id": id, "decision": d }))),
+                (all, Some((id, d))) => (all, Ok(json!({ "id": id, "decision": d, "held": held }))),
                 (all, None) => (all, Err("the change names no mandate".into())),
             }
         }

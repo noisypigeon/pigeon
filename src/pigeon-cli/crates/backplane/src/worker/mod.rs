@@ -274,16 +274,36 @@ async fn under_mandate(
     let Ok(change) = serde_json::from_value::<Change>(v["change"].clone()) else {
         return Ok(None);
     };
-    let m = match mandates::approves(env, s, &change, &request.operation).await? {
-        mandates::Verdict::Allow(m) => m,
-        mandates::Verdict::Held(why) => return Ok(Some(Ok(held(number, request, &why)))),
-        mandates::Verdict::No => return Ok(None),
+    let verdict = mandates::approves(env, s, &change, &request.operation).await?;
+    Ok(under(env, s, number, request, "mandate", verdict).await)
+}
+
+/// Runs `request` on change `number` as `<by>:<id>` when `verdict` allows it; an approval whose
+/// merge a hold defers is made without queuing the merge. See the iOS approvals ADR's
+/// 2026-11-15 amendment.
+async fn under(
+    env: &Env,
+    s: &Settings,
+    number: u32,
+    request: &wire::Request,
+    by: &str,
+    verdict: mandates::Verdict,
+) -> Option<std::result::Result<WireResponse, crate::Error>> {
+    let mut request = request.clone();
+    let id = match verdict {
+        mandates::Verdict::Allow(id) => id,
+        mandates::Verdict::ApproveHeld(id, _) => {
+            request.args.insert("hold".into(), json!(true));
+            id
+        }
+        mandates::Verdict::Held(why) => return Some(Ok(held(number, &request, &why))),
+        mandates::Verdict::No => return None,
     };
     let who = Identity {
-        subject: format!("mandate:{m}"),
+        subject: format!("{by}:{id}"),
         human: true,
     };
-    Ok(Some(run(env, s, &who, request).await))
+    Some(run(env, s, &who, &request).await)
 }
 
 /// The answer to `request` on change `number` when a hold defers it: nothing runs, and nobody is
@@ -331,16 +351,8 @@ pub(super) async fn under_window(
     let Ok(change) = serde_json::from_value::<Change>(v["change"].clone()) else {
         return Ok(None);
     };
-    let id = match mandates::window_verdict(env, s, &change, &request.operation).await? {
-        mandates::Verdict::Allow(id) => id,
-        mandates::Verdict::Held(why) => return Ok(Some(Ok(held(number, request, &why)))),
-        mandates::Verdict::No => return Ok(None),
-    };
-    let who = Identity {
-        subject: format!("window:{id}"),
-        human: true,
-    };
-    Ok(Some(run(env, s, &who, request).await))
+    let verdict = mandates::window_verdict(env, s, &change, &request.operation).await?;
+    Ok(under(env, s, number, request, "window", verdict).await)
 }
 
 /// Runs `request` on change `number` as `policy:<rule>`, when its head's tier lets the control
