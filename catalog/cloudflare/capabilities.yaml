@@ -9,3 +9,5 @@ capabilities:
   d1.write: { permissions: [D1 Write], scope: account }
   queues.write: { permissions: [Queues Write], scope: account }
   access.write: { permissions: ["Access: Apps and Policies Write", "Access: Service Tokens Write"], scope: account }
+  observability.read: { permissions: [Workers Observability Read], scope: account }
+  analytics.read: { permissions: [Account Analytics Read], scope: account }

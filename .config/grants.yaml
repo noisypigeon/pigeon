@@ -1,3 +1,6 @@
 # Grants: each secret the control plane mints, generates or derives, by name, and where it is
 # put; never a value. See .claude/decisions/2026-11-12-development-grants-applies-rescue-yield.md §1.
-grants: {}
+grants:
+  observability:
+    mint: { capabilities: [observability.read, analytics.read], ttl: 90d, rotate: 30d }
+    route: { worker: pigeon-control, key: OBSERVABILITY_TOKEN }

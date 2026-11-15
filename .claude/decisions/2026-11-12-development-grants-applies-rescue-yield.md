@@ -1262,3 +1262,25 @@ The first, the ledger:
 - **The control plane's `worker.yaml` binds `GRANTER`** to `granter` in that
   store, as `$deployment.secrets_store_id`.
 - **The rescue Worker isn't bound yet.** It gets the binding with §6.
+### 2026-11-15: Step 1b begins with the observability grant
+
+- **The first grant is `observability`,** the observability ADR's
+  `OBSERVABILITY_TOKEN`. The iOS insights ADR's Cloudflare rows wait on it.
+- **The catalog gains two capabilities, both account-scoped:**
+  - `observability.read`, *Workers Observability Read*, for logs and traces;
+  - `analytics.read`, *Account Analytics Read*, for traffic, errors and
+    usage.
+- **The ledger declares it:** minted from those two, `ttl: 90d`,
+  `rotate: 30d`, routed to `pigeon-control` as `OBSERVABILITY_TOKEN`.
+- **1b's other capabilities follow with their own grants.** These are
+  `workers.write`, `containers.write`, `secrets_store.write` and
+  `tokens.read`. A capability enters the catalog only when a grant needs it.
+- **Until `grants-rotate` exists,** each 30-day rotation is an owner approval.
+- **The order:**
+  1. This change merges, at owner tier, since the catalog is a secret path.
+  2. Its deploy reports the ledger.
+  3. The `GRANTER` binding deploys (!470).
+  4. `grant.request observability` asks the owner on `/grants/<id>`.
+
+  If a permission name is wrong, the first mint is refused with the
+  account's real names, and a fix follows.
