@@ -283,3 +283,16 @@ For each account:
 | 8 | Create `github.com/noisypigeon/noisypigeon`, empty, and add it to the App's installation | owner |
 | 9 | Stand up noisypigeon from the app | owner |
 | 10 | Cutover (§8) | planner, with owner approvals |
+
+## Amendments
+
+### 2026-11-15: the personal zone leaves the legacy unit first
+
+The owner moved one piece of §8 step 4 ahead of the rest:
+`infra/cloudflare/config.yaml` stops listing the owner's personal zone now.
+
+- That list holds `zone` data sources only. No token, workload or record names
+  that zone, so its live DNS is untouched and nothing it had managed becomes
+  unmanaged.
+- The zone joins the personal account's `zones.private` once step 5 lands.
+- History, merged ADRs and changelogs keep their text (owner, 2026-11-15).
