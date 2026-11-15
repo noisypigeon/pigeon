@@ -251,3 +251,28 @@ does, beside approvals.
 - A planner's `owner_ask` reaches the owner as a push, a digest line and a
   "For you" card, and the answer wakes the planner.
 - The app has no `Accept edits`.
+
+## Amendments
+
+### 2026-11-15: Reviewed against !548: they agree
+
+[`2026-11-12-runtime-ios-app-approvals-insights.md`](2026-11-12-runtime-ios-app-approvals-insights.md)'s
+amendment "Glanceable tracker cards, and silent sessions hidden" (!548)
+redesigns the Tracker's cards. This ADR's §5 changes the Approvals tab and
+Auto's banner.
+
+- **Different views.** !548 changes `TrackerView`'s rows, its change sheet
+  and its filter chip. §5 changes `HomeView`'s Approvals tab, `AutoBanner`,
+  `Store` and the hours sheet. The Tracker keeps showing `AutoBanner` above
+  its cards, as it does today, now with Pause or Resume and no expiry.
+- **`Needs you`** is still a change at `needs: owner`. Under standing Auto
+  that is an owner-tier or guarded change, or a change no window covers.
+  Owner items (§4) aren't changes, so they don't appear on the Tracker's
+  rail. They are listed under "For you" in Approvals.
+- **`Held`** is the hold's stage, as before. A paused Auto holds no change:
+  each approval is listed for the owner.
+- **Silent sessions:** a session waiting only on an owner item has no
+  change at `needs: owner`, so the Tracker hides it as silent. The item is
+  pushed and listed under "For you", so the owner still sees it.
+
+!543 needs no change. !547, the app's step, touches none of !548's views.
