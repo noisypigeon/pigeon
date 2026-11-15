@@ -296,3 +296,15 @@ The owner moved one piece of §8 step 4 ahead of the rest:
   unmanaged.
 - The zone joins the personal account's `zones.private` once step 5 lands.
 - History, merged ADRs and changelogs keep their text (owner, 2026-11-15).
+### 2026-11-15: Review of !594 against !581: they agree
+
+[`2026-11-15-runtime-standalone-hostnames-platform-zone.md`](2026-11-15-runtime-standalone-hostnames-platform-zone.md)
+§1 lets a zone record be named a bare `*`; !594 makes `check_record` in
+`cobot/apex.rs` accept it, as the zone schema already did.
+
+- **They agree.** §6 here already keeps a bare `*` name and proxied `AAAA`
+  valid, and !594 changes nothing else in `apex.rs`: a service's `at` still
+  refuses any wildcard, and claims and record types are untouched.
+- **One note for §5's import.** A record key is `[a-z0-9]` words joined by
+  `-`, so an imported record at `*` can't be keyed `*-<type>`. Step 3's brief
+  names its key; the rest of §5 is unchanged.
