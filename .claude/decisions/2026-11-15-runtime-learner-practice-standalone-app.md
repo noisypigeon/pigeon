@@ -147,3 +147,19 @@ Steps 1 to 3 need nothing else; the rest wait on the members ADR's steps 5a to 6
   - Questions on the GLP rules of 19 October 2026 follow the BC news release of that change. Older manuals and practice sites disagree with them.
 - **A form keeps its layout.** Wrapped text sets where each circle falls, and text measurement differs between devices and font versions. So the form's record (§5) keeps every circle's centre in millimetres from the page's top-left, as laid out when it printed, and the reader samples there. Nothing is re-measured after printing.
 - **Steps 1 to 3** are carried out as briefs: step 1 is `PigeonCore`'s learner model, form generator and page layout; step 2 is the PDF, the five screens and on-device progress; step 3 is the reader.
+### 2026-11-15: Review of !482 against the iOS app ADR: they agree
+
+- **!482 carries out the iOS app ADR's 2026-11-15 amendment, execution 3**
+  ([`2026-11-12-runtime-ios-app-approvals-insights.md`](2026-11-12-runtime-ios-app-approvals-insights.md)).
+- **What it adds to `PigeonCore`:**
+  - `Tracker.swift` and `Ops.swift`, models for `/v0/app/tracker`,
+    `/v0/app/ops` and `/v0/app/events`;
+  - their pure helpers;
+  - `PigeonCoreTests/TrackerTests.swift`.
+- **It touches nothing this ADR decides:**
+  - no question bank, form generator or page geometry;
+  - no `learner` capability or attempt storage.
+  - Its public names (`Tracker*`, `Ops*`, `Rail*`, `railStops`, `elapsed`,
+    `minutesText`, `barHeights`) leave this ADR's names free.
+- **The two agree, and neither changes.** This ADR's `PigeonCore` work adds
+  files beside these and reuses none of them.
