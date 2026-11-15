@@ -320,3 +320,28 @@ step 2. Each of its paths that this ADR governs was checked against this ADR.
   argument on `session.start`, and changes none of §2's descriptions.
 
 !503 needs no change.
+### 2026-11-15: Review of !494 against this ADR: they agree, and a hold is not a stop
+
+!494 carries out the hold in
+[`2026-11-12-runtime-ios-app-approvals-insights.md`](2026-11-12-runtime-ios-app-approvals-insights.md)'s
+2026-11-15 amendment and
+[`2026-11-13-development-session-stages-subscriptions-breaker.md`](2026-11-13-development-session-stages-subscriptions-breaker.md)'s:
+a failed deploy holds a window or mandate, and only `fix` and `revert` merges
+go through until a deploy passes.
+
+- **They agree.** A `held` change has `needs: platform`. Under §1 that is a
+  wait, not a stop: the session follows events, says nothing to the owner, and
+  asks to merge again when `auto.resumed` wakes it. A hold lists nothing for
+  the owner, and pushes only the hold itself.
+- **`stage.rs`:** §2 changes `ask`'s text for a `checked` change. !494 adds
+  `held` for an `approved` one. They touch different states, so neither changes
+  the other.
+- **`tasks.rs` and `worker/push.rs`:** §5's `stops` line and !494's `held`
+  lines are separate digest fields. A held change is never nudged, so a hold
+  doesn't raise `nudged`.
+- **One interaction needs a fix.** An approval by a window or mandate queues
+  its merge as its approver, without asking about `change.merge`. §2 makes
+  every `change_merge` on a checked head an approval, so under a hold a
+  non-fix merge would go through that path. !521 fixes it: during a hold, a
+  window's or mandate's approval is made with `hold`, so it doesn't queue the
+  merge, and the change is `held` until a deploy passes.
