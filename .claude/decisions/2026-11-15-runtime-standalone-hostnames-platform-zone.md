@@ -252,3 +252,16 @@ which it leaves unchanged.
 - Until step 4 sets `INSTANCE_ZONE`, the dispatch does nothing; until the
   hooks after the learner ADR's step 5b add `host` and `origin`, every host is
   a 404.
+### 2026-11-15: Review of !593 against !582: they agree
+
+[`2026-11-15-runtime-architecture-coverage-agents-deploys.md`](2026-11-15-runtime-architecture-coverage-agents-deploys.md)
+§1 derives the Worker's routes and hostnames from the tree.
+
+- **They agree.** Neither changes a decision of the other:
+  - the `subdomains_of` route is drawn as `*.pigeon.dev`, "standalone instance
+    (own account)", and no standalone's hostname or account is shown, as §3
+    here requires;
+  - !593's dispatch in `fetch` is a call, `hosts::ours`, not a path literal,
+    and it forwards only `/v0/app/*`, which the `app` client already covers;
+  - `/hosts/origin` is an `Instance` operation, not a Worker route, so it adds
+    no client.
