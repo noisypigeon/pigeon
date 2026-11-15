@@ -174,3 +174,79 @@ Each step was written and tested in full before its brief.
 - **`pigeon-control` doesn't deploy now.** `wrangler deploy` refuses the
   `GRANTER` Secrets Store binding (code 10021). Steps 3 and 4 reach production
   once that is fixed, which is not this ADR's.
+
+### 2026-11-15: A start queued while an alarm saves is not lost, and a job left queued is dispatched again
+
+#### What happened
+
+Reported by the approvals session (session_015XFA1kiQE9H6hakkC6p7H8):
+
+- **!506 forecast-yielded to !500.** When !500 merged, the yield ended and
+  !506's restack job was queued.
+- **The restack sat `queued` with 0 attempts for about 55 minutes,** with no
+  `job.started`.
+- **The session's rebased push, 33cb1a5, was held behind the open restack.**
+- **Neither §4's alarm nor !525's re-dispatch caught it.** A manual
+  `ci_rerun job: restack` started it at once. So the job had no `PENDING`
+  start, and capacity was free.
+
+#### Cause: fits best, not proved
+
+- **`save_after` wrote `CHANGE`, then awaited D1, events, grants, the breaker
+  and the merge queue, and only then wrote `PENDING`.**
+- **The yield's end arms !506's alarm.** `release_yields` posts `/yield`
+  `off`, and that save sets the alarm. The merge queue's `Merge` reaches !506
+  moments later, through `merges::ended`.
+- **If that alarm is inside those awaits when `Merge` lands,** `on_event`
+  queues the restack and its `Start`. The alarm then writes its own `PENDING`
+  over them.
+- **The change keeps a queued restack with nothing pending.** The alarm
+  starts only what `PENDING` holds, so §4's 60 s re-arm moves nothing.
+- **A second gap of the same kind:** an event applied while `forecast_step`
+  awaits is dropped from the alarm's change when the journal is cleared.
+
+#### Decisions
+
+- **`PENDING` is written with `CHANGE`, before any await in `save_after`.** A
+  start queued meanwhile then reads and extends the alarm's list.
+- **The alarm catches up on the journal again after `forecast_step`.**
+- **Each alarm dispatches every queued job with no `Start` or `StartAt`
+  pending** (`changes::undispatched`), whatever path queued it. So any queued
+  job starts within the alarm bound, 60 s.
+  - Jobs that GitHub Actions holds (`Actions::owns`), and a mirrored head's
+    `ios` check, are excluded.
+  - `start_container` still starts only a job that is `queued`, so the
+    dispatch is never doubled.
+- **The guard: a job queued with 0 attempts and no failed start for 5
+  minutes** (`STALL_SECS`, kept per head and job in `QUEUED`) has its pending
+  start replaced by one now. Its time then restarts.
+  - A job in a start backoff is excluded, since `job.retrying` already
+    reports it.
+  - A job waiting for capacity is dispatched again too, which changes
+    nothing but is named.
+- **Each re-dispatch is a `job.redispatched` event,** which doesn't wake the
+  session.
+- **`Digest::containers` counts these events beside failed starts and
+  losses, and names the last.** It is never pushed for that line alone, as
+  before. The line is built in `src/pigeon-cli/crates/backplane/src/tasks.rs`.
+
+#### Execution
+
+The planner wrote and tested each step itself. A race in a Durable Object's
+storage leaves an executor nothing to follow to the letter.
+
+1. This amendment.
+2. `fix(backplane)`: `undispatched`, `stalled` and `STALL_SECS` in
+   `core::change::jobs`, with core tests that replay !506. The tests cover the
+   yield, `main` moving, the yield ending, the restack queued and its start
+   lost. They also cover the `job.redispatched` digest line.
+3. `fix(backplane)`: `ChangeRun` writes `PENDING` with `CHANGE`, catches up
+   after `forecast_step`, and calls `redispatch` at the top of each alarm.
+
+#### Verification
+
+- Core tests: a restack queued as a yield ends is started. With its start
+  lost, it is found and dispatched again. One held by GitHub is not.
+- Live: no job sits `queued` with 0 attempts beyond 60 s with capacity free.
+  If one does, `job.redispatched` names it within 5 minutes, and the digest
+  names it too.
