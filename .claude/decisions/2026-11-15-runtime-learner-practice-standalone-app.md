@@ -195,3 +195,19 @@ phone without that person sitting a real test.
   sample scanned from "Scan a page" is recognised by its code strip the same way.
 - **Tests:** the filled-in sample, drawn as a camera sees it, reads back to its
   marks and scores 21; recording a sample leaves the ledger unchanged.
+
+### 2026-11-15: the scan counts down 3-2-1 on a steady page, with a manual shutter
+
+On build 14 the camera captured as soon as the page was in frame, before the
+learner had steadied it. §4's "once they are steady" becomes:
+
+- **A countdown.** Once the four anchors are found, a 3-2-1 countdown shows
+  over the camera, and the frame at 0 is read.
+- **It restarts.** If an anchor is lost, or any anchor moves more than 2% of
+  the picture's shorter side between frames, the countdown cancels and starts
+  again at 3 when the page is back and steady. A frame at 0 whose code strip
+  cannot be read restarts it too.
+- **A manual shutter.** A button reads the current frame at once, if its
+  anchors are found.
+- `PigeonCore`'s `ScanCountdown` holds the rule, so it is tested; the reader
+  takes anchors already found, so a frame is searched for them once.

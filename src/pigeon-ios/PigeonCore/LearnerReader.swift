@@ -241,9 +241,15 @@ func grid(_ box: PageBox, _ share: Double) -> [PlanePoint] {
 /// Reads a photo of a printed page: `circles` gives the circles a form's page was printed with, or nil
 /// for one this phone did not print. Nil when the anchors, the code or the circles cannot be read.
 public func readPage(_ image: GrayImage, circles: (Int, Int) -> [PlacedCircle]?) -> PageReading? {
-    guard let found = findAnchors(image), let page = Homography(from: anchorCentres, to: found) else {
-        return nil
-    }
+    guard let found = findAnchors(image) else { return nil }
+    return readPage(image, anchors: found, circles: circles)
+}
+
+/// `readPage` with the anchors `findAnchors` already found in `image`.
+public func readPage(
+    _ image: GrayImage, anchors found: [PlanePoint], circles: (Int, Int) -> [PlacedCircle]?
+) -> PageReading? {
+    guard let page = Homography(from: anchorCentres, to: found) else { return nil }
     var blacks: [Double] = [], whites: [Double] = []
     for a in LearnerPage.anchors {
         for p in grid(a, 0.5) {
