@@ -317,6 +317,10 @@ pub struct Digest {
     /// pushed; see the model-tiered briefs ADR §7.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub briefs: Vec<String>,
+    /// Job Containers that failed to start or were lost: shown, never pushed alone; see
+    /// `.claude/decisions/2026-11-15-development-job-start-failures-backoff.md` §3.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub containers: Option<String>,
 }
 
 /// How long a session goes without polling before a change that needs it stalls, in seconds;
@@ -444,7 +448,10 @@ impl Digest {
     /// Whether it holds anything at all.
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        !self.needs_owner() && self.merged_without_owner.is_empty() && self.macos.is_empty()
+        !self.needs_owner()
+            && self.merged_without_owner.is_empty()
+            && self.macos.is_empty()
+            && self.containers.is_none()
     }
 
     /// One line per item, for a page: [`Self::owner_lines`], then the sessions and briefs.
@@ -489,6 +496,7 @@ impl Digest {
         out.extend(self.stalled.iter().map(Stall::line));
         out.extend(self.mirror.clone());
         out.extend(self.macos.iter().map(|l| format!("macOS: {l}")));
+        out.extend(self.containers.clone());
         out
     }
 }
@@ -503,6 +511,20 @@ pub fn held_line(what: &str, h: &crate::mandates::Hold, now: u64) -> String {
         if n == 1 { "" } else { "s" },
         h.waits()
     )
+}
+
+/// The digest's line on the job Containers among `events` that failed to start or were lost:
+/// how many, and the last; none when there were none.
+#[must_use]
+pub fn containers(events: &[crate::events::Event]) -> Option<String> {
+    let retried: Vec<&crate::events::Event> =
+        events.iter().filter(|e| e.kind == "job.retrying").collect();
+    let last = retried.last()?;
+    Some(format!(
+        "Containers: {} failed start(s) or loss(es) since the last digest; the last: {}",
+        retried.len(),
+        last.summary
+    ))
 }
 
 /// The owner's digest at `now`.
@@ -552,5 +574,6 @@ pub fn digest(input: &DigestInput<'_>, now: u64) -> Digest {
         stalled: Vec::new(),
         macos: input.macos.to_vec(),
         briefs: Vec::new(),
+        containers: None,
     }
 }

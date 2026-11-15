@@ -1122,3 +1122,27 @@ fn a_lost_job_starts_again_after_30_then_60_seconds() {
     }
     assert_eq!(all, vec![30, 60]);
 }
+
+#[test]
+fn a_job_queued_that_never_started_is_dispatched_again_and_a_started_one_is_not() {
+    let c = restack_queued(approved());
+    let (same, effects) = step(
+        &c,
+        Event::Rerun {
+            job: RESTACK.into(),
+        },
+    )
+    .expect("re-dispatched");
+    assert_eq!(effects, vec![Effect::Start(RESTACK.into())]);
+    assert_eq!(same, c, "nothing else changes");
+    let running = restacking(approved());
+    assert!(
+        step(
+            &running,
+            Event::Rerun {
+                job: RESTACK.into()
+            }
+        )
+        .is_err()
+    );
+}

@@ -254,6 +254,13 @@ impl Change {
                 self.number
             ));
         }
+        // Queued and never started: dispatched again, on any head (job-start-failures ADR §4).
+        if self
+            .job(name)
+            .is_some_and(|j| j.status == JobStatus::Queued && j.attempts == 0)
+        {
+            return Ok((self, vec![Effect::Start(name.to_string())]));
+        }
         if !matches!(self.state, State::Failed | State::Checked | State::Refused) {
             return refuse(format!(
                 "{} is {}; only a finished head's jobs run again",

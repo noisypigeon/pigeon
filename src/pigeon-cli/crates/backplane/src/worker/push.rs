@@ -126,6 +126,7 @@ pub async fn build(env: &Env, s: &Settings) -> Result<(Digest, u64)> {
         .collect();
     let behind = mirror_behind(env, s).await;
     let macos = macos_lines(env, &events).await;
+    let containers = crate::tasks::containers(&events);
     let mut d = digest(
         &DigestInput {
             waiting: &waiting,
@@ -138,6 +139,7 @@ pub async fn build(env: &Env, s: &Settings) -> Result<(Digest, u64)> {
         },
         now(),
     );
+    d.containers = containers;
     (d.sessions, d.stalled) = sessions(env, s).await?;
     let (_, w) = to_instance(env, s, "/windows/current", &json!({})).await?;
     let w: Option<crate::core::approval::windows::Window> =

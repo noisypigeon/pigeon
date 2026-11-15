@@ -148,7 +148,13 @@ impl ChangeRun {
         *change = next;
         for e in effects {
             match e {
-                Effect::Start(job) => pending.push(Pending::Start(job)),
+                Effect::Start(job) => {
+                    // Now, in place of any later start; never twice.
+                    pending.retain(|p| !matches!(p, Pending::StartAt(j, _) if *j == job));
+                    if !pending.contains(&Pending::Start(job.clone())) {
+                        pending.push(Pending::Start(job));
+                    }
+                }
                 Effect::StartAfter { job, secs } => {
                     pending.push(Pending::StartAt(job, now() + secs));
                 }

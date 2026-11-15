@@ -264,3 +264,43 @@ fn the_digest_names_a_mandate_held_by_a_failed_deploy() {
     );
     assert_eq!(held.list[0].state, State::Held);
 }
+
+#[test]
+fn failed_starts_and_lost_containers_are_counted_in_a_line_that_is_never_pushed_alone() {
+    let event = |id: u64, kind: &str, summary: &str| backplane::events::Event {
+        id,
+        at: id,
+        kind: kind.into(),
+        change: Some(461),
+        session: None,
+        summary: summary.into(),
+        owner: false,
+        stage: None,
+        model: None,
+    };
+    let events = [
+        event(
+            1,
+            "job.retrying",
+            "!461 job `merge` didn't start (1 of 8): 503",
+        ),
+        event(2, "job.started", "!461 job `merge`"),
+        event(
+            3,
+            "job.retrying",
+            "!464 job `restack` didn't start (1 of 8): 502",
+        ),
+    ];
+    let line = backplane::tasks::containers(&events).expect("a line");
+    assert!(line.contains("2 failed start(s)"), "{line}");
+    assert!(
+        line.ends_with("!464 job `restack` didn't start (1 of 8): 502"),
+        "{line}"
+    );
+    assert_eq!(backplane::tasks::containers(&events[1..2]), None);
+    let mut d = digest(&DigestInput::default(), 100);
+    d.containers = Some(line.clone());
+    assert!(!d.needs_owner(), "never pushed alone");
+    assert!(!d.is_empty());
+    assert_eq!(d.lines(), vec![line]);
+}
