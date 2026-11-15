@@ -191,8 +191,8 @@ pub async fn auto_state(env: &Env, s: &Settings) -> Result<Value> {
     Ok(v["window"].clone())
 }
 
-/// `POST /v0/app/auto` with `{hours, passkey}`: starts an Auto window, proved by the owner's
-/// passkey for `window:start`.
+/// `POST /v0/app/auto` with `{passkey}`: starts standing Auto, proved by the owner's passkey for
+/// `window:start`; an older app's `hours` is ignored.
 ///
 /// # Errors
 ///
@@ -205,27 +205,21 @@ pub async fn auto_start(env: &Env, s: &Settings, body: &Value) -> Result<Respons
         return Response::error(format!("refused: {why}"), 403);
     }
     let owner = super::account::approver(env, s).await?;
-    let hours = body["hours"].as_u64().unwrap_or_default();
-    let (status, v) = super::mandates::to_instance(
-        env,
-        s,
-        "/windows/start",
-        &json!({ "hours": hours, "by": owner }),
-    )
-    .await?;
+    let (status, v) =
+        super::mandates::to_instance(env, s, "/windows/start", &json!({ "by": owner })).await?;
     if status != 200 {
         return Response::error(v.as_str().unwrap_or("Auto didn't start").to_string(), 409);
     }
     let said = format!(
-        "Auto window {} started for {hours} hours",
+        "Auto window {} started by {owner}, standing until the owner pauses it",
         v["window"]["id"].as_u64().unwrap_or_default()
     );
     let _ = super::events::append(env, s, "auto.started", None, None, &said, false).await;
     Response::from_json(&v)
 }
 
-/// `DELETE /v0/app/auto` with `{passkey}`: ends the Auto window, proved by the owner's passkey
-/// for `window:end`.
+/// `DELETE /v0/app/auto` with `{passkey}`: pauses Auto by ending its window, proved by the owner's
+/// passkey for `window:end`.
 ///
 /// # Errors
 ///

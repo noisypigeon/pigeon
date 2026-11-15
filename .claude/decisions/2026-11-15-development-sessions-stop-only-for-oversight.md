@@ -365,3 +365,17 @@ go through until a deploy passes.
   (`core/app/tracker.rs`) both pass the change's `stage.since`. The tests
   replay tonight's case in `tests/digest.rs` and the tracker's tests.
 - **Execution.** One `fix(backplane)` change, with this amendment.
+
+### 2026-11-15: An owner-only decision reaches the owner as an owner item; Auto is standing
+
+[`2026-11-15-security-standing-auto-owner-flags.md`](2026-11-15-security-standing-auto-owner-flags.md)
+builds on §1 without changing it:
+
+- **§1's "owner-only decision"** is filed with `owner_ask` (`kind: decision`
+  or `action`), which pushes, enters the digest and shows in the app.
+  `owner.answered` wakes the session. Until then it stops only the work that
+  depends on the item. A choice the rules settle is still never filed.
+- **§2's "under a window"** now means while Auto is on, which it is until the
+  owner pauses it. Agents still never call `change_authorize` or
+  `change_approve` under it.
+- **Step 4's settings edit** is filed as an owner item (`kind: action`).

@@ -95,84 +95,120 @@ fn a_registration_uses_its_challenge_up_even_when_refused() {
 mod windows {
     use super::super::mandates::{Decision, State};
     use super::super::tiers::{Tier, Tiered, Tiers};
-    use super::super::windows::{BUDGET, Windows};
+    use super::super::windows::{RATE, SPAN, Windows};
     use crate::core::change::Change;
 
     const NOW: u64 = 1_800_000_000;
 
-    fn change(merge: Tier) -> Change {
-        let mut c = Change::propose(5, "x", "feat: x", "p", vec!["a/**".into()], "agent");
-        let t = |tier| Tiered {
+    fn numbered(n: u32, merge: Tier, rule: &str) -> Change {
+        let mut c = Change::propose(n, "x", "feat: x", "p", vec!["a/**".into()], "agent");
+        let t = |tier, rule: &str| Tiered {
             tier,
-            rule: "rule".into(),
+            rule: rule.into(),
         };
         c.tiers = Some(Tiers {
-            authorize: t(Tier::Code),
-            merge: t(merge),
-            close: t(Tier::Confirm),
+            authorize: t(Tier::Code, "rule"),
+            merge: t(merge, rule),
+            close: t(Tier::Confirm, "rule"),
         });
         c
     }
 
+    fn change(merge: Tier) -> Change {
+        numbered(5, merge, "rule")
+    }
+
     #[test]
-    fn a_window_starts_for_a_set_length_and_one_at_a_time() {
-        let (w, first) = Windows::default().start(4, "owner", NOW).expect("started");
-        assert_eq!(first.expires, NOW + 4 * 3_600);
-        assert!(w.start(4, "owner", NOW).is_err(), "one at a time");
-        assert!(
-            Windows::default().start(3, "owner", NOW).is_err(),
-            "1, 4, 8 or 24"
-        );
-        let (w, ended) = w.end("owner ended it").expect("ended");
+    fn auto_is_standing_and_one_runs_at_a_time() {
+        let (w, first) = Windows::default().start("owner", NOW).expect("started");
+        assert_eq!((first.hours, first.expires), (0, NOW));
+        assert!(w.start("owner", NOW).is_err(), "one at a time");
+        let year = NOW + 365 * 24 * 3_600;
+        let (_, d) = w.decide(&change(Tier::Code), "change.merge", year);
+        assert_eq!(d, Some((1, Decision::Allow)), "it never expires");
+        let (w, ended) = w.end("the owner paused it").expect("ended");
         assert_eq!(ended.state, State::Ended);
         assert!(w.current().is_none());
         assert!(w.end("again").is_err());
     }
 
     #[test]
-    fn auto_lets_the_code_tier_through_and_asks_for_the_owner_tier() {
-        let (w, _) = Windows::default().start(1, "owner", NOW).expect("started");
-        for (tier, allowed) in [
-            (Tier::Confirm, true),
-            (Tier::Code, true),
-            (Tier::Owner, false),
+    fn auto_lets_the_code_tier_through_but_not_guarded_sentinel_or_owner() {
+        let (w, _) = Windows::default().start("owner", NOW).expect("started");
+        for (tier, rule, allowed) in [
+            (Tier::Confirm, "rule", true),
+            (Tier::Code, "deploys", true),
+            (Tier::Code, "guarded: .mcp.json", false),
+            (Tier::Code, "sentinel: .config/policies/**", false),
+            (Tier::Owner, "secrets: x", false),
         ] {
-            let (_, d) = w.decide(&change(tier), "change.merge", NOW + 10);
-            assert_eq!(
-                d.map(|(_, d)| d == Decision::Allow),
-                Some(allowed),
-                "{tier:?}"
-            );
+            for op in ["change.approve", "change.merge"] {
+                let (_, d) = w.decide(&numbered(5, tier, rule), op, NOW + 10);
+                assert_eq!(
+                    d.map(|(_, d)| d == Decision::Allow),
+                    Some(allowed),
+                    "{op} {rule}"
+                );
+            }
         }
+        let guarded = numbered(5, Tier::Code, "guarded: .mcp.json");
+        let (_, d) = w.decide(&guarded, "change.authorize", NOW);
+        assert_eq!(d, Some((1, Decision::Allow)), "its plan is still covered");
         let (_, d) = w.decide(&change(Tier::Code), crate::control::BREAK_GLASS, NOW);
         assert!(matches!(d, Some((_, Decision::Ask(_)))), "break-glass asks");
-        let (_, d) = w.decide(&change(Tier::Code), "change.merge", NOW + 3_600);
-        assert_eq!(d, None, "the window has run its time");
         let (_, none) = Windows::default().decide(&change(Tier::Code), "change.merge", NOW);
         assert_eq!(none, None, "no window, no decision");
     }
 
     #[test]
-    fn merges_count_against_the_budget_and_a_pause_stops_it() {
-        let (mut w, _) = Windows::default().start(24, "owner", NOW).expect("started");
-        for _ in 0..BUDGET {
-            let (next, d) = w.decide(&change(Tier::Code), "change.merge", NOW);
-            assert!(matches!(d, Some((_, Decision::Allow))));
+    fn every_merge_counts_once_however_it_was_asked_for() {
+        let (w, _) = Windows::default().start("owner", NOW).expect("started");
+        let (w, _) = w.decide(&numbered(1, Tier::Code, "rule"), "change.approve", NOW);
+        let (w, _) = w.decide(&numbered(1, Tier::Code, "rule"), "change.approve", NOW);
+        let (w, _) = w.decide(&numbered(1, Tier::Code, "rule"), "change.merge", NOW);
+        let (w, _) = w.decide(&numbered(2, Tier::Code, "rule"), "change.merge", NOW);
+        let (w, _) = w.decide(&numbered(3, Tier::Code, "rule"), "change.authorize", NOW);
+        let (w, _) = w.decide(&numbered(4, Tier::Owner, "rule"), "change.approve", NOW);
+        assert_eq!(w.list[0].merged, vec![1, 2], "approved-and-queued counts");
+        assert_eq!((w.list[0].used, w.list[0].rate(NOW)), (2, 2));
+        let (held, _) = w.hold_all("abc", "token", NOW);
+        let (held, _) = held.decide(&numbered(6, Tier::Code, "rule"), "change.approve", NOW);
+        assert_eq!(
+            held.list[0].merged,
+            vec![1, 2],
+            "a held approval doesn't queue"
+        );
+    }
+
+    #[test]
+    fn the_rate_breaker_pauses_auto_and_the_owner_resumes_it() {
+        let (mut w, _) = Windows::default().start("owner", NOW).expect("started");
+        for n in 0..u32::try_from(RATE).expect("small") {
+            let (next, d) = w.decide(&numbered(n, Tier::Code, "rule"), "change.approve", NOW);
+            assert_eq!(d, Some((1, Decision::Allow)), "{n}");
             w = next;
         }
-        assert_eq!(w.list[0].state, State::Ended, "the budget is used");
-        assert_eq!(u32::try_from(w.list[0].merged.len()), Ok(BUDGET));
-
-        let (w, _) = Windows::default().start(1, "owner", NOW).expect("started");
-        let (w, paused) = w.pause_all("the deploy of abc failed");
-        assert_eq!(paused, Some(1));
+        assert_eq!(w.list[0].state, State::Paused);
+        assert!(
+            w.list[0]
+                .why
+                .as_deref()
+                .is_some_and(|y| y.contains("48 merges"))
+        );
         let (_, d) = w.decide(&change(Tier::Code), "change.merge", NOW);
         assert_eq!(d, None, "a paused window approves nothing");
-        assert!(w.current().is_some(), "it waits for the owner to end it");
-        let (w, _) = w
-            .start(1, "owner", NOW)
-            .expect("a new window ends the paused one");
-        assert_eq!(w.list[0].state, State::Ended);
+        assert!(w.current().is_some(), "it waits for the owner");
+        let (w, second) = w.start("owner", NOW + 60).expect("resumed");
+        assert_eq!((w.list[0].state, second.id), (State::Ended, 2));
+
+        let (mut w, _) = Windows::default().start("owner", NOW).expect("started");
+        for n in 0..u32::try_from(RATE).expect("small") {
+            let at = NOW + u64::from(n) * (SPAN / 40);
+            w = w
+                .decide(&numbered(n, Tier::Code, "rule"), "change.merge", at)
+                .0;
+        }
+        assert_eq!(w.list[0].state, State::Active, "spread out, it runs on");
     }
 
     fn titled(title: &str) -> Change {
@@ -184,13 +220,13 @@ mod windows {
 
     #[test]
     fn a_failed_deploy_holds_merges_but_a_fix_and_a_passed_deploy_resumes_it() {
-        let (w, _) = Windows::default().start(1, "owner", NOW).expect("started");
+        let (w, _) = Windows::default().start("owner", NOW).expect("started");
         let (w, held) = w.hold_all("abc", "token", NOW + 600);
         assert_eq!(held, Some((1, false)));
         let late = NOW + 2 * 3_600;
         for op in ["change.authorize", "change.approve", "change.close"] {
             let (_, d) = w.decide(&titled("feat: x"), op, late);
-            assert_eq!(d, Some((1, Decision::Allow)), "{op}: time stops while held");
+            assert_eq!(d, Some((1, Decision::Allow)), "{op}");
         }
         let (_, d) = w.decide(&titled("feat: x"), "change.merge", late);
         assert!(matches!(d, Some((1, Decision::Hold(_)))), "{d:?}");
@@ -206,20 +242,15 @@ mod windows {
         let (w, _) = w.decide(&titled("fix: x"), "change.merge", late);
         let (w, resumed) = w.resume_all(late);
         let r = resumed.expect("resumed");
-        assert_eq!(r.state, State::Active);
-        assert_eq!(
-            r.expires,
-            NOW + 3_600 + (late - NOW - 600),
-            "the hold is added back"
-        );
-        assert_eq!(r.used, 1, "the budget is kept");
-        let (_, d) = w.decide(&titled("feat: x"), "change.merge", late + 60);
+        assert_eq!((r.state, r.hold), (State::Active, None));
+        assert_eq!(r.used, 1, "its merges are kept");
+        let (_, d) = w.decide(&numbered(9, Tier::Code, "rule"), "change.merge", late + 60);
         assert_eq!(d, Some((1, Decision::Allow)));
     }
 
     #[test]
-    fn a_hold_ends_after_three_failed_deploys_or_six_hours() {
-        let (w, _) = Windows::default().start(1, "owner", NOW).expect("started");
+    fn a_hold_pauses_auto_after_three_failed_deploys_or_six_hours() {
+        let (w, _) = Windows::default().start("owner", NOW).expect("started");
         let (w, _) = w.hold_all("a", "x", NOW);
         let (w, again) = w.hold_all("b", "y", NOW + 60);
         assert_eq!(again, Some((1, false)));
@@ -227,17 +258,17 @@ mod windows {
             w.list[0].hold.as_ref().map(|h| (h.failures, h.since)),
             Some((2, NOW))
         );
-        let (ended, third) = w.hold_all("c", "z", NOW + 120);
+        let (paused, third) = w.hold_all("c", "z", NOW + 120);
         assert_eq!(third, Some((1, true)));
-        assert_eq!(ended.list[0].state, State::Ended);
+        assert_eq!(paused.list[0].state, State::Paused);
         let timed = w.settle(NOW + super::super::mandates::HOLD_MAX);
-        assert_eq!(timed.list[0].state, State::Ended);
-        assert!(timed.current().is_none());
+        assert_eq!(timed.list[0].state, State::Paused);
+        assert!(timed.current().is_some(), "it waits for the owner");
         let (_, none) = timed.resume_all(NOW + 7 * 3_600);
-        assert!(none.is_none(), "an ended window never resumes");
+        assert!(none.is_none(), "a paused window never resumes by itself");
         let (w, _) = w
-            .start(4, "owner", NOW + 180)
-            .expect("a new window ends the held one");
+            .start("owner", NOW + 180)
+            .expect("the owner's start ends the held one");
         assert_eq!(w.list[0].state, State::Ended);
     }
 }
@@ -305,6 +336,7 @@ fn closing_a_landed_head_is_code_and_an_auto_window_approves_it_but_not_another_
         why: None,
         merged: Vec::new(),
         hold: None,
+        recent: Vec::new(),
     };
     let pushed = checked();
     let mut landed = checked();
@@ -334,7 +366,7 @@ fn closing_a_landed_head_is_code_and_an_auto_window_approves_it_but_not_another_
         assert_eq!(d == Decision::Allow, allowed, "{name}: {d:?}");
     }
     let ended = Window {
-        expires: 5,
+        state: State::Ended,
         ..window
     };
     assert_ne!(

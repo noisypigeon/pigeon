@@ -724,3 +724,17 @@ step 3 (!494).
 1. `PigeonCore`: `isSilent`, `RowStatus` (pill word, kind, note),
    `scopeAndSubject`, and `visible(_:by:showSilent:)`, with tests; the app:
    `TrackerView`'s cards, the chip and line, and the change sheet.
+
+### 2026-11-15: Auto is standing, and `Accept edits` goes
+
+[`2026-11-15-security-standing-auto-owner-flags.md`](2026-11-15-security-standing-auto-owner-flags.md)
+supersedes §5's length and budget, and step 6's "its limits":
+
+- a window no longer expires or ends on 20 merges; a rate breaker (48 merges
+  in 6 hours) pauses it instead, and every merge it makes is counted;
+- it no longer covers guarded or sentinel paths;
+- a hold at its cap pauses it rather than ending it;
+- the Approvals tab's `Accept edits` / `Auto` switch becomes Auto's state,
+  with Pause and Resume, each by passkey, and the hours sheet goes.
+
+Everything else in §5 and its amendments stands, the hold included.

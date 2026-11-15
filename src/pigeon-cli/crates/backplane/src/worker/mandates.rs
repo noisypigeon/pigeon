@@ -10,7 +10,7 @@ use super::{approve as page, elicit};
 use crate::access::Identity;
 use crate::approve::{self, Waiting};
 use crate::changes::Change;
-use crate::core::approval::windows::{self, BUDGET, Window, Windows};
+use crate::core::approval::windows::{self, SPAN, Window, Windows};
 use crate::mandates::{Decision, Mandate, Mandates};
 
 /// The storage key of every mandate.
@@ -224,8 +224,10 @@ pub async fn hold_all(env: &Env, s: &Settings, sha: &str, why: &str) -> Result<(
     let (_, v) = to_instance(env, s, "/windows/hold", &body).await?;
     if let Some(id) = v["window"].as_u64() {
         if v["ended"].as_bool() == Some(true) {
-            let said = format!("Auto window {id} ended: the deploy of {short} failed again: {why}");
-            tell(env, s, "auto.ended", "Auto ended", &said).await;
+            let said = format!(
+                "Auto window {id} paused: the deploy of {short} failed again: {why}; resume it in the app"
+            );
+            tell(env, s, "auto.paused", "Auto paused", &said).await;
         } else {
             let said = format!(
                 "Auto window {id} held: the deploy of {short} failed: {why}; it resumes when a deploy passes"
@@ -265,13 +267,11 @@ pub async fn resume_all(env: &Env, s: &Settings, sha: &str) -> Result<()> {
     let short = sha.get(..12).unwrap_or(sha);
     let (_, v) = to_instance(env, s, "/windows/resume", &json!({})).await?;
     if let Ok(w) = serde_json::from_value::<Window>(v["window"].clone()) {
-        let left = w.expires.saturating_sub(now()) / 60;
         let said = format!(
-            "Auto window {} resumed: the deploy of {short} passed; {}h{:02}m and {} merges left",
+            "Auto window {} resumed: the deploy of {short} passed; {} merges in the last {} hours",
             w.id,
-            left / 60,
-            left % 60,
-            BUDGET.saturating_sub(w.used)
+            w.rate(now()),
+            SPAN / 3_600
         );
         tell(env, s, "auto.resumed", "Auto resumed", &said).await;
     }
@@ -322,6 +322,10 @@ pub async fn window_verdict(
         &json!({ "change": change, "operation": operation }),
     )
     .await?;
+    if let (Some(id), Some(why)) = (v["id"].as_u64(), v["paused"].as_str()) {
+        let said = format!("Auto window {id} paused: {why}; resume it in the app");
+        tell(env, s, "auto.paused", "Auto paused", &said).await;
+    }
     let id = v["id"].as_u64().and_then(|i| u32::try_from(i).ok());
     match (
         status,
@@ -350,16 +354,10 @@ pub async fn serve_windows(state: &State, path: &str, body: Value) -> Result<Res
             let current = all.current().cloned();
             (all, Ok(json!({ "window": current })))
         }
-        "/windows/start" => {
-            let hours = body["hours"]
-                .as_u64()
-                .and_then(|h| u32::try_from(h).ok())
-                .unwrap_or_default();
-            match all.start(hours, &s("by"), t) {
-                Ok((next, w)) => (next, Ok(json!({ "window": w }))),
-                Err(why) => (all, Err(why)),
-            }
-        }
+        "/windows/start" => match all.start(&s("by"), t) {
+            Ok((next, w)) => (next, Ok(json!({ "window": w }))),
+            Err(why) => (all, Err(why)),
+        },
         "/windows/end" => match all.end(&s("why")) {
             Ok((next, w)) => (next, Ok(json!({ "window": w }))),
             Err(why) => (all, Err(why)),
@@ -387,7 +385,9 @@ pub async fn serve_windows(state: &State, path: &str, body: Value) -> Result<Res
                 .and_then(|w| held_merge(windows::decide(w, &change, "change.merge", t)));
             match all.decide(&change, &s("operation"), t) {
                 (next, Some((id, d))) => {
-                    (next, Ok(json!({ "id": id, "decision": d, "held": held })))
+                    let paused = paused_by(&all, &next, id);
+                    let v = json!({ "id": id, "decision": d, "held": held, "paused": paused });
+                    (next, Ok(v))
                 }
                 (next, None) => (next, Err("no Auto window is active".into())),
             }
@@ -592,4 +592,15 @@ fn serve_route<'a>(
     who: &'a Identity,
 ) -> futures_util::future::LocalBoxFuture<'a, Result<Response>> {
     Box::pin(page_serve(req, env, s, who))
+}
+
+/// Why window `id` went from active in `before` to paused in `after`, as the rate breaker
+/// pauses it; see `.claude/decisions/2026-11-15-security-standing-auto-owner-flags.md` §3.
+fn paused_by(before: &Windows, after: &Windows, id: u32) -> Option<String> {
+    use crate::core::approval::mandates::State;
+    let was = before.list.iter().find(|w| w.id == id)?;
+    let now = after.list.iter().find(|w| w.id == id)?;
+    (was.state == State::Active && now.state == State::Paused)
+        .then(|| now.why.clone())
+        .flatten()
 }
