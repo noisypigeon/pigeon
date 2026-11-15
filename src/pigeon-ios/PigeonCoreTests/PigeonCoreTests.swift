@@ -54,6 +54,20 @@ import PigeonCore
         #expect(home.approvals.first?.number == 244)
         #expect(home.auto?.hours == 4)
     }
+
+    @Test func standingAutoAndOwnerItemsDecode() throws {
+        let json = #"""
+        {"insights":{"cost":null,"errors":null},"approvals":[],
+        "auto":{"id":2,"hours":0,"started":0,"expires":0,"used":3,"state":"active","by":"o",
+        "recent":[100,20000,21000]},
+        "items":[{"id":1,"kind":"decision","session":"s","change":7,"title":"Which region?",
+        "detail":"d","options":["eu","us"],"opened":5}]}
+        """#
+        let home = try JSONDecoder.pigeon.decode(Home.self, from: Data(json.utf8))
+        #expect(home.auto?.rate(now: 21_700) == 2)
+        #expect(home.items?.first?.options == ["eu", "us"])
+        #expect(home.items?.first?.change == 7)
+    }
 }
 
 @Suite struct AskTests {

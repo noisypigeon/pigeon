@@ -145,7 +145,7 @@ public struct ApprovalDetail: Codable, Equatable, Sendable {
     }
 }
 
-/// An Auto window, running or paused.
+/// Auto: on, held or paused; it never expires. See the standing Auto ADR §5.
 public struct AutoWindow: Codable, Equatable, Sendable {
     public let id: Int
     public let hours: Int
@@ -154,9 +154,12 @@ public struct AutoWindow: Codable, Equatable, Sendable {
     public let used: Int
     public let state: String
     public let why: String?
+    /// When each merge in the last 6 hours was made.
+    public let recent: [Int]?
 
     public init(
-        id: Int, hours: Int, started: Int, expires: Int, used: Int, state: String, why: String?
+        id: Int, hours: Int, started: Int, expires: Int, used: Int, state: String, why: String?,
+        recent: [Int]? = nil
     ) {
         self.id = id
         self.hours = hours
@@ -165,7 +168,20 @@ public struct AutoWindow: Codable, Equatable, Sendable {
         self.used = used
         self.state = state
         self.why = why
+        self.recent = recent
     }
+}
+
+/// What only the owner can settle: a `decision` or an `action`, filed by a session.
+public struct OwnerItem: Codable, Equatable, Sendable, Identifiable {
+    public let id: Int
+    public let kind: String
+    public let session: String
+    public let change: Int?
+    public let title: String
+    public let detail: String
+    public let options: [String]?
+    public let opened: Int
 }
 
 /// `GET /v0/app/home`.
@@ -178,6 +194,7 @@ public struct Home: Codable, Equatable, Sendable {
     public let insights: Insights
     public let approvals: [ApprovalSummary]
     public let auto: AutoWindow?
+    public let items: [OwnerItem]?
 }
 
 /// `POST /v0/app/challenge`.
@@ -275,4 +292,11 @@ public func canRemovePasskey(count: Int) -> Bool { count > minimumPasskeys }
 extension JSONDecoder {
     /// A decoder for the control plane's JSON.
     public static var pigeon: JSONDecoder { JSONDecoder() }
+}
+
+extension AutoWindow {
+    /// The merges Auto made in the 6 hours before `now`: its rate breaker pauses it at 48.
+    public func rate(now: Int) -> Int {
+        (recent ?? []).filter { now - $0 < 6 * 3_600 }.count
+    }
 }

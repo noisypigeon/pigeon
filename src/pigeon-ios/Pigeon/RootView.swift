@@ -101,7 +101,6 @@ struct RootView: View {
             case .profile: ProfileSheet()
             case .chart(let metric): ChartSheet(metric: metric)
             case .approval(let id): ApprovalSheet(id: id)
-            case .auto: AutoSheet()
             }
         }
     }

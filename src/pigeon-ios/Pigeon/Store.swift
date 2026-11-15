@@ -139,12 +139,11 @@ final class Store: ObservableObject {
         }
     }
 
-    /// Starts Auto for `hours` with the owner's passkey.
-    func startAuto(hours: Int) async -> Bool {
+    /// Resumes standing Auto with the owner's passkey.
+    func startAuto() async -> Bool {
         await run {
             let answer = try await self.proof(["op": "auto"])
-            try await self.api().send(
-                "POST", "/v0/app/auto", body: ["passkey": answer.json, "hours": hours])
+            try await self.api().send("POST", "/v0/app/auto", body: ["passkey": answer.json])
             await self.refresh()
         }
     }
@@ -175,11 +174,19 @@ final class Store: ObservableObject {
         }
     }
 
-    /// Ends Auto early with the owner's passkey.
+    /// Pauses Auto with the owner's passkey.
     func endAuto() async -> Bool {
         await run {
             let answer = try await self.proof(["op": "auto-end"])
             try await self.api().send("DELETE", "/v0/app/auto", body: ["passkey": answer.json])
+            await self.refresh()
+        }
+    }
+
+    /// Answers owner item `id`; an answer grants nothing, so it takes no passkey.
+    func answer(item id: Int, with answer: String) async -> Bool {
+        await run {
+            try await self.api().send("POST", "/v0/app/items/\(id)", body: ["answer": answer])
             await self.refresh()
         }
     }

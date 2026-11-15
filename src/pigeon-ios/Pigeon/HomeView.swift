@@ -1,5 +1,5 @@
-// Approvals: the waiting cards with Accept edits / Auto, and the shared sheet, verb, bars and
-// Auto banner. See the ADR's context.
+// Approvals: Auto's state, the owner's items, the waiting cards, and the shared sheet, verb,
+// bars and Auto banner. See the standing Auto ADR §5.
 
 import PigeonCore
 import SwiftUI
@@ -9,7 +9,6 @@ enum Sheet: Identifiable {
     case profile
     case chart(String)
     case approval(String)
-    case auto
 
     var id: String {
         switch self {
@@ -17,7 +16,6 @@ enum Sheet: Identifiable {
         case .profile: return "profile"
         case .chart(let m): return "chart-\(m)"
         case .approval(let id): return "approval-\(id)"
-        case .auto: return "auto"
         }
     }
 }
@@ -60,9 +58,13 @@ struct ApprovalsView: View {
                     .background(Capsule().fill(Theme.accentSoft))
             }
             .padding(.top, 8)
-            modeSwitch
             if let auto = store.home?.auto {
                 AutoBanner(window: auto, now: now)
+            } else {
+                AutoOff()
+            }
+            ForEach(store.home?.items ?? []) { item in
+                ItemCard(item: item)
             }
             ForEach(store.home?.approvals ?? []) { a in
                 Button {
@@ -87,34 +89,6 @@ struct ApprovalsView: View {
                 Text("Nothing waiting.").font(.callout).foregroundStyle(Theme.muted)
             }
         }
-    }
-
-    private var modeSwitch: some View {
-        let auto = store.home?.auto != nil
-        return HStack(spacing: 4) {
-            segment("Accept edits", on: !auto) {
-                if auto { Task { _ = await store.endAuto() } }
-            }
-            segment("Auto", on: auto) {
-                if !auto { sheet = .auto }
-            }
-        }
-        .padding(3)
-        .background(RoundedRectangle(cornerRadius: 12).fill(Theme.chip))
-    }
-
-    private func segment(_ title: String, on: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Text(title)
-                .font(.subheadline.weight(.semibold))
-                .frame(maxWidth: .infinity, minHeight: 36)
-                .foregroundStyle(on ? Theme.ink : Theme.muted)
-                .background(
-                    RoundedRectangle(cornerRadius: 10).fill(on ? Theme.card : .clear)
-                )
-        }
-        .buttonStyle(.plain)
-        .accessibilityAddTraits(on ? .isSelected : [])
     }
 }
 
@@ -155,7 +129,8 @@ struct MiniBars: View {
     }
 }
 
-/// Auto's banner: when it ends, and that an administrator still approves the owner tier.
+/// Auto's banner: on, held or paused, with Pause or Resume; it never expires, and an
+/// administrator still approves the owner tier and guarded paths.
 struct AutoBanner: View {
     @EnvironmentObject private var store: Store
     let window: AutoWindow
@@ -163,33 +138,122 @@ struct AutoBanner: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Image(systemName: "timer").foregroundStyle(Theme.accent)
+            Image(systemName: window.state == "active" ? "bolt.fill" : "pause.circle")
+                .foregroundStyle(Theme.accent)
             VStack(alignment: .leading, spacing: 2) {
-                Text(
-                    window.state == "paused"
-                        ? "Auto paused" : "Auto until \(clock(window.expires))"
-                )
-                .font(.subheadline.weight(.semibold))
-                Text(
-                    window.state == "paused"
-                        ? (window.why ?? "")
-                        : "\(remaining(until: window.expires, now: now)) left · an administrator approves the rest"
-                )
-                .font(Theme.mono(12))
-                .foregroundStyle(Theme.muted)
+                Text(heading).font(.subheadline.weight(.semibold))
+                Text(detail)
+                    .font(Theme.mono(12))
+                    .foregroundStyle(Theme.muted)
             }
             Spacer()
-            Button("End") { Task { _ = await store.endAuto() } }
-                .font(.footnote.weight(.semibold))
-                .padding(.horizontal, 12).frame(minHeight: 36)
-                .background(RoundedRectangle(cornerRadius: 10).fill(Theme.chip))
+            if window.state == "paused" {
+                Button("Resume") { Task { _ = await store.startAuto() } }
+                    .font(.footnote.weight(.semibold))
+                    .padding(.horizontal, 12).frame(minHeight: 36)
+                    .background(RoundedRectangle(cornerRadius: 10).fill(Theme.chip))
+                    .disabled(store.busy)
+            } else {
+                Button("Pause") { Task { _ = await store.endAuto() } }
+                    .font(.footnote.weight(.semibold))
+                    .padding(.horizontal, 12).frame(minHeight: 36)
+                    .background(RoundedRectangle(cornerRadius: 10).fill(Theme.chip))
+                    .disabled(store.busy)
+            }
         }
         .foregroundStyle(Theme.ink)
         .padding(14)
         .block(shadow: Theme.accent)
     }
 
-    private func clock(_ t: Int) -> String {
-        Date(timeIntervalSince1970: TimeInterval(t)).formatted(date: .omitted, time: .shortened)
+    private var heading: String {
+        switch window.state {
+        case "held": return "Auto held"
+        case "paused": return "Auto paused"
+        default: return "Auto"
+        }
+    }
+
+    private var detail: String {
+        switch window.state {
+        case "held", "paused": return window.why ?? ""
+        default:
+            return "\(window.rate(now: now)) merges in 6h · an administrator approves the owner tier"
+        }
+    }
+}
+
+/// Auto is off: the owner resumes it with a passkey.
+struct AutoOff: View {
+    @EnvironmentObject private var store: Store
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "pause.circle").foregroundStyle(Theme.muted)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Auto paused").font(.subheadline.weight(.semibold))
+                Text("Each approval asks you until you resume it")
+                    .font(Theme.mono(12))
+                    .foregroundStyle(Theme.muted)
+            }
+            Spacer()
+            Button("Resume") { Task { _ = await store.startAuto() } }
+                .font(.footnote.weight(.semibold))
+                .padding(.horizontal, 12).frame(minHeight: 36)
+                .background(RoundedRectangle(cornerRadius: 10).fill(Theme.chip))
+                .disabled(store.busy)
+        }
+        .foregroundStyle(Theme.ink)
+        .padding(14)
+        .block()
+    }
+}
+
+/// An owner item: a decision with its options and free text, or an action to mark done.
+struct ItemCard: View {
+    @EnvironmentObject private var store: Store
+    let item: OwnerItem
+    @State private var text = ""
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(
+                (item.kind == "decision" ? "Decision" : "Action")
+                    + (item.change.map { " · !\($0)" } ?? "")
+            )
+            .font(.footnote.weight(.semibold))
+            .foregroundStyle(Theme.accent)
+            Text(item.title).font(.callout.weight(.semibold)).foregroundStyle(Theme.ink)
+            Text(item.detail).font(.footnote).foregroundStyle(Theme.ink2)
+            ForEach(item.options ?? [], id: \.self) { option in
+                Button(option) { send(option) }
+                    .font(.footnote.weight(.semibold))
+                    .frame(maxWidth: .infinity, minHeight: 36)
+                    .background(RoundedRectangle(cornerRadius: 10).fill(Theme.chip))
+                    .buttonStyle(.plain)
+            }
+            if item.kind == "action" {
+                Button("Done") { send("done") }
+                    .font(.footnote.weight(.semibold))
+                    .frame(maxWidth: .infinity, minHeight: 36)
+                    .background(RoundedRectangle(cornerRadius: 10).fill(Theme.chip))
+                    .buttonStyle(.plain)
+            }
+            HStack {
+                TextField(item.kind == "action" ? "Note" : "Answer", text: $text)
+                    .font(.footnote)
+                Button("Send") { send(text) }
+                    .font(.footnote.weight(.semibold))
+                    .disabled(text.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+        }
+        .disabled(store.busy)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .block(shadow: Theme.accent)
+    }
+
+    private func send(_ answer: String) {
+        Task { _ = await store.answer(item: item.id, with: answer) }
     }
 }

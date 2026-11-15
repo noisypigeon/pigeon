@@ -1,5 +1,5 @@
-// The cards that open over Home: one metric's chart by source and kind, an approval, Auto's
-// length, and Instances.
+// The cards that open over Home: one metric's chart by source and kind, an approval, and
+// Instances.
 
 import PigeonCore
 import UIKit
@@ -308,62 +308,6 @@ struct ApprovalSheet: View {
             Spacer()
             Text(v).font(mono ? Theme.mono(13) : .footnote).lineLimit(1)
         }
-    }
-}
-
-/// Auto's length, then the owner's passkey.
-struct AutoSheet: View {
-    @EnvironmentObject private var store: Store
-    @Environment(\.dismiss) private var dismiss
-    @State private var hours = 4
-
-    var body: some View {
-        ZStack {
-            Theme.background.ignoresSafeArea()
-            VStack(alignment: .leading, spacing: 14) {
-                Text("Auto approve for").font(Theme.display(22))
-                HStack(spacing: 10) {
-                    ForEach([1, 4, 8, 24], id: \.self) { h in
-                        Button {
-                            hours = h
-                        } label: {
-                            Text("\(h)h")
-                                .font(Theme.mono(17, .bold))
-                                .frame(maxWidth: .infinity, minHeight: 52)
-                                .foregroundStyle(hours == h ? Theme.onAccent : Theme.ink)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 12)
-                                        .fill(hours == h ? Theme.accent : Theme.card))
-                                .background(
-                                    RoundedRectangle(cornerRadius: 12).fill(Theme.shadow)
-                                        .offset(x: 3, y: 3))
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityAddTraits(hours == h ? .isSelected : [])
-                    }
-                }
-                Text(
-                    "Changes at the code tier and below are approved and merged as they pass. Anything touching secrets or destroying work still asks."
-                )
-                .font(.footnote).foregroundStyle(Theme.ink2)
-                if let e = store.error { Text(e).font(.footnote).foregroundStyle(Theme.accent) }
-                Button {
-                    Task { if await store.startAuto(hours: hours) { dismiss() } }
-                } label: {
-                    Label("Start auto for \(hours == 1 ? "1 hour" : "\(hours) hours")", systemImage: "faceid")
-                        .font(.headline)
-                        .frame(maxWidth: .infinity, minHeight: 52)
-                        .foregroundStyle(Theme.onAccent)
-                }
-                .background(RoundedRectangle(cornerRadius: 12).fill(Theme.accent))
-                .background(RoundedRectangle(cornerRadius: 12).fill(Theme.shadow).offset(x: 3, y: 3))
-                .disabled(store.busy)
-                Spacer()
-            }
-            .foregroundStyle(Theme.ink)
-            .padding(20)
-        }
-        .presentationDetents([.medium])
     }
 }
 
