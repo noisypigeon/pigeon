@@ -1,9 +1,11 @@
-// First run: link this iPhone to the Platform instance.
+// First run: link this iPhone to the Platform instance, or practise for the 7L test without an
+// account (the learner ADR's step 2).
 
 import SwiftUI
 
 struct LinkView: View {
     @EnvironmentObject private var store: Store
+    @State private var practising = false
 
     var body: some View {
         ZStack {
@@ -37,9 +39,19 @@ struct LinkView: View {
                 .background(RoundedRectangle(cornerRadius: 12).fill(Theme.accent))
                 .background(RoundedRectangle(cornerRadius: 12).fill(Theme.shadow).offset(x: 3, y: 3))
                 .disabled(store.busy)
+                Button {
+                    practising = true
+                } label: {
+                    Text("Practise for the 7L test")
+                        .font(.subheadline.weight(.semibold))
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                        .foregroundStyle(Theme.ink)
+                }
+                .background(RoundedRectangle(cornerRadius: 10).fill(Theme.chip))
                 Spacer().frame(height: 24)
             }
             .padding(24)
         }
+        .fullScreenCover(isPresented: $practising) { LearnerHomeView() }
     }
 }
