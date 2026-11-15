@@ -208,7 +208,11 @@ pub async fn page_serve(
             };
             let (status, v) = to_main(env, s, "peek", &json!({ "id": id, "token": token })).await?;
             match serde_json::from_value::<Run>(v.clone()) {
-                Ok(run) if status == 200 => page::html(200, &approve::platform_page(&run, &token)),
+                Ok(run) if status == 200 => page::html_with(
+                    200,
+                    &approve::platform_page(&run, &token),
+                    approve::PROOF_CSP,
+                ),
                 _ => page::refused(403, v.as_str().unwrap_or("this link is not valid")),
             }
         }
@@ -223,7 +227,7 @@ pub async fn page_serve(
                 return page::refused(400, "the form is missing its grant");
             };
             let path = format!("/platform/{id}?grant={token}");
-            let decided = decide(env, s, who, id, &token, &form).await;
+            let decided = decide(env, s, who, &host, id, &token, &form).await;
             let _ = elicit::inbox(env, s, "/approvals/remove", &json!({ "path": path })).await;
             decided
         }
@@ -235,6 +239,7 @@ async fn decide(
     env: &Env,
     s: &Settings,
     who: &Identity,
+    host: &str,
     id: u32,
     token: &str,
     form: &str,
@@ -253,8 +258,10 @@ async fn decide(
         let _ = super::events::append(env, s, "platform.failed", None, None, &said, false).await;
         return page::html(200, &approve::outcome("Refused", &said));
     }
-    let code = approve::field(form, "code").unwrap_or_default();
-    if let Err(why) = elicit::check_code(env, s, code.trim()).await? {
+    let purpose = crate::passkeys::grant_purpose(token);
+    let shown = format!("/platform/{id}?grant={token}");
+    let proved = super::passkeys::on_page(env, s, form, &purpose, host, &shown).await?;
+    if let Err(why) = proved {
         return page::refused(403, &why);
     }
     let (path, body) = if run.stage == Stage::Offered {

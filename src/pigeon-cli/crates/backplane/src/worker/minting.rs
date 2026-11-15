@@ -1,5 +1,5 @@
 //! Grants in the control plane: `grant.*`, the `Instance` object's requests and registry, and
-//! `/grants/<id>`, the page that runs a grant on the owner's code; values never leave the
+//! `/grants/<id>`, the page that runs a grant on the owner's proof; values never leave the
 //! Worker; see `.claude/decisions/2026-11-12-development-grants-applies-rescue-yield.md` §1.
 
 use std::collections::BTreeMap;
@@ -211,7 +211,11 @@ pub async fn page_serve(
             let entry = deployed(env, s)
                 .await?
                 .and_then(|r| r.ledger.grants.get(&o.name).cloned());
-            page::html(200, &approve::grant_page(&o, entry.as_ref(), &token))
+            page::html_with(
+                200,
+                &approve::grant_page(&o, entry.as_ref(), &token),
+                approve::PROOF_CSP,
+            )
         }
         Method::Post => {
             let origin = req.headers().get("origin")?;
@@ -223,8 +227,10 @@ pub async fn page_serve(
             let Some(token) = approve::field(&form, "grant") else {
                 return page::refused(400, "the form is missing its grant");
             };
-            let code = approve::field(&form, "code").unwrap_or_default();
-            if let Err(why) = elicit::check_code(env, s, code.trim()).await? {
+            let purpose = crate::passkeys::grant_purpose(&token);
+            let shown = format!("/grants/{id}?grant={token}");
+            let proved = super::passkeys::on_page(env, s, &form, &purpose, &host, &shown).await?;
+            if let Err(why) = proved {
                 return page::refused(403, &why);
             }
             let (status, v) =
