@@ -322,6 +322,9 @@ pub fn of_change(
         if let Some(k) = kind {
             out.push((k.to_string(), format!("!{n} job `{}`", j.name)));
         }
+        if let Some(r) = retrying(before, after, j) {
+            out.push(("job.retrying".into(), r));
+        }
     }
     if after.behind.is_some() && before.is_none_or(|b| b.behind != after.behind) {
         out.push(("change.behind".into(), format!("!{n} is behind main")));
@@ -339,4 +342,38 @@ pub fn of_change(
         ));
     }
     out
+}
+
+/// The `job.retrying` summary for job `j`, when it is queued again on the same head after a
+/// failed start or a lost Container; see
+/// `.claude/decisions/2026-11-15-development-job-start-failures-backoff.md` §3.
+fn retrying(
+    before: Option<&crate::changes::Change>,
+    after: &crate::changes::Change,
+    j: &crate::changes::Job,
+) -> Option<String> {
+    use crate::changes::JobStatus;
+    let b = before
+        .filter(|b| b.head == after.head)?
+        .jobs
+        .iter()
+        .find(|x| x.name == j.name)?;
+    if j.status != JobStatus::Queued {
+        return None;
+    }
+    let why = j.last_error.as_deref().unwrap_or("no reason was given");
+    let n = after.number;
+    if j.start_failures > b.start_failures {
+        let max = crate::changes::MAX_START_FAILURES;
+        let k = j.start_failures;
+        return Some(format!(
+            "!{n} job `{}` didn't start ({k} of {max}): {why}",
+            j.name
+        ));
+    }
+    (b.status == JobStatus::Running).then(|| {
+        let a = j.attempts;
+        let max = crate::runs::MAX_ATTEMPTS;
+        format!("!{n} job `{}`: {why} (attempt {a} of {max})", j.name)
+    })
 }

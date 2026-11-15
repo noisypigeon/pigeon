@@ -1011,3 +1011,114 @@ fn a_dropped_merge_is_kept_when_a_window_approves_the_restacked_head_again() {
         "a brief's head still waits for its planner"
     );
 }
+
+/// `name`'s job on `c`.
+fn job_of<'a>(c: &'a Change, name: &str) -> &'a Job {
+    c.jobs.iter().find(|j| j.name == name).expect("the job")
+}
+
+/// `c` behind `main` with a merge waiting on it, its restack job queued.
+fn restack_queued(mut c: Change) -> Change {
+    c.merge_after = Some("owner".into());
+    run(c, vec![Event::Behind { main: M.into() }])
+}
+
+fn start_failed(job: &str) -> Event {
+    Event::StartFailed {
+        job: job.into(),
+        sha: A.into(),
+        why: "Artifacts: minting a write token: 503".into(),
+    }
+}
+
+fn started(job: &str) -> Event {
+    Event::Started {
+        job: job.into(),
+        sha: A.into(),
+    }
+}
+
+/// The waits of each `StartAfter` in `effects`, for `job`.
+fn waits(effects: &[Effect], job: &str) -> Vec<u64> {
+    effects
+        .iter()
+        .filter_map(|e| match e {
+            Effect::StartAfter { job: j, secs } if j == job => Some(*secs),
+            _ => None,
+        })
+        .collect()
+}
+
+#[test]
+fn a_failed_start_keeps_the_job_queued_and_starts_it_again_after_a_backoff() {
+    let mut c = restack_queued(approved());
+    assert_eq!(status(&c, RESTACK), Some(JobStatus::Queued));
+    let mut all = Vec::new();
+    for _ in 0..7 {
+        let (next, effects) = step(&c, start_failed(RESTACK)).expect("applies");
+        all.extend(waits(&effects, RESTACK));
+        c = next;
+    }
+    assert_eq!(all, vec![15, 30, 60, 120, 240, 240, 240]);
+    let j = job_of(&c, RESTACK);
+    assert_eq!(j.status, JobStatus::Queued, "it keeps the merge's turn");
+    assert_eq!(j.attempts, 0, "no attempt is spent");
+    assert_eq!(j.start_failures, 7);
+    assert!(j.last_error.as_deref().is_some_and(|e| e.contains("503")));
+    assert!(crate::core::change::queue::holds_turn(&c));
+    let (c, _) = step(&c, started(RESTACK)).expect("starts");
+    assert_eq!(job_of(&c, RESTACK).start_failures, 0);
+    assert_eq!(job_of(&c, RESTACK).attempts, 1);
+}
+
+#[test]
+fn eight_failed_starts_end_a_restack_as_failed_naming_the_error() {
+    let mut c = restack_queued(approved());
+    for _ in 0..8 {
+        c = step(&c, start_failed(RESTACK)).expect("applies").0;
+    }
+    assert_eq!(c.merge_after, None, "its turn goes back");
+    assert!(
+        c.violations
+            .iter()
+            .any(|v| v.contains("failed to start 8 times") && v.contains("503")),
+        "{:?}",
+        c.violations
+    );
+}
+
+#[test]
+fn a_failed_start_of_a_running_job_or_on_another_head_changes_nothing() {
+    let c = restack_queued(approved());
+    let other = Event::StartFailed {
+        job: RESTACK.into(),
+        sha: B.into(),
+        why: "x".into(),
+    };
+    assert_eq!(step(&c, other).expect("applies").0, c);
+    let running = restacking(approved());
+    assert_eq!(
+        step(&running, start_failed(RESTACK)).expect("applies").0,
+        running
+    );
+}
+
+#[test]
+fn a_lost_job_starts_again_after_30_then_60_seconds() {
+    let mut c = restacking(approved());
+    let mut all = Vec::new();
+    for n in 0..2 {
+        let lost = Event::Lost {
+            job: RESTACK.into(),
+            sha: A.into(),
+        };
+        let (next, effects) = step(&c, lost).expect("lost");
+        all.extend(waits(&effects, RESTACK));
+        c = next;
+        assert!(job_of(&c, RESTACK).last_error.is_some());
+        if n == 0 {
+            c = step(&c, started(RESTACK)).expect("starts").0;
+        }
+    }
+    assert_eq!(all, vec![30, 60]);
+}
