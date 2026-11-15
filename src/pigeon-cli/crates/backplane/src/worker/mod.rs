@@ -40,6 +40,7 @@ mod platform;
 mod platforms;
 mod push;
 mod stages;
+mod standalone;
 mod tasks;
 mod tickets;
 
@@ -67,6 +68,11 @@ const QUEUE: &str = "queue";
 
 #[event(fetch)]
 async fn fetch(req: Request, env: Env, _ctx: worker::Context) -> Result<Response> {
+    // An app-shape standalone answers `/v0/app/*` alone; see
+    // .claude/decisions/2026-11-15-runtime-learner-practice-standalone-app.md, its 2026-11-15 amendment.
+    if standalone::is_app(&env) {
+        return standalone::fetch(req, &env).await;
+    }
     // A standalone's host under the platform's zone, before any other route; see
     // .claude/decisions/2026-11-15-runtime-standalone-hostnames-platform-zone.md §3.
     if let Some(host) = hosts::ours(&req, &env) {
@@ -1916,6 +1922,10 @@ impl DurableObject for Instance {
         if path.starts_with("/accounts/") {
             let body: Value = req.json().await?;
             return account::serve(&self.state, &path, body).await;
+        }
+        if path.starts_with("/standalone/") {
+            let body: Value = req.json().await.unwrap_or(Value::Null);
+            return standalone::serve(&self.state, &path, body).await;
         }
         if path.starts_with("/members/") {
             let body: Value = req.json().await?;

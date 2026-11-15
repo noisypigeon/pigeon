@@ -10,6 +10,8 @@ use sha2::{Digest as _, Sha256};
 #[cfg(test)]
 mod tests;
 
+pub mod handover;
+
 /// Every capability an operation may require.
 pub const CAPABILITIES: [&str; 9] = [
     "read",

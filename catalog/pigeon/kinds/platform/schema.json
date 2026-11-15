@@ -6,17 +6,19 @@
   "additionalProperties": false,
   "required": [
     "worker",
-    "hostname",
     "domains",
-    "instance",
-    "change_floor",
-    "database",
-    "buckets",
-    "queue",
-    "access",
-    "service_tokens"
+    "instance"
   ],
   "properties": {
+    "shape": {
+      "type": "string",
+      "enum": [
+        "full",
+        "app"
+      ],
+      "default": "full",
+      "description": "full: the whole platform stack; app: the control Worker, its Instance and one bucket, serving only /v0/app/* on workers.dev. See .claude/decisions/2026-11-15-runtime-learner-practice-standalone-app.md §1."
+    },
     "worker": {
       "type": "string",
       "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
@@ -321,6 +323,46 @@
       "access_aud": "$module.application.aud",
       "service_token_ids": "$module.service_tokens[*].client_id",
       "secrets_store_id": "$module.secrets_store.id"
+    }
+  },
+  "if": {
+    "properties": {
+      "shape": {
+        "const": "app"
+      }
+    },
+    "required": [
+      "shape"
+    ]
+  },
+  "then": {
+    "required": [
+      "buckets"
+    ],
+    "properties": {
+      "domains": {
+        "maxItems": 0
+      },
+      "buckets": {
+        "minItems": 1,
+        "maxItems": 1
+      }
+    }
+  },
+  "else": {
+    "required": [
+      "hostname",
+      "change_floor",
+      "database",
+      "buckets",
+      "queue",
+      "access",
+      "service_tokens"
+    ],
+    "properties": {
+      "domains": {
+        "minItems": 1
+      }
     }
   }
 }
