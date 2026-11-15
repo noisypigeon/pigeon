@@ -141,6 +141,15 @@ pub async fn build(env: &Env, s: &Settings) -> Result<(Digest, u64)> {
     );
     d.containers = containers;
     (d.sessions, d.stalled) = sessions(env, s).await?;
+    d.unlisted = crate::tasks::unlisted(&d.sessions, &waiting);
+    for n in &d.unlisted {
+        let said = format!("!{n} needs the owner but had no approval listed; re-issued");
+        let _ =
+            super::events::append(env, s, "approval.unlisted", Some(*n), None, &said, true).await;
+        if let Err(e) = super::to_change(env, &s.repo, *n, Method::Post, "/listed", None).await {
+            worker::console_error!("listed for !{n}: {e}");
+        }
+    }
     let (_, w) = to_instance(env, s, "/windows/current", &json!({})).await?;
     let w: Option<crate::core::approval::windows::Window> =
         serde_json::from_value(w["window"].clone()).unwrap_or_default();

@@ -223,3 +223,19 @@ approval carries to a session's push of the same patch.
 - **Option A loosens an approval rule,** which !511 keeps as the owner's. The
   owner approved !500 on its own link, not under a window.
 - **!500 changes nothing in !511's ADR.**
+
+### 2026-11-15: Step 4 lands: the digest names and re-issues an unlisted approval
+
+- **The check.** `tasks::unlisted(sessions, waiting)` returns the open changes
+  whose stage is `needs: owner` while `proposed` or `checked`, and that have
+  no `/approve/<n>` entry in the inbox. A change a window or mandate covers is
+  `needs: agent`, so it isn't counted.
+- **The digest.**
+  - `Digest.unlisted` holds the result and counts toward `needs_owner`.
+  - `owner_lines` says "unlisted: !<n> needs you but had no approval listed;
+    re-issued".
+- **The repair.** `worker/push.rs::build` appends `approval.unlisted` for each
+  such change and asks its `ChangeRun` to re-list (`POST /listed`). It runs
+  on each hourly digest and each `digest_show`.
+- **Paths.** `tasks.rs` and `worker/push.rs` stay under
+  [`2026-11-08-development-events-tickets-digest-mandate.md`](2026-11-08-development-events-tickets-digest-mandate.md).

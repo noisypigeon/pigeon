@@ -215,3 +215,56 @@ fn tasks_without_a_class_keep_their_rules_and_brief_tasks_are_never_swept() {
     let swept = t.sweep(&std::collections::BTreeSet::new());
     assert_eq!(swept, vec![r], "the brief task outlives the sweep");
 }
+
+fn line(changes: &[(u32, &str, &str)]) -> backplane::tasks::SessionLine {
+    backplane::tasks::SessionLine {
+        label: "https://claude.ai/code/session_x".into(),
+        listening: true,
+        changes: changes
+            .iter()
+            .map(|(n, stage, needs)| (*n, (*stage).to_string(), (*needs).to_string()))
+            .collect(),
+        model: None,
+    }
+}
+
+fn listed(number: u32, operation: &str) -> backplane::approve::Waiting {
+    backplane::approve::Waiting {
+        number,
+        operation: operation.into(),
+        title: "t".into(),
+        path: format!("/approve/{number}?grant=abc"),
+        expires: u64::MAX,
+    }
+}
+
+#[test]
+fn a_change_needing_the_owner_with_no_approval_listed_is_unlisted() {
+    use backplane::tasks::unlisted;
+    // !464: checked, the owner's to approve, and nothing on /approvals.
+    let sessions = [line(&[
+        (464, "checked", "owner"),
+        (465, "checked", "owner"),
+        (466, "checked", "agent"),
+        (467, "proposed", "owner"),
+        (468, "deploy-failed", "owner"),
+    ])];
+    let waiting = [
+        listed(465, "change.approve"),
+        listed(4650, "change.approve"),
+    ];
+    assert_eq!(unlisted(&sessions, &waiting), [464, 467]);
+}
+
+#[test]
+fn an_unlisted_change_needs_the_owner_and_has_its_line() {
+    let d = backplane::tasks::Digest {
+        unlisted: vec![464],
+        ..Default::default()
+    };
+    assert!(d.needs_owner());
+    assert_eq!(
+        d.owner_lines(),
+        ["unlisted: !464 needs you but had no approval listed; re-issued"]
+    );
+}

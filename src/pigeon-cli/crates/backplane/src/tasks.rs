@@ -330,6 +330,10 @@ pub struct Digest {
     /// `.claude/decisions/2026-11-15-development-archive-cleanly-ended-sessions.md` §4.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub archives: Vec<String>,
+    /// Changes needing the owner with no approval listed, each re-issued; see
+    /// `.claude/decisions/2026-11-15-security-owner-approvals-always-listed.md` §5.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub unlisted: Vec<u32>,
 }
 
 /// The digest's archive lines: each `session.archived` summary, then each clean end not archived,
@@ -469,6 +473,7 @@ impl Digest {
             && self.held.is_empty()
             && self.failed_deploys.is_empty()
             && self.stalled.is_empty()
+            && self.unlisted.is_empty()
             && self.mirror.is_none())
     }
 
@@ -523,11 +528,36 @@ impl Digest {
                 .map(|(n, by)| format!("merged without you: change {n}, by {by}")),
         );
         out.extend(self.stalled.iter().map(Stall::line));
+        out.extend(
+            self.unlisted
+                .iter()
+                .map(|n| format!("unlisted: !{n} needs you but had no approval listed; re-issued")),
+        );
         out.extend(self.mirror.clone());
         out.extend(self.macos.iter().map(|l| format!("macOS: {l}")));
         out.extend(self.containers.clone());
         out
     }
+}
+
+/// The open changes in `sessions` that need the owner to authorize or approve, with no
+/// `/approve/<n>` entry in `waiting`; see the always-listed ADR §5.
+#[must_use]
+pub fn unlisted(sessions: &[SessionLine], waiting: &[crate::approve::Waiting]) -> Vec<u32> {
+    sessions
+        .iter()
+        .flat_map(|l| l.changes.iter())
+        .filter(|(_, stage, needs)| {
+            needs == "owner" && matches!(stage.as_str(), "proposed" | "checked")
+        })
+        .map(|(n, _, _)| *n)
+        .filter(|n| {
+            let prefix = format!("/approve/{n}?");
+            !waiting
+                .iter()
+                .any(|w| w.number == *n && w.path.starts_with(&prefix))
+        })
+        .collect()
 }
 
 /// The digest's line for `what`, held by `h` at `now`.
@@ -606,6 +636,7 @@ pub fn digest(input: &DigestInput<'_>, now: u64) -> Digest {
         containers: None,
         stops: None,
         archives: Vec::new(),
+        unlisted: Vec::new(),
     }
 }
 
