@@ -618,3 +618,62 @@ control plane checked on the change's branch.
     before handing it over, as was done for b5.
   - In `do` and `done_when`, avoid the open-choice words the validator
     refuses. A function was named `pick` for that reason.
+
+### 2026-11-15: Step 2 lands: the Cloudflare OAuth client, with Account API Tokens Write
+
+The owner registered the client on 2026-11-15, and reported its settings
+through the status-review session:
+
+- **The client:**
+  - in the pigeon account, and private;
+  - response type `code`, grant type Authorization Code;
+  - token authentication `none`, so it is public with PKCE `S256`;
+  - redirect URL exactly `https://platform.pigeon.dev/connect/callback`;
+  - no advanced options.
+- **Scopes:** *Account API Tokens Write* and *Account Settings Read*, both
+  required, and no optional ones.
+  - *Account API Tokens Write* is an OAuth scope, so §6's `oauth` shape
+    stands. The fallback to `key` isn't needed.
+  - The ceiling's permissions are not OAuth scopes. The access token's one
+    use is to mint the narrow granter (§6), whose permissions come from
+    the ceiling, not from the consent. This keeps consent to two scopes,
+    whatever an instance's ceiling holds.
+  - *Account Settings Read* is for `verify` to list the chosen account's
+    name and ID (§5). The first flow confirms it is enough.
+  - **Step 5 changes `catalog/cloudflare/connect.yaml`'s `oauth.scopes`**
+    to exactly those two, in place of `{ from: capabilities, add: […] }`.
+    Their wire names come from `GET /client/v4/oauth/scopes`, which step 5
+    reads before it is written. The query wasn't made yet: this session has
+    no Cloudflare credential.
+- **Domain verification.** Cloudflare asked for a TXT record on the
+  `pigeon.dev` apex, `cloudflare_oauth_client_publisher=…`. The owner added
+  it by hand in the dashboard; `pigeon.dev`'s DNS isn't in the repository.
+  - If that DNS is ever brought under code, this record must be kept.
+  - Cloudflare requires a verified domain before a client can be made
+    public. What removing the record does to a private client is not
+    documented.
+- **The client's ID** is the Secrets Store secret `OAUTH_CLOUDFLARE_CLIENT`,
+  scoped to Workers, in the account's default store.
+  - Cloudflare allows one store per account, so the platform reads that
+    store rather than making one (!461). `granter` is in it too.
+  - Step 5 binds `OAUTH_CLOUDFLARE_CLIENT` beside `GRANTER`, from the same
+    store, in `worker.yaml`'s existing shape:
+    `bindings.secrets_store.OAUTH_CLOUDFLARE_CLIENT: { store: $deployment.secrets_store_id, secret: OAUTH_CLOUDFLARE_CLIENT }`.
+  - `secrets_store_id` exists only once `platform/blue` is applied after
+    !461. So that line lands after the granter planner's `GRANTER` binding
+    change, which follows that apply.
+- **Still unconfirmed:**
+  - the access and refresh tokens' lifetimes;
+  - whether refresh tokens rotate;
+  - whether consent offers an account other than the client's parent, for
+    `noisypigeon`.
+
+  The first `oauth` flow records all three. A refresh token is revoked as
+  soon as the granter is minted (§6), so only the access token's lifetime
+  matters to the flow: it must outlast `granting`.
+
+**Step 5's status:** it waits on the `GRANTER` binding change (above) and on the instance granter store: D1
+`grants` under `GRANT_KEY`, and `instance_accounts`. These are the
+non-platform-profiles ADR's steps 3 and 4, which the accounts planner now
+holds, and which wait on the grants ADR's steps 1b and 1d. The OAuth client
+no longer blocks it.
