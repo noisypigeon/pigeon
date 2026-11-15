@@ -203,3 +203,23 @@ The owner chose to fix this before step 4.
 - **Execution:** one `feat(backplane)` change to `cobot/ci.rs` and `jobs.rs`.
   Its test is a change built on another whose base squash-merges, and whose
   approval then carries.
+
+### 2026-11-15: Review of !500 against !511: they agree
+
+[`2026-11-15-development-sessions-stop-only-for-oversight.md`](2026-11-15-development-sessions-stop-only-for-oversight.md)
+(!511) changes who carries an approval the owner has already granted: the
+control plane under a window, never an agent's call. !500 adds when an
+approval carries to a session's push of the same patch.
+
+- **They agree.**
+  - !511's path for an approval no window covers ends "pending for the owner,
+    listed and pushed", which is §1's invariant. It drops `approval_wait`'s
+    card because §2 already lists and pushes every approval the owner owes.
+  - !500's carry only re-applies an approval that exists, by its approver, on
+    a head checked in full at no higher tier. It never asks for one, so no
+    merge parks (`merge_after`) waiting on the owner, as !511 requires.
+  - A carried approval queues nothing new. A merge already asked for starts.
+    Otherwise the session asks with `change_merge`, as !511 says.
+- **Option A loosens an approval rule,** which !511 keeps as the owner's. The
+  owner approved !500 on its own link, not under a window.
+- **!500 changes nothing in !511's ADR.**
