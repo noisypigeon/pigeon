@@ -296,6 +296,7 @@ The owner moved one piece of §8 step 4 ahead of the rest:
   unmanaged.
 - The zone joins the personal account's `zones.private` once step 5 lands.
 - History, merged ADRs and changelogs keep their text (owner, 2026-11-15).
+
 ### 2026-11-15: Review of !594 against !581: they agree
 
 [`2026-11-15-runtime-standalone-hostnames-platform-zone.md`](2026-11-15-runtime-standalone-hostnames-platform-zone.md)
@@ -308,3 +309,54 @@ The owner moved one piece of §8 step 4 ahead of the rest:
 - **One note for §5's import.** A record key is `[a-z0-9]` words joined by
   `-`, so an imported record at `*` can't be keyed `*-<type>`. Step 3's brief
   names its key; the rest of §5 is unchanged.
+
+### 2026-11-15: a private zone's resources keep their live names; the zone policy allows listed domains per match
+
+Step 4's survey found two gaps.
+
+**Names derived from a zone.**
+
+- A site's bucket name and its token names are built from the zone's name
+  today (`cobot/static_site.rs` `bucket_name` and `token_name`,
+  `cobot/workers.rs` `site_buckets`). Under an alias, they are built from the
+  alias.
+- A private entry may carry `names: {bucket: <name>}`, the live name of a
+  resource to keep, so `plan --adopt` keeps it in place. That name lives only
+  in the private store.
+
+**Where an alias resolves.** Once, when the manifest is parsed, in
+`core::infra::manifest::parse_with(text, private)`:
+
+- a private zone unit's `zone` setting, and each site's `zone:`, take the real
+  name before any other code reads them;
+- with no private file, a `private: true` unit and the sites on it render and
+  plan nothing.
+
+**The policy.**
+
+- sentinel's `find` gains `allow_content`, patterns that excuse a
+  `forbid_content` match, because the `regex` crate has no lookaround.
+- `.config/policies/zones.yaml` forbids domain names in tracked files, with
+  `allow_content` holding these:
+  - `pigeon.dev` and its subdomains;
+  - `example.com`, `example.org`, `example.dev` and `example.pigeon.dev`;
+  - `github.com`, `workers.dev` and `cloudflarestorage.com`;
+  - the registry, schema and push hosts the code names.
+- It ignores, until §8 step 4 removes them:
+  - the legacy workload directory;
+  - `infra/cloudflare/config.yaml`;
+  - the two secrets policies;
+  - `.claude/decisions/**` and the changelogs, which are never rewritten.
+
+**Steps.**
+
+- **Step 4a:** sentinel's `allow_content`, `zones.yaml`, and the scrub of code
+  and tests to `example.com`. `tests/architecture.rs` keeps its copy of the
+  real workloads until cutover.
+- **Step 4b:** private zones in render (§1, with `names`).
+- **Log masking and the bound scan** move into step 5, with the store that
+  holds the names.
+
+**For the owner, recorded and not acted on:** the blog's posts name third-party
+domains and the blog's own zone, and its mirror (§7) is public. Moving the blog
+keeps its posts unchanged unless the owner says otherwise.
