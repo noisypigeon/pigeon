@@ -363,3 +363,227 @@ mod push {
         assert!(!token_ok(&"zz".repeat(32)));
     }
 }
+
+mod tracker {
+    use crate::core::app::tracker::{ChangeIn, Mark, STOPS, SessionIn, Tracker, build, rail};
+    use crate::core::brief::report::Tally;
+    use crate::core::brief::{Brief, Commit, Draft, Revision};
+    use crate::core::change::stage::{Needs, Stage};
+    use crate::sessions::{Class, Declared};
+
+    const NOW: u64 = 1_800_000_000;
+
+    fn stage(name: &str, needs: Needs) -> Stage {
+        Stage {
+            stage: name.into(),
+            needs,
+            waits_on: None,
+            next: "go".into(),
+            since: Some(NOW - 5),
+        }
+    }
+
+    fn change(number: u32, session: &str, name: &str, needs: Needs) -> ChangeIn {
+        ChangeIn {
+            number,
+            title: format!("change {number}"),
+            session: Some(session.into()),
+            stage: stage(name, needs),
+        }
+    }
+
+    fn session(label: &str, polled: Option<u64>, listening: bool) -> SessionIn {
+        SessionIn {
+            label: label.into(),
+            declared: None,
+            polled,
+            listening,
+        }
+    }
+
+    fn brief(id: &str, changes: Vec<u32>, title: &str) -> Brief {
+        let draft = Draft {
+            title: title.into(),
+            adr: "adr.md".into(),
+            step: "step 1".into(),
+            model: Class::Sonnet,
+            base: "abc".into(),
+            scope: vec![],
+            decisions: vec![],
+            steps: vec![],
+            checks: vec![],
+            stop_if: vec![],
+            budget: None,
+            commit: Commit::default(),
+        };
+        Brief {
+            id: id.into(),
+            planner: "planner".into(),
+            revisions: vec![Revision {
+                draft,
+                at: NOW,
+                reason: "created".into(),
+            }],
+            changes,
+            tally: Tally::default(),
+        }
+    }
+
+    fn only(t: &Tracker) -> &crate::core::app::tracker::Row {
+        &t.sessions[0].changes[0]
+    }
+
+    #[test]
+    fn every_stage_has_its_stop() {
+        let table = [
+            ("proposed", 0),
+            ("authorized", 1),
+            ("bounding", 2),
+            ("conflicted", 2),
+            ("restacking", 2),
+            ("refused", 2),
+            ("checking", 3),
+            ("checking 2/5", 3),
+            ("failed", 3),
+            ("checked", 4),
+            ("in-review", 4),
+            ("escalated", 4),
+            ("approved", 5),
+            ("queued 2/3", 6),
+            ("merging", 7),
+            ("merged", 8),
+            ("deploying", 9),
+            ("done", 9),
+            ("deploy-failed", 9),
+        ];
+        for (name, stop) in table {
+            assert_eq!(rail(name, false).map(|r| r.0), Some(stop), "{name}");
+        }
+        assert_eq!(STOPS.len(), 10);
+    }
+
+    #[test]
+    fn closed_and_unknown_stages_have_no_rail() {
+        assert_eq!(rail("closed", false), None);
+        assert_eq!(rail("sideways", true), None);
+    }
+
+    #[test]
+    fn failed_stages_are_marked_failed() {
+        for name in ["refused", "failed", "deploy-failed"] {
+            assert_eq!(rail(name, true).map(|r| r.1), Some(Mark::Failed), "{name}");
+        }
+        assert_eq!(rail("done", false).map(|r| r.1), Some(Mark::Done));
+    }
+
+    #[test]
+    fn held_is_approved_with_its_mark() {
+        assert_eq!(rail("held", false), Some((5, Mark::Held)));
+        assert_eq!(rail("held", true), Some((5, Mark::Held)));
+    }
+
+    #[test]
+    fn a_change_needing_a_quiet_agent_is_stalled() {
+        let t = build(
+            &[session("a", Some(NOW - 3600), false)],
+            &[change(1, "a", "authorized", Needs::Agent)],
+            &[],
+            NOW,
+        );
+        assert_eq!(only(&t).mark, Mark::Stalled);
+        assert_eq!(t.counts.stalled, 1);
+    }
+
+    #[test]
+    fn a_listening_agent_is_not_stalled() {
+        let t = build(
+            &[session("a", Some(NOW - 10), true)],
+            &[change(1, "a", "authorized", Needs::Agent)],
+            &[],
+            NOW,
+        );
+        assert_eq!(only(&t).mark, Mark::Ok);
+        assert_eq!(t.counts.stalled, 0);
+    }
+
+    #[test]
+    fn a_change_takes_its_bound_brief_before_its_sessions() {
+        let mut s = session("a", Some(NOW), true);
+        s.declared = Some(Declared {
+            model: Class::Sonnet,
+            planner: Some("p".into()),
+            brief: Some("b2".into()),
+        });
+        let briefs = [
+            brief("b1", vec![1], "bound"),
+            brief("b2", vec![], "declared"),
+        ];
+        let t = build(
+            &[s],
+            &[
+                change(1, "a", "proposed", Needs::Agent),
+                change(2, "a", "proposed", Needs::Agent),
+            ],
+            &briefs,
+            NOW,
+        );
+        let rows = &t.sessions[0].changes;
+        assert_eq!(rows[0].brief.as_ref().map(|b| b.id.as_str()), Some("b1"));
+        assert_eq!(rows[1].brief.as_ref().map(|b| b.id.as_str()), Some("b2"));
+        assert_eq!(t.sessions[0].role.as_deref(), Some("executor"));
+    }
+
+    #[test]
+    fn a_live_session_without_changes_is_shown() {
+        let t = build(&[session("a", None, false)], &[], &[], NOW);
+        assert_eq!(t.sessions.len(), 1);
+        assert_eq!(t.sessions[0].changes.len(), 0);
+    }
+
+    #[test]
+    fn a_change_without_a_live_ticket_keeps_its_session_label() {
+        let t = build(&[], &[change(1, "gone", "merged", Needs::None)], &[], NOW);
+        assert_eq!(t.sessions[0].label, "gone");
+        assert_eq!(t.sessions[0].model, None);
+        assert_eq!(t.sessions[0].role, None);
+    }
+
+    #[test]
+    fn sessions_needing_the_owner_come_first() {
+        let t = build(
+            &[
+                session("a", Some(NOW - 7200), false),
+                session("b", Some(NOW), true),
+                session("c", Some(NOW), true),
+            ],
+            &[
+                change(1, "a", "authorized", Needs::Agent),
+                change(2, "c", "checked", Needs::Owner),
+                change(3, "b", "merged", Needs::None),
+            ],
+            &[],
+            NOW,
+        );
+        let order: Vec<&str> = t.sessions.iter().map(|s| s.label.as_str()).collect();
+        assert_eq!(order, ["c", "a", "b"]);
+    }
+
+    #[test]
+    fn counts_sum_owner_stalled_and_provider() {
+        let t = build(
+            &[session("a", None, false), session("b", Some(NOW), true)],
+            &[
+                change(1, "a", "authorized", Needs::Agent),
+                change(2, "b", "checked", Needs::Owner),
+                change(3, "b", "checking 1/2", Needs::Provider),
+                change(4, "b", "closed", Needs::None),
+            ],
+            &[],
+            NOW,
+        );
+        assert_eq!(
+            (t.counts.owner, t.counts.stalled, t.counts.provider),
+            (1, 1, 1)
+        );
+    }
+}

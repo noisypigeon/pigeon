@@ -218,6 +218,10 @@ async fn signed(
         }
         (Method::Post, "/v0/app/auto") => super::app::auto_start(env, s, body).await,
         (Method::Delete, "/v0/app/auto") => super::app::auto_end(env, s, body).await,
+        (Method::Get, "/v0/app/tracker") => {
+            Response::from_json(&super::app::tracker(env, s).await?)
+        }
+        (Method::Get, "/v0/app/events") => super::app::events(env, s, req).await,
         (Method::Get, "/v0/app/insights") => {
             let url = req.url()?;
             let q = |k: &str| {

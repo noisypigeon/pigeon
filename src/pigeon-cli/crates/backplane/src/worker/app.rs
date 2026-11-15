@@ -2,14 +2,14 @@
 //! page does; see `.claude/decisions/2026-11-12-runtime-ios-app-approvals-insights.md` §3-§5.
 
 use serde_json::{Map, Value, json};
-use worker::{Env, Method, Response, Result};
+use worker::{Env, Method, Request, Response, Result};
 
 use super::approve::live;
 use super::platform::Settings;
 use super::{elicit, run, to_change};
 use crate::access::Identity;
 use crate::changes::Change;
-use crate::core::app::approvals;
+use crate::core::app::{approvals, tracker};
 use crate::core::approval::windows;
 use crate::grants::Grant;
 use crate::passkeys;
@@ -258,4 +258,108 @@ pub async fn auto_end(env: &Env, s: &Settings, body: &Value) -> Result<Response>
     );
     let _ = super::events::append(env, s, "auto.ended", None, None, &said, false).await;
     Response::from_json(&v)
+}
+
+/// How long a merged change stays on the tracker, in seconds.
+const MERGED_KEPT: u64 = 3600;
+
+/// `GET /v0/app/tracker`: each session and its changes on the rail.
+///
+/// # Errors
+///
+/// When a binding fails.
+pub async fn tracker(env: &Env, s: &Settings) -> Result<Value> {
+    let now = super::platform::now();
+    let (_, t) = super::mandates::to_instance(env, s, "/tickets/list", &json!({})).await?;
+    let tickets: crate::tickets::Tickets = serde_json::from_value(t).unwrap_or_default();
+    let rows =
+        super::platform::d1_rows(env, &crate::control::list(&s.instance, &s.repo, None)).await?;
+    let (merged, open): (Vec<Value>, Vec<Value>) = rows
+        .into_iter()
+        .filter(|r| match r["state"].as_str() {
+            Some("closed") => false,
+            Some("merged") => r["updated"]
+                .as_u64()
+                .is_some_and(|u| now.saturating_sub(u) <= MERGED_KEPT),
+            _ => true,
+        })
+        .partition(|r| r["state"].as_str() == Some("merged"));
+    let mut changes = Vec::new();
+    for row in super::stages::list(env, s, open).await? {
+        if let (Some(number), Ok(stage)) = (
+            row["number"].as_u64().and_then(|n| u32::try_from(n).ok()),
+            serde_json::from_value(row["stage"].clone()),
+        ) {
+            changes.push(tracker::ChangeIn {
+                number,
+                title: row["title"].as_str().unwrap_or_default().to_string(),
+                session: row["session"].as_str().map(str::to_string),
+                stage,
+            });
+        }
+    }
+    let queue = super::stages::queue(env, s).await;
+    for row in merged {
+        let Some(number) = row["number"].as_u64().and_then(|n| u32::try_from(n).ok()) else {
+            continue;
+        };
+        let (_, view) = to_change(env, &s.repo, number, Method::Get, "/status", None).await?;
+        let Ok(change) = serde_json::from_value::<Change>(view["change"].clone()) else {
+            continue;
+        };
+        let stage = crate::core::change::stage::Stage {
+            since: row["updated"].as_u64(),
+            ..super::stages::stage(env, s, &change, &queue).await
+        };
+        changes.push(tracker::ChangeIn {
+            number,
+            title: row["title"].as_str().unwrap_or_default().to_string(),
+            session: row["session"].as_str().map(str::to_string),
+            stage,
+        });
+    }
+    let mut labels: Vec<String> = tickets
+        .0
+        .keys()
+        .filter(|l| tickets.live(l, now).is_some())
+        .cloned()
+        .collect();
+    labels.extend(changes.iter().filter_map(|c| c.session.clone()));
+    labels.sort_unstable();
+    labels.dedup();
+    let mut sessions = Vec::new();
+    for label in labels {
+        let (_, cursor) =
+            super::mandates::to_instance(env, s, "/events/cursor", &json!({ "session": label }))
+                .await?;
+        sessions.push(tracker::SessionIn {
+            declared: tickets.live(&label, now).map(|i| i.declared),
+            polled: cursor["polled"].as_u64(),
+            listening: cursor["listening"].as_bool() == Some(true),
+            label,
+        });
+    }
+    let briefs = super::briefs::all(env, s).await;
+    Ok(serde_json::to_value(tracker::build(
+        &sessions, &changes, &briefs, now,
+    ))?)
+}
+
+/// `GET /v0/app/events`: the event log as the owner, from `after`, waiting up to `seconds`; no
+/// session's cursor moves.
+///
+/// # Errors
+///
+/// When the request has no readable URL, or a binding fails.
+pub async fn events(env: &Env, s: &Settings, req: &Request) -> Result<Response> {
+    let url = req.url()?;
+    let mut args = Map::new();
+    for (k, default) in [("after", "0"), ("seconds", "25")] {
+        let v = url
+            .query_pairs()
+            .find(|(n, _)| n == k)
+            .map_or_else(|| default.to_string(), |(_, v)| v.to_string());
+        args.insert(k.into(), Value::String(v));
+    }
+    Response::from_json(&super::events::wait(env, s, &args, true).await?)
 }

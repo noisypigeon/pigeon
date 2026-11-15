@@ -4,6 +4,7 @@
 pub mod approvals;
 pub mod devices;
 pub mod push;
+pub mod tracker;
 
 #[cfg(test)]
 mod tests;
