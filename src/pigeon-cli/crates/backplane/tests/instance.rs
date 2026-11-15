@@ -485,3 +485,15 @@ fn the_control_plane_runs_ios_releases_itself() {
         assert!(op.control_plane(), "{name}");
     }
 }
+
+// See `.claude/decisions/2026-11-15-security-standing-auto-owner-flags.md` §4.
+#[test]
+fn the_control_plane_runs_owner_items_itself() {
+    for name in ["owner.ask", "owner.withdraw"] {
+        let op = catalog()
+            .iter()
+            .find(|o| o.name == name)
+            .expect("in the catalog");
+        assert!(op.control_plane(), "{name}");
+    }
+}
