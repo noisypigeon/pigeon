@@ -18,7 +18,7 @@ use crate::push::{b64url, b64url_decode};
 use crate::totp::Guard;
 
 /// Where the `Instance` keeps the keyring.
-const KEYRING: &str = "passkeys";
+pub(super) const KEYRING: &str = "passkeys";
 
 /// Where the `Instance` keeps until when a proven owner may add a passkey.
 const ADDING: &str = "passkey-adding";
@@ -32,7 +32,12 @@ const INSTANCE_PAGES: [(&str, &str, &str); 3] = [
 ];
 
 /// Where the `Instance` keeps what it has seen proven with a passkey.
-const PROOFS: &str = "passkey-proofs";
+pub(super) const PROOFS: &str = "passkey-proofs";
+
+/// The Worker var that asks for the cutover, and the value that does.
+pub(super) const PROOFS_VAR: &str = "PROOFS";
+/// What [`PROOFS_VAR`] holds once codes are to be refused.
+pub(super) const PROOFS_PASSKEY: &str = "passkey";
 
 /// Where the `Instance` keeps the enrolments used and the wrong tokens tried.
 const ENROLMENTS: &str = "passkey-enrolments";
@@ -127,6 +132,10 @@ pub async fn serve(state: &State, path: &str, body: Value) -> Result<Response> {
                 seen(state, "added").await?;
             }
             (ring, outcome(registered))
+        }
+        "/passkeys/cutover" => {
+            let proofs: Proofs = storage.get(PROOFS).await?.unwrap_or_default();
+            return Response::from_json(&json!({ "made": proofs.cutover.is_some() }));
         }
         "/passkeys/prove" => proving(state, ring, &body, &rp).await?,
         "/passkeys/enroll" => return enrolling(state, ring, &body, &rp).await,
@@ -415,6 +424,16 @@ pub async fn on_page(
         let code = page::field(form, "code").unwrap_or_default();
         elicit::check_code(env, s, code.trim()).await
     }
+}
+
+/// Whether the cutover is made: codes are refused, and a passkey is the only proof.
+///
+/// # Errors
+///
+/// When the binding fails.
+pub(super) async fn cutover_made(env: &Env, s: &Settings) -> Result<bool> {
+    let v = to_instance(env, s, "/passkeys/cutover", &json!({})).await?;
+    Ok(v["made"].as_bool() == Some(true))
 }
 
 /// Whether the owner has registered a passkey.

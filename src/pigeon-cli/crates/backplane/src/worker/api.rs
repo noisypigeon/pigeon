@@ -73,8 +73,20 @@ async fn serve_mcp(
             if request.operation == "approval.wait" {
                 return wait(env, &session, &id, &request).await;
             }
-            if !who.human && grants::OPERATIONS.contains(&request.operation.as_str()) {
+            let owners = grants::OPERATIONS.contains(&request.operation.as_str());
+            if !who.human && owners {
                 return offer(env, settings, &id, &request).await;
+            }
+            // After the cutover a person's direct call waits for a passkey too; see
+            // `.claude/decisions/2026-11-14-security-passkey-only-owner-proofs.md` §2.
+            if owners && super::passkeys::cutover_made(env, settings).await? {
+                let Some(number) = super::number_arg(&request) else {
+                    let why = "`number` must be a change number".to_string();
+                    let refused = Err(crate::Error::Invalid(vec![why]));
+                    return Response::from_json(&mcp::answer(&id, refused));
+                };
+                let answer = super::ask(env, settings, number, &request).await?;
+                return Response::from_json(&mcp::answer(&id, answer));
             }
             let outcome = run(env, settings, who, &request).await;
             Response::from_json(&mcp::answer(&id, outcome))

@@ -82,15 +82,38 @@ pub async fn serve(state: &State, env: &Env, path: &str, body: Value) -> Result<
     }
 }
 
-/// Checks the owner's `code` against the authenticator secret, under the one guard the card and
-/// the page share: each step used once, and five wrong codes in an hour lock it.
+/// Checks the owner's `code` against the authenticator secret, under the one guard: each step
+/// used once, and five wrong codes in an hour lock it. After the cutover every code is refused.
 async fn verify(state: &State, env: &Env, code: &str) -> Result<std::result::Result<(), String>> {
+    if refused(state, env).await? {
+        return Ok(Err(
+            "codes are no longer accepted; prove with a passkey".into()
+        ));
+    }
     let secret = totp::base32_decode(&platform::secret(env, "APPROVER_TOTP")?)?;
     let storage = state.storage();
     let guard: Guard = storage.get(GUARD).await?.unwrap_or_default();
     let (guard, checked) = guard.verify(&secret, code, now());
     storage.put(GUARD, &guard).await?;
     Ok(checked.map(|_| ()))
+}
+
+/// Whether codes are refused: the cutover is made, or is asked for and lacks nothing, which
+/// makes it; see `.claude/decisions/2026-11-14-security-passkey-only-owner-proofs.md` §4.
+async fn refused(state: &State, env: &Env) -> Result<bool> {
+    use super::passkeys::{KEYRING, PROOFS, PROOFS_PASSKEY, PROOFS_VAR};
+    use crate::passkeys::{Keyring, Proofs};
+    let storage = state.storage();
+    let proofs: Proofs = storage.get(PROOFS).await?.unwrap_or_default();
+    let ring: Keyring = storage.get(KEYRING).await?.unwrap_or_default();
+    let asked = env
+        .var(PROOFS_VAR)
+        .is_ok_and(|v| v.to_string() == PROOFS_PASSKEY);
+    let (next, made) = proofs.cutover(asked, &ring, now());
+    if next != proofs {
+        storage.put(PROOFS, &next).await?;
+    }
+    Ok(made)
 }
 
 /// Checks `code` with the `Instance` Durable Object.
