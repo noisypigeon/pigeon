@@ -276,3 +276,16 @@ Auto's banner.
   pushed and listed under "For you", so the owner still sees it.
 
 !543 needs no change. !547, the app's step, touches none of !548's views.
+### 2026-11-15: Review of !556 against this ADR: they agree
+
+- **!556 carries out the learner ADR's 2026-11-15 countdown amendment**
+  ([`2026-11-15-runtime-learner-practice-standalone-app.md`](2026-11-15-runtime-learner-practice-standalone-app.md)):
+  the scan counts down 3-2-1 on a steady page, with a manual shutter.
+- **What it touches:** `PigeonCore/LearnerCountdown.swift` (`ScanCountdown`),
+  an overload of `readPage` in `PigeonCore/LearnerReader.swift`,
+  `Pigeon/Learner/LearnerScanView.swift` and its test file.
+- **It touches nothing this ADR decides:** not `HomeView.swift`,
+  `Sheets.swift`, `Store.swift` or `Models.swift`; no Auto state, approval,
+  owner item or route. The learner's two pre-approved writes (that ADR's §5)
+  are unchanged, and the scan sends nothing.
+- **The two agree, and neither changes.**
