@@ -122,6 +122,11 @@ final class Store: ObservableObject {
             as: Stacks.self)
     }
 
+    /// One change's sheet; nil when it can't be read, as from a control plane without the route.
+    func changeDetail(_ number: Int) async -> ChangeDetail? {
+        try? await api().call("GET", "/v0/app/changes/\(number)", as: ChangeDetail.self)
+    }
+
     /// One approval's card.
     func detail(_ id: String) async throws -> ApprovalDetail {
         try await api().call("GET", "/v0/app/approvals/\(id)", as: ApprovalDetail.self)

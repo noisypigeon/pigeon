@@ -1,5 +1,5 @@
-// Approvals: Auto's state, the owner's items, the waiting cards, and the shared sheet, verb,
-// bars and Auto banner. See the standing Auto ADR §5.
+// The shared sheet route, verb, bars, Auto's banner and the owner's item card, which the Now
+// tab shows; see the standing Auto ADR §5 and .claude/decisions/2026-11-15-runtime-ios-app-now-tab.md §5.
 
 import PigeonCore
 import SwiftUI
@@ -16,78 +16,6 @@ enum Sheet: Identifiable {
         case .profile: return "profile"
         case .chart(let m): return "chart-\(m)"
         case .approval(let id): return "approval-\(id)"
-        }
-    }
-}
-
-struct ApprovalsView: View {
-    @EnvironmentObject private var store: Store
-    @Binding var sheet: Sheet?
-    @State private var now = Int(Date().timeIntervalSince1970)
-
-    private let tick = Timer.publish(every: 30, on: .main, in: .common).autoconnect()
-
-    var body: some View {
-        ZStack {
-            DotGrid()
-            ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
-                    TopBar(sheet: $sheet)
-                    if let error = store.error {
-                        Text(error).font(.footnote).foregroundStyle(Theme.accent)
-                    }
-                    approvals
-                }
-                .padding(.horizontal, 20)
-                .padding(.bottom, 32)
-            }
-            .refreshable { await store.refresh() }
-        }
-        .onReceive(tick) { _ in now = Int(Date().timeIntervalSince1970) }
-    }
-
-    private var approvals: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("Approvals").font(Theme.display(22)).foregroundStyle(Theme.ink)
-                Spacer()
-                Text("\(store.home?.approvals.count ?? 0) waiting")
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(Theme.accent)
-                    .padding(.horizontal, 10).padding(.vertical, 4)
-                    .background(Capsule().fill(Theme.accentSoft))
-            }
-            .padding(.top, 8)
-            if let auto = store.home?.auto {
-                AutoBanner(window: auto, now: now)
-            } else {
-                AutoOff()
-            }
-            ForEach(store.home?.items ?? []) { item in
-                ItemCard(item: item)
-            }
-            ForEach(store.home?.approvals ?? []) { a in
-                Button {
-                    sheet = .approval(a.id)
-                } label: {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(verb(a.operation) + " · !\(a.number)")
-                            .font(.footnote.weight(.semibold))
-                            .foregroundStyle(Theme.accent)
-                        Text(a.title)
-                            .font(.callout.weight(.semibold))
-                            .foregroundStyle(Theme.ink)
-                            .multilineTextAlignment(.leading)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(16)
-                    .block()
-                }
-                .buttonStyle(.plain)
-            }
-            if store.home?.approvals.isEmpty == true {
-                Text("Nothing waiting.").font(.callout).foregroundStyle(Theme.muted)
-            }
         }
     }
 }

@@ -96,14 +96,60 @@ public struct TrackerCounts: Codable, Equatable, Sendable {
     }
 }
 
-/// /v0/app/tracker's answer.
+/// A change in the merge queue: position 0 while it merges; see
+/// .claude/decisions/2026-11-15-runtime-ios-app-now-tab.md §4.
+public struct QueuedChange: Codable, Equatable, Identifiable, Sendable {
+    public var id: Int { number }
+    public let number: Int
+    public let title: String
+    public let session: String?
+    public let model: String?
+    public let stage: String
+    public let position: Int
+    public let needs: String
+    public let waitsOn: Int?
+    public let next: String
+    public let since: Int?
+
+    public init(
+        number: Int, title: String, session: String? = nil, model: String? = nil, stage: String,
+        position: Int, needs: String, waitsOn: Int? = nil, next: String, since: Int? = nil
+    ) {
+        self.number = number
+        self.title = title
+        self.session = session
+        self.model = model
+        self.stage = stage
+        self.position = position
+        self.needs = needs
+        self.waitsOn = waitsOn
+        self.next = next
+        self.since = since
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case number, title, session, model, stage, position, needs, next, since
+        case waitsOn = "waits_on"
+    }
+}
+
+/// /v0/app/tracker's answer; `queue` is empty from a control plane that predates it.
 public struct Tracker: Codable, Equatable, Sendable {
     public let sessions: [TrackedSession]
     public let counts: TrackerCounts
+    public let queue: [QueuedChange]
 
-    public init(sessions: [TrackedSession], counts: TrackerCounts) {
+    public init(sessions: [TrackedSession], counts: TrackerCounts, queue: [QueuedChange] = []) {
         self.sessions = sessions
         self.counts = counts
+        self.queue = queue
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        sessions = try c.decode([TrackedSession].self, forKey: .sessions)
+        counts = try c.decode(TrackerCounts.self, forKey: .counts)
+        queue = try c.decodeIfPresent([QueuedChange].self, forKey: .queue) ?? []
     }
 }
 
@@ -292,4 +338,153 @@ public func sessionLink(_ label: String) -> URL? {
         return nil
     }
     return url
+}
+
+// The Now tab's pure parts; see .claude/decisions/2026-11-15-runtime-ios-app-now-tab.md.
+
+/// A session's model class as the Now tab counts it; `other` for none or one it doesn't know.
+public enum ModelClass: String, CaseIterable, Equatable, Sendable {
+    case opus, sonnet, haiku, fable, other
+
+    /// The class `model` names: a class, or a model's name or ID holding one.
+    public init(_ model: String?) {
+        let m = model?.lowercased() ?? ""
+        self = [.fable, .opus, .sonnet, .haiku].first { m.contains($0.rawValue) } ?? .other
+    }
+
+    public var label: String { rawValue.capitalized }
+}
+
+/// A class and how many sessions hold it.
+public struct ClassCount: Equatable, Identifiable, Sendable {
+    public var id: ModelClass { model }
+    public let model: ModelClass
+    public let count: Int
+}
+
+/// How many sessions of each class, in `ModelClass`'s order; a class at 0 is left out.
+public func classTally(_ sessions: [TrackedSession]) -> [ClassCount] {
+    let counts = Dictionary(grouping: sessions, by: { ModelClass($0.model) }).mapValues { $0.count }
+    return ModelClass.allCases.compactMap { c in counts[c].map { ClassCount(model: c, count: $0) } }
+}
+
+/// A change's place in the merge queue: 0 while `merging`, `n` at `queued n/m`; nil otherwise.
+public func queuePosition(_ stage: String) -> Int? {
+    if stage == "merging" { return 0 }
+    guard stage.hasPrefix("queued ") else { return nil }
+    let rest = stage.dropFirst("queued ".count)
+    return Int(rest.split(separator: "/").first ?? rest)
+}
+
+/// The merge queue in order: the tracker's `queue`, or, from a control plane without one, the
+/// sessions' changes at `merging` or `queued n/m`.
+public func mergeQueue(_ t: Tracker) -> [QueuedChange] {
+    if !t.queue.isEmpty { return t.queue.sorted { ($0.position, $0.number) < ($1.position, $1.number) } }
+    var out: [QueuedChange] = []
+    for s in t.sessions {
+        for c in s.changes {
+            guard let p = queuePosition(c.stage) else { continue }
+            out.append(
+                QueuedChange(
+                    number: c.number, title: c.title, session: s.label, model: s.model,
+                    stage: c.stage, position: p, needs: c.needs, waitsOn: c.waitsOn,
+                    next: c.next, since: c.since))
+        }
+    }
+    return out.sorted { ($0.position, $0.number) < ($1.position, $1.number) }
+}
+
+/// A queued change's wait, as its cell says it.
+public func queueWait(_ q: QueuedChange) -> String {
+    if q.position == 0 { return q.next }
+    if q.needs == "owner" { return "needs you · " + q.next }
+    if q.next.contains("keeps its place"), let w = q.waitsOn { return "after !\(w) · keeps its place" }
+    if let w = q.waitsOn { return "after !\(w)" }
+    return q.next
+}
+
+/// One thing waiting on the owner.
+public enum NeedItem: Equatable, Identifiable, Sendable {
+    /// An owner item: a decision or an action.
+    case item(OwnerItem)
+    /// A listed approval.
+    case approval(ApprovalSummary)
+    /// A change at `needs: owner` whose approval isn't listed yet.
+    case change(TrackedChange, session: String)
+
+    public var id: String {
+        switch self {
+        case .item(let i): return "item-\(i.id)"
+        case .approval(let a): return "approval-\(a.id)"
+        case .change(let c, _): return "change-\(c.number)"
+        }
+    }
+}
+
+/// Everything waiting on the owner: items, then approvals, then changes at `needs: owner` with no
+/// listed approval, each oldest first; a change and its approval are one item.
+public func needsMe(home: Home?, tracker: Tracker?) -> [NeedItem] {
+    let items = (home?.items ?? []).sorted { $0.opened < $1.opened }.map(NeedItem.item)
+    let approvals = home?.approvals ?? []
+    let listed = Set(approvals.map(\.number))
+    let listedItems = approvals.sorted { $0.expires < $1.expires }.map(NeedItem.approval)
+    var changes: [(TrackedChange, String)] = []
+    for s in tracker?.sessions ?? [] {
+        for c in s.changes where c.needs == "owner" && !listed.contains(c.number) {
+            changes.append((c, s.label))
+        }
+    }
+    changes.sort { ($0.0.since ?? 0) < ($1.0.since ?? 0) }
+    return items + listedItems + changes.map { NeedItem.change($0.0, session: $0.1) }
+}
+
+/// The Needs me card's line: each kind with its count, `1 approval · 1 decision`.
+public func needsSummary(_ items: [NeedItem]) -> String {
+    var approvals = 0
+    var decisions = 0
+    var actions = 0
+    var changes = 0
+    for i in items {
+        switch i {
+        case .approval: approvals += 1
+        case .item(let o): if o.kind == "decision" { decisions += 1 } else { actions += 1 }
+        case .change: changes += 1
+        }
+    }
+    func n(_ k: Int, _ one: String, _ many: String) -> String? {
+        k == 0 ? nil : "\(k) \(k == 1 ? one : many)"
+    }
+    let parts = [
+        n(approvals, "approval", "approvals"), n(decisions, "decision", "decisions"),
+        n(actions, "action", "actions"), n(changes, "change at needs you", "changes at needs you"),
+    ]
+    let line = parts.compactMap { $0 }.joined(separator: " · ")
+    return line.isEmpty ? "Nothing waiting" : line
+}
+
+/// What a session is doing or needs, in a line: the owner first, then a merge, a failure, a
+/// stall, checks, a queue place; else quiet.
+public func doingLine(_ s: TrackedSession) -> String {
+    let cs = s.changes
+    if let c = cs.first(where: { $0.needs == "owner" }) { return "Needs you: " + c.next }
+    if let c = cs.first(where: { $0.stage == "merging" }) { return "Merging !\(c.number) now" }
+    if let c = cs.first(where: { $0.mark == .failed }) { return "Fixing: " + c.next }
+    if let c = cs.first(where: { $0.mark == .stalled }) { return "Stalled on !\(c.number): its agent is quiet" }
+    if let c = cs.first(where: { $0.stage.hasPrefix("checking ") }) {
+        let parts = c.stage.dropFirst("checking ".count).split(separator: "/")
+        if parts.count == 2 { return "Waiting on checks: \(parts[0]) of \(parts[1]) done" }
+    }
+    if let c = cs.first(where: { $0.stage == "checking" }) { return "Waiting on checks for !\(c.number)" }
+    if let p = cs.compactMap({ queuePosition($0.stage) }).min() { return "Queued at #\(p)" }
+    if let c = cs.first(where: { $0.needs == "agent" }) { return "Working: " + c.next }
+    return cs.isEmpty ? "No open change" : "Quiet"
+}
+
+/// A session's title: its newest open change's title, or its class and role.
+public func sessionTitle(_ s: TrackedSession) -> String {
+    let open = s.changes.filter { $0.mark != .done }
+    if let c = (open.isEmpty ? s.changes : open).max(by: { $0.number < $1.number }) {
+        return scopeAndSubject(c.title).subject
+    }
+    return [ModelClass(s.model).label, s.role ?? "session"].joined(separator: " ")
 }

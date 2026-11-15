@@ -1,10 +1,11 @@
-// The three tabs and the bar above them; see
-// .claude/decisions/2026-11-12-runtime-ios-app-approvals-insights.md's 2026-11-15 amendment.
+// The two tabs, Now and Insights, and the bar above them; see
+// .claude/decisions/2026-11-15-runtime-ios-app-now-tab.md §1.
 
+import PigeonCore
 import SwiftUI
 
 enum AppTab: Hashable {
-    case tracker, approvals, insights
+    case now, insights
 }
 
 /// The instance chip and the avatar button.
@@ -55,19 +56,16 @@ struct RootView: View {
     @EnvironmentObject private var store: Store
     @Environment(\.scenePhase) private var scenePhase
     @Binding var link: URL?
-    @State private var tab: AppTab = .tracker
+    @State private var tab: AppTab = .now
     @State private var sheet: Sheet?
     @State private var openApproval: String?
 
     var body: some View {
         TabView(selection: $tab) {
-            TrackerView(sheet: $sheet, tab: $tab)
-                .tabItem { Label("Tracker", systemImage: "point.3.connected.trianglepath.dotted") }
-                .tag(AppTab.tracker)
-            ApprovalsView(sheet: $sheet)
-                .tabItem { Label("Approvals", systemImage: "checkmark.shield") }
-                .badge(store.home?.approvals.count ?? 0)
-                .tag(AppTab.approvals)
+            NowView(sheet: $sheet)
+                .tabItem { Label("Now", systemImage: "point.3.connected.trianglepath.dotted") }
+                .badge(needsMe(home: store.home, tracker: store.tracker).count)
+                .tag(AppTab.now)
             InsightsView(sheet: $sheet)
                 .tabItem { Label("Insights", systemImage: "chart.bar") }
                 .tag(AppTab.insights)
@@ -88,10 +86,10 @@ struct RootView: View {
         .onChange(of: link, initial: true) { _, url in
             guard let url, url.scheme == "pigeon" else { return }
             if url.host == "approval", let id = url.pathComponents.dropFirst().first {
-                tab = .approvals
+                tab = .now
                 sheet = .approval(id)
             } else if url.host == "home" {
-                tab = .tracker
+                tab = .now
             }
             link = nil
         }

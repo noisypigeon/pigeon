@@ -300,3 +300,67 @@ extension AutoWindow {
         (recent ?? []).filter { now - $0 < 6 * 3_600 }.count
     }
 }
+
+/// A change's sheet: `change.status`'s answer, through `GET /v0/app/changes/<n>` until the app
+/// reads operations itself; see .claude/decisions/2026-11-15-runtime-ios-app-now-tab.md §4.
+public struct ChangeDetail: Decodable, Equatable, Sendable {
+    /// A job on its head.
+    public struct Job: Decodable, Equatable, Sendable {
+        public let name: String
+        public let status: String
+        public let attempts: Int?
+    }
+
+    /// A GitHub run of its checks.
+    public struct Run: Decodable, Equatable, Sendable {
+        public let run: String?
+        public let checks: [String]?
+        public let waiting: String?
+    }
+
+    public let number: Int
+    public let title: String
+    public let session: String?
+    public let model: String?
+    public let stage: String
+    public let position: Int?
+    public let needs: String
+    public let waitsOn: Int?
+    public let next: String
+    public let since: Int?
+    public let jobs: [Job]
+    public let github: [Run]
+    public let approval: String?
+
+    enum Keys: String, CodingKey {
+        case change, stage, github, position, model, approval
+    }
+
+    enum ChangeKeys: String, CodingKey {
+        case number, title, session, jobs
+    }
+
+    enum StageKeys: String, CodingKey {
+        case stage, needs, next, since
+        case waitsOn = "waits_on"
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: Keys.self)
+        let change = try c.nestedContainer(keyedBy: ChangeKeys.self, forKey: .change)
+        number = try change.decode(Int.self, forKey: .number)
+        title = try change.decode(String.self, forKey: .title)
+        session = try change.decodeIfPresent(String.self, forKey: .session)
+        jobs = try change.decodeIfPresent([Job].self, forKey: .jobs) ?? []
+        let stage = try c.nestedContainer(keyedBy: StageKeys.self, forKey: .stage)
+        self.stage = try stage.decode(String.self, forKey: .stage)
+        needs = try stage.decode(String.self, forKey: .needs)
+        waitsOn = try stage.decodeIfPresent(Int.self, forKey: .waitsOn)
+        next = try stage.decode(String.self, forKey: .next)
+        since = try stage.decodeIfPresent(Int.self, forKey: .since)
+        model = try c.decodeIfPresent(String.self, forKey: .model)
+        position = try c.decodeIfPresent(Int.self, forKey: .position)
+        github = (try? c.decodeIfPresent([Run].self, forKey: .github)) ?? []
+        approval = try c.decodeIfPresent(String.self, forKey: .approval)
+    }
+}

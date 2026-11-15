@@ -1,6 +1,6 @@
-// The tracker: each session's changes on a ten-stop rail, live through /v0/app/events; silent
-// sessions hidden by default, and a change's sheet a tap away. See
-// .claude/decisions/2026-11-12-runtime-ios-app-approvals-insights.md's 2026-11-15 amendments.
+// Now: Auto, the active sessions and what needs the owner as two cards, and the merge queue in
+// order, each opening a sheet; live through /v0/app/events. See
+// .claude/decisions/2026-11-15-runtime-ios-app-now-tab.md.
 
 import PigeonCore
 import SwiftUI
@@ -10,16 +10,40 @@ struct OpenedChange: Identifiable {
     let id: Int
 }
 
-struct TrackerView: View {
+/// The approval whose card is open over a sheet.
+struct OpenedApproval: Identifiable {
+    let id: String
+}
+
+/// The list a card opens.
+enum NowPanel: String, Identifiable {
+    case sessions, needs
+    var id: String { rawValue }
+}
+
+/// A model class's colour, shared by the chips, dots and badges.
+func classColor(_ c: ModelClass) -> Color {
+    switch c {
+    case .opus: return Theme.accent
+    case .sonnet: return Theme.color(0x3A78B5, 0x4C86C6)
+    case .haiku: return Theme.color(0x2D8C6A, 0x2F9C78)
+    case .fable: return Theme.color(0x8A6420, 0xC79A3A)
+    case .other: return Theme.muted
+    }
+}
+
+struct NowView: View {
     @EnvironmentObject private var store: Store
     @Binding var sheet: Sheet?
-    @Binding var tab: AppTab
+    @State private var panel: NowPanel?
+    @State private var opened: OpenedChange?
     @State private var filter: TrackerFilter = .all
     @State private var showSilent = false
-    @State private var opened: OpenedChange?
+    @State private var showAll = false
     @State private var now = Int(Date().timeIntervalSince1970)
 
     private let tick = Timer.publish(every: 30, on: .main, in: .common).autoconnect()
+    private let shownCells = 10
 
     var body: some View {
         ZStack {
@@ -30,90 +54,300 @@ struct TrackerView: View {
                     if let error = store.error {
                         Text(error).font(.footnote).foregroundStyle(Theme.accent)
                     }
-                    title
-                    chips
+                    Text("Now").font(Theme.display(22)).foregroundStyle(Theme.ink)
+                        .padding(.top, 8)
                     if let auto = store.home?.auto {
                         AutoBanner(window: auto, now: now)
+                    } else if store.home != nil {
+                        AutoOff()
                     }
-                    ForEach(shown) { session in
-                        SessionCard(
-                            session: session, now: now, sheet: $sheet, tab: $tab, opened: $opened)
-                    }
-                    if shown.isEmpty {
-                        Text("Nothing running.").font(.callout).foregroundStyle(Theme.muted)
-                    }
-                    hiddenLine
+                    cards
+                    queue
                 }
                 .padding(.horizontal, 20)
                 .padding(.bottom, 32)
             }
-            .refreshable { await store.loadTracker() }
+            .refreshable {
+                await store.refresh()
+                await store.loadTracker()
+            }
         }
         .task { await store.follow() }
         .onReceive(tick) { _ in now = Int(Date().timeIntervalSince1970) }
+        .sheet(item: $panel) { p in
+            Group {
+                switch p {
+                case .sessions:
+                    SessionsSheet(filter: $filter, showSilent: $showSilent, now: now)
+                case .needs:
+                    NeedsMeSheet(now: now)
+                }
+            }
+            .environmentObject(store)
+        }
         .sheet(item: $opened) { o in
-            ChangeSheet(number: o.id, now: now, sheet: $sheet, tab: $tab)
-                .environmentObject(store)
+            ChangeSheet(number: o.id, now: now).environmentObject(store)
         }
     }
 
-    private var shown: [TrackedSession] {
-        guard let tracker = store.tracker else { return [] }
-        return visible(tracker, by: filter, showSilent: showSilent)
+    private var sessions: [TrackedSession] { store.tracker?.sessions ?? [] }
+    private var needs: [NeedItem] { needsMe(home: store.home, tracker: store.tracker) }
+
+    private var cards: some View {
+        Grid(horizontalSpacing: 14) {
+            GridRow {
+                Button {
+                    panel = .sessions
+                } label: {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Eyebrow(text: "Active sessions")
+                        Text("\(sessions.count)").font(Theme.display(44)).foregroundStyle(Theme.ink)
+                        FlowRow(spacing: 6) {
+                            ForEach(classTally(sessions)) { entry in
+                                ClassChip(model: entry.model, count: entry.count)
+                            }
+                        }
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 148, alignment: .topLeading)
+                    .padding(14)
+                    .block()
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(
+                    "\(sessions.count) active sessions: "
+                        + classTally(sessions).map { "\($0.count) \($0.model.label)" }.joined(separator: ", "))
+                .accessibilityHint("Opens the list")
+
+                Button {
+                    panel = .needs
+                } label: {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("NEEDS ME").font(Theme.mono(12, .semibold)).tracking(1)
+                            .foregroundStyle(needs.isEmpty ? Theme.muted : Theme.accentSoft)
+                        Text("\(needs.count)").font(Theme.display(44))
+                            .foregroundStyle(needs.isEmpty ? Theme.ink : Theme.onAccent)
+                        Text(needsSummary(needs)).font(.footnote)
+                            .foregroundStyle(needs.isEmpty ? Theme.muted : Theme.accentSoft)
+                            .multilineTextAlignment(.leading)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 148, alignment: .topLeading)
+                    .padding(14)
+                    .background(
+                        RoundedRectangle(cornerRadius: 14).fill(needs.isEmpty ? Theme.card : Theme.accent))
+                    .background(RoundedRectangle(cornerRadius: 14).fill(Theme.shadow).offset(x: 3, y: 3))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("\(needs.count) need you: \(needsSummary(needs))")
+                .accessibilityHint("Opens the list")
+            }
+        }
     }
 
-    private var silent: Int {
-        store.tracker.map { silentCount($0, by: filter) } ?? 0
-    }
-
-    /// The filter in force: `.all` once the chosen one matches nothing.
-    private var active: TrackerFilter {
-        store.tracker.map { effectiveFilter($0, filter) } ?? .all
-    }
-
-    private var title: some View {
-        let changes = shown.reduce(0) { $0 + $1.changes.count }
-        return HStack(alignment: .firstTextBaseline) {
-            Text("Tracker").font(Theme.display(22)).foregroundStyle(Theme.ink)
+    @ViewBuilder
+    private var queue: some View {
+        let cells = store.tracker.map(mergeQueue) ?? []
+        let queued = cells.filter { $0.position > 0 }.count
+        HStack(alignment: .firstTextBaseline) {
+            Text("Merge queue").font(.headline).foregroundStyle(Theme.ink)
             Spacer()
-            Text("\(shown.count) sessions · \(changes) changes")
-                .font(Theme.mono(12)).foregroundStyle(Theme.muted)
+            Text(
+                (cells.first?.position == 0 ? "1 merging · " : "") + "\(queued) queued"
+            )
+            .font(Theme.mono(12)).foregroundStyle(Theme.muted)
         }
-        .padding(.top, 8)
+        .padding(.top, 10)
+        if cells.isEmpty {
+            Text("Nothing queued.").font(.callout).foregroundStyle(Theme.muted)
+        }
+        ForEach(showAll ? cells : Array(cells.prefix(shownCells))) { q in
+            QueueCell(cell: q) { opened = OpenedChange(id: q.number) }
+        }
+        if !showAll, cells.count > shownCells {
+            Button {
+                showAll = true
+            } label: {
+                Text("Show \(cells.count - shownCells) more")
+                    .font(.subheadline.weight(.semibold)).foregroundStyle(Theme.accent)
+                    .frame(maxWidth: .infinity, minHeight: 44)
+            }
+            .buttonStyle(.plain)
+        }
+    }
+}
+
+/// A class and its count, as a chip with its colour's dot.
+struct ClassChip: View {
+    let model: ModelClass
+    let count: Int
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Circle().fill(classColor(model)).frame(width: 8, height: 8)
+            Text("\(count) \(model.label)").font(Theme.mono(12, .semibold))
+        }
+        .foregroundStyle(Theme.ink2)
+        .padding(.horizontal, 8).frame(minHeight: 24)
+        .background(Capsule().fill(Theme.chip))
+    }
+}
+
+/// One change in the merge queue: its position, number, class, session, subject and wait.
+struct QueueCell: View {
+    let cell: QueuedChange
+    let open: () -> Void
+
+    private var meta: String {
+        let head = cell.position == 0 ? "MERGING · " : ""
+        let session = cell.session.map { " · " + shortLabel($0) } ?? ""
+        return head + "!\(cell.number) · " + ModelClass(cell.model).label.uppercased() + session
     }
 
-    private var chips: some View {
-        let counts = store.tracker?.counts
-        return FlowRow {
-            if let n = counts?.owner, n > 0 { chip("\(n) need you", .owner) }
-            if let n = counts?.stalled, n > 0 { chip("\(n) stalled", .stalled) }
-            if let n = counts?.provider, n > 0 { chip("\(n) on a provider", .provider) }
-            if silent > 0 { silentChip }
+    private var spoken: String {
+        let place = cell.position == 0 ? "Merging" : "Position \(cell.position)"
+        let subject = scopeAndSubject(cell.title).subject
+        return place + ", change \(cell.number), " + ModelClass(cell.model).label + ": " + subject + ". " + queueWait(cell)
+    }
+
+    var body: some View {
+        let merging = cell.position == 0
+        let model = ModelClass(cell.model)
+        Button(action: open) {
+            HStack(spacing: 12) {
+                Group {
+                    if merging {
+                        Image(systemName: "arrow.triangle.merge").font(.body.weight(.bold))
+                            .foregroundStyle(Theme.onAccent)
+                    } else {
+                        Text("\(cell.position)").font(Theme.mono(15, .bold)).foregroundStyle(Theme.ink)
+                    }
+                }
+                .frame(width: 34, height: 34)
+                .background(RoundedRectangle(cornerRadius: 10).fill(merging ? Theme.good : Theme.chip))
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 6) {
+                        Circle().fill(classColor(model)).frame(width: 8, height: 8)
+                        Text(meta)
+                            .font(Theme.mono(12, .semibold))
+                            .foregroundStyle(merging ? Theme.good : Theme.ink2)
+                    }
+                    Text(scopeAndSubject(cell.title).subject)
+                        .font(.subheadline.weight(.semibold)).foregroundStyle(Theme.ink)
+                        .lineLimit(merging ? 2 : 1)
+                        .multilineTextAlignment(.leading)
+                    Text(queueWait(cell)).font(.caption)
+                        .foregroundStyle(cell.needs == "owner" ? Theme.accent : Theme.muted)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 4)
+                Image(systemName: "chevron.right")
+                    .font(.footnote.weight(.semibold)).foregroundStyle(Theme.muted)
+            }
+            .padding(.horizontal, 14).padding(.vertical, 10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .block(shadow: merging ? Theme.good : (cell.needs == "owner" ? Theme.accent : Theme.shadow))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(spoken)
+        .accessibilityHint("Opens the change")
+    }
+}
+
+/// The Active sessions sheet: counts, the tracker's filters and silent toggle, and a card per
+/// session.
+struct SessionsSheet: View {
+    @EnvironmentObject private var store: Store
+    @Environment(\.dismiss) private var dismiss
+    @Binding var filter: TrackerFilter
+    @Binding var showSilent: Bool
+    let now: Int
+    @State private var opened: OpenedChange?
+
+    var body: some View {
+        let tracker = store.tracker ?? Tracker(sessions: [], counts: TrackerCounts(owner: 0, stalled: 0, provider: 0))
+        let active = effectiveFilter(tracker, filter)
+        let shown = visible(tracker, by: filter, showSilent: showSilent)
+        let silent = silentCount(tracker, by: filter)
+        ZStack {
+            Theme.background.ignoresSafeArea()
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    HStack {
+                        Text("Active sessions").font(Theme.display(22)).foregroundStyle(Theme.ink)
+                        Spacer()
+                        Button("Done") { dismiss() }
+                            .font(.body.weight(.semibold)).foregroundStyle(Theme.accent)
+                            .frame(minHeight: 44)
+                    }
+                    Text(countsLine(tracker))
+                        .font(Theme.mono(12)).foregroundStyle(Theme.muted)
+                    FlowRow {
+                        chip("All", .all, active)
+                        if tracker.counts.owner > 0 { chip("\(tracker.counts.owner) need you", .owner, active) }
+                        if tracker.counts.stalled > 0 { chip("\(tracker.counts.stalled) stalled", .stalled, active) }
+                        if tracker.counts.provider > 0 {
+                            chip("\(tracker.counts.provider) on a provider", .provider, active)
+                        }
+                        if silent > 0 {
+                            Button {
+                                showSilent.toggle()
+                            } label: {
+                                chipLabel(
+                                    Text(
+                                        "\(Image(systemName: showSilent ? "circle.inset.filled" : "circle.dashed")) \(silent) silent"
+                                    ), on: showSilent)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("\(silent) silent sessions")
+                            .accessibilityValue(showSilent ? "shown" : "hidden")
+                        }
+                    }
+                    ForEach(shown) { s in
+                        SessionSummaryCard(session: s) { opened = OpenedChange(id: $0) }
+                    }
+                    if shown.isEmpty {
+                        Text("Nothing running.").font(.callout).foregroundStyle(Theme.muted)
+                    }
+                    if !showSilent, silent > 0 {
+                        Button {
+                            showSilent = true
+                        } label: {
+                            (Text("\(silent) silent \(silent == 1 ? "session" : "sessions") hidden · ")
+                                .foregroundStyle(Theme.muted)
+                                + Text("Show").foregroundStyle(Theme.accent).fontWeight(.semibold))
+                                .font(.subheadline)
+                                .frame(maxWidth: .infinity, minHeight: 44)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(20)
+            }
+        }
+        .presentationDetents([.large])
+        .presentationDragIndicator(.visible)
+        .sheet(item: $opened) { o in
+            ChangeSheet(number: o.id, now: now).environmentObject(store)
         }
     }
 
-    private func chip(_ text: String, _ f: TrackerFilter) -> some View {
+    private func countsLine(_ t: Tracker) -> String {
+        let classes = classTally(t.sessions).map { "\($0.count) \($0.model.label)" }
+        let changes = t.sessions.reduce(0) { $0 + $1.changes.count }
+        return (["\(t.sessions.count) active"] + classes + ["\(changes) changes"]).joined(separator: " · ")
+    }
+
+    private func chip(_ text: String, _ f: TrackerFilter, _ active: TrackerFilter) -> some View {
         let on = active == f
         return Button {
-            filter = on ? .all : f
+            filter = on && f != .all ? .all : f
         } label: {
             chipLabel(Text(text), on: on)
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(on ? .isSelected : [])
-    }
-
-    private var silentChip: some View {
-        Button {
-            showSilent.toggle()
-        } label: {
-            let glyph = Image(systemName: showSilent ? "circle.inset.filled" : "circle.dashed")
-            chipLabel(Text("\(glyph) \(silent) silent"), on: showSilent)
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("\(silent) silent sessions")
-        .accessibilityValue(showSilent ? "shown" : "hidden")
-        .accessibilityAddTraits(showSilent ? .isSelected : [])
     }
 
     private func chipLabel(_ text: Text, on: Bool) -> some View {
@@ -123,21 +357,176 @@ struct TrackerView: View {
             .padding(.horizontal, 10).frame(minHeight: 32)
             .background(Capsule().fill(on ? Theme.accent : Theme.chip))
     }
+}
+
+/// A session in the Active sessions sheet: class and role, its title, what it's doing or needs,
+/// its changes, and a link into Claude.
+struct SessionSummaryCard: View {
+    @Environment(\.openURL) private var openURL
+    let session: TrackedSession
+    let open: (Int) -> Void
+
+    var body: some View {
+        let quiet = isSilent(session)
+        let needsOwner = session.changes.contains { $0.needs == "owner" }
+        let failing = session.changes.contains { $0.mark == .failed || $0.mark == .stalled }
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                ModelBadge(model: session.model, small: true)
+                Text(session.role ?? "session").font(Theme.mono(12)).foregroundStyle(Theme.muted)
+                ListeningDot(listening: session.listening)
+                Spacer()
+                if let url = sessionLink(session.label) {
+                    Button {
+                        openURL(url)
+                    } label: {
+                        HStack(spacing: 4) {
+                            Text("Open in Claude")
+                            Image(systemName: "arrow.up.right").font(.caption.weight(.bold))
+                        }
+                        .font(.footnote.weight(.semibold)).foregroundStyle(Theme.accent)
+                        .frame(minHeight: 32)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            Text(sessionTitle(session))
+                .font(.callout.weight(.semibold)).foregroundStyle(Theme.ink)
+                .fixedSize(horizontal: false, vertical: true)
+            Text(doingLine(session))
+                .font(.footnote.weight(.medium))
+                .foregroundStyle(needsOwner ? Theme.accent : (failing ? Theme.warn : Theme.ink2))
+                .fixedSize(horizontal: false, vertical: true)
+            if !session.changes.isEmpty {
+                FlowRow(spacing: 6) {
+                    ForEach(session.changes) { c in
+                        Button {
+                            open(c.number)
+                        } label: {
+                            Text(changeChip(c))
+                                .font(Theme.mono(12, .semibold)).foregroundStyle(Theme.ink2)
+                                .padding(.horizontal, 8).frame(minHeight: 28)
+                                .background(RoundedRectangle(cornerRadius: 8).fill(Theme.chip))
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityHint("Opens the change")
+                    }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .modifier(CardStyle(quiet: quiet, shadow: needsOwner ? Theme.accent : (failing ? Theme.warn : Theme.shadow)))
+    }
+
+    private func changeChip(_ c: TrackedChange) -> String {
+        if let p = queuePosition(c.stage) { return p == 0 ? "!\(c.number) merging" : "!\(c.number) #\(p)" }
+        return "!\(c.number) \(c.stage)"
+    }
+}
+
+/// The Needs me sheet: the owner's items, approvals and changes at `needs: owner`, each answered
+/// in place.
+struct NeedsMeSheet: View {
+    @EnvironmentObject private var store: Store
+    @Environment(\.dismiss) private var dismiss
+    let now: Int
+    @State private var approval: OpenedApproval?
+    @State private var opened: OpenedChange?
+
+    var body: some View {
+        let items = needsMe(home: store.home, tracker: store.tracker)
+        ZStack {
+            Theme.background.ignoresSafeArea()
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    HStack {
+                        Text("Needs me").font(Theme.display(22)).foregroundStyle(Theme.ink)
+                        Spacer()
+                        Button("Done") { dismiss() }
+                            .font(.body.weight(.semibold)).foregroundStyle(Theme.accent)
+                            .frame(minHeight: 44)
+                    }
+                    Text(items.isEmpty ? "Nothing waiting" : "\(items.count) waiting")
+                        .font(Theme.mono(12)).foregroundStyle(Theme.muted)
+                    ForEach(items) { item in
+                        row(item)
+                    }
+                    if !items.isEmpty {
+                        Text("Answered items leave this list; approvals stay listed until they no longer apply.")
+                            .font(.footnote).foregroundStyle(Theme.muted)
+                            .frame(maxWidth: .infinity)
+                            .multilineTextAlignment(.center)
+                    }
+                }
+                .padding(20)
+            }
+            .refreshable { await store.refresh() }
+        }
+        .presentationDetents([.large])
+        .presentationDragIndicator(.visible)
+        .sheet(item: $approval) { a in
+            ApprovalSheet(id: a.id).environmentObject(store)
+        }
+        .sheet(item: $opened) { o in
+            ChangeSheet(number: o.id, now: now).environmentObject(store)
+        }
+    }
 
     @ViewBuilder
-    private var hiddenLine: some View {
-        if !showSilent, silent > 0 {
-            Button {
-                showSilent = true
-            } label: {
-                (Text("\(silent) silent \(silent == 1 ? "session" : "sessions") hidden · ")
-                    .foregroundStyle(Theme.muted)
-                    + Text("Show").foregroundStyle(Theme.accent).fontWeight(.semibold))
-                    .font(.subheadline)
-                    .frame(maxWidth: .infinity, minHeight: 44)
-            }
-            .buttonStyle(.plain)
+    private func row(_ item: NeedItem) -> some View {
+        switch item {
+        case .item(let o):
+            ItemCard(item: o)
+        case .approval(let a):
+            NeedCard(
+                eyebrow: "Approval · \(verb(a.operation)) · !\(a.number)", title: a.title, detail: nil,
+                action: "Review and approve", run: { approval = OpenedApproval(id: a.id) },
+                details: { opened = OpenedChange(id: a.number) })
+        case .change(let c, _):
+            NeedCard(
+                eyebrow: "Needs you · !\(c.number)", title: scopeAndSubject(c.title).subject,
+                detail: c.next, action: "Open the change", run: { opened = OpenedChange(id: c.number) },
+                details: nil)
         }
+    }
+}
+
+/// A card for something waiting on the owner, with its one action.
+struct NeedCard: View {
+    let eyebrow: String
+    let title: String
+    let detail: String?
+    let action: String
+    let run: () -> Void
+    let details: (() -> Void)?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(eyebrow).font(.footnote.weight(.semibold)).foregroundStyle(Theme.accent)
+            Text(title).font(.callout.weight(.semibold)).foregroundStyle(Theme.ink)
+                .fixedSize(horizontal: false, vertical: true)
+            if let detail {
+                Text(detail).font(.footnote).foregroundStyle(Theme.ink2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            HStack(spacing: 12) {
+                Button(action: run) {
+                    Text(action).font(.subheadline.weight(.semibold)).foregroundStyle(Theme.onAccent)
+                        .padding(.horizontal, 14).frame(minHeight: 40)
+                        .background(RoundedRectangle(cornerRadius: 10).fill(Theme.accent))
+                }
+                .buttonStyle(.plain)
+                if let details {
+                    Button("Details", action: details)
+                        .font(.subheadline.weight(.semibold)).foregroundStyle(Theme.accent)
+                        .frame(minHeight: 40)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .block(shadow: Theme.accent)
     }
 }
 
@@ -189,107 +578,6 @@ struct FlowRow: Layout {
     }
 }
 
-/// One session and its changes, glanceable: a pill, the title in full and the rail per change.
-struct SessionCard: View {
-    @EnvironmentObject private var store: Store
-    let session: TrackedSession
-    let now: Int
-    @Binding var sheet: Sheet?
-    @Binding var tab: AppTab
-    @Binding var opened: OpenedChange?
-
-    var body: some View {
-        let quiet = isSilent(session)
-        VStack(alignment: .leading, spacing: 10) {
-            header(quiet)
-            ForEach(session.changes) { change in
-                if change.mark == .done {
-                    doneRow(change)
-                } else {
-                    row(change)
-                }
-            }
-            if session.changes.isEmpty {
-                Text("No open change").font(.subheadline).foregroundStyle(Theme.muted)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 14).padding(.vertical, 12)
-        .modifier(CardStyle(quiet: quiet, shadow: shadow))
-    }
-
-    private var shadow: Color {
-        if session.changes.contains(where: { $0.needs == "owner" }) { return Theme.accent }
-        if session.changes.contains(where: { $0.mark == .stalled }) { return Theme.warn }
-        return Theme.shadow
-    }
-
-    private func header(_ quiet: Bool) -> some View {
-        HStack(spacing: 8) {
-            ModelBadge(model: session.model, small: true)
-            Spacer()
-            if quiet {
-                Text("SILENT").font(Theme.mono(11, .semibold)).foregroundStyle(Theme.muted)
-            }
-            ListeningDot(listening: session.listening)
-        }
-    }
-
-    private func row(_ c: TrackedChange) -> some View {
-        let status = rowStatus(c)
-        let split = scopeAndSubject(c.title)
-        return VStack(alignment: .leading, spacing: 8) {
-            Button {
-                opened = OpenedChange(id: c.number)
-            } label: {
-                VStack(alignment: .leading, spacing: 7) {
-                    HStack(spacing: 8) {
-                        StatusPill(status: status)
-                        if !status.note.isEmpty {
-                            Text(status.note).font(Theme.mono(12)).foregroundStyle(Theme.muted)
-                        }
-                        Spacer(minLength: 4)
-                        if let since = c.since {
-                            Text(elapsed(since: since, now: now))
-                                .font(Theme.mono(12)).foregroundStyle(Theme.muted)
-                        }
-                        Image(systemName: "chevron.right")
-                            .font(.footnote.weight(.semibold)).foregroundStyle(Theme.muted)
-                    }
-                    TitleLine(tag: split.tag, subject: split.subject)
-                    Rail(change: c, height: 6)
-                }
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityElement(children: .combine)
-            .accessibilityHint("Opens the change")
-            if c.needs == "owner" {
-                ReviewButton(number: c.number, sheet: $sheet, tab: $tab)
-            }
-        }
-    }
-
-    private func doneRow(_ c: TrackedChange) -> some View {
-        Button {
-            opened = OpenedChange(id: c.number)
-        } label: {
-            HStack(alignment: .firstTextBaseline, spacing: 10) {
-                StatusPill(status: rowStatus(c))
-                Text("!\(c.number) \(scopeAndSubject(c.title).subject)")
-                    .font(.subheadline).foregroundStyle(Theme.muted)
-                    .multilineTextAlignment(.leading)
-                    .fixedSize(horizontal: false, vertical: true)
-                Spacer(minLength: 4)
-                Image(systemName: "chevron.right")
-                    .font(.footnote.weight(.semibold)).foregroundStyle(Theme.muted)
-            }
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityElement(children: .combine)
-    }
-}
 
 /// A title's scope tag and its subject, wrapped in full.
 struct TitleLine: View {
@@ -337,18 +625,18 @@ struct CardStyle: ViewModifier {
     }
 }
 
-/// The session's class as a badge.
+/// The session's class as a badge, in its colour.
 struct ModelBadge: View {
     let model: String?
     var small = false
 
     var body: some View {
-        let opus = model?.lowercased() == "opus"
-        Text(modelBadge(model))
+        let c = ModelClass(model)
+        Text(c.label.uppercased())
             .font(Theme.mono(small ? 10 : 11, .semibold))
-            .foregroundStyle(opus ? Theme.background : Theme.ink)
+            .foregroundStyle(c == .other ? Theme.ink : Theme.onAccent)
             .padding(.horizontal, small ? 6 : 8).padding(.vertical, small ? 2 : 3)
-            .background(RoundedRectangle(cornerRadius: 5).fill(opus ? Theme.ink : Theme.chip))
+            .background(RoundedRectangle(cornerRadius: 5).fill(c == .other ? Theme.chip : classColor(c)))
     }
 }
 
@@ -426,40 +714,45 @@ struct StatusPill: View {
     }
 }
 
-/// Opens the change's approval, or the Approvals tab when it isn't listed yet.
+
+/// Opens the change's listed approval; until it is listed, says so.
 struct ReviewButton: View {
     @EnvironmentObject private var store: Store
     let number: Int
-    @Binding var sheet: Sheet?
-    @Binding var tab: AppTab
+    var listed: String?
+    let open: (String) -> Void
 
     var body: some View {
+        let id = listed ?? store.home?.approvals.first(where: { $0.number == number })?.id
         Button {
-            if let a = store.home?.approvals.first(where: { $0.number == number }) {
-                sheet = .approval(a.id)
-            } else {
-                tab = .approvals
-            }
+            if let id { open(id) }
         } label: {
-            Text("Review and approve")
+            Text(id == nil ? "Its approval isn't listed yet" : "Approve with passkey")
                 .font(.callout.weight(.semibold))
                 .foregroundStyle(Theme.onAccent)
-                .padding(.horizontal, 18).frame(minHeight: 44)
-                .background(Capsule().fill(Theme.accent))
+                .padding(.horizontal, 18).frame(maxWidth: .infinity, minHeight: 44)
+                .background(Capsule().fill(id == nil ? Theme.muted : Theme.accent))
         }
         .buttonStyle(.plain)
+        .disabled(id == nil)
     }
 }
 
-/// A change's sheet: its title, progress, what's next, its session, and a link into Claude.
+/// A change's sheet: its title, place in the queue, progress, what's next and what it waits on,
+/// its checks, its session, and a link into Claude; the change route fills in the checks.
 struct ChangeSheet: View {
     @EnvironmentObject private var store: Store
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
-    let number: Int
     let now: Int
-    @Binding var sheet: Sheet?
-    @Binding var tab: AppTab
+    @State private var number: Int
+    @State private var detail: ChangeDetail?
+    @State private var approval: OpenedApproval?
+
+    init(number: Int, now: Int) {
+        self.now = now
+        _number = State(initialValue: number)
+    }
 
     private var found: (session: TrackedSession, change: TrackedChange)? {
         for s in store.tracker?.sessions ?? [] {
@@ -468,11 +761,15 @@ struct ChangeSheet: View {
         return nil
     }
 
+    private var queued: QueuedChange? {
+        store.tracker.map(mergeQueue)?.first { $0.number == number }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 8) {
-                Text("!\(number)").font(Theme.mono(13, .semibold)).foregroundStyle(Theme.muted)
-                if let tag = found.flatMap({ scopeAndSubject($0.change.title).tag }) {
+                Text(header).font(Theme.mono(13, .semibold)).foregroundStyle(Theme.muted)
+                if let tag = scopeAndSubject(title).tag {
                     ScopeTag(text: tag)
                 }
                 Spacer()
@@ -480,36 +777,63 @@ struct ChangeSheet: View {
                     .font(.body.weight(.semibold)).foregroundStyle(Theme.accent)
                     .frame(minHeight: 44)
             }
-            if let f = found {
-                content(f.session, f.change)
-            } else {
+            if title.isEmpty {
                 Text("This change has left the tracker.")
                     .font(.callout).foregroundStyle(Theme.muted)
                 Spacer()
+            } else {
+                content
             }
         }
         .padding(.horizontal, 20).padding(.top, 16).padding(.bottom, 20)
         .background(Theme.card)
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
+        .task(id: number) { detail = await store.changeDetail(number) }
+        .sheet(item: $approval) { a in
+            ApprovalSheet(id: a.id).environmentObject(store)
+        }
+    }
+
+    private var title: String { found?.change.title ?? queued?.title ?? detail?.title ?? "" }
+    private var stage: String { found?.change.stage ?? queued?.stage ?? detail?.stage ?? "" }
+    private var needs: String { found?.change.needs ?? queued?.needs ?? detail?.needs ?? "none" }
+    private var nextLine: String { found?.change.next ?? queued?.next ?? detail?.next ?? "" }
+    private var waitsOn: Int? { found?.change.waitsOn ?? queued?.waitsOn ?? detail?.waitsOn }
+    private var label: String? { found?.session.label ?? queued?.session ?? detail?.session }
+    private var model: String? { found?.session.model ?? queued?.model ?? detail?.model }
+
+    private var header: String {
+        var parts = ["!\(number)"]
+        if let p = queuePosition(stage) {
+            parts.append(p == 0 ? "MERGING" : "QUEUED \(p) OF \(stage.split(separator: "/").last ?? "")")
+        } else if !stage.isEmpty {
+            parts.append(stage.uppercased())
+        }
+        return parts.joined(separator: " · ")
     }
 
     @ViewBuilder
-    private func content(_ s: TrackedSession, _ c: TrackedChange) -> some View {
+    private var content: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
-                Text(scopeAndSubject(c.title).subject)
+                Text(scopeAndSubject(title).subject)
                     .font(.title3.weight(.bold)).foregroundStyle(Theme.ink)
                     .fixedSize(horizontal: false, vertical: true)
-                progress(c)
-                next(c)
-                if c.needs == "owner" {
-                    ReviewButton(number: c.number, sheet: $sheet, tab: $tab)
+                if needs == "owner" {
+                    ReviewButton(number: number, listed: detail?.approval) {
+                        approval = OpenedApproval(id: $0)
+                    }
                 }
-                details(s, c)
+                next
+                if let c = found?.change {
+                    progress(c)
+                }
+                checks
+                session
             }
         }
-        if let url = sessionLink(s.label) {
+        if let label, let url = sessionLink(label) {
             Button {
                 openURL(url)
             } label: {
@@ -526,6 +850,101 @@ struct ChangeSheet: View {
         }
     }
 
+    private var next: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("NEXT · \(needs.uppercased())")
+                .font(Theme.mono(11, .bold)).tracking(1).foregroundStyle(Theme.muted)
+            Text(nextLine)
+                .font(.callout).foregroundStyle(Theme.ink)
+                .fixedSize(horizontal: false, vertical: true)
+            if let w = waitsOn {
+                Button {
+                    number = w
+                } label: {
+                    HStack(spacing: 4) {
+                        Text("Waits on !\(w)")
+                        Image(systemName: "chevron.right").font(.caption.weight(.bold))
+                    }
+                    .font(.subheadline.weight(.semibold)).foregroundStyle(Theme.accent)
+                    .frame(minHeight: 36)
+                }
+                .buttonStyle(.plain)
+            }
+            if let since = found?.change.since ?? queued?.since ?? detail?.since {
+                Text("In this stage \(elapsed(since: since, now: now))")
+                    .font(Theme.mono(12)).foregroundStyle(Theme.muted)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 14).padding(.vertical, 12)
+        .background(RoundedRectangle(cornerRadius: 14).fill(Theme.background))
+    }
+
+    @ViewBuilder
+    private var checks: some View {
+        if let d = detail, !d.jobs.isEmpty || d.github.contains(where: { $0.run != nil }) {
+            VStack(alignment: .leading, spacing: 0) {
+                Text("CHECKS").font(Theme.mono(11, .bold)).tracking(1).foregroundStyle(Theme.muted)
+                    .padding(.bottom, 6)
+                ForEach(d.jobs, id: \.name) { j in
+                    HStack(spacing: 10) {
+                        Image(systemName: jobGlyph(j.status)).foregroundStyle(jobColor(j.status))
+                        Text(j.name).font(Theme.mono(14)).foregroundStyle(Theme.ink)
+                        Spacer()
+                        Text(j.status).font(.footnote.weight(.semibold)).foregroundStyle(jobColor(j.status))
+                    }
+                    .frame(minHeight: 36)
+                    .accessibilityElement(children: .combine)
+                }
+                ForEach(Array(d.github.enumerated()), id: \.offset) { item in
+                    if let run = item.element.run, let url = URL(string: run) {
+                        Button {
+                            openURL(url)
+                        } label: {
+                            HStack(spacing: 4) {
+                                Text(item.element.waiting.map { "GitHub run · \($0)" } ?? "GitHub run")
+                                Image(systemName: "arrow.up.right").font(.caption.weight(.bold))
+                            }
+                            .font(.subheadline.weight(.semibold)).foregroundStyle(Theme.accent)
+                            .frame(minHeight: 36)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+            .padding(.horizontal, 14).padding(.vertical, 12)
+            .background(RoundedRectangle(cornerRadius: 14).fill(Theme.background))
+        }
+    }
+
+    private var session: some View {
+        Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 8) {
+            GridRow {
+                Text("Session").foregroundStyle(Theme.muted)
+                HStack(spacing: 8) {
+                    ModelBadge(model: model, small: true)
+                    Text(found?.session.role?.capitalized ?? label.map(shortLabel) ?? "none")
+                        .foregroundStyle(Theme.ink)
+                    if let s = found?.session {
+                        ListeningDot(listening: s.listening)
+                        Text(s.listening ? "listening" : "not listening")
+                            .fontWeight(.semibold)
+                            .foregroundStyle(s.listening ? Theme.good : Theme.muted)
+                    }
+                }
+            }
+            if let b = found?.change.brief {
+                GridRow {
+                    Text("Brief").foregroundStyle(Theme.muted)
+                    Text("\(b.id) · \(b.title)")
+                        .foregroundStyle(Theme.ink)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+        .font(.subheadline)
+    }
+
     private func progress(_ c: TrackedChange) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline) {
@@ -535,28 +954,20 @@ struct ChangeSheet: View {
             }
             .foregroundStyle(Theme.accent)
             ForEach(Array(railStops.enumerated()), id: \.offset) { item in
-                stopRow(item.offset, item.element, c)
+                HStack(spacing: 12) {
+                    stopDot(item.offset, c)
+                    Text(item.offset == c.stop ? c.stage : item.element)
+                        .font(.subheadline.weight(item.offset == c.stop ? .bold : .regular))
+                        .foregroundStyle(item.offset == c.stop ? Theme.ink : Theme.ink2)
+                    Spacer()
+                }
+                .frame(minHeight: 24)
             }
         }
         .padding(.horizontal, 14).padding(.vertical, 12)
         .background(RoundedRectangle(cornerRadius: 14).fill(Theme.accentSoft))
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(railLabel(c))
-    }
-
-    private func stopRow(_ i: Int, _ name: String, _ c: TrackedChange) -> some View {
-        HStack(spacing: 12) {
-            stopDot(i, c)
-            Text(i == c.stop ? c.stage : name)
-                .font(.subheadline.weight(i == c.stop ? .bold : .regular))
-                .foregroundStyle(i == c.stop ? Theme.ink : Theme.ink2)
-            Spacer()
-            if i == c.stop, let since = c.since {
-                Text(elapsed(since: since, now: now))
-                    .font(Theme.mono(12, .semibold)).foregroundStyle(Theme.accent)
-            }
-        }
-        .frame(minHeight: 24)
     }
 
     @ViewBuilder
@@ -572,40 +983,20 @@ struct ChangeSheet: View {
         }
     }
 
-    private func next(_ c: TrackedChange) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("NEXT · \(c.needs.uppercased())")
-                .font(Theme.mono(11, .bold)).tracking(1).foregroundStyle(Theme.muted)
-            Text(c.needs == "change" ? needsChip(c) : c.next)
-                .font(.callout).foregroundStyle(Theme.ink)
-                .fixedSize(horizontal: false, vertical: true)
+    private func jobGlyph(_ status: String) -> String {
+        switch status {
+        case "passed": return "checkmark.circle.fill"
+        case "failed", "cancelled": return "xmark.circle.fill"
+        default: return "circle.dotted"
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 14).padding(.vertical, 12)
-        .background(RoundedRectangle(cornerRadius: 14).fill(Theme.background))
     }
 
-    private func details(_ s: TrackedSession, _ c: TrackedChange) -> some View {
-        Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 8) {
-            GridRow {
-                Text("Session").foregroundStyle(Theme.muted)
-                HStack(spacing: 8) {
-                    ModelBadge(model: s.model, small: true)
-                    Text(s.role?.capitalized ?? "Session").foregroundStyle(Theme.ink)
-                    ListeningDot(listening: s.listening)
-                    Text(s.listening ? "listening" : "not listening")
-                        .fontWeight(.semibold)
-                        .foregroundStyle(s.listening ? Theme.good : Theme.muted)
-                }
-            }
-            GridRow {
-                Text("Brief").foregroundStyle(Theme.muted)
-                Text(c.brief.map { "\($0.id) · \($0.title)" } ?? "none")
-                    .foregroundStyle(Theme.ink)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+    private func jobColor(_ status: String) -> Color {
+        switch status {
+        case "passed": return Theme.good
+        case "failed", "cancelled": return Theme.warn
+        default: return Theme.muted
         }
-        .font(.subheadline)
     }
 }
 
