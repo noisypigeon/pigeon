@@ -10,6 +10,7 @@ use std::time::{Duration, Instant};
 
 use crate::cobot::Error;
 use crate::cobot::git::command;
+use crate::core::change::STALE_BASE;
 
 /// The longest a job's command runs before it is killed.
 pub const TIMEOUT: Duration = Duration::from_mins(45);
@@ -334,7 +335,7 @@ pub fn squash_onto(
     if !ancestor.success() {
         return Err(Error::Git {
             args: "merge-base --is-ancestor".into(),
-            message: format!("{base} has moved past {branch}'s base; rebase onto {base} and push"),
+            message: format!("{base} {STALE_BASE} {branch}'s base; rebase onto {base} and push"),
         });
     }
     let parent = git(dir, "", "", &["rev-parse", &on])?;

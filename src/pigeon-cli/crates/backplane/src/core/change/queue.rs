@@ -15,6 +15,13 @@ pub const STUCK: u64 = 60 * 60;
 /// seconds; see the 2026-11-11 amendment on a turn held by no merge.
 pub const SETTLE: u64 = 2 * 60;
 
+/// Misses in a row after which a kept change's turn is protected; see the 2026-11-15 amendment
+/// on a turn lost only because `main` moved.
+pub const PROTECT: u32 = 2;
+
+/// How long a protected turn holds the queue for its change, in seconds.
+pub const HOLD: u64 = 20 * 60;
+
 /// Whether change `c` still has a merge on its way: a merge job, a restack or a gate check
 /// queued or running, or a merge parked.
 #[must_use]
@@ -71,6 +78,19 @@ pub enum Queued {
     },
 }
 
+/// A change that lost its turn only because `main` moved: it is first when asked again.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Kept {
+    /// Turns lost to `main` moving in a row.
+    pub misses: u32,
+    /// When it last lost one.
+    pub at: u64,
+    /// Its turn waits for its merge to be asked again: nothing else starts meanwhile, for at
+    /// most [`SETTLE`].
+    #[serde(default)]
+    pub reserved: bool,
+}
+
 /// One repository's merges: the one running and those waiting, oldest first.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MergeQueue {
@@ -80,6 +100,9 @@ pub struct MergeQueue {
     /// The merges waiting.
     #[serde(default)]
     pub waiting: VecDeque<Entry>,
+    /// The changes that lost their turn only because `main` moved.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub kept: BTreeMap<u32, Kept>,
     /// The Instance's yields, each change to the one it waits for: read in, never stored; see
     /// the yield ADR's 2026-11-13 amendment on the queue keeping a yielded change's place.
     #[serde(skip)]
@@ -94,6 +117,25 @@ impl MergeQueue {
             .as_ref()
             .filter(|e| now.saturating_sub(e.at) >= SETTLE)
             .map(|e| e.number)
+    }
+
+    /// The kept change whose turn holds the queue at `now`, not yet asked again: reserved less
+    /// than [`SETTLE`] ago, or protected, having missed [`PROTECT`] turns in a row less than
+    /// [`HOLD`] ago.
+    #[must_use]
+    pub fn protected(&self, now: u64) -> Option<u32> {
+        let asked = |n: u32| {
+            self.merging.as_ref().is_some_and(|e| e.number == n)
+                || self.waiting.iter().any(|e| e.number == n)
+        };
+        let holds = |k: &Kept| {
+            let since = now.saturating_sub(k.at);
+            (k.reserved && since < SETTLE) || (k.misses >= PROTECT && since < HOLD)
+        };
+        self.kept
+            .iter()
+            .find(|(n, k)| holds(k) && !asked(**n))
+            .map(|(n, _)| *n)
     }
 }
 
@@ -128,9 +170,18 @@ pub fn enqueue(
         let place = next.waiting.len() + usize::from(next.merging.is_some());
         return Ok((next, Queued::Yielded { place, to }));
     }
-    if next.merging.is_none() {
+    let kept = q.kept.contains_key(&number);
+    let held = q.protected(now).is_some_and(|n| n != number);
+    if let Some(k) = next.kept.get_mut(&number) {
+        k.reserved = false;
+    }
+    if next.merging.is_none() && !held {
         next.merging = Some(entry);
         return Ok((next, Queued::Start));
+    }
+    if kept {
+        next.waiting.push_front(entry);
+        return Ok((next, Queued::Behind(1)));
     }
     next.waiting.push_back(entry);
     let behind = next.waiting.len();
@@ -159,8 +210,40 @@ pub fn ask(
 pub fn done(q: &MergeQueue, number: u32, now: u64) -> (MergeQueue, Option<Entry>) {
     let mut next = q.clone();
     next.waiting.retain(|e| e.number != number);
+    next.kept.remove(&number);
     if next.merging.as_ref().is_some_and(|e| e.number == number) {
         next.merging = None;
+    }
+    advance(next, now)
+}
+
+/// Change `number` lost its turn only because `main` moved: the next queue, with its turn taken
+/// back and nothing started, so its merge asked again finds the turn free; see the 2026-11-15
+/// amendment on a turn lost only because `main` moved.
+#[must_use]
+pub fn keep(q: &MergeQueue, number: u32, now: u64) -> MergeQueue {
+    let mut next = q.clone();
+    next.waiting.retain(|e| e.number != number);
+    if next.merging.as_ref().is_some_and(|e| e.number == number) {
+        next.merging = None;
+    }
+    let misses = next.kept.get(&number).map_or(0, |k| k.misses) + 1;
+    let kept = Kept {
+        misses,
+        at: now,
+        reserved: true,
+    };
+    next.kept.insert(number, kept);
+    next
+}
+
+/// Change `number`'s kept turn is no longer reserved, as when its merge asked again waits for
+/// the owner: the next queue, and the next merge to start, if any; a protected turn still holds.
+#[must_use]
+pub fn release(q: &MergeQueue, number: u32, now: u64) -> (MergeQueue, Option<Entry>) {
+    let mut next = q.clone();
+    if let Some(k) = next.kept.get_mut(&number) {
+        k.reserved = false;
     }
     advance(next, now)
 }
@@ -180,11 +263,11 @@ pub fn unstick(q: &MergeQueue, now: u64) -> (MergeQueue, Option<Entry>) {
     advance(next, now)
 }
 
-/// `q` with its oldest waiting merge that yields to none started when none runs, and that
-/// merge; a yielded one keeps its place.
+/// `q` with its oldest waiting merge that yields to none started when none runs and no kept
+/// change's turn is [`MergeQueue::protected`], and that merge; a yielded one keeps its place.
 #[must_use]
 pub fn advance(mut q: MergeQueue, now: u64) -> (MergeQueue, Option<Entry>) {
-    if q.merging.is_some() {
+    if q.merging.is_some() || q.protected(now).is_some() {
         return (q, None);
     }
     let Some(i) = q

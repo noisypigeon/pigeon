@@ -666,3 +666,76 @@ approved again after every merge ahead of them, and !327's restack was lost
   and tasks 1 to 23.
 - **Unchanged:** a generated change that pushed is still left to its session
   (F2), and a session never closes another session's change.
+
+### 2026-11-15: A turn lost only because `main` moved is kept
+
+- **What went wrong.** A change at the head of the queue that is `behind`
+  restacks when its turn comes (2026-11-13). When the restack is clean but
+  its own lines changed, its approval doesn't carry; its head is checked in
+  full again ("main changed its files at …"), reaches `checked`, and gives
+  its turn back ("checked and carries no approval"). The window approves it
+  again within seconds, and its `change_merge` queues it at the tail. On a
+  busy queue it is `behind` again when its turn comes back, so it can rotate
+  without merging.
+  - !546: approved 15 Nov 16:10 UTC, yielded to !543 at 3/6, released for a
+    conflict, then released at event 22671 ("checked and carries no
+    approval") and queued again at 13/14, waiting on !570. Its stacked !547
+    and the TestFlight build behind it waited with it.
+  - !549: 4/5 → released (21764) → 10/10, 88 minutes from approval to merge.
+  - !566: 3/9 → released (22536) → 8/12.
+  - !543 and !544 (21516, 21520): their merge jobs were refused, "main has
+    moved past … base", before their `behind` arrived, so the refusal didn't
+    restack them and both lost their turn: 124 and 98 minutes from approval to
+    merge.
+  - Earlier, outside the event log's retention: !481 3/15 → 18/19, !491 →
+    17/17, !488 2/15 → 16/16.
+  - Measured over the event log's window (events 20739 to 22732, 31 merges, one
+    every 20 minutes on average): a change that lost no turn merged a median 28
+    minutes after its first approval (23 changes); one that lost a turn to
+    `main` moving took 88 to 124 minutes, and !546 had not merged after 176.
+- **A turn lost only because `main` moved is kept.** That is a holder whose
+  parked merge was dropped by a restack's carry, nothing else: the restack ran
+  for its turn, the head is `checked`, with no violation and no conflict
+  (`control::keeps_turn`). The queue then:
+  - takes the turn back without starting the next merge (`merges::keep`) and
+    records `merge.kept`, with the misses in a row. The turn stays reserved
+    for it until its merge is asked again, for at most `SETTLE` (2 minutes),
+    since an ask first moves the queue on;
+  - asks `change.merge` for the head itself, as a session would: a window,
+    mandate or policy that covers it approves it, and it takes the turn again
+    at once, before anything else merges. `main` hasn't moved, so it merges
+    after its gate, with no further restack;
+  - otherwise (the owner approves it, say because its tier rose) releases the
+    reservation (`merges::release`) and moves on, and the change is **first**
+    in line when its merge is asked again, wherever the ask comes from.
+- **A merge refused because `main` moved past its base restacks**, as a merge
+  refused while `behind` does (2026-11-13), and merges again under its
+  approval, keeping its turn. `STALE_BASE` names the merge job's refusal.
+- **What still loses the turn:** failed checks or a failed gate, a conflict,
+  a refusal (a violation), a close, or a failed restack. A kept change that
+  fails is forgotten; so is one that merges.
+- **Yields are unchanged:** a yielded change keeps its place and is passed
+  over until its yield ends.
+- **Livelock guard.** After `PROTECT` (2) misses in a row, the change's turn
+  is protected: while it is kept and not yet asked again, nothing else starts,
+  for at most `HOLD` (20 minutes, the bound a held turn already has). It
+  lands before `main` moves again.
+- **Not chosen: holding `main` still across the whole re-check by a
+  reservation of its own.** The holder already keeps `main` still from its
+  restack to its merge (2026-11-11): its re-check of about 8 minutes (!546's
+  took 510 s) is inside the turn. Letting others merge during it would save
+  about 2 merges' time (3 minutes each with checks by reach) and invalidate
+  it again, which is the loop this amendment ends.
+- **After, replayed** (`tests/merge_kept.rs`):
+  - !546: kept at event 22671, approved again and merged on its own turn:
+    its position stays 1 instead of 13/14;
+  - !549: 4/5 → 1, instead of 10/10;
+  - !481: 3/15 → 1, instead of 18/19;
+  - !543/!544: restacked and merged on their turn instead of released.
+
+  Live numbers follow from the next day's event log, under the same measure.
+
+**Execution,** in one change (!585): `MergeQueue.kept`, `keep`, `release`, the front
+place and the protected turn; `control::keeps_turn`; `merge.kept`; the
+stale-base refusal treated as `behind`; the worker's re-ask; and tests that
+replay !546's, !549's, !481's and !543's sequences.

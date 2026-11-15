@@ -413,7 +413,8 @@ impl ChangeRun {
         {
             worker::console_error!("ended !{}: {e}", change.number);
         }
-        if control::leaves_merge_queue(before.as_ref(), change) {
+        let keeps = control::keeps_turn(before.as_ref(), change);
+        if !keeps && control::leaves_merge_queue(before.as_ref(), change) {
             self.released(change).await;
             super::merges::ended(&self.env, change, None).await?;
         }
@@ -436,6 +437,9 @@ impl ChangeRun {
         let found = before.as_ref().and_then(|b| b.landed.as_ref());
         if change.landed.is_some() && found != change.landed.as_ref() {
             self.close_landed(change).await;
+        }
+        if keeps && let Err(e) = super::merges::kept(&self.env, change).await {
+            worker::console_error!("kept turn of !{}: {e}", change.number);
         }
         Ok(())
     }

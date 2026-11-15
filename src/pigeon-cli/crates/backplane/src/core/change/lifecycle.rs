@@ -5,8 +5,8 @@
 use std::collections::BTreeMap;
 
 use super::types::{
-    Approval, BOUND, Change, Effect, Event, Job, JobStatus, MERGE, RESTACK, Refusal, State, is_sha,
-    refuse,
+    Approval, BOUND, Change, Effect, Event, Job, JobStatus, MERGE, RESTACK, Refusal, STALE_BASE,
+    State, is_sha, refuse,
 };
 
 /// A transition's answer: the next change and what the shell must do, or why it was refused.
@@ -45,7 +45,16 @@ impl Change {
                 self.push(sha)
             }
             Event::Behind { main } => self.behind(main),
-            Event::Restacked { sha, restack } => self.restacked(&sha, &restack),
+            Event::Restacked { sha, restack } => {
+                // A head moved for a parked merge: dropped later, it keeps its turn.
+                let moved = restack.to.is_some() && self.merge_after.is_some();
+                let asked = self.merge_after.clone();
+                let (mut c, effects) = self.restacked(&sha, &restack)?;
+                if moved && c.head == restack.to {
+                    c.restacked_for = asked;
+                }
+                Ok((c, effects))
+            }
             Event::Started { job, sha } => self.started(&job, &sha),
             Event::Bounded {
                 sha,
@@ -93,10 +102,12 @@ impl Change {
                     return Ok((self, Vec::new()));
                 }
                 self = self.set_status(MERGE, JobStatus::Failed);
+                // Behind, or refused because `main` moved past its base, it restacks and merges
+                // again under its approval; see the concurrent-sessions ADR's 2026-11-15 amendment.
+                let stale = self.behind.is_some() || reason.contains(STALE_BASE);
                 self.violations = vec![reason];
-                // Behind, it restacks and merges again under its approval.
                 match self.approval.as_ref().map(|a| a.by.clone()) {
-                    Some(by) if self.behind.is_some() => Ok(self.restack_for_merge(&by)),
+                    Some(by) if stale => Ok(self.restack_for_merge(&by)),
                     _ => Ok((self, Vec::new())),
                 }
             }
@@ -162,6 +173,7 @@ impl Change {
             self.full.clear();
             self.gate = None;
             self.gate_full = None;
+            self.restacked_for = None;
         }
         self.pushed(sha)
     }
@@ -244,6 +256,7 @@ impl Change {
             at,
         });
         self.state = State::Approved;
+        self.restacked_for = None;
         // Approved by hand while a carry was pending: the carry is moot, and a parked merge starts.
         self.carried = None;
         match self.merge_after.take() {

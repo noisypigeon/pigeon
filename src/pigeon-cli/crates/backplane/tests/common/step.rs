@@ -29,6 +29,12 @@ pub trait Queue {
     fn done(&mut self, number: u32, now: u64) -> Option<Entry>;
     /// [`merges::unstick`], kept.
     fn unstick(&mut self, now: u64) -> Option<Entry>;
+    /// [`merges::keep`], kept.
+    fn keep(&mut self, number: u32, now: u64);
+    /// [`merges::release`], kept.
+    fn release(&mut self, number: u32, now: u64) -> Option<Entry>;
+    /// [`merges::advance`], kept.
+    fn advance(&mut self, now: u64) -> Option<Entry>;
 }
 
 impl Queue for MergeQueue {
@@ -52,6 +58,22 @@ impl Queue for MergeQueue {
 
     fn unstick(&mut self, now: u64) -> Option<Entry> {
         let (next, entry) = merges::unstick(self, now);
+        *self = next;
+        entry
+    }
+
+    fn keep(&mut self, number: u32, now: u64) {
+        *self = merges::keep(self, number, now);
+    }
+
+    fn release(&mut self, number: u32, now: u64) -> Option<Entry> {
+        let (next, entry) = merges::release(self, number, now);
+        *self = next;
+        entry
+    }
+
+    fn advance(&mut self, now: u64) -> Option<Entry> {
+        let (next, entry) = merges::advance(self.clone(), now);
         *self = next;
         entry
     }

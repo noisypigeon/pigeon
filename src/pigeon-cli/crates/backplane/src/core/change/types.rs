@@ -21,6 +21,10 @@ pub const RESTACK: &str = "restack";
 /// change. See `.claude/decisions/2026-11-10-development-code-checks-github-actions.md` §2.
 pub const MIRROR: &str = "mirror";
 
+/// What the merge job's refusal says when `main` moved past the head's base; see the
+/// concurrent-sessions ADR's 2026-11-15 amendment.
+pub const STALE_BASE: &str = "has moved past";
+
 /// Where a change is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -432,6 +436,11 @@ pub struct Change {
     /// approval; see `.claude/decisions/2026-11-13-development-model-tiered-agent-briefs.md` §6.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub escalated: Option<Escalated>,
+    /// Who asked for the merge a restack moved its head for, until a new approval or a
+    /// session's push; a merge dropped then keeps its turn. See the concurrent-sessions ADR's
+    /// 2026-11-15 amendment.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub restacked_for: Option<String>,
 }
 
 /// Something that happened to a change.
@@ -715,6 +724,7 @@ impl Change {
             brief: None,
             accepted: None,
             escalated: None,
+            restacked_for: None,
         }
     }
 

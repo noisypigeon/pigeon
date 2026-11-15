@@ -70,6 +70,54 @@ pub async fn resume(env: &Env, s: &Settings) -> Result<()> {
     start(env, s, serde_json::from_value(v["next"].clone()).ok()).await
 }
 
+/// `change` lost its turn only because `main` moved: the queue keeps it and starts nothing,
+/// `merge.kept` is recorded, its merge is asked again as its session would, and its reservation
+/// is released, so the queue moves on only when that didn't take the turn back; see the
+/// concurrent-sessions ADR's 2026-11-15 amendment.
+///
+/// # Errors
+///
+/// When a binding fails.
+pub async fn kept(env: &Env, change: &Change) -> Result<()> {
+    let s = Settings::from(env)?;
+    let n = change.number;
+    let (_, answer) = to_instance(env, &s, "/merges/keep", &json!({ "number": n })).await?;
+    let misses = answer["misses"].as_u64().unwrap_or(1);
+    let why = format!(
+        "!{n} keeps its merge turn: main moved under it ({misses} in a row); its merge is asked again"
+    );
+    let added = super::events::append(
+        env,
+        &s,
+        "merge.kept",
+        Some(n),
+        change.session.clone(),
+        &why,
+        false,
+    );
+    if let Err(e) = added.await {
+        worker::console_error!("merge.kept: {e}");
+    }
+    let mut args = serde_json::Map::new();
+    args.insert("number".into(), json!(n));
+    let request = crate::wire::Request {
+        operation: "change.merge".into(),
+        args,
+    };
+    match Box::pin(super::ask(env, &s, n, &request)).await {
+        Ok(Ok(_)) => {}
+        Ok(Err(e)) => worker::console_warn!("merge of kept !{n}: {e}"),
+        Err(e) => worker::console_error!("merge of kept !{n}: {e}"),
+    }
+    let (_, released) = to_instance(env, &s, "/merges/release", &json!({ "number": n })).await?;
+    start(
+        env,
+        &s,
+        serde_json::from_value(released["next"].clone()).ok(),
+    )
+    .await
+}
+
 /// Hands back the turn of a holder with no merge on its way, recording `merge.released`; see the
 /// 2026-11-11 amendment on a turn held by no merge.
 async fn hand_back_idle(env: &Env, s: &Settings) -> Result<()> {
@@ -308,7 +356,7 @@ async fn start(env: &Env, s: &Settings, mut next: Option<Entry>) -> Result<()> {
     Ok(())
 }
 
-/// The `Instance` Durable Object's side: `/merges/enqueue`, `done`, `resume` and `list`.
+/// The `Instance` Durable Object's side: `/merges/enqueue`, `done`, `keep`, `release`, `resume` and `list`.
 ///
 /// # Errors
 ///
@@ -337,6 +385,15 @@ pub async fn serve(state: &State, path: &str, body: &Value) -> Result<Response> 
         "/merges/done" => {
             let (q, next) = merges::done(&q, number, now());
             (q, json!({ "next": next }))
+        }
+        "/merges/release" => {
+            let (q, next) = merges::release(&q, number, now());
+            (q, json!({ "next": next }))
+        }
+        "/merges/keep" => {
+            let q = merges::keep(&q, number, now());
+            let misses = q.kept.get(&number).map_or(1, |k| k.misses);
+            (q, json!({ "misses": misses }))
         }
         "/merges/resume" => {
             let (q, next) = merges::advance(q, now());

@@ -953,6 +953,8 @@ pub fn next_number(instance: &str, repo: &str, floor: u32) -> Statement {
 pub fn merge_ended(event: &Event, change: &Change) -> Option<Option<String>> {
     match event {
         Event::Merged { commit, .. } => Some(commit.clone()),
+        // A refusal that restacks to merge again keeps the turn.
+        Event::MergeFailed { .. } if change.merge_after.is_some() => None,
         Event::MergeFailed { .. } => Some(None),
         Event::Lost { job, .. } | Event::StartFailed { job, .. }
             if job == MERGE
@@ -1004,6 +1006,19 @@ pub fn catch_up(change: &mut Change, journal: &[changes::Event], seen: usize) {
             *change = next;
         }
     }
+}
+
+/// Whether `after`, saved over `before`, dropped its merge only because `main` moved: a restack
+/// moved its head for that merge, which is now checked with no violation or conflict but carries
+/// no approval. It keeps its turn; see the concurrent-sessions ADR's 2026-11-15 amendment.
+#[must_use]
+pub fn keeps_turn(before: Option<&Change>, after: &Change) -> bool {
+    before.is_some_and(|b| b.merge_after.is_some())
+        && after.restacked_for.is_some()
+        && after.state == changes::State::Checked
+        && after.conflict.is_none()
+        && after.violations.is_empty()
+        && merge_dropped(after)
 }
 
 /// Whether `after`, saved over `before`, gives its place in the merge queue back: its merge
