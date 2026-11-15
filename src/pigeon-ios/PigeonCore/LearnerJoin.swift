@@ -6,7 +6,7 @@
 import CryptoKit
 import Foundation
 
-/// `pigeon://join?base=<https://….workers.dev>&token=<64 hex>`.
+/// `pigeon://join?base=<https://….workers.dev or https://<label>.pigeon.dev>&token=<64 hex>`.
 public struct JoinLink: Equatable, Sendable, Identifiable {
     public let base: URL
     public let token: String
@@ -17,7 +17,8 @@ public struct JoinLink: Equatable, Sendable, Identifiable {
             let b = items.first(where: { $0.name == "base" })?.value,
             let token = items.first(where: { $0.name == "token" })?.value,
             let base = URL(string: b), base.scheme == "https",
-            let host = base.host, host.hasSuffix(".workers.dev"), base.path.isEmpty || base.path == "/",
+            let host = base.host, host.hasSuffix(".workers.dev") || standaloneLabel(host: host) != nil,
+            base.path.isEmpty || base.path == "/",
             token.count == 64, token.allSatisfy(\.isHexDigit)
         else { return nil }
         self.base = base
@@ -26,6 +27,28 @@ public struct JoinLink: Equatable, Sendable, Identifiable {
 
     /// The invitation's ID: the token's SHA-256, hex.
     public var id: String { hex(SHA256.hash(data: Data(token.utf8))) }
+}
+
+/// The zone standalones are named under; see
+/// .claude/decisions/2026-11-15-runtime-standalone-hostnames-platform-zone.md §2.
+public let standaloneZone = "pigeon.dev"
+
+/// Whether `label` has a standalone label's shape, as backplane's `check_label` reads it: 3 to
+/// 32 of `a-z`, `0-9` and `-`, a leading letter, no trailing `-` and no `--`. Reserved and
+/// taken labels are the platform's to refuse.
+public func isLabel(_ label: String) -> Bool {
+    let ok = Set("abcdefghijklmnopqrstuvwxyz0123456789-")
+    guard (3...32).contains(label.count), label.allSatisfy({ ok.contains($0) }),
+        let first = label.first, first.isLetter, label.last != "-", !label.contains("--")
+    else { return false }
+    return true
+}
+
+/// The label of a host directly under `standaloneZone`, or nil.
+public func standaloneLabel(host: String) -> String? {
+    guard host.hasSuffix(".\(standaloneZone)") else { return nil }
+    let label = String(host.dropLast(standaloneZone.count + 1))
+    return isLabel(label) ? label : nil
 }
 
 /// The text the joining device signs.
@@ -194,10 +217,12 @@ public struct InstanceEntry: Codable, Equatable, Sendable, Identifiable {
     public let features: [String]
     public let status: String?
     public let why: String?
+    /// Its `<label>.pigeon.dev`, its identifier, when it has one.
+    public let host: String?
 
     public init(
         id: String?, name: String, mode: String, shape: String, base_url: String?, accent: String?,
-        features: [String], status: String?, why: String?
+        features: [String], status: String?, why: String?, host: String? = nil
     ) {
         self.id = id
         self.name = name
@@ -208,6 +233,7 @@ public struct InstanceEntry: Codable, Equatable, Sendable, Identifiable {
         self.features = features
         self.status = status
         self.why = why
+        self.host = host
     }
 
     public var key: String { id ?? name }

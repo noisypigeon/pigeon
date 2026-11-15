@@ -50,6 +50,41 @@ private func attestation(x: [UInt8], y: [UInt8], credential: [UInt8]) -> Data {
         }
     }
 
+    @Test func aJoinLinkMayNameAStandalonesHostUnderThePlatformsZone() throws {
+        let token = String(repeating: "ab", count: 32)
+        let ok = try #require(
+            JoinLink(url: URL(string: "pigeon://join?base=https://example.pigeon.dev&token=\(token)")!))
+        #expect(ok.base.host == "example.pigeon.dev")
+        for bad in [
+            "pigeon://join?base=http://example.pigeon.dev&token=\(token)",
+            "pigeon://join?base=https://a.example.pigeon.dev&token=\(token)",
+            "pigeon://join?base=https://ab.pigeon.dev&token=\(token)",
+            "pigeon://join?base=https://example.pigeon.dev.evil.example&token=\(token)",
+            "pigeon://join?base=https://example.pigeon.dev/x&token=\(token)",
+        ] {
+            #expect(JoinLink(url: URL(string: bad)!) == nil, "\(bad)")
+        }
+    }
+
+    @Test func aLabelHasBackplanesShape() {
+        for good in ["example", "ex-ample2", String(repeating: "a", count: 32)] {
+            #expect(isLabel(good), "\(good)")
+        }
+        for bad in ["ab", String(repeating: "a", count: 33), "Example", "1example", "example-", "ex--ample", "ex.ample"] {
+            #expect(!isLabel(bad), "\(bad)")
+        }
+        #expect(standaloneLabel(host: "example.pigeon.dev") == "example")
+        #expect(standaloneLabel(host: "example.workers.dev") == nil)
+    }
+
+    @Test func anInstanceEntryReadsItsHostWhenListedWithOne() throws {
+        let json = #"{"id":"i1","name":"Practice","mode":"standalone","shape":"app","base_url":"https://example.pigeon.dev","features":["learner"],"status":"ready","host":"example.pigeon.dev"}"#
+        let e = try JSONDecoder().decode(InstanceEntry.self, from: Data(json.utf8))
+        #expect(e.host == "example.pigeon.dev")
+        let old = #"{"name":"Practice","mode":"standalone","shape":"app","features":[]}"#
+        #expect(try JSONDecoder().decode(InstanceEntry.self, from: Data(old.utf8)).host == nil)
+    }
+
     @Test func theMatchCodeIsBackplanes() {
         let point = Data([4] + (1...64).map { UInt8($0) })
         #expect(matchCode(token: "t0k3n", publicKey: point) == "696816")

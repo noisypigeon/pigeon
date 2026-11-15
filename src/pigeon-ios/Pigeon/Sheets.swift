@@ -379,7 +379,7 @@ struct InstancesSheet: View {
         switch i.status ?? "ready" {
         case "standing-up": return "Standing up… pull to refresh"
         case "failed": return "Stand-up failed: \(i.why ?? "unknown"). Add it again to resume."
-        default: return i.learner ? "Practice and progress" : (URL(string: i.base_url ?? "")?.host ?? "")
+        default: return i.host ?? (i.learner ? "Practice and progress" : (URL(string: i.base_url ?? "")?.host ?? ""))
         }
     }
 }
@@ -390,6 +390,7 @@ struct StandUpSheet: View {
     @EnvironmentObject private var store: Store
     @Environment(\.dismiss) private var dismiss
     @State private var name = ""
+    @State private var label = ""
     @State private var token = ""
 
     var body: some View {
@@ -401,6 +402,15 @@ struct StandUpSheet: View {
                     Text("Kept only on your platform's private list, never in the repository.")
                 }
                 Section {
+                    HStack(spacing: 0) {
+                        TextField("label", text: $label)
+                            .textInputAutocapitalization(.never).autocorrectionDisabled()
+                        Text(".\(standaloneZone)").foregroundStyle(Theme.muted)
+                    }
+                } footer: {
+                    Text("Its address and identifier: 3 to 32 lowercase letters, digits or dashes. Kept only on your platform, never in the repository.")
+                }
+                Section {
                     Button("Paste account token") { token = UIPasteboard.general.string ?? "" }
                     if !token.isEmpty { Text("Token pasted").foregroundStyle(Theme.muted) }
                 } footer: {
@@ -409,14 +419,14 @@ struct StandUpSheet: View {
                 if let e = store.error { Text(e).foregroundStyle(Theme.kind(1)) }
                 Button("Stand it up") {
                     Task {
-                        if await store.standUp(name: name, token: token) {
+                        if await store.standUp(name: name, label: label, token: token) {
                             UIPasteboard.general.string = ""
                             token = ""
                             dismiss()
                         }
                     }
                 }
-                .disabled(name.isEmpty || token.count < 20 || store.busy)
+                .disabled(name.isEmpty || !isLabel(label) || token.count < 20 || store.busy)
             }
             .navigationTitle("Practice instance")
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } } }

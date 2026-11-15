@@ -162,14 +162,14 @@ final class Store: ObservableObject {
 
     /// Stands up a personal learner instance named `name` in the account `token` reaches,
     /// proved by the owner's passkey for that token; the token is sent once and never kept.
-    func standUp(name: String, token: String) async -> Bool {
+    func standUp(name: String, label: String, token: String) async -> Bool {
         await run {
             let token = token.trimmingCharacters(in: .whitespacesAndNewlines)
             let sha = hex(SHA256.hash(data: Data(token.utf8)))
             let answer = try await self.proof(["op": "instance:standup", "id": sha])
             try await self.api().send(
                 "POST", "/v0/app/instances/standup",
-                body: ["name": name, "token": token, "passkey": answer.json])
+                body: ["name": name, "label": label, "token": token, "passkey": answer.json])
             await self.loadInstances()
         }
     }
