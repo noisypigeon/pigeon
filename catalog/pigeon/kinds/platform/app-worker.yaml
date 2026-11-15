@@ -12,7 +12,7 @@ durable_objects:
     - { tag: v1, new_sqlite_classes: [Instance] }
 bindings:
   r2:
-    LEARNER: "$deployment.buckets[0].name"
+    LEARNER: $deployment.bucket
   vars:
     INSTANCE_NAME: $deployment.instance
     SHAPE: app

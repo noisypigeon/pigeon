@@ -178,6 +178,29 @@ pub fn bind(root: &Path, found: &Found, unit: &str) -> Result<Found, String> {
     })
 }
 
+/// `found` bound to `settings` as stack `unit`, as [`bind`] binds it to a manifest's unit: for a
+/// stack no `config.yaml` declares, such as an app-shape standalone's; see
+/// `.claude/decisions/2026-11-15-runtime-learner-practice-standalone-app.md`, its 2026-11-15
+/// amendment.
+///
+/// # Errors
+///
+/// A message for each value naming a setting `settings` lacks.
+pub fn bind_settings(found: &Found, unit: &str, settings: &Value) -> Result<Found, String> {
+    let mut v = serde_json::to_value(&found.spec).map_err(|e| e.to_string())?;
+    let mut bad = Vec::new();
+    rebind(&mut v, unit, settings, &mut bad);
+    if !bad.is_empty() {
+        return Err(bad.join("; "));
+    }
+    let mut spec: Spec = serde_json::from_value(v).map_err(|e| e.to_string())?;
+    spec.deployment = None;
+    Ok(Found {
+        spec,
+        ..found.clone()
+    })
+}
+
 /// `found` bound as a deploy binds it: to `deployment` when given, else to its kind's only
 /// stack; see the step 4c amendment of
 /// `.claude/decisions/2026-11-08-runtime-blue-green-self-standup.md`. A spec with no

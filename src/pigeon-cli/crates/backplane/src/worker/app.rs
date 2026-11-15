@@ -70,6 +70,13 @@ pub async fn challenge(env: &Env, s: &Settings, body: &Value) -> Result<Response
     let purpose = match body["op"].as_str() {
         Some("auto") => windows::START.to_string(),
         Some("auto-end") => windows::END.to_string(),
+        Some("instance:standup") => {
+            let sha = body["id"].as_str().unwrap_or_default();
+            if sha.len() != 64 || !sha.bytes().all(|b| b.is_ascii_hexdigit()) {
+                return Response::error("the id is the token's SHA-256, hex", 400);
+            }
+            crate::core::member::listing::standup_purpose(&sha.to_ascii_lowercase())
+        }
         Some(op @ ("unlink" | "passkey:remove")) => {
             let id = body["id"].as_str().unwrap_or_default();
             if id.is_empty() {

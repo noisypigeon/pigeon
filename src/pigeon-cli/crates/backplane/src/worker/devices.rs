@@ -253,6 +253,10 @@ async fn signed(
             }
             Response::from_json(&super::insights::ops(env, s, range).await?)
         }
+        (Method::Get, "/v0/app/instances") => super::instances::list(env, s, device).await,
+        (Method::Post, "/v0/app/instances/standup") => {
+            super::instances::standup(env, s, device, body).await
+        }
         (Method::Get, super::members::PATH) => super::members::route(env, s, device).await,
         (m, p) if super::account::handles(p) => {
             super::account::route(env, s, device, m, p, body).await

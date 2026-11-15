@@ -191,7 +191,13 @@ pub fn run(spec: &JobSpec, dir: &Path) -> Report {
             .filter(|s| s.len() >= 8)
             .fold(t.to_string(), |acc, s| acc.replace(s.as_str(), "…"))
     };
-    match work(spec, dir, &mut log) {
+    let done = if crate::standup_job::asks(&spec.argv) {
+        crate::standup_job::parse(&spec.argv)
+            .and_then(|instance| crate::standup_job::standup(&spec.env, dir, &instance, &mut log))
+    } else {
+        work(spec, dir, &mut log)
+    };
+    match done {
         Ok(result) => Report {
             platform: Some(result),
             ..crate::jobs::report(spec, Outcome::Passed, &scrub(&log))

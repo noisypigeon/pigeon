@@ -12,6 +12,7 @@ mod tests;
 
 pub mod handover;
 pub mod join;
+pub mod listing;
 
 /// Every capability an operation may require.
 pub const CAPABILITIES: [&str; 9] = [

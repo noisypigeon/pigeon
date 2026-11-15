@@ -27,6 +27,7 @@ mod gitdoor;
 mod github;
 mod hosts;
 mod insights;
+mod instances;
 mod learner;
 mod listed;
 mod macos;
@@ -1923,6 +1924,10 @@ impl DurableObject for Instance {
         if path.starts_with("/accounts/") {
             let body: Value = req.json().await?;
             return account::serve(&self.state, &path, body).await;
+        }
+        if path.starts_with("/instances/") {
+            let body: Value = req.json().await.unwrap_or(Value::Null);
+            return instances::serve(&self.state, &path, body).await;
         }
         if path.starts_with("/learner/") {
             let body: Value = req.json().await.unwrap_or(Value::Null);

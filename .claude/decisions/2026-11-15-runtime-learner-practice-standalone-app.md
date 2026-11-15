@@ -378,3 +378,30 @@ template beside the platform kind.
     derivation never meets them, and the privacy test has nothing to find.
 
 Neither ADR changes.
+### 2026-11-15: The stand-up is started from the app, and every app stack is named `learner`
+
+Step 5b, as built, differs from the first 2026-11-15 amendment in three
+ways. Each keeps the instance's name out of events and logs.
+
+- **The owner starts it from the app,** not from the platform-run page.
+  `POST /v0/app/instances/standup` takes the label, the pasted token and a
+  passkey proof bound to the token's SHA-256 (`instance:standup:<sha>`), as
+  the instances ADR §8 step 4 designs. A platform run would name its unit in
+  events and on its page.
+- **The Worker dispatches the Runner job itself** (`standup learner`, the
+  platform job's third task, in `standup_job.rs`). `GET /v0/app/instances`
+  polls that job and records how it ended.
+- **Every app stack is named the same in its own account:** instance
+  `learner`, Worker `pigeon-learner`, bucket `pigeon-learner-<8 hex>`. The
+  owner's label lives only in the `instances.private` entry
+  (`core/member/listing.rs`).
+- **Resuming.** A retry reuses the bucket it made and keeps an existing
+  `STATE_KEY`, so sealed data is never orphaned. A missing `workers.dev`
+  subdomain fails the job before anything is created.
+- **The size check** is wrangler's dry run of the bundle, before the bucket
+  or the Worker is created.
+
+This amendment adds `src/pigeon-cli/crates/backplane/src/standup_job.rs`,
+`src/pigeon-cli/crates/backplane/src/worker/instances.rs` and
+`src/pigeon-cli/crates/backplane/src/cobot/workers.rs`'s `bind_settings` to
+what the ADR governs.

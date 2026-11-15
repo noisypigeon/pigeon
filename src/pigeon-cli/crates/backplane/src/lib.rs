@@ -49,6 +49,8 @@ pub mod sessions;
 #[cfg(feature = "engines")]
 pub mod ship;
 pub mod signing;
+#[cfg(feature = "engines")]
+pub mod standup_job;
 pub mod tasks;
 pub mod testmaps;
 pub mod tickets;
