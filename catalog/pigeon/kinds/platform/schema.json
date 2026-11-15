@@ -36,6 +36,11 @@
       "description": "The host the stack serves, and Access protects.",
       "pattern": "^[a-z0-9]+([.-][a-z0-9]+)+$"
     },
+    "instance_zone": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+([.-][a-z0-9]+)+$",
+      "description": "The zone whose subdomains name standalone instances, served by this stack's `*.<zone>/*` route; see .claude/decisions/2026-11-15-runtime-standalone-hostnames-platform-zone.md."
+    },
     "instance": {
       "type": "string",
       "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",

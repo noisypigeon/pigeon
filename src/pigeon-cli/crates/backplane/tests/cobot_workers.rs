@@ -894,3 +894,106 @@ fn a_list_settings_item_binds_by_its_index() {
         workers::bind(past.path(), &found(past.path()), "platform/blue").expect_err("past the end");
     assert!(e.contains("domains[2]"), "{e}");
 }
+
+#[test]
+fn a_subdomains_route_renders_a_wildcard_and_its_var() {
+    let spec = SPEC.replace(
+        "routes: [ { custom_domain: pigeon.dev } ]",
+        "routes: [ { custom_domain: platform.example.dev }, { subdomains_of: example.dev } ]",
+    );
+    let root = fixture(&spec);
+    let f = found(root.path());
+    assert_eq!(workers::validate(root.path(), &f), Vec::new());
+    let w = workers::render(&f, &outputs()).expect("renders");
+    assert_eq!(
+        w["routes"][1],
+        json!({ "pattern": "*.example.dev/*", "zone_name": "example.dev" })
+    );
+    assert_eq!(w["vars"][workers::SUBDOMAINS_VAR], "example.dev");
+    assert_eq!(w["vars"]["TEAM"], "pigeon");
+}
+
+#[test]
+fn bad_routes_are_refused() {
+    for (routes, want) in [
+        (
+            "[ { custom_domain: a.dev, subdomains_of: a.dev } ]",
+            "one of",
+        ),
+        ("[ {} ]", "one of"),
+        ("[ { subdomains_of: Example } ]", "is not a zone"),
+        (
+            "[ { subdomains_of: a.dev }, { subdomains_of: b.dev } ]",
+            "at most one",
+        ),
+    ] {
+        let root = fixture(&SPEC.replace("[ { custom_domain: pigeon.dev } ]", routes));
+        let got: Vec<String> = workers::validate(root.path(), &found(root.path()))
+            .into_iter()
+            .map(|p| p.message)
+            .collect();
+        assert!(got.iter().any(|m| m.contains(want)), "{routes}: {got:?}");
+    }
+    let root = fixture(
+        &SPEC
+            .replace(
+                "[ { custom_domain: pigeon.dev } ]",
+                "[ { subdomains_of: a.dev } ]",
+            )
+            .replace("TEAM: pigeon", "INSTANCE_ZONE: a.dev"),
+    );
+    let got = workers::validate(root.path(), &found(root.path()));
+    assert!(
+        got.iter()
+            .any(|p| p.message.contains("set by `subdomains_of`")),
+        "{got:?}"
+    );
+}
+
+#[test]
+fn a_subdomains_route_follows_its_stack_setting_and_only_one_stack_may_set_it() {
+    let spec = STACK_SPEC.replace(
+        "deployment: pigeon/platform\n",
+        "deployment: pigeon/platform\nroutes: [ { subdomains_of: $deployment.instance_zone } ]\n",
+    );
+    let root = fixture(&spec);
+    stacks(root.path());
+    let config = root.path().join("config.yaml");
+    let text = fs::read_to_string(&config).expect("read");
+    fs::write(
+        &config,
+        text.replace(
+            "    change_floor: 12\n",
+            "    change_floor: 12\n    instance_zone: example.dev\n",
+        ),
+    )
+    .expect("write");
+    let f = found(root.path());
+    assert_eq!(workers::validate(root.path(), &f), Vec::new());
+    let blue = workers::bind(root.path(), &f, "platform/blue").expect("binds");
+    assert_eq!(
+        blue.spec.routes[0].subdomains_of.as_deref(),
+        Some("example.dev")
+    );
+    let green = workers::bind(root.path(), &f, "platform/green").expect("binds");
+    assert!(green.spec.routes.is_empty(), "{:?}", green.spec.routes);
+    fs::write(
+        &config,
+        text.replace(
+            "    change_floor: 12\n",
+            "    change_floor: 12\n    instance_zone: example.dev\n",
+        )
+        .replace(
+            "    change_floor: 1\n",
+            "    change_floor: 1\n    instance_zone: example.dev\n",
+        ),
+    )
+    .expect("write");
+    let got = workers::validate(root.path(), &found(root.path()));
+    assert!(
+        got.iter().any(|p| p
+            .message
+            .contains("more than one stack: platform/blue, platform/green")),
+        "{got:?}"
+    );
+}

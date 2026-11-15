@@ -153,6 +153,15 @@ pub fn bind(root: &Path, found: &Found, unit: &str) -> Result<Found, String> {
         return Err(format!("`{unit}` is a `{}`, not a `{kind}`", entry.kind));
     }
     let mut v = serde_json::to_value(&found.spec).map_err(|e| e.to_string())?;
+    // A `subdomains_of` route naming a setting the stack leaves unset is left out.
+    if let Some(routes) = v["routes"].as_array_mut() {
+        routes.retain(|r| {
+            r["subdomains_of"]
+                .as_str()
+                .and_then(|s| s.strip_prefix(DEPLOYMENT_PREFIX))
+                .is_none_or(|k| setting_at(&entry.settings, k).is_some_and(|x| !x.is_null()))
+        });
+    }
     let mut bad = Vec::new();
     rebind(&mut v, unit, &entry.settings, &mut bad);
     if !bad.is_empty() {
@@ -221,13 +230,21 @@ pub struct Entry {
     pub features: Vec<String>,
 }
 
-/// A custom domain.
+/// A route: a custom domain, or every first-level subdomain of a zone; see
+/// `.claude/decisions/2026-11-15-runtime-standalone-hostnames-platform-zone.md` §1.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Route {
     /// The hostname.
-    pub custom_domain: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub custom_domain: Option<String>,
+    /// A zone, served as `*.<zone>/*`, with [`SUBDOMAINS_VAR`] set to it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub subdomains_of: Option<String>,
 }
+
+/// The var a `subdomains_of` route sets to its zone.
+pub const SUBDOMAINS_VAR: &str = "INSTANCE_ZONE";
 
 /// Durable Object classes; each binding is its class's name in `SCREAMING_SNAKE_CASE`.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
@@ -577,12 +594,24 @@ pub fn validate(root: &Path, found: &Found) -> Vec<Problem> {
                 "`deployment`: no unit of kind `{kind}` in config.yaml"
             ))];
         }
+        let mut serving = Vec::new();
         let mut out = Vec::new();
         for u in units {
             match bind(root, found, &u) {
-                Ok(bound) => out.extend(validate(root, &bound)),
+                Ok(bound) => {
+                    if bound.spec.routes.iter().any(|r| r.subdomains_of.is_some()) {
+                        serving.push(u.clone());
+                    }
+                    out.extend(validate(root, &bound));
+                }
                 Err(e) => out.push(problem(format!("bound to `{u}`: {e}"))),
             }
+        }
+        if serving.len() > 1 {
+            out.push(problem(format!(
+                "`subdomains_of` is set on more than one stack: {}",
+                serving.join(", ")
+            )));
         }
         return out;
     }
@@ -621,9 +650,46 @@ pub fn validate(root: &Path, found: &Found) -> Vec<Problem> {
             s.entry.krate
         ));
     }
+    validate_routes(s, &mut add);
     validate_classes(s, root, &mut add);
     validate_bindings(s, root, &mut add);
     out
+}
+
+/// Each route is one custom domain or one zone's subdomains, and at most one is the latter.
+fn validate_routes(s: &Spec, add: &mut impl FnMut(String)) {
+    let host = |h: &str| {
+        h.split('.').count() >= 2
+            && h.split('.').all(|l| {
+                !l.is_empty()
+                    && !l.starts_with('-')
+                    && !l.ends_with('-')
+                    && l.bytes()
+                        .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+            })
+    };
+    for r in &s.routes {
+        match (&r.custom_domain, &r.subdomains_of) {
+            (Some(_), Some(_)) | (None, None) => {
+                add("a route is one of `custom_domain` or `subdomains_of`".into());
+            }
+            (None, Some(z)) if !host(z) => add(format!("`subdomains_of` `{z}` is not a zone")),
+            _ => {}
+        }
+    }
+    if s.routes
+        .iter()
+        .filter(|r| r.subdomains_of.is_some())
+        .count()
+        > 1
+    {
+        add("at most one route is `subdomains_of`".into());
+    }
+    if s.routes.iter().any(|r| r.subdomains_of.is_some())
+        && s.bindings.vars.contains_key(SUBDOMAINS_VAR)
+    {
+        add(format!("var `{SUBDOMAINS_VAR}` is set by `subdomains_of`"));
+    }
 }
 
 fn validate_classes(s: &Spec, root: &Path, add: &mut impl FnMut(String)) {
@@ -896,6 +962,9 @@ pub fn render_with(
     };
     let mut out = render_script(spec, images);
     render_bindings(&spec.bindings, &mut out, &mut get);
+    if let Some(z) = spec.routes.iter().find_map(|r| r.subdomains_of.as_ref()) {
+        out["vars"][SUBDOMAINS_VAR] = json!(z);
+    }
     if problems.is_empty() {
         Ok(out)
     } else {
@@ -929,7 +998,11 @@ fn render_script(spec: &Spec, images: Option<&BTreeMap<String, String>>) -> Valu
         out["routes"] = spec
             .routes
             .iter()
-            .map(|r| json!({ "pattern": r.custom_domain, "custom_domain": true }))
+            .map(|r| match (&r.custom_domain, &r.subdomains_of) {
+                (Some(d), _) => json!({ "pattern": d, "custom_domain": true }),
+                (None, Some(z)) => json!({ "pattern": format!("*.{z}/*"), "zone_name": z }),
+                (None, None) => Value::Null,
+            })
             .collect();
     }
     if !spec.crons.is_empty() {
