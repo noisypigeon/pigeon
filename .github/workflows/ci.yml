@@ -77,14 +77,16 @@ jobs:
         with:
           ref: ${{ inputs.sha }}
           persist-credentials: false
+      # Keyed by check kind, not name, so each lockfile saves about four entries; fmt needs none.
+      # See .claude/decisions/2026-11-15-development-code-checks-by-reach.md §5.
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && matrix.check.name != 'fmt'
         with:
           path: |
             /usr/local/cargo/registry
             /usr/local/cargo/git
             src/pigeon-cli/target
-          key: cargo-${{ hashFiles('src/pigeon-cli/Cargo.lock') }}-${{ matrix.check.name }}
+          key: cargo-${{ hashFiles('src/pigeon-cli/Cargo.lock') }}-${{ contains(matrix.check.name, '(wasm)') && 'wasm' || matrix.check.name == 'test map' && 'map' || contains(matrix.check.name, 'clippy') && 'clippy' || contains(matrix.check.name, 'test') && 'test' || 'other' }}
           restore-keys: cargo-${{ hashFiles('src/pigeon-cli/Cargo.lock') }}-
       - name: ${{ matrix.check.name }}
         working-directory: src/pigeon-cli
