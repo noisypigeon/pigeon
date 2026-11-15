@@ -211,3 +211,148 @@ learner had steadied it. §4's "once they are steady" becomes:
   anchors are found.
 - `PigeonCore`'s `ScanCountdown` holds the rule, so it is tested; the reader
   takes anchors already found, so a frame is searched for them once.
+### 2026-11-15: The standalone joins, stands up and carries over on its own; steps 4 to 8 are split
+
+Steps 4 to 8 waited on the members ADR's steps 5a to 6b and on
+`instance.standup`. Neither is on `main`, and the learner needs only a
+little of either. This amendment builds that little here.
+
+**Dependencies, resolved.**
+
+- **The members ADR's steps 5a to 6b stay with that ADR.** The learner never
+  calls the platform, so the platform's gate (5a to 5d) and its pages'
+  sign-in cookie (6a) are not needed. Invitation, enrolment and admission run
+  on the standalone instead (below), over `core/member`'s existing `invite`,
+  `enrol` and `admit`.
+- **A standalone's roles are compiled in.** It reads the release's
+  `.config/roles.yaml` through `include_str!` and refuses to start serving if
+  `check_roles` fails. 5a's deploy report stays the platform's way.
+- **`instance.standup` is built for `shape: app` only,** as a third task of
+  the platform job, `standup <instance>`, on a Runner. The owner pastes a
+  one-time token for the new account on the platform-run page and proves it
+  with a passkey, as for `platform.apply`. `shape: full` stays unbuilt.
+
+**§1, the app shape, made exact.**
+
+- **The kind.** `shape: full | app`. With `app`, `domains` may be empty and
+  `instance` is required. `database`, `queue`, `access` and `service_tokens`
+  are not required.
+- **The Worker template** is `catalog/pigeon/kinds/platform/app-worker.yaml`,
+  not under `infra/`, so `pigeon cobot workers` never deploys it into the
+  platform's account.
+  - It has the same crate and features as the control Worker.
+  - Its only Durable Object is `Instance`, and its one R2 binding is
+    `LEARNER`.
+  - Its vars are `INSTANCE_NAME`, `SHAPE: app` and `PASSKEY_RP_ID:
+    platform.pigeon.dev`; its secrets are `STATE_KEY` and `HANDOVER`;
+    `workers_dev` is true.
+  - The control Worker's `worker.yaml` is unchanged.
+- **The router.** With `SHAPE=app`, `fetch` answers `/v0/app/*` and nothing
+  else. It returns 404 for any other path before it reads another binding or
+  secret, and it needs no Access settings.
+- **The hand-over.** `HANDOVER` holds public keys only: the owner's account
+  ID, their passkeys' IDs and public keys, and their devices' IDs and public
+  keys. On its first request, the `Instance` seeds `accounts`, `members` (the
+  owner as administrator), `devices` and the passkey ring from it if they are
+  empty, and never again.
+- **The job** creates the bucket, renders the template, deploys it with
+  wrangler, puts `STATE_KEY` (32 random bytes, made in the job) and
+  `HANDOVER`, and checks `GET /v0/app/instances` there. It reports only the
+  base URL and the bucket.
+  - Its log names no instance, account or host: wrangler's output is not
+    kept.
+  - A bundle over the free plan's compressed Worker size fails the job with
+    that size, before anything is created. Moving to Workers Paid is then the
+    owner's decision, because it is a spend.
+
+**§2, the private listing.**
+
+- `standup` records the entry under `instances.private` when the job
+  reports. The owner's devices' public keys are already on the stack, so the
+  owner's app is linked there from the first minute.
+- `GET /v0/app/instances` on a standalone answers itself alone.
+
+**§5, the store, and the carry-over.**
+
+- **Forms.** The app makes a form and lays out its circles (`PigeonCore`),
+  and the instance stores both, as `forms/<n>.json`.
+- **Attempts.** The instance recomputes an attempt's results from the stored
+  key; the app's results are not trusted.
+- **Sync.** `POST /v0/app/learner/sync` takes `{forms, attempts}` and is
+  idempotent: an item already held with the same content is accepted again,
+  and one held with different content is refused by name. It answers every
+  form number and attempt ID the instance holds. `POST .../forms` and
+  `POST .../attempts` are its one-item cases.
+- **Sealing.** Each object is sealed with AES-GCM under
+  `HKDF-SHA256(STATE_KEY, info "pigeon-learner-v1")`.
+- **The phone's store stays the cache.** Its files and their format, the
+  ones step 2 wrote, do not change.
+  - An item is pending until a sync answer names it.
+  - Nothing on the phone is deleted, so a failed or partial sync loses
+    nothing, and is retried on the next open and after each write.
+  - Once linked, the first sync carries everything practised before the link.
+- **The carry-over's test** is in `PigeonCoreTests`. It seeds a store in step
+  2's file format with forms, circles and scored attempts, then syncs against
+  a fake instance. It checks three things:
+  - every item arrives, with the same content;
+  - a sync that fails, or answers only part, leaves the rest pending and
+    every file in place;
+  - once confirmed, the store reads back unchanged.
+
+  A Rust test holds the instance's side: sync is idempotent, refuses a
+  different content by name, round-trips through the seal, and recomputes
+  results.
+
+**§7, adding a member, replaced.** Every step runs on the standalone, and the
+platform holds no account for the learner.
+
+1. **Invite.** The owner's app, on the standalone, posts
+   `POST /v0/app/members/invites` with the email and role `user`, proved by
+   passkey against the standalone's challenge. It shows the answer as a
+   `pigeon://join?base=<base URL>&token=<token>` link and its QR code, which
+   the owner sends to the learner. The link never passes through the
+   platform.
+2. **Enrol.** The learner's app, opened by the link:
+   - asks `POST /v0/app/join/challenge` with the token for a challenge;
+   - creates a passkey natively for relying party `platform.pigeon.dev`,
+     through its associated domain;
+   - takes the authenticator data and the public key from the attestation
+     with `PigeonCore`;
+   - posts `POST /v0/app/join` with the token, the passkey, and its device
+     key signed as a link is.
+
+   The standalone checks the client data and the relying party's hash, then
+   creates a `person` account, enrols it and holds the device. It answers the
+   match code. The passkey-only ADR's "a `workers.dev` host can't register" is
+   unchanged: the app registers, and the stack only verifies.
+3. **Admit.** The owner's app shows the enrolled invitation's match code. The
+   owner compares it with the learner's screen, then admits with a passkey
+   (`POST /v0/app/members/admit`). The learner becomes a User, and the device
+   is linked to their account.
+4. **Linked.** The learner's app asks `GET /v0/app/join/<id>`, which answers
+   only the state, until it reads `admitted`. It then keeps the standalone as
+   its one instance, and syncs.
+
+**Distribution and the link.** The app registers the `pigeon` URL scheme
+(`project.yml`). This amendment adds `catalog/pigeon/kinds/platform/**`,
+`src/pigeon-ios/project.yml`, `.config/policies/roles.yaml` and the new
+backplane files listed below to what the ADR governs.
+
+**Steps 4 to 8, as changes.** The planner carries each one: each is owner
+tier, touches device or passkey proofs, or is the carry-over the owner made a
+hard requirement, so no brief would leave its executor without a choice.
+
+| # | Change | Paths |
+|---|---|---|
+| 4 | `learner` in `.config/roles.yaml`, its policy, and `CAPABILITIES` | `.config/roles.yaml`, `.config/policies/roles.yaml`, `core/member/` |
+| 5a | `shape`, the app template, the app-only router, the hand-over seed | `catalog/pigeon/kinds/platform/**`, `worker/standalone.rs`, `worker/mod.rs` |
+| 5b | `standup <instance>` in the platform job, `instance.standup`, and `instances.private` | `platform_job.rs`, `worker/platforms.rs`, `worker/standalone.rs` |
+| 6 | `GET /v0/app/instances`, the app's per-instance API base, and `InstancesSheet` | `worker/standalone.rs`, `Pigeon/**`, `PigeonCore/**` |
+| 7a | The learner routes, the sealed store and sync | `core/learner/**`, `worker/learner.rs` |
+| 7b | The app's sync and carry-over, with its test | `Pigeon/Learner/**`, `PigeonCore/**`, `PigeonCoreTests/Learner*.swift` |
+| 8a | Invites, join and admit on a standalone | `worker/members.rs`, `core/member/**` |
+| 8b | The owner's invite and admit, and the learner's join | `Pigeon/**`, `PigeonCore/**`, `project.yml` |
+
+- Step 9 (the owner's steps) becomes a guide sent to the owner once 8b is
+  released.
+- Each app change ships with `ios_release` once it merges.
