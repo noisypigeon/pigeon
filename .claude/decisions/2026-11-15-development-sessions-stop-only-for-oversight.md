@@ -284,3 +284,39 @@ session wants the owner to approve personally, as !500 did.
 - `approval_wait` returns at once, and no session shows "Answer the MCP
   server's question".
 - The digest's `stops` line shows `nudged` falling over the following nights.
+
+## Amendments
+
+### 2026-11-15: Reviewed against !503: they agree, and a renewed ticket passes `parent` again
+
+!503 carries out
+[`2026-11-15-development-archive-cleanly-ended-sessions.md`](2026-11-15-development-archive-cleanly-ended-sessions.md)
+step 2. Each of its paths that this ADR governs was checked against this ADR.
+
+- **§1, ending with work left.** A session that ends with work left still
+  holds its changes, so `session_end` judges the end unclean, and it is never
+  archived. A clean end leaves nothing but hand-offs. Neither ADR asks the
+  owner anything at a session's end.
+- **§1, owner-only decisions.** Archiving a child that ended clean is not an
+  owner-only destructive action. `unarchive_session` reverses it. The owner
+  asked for it, and the archive ADR limits it to the archiver's own children,
+  never an `ios` or `desktop_app` session. The archiver acts on
+  `session.archivable` without stopping. A child still working is looked at
+  once more, then skipped and reported. That wait isn't a stop either.
+- **§1, ticket renewal.** Renewal is `session_start` with `replace`. !503 keeps
+  `parent` on the ticket record, so a new ticket starts without it. A session
+  created by another passes `parent` on every `session_start`, renewals
+  included, as `CLAUDE.md` says. An executor still gets its archiver from its
+  `planner`.
+- **§2.** `session_archived` is a report, not an approval. No window covers it,
+  and the archiver's own ticket guards it. Nothing in !503 calls
+  `change_approve` or `change_authorize`.
+- **§4, `sessions.rs`.** !503 adds only `session_id` there. The `wait:`
+  refusals are unchanged.
+- **§5, `tasks.rs` and `worker/push.rs`.** !503's `archives` lines and §5's
+  `stops` line are separate `Digest` fields. Both are shown and never pushed,
+  and neither changes `needs_owner`.
+- **`wire.rs` and `worker/mod.rs`.** !503 adds `session.archived` and a `parent`
+  argument on `session.start`, and changes none of §2's descriptions.
+
+!503 needs no change.
