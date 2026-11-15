@@ -111,6 +111,21 @@ pub struct Job {
     /// How many times it has been dispatched.
     #[serde(default)]
     pub attempts: u32,
+    /// Its starts that failed since it was last dispatched; see
+    /// `.claude/decisions/2026-11-15-development-job-start-failures-backoff.md` §1.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub start_failures: u32,
+    /// Why its last start failed, or that its Container was lost.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_error: Option<String>,
+}
+
+#[expect(
+    clippy::trivially_copy_pass_by_ref,
+    reason = "serde passes a reference"
+)]
+fn is_zero(n: &u32) -> bool {
+    *n == 0
 }
 
 impl Job {
@@ -120,6 +135,8 @@ impl Job {
             argv,
             status: JobStatus::Queued,
             attempts: 0,
+            start_failures: 0,
+            last_error: None,
         }
     }
 
@@ -473,6 +490,15 @@ pub enum Event {
         /// The head it ran on.
         sha: String,
     },
+    /// A job's Container didn't start, for `why`; the job waits, then starts again.
+    StartFailed {
+        /// The job.
+        job: String,
+        /// The head it was to run on.
+        sha: String,
+        /// The start's error.
+        why: String,
+    },
     /// Someone asked for a finished job again.
     Rerun {
         /// The job.
@@ -557,6 +583,13 @@ pub enum Event {
 pub enum Effect {
     /// Dispatch this job on the head.
     Start(String),
+    /// Dispatch this job on the head after `secs` seconds.
+    StartAfter {
+        /// The job.
+        job: String,
+        /// The wait, in seconds.
+        secs: u64,
+    },
     /// Stop these jobs' Containers.
     Cancel(Vec<String>),
 }

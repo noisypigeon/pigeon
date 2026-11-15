@@ -924,14 +924,14 @@ pub fn next_number(instance: &str, repo: &str, floor: u32) -> Statement {
 }
 
 /// Whether `event`, just applied to `change`, ended its merge, so the queue's turn is released:
-/// `Some(commit)` when merged, `Some(None)` when it failed or its Container was lost on every
-/// attempt; a loss that is retried keeps the turn.
+/// `Some(commit)` when merged, `Some(None)` when it failed, or its Container was lost on every
+/// attempt or failed its last start; a loss or failed start that is retried keeps the turn.
 #[must_use]
 pub fn merge_ended(event: &Event, change: &Change) -> Option<Option<String>> {
     match event {
         Event::Merged { commit, .. } => Some(commit.clone()),
         Event::MergeFailed { .. } => Some(None),
-        Event::Lost { job, .. }
+        Event::Lost { job, .. } | Event::StartFailed { job, .. }
             if job == MERGE
                 && change
                     .jobs

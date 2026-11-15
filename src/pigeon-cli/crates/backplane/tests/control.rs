@@ -907,6 +907,8 @@ fn job(name: &str, cmd: &str, status: backplane::changes::JobStatus) -> backplan
         argv: cmd.split(' ').map(str::to_string).collect(),
         status,
         attempts: 1,
+        start_failures: 0,
+        last_error: None,
     }
 }
 

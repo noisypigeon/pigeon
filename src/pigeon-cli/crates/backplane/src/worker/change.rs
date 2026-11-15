@@ -136,7 +136,9 @@ impl ChangeRun {
         *change = next;
         for e in effects {
             match e {
-                Effect::Start(job) => pending.push(Pending::Start(job)),
+                Effect::Start(job) | Effect::StartAfter { job, .. } => {
+                    pending.push(Pending::Start(job));
+                }
                 Effect::Cancel(jobs) => {
                     if let Some(sha) = &head {
                         pending.extend(jobs.iter().map(|j| {

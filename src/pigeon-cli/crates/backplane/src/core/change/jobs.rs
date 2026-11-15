@@ -6,6 +6,25 @@ use super::types::{
 };
 use crate::runs::MAX_ATTEMPTS;
 
+/// Failed starts before a job fails; see
+/// `.claude/decisions/2026-11-15-development-job-start-failures-backoff.md` §1.
+pub const MAX_START_FAILURES: u32 = 8;
+
+/// Seconds before the next start after `failures` failed starts: 15, 30, 60, 120, then 240.
+#[must_use]
+pub fn start_backoff(failures: u32) -> u64 {
+    match failures {
+        0 | 1 => 15,
+        2 => 30,
+        3 => 60,
+        4 => 120,
+        _ => 240,
+    }
+}
+
+/// Seconds before a lost job's second and third attempts.
+pub const LOST_BACKOFF: [u64; 2] = [30, 60];
+
 impl Change {
     pub(super) fn started(mut self, name: &str, sha: &str) -> Step {
         if !self.on_head(sha) {
@@ -15,6 +34,7 @@ impl Change {
             Some(i) if self.jobs[i].status == JobStatus::Queued => {
                 self.jobs[i].status = JobStatus::Running;
                 self.jobs[i].attempts += 1;
+                self.jobs[i].start_failures = 0;
                 Ok((self, Vec::new()))
             }
             Some(_) => refuse(format!("job `{name}` is not queued")),
@@ -145,28 +165,66 @@ impl Change {
         if !self.jobs[i].open() {
             return Ok((self, Vec::new()));
         }
-        if self.jobs[i].attempts < MAX_ATTEMPTS {
+        self.jobs[i].last_error = Some("its Container was lost while it ran".into());
+        let attempts = self.jobs[i].attempts;
+        if attempts < MAX_ATTEMPTS {
             self.jobs[i].status = JobStatus::Queued;
-            return Ok((self, vec![Effect::Start(name.to_string())]));
+            let secs = LOST_BACKOFF[usize::try_from(attempts.saturating_sub(1))
+                .unwrap_or(0)
+                .min(1)];
+            let job = name.to_string();
+            return Ok((self, vec![Effect::StartAfter { job, secs }]));
         }
+        self.given_up(
+            i,
+            name,
+            sha,
+            &format!("Container was lost {MAX_ATTEMPTS} times"),
+        )
+    }
+
+    /// A queued job whose Container didn't start: it starts again after a backoff, and fails
+    /// after [`MAX_START_FAILURES`], as a lost one does.
+    pub(super) fn start_failed(mut self, name: &str, sha: &str, why: &str) -> Step {
+        if !self.on_head(sha) {
+            return Ok((self, Vec::new()));
+        }
+        let Some(i) = self.index(name) else {
+            return refuse(format!("no job `{name}`"));
+        };
+        if self.jobs[i].status != JobStatus::Queued {
+            return Ok((self, Vec::new()));
+        }
+        let why: String = why.chars().take(300).collect();
+        self.jobs[i].start_failures += 1;
+        self.jobs[i].last_error = Some(why.clone());
+        let failures = self.jobs[i].start_failures;
+        if failures < MAX_START_FAILURES {
+            let job = name.to_string();
+            let secs = start_backoff(failures);
+            return Ok((self, vec![Effect::StartAfter { job, secs }]));
+        }
+        let what = format!("Container failed to start {MAX_START_FAILURES} times: {why}");
+        self.given_up(i, name, sha, &what)
+    }
+
+    /// Job `i`, `name`, ends for `what`: a restack as a failed one, a merge giving its turn
+    /// back, a bound refusing the head, and a check failing.
+    fn given_up(mut self, i: usize, name: &str, sha: &str, what: &str) -> Step {
         if name == RESTACK {
             let (mut c, effects) = self.finished(RESTACK, sha, false)?;
             c.violations.push(format!(
-                "the restack job's Container was lost {MAX_ATTEMPTS} times; rebase onto main and push, or it restacks after the next merge"
+                "the restack job's {what}; rebase onto main and push, or it restacks after the next merge"
             ));
             return Ok((c, effects));
         }
         self.jobs[i].status = JobStatus::Failed;
         if name == MERGE {
-            self.violations = vec![format!(
-                "the merge job's Container was lost {MAX_ATTEMPTS} times; merge again"
-            )];
+            self.violations = vec![format!("the merge job's {what}; merge again")];
             return Ok((self, Vec::new()));
         }
         if name == BOUND {
-            self.violations = vec![format!(
-                "the bound job's Container was lost {MAX_ATTEMPTS} times"
-            )];
+            self.violations = vec![format!("the bound job's {what}")];
             self.state = State::Refused;
             return Ok((self, Vec::new()));
         }

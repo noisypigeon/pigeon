@@ -13,6 +13,7 @@ mod restack;
 pub mod stage;
 mod types;
 
+pub use jobs::{LOST_BACKOFF, MAX_START_FAILURES, start_backoff};
 pub use lifecycle::{Step, step};
 pub use types::*;
 

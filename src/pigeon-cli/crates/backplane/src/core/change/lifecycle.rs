@@ -71,6 +71,7 @@ impl Change {
             }
             Event::Finished { job, sha, ok } => self.finished(&job, &sha, ok),
             Event::Lost { job, sha } => self.lost(&job, &sha),
+            Event::StartFailed { job, sha, why } => self.start_failed(&job, &sha, &why),
             Event::Rerun { job } => self.rerun(&job),
             Event::Accept { by, sha } => self.accept(&by, sha),
             Event::Escalate { by, question, at } => self.escalate(by, question, at),

@@ -997,3 +997,26 @@ fn behind_for_turn(c: &mut Change) -> Vec<Effect> {
     c.apply(Event::Merge { by: "owner".into() })
         .expect("its turn")
 }
+
+#[test]
+fn a_merge_that_fails_its_last_start_releases_its_turn_and_earlier_ones_keep_it() {
+    use backplane::changes::MAX_START_FAILURES;
+    use backplane::control::merge_ended;
+
+    // !461: its merge job's Container failed to start, and each failure was counted as lost.
+    let mut c = approved();
+    c.apply(Event::Merge { by: "owner".into() }).expect("merge");
+    for n in 1..=MAX_START_FAILURES {
+        let failed = Event::StartFailed {
+            job: MERGE.into(),
+            sha: A.into(),
+            why: "Artifacts: minting a write token: 503".into(),
+        };
+        c.apply(failed.clone()).expect("start failed");
+        if n < MAX_START_FAILURES {
+            assert_eq!(merge_ended(&failed, &c), None, "start {n} is retried");
+        } else {
+            assert_eq!(merge_ended(&failed, &c), Some(None), "the last ends it");
+        }
+    }
+}

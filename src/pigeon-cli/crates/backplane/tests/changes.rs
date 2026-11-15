@@ -268,7 +268,9 @@ fn a_lost_job_retries_until_its_attempts_are_used() {
             })
             .expect("lost");
         if n < MAX_ATTEMPTS {
-            assert_eq!(effects, [Effect::Start("fmt".into())]);
+            let secs = backplane::changes::LOST_BACKOFF[n as usize - 1];
+            let job = "fmt".into();
+            assert_eq!(effects, [Effect::StartAfter { job, secs }]);
         }
     }
     assert_eq!(c.state, State::Failed);
