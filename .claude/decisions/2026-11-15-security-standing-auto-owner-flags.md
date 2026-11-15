@@ -308,3 +308,12 @@ is unchanged by it.
   ADR's, unchanged here.
 
 !547 needs no change.
+
+### 2026-11-15: Reviewed against !556: they agree
+
+[`2026-11-15-runtime-learner-practice-standalone-app.md`](2026-11-15-runtime-learner-practice-standalone-app.md)
+(!556) gives the learner scan a 3-2-1 countdown and a manual shutter. It
+changes the learner's scan screen and its `PigeonCore` model. §5 changes
+the Approvals tab, `AutoBanner`, `Store`'s Auto and item calls, and
+`AutoWindow`, `OwnerItem` and `Home` in `Models.swift`. Neither touches the
+other's views or types. !547 needs no change.
