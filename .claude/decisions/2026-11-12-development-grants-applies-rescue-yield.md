@@ -1284,3 +1284,15 @@ The first, the ledger:
 
   If a permission name is wrong, the first mint is refused with the
   account's real names, and a fix follows.
+
+### 2026-11-15: The control plane dispatches `grant.*`, and `granter` is checked by the first grant
+
+- **`grant.*` was routed but never dispatched.** The Worker routes it to
+  `minting::run`. But `wire::Operation::control_plane` didn't list `grant.`,
+  so each call was refused with "runs in an instance's Container" before it
+  was routed. `control_plane` now lists it.
+- **`/grants/granter` was never a route.** `/grants/<n>` serves only numbered
+  requests.
+  - So the first real grant's page is what checks `granter`: it reads the
+    binding, resolves the account, mints and verifies.
+  - A standalone check page is still to do.

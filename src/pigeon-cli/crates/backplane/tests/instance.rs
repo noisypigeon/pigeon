@@ -456,6 +456,22 @@ fn the_control_plane_runs_apple_check_itself() {
 }
 
 #[test]
+fn the_control_plane_runs_grants_itself() {
+    for name in [
+        "grant.list",
+        "grant.request",
+        "grant.rotate",
+        "grant.revoke",
+    ] {
+        let op = catalog()
+            .iter()
+            .find(|o| o.name == name)
+            .expect("in the catalog");
+        assert!(op.control_plane(), "{name}");
+    }
+}
+
+#[test]
 fn the_control_plane_runs_ios_releases_itself() {
     for name in ["ios.release", "ios.status"] {
         let op = catalog()

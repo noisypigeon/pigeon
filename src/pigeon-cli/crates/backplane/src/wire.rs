@@ -170,6 +170,7 @@ impl Operation {
             || self.name.starts_with("platform.")
             || self.name.starts_with("apple.")
             || self.name.starts_with("ios.")
+            || self.name.starts_with("grant.")
     }
 }
 
