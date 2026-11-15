@@ -237,3 +237,30 @@ fn a_sessions_class_is_named_on_its_lines() {
         ]
     );
 }
+
+#[test]
+fn the_digest_names_a_mandate_held_by_a_failed_deploy() {
+    let mut mandates = Mandates::default();
+    kept!(mandates.propose(ADR, "task", vec!["src/**".into()], false, None, None))
+        .expect("proposes");
+    kept!(mandates.offer(1, "tok", 0, 100)).expect("offers");
+    kept!(mandates.grant("tok", "owner", 1)).expect("grants");
+    let (held, ids, _) = mandates.hold_all("abcdefabcdefabcdef", "token", 60);
+    assert_eq!(ids, [1]);
+    let d = digest(
+        &DigestInput {
+            mandates: &held.list,
+            ..DigestInput::default()
+        },
+        660,
+    );
+    assert!(d.needs_owner());
+    assert_eq!(
+        d.held,
+        [
+            "held: mandate 1 for 10 min, 1 failed deploy: merges once a deploy of main passes: \
+          the deploy of abcdefabcdef failed: token; resumes when a deploy passes"
+        ]
+    );
+    assert_eq!(held.list[0].state, State::Held);
+}

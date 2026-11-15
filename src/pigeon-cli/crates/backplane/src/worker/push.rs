@@ -139,6 +139,13 @@ pub async fn build(env: &Env, s: &Settings) -> Result<(Digest, u64)> {
         now(),
     );
     (d.sessions, d.stalled) = sessions(env, s).await?;
+    let (_, w) = to_instance(env, s, "/windows/current", &json!({})).await?;
+    let w: Option<crate::core::approval::windows::Window> =
+        serde_json::from_value(w["window"].clone()).unwrap_or_default();
+    if let Some((id, h)) = w.as_ref().and_then(|w| Some((w.id, w.hold.as_ref()?))) {
+        let line = crate::tasks::held_line(&format!("Auto window {id}"), h, now());
+        d.held.insert(0, line);
+    }
     let open: std::collections::BTreeMap<u32, String> = d
         .sessions
         .iter()

@@ -291,6 +291,10 @@ pub struct Digest {
     pub stale_tasks: Vec<Task>,
     /// Mandates paused, with why.
     pub paused: Vec<(u32, String)>,
+    /// Windows and mandates held by a failed deploy, each as its line; see the session-stages
+    /// ADR's 2026-11-15 amendment.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub held: Vec<String>,
     /// Deploys that failed: the commit and why.
     pub failed_deploys: Vec<(String, String)>,
     /// Changes merged without the owner: the change and who approved.
@@ -431,6 +435,7 @@ impl Digest {
         !(self.approvals.is_empty()
             && self.stale_tasks.is_empty()
             && self.paused.is_empty()
+            && self.held.is_empty()
             && self.failed_deploys.is_empty()
             && self.stalled.is_empty()
             && self.mirror.is_none())
@@ -470,6 +475,7 @@ impl Digest {
                 .iter()
                 .map(|(id, why)| format!("paused: mandate {id}: {why}")),
         );
+        out.extend(self.held.iter().cloned());
         out.extend(
             self.failed_deploys.iter().map(|(sha, why)| {
                 format!("deploy failed: {}: {why}", sha.get(..12).unwrap_or(sha))
@@ -485,6 +491,18 @@ impl Digest {
         out.extend(self.macos.iter().map(|l| format!("macOS: {l}")));
         out
     }
+}
+
+/// The digest's line for `what`, held by `h` at `now`.
+#[must_use]
+pub fn held_line(what: &str, h: &crate::mandates::Hold, now: u64) -> String {
+    let n = h.failures;
+    format!(
+        "held: {what} for {} min, {n} failed deploy{}: {}; resumes when a deploy passes",
+        now.saturating_sub(h.since) / 60,
+        if n == 1 { "" } else { "s" },
+        h.waits()
+    )
 }
 
 /// The owner's digest at `now`.
@@ -515,6 +533,17 @@ pub fn digest(input: &DigestInput<'_>, now: u64) -> Digest {
             .iter()
             .filter(|m| m.state == crate::mandates::State::Paused)
             .map(|m| (m.id, m.why.clone().unwrap_or_default()))
+            .collect(),
+        held: input
+            .mandates
+            .iter()
+            .filter_map(|m| {
+                Some(held_line(
+                    &format!("mandate {}", m.id),
+                    m.hold.as_ref()?,
+                    now,
+                ))
+            })
             .collect(),
         failed_deploys: input.failed_deploys.to_vec(),
         merged_without_owner: input.merged_without_owner.to_vec(),

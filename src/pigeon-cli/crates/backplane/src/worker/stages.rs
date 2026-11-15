@@ -45,6 +45,32 @@ async fn covered(env: &Env, s: &Settings, c: &Change) -> Option<String> {
         .map(|id| format!("window:{id}"))
 }
 
+/// What a hold defers approved `c`'s merge on, when its mandate or the Auto window is held.
+async fn held(env: &Env, s: &Settings, c: &Change) -> Option<String> {
+    use crate::core::approval::{mandates, windows};
+    if c.state != State::Approved {
+        return None;
+    }
+    let at = platform::now();
+    let d = if let Some(id) = c.mandate {
+        let (_, v) = to_instance(env, s, "/mandates/list", &json!({}))
+            .await
+            .ok()?;
+        let all: Vec<mandates::Mandate> = serde_json::from_value(v["mandates"].clone()).ok()?;
+        mandates::decide(all.iter().find(|m| m.id == id)?, c, "change.merge", at)
+    } else {
+        let (_, v) = to_instance(env, s, "/windows/current", &json!({}))
+            .await
+            .ok()?;
+        let window: windows::Window = serde_json::from_value(v["window"].clone()).ok()?;
+        windows::decide(&window, c, "change.merge", at)
+    };
+    match d {
+        mandates::Decision::Hold(why) => Some(why),
+        _ => None,
+    }
+}
+
 /// When change `number` last moved: its last event that isn't a job's or a nudge.
 async fn since(env: &Env, s: &Settings, number: u32) -> Option<u64> {
     let mut after = 0;
@@ -84,6 +110,7 @@ pub async fn stage(env: &Env, s: &Settings, c: &Change, queue: &MergeQueue) -> S
         place: stage::place(queue, c.number),
         deploy,
         covered: covered(env, s, c).await,
+        held: held(env, s, c).await,
     };
     stage::of(c, &cx)
 }

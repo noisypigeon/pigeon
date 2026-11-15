@@ -76,6 +76,9 @@ const WAKING: &[&str] = &[
     "deploy.failed",
     "grant.failed",
     "auto.paused",
+    "auto.held",
+    "auto.resumed",
+    "auto.ended",
     "session.replaced",
 ];
 

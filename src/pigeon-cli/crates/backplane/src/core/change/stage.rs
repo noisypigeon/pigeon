@@ -71,6 +71,9 @@ pub struct Context {
     /// The window or mandate that would allow its next authorization or approval, as
     /// `window:<id>` or `mandate:<id>`.
     pub covered: Option<String>,
+    /// For an approved change: what its merge waits on while a hold defers it; see the
+    /// session-stages ADR's 2026-11-15 amendment.
+    pub held: Option<String>,
 }
 
 /// A change's place in the merge queue.
@@ -253,12 +256,13 @@ pub fn of(c: &Change, cx: &Context) -> Stage {
             ),
         ),
         State::Checked => ask("checked", covered, "change_approve", "approve the head"),
-        State::Approved => approved(c, place),
+        State::Approved => approved(c, place, cx.held.as_deref()),
     }
 }
 
-/// An approved change's stage, given its place in the merge queue.
-fn approved(c: &Change, place: Option<Place>) -> Stage {
+/// An approved change's stage, given its place in the merge queue and what a hold defers its
+/// merge on.
+fn approved(c: &Change, place: Option<Place>, held: Option<&str>) -> Stage {
     match place {
         Some(Place::Waiting { turn, of, .. }) if let Some(y) = &c.yielded => Stage {
             stage: format!("queued {turn}/{of}"),
@@ -286,6 +290,7 @@ fn approved(c: &Change, place: Option<Place>) -> Stage {
             Needs::Platform,
             "its merge is parked until its approval carries and its gate passes",
         ),
+        _ if let Some(why) = held => at("held", Needs::Platform, why),
         _ if failed(c, MERGE) => {
             let why = c
                 .violations
@@ -478,6 +483,26 @@ mod tests {
         let mut c = change(State::Approved);
         c.merge_after = Some("owner".into());
         assert_eq!(of(&c, &Context::default()).needs, Needs::Platform);
+    }
+
+    #[test]
+    fn a_merge_a_hold_defers_is_held_until_a_deploy_passes() {
+        let c = change(State::Approved);
+        let why = "merges once a deploy of main passes: the deploy of abc failed: x";
+        let cx = Context {
+            held: Some(why.into()),
+            ..Context::default()
+        };
+        let st = of(&c, &cx);
+        assert_eq!(
+            (st.stage.as_str(), st.needs, st.next.as_str()),
+            ("held", Needs::Platform, why)
+        );
+        assert_eq!(
+            of(&c, &Context::default()).needs,
+            Needs::Agent,
+            "resumed: it asks again"
+        );
     }
 
     #[test]
