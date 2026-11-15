@@ -504,6 +504,11 @@ fn a_change_built_on_one_restacked_before_merging_keeps_its_own_message() {
     let to = r.to.expect("pushed");
     let message = git(job.path(), &["log", "-1", "--format=%B", &to]);
     assert!(message.starts_with("feat: y"), "{message}");
+    // !492: its own patch is unchanged once !490 squashes onto main, so its approval carries.
+    assert!(
+        r.same_patch,
+        "counted from the change built on, not the fork with main"
+    );
 }
 
 #[test]

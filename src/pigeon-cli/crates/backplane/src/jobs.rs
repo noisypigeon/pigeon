@@ -583,7 +583,7 @@ fn bound(spec: &JobSpec, dir: &Path, sentinel: &Path) -> Report {
         checks,
         full,
         gate,
-        patch: crate::cobot::ci::head_patch(dir, &spec.base, &spec.sha),
+        patch: crate::cobot::ci::head_patch(dir, since, &spec.sha),
         merged: None,
         published: Vec::new(),
         workers: Vec::new(),

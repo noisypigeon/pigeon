@@ -894,8 +894,10 @@ pub fn restack(
     } else {
         Relation::Disjoint
     };
-    let mine = own_lines(dir, &fork, sha)?;
-    r.same_patch = patch_id(dir, &fork, sha)? == patch_id(dir, &onto, &new)?
+    // Counted from the change built on, when there is one; see the always-listed ADR's
+    // 2026-11-15 amendment on changes built on another.
+    let mine = own_lines(dir, from, sha)?;
+    r.same_patch = patch_id(dir, from, sha)? == patch_id(dir, &onto, &new)?
         || (mine.is_some() && mine == own_lines(dir, &onto, &new)?);
     let lease = format!("--force-with-lease=refs/heads/{branch}:{sha}");
     let refspec = format!("{new}:refs/heads/{branch}");
