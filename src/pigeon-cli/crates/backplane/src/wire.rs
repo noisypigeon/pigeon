@@ -197,8 +197,8 @@ const CATALOG: &[Operation] = &[
         name: "architecture.describe",
         engine: Engine::Backplane,
         effect: Effect::Read,
-        summary: "Describe the instance's architecture as a graph and its layout",
-        args: &[],
+        summary: "Describe the instance's architecture: its graph, layout and network, each part with the code it was derived from, as of the deployed SHA (args: format?, json, text or svg)",
+        args: &[arg("format", false, Kind::Text)],
     },
     Operation {
         name: "policy.check",
@@ -406,8 +406,11 @@ const CATALOG: &[Operation] = &[
         name: "sites.publish",
         engine: Engine::Cobot,
         effect: Effect::Apply,
-        summary: "Build the named sites, or every site, with the architecture as data, sync each to its bucket and check it live, with the run's CLOUDFLARE_API_TOKEN (args: sites?)",
-        args: &[arg("sites", false, Kind::Strings)],
+        summary: "Build the named sites, or every site, with the architecture as data, sync each to its bucket and check it live, with the run's CLOUDFLARE_API_TOKEN (args: sites?, deployed?, the SHA the deploy runs for)",
+        args: &[
+            arg("sites", false, Kind::Strings),
+            arg("deployed", false, Kind::Text),
+        ],
     },
     Operation {
         name: "deploy.status",

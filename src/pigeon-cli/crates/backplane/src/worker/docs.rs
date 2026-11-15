@@ -85,6 +85,29 @@ async fn serve(mut req: Request, env: &Env, s: &Settings, who: &Identity) -> Res
     Ok(r)
 }
 
+/// `architecture.describe` for agents: the site's own `architecture.json`, as of the deployed
+/// SHA, in `format`; see
+/// .claude/decisions/2026-11-15-runtime-architecture-coverage-agents-deploys.md §4.
+pub(super) async fn describe(
+    env: &Env,
+    format: Option<&str>,
+) -> std::result::Result<serde_json::Value, String> {
+    let bucket = env.bucket(BINDING).map_err(|e| e.to_string())?;
+    let object = bucket
+        .get("architecture.json")
+        .execute()
+        .await
+        .map_err(|e| e.to_string())?
+        .ok_or("the docs site holds no architecture.json yet; main's next deploy publishes it")?;
+    let bytes = match object.body() {
+        Some(b) => b.bytes().await.map_err(|e| e.to_string())?,
+        None => Vec::new(),
+    };
+    let result: serde_json::Value =
+        serde_json::from_slice(&bytes).map_err(|e| format!("architecture.json: {e}"))?;
+    crate::architecture::render::formatted(result, format)
+}
+
 /// The routes this surface serves.
 pub(super) const ROUTES: &[super::Route] = &[
     super::Route::any(crate::routes::Path::Exact(view::PREFIX), serve_route),

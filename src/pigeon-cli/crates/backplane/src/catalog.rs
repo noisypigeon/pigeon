@@ -36,7 +36,11 @@ pub fn run_with(
     match op.name {
         "instance.show" => Ok(respond(json!(instance), Vec::new())),
         "architecture.describe" => {
-            architecture_describe(instance, &var).map(|(r, v)| respond(r, v))
+            let (r, v) = architecture_describe(instance, &var)?;
+            let format = request.args.get("format").and_then(Value::as_str);
+            let r = crate::architecture::render::formatted(r, format)
+                .map_err(|e| Error::Invalid(vec![e]))?;
+            Ok(respond(r, v))
         }
         "policy.check" => policy_check(instance, &request.args, &var).map(|(r, v)| respond(r, v)),
         "change.scope" => change_scope(instance, &request.args).map(|r| respond(r, Vec::new())),
@@ -61,16 +65,72 @@ fn architecture_describe(
     let (graph, problems) = crate::architecture::describe_with(instance, var)?;
     let layout = crate::architecture::layout(&graph);
     let network = crate::architecture::network(&instance.root, instance.platform_root());
-    Ok((
-        json!({
-            "nodes": graph.nodes,
-            "edges": graph.edges,
-            "groups": graph.groups,
-            "layout": layout,
-            "network": network,
-        }),
-        problems,
-    ))
+    let mut result = json!({
+        "nodes": graph.nodes,
+        "edges": graph.edges,
+        "groups": graph.groups,
+        "layout": layout,
+        "network": network,
+    });
+    let zones = zones(instance, &result);
+    let roots: Vec<String> = [&instance.root, &instance.platform_root().to_path_buf()]
+        .iter()
+        .map(|r| format!("{}/", r.display()))
+        .collect();
+    scrub(&mut result, &zones, &roots);
+    Ok((result, problems))
+}
+
+/// Every zone but `pigeon.dev`'s the graph would name: each site's host, and each workload's
+/// directory, longest first.
+fn zones(instance: &Instance, result: &Value) -> Vec<String> {
+    let ours = |h: &str| h == "pigeon.dev" || h.ends_with(".pigeon.dev");
+    let mut out: Vec<String> = result["nodes"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|n| n["kind"] == "site")
+        .filter_map(|n| n["label"].as_str())
+        .filter(|h| h.contains('.') && !ours(h))
+        .map(|h| h.trim_start_matches("www.").to_string())
+        .collect();
+    for root in [&instance.root, &instance.platform_root().to_path_buf()] {
+        for e in std::fs::read_dir(root.join("workloads"))
+            .into_iter()
+            .flatten()
+            .flatten()
+        {
+            let name = e.file_name().to_string_lossy().into_owned();
+            if name.contains('.') && !ours(&name) {
+                out.push(name);
+            }
+        }
+    }
+    out.sort();
+    out.dedup();
+    out.sort_by_key(|z| std::cmp::Reverse(z.len()));
+    out
+}
+
+/// Replaces each of `zones` in every string of `v` with `zone-<n>`, and drops `roots`, so the
+/// graph names no zone but `pigeon.dev` and no checkout's path; see
+/// `.claude/decisions/2026-11-15-runtime-architecture-coverage-agents-deploys.md` §2.
+fn scrub(v: &mut Value, zones: &[String], roots: &[String]) {
+    match v {
+        Value::String(s) => {
+            for r in roots {
+                *s = s.replace(r.as_str(), "");
+            }
+            for (i, z) in zones.iter().enumerate() {
+                if s.contains(z.as_str()) {
+                    *s = s.replace(z.as_str(), &format!("zone-{}", i + 1));
+                }
+            }
+        }
+        Value::Array(a) => a.iter_mut().for_each(|x| scrub(x, zones, roots)),
+        Value::Object(o) => o.values_mut().for_each(|x| scrub(x, zones, roots)),
+        _ => {}
+    }
 }
 
 /// The pull request `args` describe, as `pigeon-sentinel`'s `PR_*` variables, if they name any
@@ -171,7 +231,10 @@ fn sites_publish(
         provider_config: None,
         provider_token: false,
     };
-    let (architecture, _) = architecture_describe(instance, var)?;
+    let (mut architecture, _) = architecture_describe(instance, var)?;
+    if let Some(sha) = args.get("deployed").and_then(Value::as_str) {
+        architecture["deployed"] = json!(sha);
+    }
     let data = std::collections::BTreeMap::from([("architecture".to_string(), architecture)]);
     let published = crate::cobot::publish(&ctx, &wanted, 5, &data).map_err(|e| cobot_failed(&e))?;
     let violations = published

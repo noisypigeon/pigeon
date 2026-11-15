@@ -215,6 +215,12 @@ Where each check runs:
   shows it. A plan
   cites its ADR, because the bound job checks the pull-request policy with
   the plan as the body.
+- `architecture_describe` (`format`: `json`, `text` or `svg`): the platform's
+  graph as of the deployed SHA, each part and link with the code it came
+  from; locally, `pigeon backplane run architecture.describe --text
+  format=text`. Every deploy republishes it; `tests/architecture.rs` fails on
+  a route, binding or outbound host it lacks, per
+  [`2026-11-15-runtime-architecture-coverage-agents-deploys.md`](.claude/decisions/2026-11-15-runtime-architecture-coverage-agents-deploys.md).
 - `pigeon cobot show --plan ID --state DIR`: a stored plan's changes attribute by
   attribute, decrypted with the state passphrase; sensitive values stay hidden.
 - `pigeon cobot workers validate|permissions|render|plan|deploy|status|secrets put|teardown`:

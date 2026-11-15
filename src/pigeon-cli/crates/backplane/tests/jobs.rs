@@ -343,7 +343,7 @@ fn the_merge_job_refuses_when_main_has_moved_past_the_branch() {
 }
 
 #[test]
-fn a_deploy_publishes_only_the_sites_whose_inputs_changed() {
+fn every_deploy_publishes_the_architecture_site() {
     let tmp = TempDir::new().expect("tempdir");
     let (bare, _) = remote(tmp.path(), &["CLAUDE.md"]);
     let work = tmp.path().join("work");
@@ -364,8 +364,14 @@ fn a_deploy_publishes_only_the_sites_whose_inputs_changed() {
         run_job(&s, &tmp.path().join(dir))
     };
     let r = deploy(&docs_only, Some(&before), "a");
-    assert_eq!(r.outcome, Outcome::Passed, "{}", r.log);
-    assert!(r.log.contains("no site to publish"), "{}", r.log);
+    assert_eq!(r.outcome, Outcome::Failed, "{}", r.log);
+    assert!(
+        r.violations
+            .iter()
+            .any(|v| v.contains("CLOUDFLARE_API_TOKEN")),
+        "a docs-only deploy publishes sites/docs, which names the deployed SHA: {:?}",
+        r.violations
+    );
     assert!(r.log.contains("no Worker to deploy"), "{}", r.log);
     let mut config = std::fs::read_to_string(work.join("config.yaml")).expect("read");
     config.push_str("# a change the architecture site draws\n");

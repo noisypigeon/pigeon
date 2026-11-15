@@ -8,12 +8,16 @@ mod layout;
 mod network;
 #[cfg(feature = "engines")]
 mod place;
+pub mod render;
 
 #[cfg(feature = "engines")]
 pub use describe::{describe, describe_with};
 pub use layout::{GroupBox, LaneBox, Layout, Placed, Routed, layout};
 #[cfg(feature = "engines")]
-pub use network::{Kind, LINKS, Network, Row, evidenced, network};
+pub use network::{
+    Kind, LINKS, Network, ROUTE_KEYS, Row, SERVICES, STANDALONE, Service, evidenced, hosts_in,
+    internal, literals, network, outbound_files,
+};
 #[cfg(feature = "engines")]
 pub use place::{Diagram, place};
 

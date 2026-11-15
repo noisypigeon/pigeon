@@ -371,6 +371,7 @@ fn publish_sites(
     let instance = Instance::load(dir).map_err(|e| e.to_string())?;
     let mut args = Map::new();
     args.insert("sites".into(), json!(sites));
+    args.insert("deployed".into(), json!(spec.sha));
     let request = Request {
         operation: "sites.publish".into(),
         args,

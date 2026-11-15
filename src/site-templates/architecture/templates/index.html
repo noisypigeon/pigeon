@@ -16,8 +16,10 @@
   <script src="{{ get_url(path="assets/js/rail.js") }}" defer></script>
 </head>
 {%- set data = load_data(path="data/architecture.json", required=false) %}
-{%- set sha = "" %}
-{%- if config.extra.features.commit %}{% set sha = get_env(name="SITE_COMMIT_SHA", default="") %}{% endif %}
+{%- set_global sha = "" %}
+{%- if config.extra.features.commit %}{% set_global sha = get_env(name="SITE_COMMIT_SHA", default="") %}{% endif %}
+{%- set_global shown = "built from" %}
+{%- if data and data.deployed %}{% set_global sha = data.deployed %}{% set_global shown = "deployed" %}{% endif %}
 <body class="{% if config.extra.features.motion %}motion{% endif %}">
   <header class="top"><span class="brand">{{ config.title }}</span></header>
 
@@ -61,6 +63,7 @@
         <div class="cols">
           <div class="sec"><span class="muted">Hostnames</span>
             {%- for h in net.access.hosts %}<div class="kv"><span class="mono">{{ h }}</span><span class="rule"></span><span class="pill">protected</span></div>{% endfor %}
+            {%- for h in net.worker.hosts | default(value=[]) %}{% if h.k not in net.access.hosts %}<div class="kv"><span class="mono">{{ h.k }}</span><span class="rule"></span><span class="pill">{{ h.v }}</span></div>{% endif %}{% endfor %}
           </div>
           <div class="sec"><span class="muted">Service tokens</span>
             {%- for t in net.access.tokens %}<div class="kv"><span class="mono">{{ t }}</span><span class="rule"></span><span class="pill">service</span></div>{% endfor %}
@@ -85,7 +88,8 @@
           </div>
           <div class="sec"><span class="muted">Holds</span>
             <div class="kv"><span>secrets</span><span class="rule"></span><span class="pill mono">{{ w.secrets }}</span></div>
-            {%- if sha %}<div class="kv"><span>built from</span><span class="rule"></span><span class="pill mono">{{ sha | truncate(length=7, end="") }}</span></div>{% endif %}
+            {%- if w.secrets_store %}<div class="kv"><span>Secrets Store</span><span class="rule"></span><span class="pill mono">{{ w.secrets_store | join(sep=" · ") }}</span></div>{% endif %}
+            {%- if sha %}<div class="kv"><span>{{ shown }}</span><span class="rule"></span><span class="pill mono">{{ sha | truncate(length=7, end="") }}</span></div>{% endif %}
           </div>
         </div>
       </div>
@@ -121,6 +125,8 @@
             <ul class="out">
               {%- for l in net.links %}{% if l.from == p.id %}
               <li><span class="swatch k-{{ l.kind }}"></span><span>{{ l.label }}</span><span class="mono">→ {{ l.to }}</span></li>
+              {%- elif l.to == p.id and l.from == "Worker" and p.kind != "object" %}
+              <li><span class="swatch k-{{ l.kind }}"></span><span>{{ l.label }}</span><span class="mono">← Worker</span></li>
               {%- endif %}{% endfor -%}
             </ul>
           </div>
@@ -166,6 +172,36 @@
     {%- endif %}
     </div>
 
+    {%- set_global sv = 0 %}
+    {%- for p in net.parts %}{% if p.kind == "service" %}{% set_global sv = sv + 1 %}{% endif %}{% endfor %}
+    {%- if sv > 0 or net.macos %}
+    <div class="arrow"><span>outbound HTTPS</span></div>
+    <section class="region services" aria-label="Outbound services">
+      <div class="region-h"><span class="region-name">Outbound services</span></div>
+      <div class="row bus-above" style="--n: {{ sv }}">
+        {%- for p in net.parts %}{% if p.kind == "service" %}
+        <div class="col">
+          <span class="stub arrowed"></span>
+          <div class="card panel kind-service" id="part-{{ p.id | slugify }}">
+            <div class="panel-h"><span class="dot"></span><span class="grow">{{ p.id }}</span></div>
+            <div class="sec">
+              {%- for l in net.links %}{% if l.to == p.id %}<span class="muted">{{ l.label }}</span><span class="mono">← {{ l.from }}</span>{% endif %}{% endfor %}
+            </div>
+          </div>
+        </div>
+        {%- endif %}{% endfor %}
+      </div>
+      {%- if net.macos %}
+      <div class="card panel">
+        <div class="panel-h"><span class="grow">macOS builds</span><span class="pill">first available first</span></div>
+        <div class="sec">
+          {%- for m in net.macos | default(value=[]) %}<div class="kv"><span class="mono">{{ m.k }}</span><span class="rule"></span><span class="pill">{{ m.v }}</span></div>{% endfor %}
+        </div>
+      </div>
+      {%- endif %}
+    </section>
+    {%- endif %}
+
     <details class="evidence">
       <summary>Every link, and the code it was derived from</summary>
       <div class="tw"><table>
@@ -184,7 +220,7 @@
 
   <footer>
     <span>Derived from the code by <span class="mono">architecture.describe</span>; nothing here is placed by hand.</span>
-    {%- if sha %}<span>Built from <span class="mono">{{ sha | truncate(length=12, end="") }}</span>.</span>{% endif %}
+    {%- if sha %}<span>{{ shown | capitalize }} <span class="mono">{{ sha | truncate(length=12, end="") }}</span>.</span>{% endif %}
     {%- if data and data.network and data.network.access.hosts %}
     <span>Deploys, changes and approvals: <a href="https://{{ data.network.access.hosts | first }}/">{{ data.network.access.hosts | first }}</a>, behind Access.</span>
     {%- endif %}

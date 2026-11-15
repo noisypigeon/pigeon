@@ -177,64 +177,23 @@ fn deploys_name_the_sites_a_change_to_main_publishes() {
     let files = |f: &[&str]| f.iter().map(|s| (*s).to_string()).collect::<Vec<_>>();
     let all = backplane::cobot::scope::deploys(&root, None).expect("finds");
     assert_eq!(all, ["sites/docs"], "only the instance's manifest sites");
-    let got = backplane::cobot::scope::deploys(
-        &root,
-        Some(&files(&["catalog/cloudflare/capabilities.yaml"])),
-    )
-    .expect("finds");
-    assert_eq!(
-        got,
-        ["sites/docs"],
-        "the architecture site draws the catalog"
-    );
-    let got =
-        backplane::cobot::scope::deploys(&root, Some(&files(&["config.yaml"]))).expect("finds");
-    assert!(got.contains(&"sites/docs".to_string()), "{got:?}");
-    let got = backplane::cobot::scope::deploys(
-        &root,
-        Some(&files(&["workloads/noisypigeon.com/blog/site/posts/x.md"])),
-    )
-    .expect("finds");
-    assert_eq!(
-        got,
-        ["sites/docs"],
-        "the architecture draws workloads too; the legacy blog publishes from its own instance"
-    );
-    let got = backplane::cobot::scope::deploys(
-        &root,
-        Some(&files(&[
-            "src/site-templates/architecture/static/assets/css/main.css",
-        ])),
-    )
-    .expect("finds");
-    assert_eq!(
-        got,
-        ["sites/docs"],
-        "a site pinning `tree` publishes its template's changes"
-    );
-    let got = backplane::cobot::scope::deploys(
-        &root,
-        Some(&files(&["src/site-templates/blog/templates/index.html"])),
-    )
-    .expect("finds");
-    assert_eq!(
-        got,
-        Vec::<String>::new(),
-        "a template no site pins as `tree` publishes nothing"
-    );
-    let got = backplane::cobot::scope::deploys(
-        &root,
-        Some(&files(&[
-            "src/pigeon-cli/crates/backplane/src/cobot/git.rs",
+    for changed in [
+        &["catalog/cloudflare/capabilities.yaml"][..],
+        &["config.yaml"],
+        &["workloads/noisypigeon.com/blog/site/posts/x.md"],
+        &["src/site-templates/blog/templates/index.html"],
+        &[
+            "src/pigeon-cli/crates/backplane/src/worker/mod.rs",
             "CLAUDE.md",
-        ])),
-    )
-    .expect("finds");
-    assert_eq!(
-        got,
-        Vec::<String>::new(),
-        "code and docs publish nothing; a template reaches a site by its pinned tag"
-    );
+        ],
+    ] {
+        let got = backplane::cobot::scope::deploys(&root, Some(&files(changed))).expect("finds");
+        assert_eq!(
+            got,
+            ["sites/docs"],
+            "the architecture site names the deployed SHA, so every deploy publishes it: {changed:?}"
+        );
+    }
 }
 
 #[test]

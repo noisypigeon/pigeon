@@ -456,7 +456,14 @@ pub fn build_in(
                 path: path.clone(),
                 message: e.to_string(),
             })?;
-            fs::write(&path, text).map_err(io(&path))?;
+            fs::write(&path, &text).map_err(io(&path))?;
+            // The site carries its data, which `architecture_describe` reads from its bucket;
+            // see .claude/decisions/2026-11-15-runtime-architecture-coverage-agents-deploys.md §4.
+            if site.template == "architecture" && name == "architecture" {
+                let copy = work.join("static").join("architecture.json");
+                fs::create_dir_all(work.join("static")).map_err(io(&copy))?;
+                fs::write(&copy, &text).map_err(io(&copy))?;
+            }
         }
         run(
             Command::new("zola")

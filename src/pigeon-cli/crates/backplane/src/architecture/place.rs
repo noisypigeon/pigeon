@@ -17,7 +17,7 @@ pub const H: i64 = 100;
 const PITCH: i64 = 320;
 /// The distance between rows' tops.
 const ROW: i64 = 260;
-/// The diagram's width.
+/// The diagram's least width; a wider row widens it.
 const WIDTH: i64 = 1000;
 /// Where a link between boxes of one row runs, below their tops.
 const ACROSS: i64 = 56;
@@ -69,7 +69,7 @@ fn row_of(kind: &str) -> Option<i64> {
     match kind {
         "object" => Some(0),
         "container" => Some(1),
-        "database" | "bucket" | "git" => Some(2),
+        "database" | "bucket" | "store" | "git" => Some(2),
         _ => None,
     }
 }
@@ -98,11 +98,13 @@ pub fn place(parts: &[Part], links: &[Link]) -> Diagram {
             row.insert(row.len() / 2, p);
         }
     }
+    let widest = rows.values().map(Vec::len).max().unwrap_or(0);
+    let width = WIDTH.max(i64::try_from(widest).unwrap_or(0) * PITCH);
     let mut boxes = Vec::new();
     for (r, row) in &rows {
         let n = i64::try_from(row.len()).unwrap_or(0);
         for (i, p) in (0..).zip(row.iter()) {
-            let centre = WIDTH / 2 + (2 * i - (n - 1)) * PITCH / 2;
+            let centre = width / 2 + (2 * i - (n - 1)) * PITCH / 2;
             boxes.push(Boxed {
                 id: p.id.clone(),
                 x: centre - W / 2,
@@ -161,7 +163,7 @@ pub fn place(parts: &[Part], links: &[Link]) -> Diagram {
     routes.sort_by(|a, b| a.id.cmp(&b.id));
     let height = boxes.iter().map(|b| b.y + b.h).max().unwrap_or(0);
     Diagram {
-        width: WIDTH,
+        width,
         height,
         boxes,
         routes,

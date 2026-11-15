@@ -225,6 +225,14 @@ pub const LINKS: &[Row] = &[
         ],
     ),
     row(
+        "worker_store",
+        "Worker",
+        "Secrets Store",
+        "granter: mints scoped tokens",
+        Kind::Call,
+        &[("worker/minting.rs", ".secret_store(GRANTER)")],
+    ),
+    row(
         "actions_checker",
         "Actions",
         "Checker",
@@ -236,6 +244,183 @@ pub const LINKS: &[Row] = &[
         ],
     ),
 ];
+
+/// A service outside Cloudflare the Worker calls; see
+/// `.claude/decisions/2026-11-15-runtime-architecture-coverage-agents-deploys.md` §1.
+#[derive(Debug, Clone, Copy)]
+pub struct Service {
+    /// Its part's id, and what the diagram shows.
+    pub id: &'static str,
+    /// The hosts the code calls it at; evidence only, never shown.
+    pub hosts: &'static [&'static str],
+    /// What the Worker uses it for.
+    pub label: &'static str,
+    /// For a service with no fixed host: where the code calls it.
+    pub evidence: &'static [(&'static str, &'static str)],
+    /// Whether it is drawn as another part already, such as GitHub's.
+    pub drawn: bool,
+}
+
+/// Every outbound service; a row is kept while one of its hosts is in a non-test string
+/// literal of [`SOURCES`], or, with no host, while its evidence is.
+pub const SERVICES: &[Service] = &[
+    Service {
+        id: "Cloudflare API",
+        hosts: &["api.cloudflare.com"],
+        label: "mints tokens · insights GraphQL",
+        evidence: &[],
+        drawn: false,
+    },
+    Service {
+        id: "APNs",
+        hosts: &["api.push.apple.com"],
+        label: "pushes to the owner's iPhone",
+        evidence: &[],
+        drawn: false,
+    },
+    Service {
+        id: "Web Push",
+        hosts: &[],
+        label: "approvals · digest, to the owner's browsers",
+        evidence: &[("worker/push.rs", "Vapid::from_secret(")],
+        drawn: false,
+    },
+    Service {
+        id: "App Store Connect",
+        hosts: &["api.appstoreconnect.apple.com", "www.apple.com"],
+        label: "ios.release: TestFlight uploads, signing",
+        evidence: &[],
+        drawn: false,
+    },
+    Service {
+        id: "Bitrise",
+        hosts: &["api.bitrise.io"],
+        label: "macOS builds, failover",
+        evidence: &[],
+        drawn: false,
+    },
+    Service {
+        id: "Buildkite",
+        hosts: &["api.buildkite.com", "agent.buildkite.com"],
+        label: "macOS builds, failover · signing pipeline",
+        evidence: &[],
+        drawn: false,
+    },
+    Service {
+        id: "GitHub",
+        hosts: &["api.github.com", "github.com"],
+        label: "Actions and the mirror",
+        evidence: &[],
+        drawn: true,
+    },
+];
+
+/// Whether `host` is one of the platform's own, a Durable Object's or a test's.
+#[must_use]
+pub fn internal(host: &str) -> bool {
+    !host.contains('.')
+        || host == "pigeon.dev"
+        || host.ends_with(".pigeon.dev")
+        || host.ends_with(".example")
+        || host.ends_with(".invalid")
+        || host == "example.com"
+}
+
+/// The hosts in `https://` string literals of `text`, before its tests.
+#[must_use]
+pub fn hosts_in(text: &str) -> Vec<String> {
+    let text = text.split("#[cfg(test)]").next().unwrap_or("");
+    let mut out: Vec<String> = text
+        .split("\"https://")
+        .skip(1)
+        .map(|s| {
+            s.chars()
+                .take_while(|c| c.is_ascii_alphanumeric() || *c == '.' || *c == '-')
+                .collect::<String>()
+        })
+        .filter(|h| !h.is_empty())
+        .collect();
+    out.sort();
+    out.dedup();
+    out
+}
+
+/// Every Rust file under [`SOURCES`] the Worker's code may call out from: all but cobot's,
+/// which runs in Containers, and this module's.
+#[must_use]
+pub fn outbound_files(platform: &Path) -> Vec<std::path::PathBuf> {
+    fn walk(dir: &Path, out: &mut Vec<std::path::PathBuf>) {
+        let mut entries: Vec<_> = std::fs::read_dir(dir)
+            .into_iter()
+            .flatten()
+            .flatten()
+            .map(|e| e.path())
+            .collect();
+        entries.sort();
+        for p in entries {
+            let name = p.file_name().map(|n| n.to_string_lossy().into_owned());
+            if p.is_dir() {
+                if !matches!(name.as_deref(), Some("cobot" | "architecture" | "tests")) {
+                    walk(&p, out);
+                }
+            } else if p.extension().is_some_and(|x| x == "rs")
+                && !name
+                    .as_deref()
+                    .is_some_and(|n| n == "tests.rs" || n.ends_with("_tests.rs"))
+            {
+                out.push(p);
+            }
+        }
+    }
+    let mut out = Vec::new();
+    walk(&platform.join(SOURCES), &mut out);
+    out
+}
+
+/// The outbound services kept, each with the files it was found in.
+fn services(platform: &Path) -> Vec<(Service, String)> {
+    let root = platform.join(SOURCES);
+    let found: Vec<(String, Vec<String>)> = outbound_files(platform)
+        .iter()
+        .filter_map(|p| {
+            let text = std::fs::read_to_string(p).ok()?;
+            let rel = p
+                .strip_prefix(&root)
+                .map(|r| r.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            Some((rel, hosts_in(&text)))
+        })
+        .collect();
+    SERVICES
+        .iter()
+        .filter(|s| !s.drawn)
+        .filter_map(|s| {
+            let files: Vec<String> = if s.hosts.is_empty() {
+                let row = Row {
+                    id: s.id,
+                    from: "Worker",
+                    to: s.id,
+                    label: s.label,
+                    kind: Kind::Call,
+                    evidence: s.evidence,
+                };
+                if !evidenced(platform, &row) {
+                    return None;
+                }
+                s.evidence.iter().map(|(f, _)| (*f).to_string()).collect()
+            } else {
+                found
+                    .iter()
+                    .filter(|(_, hs)| hs.iter().any(|h| s.hosts.contains(&h.as_str())))
+                    .map(|(f, _)| f.clone())
+                    .collect()
+            };
+            let mut files = files;
+            files.dedup();
+            (!files.is_empty()).then(|| (*s, files.join(" ")))
+        })
+        .collect()
+}
 
 /// A row of a card: a name and what it says.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -256,7 +441,7 @@ fn item(k: impl Into<String>, v: impl Into<String>) -> Item {
 /// One kind of client, and the routes it uses.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Client {
-    /// `mcp`, `git` or `owner`.
+    /// `mcp`, `git`, `app`, `owner` or `ci`.
     pub id: String,
     /// What the diagram shows.
     pub title: String,
@@ -305,6 +490,10 @@ pub struct Worker {
     pub d1: Vec<String>,
     /// Its R2 bindings.
     pub r2: Vec<String>,
+    /// Its Secrets Store bindings.
+    pub secrets_store: Vec<String>,
+    /// The hostnames it serves, from its spec's routes; only `pigeon.dev`'s are named.
+    pub hosts: Vec<Item>,
 }
 
 /// A box of the connection diagram.
@@ -312,7 +501,7 @@ pub struct Worker {
 pub struct Part {
     /// Unique; a link's ends.
     pub id: String,
-    /// `object`, `container`, `database`, `bucket`, `git` or `github`.
+    /// `object`, `container`, `database`, `bucket`, `store`, `git`, `github` or `service`.
     pub kind: String,
     /// What it does.
     pub role: String,
@@ -355,6 +544,8 @@ pub struct Network {
     pub parts: Vec<Part>,
     /// The kept links.
     pub links: Vec<Link>,
+    /// Where macOS jobs run, first available first, from `.config/macos.yaml`.
+    pub macos: Vec<Item>,
     /// Where the parts sit and how the links run.
     pub diagram: super::place::Diagram,
 }
@@ -412,7 +603,8 @@ pub fn network(root: &Path, platform: &Path) -> Option<Network> {
         None => found.spec,
     };
     let access = access(&stacks);
-    let routes = routes(platform);
+    let mut routes = routes(platform);
+    routes.extend(own_routes(platform));
     let worker = worker(platform, &spec, &routes);
     let github = spec
         .bindings
@@ -426,9 +618,23 @@ pub fn network(root: &Path, platform: &Path) -> Option<Network> {
         .filter(|(_, e)| e.kind == "cloudflare/git-repo")
         .map(|(id, _)| id.rsplit('/').next().unwrap_or(id).to_string())
         .collect();
-    let parts = parts(platform, &worker, &repos, github.as_deref());
+    let services = services(platform);
+    let mut parts = parts(platform, &worker, &repos, github.as_deref());
+    for (s, source) in &services {
+        parts.push(Part {
+            id: s.id.into(),
+            kind: "service".into(),
+            role: s.label.into(),
+            many: false,
+            source: source
+                .split(' ')
+                .map(|f| format!("{SOURCES}/{f}"))
+                .collect::<Vec<_>>()
+                .join(" "),
+        });
+    }
     let known = |id: &str| id == "Worker" || parts.iter().any(|p| p.id == id);
-    let links: Vec<Link> = LINKS
+    let mut links: Vec<Link> = LINKS
         .iter()
         .filter(|r| known(r.from) && known(r.to) && evidenced(platform, r))
         .map(|r| Link {
@@ -444,6 +650,14 @@ pub fn network(root: &Path, platform: &Path) -> Option<Network> {
             },
         })
         .collect();
+    links.extend(services.iter().map(|(s, source)| Link {
+        id: format!("worker_{}", s.id.to_lowercase().replace(' ', "_")),
+        from: "Worker".into(),
+        to: s.id.into(),
+        label: s.label.into(),
+        kind: Kind::Call,
+        source: source.clone(),
+    }));
     let diagram = super::place::place(&parts, &links);
     Some(Network {
         clients: clients(&routes),
@@ -452,8 +666,201 @@ pub fn network(root: &Path, platform: &Path) -> Option<Network> {
         github,
         parts,
         links,
+        macos: macos(platform),
         diagram,
     })
+}
+
+/// Where macOS jobs run, in `.config/macos.yaml`'s order, each with its provider's doc comment.
+fn macos(platform: &Path) -> Vec<Item> {
+    let Ok(config) = std::fs::read_to_string(platform.join(".config/macos.yaml")) else {
+        return Vec::new();
+    };
+    let Some(order) = config.lines().find_map(|l| l.strip_prefix("order:")) else {
+        return Vec::new();
+    };
+    let docs = read(platform, "core/macos/mod.rs").unwrap_or_default();
+    let lines: Vec<&str> = docs.lines().collect();
+    order
+        .trim()
+        .trim_matches(['[', ']'])
+        .split(',')
+        .map(str::trim)
+        .filter(|n| !n.is_empty())
+        .enumerate()
+        .map(|(i, name)| {
+            let mut variant = name.to_string();
+            if let Some(f) = variant.get_mut(0..1) {
+                f.make_ascii_uppercase();
+            }
+            let doc = lines
+                .iter()
+                .position(|l| l.trim() == format!("{variant},"))
+                .and_then(|at| at.checked_sub(1))
+                .and_then(|at| lines[at].trim().strip_prefix("///"))
+                .map(|d| d.trim().trim_end_matches('.').replace('`', ""))
+                .unwrap_or_default();
+            let rank = if i == 0 { "first" } else { "failover" };
+            item(name, format!("{rank} · {doc}"))
+        })
+        .collect()
+}
+
+/// The paths `fetch` serves before its router, from the string literals and `module::CONST`
+/// paths in its body, by surface: `app` under the app's API, `ci` for the rest but health.
+fn own_routes(platform: &Path) -> Vec<(String, Vec<String>)> {
+    let Some(text) = read(platform, "worker/mod.rs") else {
+        return Vec::new();
+    };
+    let Some(start) = text.find("async fn fetch(") else {
+        return Vec::new();
+    };
+    let body = &text[start..];
+    let body = &body[..body.find("\n}\n").unwrap_or(body.len())];
+    let mut paths = literals(body, "/");
+    for c in consts_in(body) {
+        if let Some(v) = const_value(platform, &c).filter(|v| v.starts_with('/')) {
+            paths.push(v);
+        }
+    }
+    let api = paths
+        .iter()
+        .find(|p| p.starts_with("/v0/app/"))
+        .cloned()
+        .unwrap_or_else(|| "/v0/app/".into());
+    let mut app: Vec<String> = Vec::new();
+    let mut ci = Vec::new();
+    let mut health = Vec::new();
+    for p in paths {
+        let shown = if p.ends_with('/') && p.len() > 1 {
+            format!("{p}…")
+        } else {
+            p.clone()
+        };
+        if p.starts_with(&api) || p.starts_with("/.well-known/") {
+            app.push(shown);
+        } else if p.starts_with("/healthz") {
+            health.push(shown);
+        } else {
+            ci.push(shown);
+        }
+    }
+    app.extend(app_api(platform, &api));
+    let mut out = Vec::new();
+    for (stem, mut v) in [("app", app), ("ci", ci), ("health", health)] {
+        let mut seen = std::collections::BTreeSet::new();
+        v.retain(|p| seen.insert(p.clone()));
+        if !v.is_empty() {
+            out.push((stem.to_string(), v));
+        }
+    }
+    out
+}
+
+/// The app's API: each `"<api>…"` literal in the Worker's sources, with its method when a
+/// `Method::` precedes it on its line.
+fn app_api(platform: &Path, api: &str) -> Vec<String> {
+    let dir = platform.join(SOURCES).join("worker");
+    let mut files: Vec<_> = std::fs::read_dir(&dir)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.extension().is_some_and(|x| x == "rs"))
+        .collect();
+    files.sort();
+    let mut out = Vec::new();
+    for path in files {
+        let Ok(text) = std::fs::read_to_string(&path) else {
+            continue;
+        };
+        let text = text.split("#[cfg(test)]").next().unwrap_or("");
+        for line in text.lines() {
+            let method = line.split("Method::").nth(1).map(|m| {
+                m.chars()
+                    .take_while(char::is_ascii_alphanumeric)
+                    .collect::<String>()
+                    .to_uppercase()
+            });
+            for p in literals(line, api) {
+                if p == api {
+                    continue;
+                }
+                let p = if p.ends_with('/') {
+                    format!("{p}…")
+                } else {
+                    p
+                };
+                out.push(match &method {
+                    Some(m) => format!("{m} {p}"),
+                    None => p,
+                });
+            }
+        }
+    }
+    out.sort_by(|a, b| {
+        let path = |s: &str| s.rsplit(' ').next().unwrap_or(s).to_string();
+        (path(a), a.clone()).cmp(&(path(b), b.clone()))
+    });
+    out.dedup();
+    out
+}
+
+/// The string literals in `text` that start with `prefix`.
+#[must_use]
+pub fn literals(text: &str, prefix: &str) -> Vec<String> {
+    text.split(&format!("\"{prefix}"))
+        .skip(1)
+        .filter_map(|s| s.find('"').map(|end| format!("{prefix}{}", &s[..end])))
+        .filter(|p| !p.contains(['{', ' ', '\\']))
+        .collect()
+}
+
+/// The `module::CONST` paths in `text`, such as `devices::API` or `crate::apple::ROUTE`.
+fn consts_in(text: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut rest = text;
+    while let Some(i) = rest.find("::") {
+        let before = &rest[..i];
+        let module: String = before
+            .chars()
+            .rev()
+            .take_while(|c| c.is_ascii_lowercase() || *c == '_')
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+            .collect();
+        let after = &rest[i + 2..];
+        let name: String = after
+            .chars()
+            .take_while(|c| c.is_ascii_uppercase() || *c == '_')
+            .collect();
+        let next = after[name.len()..].chars().next();
+        if !module.is_empty()
+            && name.len() > 1
+            && !next.is_some_and(|c| c.is_ascii_alphanumeric() || c == '(' || c == ':')
+        {
+            out.push(format!("{module}::{name}"));
+        }
+        rest = after;
+    }
+    out.sort();
+    out.dedup();
+    out
+}
+
+/// The value of `pub const <NAME>: &str = "…"` in `<module>.rs`, under `worker/` or the crate.
+fn const_value(platform: &Path, path: &str) -> Option<String> {
+    let (module, name) = path.split_once("::")?;
+    let decl = format!("const {name}: &str = \"");
+    [format!("worker/{module}.rs"), format!("{module}.rs")]
+        .iter()
+        .filter_map(|f| read(platform, f))
+        .find_map(|text| {
+            let at = text.find(&decl)? + decl.len();
+            let end = text[at..].find('"')?;
+            Some(text[at..at + end].to_string())
+        })
 }
 
 /// Each surface's routes, by its file's stem, as `METHOD path`; a prefix ends in `…`.
@@ -532,6 +939,8 @@ fn clients(routes: &[(String, Vec<String>)]) -> Vec<Client> {
         .count();
     let mut mcp = Vec::new();
     let mut git = Vec::new();
+    let mut app = Vec::new();
+    let mut ci = Vec::new();
     let mut owner: Vec<String> = Vec::new();
     for (stem, paths) in routes {
         for p in paths {
@@ -544,6 +953,8 @@ fn clients(routes: &[(String, Vec<String>)]) -> Vec<Client> {
                 }
                 "api" => mcp.push(item(p.clone(), "")),
                 "gitdoor" => git.push(item(p.clone(), "fetch, and push to a change's branch")),
+                "app" => app.push(item(p.clone(), "")),
+                "ci" => ci.push(item(p.clone(), "")),
                 _ => owner.push(p.clone()),
             }
         }
@@ -555,22 +966,34 @@ fn clients(routes: &[(String, Vec<String>)]) -> Vec<Client> {
             .trim_end_matches('…')
             .to_string()
     };
+    // A page's sub-paths and scripts are said beside it, not listed.
+    let parent = |p: &str| -> Option<String> {
+        let me = path(p);
+        owner
+            .iter()
+            .map(|o| path(o))
+            .filter(|o| *o != me && me.starts_with(&format!("{}/", o.trim_end_matches('/'))))
+            .max_by_key(String::len)
+    };
     let pages: Vec<Item> = owner
         .iter()
-        .filter(|p| !path(p).contains('.'))
-        .filter(|p| {
+        .filter(|p| parent(p).is_none())
+        .map(|p| {
             let me = path(p);
-            !owner.iter().any(|o| {
-                let other = path(o);
-                other != me && me.starts_with(&format!("{}/", other.trim_end_matches('/')))
-            })
+            let under: Vec<String> = owner
+                .iter()
+                .filter(|o| parent(o).as_deref() == Some(me.as_str()))
+                .map(|o| path(o))
+                .collect();
+            item(p.clone(), under.join(" "))
         })
-        .map(|p| item(p.clone(), ""))
         .collect();
     [
         ("mcp", "MCP clients", mcp),
         ("git", "git", git),
+        ("app", "iOS app", app),
         ("owner", "Owner's browser", pages),
+        ("ci", "CI and job Containers", ci),
     ]
     .into_iter()
     .filter(|(_, _, items)| !items.is_empty())
@@ -687,6 +1110,15 @@ fn parts(platform: &Path, w: &Worker, repos: &[String], github: Option<&str>) ->
     if !w.r2.is_empty() {
         out.push(part("R2", "bucket", w.r2.join(" · "), false, spec));
     }
+    if !w.secrets_store.is_empty() {
+        out.push(part(
+            "Secrets Store",
+            "store",
+            w.secrets_store.join(" · "),
+            false,
+            spec,
+        ));
+    }
     if !repos.is_empty() {
         out.push(part(
             "Artifacts",
@@ -726,7 +1158,9 @@ fn access(stacks: &[&crate::cobot::manifest::Entry]) -> Access {
                 .filter_map(|x| x.as_str().map(String::from))
                 .collect()
         };
-        access.hosts.extend(strings(&e.settings["domains"]));
+        access
+            .hosts
+            .extend(strings(&e.settings["domains"]).iter().map(|h| shown(h)));
         for t in e.settings["service_tokens"]
             .as_array()
             .into_iter()
@@ -740,6 +1174,48 @@ fn access(stacks: &[&crate::cobot::manifest::Entry]) -> Access {
     access.hosts.dedup();
     access.tokens.dedup();
     access
+}
+
+/// What a standalone shows instead of its hostname or account.
+pub const STANDALONE: &str = "standalone instance (own account)";
+
+/// `host` when it is `pigeon.dev`'s, else [`STANDALONE`]; no other zone is ever named.
+fn shown(host: &str) -> String {
+    if host == "pigeon.dev" || host.ends_with(".pigeon.dev") {
+        host.to_string()
+    } else {
+        STANDALONE.to_string()
+    }
+}
+
+/// The route keys [`hosts`] represents; the coverage test fails on any other.
+pub const ROUTE_KEYS: &[&str] = &["custom_domain", "subdomains_of"];
+
+/// The hostnames the spec's routes serve, each with what it is.
+fn hosts(spec: &crate::cobot::workers::Spec) -> Vec<Item> {
+    let mut out: Vec<Item> = Vec::new();
+    for r in &spec.routes {
+        let Ok(serde_json::Value::Object(fields)) = serde_json::to_value(r) else {
+            continue;
+        };
+        for (k, v) in fields {
+            let Some(v) = v.as_str() else { continue };
+            match k.as_str() {
+                "custom_domain" => out.push(item(shown(v), "custom domain")),
+                "subdomains_of" => out.push(item(
+                    if shown(v) == STANDALONE {
+                        STANDALONE.to_string()
+                    } else {
+                        format!("*.{v}")
+                    },
+                    format!("every subdomain: each {STANDALONE}"),
+                )),
+                _ => {}
+            }
+        }
+    }
+    out.dedup();
+    out
 }
 
 /// The Worker, from its bound spec.
@@ -778,5 +1254,7 @@ fn worker(
             .collect(),
         d1: spec.bindings.d1.keys().cloned().collect(),
         r2: spec.bindings.r2.keys().cloned().collect(),
+        secrets_store: spec.bindings.secrets_store.keys().cloned().collect(),
+        hosts: hosts(spec),
     }
 }

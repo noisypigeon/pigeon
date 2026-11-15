@@ -561,6 +561,18 @@ async fn run(
             .map_err(|e| crate::Error::Invalid(vec![e.to_string()]))?
             .map_err(|m| crate::Error::Invalid(vec![m]))?;
     }
+    if op.name == "architecture.describe" {
+        let format = request.args.get("format").and_then(Value::as_str);
+        let result = docs::describe(env, format)
+            .await
+            .map_err(|e| crate::Error::Invalid(vec![e]))?;
+        return Ok(WireResponse {
+            operation: op.name.to_string(),
+            ok: true,
+            result,
+            violations: Vec::new(),
+        });
+    }
     if !op.control_plane() {
         return Err(crate::Error::Invalid(vec![format!(
             "`{}` runs in an instance's Container, which the control plane doesn't dispatch yet",

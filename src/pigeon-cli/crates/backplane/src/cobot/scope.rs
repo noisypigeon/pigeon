@@ -236,16 +236,6 @@ pub fn run(root: &Path, jobs: &[Job]) -> Result<Vec<String>, Error> {
     Ok(failed)
 }
 
-/// What an `architecture` site draws from, besides its own unit: everything
-/// `architecture.describe` reads.
-const DESCRIBED: [&str; 5] = [
-    "config.yaml",
-    "infra/",
-    "catalog/",
-    "workloads/",
-    ".config/",
-];
-
 fn relative(root: &Path, p: &Path) -> String {
     let root = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
     let p = p.canonicalize().unwrap_or_else(|_| p.to_path_buf());
@@ -256,9 +246,9 @@ fn relative(root: &Path, p: &Path) -> String {
 
 /// The instance's manifest sites a change to `main` touching `files` must publish, by unit; `files` of `None`
 /// means every site, as on a first deploy. A site's inputs are its unit (the instance's
-/// `config.yaml` for a manifest unit, else its directory), its content, its template's
-/// directory when it pins `tree`, and, on the `architecture` template, everything that
-/// template draws.
+/// `config.yaml` for a manifest unit, else its directory), its content, and its template's
+/// directory when it pins `tree`; a site on the `architecture` template publishes on every
+/// deploy.
 ///
 /// # Errors
 ///
@@ -286,8 +276,10 @@ pub fn deploys(root: &Path, files: Option<&[String]>) -> Result<Vec<String>, Err
             if s.version == crate::cobot::sites::TREE {
                 inputs.push(format!("{}/", s.project()));
             }
+            // Its footer names the deployed SHA, so it publishes on every deploy; see
+            // .claude/decisions/2026-11-15-runtime-architecture-coverage-agents-deploys.md §3.
             if s.template == "architecture" {
-                inputs.extend(DESCRIBED.iter().map(|p| (*p).to_string()));
+                return true;
             }
             files.iter().any(|f| {
                 inputs.iter().any(|i| {

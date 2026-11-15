@@ -144,10 +144,15 @@ fn units(instance: &Instance, g: &mut Graph, problems: &mut Vec<String>) -> Vec<
         ));
         let Some(c) = &u.config else { continue };
         let x = &c.schema["x-cobot"];
-        let schema = c.home.strip_prefix(root).map_or_else(
-            |_| c.home.display().to_string(),
-            |p| p.display().to_string(),
-        );
+        let canonical = root.canonicalize().unwrap_or_else(|_| root.clone());
+        let schema = c
+            .home
+            .strip_prefix(root)
+            .or_else(|_| c.home.strip_prefix(&canonical))
+            .map_or_else(
+                |_| c.home.display().to_string(),
+                |p| p.display().to_string(),
+            );
         for provider in x["providers"]
             .as_object()
             .into_iter()

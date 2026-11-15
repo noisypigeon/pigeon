@@ -88,7 +88,7 @@ details[open] > summary .chev { transform: rotate(180deg); }
 .access { width: 100%; max-width: 560px; }
 .worker { width: 100%; max-width: 820px; }
 .worker .sec { border-right: 1px solid var(--hair-2); }
-.github .row { align-self: stretch; }
+.github .row, .services .row { align-self: stretch; }
 
 /* The connection diagram: drawn at its own size, scrolled inside its region when narrower. */
 .scroller { width: 100%; overflow-x: auto; }
@@ -113,7 +113,8 @@ details[open] > summary .chev { transform: rotate(180deg); }
 .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; background: var(--gh); }
 .kind-object .dot { background: var(--object); }
 .kind-container .dot { background: var(--container); }
-.kind-database .dot, .kind-bucket .dot { background: var(--storage); }
+.kind-database .dot, .kind-bucket .dot, .kind-store .dot { background: var(--storage); }
+.kind-service .dot { background: var(--link); }
 .kind-git .dot { background: var(--git); }
 .out { display: none; }
 .legend { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 22px; font-size: 12px; color: var(--muted); }
