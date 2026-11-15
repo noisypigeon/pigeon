@@ -16,6 +16,8 @@ bindings:
   vars:
     INSTANCE_NAME: $deployment.instance
     SHAPE: app
+    # The app features it serves, comma-separated.
+    FEATURES: learner
     PASSKEY_RP_ID: platform.pigeon.dev
   version_metadata: CF_VERSION_METADATA
 # STATE_KEY: 32 random bytes, hex, made in the stand-up job; HANDOVER: the owner's public keys.

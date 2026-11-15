@@ -29,8 +29,10 @@ engines = [
 worker = ["dep:futures-util", "dep:wasm-bindgen", "dep:worker", "worker/d1", "worker/queue"]
 
 [dependencies]
+aes-gcm.workspace = true
 age = { workspace = true, optional = true }
 futures-util = { workspace = true, optional = true }
+hkdf.workspace = true
 hmac.workspace = true
 jsonschema = { workspace = true, optional = true }
 md-5 = { workspace = true, optional = true }

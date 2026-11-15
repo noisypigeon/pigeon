@@ -80,17 +80,23 @@ pub async fn fetch(mut req: Request, env: &Env) -> Result<Response> {
         return Response::error(why.to_string(), 503);
     }
     let method = req.method();
+    let base = req.url()?.origin().ascii_serialization();
     let bytes = if method == Method::Get {
         Vec::new()
     } else {
         req.bytes().await?
     };
+    // Joining runs before this device is linked; its passkey and signature prove it.
+    if path == "/v0/app/join" || path.starts_with("/v0/app/join/") {
+        let body: Value = serde_json::from_slice(&bytes).unwrap_or(Value::Null);
+        return super::members::join_route(env, &s, &method, &path, &body).await;
+    }
     let device = match devices::authenticate(env, &s, &req, &bytes).await? {
         Ok(d) => d,
         Err(why) => return Response::error(format!("unauthorized: {why}"), 401),
     };
     let body: Value = serde_json::from_slice(&bytes).unwrap_or(Value::Null);
-    signed(env, &s, &device, &method, &path, &body).await
+    signed(env, &s, &device, &base, &method, &path, &body).await
 }
 
 /// The routes a device's signature lets through on a standalone.
@@ -98,15 +104,38 @@ async fn signed(
     env: &Env,
     s: &Settings,
     device: &Device,
+    base: &str,
     method: &Method,
     path: &str,
-    _body: &Value,
+    body: &Value,
 ) -> Result<Response> {
     match (method, path) {
         (Method::Get, "/v0/app/whoami") => {
             Response::from_json(&json!({ "device": device.id, "name": device.name }))
         }
         (Method::Get, super::members::PATH) => super::members::route(env, s, device).await,
+        (Method::Get, "/v0/app/instances") => {
+            let features: Vec<String> = env
+                .var("FEATURES")
+                .map(|v| v.to_string())
+                .unwrap_or_default()
+                .split(',')
+                .map(str::trim)
+                .filter(|f| !f.is_empty())
+                .map(str::to_string)
+                .collect();
+            Response::from_json(&json!({ "instances": [{
+                "name": s.instance, "mode": "standalone", "shape": "app", "base_url": base,
+                "features": features, "current": true,
+            }] }))
+        }
+        (Method::Post, "/v0/app/challenge") => super::members::challenge(env, s, body).await,
+        (Method::Post, p) if p.starts_with("/v0/app/members/") => {
+            super::members::write(env, s, device, base, p, body).await
+        }
+        (m, p) if p.starts_with(super::learner::API) => {
+            super::learner::route(env, s, device, m, p, body).await
+        }
         _ => Response::error("not found", 404),
     }
 }

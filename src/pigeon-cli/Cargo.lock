@@ -1840,8 +1840,10 @@ dependencies = [
 name = "pigeon-backplane"
 version = "0.1.30"
 dependencies = [
+ "aes-gcm",
  "age",
  "futures-util",
+ "hkdf",
  "hmac",
  "httparse",
  "jsonschema",

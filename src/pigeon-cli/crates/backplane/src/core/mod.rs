@@ -11,6 +11,7 @@ pub mod deploy;
 #[cfg(feature = "engines")]
 pub mod infra;
 pub mod insights;
+pub mod learner;
 pub mod ledger;
 pub mod macos;
 pub mod member;

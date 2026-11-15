@@ -11,6 +11,7 @@ use sha2::{Digest as _, Sha256};
 mod tests;
 
 pub mod handover;
+pub mod join;
 
 /// Every capability an operation may require.
 pub const CAPABILITIES: [&str; 9] = [
