@@ -39,7 +39,7 @@ pub const GIVE_UP: u64 = 2 * 60 * 60;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Provider {
-    /// GitHub Actions' hosted `macos-15`.
+    /// GitHub Actions' hosted `macos-26`.
     Github,
     /// Bitrise's hosted macOS.
     Bitrise,

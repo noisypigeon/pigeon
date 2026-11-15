@@ -252,3 +252,44 @@ The owner asked for the feature to be built end to end, then tested and tuned to
   - **The owner's overrides.** These are `ci_rerun on: github|bitrise|buildkite` and `ios.release on`, owner tier through the approval code. Until then, the CI window sends `ios` past GitHub, and a reviewed change to `order` sends archives elsewhere.
   - **The app's Bitrise source.** It needs a colour, which `Theme.swift` checks for colour-blind separation.
   - **Measured minutes** (step 9's last item), after a month.
+
+### 2026-11-15: The pin moves to Xcode 26.6, on every provider
+
+Buildkite's hosted macOS images dropped Xcode 26.1. Both hosted queues,
+`macos-sign` and `macos-build`, run macOS Tahoe 26.6.2 with Xcode 26.6 by
+default, and their Xcode list offers no 26.1. A `pigeon-ios-build` check on
+15 Nov stopped in `ci.sh` with `no Xcode 26.1`, listing 26.2 to 27.3. GitHub's
+`macos-15` image has no 26.6; it tops out at 26.3. Its `macos-26` image has
+26.6 as default, at `/Applications/Xcode_26.6.app`. Bitrise has a stable
+stack, `osx-xcode-26.6.x`.
+
+The owner chose to move the pin to 26.6, Buildkite's default, so check,
+archive and sign all use the same Xcode wherever they run:
+
+- **`.xcode-version` is `26.6`.** `ci.sh`'s match to its precision is
+  unchanged: `26.6` takes 26.6 or 26.6.x, and nothing else.
+- **GitHub's `ios` and `ios.archive` run on `macos-26`,** in `ci.yml`, and
+  `Provider::Github` names it.
+- **`bitrise.yml`'s `stack` is `osx-xcode-26.6.x`.** The Bitrise account isn't
+  live, so nothing is re-pasted there yet.
+- **`ios-sign.sh`** selects `/Applications/Xcode_26.6.app`, and its
+  `DTXcode` check wants a value starting `266` (26.6 is `2660`). It stays at
+  the `secrets` tier.
+- **`ios-build.yml` doesn't change,** so its SHA-256 and the owner's pasted
+  copy stand.
+- §8 step 2.1's "a stack with Xcode 26.1" reads 26.6.
+- **The runner moves first, in its own change.** A change's GitHub checks run
+  `main`'s `ci.yml`, so a change that moves the pin and the runner together
+  checks 26.6 on `macos-15` and fails. `macos-26` also has 26.1.1, so the
+  runner moves while the pin is still 26.1, and the pin follows once that
+  change merges.
+
+Verification, after the change merges:
+
+1. A change's `ios` check passes on GitHub's `macos-26`.
+2. The owner runs `pigeon-ios-build` with `PIGEON_JOB=check` on the new
+   `main`'s full SHA, and it passes.
+3. Where the owner allows it, `ci_rerun on: buildkite` for an `ios` check.
+4. A release's `sign` is proven on 26.6 only by an `ios.release`, which the
+   owner starts: the archive, on GitHub's `macos-26`, carries `DTXcode`
+   `2660`, and `ios-sign.sh` exports and uploads it.

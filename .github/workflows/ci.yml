@@ -42,7 +42,7 @@ jobs:
     name: ${{ matrix.check.name }}
     # `ios` and `ios.archive` build the app on macOS, with no container; see
     # .claude/decisions/2026-11-11-release-ios-app-buildkite-testflight.md's 2026-11-11 amendment.
-    runs-on: ${{ startsWith(matrix.check.name, 'ios') && 'macos-15' || 'ubuntu-24.04' }}
+    runs-on: ${{ startsWith(matrix.check.name, 'ios') && 'macos-26' || 'ubuntu-24.04' }}
     timeout-minutes: 60
     # The ci image's base, by digest.
     container: ${{ !startsWith(matrix.check.name, 'ios') && 'docker.io/library/rust:1.99.1-slim-bookworm@sha256:24707e70a4f1e23d9a7b25202ec43126d28a52294b96aad5c670df1fd1f1d400' || '' }}
