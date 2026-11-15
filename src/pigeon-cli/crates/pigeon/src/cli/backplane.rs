@@ -35,6 +35,11 @@ pub enum BackplaneCommand {
     /// for the authenticator app
     #[cfg(feature = "backplane")]
     TotpSecret,
+    /// Print a one-time passkey enrolment: its stored form on stdout, for
+    /// `pigeon cobot workers secrets put … PASSKEY_ENROLL`, and its token on stderr, to type at
+    /// `/passkeys/enroll` within the hour
+    #[cfg(feature = "backplane")]
+    EnrollSecret,
     /// Print a new Web Push key: its private half, base64url, on stdout, for
     /// `pigeon cobot workers secrets put … PUSH_VAPID_KEY`, and its public half on stderr
     #[cfg(feature = "backplane")]

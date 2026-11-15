@@ -45,6 +45,7 @@ pub fn run(command: BackplaneCommand) -> i32 {
         BackplaneCommand::Serve(args) => serve(&args),
         BackplaneCommand::Jobs(args) => jobs(&args),
         BackplaneCommand::TotpSecret => totp_secret(),
+        BackplaneCommand::EnrollSecret => enroll_secret(),
         BackplaneCommand::VapidKey => vapid_key(),
         #[cfg(feature = "signing")]
         BackplaneCommand::Signing(c) => super::signing::run(c),
@@ -65,6 +66,30 @@ fn totp_secret() -> i32 {
          otpauth://totp/pigeon:owner?secret={secret}&issuer=pigeon&algorithm=SHA1&digits=6&period=30"
     );
     println!("{secret}");
+    SUCCESS
+}
+
+/// A one-time enrolment: its stored form on stdout, and its token on stderr.
+fn enroll_secret() -> i32 {
+    use std::io::Read;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    use backplane::core::approval::enroll;
+    let mut bytes = [0u8; 32];
+    if let Err(e) = std::fs::File::open("/dev/urandom").and_then(|mut f| f.read_exact(&mut bytes)) {
+        eprintln!("backplane: no randomness: {e}");
+        return INVALID;
+    }
+    let Ok(now) = SystemTime::now().duration_since(UNIX_EPOCH) else {
+        eprintln!("backplane: the clock is before 1970");
+        return INVALID;
+    };
+    let token = enroll::token(&bytes);
+    let expires = now.as_secs() + enroll::MAX_AHEAD;
+    eprintln!(
+        "Type this token at /passkeys/enroll within the hour (it is shown once and stored nowhere):\n{token}"
+    );
+    println!("{}", enroll::stored(&token, expires));
     SUCCESS
 }
 

@@ -87,3 +87,30 @@ fn an_unknown_operation_exits_2() {
         .code(2)
         .stderr(predicate::str::contains("no operation `nope.nope`"));
 }
+
+// See `.claude/decisions/2026-11-14-security-passkey-only-owner-proofs.md` §3.
+#[test]
+fn enroll_secret_prints_the_stored_form_and_keeps_the_token_off_stdout() {
+    let out = backplane().arg("enroll-secret").assert().success();
+    let out = out.get_output();
+    let stdout = String::from_utf8(out.stdout.clone()).expect("UTF-8");
+    let stderr = String::from_utf8(out.stderr.clone()).expect("UTF-8");
+    let is_hex =
+        |s: &str| s.len() == 64 && s.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'));
+    assert_eq!(stdout.lines().count(), 1, "{stdout}");
+    let line = stdout.trim_end();
+    let (expires, hash) = line.split_once('.').expect("two parts");
+    let expires: u64 = expires.parse().expect("an expiry");
+    assert!(is_hex(hash), "{hash}");
+    let token = stderr
+        .lines()
+        .rev()
+        .find(|l| !l.trim().is_empty())
+        .expect("a token");
+    assert!(is_hex(token), "{token}");
+    assert_eq!(
+        backplane::core::approval::enroll::stored(token, expires),
+        line
+    );
+    assert!(!stdout.contains(token), "the token stays off stdout");
+}
