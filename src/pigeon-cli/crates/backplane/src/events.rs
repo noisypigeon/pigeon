@@ -81,6 +81,7 @@ const WAKING: &[&str] = &[
     "auto.ended",
     "session.replaced",
     "session.archivable",
+    "owner.answered",
 ];
 
 /// Whether `e` needs the agent: its change's stage does, or the change is done, closed, its

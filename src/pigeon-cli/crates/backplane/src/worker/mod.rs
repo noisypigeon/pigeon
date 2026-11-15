@@ -33,6 +33,7 @@ mod mandates;
 mod members;
 mod merges;
 mod minting;
+mod owner_items;
 mod passkeys;
 mod platform;
 mod platforms;
@@ -867,6 +868,13 @@ async fn dispatch(
         Routed::SessionArchived { args } => {
             Ok(answered(operation, tickets::archived(env, s, &args).await?))
         }
+        Routed::Owner {
+            operation: op,
+            args,
+        } => Ok(answered(
+            operation,
+            owner_items::run(env, s, &op, &args).await?,
+        )),
         Routed::SessionStart { args } => {
             Ok(answered(operation, tickets::start(env, s, &args).await?))
         }
@@ -1937,6 +1945,10 @@ impl DurableObject for Instance {
         if path.starts_with("/macos/") {
             let body: Value = req.json().await?;
             return macos::serve(&self.state, &path, &body).await;
+        }
+        if path.starts_with("/owner-items/") {
+            let body: Value = req.json().await?;
+            return owner_items::serve(&self.state, &path, &body).await;
         }
         if path.starts_with("/merges/") {
             let body: Value = req.json().await?;

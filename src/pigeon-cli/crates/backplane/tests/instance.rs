@@ -155,6 +155,8 @@ fn catalog_names_are_unique_and_dotted() {
             ("ios.release", Effect::Build),
             ("session.end", Effect::Build),
             ("session.archived", Effect::Build),
+            ("owner.ask", Effect::Build),
+            ("owner.withdraw", Effect::Build),
             ("session.start", Effect::Build),
             ("brief.create", Effect::Build),
             ("brief.amend", Effect::Build),

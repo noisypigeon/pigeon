@@ -184,6 +184,7 @@ async fn signed(
     body: &Value,
 ) -> Result<Response> {
     const APPROVALS: &str = "/v0/app/approvals/";
+    const ITEMS: &str = "/v0/app/items/";
     match (method, path) {
         (Method::Get, "/v0/app/whoami") => {
             Response::from_json(&json!({ "device": device.id, "name": device.name }))
@@ -206,6 +207,7 @@ async fn signed(
             let mut home = super::insights::home(env).await?;
             home["approvals"] = super::app::list(env, s).await?;
             home["auto"] = super::app::auto_state(env, s).await?;
+            home["items"] = super::owner_items::open(env, s).await?;
             Response::from_json(&home)
         }
         (Method::Get, "/v0/app/approvals") => Response::from_json(&super::app::list(env, s).await?),
@@ -218,6 +220,9 @@ async fn signed(
         }
         (Method::Post, "/v0/app/auto") => super::app::auto_start(env, s, body).await,
         (Method::Delete, "/v0/app/auto") => super::app::auto_end(env, s, body).await,
+        (Method::Post, p) if p.starts_with(ITEMS) => {
+            super::owner_items::answer(env, s, p.trim_start_matches(ITEMS), body).await
+        }
         (Method::Get, "/v0/app/tracker") => {
             Response::from_json(&super::app::tracker(env, s).await?)
         }

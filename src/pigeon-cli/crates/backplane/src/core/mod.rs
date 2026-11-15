@@ -15,6 +15,7 @@ pub mod ledger;
 pub mod macos;
 pub mod member;
 pub mod minting;
+pub mod owner;
 pub mod platform;
 #[cfg(feature = "engines")]
 pub mod release;

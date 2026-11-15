@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: security
-* Governs: `src/pigeon-cli/crates/backplane/src/core/approval/windows.rs`, `src/pigeon-cli/crates/backplane/src/worker/app.rs`, `src/pigeon-cli/crates/backplane/src/tasks.rs`, `src/pigeon-cli/crates/backplane/src/worker/push.rs`, `src/pigeon-ios/Pigeon/HomeView.swift`, `src/pigeon-ios/Pigeon/Sheets.swift`, `src/pigeon-ios/Pigeon/Store.swift`, `src/pigeon-ios/PigeonCore/Models.swift`
+* Governs: `src/pigeon-cli/crates/backplane/src/core/approval/windows.rs`, `src/pigeon-cli/crates/backplane/src/worker/app.rs`, `src/pigeon-cli/crates/backplane/src/core/owner/**`, `src/pigeon-cli/crates/backplane/src/worker/owner_items.rs`, `src/pigeon-cli/crates/backplane/src/tasks.rs`, `src/pigeon-cli/crates/backplane/src/worker/push.rs`, `src/pigeon-ios/Pigeon/HomeView.swift`, `src/pigeon-ios/Pigeon/Sheets.swift`, `src/pigeon-ios/Pigeon/Store.swift`, `src/pigeon-ios/PigeonCore/Models.swift`
 
 ## Context
 
@@ -317,3 +317,12 @@ changes the learner's scan screen and its `PigeonCore` model. §5 changes
 the Approvals tab, `AutoBanner`, `Store`'s Auto and item calls, and
 `AutoWindow`, `OwnerItem` and `Home` in `Models.swift`. Neither touches the
 other's views or types. !547 needs no change.
+
+### 2026-11-15: Step 2 lands: owner items in the control plane
+
+- **Paths.** `Governs` gains `core/owner/**` and `worker/owner_items.rs`.
+- **`options`** are passed one per line, as a scope is.
+- **A session holds at most 5 open items.** A sixth is refused with `wait:`,
+  cleared by `owner.answered`.
+- **`owner.withdrawn`** is the event of a session's withdrawal; it wakes no
+  one.

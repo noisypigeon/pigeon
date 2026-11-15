@@ -334,6 +334,10 @@ pub struct Digest {
     /// `.claude/decisions/2026-11-15-security-owner-approvals-always-listed.md` §5.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub unlisted: Vec<u32>,
+    /// The owner's open items, one line each: pushed while any is open; see
+    /// `.claude/decisions/2026-11-15-security-standing-auto-owner-flags.md` §4.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub items: Vec<String>,
 }
 
 /// The digest's archive lines: each `session.archived` summary, then each clean end not archived,
@@ -482,6 +486,7 @@ impl Digest {
             && self.failed_deploys.is_empty()
             && self.stalled.is_empty()
             && self.unlisted.is_empty()
+            && self.items.is_empty()
             && self.mirror.is_none())
     }
 
@@ -508,11 +513,12 @@ impl Digest {
     /// One line per item for the owner, for a push: everything but the sessions.
     #[must_use]
     pub fn owner_lines(&self) -> Vec<String> {
-        let mut out: Vec<String> = self
-            .approvals
-            .iter()
-            .map(|(n, op, path)| format!("waiting: `{op}` on change {n}: {path}"))
-            .collect();
+        let mut out: Vec<String> = self.items.iter().map(|l| format!("for you: {l}")).collect();
+        out.extend(
+            self.approvals
+                .iter()
+                .map(|(n, op, path)| format!("waiting: `{op}` on change {n}: {path}")),
+        );
         out.extend(self.stale_tasks.iter().map(|t| {
             format!(
                 "unclaimed: task {} ({}) on change {}: {}",
@@ -648,6 +654,7 @@ pub fn digest(input: &DigestInput<'_>, now: u64) -> Digest {
         stops: None,
         archives: Vec::new(),
         unlisted: Vec::new(),
+        items: Vec::new(),
     }
 }
 
@@ -669,6 +676,7 @@ pub fn stops(events: &[crate::events::Event]) -> Option<String> {
                 .to_string(),
             "grant.requested" => "grant".into(),
             "deploy.failed" => "deploy".into(),
+            "owner.asked" => e.summary.split(' ').next().unwrap_or("item").to_string(),
             crate::events::NUDGED => {
                 nudged += 1;
                 continue;

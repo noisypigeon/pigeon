@@ -419,3 +419,35 @@ fn a_change_authorized_minutes_ago_is_not_stalled_whatever_its_sessions_last_pol
         "a recent poll"
     );
 }
+
+// See `.claude/decisions/2026-11-15-security-standing-auto-owner-flags.md` §4.
+#[test]
+fn an_open_owner_item_is_pushed_first_and_counted_in_the_stops() {
+    let d = backplane::tasks::Digest {
+        items: vec!["decision #1 from session_a, 0h05m: Which region?".into()],
+        unlisted: vec![464],
+        ..Default::default()
+    };
+    assert!(d.needs_owner());
+    assert_eq!(
+        d.owner_lines()[0],
+        "for you: decision #1 from session_a, 0h05m: Which region?"
+    );
+    let e = |id: u64, summary: &str| backplane::events::Event {
+        id,
+        at: id,
+        kind: "owner.asked".into(),
+        change: None,
+        session: None,
+        summary: summary.into(),
+        owner: true,
+        stage: None,
+        model: None,
+    };
+    assert_eq!(
+        backplane::tasks::stops(&[e(1, "decision #1: x"), e(2, "action #2: y")]).as_deref(),
+        Some(
+            "stops since last digest: owner 2 (action 1, decision 1); agent nudged 0; escalated 0"
+        )
+    );
+}

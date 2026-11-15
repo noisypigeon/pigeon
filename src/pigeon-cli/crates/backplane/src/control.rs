@@ -129,6 +129,13 @@ pub enum Routed {
         /// Its arguments.
         args: serde_json::Map<String, Value>,
     },
+    /// `owner.ask` or `owner.withdraw`, with its arguments.
+    Owner {
+        /// The operation.
+        operation: String,
+        /// Its arguments.
+        args: serde_json::Map<String, Value>,
+    },
     /// `session.end`, with its arguments.
     SessionEnd {
         /// Its arguments.
@@ -406,6 +413,10 @@ pub fn route(request: &Request, by: &str, at: u64) -> Result<Routed, String> {
         "session.start" => Ok(Routed::SessionStart { args: a.clone() }),
         "session.end" => Ok(Routed::SessionEnd { args: a.clone() }),
         "session.archived" => Ok(Routed::SessionArchived { args: a.clone() }),
+        "owner.ask" | "owner.withdraw" => Ok(Routed::Owner {
+            operation: request.operation.clone(),
+            args: a.clone(),
+        }),
         "session.status" => Ok(Routed::SessionStatus { args: a.clone() }),
         op if op.starts_with("brief.") => Ok(Routed::Brief {
             operation: request.operation.clone(),

@@ -486,6 +486,32 @@ const CATALOG: &[Operation] = &[
         ],
     },
     Operation {
+        name: "owner.ask",
+        engine: Engine::Backplane,
+        effect: Effect::Build,
+        summary: "As `session`, flag the owner for what only they can settle: `kind` `decision` (a choice only the owner can make, with up to 4 `options`, one per line) or `action` (something only they can do: provider setup, a credential, account recovery, an edit to a guarded file), with a one-line `title`, its `detail` and the `change` it is about; pushed, in the digest and the app's Approvals tab until answered. `owner.answered` wakes you with the answer; stop only the work that depends on it. Never for a choice the rules settle, or a destructive act, which is asked where it happens",
+        args: &[
+            arg("kind", true, Kind::String),
+            arg("title", true, Kind::String),
+            arg("detail", true, Kind::Text),
+            arg("session", true, Kind::String),
+            arg("change", false, Kind::Text),
+            arg("options", false, Kind::Text),
+            arg("ticket", false, Kind::String),
+        ],
+    },
+    Operation {
+        name: "owner.withdraw",
+        engine: Engine::Backplane,
+        effect: Effect::Build,
+        summary: "As `session`, withdraw your own open owner item `id`, as when its action is seen done; only the owner answers an item, from their device",
+        args: &[
+            arg("id", true, Kind::Text),
+            arg("session", true, Kind::String),
+            arg("ticket", false, Kind::String),
+        ],
+    },
+    Operation {
         name: "session.start",
         engine: Engine::Backplane,
         effect: Effect::Build,
