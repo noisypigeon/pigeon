@@ -208,3 +208,83 @@ public func railLabel(_ c: TrackedChange) -> String {
     case .ok: return base
     }
 }
+
+/// A session none of whose changes needs anyone: each is merged or done, or it has none; see the
+/// ADR's "Glanceable tracker cards" amendment.
+public func isSilent(_ s: TrackedSession) -> Bool {
+    s.changes.allSatisfy { $0.needs == "none" }
+}
+
+/// How many of the tracker's sessions are silent.
+public func silentCount(_ t: Tracker) -> Int {
+    t.sessions.filter(isSilent).count
+}
+
+/// The sessions `f` keeps; silent ones only when `showSilent`, and then last.
+public func visible(_ t: Tracker, by f: TrackerFilter, showSilent: Bool) -> [TrackedSession] {
+    let kept = filtered(t, by: f)
+    let loud = kept.filter { !isSilent($0) }
+    return showSilent ? loud + kept.filter(isSilent) : loud
+}
+
+/// What a row's status pill draws.
+public enum RowKind: String, Equatable, Sendable {
+    case owner, failed, stalled, held, done, moving
+}
+
+/// A row's status: its pill's kind and word, and the note beside it.
+public struct RowStatus: Equatable, Sendable {
+    public let kind: RowKind
+    public let word: String
+    public let note: String
+
+    public init(kind: RowKind, word: String, note: String = "") {
+        self.kind = kind
+        self.word = word
+        self.note = note
+    }
+}
+
+/// A change's status pill: `Needs you` for the owner, else by its mark, else its stage.
+public func rowStatus(_ c: TrackedChange) -> RowStatus {
+    if c.needs == "owner" { return RowStatus(kind: .owner, word: "Needs you") }
+    switch c.mark {
+    case .failed: return RowStatus(kind: .failed, word: "Failed")
+    case .stalled: return RowStatus(kind: .stalled, word: "Stalled", note: "its agent is quiet")
+    case .held: return RowStatus(kind: .held, word: "Held", note: "until a deploy passes")
+    case .done: return RowStatus(kind: .done, word: "Done")
+    case .ok:
+        let note =
+            c.needs == "change" ? (c.waitsOn.map { "after !\($0)" } ?? "after another change") : ""
+        let word = c.stage.prefix(1).uppercased() + c.stage.dropFirst()
+        return RowStatus(kind: .moving, word: word, note: note)
+    }
+}
+
+/// A Conventional Commit title's tag, its scope or else its type, and its subject; no tag for any
+/// other title.
+public func scopeAndSubject(_ title: String) -> (tag: String?, subject: String) {
+    guard let colon = title.range(of: ": ") else { return (nil, title) }
+    var head = String(title[..<colon.lowerBound])
+    if head.hasSuffix("!") { head.removeLast() }
+    let subject = String(title[colon.upperBound...])
+    if let open = head.firstIndex(of: "("), head.hasSuffix(")") {
+        let type = head[..<open]
+        let scope = head[head.index(after: open)..<head.index(before: head.endIndex)]
+        guard isWord(type), isWord(scope) else { return (nil, title) }
+        return (String(scope), subject)
+    }
+    return isWord(head) ? (head, subject) : (nil, title)
+}
+
+private func isWord<S: StringProtocol>(_ s: S) -> Bool {
+    !s.isEmpty && s.allSatisfy { $0.isLowercase || $0.isNumber || $0 == "-" }
+}
+
+/// A session label's link to open in Claude: an https URL on claude.ai; none otherwise.
+public func sessionLink(_ label: String) -> URL? {
+    guard let url = URL(string: label), url.scheme == "https", url.host == "claude.ai" else {
+        return nil
+    }
+    return url
+}

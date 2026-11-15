@@ -158,3 +158,88 @@ import PigeonCore
         #expect(barHeights([]) == [])
     }
 }
+
+@Suite struct GlanceableTrackerTests {
+    static func change(
+        _ n: Int, stage: String = "checked", needs: String = "none", mark: RailMark = .ok,
+        waitsOn: Int? = nil
+    ) -> TrackedChange {
+        TrackedChange(
+            number: n, title: "feat(ios): x", stage: stage, needs: needs, waitsOn: waitsOn,
+            next: "n", stop: 4, mark: mark)
+    }
+
+    static func session(_ label: String, _ changes: [TrackedChange], listening: Bool = true)
+        -> TrackedSession
+    {
+        TrackedSession(label: label, listening: listening, changes: changes)
+    }
+
+    @Test func aSessionIsSilentOnlyWhenNoChangeNeedsAnyone() {
+        #expect(isSilent(Self.session("a", [])))
+        #expect(isSilent(Self.session("b", [Self.change(1, stage: "done", mark: .done)])))
+        #expect(isSilent(Self.session("c", [Self.change(1, stage: "merged")], listening: false)))
+        #expect(!isSilent(Self.session("d", [Self.change(1, needs: "platform")])))
+        #expect(!isSilent(Self.session("e", [Self.change(1, needs: "agent", mark: .stalled)])))
+        #expect(!isSilent(Self.session("f", [Self.change(1, needs: "platform", mark: .held)])))
+        #expect(
+            !isSilent(
+                Self.session(
+                    "g", [Self.change(1, stage: "done", mark: .done), Self.change(2, needs: "owner")]
+                )))
+    }
+
+    @Test func silentSessionsAreHiddenUnlessShownAndThenLast() {
+        let t = Tracker(
+            sessions: [
+                Self.session("quiet", []),
+                Self.session("busy", [Self.change(1, needs: "provider")]),
+                Self.session("owed", [Self.change(2, needs: "owner")]),
+            ],
+            counts: TrackerCounts(owner: 1, stalled: 0, provider: 1))
+        #expect(silentCount(t) == 1)
+        #expect(visible(t, by: .all, showSilent: false).map(\.label) == ["busy", "owed"])
+        #expect(visible(t, by: .all, showSilent: true).map(\.label) == ["busy", "owed", "quiet"])
+        #expect(visible(t, by: .owner, showSilent: true).map(\.label) == ["owed"])
+    }
+
+    @Test func aRowsPillSaysWhoActsAndWhy() {
+        #expect(
+            rowStatus(Self.change(1, needs: "owner")) == RowStatus(kind: .owner, word: "Needs you"))
+        #expect(
+            rowStatus(Self.change(1, stage: "failed", needs: "agent", mark: .failed))
+                == RowStatus(kind: .failed, word: "Failed"))
+        #expect(
+            rowStatus(Self.change(1, needs: "agent", mark: .stalled))
+                == RowStatus(kind: .stalled, word: "Stalled", note: "its agent is quiet"))
+        #expect(
+            rowStatus(Self.change(1, stage: "held", needs: "platform", mark: .held))
+                == RowStatus(kind: .held, word: "Held", note: "until a deploy passes"))
+        #expect(
+            rowStatus(Self.change(1, stage: "done", mark: .done))
+                == RowStatus(kind: .done, word: "Done"))
+        #expect(
+            rowStatus(Self.change(1, stage: "queued 3/4", needs: "change", waitsOn: 506))
+                == RowStatus(kind: .moving, word: "Queued 3/4", note: "after !506"))
+        #expect(
+            rowStatus(Self.change(1, stage: "checking 7/8", needs: "provider"))
+                == RowStatus(kind: .moving, word: "Checking 7/8"))
+    }
+
+    @Test func aTitleSplitsIntoItsTagAndSubject() {
+        #expect(scopeAndSubject("feat(backplane): owner_ask flags").tag == "backplane")
+        #expect(scopeAndSubject("feat(backplane): owner_ask flags").subject == "owner_ask flags")
+        #expect(scopeAndSubject("fix!: breaks").tag == "fix")
+        #expect(scopeAndSubject("ci(ios)!: x").tag == "ios")
+        #expect(scopeAndSubject("Plain title: with colon").tag == nil)
+        #expect(scopeAndSubject("Plain title: with colon").subject == "Plain title: with colon")
+        #expect(scopeAndSubject("no colon").tag == nil)
+    }
+
+    @Test func onlyAClaudeLinkOpensASession() {
+        #expect(sessionLink("https://claude.ai/code/session_X1")?.path == "/code/session_X1")
+        #expect(sessionLink("http://claude.ai/code/x") == nil)
+        #expect(sessionLink("https://example.com/code/x") == nil)
+        #expect(sessionLink("bare") == nil)
+    }
+}
