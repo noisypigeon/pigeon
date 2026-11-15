@@ -38,6 +38,8 @@ belong in the ADR, never in the file.
 
 ## Rules
 
+- No Python: tooling is Rust (`pigeon …`) or POSIX sh; see
+  [`2026-11-15-development-no-python-rust-tooling.md`](.claude/decisions/2026-11-15-development-no-python-rust-tooling.md).
 - The repo is public: never push secrets, credentials, key IDs or private
   bucket names, in commits, branch names, PR text or CI logs. No new secret
   enters the repository; `.config/policies/secrets*.yaml` pin the two
@@ -65,9 +67,8 @@ Per
   Opus plans; Haiku and Sonnet execute briefs, and decide nothing.
 - **A planner (opus)** writes ADRs and briefs (`brief_create`, `brief_amend`),
   starts an executor per brief with `create_session`, taking its arguments
-  from `python3 -I tooling/session/session.py executor b<n>` (run directly,
-  not through `session.sh`), and reviews each executor's change before it
-  merges.
+  from `sh tooling/session/session.sh executor b<n>`, and reviews each
+  executor's change before it merges.
 - **An executor (haiku or sonnet)** starts with `model`, `planner` and
   `brief`, claims its brief's task, and proposes with `brief`, which writes
   the change's title, plan and scope. Then it:

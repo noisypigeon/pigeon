@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: development
-* Governs: `src/pigeon-cli/crates/backplane/src/sessions.rs`, `src/pigeon-cli/crates/backplane/src/tasks.rs`, `tooling/session/session.py`, `tooling/session/models.json`, `src/pigeon-cli/crates/backplane/src/core/brief/**`, `src/pigeon-cli/crates/backplane/src/briefs.rs`, `src/pigeon-cli/crates/backplane/src/worker/briefs.rs`, `src/pigeon-cli/crates/backplane/src/worker/merges.rs`, `src/pigeon-cli/crates/backplane/src/worker/tickets.rs`
+* Governs: `src/pigeon-cli/crates/backplane/src/sessions.rs`, `src/pigeon-cli/crates/backplane/src/tasks.rs`, `tooling/session/session.sh`, `tooling/session/models.json`, `src/pigeon-cli/crates/backplane/src/core/brief/**`, `src/pigeon-cli/crates/backplane/src/briefs.rs`, `src/pigeon-cli/crates/backplane/src/worker/briefs.rs`, `src/pigeon-cli/crates/backplane/src/worker/merges.rs`, `src/pigeon-cli/crates/backplane/src/worker/tickets.rs`
 * Governs: `src/pigeon-cli/crates/backplane/src/sessions.rs`, `src/pigeon-cli/crates/backplane/src/tasks.rs`, `tooling/session/session.py`, `tooling/session/models.json`, `src/pigeon-cli/crates/backplane/src/core/brief/**`, `src/pigeon-cli/crates/backplane/src/briefs.rs`, `src/pigeon-cli/crates/backplane/src/worker/briefs.rs`, `src/pigeon-cli/crates/backplane/src/worker/merges.rs`, `src/pigeon-cli/crates/backplane/src/worker/tickets.rs`
 
 ## Context
@@ -916,3 +916,7 @@ Per
   `cargo test --workspace`, so by `mise run ci` and the code checks.
 - `CLAUDE.md`'s planner line, and deleting `session.py`, are that ADR's step
   3, the owner's.
+
+### 2026-11-15: `session.py` is gone
+
+Per [`2026-11-15-development-no-python-rust-tooling.md`](2026-11-15-development-no-python-rust-tooling.md) step 3, `tooling/session/session.py` is deleted, so `Governs` names `tooling/session/session.sh` in its place.

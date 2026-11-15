@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: development
-* Governs: `tooling/session/session.sh`, `tooling/session/models.json`, `tooling/session/*.py`, `src/pigeon-cli/crates/backplane/src/core/session/*.rs`, `src/pigeon-cli/crates/pigeon/src/cli/session.rs`, `src/pigeon-cli/crates/pigeon/src/commands/session.rs`
+* Governs: `tooling/session/session.sh`, `tooling/session/models.json`, `src/pigeon-cli/crates/backplane/src/core/session/*.rs`, `src/pigeon-cli/crates/pigeon/src/cli/session.rs`, `src/pigeon-cli/crates/pigeon/src/commands/session.rs`
 
 ## Context
 
@@ -187,3 +187,13 @@ brief would have to spell out line by line.
   and refetched when `pigeon.sha` differed; the stubs logged nothing.
 - **`executor` matched `session.py executor`** for brief b9 with `--tag`,
   byte for byte, but for the prompt's `Monitor` line.
+
+### 2026-11-15: Step 3 lands in two changes
+
+- The control plane refuses a change that mixes sentinel's paths with
+  anything but ADRs (the factory-crates ADR §2), so step 3 is two changes:
+  first `CLAUDE.md`'s lines and `session.py` deleted, then
+  `.config/policies/no-python.yaml` on its own.
+- `Governs` here drops `tooling/session/*.py`. The model-tiered,
+  Rust-follower and stages ADRs' `Governs` drop `session.py`, each with an
+  amendment.
