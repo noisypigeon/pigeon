@@ -828,3 +828,21 @@ fn a_zone_claims_its_platforms_domains_and_yields_to_inner_zones() {
         "{got:?}"
     );
 }
+
+#[test]
+fn a_zone_unit_takes_a_bare_star_record_as_its_wildcard() {
+    let platform = platform();
+    let inst = instance(&manifest().replace(
+        "    records: {}\n  sites/blog:",
+        "    records:\n      instances: { name: \"*\", type: AAAA, content: \"100::\", proxied: true }\n  sites/blog:",
+    ));
+    assert_eq!(problems(inst.path(), platform.path()), Vec::<String>::new());
+    let zone = render(inst.path(), platform.path(), &format!("zones/{ZONE}"));
+    let got = items(&zone, "dns_records");
+    let wild = got
+        .values()
+        .find(|r| r["type"] == "AAAA")
+        .unwrap_or_else(|| panic!("{got:?}"));
+    assert_eq!(wild["name"], format!("*.{ZONE}"));
+    assert_eq!(wild["proxied"], true);
+}

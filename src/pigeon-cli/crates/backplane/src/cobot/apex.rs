@@ -1194,7 +1194,9 @@ fn check_record(r: &Rec, zone: &str) -> Result<(), String> {
     if r.name.ends_with(&format!(".{zone}")) || r.name == zone {
         return Err(format!("name `{}` must be relative to the zone", r.name));
     }
-    if !HOST.is_match(&r.name) {
+    // A bare `*` is the zone's wildcard; see
+    // .claude/decisions/2026-11-15-runtime-standalone-hostnames-platform-zone.md §1.
+    if r.name != "*" && !HOST.is_match(&r.name) {
         return Err(format!("name `{}` is not a DNS name", r.name));
     }
     let full = fqdn(&r.name, zone);
