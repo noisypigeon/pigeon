@@ -265,3 +265,30 @@ which it leaves unchanged.
     and it forwards only `/v0/app/*`, which the `app` client already covers;
   - `/hosts/origin` is an `Instance` operation, not a Worker route, so it adds
     no client.
+### 2026-11-15: Reviewed against !563, the app shape: they agree
+
+!563 carries step 5a of
+[`2026-11-15-runtime-learner-practice-standalone-app.md`](2026-11-15-runtime-learner-practice-standalone-app.md).
+In `catalog/pigeon/kinds/platform/schema.json` it adds `shape: full | app`
+and lets an app shape omit `domains`. It also adds `app-worker.yaml` beside
+the schema, the app-only router and the hand-over seed.
+
+- **The schema changes don't meet.** `shape` and this ADR's `instance_zone`
+  are separate properties. An app shape still has no `domains`: its hostname
+  is reached through the platform's wildcard (§1), not through a route of its
+  own.
+- **The stack itself doesn't change.**
+  - It still serves `workers.dev`, which becomes §5's `origin`.
+  - Its router already answers `/v0/app/*` alone and 404s every other path
+    first, which is what §3's path rule expects of the origin.
+- **§5's hooks land in one change after the learner ADR's step 5b,** made by
+  this ADR's planner, as the two planners agreed:
+  - the entry's `label`, `host` and `origin`;
+  - `/instances/begin` taking `label`;
+  - `BASE_URL` in `app-worker.yaml`, used for invite links;
+  - `JoinLink` accepting `https://<label>.pigeon.dev`.
+
+  Step 5b lands the entry without them, with `base_url` the `workers.dev` URL
+  until then.
+
+Neither ADR changes.
