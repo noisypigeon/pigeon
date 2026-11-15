@@ -44,6 +44,10 @@ const TOKEN_REUSE: u64 = 50 * 60;
 /// How often a running job is asked how it went.
 const POLL: Duration = Duration::from_secs(20);
 
+/// The latest an open change's alarm may be set; see
+/// `.claude/decisions/2026-11-15-development-job-start-failures-backoff.md` §4.
+const REARM: Duration = Duration::from_secs(60);
+
 /// The most of a failed job's log `change.status` shows.
 const SHOWN: usize = 8 * 1024;
 
@@ -53,6 +57,8 @@ const SHOWN: usize = 8 * 1024;
 enum Pending {
     /// Start this job on the head.
     Start(String),
+    /// Start this job on the head once Unix second `at` passes.
+    StartAt(String, u64),
     /// Stop the `Checker` Container of this job ID; queued before jobs had classes.
     Stop(String),
     /// Stop the Container of this job ID, in its class.
@@ -104,8 +110,14 @@ impl ChangeRun {
                 .iter()
                 .any(|j| matches!(j.status, JobStatus::Queued | JobStatus::Running))
         });
-        if (open || !pending.is_empty()) && storage.get_alarm().await?.is_none() {
-            storage.set_alarm(Duration::from_millis(0)).await?;
+        if !open && pending.is_empty() {
+            return Ok(());
+        }
+        let latest = i64::try_from(now() + REARM.as_secs()).unwrap_or(i64::MAX) * 1000;
+        match storage.get_alarm().await? {
+            None => storage.set_alarm(Duration::from_millis(0)).await?,
+            Some(at) if at > latest => storage.set_alarm(REARM).await?,
+            Some(_) => {}
         }
         Ok(())
     }
@@ -136,8 +148,9 @@ impl ChangeRun {
         *change = next;
         for e in effects {
             match e {
-                Effect::Start(job) | Effect::StartAfter { job, .. } => {
-                    pending.push(Pending::Start(job));
+                Effect::Start(job) => pending.push(Pending::Start(job)),
+                Effect::StartAfter { job, secs } => {
+                    pending.push(Pending::StartAt(job, now() + secs));
                 }
                 Effect::Cancel(jobs) => {
                     if let Some(sha) = &head {
@@ -398,10 +411,17 @@ impl ChangeRun {
             .jobs
             .iter()
             .any(|j| matches!(j.status, JobStatus::Queued | JobStatus::Running));
-        if !pending.is_empty() && !wait {
+        let t = now();
+        let later = |p: &Pending| match p {
+            Pending::StartAt(_, at) if *at > t => Some(*at - t),
+            _ => None,
+        };
+        let soonest = pending.iter().filter_map(later).min();
+        if pending.iter().any(|p| later(p).is_none()) && !wait {
             storage.set_alarm(Duration::from_millis(0)).await?;
         } else if open || !pending.is_empty() {
-            storage.set_alarm(POLL).await?;
+            let due = soonest.map_or(POLL, |s| POLL.min(Duration::from_secs(s)));
+            storage.set_alarm(due).await?;
         }
         let found = before.as_ref().and_then(|b| b.landed.as_ref());
         if change.landed.is_some() && found != change.landed.as_ref() {
@@ -755,6 +775,14 @@ impl ChangeRun {
         next: &mut Vec<Pending>,
         applied: &mut Vec<Event>,
     ) -> bool {
+        // Only a queued job starts: a second start would run it twice.
+        if !change
+            .jobs
+            .iter()
+            .any(|j| j.name == job && j.status == JobStatus::Queued)
+        {
+            return true;
+        }
         let sha = change.head.clone().unwrap_or_default();
         let running = change
             .jobs
@@ -773,21 +801,15 @@ impl ChangeRun {
             next.push(Pending::Start(job));
             return false;
         }
-        let _ = Self::apply(
-            change,
-            Event::Started {
-                job: job.clone(),
-                sha: sha.clone(),
-            },
-            next,
-        );
         if let Err(why) = started {
             worker::console_warn!("job {job} did not start: {why}");
-            let lost = Event::Lost { job, sha };
-            if Self::apply(change, lost.clone(), next).is_ok() {
-                applied.push(lost);
+            let failed = Event::StartFailed { job, sha, why };
+            if Self::apply(change, failed.clone(), next).is_ok() {
+                applied.push(failed);
             }
+            return true;
         }
+        let _ = Self::apply(change, Event::Started { job, sha }, next);
         true
     }
 
@@ -847,6 +869,31 @@ impl ChangeRun {
                 .await;
         }
         Ok(())
+    }
+
+    /// Asks each of `running` how it went, applying what each answers; a poll that errs is
+    /// logged and asked again next alarm, so it never drops the alarm (job-start-failures ADR §4).
+    async fn poll_all(
+        &self,
+        change: &mut Change,
+        running: Vec<String>,
+        next: &mut Vec<Pending>,
+        applied: &mut Vec<Event>,
+    ) {
+        for job in running {
+            let event = match self.poll(change, &job).await {
+                Ok(e) => e,
+                Err(e) => {
+                    worker::console_warn!("poll {job} on !{}: {e}", change.number);
+                    None
+                }
+            };
+            if let Some(event) = event
+                && Self::apply(change, event.clone(), next).is_ok()
+            {
+                applied.push(event);
+            }
+        }
     }
 
     async fn poll(&self, change: &Change, job: &str) -> Result<Option<Event>> {
@@ -1069,8 +1116,14 @@ impl DurableObject for ChangeRun {
                 |p| matches!(p, Pending::Start(j) if control::to_github(&change, j, true, false)),
             )
             && self.window_open().await;
+        let t = now();
         for p in std::mem::take(&mut pending) {
+            let p = match p {
+                Pending::StartAt(job, at) if at <= t => Pending::Start(job),
+                p => p,
+            };
             match p {
+                Pending::StartAt(..) => next.push(p),
                 Pending::Stop(id) => self.stop(control::Class::Checker, &id).await?,
                 Pending::StopIn(class, id) => self.stop(class, &id).await?,
                 Pending::Start(job) if job == control::UNMIRROR => {
@@ -1121,13 +1174,8 @@ impl DurableObject for ChangeRun {
                 .map(|j| j.status)
         };
         let restack_before = restack_status(&change);
-        for job in running {
-            if let Some(event) = self.poll(&change, &job).await?
-                && Self::apply(&mut change, event.clone(), &mut next).is_ok()
-            {
-                applied.push(event);
-            }
-        }
+        self.poll_all(&mut change, running, &mut next, &mut applied)
+            .await;
         // Finished failing or lost on its last attempt; see the 2026-11-13 amendment of
         // .claude/decisions/2026-11-08-development-concurrent-agent-sessions.md.
         let restack_failed = restack_before != Some(JobStatus::Failed)
