@@ -116,6 +116,47 @@ const fn arg(name: &'static str, required: bool, kind: Kind) -> Arg {
     }
 }
 
+/// Who answers an operation's request for approval. See
+/// `.claude/decisions/2026-11-15-runtime-one-mcp-entry-point.md` §1.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Asks {
+    /// Runs on the caller's capability.
+    None,
+    /// A mandate, window, policy or change grant answers, else pending for the owner.
+    Grant,
+    /// The owner proves on its page, each time.
+    Page,
+}
+
+/// A door an operation is reachable through.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Door {
+    /// `/mcp`, behind Access.
+    Access,
+    /// `/v0/app/mcp`, by device signature.
+    Device,
+}
+
+const GRANT: [&str; 6] = [
+    "change.authorize",
+    "change.approve",
+    "change.merge",
+    "change.close",
+    "ci.cloudflare",
+    "change.pin",
+];
+
+const PAGE: [&str; 6] = [
+    "mandate.propose",
+    "ci.window",
+    "grant.request",
+    "grant.rotate",
+    "grant.revoke",
+    "platform.apply",
+];
+
 /// One operation a surface may request.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Operation {
@@ -171,6 +212,36 @@ impl Operation {
             || self.name.starts_with("apple.")
             || self.name.starts_with("ios.")
             || self.name.starts_with("grant.")
+    }
+
+    /// Who answers its request for approval.
+    #[must_use]
+    pub fn asks(&self) -> Asks {
+        if GRANT.contains(&self.name) {
+            Asks::Grant
+        } else if PAGE.contains(&self.name) {
+            Asks::Page
+        } else {
+            Asks::None
+        }
+    }
+
+    /// The capability a caller needs to run it.
+    #[must_use]
+    pub fn capability(&self) -> &'static str {
+        if self.effect == Effect::Read {
+            "read"
+        } else if self.effect == Effect::Apply && !self.control_plane() {
+            "platform"
+        } else {
+            "propose"
+        }
+    }
+
+    /// The doors it is reachable through.
+    #[must_use]
+    pub fn doors(&self) -> &'static [Door] {
+        &[Door::Access]
     }
 }
 
@@ -839,3 +910,6 @@ mod tests {
         assert_eq!(back, sent);
     }
 }
+
+#[cfg(test)]
+mod registry_tests;
