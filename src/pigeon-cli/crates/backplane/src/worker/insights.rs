@@ -1,11 +1,13 @@
 //! The app's insights in the control plane: filled each hour by the cron, and read by the app's
 //! routes; see `.claude/decisions/2026-11-12-runtime-ios-app-approvals-insights.md` §7.
 
+use std::collections::BTreeSet;
+
 use serde_json::{Value, json};
 use worker::{Env, Fetch, Method, Result};
 
-use super::platform::{d1, d1_rows, json_request, now, secret};
-use crate::insights::{self, Row};
+use super::platform::{Settings, d1, d1_rows, json_request, now, secret};
+use crate::insights::{self, Row, ops};
 
 /// Fills each hour due: GitHub's and Buildkite's rows, each source failing alone. Cloudflare's
 /// wait for `OBSERVABILITY_TOKEN`; see the ADR's 2026-11-12 amendment on step 4.
@@ -125,4 +127,103 @@ pub async fn detail(
     }
     let r = rows(env, metric, range).await?;
     Ok(insights::stacks(&r, metric, Some(source), range, now()))
+}
+
+/// The most pages of the event log one answer reads.
+const OPS_PAGES: usize = 15;
+
+/// The event log from `from`, a page at a time; what a failing read leaves is what it got.
+async fn log_since(env: &Env, s: &Settings, from: u64) -> Vec<crate::events::Event> {
+    let mut events = Vec::new();
+    let mut after = 0;
+    for _ in 0..OPS_PAGES {
+        let body = json!({ "after": after });
+        let Ok((_, v)) = super::mandates::to_instance(env, s, "/events/since", &body).await else {
+            break;
+        };
+        let page = v["events"].as_array().cloned().unwrap_or_default();
+        for e in &page {
+            after = e["id"].as_u64().unwrap_or(after);
+            if let Ok(e) = serde_json::from_value::<crate::events::Event>(e.clone())
+                && e.at >= from
+            {
+                events.push(e);
+            }
+        }
+        if page.len() < crate::events::PAGE || after >= v["last"].as_u64().unwrap_or_default() {
+            break;
+        }
+    }
+    events
+}
+
+/// `GET /v0/app/ops?range=`: deploys, queue and approval waits, throughput, providers and failed
+/// jobs; each source failing alone, its panel empty.
+///
+/// # Errors
+///
+/// When building a request fails.
+pub async fn ops(env: &Env, s: &Settings, range: u64) -> Result<Value> {
+    let t = now();
+    let from = t.saturating_sub(range * insights::DAY);
+
+    let history = match json_request("https://main/status", Method::Get, None, None) {
+        Ok(req) => match super::platform::call(env, &super::main_stub(env, &s.repo)?, req).await {
+            Ok(mut r) => r.json::<Value>().await.unwrap_or_default(),
+            Err(_) => Value::Null,
+        },
+        Err(_) => Value::Null,
+    };
+    let history = history["pipeline"]["history"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+
+    let queue = super::stages::queue(env, s).await;
+    let events = log_since(env, s, from).await;
+    let merged = d1_rows(env, &ops::merged_since(&s.instance, &s.repo, from))
+        .await
+        .unwrap_or_default();
+    let failed = d1_rows(env, &ops::failed_jobs_since(&s.instance, &s.repo, from))
+        .await
+        .unwrap_or_default();
+    let lost = d1_rows(env, &ops::macos_lost_since(from))
+        .await
+        .unwrap_or_default();
+
+    let providers = match crate::macos::config() {
+        Ok(cfg) => {
+            let health = super::macos::health(env, s).await;
+            let usage = super::macos::usage(env).await.unwrap_or_default();
+            crate::macos::status(&cfg, &health, &usage, t)["providers"]
+                .as_array()
+                .cloned()
+                .unwrap_or_default()
+        }
+        Err(_) => Vec::new(),
+    };
+
+    let owner_approved: BTreeSet<u32> = merged
+        .iter()
+        .filter(|r| ops::approver_kind(r["approver"].as_str().unwrap_or_default()) == "owner")
+        .filter_map(|r| r["number"].as_u64().and_then(|n| u32::try_from(n).ok()))
+        .collect();
+    let mut approval = ops::approval_waits(&events, &owner_approved);
+    approval.sort_unstable();
+    let approvals = ops::Approvals {
+        count: u32::try_from(approval.len()).unwrap_or(u32::MAX),
+        p50: ops::percentile(&approval, 50),
+        p95: ops::percentile(&approval, 95),
+    };
+
+    let answer = ops::ops(
+        range,
+        ops::deploys(&history, from),
+        ops::queue(&queue, ops::merge_waits(&events)),
+        approvals,
+        ops::throughput(&merged, from, t),
+        providers,
+        ops::jobs(&failed, &lost),
+    );
+    Ok(serde_json::to_value(answer)?)
 }

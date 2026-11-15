@@ -232,6 +232,18 @@ async fn signed(
                 Err(why) => Response::error(why, 400),
             }
         }
+        (Method::Get, "/v0/app/ops") => {
+            let url = req.url()?;
+            let range = url
+                .query_pairs()
+                .find(|(n, _)| n == "range")
+                .and_then(|(_, v)| v.parse().ok())
+                .unwrap_or(1);
+            if !crate::insights::ops::RANGES.contains(&range) {
+                return Response::error("range is 1, 7 or 30", 400);
+            }
+            Response::from_json(&super::insights::ops(env, s, range).await?)
+        }
         (Method::Get, super::members::PATH) => super::members::route(env, s, device).await,
         (m, p) if super::account::handles(p) => {
             super::account::route(env, s, device, m, p, body).await

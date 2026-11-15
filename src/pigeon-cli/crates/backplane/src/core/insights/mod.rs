@@ -7,6 +7,8 @@ use serde_json::{Value, json};
 use crate::control::Statement;
 use crate::core::change::{BOUND, MERGE, MIRROR, RESTACK};
 
+pub mod ops;
+
 #[cfg(test)]
 mod tests;
 
