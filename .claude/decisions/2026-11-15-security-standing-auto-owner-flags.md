@@ -289,3 +289,22 @@ Auto's banner.
   owner item or route. The learner's two pre-approved writes (that ADR's §5)
   are unchanged, and the scan sends nothing.
 - **The two agree, and neither changes.**
+
+### 2026-11-15: Reviewed against !561: they agree
+
+[`2026-11-15-runtime-learner-practice-standalone-app.md`](2026-11-15-runtime-learner-practice-standalone-app.md)
+(!561) decides how the learner's standalone joins, stands up and carries
+over a phone's practice, outside `infra/`, with its own router and sync
+route.
+[`2026-11-14-security-instance-members-roles-invitations.md`](2026-11-14-security-instance-members-roles-invitations.md)
+is unchanged by it.
+
+- **No shared surface.** The standalone serves no approvals, Auto or owner
+  items. §5's Approvals tab, `AutoBanner` and "For you" are the platform
+  app's, behind its device session.
+- **Roles.** Owner items are answered through the platform app's device
+  session (`POST /v0/app/items/<id>`), as approvals are. A learner's
+  standalone has no route to them. Who may link a device is the members
+  ADR's, unchanged here.
+
+!547 needs no change.
