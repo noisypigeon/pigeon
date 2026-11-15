@@ -11,7 +11,7 @@ impl Change {
     /// `.claude/decisions/2026-11-15-development-code-checks-by-reach.md` §4.
     fn gate_missing(&self) -> Vec<Check> {
         let passed = |c: &Check, name: &str| {
-            let carried = clippy(c) && self.carried_checks.iter().any(|n| n == name);
+            let carried = rerun_carried(c) && self.carried_checks.iter().any(|n| n == name);
             !carried
                 && self
                     .jobs
@@ -133,9 +133,13 @@ impl Change {
     }
 }
 
-/// Whether `c` is a clippy check, which a carried head runs again in its gate.
-fn clippy(c: &Check) -> bool {
+/// Whether a carried head runs `c` again in its gate: a crate clippy or the wasm clippy, not a
+/// feature one. See the 2026-11-15 amendment to
+/// `.claude/decisions/2026-11-15-development-code-checks-by-reach.md`.
+fn rerun_carried(c: &Check) -> bool {
+    let has = |a: &str| c.argv.iter().any(|x| x == a);
     c.argv.get(1).is_some_and(|v| v == "clippy")
+        && (!has("--no-default-features") || has("--target"))
 }
 
 /// Whether `c` runs the whole workspace's tests, which a scoped gate leaves out.

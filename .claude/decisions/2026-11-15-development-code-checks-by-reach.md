@@ -195,3 +195,50 @@ under 200 lines each.
    - median run minutes;
    - push to merge, from `change_status` and `deploy_status`;
    - and whether to batch.
+
+## Amendments
+
+### 2026-11-15: Step 5 measured early; a carried head re-runs two clippy checks, not six
+
+The owner asked for step 5 now, not a day after step 4. It was measured 8
+hours after !515 merged (`main` at `8173faf`, 07:15 UTC), across 24 merges,
+the same ways as §"What was measured, before".
+
+- **Change CI runs** (GitHub `ci.yml`, change runs only):
+  - median 4.4 minutes before, over 26 runs from 04:38 UTC;
+  - median 1.45 minutes after, over 33 runs.
+- **Last push to merge** (the event log, from the head's last
+  `change.pushed` to `change.merged`):
+  - median 4.8 minutes before, over 12 merges;
+  - median 2.9 minutes after, over 25 merges.
+  - For example, !539 changed only wasm-only code: fmt, the wasm clippy and
+    the merge took 2.9 minutes.
+- **Full gates.** 20 of 23 Rust merges before; 8 of 24 merges after.
+  - Each of the 8 came from a clean restack.
+  - Those with code checks added only `gate: test`, one or two gate jobs,
+    where the old gate added four.
+- **The gap between merges** stayed near 8 minutes: a median of 7.6
+  before and 8.3 after.
+  - Before, a queue about 19 deep set it.
+  - After, the queue drained, so changes arriving set it, not the turn.
+- **Batching** stays deferred: fewer than a quarter of merges gate in
+  full for any reason but a clean restack.
+- **A day of data** would add no different case, since every rule fired
+  within these 24 merges. The scheduled check stands down.
+
+**Carried heads.** The three carried heads (!507, !524 and !525) each
+re-ran six clippy jobs in the gate, as §4 worded it.
+
+- A `pigeon` feature clippy builds `pigeon`'s own code, which a disjoint
+  restack carries unchanged.
+- The crate clippy and the wasm clippy build every crate that `main`'s new
+  code reaches.
+- So a carried head re-runs only those two: a clippy without
+  `--no-default-features`, or the one with `--target`.
+- **What it risks.** A break that only one feature's build shows, from
+  `main`'s new code meeting this change's. Any later change that reaches
+  `pigeon` runs every feature clippy, and so does `mise run ci`.
+
+**Execution:** one change. It holds this amendment, `rerun_carried` in
+`core/change/gate.rs`, and a test in `tests/merges.rs` where a carried head
+re-runs its crate clippy and not a feature one.

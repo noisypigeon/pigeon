@@ -968,6 +968,38 @@ fn a_disjoint_same_patch_restack_carries_its_checks() {
 }
 
 #[test]
+fn a_carried_head_re_runs_its_crate_clippy_and_not_a_feature_one() {
+    let feature = Check {
+        name: "clippy pigeon --features cobot".into(),
+        argv: [
+            "cargo",
+            "clippy",
+            "-p",
+            "pigeon",
+            "--no-default-features",
+            "--features",
+            "cobot",
+        ]
+        .map(String::from)
+        .to_vec(),
+    };
+    let mut c = approved_with(&["fmt", "clippy"], &["fmt", "clippy"]);
+    c.full.push(feature.clone());
+    c.jobs.push(backplane::changes::Job {
+        name: feature.name.clone(),
+        argv: feature.argv.clone(),
+        status: backplane::changes::JobStatus::Passed,
+        ..c.jobs[0].clone()
+    });
+    c.gate = Some(backplane::core::deploy::gate::Gate::Scoped);
+    c.carried_checks = vec!["clippy".into(), feature.name];
+    assert_eq!(
+        c.apply(Event::Merge { by: "owner".into() }).expect("gates"),
+        [Effect::Start(gate("clippy"))]
+    );
+}
+
+#[test]
 fn a_scoped_head_whose_checks_passed_merges_with_no_gate_job() {
     // §4 of the code-checks-by-reach ADR: the gate set is the head's own checks and the suite.
     let mut c = approved_with(&["fmt", "clippy"], &["fmt", "clippy"]);
