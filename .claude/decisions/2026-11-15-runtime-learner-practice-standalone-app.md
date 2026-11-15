@@ -136,3 +136,14 @@ Steps 1 to 3 need nothing else; the rest wait on the members ADR's steps 5a to 6
    - stand up the instance from the app;
    - invite the learner and admit them;
    - add them to TestFlight.
+
+## Amendments
+
+### 2026-11-15: the bank is an app resource, a form keeps its circles' positions, and steps 1 to 3 are briefs
+
+- **The bank** lives at `src/pigeon-ios/Pigeon/Learner/questions.json`, not under `catalog/`, which holds provider catalogs (`catalog/README.md`). This amendment adds it to what the ADR governs.
+  - It is one JSON array, one question per line: `id`, `topic`, `question`, four `choices`, `answer` (`A` to `D`), `explanation`, `source`, and optional `unverified` and `combined` flags.
+  - It holds 267 questions in 11 topics. 19 are `unverified` and are never drawn; 17 are `combined`.
+  - Questions on the GLP rules of 19 October 2026 follow the BC news release of that change. Older manuals and practice sites disagree with them.
+- **A form keeps its layout.** Wrapped text sets where each circle falls, and text measurement differs between devices and font versions. So the form's record (§5) keeps every circle's centre in millimetres from the page's top-left, as laid out when it printed, and the reader samples there. Nothing is re-measured after printing.
+- **Steps 1 to 3** are carried out as briefs: step 1 is `PigeonCore`'s learner model, form generator and page layout; step 2 is the PDF, the five screens and on-device progress; step 3 is the reader.
