@@ -38,12 +38,6 @@ async fn serve_mcp(
     who: &Identity,
 ) -> Result<Response> {
     let key = platform::secret(env, "SESSION_KEY").ok();
-    let session = req
-        .headers()
-        .get(mcp::SESSION_HEADER)?
-        .zip(key.as_deref())
-        .and_then(|(id, k)| mcp::session(&id, k.as_bytes()))
-        .unwrap_or_default();
     let message: Value = match req.json().await {
         Ok(v) => v,
         Err(_) => {
@@ -71,7 +65,7 @@ async fn serve_mcp(
         Action::Call { id, request } => {
             let request = control::retarget(&request);
             if request.operation == "approval.wait" {
-                return wait(env, &session, &id, &request).await;
+                return wait(env, &id, &request).await;
             }
             let owners = grants::OPERATIONS.contains(&request.operation.as_str());
             if !who.human && owners {

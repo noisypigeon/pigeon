@@ -405,15 +405,10 @@ async fn under_change_grant(
     Ok(Some(run(env, s, &who, request).await))
 }
 
-/// `approval.wait`: the link to the owner's approval page for `operation` on change `number`,
-/// as a URL card when the client shows them, else as text; see
-/// `.claude/decisions/2026-11-14-security-passkey-only-owner-proofs.md` §2.
-async fn wait(
-    env: &Env,
-    session: &mcp::Session,
-    id: &Value,
-    request: &wire::Request,
-) -> Result<Response> {
+/// `approval.wait`: the link to the owner's approval page for `operation` on change `number`, as
+/// a result, never a card; see
+/// `.claude/decisions/2026-11-15-development-sessions-stop-only-for-oversight.md` §3.
+async fn wait(env: &Env, id: &Value, request: &wire::Request) -> Result<Response> {
     let refused =
         |why: String| Response::from_json(&mcp::answer(id, Err(crate::Error::Invalid(vec![why]))));
     let Some(number) = number_arg(request) else {
@@ -444,12 +439,21 @@ async fn wait(
             Err(why) => return refused(why),
         },
     };
-    let message = format!("`{operation}` on change {number} waits for the owner's passkey");
-    if session.url_elicitation {
-        let key = format!("{}{number}-{operation}", mcp::ELICIT);
-        return Response::from_json(&mcp::elicit_url(id, &key, &link, &message));
-    }
-    refused(format!("{message}: {link}"))
+    let message = format!(
+        "`{operation}` on change {number} waits for the owner's passkey at {link}; it is listed on /approvals and pushed, and its stage moves when it lands"
+    );
+    Response::from_json(&mcp::answer(
+        id,
+        Ok(WireResponse {
+            operation: request.operation.clone(),
+            ok: true,
+            result: json!({
+                "pending": { "operation": operation, "number": number, "link": link },
+                "message": message,
+            }),
+            violations: Vec::new(),
+        }),
+    ))
 }
 
 fn change_stub(env: &Env, repo: &str, number: u32) -> Result<worker::Stub> {

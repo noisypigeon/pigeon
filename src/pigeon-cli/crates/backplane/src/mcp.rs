@@ -31,8 +31,6 @@ pub mod code {
     pub const METHOD_NOT_FOUND: i64 = -32601;
     /// Bad parameters, or an unknown tool.
     pub const INVALID_PARAMS: i64 = -32602;
-    /// The client must open a URL-mode elicitation first.
-    pub const URL_ELICITATION_REQUIRED: i64 = -32042;
 }
 
 /// What a client declared at `initialize`, carried in its session ID.
@@ -310,23 +308,6 @@ pub fn answer(id: &Value, outcome: Result<Response, Error>) -> Value {
             }),
         ),
     }
-}
-
-/// The error that asks the client to open `url`: a URL-mode elicitation, under `message`; see
-/// `.claude/decisions/2026-11-14-security-passkey-only-owner-proofs.md` §2.
-#[must_use]
-pub fn elicit_url(id: &Value, elicitation: &str, url: &str, message: &str) -> Value {
-    json!({
-        "jsonrpc": "2.0",
-        "id": id,
-        "error": {
-            "code": code::URL_ELICITATION_REQUIRED,
-            "message": message,
-            "data": { "elicitations": [{
-                "mode": "url", "elicitationId": elicitation, "url": url, "message": message,
-            }] },
-        },
-    })
 }
 
 /// One JSON-RPC message as a Server-Sent Event.

@@ -229,26 +229,6 @@ fn a_v2_session_carries_both_capabilities_and_v1_still_parses() {
     assert_eq!(mcp::session(&both.replacen(".u.", ".fu.", 1), key), None);
 }
 
-// See `.claude/decisions/2026-11-14-security-passkey-only-owner-proofs.md` §2.
-#[test]
-fn the_approval_card_is_a_url_elicitation_and_never_a_form() {
-    let url = "https://control.example.com/approve/22?grant=t";
-    let r = mcp::elicit_url(&json!(7), "elicit-22-abc", url, "approve 22");
-    assert_eq!(r["id"], 7);
-    assert_eq!(r["error"]["code"], -32042);
-    assert_eq!(r["error"]["message"], "approve 22");
-    let asked = &r["error"]["data"]["elicitations"];
-    assert_eq!(asked.as_array().map(Vec::len), Some(1));
-    assert_eq!(asked[0]["mode"], "url");
-    assert_eq!(asked[0]["elicitationId"], "elicit-22-abc");
-    assert_eq!(asked[0]["url"], url);
-    assert!(r.get("method").is_none(), "no form is asked");
-    assert_eq!(
-        mcp::sse(&json!({ "a": 1 })),
-        "event: message\ndata: {\"a\":1}\n\n"
-    );
-}
-
 #[test]
 fn only_answers_to_this_servers_cards_are_handed_on() {
     let answer = mcp::parse(
