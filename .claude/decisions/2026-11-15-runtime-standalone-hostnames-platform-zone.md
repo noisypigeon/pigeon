@@ -198,3 +198,44 @@ change carries those steps:
   hostname, and a signed `GET /v0/app/instances` through it answers; `dig`
   for an unused label resolves to the same proxied address and answers 404.
 - `mise run ci` passes at every step.
+
+## Amendments
+
+### 2026-11-15: !561 agrees, and this ADR carries §5's hooks itself
+
+!561 amended
+[`2026-11-15-runtime-learner-practice-standalone-app.md`](2026-11-15-runtime-learner-practice-standalone-app.md)
+and cites
+[`2026-11-14-security-instance-members-roles-invitations.md`](2026-11-14-security-instance-members-roles-invitations.md),
+which it leaves unchanged.
+
+- **They agree.** Neither changes a decision of the other:
+  - its app-only router answers `/v0/app/*` and 404s the rest, which is all
+    §3's proxy forwards;
+  - its join link, `pigeon://join?base=<base URL>&token=…`, carries the base
+    as data, and `/v0/app/join*` reaches the stack through the proxy;
+  - its native passkey registration keeps relying party `platform.pigeon.dev`,
+    as §4 does;
+  - its stand-up job's log names no instance, account or host, and every app
+    stack is `learner` and `pigeon-learner` in its own account;
+  - the members ADR's platform gate and sign-in cookie stay unbuilt, and this
+    ADR needs neither.
+- **§5's hooks are this ADR's, not the learner ADR's.** The learner planner
+  keeps its steps 5b and 6 as they are. One change, built after 5b, adds:
+  - the entry's `label`, `host` and `origin`. Its `name` stays the owner's
+    display text, not a label;
+  - `label` on the stand-up, checked by `check_label`;
+  - the job's `workers.dev` URL recorded as `origin`, and `base_url` as
+    `https://<host>`;
+  - `/instances/host` on `Instance`, answering `origin` for a host;
+  - `GET /v0/app/instances` answering `host` and `base_url`, never `origin`.
+- **Two places assume `workers.dev`, and change with it:**
+  - the standalone builds invite links from the request's origin, which behind
+    the proxy is its `workers.dev` host. It uses `BASE_URL`, a var in
+    `catalog/pigeon/kinds/platform/app-worker.yaml` set at deploy, instead;
+  - the app's `JoinLink` accepts only `https://*.workers.dev` bases. It also
+    accepts `https://<label>.pigeon.dev`, a label passing `check_label`'s
+    shape.
+- **Order.** The proxy (step 3's Worker half) and these hooks build after
+  5b. Step 4 turns the route on only once the proxy is deployed, so no
+  `*.pigeon.dev` request reaches the platform's own routes.
