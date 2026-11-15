@@ -1222,3 +1222,35 @@ The first, the ledger:
 - **Paired with the amendment on `after-seen`:** the base is the commit the
   bound job last saw the change built on. So this also holds when the parent
   restacked before merging.
+
+### 2026-11-14: The platform reads the account's one Secrets Store, and never creates one
+
+- **What happened.** `platform/blue`'s plan created a store named
+  `pigeon-control`. Run #24's apply was refused with a 403, because its token
+  lacked Secrets Store Edit. Run #26, with Secrets Store Edit, was refused
+  with a 400. Cloudflare allows one Secrets Store per account, and the
+  account's default store already existed. Cloudflare made it when the store
+  was first opened in the dashboard. The owner has created `granter` in it.
+- **The `cloudflare/secrets-store` module now reads the store.** It is a
+  `cloudflare_secrets_stores` data source, not a resource.
+  - Its `id` is the account's one store. A postcondition stops the plan
+    unless there is exactly one.
+  - It takes no `name`, so no ID or name enters the repository.
+  - `pigeon/platform` keeps its `secrets_store` singleton and its
+    `secrets_store_id` output.
+- **It is read, not adopted.** This replaces the 2026-11-13 amendment's
+  "adopted (`pigeon cobot adopt`)".
+  - The account holds one store, so it isn't a stack's to own. Imported into
+    a color's state, it would be destroyed with that color, `granter`
+    included. Blue and green would also both hold it.
+  - Adopting by name wouldn't find it anyway, because the default store isn't
+    named after the Worker.
+- **The order now:**
+  1. This change merges.
+  2. The owner plans and applies `platform/blue`. The expected plan
+     creates and replaces nothing, and adds the `secrets_store_id` output.
+     The apply records that output for the deploy job.
+  3. A later change binds `GRANTER` in the control plane's `worker.yaml`,
+     as `{ store: $deployment.secrets_store_id, secret: granter }`.
+  4. `/grants/granter` checks the binding and the token.
+- **A platform run's token needs only Secrets Store Read** for this module.

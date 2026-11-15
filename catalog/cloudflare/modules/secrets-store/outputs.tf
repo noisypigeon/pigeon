@@ -1,3 +1,3 @@
 output "id" {
-  value = cloudflare_secrets_store.this.id
+  value = one(data.cloudflare_secrets_stores.this.result).id
 }

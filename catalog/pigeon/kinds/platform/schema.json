@@ -235,8 +235,7 @@
       "secrets_store": {
         "module": "cloudflare/secrets-store",
         "inputs": {
-          "account_id": "$module.account.id",
-          "name": "$config.worker"
+          "account_id": "$module.account.id"
         }
       },
       "owners": {

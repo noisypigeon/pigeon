@@ -1,4 +1,5 @@
-# One Secrets Store; see .claude/decisions/2026-11-12-development-grants-applies-rescue-yield.md §1.
+# The account's one Secrets Store, read, never created; see
+# .claude/decisions/2026-11-12-development-grants-applies-rescue-yield.md, its 2026-11-14 amendment.
 terraform {
   required_providers {
     cloudflare = {
@@ -8,7 +9,13 @@ terraform {
   }
 }
 
-resource "cloudflare_secrets_store" "this" {
+data "cloudflare_secrets_stores" "this" {
   account_id = var.account_id
-  name       = var.name
+
+  lifecycle {
+    postcondition {
+      condition     = length(self.result) == 1
+      error_message = "The account must hold exactly one Secrets Store."
+    }
+  }
 }
