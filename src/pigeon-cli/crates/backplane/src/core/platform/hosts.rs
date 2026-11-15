@@ -34,6 +34,9 @@ pub const RESERVED: [&str; 29] = [
     "noisypigeon",
 ];
 
+/// The control Worker's var naming the zone, set by its `subdomains_of` route (§1).
+pub const ZONE_VAR: &str = "INSTANCE_ZONE";
+
 /// The only paths a standalone's host serves.
 pub const PATH_PREFIX: &str = "/v0/app/";
 
@@ -99,9 +102,89 @@ pub fn passes(name: &str) -> bool {
     PASSED.contains(&n.as_str()) || n.starts_with("x-pigeon-")
 }
 
+/// Whether the proxy, not the platform's routes, answers `host`: any host under `zone` but the
+/// platform's `own` hosts. One that names no standalone is then a bare 404.
+#[must_use]
+pub fn handled(host: &str, zone: &str, own: &[&str]) -> bool {
+    let host = host.trim_end_matches('.').to_ascii_lowercase();
+    host.ends_with(&format!(".{}", zone.to_ascii_lowercase()))
+        && !own.iter().any(|o| o.eq_ignore_ascii_case(&host))
+}
+
+/// The `origin` of the entry for `host` in the `instances.private` listing, `{entries: [{host,
+/// origin, …}]}`, when it is an `https` URL.
+#[must_use]
+pub fn origin_of(listing: &serde_json::Value, host: &str) -> Option<String> {
+    listing["entries"]
+        .as_array()?
+        .iter()
+        .find(|e| e["host"].as_str() == Some(host))?["origin"]
+        .as_str()
+        .filter(|o| o.starts_with("https://") && !o[8..].contains('/'))
+        .map(str::to_string)
+}
+
+/// The URL the proxy fetches: `path_and_query` on `origin`.
+#[must_use]
+pub fn target(origin: &str, path_and_query: &str) -> String {
+    format!("{}{path_and_query}", origin.trim_end_matches('/'))
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{RESERVED, check_label, forwarded, host_of, label_of, passes};
+    use super::{
+        RESERVED, check_label, forwarded, handled, host_of, label_of, origin_of, passes, target,
+    };
+
+    #[test]
+    fn the_proxy_answers_hosts_under_the_zone_but_the_platforms_own() {
+        #[cfg(feature = "engines")]
+        assert_eq!(super::ZONE_VAR, crate::cobot::workers::SUBDOMAINS_VAR);
+        let own = ["platform.pigeon.dev", "blue.platform.pigeon.dev"];
+        for h in [
+            "example.pigeon.dev",
+            "www.pigeon.dev",
+            "a.b.pigeon.dev",
+            "Example.pigeon.dev.",
+        ] {
+            assert!(handled(h, "pigeon.dev", &own), "{h}");
+        }
+        for h in [
+            "platform.pigeon.dev",
+            "blue.platform.pigeon.dev",
+            "pigeon.dev",
+            "example.workers.dev",
+            "examplepigeon.dev",
+        ] {
+            assert!(!handled(h, "pigeon.dev", &own), "{h}");
+        }
+    }
+
+    #[test]
+    fn a_host_finds_its_origin_only_in_its_own_entry() {
+        let listing = serde_json::json!({ "entries": [
+            { "host": "other.pigeon.dev", "origin": "https://b.example.workers.dev" },
+            { "host": "example.pigeon.dev", "origin": "https://a.example.workers.dev" },
+            { "host": "bad.pigeon.dev", "origin": "http://a.example.workers.dev" },
+            { "host": "path.pigeon.dev", "origin": "https://a.example.workers.dev/x" },
+            { "name": "no host yet", "base_url": "https://c.example.workers.dev" },
+        ]});
+        assert_eq!(
+            origin_of(&listing, "example.pigeon.dev").as_deref(),
+            Some("https://a.example.workers.dev")
+        );
+        for h in ["bad.pigeon.dev", "path.pigeon.dev", "unknown.pigeon.dev"] {
+            assert_eq!(origin_of(&listing, h), None, "{h}");
+        }
+        assert_eq!(
+            origin_of(&serde_json::Value::Null, "example.pigeon.dev"),
+            None
+        );
+        assert_eq!(
+            target("https://a.example.workers.dev/", "/v0/app/instances?x=1"),
+            "https://a.example.workers.dev/v0/app/instances?x=1"
+        );
+    }
 
     #[test]
     fn labels_are_dns_safe_unreserved_and_free() {
