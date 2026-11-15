@@ -26,6 +26,7 @@ mod events;
 mod gitdoor;
 mod github;
 mod insights;
+mod listed;
 mod macos;
 mod main_run;
 mod mandates;

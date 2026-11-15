@@ -50,6 +50,9 @@ pub async fn pending(
     number: u32,
     operation: &str,
 ) -> std::result::Result<(String, u64), String> {
+    if let Some((link, expires)) = listed(env, s, host, number, operation).await {
+        return Ok((link, expires));
+    }
     let body = json!({ "operation": operation, "page": true });
     let (status, v) = to_change(env, &s.repo, number, Method::Post, "/grant", Some(&body))
         .await
@@ -67,10 +70,36 @@ pub async fn pending(
         path: path.clone(),
         expires: grant.expires,
     };
-    elicit::inbox(env, s, "/approvals/add", &json!(waiting))
+    elicit::inbox(env, s, "/approvals/put", &json!(waiting))
         .await
         .map_err(|e| e.to_string())?;
     Ok((format!("https://{host}{path}"), grant.expires))
+}
+
+/// The link and expiry of change `number`'s listed `operation`, while it still applies.
+async fn listed(
+    env: &Env,
+    s: &Settings,
+    host: &str,
+    number: u32,
+    operation: &str,
+) -> Option<(String, u64)> {
+    let v = elicit::inbox(env, s, "/approvals/list", &json!({}))
+        .await
+        .ok()?;
+    let list: Vec<Waiting> = serde_json::from_value(v).unwrap_or_default();
+    let w = list.into_iter().find(|w| {
+        w.number == number && w.operation == operation && w.path.starts_with("/approve/")
+    })?;
+    let token = w.path.split_once("?grant=")?.1;
+    let body = json!({ "token": token });
+    let (status, v) = to_change(env, &s.repo, number, Method::Post, "/peek", Some(&body))
+        .await
+        .ok()?;
+    let change: Change = serde_json::from_value(v["change"].clone()).ok()?;
+    let grant: Grant = serde_json::from_value(v["grant"].clone()).ok()?;
+    (status == 200 && crate::grants::still_applies(&change, &grant))
+        .then(|| (format!("https://{host}{}", w.path), w.expires))
 }
 
 /// The approvals still waiting: those whose link is unexpired and unused, the rest dropped

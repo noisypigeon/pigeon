@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: security
-* Governs: `src/pigeon-cli/crates/backplane/src/worker/approve.rs`, `src/pigeon-cli/crates/backplane/src/core/app/approvals.rs`
+* Governs: `src/pigeon-cli/crates/backplane/src/worker/approve.rs`, `src/pigeon-cli/crates/backplane/src/core/app/approvals.rs`, `src/pigeon-cli/crates/backplane/src/core/approval/listed.rs`, `src/pigeon-cli/crates/backplane/src/worker/listed.rs`
 
 ## Context
 
@@ -160,3 +160,22 @@ the new stage `held`.
 - **`worker/mod.rs`,** where both work: !492 adds only `mod listed;`. That
   doesn't touch !484's hooks.
 - **!492 changes nothing in those ADRs.**
+### 2026-11-15: Steps 2 and 3 land, by the planner; a plan owes its authorize before any push
+
+- **The planner carries both steps.** `core/approval/**`,
+  `worker/approve.rs` and `worker/elicit.rs` are guarded, so a brief's change
+  is refused there. Step 2 started as brief b12 (!471), which the planner took
+  back. Step 3 is !487.
+- **`Owed.head` is optional.** A proposed change has no head until it is
+  pushed, and its authorize is owed all the same. `change.approve` still needs
+  a head, and a listed entry matches only the same head, `None` included.
+- **Step 3 as built:**
+  - `ChangeRun::save_after` calls `worker/listed.rs::reconcile` for a change
+    that is, or was, proposed or checked;
+  - `POST /listed` runs the same reconcile on demand, for step 4;
+  - the `Instance`'s `/approvals/put` keeps one entry per change and
+    operation;
+  - `approve::pending` answers the listed entry while it applies, and puts
+    rather than adds.
+- **Paths.** `Governs` gains `core/approval/listed.rs` and
+  `worker/listed.rs`.

@@ -365,6 +365,11 @@ impl ChangeRun {
         // on generated work following its parent's own record.
         self.mirror(change).await?;
         super::events::changed(&self.env, before.as_ref(), change).await;
+        if let Err(e) =
+            super::listed::reconcile(&self.env, &storage, GRANTS, before.as_ref(), change).await
+        {
+            worker::console_error!("listed for !{}: {e}", change.number);
+        }
         if let Err(e) = self.breaker(change).await {
             worker::console_error!("breaker for !{}: {e}", change.number);
         }
@@ -989,6 +994,15 @@ impl DurableObject for ChangeRun {
                     }
                     Err(why) => Response::error(why, 409),
                 }
+            }
+            (Method::Post, "listed") => {
+                let Some(change) = existing else {
+                    return Response::error("no such change", 404);
+                };
+                let storage = self.state.storage();
+                super::listed::reconcile(&self.env, &storage, GRANTS, Some(&change), &change)
+                    .await?;
+                Response::from_json(&json!({ "status": "reconciled" }))
             }
             (Method::Post, "peek") => {
                 let Some(change) = existing else {

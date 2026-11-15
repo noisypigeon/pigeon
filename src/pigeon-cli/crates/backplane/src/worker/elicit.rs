@@ -57,6 +57,21 @@ pub async fn serve(state: &State, env: &Env, path: &str, body: Value) -> Result<
             storage.put(WAITING, &list).await?;
             Response::from_json(&json!({ "status": "added" }))
         }
+        "/approvals/put" => {
+            // One change approval per change and operation; see the always-listed ADR §2.
+            let w: crate::approve::Waiting = serde_json::from_value(body)?;
+            let mut list: Vec<crate::approve::Waiting> =
+                storage.get(WAITING).await?.unwrap_or_default();
+            list.retain(|x| {
+                x.expires > now()
+                    && !(x.path.starts_with("/approve/")
+                        && x.number == w.number
+                        && x.operation == w.operation)
+            });
+            list.push(w);
+            storage.put(WAITING, &list).await?;
+            Response::from_json(&json!({ "status": "put" }))
+        }
         "/approvals/list" => {
             let mut list: Vec<crate::approve::Waiting> =
                 storage.get(WAITING).await?.unwrap_or_default();
