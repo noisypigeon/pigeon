@@ -77,7 +77,7 @@ pub async fn serve(state: &State, path: &str, body: Value) -> Result<Response> {
     let (ring, answer) = match path {
         "/passkeys/list" => {
             let adding: u64 = storage.get(ADDING).await?.unwrap_or_default();
-            let proofs: Proofs = storage.get(PROOFS).await?.unwrap_or_default();
+            let proofs = gate(state, &ring, &body).await?;
             let listed = json!({
             "keys": ring.keys.iter().map(|k| json!({
                 "id": k.id, "name": k.name, "created": k.created, "used": k.used,
@@ -134,7 +134,7 @@ pub async fn serve(state: &State, path: &str, body: Value) -> Result<Response> {
             (ring, outcome(registered))
         }
         "/passkeys/cutover" => {
-            let proofs: Proofs = storage.get(PROOFS).await?.unwrap_or_default();
+            let proofs = gate(state, &ring, &body).await?;
             return Response::from_json(&json!({ "made": proofs.cutover.is_some() }));
         }
         "/passkeys/prove" => proving(state, ring, &body, &rp).await?,
@@ -247,6 +247,25 @@ async fn enrolling(state: &State, ring: Keyring, body: &Value, rp: &str) -> Resu
         seen(state, "enrolled").await?;
     }
     Response::from_json(&outcome(registered))
+}
+
+/// The proofs after the gate: the cutover made and recorded when `body.asked` and nothing is
+/// missing; see `.claude/decisions/2026-11-14-security-passkey-only-owner-proofs.md` §4.
+async fn gate(state: &State, ring: &Keyring, body: &Value) -> Result<Proofs> {
+    let storage = state.storage();
+    let proofs: Proofs = storage.get(PROOFS).await?.unwrap_or_default();
+    let asked = body["asked"].as_bool() == Some(true);
+    let (next, _) = proofs.cutover(asked, ring, now());
+    if next != proofs {
+        storage.put(PROOFS, &next).await?;
+    }
+    Ok(next)
+}
+
+/// Whether [`PROOFS_VAR`] asks for the cutover.
+fn asked(env: &Env) -> bool {
+    env.var(PROOFS_VAR)
+        .is_ok_and(|v| v.to_string() == PROOFS_PASSKEY)
 }
 
 /// Records `surface` as proven with a passkey now; an empty or unknown one records nothing.
@@ -432,7 +451,7 @@ pub async fn on_page(
 ///
 /// When the binding fails.
 pub(super) async fn cutover_made(env: &Env, s: &Settings) -> Result<bool> {
-    let v = to_instance(env, s, "/passkeys/cutover", &json!({})).await?;
+    let v = to_instance(env, s, "/passkeys/cutover", &json!({ "asked": asked(env) })).await?;
     Ok(v["made"].as_bool() == Some(true))
 }
 
@@ -613,7 +632,7 @@ fn said_of(v: &Value, done: &str) -> String {
 }
 
 async fn list(env: &Env, s: &Settings, said: Option<&str>) -> Result<Response> {
-    let v = to_instance(env, s, "/passkeys/list", &json!({})).await?;
+    let v = to_instance(env, s, "/passkeys/list", &json!({ "asked": asked(env) })).await?;
     let keys: Vec<page::Listed> = v["keys"]
         .as_array()
         .into_iter()
