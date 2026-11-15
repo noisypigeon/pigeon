@@ -52,6 +52,18 @@ const IOS: [&str; 1] = ["src/pigeon-ios/"];
 /// The crates whose `worker` build compiles to wasm.
 const WORKER: [&str; 1] = ["pigeon-backplane"];
 
+/// Paths only the wasm `worker` build compiles, and their crate; see
+/// `.claude/decisions/2026-11-15-development-code-checks-by-reach.md` §1.
+const WASM_ONLY: [(&str, &str); 1] = [(
+    "src/pigeon-cli/crates/backplane/src/worker/",
+    "pigeon-backplane",
+)];
+
+/// Whether only the wasm `worker` build compiles `path`.
+fn wasm_only(path: &str) -> bool {
+    WASM_ONLY.iter().any(|(dir, _)| path.starts_with(dir))
+}
+
 /// One check: a name, and the command to run in [`WORKSPACE`].
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Job {
@@ -255,9 +267,16 @@ fn worker_jobs(crates: &[&str]) -> Vec<Job> {
 }
 
 /// The Rust checks for the crates `files` touch and their dependants; with `map`, their tests are
-/// the binaries [`TestMap::select`] picks.
+/// the binaries [`TestMap::select`] picks. A wasm-only path adds only its crate's wasm clippy.
 fn rust_jobs(crates: &Crates, config: &Config, files: &[&str], map: Option<&TestMap>) -> Vec<Job> {
     let mut out = Vec::new();
+    let wasm: BTreeSet<&str> = WASM_ONLY
+        .iter()
+        .filter(|(dir, _)| files.iter().any(|f| f.starts_with(dir)))
+        .map(|(_, c)| *c)
+        .collect();
+    let native: Vec<&str> = files.iter().copied().filter(|f| !wasm_only(f)).collect();
+    let files = native.as_slice();
     let changed: BTreeSet<String> = files
         .iter()
         .filter_map(|f| {
@@ -269,6 +288,11 @@ fn rust_jobs(crates: &Crates, config: &Config, files: &[&str], map: Option<&Test
         })
         .collect();
     let affected = crates.with_dependants(&changed);
+    if affected.is_empty() && !wasm.is_empty() {
+        out.push(job("fmt", &["cargo", "fmt", "--all", "--", "--check"]));
+        let w: Vec<&str> = wasm.iter().copied().collect();
+        out.extend(worker_jobs(&crates.of(&w)));
+    }
     if !affected.is_empty() {
         let packages: Vec<&str> = affected.iter().map(String::as_str).collect();
         let with_p = |verb: &str, extra: &[&str]| {
@@ -311,7 +335,7 @@ fn rust_jobs(crates: &Crates, config: &Config, files: &[&str], map: Option<&Test
         let workers: Vec<&str> = WORKER
             .iter()
             .copied()
-            .filter(|w| affected.contains(*w))
+            .filter(|w| affected.contains(*w) || wasm.contains(w))
             .collect();
         out.extend(worker_jobs(&workers));
         match map.and_then(|m| m.select(crates, files)) {
@@ -322,10 +346,10 @@ fn rust_jobs(crates: &Crates, config: &Config, files: &[&str], map: Option<&Test
     out
 }
 
-/// How much of the full set the merge gate of a change touching `files` runs: scoped when the
-/// test map chose its tests, they span at most [`MAX_PACKAGES`] packages, and no workspace-wide
-/// path changed; full otherwise, saying why. See the 2026-11-12 amendment on the merge gate to
-/// `.claude/decisions/2026-11-10-development-factory-crates-functional-core.md`.
+/// How much of the full set the merge gate of a change touching `files` runs: full for a
+/// workspace-wide path, or tests the map chose across more than [`MAX_PACKAGES`] packages;
+/// scoped otherwise, since tests chosen by crate cover every package the change reaches. See
+/// `.claude/decisions/2026-11-15-development-code-checks-by-reach.md` §3.
 #[must_use]
 pub fn gate_of(crates: &Crates, files: &[String], map: Option<&TestMap>) -> Gate {
     let files: Vec<&str> = files
@@ -336,22 +360,12 @@ pub fn gate_of(crates: &Crates, files: &[String], map: Option<&TestMap>) -> Gate
     if let Some(f) = files.iter().find(|f| under(f, &EVERYTHING)) {
         return Gate::Full(format!("{f} runs every check"));
     }
-    let rust = files
-        .iter()
-        .any(|f| crates.by_dir.keys().any(|d| f.starts_with(d.as_str())));
-    if !rust {
-        return Gate::Scoped;
+    match map.and_then(|m| m.select(crates, &files)) {
+        Some(picked) if picked.len() > MAX_PACKAGES => {
+            Gate::Full(format!("its tests span {} packages", picked.len()))
+        }
+        _ => Gate::Scoped,
     }
-    let Some(map) = map else {
-        return Gate::Full("there is no test map for main's newest build".into());
-    };
-    let Some(picked) = map.select(crates, &files) else {
-        return Gate::Full("the test map can't choose this change's tests".into());
-    };
-    if picked.len() > MAX_PACKAGES {
-        return Gate::Full(format!("its tests span {} packages", picked.len()));
-    }
-    Gate::Scoped
 }
 
 /// `pigeon`'s features, from the release units and its manifest.
@@ -573,7 +587,7 @@ mod tests {
     }
 
     #[test]
-    fn a_gate_is_scoped_only_when_the_test_map_chose_a_narrow_set() {
+    fn a_gate_is_full_only_for_a_workspace_setting_or_mapped_tests_across_packages() {
         use super::{Binary, Gate, TestMap, gate_of};
         let dir = |p: &str| format!("src/pigeon-cli/crates/{p}/");
         let crates = Crates {
@@ -614,18 +628,24 @@ mod tests {
             scoped(&gate_of(&crates, &files(&[a, b]), Some(&map))),
             "2 packages"
         );
-        assert!(
-            scoped(&gate_of(&crates, &files(&["docs/x.md"]), None)),
-            "no Rust"
-        );
         for (name, f, m) in [
-            ("3 packages", files(&[a, b, c]), Some(&map)),
-            ("no map", files(&[a]), None),
+            ("no Rust", files(&["docs/x.md"]), None),
+            ("no map: tests by crate", files(&[a]), None),
             (
-                "unknown to the map",
+                "unknown to the map: tests by crate",
                 files(&["src/pigeon-cli/crates/pigeon/src/new.rs"]),
                 Some(&map),
             ),
+            (
+                "wasm-only",
+                files(&["src/pigeon-cli/crates/backplane/src/worker/x.rs"]),
+                Some(&map),
+            ),
+        ] {
+            assert!(scoped(&gate_of(&crates, &f, m)), "{name}");
+        }
+        for (name, f, m) in [
+            ("3 packages", files(&[a, b, c]), Some(&map)),
             ("workspace-wide", files(&[a, "mise.toml"]), Some(&map)),
         ] {
             assert!(!scoped(&gate_of(&crates, &f, m)), "{name}");

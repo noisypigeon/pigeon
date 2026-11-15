@@ -36,10 +36,11 @@ pub struct TestMap {
 impl TestMap {
     /// The test checks for `files`, one per package, from the binaries that ran them; none when
     /// the map can't say: a non-`.rs` file under a crate, a `.rs` file it doesn't know, or more
-    /// than half of its binaries.
+    /// than half of its binaries. A wasm-only file picks none, and an unknown unit-test module
+    /// its package's `lib`; see `.claude/decisions/2026-11-15-development-code-checks-by-reach.md`.
     pub(super) fn select(&self, crates: &Crates, files: &[&str]) -> Option<Vec<Job>> {
         let mut picked: BTreeSet<&Binary> = BTreeSet::new();
-        for f in files {
+        for f in files.iter().filter(|f| !super::wasm_only(f)) {
             let Some((dir, package)) = crates
                 .by_dir
                 .iter()
@@ -55,7 +56,7 @@ impl TestMap {
                 .strip_prefix("tests/")
                 .and_then(|t| t.strip_suffix(".rs"))
                 .filter(|t| !t.contains('/'));
-            let reached: Vec<&Binary> = self
+            let mut reached: Vec<&Binary> = self
                 .binaries
                 .iter()
                 .filter(|b| {
@@ -63,6 +64,13 @@ impl TestMap {
                         || b.files.iter().any(|x| x == f)
                 })
                 .collect();
+            if reached.is_empty() && unit_tests(rel) {
+                reached = self
+                    .binaries
+                    .iter()
+                    .filter(|b| b.package == *package && b.kind == "lib")
+                    .collect();
+            }
             if reached.is_empty() {
                 return None;
             }
@@ -107,4 +115,15 @@ impl TestMap {
                 .collect(),
         )
     }
+}
+
+/// Whether `rel`, a path in its crate, is a unit-test module of its `lib`: `src/**/tests.rs` or
+/// `src/**/tests/*.rs`.
+fn unit_tests(rel: &str) -> bool {
+    rel.strip_prefix("src/").is_some_and(|r| {
+        r == "tests.rs"
+            || r.ends_with("/tests.rs")
+            || r.starts_with("tests/")
+            || r.contains("/tests/")
+    })
 }

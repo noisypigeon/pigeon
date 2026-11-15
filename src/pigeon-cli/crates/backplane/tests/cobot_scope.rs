@@ -474,3 +474,41 @@ fn no_check_name_holds_a_comma_which_a_github_cache_key_refuses() {
         }
     }
 }
+
+#[test]
+fn a_wasm_only_path_runs_fmt_and_the_wasm_clippy_alone() {
+    // !476: only `worker/passkeys.rs`, which no native build compiles.
+    let worker = "src/pigeon-cli/crates/backplane/src/worker/passkeys.rs";
+    let wasm_only = ["fmt", "clippy backplane worker (wasm)", "policy.check"];
+    assert_eq!(names(&[worker]), wasm_only, "no map");
+    assert_eq!(with_map(&[worker]), wasm_only, "with a map");
+    let got = with_map(&[worker, "src/pigeon-cli/crates/backplane/src/cobot/git.rs"]);
+    assert_eq!(
+        tests_of(&got),
+        ["test pigeon-backplane: lib cobot_git"],
+        "the native file's tests, chosen by the map: {got:?}"
+    );
+    assert_eq!(
+        got.iter()
+            .filter(|n| *n == "clippy backplane worker (wasm)")
+            .count(),
+        1,
+        "{got:?}"
+    );
+}
+
+#[test]
+fn a_unit_test_module_the_map_doesnt_know_runs_its_lib() {
+    // !415: `core/change/tests.rs`, whose lines coverage doesn't list.
+    for f in [
+        "src/pigeon-cli/crates/backplane/src/core/change/tests.rs",
+        "src/pigeon-cli/crates/backplane/src/core/tests/x.rs",
+    ] {
+        let got = with_map(&[f]);
+        assert_eq!(
+            tests_of(&got),
+            ["test pigeon-backplane: lib"],
+            "{f}: {got:?}"
+        );
+    }
+}
