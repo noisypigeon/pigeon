@@ -1259,3 +1259,61 @@ fn a_push_before_any_approval_carries_nothing() {
         (State::Checked, None, None)
     );
 }
+
+/// No jobs.
+const NONE: [String; 0] = [];
+
+/// !506 yielded to !500 by forecast; !500 merges, the yield ends, and the merge queue asks again.
+fn yield_ended_restack() -> (Change, Vec<Effect>) {
+    let parked = approved()
+        .yield_to(500, "forecast", "forecast: they conflict in a.rs", 3)
+        .expect("yields");
+    let behind = run(parked, vec![Event::Behind { main: M.into() }]);
+    assert!(
+        behind.job(RESTACK).is_none(),
+        "no merge asked, so no restack yet"
+    );
+    step(&behind.unyield().after_ended(500, Some(B.into())), merge()).expect("merges")
+}
+
+#[test]
+fn a_restack_queued_when_a_yield_ends_is_dispatched() {
+    let (c, effects) = yield_ended_restack();
+    assert_eq!(job_of(&c, RESTACK).status, JobStatus::Queued);
+    assert_eq!(effects, vec![Effect::Start(RESTACK.into())]);
+    assert_eq!(undispatched(&c, &[RESTACK], |_| false), NONE);
+}
+
+#[test]
+fn a_queued_job_whose_start_was_lost_is_dispatched_again_and_one_run_elsewhere_is_not() {
+    // An alarm saving its own pending over the merge event's start, as on !506.
+    let (c, _) = yield_ended_restack();
+    assert_eq!(undispatched(&c, &[], |_| false), vec![RESTACK.to_string()]);
+    assert_eq!(undispatched(&c, &[], |j| j == RESTACK), NONE);
+    assert_eq!(undispatched(&restacking(approved()), &[], |_| false), NONE);
+}
+
+#[test]
+fn a_job_queued_with_no_attempt_for_five_minutes_restarts_and_its_time_with_it() {
+    let (c, _) = yield_ended_restack();
+    let (since, out) = stalled(&c, &std::collections::BTreeMap::new(), 100);
+    assert_eq!(out, NONE);
+    let (since, out) = stalled(&c, &since, 100 + STALL_SECS - 1);
+    assert_eq!(out, NONE);
+    let (since, out) = stalled(&c, &since, 100 + STALL_SECS);
+    assert_eq!(out, vec![RESTACK.to_string()]);
+    assert!(
+        stalled(&c, &since, 101 + STALL_SECS).1.is_empty(),
+        "its time restarted"
+    );
+    let failing = step(&c, start_failed(RESTACK)).expect("fails").0;
+    assert!(
+        stalled(&failing, &since, 10_000).1.is_empty(),
+        "backing off"
+    );
+    assert!(
+        stalled(&restacking(approved()), &since, 10_000)
+            .0
+            .is_empty()
+    );
+}

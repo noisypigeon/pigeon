@@ -303,6 +303,19 @@ fn failed_starts_and_lost_containers_are_counted_in_a_line_that_is_never_pushed_
     assert!(!d.needs_owner(), "never pushed alone");
     assert!(!d.is_empty());
     assert_eq!(d.lines(), vec![line]);
+    let stalled = event(
+        4,
+        "job.redispatched",
+        "!506 job `restack` was queued with no start pending; dispatched again",
+    );
+    let line = backplane::tasks::containers(&[stalled]).expect("names it");
+    assert!(
+        line.contains("0 failed start(s) or loss(es), 1 stalled job(s)"),
+        "{line}"
+    );
+    assert!(
+        line.ends_with("!506 job `restack` was queued with no start pending; dispatched again")
+    );
 }
 
 // See `.claude/decisions/2026-11-15-development-sessions-stop-only-for-oversight.md` §5.

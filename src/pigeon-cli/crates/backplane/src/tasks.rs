@@ -580,16 +580,19 @@ pub fn held_line(what: &str, h: &crate::mandates::Hold, now: u64) -> String {
     )
 }
 
-/// The digest's line on the job Containers among `events` that failed to start or were lost:
-/// how many, and the last; none when there were none.
+/// The digest's line on the job Containers among `events` that failed to start, were lost, or
+/// sat queued and were dispatched again: how many, and the last; none when there were none.
 #[must_use]
 pub fn containers(events: &[crate::events::Event]) -> Option<String> {
-    let retried: Vec<&crate::events::Event> =
-        events.iter().filter(|e| e.kind == "job.retrying").collect();
-    let last = retried.last()?;
+    let of = |kind: &str| events.iter().filter(|e| e.kind == kind).count();
+    let last = events
+        .iter()
+        .rfind(|e| matches!(e.kind.as_str(), "job.retrying" | "job.redispatched"))?;
     Some(format!(
-        "Containers: {} failed start(s) or loss(es) since the last digest; the last: {}",
-        retried.len(),
+        "Containers: {} failed start(s) or loss(es), {} stalled job(s) dispatched again since \
+         the last digest; the last: {}",
+        of("job.retrying"),
+        of("job.redispatched"),
         last.summary
     ))
 }

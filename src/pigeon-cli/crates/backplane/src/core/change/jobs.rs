@@ -1,9 +1,12 @@
 //! A head's jobs: started, bounded, finished, lost and run again.
 
+use std::collections::BTreeMap;
+
 use super::lifecycle::Step;
 use super::types::{
     BOUND, Change, Check, Effect, GATE, Job, JobStatus, MERGE, MIRROR, RESTACK, State, refuse,
 };
+
 use crate::runs::MAX_ATTEMPTS;
 
 /// Failed starts before a job fails; see
@@ -24,6 +27,53 @@ pub fn start_backoff(failures: u32) -> u64 {
 
 /// Seconds before a lost job's second and third attempts.
 pub const LOST_BACKOFF: [u64; 2] = [30, 60];
+
+/// Seconds a job may sit queued with no attempt before it is dispatched again.
+pub const STALL_SECS: u64 = 5 * 60;
+
+/// `change`'s queued jobs that no start in `pending` names and that run `elsewhere` does not
+/// claim: each is dispatched again; see the job-start ADR's yield-end amendment.
+#[must_use]
+pub fn undispatched(
+    change: &Change,
+    pending: &[&str],
+    elsewhere: impl Fn(&str) -> bool,
+) -> Vec<String> {
+    change
+        .jobs
+        .iter()
+        .filter(|j| j.status == JobStatus::Queued && !pending.contains(&j.name.as_str()))
+        .filter(|j| !elsewhere(&j.name))
+        .map(|j| j.name.clone())
+        .collect()
+}
+
+/// When each of `change`'s jobs queued with no attempt and no failed start was first seen,
+/// `since` kept and added to at `now`; and those queued [`STALL_SECS`] or more, which restart.
+#[must_use]
+pub fn stalled(
+    change: &Change,
+    since: &BTreeMap<String, u64>,
+    now: u64,
+) -> (BTreeMap<String, u64>, Vec<String>) {
+    let head = change.head.as_deref().unwrap_or_default();
+    let mut kept = BTreeMap::new();
+    let mut out = Vec::new();
+    for j in &change.jobs {
+        if j.status != JobStatus::Queued || j.attempts > 0 || j.start_failures > 0 {
+            continue;
+        }
+        let key = format!("{head}/{}", j.name);
+        let first = since.get(&key).copied().unwrap_or(now);
+        if now.saturating_sub(first) >= STALL_SECS {
+            out.push(j.name.clone());
+            kept.insert(key, now);
+        } else {
+            kept.insert(key, first);
+        }
+    }
+    (kept, out)
+}
 
 impl Change {
     pub(super) fn started(mut self, name: &str, sha: &str) -> Step {
