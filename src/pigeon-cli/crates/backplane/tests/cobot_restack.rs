@@ -5,7 +5,7 @@ use std::path::Path;
 use std::process::Command;
 
 use backplane::cobot::ci::{
-    Relation, built_on_head, changed, checkout, fetch_branch, forecast, restack,
+    Relation, built_on_head, changed, checkout, fetch_branch, forecast, head_patch, restack,
 };
 
 fn git(dir: &Path, args: &[&str]) -> String {
@@ -504,4 +504,32 @@ fn a_change_built_on_one_restacked_before_merging_keeps_its_own_message() {
     let to = r.to.expect("pushed");
     let message = git(job.path(), &["log", "-1", "--format=%B", &to]);
     assert!(message.starts_with("feat: y"), "{message}");
+}
+
+#[test]
+fn a_head_rebased_with_the_same_patch_has_the_same_patch_id_and_another_patch_does_not() {
+    let tmp = tempfile::tempdir().expect("tmp");
+    let w = tmp.path();
+    git(w, &["init", "-q"]);
+    write(w, "a.txt", "a\n");
+    write(w, "b.txt", "b\n");
+    git(w, &["add", "."]);
+    git(w, &["commit", "-qm", "base"]);
+    git(w, &["checkout", "-qb", "change"]);
+    write(w, "a.txt", "a\nmine\n");
+    git(w, &["commit", "-qam", "mine"]);
+    let first = git(w, &["rev-parse", "HEAD"]);
+    let one = head_patch(w, "main", &first).expect("patch-id");
+    git(w, &["checkout", "-q", "main"]);
+    write(w, "b.txt", "b\ntheirs\n");
+    git(w, &["commit", "-qam", "theirs"]);
+    git(w, &["checkout", "-q", "change"]);
+    git(w, &["rebase", "-q", "main"]);
+    let rebased = git(w, &["rev-parse", "HEAD"]);
+    assert_ne!(first, rebased);
+    assert_eq!(head_patch(w, "main", &rebased), Some(one.clone()));
+    write(w, "a.txt", "a\nmine, changed\n");
+    git(w, &["commit", "-qam", "more"]);
+    let other = git(w, &["rev-parse", "HEAD"]);
+    assert_ne!(head_patch(w, "main", &other), Some(one));
 }

@@ -284,6 +284,10 @@ pub struct Carried {
     /// The restacked head it carries to, once the restack job reports it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub to: Option<String>,
+    /// The approved head's patch-id, when a session's push carries it; see the always-listed
+    /// ADR's 2026-11-15 amendment on session pushes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub patch: Option<String>,
 }
 
 /// One proof covering a change's remaining stages; see
@@ -352,6 +356,9 @@ pub struct Change {
     /// An approval carried across a restack.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub carried: Option<Carried>,
+    /// The head's patch-id against its merge-base with `main`, as the bound job reported it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub patch: Option<String>,
     /// Who asked to merge while its restack was pending, or while its merge gate runs; its
     /// merge starts once the approval carries over and the gate passes.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -477,6 +484,9 @@ pub enum Event {
         /// amendment on the merge gate, which gates in full.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         gate: Option<crate::core::deploy::gate::Gate>,
+        /// The head's patch-id against its merge-base with `main`.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        patch: Option<String>,
     },
     /// A check finished.
     Finished {
@@ -684,6 +694,7 @@ impl Change {
             affects: Vec::new(),
             behind: None,
             carried: None,
+            patch: None,
             merge_after: None,
             full: Vec::new(),
             gate: None,

@@ -54,11 +54,13 @@ impl Change {
                 full,
                 tiers,
                 gate,
+                patch,
             } => {
                 if self.on_head(&sha) {
                     self.tiers = tiers;
                     self.full = full;
                     self.gate = gate;
+                    self = self.carry_patch(&sha, patch.as_ref());
                     // A brief's change never reaches guarded, secret or sentinel paths; see
                     // `.claude/decisions/2026-11-13-development-model-tiered-agent-briefs.md` §2.
                     if self.brief.is_some()
@@ -139,6 +141,7 @@ impl Change {
         }
         let (mut c, mut effects) = self.cancel_open();
         c.head = Some(sha);
+        c.patch = None;
         c.approval = None;
         c.conflict = None;
         c.violations.clear();
@@ -149,9 +152,11 @@ impl Change {
         Ok((c, effects))
     }
 
-    /// A new head: its tiers and `behind` go with the old one.
+    /// A new head: its tiers and `behind` go with the old one; an approval waits to carry when
+    /// the bound job finds the same patch.
     pub(super) fn push(mut self, sha: String) -> Step {
         if !self.on_head(&sha) {
+            self.carried = self.session_carry();
             self.tiers = None;
             self.behind = None;
             self.full.clear();

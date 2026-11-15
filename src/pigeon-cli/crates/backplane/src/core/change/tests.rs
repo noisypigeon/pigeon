@@ -39,6 +39,7 @@ fn bounded(full: Vec<Check>) -> Event {
         full,
         tiers: None,
         gate: None,
+        patch: None,
     }
 }
 
@@ -151,6 +152,7 @@ fn table() -> Vec<Row> {
                 full: Vec::new(),
                 tiers: None,
                 gate: None,
+                patch: None,
             },
             Some((State::Refused, Vec::new())),
         ),
@@ -167,6 +169,7 @@ fn table() -> Vec<Row> {
                 full: Vec::new(),
                 tiers: None,
                 gate: None,
+                patch: None,
             },
             Some((State::Bounded, vec![start("fmt")])),
         ),
@@ -306,6 +309,7 @@ fn a_refusal_leaves_the_change_as_it_was() {
         }],
         tiers: None,
         gate: None,
+        patch: None,
     };
     assert!(step(&before, event).is_err(), "no bound job");
     assert_eq!((before.full.len(), before.tiers), (0, tiers_before));
@@ -331,6 +335,7 @@ fn gated(gate: Option<crate::core::deploy::gate::Gate>) -> (Change, Vec<Effect>)
         full: full_set(),
         tiers: None,
         gate,
+        patch: None,
     };
     let c = run(
         pushed(),
@@ -398,6 +403,7 @@ fn a_clean_restack_makes_the_gate_full_and_a_session_push_clears_it() {
         full: Vec::new(),
         tiers: None,
         gate: Some(Gate::Scoped),
+        patch: None,
     };
     let (c, _) = step(&c, rebound).expect("bounded");
     assert!(
@@ -420,6 +426,7 @@ fn a_full_run_asked_for_at_merge_holds_whatever_the_gate() {
             full: full_set(),
             tiers: None,
             gate: Some(Gate::Scoped),
+            patch: None,
         }],
     );
     c = run(
@@ -782,6 +789,7 @@ fn bounded_with(tiers: crate::approvals::Tiers) -> Event {
         full: Vec::new(),
         tiers: Some(tiers),
         gate: None,
+        patch: None,
     }
 }
 
@@ -978,6 +986,7 @@ fn a_dropped_merge_is_kept_when_a_window_approves_the_restacked_head_again() {
                 full: Vec::new(),
                 tiers: None,
                 gate: None,
+                patch: None,
             }],
         )
     };
@@ -1144,5 +1153,109 @@ fn a_job_queued_that_never_started_is_dispatched_again_and_a_started_one_is_not(
             }
         )
         .is_err()
+    );
+}
+
+fn bounded_at(sha: &str, merge: crate::approvals::Tier, patch: Option<&str>) -> Event {
+    let mut tiers = tiered("routine");
+    tiers.merge.tier = merge;
+    Event::Bounded {
+        sha: sha.into(),
+        violations: Vec::new(),
+        checks: Vec::new(),
+        full: Vec::new(),
+        tiers: Some(tiers),
+        gate: None,
+        patch: patch.map(str::to_string),
+    }
+}
+
+/// !464: approved on `5f1bccf`, then the session rebased and pushed `efd44b8`, the same patch.
+fn approved_then_pushed(merge: crate::approvals::Tier) -> Change {
+    run(
+        planned(),
+        vec![
+            Event::Pushed { sha: A.into() },
+            bounded_at(A, merge, Some("p464")),
+            Event::Approve {
+                by: "owner".into(),
+                sha: A.into(),
+                at: 2,
+            },
+            Event::Pushed { sha: B.into() },
+        ],
+    )
+}
+
+#[test]
+fn case_464_a_session_push_of_the_same_patch_carries_the_owners_approval() {
+    use crate::approvals::Tier;
+    let c = approved_then_pushed(Tier::Code);
+    assert_eq!(c.state, State::Pushed);
+    assert_eq!(
+        c.approval, None,
+        "nothing is approved before the new head is checked"
+    );
+    let c = run(c, vec![bounded_at(B, Tier::Code, Some("p464"))]);
+    assert_eq!(c.state, State::Approved);
+    let a = c.approval.expect("carried");
+    assert_eq!((a.by.as_str(), a.sha.as_deref()), ("owner", Some(B)));
+    assert_eq!(c.carried, None);
+}
+
+#[test]
+fn a_session_push_of_another_patch_asks_the_owner_again() {
+    use crate::approvals::Tier;
+    let c = run(
+        approved_then_pushed(Tier::Code),
+        vec![bounded_at(B, Tier::Code, Some("other"))],
+    );
+    assert_eq!(
+        (c.state, c.approval, c.carried),
+        (State::Checked, None, None)
+    );
+}
+
+#[test]
+fn a_session_push_with_no_patch_reported_asks_the_owner_again() {
+    use crate::approvals::Tier;
+    let c = run(
+        approved_then_pushed(Tier::Code),
+        vec![bounded_at(B, Tier::Code, None)],
+    );
+    assert_eq!(
+        (c.state, c.approval, c.carried),
+        (State::Checked, None, None)
+    );
+}
+
+#[test]
+fn a_session_push_whose_merge_tier_rose_asks_the_owner_again() {
+    use crate::approvals::Tier;
+    let c = run(
+        approved_then_pushed(Tier::Confirm),
+        vec![bounded_at(B, Tier::Code, Some("p464"))],
+    );
+    assert_eq!(
+        (c.state, c.approval, c.carried),
+        (State::Checked, None, None)
+    );
+}
+
+#[test]
+fn a_push_before_any_approval_carries_nothing() {
+    use crate::approvals::Tier;
+    let c = run(
+        planned(),
+        vec![
+            Event::Pushed { sha: A.into() },
+            bounded_at(A, Tier::Code, Some("p464")),
+            Event::Pushed { sha: B.into() },
+            bounded_at(B, Tier::Code, Some("p464")),
+        ],
+    );
+    assert_eq!(
+        (c.state, c.approval, c.carried),
+        (State::Checked, None, None)
     );
 }

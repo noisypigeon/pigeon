@@ -191,6 +191,7 @@ fn reports_become_events() {
         forecast: vec![],
         built_on: None,
         ledger: None,
+        patch: None,
     };
     assert_eq!(
         control::event_of("fmt", A, &report(Outcome::Running, vec![])),
@@ -244,6 +245,7 @@ fn events_round_trip_their_wire_form() {
         full: vec![],
         tiers: None,
         gate: None,
+        patch: None,
     };
     let text = serde_json::to_string(&e).expect("serialize");
     assert!(text.contains("\"type\":\"bounded\""), "{text}");
@@ -330,6 +332,7 @@ fn the_mirror_writes_every_state_the_migration_allows() {
         }],
         tiers: None,
         gate: None,
+        patch: None,
     })
     .expect("bounded");
     c.apply(Event::Started {
@@ -423,6 +426,7 @@ fn deploy_report(outcome: Outcome) -> Report {
         forecast: vec![],
         built_on: None,
         ledger: None,
+        patch: None,
     }
 }
 
@@ -627,6 +631,7 @@ fn a_change_is_unmirrored_by_its_branch_on_a_runner() {
         full: vec![],
         tiers: None,
         gate: None,
+        patch: None,
     };
     assert_eq!(control::with_mirror(refused.clone()), refused);
     let other = Event::Close;
@@ -863,6 +868,7 @@ fn code_checks_go_to_github_only_on_a_mirrored_change() {
         ],
         tiers: None,
         gate: None,
+        patch: None,
     }))
     .expect("bounded");
     assert!(control::to_github(&c, "fmt", true, false));
@@ -892,6 +898,7 @@ fn code_checks_go_to_github_only_on_a_mirrored_change() {
             }],
             tiers: None,
             gate: None,
+            patch: None,
         })
         .expect("bounded");
     assert!(

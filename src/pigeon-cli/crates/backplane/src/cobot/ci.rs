@@ -601,6 +601,13 @@ pub fn own_lines(dir: &Path, from: &str, to: &str) -> Result<Option<Vec<String>>
     Ok(Some(out))
 }
 
+/// `sha`'s patch-id against its merge-base with `base`, or none when git can't say.
+#[must_use]
+pub fn head_patch(dir: &Path, base: &str, sha: &str) -> Option<String> {
+    let fork = git(dir, "", "", &["merge-base", base, sha]).ok()?;
+    patch_id(dir, fork.trim(), sha).ok()
+}
+
 fn patch_id(dir: &Path, from: &str, to: &str) -> Result<String, Error> {
     let diff = command("", "")
         .arg("-C")

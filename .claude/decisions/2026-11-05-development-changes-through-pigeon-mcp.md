@@ -249,3 +249,12 @@ What changes:
   change's head as the merge base (`merge_from`), not `main`'s fork. So an
   edit to a file the other change added survives. See the yield ADR's
   2026-11-14 amendment on merging from the change built on.
+
+### 2026-11-15: A session's push of the same patch keeps the owner's approval
+
+- "A new push resets the review" gains one exception. An approved head's
+  approval carries to the session's next head when the bound job finds the
+  same patch-id, the new head is checked in full, and its merge tier is no
+  higher. See
+  [`2026-11-15-security-owner-approvals-always-listed.md`](2026-11-15-security-owner-approvals-always-listed.md)'s
+  2026-11-15 amendment.

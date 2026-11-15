@@ -646,6 +646,9 @@ pub struct Report {
     /// 2026-11-12 amendment on the merge gate, which gates in full.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub gate: Option<crate::core::deploy::gate::Gate>,
+    /// For the bound job: the head's patch-id against its merge-base with `main`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub patch: Option<String>,
     /// For the merge job: the commit `main` now holds.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub merged: Option<String>,
@@ -699,6 +702,7 @@ impl Report {
             checks: Vec::new(),
             full: Vec::new(),
             gate: None,
+            patch: None,
             merged: None,
             published: Vec::new(),
             workers: Vec::new(),
@@ -783,6 +787,7 @@ pub fn event_of(job: &str, sha: &str, report: &Report) -> Option<Event> {
             full: report.full.clone(),
             tiers: report.tiers.clone(),
             gate: report.gate.clone(),
+            patch: report.patch.clone(),
         });
     }
     Some(Event::Finished {
@@ -1388,6 +1393,7 @@ pub fn with_mirror(event: Event) -> Event {
             full,
             tiers,
             gate,
+            patch,
         } => {
             if violations.is_empty() && !checks.iter().any(|c| c.name == MIRROR) {
                 checks.push(Check {
@@ -1402,6 +1408,7 @@ pub fn with_mirror(event: Event) -> Event {
                 full,
                 tiers,
                 gate,
+                patch,
             }
         }
         other => other,

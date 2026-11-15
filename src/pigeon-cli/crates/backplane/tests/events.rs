@@ -125,6 +125,7 @@ mod of_change {
             }],
             tiers: None,
             gate: None,
+            patch: None,
         })
         .expect("bounded");
         c.apply(Event::Started {

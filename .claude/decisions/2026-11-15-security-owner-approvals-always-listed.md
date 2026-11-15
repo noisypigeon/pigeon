@@ -254,3 +254,37 @@ approval carries to a session's push of the same patch.
   always listed. An entry that still applies stays, whoever asked for it.
 - **Tests:** !500's case stays listed. A moved head, a used or unknown grant,
   and a change no longer checked each go.
+
+### 2026-11-15: The owner's approval carries to a session's push of the same patch
+
+The owner chose this (option A, relayed by the status-review session). Their
+passkey on this change's merge records it. It amends §4 and
+[`2026-11-05-development-changes-through-pigeon-mcp.md`](2026-11-05-development-changes-through-pigeon-mcp.md)'s
+"a new push resets the review".
+
+- **The rule.** An approval of head `X` carries to a head `Y` that the
+  change's session pushes, only when all of these hold:
+  - the change was approved on `X`;
+  - the bound job of `X`, and then of `Y`, each reports its head's
+    `git patch-id --stable` against its merge-base with `main`, and the two
+    are identical. The control plane computes both; the session reports
+    neither;
+  - `Y` reaches `checked` with its checks run in full again;
+  - `Y`'s merge tier is no higher than `X`'s.
+- **Otherwise it resets,** and §2 lists `Y` for the owner.
+- **The carried approval still names one head.** It is a new approval on `Y`,
+  by the same approver, as a restack's carry is
+  ([`2026-11-08-development-concurrent-agent-sessions.md`](2026-11-08-development-concurrent-agent-sessions.md)
+  §3).
+- **How it's built.**
+  - `Report.patch` and `Event::Bounded.patch` carry the head's patch-id
+    (`cobot::ci::head_patch`), and `Change.patch` keeps it.
+  - A session's push of an approved head sets `Carried` with that patch-id.
+  - The new head's bound job either sets the carry's target or drops it.
+  - `Change::carry` then approves at `checked`, as for a restack.
+  - A restack's own push doesn't take this path, and its carry is unchanged.
+- **Tests:**
+  - !464's `5f1bccf` → `efd44b8` carries;
+  - another patch, no reported patch-id, a higher merge tier, or a push
+    before any approval each resets;
+  - the same patch rebased onto a moved `main` keeps its patch-id.

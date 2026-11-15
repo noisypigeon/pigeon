@@ -57,6 +57,7 @@ impl Change {
                 from: head,
                 merge: t.merge.tier,
                 to: None,
+                patch: None,
             }),
             _ => None,
         };
@@ -182,6 +183,43 @@ impl Change {
             })
             .cloned()
             .collect()
+    }
+
+    /// The approval a session's push carries, pending its patch: an approved head's, with its
+    /// patch-id and tier known; see the always-listed ADR's 2026-11-15 amendment.
+    pub(super) fn session_carry(&self) -> Option<Carried> {
+        if self.state != State::Approved {
+            return None;
+        }
+        let (a, t, patch) = (
+            self.approval.as_ref()?,
+            self.tiers.as_ref()?,
+            self.patch.clone()?,
+        );
+        let from = self.head.clone()?;
+        (a.sha.as_deref() == Some(from.as_str())).then(|| Carried {
+            by: a.by.clone(),
+            at: a.at,
+            from,
+            merge: t.merge.tier,
+            to: None,
+            patch: Some(patch),
+        })
+    }
+
+    /// The bound job's `patch` for head `sha`: kept, and a session's carry goes on to `sha` only
+    /// when it is the approved head's patch.
+    pub(super) fn carry_patch(mut self, sha: &str, patch: Option<&String>) -> Self {
+        self.patch = patch.cloned();
+        self.carried = match self.carried.take() {
+            Some(mut c) if c.patch.is_some() => (patch.is_some() && c.patch.as_ref() == patch)
+                .then(|| {
+                    c.to = Some(sha.to_string());
+                    c
+                }),
+            other => other,
+        };
+        self
     }
 
     /// Approves a restacked head that reached `checked` with the approval carried to it, when

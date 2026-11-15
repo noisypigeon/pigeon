@@ -161,6 +161,7 @@ fn check(c: &mut Change, sha: &str, merge: Tier) {
             full: vec![],
             tiers: Some(tiers(merge)),
             gate: None,
+            patch: None,
         })
         .expect("bounded");
     if !started.contains(&Effect::Start("fmt".into())) {
@@ -348,6 +349,7 @@ fn bound(c: &mut Change, sha: &str, merge: Tier) {
         full: vec![],
         tiers: Some(tiers(merge)),
         gate: None,
+        patch: None,
     })
     .expect("bounded");
     c.apply(Event::Started {
@@ -435,6 +437,7 @@ fn a_merge_on_a_checked_unapproved_head_is_refused_not_parked() {
         full: vec![],
         tiers: None,
         gate: None,
+        patch: None,
     })
     .expect("bounded");
     c.apply(Event::Started {
@@ -591,6 +594,7 @@ fn approved_with(checks: &[&str], full: &[&str]) -> Change {
         full: full.iter().map(|n| named(n)).collect(),
         tiers: Some(tiers(Tier::Confirm)),
         gate: None,
+        patch: None,
     })
     .expect("bounded");
     for n in checks {
@@ -733,6 +737,7 @@ fn a_merge_offered_at_any_point_of_a_restack_keeps_the_turn_and_gates_once_carri
             full: vec![named("fmt"), named("test")],
             tiers: Some(tiers(Tier::Confirm)),
             gate: None,
+            patch: None,
         })
         .expect("bounded");
         offer(&mut c, 2);
@@ -805,6 +810,7 @@ fn a_restacked_head_with_nothing_left_to_check_carries_its_approval_at_bound() {
         full: vec![],
         tiers: Some(tiers(Tier::Confirm)),
         gate: None,
+        patch: None,
     })
     .expect("bounded");
     assert_eq!(c.state, State::Approved, "the approval carried at bound");
@@ -832,6 +838,7 @@ fn an_approved_head_with_a_carry_left_over_merges_and_a_parked_merge_starts_on_a
             full: vec![],
             tiers: Some(tiers(Tier::Confirm)),
             gate: None,
+            patch: None,
         })
         .expect("bounded");
     assert_eq!(
@@ -851,6 +858,7 @@ fn an_approved_head_with_a_carry_left_over_merges_and_a_parked_merge_starts_on_a
         full: vec![],
         tiers: None,
         gate: None,
+        patch: None,
     })
     .expect("bounded");
     c.apply(Event::Finished {
@@ -921,6 +929,7 @@ fn restacked_onto_c(
         full: full.iter().map(|n| named(n)).collect(),
         tiers: Some(tiers(Tier::Confirm)),
         gate: None,
+        patch: None,
     })
     .expect("bounded")
 }
