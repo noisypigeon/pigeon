@@ -8,7 +8,7 @@ project_type: other
 meta:
   bitrise.io:
     # The stack with .xcode-version's Xcode; ci.sh stops on any other.
-    stack: osx-xcode-26.1.x
+    stack: osx-xcode-26.6.x
     machine_type_id: g2.mac.medium
 workflows:
   ios-check:

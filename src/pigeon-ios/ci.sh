@@ -34,7 +34,7 @@ curl -fsSLo "$tools/xcodegen.zip" \
 )
 export PATH="$tools/install/bin:$PATH"
 
-# The first Xcode matching .xcode-version to its precision: 26.1 takes 26.1.1, nothing else.
+# The first Xcode matching .xcode-version to its precision: 26.6 takes 26.6 or 26.6.x, nothing else.
 want="$(tr -d '[:space:]' < .xcode-version)"
 unset DEVELOPER_DIR
 found=""

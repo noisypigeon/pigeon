@@ -328,3 +328,13 @@ hadn't caught up.
 - **`ios.release` refuses while `main` is ahead of the mirror,** naming both
   commits, instead of releasing an older one. It is asked again once GitHub
   holds `main`'s head, usually within a minute.
+
+### 2026-11-15: The app builds with Xcode 26.6
+
+Buildkite's hosted macOS images no longer ship Xcode 26.1; both queues run
+Xcode 26.6 by default. `.xcode-version` moves to `26.6`, and `mise run ios`
+selects `/Applications/Xcode_26.6.app` through it. GitHub's `macos-15` has no
+26.6, so the `ios` jobs move to `macos-26`; the 2026-11-12 fact that
+"`macos-15` has Xcode 26.1.1" no longer applies to them. The rest of the
+switch, on every provider, is in the 2026-11-15 amendment to
+`2026-11-12-development-macos-builds-provider-failover.md`.
