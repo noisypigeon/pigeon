@@ -239,3 +239,18 @@ approval carries to a session's push of the same patch.
   on each hourly digest and each `digest_show`.
 - **Paths.** `tasks.rs` and `worker/push.rs` stay under
   [`2026-11-08-development-events-tickets-digest-mandate.md`](2026-11-08-development-events-tickets-digest-mandate.md).
+
+### 2026-11-15: A listed approval stays while it applies, whoever asked for it
+
+- **Found on !500.**
+  - Window:9 covered it, but its session asked the owner on purpose, because
+    it loosens an approval rule.
+  - §2's reconcile then removed the listed approval on the next save (each
+    "behind main"), because the change owed nothing automatically.
+  - The owner never saw it.
+- **The rule.** Reconcile removes an entry only when its grant no longer
+  applies: unknown, used, for a moved head, or for an operation no longer
+  offered (`listed::applies`). §1's invariant is unchanged: what is owed is
+  always listed. An entry that still applies stays, whoever asked for it.
+- **Tests:** !500's case stays listed. A moved head, a used or unknown grant,
+  and a change no longer checked each go.

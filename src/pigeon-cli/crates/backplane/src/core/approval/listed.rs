@@ -61,6 +61,13 @@ pub fn owed(change: &Change, stage: &Stage) -> Option<Owed> {
     })
 }
 
+/// Whether a listed entry's `grant` still applies to `change`: known, unused, for its head, and
+/// for an operation still offered; one that does stays listed, whoever asked for it.
+#[must_use]
+pub fn applies(change: &Change, grant: Option<&super::grants::Grant>) -> bool {
+    grant.is_some_and(|g| g.used.is_none() && super::grants::still_applies(change, g))
+}
+
 /// What to do with the change's listed entry, given what it owes, at `now` in Unix seconds.
 #[must_use]
 pub fn reconcile(owed: Option<&Owed>, listed: Option<&Listed>, now: u64) -> Action {

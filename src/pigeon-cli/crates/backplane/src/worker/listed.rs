@@ -53,7 +53,15 @@ pub(super) async fn reconcile(
     match listed::reconcile(owed.as_ref(), found.as_ref(), now()) {
         Action::Keep => Ok(()),
         Action::Remove => {
-            if let Some(w) = &entry {
+            let grant = |w: &Waiting| {
+                grants.0.get(&grants::key(
+                    w.path.strip_prefix(&prefix).unwrap_or_default(),
+                ))
+            };
+            if let Some(w) = entry
+                .as_ref()
+                .filter(|w| !listed::applies(change, grant(w)))
+            {
                 remove(w).await?;
             }
             Ok(())
