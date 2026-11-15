@@ -1,5 +1,6 @@
 // The app's state and what it asks the control plane, in one place the views read.
 
+import CryptoKit
 import Foundation
 import PigeonCore
 import SwiftUI
@@ -14,6 +15,7 @@ final class Store: ObservableObject {
     @Published var avatar: Data?
     @Published var tracker: Tracker?
     @Published var ops: Ops?
+    @Published var instances: [InstanceEntry] = []
 
     private let auth = Auth()
     private var device: DeviceKey?
@@ -144,6 +146,32 @@ final class Store: ObservableObject {
             try await self.api().send(
                 "POST", "/v0/app/auto", body: ["passkey": answer.json, "hours": hours])
             await self.refresh()
+        }
+    }
+
+    /// Reloads the instances: the platform, then the personal ones this account administers.
+    func loadInstances() async {
+        guard linked else { return }
+        do {
+            instances = try await api().call("GET", "/v0/app/instances", as: InstanceList.self).instances
+        } catch let e as APIError where e.status == 401 {
+            unlink(because: e)
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+
+    /// Stands up a personal learner instance named `name` in the account `token` reaches,
+    /// proved by the owner's passkey for that token; the token is sent once and never kept.
+    func standUp(name: String, token: String) async -> Bool {
+        await run {
+            let token = token.trimmingCharacters(in: .whitespacesAndNewlines)
+            let sha = hex(SHA256.hash(data: Data(token.utf8)))
+            let answer = try await self.proof(["op": "instance:standup", "id": sha])
+            try await self.api().send(
+                "POST", "/v0/app/instances/standup",
+                body: ["name": name, "token": token, "passkey": answer.json])
+            await self.loadInstances()
         }
     }
 

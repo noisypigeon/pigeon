@@ -62,12 +62,17 @@ struct PigeonApp: App {
     @StateObject private var store = Store()
     @AppStorage("appearance") private var appearance = Appearance.system.rawValue
     @State private var link: URL?
+    @State private var joining: JoinLink?
+    /// The learner's instance, once this iPhone joined one; see the learner ADR's 2026-11-15 amendment.
+    @AppStorage("learner.instance") private var learnerLink: Data?
 
     var body: some Scene {
         WindowGroup {
             Group {
                 if store.linked {
                     RootView(link: $link)
+                } else if learnerLink != nil {
+                    LearnerHomeView()
                 } else {
                     LinkView()
                 }
@@ -75,6 +80,7 @@ struct PigeonApp: App {
             .environmentObject(store)
             .preferredColorScheme(Appearance(rawValue: appearance)?.scheme)
             .onOpenURL(perform: open)
+            .fullScreenCover(item: $joining) { LearnerJoinView(link: $0) }
             .task {
                 delegate.onToken = { token in Task { await store.registerPush(token) } }
                 delegate.onLink = { url in open(url) }
@@ -92,9 +98,14 @@ struct PigeonApp: App {
         }
     }
 
-    /// `pigeon://approval/<id>` opens that card; `pigeon://home` opens the Tracker.
+    /// `pigeon://approval/<id>` opens that card; `pigeon://home` opens the Tracker;
+    /// `pigeon://join?…` joins a learner's instance.
     private func open(_ url: URL) {
         guard url.scheme == "pigeon" else { return }
+        if let join = JoinLink(url: url) {
+            joining = join
+            return
+        }
         link = url
     }
 

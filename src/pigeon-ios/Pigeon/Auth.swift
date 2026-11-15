@@ -17,6 +17,13 @@ struct PasskeyAnswer {
     }
 }
 
+/// A new passkey: its ID, client data and attestation object.
+struct PasskeyCreated {
+    let id: Data
+    let client: Data
+    let attestation: Data
+}
+
 enum AuthError: Error, LocalizedError {
     case cancelled
     case noCode
@@ -37,6 +44,7 @@ final class Auth: NSObject, ASWebAuthenticationPresentationContextProviding,
 {
     private var session: ASWebAuthenticationSession?
     private var passkey: CheckedContinuation<PasskeyAnswer, Error>?
+    private var created: CheckedContinuation<PasskeyCreated, Error>?
 
     private var window: ASPresentationAnchor {
         UIApplication.shared.connectedScenes
@@ -83,6 +91,21 @@ final class Auth: NSObject, ASWebAuthenticationPresentationContextProviding,
         }
     }
 
+    /// Creates a passkey for relying party `rp` against `challenge`, named `name` on this iPhone.
+    func create(challenge: Data, rp: String, name: String, user: Data) async throws -> PasskeyCreated {
+        let provider = ASAuthorizationPlatformPublicKeyCredentialProvider(relyingPartyIdentifier: rp)
+        let request = provider.createCredentialRegistrationRequest(
+            challenge: challenge, name: name, userID: user)
+        request.userVerificationPreference = .required
+        let controller = ASAuthorizationController(authorizationRequests: [request])
+        controller.delegate = self
+        controller.presentationContextProvider = self
+        return try await withCheckedThrowingContinuation { done in
+            self.created = done
+            controller.performRequests()
+        }
+    }
+
     /// Asks for the owner's passkey against `challenge`.
     func prove(_ challenge: PasskeyChallenge) async throws -> PasskeyAnswer {
         guard let bytes = fromBase64url(challenge.challenge) else { throw AuthError.badChallenge }
@@ -106,6 +129,19 @@ final class Auth: NSObject, ASWebAuthenticationPresentationContextProviding,
         controller: ASAuthorizationController,
         didCompleteWithAuthorization authorization: ASAuthorization
     ) {
+        if let r = authorization.credential
+            as? ASAuthorizationPlatformPublicKeyCredentialRegistration
+        {
+            if let object = r.rawAttestationObject {
+                created?.resume(
+                    returning: PasskeyCreated(
+                        id: r.credentialID, client: r.rawClientDataJSON, attestation: object))
+            } else {
+                created?.resume(throwing: AuthError.cancelled)
+            }
+            created = nil
+            return
+        }
         guard
             let a = authorization.credential
                 as? ASAuthorizationPlatformPublicKeyCredentialAssertion
@@ -129,5 +165,7 @@ final class Auth: NSObject, ASWebAuthenticationPresentationContextProviding,
         let cancelled = (error as? ASAuthorizationError)?.code == .canceled
         passkey?.resume(throwing: cancelled ? AuthError.cancelled : error)
         passkey = nil
+        created?.resume(throwing: cancelled ? AuthError.cancelled : error)
+        created = nil
     }
 }
