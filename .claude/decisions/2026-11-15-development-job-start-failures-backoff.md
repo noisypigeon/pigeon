@@ -148,3 +148,29 @@ From the event log and `deploy_status`, all times UTC:
   merge keeps its turn.
 - Live: a queued job with no `PENDING` start begins within 60 s, or by
   `ci_rerun` after 2 minutes.
+
+## Amendments
+
+### 2026-11-15: The steps as drafted: step 2 in two, a start only of a queued job, and `ci_rerun` with no wait
+
+Each step was written and tested in full before its brief.
+
+- **Step 2 is two changes,** each under the change policy's 200 lines:
+  - **2a** (brief b13, !475): `StartFailed`, `StartAfter`, `Lost`'s spacing,
+    and `control::merge_ended` ending a merge's turn on its last failed
+    start, as on its last loss.
+  - **2b:** the core table tests, and `job.retrying` in `events::of_change`.
+  - Until step 3, the worker starts a `StartAfter` at once.
+- **Step 3 also starts only a job still `queued`.** A duplicate start would
+  post the job to its Container again, and run a merge twice.
+  - A poll that errs is logged and asked again next alarm.
+  - The alarm sits at the sooner of 20 s and the next due start.
+- **Step 4's `ci_rerun` re-dispatches a job queued with 0 attempts at once,**
+  not after 2 minutes. A start already pending is not doubled, and a job that
+  started is refused as before, so the wait guarded nothing. The digest line is
+  `Digest::containers`.
+- **Executors install Rust 1.99.1 with rustup.** `mise.run` is refused from
+  their containers.
+- **`pigeon-control` doesn't deploy now.** `wrangler deploy` refuses the
+  `GRANTER` Secrets Store binding (code 10021). Steps 3 and 4 reach production
+  once that is fixed, which is not this ADR's.
