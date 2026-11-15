@@ -288,3 +288,27 @@ passkey on this change's merge records it. It amends §4 and
   - another patch, no reported patch-id, a higher merge tier, or a push
     before any approval each resets;
   - the same patch rebased onto a moved `main` keeps its patch-id.
+
+### 2026-11-15: Step 5 verified, live, on !551
+
+- **The evidence.** !551 (`chore(claude)`: `.claude/settings.json`) is
+  owner-tier, because its path is guarded and in `secrets:`.
+  - It reached `checked` at 17:01:15 UTC (event 21663).
+  - `approval.pending` "`change.approve` on !551 waits for the owner" came in
+    the same second (event 21665).
+  - Its session, the false-stops planner, made no `change_approve`,
+    `change_merge` or `approval_wait` call on it before then.
+  - Willow approved it from the listing at 17:04:36 (event 21701).
+  - Its later restack carried the approval for the same patch (events
+    21857–21859), so it needed no new listing.
+- **!543, which the status session reported, can't stand as the evidence.**
+  Willow saw its restacked head on `/approvals` and in the app before anyone
+  pointed it out, and approved it at 17:46:10 (event 21921). But its event log
+  holds no `approval.pending` at all, from the control plane or an agent.
+  - So its listing, whatever made it, isn't recorded. One possible cause is an
+    entry that `listed::reconcile` kept or re-issued without appending an
+    event, but that isn't verified.
+  - Every listing, whether new, kept for a new head, or re-issued, should
+    append `approval.pending`, so the log can show this. It's a follow-up,
+    not part of this step.
+- **Step 5 is done.**
