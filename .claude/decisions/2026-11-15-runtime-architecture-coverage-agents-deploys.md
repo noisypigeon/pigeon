@@ -184,3 +184,33 @@ either change what it lacks.
     "Claude Platform API: metered pool requests".
 - **Who adds each.** Whichever change lands second adds the route to the `ci`
   client and the `SERVICES` row. The coverage test names what it lacks.
+### 2026-11-15: Reviewed against !588: they agree; its step 3 adds rows the coverage test asks for
+
+[`2026-11-15-development-capacity-pools-hard-spend-cap.md`](2026-11-15-development-capacity-pools-hard-spend-cap.md)
+(!588) governs `jobs.rs`, as this ADR's §3 does.
+
+- **`jobs.rs`: different paths.** !588's `pool` job is dispatched to
+  `Checker` through `control.rs`'s `POOL` and run by `pool_job.rs`. §3 changes
+  only the deploy job's `publish_sites`, which passes `deployed`. Neither
+  touches the other's job, and a deploy is unchanged by pools.
+- **What !588's step 3 adds to the diagram.** Nearly all of it is derived,
+  with no row:
+  - the `Pool` Durable Object, from `worker.yaml`'s classes and its doc
+    comment;
+  - the four new secrets, as the count only;
+  - the pool's service token, from the platform unit's `service_tokens`;
+  - the `pool` job, under `Checker`'s "every other job".
+- **What step 3 must add, or the coverage test fails on it:**
+  - **The gateway's route**, `/v0/pool/…`, in `worker/pool.rs`'s `ROUTES`.
+    It is a client's route. `network::clients` maps the `pool` surface to
+    the `ci` client, "CI and job Containers", since only a job Container's
+    harness calls it.
+  - **The outbound host** the gateway forwards to. `SERVICES` gains a row:
+    id `Claude Platform API`, the host the code calls, and the label "pool
+    gateway: metered messages". The key and the workspace stay Worker
+    secrets, and the diagram never names them.
+- **Privacy holds.** The pool's limits, ledger and spend are live state.
+  Like the Auto window and holds (§1), they are not drawn; `pool_status` and
+  Insights show them.
+
+!592 needs no change.
