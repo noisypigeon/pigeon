@@ -57,6 +57,12 @@ belong in the ADR, never in the file.
   seed's "wait for the owner's approval" is met when `next` names one, unless
   it says "even under a window". See the session-stages ADR's 2026-11-14
   amendment.
+- A session stops for the owner only for a change at `needs: owner`, a denied
+  permission prompt, or an owner-only act (destructive, a spend or credential
+  grant, loosening an approval rule), and stops only the work that depends on
+  it. A `wait:` refusal, a dependency or a choice the rules settle is never a
+  question for the owner. See
+  [`2026-11-15-development-sessions-stop-only-for-oversight.md`](.claude/decisions/2026-11-15-development-sessions-stop-only-for-oversight.md).
 
 ## Briefs and model classes
 
@@ -151,7 +157,7 @@ Where each check runs:
   ticketed label is refused without it, and `session_end` frees it,
   answering what each change it still holds has left; a session that stops
   with work unfinished says in its last message what is done and what
-  remains, and asks whether a new session should finish it. Calls to
+  remains, and how to resume it; it doesn't ask whether to. Calls to
   the `Instance`, `ChangeRun` and `MainRun` objects name the Worker's
   version, and an older object resets itself, per
   [`2026-11-08-development-concurrent-agent-sessions.md`](.claude/decisions/2026-11-08-development-concurrent-agent-sessions.md).
