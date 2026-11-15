@@ -12,6 +12,8 @@ final class Store: ObservableObject {
     @Published var busy = false
     @Published var me: Me?
     @Published var avatar: Data?
+    @Published var tracker: Tracker?
+    @Published var ops: Ops?
 
     private let auth = Auth()
     private var device: DeviceKey?
@@ -49,6 +51,65 @@ final class Store: ObservableObject {
             unlink(because: e)
         } catch {
             self.error = error.localizedDescription
+        }
+    }
+
+    /// Reloads the tracker.
+    func loadTracker() async {
+        guard linked else { return }
+        do {
+            tracker = try await api().call("GET", "/v0/app/tracker", as: Tracker.self)
+        } catch let e as APIError where e.status == 401 {
+            unlink(because: e)
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+
+    /// Reloads the operational insights over `range` days.
+    func loadOps(range: Int) async {
+        guard linked else { return }
+        do {
+            ops = try await api().call("GET", "/v0/app/ops?range=\(range)", as: Ops.self)
+        } catch let e as APIError where e.status == 401 {
+            unlink(because: e)
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+
+    /// Follows the event log until cancelled, reloading the tracker and Home on each batch.
+    func follow() async {
+        await loadTracker()
+        var after = 9007199254740991
+        do {
+            after = try await api().call(
+                "GET", "/v0/app/events?after=9007199254740991&seconds=0", as: AppEvents.self
+            ).last
+        } catch {}
+        var reloaded = Date.distantPast
+        while !Task.isCancelled && linked {
+            do {
+                let batch = try await api().call(
+                    "GET", "/v0/app/events?after=\(after)&seconds=25", as: AppEvents.self)
+                if batch.events.isEmpty {
+                    if batch.last < after { after = batch.last }
+                } else {
+                    after = batch.last
+                    if Date().timeIntervalSince(reloaded) >= 2 {
+                        reloaded = Date()
+                        await loadTracker()
+                        await refresh()
+                    }
+                }
+            } catch let e as APIError where e.status == 401 {
+                unlink(because: e)
+                return
+            } catch {
+                if Task.isCancelled { return }
+                try? await Task.sleep(nanoseconds: 30_000_000_000)
+                await loadTracker()
+            }
         }
     }
 
@@ -209,6 +270,8 @@ final class Store: ObservableObject {
         UserDefaults.standard.set(false, forKey: Self.linkedKey)
         linked = false
         home = nil
+        tracker = nil
+        ops = nil
         me = nil
         avatar = nil
         error = "This iPhone needs linking again: \(e.localizedDescription)"

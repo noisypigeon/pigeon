@@ -1,5 +1,5 @@
-// Home: the avatar for Instances, Insights (Cost and Errors today), and Approvals with
-// Accept edits / Auto; every card opens over Home. See the ADR's context.
+// Approvals: the waiting cards with Accept edits / Auto, and the shared sheet, verb, bars and
+// Auto banner. See the ADR's context.
 
 import PigeonCore
 import SwiftUI
@@ -22,10 +22,9 @@ enum Sheet: Identifiable {
     }
 }
 
-struct HomeView: View {
+struct ApprovalsView: View {
     @EnvironmentObject private var store: Store
-    @Binding var openApproval: String?
-    @State private var sheet: Sheet?
+    @Binding var sheet: Sheet?
     @State private var now = Int(Date().timeIntervalSince1970)
 
     private let tick = Timer.publish(every: 30, on: .main, in: .common).autoconnect()
@@ -35,14 +34,9 @@ struct HomeView: View {
             DotGrid()
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
-                    header
+                    TopBar(sheet: $sheet)
                     if let error = store.error {
                         Text(error).font(.footnote).foregroundStyle(Theme.accent)
-                    }
-                    Text("Insights").font(Theme.display(22)).foregroundStyle(Theme.ink)
-                    HStack(spacing: 10) {
-                        tile("Cost", metric: "cost", stacks: store.home?.insights.cost)
-                        tile("Errors", metric: "errors", stacks: store.home?.insights.errors)
                     }
                     approvals
                 }
@@ -51,86 +45,7 @@ struct HomeView: View {
             }
             .refreshable { await store.refresh() }
         }
-        .task {
-            await store.refresh()
-            await store.loadProfile()
-        }
         .onReceive(tick) { _ in now = Int(Date().timeIntervalSince1970) }
-        .onChange(of: openApproval) { _, id in
-            if let id { sheet = .approval(id) }
-            openApproval = nil
-        }
-        .sheet(item: $sheet) { which in
-            switch which {
-            case .instances: InstancesSheet()
-            case .profile: ProfileSheet()
-            case .chart(let metric): ChartSheet(metric: metric)
-            case .approval(let id): ApprovalSheet(id: id)
-            case .auto: AutoSheet()
-            }
-        }
-    }
-
-    private var header: some View {
-        HStack {
-            Button {
-                sheet = .instances
-            } label: {
-                HStack(spacing: 8) {
-                    Circle().fill(Theme.accent).frame(width: 8, height: 8)
-                    Text("Platform").font(.headline)
-                    Image(systemName: "chevron.down")
-                }
-                .foregroundStyle(Theme.ink)
-                .padding(.horizontal, 12)
-                .frame(minHeight: 40)
-                .block(radius: 20)
-            }
-            .accessibilityLabel("Instance: Platform. Switch instance")
-            Spacer()
-            Button {
-                sheet = .profile
-            } label: {
-                avatarImage
-                    .resizable()
-                    .scaledToFill()
-                    .frame(width: 40, height: 40)
-                    .clipShape(Circle())
-                    .overlay(Circle().stroke(Theme.card, lineWidth: 2))
-                    .background(Circle().fill(Theme.shadow).offset(x: 2, y: 2))
-            }
-            .accessibilityLabel("Profile")
-        }
-        .padding(.top, 8)
-    }
-
-    private var avatarImage: Image {
-        if let data = store.avatar, let image = UIImage(data: data) { return Image(uiImage: image) }
-        return Image("Avatar")
-    }
-
-    private func tile(_ title: String, metric: String, stacks: Stacks?) -> some View {
-        Button {
-            sheet = .chart(metric)
-        } label: {
-            VStack(alignment: .leading, spacing: 6) {
-                HStack {
-                    Text(title).font(.subheadline.weight(.semibold))
-                    Spacer()
-                    Image(systemName: "arrow.up.left.and.arrow.down.right")
-                        .font(.caption).foregroundStyle(Theme.muted)
-                }
-                Text(stacks.map { formatted($0.total, metric: metric) } ?? "—")
-                    .font(Theme.display(22))
-                MiniBars(stacks: stacks)
-                    .frame(height: 48)
-            }
-            .foregroundStyle(Theme.ink)
-            .padding(12)
-            .block()
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Expand \(title)")
     }
 
     private var approvals: some View {

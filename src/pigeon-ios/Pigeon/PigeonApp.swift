@@ -1,4 +1,4 @@
-// The Pigeon app: links this iPhone, then shows Home; see
+// The Pigeon app: links this iPhone, then shows its tabs; see
 // .claude/decisions/2026-11-12-runtime-ios-app-approvals-insights.md.
 
 import PigeonCore
@@ -19,6 +19,7 @@ extension Appearance {
 final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
     var onToken: ((Data) -> Void)?
     var onLink: ((URL) -> Void)?
+    var pendingLink: URL?
 
     func application(
         _ application: UIApplication,
@@ -42,7 +43,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         if let link = response.notification.request.content.userInfo["link"] as? String,
             let url = URL(string: link)
         {
-            onLink?(url)
+            if let onLink { onLink(url) } else { pendingLink = url }
         }
         done()
     }
@@ -60,13 +61,13 @@ struct PigeonApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     @StateObject private var store = Store()
     @AppStorage("appearance") private var appearance = Appearance.system.rawValue
-    @State private var openApproval: String?
+    @State private var link: URL?
 
     var body: some Scene {
         WindowGroup {
             Group {
                 if store.linked {
-                    HomeView(openApproval: $openApproval)
+                    RootView(link: $link)
                 } else {
                     LinkView()
                 }
@@ -77,6 +78,10 @@ struct PigeonApp: App {
             .task {
                 delegate.onToken = { token in Task { await store.registerPush(token) } }
                 delegate.onLink = { url in open(url) }
+                if let url = delegate.pendingLink {
+                    link = url
+                    delegate.pendingLink = nil
+                }
             }
             .onChange(of: store.linked) { _, linked in
                 if linked { askForNotifications() }
@@ -87,10 +92,10 @@ struct PigeonApp: App {
         }
     }
 
-    /// `pigeon://approval/<id>` opens that card; anything else opens Home.
+    /// `pigeon://approval/<id>` opens that card; `pigeon://home` opens the Tracker.
     private func open(_ url: URL) {
-        guard url.scheme == "pigeon", url.host == "approval" else { return }
-        openApproval = url.pathComponents.dropFirst().first
+        guard url.scheme == "pigeon" else { return }
+        link = url
     }
 
     private func askForNotifications() {

@@ -30,6 +30,7 @@ enum Theme {
     static let onAccent = color(0xFFFDF8, 0x14121A)
     static let accentSoft = color(0xF2D3DE, 0x3D2432)
     static let good = color(0x2F6B4F, 0x5FBF8E)
+    static let warn = color(0xB04F1A, 0xD06A35)
 
     /// The sources' colours, checked for colour-blind separation on both surfaces.
     static func source(_ name: String) -> Color {
