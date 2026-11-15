@@ -2,7 +2,7 @@
 //! proxy passes; see `.claude/decisions/2026-11-15-runtime-standalone-hostnames-platform-zone.md`.
 
 /// Labels the platform keeps for itself (§2).
-pub const RESERVED: [&str; 29] = [
+pub const RESERVED: [&str; 28] = [
     "platform",
     "www",
     "api",
@@ -31,7 +31,6 @@ pub const RESERVED: [&str; 29] = [
     "ns1",
     "ns2",
     "pigeon",
-    "noisypigeon",
 ];
 
 /// The control Worker's var naming the zone, set by its `subdomains_of` route (§1).

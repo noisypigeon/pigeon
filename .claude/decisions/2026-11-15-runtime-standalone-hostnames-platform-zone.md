@@ -301,3 +301,11 @@ Neither ADR changes.
   `begin`, only when the control Worker has `INSTANCE_ZONE`. A resumed entry
   keeps its label. `Listing::shown` is what `/instances/list` answers: every
   entry without `origin`.
+
+### 2026-11-15: `noisypigeon` is not a reserved label
+
+- §2's reserved labels lose `noisypigeon`. Only the owner names an instance
+  (stand-up is administrator-only and passkey-proved), so the reservation
+  guarded nothing, and it kept the noisypigeon standalone of
+  [`2026-11-15-runtime-zoned-standalone-account-imports.md`](2026-11-15-runtime-zoned-standalone-account-imports.md)
+  from its own label. `pigeon` stays reserved.
