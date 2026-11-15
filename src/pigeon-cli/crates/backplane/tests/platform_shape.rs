@@ -59,5 +59,5 @@ fn the_app_worker_template_is_a_worker_spec_with_no_container_or_domain() {
     assert!(spec.routes.is_empty() && spec.containers.is_empty() && spec.crons.is_empty());
     assert_eq!(spec.durable_objects.classes, ["Instance"]);
     assert_eq!(spec.bindings.vars["SHAPE"], "app");
-    assert_eq!(spec.secrets, ["STATE_KEY", "HANDOVER"]);
+    assert_eq!(spec.secrets, ["STATE_KEY", "HANDOVER", "BASE_URL"]);
 }

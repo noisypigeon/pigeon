@@ -64,7 +64,7 @@ pub async fn serve(state: &State, path: &str, body: Value) -> Result<Response> {
     };
     match path {
         "/instances/list" => Response::from_json(&json!({
-            "instances": listing.visible(&caller.account),
+            "instances": listing.shown(&caller.account),
             "running": listing.running(),
         })),
         "/instances/begin" => {
@@ -87,6 +87,18 @@ pub async fn serve(state: &State, path: &str, body: Value) -> Result<Response> {
             let (listing, entry) = match begun {
                 Ok(b) => b,
                 Err(why) => return fail(&why, 409),
+            };
+            // Its label under the platform's zone; see
+            // .claude/decisions/2026-11-15-runtime-standalone-hostnames-platform-zone.md §5.
+            let (listing, entry) = match body["zone"].as_str().filter(|z| !z.is_empty()) {
+                None => (listing, entry),
+                Some(zone) => match listing.named(&entry.id, &s("label"), zone) {
+                    Ok(l) => {
+                        let e = l.entries.iter().find(|e| e.id == entry.id).cloned();
+                        (l, e.unwrap_or(entry))
+                    }
+                    Err(why) => return fail(&why, 409),
+                },
             };
             let ring: Keyring = storage.get(KEYRING).await?.unwrap_or_default();
             let handover = Handover {
@@ -213,13 +225,15 @@ pub async fn standup(env: &Env, s: &Settings, device: &Device, body: &Value) -> 
     let begin = json!({
         "device": device.id, "id": platform::random_hex(8)?, "job": job,
         "name": body["name"], "accent": body["accent"].as_str().unwrap_or("#3a7d5c"),
+        "label": body["label"], "zone": env.var("INSTANCE_ZONE").map(|v| v.to_string()).unwrap_or_default(),
     });
     let v = elicit::inbox(env, s, "/instances/begin", &begin).await?;
     if v["error"].is_string() {
         return answer(&v);
     }
     let handover = v["handover"].to_string();
-    if let Err(why) = start(env, &job, &token, &handover).await {
+    let base = v["entry"]["host"].as_str().map(|h| format!("https://{h}"));
+    if let Err(why) = start(env, &job, &token, &handover, base.as_deref()).await {
         let failed = json!({ "job": job, "why": format!("the job didn't start: {why}") });
         elicit::inbox(env, s, "/instances/finished", &failed).await?;
         return Response::error("the stand-up didn't start; try again", 502);
@@ -250,6 +264,7 @@ async fn start(
     job: &str,
     token: &str,
     handover: &str,
+    base: Option<&str>,
 ) -> std::result::Result<(), String> {
     let s = Settings::from(env).map_err(|e| e.to_string())?;
     let sha = deployed(env, &s).await?;
@@ -274,6 +289,7 @@ async fn start(
         env: BTreeMap::from([
             ("CLOUDFLARE_API_TOKEN".to_string(), token.to_string()),
             ("HANDOVER".to_string(), handover.to_string()),
+            ("BASE_URL".to_string(), base.unwrap_or_default().to_string()),
         ]),
     };
     let body = serde_json::to_value(&spec).map_err(|e| e.to_string())?;

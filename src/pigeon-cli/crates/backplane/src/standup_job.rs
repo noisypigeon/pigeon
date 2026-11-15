@@ -170,6 +170,7 @@ pub fn standup(
     ];
     tools.secrets = vec![
         handover.clone(),
+        get("BASE_URL").unwrap_or_default(),
         bucket.clone(),
         worker.clone(),
         sub.clone(),
@@ -220,6 +221,10 @@ pub fn standup(
     }
     workers::put_secret(&found, "HANDOVER", &handover, &tools, &out).map_err(|e| e.to_string())?;
     log.push_str("handed over the owner's public keys\n");
+    if let Some(b) = get("BASE_URL") {
+        workers::put_secret(&found, "BASE_URL", &b, &tools, &out).map_err(|e| e.to_string())?;
+        log.push_str("set its base URL\n");
+    }
     let base = format!("https://{worker}.{sub}.workers.dev");
     check(&base)?;
     log.push_str("the Worker answers /v0/app/* alone\n");

@@ -292,3 +292,12 @@ the schema, the app-only router and the hand-over seed.
   until then.
 
 Neither ADR changes.
+### 2026-11-15: `BASE_URL` is a secret of the stack, and the listing's entry is named after it begins
+
+- **`BASE_URL` is a Worker secret, not a var.** The stand-up job puts it as
+  it puts `HANDOVER`, so the `wrangler.jsonc` it renders never holds a host.
+  A stack without one builds join links from its request's origin, as before.
+- **`Listing::named`** gives a begun entry its `label` and `host`, after
+  `begin`, only when the control Worker has `INSTANCE_ZONE`. A resumed entry
+  keeps its label. `Listing::shown` is what `/instances/list` answers: every
+  entry without `origin`.

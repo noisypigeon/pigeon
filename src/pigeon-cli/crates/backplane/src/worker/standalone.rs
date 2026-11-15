@@ -80,7 +80,13 @@ pub async fn fetch(mut req: Request, env: &Env) -> Result<Response> {
         return Response::error(why.to_string(), 503);
     }
     let method = req.method();
-    let base = req.url()?.origin().ascii_serialization();
+    // Its own host under the platform's zone, when it has one; see
+    // .claude/decisions/2026-11-15-runtime-standalone-hostnames-platform-zone.md §5.
+    let own = env.secret("BASE_URL").map(|b| b.to_string()).ok();
+    let base = match own.filter(|b| b.starts_with("https://")) {
+        Some(b) => b,
+        None => req.url()?.origin().ascii_serialization(),
+    };
     let bytes = if method == Method::Get {
         Vec::new()
     } else {
