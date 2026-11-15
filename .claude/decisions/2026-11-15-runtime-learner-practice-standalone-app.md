@@ -356,3 +356,25 @@ hard requirement, so no brief would leave its executor without a choice.
 - Step 9 (the owner's steps) becomes a guide sent to the owner once 8b is
   released.
 - Each app change ships with `ios_release` once it merges.
+
+### 2026-11-15: Reviewed !563 against !582, the architecture's coverage: they agree
+
+[`2026-11-15-runtime-architecture-coverage-agents-deploys.md`](2026-11-15-runtime-architecture-coverage-agents-deploys.md)
+derives every route, binding and hostname of the platform's Workers from the
+tree. !563 adds the app shape's router to the control Worker's code, and its
+template beside the platform kind.
+
+- **The app shape's routes are covered as they are.** Each is a
+  `"/v0/app/…"` literal in `worker/standalone.rs`, and later in
+  `worker/learner.rs`, `worker/members.rs` and `worker/instances.rs`. The
+  coverage test reads those under the `app` client, as §1 says. The `SHAPE`
+  check comes before every other path, and it adds no path of its own.
+- **No personal stack enters the diagram.**
+  - `catalog/pigeon/kinds/platform/app-worker.yaml` isn't under `infra/`, so
+    it is not one of the platform's Worker specs. Its bindings (`LEARNER`,
+    `STATE_KEY`, `HANDOVER`) describe no deployed part of the platform.
+  - A standalone's account, `workers.dev` host and label are runtime data in
+    `instances.private` alone. No repository file names them, so §1's
+    derivation never meets them, and the privacy test has nothing to find.
+
+Neither ADR changes.
