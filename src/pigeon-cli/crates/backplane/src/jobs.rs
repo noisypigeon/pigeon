@@ -563,7 +563,7 @@ fn bound(spec: &JobSpec, dir: &Path, sentinel: &Path) -> Report {
     for c in &checks {
         let _ = writeln!(log, "check: {}", c.name);
     }
-    let full = full_set(dir, &checks, &mut log);
+    let full = full_set(&checks, &mut log);
     let gate = (!full.is_empty()).then(|| gate(dir, &files, map.as_ref(), &mut log));
     let predicted = forecast(spec, dir, &mut log);
     let seen = (since != spec.base)
@@ -640,31 +640,27 @@ fn gate(
 /// The variable `pigeon-start` exports the test map's path in.
 pub const TEST_MAP_VAR: &str = "PIGEON_TEST_MAP";
 
-/// The head's full set of code checks, which the merge gate runs, when `checks` holds any code
-/// check; none for a head with no Rust input. See
-/// `.claude/decisions/2026-11-10-development-factory-crates-functional-core.md` §5.
-fn full_set(dir: &Path, checks: &[Check], log: &mut String) -> Vec<Check> {
-    if !checks.iter().any(|c| crate::actions::on_github(&c.argv)) {
-        return Vec::new();
+/// The head's merge gate set: its own code checks, and the whole test suite, which only a full
+/// gate runs; none for a head with no Rust input. See
+/// `.claude/decisions/2026-11-15-development-code-checks-by-reach.md` §4.
+fn full_set(checks: &[Check], log: &mut String) -> Vec<Check> {
+    let mut full: Vec<Check> = checks
+        .iter()
+        .filter(|c| crate::actions::on_github(&c.argv))
+        .cloned()
+        .collect();
+    if full.is_empty() {
+        return full;
     }
-    match crate::cobot::scope::full(dir) {
-        Ok(jobs) => {
-            let full: Vec<Check> = jobs
-                .into_iter()
-                .filter(|j| crate::actions::on_github(&j.argv))
-                .map(|j| Check {
-                    name: j.name,
-                    argv: j.argv,
-                })
-                .collect();
-            let _ = writeln!(log, "merge gate: {} check(s)", full.len());
-            full
-        }
-        Err(e) => {
-            let _ = writeln!(log, "merge gate: the full set isn't readable ({e})");
-            Vec::new()
-        }
+    let suite = ["cargo", "test", "--workspace", "--locked"].map(String::from);
+    if !full.iter().any(|c| c.argv == suite) {
+        full.push(Check {
+            name: "test".into(),
+            argv: suite.to_vec(),
+        });
     }
+    let _ = writeln!(log, "merge gate: {} check(s)", full.len());
+    full
 }
 
 /// The head's approval tiers, by the rules on the base branch; none when the base has none; see

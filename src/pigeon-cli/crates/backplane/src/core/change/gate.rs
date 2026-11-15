@@ -6,18 +6,23 @@ use super::types::{Change, Check, Effect, GATE, Job, JobStatus, MERGE, State, co
 use crate::core::deploy::gate::Gate;
 
 impl Change {
-    /// The head's full checks not yet passed on it, under their own name or as a gate job.
+    /// The head's full checks not yet passed on it, under their own name or as a gate job; a
+    /// clippy check a restack carried runs again. See
+    /// `.claude/decisions/2026-11-15-development-code-checks-by-reach.md` §4.
     fn gate_missing(&self) -> Vec<Check> {
-        let passed = |name: &str| {
-            self.jobs
-                .iter()
-                .any(|j| j.name == name && j.status == JobStatus::Passed)
+        let passed = |c: &Check, name: &str| {
+            let carried = clippy(c) && self.carried_checks.iter().any(|n| n == name);
+            !carried
+                && self
+                    .jobs
+                    .iter()
+                    .any(|j| j.name == name && j.status == JobStatus::Passed)
         };
         let scoped = self.gate_why().is_none();
         self.full
             .iter()
             .filter(|c| !(scoped && whole_suite(c)))
-            .filter(|c| !passed(&c.name) && !passed(&format!("{GATE}{}", c.name)))
+            .filter(|c| !passed(c, &c.name) && !passed(c, &format!("{GATE}{}", c.name)))
             .cloned()
             .collect()
     }
@@ -106,6 +111,7 @@ impl Change {
             for c in missing {
                 let name = format!("{GATE}{}", c.name);
                 self.jobs.retain(|j| j.name != name);
+                self.carried_checks.retain(|n| *n != name);
                 effects.push(Effect::Start(name.clone()));
                 self.jobs.push(Job::queued(&name, c.argv));
             }
@@ -125,6 +131,11 @@ impl Change {
             Err(_) => (self, Vec::new()),
         }
     }
+}
+
+/// Whether `c` is a clippy check, which a carried head runs again in its gate.
+fn clippy(c: &Check) -> bool {
+    c.argv.get(1).is_some_and(|v| v == "clippy")
 }
 
 /// Whether `c` runs the whole workspace's tests, which a scoped gate leaves out.

@@ -938,8 +938,41 @@ fn a_disjoint_same_patch_restack_carries_its_checks() {
     assert_eq!(c.state, State::Approved, "the approval carries at once");
     assert_eq!(
         c.apply(Event::Merge { by: "owner".into() }).expect("gates"),
-        [Effect::Start(gate("test"))],
-        "the gate runs only what never passed"
+        [Effect::Start(gate("clippy")), Effect::Start(gate("test"))],
+        "the gate runs what never passed, and the carried clippy again"
+    );
+    let mut last = Vec::new();
+    for job in ["clippy", "test"] {
+        last = c
+            .apply(Event::Finished {
+                job: gate(job),
+                sha: C.into(),
+                ok: true,
+            })
+            .expect("gate passed");
+    }
+    assert_eq!(
+        last,
+        [Effect::Start(MERGE.into())],
+        "the gate passed: it merges"
+    );
+}
+
+#[test]
+fn a_scoped_head_whose_checks_passed_merges_with_no_gate_job() {
+    // §4 of the code-checks-by-reach ADR: the gate set is the head's own checks and the suite.
+    let mut c = approved_with(&["fmt", "clippy"], &["fmt", "clippy"]);
+    c.full.push(Check {
+        name: "test".into(),
+        argv: ["cargo", "test", "--workspace", "--locked"]
+            .map(String::from)
+            .to_vec(),
+    });
+    c.gate = Some(backplane::core::deploy::gate::Gate::Scoped);
+    assert_eq!(
+        c.apply(Event::Merge { by: "owner".into() })
+            .expect("merges"),
+        [Effect::Start(MERGE.into())]
     );
 }
 

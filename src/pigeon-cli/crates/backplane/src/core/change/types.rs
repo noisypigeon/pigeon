@@ -387,6 +387,10 @@ pub struct Change {
     /// carried to the new head; see the factory ADR's 2026-11-12 amendment.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub kept: Vec<Job>,
+    /// The head's checks that a restack carried rather than ran on it; the merge gate runs its
+    /// clippy ones again. See `.claude/decisions/2026-11-15-development-code-checks-by-reach.md` §4.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub carried_checks: Vec<String>,
     /// The head whose patch a restack found already on `main`; closing it then loses nothing;
     /// see `.claude/decisions/2026-11-12-development-grants-applies-rescue-yield.md` §4 F3.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -690,6 +694,7 @@ impl Change {
             held: None,
             grant: None,
             kept: Vec::new(),
+            carried_checks: Vec::new(),
             landed: None,
             evicted: None,
             yielded: None,

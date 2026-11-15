@@ -63,6 +63,7 @@ impl Change {
         self.jobs[bound].status = JobStatus::Passed;
         self.state = State::Bounded;
         let kept = self.kept.split_off(0);
+        self.carried_checks.clear();
         let mut effects = Vec::new();
         for c in checks {
             if c.name == BOUND || self.jobs.iter().any(|j| j.name == c.name) {
@@ -71,6 +72,7 @@ impl Change {
             // Passed on the head before a disjoint, same-patch restack: not run again.
             if let Some(k) = kept.iter().find(|k| k.name == c.name && k.argv == c.argv) {
                 self.jobs.push(k.clone());
+                self.carried_checks.push(k.name.clone());
                 continue;
             }
             effects.push(Effect::Start(c.name.clone()));
@@ -83,6 +85,7 @@ impl Change {
                 .strip_prefix(GATE)
                 .is_some_and(|n| self.full.iter().any(|f| f.name == n && f.argv == k.argv));
             if in_full && !self.jobs.iter().any(|j| j.name == k.name) {
+                self.carried_checks.push(k.name.clone());
                 self.jobs.push(k);
             }
         }
