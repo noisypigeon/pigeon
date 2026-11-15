@@ -135,3 +135,28 @@ through `ChangeRun` (§2). There is never a second entry.
    agent call. Record that here. (planner)
 
 `Governs` gains each step's files as it lands.
+
+## Amendments
+
+### 2026-11-15: Review of !492 against !484: they agree
+
+!484 amended
+[`2026-11-07-development-control-plane-deploys-itself.md`](2026-11-07-development-control-plane-deploys-itself.md),
+[`2026-11-08-security-tiered-approvals-task-mandates.md`](2026-11-08-security-tiered-approvals-task-mandates.md),
+[`2026-11-12-runtime-ios-app-approvals-insights.md`](2026-11-12-runtime-ios-app-approvals-insights.md)
+and
+[`2026-11-13-development-session-stages-subscriptions-breaker.md`](2026-11-13-development-session-stages-subscriptions-breaker.md).
+A failed deploy now holds Auto windows and mandates, and a held change is in
+the new stage `held`.
+
+- **They agree.**
+  - `held` is only for an approved change. It has `needs: platform` and
+    lists nothing for the owner.
+  - §1's invariant covers only `needs: owner` with `change.authorize` or
+    `change.approve`, so `listed::owed` owes nothing for a held change, and
+    `worker/listed.rs` removes any entry left for it.
+- **A held window still authorizes and approves,** so a change it covers stays
+  `needs: agent` and is not listed, as before.
+- **`worker/mod.rs`,** where both work: !492 adds only `mod listed;`. That
+  doesn't touch !484's hooks.
+- **!492 changes nothing in those ADRs.**
