@@ -179,9 +179,9 @@ Where each check runs:
   owner's `change_authorize`, `change_approve`, `change_merge` (squashes the
   approved head onto `main` as `<title> (!n)`) and `change_close`, which,
   called by the agent, answer at once with the approval page's link;
-  `approval_wait` shows the code card for one. `mandate_propose`,
+  `approval_wait` shows that link as a card. `mandate_propose`,
   `mandate_status` and `mandate_end` handle mandates; one is granted on
-  `/mandate/<id>` with the code. A change proposed with `mandate` is
+  `/mandate/<id>` with a passkey. A change proposed with `mandate` is
   authorized, approved and merged as `mandate:<id>` while the mandate covers
   it; otherwise the owner is asked as usual.
   Each push to `main` runs `MainRun`'s pipeline: one deploy at a time, of the

@@ -240,7 +240,7 @@ pub fn parse(message: &Value, version: &str) -> Action {
                         "protocolVersion": session.protocol,
                         "capabilities": { "tools": { "listChanged": false } },
                         "serverInfo": { "name": "pigeon", "version": version },
-                        "instructions": "pigeon's control plane. Propose a change, push its branch, read its status; the owner approves in the card this server shows, with their authenticator code.",
+                        "instructions": "pigeon's control plane. Propose a change, push its branch, read its status; the owner approves on the approval page this server links to, with a passkey.",
                     }),
                 ),
                 session,

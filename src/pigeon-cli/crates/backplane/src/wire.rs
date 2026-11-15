@@ -296,7 +296,7 @@ const CATALOG: &[Operation] = &[
         name: "change.approve",
         engine: Engine::Backplane,
         effect: Effect::Apply,
-        summary: "Approve a checked change's head for merge, which queues its merge (sha?: the head; a person's call without it approves the current head, and a service token's call asks the owner for their code in the card; hold?: true approves without queuing the merge); never by its proposer",
+        summary: "Approve a checked change's head for merge, which queues its merge (sha?: the head; a person's call without it approves the current head, and a service token's call waits for the owner's passkey on the approval page; hold?: true approves without queuing the merge); never by its proposer",
         args: &[
             NUMBER,
             arg("sha", false, Kind::String),
@@ -345,7 +345,7 @@ const CATALOG: &[Operation] = &[
         name: "ci.window",
         engine: Engine::Backplane,
         effect: Effect::Plan,
-        summary: "Ask the owner to run every change's code checks on Cloudflare's Checker instead of GitHub Actions for `hours` (1 to 24; 0 closes the window early); answers with the page's link, granted with the code",
+        summary: "Ask the owner to run every change's code checks on Cloudflare's Checker instead of GitHub Actions for `hours` (1 to 24; 0 closes the window early); answers with the page's link, granted with a passkey",
         args: &[
             arg("hours", true, Kind::Text),
             arg("ticket", false, Kind::String),
@@ -362,7 +362,7 @@ const CATALOG: &[Operation] = &[
         name: "grant.request",
         engine: Engine::Backplane,
         effect: Effect::Plan,
-        summary: "Ask the owner to mint or generate grant `name` from the deployed ledger and put it at its route; answers with the page's link, where the code runs it",
+        summary: "Ask the owner to mint or generate grant `name` from the deployed ledger and put it at its route; answers with the page's link, where a passkey runs it",
         args: &[
             arg("name", true, Kind::String),
             arg("ticket", false, Kind::String),
@@ -420,7 +420,7 @@ const CATALOG: &[Operation] = &[
         name: "mandate.propose",
         engine: Engine::Backplane,
         effect: Effect::Plan,
-        summary: "Propose a mandate: a task the owner grants once with the code, so changes inside it go through without asking; `adr` (the ADR it executes), `summary`, `scope` (globs, one per line), `may_deploy`, `budget` (merges, 1 to 10, default 5) and `hours` (1 to 72, default 24); answers with the page's link",
+        summary: "Propose a mandate: a task the owner grants once with a passkey, so changes inside it go through without asking; `adr` (the ADR it executes), `summary`, `scope` (globs, one per line), `may_deploy`, `budget` (merges, 1 to 10, default 5) and `hours` (1 to 72, default 24); answers with the page's link",
         args: &[
             arg("adr", true, Kind::String),
             arg("summary", true, Kind::String),
@@ -665,7 +665,7 @@ const CATALOG: &[Operation] = &[
         name: "platform.plan",
         engine: Engine::Backplane,
         effect: Effect::Plan,
-        summary: "Plan a pigeon/platform unit: answers at once with the page where the owner grants it with their code and a one-time account token (args: unit, e.g. platform/blue)",
+        summary: "Plan a pigeon/platform unit: answers at once with the page where the owner grants it with a passkey and a one-time account token (args: unit, e.g. platform/blue)",
         args: &[
             arg("unit", true, Kind::String),
             arg("ticket", false, Kind::String),
@@ -675,7 +675,7 @@ const CATALOG: &[Operation] = &[
         name: "platform.apply",
         engine: Engine::Backplane,
         effect: Effect::Plan,
-        summary: "Offer a planned platform run's apply again: answers with the page where the owner reviews its changes and grants it with their code (args: run)",
+        summary: "Offer a planned platform run's apply again: answers with the page where the owner reviews its changes and grants it with a passkey (args: run)",
         args: &[
             arg("run", true, Kind::Text),
             arg("ticket", false, Kind::String),
