@@ -172,3 +172,32 @@ The digest gains two shown, never-pushed lists. Neither changes `needs_owner`:
 - **Not yet.** Sessions started before the deploy declare no `parent`, so
   they have no archiver. An executor still gets one from its `planner`. Step
   3 verifies live.
+
+### 2026-11-15: Step 3, live: the archive path works, and the digest now reads every event since its cursor
+
+- **What ran.** After !503 deployed (`e760c08`), the planner went through
+  `/v0/run` with a synthetic label, `…/session_verify-archive-503`. No Claude
+  Code session stands behind that label, so `archive_session` was never
+  called.
+  - `session.start` with `parent` set to the planner's label.
+  - `session.end`: holding nothing, the end was judged `clean: true`, with
+    the planner as `archiver`. Events 21211 and 21212 followed: `session.ended`
+    "clean", then `session.archivable` addressed to the planner, which
+    `wake=agent` lets through.
+  - `session.archived` was refused from a session that isn't the archiver.
+    The archiver's own report (`skipped`, with why) was recorded as 21213. A
+    second report was refused as already recorded.
+- **What it found.** `digest_show` omitted the report.
+  - `worker/push.rs::build` read a single `/events/since` page, at most
+    `events::PAGE` (200) events after its cursor.
+  - The hourly digest then moved the cursor only to that page's end.
+  - At about 230 events an hour, the digest fell further behind each hour.
+    !503's own window approval was missing from "merged without you" too.
+- **The fix.** `build` pages through `/events/since`, up to 50 pages, as
+  `worker/stages.rs` and `worker/insights.rs` already do. Every event since
+  the cursor counts, and the cursor moves to the last event read.
+- **What remains.** A real executor's clean end, archived by its planner with
+  `archive_session`, is the first end-to-end run. It shows in the next
+  digest's archive lines. Sessions started before !503 declare no `parent`, so
+  a planner seeded by the status session has no archiver. Its clean end shows
+  as "ended clean, not archived".

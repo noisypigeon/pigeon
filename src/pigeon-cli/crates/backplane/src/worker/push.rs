@@ -98,15 +98,7 @@ pub async fn build(env: &Env, s: &Settings) -> Result<(Digest, u64)> {
     let (_, all_mandates) = to_instance(env, s, "/mandates/list", &json!({})).await?;
     let mandates: Vec<crate::mandates::Mandate> =
         serde_json::from_value(all_mandates["mandates"].clone()).unwrap_or_default();
-    let (_, since) = to_instance(
-        env,
-        s,
-        "/events/since",
-        &json!({ "after": after, "owner": true }),
-    )
-    .await?;
-    let events: Vec<crate::events::Event> =
-        serde_json::from_value(since["events"].clone()).unwrap_or_default();
+    let events = since(env, s, after).await?;
     let last = events.last().map_or(after, |x| x.id);
     let failed: Vec<(String, String)> = events
         .iter()
@@ -174,6 +166,28 @@ pub async fn build(env: &Env, s: &Settings) -> Result<(Digest, u64)> {
     let tickets: crate::tickets::Tickets = serde_json::from_value(t).unwrap_or_default();
     d.archives = crate::tasks::archive_lines(&reports, &tickets.unarchived(now()));
     Ok((d, last))
+}
+
+/// The most `/events/since` pages the digest reads in one go.
+const DIGEST_PAGES: usize = 50;
+
+/// Every event after `after`, page by page; see
+/// `.claude/decisions/2026-11-15-development-archive-cleanly-ended-sessions.md`, 2026-11-15.
+async fn since(env: &Env, s: &Settings, mut after: u64) -> Result<Vec<crate::events::Event>> {
+    let mut events = Vec::new();
+    for _ in 0..DIGEST_PAGES {
+        let body = json!({ "after": after, "owner": true });
+        let (_, v) = to_instance(env, s, "/events/since", &body).await?;
+        let page: Vec<crate::events::Event> =
+            serde_json::from_value(v["events"].clone()).unwrap_or_default();
+        let full = page.len() >= crate::events::PAGE;
+        after = page.last().map_or(after, |e| e.id);
+        events.extend(page);
+        if !full || after >= v["last"].as_u64().unwrap_or_default() {
+            break;
+        }
+    }
+    Ok(events)
 }
 
 /// Each session with open changes, with whether it listens and each change's stage, and the
