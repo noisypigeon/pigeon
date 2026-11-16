@@ -158,6 +158,7 @@
 - chore(secrets): the four stored ciphertexts carry the ENC[pigeon:v1:] tag (!769) ([741c355](https://github.com/noisypigeon/pigeon/commit/741c355c46be13d5f4d4ca8143cbcf4a02e8e109))
 - refactor: src/pigeon-core is the pigeon-core crate: backplane's functional core, its pure modules and the wire form, built alone for native and wasm (!770) ([c446ce8](https://github.com/noisypigeon/pigeon/commit/c446ce8a38176dec4d6e73bae59a291576e283d9)) · backplane
 - refactor: the pigeon binary's crate moves to src/pigeon-harness (!772) ([0633627](https://github.com/noisypigeon/pigeon/commit/06336271f79bed3ecadbe44c81fdbfdc2bc497be)) · backplane
+- test: the stored-state fixtures move ahead to src/pigeon-agent/tests/state (!777) ([9483ac0](https://github.com/noisypigeon/pigeon/commit/9483ac01b71e5534998eaf5b3544984db92f042c))
 
 ## 2026-11-15
 
