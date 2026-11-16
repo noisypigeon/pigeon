@@ -4,15 +4,15 @@ rules:
   - find:
       match: '(\.tf|\.tf\.json|\.tofu|\.tofu\.json)$'
       allow_under: [catalog/, infra/, workloads/]
-      ignore: ['^\.git$', '(^|/)target$', '(^|/)\.cobot$']
+      ignore: ['^\.git$', '(^|/)target$', '(^|/)\.cobot$', '(^|/)\.pigeon$']
   - find:
       match: '(\.tfvars|\.tfvars\.json|(^|/)\.terraform\.lock\.hcl|(^|/)unit\.yaml)$'
       allow_under: [infra/, workloads/]
-      ignore: ['^\.git$', '(^|/)target$', '(^|/)\.cobot$']
+      ignore: ['^\.git$', '(^|/)target$', '(^|/)\.cobot$', '(^|/)\.pigeon$']
   - find:
       match: '(\.tfstate(\.backup)?$|(^|/)\.terraform/)'
-      ignore: ['^\.git$', '(^|/)target$', '(^|/)\.cobot$']
+      ignore: ['^\.git$', '(^|/)target$', '(^|/)\.cobot$', '(^|/)\.pigeon$']
   - find:
       match: '(^|/)secrets\.config\.yaml$'
       allow_under: [infra/, workloads/]
-      ignore: ['^\.git$', '(^|/)target$', '(^|/)\.cobot$']
+      ignore: ['^\.git$', '(^|/)target$', '(^|/)\.cobot$', '(^|/)\.pigeon$']
