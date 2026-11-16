@@ -16,6 +16,7 @@
 - backplane v0.1.40
 - backplane v0.1.41
 - backplane v0.1.42
+- backplane v0.1.43
 - infra-agnostic-random-string v0.1.3
 - infra-agnostic-schema v0.1.3
 - infra-agnostic-schema v0.1.4
@@ -58,7 +59,9 @@
 - sentinel v0.1.17
 - site-template-architecture v0.1.1
 - site-template-architecture v0.1.2
+- site-template-architecture v0.1.3
 - site-template-blog v1.0.3
+- site-template-blog v1.0.4
 
 ### Merged
 
@@ -201,6 +204,15 @@
 - feat(look): the owner pages' design tokens and stylesheet, mirrored from the iOS app (!804) ([3d821ff](https://github.com/noisypigeon/pigeon/commit/3d821ffb598a3661967eb17ec72961dd1643d73c))
 - fix(bench): `pigeon session bench ci` asks its bench for `pigeon dev scope` (!809) ([ae8b3de](https://github.com/noisypigeon/pigeon/commit/ae8b3def6bcaed70043037d683636ea726c53609))
 - docs: the merge-path ADR's Governs glob matches `ci.rs` under its cobot and checks paths (!835) ([f88d240](https://github.com/noisypigeon/pigeon/commit/f88d24033a46a6bde09191431a8d635943134f1f))
+- feat(agent): the release bot takes a merge turn, so main moves only through the merge queue (!821) ([58c4639](https://github.com/noisypigeon/pigeon/commit/58c46391313ed775f3ce57046b84a2ffa90e3dfb)) · backplane
+- feat(approve): the owner pages wear the app's look (!816) ([6385596](https://github.com/noisypigeon/pigeon/commit/6385596fdb09b9c73e26b21f8697c12dc807a39d))
+- refactor: the agent's `cobot` module splits into infra, workers, sites, git, release, checks and containers (!803) ([0047368](https://github.com/noisypigeon/pigeon/commit/004736808421d312cd0d8b6731db16eb4b072de9)) · backplane
+- fix(look): the owner pages' avatar at the app's 40 pt header size (!819) ([0700510](https://github.com/noisypigeon/pigeon/commit/0700510907a900169d094f3b5c7258e8deda8102))
+- docs(adr): review !812 against !801 (!825) ([befacd8](https://github.com/noisypigeon/pigeon/commit/befacd8ffa3fec39571cb6f85ebee09814578c94))
+- feat(site-templates): the blog and architecture templates take the app's look (!817) ([212356c](https://github.com/noisypigeon/pigeon/commit/212356c0851abb7766165f336a8aa9bc5780bb81)) · site-template-architecture, site-template-blog
+- docs(adr): the AI Gateway is an optional `ai_gateways` list on the pigeon/platform kind, and DLP waits for its own step (!828) ([5ac9687](https://github.com/noisypigeon/pigeon/commit/5ac96877567560508e37c21446ace6c6483d35f2))
+- docs(adr): review !802 against !801 (!823) ([50641c6](https://github.com/noisypigeon/pigeon/commit/50641c698f8c2f3e260bdcc1195104e9582f2bf1))
+- chore(approvals): approvals.yaml names the gate, so Auto covers every other guarded and eviction path (!812) ([4466cb4](https://github.com/noisypigeon/pigeon/commit/4466cb441c27b4b79b47556b6da06d2c9669a393))
 
 ## 2026-11-15
 
