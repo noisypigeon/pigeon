@@ -468,7 +468,7 @@ pub fn enroll_page(said: Option<&str>) -> String {
     }
     let _ = write!(
         b,
-        "<p>For when no passkey is left. <code>pigeon backplane enroll-secret</code> prints a \
+        "<p>For when no passkey is left. <code>pigeon keys enroll</code> prints a \
 token that works once, for at most an hour, after its other line is put as the \
 <code>PASSKEY_ENROLL</code> secret.</p>\
 <form method=\"post\" action=\"/passkeys/enroll\">\

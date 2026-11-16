@@ -872,10 +872,7 @@ pigeon-core lib pigeon_core bench::allow::tests::display_writes_text
 pigeon-core lib pigeon_core bench::allow::tests::rule1_empty
 pigeon-core lib pigeon_core bench::allow::tests::rule2_too_long
 pigeon-core lib pigeon_core bench::allow::tests::rule2_too_many
-pigeon-core lib pigeon_core bench::allow::tests::rule3_mise_ci
-pigeon-core lib pigeon_core bench::allow::tests::rule3_mise_other
-pigeon-core lib pigeon_core bench::allow::tests::rule3_mise_shape
-pigeon-core lib pigeon_core bench::allow::tests::rule3_mise_tasks_allowed
+pigeon-core lib pigeon_core bench::allow::tests::rule3_mise_is_refused
 pigeon-core lib pigeon_core bench::allow::tests::rule3_pigeon_dev_runs_the_same_tasks
 pigeon-core lib pigeon_core bench::allow::tests::rule3b_bench_check
 pigeon-core lib pigeon_core bench::allow::tests::rule3b_bench_refused

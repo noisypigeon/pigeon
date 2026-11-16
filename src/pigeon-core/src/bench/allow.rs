@@ -2,9 +2,8 @@
 
 use serde::{Deserialize, Serialize};
 
-/// Tasks a bench may run, through `pigeon dev` or `mise run`: `pigeon dev`'s names, then the old
-/// ones it still accepts.
-pub const TASKS: [&str; 16] = [
+/// Tasks a bench may run, through `pigeon dev`.
+pub const TASKS: [&str; 12] = [
     "ci-scoped",
     "build",
     "test",
@@ -17,10 +16,6 @@ pub const TASKS: [&str; 16] = [
     "policy-build",
     "policy-change",
     "instance",
-    "sentinel",
-    "sentinel-build",
-    "sentinel-change",
-    "backplane",
 ];
 /// `cargo` subcommands a bench may run.
 pub const CARGO: [&str; 7] = [
@@ -42,11 +37,11 @@ pub const MAX_ARGS: usize = 64;
 /// Most bytes one argument may have.
 pub const MAX_ARG_BYTES: usize = 4096;
 
-/// An allowed command: a `mise` task, a check by name, or a plain argv.
+/// An allowed command: a `pigeon dev` task, a check by name, or a plain argv.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase", tag = "kind")]
 pub enum Command {
-    /// A `mise run` task.
+    /// A `pigeon dev` task.
     Task {
         /// The task's name.
         name: String,
@@ -77,12 +72,10 @@ fn r(s: impl Into<String>) -> Result<Command, Refusal> {
     Err(Refusal(s.into()))
 }
 
-/// Task `t`, run as `how` (`mise run` or `pigeon dev`), if a bench may run it.
-fn task(t: &str, how: &str) -> Result<Command, Refusal> {
+/// Task `t`, run as `pigeon dev <t>`, if a bench may run it.
+fn task(t: &str) -> Result<Command, Refusal> {
     if t == "ci" {
-        r(format!(
-            "bench: `{how} ci` runs on the gate; use `bench ci`"
-        ))
+        r("bench: `pigeon dev ci` runs on the gate; use `bench ci`")
     } else if TASKS.contains(&t) {
         Ok(Command::Task { name: t.into() })
     } else {
@@ -109,12 +102,6 @@ pub fn allow(argv: &[String]) -> Result<Command, Refusal> {
         return r("bench: an argument is too long or holds NUL");
     }
     match argv[0].as_str() {
-        "mise" => {
-            if argv.len() != 3 || argv[1] != "run" {
-                return r("bench: only `mise run <task>`");
-            }
-            task(&argv[2], "mise run")
-        }
         "bench" => {
             let ok = argv.len() == 3
                 && argv[1] == "check"
@@ -148,24 +135,27 @@ pub fn allow(argv: &[String]) -> Result<Command, Refusal> {
                 argv: argv.to_vec(),
             })
         }
-        "pigeon" if argv.get(1).is_some_and(|a| a == "dev") => {
+        "pigeon"
+            if argv.get(1).is_some_and(|a| a == "dev")
+                && argv.get(2).is_none_or(|a| a != "scope") =>
+        {
             if argv.len() != 3 {
                 return r("bench: only `pigeon dev <task>`");
             }
-            task(&argv[2], "pigeon dev")
+            task(&argv[2])
         }
         "pigeon" => {
-            let ok = argv.len() >= 3
-                && ((argv[1] == "cobot"
-                    && ["validate", "render", "scope"].contains(&argv[2].as_str()))
-                    || (argv[1] == "backplane" && argv[2] == "decisions"));
+            let ok = (argv.len() >= 3
+                && ((argv[1] == "infra" && ["validate", "render"].contains(&argv[2].as_str()))
+                    || (argv[1] == "dev" && argv[2] == "scope")))
+                || (argv.len() >= 2 && argv[1] == "decisions");
             if ok {
                 Ok(Command::Argv {
                     argv: argv.to_vec(),
                 })
             } else {
                 r(
-                    "bench: only `pigeon cobot validate|render|scope` and `pigeon backplane decisions`",
+                    "bench: only `pigeon infra validate|render`, `pigeon dev scope` and `pigeon decisions`",
                 )
             }
         }
@@ -225,39 +215,20 @@ mod tests {
     }
 
     #[test]
-    fn rule3_mise_shape() {
-        let e = "bench: only `mise run <task>`";
-        assert_eq!(refused(&["mise"]), e);
-        assert_eq!(refused(&["mise", "x", "fmt"]), e);
-        assert_eq!(refused(&["mise", "run", "fmt", "extra"]), e);
-    }
-
-    #[test]
-    fn rule3_mise_ci() {
-        assert_eq!(
-            refused(&["mise", "run", "ci"]),
-            "bench: `mise run ci` runs on the gate; use `bench ci`"
-        );
-    }
-
-    #[test]
-    fn rule3_mise_tasks_allowed() {
-        for t in TASKS {
+    fn rule3_mise_is_refused() {
+        for argv in [
+            &["mise"][..],
+            &["mise", "run", "fmt"],
+            &["mise", "run", "ci"],
+        ] {
+            assert_eq!(refused(argv), "bench: `mise` isn't allowed");
+        }
+        for old in ["sentinel", "sentinel-build", "sentinel-change", "backplane"] {
             assert_eq!(
-                allow(&v(&["mise", "run", t])),
-                Ok(Command::Task {
-                    name: t.to_string()
-                })
+                refused(&["pigeon", "dev", old]),
+                format!("bench: task `{old}` isn't allowed")
             );
         }
-    }
-
-    #[test]
-    fn rule3_mise_other() {
-        assert_eq!(
-            refused(&["mise", "run", "deploy"]),
-            "bench: task `deploy` isn't allowed"
-        );
     }
 
     #[test]
@@ -337,14 +308,24 @@ mod tests {
 
     #[test]
     fn rule5_pigeon() {
-        let e = "bench: only `pigeon cobot validate|render|scope` and `pigeon backplane decisions`";
-        assert_eq!(refused(&["pigeon", "cobot", "plan"]), e);
+        let e =
+            "bench: only `pigeon infra validate|render`, `pigeon dev scope` and `pigeon decisions`";
+        assert_eq!(refused(&["pigeon", "infra", "plan"]), e);
         assert_eq!(refused(&["pigeon"]), e);
-        assert_eq!(refused(&["pigeon", "backplane", "run"]), e);
-        let a = v(&["pigeon", "cobot", "scope", "--json"]);
-        assert_eq!(allow(&a), Ok(Command::Argv { argv: a.clone() }));
-        let b = v(&["pigeon", "backplane", "decisions", "x"]);
-        assert_eq!(allow(&b), Ok(Command::Argv { argv: b.clone() }));
+        assert_eq!(refused(&["pigeon", "run"]), e);
+        for old in [
+            &["pigeon", "cobot", "validate"][..],
+            &["pigeon", "backplane", "decisions", "x"],
+        ] {
+            assert_eq!(refused(old), e);
+        }
+        for ok in [
+            v(&["pigeon", "dev", "scope", "--json"]),
+            v(&["pigeon", "infra", "render", "--state", "s"]),
+            v(&["pigeon", "decisions", "x"]),
+        ] {
+            assert_eq!(allow(&ok), Ok(Command::Argv { argv: ok.clone() }));
+        }
     }
 
     #[test]

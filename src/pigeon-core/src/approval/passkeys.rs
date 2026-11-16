@@ -680,7 +680,7 @@ impl Proofs {
             (self.app, "a change approved with a passkey in the app"),
             (
                 self.enrolled,
-                "an enrolment drill with `pigeon backplane enroll-secret`",
+                "an enrolment drill with `pigeon keys enroll`",
             ),
         ];
         out.extend(

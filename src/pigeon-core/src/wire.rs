@@ -545,7 +545,7 @@ const CATALOG: &[Operation] = &[
         name: "bench.run",
         engine: Engine::Backplane,
         effect: Effect::Build,
-        summary: "Run `argv` on your bench `bench` (0 to 2, default 0) at `sha`, the commit `pigeon session bench push` put on your scratch ref: an allowed `mise run <task>`, `cargo fmt|check|clippy|build|test|tree|metadata …`, `bench check <name>`, `pigeon cobot validate|render|scope …`, or `git diff|log|status …`; answers its `run`; one run per bench at a time; `timeout` in minutes, 1 to 90",
+        summary: "Run `argv` on your bench `bench` (0 to 2, default 0) at `sha`, the commit `pigeon session bench push` put on your scratch ref: an allowed `pigeon dev <task>`, `cargo fmt|check|clippy|build|test|tree|metadata …`, `bench check <name>`, `pigeon infra validate|render …`, `pigeon dev scope …`, `pigeon decisions …`, or `git diff|log|status …`; answers its `run`; one run per bench at a time; `timeout` in minutes, 1 to 90",
         args: &[
             arg("ticket", true, Kind::String),
             arg("sha", true, Kind::String),

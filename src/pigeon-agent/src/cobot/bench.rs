@@ -1212,7 +1212,7 @@ depends = ["rust"]
 dir = "../outside"
 run = "true"
 
-[tasks.sentinel]
+[tasks.policy]
 run = "sleep 30"
 "#;
 
@@ -1302,8 +1302,8 @@ run = "sleep 30"
             "bench: mise task `features`'s dir leaves the checkout"
         );
         assert_eq!(
-            mise_steps(MISE, "backplane").unwrap_err(),
-            "bench: mise.toml has no task `backplane`"
+            mise_steps(MISE, "instance").unwrap_err(),
+            "bench: mise.toml has no task `instance`"
         );
         assert!(mise_steps("not toml [", "fmt").is_err());
     }
@@ -1459,7 +1459,7 @@ run = "sleep 30"
         let root = tempfile::tempdir().expect("tmp");
         let (bare, sha) = remote(root.path());
         let b = bench(&root.path().join("work"));
-        let (code, v) = b.start(spec(&bare, &sha, "r1", &["mise", "run", "lint"]));
+        let (code, v) = b.start(spec(&bare, &sha, "r1", &["pigeon", "dev", "lint"]));
         assert_eq!(code, 202, "{v}");
         let v = done(&b, "r1");
         assert_eq!(v["state"], "passed", "{v}");
@@ -1498,7 +1498,7 @@ run = "sleep 30"
         let root = tempfile::tempdir().expect("tmp");
         let (bare, sha) = remote(root.path());
         let b = bench(&root.path().join("work"));
-        b.start(spec(&bare, &sha, "r2", &["mise", "run", "test"]));
+        b.start(spec(&bare, &sha, "r2", &["pigeon", "dev", "test"]));
         let v = done(&b, "r2");
         assert_eq!(v["state"], "failed", "{v}");
         assert_eq!(v["exit"], 3);
@@ -1525,7 +1525,7 @@ run = "sleep 30"
         let (bare, sha) = remote(root.path());
         let b = bench(&root.path().join("work"));
         assert_eq!(
-            b.start(spec(&bare, &sha, "long", &["mise", "run", "sentinel"]))
+            b.start(spec(&bare, &sha, "long", &["pigeon", "dev", "policy"]))
                 .0,
             202
         );
