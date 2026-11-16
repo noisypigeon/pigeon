@@ -11,24 +11,35 @@ pub const VAR: &str = "PIGEON_SENTINEL";
 /// The binary's name.
 pub const BINARY: &str = crate::cobot::ship_wire::SENTINEL_BINARY;
 
-/// Where `pigeon-sentinel` is: `var`'s [`VAR`], else beside the running executable or in its
-/// parent directory, else its bare name, found on `PATH`.
+/// Where the judge is: `var`'s [`VAR`], else either of
+/// [`crate::cobot::ship_wire::JUDGE_BINARIES`] beside the running executable, in its parent
+/// directory or on `PATH`, else [`BINARY`]'s bare name.
 #[must_use]
 pub fn locate(var: &dyn Fn(&str) -> Option<String>) -> PathBuf {
     let var = crate::names::lookup(var);
     if let Some(p) = var(VAR).filter(|p| !p.is_empty()) {
         return PathBuf::from(p);
     }
-    if let Ok(exe) = std::env::current_exe() {
-        let here = exe.parent();
-        for dir in here.into_iter().chain(here.and_then(Path::parent)) {
-            let candidate = dir.join(BINARY);
-            if candidate.is_file() {
-                return candidate;
-            }
-        }
-    }
-    PathBuf::from(BINARY)
+    let exe = std::env::current_exe().ok();
+    let here = exe.as_deref().and_then(Path::parent);
+    let path = var("PATH").unwrap_or_default();
+    let dirs: Vec<PathBuf> = here
+        .into_iter()
+        .chain(here.and_then(Path::parent))
+        .map(Path::to_path_buf)
+        .chain(std::env::split_paths(&path))
+        .collect();
+    find(&dirs).unwrap_or_else(|| PathBuf::from(BINARY))
+}
+
+/// The first of the judge's names found in `dirs`, each directory in turn.
+fn find(dirs: &[PathBuf]) -> Option<PathBuf> {
+    dirs.iter().find_map(|d| {
+        crate::cobot::ship_wire::JUDGE_BINARIES
+            .iter()
+            .map(|b| d.join(b))
+            .find(|c| c.is_file())
+    })
 }
 
 /// What a check found.
@@ -184,4 +195,23 @@ pub fn version(binary: &Path) -> Option<String> {
             .trim()
             .to_string()
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_judge_is_found_under_either_name_the_new_first() {
+        let a = tempfile::tempdir().expect("tempdir");
+        let b = tempfile::tempdir().expect("tempdir");
+        let dirs = [a.path().to_path_buf(), b.path().to_path_buf()];
+        assert_eq!(find(&dirs), None);
+        std::fs::write(b.path().join("pigeon-sentinel"), "").expect("old");
+        assert_eq!(find(&dirs), Some(b.path().join("pigeon-sentinel")));
+        std::fs::write(b.path().join("pigeon-eviction"), "").expect("new");
+        assert_eq!(find(&dirs), Some(b.path().join("pigeon-eviction")));
+        std::fs::write(a.path().join("pigeon-sentinel"), "").expect("nearer");
+        assert_eq!(find(&dirs), Some(a.path().join("pigeon-sentinel")));
+    }
 }

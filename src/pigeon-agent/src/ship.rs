@@ -165,16 +165,73 @@ pub const BUILD: [&str; 9] = [
     "backplane",
 ];
 
-/// The command that builds the `pigeon-sentinel` the bound job judges with, by its binary's name,
-/// so it builds whichever package holds it.
-pub const SENTINEL_BUILD: [&str; 6] = [
-    "cargo",
-    "build",
-    "--release",
-    "--locked",
-    "--bin",
-    crate::cobot::ship_wire::SENTINEL_BINARY,
-];
+/// The command that builds the judge the bound job judges with, by its binary's name `bin`, so it
+/// builds whichever package holds it.
+#[must_use]
+pub fn judge_build(bin: &str) -> [&str; 6] {
+    ["cargo", "build", "--release", "--locked", "--bin", bin]
+}
+
+/// The first of [`crate::cobot::ship_wire::JUDGE_BINARIES`] that a member of the workspace at
+/// `ws` declares, as a `[[bin]]` or a package with `src/main.rs`; else the old name.
+#[must_use]
+pub fn judge_binary(ws: &Path) -> &'static str {
+    let manifest = |dir: &Path| {
+        std::fs::read_to_string(dir.join("Cargo.toml"))
+            .ok()
+            .and_then(|t| t.parse::<toml::Value>().ok())
+    };
+    let members: Vec<String> = manifest(ws)
+        .and_then(|m| {
+            let list = m.get("workspace")?.get("members")?.as_array()?.clone();
+            Some(
+                list.iter()
+                    .filter_map(|v| v.as_str().map(String::from))
+                    .collect(),
+            )
+        })
+        .unwrap_or_default();
+    let mut dirs = Vec::new();
+    for m in &members {
+        match m.trim_end_matches('/').strip_suffix("/*") {
+            Some(parent) => {
+                let mut found: Vec<_> = std::fs::read_dir(ws.join(parent))
+                    .into_iter()
+                    .flatten()
+                    .flatten()
+                    .map(|e| e.path())
+                    .collect();
+                found.sort();
+                dirs.extend(found);
+            }
+            None => dirs.push(ws.join(m)),
+        }
+    }
+    let mut bins = std::collections::BTreeSet::new();
+    for dir in dirs {
+        let Some(m) = manifest(&dir) else { continue };
+        let declared: Vec<String> = m
+            .get("bin")
+            .and_then(toml::Value::as_array)
+            .map(|a| {
+                a.iter()
+                    .filter_map(|b| b.get("name")?.as_str().map(String::from))
+                    .collect()
+            })
+            .unwrap_or_default();
+        if declared.is_empty()
+            && dir.join("src/main.rs").is_file()
+            && let Some(name) = m.get("package").and_then(|p| p.get("name")?.as_str())
+        {
+            bins.insert(name.to_string());
+        }
+        bins.extend(declared);
+    }
+    crate::cobot::ship_wire::JUDGE_BINARIES
+        .into_iter()
+        .find(|b| bins.contains(*b))
+        .unwrap_or(crate::cobot::ship_wire::SENTINEL_BINARY)
+}
 
 /// Builds `pigeon` from the checkout at `dir` when the workspace changed among `files`, and
 /// stores it at [`crate::cobot::ship_wire::build_key`] in the [`BUILDS_BINDING`] bucket, with S3
@@ -234,11 +291,8 @@ pub fn build(
     };
     let (binary, took) = compile(&BUILD, "pigeon", log)?;
     let sha256 = crate::cobot::s3::sha256_hex(&binary);
-    let (sentinel, sentinel_took) = compile(
-        &SENTINEL_BUILD,
-        crate::cobot::ship_wire::SENTINEL_BINARY,
-        log,
-    )?;
+    let judge = judge_binary(&workspace);
+    let (sentinel, sentinel_took) = compile(&judge_build(judge), judge, log)?;
     let sentinel_sha256 = crate::cobot::s3::sha256_hex(&sentinel);
     let api = crate::cobot::cloudflare::Api::new(None, token.clone());
     let account = api.account()?;
@@ -366,4 +420,60 @@ fn build_images(
         source: spec.sha.clone(),
         images: refs,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn tree(crates: &[(&str, &str, bool)]) -> tempfile::TempDir {
+        let dir = tempfile::tempdir().expect("tempdir");
+        std::fs::write(
+            dir.path().join("Cargo.toml"),
+            "[workspace]\nmembers = [\"src/*\"]\n",
+        )
+        .expect("workspace");
+        for (name, manifest, main) in crates {
+            let c = dir.path().join("src").join(name);
+            std::fs::create_dir_all(c.join("src")).expect("crate");
+            std::fs::write(c.join("Cargo.toml"), manifest).expect("manifest");
+            if *main {
+                std::fs::write(c.join("src/main.rs"), "fn main() {}\n").expect("main");
+            }
+        }
+        dir
+    }
+
+    #[test]
+    fn the_judge_is_built_under_the_name_the_tree_declares() {
+        let old = "[package]\nname = \"pigeon-eviction\"\n\n[[bin]]\nname = \"pigeon-sentinel\"\npath = \"src/main.rs\"\n";
+        let new = "[package]\nname = \"pigeon-eviction\"\n\n[[bin]]\nname = \"pigeon-eviction\"\npath = \"src/main.rs\"\n";
+        let other = "[package]\nname = \"pigeon\"\n";
+        let t = tree(&[
+            ("pigeon-eviction", old, true),
+            ("pigeon-harness", other, true),
+        ]);
+        assert_eq!(judge_binary(t.path()), "pigeon-sentinel");
+        let t = tree(&[
+            ("pigeon-eviction", new, true),
+            ("pigeon-harness", other, true),
+        ]);
+        assert_eq!(judge_binary(t.path()), "pigeon-eviction");
+        let implicit = "[package]\nname = \"pigeon-eviction\"\n";
+        let t = tree(&[("pigeon-eviction", implicit, true)]);
+        assert_eq!(judge_binary(t.path()), "pigeon-eviction");
+        let t = tree(&[("pigeon-harness", other, true)]);
+        assert_eq!(judge_binary(t.path()), "pigeon-sentinel");
+        assert_eq!(
+            judge_build("pigeon-eviction"),
+            [
+                "cargo",
+                "build",
+                "--release",
+                "--locked",
+                "--bin",
+                "pigeon-eviction"
+            ]
+        );
+    }
 }

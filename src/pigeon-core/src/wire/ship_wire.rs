@@ -46,6 +46,10 @@ pub const BUILD_BINARIES: [&str; 2] = ["pigeon", SENTINEL_BINARY];
 /// The sentinel binary's name.
 pub const SENTINEL_BINARY: &str = "pigeon-sentinel";
 
+/// The judge's binary names, the new first; a build stores either under [`sentinel_key`]. See
+/// `.claude/decisions/2026-11-16-development-src-crates-neutral-names.md` §3.
+pub const JUDGE_BINARIES: [&str; 2] = ["pigeon-eviction", SENTINEL_BINARY];
+
 /// The variable naming the `pigeon-sentinel` build a job Container downloads.
 pub const SENTINEL_URL_VAR: &str = "PIGEON_SENTINEL_URL";
 /// The variable holding that build's SHA-256.
