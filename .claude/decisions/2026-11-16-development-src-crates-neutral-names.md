@@ -538,3 +538,17 @@ whose demo amendment it adds.
   - Its `/Dockerfile` edit adds `iproute2` to the `ci` stage's
     post-warm-up layer. That isn't a stage §5 renames, nor one of the `ARG`s
     §4 pins.
+### 2026-11-16: Reviewed against the test map by module (!714); they agree
+
+!714 carries out step 2b of
+[`2026-11-16-development-one-test-binary-per-crate.md`](2026-11-16-development-one-test-binary-per-crate.md)
+(§3, §4). It changes no manifest and nothing this ADR governs.
+- **The map.** `test-map.sh` maps a `suite` per top-level module. It still
+  lists packages and targets with `cargo metadata` from the workspace, so it
+  follows §1's layout and the moves of steps 5 to 7 with no edit.
+- **Moves.** A unit names its package and files. After a crate moves, the old
+  map's files match nothing, and selection falls back to the reached crates
+  until the next map. A move needs no map edit.
+- **The ledger.** A stale `tooling/ci/tests.ledger` is a warning. A move
+  still adds its lines to `tests.moves` (§6), and `--check` still fails on a
+  test that is gone or a package that runs fewer tests.
