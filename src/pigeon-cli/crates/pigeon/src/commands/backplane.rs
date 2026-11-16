@@ -154,6 +154,19 @@ fn jobs(args: &JobsArgs) -> i32 {
     let token = std::env::var(backplane::serve::TOKEN_VAR).unwrap_or_default();
     let board = std::sync::Arc::new(backplane::jobs::Board::new(args.work.clone()));
     let server = match backplane::serve::Server::bind_jobs(&args.listen, &token, board) {
+        Ok(s) if args.bench => {
+            // The sandbox mounts its own /tmp, which would hide a checkout there.
+            let Some(work) = args.work.clone().filter(|w| !w.starts_with("/tmp")) else {
+                eprintln!("backplane: --bench needs --work outside /tmp");
+                return INVALID;
+            };
+            let work = work.join("bench");
+            s.with_bench(std::sync::Arc::new(backplane::cobot::bench::Bench::new(
+                work,
+                backplane::cobot::bench::Sandbox::Unshare,
+                |k| std::env::var(k).ok(),
+            )))
+        }
         Ok(s) => s,
         Err(e) => {
             eprintln!("backplane: {e}");

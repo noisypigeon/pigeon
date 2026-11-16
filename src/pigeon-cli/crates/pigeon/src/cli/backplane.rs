@@ -74,6 +74,10 @@ pub struct JobsArgs {
     /// Where jobs check out [default: the temporary directory]
     #[arg(long)]
     pub work: Option<PathBuf>,
+    /// Also serve `/v0/bench/*`: a session's bench, whose commands run as uid 1000 with no
+    /// network; see .claude/decisions/2026-11-16-development-session-bench-containers.md
+    #[arg(long)]
+    pub bench: bool,
 }
 
 /// `pigeon backplane serve` arguments.

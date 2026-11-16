@@ -550,3 +550,38 @@ The spike (!657, `tooling/spikes/bench-sandbox/run.sh`) ran as a check on a
 - **Not measured, left to step 5's verification:**
   - the `chown` of `/cache/target` at bench start;
   - a build as uid 1000 rather than as the namespace's root.
+
+### 2026-11-16: Step 5 as built: `cobot::bench`, and where it differs from §3.2 and §5
+
+`cobot::bench` (!663) lives in the shell, per `.config/policies/backplane.yaml`. It
+is served by `pigeon backplane jobs --listen ADDR --work DIR --bench`.
+
+- **Routes.** Every route is a `POST` with a JSON body, since the signature
+  covers the path:
+  - `/v0/bench/run` {`run`, `remote`, `token`, `ref`, `sha`, `base`,
+    `command`, `timeout`};
+  - `/v0/bench/status` {`run`, `offset`, `wait`};
+  - `/v0/bench/cancel`;
+  - `/v0/bench/reset`;
+  - `/v0/bench/info`.
+- **`--work` must lie outside `/tmp`.** The sandbox mounts its own `/tmp`. The
+  `Bench` object passes `/cache`, so the checkout is `/cache/bench/pigeon`.
+- **The cargo home belongs to uid 1000 too**, beside the checkout and
+  `/cache/target`. `cargo fetch` writes it, so it isn't read-only for
+  commands as §5 said.
+  - It holds the public crates already in the image, and nothing secret.
+- **git runs with `core.hooksPath=/dev/null` and `core.fsmonitor=false`.**
+  A command can write `.git`, and the next sync's fetch runs as the same
+  uid with the network and the run's token. Hooks and fsmonitor are the code
+  paths that would run there.
+  - A command could still plant `.git/config` that sends that token
+    elsewhere. The token is a 5-minute read token for this public
+    repository, minted per run, so this is accepted.
+- **The Worker polls the run, rather than the server reporting its end**
+  (§3.2 step 4). The server holds no credential for the Worker. The `Bench`
+  object's alarm reads `/v0/bench/status` until the run is done, then stores
+  the log and appends `bench.finished`.
+- **The tests drive the whole flow with the sandbox off** (`Sandbox::Plain`),
+  against a local bare repository: sync, mise tasks, exit codes, one run at a
+  time, cancel, paging and refusals. The sandbox's wrapping is tested as
+  argv. The sandbox itself is proved live in step 9.

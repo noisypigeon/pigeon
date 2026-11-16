@@ -138,6 +138,8 @@ pub struct Server {
     instance: Option<Instance>,
     /// The jobs `/v0/jobs` takes; only a jobs server has them.
     jobs: Option<Arc<crate::jobs::Board>>,
+    /// The bench `/v0/bench/*` drives; only a bench's jobs server has one.
+    bench: Option<Arc<crate::cobot::bench::Bench>>,
     state: String,
     token: String,
     /// Whether `/v0/` routes take signed requests instead of the bearer token.
@@ -199,6 +201,7 @@ impl Server {
             deadline: DEADLINE,
             instance: Some(instance),
             jobs: None,
+            bench: None,
             state: state.to_string(),
             token: token.to_string(),
             signed,
@@ -236,6 +239,7 @@ impl Server {
             deadline: DEADLINE,
             instance: None,
             jobs: Some(board),
+            bench: None,
             state: String::new(),
             token: token.to_string(),
             signed: true,
@@ -243,6 +247,14 @@ impl Server {
             changing: Mutex::new(()),
             stop: Arc::new(AtomicBool::new(false)),
         })
+    }
+
+    /// Serves `/v0/bench/*` with `bench`, beside `/v0/jobs`: a bench's Container; see
+    /// `.claude/decisions/2026-11-16-development-session-bench-containers.md` §3.2.
+    #[must_use]
+    pub fn with_bench(mut self, bench: Arc<crate::cobot::bench::Bench>) -> Self {
+        self.bench = Some(bench);
+        self
     }
 
     /// Replaces [`DEADLINE`].
@@ -372,6 +384,7 @@ impl Server {
             (_, "/healthz") => return reply(405, json!({ "error": "method not allowed" })),
             (_, "/v0/operations" | "/v0/run") => {}
             (_, p) if self.jobs.is_some() && (p == "/v0/jobs" || p.starts_with("/v0/jobs/")) => {}
+            (_, p) if self.bench.is_some() && p.starts_with("/v0/bench/") => {}
             _ => return reply(404, json!({ "error": "not found" })),
         }
         if self.signed {
@@ -419,6 +432,14 @@ impl Server {
             };
         };
         let (status, body) = match (&self.jobs, head.method.as_str(), head.path.as_str()) {
+            (_, "POST", path) if self.bench.is_some() && path.starts_with("/v0/bench/") => {
+                match &self.bench {
+                    Some(bench) => {
+                        crate::cobot::bench::route(bench, &path["/v0/bench/".len()..], &body)
+                    }
+                    None => (404, json!({ "error": "not a bench" })),
+                }
+            }
             (Some(board), "POST", "/v0/jobs") => crate::jobs::submit(board, &body),
             (Some(board), "GET", path) if path.starts_with("/v0/jobs/") => {
                 crate::jobs::status(board, &path["/v0/jobs/".len()..])

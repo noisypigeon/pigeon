@@ -11,6 +11,8 @@ pub mod artifacts;
 #[cfg(any(feature = "engines", feature = "worker"))]
 pub mod artifacts_wire;
 #[cfg(feature = "engines")]
+pub mod bench;
+#[cfg(feature = "engines")]
 pub mod catalog;
 #[cfg(feature = "engines")]
 pub mod ci;
