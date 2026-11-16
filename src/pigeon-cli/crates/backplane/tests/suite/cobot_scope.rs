@@ -508,3 +508,152 @@ fn a_unit_test_module_the_map_doesnt_know_runs_its_lib() {
         );
     }
 }
+
+fn suite_map() -> backplane::cobot::scope::TestMap {
+    let unit = |package: &str, kind: &str, name: &str, filter: &str, files: &[&str]| {
+        backplane::cobot::scope::Binary {
+            package: package.into(),
+            kind: kind.into(),
+            name: name.into(),
+            filter: filter.into(),
+            files: files.iter().map(|f| format!("{BACKPLANE}{f}")).collect(),
+        }
+    };
+    let mut binaries = vec![
+        unit(
+            "pigeon-backplane",
+            "lib",
+            "backplane",
+            "",
+            &["src/cobot/git.rs"],
+        ),
+        unit(
+            "pigeon-backplane",
+            "test",
+            "suite",
+            "cobot_git::",
+            &["src/cobot/git.rs", "tests/suite/cobot_git.rs"],
+        ),
+        unit(
+            "pigeon-backplane",
+            "test",
+            "suite",
+            "cobot_scope::",
+            &["src/cobot/scope.rs"],
+        ),
+        unit(
+            "pigeon-backplane",
+            "test",
+            "suite",
+            "merges::",
+            &["src/merges.rs"],
+        ),
+    ];
+    for n in 0..3 {
+        binaries.push(unit(
+            "pigeon",
+            "test",
+            &format!("t{n}"),
+            "",
+            &["src/other.rs"],
+        ));
+    }
+    backplane::cobot::scope::TestMap {
+        sha: "a".repeat(40),
+        binaries,
+    }
+}
+
+fn with_suite_map(files: &[&str]) -> Vec<Job> {
+    let files: Vec<String> = files.iter().map(|f| (*f).to_string()).collect();
+    backplane::cobot::scope::jobs_with(&repo_root(), &files, Some(&suite_map()))
+        .expect("scopes")
+        .into_iter()
+        .filter(|j| j.name.starts_with("test "))
+        .collect()
+}
+
+#[test]
+fn a_map_by_module_runs_only_the_suite_modules_a_change_reaches() {
+    let got = with_suite_map(&["src/pigeon-cli/crates/backplane/src/cobot/scope.rs"]);
+    assert_eq!(
+        got.iter().map(|j| j.name.as_str()).collect::<Vec<_>>(),
+        ["test pigeon-backplane: suite cobot_scope"],
+        "{got:?}"
+    );
+    assert_eq!(
+        got[0].argv,
+        [
+            "cargo",
+            "test",
+            "-p",
+            "pigeon-backplane",
+            "--test",
+            "suite",
+            "--locked",
+            "--",
+            "cobot_scope::"
+        ]
+    );
+    for (files, want, why) in [
+        (
+            &["src/pigeon-cli/crates/backplane/src/cobot/git.rs"][..],
+            &[
+                "test pigeon-backplane: lib",
+                "test pigeon-backplane: suite cobot_git",
+            ][..],
+            "a whole lib and a module are two checks",
+        ),
+        (
+            &["src/pigeon-cli/crates/backplane/tests/suite/merges.rs"][..],
+            &["test pigeon-backplane: suite merges"][..],
+            "a module file picks its module",
+        ),
+        (
+            &["src/pigeon-cli/crates/backplane/tests/suite/merges/replays.rs"][..],
+            &["test pigeon-backplane: suite merges"][..],
+            "a module directory's file picks its module",
+        ),
+        (
+            &["src/pigeon-cli/crates/backplane/tests/suite/harness/http.rs"][..],
+            &["test pigeon-backplane: suite cobot_git cobot_scope merges"][..],
+            "the harness picks every module",
+        ),
+        (
+            &["src/pigeon-cli/crates/backplane/tests/suite/main.rs"][..],
+            &["test pigeon-backplane: suite cobot_git cobot_scope merges"][..],
+            "main.rs picks every module",
+        ),
+    ] {
+        let got = with_suite_map(files);
+        assert_eq!(
+            got.iter().map(|j| j.name.as_str()).collect::<Vec<_>>(),
+            want,
+            "{why}: {got:?}"
+        );
+    }
+    let unknown = "src/pigeon-cli/crates/backplane/tests/suite/brand_new.rs";
+    let got = with_suite_map(&[unknown]);
+    let crates: Vec<String> = names(&[unknown])
+        .into_iter()
+        .filter(|n| n.starts_with("test "))
+        .collect();
+    assert_eq!(
+        got.iter().map(|j| j.name.clone()).collect::<Vec<_>>(),
+        crates,
+        "a module the map doesn't know falls back to crates"
+    );
+    assert!(
+        crates.iter().any(|n| n.contains("pigeon-backplane")),
+        "{crates:?}"
+    );
+}
+
+#[test]
+fn a_map_without_filters_reads_as_whole_targets() {
+    let map: backplane::cobot::scope::TestMap = serde_json::from_str(
+        r#"{"version":1,"sha":"a","binaries":[{"package":"p","kind":"test","name":"x","argv":["cargo"],"files":["f.rs"]}]}"#,
+    )
+    .expect("a version 1 map reads");
+    assert_eq!(map.binaries[0].filter, "", "{map:?}");
+}
