@@ -6,7 +6,7 @@ use std::collections::{BTreeMap, VecDeque};
 
 use serde::{Deserialize, Serialize};
 
-use super::types::{Change, GATE, JobStatus, MERGE, RESTACK};
+use super::types::{Change, GATE, JobStatus, MERGE, RESTACK, State};
 
 /// How long a merge may run before the queue moves past it, in seconds.
 pub const STUCK: u64 = 60 * 60;
@@ -31,6 +31,17 @@ pub fn holds_turn(c: &Change) -> bool {
         || c.jobs.iter().any(|j| {
             on_its_way(&j.name) && matches!(j.status, JobStatus::Queued | JobStatus::Running)
         })
+}
+
+/// Whether change `c`, giving its turn back, keeps its place: it yields, and can still merge; see
+/// the concurrent-sessions ADR's 2026-11-16 amendment.
+#[must_use]
+pub fn keeps_place(c: &Change) -> bool {
+    c.yielded.is_some()
+        && !matches!(
+            c.state,
+            State::Failed | State::Refused | State::Closed | State::Merged
+        )
 }
 
 /// Whether `from` yielding to `to` closes a cycle in `yields`: `to` already waits on `from`,
@@ -214,6 +225,25 @@ pub fn done(q: &MergeQueue, number: u32, now: u64) -> (MergeQueue, Option<Entry>
     if next.merging.as_ref().is_some_and(|e| e.number == number) {
         next.merging = None;
     }
+    advance(next, now)
+}
+
+/// Change `number` yielded while holding or waiting for the turn: the next queue, with it first in
+/// the waiting line, passed over until its yield ends, and the next merge to start, if any; see
+/// the concurrent-sessions ADR's 2026-11-16 amendment.
+#[must_use]
+pub fn yielded_back(q: &MergeQueue, number: u32, now: u64) -> (MergeQueue, Option<Entry>) {
+    let mut next = q.clone();
+    let held = next.merging.take_if(|e| e.number == number);
+    let waiting = next
+        .waiting
+        .iter()
+        .position(|e| e.number == number)
+        .and_then(|i| next.waiting.remove(i));
+    if let Some(e) = held.or(waiting) {
+        next.waiting.push_front(e);
+    }
+    next.kept.remove(&number);
     advance(next, now)
 }
 

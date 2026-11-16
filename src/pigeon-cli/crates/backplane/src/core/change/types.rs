@@ -744,6 +744,15 @@ impl Change {
         if to == self.number {
             return Err("a change can't yield to itself".into());
         }
+        if self.job(MERGE).is_some_and(Job::open) {
+            return Err(format!(
+                "{} is being merged; it can't yield now",
+                self.branch()
+            ));
+        }
+        // Its parked merge goes back with its turn; see the concurrent-sessions ADR's 2026-11-16
+        // amendment.
+        self.merge_after = None;
         self.yielded = Some(Yielded {
             to,
             by: by.to_string(),

@@ -241,7 +241,12 @@ pub async fn ended(env: &Env, c: &Change, merged: Option<&str>) -> Result<()> {
             }
         }
     }
-    let (_, v) = to_instance(env, &s, "/merges/done", &json!({ "number": c.number })).await?;
+    let path = if merges::keeps_place(c) {
+        "/merges/yielded"
+    } else {
+        "/merges/done"
+    };
+    let (_, v) = to_instance(env, &s, path, &json!({ "number": c.number })).await?;
     start(env, &s, serde_json::from_value(v["next"].clone()).ok()).await
 }
 
@@ -383,7 +388,7 @@ async fn start(env: &Env, s: &Settings, mut next: Option<Entry>) -> Result<()> {
     Ok(())
 }
 
-/// The `Instance` Durable Object's side: `/merges/enqueue`, `done`, `keep`, `release`, `front`, `resume` and `list`.
+/// The `Instance` Durable Object's side: `/merges/enqueue`, `done`, `yielded`, `keep`, `release`, `front`, `resume` and `list`.
 ///
 /// # Errors
 ///
@@ -420,6 +425,10 @@ pub async fn serve(state: &State, path: &str, body: &Value) -> Result<Response> 
                 return Ok(Response::from_json(&refused)?.with_status(409));
             }
         },
+        "/merges/yielded" => {
+            let (q, next) = merges::yielded_back(&q, number, now());
+            (q, json!({ "next": next }))
+        }
         "/merges/release" => {
             let (q, next) = merges::release(&q, number, now());
             (q, json!({ "next": next }))

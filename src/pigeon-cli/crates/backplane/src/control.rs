@@ -1058,11 +1058,23 @@ pub fn leaves_merge_queue(before: Option<&Change>, after: &Change) -> bool {
 /// Why `change` gave its merge turn back without merging, for the `merge.released` event.
 #[must_use]
 pub fn release_reason(change: &Change) -> String {
+    if let Some(y) = &change.yielded {
+        return format!("it yields to !{}", y.to);
+    }
     if let Some(v) = change.violations.first() {
         return v.clone();
     }
     if change.conflict.is_some() {
         return "it conflicts with main".into();
+    }
+    if change.state == changes::State::Failed {
+        let failed: Vec<&str> = change
+            .jobs
+            .iter()
+            .filter(|j| j.status == changes::JobStatus::Failed)
+            .map(|j| j.name.as_str())
+            .collect();
+        return format!("its head failed {}", failed.join(", "));
     }
     format!(
         "it is {} and carries no approval, so its merge can't start",

@@ -193,6 +193,9 @@ impl Change {
         }
         let mut gating = self.jobs.iter().filter(|j| j.gates());
         if gating.clone().any(|j| j.status == JobStatus::Failed) {
+            // A failed head can't merge: its parked merge, and so its turn, goes back; see the
+            // concurrent-sessions ADR's 2026-11-16 amendment.
+            self.merge_after = None;
             self.state = State::Failed;
             return self.cancel_open();
         }

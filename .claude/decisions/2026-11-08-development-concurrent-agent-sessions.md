@@ -787,3 +787,48 @@ replay !546's, !549's, !481's and !543's sequences.
 **Execution,** in one change (!591), built on !585: `merges::front`, the
 `change.front` operation, its tier and grant, `merge.fronted` and the digest
 line, with tests.
+
+### 2026-11-16: A head that fails, or a holder that yields, gives its turn back
+
+- **What went wrong.** On 16 Nov, about 02:10 UTC, !675 held the turn and
+  restacked. Its new head's merge gate ran beside its checks (the 2026-11-15
+  merge-turn amendment to
+  [`2026-11-15-development-code-checks-by-reach.md`](2026-11-15-development-code-checks-by-reach.md)),
+  and the gate failed while the head was `bounded`.
+  - `settle` made it `failed`, but kept its parked merge (`merge_after`).
+  - `holds_turn` stayed true, so no `merge.released` was recorded and
+    `hand_back_idle` passed over it.
+  - Its stage read `merging` at position 0.
+  - Its `change_yield` to !673 (at 1794795368) was recorded, but a yield
+    never touched the holder.
+  - !679, the fix for its failure, queued behind it. Only the owner's close
+    of !675 freed the queue.
+  - `a_failed_check_after_the_restack_loses_the_turn` replayed the same path
+    but asserted only that the turn wasn't kept.
+- **A head that fails drops its parked merge.** A failed check, or a gate
+  job settling as a check, clears `merge_after` with the `failed` state.
+  - The save's `leaves_merge_queue` then records `merge.released` and ends the
+    turn, as a close does.
+  - The change leaves the queue as `failed`, `needs: agent`. A push or a
+    `ci_rerun` that passes is merged when it is asked again, from the tail, as
+    any change.
+  - A gate that fails on an `approved` head already did this (`gate_settled`).
+- **A holder that yields gives its turn back.**
+  - `change_yield` drops the change's parked merge, so nothing starts it
+    without a turn.
+  - A yield is refused while its merge job runs; that merge isn't preempted.
+  - The queue puts the holder first in its waiting line
+    (`merges::yielded_back`), passed over until its yield ends, as a waiting
+    yielded change keeps its place (the yield ADR's 2026-11-13 amendment).
+  - `merge.released` names the yield.
+  - A change that yields while `failed` or closed leaves the queue instead.
+- **Unchanged:**
+  - a turn lost only because `main` moved is kept (2026-11-15);
+  - the gate still runs beside the checks;
+  - nothing about what passes a check, a gate or a merge.
+
+**Execution,** in one change (!681): `settle` and `Change::yield_to` in
+`core/change`, `merges::yielded_back` and `ended`'s choice of it, and
+`release_reason` naming a yield. Its tests in `tests/merge_released.rs` replay
+!675: its gate fails after the restack, the turn goes back and the next merge
+starts; a yield while holding releases the turn; keep-place still keeps.
