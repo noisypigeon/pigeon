@@ -245,3 +245,23 @@ still apply.
 - **§4's re-ask** goes through `change.merge`, like a session's ask. When it
   needs the owner, it lists through !801's `Grants::page`, so it reuses the
   open link and mints none.
+
+### 2026-11-16: Review of !812 against !820: they agree
+
+- !820 records the owner's answers above, and amends
+  [`2026-11-09-security-approvals-once-passkeys.md`](2026-11-09-security-approvals-once-passkeys.md):
+  an owner approval covers its head's merge, with no `change.merge` ask
+  for the same head. It changes no code.
+- !812 adds `approvals.yaml`'s `gate:` under
+  [`2026-11-15-security-standing-auto-owner-flags.md`](2026-11-15-security-standing-auto-owner-flags.md).
+  The gate keeps the owner's passkey on the approval core, `approve.rs`,
+  `access.rs`, the Worker's `elicit.rs`, `mandates.rs` and passkey files,
+  `approvals.yaml`, the secrets pins and `.github/**`.
+- **6a** (the owner's merge ask) touches the approval code and so the gate. It
+  takes the owner's passkey, as its step already says. Once it lands, an
+  owner-tier change such as !812 asks once, not twice. !812 itself needed
+  both taps.
+- **6b** (checks carried by reach) lives in the restack's carry rule and the
+  gate's set. That code is neither guarded nor in the gate, so Auto covers it
+  as before.
+- Neither changes what the other decides.
