@@ -201,3 +201,53 @@ The digest gains two shown, never-pushed lists. Neither changes `needs_owner`:
   digest's archive lines. Sessions started before !503 declare no `parent`, so
   a planner seeded by the status session has no archiver. Its clean end shows
   as "ended clean, not archived".
+
+### 2026-11-16: A silent session holding nothing lapses after two hours, and an archive is reported without the archiver's ticket
+
+- **What broke.** Archiving a Claude Code session doesn't end its ticket.
+  The app's Active sessions lists every live ticket, so on 16 Nov it showed 9
+  sessions, all archived on the Claude side. 8 held no open change and hadn't
+  polled. Their tickets would have lived out the full `TTL` (24 hours). The
+  control plane can't see Claude's archive (option (a) above stays closed), so
+  it judges by what it does see: silence.
+- **The lapse.** A live ticket **lapses** when all of these hold:
+  - its session hasn't polled for `tickets::IDLE`, 2 hours, counted from its
+    last poll, or from its ticket's start if it never polled. Two hours is
+    four re-arms of a 30-minute `follow` Monitor, so a following session never
+    reaches it, and an archived one leaves within about three hours (the
+    sweep runs hourly);
+  - its label holds no open change;
+  - it holds no open task it claimed.
+
+  `Tickets::lapsing` names them (pure, tested), and `Tickets::lapse` ends each
+  as `session.end` would, recording `ended: {at, clean: true, archiver,
+  lapsed: true}`. Holding nothing, the end is clean by §2.
+- **Where.** `push::hourly` runs the sweep before it builds the digest
+  (`worker/tickets.rs::lapse`, through the `Instance`'s `/tickets/lapse`), so
+  the Active sessions list and that hour's digest read the same tickets. Each
+  lapse appends `session.ended` ("lapsed: silent N min, holding nothing"). It
+  doesn't append `session.archivable`: a lapsed session may still be working
+  without following, and its archiver can't tell.
+- **A session that holds an open change never lapses.** It keeps its ticket
+  until `TTL`, then today's eviction path (`eviction-session-gone`) applies.
+  Only the control plane evicts.
+- **A lapsed session that is still working** calls `session_start` with its
+  label again. Until then its operations need no ticket, as for any ended
+  label.
+- **The digest.** `unarchived` skips lapsed ends. The control plane can't
+  tell whether a lapsed session was archived, and naming every silent
+  session for an hour would repeat the noise this fixes.
+- **The archive report.** `session.archived` no longer needs the archiver to
+  hold a live ticket. The owner's status session archives by hand and holds
+  none, so its reports were refused and its archives stayed listed as "ended
+  clean, not archived". The ticket guard still asks for the archiver's ticket
+  while it holds one. A label with no archiver (a planner seeded before
+  `parent`) takes the report from any session but itself, named as `by`.
+  The report only clears a digest line, so the looser check risks no more.
+- **Execution.**
+  1. This amendment, and the code: `tickets.rs`, `worker/tickets.rs`,
+     `worker/push.rs`, with tests in `tests/tickets.rs`. (planner)
+  2. Verify live: after the deploy, the first hourly run ends the stale
+     tickets, the Active sessions list keeps only !653's session, and the
+     status session's reports clear its "ended clean, not archived" lines.
+     Recorded here as an amendment. (planner)

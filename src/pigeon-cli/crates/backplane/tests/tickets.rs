@@ -151,6 +151,7 @@ fn a_handoff_needs_the_change_holders_ticket_not_the_recipients() {
 }
 
 const P: &str = "https://claude.ai/code/session_planner";
+const Q: &str = "https://claude.ai/code/session_status";
 
 fn handoff(change: u32, to: &str, claimed: Option<&str>) -> backplane::tasks::Task {
     serde_json::from_value(serde_json::json!({
@@ -178,7 +179,7 @@ fn an_end_is_clean_only_when_every_held_change_is_offered_to_another_session() {
 }
 
 #[test]
-fn only_the_archiver_reports_once_on_a_clean_end_while_its_ticket_lives() {
+fn only_the_archiver_reports_once_on_a_clean_end_and_any_other_session_when_none() {
     let exec = declare(Some("haiku"), Some(P), Some("b3")).expect("an executor");
     let mut t = Tickets::default();
     t.start(P, false, 0).expect("planner");
@@ -207,22 +208,89 @@ fn only_the_archiver_reports_once_on_a_clean_end_while_its_ticket_lives() {
         t.record_archive(A, P, "archived", "again", 3).is_err(),
         "once"
     );
-    t.end(P, 4);
-    assert!(
-        t.record_archive(A, P, "archived", "x", 4)
-            .expect_err("its ticket ended")
-            .contains("no live ticket")
-    );
-    t.start(P, false, 5).expect("the planner again");
     t.start(A, true, 5).expect("anew");
     t.end(A, 6);
     t.record_end(A, true, 6);
     assert!(
-        t.record_archive(A, P, "archived", "x", 7)
-            .expect_err("no archiver now")
-            .contains("isn't"),
-        "a planner with no parent has no archiver"
+        t.record_archive(A, A, "archived", "x", 7).is_err(),
+        "not itself, even with no archiver"
     );
+    assert_eq!(
+        t.record_archive(A, Q, "archived", "by hand", 7)
+            .expect("no archiver, so any other session")
+            .by,
+        Q
+    );
+}
+
+#[test]
+fn an_archiver_reports_without_a_ticket_of_its_own_but_no_other_session_does() {
+    let mut t = Tickets::default();
+    t.start(A, false, 0).expect("child");
+    t.parented(A, Some(Q.into()));
+    t.end(A, 1);
+    t.record_end(A, true, 1);
+    assert!(
+        t.record_archive(A, P, "archived", "x", 2)
+            .expect_err("not its archiver")
+            .contains("archiver isn't")
+    );
+    assert!(
+        t.record_archive(A, Q, "archived", "by hand", 2).is_ok(),
+        "its parent, which never started a ticket"
+    );
+    assert!(t.unarchived(1 + 2 * 60 * 60).is_empty(), "reported");
+}
+
+#[test]
+fn a_silent_session_holding_nothing_lapses_after_idle() {
+    use backplane::tickets::IDLE;
+    use std::collections::{BTreeMap, BTreeSet};
+    const B: &str = "https://claude.ai/code/session_b";
+    const C: &str = "https://claude.ai/code/session_c";
+    let mut t = Tickets::default();
+    for l in [A, B, C] {
+        t.start(l, false, 100).expect("issues");
+    }
+    t.start(P, false, 300).expect("issues");
+    t.parented(A, Some(P.into()));
+    let polled = BTreeMap::from([(A.to_string(), 200), (C.to_string(), 200 + IDLE)]);
+    let busy = BTreeSet::from([B.to_string()]);
+    assert!(
+        t.lapsing(200 + IDLE - 1, &polled, &busy).is_empty(),
+        "A polled under IDLE ago"
+    );
+    assert_eq!(
+        t.lapsing(200 + IDLE, &polled, &busy),
+        vec![A.to_string()],
+        "A is silent past IDLE; P never polled, but started under IDLE ago"
+    );
+    assert_eq!(
+        t.lapsing(300 + IDLE, &polled, &busy),
+        vec![A.to_string(), P.to_string()],
+        "a session that never polled counts from its ticket's start; B holds work; C polled"
+    );
+    let e = t.lapse(A, 200 + IDLE).expect("live");
+    assert!(e.clean && e.lapsed);
+    assert_eq!(e.archiver.as_deref(), Some(P));
+    assert!(t.live(A, 200 + IDLE).is_none(), "no longer active");
+    assert!(t.lapse(A, 200 + IDLE).is_none(), "once");
+    assert!(
+        !t.lapsing(200 + IDLE, &polled, &busy)
+            .contains(&A.to_string()),
+        "an ended ticket isn't named again"
+    );
+    assert!(
+        t.unarchived(200 + IDLE + 2 * 60 * 60).is_empty(),
+        "a lapsed end isn't listed as unarchived"
+    );
+    assert!(
+        t.record_archive(A, P, "archived", "archived on Claude", 200 + IDLE)
+            .is_ok(),
+        "its archiver may still report it"
+    );
+    t.start(A, false, 300 + IDLE)
+        .expect("a lapsed session may start again");
 }
 
 #[test]

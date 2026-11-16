@@ -305,6 +305,10 @@ pub async fn show(env: &Env, s: &Settings, owner: bool) -> Result<Value> {
 /// When a binding fails.
 pub async fn hourly(env: &Env) -> Result<()> {
     let s = Settings::from(env)?;
+    // Silent sessions holding nothing lapse first; see the archive ADR's 2026-11-16 amendment.
+    if let Err(e) = super::tickets::lapse(env, &s).await {
+        worker::console_error!("lapse: {e}");
+    }
     let (d, last) = build(env, &s).await?;
     let lines = d.owner_lines();
     let hash = super::super::grants::hex(&Sha256::digest(lines.join("\n").as_bytes()));

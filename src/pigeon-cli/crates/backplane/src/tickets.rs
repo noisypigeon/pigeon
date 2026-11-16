@@ -115,6 +115,10 @@ pub struct Ended {
     /// The session that archives it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub archiver: Option<String>,
+    /// Whether the control plane ended it as silent past [`IDLE`]; see the archive ADR's
+    /// 2026-11-16 amendment.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub lapsed: bool,
 }
 
 /// An archiver's report on an ended session; see the archive ADR §3.
@@ -147,6 +151,10 @@ pub fn clean(label: &str, held: &[u32], tasks: &[crate::tasks::Task]) -> bool {
 
 /// How long after a clean end the digest names a session not yet archived, and until when.
 pub const UNARCHIVED: (u64, u64) = (60 * 60, 24 * 60 * 60);
+
+/// How long a session holding nothing goes without polling before its ticket lapses, in
+/// seconds; see the archive ADR's 2026-11-16 amendment.
+pub const IDLE: u64 = 2 * 60 * 60;
 
 /// Every label's ticket as issued.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -225,13 +233,56 @@ impl Tickets {
             at: now,
             clean,
             archiver: i.archiver().map(str::to_string),
+            lapsed: false,
         };
         i.ended = Some(ended.clone());
         Some(ended)
     }
 
-    /// Records `by`'s report on `label` at `now`: only `label`'s archiver, while its own ticket
-    /// is live, after `label` ended clean, and once.
+    /// Each live label quiet past [`IDLE`] at `now`, from its last poll in `polled`, else its
+    /// ticket's start, that isn't in `busy` (holding an open change or a claimed task).
+    #[must_use]
+    pub fn lapsing(
+        &self,
+        now: u64,
+        polled: &BTreeMap<String, u64>,
+        busy: &std::collections::BTreeSet<String>,
+    ) -> Vec<String> {
+        self.0
+            .iter()
+            .filter(|(l, i)| i.expires > now && !busy.contains(*l))
+            .filter(|(l, i)| {
+                let since = polled
+                    .get(*l)
+                    .copied()
+                    .unwrap_or(0)
+                    .max(i.expires.saturating_sub(TTL));
+                now.saturating_sub(since) >= IDLE
+            })
+            .map(|(l, _)| l.clone())
+            .collect()
+    }
+
+    /// Ends `label`'s live ticket at `now` as lapsed, holding nothing, so clean: its end, or none
+    /// when it held no live ticket.
+    pub fn lapse(&mut self, label: &str, now: u64) -> Option<Ended> {
+        if !self.end(label, now) {
+            return None;
+        }
+        let i = self.0.get_mut(label)?;
+        let ended = Ended {
+            at: now,
+            clean: true,
+            archiver: i.archiver().map(str::to_string),
+            lapsed: true,
+        };
+        i.ended = Some(ended.clone());
+        Some(ended)
+    }
+
+    /// Records `by`'s report on `label` at `now`, after `label` ended clean, once: from its
+    /// archiver, or, when it has none, from any other session; see the archive ADR's 2026-11-16
+    /// amendment.
     ///
     /// # Errors
     ///
@@ -247,14 +298,14 @@ impl Tickets {
         if !["archived", "skipped"].contains(&outcome) {
             return Err("`outcome` is archived or skipped".into());
         }
-        if self.live(by, now).is_none() {
-            return Err(format!("session {by} holds no live ticket"));
+        if by == label {
+            return Err("a session never reports its own archive".into());
         }
         let Some(i) = self.0.get_mut(label) else {
             return Err(format!("session {label} isn't known"));
         };
         match &i.ended {
-            Some(e) if e.clean && e.archiver.as_deref() == Some(by) => {}
+            Some(e) if e.clean && e.archiver.as_deref().is_none_or(|a| a == by) => {}
             Some(e) if e.clean => return Err(format!("session {label}'s archiver isn't {by}")),
             _ => return Err(format!("session {label} hasn't ended clean")),
         }
@@ -271,14 +322,15 @@ impl Tickets {
         Ok(a)
     }
 
-    /// Each label that ended clean within [`UNARCHIVED`] of `now` with no report, and its archiver.
+    /// Each label that ended clean, not lapsed, within [`UNARCHIVED`] of `now` with no report, and
+    /// its archiver.
     #[must_use]
     pub fn unarchived(&self, now: u64) -> Vec<(String, Option<String>)> {
         self.0
             .iter()
             .filter(|(_, i)| i.archived.is_none())
             .filter_map(|(l, i)| {
-                let e = i.ended.as_ref().filter(|e| e.clean)?;
+                let e = i.ended.as_ref().filter(|e| e.clean && !e.lapsed)?;
                 let age = now.saturating_sub(e.at);
                 (UNARCHIVED.0..UNARCHIVED.1)
                     .contains(&age)

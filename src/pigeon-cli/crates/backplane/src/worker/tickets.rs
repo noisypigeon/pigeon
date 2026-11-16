@@ -162,6 +162,67 @@ pub async fn end(
     ))
 }
 
+/// Ends each live ticket whose session is silent past [`crate::tickets::IDLE`] holding no open
+/// change and no claimed task; see the archive ADR's 2026-11-16 amendment.
+///
+/// # Errors
+///
+/// When a binding fails.
+pub async fn lapse(env: &Env, s: &Settings) -> Result<()> {
+    let (_, t) = to_instance(env, s, "/tickets/list", &json!({})).await?;
+    let tickets: Tickets = serde_json::from_value(t).unwrap_or_default();
+    let now = now();
+    let rows = super::platform::d1_rows(env, &crate::control::open(&s.instance, &s.repo)).await?;
+    let mut busy: std::collections::BTreeSet<String> = crate::control::open_rows(&rows)
+        .into_iter()
+        .filter_map(|o| o.session)
+        .collect();
+    let (_, t) = to_instance(env, s, "/tasks/list", &json!({})).await?;
+    let tasks: Vec<crate::tasks::Task> =
+        serde_json::from_value(t["tasks"].clone()).unwrap_or_default();
+    busy.extend(
+        tasks
+            .into_iter()
+            .filter(|t| !t.done)
+            .filter_map(|t| t.claimed_by),
+    );
+    let mut polled = std::collections::BTreeMap::new();
+    for label in tickets.0.keys().filter(|l| tickets.live(l, now).is_some()) {
+        let (_, c) = to_instance(env, s, "/events/cursor", &json!({ "session": label })).await?;
+        if let Some(p) = c["polled"].as_u64() {
+            polled.insert(label.clone(), p);
+        }
+    }
+    let lapsing = tickets.lapsing(now, &polled, &busy);
+    if lapsing.is_empty() {
+        return Ok(());
+    }
+    let (_, v) = to_instance(env, s, "/tickets/lapse", &json!({ "labels": lapsing })).await?;
+    for label in v["lapsed"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+    {
+        let quiet = polled.get(label).map_or_else(
+            || "never polled".to_string(),
+            |p| format!("silent {} min", now.saturating_sub(*p) / 60),
+        );
+        let said = format!("session {label}'s ticket lapsed: {quiet}, holding nothing");
+        super::events::append(
+            env,
+            s,
+            "session.ended",
+            None,
+            Some(label.to_string()),
+            &said,
+            false,
+        )
+        .await?;
+    }
+    Ok(())
+}
+
 /// `session.archived`: archiver `session`'s report on ended `label`; see
 /// `.claude/decisions/2026-11-15-development-archive-cleanly-ended-sessions.md` §3.
 ///
@@ -344,6 +405,18 @@ pub async fn serve(state: &State, path: &str, body: &Value) -> Result<Response> 
                 }
                 Err(why) => Response::error(why, 409),
             }
+        }
+        "/tickets/lapse" => {
+            let at = now();
+            let lapsed: Vec<&str> = body["labels"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(Value::as_str)
+                .filter(|l| all.lapse(l, at).is_some())
+                .collect();
+            storage.put(TICKETS, &all).await?;
+            Response::from_json(&json!({ "lapsed": lapsed }))
         }
         "/tickets/end" => {
             let ended = all.end(body["label"].as_str().unwrap_or_default(), now());
