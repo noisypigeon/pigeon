@@ -1610,12 +1610,30 @@ pub struct Releasing {
     /// The last release.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last: Option<ReleaseEnded>,
+    /// When the target first waited, in Unix seconds.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub since: Option<u64>,
 }
 
 impl Releasing {
     /// A deploy of `sha` passed: it is the target, replacing any older one.
     pub fn deployed(&mut self, sha: &str) {
         self.target = Some(sha.to_string());
+    }
+
+    /// A deploy of `sha` passed at `at`: it is the target, waiting since the oldest unreleased one.
+    pub fn deployed_at(&mut self, sha: &str, at: u64) {
+        self.deployed(sha);
+        self.since.get_or_insert(at);
+    }
+
+    /// Seconds the target has waited at `now`; 0 with no target.
+    #[must_use]
+    pub fn waited(&self, now: u64) -> u64 {
+        match (&self.target, self.since) {
+            (Some(_), Some(s)) => now.saturating_sub(s),
+            _ => 0,
+        }
     }
 
     /// The release to start, when none runs: the target, now running.
@@ -1646,6 +1664,7 @@ impl Releasing {
                 at,
             });
         }
+        self.since = self.target.as_ref().map(|_| at);
     }
 }
 

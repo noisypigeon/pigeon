@@ -70,6 +70,27 @@ pub async fn resume(env: &Env, s: &Settings) -> Result<()> {
     start(env, s, serde_json::from_value(v["next"].clone()).ok()).await
 }
 
+/// The release bot asks for the merge turn, its target having waited `waited` seconds: whether
+/// it holds it; see the merge-path ADR §1.
+///
+/// # Errors
+///
+/// When a binding fails.
+pub async fn release_turn(env: &Env, s: &Settings, waited: u64) -> Result<bool> {
+    let (_, v) = to_instance(env, s, "/merges/release-turn", &json!({ "waited": waited })).await?;
+    Ok(v["granted"].as_bool().unwrap_or(false))
+}
+
+/// The release bot's turn ended: the next merge starts, if any.
+///
+/// # Errors
+///
+/// When a binding fails.
+pub async fn release_turn_done(env: &Env, s: &Settings) -> Result<()> {
+    let (_, v) = to_instance(env, s, "/merges/release-turn-done", &json!({})).await?;
+    start(env, s, serde_json::from_value(v["next"].clone()).ok()).await
+}
+
 /// `change` lost its turn only because `main` moved: the queue keeps it and starts nothing,
 /// `merge.kept` is recorded, its merge is asked again as its session would, and its reservation
 /// is released, so the queue moves on only when that didn't take the turn back; see the
@@ -388,7 +409,7 @@ async fn start(env: &Env, s: &Settings, mut next: Option<Entry>) -> Result<()> {
     Ok(())
 }
 
-/// The `Instance` Durable Object's side: `/merges/enqueue`, `done`, `yielded`, `keep`, `release`, `front`, `resume` and `list`.
+/// The `Instance` Durable Object's side: `/merges/enqueue`, `done`, `yielded`, `keep`, `release`, `front`, `resume`, `release-turn`, `release-turn-done` and `list`.
 ///
 /// # Errors
 ///
@@ -440,6 +461,15 @@ pub async fn serve(state: &State, path: &str, body: &Value) -> Result<Response> 
         }
         "/merges/resume" => {
             let (q, next) = merges::advance(q, now());
+            (q, json!({ "next": next }))
+        }
+        "/merges/release-turn" => {
+            let waited = body["waited"].as_u64().unwrap_or_default();
+            let (q, granted) = merges::release_turn(&q, waited, now());
+            (q, json!({ "granted": granted }))
+        }
+        "/merges/release-turn-done" => {
+            let (q, next) = merges::release_turn_done(&q, now());
             (q, json!({ "next": next }))
         }
         "/merges/list" => return Response::from_json(&q),

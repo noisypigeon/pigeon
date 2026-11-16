@@ -1490,3 +1490,24 @@ fn a_release_without_a_container_waits_unless_a_newer_deploy_came() {
     r.wait("a");
     assert_eq!(r.start().as_deref(), Some("b"));
 }
+
+#[test]
+fn a_release_target_waits_from_its_oldest_unreleased_deploy() {
+    let mut r = control::Releasing::default();
+    r.deployed_at("a", 10);
+    r.deployed_at("b", 50);
+    assert_eq!(r.waited(70), 60);
+    assert_eq!(r.start().as_deref(), Some("b"));
+    r.finished(true, "ok", 80);
+    assert_eq!(r.waited(90), 0);
+}
+
+#[test]
+fn a_deploy_during_a_release_waits_from_its_end() {
+    let mut r = control::Releasing::default();
+    r.deployed_at("a", 10);
+    r.start();
+    r.deployed_at("b", 20);
+    r.finished(true, "ok", 40);
+    assert_eq!(r.waited(100), 60);
+}

@@ -22,6 +22,9 @@ pub const PROTECT: u32 = 2;
 /// How long a protected turn holds the queue for its change, in seconds.
 pub const HOLD: u64 = 20 * 60;
 
+/// Seconds a release target waits for an idle queue before it takes the next turn anyway.
+pub const RELEASE_WAIT: u64 = 30 * 60;
+
 /// Whether change `c` still has a merge on its way: a merge job, a restack or a gate check
 /// queued or running, or a merge parked.
 #[must_use]
@@ -114,6 +117,12 @@ pub struct MergeQueue {
     /// The changes that lost their turn only because `main` moved.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub kept: BTreeMap<u32, Kept>,
+    /// When the release bot took the turn, in Unix seconds.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub releasing: Option<u64>,
+    /// When the release bot asked for the next turn while it was busy, in Unix seconds.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub release_asked: Option<u64>,
     /// The Instance's yields, each change to the one it waits for: read in, never stored; see
     /// the yield ADR's 2026-11-13 amendment on the queue keeping a yielded change's place.
     #[serde(skip)]
@@ -121,6 +130,16 @@ pub struct MergeQueue {
 }
 
 impl MergeQueue {
+    /// Whether the release bot holds the turn at now, or has the next one reserved.
+    #[must_use]
+    pub fn release_holds(&self, now: u64) -> bool {
+        self.releasing
+            .is_some_and(|at| now.saturating_sub(at) < HOLD)
+            || self
+                .release_asked
+                .is_some_and(|at| now.saturating_sub(at) < SETTLE)
+    }
+
     /// The change holding the turn, once it has held it [`SETTLE`].
     #[must_use]
     pub fn holder(&self, now: u64) -> Option<u32> {
@@ -182,7 +201,7 @@ pub fn enqueue(
         return Ok((next, Queued::Yielded { place, to }));
     }
     let kept = q.kept.contains_key(&number);
-    let held = q.protected(now).is_some_and(|n| n != number);
+    let held = q.protected(now).is_some_and(|n| n != number) || q.release_holds(now);
     if let Some(k) = next.kept.get_mut(&number) {
         k.reserved = false;
     }
@@ -329,11 +348,52 @@ pub fn unstick(q: &MergeQueue, now: u64) -> (MergeQueue, Option<Entry>) {
     advance(next, now)
 }
 
+/// The release bot asks for the turn at `now`, its target having waited `waited` seconds: the
+/// next queue, and whether it holds the turn; see the merge-path ADR §1.
+#[must_use]
+pub fn release_turn(q: &MergeQueue, waited: u64, now: u64) -> (MergeQueue, bool) {
+    let mut next = q.clone();
+    if next
+        .releasing
+        .is_some_and(|at| now.saturating_sub(at) < HOLD)
+    {
+        return (next, true);
+    }
+    let free = next.merging.is_none() && next.protected(now).is_none();
+    let idle = next
+        .waiting
+        .iter()
+        .all(|e| next.yielded.contains_key(&e.number));
+    let due = waited >= RELEASE_WAIT;
+    if free && (idle || due) {
+        next.releasing = Some(now);
+        next.release_asked = None;
+        return (next, true);
+    }
+    if due
+        && next
+            .release_asked
+            .is_none_or(|at| now.saturating_sub(at) >= SETTLE)
+    {
+        next.release_asked = Some(now);
+    }
+    (next, false)
+}
+
+/// The release bot's turn ended: the next queue, and the next merge to start, if any.
+#[must_use]
+pub fn release_turn_done(q: &MergeQueue, now: u64) -> (MergeQueue, Option<Entry>) {
+    let mut next = q.clone();
+    next.releasing = None;
+    next.release_asked = None;
+    advance(next, now)
+}
+
 /// `q` with its oldest waiting merge that yields to none started when none runs and no kept
 /// change's turn is [`MergeQueue::protected`], and that merge; a yielded one keeps its place.
 #[must_use]
 pub fn advance(mut q: MergeQueue, now: u64) -> (MergeQueue, Option<Entry>) {
-    if q.merging.is_some() || q.protected(now).is_some() {
+    if q.merging.is_some() || q.protected(now).is_some() || q.release_holds(now) {
         return (q, None);
     }
     let Some(i) = q

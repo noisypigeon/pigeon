@@ -721,7 +721,7 @@ impl MainRun {
     /// A deploy of `sha` passed: it is the release target, replacing any older one.
     async fn release_target(&self, sha: &str) -> Result<()> {
         let mut r = self.releasing().await?;
-        r.deployed(sha);
+        r.deployed_at(sha, now());
         self.state.storage().put(RELEASES, &r).await
     }
 
@@ -775,20 +775,50 @@ impl MainRun {
             if let Some((passed, summary)) = ended {
                 r.finished(passed, &summary, at);
                 release_event(&self.env, &sha, passed, &summary).await;
+                self.free_release_turn().await;
             }
         }
-        if let Some(sha) = r.start() {
+        let turn =
+            r.running.is_none() && r.target.is_some() && self.release_turn(r.waited(at)).await;
+        if let Some(sha) = turn.then(|| r.start()).flatten() {
             match self.start_release(&sha).await {
                 Ok(()) => {}
-                Err(why) if control::no_capacity(&why) => r.wait(&sha),
+                Err(why) if control::no_capacity(&why) => {
+                    r.wait(&sha);
+                    self.free_release_turn().await;
+                }
                 Err(why) => {
                     r.finished(false, &why, at);
                     release_event(&self.env, &sha, false, &why).await;
+                    self.free_release_turn().await;
                 }
             }
         }
         self.state.storage().put(RELEASES, &r).await?;
         Ok(r.running.is_some() || r.target.is_some())
+    }
+
+    /// Whether the release holds the merge turn, its target having waited `waited` seconds.
+    async fn release_turn(&self, waited: u64) -> bool {
+        let Ok(s) = platform::Settings::from(&self.env) else {
+            return false;
+        };
+        super::merges::release_turn(&self.env, &s, waited)
+            .await
+            .unwrap_or_else(|e| {
+                worker::console_error!("release turn: {e}");
+                false
+            })
+    }
+
+    /// Frees the release's merge turn, so the next merge starts.
+    async fn free_release_turn(&self) {
+        let Ok(s) = platform::Settings::from(&self.env) else {
+            return;
+        };
+        if let Err(e) = super::merges::release_turn_done(&self.env, &s).await {
+            worker::console_error!("release turn: {e}");
+        }
     }
 
     async fn test_maps(&self) -> Result<TestMaps> {
