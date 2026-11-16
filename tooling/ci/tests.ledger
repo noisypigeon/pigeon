@@ -29,7 +29,7 @@ pigeon test suite dev::a_task_runs_from_the_root_and_its_failure_is_the_exit_cod
 pigeon test suite dev::an_old_task_name_runs_its_task_after_one_line_on_stderr
 pigeon test suite dev::an_unknown_task_is_a_usage_error_and_old_names_stay_out_of_help
 pigeon test suite dev::dry_run_prints_the_plan_in_order
-pigeon test suite dev::every_mise_task_is_a_dev_task_with_the_same_graph_and_commands
+pigeon test suite dev::every_name_is_unique_and_dependencies_use_new_names
 pigeon test suite dev::list_names_every_task
 pigeon test suite dev::no_dev_command_names_an_old_spelling
 pigeon test suite dev::old_names_find_their_tasks
@@ -926,7 +926,7 @@ pigeon-backplane test suite cobot_git::apply_creates_imports_and_then_changes_no
 pigeon-backplane test suite cobot_git::each_instance_uses_its_own_namespace_in_the_account_its_token_sees
 pigeon-backplane test suite cobot_git::only_a_change_branch_is_pushed_or_deleted_this_way
 pigeon-backplane test suite cobot_git::the_git_token_travels_only_in_the_environment
-pigeon-backplane test suite cobot_image_tools::image_tools_match_mise
+pigeon-backplane test suite cobot_image_tools::image_tools_match_the_checks_and_the_toolchain
 pigeon-backplane test suite cobot_image_tools::the_image_build_sees_every_config_file_a_crate_includes
 pigeon-backplane test suite cobot_image_tools::the_recipe_stubs_every_declared_target
 pigeon-backplane test suite cobot_local::a_local_unit_is_validated_but_skipped_unless_named

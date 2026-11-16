@@ -19,7 +19,7 @@ ENTRYPOINT ["/usr/local/bin/pigeon"]
 
 FROM runtime AS sentinel
 
-# tofu and zola, checksum-pinned; versions equal mise.toml's.
+# tofu and zola, checksum-pinned; versions equal ci.yml's.
 FROM docker.io/library/debian:bookworm-20261005-slim@sha256:7c7b2c966bc9ee8cedfeef67e0e279108992c77681fa595db4a9d65c06ccc587 AS tools
 ARG TOFU_VERSION=1.13.1
 ARG TOFU_SHA256=378ada19d4bc70c43732004e8159be771b23b9a5afdf059e5f8a2b3fa2c70a69
@@ -72,11 +72,11 @@ RUN mkdir /recipe \
       done; \
     done
 
-# A change's jobs run here (lifecycle ADR §4): the toolchain mise.toml pins, git, backplane's
+# A change's jobs run here (lifecycle ADR §4): the toolchain rust-toolchain.toml pins, git, backplane's
 # tools, and the workspace's dependencies already compiled, so a job builds only the crates
 # it touches. Build with `--build-arg FEATURES=backplane`.
 FROM docker.io/library/rust:1.99.1-slim-bookworm@sha256:24707e70a4f1e23d9a7b25202ec43126d28a52294b96aad5c670df1fd1f1d400 AS ci
-# Node, wrangler and worker-build deploy Workers from the pipeline; versions equal mise.toml's
+# Node, wrangler and worker-build deploy Workers from the pipeline; pinned here alone
 # (.claude/decisions/2026-11-07-development-control-plane-deploys-itself.md §2).
 ARG NODE_VERSION=24.22.0
 ARG NODE_SHA256=cc2f601cee82d9a5a233302fe307abc600727035fd7d2c3a3571755989e95008

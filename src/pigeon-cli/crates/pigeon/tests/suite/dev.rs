@@ -1,7 +1,6 @@
-//! `pigeon dev`: mise.toml's tasks in Rust, the same graph and commands in the new spellings;
+//! `pigeon dev`: the task graph in Rust, its only source;
 //! see .claude/decisions/2026-11-16-development-src-crates-neutral-names.md §4.
 
-use std::collections::BTreeMap;
 use std::path::Path;
 
 use assert_cmd::Command;
@@ -15,135 +14,27 @@ fn root() -> std::path::PathBuf {
     workspace_root(Path::new(env!("CARGO_MANIFEST_DIR"))).expect("a workspace above the crate")
 }
 
-/// A mise task: what it depends on and what it runs.
-#[derive(Debug, Default)]
-struct MiseTask {
-    depends: Vec<String>,
-    run: Vec<String>,
-}
-
-/// The strings in a TOML value: one basic, literal or multi-line literal string, or an array
-/// of them.
-fn strings(value: &str) -> Vec<String> {
-    let mut out = Vec::new();
-    let mut rest = value.trim();
-    while !rest.is_empty() {
-        rest = rest
-            .trim_start_matches(|c: char| c == '[' || c == ']' || c == ',' || c.is_whitespace());
-        if let Some(r) = rest.strip_prefix("'''") {
-            let r = r.strip_prefix('\n').unwrap_or(r);
-            let end = r.find("'''").expect("closing '''");
-            out.push(r[..end].to_string());
-            rest = &r[end + 3..];
-        } else if let Some(r) = rest.strip_prefix('\'') {
-            let end = r.find('\'').expect("closing '");
-            out.push(r[..end].to_string());
-            rest = &r[end + 1..];
-        } else if let Some(r) = rest.strip_prefix('"') {
-            let mut s = String::new();
-            let mut chars = r.char_indices();
-            let mut end = r.len();
-            while let Some((i, c)) = chars.next() {
-                match c {
-                    '\\' => s.push(chars.next().expect("escaped").1),
-                    '"' => {
-                        end = i;
-                        break;
-                    }
-                    c => s.push(c),
-                }
-            }
-            out.push(s);
-            rest = &r[end + 1..];
-        } else {
-            break;
-        }
-    }
-    out
-}
-
-/// mise.toml's tasks, by name.
-fn mise_tasks(text: &str) -> BTreeMap<String, MiseTask> {
-    let mut tasks = BTreeMap::<String, MiseTask>::new();
-    let mut current: Option<String> = None;
-    let mut lines = text.lines().peekable();
-    while let Some(line) = lines.next() {
-        let trimmed = line.trim();
-        if trimmed.starts_with('[') && !trimmed.starts_with("[[") && trimmed.ends_with(']') {
-            current = trimmed
-                .strip_prefix("[tasks.")
-                .and_then(|s| s.strip_suffix(']'))
-                .map(|s| s.trim_matches('"').to_string());
-            if let Some(name) = &current {
-                tasks.entry(name.clone()).or_default();
-            }
-            continue;
-        }
-        let Some(name) = &current else { continue };
-        let Some((key, value)) = trimmed.split_once('=') else {
-            continue;
-        };
-        let key = key.trim();
-        if key != "depends" && key != "run" {
-            continue;
-        }
-        // A value continues until its brackets and triple quotes close.
-        let mut value = value.trim().to_string();
-        let open = |v: &str| {
-            v.matches("'''").count() % 2 == 1
-                || (v.starts_with('[') && v.matches('[').count() > v.matches(']').count())
-        };
-        while open(&value) {
-            value.push('\n');
-            value.push_str(lines.next().expect("an unclosed value"));
-        }
-        let task = tasks.get_mut(name).expect("its section");
-        if key == "depends" {
-            task.depends = strings(&value);
-        } else {
-            task.run = strings(&value);
-        }
-    }
-    tasks
-}
-
-/// A mise command in the new spellings.
-fn respell(command: &str) -> String {
-    command
-        .replace("-p pigeon -- backplane run ", "-p pigeon -- run ")
-        .replace("-p pigeon -- backplane instance ", "-p pigeon -- instance ")
-        .replace("-p pigeon -- cobot scope ", "-p pigeon -- dev scope ")
-        .replace("--features sentinel ", "--features eviction ")
-        .replace("--features cobot ", "--features infra ")
-        .replace("--features backplane ", "--features agent ")
-}
-
-/// A mise task's name in `pigeon dev`.
-fn renamed(name: &str) -> &'static str {
-    find(name)
-        .unwrap_or_else(|| panic!("mise's `{name}` has no `pigeon dev` task"))
-        .name
-}
-
 #[test]
-fn every_mise_task_is_a_dev_task_with_the_same_graph_and_commands() {
-    let text = std::fs::read_to_string(root().join("mise.toml")).expect("mise.toml");
-    let mise = mise_tasks(&text);
-    assert_eq!(mise.len(), TASKS.len(), "{mise:?}");
-    for (name, task) in &mise {
-        let dev = find(name).unwrap_or_else(|| panic!("mise's `{name}` has no `pigeon dev` task"));
-        let depends: Vec<_> = task.depends.iter().map(|d| renamed(d)).collect();
-        assert_eq!(depends, dev.depends, "{name}'s dependencies");
-        let run: Vec<_> = task.run.iter().map(|c| respell(c.trim_end())).collect();
-        let ours: Vec<_> = dev.run.iter().map(|c| c.trim_end().to_string()).collect();
-        assert_eq!(run, ours, "{name}'s commands");
-    }
+fn every_name_is_unique_and_dependencies_use_new_names() {
+    let mut seen = std::collections::BTreeSet::new();
     for task in TASKS {
+        assert!(!task.about.is_empty(), "{} says what it does", task.name);
         assert!(
-            mise.contains_key(task.name) || task.old.is_some_and(|o| mise.contains_key(o)),
-            "`pigeon dev {}` is not in mise.toml",
+            !task.run.is_empty() || !task.depends.is_empty(),
+            "{} does something",
             task.name
         );
+        for name in std::iter::once(task.name).chain(task.old) {
+            assert!(seen.insert(name), "`{name}` names two tasks");
+        }
+        for dep in task.depends {
+            let found = find(dep).unwrap_or_else(|| panic!("{}: no task `{dep}`", task.name));
+            assert_eq!(
+                found.name, *dep,
+                "{} names `{dep}` by its old name",
+                task.name
+            );
+        }
     }
 }
 

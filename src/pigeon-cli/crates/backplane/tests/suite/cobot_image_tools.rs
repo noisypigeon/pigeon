@@ -1,4 +1,4 @@
-//! The backplane image's tool versions equal mise.toml's; see
+//! The image's tool versions equal the checks' and rust-toolchain.toml's; see
 //! `.claude/decisions/2026-11-03-release-cobot-image-in-workflows.md`.
 
 use std::fs;
@@ -19,37 +19,60 @@ fn defaults(dockerfile: &str, name: &str) -> Vec<String> {
         .collect()
 }
 
-/// The quoted version of `<tool> = "<version>"` in mise.toml.
-fn mise(manifest: &str, tool: &str) -> String {
-    manifest
+/// The value of `<key>: <value>` in ci.yml's `env`.
+fn workflow_env(workflow: &str, key: &str) -> String {
+    workflow
         .lines()
-        .find_map(|l| {
-            let (key, value) = l.split_once('=')?;
-            (key.trim() == tool).then(|| value.trim().trim_matches('"').to_string())
-        })
-        .unwrap_or_else(|| panic!("mise.toml has no {tool}"))
+        .find_map(|l| l.trim().strip_prefix(&format!("{key}:")))
+        .map_or_else(|| panic!("ci.yml has no {key}"), |v| v.trim().to_string())
+}
+
+/// The version of every `rust:<version>-…` image named in `text`.
+fn rust_images(text: &str) -> Vec<String> {
+    text.split("library/rust:")
+        .skip(1)
+        .map(|r| r.split('-').next().unwrap_or_default().to_string())
+        .collect()
 }
 
 #[test]
-fn image_tools_match_mise() {
+fn image_tools_match_the_checks_and_the_toolchain() {
     let dockerfile = read("../../../../Dockerfile");
-    let toml = read("../../../../mise.toml");
-    for (key, tool) in [
-        ("TOFU_VERSION", "opentofu"),
-        ("ZOLA_VERSION", "zola"),
-        ("NODE_VERSION", "node"),
-        ("WRANGLER_VERSION", "\"npm:wrangler\""),
-        ("WORKER_BUILD_VERSION", "\"cargo:worker-build\""),
-    ] {
-        let want = mise(&toml, tool);
+    let workflow = read("../../../../.github/workflows/ci.yml");
+    let toolchain = read("../../../../rust-toolchain.toml");
+    for key in ["TOFU_VERSION", "TOFU_SHA256", "ZOLA_VERSION", "ZOLA_SHA256"] {
+        let want = workflow_env(&workflow, key);
         let got = defaults(&dockerfile, key);
         assert!(!got.is_empty(), "Dockerfile has no ARG {key}");
         for v in got {
-            assert_eq!(
-                v, want,
-                "Dockerfile ARG {key} differs from mise.toml's {tool}"
-            );
+            assert_eq!(v, want, "Dockerfile ARG {key} differs from ci.yml's");
         }
+    }
+    for key in ["NODE_VERSION", "WRANGLER_VERSION", "WORKER_BUILD_VERSION"] {
+        let mut got = defaults(&dockerfile, key);
+        assert!(!got.is_empty(), "Dockerfile has no ARG {key}");
+        got.sort();
+        got.dedup();
+        assert_eq!(got.len(), 1, "Dockerfile pins {key} twice: {got:?}");
+    }
+    let channel = toolchain
+        .lines()
+        .find_map(|l| l.trim().strip_prefix("channel"))
+        .map(|v| {
+            v.trim()
+                .trim_start_matches('=')
+                .trim()
+                .trim_matches('"')
+                .to_string()
+        })
+        .expect("rust-toolchain.toml has a channel");
+    let images: Vec<_> = rust_images(&dockerfile)
+        .into_iter()
+        .chain(rust_images(&workflow))
+        .collect();
+    assert!(images.len() >= 3, "{images:?}");
+    for v in images {
+        assert_eq!(v, channel, "a rust image differs from rust-toolchain.toml");
     }
 }
 

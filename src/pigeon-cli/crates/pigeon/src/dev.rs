@@ -1,4 +1,4 @@
-//! `pigeon dev <task>`: mise.toml's tasks and their dependencies, run from the workspace root;
+//! `pigeon dev <task>`: the task graph and its commands, run from the workspace root;
 //! see .claude/decisions/2026-11-16-development-src-crates-neutral-names.md §4.
 
 use std::path::{Path, PathBuf};
@@ -9,7 +9,7 @@ use std::process::Command;
 pub struct Task {
     /// Its name.
     pub name: &'static str,
-    /// Its mise name, when that differs; accepted until step 12.
+    /// Its old name, when that differs; accepted until step 12.
     pub old: Option<&'static str>,
     /// What it does.
     pub about: &'static str,

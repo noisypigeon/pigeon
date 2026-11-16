@@ -94,7 +94,7 @@ pub enum Commands {
     #[cfg(feature = "session")]
     #[command(subcommand)]
     Session(SessionCommand),
-    /// Build, test and check the workspace: mise.toml's tasks, run from the workspace root
+    /// Build, test and check the workspace: its tasks, run from the workspace root
     Dev(DevArgs),
     /// `pigeon eviction`'s old spelling
     #[cfg(feature = "eviction")]
