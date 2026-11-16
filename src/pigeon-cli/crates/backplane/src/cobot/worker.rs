@@ -250,7 +250,7 @@ pub fn accept(
 }
 
 #[cfg(target_arch = "wasm32")]
-pub use wasm::{call, monitor, start, start_jobs};
+pub use wasm::{call, monitor, start, start_bench, start_jobs};
 
 #[cfg(target_arch = "wasm32")]
 mod wasm {
@@ -291,6 +291,22 @@ mod wasm {
         launch: &JobsLaunch,
     ) -> Result<(), DispatchError> {
         boot(state, container, &launch.entrypoint(), &launch.env()).await
+    }
+
+    /// As [`start_jobs`], serving `/v0/bench/*` too, with its work under `/cache`; see
+    /// `.claude/decisions/2026-11-16-development-session-bench-containers.md` §3.2.
+    ///
+    /// # Errors
+    ///
+    /// As [`start`].
+    pub async fn start_bench(
+        state: &State,
+        container: &Container,
+        launch: &JobsLaunch,
+    ) -> Result<(), DispatchError> {
+        let mut entrypoint = launch.entrypoint();
+        entrypoint.extend(["--work", "/cache", "--bench"].map(str::to_string));
+        boot(state, container, &entrypoint, &launch.env()).await
     }
 
     /// Starts the Container through the runtime's own `ctx.container.start`, with `env` as a

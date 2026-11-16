@@ -585,3 +585,36 @@ is served by `pigeon backplane jobs --listen ADDR --work DIR --bench`.
   against a local bare repository: sync, mise tasks, exit codes, one run at a
   time, cancel, paging and refusals. The sandbox's wrapping is tested as
   argv. The sandbox itself is proved live in step 9.
+
+### 2026-11-16: Step 6 as built: the `Bench` object, the fleet, `bench.*`, and teardown
+
+One change carries step 6 (!684). It re-proposes !675, which was closed to free
+the merge turn after a stale test map failed its gate, and which itself replaced
+!671, whose approved scope lacked `tests/instance.rs`, the pin of every
+operation that changes something.
+
+- **The `Bench` object** is named `<session_id>.<k>`.
+  - It starts its Container as `jobs --work /cache --bench`, under
+    `link::derive(BACKPLANE_TOKEN, "bench:<name>")`, held by its monitor.
+  - It forwards `/v0/bench/*`.
+  - Its alarm, every 5 minutes, meters its seconds. It stops the bench when
+    the label's ticket isn't live, or when it has been idle past its timeout
+    with no run going.
+- **The fleet** is kept by the `Instance` at
+  `/benches/{admit,touch,release,meter,asked,end,list}`, under
+  `Limits::default()` until `limits.set` carries `max_benches` and
+  `bench_hours`.
+- **A finished run's log goes to R2 when it is first read as ended.** That is
+  usually `bench run`'s own last `bench.status`, which also appends
+  `bench.finished`. A run nobody reads after it ends keeps its log only in the
+  Container, until the bench stops. That's the session's own loss, and
+  `bench run` always reads to the end.
+- **The day's budget files one owner item** (`owner.ask`, `kind: action`), on
+  the first refusal of the UTC day. It is filed by the control plane, as the
+  refused session.
+- **`session.end` stops the session's benches.** When the session ever had a
+  bench, it also dispatches an `unscratch` job on `Runner`, with a write
+  token minted for it. The job deletes `refs/heads/scratch/<session_id>` and
+  refuses any other ref. A lapsed ticket's benches stop through their alarm,
+  and its scratch ref stays until the session's next `session.end`. A sweep
+  of such refs is left for later.

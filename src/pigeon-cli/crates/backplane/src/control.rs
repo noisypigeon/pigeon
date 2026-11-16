@@ -136,6 +136,14 @@ pub enum Routed {
         /// Its arguments.
         args: serde_json::Map<String, Value>,
     },
+    /// A `bench.*` operation, with its arguments; see
+    /// `.claude/decisions/2026-11-16-development-session-bench-containers.md` §3.
+    Bench {
+        /// The operation.
+        operation: String,
+        /// Its arguments.
+        args: serde_json::Map<String, Value>,
+    },
     /// `owner.ask` or `owner.withdraw`, with its arguments.
     Owner {
         /// The operation.
@@ -424,6 +432,11 @@ pub fn route(request: &Request, by: &str, at: u64) -> Result<Routed, String> {
         "session.start" => Ok(Routed::SessionStart { args: a.clone() }),
         "session.end" => Ok(Routed::SessionEnd { args: a.clone() }),
         "session.archived" => Ok(Routed::SessionArchived { args: a.clone() }),
+        "bench.run" | "bench.status" | "bench.logs" | "bench.cancel" | "bench.reset"
+        | "bench.list" | "bench.warm" => Ok(Routed::Bench {
+            operation: request.operation.clone(),
+            args: a.clone(),
+        }),
         "owner.ask" | "owner.withdraw" => Ok(Routed::Owner {
             operation: request.operation.clone(),
             args: a.clone(),
@@ -1272,6 +1285,10 @@ pub const MIRROR: &str = changes::MIRROR;
 /// The job that deletes a merged or closed change's branch from GitHub.
 pub const UNMIRROR: &str = "unmirror";
 
+/// The job deleting a session's scratch ref when it ends; see
+/// `.claude/decisions/2026-11-16-development-session-bench-containers.md` §4.
+pub const UNSCRATCH: &str = "unscratch";
+
 /// The owner's break-glass: a change head's code checks on Cloudflare's `Checker`, which
 /// `ci_rerun … on: cloudflare` asks for; see
 /// `.claude/decisions/2026-11-10-development-code-checks-github-actions.md` §5.
@@ -1479,6 +1496,17 @@ pub fn unmirror_spec(change: &Change, to: &str, to_token: &str) -> JobSpec {
             (MIRROR_TOKEN.to_string(), to_token.to_string()),
         ]),
         ..deploy_spec("", "", &sha, None, std::collections::BTreeMap::new())
+    }
+}
+
+/// The spec deleting session `session_id`'s scratch ref from `remote`, with write `token`.
+#[must_use]
+pub fn unscratch_spec(session_id: &str, remote: &str, token: &str) -> JobSpec {
+    JobSpec {
+        id: format!("{UNSCRATCH}-{}", session_id.replace('_', "-")),
+        branch: format!("scratch/{session_id}"),
+        job: UNSCRATCH.into(),
+        ..deploy_spec(remote, token, "", None, std::collections::BTreeMap::new())
     }
 }
 
@@ -1803,6 +1831,7 @@ pub fn class_of(job: &str) -> Class {
         || job == PLATFORM
         || job == MIRROR
         || job == UNMIRROR
+        || job == UNSCRATCH
         || job == EVICTION
     {
         Class::Runner

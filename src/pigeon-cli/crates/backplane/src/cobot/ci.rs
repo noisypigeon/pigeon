@@ -392,6 +392,29 @@ pub fn squash_onto(
     Ok(new)
 }
 
+/// Deletes `refname` from `remote` from a new repository at `dir`; a ref already gone is no
+/// error.
+///
+/// # Errors
+///
+/// [`Error::Git`] when git fails; [`Error::Io`] when `dir` can't be made.
+pub fn delete_ref(dir: &Path, remote: &str, token: &str, refname: &str) -> Result<(), Error> {
+    std::fs::create_dir_all(dir).map_err(|e| Error::Io {
+        path: dir.to_path_buf(),
+        message: e.to_string(),
+    })?;
+    git(dir, remote, token, &["init", "-q"])?;
+    match git(
+        dir,
+        remote,
+        token,
+        &["push", "-q", remote, &format!(":{refname}")],
+    ) {
+        Err(Error::Git { message, .. }) if message.contains("remote ref does not exist") => Ok(()),
+        other => other.map(|_| ()),
+    }
+}
+
 /// Fetches every tag from `remote` into `dir`, as a site's template is read from its tag.
 ///
 /// # Errors

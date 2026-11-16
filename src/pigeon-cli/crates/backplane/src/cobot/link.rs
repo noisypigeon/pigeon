@@ -121,6 +121,14 @@ pub fn constant_eq(a: &[u8], b: &[u8]) -> bool {
     a.len() == b.len() && a.iter().zip(b).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
 }
 
+/// A key derived from `token` for `purpose`, as hex: a bench's own signing key, so a leak
+/// opens only that bench; see
+/// `.claude/decisions/2026-11-16-development-session-bench-containers.md` §5.
+#[must_use]
+pub fn derive(token: &str, purpose: &str) -> String {
+    hmac_hex(token, purpose)
+}
+
 fn hmac_hex(token: &str, message: &str) -> String {
     let mut mac =
         Hmac::<Sha256>::new_from_slice(token.as_bytes()).expect("HMAC takes a key of any length");

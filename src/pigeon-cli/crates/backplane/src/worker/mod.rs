@@ -13,6 +13,7 @@ mod apns;
 mod app;
 mod apple;
 mod approve;
+mod bench;
 mod bitrise;
 mod briefs;
 mod buildkite;
@@ -52,6 +53,7 @@ use worker::{
     durable_object, event,
 };
 
+pub use bench::Bench;
 pub use change::ChangeRun;
 pub use checker::{Checker, Runner};
 pub use main_run::MainRun;
@@ -912,6 +914,13 @@ async fn dispatch(
         Routed::SessionArchived { args } => {
             Ok(answered(operation, tickets::archived(env, s, &args).await?))
         }
+        Routed::Bench {
+            operation: op,
+            args,
+        } => Ok(answered(
+            operation,
+            bench::operation(env, s, &op, &args).await?,
+        )),
         Routed::Owner {
             operation: op,
             args,
@@ -1977,6 +1986,10 @@ impl DurableObject for Instance {
         {
             let body: Value = req.json().await.unwrap_or(Value::Null);
             return sessions_store(&self.state, &path, &body).await;
+        }
+        if path.starts_with("/benches/") {
+            let body: Value = req.json().await.unwrap_or(Value::Null);
+            return bench::serve(&self.state, &path, &body).await;
         }
         if path.starts_with("/push/") || path.starts_with("/digest/") {
             let body: Value = req.json().await?;

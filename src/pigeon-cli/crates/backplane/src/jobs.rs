@@ -163,6 +163,9 @@ pub fn run_judged(spec: &JobSpec, dir: &Path, sentinel: &Path) -> Report {
     if spec.job == MIRROR || spec.job == UNMIRROR {
         return mirror(spec, dir);
     }
+    if spec.job == crate::control::UNSCRATCH {
+        return unscratch(spec, dir);
+    }
     let _ = std::fs::remove_dir_all(dir);
     if let Err(e) = crate::cobot::ci::checkout(
         dir,
@@ -212,6 +215,24 @@ pub fn run_judged(spec: &JobSpec, dir: &Path, sentinel: &Path) -> Report {
         if ok { Outcome::Passed } else { Outcome::Failed },
         &log,
     )
+}
+
+/// The unscratch job: deletes a session's scratch ref when it ends; see
+/// `.claude/decisions/2026-11-16-development-session-bench-containers.md` §4.
+fn unscratch(spec: &JobSpec, dir: &Path) -> Report {
+    let refname = format!("refs/heads/{}", spec.branch);
+    if crate::core::bench::scratch_owner(&refname).is_none() {
+        return report(
+            spec,
+            Outcome::Failed,
+            "an unscratch job deletes only a session's scratch ref",
+        );
+    }
+    let _ = std::fs::remove_dir_all(dir);
+    match crate::cobot::ci::delete_ref(dir, &spec.remote, &spec.token, &refname) {
+        Ok(()) => report(spec, Outcome::Passed, &format!("deleted {refname}\n")),
+        Err(e) => report(spec, Outcome::Failed, &e.to_string()),
+    }
 }
 
 /// The mirror job: `main` and the tags, fast-forward and add-only, to GitHub in a fresh bare

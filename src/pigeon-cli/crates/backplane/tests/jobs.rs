@@ -693,3 +693,40 @@ fn an_eviction_job_whose_judge_cant_answer_fails_and_grants_nothing() {
     let r = jobs::run_judged(&garbled, &tmp.path().join("job2"), &bad);
     assert_eq!(r.outcome, Outcome::Failed);
 }
+
+#[test]
+fn the_unscratch_job_deletes_only_a_sessions_scratch_ref() {
+    let tmp = TempDir::new().expect("tempdir");
+    let (remote, sha) = remote(tmp.path(), &["README.md"]);
+    let scratch = "refs/heads/scratch/session_abc";
+    git(&remote, &["update-ref", scratch, &sha]);
+    let url = remote.to_str().expect("utf-8");
+    let u = backplane::control::unscratch_spec("session_abc", url, "a-token-never-shown");
+    assert_eq!(u.id, "unscratch-session-abc");
+    let r = run_job(&u, &tmp.path().join("job"));
+    assert_eq!(r.outcome, Outcome::Passed, "{}", r.log);
+    assert_eq!(
+        git(
+            &remote,
+            &["for-each-ref", "--format=%(refname)", "refs/heads/scratch"]
+        ),
+        ""
+    );
+    let again = run_job(&u, &tmp.path().join("job"));
+    assert_eq!(
+        again.outcome,
+        Outcome::Passed,
+        "already gone: {}",
+        again.log
+    );
+    let mut change = u.clone();
+    change.branch = "change/1-x".into();
+    let refused = run_job(&change, &tmp.path().join("job"));
+    assert_eq!(refused.outcome, Outcome::Failed);
+    assert!(
+        refused.log.contains("only a session's scratch ref"),
+        "{}",
+        refused.log
+    );
+    assert_ne!(git(&remote, &["for-each-ref", "refs/heads/change"]), "");
+}

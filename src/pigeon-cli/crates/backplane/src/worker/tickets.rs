@@ -139,6 +139,10 @@ pub async fn end(
             false,
         )
         .await?;
+        // Its benches stop and its scratch ref goes; see the bench ADR §4.
+        if let Err(e) = super::bench::end_session(env, s, &label).await {
+            worker::console_error!("bench end: {e}");
+        }
         if let (true, Some(by)) = (clean, archiver.as_str()) {
             let said = format!(
                 "session {label} ended clean; archive {} (`session_archived` after)",
