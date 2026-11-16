@@ -4,7 +4,7 @@
 * Model: Claude, planner session
 * Author: Willow Graysen (@noisypigeon).
 * Category: development
-* Governs: `src/**/worker/main_run.rs`, `src/**/worker/merges.rs`, `src/**/worker/github.rs`, `src/**/cobot/ci.rs`, `src/**/release/**`
+* Governs: `src/**/worker/main_run.rs`, `src/**/worker/merges.rs`, `src/**/worker/github.rs`, `src/pigeon-agent/src/*/ci.rs`, `src/**/release/**`
 
 ## Context
 
