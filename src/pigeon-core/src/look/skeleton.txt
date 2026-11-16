@@ -1,0 +1,148 @@
+== inbox
+<link rel="manifest" href="/approvals/manifest.json">
+<a href="/mandate/3?grant=tok">
+<a href="/approve/7?grant=tok">
+<button id="notify" type="button">
+<script src="/approvals/push.js">
+== inbox-empty
+<link rel="manifest" href="/approvals/manifest.json">
+<button id="notify" type="button">
+<script src="/approvals/push.js">
+== approve-authorize
+<form method="post" action="/approve/7">
+<input type="hidden" name="grant" value="tok">
+<input type="hidden" name="operation" value="change.authorize">
+<label>
+<input name="ask_zone" required autocomplete="off" spellcheck="false" minlength="32" maxlength="32" pattern="[0-9a-f]{32,32}">
+<button type="button" data-passkey="prove" data-purpose="grant:1a7674eb4ee78df7e1ac439a93c3fa8e3c945784d4dec9fd8e3011738b2f1d62" hidden>
+<script src="/passkey.js" defer>
+<label>
+<input name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required>
+<label>
+<input type="checkbox" name="review" value="1">
+<button type="submit">
+<a href="/approvals">
+== approve-head
+<form method="post" action="/approve/7">
+<input type="hidden" name="grant" value="tok">
+<input type="hidden" name="operation" value="change.approve">
+<button type="button" data-passkey="prove" data-purpose="grant:1a7674eb4ee78df7e1ac439a93c3fa8e3c945784d4dec9fd8e3011738b2f1d62" hidden>
+<script src="/passkey.js" defer>
+<label>
+<input name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required>
+<label>
+<input type="checkbox" name="review" value="1">
+<button type="submit">
+<a href="/approvals">
+== approve-close
+<form method="post" action="/approve/7">
+<input type="hidden" name="grant" value="tok">
+<input type="hidden" name="operation" value="change.close">
+<button type="button" data-passkey="prove" data-purpose="grant:1a7674eb4ee78df7e1ac439a93c3fa8e3c945784d4dec9fd8e3011738b2f1d62" hidden>
+<script src="/passkey.js" defer>
+<label>
+<input name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required>
+<button type="submit">
+<a href="/approvals">
+== approve-confirm
+<form method="post" action="/approve/7">
+<input type="hidden" name="grant" value="tok">
+<input type="hidden" name="operation" value="change.pin">
+<button type="submit">
+<a href="/approvals">
+== mandate
+<form method="post" action="/mandate/3">
+<input type="hidden" name="grant" value="tok">
+<button type="button" data-passkey="prove" data-purpose="grant:1a7674eb4ee78df7e1ac439a93c3fa8e3c945784d4dec9fd8e3011738b2f1d62" hidden>
+<script src="/passkey.js" defer>
+<label>
+<input name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required>
+<button type="submit">
+<a href="/approvals">
+== grant
+<form method="post" action="/grants/2">
+<input type="hidden" name="grant" value="tok">
+<button type="button" data-passkey="prove" data-purpose="grant:1a7674eb4ee78df7e1ac439a93c3fa8e3c945784d4dec9fd8e3011738b2f1d62" hidden>
+<script src="/passkey.js" defer>
+<label>
+<input name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required>
+<button type="submit">
+<a href="/approvals">
+== ci-window
+<form method="post" action="/ci-window/4">
+<input type="hidden" name="grant" value="tok">
+<button type="button" data-passkey="prove" data-purpose="grant:1a7674eb4ee78df7e1ac439a93c3fa8e3c945784d4dec9fd8e3011738b2f1d62" hidden>
+<script src="/passkey.js" defer>
+<label>
+<input name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required>
+<button type="submit">
+<a href="/approvals">
+== platform-plan
+<form method="post" action="/platform/5">
+<input type="hidden" name="grant" value="tok">
+<button type="button" data-passkey="prove" data-purpose="grant:1a7674eb4ee78df7e1ac439a93c3fa8e3c945784d4dec9fd8e3011738b2f1d62" hidden>
+<script src="/passkey.js" defer>
+<label>
+<input name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required>
+<label>
+<input name="account_token" type="password" autocomplete="off" minlength="20" required>
+<button type="submit" name="decision" value="grant">
+<a href="/approvals">
+== platform-apply
+<form method="post" action="/platform/6">
+<input type="hidden" name="grant" value="tok">
+<button type="button" data-passkey="prove" data-purpose="grant:1a7674eb4ee78df7e1ac439a93c3fa8e3c945784d4dec9fd8e3011738b2f1d62" hidden>
+<script src="/passkey.js" defer>
+<label>
+<input name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required>
+<button type="submit" name="decision" value="grant">
+<button type="submit" name="decision" value="refuse" formnovalidate>
+<a href="/approvals">
+== link
+<form method="post" action="/app/link">
+<input type="hidden" name="name" value="Willow&#39;s iPhone">
+<input type="hidden" name="key" value="BASE64KEY">
+<button type="button" data-passkey="prove" data-purpose="device:ab:cd:ef:01" hidden>
+<script src="/passkey.js" defer>
+<label>
+<input name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required>
+<button type="submit">
+<a href="/devices">
+== devices
+<form method="post" action="/devices">
+<input type="hidden" name="remove" value="d1">
+<button type="button" data-passkey="prove" data-purpose="device:d1" hidden>
+<label>
+<input name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required>
+<button type="submit">
+<script src="/passkey.js" defer>
+== passkeys
+<form method="post" action="/passkeys">
+<input type="hidden" name="remove" value="a1">
+<button type="button" data-passkey="prove" data-purpose="passkey:remove:a1" hidden>
+<label>
+<input name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required>
+<button type="submit">
+<form method="post" action="/passkeys">
+<input type="hidden" name="add" value="1">
+<button type="button" data-passkey="prove" data-purpose="passkey:add" hidden>
+<form method="post" action="/passkeys">
+<label>
+<input name="name" maxlength="64" required>
+<label>
+<input name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required>
+<button type="button" data-passkey="register" data-purpose="register" hidden>
+<script src="/passkey.js" defer>
+<a href="/approvals">
+== enroll
+<form method="post" action="/passkeys/enroll">
+<label>
+<input name="token" type="password" autocomplete="off" minlength="32" required>
+<label>
+<input name="name" maxlength="64" required>
+<label>
+<input type="checkbox" name="replace" value="1">
+<button type="button" data-passkey="register" data-purpose="register" hidden>
+<script src="/passkey.js" defer>
+<a href="/passkeys">
+== outcome

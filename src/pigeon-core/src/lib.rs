@@ -28,6 +28,7 @@ pub mod insights;
 pub mod iosrelease;
 pub mod learner;
 pub mod ledger;
+pub mod look;
 pub mod macos;
 pub mod mcp;
 pub mod member;
