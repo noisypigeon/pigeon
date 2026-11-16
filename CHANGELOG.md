@@ -194,6 +194,7 @@
 - test(agent): the sentinel tiers test holds with or without approvals.yaml's gate (!815) ([ccf989e](https://github.com/noisypigeon/pigeon/commit/ccf989e622be825c191b649928ac9e4d037c2787))
 - docs(adr): faster merges: the release bot takes a merge turn, the head's jobs overlap, and two owner decisions (!818) ([38cb8fb](https://github.com/noisypigeon/pigeon/commit/38cb8fb9d275639390b2a177dba656414cbc9273))
 - docs(adr): the owner's answers on merges: an owner approval covers its head's merge, and checks carry across a restack outside their reach (!820) ([f3c9428](https://github.com/noisypigeon/pigeon/commit/f3c94289da06ebee71a7479c42b262f3638f51cb))
+- docs(adr): review !797 against !801 (!822) ([5c4c6cc](https://github.com/noisypigeon/pigeon/commit/5c4c6cc3d3545bd2473ccb896b93b2e423938eba))
 
 ## 2026-11-15
 
