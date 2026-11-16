@@ -22,6 +22,21 @@ pub const NEEDED: [&str; 6] = [
     ship::HOST_VAR,
 ];
 
+/// Why the deploy of `spec.sha` is superseded: `main` has moved past it. None when `main` is
+/// still there or its head can't be read; see the deploys ADR's 2026-11-16 amendment.
+#[must_use]
+pub fn superseded(spec: &JobSpec, dir: &Path) -> Option<String> {
+    crate::cobot::ci::remote_head(dir, &spec.remote, &spec.token, &spec.branch)
+        .ok()
+        .filter(|head| *head != spec.sha)
+        .map(|head| {
+            format!(
+                "main moved on to {head}; the deploy of {} is superseded",
+                spec.sha
+            )
+        })
+}
+
 /// Deploys the Workers whose inputs changed among `files` from the checkout at `dir`; each as
 /// `<name>: <from> → <to>`. When the job image's inputs changed since its commit, it is built and
 /// pushed first, and set in `built`, even if a later step fails.

@@ -1124,8 +1124,10 @@ impl DurableObject for MainRun {
                     }
                     deploy_event(&self.env, &sha, &report).await;
                     // A failed deploy holds Auto, and a passed one resumes it; see the iOS
-                    // approvals ADR's 2026-11-15 amendment.
+                    // approvals ADR's 2026-11-15 amendment. A superseded one does neither; see
+                    // the deploys ADR's 2026-11-16 amendment.
                     let auto = match platform::Settings::from(&self.env) {
+                        _ if report.outcome == Outcome::Superseded => Ok(()),
                         Ok(s) if report.outcome == Outcome::Passed => {
                             super::mandates::resume_all(&self.env, &s, &sha).await
                         }
@@ -1178,13 +1180,16 @@ impl DurableObject for MainRun {
 
 /// Tells the event log how the deploy of `sha` ended.
 async fn deploy_event(env: &Env, sha: &str, report: &Report) {
-    let (kind, how) = if report.outcome == Outcome::Passed {
-        ("deploy.passed", "passed".to_string())
-    } else {
-        (
+    let (kind, how) = match report.outcome {
+        Outcome::Passed => ("deploy.passed", "passed".to_string()),
+        Outcome::Superseded => (
+            "deploy.superseded",
+            format!("was superseded: {}", control::failure(report)),
+        ),
+        _ => (
             "deploy.failed",
             format!("failed: {}", control::failure(report)),
-        )
+        ),
     };
     let summary = format!("the deploy of {} {how}", sha.get(..12).unwrap_or(sha));
     let Ok(s) = platform::Settings::from(env) else {
@@ -1193,7 +1198,7 @@ async fn deploy_event(env: &Env, sha: &str, report: &Report) {
     if let Err(e) = super::events::append(env, &s, kind, None, None, &summary, false).await {
         worker::console_error!("deploy event: {e}");
     }
-    if report.outcome != Outcome::Passed {
+    if report.outcome == Outcome::Failed {
         super::push::notify(env, &s, "Deploy failed", &summary, "/approvals").await;
     }
 }

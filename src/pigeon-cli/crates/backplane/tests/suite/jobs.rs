@@ -392,8 +392,8 @@ fn every_deploy_publishes_the_architecture_site() {
     let r = deploy(&docs_only, Some(&before), "c");
     assert_eq!(
         r.outcome,
-        Outcome::Failed,
-        "a SHA that isn't main's head is refused"
+        Outcome::Superseded,
+        "a SHA that isn't main's head is superseded, not failed"
     );
 }
 

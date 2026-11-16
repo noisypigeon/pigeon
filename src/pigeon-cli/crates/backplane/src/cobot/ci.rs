@@ -90,6 +90,23 @@ pub fn checkout(
     Ok(())
 }
 
+/// `branch`'s head on `remote` now, by `git ls-remote`, run in `dir`.
+///
+/// # Errors
+///
+/// [`Error::Git`] when git fails or `remote` has no such branch.
+pub fn remote_head(dir: &Path, remote: &str, token: &str, branch: &str) -> Result<String, Error> {
+    let refname = format!("refs/heads/{branch}");
+    let out = git(dir, remote, token, &["ls-remote", remote, &refname])?;
+    out.lines()
+        .find_map(|l| l.split_once('\t').filter(|(_, r)| *r == refname))
+        .map(|(sha, _)| sha.to_string())
+        .ok_or_else(|| Error::Git {
+            args: format!("ls-remote {refname}"),
+            message: format!("no {refname}"),
+        })
+}
+
 /// The paths `sha` changes since it left `base`, as `git diff --name-only base...sha`.
 ///
 /// # Errors

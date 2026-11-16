@@ -175,6 +175,14 @@ pub fn run_judged(spec: &JobSpec, dir: &Path, sentinel: &Path) -> Report {
         &spec.branch,
         &spec.sha,
     ) {
+        if spec.job == DEPLOY
+            && let Some(why) = crate::ship::superseded(spec, dir)
+        {
+            return Report {
+                violations: vec![why],
+                ..report(spec, Outcome::Superseded, &e.to_string())
+            };
+        }
         let mut r = report(spec, Outcome::Failed, &e.to_string());
         if spec.job == BOUND {
             r.violations = vec![e.to_string()];
@@ -332,6 +340,19 @@ fn deploy(spec: &JobSpec, dir: &Path) -> Report {
             Vec::new()
         }
     };
+    // Main's head is checked again before each costly step; see the deploys ADR's 2026-11-16
+    // amendment.
+    let superseded = |images: Option<crate::control::Images>, log: &str| {
+        crate::ship::superseded(spec, dir).map(|why| Report {
+            published: published.clone(),
+            images,
+            violations: vec![why.clone()],
+            ..report(spec, Outcome::Superseded, &scrub(&format!("{log}{why}\n")))
+        })
+    };
+    if let Some(r) = superseded(None, &log) {
+        return r;
+    }
     let mut images = None;
     let workers = match crate::ship::workers(spec, dir, files.as_deref(), &mut log, &mut images) {
         Ok(w) => w,
@@ -340,6 +361,11 @@ fn deploy(spec: &JobSpec, dir: &Path) -> Report {
             Vec::new()
         }
     };
+    if workers.is_empty()
+        && let Some(r) = superseded(images.clone(), &log)
+    {
+        return r;
+    }
     let build = match crate::ship::build(spec, dir, files.as_deref(), &mut log) {
         Ok(b) => b,
         Err(why) => {

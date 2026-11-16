@@ -562,6 +562,49 @@ fn a_lost_deploy_retries_then_fails() {
 }
 
 #[test]
+fn a_deploy_main_moved_past_is_superseded_and_the_newest_push_goes_next() {
+    use backplane::core::change::stage::Deploy;
+    let mut p = Pipeline::default();
+    p.pushed(A);
+    p.start();
+    p.finished(&deploy_report(Outcome::Passed), 1);
+    p.pushed(B);
+    assert_eq!(p.start().as_deref(), Some(B));
+    p.pushed(C);
+    let mut r = deploy_report(Outcome::Superseded);
+    r.violations = vec![format!("main moved on to {C}")];
+    p.finished(&r, 2);
+    assert_eq!(p.deployed.as_deref(), Some(A), "superseded isn't deployed");
+    assert_eq!(p.history[0].outcome, Outcome::Superseded);
+    assert_eq!(
+        p.history[0].violations,
+        vec![format!("main moved on to {C}")]
+    );
+    assert_eq!(
+        p.carrying(B),
+        Deploy::Pending,
+        "C's deploy carries B; a superseded deploy is no failure"
+    );
+    assert_eq!(p.start().as_deref(), Some(C), "the newest push goes next");
+}
+
+#[test]
+fn a_lost_deploy_main_moved_past_is_superseded_not_retried() {
+    let mut p = Pipeline::default();
+    p.pushed(A);
+    p.start();
+    p.pushed(B);
+    assert_eq!(
+        p.lost(1).as_deref(),
+        Some(B),
+        "the newest push starts at once"
+    );
+    assert_eq!(p.history[0].sha, A);
+    assert_eq!(p.history[0].outcome, Outcome::Superseded);
+    assert_eq!(p.running, Some((B.to_string(), 1)));
+}
+
+#[test]
 fn a_deploy_spec_never_shows_its_credentials() {
     let env = std::collections::BTreeMap::from([(
         "CLOUDFLARE_API_TOKEN".to_string(),
@@ -1325,5 +1368,78 @@ fn a_proposal_naming_a_brief_may_leave_title_plan_and_scope_to_it() {
     assert!(
         without.is_err(),
         "title, plan and scope are needed without a brief"
+    );
+}
+
+fn git_in(dir: &std::path::Path, args: &[&str]) -> String {
+    let out = std::process::Command::new("git")
+        .arg("-C")
+        .arg(dir)
+        .args([
+            "-c",
+            "user.name=t",
+            "-c",
+            "user.email=t@t",
+            "-c",
+            "commit.gpgsign=false",
+        ])
+        .args(args)
+        .output()
+        .expect("git");
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    String::from_utf8_lossy(&out.stdout).trim().to_string()
+}
+
+#[test]
+fn a_deploy_main_moved_past_is_superseded_before_its_builds() {
+    let t = tempfile::tempdir().expect("tempdir");
+    let (remote, work, job) = (
+        t.path().join("r.git"),
+        t.path().join("w"),
+        t.path().join("j"),
+    );
+    for d in [&work, &job] {
+        std::fs::create_dir_all(d).expect("dir");
+    }
+    git_in(
+        t.path(),
+        &[
+            "init",
+            "-q",
+            "--bare",
+            "-b",
+            "main",
+            remote.to_str().expect("utf8"),
+        ],
+    );
+    git_in(&work, &["init", "-q", "-b", "main"]);
+    git_in(&work, &["commit", "-q", "--allow-empty", "-m", "a"]);
+    let a = git_in(&work, &["rev-parse", "HEAD"]);
+    git_in(
+        &work,
+        &["push", "-q", remote.to_str().expect("utf8"), "main"],
+    );
+    let remote = remote.to_str().expect("utf8");
+    let spec = |sha: &str| {
+        backplane::control::deploy_spec(remote, "", sha, None, std::collections::BTreeMap::new())
+    };
+    assert_eq!(
+        backplane::ship::superseded(&spec(&a), &job),
+        None,
+        "main is still there"
+    );
+    git_in(&work, &["commit", "-q", "--allow-empty", "-m", "b"]);
+    let b = git_in(&work, &["rev-parse", "HEAD"]);
+    git_in(&work, &["push", "-q", remote, "main"]);
+    let why = backplane::ship::superseded(&spec(&a), &job).expect("superseded");
+    assert!(why.contains(&b), "{why}");
+    assert_eq!(
+        backplane::ship::superseded(&spec(&a), &t.path().join("missing")),
+        None,
+        "an unreadable head never stops a deploy"
     );
 }

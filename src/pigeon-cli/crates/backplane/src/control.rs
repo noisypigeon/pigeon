@@ -655,6 +655,10 @@ pub enum Outcome {
     Passed,
     /// It failed.
     Failed,
+    /// A deploy whose commit `main` moved past; see
+    /// `.claude/decisions/2026-11-07-development-control-plane-deploys-itself.md`'s 2026-11-16
+    /// amendment.
+    Superseded,
 }
 
 /// A job's report.
@@ -1747,10 +1751,10 @@ impl Pipeline {
             at,
             published: report.published.clone(),
             workers: report.workers.clone(),
-            violations: if report.outcome == Outcome::Failed {
-                vec![failure(report)]
-            } else {
+            violations: if report.outcome == Outcome::Passed {
                 report.violations.clone()
+            } else {
+                vec![failure(report)]
             },
         });
     }
@@ -1772,9 +1776,20 @@ impl Pipeline {
     }
 
     /// The running deploy's Container was lost: the same deploy, again, until its attempts are
-    /// used.
+    /// used; or, when `main` has moved past it, the newest push.
     pub fn lost(&mut self, at: u64) -> Option<String> {
         let (sha, attempts) = self.running.take()?;
+        if let Some(newer) = self.target.clone().filter(|t| *t != sha) {
+            self.record(Deployed {
+                sha,
+                outcome: Outcome::Superseded,
+                at,
+                published: Vec::new(),
+                workers: Vec::new(),
+                violations: vec![format!("main moved on to {newer}")],
+            });
+            return self.start();
+        }
         if attempts < crate::runs::MAX_ATTEMPTS {
             self.running = Some((sha.clone(), attempts + 1));
             return Some(sha);

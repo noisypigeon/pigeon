@@ -282,3 +282,27 @@ glob under `src/pigeon-cli/` or `src/site-templates/` becomes `src/**/<tail>`
 (or `**<file>` for a workspace root file), which matches the file both before
 and after the restructure moves it. That ADR's step 12 tightens them to the
 new paths.
+
+### 2026-11-16: A deploy main has moved past is superseded, not failed, and stops before its builds
+
+- **On 2026-11-16 the deploys of `34ce5d2` and `62547c9` failed** only
+  because `main` moved on while they ran: the job's checkout found `main`'s
+  head elsewhere and refused. Each failure held Auto, counted toward pausing
+  mandates (mandate 2 ended), pushed "Deploy failed", and wasted up to 20
+  minutes of image and wasm builds. With frequent merges it recurs.
+- **A deploy whose SHA is no longer `main`'s head is `superseded`,** a third
+  outcome beside `passed` and `failed`.
+  - The deploy job reports it when its checkout finds `main` elsewhere.
+  - `MainRun` records it in the history without setting `deployed`, so the
+    next deploy still publishes everything since the last one that passed.
+  - It neither holds nor resumes Auto, keeps no ledger, pushes nothing, and
+    is the `deploy.superseded` event, which wakes no agent and is not in the
+    digest's failed deploys.
+  - The pipeline goes straight on to the newest push.
+- **A lost deploy `main` has moved past** is superseded rather than retried,
+  and the newest push starts.
+- **The job checks `main`'s head before each costly step,** with
+  `git ls-remote`: before the Workers (image build, wasm build) and, when no
+  Worker was deployed, before the `pigeon` build. A superseded deploy stops
+  in seconds; what it already published or pushed is reported as for any
+  deploy. A failed `ls-remote` doesn't stop the deploy.
