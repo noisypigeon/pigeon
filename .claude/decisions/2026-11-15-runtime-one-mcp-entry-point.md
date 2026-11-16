@@ -193,3 +193,37 @@ operation and has no logic of its own; the Now tab's
 
 Steps 2 to 5 and 8 to 9 are briefs; 6, 7 and 10 need the owner's phone
 and TestFlight.
+
+## Amendments
+
+### 2026-11-15: Reviewed against !563, the learner's standalone: they agree, and its routes become this ADR's operations
+
+[`2026-11-15-runtime-learner-practice-standalone-app.md`](2026-11-15-runtime-learner-practice-standalone-app.md)
+adds `/v0/app/*` routes on a standalone (!563, !587) and on the platform
+(!595).
+
+- **The doors agree.** A standalone answers only `/v0/app/*` with a device
+  signature (!563). That is §2's "a standalone's only path", and
+  `/v0/app/mcp` will sit under the same router with no new door.
+- **§1 already names its operations:**
+  - `join.*`: `/v0/app/join/challenge`, `/v0/app/join`,
+    `/v0/app/join/<id>`;
+  - `members.invite` and `members.admit`;
+  - `learner.*`: progress, attempts, forms and sync;
+  - `instances.*`: `GET /v0/app/instances` and
+    `POST /v0/app/instances/standup`.
+
+  `join.*` accepts a key the request itself presents, as §2 allows.
+- **They predate step 2, so they are routes for now.** Their logic is in the
+  core (`core/learner`, `core/member/join.rs`, `core/member/listing.rs`), and
+  each handler is a thin call to the `Instance`. Step 4 turns each into an
+  operation through `run()` and leaves a shim. Step 1's inventory counts
+  them until then.
+- **What step 4 keeps:**
+  - The learner's two writes stay device-signed with no passkey (the learner
+    ADR's §5).
+  - `members.invite`, `members.admit` and `instances.standup` keep their
+    passkey proofs, as §3's `_meta` proofs.
+  - Each write is still checked where it is stored, on the `Instance`.
+
+Neither ADR changes.
