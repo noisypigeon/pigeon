@@ -4,6 +4,7 @@
 pub mod account;
 pub mod app;
 pub mod approval;
+pub mod bench;
 pub mod brief;
 pub mod change;
 pub mod connect;
