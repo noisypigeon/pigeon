@@ -1,0 +1,6 @@
+description: The judge only judges; actions are the agent's, per 2026-11-02-development-sentinel-policy-cobot-actions.md.
+target: tree
+rules:
+  - find:
+      match: '^src/pigeon-eviction/src/'
+      forbid_content: 'std::process::Command|Command::new|fs::write'

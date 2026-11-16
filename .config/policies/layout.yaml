@@ -4,9 +4,9 @@ rules:
   - entries:
       path: .
       dirs: ['^\.claude$', '^\.config$', '^\.github$', '^src$', '^tooling$', '^catalog$', '^infra$', '^workloads$']
-      files: ['^\.gitignore$', '^\.mcp\.json$', '^CHANGELOG\.md$', '^CLAUDE\.md$', '^config\.yaml$', '^mise\.toml$', '^Cargo\.(toml|lock)$', '^Dockerfile$', '^\.dockerignore$', '^pigeon-start$', '^rust-toolchain\.toml$']
+      files: ['^\.gitignore$', '^\.mcp\.json$', '^CHANGELOG\.md$', '^CLAUDE\.md$', '^config\.yaml$', '^Cargo\.(toml|lock)$', '^Dockerfile$', '^\.dockerignore$', '^pigeon-start$', '^rust-toolchain\.toml$']
       require: [src, tooling, catalog, infra, workloads]
-      ignore: ['^\.git$', '^\.cobot$', '^\.pigeon$', '^target$']
+      ignore: ['^\.git$', '^\.pigeon$', '^target$']
   - entries:
       path: src
       dirs: ['^[a-z0-9]+(-[a-z0-9]+)*$']
@@ -19,5 +19,5 @@ rules:
       files: ['^README\.md$']
       require: [README.md]
   - find:
-      match: '^src/(pigeon-cli/crates/backplane/src/core|pigeon-core/src)/(change|approval|deploy|platform|infra|sites|release)/'
+      match: '^src/pigeon-core/src/(change|approval|deploy|platform|infra|sites|release)/'
       forbid_content: 'std::fs|std::process|std::net|ureq|worker::|SystemTime::now|Instant::now|&mut self\b'

@@ -301,7 +301,7 @@ fn layout_root(skip: &[&str], extra: &[&str]) -> TempDir {
         ".config",
         ".github",
         ".git",
-        "src/pigeon-cli",
+        "src/pigeon-core",
         "tooling",
         "catalog",
         "infra",
@@ -311,7 +311,6 @@ fn layout_root(skip: &[&str], extra: &[&str]) -> TempDir {
         ".gitignore",
         "CHANGELOG.md",
         "CLAUDE.md",
-        "mise.toml",
         "tooling/README.md",
         "catalog/README.md",
         "infra/README.md",
@@ -354,7 +353,7 @@ fn layout_rules() {
         (&[], &["src/README.md"]),
         (&[], &["src/Bad_Name/"]),
         (&["infra/README.md"], &[]),
-        (&["src/pigeon-cli"], &[]),
+        (&["src/pigeon-core"], &[]),
         (&[], &["workloads/notes.md"]),
         (&[], &["workloads/Not_A_Zone/"]),
         (&[], &["workloads/cloudflare/"]),
@@ -378,13 +377,13 @@ fn layout_with(path: &str, content: &str) -> Vec<String> {
 
 #[test]
 fn layout_keeps_backplane_core_pure() {
-    let core = "src/pigeon-cli/crates/backplane/src/core/change/lifecycle.rs";
-    let approval = "src/pigeon-cli/crates/backplane/src/core/approval/grants.rs";
-    let deploy = "src/pigeon-cli/crates/backplane/src/core/deploy/ship.rs";
-    let platform = "src/pigeon-cli/crates/backplane/src/core/platform/runs.rs";
-    let infra = "src/pigeon-cli/crates/backplane/src/core/infra/plans.rs";
-    let sites = "src/pigeon-cli/crates/backplane/src/core/sites/publish.rs";
-    let release = "src/pigeon-cli/crates/backplane/src/core/release/lines.rs";
+    let core = "src/pigeon-core/src/change/lifecycle.rs";
+    let approval = "src/pigeon-core/src/approval/grants.rs";
+    let deploy = "src/pigeon-core/src/deploy/ship.rs";
+    let platform = "src/pigeon-core/src/platform/runs.rs";
+    let infra = "src/pigeon-core/src/infra/plans.rs";
+    let sites = "src/pigeon-core/src/sites/publish.rs";
+    let release = "src/pigeon-core/src/release/lines.rs";
     passes(&layout_with(
         core,
         "pub fn step(c: &Change) -> Change {\n    c.clone()\n}\n",
@@ -412,7 +411,7 @@ fn layout_keeps_backplane_core_pure() {
         fails(&layout_with(sites, bad));
         fails(&layout_with(release, bad));
     }
-    let shell = "src/pigeon-cli/crates/backplane/src/worker/change.rs";
+    let shell = "src/pigeon-agent/src/worker/change.rs";
     passes(&layout_with(
         shell,
         "fn apply(&mut self) { std::fs::read(p); }",
@@ -451,7 +450,7 @@ fn terraform_rules() {
         ("catalog/c/modules/m/main.tf", ""),
         ("workloads/w/unit.yaml", ""),
         ("src/x/target/debug/build.tf", ""),
-        (".cobot/infra/a/main.tf.json", ""),
+        (".pigeon/infra/a/main.tf.json", ""),
     ];
     passes(&violations("terraform", tree_root(&ok).path(), None));
     for bad in [
@@ -679,38 +678,29 @@ fn roles_holds_three_explicit_capability_lists_only() {
 #[test]
 fn sentinel_actions_keeps_sentinel_read_only() {
     let ok = [
+        ("src/pigeon-eviction/src/lib.rs", "use std::fs;\n"),
+        ("src/pigeon-eviction/tests/t.rs", "fs::write(p, c);\n"),
         (
-            "src/pigeon-cli/crates/sentinel/src/lib.rs",
-            "use std::fs;\n",
-        ),
-        (
-            "src/pigeon-cli/crates/sentinel/tests/t.rs",
-            "fs::write(p, c);\n",
-        ),
-        (
-            "src/pigeon-cli/crates/cobot/src/release/git.rs",
+            "src/pigeon-agent/src/release/git.rs",
             "Command::new(\"git\");\n",
         ),
     ];
-    passes(&violations("sentinel-actions", tree_root(&ok).path(), None));
+    passes(&violations("eviction-actions", tree_root(&ok).path(), None));
     for (file, content) in [
         (
-            "src/pigeon-cli/crates/sentinel/src/lib.rs",
+            "src/pigeon-eviction/src/lib.rs",
             "use std::process::Command;\n",
         ),
         (
-            "src/pigeon-cli/crates/sentinel/src/x.rs",
+            "src/pigeon-eviction/src/x.rs",
             "let c = Command::new(\"git\");\n",
         ),
-        (
-            "src/pigeon-cli/crates/sentinel/src/y.rs",
-            "fs::write(p, c)?;\n",
-        ),
+        ("src/pigeon-eviction/src/y.rs", "fs::write(p, c)?;\n"),
     ] {
         let mut files = ok.to_vec();
         files.retain(|(f, _)| *f != file);
         files.push((file, content));
-        let v = violations("sentinel-actions", tree_root(&files).path(), None);
+        let v = violations("eviction-actions", tree_root(&files).path(), None);
         assert!(
             v.iter().any(|m| m.starts_with(&format!("{file}:1:"))),
             "{file}: {v:?}"

@@ -9,18 +9,6 @@ guarded:
   - .claude/settings*.json
   # The code checks' workflow; see .claude/decisions/2026-11-10-development-code-checks-github-actions.md §6.
   - .github/**
-  - src/pigeon-cli/crates/backplane/src/approvals.rs
-  - src/pigeon-cli/crates/backplane/src/approve.rs
-  - src/pigeon-cli/crates/backplane/src/worker/approve.rs
-  - src/pigeon-cli/crates/backplane/src/mandates.rs
-  - src/pigeon-cli/crates/backplane/src/worker/mandates.rs
-  - src/pigeon-cli/crates/backplane/src/access.rs
-  - src/pigeon-cli/crates/backplane/src/grants.rs
-  - src/pigeon-cli/crates/backplane/src/totp.rs
-  - src/pigeon-cli/crates/backplane/src/worker/elicit.rs
-  - src/pigeon-cli/crates/backplane/src/passkeys.rs
-  - src/pigeon-cli/crates/backplane/src/worker/passkeys.rs
-  - src/pigeon-cli/crates/backplane/src/worker/passkey.js
   - src/pigeon-core/src/approve.rs
   - src/pigeon-core/src/access.rs
   - src/pigeon-agent/src/worker/approve.rs
@@ -29,15 +17,12 @@ guarded:
   - src/pigeon-agent/src/worker/passkeys.rs
   - src/pigeon-agent/src/worker/passkey.js
   # The approval domain's core; see .claude/decisions/2026-11-10-development-factory-crates-functional-core.md §3.
-  - src/pigeon-cli/crates/backplane/src/core/approval/**
   - src/pigeon-core/src/approval/**
   # Each role's capabilities; see .claude/decisions/2026-11-14-security-instance-members-roles-invitations.md §2.
   - .config/roles.yaml
 # The code without a mandate that may deploy; every Worker's inputs count too.
 deploying:
   - infra/**
-  - src/pigeon-cli/Dockerfile
-  - src/pigeon-cli/pigeon-start
   - Dockerfile
   - pigeon-start
   - "**/migrations/**"
@@ -54,14 +39,8 @@ secrets:
   - catalog/cloudflare/capabilities.yaml
   - catalog/cloudflare/modules/api-token/**
   - catalog/cloudflare/modules/access-service-token/**
-  - src/pigeon-cli/crates/backplane/src/worker/platform.rs
-  - src/pigeon-cli/crates/backplane/src/platform_job.rs
   # The Apple connection and the code that handles the signing identity; see
   # .claude/decisions/2026-11-11-release-ios-app-buildkite-testflight.md §7.
-  - src/pigeon-cli/crates/backplane/src/apple.rs
-  - src/pigeon-cli/crates/backplane/src/worker/apple.rs
-  - src/pigeon-cli/crates/backplane/src/signing.rs
-  - src/pigeon-cli/crates/pigeon/src/commands/signing.rs
   - src/pigeon-agent/src/worker/platform.rs
   - src/pigeon-agent/src/platform_job.rs
   - src/pigeon-core/src/apple.rs
@@ -78,7 +57,6 @@ secret_lists:
 # owner for this file), never a mandate, and nothing in it but these and its ADR. See
 # .claude/decisions/2026-11-10-development-factory-crates-functional-core.md §2.
 sentinel:
-  - src/pigeon-cli/crates/sentinel/**
   - src/pigeon-eviction/**
   - .config/policies/**
   - catalog/policies/**

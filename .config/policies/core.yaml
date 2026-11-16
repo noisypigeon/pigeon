@@ -1,0 +1,6 @@
+description: pigeon-core composes; it writes no file and starts no process, per 2026-11-03-development-backplane-platform-composition-layer.md and 2026-11-10-development-factory-crates-functional-core.md §1.
+target: tree
+rules:
+  - find:
+      match: '^src/pigeon-core/src/'
+      forbid_content: 'std::process::Command|Command::new|fs::write'

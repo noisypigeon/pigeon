@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: development
-* Governs: `.config/policies/sentinel-actions.yaml`, `src/**/definition.rs`, `src/**/markdown.rs`, `src/**/policy.rs`, `src/**/report.rs`, `src/**/rules.rs`, `src/**/target.rs`, `src/**/release/**`, `src/**/tests/suite/cobot_release*.rs`, `src/pigeon-harness/src/commands/infra.rs`
+* Governs: `.config/policies/eviction-actions.yaml`, `src/**/definition.rs`, `src/**/markdown.rs`, `src/**/policy.rs`, `src/**/report.rs`, `src/**/rules.rs`, `src/**/target.rs`, `src/**/release/**`, `src/**/tests/suite/cobot_release*.rs`, `src/pigeon-harness/src/commands/infra.rs`
 
 ## Context
 
@@ -142,3 +142,8 @@ new paths.
 The src-crates ADR's step 12 renames the harness's `commands/{cobot,backplane}.rs` and
 `cli/backplane.rs` to `commands/{infra,agent}.rs` and `cli/agent.rs`. `Governs` names the
 new paths under `src/pigeon-harness/`.
+
+### 2026-11-16: The policy file is eviction-actions.yaml
+
+Step 12 of the src-crates ADR renames `.config/policies/sentinel-actions.yaml` to
+`eviction-actions.yaml`, matching `src/pigeon-eviction/src/` only.

@@ -3,17 +3,17 @@ target: tree
 rules:
   - find:
       match: '(\.(py|pyi|pyw|pyx|ipynb)|(^|/)(pyproject\.toml|setup\.cfg|requirements[^/]*\.txt|Pipfile(\.lock)?|uv\.lock|poetry\.lock))$'
-      ignore: ['^\.git$', '(^|/)target$', '(^|/)\.cobot$', '(^|/)\.pigeon$', '(^|/)node_modules$']
+      ignore: ['^\.git$', '(^|/)target$', '(^|/)\.pigeon$', '(^|/)node_modules$']
   - find:
       match: '.'
       forbid_content: '^#!.*python'
-      ignore: ['^\.git$', '(^|/)target$', '(^|/)\.cobot$', '(^|/)\.pigeon$', '(^|/)node_modules$']
+      ignore: ['^\.git$', '(^|/)target$', '(^|/)\.pigeon$', '(^|/)node_modules$']
   - find:
       match: '(\.(sh|bash|toml|ya?ml|json)|(^|/)Dockerfile[^/]*|(^|/)pigeon-start)$'
       allow_under: [.config/policies/no-python.yaml]
       forbid_content: '(?i)(^|[^A-Za-z0-9_.-])python[0-9.]*($|[^A-Za-z0-9_-])'
-      ignore: ['^\.git$', '(^|/)target$', '(^|/)\.cobot$', '(^|/)\.pigeon$', '(^|/)node_modules$']
+      ignore: ['^\.git$', '(^|/)target$', '(^|/)\.pigeon$', '(^|/)node_modules$']
   - find:
       match: '\.rs$'
       forbid_content: 'Command::new\("python'
-      ignore: ['^\.git$', '(^|/)target$', '(^|/)\.cobot$', '(^|/)\.pigeon$']
+      ignore: ['^\.git$', '(^|/)target$', '(^|/)\.pigeon$']

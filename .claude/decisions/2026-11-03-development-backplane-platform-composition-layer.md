@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: development
-* Governs: `.config/instance.yaml`, `.config/policies/backplane.yaml`, `src/**/engine.rs`, `src/**/catalog.rs`, `src/pigeon-harness/src/commands/agent.rs`, `src/pigeon-harness/src/cli/agent.rs`
+* Governs: `.config/instance.yaml`, `.config/policies/core.yaml`, `src/**/engine.rs`, `src/**/catalog.rs`, `src/pigeon-harness/src/commands/agent.rs`, `src/pigeon-harness/src/cli/agent.rs`
 
 ## Context
 
@@ -240,3 +240,8 @@ new paths.
 The src-crates ADR's step 12 renames the harness's `commands/{cobot,backplane}.rs` and
 `cli/backplane.rs` to `commands/{infra,agent}.rs` and `cli/agent.rs`. `Governs` names the
 new paths under `src/pigeon-harness/`.
+
+### 2026-11-16: The policy file is core.yaml
+
+Step 12 of the src-crates ADR renames `.config/policies/backplane.yaml` to `core.yaml`. It
+matches `src/pigeon-core/src/` only: the crate split moved the shell out of core.
