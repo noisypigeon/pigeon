@@ -387,3 +387,33 @@ boundary. The other steps are briefs for Sonnet executors.
     - `names.yaml` added;
     - this ADR amended with the outcome.
     (planner, owner approves)
+
+## Amendments
+
+### 2026-11-16: Review of !674 against this ADR: they agree
+
+- [`2026-11-16-development-one-test-binary-per-crate.md`](2026-11-16-development-one-test-binary-per-crate.md)
+  step 4 (!674) changes only backplane's own manifest:
+  - `autotests = false`;
+  - `[[test]] suite`;
+  - and the moves of its test files into `tests/suite/`.
+  It renames no package, and moves no crate.
+- **Moving with each crate.** Each crate's `tests/suite/**` moves with its
+  crate, unchanged inside.
+  - Backplane's suite modules split between `src/pigeon-core` and
+    `src/pigeon-agent` by where their code goes. Each move brief writes
+    `tests.moves`.
+  - `harness/` goes with each suite.
+- **Globs.** The test globs in `Governs` that !674 writes take §6's form,
+  `src/**/tests/suite/<file>.rs`. They match both layouts, so the crate moves
+  need no further ADR edit for them.
+- **The behaviour ledger.**
+  - `tests.ledger` and `tests.moves` move to `tooling/ci/` in this ADR's
+    step 4. `behaviours.sh` reads the base ledger from either path.
+  - From !674, its count check counts each moved test under the package its
+    move names.
+- **Order.**
+  - This ADR's steps 4 and 5 may follow !674.
+  - Backplane's split (steps 6 and 7) follows the test ADR's briefs 2b, 5a
+    and 5b1 to 5b4, which touch only `backplane/tests/suite/**` and
+    `tooling/ci/test-map.sh`.
