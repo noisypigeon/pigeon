@@ -1,7 +1,6 @@
 //! The merge queue; see `.claude/decisions/2026-11-08-development-concurrent-agent-sessions.md` §3.
 
-#[path = "common/step.rs"]
-mod step;
+use crate::harness::step;
 
 use backplane::approvals::{Tier, Tiered, Tiers};
 use backplane::changes::{

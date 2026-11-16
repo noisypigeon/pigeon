@@ -4,7 +4,7 @@
 * Model: Claude Fable 5.2, planning as the `opus` class in a model-variance test
 * Author: Willow Graysen (@noisypigeon).
 * Category: security
-* Governs: `src/pigeon-cli/crates/backplane/src/core/approval/passkeys.rs`, `src/pigeon-cli/crates/backplane/src/core/approval/totp.rs`, `src/pigeon-cli/crates/backplane/src/totp.rs`, `src/pigeon-cli/crates/backplane/src/worker/elicit.rs`, `src/pigeon-cli/crates/backplane/src/worker/passkeys.rs`, `src/pigeon-cli/crates/backplane/src/worker/passkey.js`, `src/pigeon-cli/crates/backplane/tests/**totp.rs`, `src/pigeon-cli/crates/backplane/tests/**passkeys.rs`
+* Governs: `src/pigeon-cli/crates/backplane/src/core/approval/passkeys.rs`, `src/pigeon-cli/crates/backplane/src/core/approval/totp.rs`, `src/pigeon-cli/crates/backplane/src/totp.rs`, `src/pigeon-cli/crates/backplane/src/worker/elicit.rs`, `src/pigeon-cli/crates/backplane/src/worker/passkeys.rs`, `src/pigeon-cli/crates/backplane/src/worker/passkey.js`, `src/**/tests/suite/totp.rs`, `src/**/tests/suite/passkeys.rs`
 
 ## Context
 

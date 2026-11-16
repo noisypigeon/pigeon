@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 use backplane::{Effect, Error, Instance, Request, Response, catalog, run_with};
 
-mod common;
+use crate::harness as common;
 
 /// Runs `request` with the built `pigeon-sentinel` as the judge.
 fn run(instance: &Instance, request: &Request) -> Result<Response, Error> {
@@ -265,7 +265,7 @@ fn change_scope_names_the_checks_and_needs_files() {
         names,
         [
             "infra.validate",
-            "test pigeon-backplane: cobot_catalog cobot_manifest cobot_apex cobot_git cobot_credentials",
+            "test pigeon-backplane: suite cobot_catalog cobot_manifest cobot_apex cobot_git cobot_credentials",
             "policy.check"
         ]
     );

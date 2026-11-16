@@ -1,8 +1,7 @@
 //! The owner moves a queued change to the front; see the 2026-11-15 amendment to
 //! `.claude/decisions/2026-11-08-development-concurrent-agent-sessions.md`.
 
-#[path = "common/step.rs"]
-mod step;
+use crate::harness::step;
 
 use backplane::merges::{self, MergeQueue, Queued};
 use step::Queue;

@@ -1,8 +1,7 @@
 //! A turn lost only because `main` moved is kept; see the 2026-11-15 amendment to
 //! `.claude/decisions/2026-11-08-development-concurrent-agent-sessions.md`.
 
-#[path = "common/step.rs"]
-mod step;
+use crate::harness::step;
 
 use backplane::approvals::{Tier, Tiered, Tiers};
 use backplane::changes::{

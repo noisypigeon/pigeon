@@ -1,10 +1,6 @@
 //! One-time enrolment; see
 //! `.claude/decisions/2026-11-14-security-passkey-only-owner-proofs.md` §3.
 
-#[macro_use]
-#[path = "common/kept.rs"]
-mod kept;
-
 use backplane::core::approval::enroll::{Enrolments, LOCK_AFTER, MAX_AHEAD, stored, token};
 
 const NOW: u64 = 1_000_000;

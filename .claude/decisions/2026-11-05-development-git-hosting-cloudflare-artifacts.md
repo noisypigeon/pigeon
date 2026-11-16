@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: development
-* Governs: `catalog/cloudflare/kinds/git-repo/**`, `src/pigeon-cli/crates/backplane/src/cobot/artifacts*.rs`, `src/pigeon-cli/crates/backplane/src/cobot/git.rs`, `src/pigeon-cli/crates/backplane/tests/**cobot_git.rs`, `.config/policies/mirror.yaml`
+* Governs: `catalog/cloudflare/kinds/git-repo/**`, `src/pigeon-cli/crates/backplane/src/cobot/artifacts*.rs`, `src/pigeon-cli/crates/backplane/src/cobot/git.rs`, `src/**/tests/suite/cobot_git.rs`, `.config/policies/mirror.yaml`
 
 ## Context
 

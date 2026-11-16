@@ -50,7 +50,7 @@ fn the_catalog_runs_infra_checks_and_no_rust_build() {
         got,
         [
             "infra.validate",
-            "test pigeon-backplane: cobot_catalog cobot_manifest cobot_apex cobot_git cobot_credentials",
+            "test pigeon-backplane: suite cobot_catalog cobot_manifest cobot_apex cobot_git cobot_credentials",
             "policy.check"
         ]
     );
@@ -417,7 +417,7 @@ fn a_mapped_test_check_does_not_stand_in_for_a_crates_whole_suite() {
         "catalog/cloudflare/kinds/git-repo/schema.json",
     ]);
     assert!(
-        got.contains(&"test pigeon-backplane: cobot_catalog cobot_manifest cobot_apex cobot_git cobot_credentials".to_string()),
+        got.contains(&"test pigeon-backplane: suite cobot_catalog cobot_manifest cobot_apex cobot_git cobot_credentials".to_string()),
         "{got:?}"
     );
 }

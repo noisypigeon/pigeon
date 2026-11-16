@@ -1,8 +1,7 @@
 //! Reconciliation planned on conflict and on review; see
 //! `.claude/decisions/2026-11-08-development-concurrent-agent-sessions.md` §4.
 
-#[path = "common/step.rs"]
-mod step;
+use crate::harness::step;
 
 use backplane::changes::{Change, ConflictContext, Event, Relation, Restacked, State};
 use backplane::reconcile::{ADR, adrs, conflict, existing, gone, retired, review};

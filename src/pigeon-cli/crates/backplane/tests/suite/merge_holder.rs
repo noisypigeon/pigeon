@@ -1,8 +1,7 @@
 //! A turn held by no merge is handed back; see the 2026-11-11 amendment to
 //! `.claude/decisions/2026-11-08-development-concurrent-agent-sessions.md`.
 
-#[path = "common/step.rs"]
-mod step;
+use crate::harness::step;
 
 use backplane::changes::{Change, Effect, Event, GATE, JobStatus, MERGE, RESTACK, State};
 use backplane::control;

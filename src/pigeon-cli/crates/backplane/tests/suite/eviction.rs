@@ -1,8 +1,7 @@
 //! Open changes as eviction candidates; see
 //! `.claude/decisions/2026-11-10-development-change-slot-eviction-policy.md` §4.
 
-#[path = "common/step.rs"]
-mod step;
+use crate::harness::step;
 
 use backplane::core::change::eviction::{Facts, Holds, Session, candidate, kind};
 

@@ -1,10 +1,6 @@
 //! Mandates: proposed, granted once with the code, bounded by scope, budget and expiry; see
 //! `.claude/decisions/2026-11-08-security-tiered-approvals-task-mandates.md` §3.
 
-#[macro_use]
-#[path = "common/kept.rs"]
-mod kept;
-
 use backplane::approvals::{Tier, Tiered, Tiers};
 use backplane::changes::Change;
 use backplane::mandates::{Decision, Mandate, Mandates, State};

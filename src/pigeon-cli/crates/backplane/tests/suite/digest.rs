@@ -1,10 +1,6 @@
 //! The owner's digest; see
 //! `.claude/decisions/2026-11-08-development-events-tickets-digest-mandate.md` §4.
 
-#[macro_use]
-#[path = "common/kept.rs"]
-mod kept;
-
 use backplane::approve::Waiting;
 use backplane::mandates::{Mandates, State};
 use backplane::tasks::{DigestInput, STALE, Tasks, digest};

@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: development
-* Governs: `.config/policies/layout.yaml`, `infra/README.md`, `tooling/README.md`, `workloads/README.md`, `src/pigeon-cli/crates/sentinel/src/target.rs`, `src/pigeon-cli/crates/sentinel/tests/**tree.rs`
+* Governs: `.config/policies/layout.yaml`, `infra/README.md`, `tooling/README.md`, `workloads/README.md`, `src/pigeon-cli/crates/sentinel/src/target.rs`, `src/**/tests/suite/tree.rs`
 
 ## Context
 

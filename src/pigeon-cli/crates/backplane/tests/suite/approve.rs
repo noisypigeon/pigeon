@@ -1,10 +1,6 @@
 //! The approval page: every value escaped, no script, one form back to itself with the
 //! owner's code; see `.claude/decisions/2026-11-08-security-tiered-approvals-task-mandates.md` §4.
 
-#[macro_use]
-#[path = "common/kept.rs"]
-mod kept;
-
 use backplane::approve;
 use backplane::changes::{Change, State};
 use backplane::grants::Grant;

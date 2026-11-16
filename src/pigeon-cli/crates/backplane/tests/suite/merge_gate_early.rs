@@ -1,8 +1,7 @@
 //! A head restacked for its merge turn runs its full gate beside its checks; see the 2026-11-15
 //! merge-turn amendment to `.claude/decisions/2026-11-15-development-code-checks-by-reach.md`.
 
-#[path = "common/step.rs"]
-mod step;
+use crate::harness::step;
 
 use backplane::approvals::{Tier, Tiered, Tiers};
 use backplane::changes::{

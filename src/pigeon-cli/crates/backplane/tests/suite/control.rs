@@ -1,8 +1,7 @@
 //! The control plane's routing, push events and job reports; see
 //! `.claude/decisions/2026-11-05-development-changes-through-pigeon-mcp.md` §1, §4.
 
-#[path = "common/step.rs"]
-mod step;
+use crate::harness::step;
 
 use backplane::changes::{BOUND, Change, Check, Event};
 use backplane::control::{self, Outcome, Pipeline, Push, Report, Routed, Target};
@@ -256,9 +255,9 @@ fn events_round_trip_their_wire_form() {
 }
 
 const SCHEMA: [&str; 3] = [
-    include_str!("../migrations/0001_schema_v0.sql"),
-    include_str!("../migrations/0002_changes.sql"),
-    include_str!("../migrations/0003_change_sessions.sql"),
+    include_str!("../../migrations/0001_schema_v0.sql"),
+    include_str!("../../migrations/0002_changes.sql"),
+    include_str!("../../migrations/0003_change_sessions.sql"),
 ];
 
 fn db() -> rusqlite::Connection {

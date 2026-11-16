@@ -10,7 +10,7 @@ use backplane::control::{JobSpec, Outcome};
 use backplane::jobs::{self, Board};
 use tempfile::TempDir;
 
-mod common;
+use crate::harness as common;
 
 /// Runs `spec` with the built `pigeon-sentinel` as the bound job's judge.
 fn run_job(spec: &JobSpec, dir: &Path) -> backplane::control::Report {
@@ -117,7 +117,7 @@ fn the_bound_job_passes_a_change_inside_its_scope_and_names_its_checks() {
         names,
         [
             "infra.validate",
-            "test pigeon-backplane: cobot_catalog cobot_manifest cobot_apex cobot_git cobot_credentials"
+            "test pigeon-backplane: suite cobot_catalog cobot_manifest cobot_apex cobot_git cobot_credentials"
         ],
         "policy.check is the bound job's own"
     );
