@@ -199,6 +199,8 @@
 - docs(adr): review !797 against !801 (!822) ([5c4c6cc](https://github.com/noisypigeon/pigeon/commit/5c4c6cc3d3545bd2473ccb896b93b2e423938eba))
 - refactor: the agent crate's library is `agent`, and the harness's test modules take the groups' names (!797) ([3daef0b](https://github.com/noisypigeon/pigeon/commit/3daef0b4d7f43b18df02017022d02da09e92e6dc)) · backplane
 - feat(look): the owner pages' design tokens and stylesheet, mirrored from the iOS app (!804) ([3d821ff](https://github.com/noisypigeon/pigeon/commit/3d821ffb598a3661967eb17ec72961dd1643d73c))
+- fix(bench): `pigeon session bench ci` asks its bench for `pigeon dev scope` (!809) ([ae8b3de](https://github.com/noisypigeon/pigeon/commit/ae8b3def6bcaed70043037d683636ea726c53609))
+- docs: the merge-path ADR's Governs glob matches `ci.rs` under its cobot and checks paths (!835) ([f88d240](https://github.com/noisypigeon/pigeon/commit/f88d24033a46a6bde09191431a8d635943134f1f))
 
 ## 2026-11-15
 
