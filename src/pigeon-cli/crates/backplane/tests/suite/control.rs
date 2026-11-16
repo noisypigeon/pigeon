@@ -1443,3 +1443,44 @@ fn a_deploy_main_moved_past_is_superseded_before_its_builds() {
         "an unreadable head never stops a deploy"
     );
 }
+
+#[test]
+fn a_passed_deploy_replaces_an_older_release_target() {
+    let mut r = control::Releasing::default();
+    r.deployed("a");
+    r.deployed("b");
+    assert_eq!(r.start().as_deref(), Some("b"), "the newest deploy only");
+    assert_eq!(r.start(), None);
+}
+
+#[test]
+fn a_deploy_passed_while_a_release_runs_waits_for_it() {
+    let mut r = control::Releasing::default();
+    r.deployed("a");
+    assert_eq!(r.start().as_deref(), Some("a"));
+    r.deployed("b");
+    r.deployed("c");
+    assert_eq!(r.start(), None, "one release at a time");
+    r.finished(false, "boom", 7);
+    let last = r.last.clone().expect("last");
+    assert_eq!((last.sha.as_str(), last.passed), ("a", false));
+    assert_eq!(r.start().as_deref(), Some("c"));
+    r.finished(true, "nothing to release", 8);
+    assert_eq!(
+        r.start(),
+        None,
+        "a release isn't retried until the next passed deploy"
+    );
+}
+
+#[test]
+fn a_release_without_a_container_waits_unless_a_newer_deploy_came() {
+    let mut r = control::Releasing::default();
+    r.deployed("a");
+    let a = r.start().expect("starts");
+    r.wait(&a);
+    assert_eq!(r.start().as_deref(), Some("a"));
+    r.deployed("b");
+    r.wait("a");
+    assert_eq!(r.start().as_deref(), Some("b"));
+}

@@ -166,6 +166,9 @@ pub fn run_judged(spec: &JobSpec, dir: &Path, sentinel: &Path) -> Report {
     if spec.job == crate::control::UNSCRATCH {
         return unscratch(spec, dir);
     }
+    if spec.job == crate::control::RELEASE {
+        return release(spec, dir);
+    }
     let _ = std::fs::remove_dir_all(dir);
     if let Err(e) = crate::cobot::ci::checkout(
         dir,
@@ -240,6 +243,91 @@ fn unscratch(spec: &JobSpec, dir: &Path) -> Report {
     match crate::cobot::ci::delete_ref(dir, &spec.remote, &spec.token, &refname) {
         Ok(()) => report(spec, Outcome::Passed, &format!("deleted {refname}\n")),
         Err(e) => report(spec, Outcome::Failed, &e.to_string()),
+    }
+}
+
+/// What a release job says when `main` moved past the deploy it releases.
+pub const MAIN_MOVED: &str = "main moved; the next deploy releases";
+
+/// The release job: the release bot on the deployed `main`, its output committed as
+/// `chore(release): …` and pushed with a tag per release; see
+/// `.claude/decisions/2026-11-16-development-src-crates-neutral-names.md` §7. It builds no
+/// image: image units' versions bump, and their images follow that ADR's step 5.
+fn release(spec: &JobSpec, dir: &Path) -> Report {
+    let failed = |why: String| Report {
+        violations: vec![why.clone()],
+        ..report(spec, Outcome::Failed, &why)
+    };
+    let _ = std::fs::remove_dir_all(dir);
+    match crate::cobot::ci::checkout_head(dir, &spec.remote, &spec.token, &spec.base, &spec.sha) {
+        Ok(true) => {}
+        Ok(false) => return report(spec, Outcome::Passed, MAIN_MOVED),
+        Err(e) => return failed(e.to_string()),
+    }
+    let config_file = ".config/releases.yaml";
+    let outcome = crate::cobot::release::Config::load(&dir.join(config_file))
+        .and_then(|c| crate::cobot::release::run(dir, &c, config_file, "HEAD", None, false, false));
+    let outcome = match outcome {
+        Ok(o) => o,
+        Err(e) => return failed(e.to_string()),
+    };
+    if outcome.written.is_empty() {
+        return report(spec, Outcome::Passed, "nothing to release");
+    }
+    let (ok, log) = crate::cobot::ci::exec(
+        &crate::cobot::scope::workspace(dir),
+        &[
+            "cargo".into(),
+            "update".into(),
+            "-w".into(),
+            "--offline".into(),
+        ],
+        crate::cobot::ci::TIMEOUT,
+        &spec.token,
+    );
+    if !ok {
+        return failed(format!("cargo update -w --offline failed\n{log}"));
+    }
+    let subject = release_subject(&outcome.released);
+    let tags: Vec<String> = outcome.released.iter().map(|r| r.tag.clone()).collect();
+    match crate::cobot::ci::land(
+        dir,
+        &spec.remote,
+        &spec.token,
+        &spec.base,
+        &subject,
+        spec.env
+            .get(crate::control::COMMIT_AUTHOR)
+            .map(String::as_str),
+        &tags,
+    ) {
+        Ok(crate::cobot::ci::Landed::Pushed(commit)) => {
+            let mut log = format!("{subject} as {commit}\n");
+            for t in &tags {
+                let _ = writeln!(log, "tag {t}");
+            }
+            Report {
+                merged: Some(commit),
+                ..report(spec, Outcome::Passed, &log)
+            }
+        }
+        Ok(crate::cobot::ci::Landed::Moved) => report(spec, Outcome::Passed, MAIN_MOVED),
+        Err(e) => failed(e.to_string()),
+    }
+}
+
+/// `chore(release): <unit vX.Y.Z>[, …]`, units sorted; `chore(release): changelog` with none.
+#[must_use]
+pub fn release_subject(released: &[crate::cobot::release::Released]) -> String {
+    let mut units: Vec<String> = released
+        .iter()
+        .map(|r| format!("{} v{}", r.unit, r.version))
+        .collect();
+    units.sort();
+    if units.is_empty() {
+        "chore(release): changelog".into()
+    } else {
+        format!("chore(release): {}", units.join(", "))
     }
 }
 

@@ -1,7 +1,8 @@
 //! The `MainRun` Durable Object: `main`'s pipeline. Each push to `main` is recorded; its alarm
 //! runs one deploy job at a time, of the newest push, which publishes the sites whose inputs
 //! changed since the last deploy (`control::Pipeline`). Beside it, each push is mirrored to
-//! GitHub (`mirroring::Mirroring`), and both sides' refs are compared hourly.
+//! GitHub (`mirroring::Mirroring`), and both sides' refs are compared hourly; after each passed
+//! deploy, the release bot runs (`control::Releasing`).
 
 use std::collections::BTreeMap;
 use std::time::Duration;
@@ -27,6 +28,8 @@ const IOS_RELEASES: &str = "ios_releases";
 const EVICTIONS: &str = "evictions";
 /// The grants ledger the last passed deploy reported.
 const LEDGER: &str = "ledger";
+/// The release job's state (`control::Releasing`).
+const RELEASES: &str = "releases";
 
 /// How long an eviction job may run before it counts as lost.
 const EVICTION_DEADLINE: u64 = 30 * 60;
@@ -649,6 +652,88 @@ impl MainRun {
         }
     }
 
+    async fn releasing(&self) -> Result<control::Releasing> {
+        Ok(self
+            .state
+            .storage()
+            .get(RELEASES)
+            .await?
+            .unwrap_or_default())
+    }
+
+    /// A deploy of `sha` passed: it is the release target, replacing any older one.
+    async fn release_target(&self, sha: &str) -> Result<()> {
+        let mut r = self.releasing().await?;
+        r.deployed(sha);
+        self.state.storage().put(RELEASES, &r).await
+    }
+
+    /// Starts the release of the deployed `sha` in a job Container, with a write token for
+    /// Artifacts minted for this job.
+    async fn start_release(&self, sha: &str) -> std::result::Result<(), String> {
+        let (remote, token) =
+            platform::credentials(&self.env, true, crate::cobot::artifacts_wire::TOKEN_TTL)
+                .await
+                .map_err(|e| e.to_string())?;
+        let author = self
+            .env
+            .var(control::COMMIT_AUTHOR)
+            .ok()
+            .map(|v| v.to_string());
+        let spec = control::release_spec(&remote, &token, sha, author.as_deref());
+        let body = serde_json::to_value(&spec).map_err(|e| e.to_string())?;
+        let req = json_request("https://checker/start", Method::Post, Some(&body), None)
+            .map_err(|e| e.to_string())?;
+        let mut r = job_stub(&self.env, control::class_of(control::RELEASE), &spec.id)
+            .map_err(|e| e.to_string())?
+            .fetch_with_request(req)
+            .await
+            .map_err(|e| e.to_string())?;
+        if (200..300).contains(&r.status_code()) {
+            Ok(())
+        } else {
+            Err(r.text().await.unwrap_or_default())
+        }
+    }
+
+    /// Moves releases on: polls the running one, or starts the newest passed deploy's; whether
+    /// one runs or waits. A failed release holds nothing, and waits for the next passed deploy;
+    /// see `.claude/decisions/2026-11-16-development-src-crates-neutral-names.md` §7.
+    async fn release_step(&self) -> Result<bool> {
+        let mut r = self.releasing().await?;
+        let at = now();
+        if let Some(sha) = r.running.clone() {
+            let ended = match self
+                .poll_job(&control::release_id(&sha), control::RELEASE)
+                .await?
+            {
+                Ok(Some(report)) => {
+                    let passed = report.outcome == Outcome::Passed;
+                    let line = report.log.lines().next().map(str::to_string);
+                    Some((passed, line.unwrap_or_else(|| control::failure(&report))))
+                }
+                Ok(None) => None,
+                Err(()) => Some((false, "its Container is gone".to_string())),
+            };
+            if let Some((passed, summary)) = ended {
+                r.finished(passed, &summary, at);
+                release_event(&self.env, &sha, passed, &summary).await;
+            }
+        }
+        if let Some(sha) = r.start() {
+            match self.start_release(&sha).await {
+                Ok(()) => {}
+                Err(why) if control::no_capacity(&why) => r.wait(&sha),
+                Err(why) => {
+                    r.finished(false, &why, at);
+                    release_event(&self.env, &sha, false, &why).await;
+                }
+            }
+        }
+        self.state.storage().put(RELEASES, &r).await?;
+        Ok(r.running.is_some() || r.target.is_some())
+    }
+
     async fn test_maps(&self) -> Result<TestMaps> {
         Ok(self
             .state
@@ -1042,6 +1127,7 @@ impl DurableObject for MainRun {
                     "mirror": m,
                     "mirror_behind": m.behind(now()),
                     "test_map": self.test_maps().await?.view(),
+                    "release": self.releasing().await?,
                 }))
             }
             (Method::Post, "ios/release") => match self.ios_release().await {
@@ -1123,6 +1209,9 @@ impl DurableObject for MainRun {
                         self.state.storage().put(LEDGER, l).await?;
                     }
                     deploy_event(&self.env, &sha, &report).await;
+                    if report.outcome == Outcome::Passed {
+                        self.release_target(&sha).await?;
+                    }
                     // A failed deploy holds Auto, and a passed one resumes it; see the iOS
                     // approvals ADR's 2026-11-15 amendment. A superseded one does neither; see
                     // the deploys ADR's 2026-11-16 amendment.
@@ -1158,6 +1247,10 @@ impl DurableObject for MainRun {
         if let Err(e) = self.ios_step().await {
             worker::console_error!("ios release: {e}");
         }
+        let releasing = self.release_step().await.unwrap_or_else(|e| {
+            worker::console_error!("release: {e}");
+            true
+        });
         let evicting = match self.eviction_step().await {
             Ok(running) => running,
             Err(e) => {
@@ -1166,7 +1259,7 @@ impl DurableObject for MainRun {
             }
         };
         let storage = self.state.storage();
-        if super::platforms::running(&self.state).await? || evicting {
+        if super::platforms::running(&self.state).await? || evicting || releasing {
             // The earliest alarm wins: the mirror's may be an hour away.
             let poll_at = i64::try_from((now() + super::platforms::POLL.as_secs()) * 1000)
                 .unwrap_or(i64::MAX);
@@ -1200,6 +1293,22 @@ async fn deploy_event(env: &Env, sha: &str, report: &Report) {
     }
     if report.outcome == Outcome::Failed {
         super::push::notify(env, &s, "Deploy failed", &summary, "/approvals").await;
+    }
+}
+
+/// Tells the event log how the release of `sha` ended, with its log's first line.
+async fn release_event(env: &Env, sha: &str, passed: bool, line: &str) {
+    let (kind, how) = if passed {
+        ("release.passed", "passed")
+    } else {
+        ("release.failed", "failed")
+    };
+    let summary = format!("the release of {} {how}: {line}", short(sha));
+    let Ok(s) = platform::Settings::from(env) else {
+        return;
+    };
+    if let Err(e) = super::events::append(env, &s, kind, None, None, &summary, false).await {
+        worker::console_error!("release event: {e}");
     }
 }
 

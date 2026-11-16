@@ -731,3 +731,166 @@ fn the_unscratch_job_deletes_only_a_sessions_scratch_ref() {
     );
     assert_ne!(git(&remote, &["for-each-ref", "refs/heads/change"]), "");
 }
+
+const RELEASES: &str = "description: test.
+repository: https://x
+changelog: CHANGELOG.md
+units:
+  a:
+    manifest: a/Cargo.toml
+    features: a
+    paths: [a/]
+  b:
+    manifest: b/Cargo.toml
+    features: b
+    paths: [b/]
+";
+
+/// A bare remote whose `main` is a fresh workspace of units `a` and `b`, never released; the
+/// remote, its work tree and `main`'s head.
+fn unreleased(tmp: &Path) -> (PathBuf, PathBuf, String) {
+    let bare = tmp.join("remote.git");
+    let work = tmp.join("work");
+    let bare_path = bare.to_str().expect("utf-8");
+    git(tmp, &["init", "-q", "--bare", bare_path]);
+    git(
+        tmp,
+        &["init", "-q", "-b", "main", work.to_str().expect("utf-8")],
+    );
+    let files = [
+        (".config/releases.yaml", RELEASES),
+        ("Cargo.toml", "[workspace]\nmembers = [\"a\", \"b\"]\n"),
+        (
+            "a/Cargo.toml",
+            "[package]\nname = \"a\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+        ),
+        ("a/src/lib.rs", ""),
+        (
+            "b/Cargo.toml",
+            "[package]\nname = \"b\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+        ),
+        ("b/src/lib.rs", ""),
+    ];
+    for (p, body) in files {
+        let f = work.join(p);
+        std::fs::create_dir_all(f.parent().expect("parent")).expect("mkdir");
+        std::fs::write(&f, body).expect("write");
+    }
+    git(&work, &["add", "-A"]);
+    git(&work, &["commit", "-q", "-m", "feat: a and b (#1)"]);
+    git(&work, &["remote", "add", "origin", bare_path]);
+    git(&work, &["push", "-q", "origin", "main"]);
+    let sha = git(&work, &["rev-parse", "HEAD"]);
+    (bare, work, sha)
+}
+
+fn release_spec(bare: &Path, sha: &str) -> JobSpec {
+    backplane::control::release_spec(
+        &format!("file://{}", bare.display()),
+        "a-token-never-shown",
+        sha,
+        Some("Owner <1+owner@users.noreply.github.com>"),
+    )
+}
+
+#[test]
+fn a_release_commits_and_tags_the_bots_output_and_a_rerun_writes_nothing() {
+    let tmp = TempDir::new().expect("tempdir");
+    let (bare, _, sha) = unreleased(tmp.path());
+    let r = run_job(&release_spec(&bare, &sha), &tmp.path().join("job"));
+    assert_eq!(r.outcome, Outcome::Passed, "{}", r.log);
+    let commit = git(&bare, &["rev-parse", "refs/heads/main"]);
+    assert_eq!(r.merged.as_deref(), Some(commit.as_str()));
+    assert_eq!(git(&bare, &["rev-parse", &format!("{commit}^")]), sha);
+    assert_eq!(
+        git(&bare, &["log", "-1", "--format=%s", &commit]),
+        "chore(release): a v0.1.0, b v0.1.0"
+    );
+    assert_eq!(
+        git(&bare, &["log", "-1", "--format=%an <%ae>|%cn", &commit]),
+        "Owner <1+owner@users.noreply.github.com>|pigeon"
+    );
+    for tag in ["a/v0.1.0", "b/v0.1.0"] {
+        assert_eq!(
+            git(
+                &bare,
+                &["rev-parse", &format!("refs/tags/{tag}^{{commit}}")]
+            ),
+            commit
+        );
+        assert!(r.log.contains(&format!("tag {tag}\n")), "{}", r.log);
+    }
+    let files = git(&bare, &["show", "--name-only", "--format=", &commit]);
+    assert!(files.contains("CHANGELOG.md"), "{files}");
+    assert!(files.contains("Cargo.lock"), "{files}");
+    assert!(
+        r.log.starts_with("chore(release): a v0.1.0, b v0.1.0 as "),
+        "{}",
+        r.log
+    );
+
+    let again = run_job(&release_spec(&bare, &commit), &tmp.path().join("job"));
+    assert_eq!(again.outcome, Outcome::Passed, "{}", again.log);
+    assert_eq!(again.log, "nothing to release");
+    assert_eq!(git(&bare, &["rev-parse", "refs/heads/main"]), commit);
+}
+
+#[test]
+fn a_release_of_a_deploy_main_has_moved_past_does_nothing() {
+    let tmp = TempDir::new().expect("tempdir");
+    let (bare, work, sha) = unreleased(tmp.path());
+    std::fs::write(work.join("a/src/lib.rs"), "//! a\n").expect("write");
+    git(&work, &["commit", "-qam", "feat: a moves (#2)"]);
+    git(&work, &["push", "-q", "origin", "main"]);
+    let main = git(&bare, &["rev-parse", "refs/heads/main"]);
+    let r = run_job(&release_spec(&bare, &sha), &tmp.path().join("job"));
+    assert_eq!(r.outcome, Outcome::Passed, "{}", r.log);
+    assert_eq!(r.log, jobs::MAIN_MOVED);
+    assert_eq!(git(&bare, &["rev-parse", "refs/heads/main"]), main);
+    assert_eq!(git(&bare, &["tag", "--list"]), "", "no tags");
+}
+
+#[test]
+fn a_release_with_no_unit_is_a_changelog_commit() {
+    use backplane::cobot::release::Released;
+    let unit = |u: &str| Released {
+        unit: u.into(),
+        version: "1.2.3".into(),
+        tag: format!("{u}/v1.2.3"),
+        image: None,
+        features: String::new(),
+    };
+    assert_eq!(jobs::release_subject(&[]), "chore(release): changelog");
+    assert_eq!(
+        jobs::release_subject(&[unit("pigeon"), unit("eviction")]),
+        "chore(release): eviction v1.2.3, pigeon v1.2.3"
+    );
+}
+
+#[test]
+fn a_release_push_refused_because_main_moved_lands_nothing() {
+    use backplane::cobot::ci::{self, Landed};
+    let tmp = TempDir::new().expect("tempdir");
+    let (bare, work, sha) = unreleased(tmp.path());
+    let url = format!("file://{}", bare.display());
+    let dir = tmp.path().join("job");
+    assert!(ci::checkout_head(&dir, &url, "t", "main", &sha).expect("checkout"));
+    std::fs::write(work.join("b/src/lib.rs"), "//! b\n").expect("write");
+    git(&work, &["commit", "-qam", "feat: b moves (#2)"]);
+    git(&work, &["push", "-q", "origin", "main"]);
+    let main = git(&bare, &["rev-parse", "refs/heads/main"]);
+    std::fs::write(dir.join("CHANGELOG.md"), "# Changelog\n").expect("write");
+    let landed = ci::land(
+        &dir,
+        &url,
+        "t",
+        "main",
+        "chore(release): changelog",
+        None,
+        &["a/v0.1.0".to_string()],
+    )
+    .expect("land");
+    assert_eq!(landed, Landed::Moved);
+    assert_eq!(git(&bare, &["rev-parse", "refs/heads/main"]), main);
+    assert_eq!(git(&bare, &["tag", "--list"]), "", "no tags");
+}

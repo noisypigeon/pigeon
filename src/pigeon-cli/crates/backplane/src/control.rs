@@ -1554,6 +1554,96 @@ pub fn mirror_spec(remote: &str, token: &str, sha: &str, to: &str, to_token: &st
     }
 }
 
+/// The job that runs the release bot on a deployed `main` and commits and tags its output; see
+/// `.claude/decisions/2026-11-16-development-src-crates-neutral-names.md` §7.
+pub const RELEASE: &str = "release";
+
+/// A release job's ID: `main-<sha, 12>-release`.
+#[must_use]
+pub fn release_id(sha: &str) -> String {
+    format!("main-{}-{RELEASE}", &sha[..12.min(sha.len())])
+}
+
+/// The spec for releasing the deployed `sha` of `main`, with a write `token`; its commit's
+/// author is `author` ([`COMMIT_AUTHOR`]) when set.
+#[must_use]
+pub fn release_spec(remote: &str, token: &str, sha: &str, author: Option<&str>) -> JobSpec {
+    let env = author
+        .map(|a| (COMMIT_AUTHOR.to_string(), a.to_string()))
+        .into_iter()
+        .collect();
+    JobSpec {
+        id: release_id(sha),
+        job: RELEASE.into(),
+        ..deploy_spec(remote, token, sha, None, env)
+    }
+}
+
+/// How a release ended.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReleaseEnded {
+    /// The deployed commit it released.
+    pub sha: String,
+    /// Whether it passed.
+    pub passed: bool,
+    /// Its log's first line, or why it failed.
+    pub summary: String,
+    /// When it ended, in Unix seconds.
+    pub at: u64,
+}
+
+/// `MainRun`'s releases: one at a time, of the newest passed deploy; see
+/// `.claude/decisions/2026-11-16-development-src-crates-neutral-names.md` §7.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Releasing {
+    /// The newest passed deploy not yet released.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target: Option<String>,
+    /// The release in progress.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub running: Option<String>,
+    /// The last release.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last: Option<ReleaseEnded>,
+}
+
+impl Releasing {
+    /// A deploy of `sha` passed: it is the target, replacing any older one.
+    pub fn deployed(&mut self, sha: &str) {
+        self.target = Some(sha.to_string());
+    }
+
+    /// The release to start, when none runs: the target, now running.
+    pub fn start(&mut self) -> Option<String> {
+        if self.running.is_some() {
+            return None;
+        }
+        self.running = self.target.take();
+        self.running.clone()
+    }
+
+    /// The release of `sha` couldn't start for want of a Container: it waits as the target,
+    /// unless a newer one came.
+    pub fn wait(&mut self, sha: &str) {
+        if self.running.as_deref() == Some(sha) {
+            self.running = None;
+        }
+        self.target.get_or_insert_with(|| sha.to_string());
+    }
+
+    /// The running release ended; a failure waits for the next passed deploy.
+    pub fn finished(&mut self, passed: bool, summary: &str, at: u64) {
+        if let Some(sha) = self.running.take() {
+            self.last = Some(ReleaseEnded {
+                sha,
+                passed,
+                summary: summary.to_string(),
+                at,
+            });
+        }
+    }
+}
+
 /// One deploy, as `deploy.status` shows it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Deployed {

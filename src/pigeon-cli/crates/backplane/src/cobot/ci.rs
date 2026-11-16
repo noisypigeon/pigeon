@@ -447,6 +447,143 @@ pub fn fetch_tags(dir: &Path, remote: &str, token: &str) -> Result<(), Error> {
     .map(|_| ())
 }
 
+/// Fetches `branch` and every tag from `remote` into a new repository at `dir`, and checks out
+/// `sha` when it is still `branch`'s head; `false`, with nothing checked out, when it moved.
+///
+/// # Errors
+///
+/// [`Error::Git`] when git fails; [`Error::Io`] when `dir` can't be made.
+pub fn checkout_head(
+    dir: &Path,
+    remote: &str,
+    token: &str,
+    branch: &str,
+    sha: &str,
+) -> Result<bool, Error> {
+    std::fs::create_dir_all(dir).map_err(|e| Error::Io {
+        path: dir.to_path_buf(),
+        message: e.to_string(),
+    })?;
+    git(dir, remote, token, &["init", "-q"])?;
+    let head = fetch_head(dir, remote, token, branch)?;
+    if head != sha {
+        return Ok(false);
+    }
+    fetch_tags(dir, remote, token)?;
+    git(
+        dir,
+        remote,
+        token,
+        &["-c", "advice.detachedHead=false", "checkout", "-q", sha],
+    )?;
+    Ok(true)
+}
+
+/// `branch`'s head on `remote`, fetched into `dir` as `refs/remotes/origin/<branch>`.
+fn fetch_head(dir: &Path, remote: &str, token: &str, branch: &str) -> Result<String, Error> {
+    let r = format!("+refs/heads/{branch}:refs/remotes/origin/{branch}");
+    git(
+        dir,
+        remote,
+        token,
+        &["fetch", "-q", "--no-tags", remote, &r],
+    )?;
+    git(
+        dir,
+        remote,
+        token,
+        &["rev-parse", &format!("refs/remotes/origin/{branch}")],
+    )
+}
+
+/// How [`land`] ended.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Landed {
+    /// The commit, pushed to the branch, with its tags.
+    Pushed(String),
+    /// The branch moved past the checkout, so nothing was pushed.
+    Moved,
+}
+
+/// Commits everything in the checkout at `dir` with `message` (its author `author`,
+/// `Name <email>`, else `pigeon`; its committer `pigeon`), tags the commit with each of `tags`,
+/// pushes it to `remote`'s `branch` as a fast-forward, then pushes the tags. A refused push
+/// whose branch has moved is [`Landed::Moved`], and pushes no tag.
+///
+/// # Errors
+///
+/// [`Error::Git`] when `author` isn't `Name <email>`, or git fails.
+pub fn land(
+    dir: &Path,
+    remote: &str,
+    token: &str,
+    branch: &str,
+    message: &str,
+    author: Option<&str>,
+    tags: &[String],
+) -> Result<Landed, Error> {
+    let author = match author {
+        Some(a) => Some(identity(a).ok_or_else(|| Error::Git {
+            args: "commit".into(),
+            message: format!("the author `{a}` is not `Name <email>`"),
+        })?),
+        None => None,
+    };
+    let from = git(dir, "", "", &["rev-parse", "HEAD"])?;
+    git(dir, "", "", &["add", "-A"])?;
+    let mut cmd = command("", "");
+    if let Some((name, email)) = &author {
+        cmd.env("GIT_AUTHOR_NAME", name)
+            .env("GIT_AUTHOR_EMAIL", email);
+    }
+    let out = cmd
+        .arg("-C")
+        .arg(dir)
+        .args([
+            "-c",
+            "user.name=pigeon",
+            "-c",
+            "user.email=pigeon@users.noreply.pigeon.dev",
+            "commit",
+            "-q",
+            "--no-verify",
+            "-m",
+            message,
+        ])
+        .output()
+        .map_err(|e| Error::Git {
+            args: "commit".into(),
+            message: e.to_string(),
+        })?;
+    if !out.status.success() {
+        return Err(Error::Git {
+            args: "commit".into(),
+            message: String::from_utf8_lossy(&out.stderr).trim().to_string(),
+        });
+    }
+    let commit = git(dir, "", "", &["rev-parse", "HEAD"])?;
+    for t in tags {
+        git(dir, "", "", &["tag", t, &commit])?;
+    }
+    let to = format!("{commit}:refs/heads/{branch}");
+    if let Err(e) = git(dir, remote, token, &["push", "-q", remote, &to]) {
+        return match fetch_head(dir, remote, token, branch) {
+            Ok(head) if head != from => Ok(Landed::Moved),
+            _ => Err(e),
+        };
+    }
+    if !tags.is_empty() {
+        let refs: Vec<String> = tags
+            .iter()
+            .map(|t| format!("refs/tags/{t}:refs/tags/{t}"))
+            .collect();
+        let mut args = vec!["push", "-q", remote];
+        args.extend(refs.iter().map(String::as_str));
+        git(dir, remote, token, &args)?;
+    }
+    Ok(Landed::Pushed(commit))
+}
+
 /// The paths changed from `from` to `to`, both in `dir`.
 ///
 /// # Errors
