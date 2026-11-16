@@ -316,3 +316,13 @@ with what shipped. It changes no code and none of this ADR's decisions:
   `asks`, `capability` and `doors` (`/mcp` only), and adds no route.
 
 Neither ADR changes.
+### 2026-11-16: Review of !713 against this ADR: they agree
+
+!713 is step 5 of
+[`2026-11-16-development-src-crates-neutral-names.md`](2026-11-16-development-src-crates-neutral-names.md).
+It moves the policy engine from `src/pigeon-cli/crates/sentinel` to
+`src/pigeon-eviction` and renames its package. It touches none of the files
+this ADR governs. Its other files are the workspace's bookkeeping: `Cargo.toml`,
+`Cargo.lock`, `.config/releases.yaml` and the behaviour ledger. This ADR's
+`src/**/…` globs match the files the restructure moves later, both before and
+after the move. So neither decision changes.
