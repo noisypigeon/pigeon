@@ -340,3 +340,12 @@ after the move. So neither decision changes.
 - **Coverage (§6).** The extractor reads the `Dockerfile` and CI as planned.
   `rust-toolchain.toml` names no host, so it needs no reading.
 - **Order.** Neither waits for the other.
+### 2026-11-16: Review of !746 against this ADR: they agree
+
+!746 carries out part of step 6 of
+[`2026-11-16-development-src-crates-neutral-names.md`](2026-11-16-development-src-crates-neutral-names.md)
+(§2): it rewrites import paths to name `core::` modules and deletes the 14
+three-line re-export shims. It touches none of the files this ADR governs
+(`worker/{github,buildkite,bitrise,apple,insights}.rs`, `cobot/cloudflare.rs`,
+`architecture/network.rs`), so no provider call, route or credential changes,
+and the `src/**/…` globs still match. Neither decision changes.
