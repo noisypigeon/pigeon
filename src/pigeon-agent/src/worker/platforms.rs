@@ -31,7 +31,7 @@ pub const POLL: Duration = Duration::from_secs(15);
 const ATTEMPTS: u32 = 3;
 
 fn host(env: &Env) -> String {
-    env.var(crate::cobot::ship_wire::HOST_VAR)
+    env.var(crate::wire::ship_wire::HOST_VAR)
         .map(|v| v.to_string())
         .unwrap_or_default()
 }
@@ -561,7 +561,7 @@ async fn start(env: &Env, run: &Run, sha: Option<&str>) -> std::result::Result<(
         .map_err(|e| e.to_string())?;
     let state_key =
         secret(env, crate::control::PLATFORM_STATE_KEY_VAR).map_err(|e| e.to_string())?;
-    let (remote, git) = platform::credentials(env, false, crate::cobot::artifacts_wire::TOKEN_TTL)
+    let (remote, git) = platform::credentials(env, false, crate::wire::artifacts_wire::TOKEN_TTL)
         .await
         .map_err(|e| e.to_string())?;
     let env_vars = BTreeMap::from([

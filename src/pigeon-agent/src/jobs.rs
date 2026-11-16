@@ -12,12 +12,12 @@ use std::sync::{Arc, Mutex};
 
 use serde_json::{Map, Value, json};
 
-use crate::cobot::release::LoadConfig;
-use crate::cobot::scope::ReadTestMap;
+use crate::checks::scope::ReadTestMap;
 use crate::control::{
     DEPLOY, JobSpec, MIRROR, MIRROR_TO, MIRROR_TOKEN, Outcome, Report, UNMIRROR, tail,
 };
 use crate::core::change::{BOUND, Check, ConflictContext, MERGE, RESTACK, Relation, Restacked};
+use crate::release::LoadConfig;
 use crate::{Instance, Request, run_with};
 
 /// Where jobs check out, under the Container's temporary directory.
@@ -156,7 +156,7 @@ pub fn run_judged(spec: &JobSpec, dir: &Path, sentinel: &Path) -> Report {
     // A merge whose report was lost may already be on the base; finding it there is the merge.
     if spec.job == MERGE
         && let Ok(Some(commit)) =
-            crate::cobot::ci::merged_already(dir, &spec.remote, &spec.token, &spec.base, &spec.sha)
+            crate::checks::ci::merged_already(dir, &spec.remote, &spec.token, &spec.base, &spec.sha)
     {
         return Report {
             log: format!("{} is already on {} as {commit}\n", spec.sha, spec.base),
@@ -174,7 +174,7 @@ pub fn run_judged(spec: &JobSpec, dir: &Path, sentinel: &Path) -> Report {
         return release(spec, dir);
     }
     let _ = std::fs::remove_dir_all(dir);
-    if let Err(e) = crate::cobot::ci::checkout(
+    if let Err(e) = crate::checks::ci::checkout(
         dir,
         &spec.remote,
         &spec.token,
@@ -215,14 +215,14 @@ pub fn run_judged(spec: &JobSpec, dir: &Path, sentinel: &Path) -> Report {
         return crate::platform_job::run(spec, dir);
     }
     // A check may read a released template by its tag, as `sites.build` does.
-    if let Err(e) = crate::cobot::ci::fetch_tags(dir, &spec.remote, &spec.token) {
+    if let Err(e) = crate::checks::ci::fetch_tags(dir, &spec.remote, &spec.token) {
         return report(spec, Outcome::Failed, &e.to_string());
     }
-    let workspace = crate::cobot::scope::workspace(dir);
-    let (ok, log) = crate::cobot::ci::exec(
+    let workspace = crate::checks::scope::workspace(dir);
+    let (ok, log) = crate::checks::ci::exec(
         &workspace,
         &spec.argv,
-        crate::cobot::ci::TIMEOUT,
+        crate::checks::ci::TIMEOUT,
         &spec.token,
     );
     report(
@@ -244,7 +244,7 @@ fn unscratch(spec: &JobSpec, dir: &Path) -> Report {
         );
     }
     let _ = std::fs::remove_dir_all(dir);
-    match crate::cobot::ci::delete_ref(dir, &spec.remote, &spec.token, &refname) {
+    match crate::checks::ci::delete_ref(dir, &spec.remote, &spec.token, &refname) {
         Ok(()) => report(spec, Outcome::Passed, &format!("deleted {refname}\n")),
         Err(e) => report(spec, Outcome::Failed, &e.to_string()),
     }
@@ -263,14 +263,14 @@ fn release(spec: &JobSpec, dir: &Path) -> Report {
         ..report(spec, Outcome::Failed, &why)
     };
     let _ = std::fs::remove_dir_all(dir);
-    match crate::cobot::ci::checkout_head(dir, &spec.remote, &spec.token, &spec.base, &spec.sha) {
+    match crate::checks::ci::checkout_head(dir, &spec.remote, &spec.token, &spec.base, &spec.sha) {
         Ok(true) => {}
         Ok(false) => return report(spec, Outcome::Passed, MAIN_MOVED),
         Err(e) => return failed(e.to_string()),
     }
     let config_file = ".config/releases.yaml";
-    let outcome = crate::cobot::release::Config::load(&dir.join(config_file))
-        .and_then(|c| crate::cobot::release::run(dir, &c, config_file, "HEAD", None, false, false));
+    let outcome = crate::release::Config::load(&dir.join(config_file))
+        .and_then(|c| crate::release::run(dir, &c, config_file, "HEAD", None, false, false));
     let outcome = match outcome {
         Ok(o) => o,
         Err(e) => return failed(e.to_string()),
@@ -278,15 +278,15 @@ fn release(spec: &JobSpec, dir: &Path) -> Report {
     if outcome.written.is_empty() {
         return report(spec, Outcome::Passed, "nothing to release");
     }
-    let (ok, log) = crate::cobot::ci::exec(
-        &crate::cobot::scope::workspace(dir),
+    let (ok, log) = crate::checks::ci::exec(
+        &crate::checks::scope::workspace(dir),
         &[
             "cargo".into(),
             "update".into(),
             "-w".into(),
             "--offline".into(),
         ],
-        crate::cobot::ci::TIMEOUT,
+        crate::checks::ci::TIMEOUT,
         &spec.token,
     );
     if !ok {
@@ -294,7 +294,7 @@ fn release(spec: &JobSpec, dir: &Path) -> Report {
     }
     let subject = release_subject(&outcome.released);
     let tags: Vec<String> = outcome.released.iter().map(|r| r.tag.clone()).collect();
-    match crate::cobot::ci::land(
+    match crate::checks::ci::land(
         dir,
         &spec.remote,
         &spec.token,
@@ -305,7 +305,7 @@ fn release(spec: &JobSpec, dir: &Path) -> Report {
             .map(String::as_str),
         &tags,
     ) {
-        Ok(crate::cobot::ci::Landed::Pushed(commit)) => {
+        Ok(crate::checks::ci::Landed::Pushed(commit)) => {
             let mut log = format!("{subject} as {commit}\n");
             for t in &tags {
                 let _ = writeln!(log, "tag {t}");
@@ -315,14 +315,14 @@ fn release(spec: &JobSpec, dir: &Path) -> Report {
                 ..report(spec, Outcome::Passed, &log)
             }
         }
-        Ok(crate::cobot::ci::Landed::Moved) => report(spec, Outcome::Passed, MAIN_MOVED),
+        Ok(crate::checks::ci::Landed::Moved) => report(spec, Outcome::Passed, MAIN_MOVED),
         Err(e) => failed(e.to_string()),
     }
 }
 
 /// `chore(release): <unit vX.Y.Z>[, …]`, units sorted; `chore(release): changelog` with none.
 #[must_use]
-pub fn release_subject(released: &[crate::cobot::release::Released]) -> String {
+pub fn release_subject(released: &[crate::release::Released]) -> String {
     let mut units: Vec<String> = released
         .iter()
         .map(|r| format!("{} v{}", r.unit, r.version))
@@ -349,18 +349,18 @@ fn mirror(spec: &JobSpec, dir: &Path) -> Report {
     };
     let _ = std::fs::remove_dir_all(dir);
     let staged = dir.join("mirror.git");
-    if let Err(e) = crate::cobot::git::bare(&staged) {
+    if let Err(e) = crate::git::bare(&staged) {
         return failed(e.to_string());
     }
-    let scrub = |e: crate::cobot::Error| failed(e.to_string().replace(to_token.as_str(), "***"));
+    let scrub = |e: crate::infra::Error| failed(e.to_string().replace(to_token.as_str(), "***"));
     if spec.job == UNMIRROR {
-        return match crate::cobot::git::delete_change(&spec.branch, to, Some(to_token), &staged) {
+        return match crate::git::delete_change(&spec.branch, to, Some(to_token), &staged) {
             Ok(()) => report(spec, Outcome::Passed, &format!("deleted {}\n", spec.branch)),
             Err(e) => scrub(e),
         };
     }
     if crate::core::change::branch(&spec.branch).is_some() {
-        return match crate::cobot::git::push_change(
+        return match crate::git::push_change(
             &spec.remote,
             &spec.token,
             &spec.branch,
@@ -377,7 +377,7 @@ fn mirror(spec: &JobSpec, dir: &Path) -> Report {
             Err(e) => scrub(e),
         };
     }
-    match crate::cobot::git::mirror_from(
+    match crate::git::mirror_from(
         &spec.remote,
         &spec.token,
         &spec.branch,
@@ -406,11 +406,11 @@ fn deploy(spec: &JobSpec, dir: &Path) -> Report {
         violations: vec![why],
         ..report(spec, Outcome::Failed, log)
     };
-    if let Err(e) = crate::cobot::ci::fetch_tags(dir, &spec.remote, &spec.token) {
+    if let Err(e) = crate::checks::ci::fetch_tags(dir, &spec.remote, &spec.token) {
         return failed(e.to_string(), "");
     }
     let files = match &spec.since {
-        Some(since) => crate::cobot::ci::changed_since(dir, since, &spec.sha).ok(),
+        Some(since) => crate::checks::ci::changed_since(dir, since, &spec.sha).ok(),
         None => None,
     };
     let mut log = match &files {
@@ -466,7 +466,7 @@ fn deploy(spec: &JobSpec, dir: &Path) -> Report {
             None
         }
     };
-    let ledger = match crate::cobot::catalog::ledger_resolved(dir, dir, &spec.sha) {
+    let ledger = match crate::infra::catalog::ledger_resolved(dir, dir, &spec.sha) {
         Ok(l) => l,
         Err(problems) => {
             let _ = writeln!(log, "grants ledger not kept: {}", problems.join("; "));
@@ -504,7 +504,7 @@ fn publish_sites(
     files: Option<&[String]>,
     log: &mut String,
 ) -> Result<Vec<String>, String> {
-    let sites = crate::cobot::scope::deploys(dir, files).map_err(|e| e.to_string())?;
+    let sites = crate::checks::scope::deploys(dir, files).map_err(|e| e.to_string())?;
     if sites.is_empty() {
         log.push_str("no site to publish\n");
         return Ok(Vec::new());
@@ -550,7 +550,7 @@ fn merge(spec: &JobSpec, dir: &Path) -> Report {
         );
     }
     let _ = writeln!(message, "Change-Head: {}", spec.sha);
-    match crate::cobot::ci::squash_onto(
+    match crate::checks::ci::squash_onto(
         dir,
         &spec.remote,
         &spec.token,
@@ -581,7 +581,7 @@ const UNION: &str = ".claude/decisions/*.md";
 /// change's branch when git merges it; see
 /// `.claude/decisions/2026-11-08-development-concurrent-agent-sessions.md` §3.
 fn restack(spec: &JobSpec, dir: &Path) -> Report {
-    match crate::cobot::ci::restack(
+    match crate::checks::ci::restack(
         dir,
         &spec.remote,
         &spec.token,
@@ -593,10 +593,10 @@ fn restack(spec: &JobSpec, dir: &Path) -> Report {
     ) {
         Ok(r) => {
             let relation = match r.relation {
-                crate::cobot::ci::Relation::Current => Relation::Current,
-                crate::cobot::ci::Relation::Disjoint => Relation::Disjoint,
-                crate::cobot::ci::Relation::Clean => Relation::Clean,
-                crate::cobot::ci::Relation::Conflicting => Relation::Conflicting,
+                crate::checks::ci::Relation::Current => Relation::Current,
+                crate::checks::ci::Relation::Disjoint => Relation::Disjoint,
+                crate::checks::ci::Relation::Clean => Relation::Clean,
+                crate::checks::ci::Relation::Conflicting => Relation::Conflicting,
             };
             Report {
                 log: format!(
@@ -640,7 +640,7 @@ fn restack(spec: &JobSpec, dir: &Path) -> Report {
 /// its plan as the body, then the checks its paths need.
 fn bound(spec: &JobSpec, dir: &Path, sentinel: &Path) -> Report {
     let (since, built) = built_on(spec, dir);
-    let files = match crate::cobot::ci::changed(dir, since, &spec.sha) {
+    let files = match crate::checks::ci::changed(dir, since, &spec.sha) {
         Ok(f) => f,
         Err(e) => {
             let mut r = report(spec, Outcome::Failed, &e.to_string());
@@ -686,7 +686,7 @@ fn bound(spec: &JobSpec, dir: &Path, sentinel: &Path) -> Report {
     }
     let map = violations.is_empty().then(|| test_map(&mut log)).flatten();
     let checks = if violations.is_empty() {
-        match crate::cobot::scope::jobs_with(dir, &files, map.as_ref()) {
+        match crate::checks::scope::jobs_with(dir, &files, map.as_ref()) {
             Ok(jobs) => jobs
                 .into_iter()
                 .filter(|j| j.name != "policy.check")
@@ -711,7 +711,7 @@ fn bound(spec: &JobSpec, dir: &Path, sentinel: &Path) -> Report {
     let gate = (!full.is_empty()).then(|| gate(dir, &files, map.as_ref(), &mut log));
     let predicted = forecast(spec, dir, &mut log);
     let seen = (since != spec.base)
-        .then(|| crate::cobot::ci::built_on_head(dir, since, &spec.sha).ok())
+        .then(|| crate::checks::ci::built_on_head(dir, since, &spec.sha).ok())
         .flatten();
     let outcome = if violations.is_empty() {
         Outcome::Passed
@@ -723,7 +723,7 @@ fn bound(spec: &JobSpec, dir: &Path, sentinel: &Path) -> Report {
         checks,
         full,
         gate,
-        patch: crate::cobot::ci::head_patch(dir, since, &spec.sha),
+        patch: crate::checks::ci::head_patch(dir, since, &spec.sha),
         tiers,
         forecast: predicted,
         built_on: seen,
@@ -734,12 +734,12 @@ fn bound(spec: &JobSpec, dir: &Path, sentinel: &Path) -> Report {
 /// `main`'s test map, from `PIGEON_TEST_MAP`, which `pigeon-start` exports; none without one, and
 /// the tests are then chosen by crate. See the 2026-11-11 amendment to
 /// `.claude/decisions/2026-11-10-development-factory-crates-functional-core.md`.
-fn test_map(log: &mut String) -> Option<crate::cobot::scope::TestMap> {
+fn test_map(log: &mut String) -> Option<crate::checks::scope::TestMap> {
     let Ok(path) = std::env::var(TEST_MAP_VAR) else {
         log.push_str("test map: none; tests by crate\n");
         return None;
     };
-    match crate::cobot::scope::TestMap::read(std::path::Path::new(&path)) {
+    match crate::checks::scope::TestMap::read(std::path::Path::new(&path)) {
         Ok(m) => {
             let _ = writeln!(log, "test map: {} binaries, of {}", m.binaries.len(), m.sha);
             Some(m)
@@ -757,11 +757,11 @@ fn test_map(log: &mut String) -> Option<crate::cobot::scope::TestMap> {
 fn gate(
     dir: &Path,
     files: &[String],
-    map: Option<&crate::cobot::scope::TestMap>,
+    map: Option<&crate::checks::scope::TestMap>,
     log: &mut String,
 ) -> crate::core::deploy::gate::Gate {
     use crate::core::deploy::gate::Gate;
-    let gate = crate::cobot::scope::gate(dir, files, map)
+    let gate = crate::checks::scope::gate(dir, files, map)
         .unwrap_or_else(|e| Gate::Full(format!("the workspace isn't readable ({e})")));
     match &gate {
         Gate::Scoped => log.push_str("merge gate: scoped; the test map chose the tests\n"),
@@ -811,7 +811,7 @@ fn tiers(
         && files
             .iter()
             .filter(|f| f.starts_with(&decisions))
-            .all(|f| crate::cobot::ci::appends_only(dir, &spec.base, &spec.sha, f));
+            .all(|f| crate::checks::ci::appends_only(dir, &spec.base, &spec.sha, f));
     let adds_secret = files
         .iter()
         .filter(|f| {
@@ -822,7 +822,7 @@ fn tiers(
         })
         .any(|f| adds_secret(dir, &spec.base, f));
     let facts = crate::core::approval::tiers::Facts {
-        deploys_worker: crate::cobot::scope::workers(dir, Some(files))
+        deploys_worker: crate::checks::scope::workers(dir, Some(files))
             .map_or(true, |w| !w.is_empty()),
         appends_only,
         adds_secret,
@@ -832,7 +832,7 @@ fn tiers(
 
 /// The approval rules on the base branch; none when it has none, or they don't read.
 fn base_rules(spec: &JobSpec, dir: &Path) -> Option<crate::core::approval::tiers::Rules> {
-    let text = crate::cobot::ci::base_file(dir, &spec.base, crate::core::approval::tiers::RULES)?;
+    let text = crate::checks::ci::base_file(dir, &spec.base, crate::core::approval::tiers::RULES)?;
     serde_saphyr::from_str(&text).ok()
 }
 
@@ -858,7 +858,7 @@ fn adds_secret(dir: &Path, base: &str, path: &str) -> bool {
     else {
         return true;
     };
-    let before = crate::cobot::ci::base_file(dir, base, path)
+    let before = crate::checks::ci::base_file(dir, base, path)
         .and_then(|t| names(&t))
         .unwrap_or_default();
     crate::core::approval::tiers::lengthens(&before, &head)
@@ -874,7 +874,7 @@ fn policy(
     sentinel: &Path,
     log: &mut String,
 ) -> Result<Vec<String>, String> {
-    let sum = std::env::var(crate::cobot::ship_wire::JUDGE_SHA256_VAR)
+    let sum = std::env::var(crate::wire::ship_wire::JUDGE_SHA256_VAR)
         .ok()
         .unwrap_or_default();
     let _ = writeln!(log, "sentinel: {} (sha256 {sum})", sentinel.display());
@@ -959,7 +959,7 @@ fn built_on<'a>(spec: &'a JobSpec, dir: &Path) -> (&'a str, String) {
     let Some(after) = spec.env.get(crate::control::AFTER) else {
         return (&spec.base, String::new());
     };
-    match crate::cobot::ci::fetch_branch(dir, &spec.remote, &spec.token, after) {
+    match crate::checks::ci::fetch_branch(dir, &spec.remote, &spec.token, after) {
         Ok(()) => (after, format!("built on {after}\n")),
         Err(e) => (
             &spec.base,
@@ -985,7 +985,7 @@ fn forecast(spec: &JobSpec, dir: &Path, log: &mut String) -> Vec<Value> {
             Some((n, o["branch"].as_str()?.to_string()))
         })
         .collect();
-    crate::cobot::ci::forecast(
+    crate::checks::ci::forecast(
         dir,
         &spec.remote,
         &spec.token,
@@ -1007,7 +1007,7 @@ fn forecast(spec: &JobSpec, dir: &Path, log: &mut String) -> Vec<Value> {
 /// `.claude/decisions/2026-11-10-development-factory-crates-functional-core.md` §2.
 fn base_policies(spec: &JobSpec, dir: &Path) -> Result<Option<PathBuf>, String> {
     let manifest = crate::instance::MANIFEST;
-    let Some(text) = crate::cobot::ci::base_file(dir, &spec.base, manifest) else {
+    let Some(text) = crate::checks::ci::base_file(dir, &spec.base, manifest) else {
         return Ok(None);
     };
     let v: Value =
@@ -1017,7 +1017,7 @@ fn base_policies(spec: &JobSpec, dir: &Path) -> Result<Option<PathBuf>, String> 
     };
     let out = dir.join(".git").join("pigeon-base-policies");
     let _ = std::fs::remove_dir_all(&out);
-    crate::cobot::ci::base_tree(dir, &spec.base, rel, &out).map_err(|e| e.to_string())?;
+    crate::checks::ci::base_tree(dir, &spec.base, rel, &out).map_err(|e| e.to_string())?;
     Ok(Some(out))
 }
 

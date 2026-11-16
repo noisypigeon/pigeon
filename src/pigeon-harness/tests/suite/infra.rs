@@ -87,7 +87,7 @@ fn cobot_reports_its_own_version() {
         .args(["infra", "--version"])
         .assert()
         .success()
-        .stdout(predicate::str::contains(agent::cobot::VERSION));
+        .stdout(predicate::str::contains(agent::VERSION));
 }
 
 #[test]

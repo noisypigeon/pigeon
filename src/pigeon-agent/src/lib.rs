@@ -11,10 +11,19 @@ pub use pigeon_core::{
 
 pub mod architecture;
 #[cfg(feature = "engines")]
+pub mod bench;
+#[cfg(feature = "engines")]
 pub mod catalog;
-pub mod cobot;
+#[cfg(feature = "engines")]
+pub mod checks;
+#[cfg(any(feature = "worker", test))]
+pub mod containers;
 #[cfg(feature = "engines")]
 pub mod engine;
+#[cfg(feature = "engines")]
+pub mod git;
+#[cfg(feature = "engines")]
+pub mod infra;
 #[cfg(feature = "engines")]
 pub mod instance;
 #[cfg(feature = "engines")]
@@ -23,15 +32,21 @@ pub mod names;
 #[cfg(feature = "engines")]
 pub mod platform_job;
 #[cfg(feature = "engines")]
+pub mod release;
+#[cfg(feature = "engines")]
 pub mod sentinel;
 #[cfg(feature = "engines")]
 pub mod serve;
 #[cfg(feature = "engines")]
 pub mod ship;
 #[cfg(feature = "engines")]
+pub mod sites;
+#[cfg(feature = "engines")]
 pub mod standup_job;
 #[cfg(feature = "worker")]
 pub mod worker;
+#[cfg(feature = "engines")]
+pub mod workers;
 
 #[cfg(feature = "engines")]
 pub use catalog::{run, run_with};

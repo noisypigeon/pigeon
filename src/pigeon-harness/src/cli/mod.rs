@@ -44,7 +44,7 @@ pub enum Commands {
     Eviction(EvictionCommand),
     /// Validate, render, plan and apply infrastructure units, and manage their secrets
     #[cfg(feature = "infra")]
-    #[command(subcommand, version = ::agent::cobot::VERSION)]
+    #[command(subcommand, version = ::agent::VERSION)]
     Infra(InfraCommand),
     /// Build static sites, or publish them to their R2 buckets
     #[cfg(feature = "infra")]

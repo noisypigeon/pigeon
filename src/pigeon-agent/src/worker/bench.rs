@@ -72,7 +72,7 @@ pub async fn end_session(env: &Env, s: &Settings, label: &str) -> Result<()> {
         return Ok(());
     }
     let (remote, token) =
-        platform::credentials(env, true, crate::cobot::artifacts_wire::TOKEN_TTL).await?;
+        platform::credentials(env, true, crate::wire::artifacts_wire::TOKEN_TTL).await?;
     let spec = crate::control::unscratch_spec(session, &remote, &token);
     let body = serde_json::to_value(&spec)?;
     let req = json_request("https://checker/start", Method::Post, Some(&body), None)?;
@@ -92,7 +92,7 @@ const TICK_MS: i64 = 5 * 60 * 1000;
 /// The bench's own signing key, derived from the Worker's, so a leak opens only this bench.
 fn key(env: &Env, name: &str) -> Result<String> {
     let token = super::checker::signing_key(env)?;
-    Ok(crate::cobot::link::derive(&token, &format!("bench:{name}")))
+    Ok(crate::wire::link::derive(&token, &format!("bench:{name}")))
 }
 
 /// One bench's Container, named `<session_id>.<k>`.
@@ -180,11 +180,11 @@ impl Bench {
         if container.running() {
             return Ok(());
         }
-        let launch = crate::cobot::worker::JobsLaunch {
+        let launch = crate::containers::worker::JobsLaunch {
             token: key(&self.env, name).map_err(|e| e.to_string())?,
             build: super::latest_build(&self.env).await,
         };
-        crate::cobot::worker::start_bench(&self.state, &container, &launch)
+        crate::containers::worker::start_bench(&self.state, &container, &launch)
             .await
             .map_err(|e| e.to_string())?;
         let storage = self.state.storage();
@@ -192,7 +192,7 @@ impl Bench {
         let _ = storage.put("metered", now()).await;
         if let Some(held) = self.state.container() {
             self.state.wait_until(async move {
-                let _ = crate::cobot::worker::monitor(&held).await;
+                let _ = crate::containers::worker::monitor(&held).await;
             });
         }
         Ok(())
@@ -213,7 +213,7 @@ impl Bench {
         };
         let bytes = serde_json::to_vec(body).unwrap_or_default();
         let token = key(&self.env, &name)?;
-        match crate::cobot::worker::call(
+        match crate::containers::worker::call(
             &container,
             &token,
             Method::Post,
@@ -255,7 +255,7 @@ impl Bench {
         for _ in 0..200 {
             let ask =
                 serde_json::to_vec(&json!({ "run": run, "offset": offset })).unwrap_or_default();
-            let Ok((200, page)) = crate::cobot::worker::call(
+            let Ok((200, page)) = crate::containers::worker::call(
                 &container,
                 token,
                 Method::Post,
@@ -333,7 +333,7 @@ impl Bench {
             return false;
         };
         matches!(
-            crate::cobot::worker::call(&container, &token, Method::Post, "/v0/bench/info", b"{}").await,
+            crate::containers::worker::call(&container, &token, Method::Post, "/v0/bench/info", b"{}").await,
             Ok((200, v)) if !v["running"].is_null()
         )
     }
@@ -602,7 +602,7 @@ async fn run(
         Err(refused) => return Ok(refused),
     };
     let (remote, token) =
-        platform::credentials(env, false, crate::cobot::artifacts_wire::TOKEN_TTL).await?;
+        platform::credentials(env, false, crate::wire::artifacts_wire::TOKEN_TTL).await?;
     let run = format!("{k}-{}", platform::random_hex(6)?);
     let spec = json!({
         "run": run,

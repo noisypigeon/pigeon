@@ -565,7 +565,7 @@ fn the_workers_client_signing_agrees_with_serve() {
     let state = TempDir::new().expect("state");
     let c = serving_as(root.path(), state.path(), None, true);
     let body = br#"{"operation":"instance.show","args":{}}"#;
-    let signed = agent::cobot::link::sign(TOKEN, "POST", "/v0/run", unix_now(), [0x5a; 32], body);
+    let signed = agent::wire::link::sign(TOKEN, "POST", "/v0/run", unix_now(), [0x5a; 32], body);
     let extra = format!(
         "{TIMESTAMP_HEADER}: {}\r\n{NONCE_HEADER}: {}\r\n{SIGNATURE_HEADER}: {}\r\n",
         signed.timestamp, signed.nonce, signed.signature
@@ -573,7 +573,7 @@ fn the_workers_client_signing_agrees_with_serve() {
     let (status, text, sig) = parse(&c.exchange(&raw_request("POST", "/v0/run", body, &extra)));
     assert_eq!(status, 200, "{text}");
     assert_eq!(
-        agent::cobot::link::verify_response(
+        agent::wire::link::verify_response(
             TOKEN,
             &signed.nonce,
             status,
@@ -584,7 +584,7 @@ fn the_workers_client_signing_agrees_with_serve() {
         "the Worker verifies serve's answer"
     );
     assert!(
-        agent::cobot::link::verify_response(
+        agent::wire::link::verify_response(
             TOKEN,
             &signed.nonce,
             500,

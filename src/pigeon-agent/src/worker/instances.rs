@@ -268,7 +268,7 @@ async fn start(
 ) -> std::result::Result<(), String> {
     let s = Settings::from(env).map_err(|e| e.to_string())?;
     let sha = deployed(env, &s).await?;
-    let (remote, git) = platform::credentials(env, false, crate::cobot::artifacts_wire::TOKEN_TTL)
+    let (remote, git) = platform::credentials(env, false, crate::wire::artifacts_wire::TOKEN_TTL)
         .await
         .map_err(|e| e.to_string())?;
     let spec = JobSpec {

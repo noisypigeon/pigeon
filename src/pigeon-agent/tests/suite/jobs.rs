@@ -117,7 +117,7 @@ fn the_bound_job_passes_a_change_inside_its_scope_and_names_its_checks() {
         names,
         [
             "infra.validate",
-            "test pigeon-agent: suite cobot_catalog cobot_manifest cobot_apex cobot_git cobot_credentials"
+            "test pigeon-agent: suite infra_catalog infra_manifest sites_apex git infra_credentials"
         ],
         "policy.check is the bound job's own"
     );
@@ -852,7 +852,7 @@ fn a_release_of_a_deploy_main_has_moved_past_does_nothing() {
 
 #[test]
 fn a_release_with_no_unit_is_a_changelog_commit() {
-    use agent::cobot::release::Released;
+    use agent::release::Released;
     let unit = |u: &str| Released {
         unit: u.into(),
         version: "1.2.3".into(),
@@ -869,7 +869,7 @@ fn a_release_with_no_unit_is_a_changelog_commit() {
 
 #[test]
 fn a_release_push_refused_because_main_moved_lands_nothing() {
-    use agent::cobot::ci::{self, Landed};
+    use agent::checks::ci::{self, Landed};
     let tmp = TempDir::new().expect("tempdir");
     let (bare, work, sha) = unreleased(tmp.path());
     let url = format!("file://{}", bare.display());

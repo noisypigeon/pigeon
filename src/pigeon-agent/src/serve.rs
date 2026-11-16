@@ -16,7 +16,7 @@ use rustls::server::WebPkiClientVerifier;
 use rustls::{RootCertStore, ServerConfig, ServerConnection, StreamOwned};
 use serde_json::{Value, json};
 
-use crate::cobot::link::constant_eq;
+use crate::wire::link::constant_eq;
 
 use crate::{Effect, Error, Instance, Request, catalog, run_with};
 
@@ -47,7 +47,7 @@ pub const TLS_KEY_VAR: &str = "AGENT_TLS_KEY";
 /// The environment variable holding the CA that issues client certificates, as PEM.
 pub const TLS_CLIENT_CA_VAR: &str = "AGENT_TLS_CLIENT_CA";
 
-pub use crate::cobot::link::{
+pub use crate::wire::link::{
     NONCE_HEADER, SIGNATURE_HEADER, SKEW, TIMESTAMP_HEADER, sign_request, sign_response,
 };
 
@@ -139,7 +139,7 @@ pub struct Server {
     /// The jobs `/v0/jobs` takes; only a jobs server has them.
     jobs: Option<Arc<crate::jobs::Board>>,
     /// The bench `/v0/bench/*` drives; only a bench's jobs server has one.
-    bench: Option<Arc<crate::cobot::bench::Bench>>,
+    bench: Option<Arc<crate::bench::Bench>>,
     state: String,
     token: String,
     /// Whether `/v0/` routes take signed requests instead of the bearer token.
@@ -252,7 +252,7 @@ impl Server {
     /// Serves `/v0/bench/*` with `bench`, beside `/v0/jobs`: a bench's Container; see
     /// `.claude/decisions/2026-11-16-development-session-bench-containers.md` §3.2.
     #[must_use]
-    pub fn with_bench(mut self, bench: Arc<crate::cobot::bench::Bench>) -> Self {
+    pub fn with_bench(mut self, bench: Arc<crate::bench::Bench>) -> Self {
         self.bench = Some(bench);
         self
     }
@@ -434,9 +434,7 @@ impl Server {
         let (status, body) = match (&self.jobs, head.method.as_str(), head.path.as_str()) {
             (_, "POST", path) if self.bench.is_some() && path.starts_with("/v0/bench/") => {
                 match &self.bench {
-                    Some(bench) => {
-                        crate::cobot::bench::route(bench, &path["/v0/bench/".len()..], &body)
-                    }
+                    Some(bench) => crate::bench::route(bench, &path["/v0/bench/".len()..], &body),
                     None => (404, json!({ "error": "not a bench" })),
                 }
             }

@@ -603,13 +603,13 @@ fn is_agent(krate: &str) -> bool {
 /// platform has no backplane Worker.
 #[must_use]
 pub fn network(root: &Path, platform: &Path) -> Option<Network> {
-    let found = crate::cobot::workers::discover(platform)
+    let found = crate::workers::discover(platform)
         .ok()?
         .into_iter()
         .find(|f| is_agent(&f.spec.entry.krate))?;
     let kind = found.spec.deployment.clone();
-    let (manifest, _) = crate::cobot::manifest::load(root, platform)?;
-    let stacks: Vec<&crate::cobot::manifest::Entry> = manifest
+    let (manifest, _) = crate::infra::manifest::load(root, platform)?;
+    let stacks: Vec<&crate::infra::manifest::Entry> = manifest
         .units
         .values()
         .filter(|e| Some(&e.kind) == kind.as_ref())
@@ -620,7 +620,7 @@ pub fn network(root: &Path, platform: &Path) -> Option<Network> {
         .find(|(_, e)| Some(&e.kind) == kind.as_ref())
         .map(|(id, _)| id.clone());
     let spec = match &stack {
-        Some(unit) => crate::cobot::workers::bind(root, &found, unit).ok()?.spec,
+        Some(unit) => crate::workers::bind(root, &found, unit).ok()?.spec,
         None => found.spec,
     };
     let access = access(&stacks);
@@ -1170,7 +1170,7 @@ fn parts(platform: &Path, w: &Worker, repos: &[String], github: Option<&str>) ->
 }
 
 /// Access, from the platform units' domains and service tokens.
-fn access(stacks: &[&crate::cobot::manifest::Entry]) -> Access {
+fn access(stacks: &[&crate::infra::manifest::Entry]) -> Access {
     let mut access = Access::default();
     for e in stacks {
         let strings = |v: &serde_json::Value| -> Vec<String> {
@@ -1214,7 +1214,7 @@ fn shown(host: &str) -> String {
 pub const ROUTE_KEYS: &[&str] = &["custom_domain", "subdomains_of"];
 
 /// The hostnames the spec's routes serve, each with what it is.
-fn hosts(spec: &crate::cobot::workers::Spec) -> Vec<Item> {
+fn hosts(spec: &crate::workers::Spec) -> Vec<Item> {
     let mut out: Vec<Item> = Vec::new();
     for r in &spec.routes {
         let Ok(serde_json::Value::Object(fields)) = serde_json::to_value(r) else {
@@ -1243,7 +1243,7 @@ fn hosts(spec: &crate::cobot::workers::Spec) -> Vec<Item> {
 /// The Worker, from its bound spec.
 fn worker(
     platform: &Path,
-    spec: &crate::cobot::workers::Spec,
+    spec: &crate::workers::Spec,
     routes: &[(String, Vec<String>)],
 ) -> Worker {
     let containers: Vec<String> = spec.containers.iter().map(|c| c.class.clone()).collect();

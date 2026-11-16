@@ -5,8 +5,8 @@ use std::env;
 use std::io::Read;
 use std::path::Path;
 
-use agent::cobot::session::Session;
-use agent::cobot::workers::{self, Found, Tools};
+use agent::infra::session::Session;
+use agent::workers::{self, Found, Tools};
 use serde_json::{Map, Value};
 
 use crate::cli::{ImagesPush, WorkersCommand, WorkersImages, WorkersSecrets, WorkersState};
@@ -16,7 +16,7 @@ use crate::cli::{ImagesPush, WorkersCommand, WorkersImages, WorkersSecrets, Work
 /// # Errors
 ///
 /// As each command's engine function.
-pub fn run(command: WorkersCommand) -> Result<(), agent::cobot::Error> {
+pub fn run(command: WorkersCommand) -> Result<(), agent::infra::Error> {
     match command {
         WorkersCommand::Validate(at) => {
             let found = workers::select_bound(&at.root, &at.names, at.deployment.as_deref())?;
@@ -25,7 +25,7 @@ pub fn run(command: WorkersCommand) -> Result<(), agent::cobot::Error> {
                 .flat_map(|f| workers::validate(&at.root, f))
                 .collect();
             if !problems.is_empty() {
-                return Err(agent::cobot::Error::Invalid(problems));
+                return Err(agent::infra::Error::Invalid(problems));
             }
             println!("cobot: {} Worker spec(s) valid", found.len());
             Ok(())
@@ -66,14 +66,14 @@ pub fn run(command: WorkersCommand) -> Result<(), agent::cobot::Error> {
             let mut value = String::new();
             std::io::stdin()
                 .read_to_string(&mut value)
-                .map_err(|e| agent::cobot::Error::Tool {
+                .map_err(|e| agent::infra::Error::Tool {
                     command: "stdin".into(),
                     message: e.to_string(),
                 })?;
             let value = value.trim_end_matches(['\r', '\n']);
             // A pipe whose producer failed sends nothing; a secret is never set empty.
             if value.is_empty() {
-                return Err(agent::cobot::Error::Tool {
+                return Err(agent::infra::Error::Tool {
                     command: "secrets put".into(),
                     message: format!("no value on stdin; {} is unchanged", p.key),
                 });
@@ -85,12 +85,12 @@ pub fn run(command: WorkersCommand) -> Result<(), agent::cobot::Error> {
         WorkersCommand::Outputs(s) => {
             let (_, found, outputs) = state_outputs(&s)?;
             let specs: Vec<_> = found.into_iter().map(|f| f.spec).collect();
-            let snapshot = agent::cobot::ship::snapshot(&specs, &outputs);
+            let snapshot = agent::workers::ship::snapshot(&specs, &outputs);
             println!("{}", serde_json::to_string(&snapshot).unwrap_or_default());
             eprintln!(
                 "cobot: {} unit(s) of outputs; pipe this to `pigeon workers secrets put --root . <worker> {}`",
                 snapshot.len(),
-                agent::cobot::ship::OUTPUTS_VAR
+                agent::workers::ship::OUTPUTS_VAR
             );
             Ok(())
         }
@@ -105,33 +105,34 @@ pub fn run(command: WorkersCommand) -> Result<(), agent::cobot::Error> {
     }
 }
 
-fn one(root: &Path, name: &str, deployment: Option<&str>) -> Result<Found, agent::cobot::Error> {
+fn one(root: &Path, name: &str, deployment: Option<&str>) -> Result<Found, agent::infra::Error> {
     workers::select_bound(root, &[name.to_string()], deployment)?
         .into_iter()
         .next()
-        .ok_or_else(|| agent::cobot::Error::UnknownUnit(format!("workers/{name}")))
+        .ok_or_else(|| agent::infra::Error::UnknownUnit(format!("workers/{name}")))
 }
 
 /// wrangler and docker, with the run's account; the token and account are scrubbed from output.
-fn tools() -> Result<Tools, agent::cobot::Error> {
+fn tools() -> Result<Tools, agent::infra::Error> {
     Ok(account_tools()?.0)
 }
 
 /// As [`tools`], with the API and the account they run against.
-fn account_tools() -> Result<(Tools, agent::cobot::cloudflare::Api, String), agent::cobot::Error> {
-    let token = agent::cobot::cloudflare::token(
-        std::env::var(agent::cobot::CREDENTIALS_VAR).ok().as_deref(),
-        env::var(agent::cobot::cloudflare::TOKEN_VAR).ok(),
+fn account_tools() -> Result<(Tools, agent::workers::cloudflare::Api, String), agent::infra::Error>
+{
+    let token = agent::workers::cloudflare::token(
+        std::env::var(agent::infra::CREDENTIALS_VAR).ok().as_deref(),
+        env::var(agent::workers::cloudflare::TOKEN_VAR).ok(),
     )
-    .ok_or_else(|| agent::cobot::Error::Tool {
+    .ok_or_else(|| agent::infra::Error::Tool {
         command: "workers".into(),
         message: format!(
             "set {} to a token with `pigeon workers permissions`",
-            agent::cobot::cloudflare::TOKEN_VAR
+            agent::workers::cloudflare::TOKEN_VAR
         ),
     })?;
-    let api = agent::cobot::cloudflare::Api::new(None, token.clone());
-    let account = api.account().map_err(|message| agent::cobot::Error::Tool {
+    let api = agent::workers::cloudflare::Api::new(None, token.clone());
+    let account = api.account().map_err(|message| agent::infra::Error::Tool {
         command: "workers".into(),
         message,
     })?;
@@ -142,7 +143,7 @@ fn account_tools() -> Result<(Tools, agent::cobot::cloudflare::Api, String), age
     let mut t = Tools::from(|k| env::var(k).ok());
     t.env = vec![
         ("CLOUDFLARE_ACCOUNT_ID".into(), account.clone()),
-        (agent::cobot::cloudflare::TOKEN_VAR.into(), token.clone()),
+        (agent::workers::cloudflare::TOKEN_VAR.into(), token.clone()),
     ];
     t.secrets.push(token);
     Ok((t, api, account))
@@ -151,28 +152,28 @@ fn account_tools() -> Result<(Tools, agent::cobot::cloudflare::Api, String), age
 /// Each selected Worker, checked, the state's session, and the outputs their references name.
 fn state_outputs(
     s: &WorkersState,
-) -> Result<(Session, Vec<Found>, agent::cobot::ship::Outputs), agent::cobot::Error> {
+) -> Result<(Session, Vec<Found>, agent::workers::ship::Outputs), agent::infra::Error> {
     let found = workers::select_bound(&s.at.root, &s.at.names, s.at.deployment.as_deref())?;
     let problems: Vec<_> = found
         .iter()
         .flat_map(|f| workers::validate(&s.at.root, f))
         .collect();
     if !problems.is_empty() {
-        return Err(agent::cobot::Error::Invalid(problems));
+        return Err(agent::infra::Error::Invalid(problems));
     }
     let providers = s
         .providers
         .clone()
         .unwrap_or_else(|| s.at.root.join(".config"));
     let session =
-        agent::cobot::session::open(&s.at.root, &providers, &s.state.to_string_lossy(), |k| {
+        agent::infra::session::open(&s.at.root, &providers, &s.state.to_string_lossy(), |k| {
             env::var(k).ok()
         })?;
     let mut outputs: BTreeMap<String, Map<String, Value>> = BTreeMap::new();
     for f in &found {
         for unit in workers::referenced_units(&f.spec) {
             if let std::collections::btree_map::Entry::Vacant(e) = outputs.entry(unit) {
-                let o = agent::cobot::outputs(&session.ctx, e.key())?;
+                let o = agent::infra::outputs(&session.ctx, e.key())?;
                 e.insert(o);
             }
         }
@@ -183,16 +184,16 @@ fn state_outputs(
 
 /// Each selected Worker and its configuration, references resolved from the state, and the
 /// state's session.
-fn rendered(s: &WorkersState) -> Result<(Session, Vec<(Found, Value)>), agent::cobot::Error> {
+fn rendered(s: &WorkersState) -> Result<(Session, Vec<(Found, Value)>), agent::infra::Error> {
     let (session, found, outputs) = state_outputs(s)?;
     let all = found
         .into_iter()
         .map(|f| match workers::render(&f, &outputs) {
             Ok(v) => Ok((f, v)),
-            Err(problems) => Err(agent::cobot::Error::Invalid(
+            Err(problems) => Err(agent::infra::Error::Invalid(
                 problems
                     .into_iter()
-                    .map(|message| agent::cobot::Problem {
+                    .map(|message| agent::infra::Problem {
                         path: format!("{}/{}", f.dir, workers::SPEC),
                         message,
                     })
@@ -217,9 +218,9 @@ fn git(root: &Path, args: &[&str]) -> Option<String> {
 /// Builds and pushes each selected Worker's images, tagged with the checkout's commit, which
 /// must be clean; prints the references as JSON. See
 /// `.claude/decisions/2026-11-07-development-job-images-on-cloudflare.md` §1.
-fn images_push(p: &ImagesPush) -> Result<(), agent::cobot::Error> {
+fn images_push(p: &ImagesPush) -> Result<(), agent::infra::Error> {
     let root = &p.at.root;
-    let refused = |message: String| agent::cobot::Error::Tool {
+    let refused = |message: String| agent::infra::Error::Tool {
         command: "images push".into(),
         message,
     };
@@ -249,7 +250,7 @@ fn images_push(p: &ImagesPush) -> Result<(), agent::cobot::Error> {
     }
     let (tools, api, account) = account_tools()?;
     let tag = source.chars().take(12).collect::<String>();
-    let mut images = agent::cobot::ship::Images {
+    let mut images = agent::workers::ship::Images {
         source,
         images: BTreeMap::new(),
     };
@@ -264,18 +265,18 @@ fn images_push(p: &ImagesPush) -> Result<(), agent::cobot::Error> {
     println!("{}", serde_json::to_string(&images).unwrap_or_default());
     eprintln!(
         "cobot: pipe this to `pigeon workers secrets put --root . <worker> {}`",
-        agent::cobot::ship::IMAGES_VAR
+        agent::workers::ship::IMAGES_VAR
     );
     Ok(())
 }
 
-fn plan(s: &WorkersState) -> Result<(), agent::cobot::Error> {
+fn plan(s: &WorkersState) -> Result<(), agent::infra::Error> {
     let (mut session, all) = rendered(s)?;
     let map: BTreeMap<String, Value> = all
         .iter()
         .map(|(f, v)| (f.spec.name.clone(), v.clone()))
         .collect();
-    let stored = workers::store(&session.ctx.state, &map, agent::cobot::session::now())?;
+    let stored = workers::store(&session.ctx.state, &map, agent::infra::session::now())?;
     session.push()?;
     for (f, v) in &all {
         workers::write(&s.at.root, f, v, &stored.id)?;
@@ -288,16 +289,16 @@ fn plan(s: &WorkersState) -> Result<(), agent::cobot::Error> {
     Ok(())
 }
 
-fn deploy(s: &WorkersState, id: &str) -> Result<(), agent::cobot::Error> {
+fn deploy(s: &WorkersState, id: &str) -> Result<(), agent::infra::Error> {
     let (session, all) = rendered(s)?;
-    let stored = workers::load(&session.ctx.state, id, agent::cobot::session::now())?;
+    let stored = workers::load(&session.ctx.state, id, agent::infra::session::now())?;
     let tools = tools()?;
     for (f, v) in &all {
         let Some(want) = stored.workers.get(&f.spec.name) else {
             continue;
         };
         if &workers::digest(v) != want {
-            return Err(agent::cobot::Error::Plan(format!(
+            return Err(agent::infra::Error::Plan(format!(
                 "{} changed since plan {id}; plan again",
                 f.spec.name
             )));

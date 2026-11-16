@@ -9,7 +9,7 @@ members = ["src/common", "src/pigeon-core", "src/pigeon-harness", "src/pigeon-ag
 cli = "pigeon-harness"
 policy-tests = ["pigeon-eviction", "pigeon-harness", "pigeon-agent"]
 worker = { package = "pigeon-agent", name = "clippy agent worker (wasm)", only = ["src/pigeon-agent/src/worker/"] }
-infra-tests = { package = "pigeon-agent", test = "suite", modules = ["cobot_catalog::", "cobot_manifest::", "cobot_apex::", "cobot_git::", "cobot_credentials::"] }
+infra-tests = { package = "pigeon-agent", test = "suite", modules = ["infra_catalog::", "infra_manifest::", "sites_apex::", "git::", "infra_credentials::"] }
 
 [workspace.package]
 version = "0.1.0"

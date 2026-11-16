@@ -224,7 +224,7 @@ pub(super) async fn ask(
         }
     }
     let host = env
-        .var(crate::cobot::ship_wire::HOST_VAR)
+        .var(crate::wire::ship_wire::HOST_VAR)
         .map(|v| v.to_string())
         .unwrap_or_default();
     match approve::pending(env, settings, &host, number, &request.operation).await {
@@ -471,7 +471,7 @@ async fn wait(env: &Env, id: &Value, request: &wire::Request) -> Result<Response
     }
     let s = Settings::from(env)?;
     let host = env
-        .var(crate::cobot::ship_wire::HOST_VAR)
+        .var(crate::wire::ship_wire::HOST_VAR)
         .map(|v| v.to_string())
         .unwrap_or_default();
     // As `ask` does: a merge of a checked head no one approved waits on its approval.
@@ -1408,13 +1408,13 @@ async fn last_log(env: &Env, status: &Value) -> Result<Option<String>> {
 /// The refusal for a token that reaches only `/healthz` and `/builds/`, past those.
 fn narrow_token(env: &Env, who: &Identity) -> Option<Result<Response>> {
     let is = |var: &str| platform::secret(env, var).is_ok_and(|id| id == who.subject);
-    if is(crate::cobot::ship_wire::ACCESS_ID_VAR) {
+    if is(crate::wire::ship_wire::ACCESS_ID_VAR) {
         return Some(Response::error(
             "the deployer's token reads /healthz and /healthz/smoke only",
             403,
         ));
     }
-    if is(crate::cobot::ship_wire::BUILDS_ACCESS_ID_VAR) {
+    if is(crate::wire::ship_wire::BUILDS_ACCESS_ID_VAR) {
         return Some(Response::error("the builds token reads /builds/ only", 403));
     }
     None
@@ -1503,15 +1503,15 @@ async fn smoke(env: &Env, s: &Settings, who: &Identity) -> Result<Response> {
 /// `GET /builds/<sha>/<file>`: `main`'s `pigeon` or `pigeon-sentinel` built at that commit, or
 /// its test map, from R2.
 async fn build(env: &Env, path: &str) -> Result<Response> {
-    let Some((sha, binary)) = crate::cobot::ship_wire::build_path(path) else {
+    let Some((sha, binary)) = crate::wire::ship_wire::build_path(path) else {
         return Response::error("not found", 404);
     };
-    let key = if binary == crate::cobot::ship_wire::SENTINEL_BINARY {
-        crate::cobot::ship_wire::sentinel_key(sha)
-    } else if binary == crate::cobot::ship_wire::TEST_MAP_FILE {
+    let key = if binary == crate::wire::ship_wire::SENTINEL_BINARY {
+        crate::wire::ship_wire::sentinel_key(sha)
+    } else if binary == crate::wire::ship_wire::TEST_MAP_FILE {
         crate::core::deploy::testmaps::key(sha)
     } else {
-        crate::cobot::ship_wire::build_key(sha)
+        crate::wire::ship_wire::build_key(sha)
     };
     let Some(object) = env.bucket("CI_LOGS")?.get(key).execute().await? else {
         return Response::error("no build of that commit", 404);
@@ -1529,11 +1529,11 @@ async fn build(env: &Env, path: &str) -> Result<Response> {
 
 /// `main`'s pipeline's newest build, as job Containers fetch it; none when there is no build
 /// yet, no public host, or no builds token to fetch it with.
-pub(super) async fn latest_build(env: &Env) -> Option<crate::cobot::worker::JobsBuild> {
-    let host = env.var(crate::cobot::ship_wire::HOST_VAR).ok()?.to_string();
+pub(super) async fn latest_build(env: &Env) -> Option<crate::containers::worker::JobsBuild> {
+    let host = env.var(crate::wire::ship_wire::HOST_VAR).ok()?.to_string();
     let access = (
-        platform::secret(env, crate::cobot::ship_wire::BUILDS_ACCESS_ID_VAR).ok()?,
-        platform::secret(env, crate::cobot::ship_wire::BUILDS_ACCESS_SECRET_VAR).ok()?,
+        platform::secret(env, crate::wire::ship_wire::BUILDS_ACCESS_ID_VAR).ok()?,
+        platform::secret(env, crate::wire::ship_wire::BUILDS_ACCESS_SECRET_VAR).ok()?,
     );
     let repo = env.var("REPO").ok()?.to_string();
     let mut r = main_stub(env, &repo)
@@ -1548,7 +1548,7 @@ pub(super) async fn latest_build(env: &Env) -> Option<crate::cobot::worker::Jobs
             format!(
                 "https://{host}/builds/{}/{}",
                 b.sha,
-                crate::cobot::ship_wire::SENTINEL_BINARY
+                crate::wire::ship_wire::SENTINEL_BINARY
             ),
             sum,
         )
@@ -1558,10 +1558,10 @@ pub(super) async fn latest_build(env: &Env) -> Option<crate::cobot::worker::Jobs
     )
     .ok()
     .map(|m| {
-        let file = crate::cobot::ship_wire::TEST_MAP_FILE;
+        let file = crate::wire::ship_wire::TEST_MAP_FILE;
         (format!("https://{host}/builds/{}/{file}", m.sha), m.sha256)
     });
-    Some(crate::cobot::worker::JobsBuild {
+    Some(crate::containers::worker::JobsBuild {
         url: format!("https://{host}/builds/{}/pigeon", b.sha),
         sha256: b.sha256,
         access,

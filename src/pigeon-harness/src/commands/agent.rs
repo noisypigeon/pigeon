@@ -163,9 +163,9 @@ fn jobs(args: &JobsArgs) -> i32 {
                 return INVALID;
             };
             let work = work.join("bench");
-            s.with_bench(std::sync::Arc::new(agent::cobot::bench::Bench::new(
+            s.with_bench(std::sync::Arc::new(agent::bench::Bench::new(
                 work,
-                agent::cobot::bench::Sandbox::Unshare,
+                agent::bench::Sandbox::Unshare,
                 |k| std::env::var(k).ok(),
             )))
         }

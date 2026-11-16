@@ -194,7 +194,7 @@ impl Instance {
                 "{MANIFEST}: no paths.providers, and the platform has no `{DEFAULT_PROVIDERS}`"
             ));
         }
-        if let Err(p) = crate::cobot::catalog::ledger(&self.root, self.platform_root()) {
+        if let Err(p) = crate::infra::catalog::ledger(&self.root, self.platform_root()) {
             problems.extend(p);
         }
         problems

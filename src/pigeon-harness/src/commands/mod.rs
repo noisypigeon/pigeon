@@ -98,7 +98,7 @@ fn dev(args: DevArgs) -> i32 {
     };
     // A repository root whose workspace is still under src/pigeon-cli; see step 4a.
     #[cfg(feature = "infra")]
-    let root = ::agent::cobot::scope::workspace(&root);
+    let root = ::agent::checks::scope::workspace(&root);
     crate::dev::run(&root, &task, args.dry_run)
 }
 

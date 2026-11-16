@@ -9,10 +9,10 @@ use serde_json::Value;
 pub const VAR: &str = "PIGEON_EVICTION";
 
 /// The binary's name.
-pub const BINARY: &str = crate::cobot::ship_wire::SENTINEL_BINARY;
+pub const BINARY: &str = crate::wire::ship_wire::SENTINEL_BINARY;
 
 /// Where the judge is: `var`'s [`VAR`], else either of
-/// [`crate::cobot::ship_wire::JUDGE_BINARIES`] beside the running executable, in its parent
+/// [`crate::wire::ship_wire::JUDGE_BINARIES`] beside the running executable, in its parent
 /// directory or on `PATH`, else [`BINARY`]'s bare name.
 #[must_use]
 pub fn locate(var: &dyn Fn(&str) -> Option<String>) -> PathBuf {
@@ -34,7 +34,7 @@ pub fn locate(var: &dyn Fn(&str) -> Option<String>) -> PathBuf {
 /// The first of the judge's names found in `dirs`, each directory in turn.
 fn find(dirs: &[PathBuf]) -> Option<PathBuf> {
     dirs.iter().find_map(|d| {
-        crate::cobot::ship_wire::JUDGE_BINARIES
+        crate::wire::ship_wire::JUDGE_BINARIES
             .iter()
             .map(|b| d.join(b))
             .find(|c| c.is_file())
@@ -82,7 +82,7 @@ impl std::fmt::Display for Failure {
 
 fn run(binary: &Path, args: &[String], env: &[(&str, String)]) -> Result<Value, Failure> {
     let shown = binary.display();
-    let ran = crate::cobot::ci::run_program(binary, args, env).map_err(Failure::Missing)?;
+    let ran = crate::checks::ci::run_program(binary, args, env).map_err(Failure::Missing)?;
     if !matches!(ran.code, Some(0 | 1)) {
         return Err(Failure::Refused(format!(
             "{shown} couldn't judge: {}",
@@ -186,7 +186,7 @@ pub fn evict(
 /// The binary's version, as `pigeon-sentinel --version` prints it; none when it doesn't run.
 #[must_use]
 pub fn version(binary: &Path) -> Option<String> {
-    let ran = crate::cobot::ci::run_program(binary, &["--version".to_string()], &[]).ok()?;
+    let ran = crate::checks::ci::run_program(binary, &["--version".to_string()], &[]).ok()?;
     (ran.code == Some(0)).then(|| {
         ran.stdout
             .trim()

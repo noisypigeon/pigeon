@@ -469,7 +469,7 @@ fn route_gaps(root: &std::path::Path, net: &Value) -> Vec<String> {
 /// Every field of the Worker's spec is known, and each holds what the network shows.
 fn spec_gaps(root: &std::path::Path, net: &Value) -> Vec<String> {
     let mut gaps = Vec::new();
-    let found = agent::cobot::workers::discover(root)
+    let found = agent::workers::discover(root)
         .expect("discovers")
         .into_iter()
         .find(|f| f.spec.entry.krate.ends_with("pigeon-agent"))
@@ -660,7 +660,7 @@ fn the_worker_reads_the_signing_key_only_under_its_stored_name() {
         }
         let text = std::fs::read_to_string(&path).expect("source");
         assert!(
-            !text.contains("cobot::worker::TOKEN_VAR"),
+            !text.contains("worker::TOKEN_VAR"),
             "{}: the Worker's secret is read through checker::signing_key",
             path.display()
         );

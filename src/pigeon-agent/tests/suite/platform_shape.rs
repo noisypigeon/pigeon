@@ -51,7 +51,7 @@ fn a_full_shape_still_needs_the_whole_stack() {
 
 #[test]
 fn the_app_worker_template_is_a_worker_spec_with_no_container_or_domain() {
-    let spec: agent::cobot::workers::Spec = serde_saphyr::from_str(include_str!(
+    let spec: agent::workers::Spec = serde_saphyr::from_str(include_str!(
         "../../../../catalog/pigeon/kinds/platform/app-worker.yaml"
     ))
     .expect("template parses");

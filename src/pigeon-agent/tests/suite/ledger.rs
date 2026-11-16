@@ -3,7 +3,7 @@
 
 use std::path::PathBuf;
 
-use agent::cobot::catalog::{ledger as read, ledger_resolved as resolve};
+use agent::infra::catalog::{ledger as read, ledger_resolved as resolve};
 
 fn repo_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")

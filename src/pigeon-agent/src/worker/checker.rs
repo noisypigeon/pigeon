@@ -2,7 +2,7 @@
 //! signing key, told what to run over the signed link, and asked how it went. They differ only
 //! in their Container's size (approvals-images-state ADR §4).
 
-use crate::cobot::worker::{DispatchError, JobsLaunch};
+use crate::containers::worker::{DispatchError, JobsLaunch};
 use worker::{DurableObject, Env, Method, Request, Response, Result, State, durable_object};
 
 use super::platform::secret;
@@ -65,7 +65,7 @@ async fn serve(state: &State, env: &Env, mut req: Request, class: &str) -> Resul
         (Method::Post, ["start"]) => {
             let body = req.bytes().await?;
             let token = signing_key(env)?;
-            if let Err(e) = crate::cobot::worker::start_jobs(
+            if let Err(e) = crate::containers::worker::start_jobs(
                 state,
                 &container,
                 &JobsLaunch {
@@ -82,11 +82,17 @@ async fn serve(state: &State, env: &Env, mut req: Request, class: &str) -> Resul
             // twenty seconds after the last request, and the job's report is lost.
             if let Some(held) = state.container() {
                 state.wait_until(async move {
-                    let _ = crate::cobot::worker::monitor(&held).await;
+                    let _ = crate::containers::worker::monitor(&held).await;
                 });
             }
-            match crate::cobot::worker::call(&container, &token, Method::Post, "/v0/jobs", &body)
-                .await
+            match crate::containers::worker::call(
+                &container,
+                &token,
+                Method::Post,
+                "/v0/jobs",
+                &body,
+            )
+            .await
             {
                 Ok((status, v)) => Ok(Response::from_json(&v)?.with_status(status)),
                 Err(e) => failed(&e),
@@ -97,7 +103,7 @@ async fn serve(state: &State, env: &Env, mut req: Request, class: &str) -> Resul
                 return Response::error("the job's Container is not running", 404);
             }
             let token = signing_key(env)?;
-            match crate::cobot::worker::call(
+            match crate::containers::worker::call(
                 &container,
                 &token,
                 Method::Get,

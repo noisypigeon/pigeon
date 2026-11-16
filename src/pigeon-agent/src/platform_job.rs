@@ -8,9 +8,9 @@ use std::path::Path;
 
 use serde_json::{Value, json};
 
-use crate::cobot;
-use crate::cobot::providers::LoadAllowlist;
 use crate::control::{JobSpec, Outcome, Report};
+use crate::infra::providers::LoadAllowlist;
+use crate::{infra, sites, workers};
 
 pub use crate::control::PLATFORM;
 
@@ -100,10 +100,10 @@ pub fn state_bucket(names: &[String]) -> Result<Option<String>, String> {
 /// Why a plan with `changes` isn't applied by this job: it destroys something. A stack is
 /// removed by `platform.teardown`, never by a plan.
 #[must_use]
-pub fn destroys(changes: &[cobot::Change]) -> Option<String> {
+pub fn destroys(changes: &[infra::Change]) -> Option<String> {
     let gone: Vec<String> = changes
         .iter()
-        .filter(|c| matches!(c.action, cobot::Action::Delete | cobot::Action::Replace))
+        .filter(|c| matches!(c.action, infra::Action::Delete | infra::Action::Replace))
         .map(|c| format!("{} ({})", c.address, c.action.word()))
         .collect();
     (!gone.is_empty()).then(|| format!("the plan destroys {}", gone.join(", ")))
@@ -122,22 +122,22 @@ fn random_suffix() -> Result<String, String> {
 
 /// The state bucket on `account`, created with a random suffix if there is none.
 fn ensure_bucket(
-    api: &cobot::cloudflare::Api,
+    api: &workers::cloudflare::Api,
     account: &str,
     log: &mut String,
 ) -> Result<String, String> {
-    let names = cobot::cloudflare::bucket_names(api, account)?;
+    let names = workers::cloudflare::bucket_names(api, account)?;
     if let Some(b) = state_bucket(&names)? {
         log.push_str("the platform's state bucket exists\n");
         return Ok(b);
     }
     let name = format!("{STATE_BUCKET}-{}", random_suffix()?);
-    cobot::cloudflare::create_bucket(api, account, &name)?;
+    workers::cloudflare::create_bucket(api, account, &name)?;
     log.push_str("created the platform's state bucket\n");
     Ok(name)
 }
 
-fn changes(c: &[cobot::Change]) -> Value {
+fn changes(c: &[infra::Change]) -> Value {
     Value::Array(
         c.iter()
             .map(|c| json!({ "address": c.address, "action": c.action.word(), "attributes": c.attributes }))
@@ -148,7 +148,7 @@ fn changes(c: &[cobot::Change]) -> Value {
 /// The plan's changes with their values, before and after, as `show` masks them, by
 /// resource: the owner reviews a plan before applying it. Output changes are kept as `shown`
 /// lists them.
-fn with_values(shown: &Value, diff: impl IntoIterator<Item = cobot::AttrChange>) -> Value {
+fn with_values(shown: &Value, diff: impl IntoIterator<Item = infra::AttrChange>) -> Value {
     let mut out: Vec<Value> = Vec::new();
     for d in diff {
         let v = json!({ "attribute": d.attribute, "before": d.before, "after": d.after,
@@ -213,44 +213,44 @@ pub fn run(spec: &JobSpec, dir: &Path) -> Report {
 fn work(spec: &JobSpec, dir: &Path, log: &mut String) -> Result<Value, String> {
     let task = Task::parse(&spec.argv)?;
     let env = |k: &str| spec.env.get(k).filter(|v| !v.is_empty()).cloned();
-    let token = env(cobot::cloudflare::TOKEN_VAR)
+    let token = env(workers::cloudflare::TOKEN_VAR)
         .ok_or("the owner's account token didn't reach the job")?;
     let key = env(STATE_KEY_VAR).ok_or(format!("{STATE_KEY_VAR} isn't set"))?;
-    let api = cobot::cloudflare::Api::new(None, token.clone());
+    let api = workers::cloudflare::Api::new(None, token.clone());
     let account = api.account()?;
     let bucket = ensure_bucket(&api, &account, log)?;
     let vars = [
-        (cobot::cloudflare::TOKEN_VAR.to_string(), token.clone()),
-        (cobot::PASSPHRASE_VAR.to_string(), key),
+        (workers::cloudflare::TOKEN_VAR.to_string(), token.clone()),
+        (infra::PASSPHRASE_VAR.to_string(), key),
         (
-            cobot::state::ENDPOINT_VAR.to_string(),
-            cobot::sites::endpoint(&account),
+            infra::state::ENDPOINT_VAR.to_string(),
+            sites::endpoint(&account),
         ),
         (
-            cobot::state::ACCESS_KEY_VAR.to_string(),
+            infra::state::ACCESS_KEY_VAR.to_string(),
             api.token_id(&account)?,
         ),
         (
-            cobot::state::SECRET_KEY_VAR.to_string(),
-            cobot::s3::sha256_hex(token.as_bytes()),
+            infra::state::SECRET_KEY_VAR.to_string(),
+            infra::s3::sha256_hex(token.as_bytes()),
         ),
     ];
     let var = |k: &str| vars.iter().find(|(n, _)| n == k).map(|(_, v)| v.clone());
     let state = format!("r2://{bucket}/{STATE_PREFIX}");
     let providers = dir.join(".config");
-    let failed = |e: cobot::Error| e.to_string();
-    let mut s = cobot::session::open(dir, &providers, &state, var).map_err(failed)?;
-    let store = cobot::s3::Bucket {
-        endpoint: cobot::sites::endpoint(&account),
+    let failed = |e: infra::Error| e.to_string();
+    let mut s = infra::session::open(dir, &providers, &state, var).map_err(failed)?;
+    let store = infra::s3::Bucket {
+        endpoint: sites::endpoint(&account),
         name: bucket.clone(),
-        creds: cobot::s3::Credentials {
+        creds: infra::s3::Credentials {
             access_key: api.token_id(&account)?,
-            secret_key: cobot::s3::sha256_hex(token.as_bytes()),
+            secret_key: infra::s3::sha256_hex(token.as_bytes()),
         },
     };
-    let allow = cobot::providers::Allowlist::load(&providers).map_err(failed)?;
+    let allow = infra::providers::Allowlist::load(&providers).map_err(failed)?;
     let (config, found) =
-        cobot::providers::fetch_mirror(&store, &allow, dir, cobot::session::now())?;
+        infra::providers::fetch_mirror(&store, &allow, dir, infra::session::now())?;
     let _ = match &config {
         Some(_) => writeln!(log, "providers from the state bucket: {}", found.join(", ")),
         None => writeln!(
@@ -260,15 +260,15 @@ fn work(spec: &JobSpec, dir: &Path, log: &mut String) -> Result<Value, String> {
     };
     s.ctx.provider_config = config;
     s.ctx.provider_token = true;
-    let now = cobot::session::now();
+    let now = infra::session::now();
     match task {
         Task::Plan { unit } => {
             s.ctx.adopt = true;
-            let units = cobot::select_in(dir, dir, &providers, std::slice::from_ref(&unit))
+            let units = infra::select_in(dir, dir, &providers, std::slice::from_ref(&unit))
                 .map_err(failed)?;
-            let (stored, plans) = cobot::plan_stored(&s.ctx, &units, now).map_err(failed)?;
+            let (stored, plans) = infra::plan_stored(&s.ctx, &units, now).map_err(failed)?;
             s.push().map_err(failed)?;
-            let all: Vec<cobot::Change> = plans.iter().flat_map(|p| p.changes.clone()).collect();
+            let all: Vec<infra::Change> = plans.iter().flat_map(|p| p.changes.clone()).collect();
             let _ = writeln!(
                 log,
                 "planned {unit}: {} change(s), plan {}",
@@ -278,7 +278,7 @@ fn work(spec: &JobSpec, dir: &Path, log: &mut String) -> Result<Value, String> {
             if let Some(why) = destroys(&all) {
                 return Err(why);
             }
-            let shown = match cobot::show_stored(&s.ctx, &stored.id, now) {
+            let shown = match infra::show_stored(&s.ctx, &stored.id, now) {
                 Ok(units) => with_values(&changes(&all), units.into_iter().flat_map(|(_, d)| d)),
                 Err(e) => {
                     let _ = writeln!(log, "the plan's values couldn't be shown: {e}");
@@ -293,14 +293,14 @@ fn work(spec: &JobSpec, dir: &Path, log: &mut String) -> Result<Value, String> {
             s.push().map_err(failed)?;
             let applied = applied.map_err(failed)?;
             // Applied is applied: outputs that can't be read are logged, never a failure.
-            let outputs = match cobot::outputs(&s.ctx, &unit) {
+            let outputs = match infra::outputs(&s.ctx, &unit) {
                 Ok(o) => Value::Object(o),
                 Err(e) => {
                     let _ = writeln!(log, "the stack's outputs couldn't be read: {e}");
                     Value::Null
                 }
             };
-            let all: Vec<cobot::Change> = applied.iter().flat_map(|p| p.changes.clone()).collect();
+            let all: Vec<infra::Change> = applied.iter().flat_map(|p| p.changes.clone()).collect();
             let _ = writeln!(
                 log,
                 "applied plan {plan} to {unit}: {} change(s)",
@@ -318,8 +318,8 @@ fn work(spec: &JobSpec, dir: &Path, log: &mut String) -> Result<Value, String> {
 mod tests {
     use super::*;
 
-    fn attr(address: &str, attribute: &str, before: &str, after: &str) -> cobot::AttrChange {
-        cobot::AttrChange {
+    fn attr(address: &str, attribute: &str, before: &str, after: &str) -> infra::AttrChange {
+        infra::AttrChange {
             address: address.into(),
             action: "update".into(),
             attribute: attribute.into(),

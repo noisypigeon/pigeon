@@ -1,4 +1,4 @@
-//! The deploy job's Workers: those whose inputs changed, each shipped with `crate::cobot::ship` from
+//! The deploy job's Workers: those whose inputs changed, each shipped with `crate::workers::ship` from
 //! the snapshots and credentials the job was given; see
 //! `.claude/decisions/2026-11-07-development-control-plane-deploys-itself.md`. Then `pigeon`,
 //! built and stored for job Containers; see
@@ -7,8 +7,8 @@
 use std::fmt::Write as _;
 use std::path::Path;
 
-use crate::cobot::ship::{self, Images, Outputs, Target};
-use crate::cobot::workers::{self, Tools};
+use crate::workers::ship::{self, Images, Outputs, Target};
+use crate::workers::{self, Tools};
 
 use crate::control::{Build, JobSpec};
 
@@ -26,7 +26,7 @@ pub const NEEDED: [&str; 6] = [
 /// still there or its head can't be read; see the deploys ADR's 2026-11-16 amendment.
 #[must_use]
 pub fn superseded(spec: &JobSpec, dir: &Path) -> Option<String> {
-    crate::cobot::ci::remote_head(dir, &spec.remote, &spec.token, &spec.branch)
+    crate::checks::ci::remote_head(dir, &spec.remote, &spec.token, &spec.branch)
         .ok()
         .filter(|head| *head != spec.sha)
         .map(|head| {
@@ -52,7 +52,7 @@ pub fn workers(
     log: &mut String,
     built: &mut Option<crate::control::Images>,
 ) -> Result<Vec<String>, String> {
-    let names = crate::cobot::scope::workers(dir, files).map_err(|e| e.to_string())?;
+    let names = crate::checks::scope::workers(dir, files).map_err(|e| e.to_string())?;
     if names.is_empty() {
         log.push_str("no Worker to deploy\n");
         return Ok(Vec::new());
@@ -78,14 +78,14 @@ pub fn workers(
     let mut images: Images = serde_json::from_str(&get(ship::IMAGES_VAR))
         .map_err(|e| format!("{} is not JSON images: {e}", ship::IMAGES_VAR))?;
     let since_image =
-        crate::cobot::ci::changed_since(dir, &images.source, &spec.sha).map_err(|e| {
+        crate::checks::ci::changed_since(dir, &images.source, &spec.sha).map_err(|e| {
             format!(
                 "the images' commit {} isn't in main's history: {e}",
                 images.source
             )
         })?;
     let token = get(ship::TOKEN_VAR);
-    let api = crate::cobot::cloudflare::Api::new(None, token.clone());
+    let api = crate::workers::cloudflare::Api::new(None, token.clone());
     let account = api.account()?;
     let mut tools = Tools::from(|_| None);
     tools.env = vec![
@@ -93,7 +93,7 @@ pub fn workers(
         ("CLOUDFLARE_API_TOKEN".into(), token.clone()),
     ];
     tools.secrets = vec![token.clone(), get(ship::ACCESS_SECRET_VAR)];
-    let mut blocks = crate::cobot::scope::image_inputs(&since_image);
+    let mut blocks = crate::checks::scope::image_inputs(&since_image);
     // A container class new since the images were built has none; it is built like a changed
     // image. See the job-images ADR's 2026-11-16 amendment.
     blocks.extend(
@@ -172,7 +172,7 @@ pub fn judge_build(bin: &str) -> [&str; 6] {
     ["cargo", "build", "--release", "--locked", "--bin", bin]
 }
 
-/// The first of [`crate::cobot::ship_wire::JUDGE_BINARIES`] that a member of the workspace at
+/// The first of [`crate::wire::ship_wire::JUDGE_BINARIES`] that a member of the workspace at
 /// `ws` declares, as a `[[bin]]` or a package with `src/main.rs`; else the old name.
 #[must_use]
 pub fn judge_binary(ws: &Path) -> &'static str {
@@ -227,14 +227,14 @@ pub fn judge_binary(ws: &Path) -> &'static str {
         }
         bins.extend(declared);
     }
-    crate::cobot::ship_wire::JUDGE_BINARIES
+    crate::wire::ship_wire::JUDGE_BINARIES
         .into_iter()
         .find(|b| bins.contains(*b))
-        .unwrap_or(crate::cobot::ship_wire::SENTINEL_BINARY)
+        .unwrap_or(crate::wire::ship_wire::SENTINEL_BINARY)
 }
 
 /// Builds `pigeon` from the checkout at `dir` when the workspace changed among `files`, and
-/// stores it at [`crate::cobot::ship_wire::build_key`] in the [`BUILDS_BINDING`] bucket, with S3
+/// stores it at [`crate::wire::ship_wire::build_key`] in the [`BUILDS_BINDING`] bucket, with S3
 /// credentials from the deploy token; the build, or none when nothing changed.
 ///
 /// # Errors
@@ -246,7 +246,7 @@ pub fn build(
     files: Option<&[String]>,
     log: &mut String,
 ) -> Result<Option<Build>, String> {
-    if !crate::cobot::scope::builds(files) {
+    if !crate::checks::scope::builds(files) {
         log.push_str("no Rust change: jobs keep the last build\n");
         return Ok(None);
     }
@@ -272,14 +272,14 @@ pub fn build(
     let reference = reference
         .ok_or_else(|| format!("no Worker binds {BUILDS_BINDING}, where builds are stored"))?;
     let bucket = workers::resolve(&reference, &outputs)?;
-    let workspace = crate::cobot::scope::workspace(dir);
+    let workspace = crate::checks::scope::workspace(dir);
     let target = std::env::var_os("CARGO_TARGET_DIR")
         .map_or_else(|| workspace.join("target"), std::path::PathBuf::from);
     let compile = |argv: &[&str], name: &str, log: &mut String| {
         let argv: Vec<String> = argv.iter().map(|s| (*s).to_string()).collect();
         let started = std::time::Instant::now();
         let (ok, out) =
-            crate::cobot::ci::exec(&workspace, &argv, crate::cobot::ci::TIMEOUT, &spec.token);
+            crate::checks::ci::exec(&workspace, &argv, crate::checks::ci::TIMEOUT, &spec.token);
         let took = started.elapsed().as_secs();
         if !ok {
             let _ = writeln!(log, "{}", crate::control::tail(&out));
@@ -290,18 +290,18 @@ pub fn build(
         Ok((binary, took))
     };
     let (binary, took) = compile(&BUILD, "pigeon", log)?;
-    let sha256 = crate::cobot::s3::sha256_hex(&binary);
+    let sha256 = crate::infra::s3::sha256_hex(&binary);
     let judge = judge_binary(&workspace);
     let (sentinel, sentinel_took) = compile(&judge_build(judge), judge, log)?;
-    let sentinel_sha256 = crate::cobot::s3::sha256_hex(&sentinel);
-    let api = crate::cobot::cloudflare::Api::new(None, token.clone());
+    let sentinel_sha256 = crate::infra::s3::sha256_hex(&sentinel);
+    let api = crate::workers::cloudflare::Api::new(None, token.clone());
     let account = api.account()?;
-    let creds = crate::cobot::s3::Credentials {
+    let creds = crate::infra::s3::Credentials {
         access_key: api.token_id(&account)?,
-        secret_key: crate::cobot::s3::sha256_hex(token.as_bytes()),
+        secret_key: crate::infra::s3::sha256_hex(token.as_bytes()),
     };
-    let store = crate::cobot::s3::Bucket {
-        endpoint: crate::cobot::sites::endpoint(&account),
+    let store = crate::infra::s3::Bucket {
+        endpoint: crate::sites::endpoint(&account),
         name: bucket.clone(),
         creds,
     };
@@ -310,13 +310,13 @@ pub fn build(
         .map_or(0, |d| d.as_secs());
     for (key, bytes, took, sum) in [
         (
-            crate::cobot::ship_wire::build_key(&spec.sha),
+            crate::wire::ship_wire::build_key(&spec.sha),
             &binary,
             took,
             &sha256,
         ),
         (
-            crate::cobot::ship_wire::sentinel_key(&spec.sha),
+            crate::wire::ship_wire::sentinel_key(&spec.sha),
             &sentinel,
             sentinel_took,
             &sentinel_sha256,
@@ -374,12 +374,12 @@ fn build_images(
     dir: &Path,
     names: &[String],
     images: &Images,
-    api: &crate::cobot::cloudflare::Api,
+    api: &crate::workers::cloudflare::Api,
     account: &str,
     tools: &Tools,
     log: &mut String,
 ) -> Result<Images, String> {
-    let failed = |e: crate::cobot::Error| format!("needs image: building it failed: {e}");
+    let failed = |e: crate::infra::Error| format!("needs image: building it failed: {e}");
     let deployment = spec
         .env
         .get(workers::DEPLOYMENT_VAR)
@@ -387,7 +387,7 @@ fn build_images(
         .cloned();
     let work = std::env::temp_dir().join("pigeon-images");
     let _ = std::fs::remove_dir_all(&work);
-    let builder = crate::cobot::imagebuild::fetch(&work).map_err(failed)?;
+    let builder = crate::workers::imagebuild::fetch(&work).map_err(failed)?;
     let tag: String = spec.sha.chars().take(12).collect();
     let mut refs = images.images.clone();
     for name in names {
@@ -400,7 +400,7 @@ fn build_images(
             continue;
         }
         refs.extend(
-            crate::cobot::imagebuild::build_and_push(
+            crate::workers::imagebuild::build_and_push(
                 dir,
                 &found,
                 &tag,

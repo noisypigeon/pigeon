@@ -192,11 +192,12 @@ fn change_scope(instance: &Instance, args: &Map<String, Value>) -> Result<Value,
         .lines()
         .map(str::to_string)
         .collect();
-    let jobs =
-        crate::cobot::scope::jobs(instance.platform_root(), &files).map_err(|e| Error::Engine {
+    let jobs = crate::checks::scope::jobs(instance.platform_root(), &files).map_err(|e| {
+        Error::Engine {
             engine: Engine::Cobot,
             message: e.to_string(),
-        })?;
+        }
+    })?;
     Ok(json!({ "jobs": jobs }))
 }
 
@@ -208,22 +209,22 @@ fn sites_publish(
     args: &Map<String, Value>,
     var: &impl Fn(&str) -> Option<String>,
 ) -> Result<(Value, Vec<String>), Error> {
-    let token = var(crate::cobot::cloudflare::TOKEN_VAR).ok_or_else(|| {
+    let token = var(crate::workers::cloudflare::TOKEN_VAR).ok_or_else(|| {
         Error::Invalid(vec![format!(
             "`sites.publish` needs {} with R2 write on the account",
-            crate::cobot::cloudflare::TOKEN_VAR
+            crate::workers::cloudflare::TOKEN_VAR
         )])
     })?;
     let wanted = strings(args, "sites");
-    let ctx = crate::cobot::Context {
+    let ctx = crate::infra::Context {
         root: instance.root.clone(),
         providers: instance.providers_dir(),
         state: std::env::temp_dir(),
         state_passphrase: String::new(),
         secrets_passphrase: None,
         workload_secrets_passphrase: None,
-        today: crate::cobot::generations::today(),
-        credentials: var(crate::cobot::CREDENTIALS_VAR),
+        today: crate::infra::generations::today(),
+        credentials: var(crate::infra::CREDENTIALS_VAR),
         cloudflare_token: Some(token),
         cloudflare_api: None,
         platform: instance.platform.clone(),
@@ -236,7 +237,7 @@ fn sites_publish(
         architecture["deployed"] = json!(sha);
     }
     let data = std::collections::BTreeMap::from([("architecture".to_string(), architecture)]);
-    let published = crate::cobot::publish(&ctx, &wanted, 5, &data).map_err(|e| cobot_failed(&e))?;
+    let published = crate::infra::publish(&ctx, &wanted, 5, &data).map_err(|e| cobot_failed(&e))?;
     let violations = published
         .iter()
         .flat_map(|p| {
@@ -278,7 +279,7 @@ fn sites_build(
     args: &Map<String, Value>,
     var: &impl Fn(&str) -> Option<String>,
 ) -> Result<Value, Error> {
-    let cobot = |e: crate::cobot::Error| Error::Engine {
+    let cobot = |e: crate::infra::Error| Error::Engine {
         engine: Engine::Cobot,
         message: e.to_string(),
     };
@@ -292,16 +293,15 @@ fn sites_build(
                 .collect()
         })
         .unwrap_or_default();
-    let sites = crate::cobot::sites::find_in(&instance.root, instance.platform_root(), &wanted)
-        .map_err(cobot)?;
+    let sites =
+        crate::sites::find_in(&instance.root, instance.platform_root(), &wanted).map_err(cobot)?;
     if sites.is_empty() {
         return Ok(json!({ "sites": [] }));
     }
     let (architecture, _) = architecture_describe(instance, var)?;
     let data = std::collections::BTreeMap::from([("architecture".to_string(), architecture)]);
-    let built =
-        crate::cobot::sites::build_in(&instance.root, instance.platform_root(), &sites, &data)
-            .map_err(cobot)?;
+    let built = crate::sites::build_in(&instance.root, instance.platform_root(), &sites, &data)
+        .map_err(cobot)?;
     Ok(json!({
         "sites": built
             .iter()
@@ -316,12 +316,12 @@ fn sites_build(
 
 fn infra_validate(instance: &Instance) -> Result<(Value, Vec<String>), Error> {
     let dir = instance.providers_dir();
-    match crate::cobot::validate_in(&instance.root, instance.platform_root(), &dir) {
+    match crate::infra::validate_in(&instance.root, instance.platform_root(), &dir) {
         Ok(units) => Ok((
             json!({ "units": units.iter().map(|u| u.path.as_str()).collect::<Vec<_>>() }),
             Vec::new(),
         )),
-        Err(crate::cobot::Error::Invalid(problems)) => Ok((
+        Err(crate::infra::Error::Invalid(problems)) => Ok((
             json!({ "units": [] }),
             problems
                 .iter()
@@ -341,7 +341,7 @@ fn text<'a>(args: &'a Map<String, Value>, name: &str) -> Result<&'a str, Error> 
         .ok_or_else(|| Error::Invalid(vec![format!("argument `{name}` must be a string")]))
 }
 
-fn cobot_failed(e: &crate::cobot::Error) -> Error {
+fn cobot_failed(e: &crate::infra::Error) -> Error {
     Error::Engine {
         engine: Engine::Cobot,
         message: e.to_string(),
@@ -352,9 +352,9 @@ fn session(
     instance: &Instance,
     args: &Map<String, Value>,
     var: &impl Fn(&str) -> Option<String>,
-) -> Result<crate::cobot::session::Session, Error> {
+) -> Result<crate::infra::session::Session, Error> {
     let providers = instance.providers_dir();
-    crate::cobot::session::open(&instance.root, &providers, text(args, "state")?, var)
+    crate::infra::session::open(&instance.root, &providers, text(args, "state")?, var)
         .map(|mut s| {
             s.ctx.platform.clone_from(&instance.platform);
             s
@@ -362,7 +362,7 @@ fn session(
         .map_err(|e| cobot_failed(&e))
 }
 
-fn changes(changes: &[crate::cobot::Change]) -> Value {
+fn changes(changes: &[crate::infra::Change]) -> Value {
     Value::Array(
         changes
             .iter()
@@ -388,9 +388,9 @@ fn infra_plan(
     };
     let mut s = session(instance, args, var)?;
     let selected =
-        crate::cobot::select_in(&s.ctx.root, s.ctx.platform_root(), &s.ctx.providers, &units)
+        crate::infra::select_in(&s.ctx.root, s.ctx.platform_root(), &s.ctx.providers, &units)
             .map_err(|e| cobot_failed(&e))?;
-    let (stored, _) = crate::cobot::plan_stored(&s.ctx, &selected, crate::cobot::session::now())
+    let (stored, _) = crate::infra::plan_stored(&s.ctx, &selected, crate::infra::session::now())
         .map_err(|e| cobot_failed(&e))?;
     s.push().map_err(|e| cobot_failed(&e))?;
     Ok(json!({
@@ -412,7 +412,7 @@ fn infra_apply(
 ) -> Result<Value, Error> {
     let plan = text(args, "plan")?;
     let mut s = session(instance, args, var)?;
-    let applied = s.apply_stored(plan, crate::cobot::session::now());
+    let applied = s.apply_stored(plan, crate::infra::session::now());
     s.push().map_err(|e| cobot_failed(&e))?;
     let applied = applied.map_err(|e| cobot_failed(&e))?;
     Ok(json!({

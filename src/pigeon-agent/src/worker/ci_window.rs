@@ -49,7 +49,7 @@ pub async fn run(env: &Env, s: &Settings, hours: u32) -> Result<(u16, Value)> {
     let _ = super::events::append(env, s, "approval.pending", None, None, &said, false).await;
     super::push::notify(env, s, "Approval waiting", &said, &path).await;
     let host = env
-        .var(crate::cobot::ship_wire::HOST_VAR)
+        .var(crate::wire::ship_wire::HOST_VAR)
         .map(|v| v.to_string())
         .unwrap_or_default();
     Ok((

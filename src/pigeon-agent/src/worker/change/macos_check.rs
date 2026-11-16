@@ -12,7 +12,7 @@ use crate::control::{self, Outcome as JobOutcome, Report};
 use crate::core::change::{Change, Event, JobStatus};
 use crate::core::macos::{self, Job, Kind, Outcome, Placed, Provider, Settled};
 
-/// The `ios` check's name, as `cobot::scope` names it.
+/// The `ios` check's name, as `checks::scope` names it.
 pub const IOS: &str = "ios";
 
 /// Whether `job` on `change` is its `ios` check.

@@ -11,9 +11,8 @@ use std::time::Duration;
 
 use serde_json::{Value, json};
 
-use crate::cobot;
-use crate::cobot::workers::{self, Found, Spec, Tools};
 use crate::core::member::handover::Handover;
+use crate::workers::{self, Found, Spec, Tools};
 
 /// The app shape's Worker template, from the checkout's root.
 pub const TEMPLATE: &str = "catalog/pigeon/kinds/platform/app-worker.yaml";
@@ -130,11 +129,11 @@ pub fn standup(
     log: &mut String,
 ) -> Result<Value, String> {
     let get = |k: &str| env.get(k).filter(|v| !v.is_empty()).cloned();
-    let token = get(cobot::cloudflare::TOKEN_VAR)
+    let token = get(workers::cloudflare::TOKEN_VAR)
         .ok_or("the owner's account token didn't reach the job")?;
     let handover = get(HANDOVER_VAR).ok_or("the owner's keys didn't reach the job")?;
     Handover::parse(&handover)?;
-    let api = cobot::cloudflare::Api::new(None, token.clone());
+    let api = workers::cloudflare::Api::new(None, token.clone());
     let account = api.account()?;
     let worker = worker_name(instance);
     let sub = api.get(&format!("/accounts/{account}/workers/subdomain"))?;
@@ -145,7 +144,7 @@ pub fn standup(
             "the account has no workers.dev subdomain yet; the owner chooses one in the dashboard",
         )?
         .to_string();
-    let names = cobot::cloudflare::bucket_names(&api, &account)?;
+    let names = workers::cloudflare::bucket_names(&api, &account)?;
     let found_bucket = existing_bucket(&names, &worker);
     let bucket = match &found_bucket {
         Some(b) => b.clone(),
@@ -203,7 +202,7 @@ pub fn standup(
         None => log.push_str("wrangler didn't report the Worker's size\n"),
     }
     if found_bucket.is_none() {
-        cobot::cloudflare::create_bucket(&api, &account, &bucket)?;
+        workers::cloudflare::create_bucket(&api, &account, &bucket)?;
         log.push_str("created the bucket\n");
     } else {
         log.push_str("the bucket exists\n");
