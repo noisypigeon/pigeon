@@ -11,6 +11,7 @@
 - backplane v0.1.35
 - backplane v0.1.36
 - backplane v0.1.37
+- backplane v0.1.38
 - infra-agnostic-random-string v0.1.3
 - infra-agnostic-schema v0.1.3
 - infra-agnostic-schema v0.1.4
@@ -174,6 +175,12 @@
 - refactor(core): a bench runs only `pigeon dev` tasks and the new command spellings (!785) ([e4985b3](https://github.com/noisypigeon/pigeon/commit/e4985b342ac7e5517853a9e0fa048436bd802416)) · backplane
 - feat(core): approvals.yaml's judge keys read as eviction and eviction_bookkeeping too, and either rule prefix counts (!789) ([ca0783e](https://github.com/noisypigeon/pigeon/commit/ca0783e1b320b54458333da0fcce4ed78aefd611))
 - fix(app): a Worker retry of a device check isn't a replay, and the app unlinks only an unknown device (!793) ([6c01a15](https://github.com/noisypigeon/pigeon/commit/6c01a15576de46e9467340401d47716a8ce67eb5)) · backplane
+- refactor(agent): the signing key is AGENT_TOKEN and the judge PIGEON_EVICTION, and the names fallbacks go (!795) ([eace9c2](https://github.com/noisypigeon/pigeon/commit/eace9c22aa2eeff65bfcf1fa6f270fd6dae16160)) · backplane
+- chore(policies): the policies and approvals name only the new layout, and two policies take neutral names (!787) ([211a93c](https://github.com/noisypigeon/pigeon/commit/211a93c5ee4002c7473e9af1934b4675a8c49489))
+- build: the test harnesses and `pigeon dev policy-build` build the judge by its package, under either binary name (!796) ([6a1ce4b](https://github.com/noisypigeon/pigeon/commit/6a1ce4b79269341152b5a1067e1fe49de54eec58))
+- chore(approvals): the judge's keys are eviction and eviction_bookkeeping (!800) ([ee0abb1](https://github.com/noisypigeon/pigeon/commit/ee0abb1bc17915394cb794b8c3c1dd4f5069e2f9))
+- feat(core): Auto covers guarded and sentinel paths once approvals.yaml names a gate, which alone still asks the owner (!794) ([2cc254b](https://github.com/noisypigeon/pigeon/commit/2cc254b9b65b574b6edc36fff30770fae189d053))
+- docs(adr): the provider broker records the owner's three answers, and the one MCP entry point's session ID is signed but not bound (!805) ([7a93042](https://github.com/noisypigeon/pigeon/commit/7a930429c2407268d47119f9c53a5aa5080e978a))
 
 ## 2026-11-15
 
