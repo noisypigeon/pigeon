@@ -4,7 +4,7 @@
   "description": "Provider-agnostic modules any unit composes; see .claude/decisions/2026-11-03-runtime-infra-agnostic-shared-modules.md.",
   "type": "object",
   "additionalProperties": false,
-  "x-cobot": {
+  "x-pigeon": {
     "version": "0.1.3",
     "secrets": [],
     "providers": {}

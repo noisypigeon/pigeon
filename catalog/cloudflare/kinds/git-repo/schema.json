@@ -20,7 +20,7 @@
       "maxLength": 200
     }
   },
-  "x-cobot": {
+  "x-pigeon": {
     "version": "0.1.0",
     "api": "artifacts",
     "credentials": {

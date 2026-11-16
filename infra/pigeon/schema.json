@@ -41,7 +41,7 @@
           }
         }
       },
-      "x-cobot": {
+      "x-pigeon": {
         "module": "cloudflare/r2-bucket",
         "for_each": "$item.name",
         "inputs": {
@@ -52,7 +52,7 @@
       }
     }
   },
-  "x-cobot": {
+  "x-pigeon": {
     "version": "0.1.6",
     "local": true,
     "secrets": [],

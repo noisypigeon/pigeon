@@ -560,14 +560,14 @@ fn offline_platform() -> TempDir {
     let mut s: Value =
         serde_json::from_str(&fs::read_to_string(&schema).expect("read")).expect("json");
     for kind in ["apex", "workload"] {
-        s["x-cobot"][kind]["providers"] = json!({});
+        s["x-pigeon"][kind]["providers"] = json!({});
     }
     fs::write(&schema, s.to_string()).expect("write");
     for kind in ["zone", "static-site"] {
         let path = root.join(format!("catalog/cloudflare/kinds/{kind}/schema.json"));
         let mut k: Value =
             serde_json::from_str(&fs::read_to_string(&path).expect("read")).expect("json");
-        k["x-cobot"]["providers"] = json!({});
+        k["x-pigeon"]["providers"] = json!({});
         fs::write(&path, k.to_string()).expect("write");
     }
     let named = "output \"name\" {\n  value = terraform_data.this.id\n}\n";

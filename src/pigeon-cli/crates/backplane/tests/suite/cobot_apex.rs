@@ -769,9 +769,9 @@ fn builtin_repo() -> TempDir {
         &fs::read_to_string(repo_root().join("catalog/cloudflare/schema.json")).expect("schema"),
     )
     .expect("json");
-    let mut apex_x = real["x-cobot"]["apex"].clone();
+    let mut apex_x = real["x-pigeon"]["apex"].clone();
     apex_x["providers"] = json!({});
-    let mut workload_x = real["x-cobot"]["workload"].clone();
+    let mut workload_x = real["x-pigeon"]["workload"].clone();
     workload_x["providers"] = json!({});
     for (module, vars) in [
         ("ruleset", &["zone_id", "name", "phase", "rules"][..]),

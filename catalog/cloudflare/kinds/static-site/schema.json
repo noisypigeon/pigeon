@@ -91,7 +91,7 @@
       "pattern": "^(@|(\\*\\.)?[a-z0-9_]([a-z0-9_-]*[a-z0-9_])?(\\.[a-z0-9_]([a-z0-9_-]*[a-z0-9_])?)*)$"
     }
   },
-  "x-cobot": {
+  "x-pigeon": {
     "version": "0.1.0",
     "providers": {
       "cloudflare": {

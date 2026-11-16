@@ -10,7 +10,7 @@
     "applications",
     "organization_id"
   ],
-  "x-cobot": {
+  "x-pigeon": {
     "version": "0.1.2",
     "secrets": [],
     "providers": {
@@ -63,7 +63,7 @@
           }
         }
       },
-      "x-cobot": {
+      "x-pigeon": {
         "module": "project",
         "for_each": "$item.name",
         "inputs": {
@@ -100,7 +100,7 @@
           }
         }
       },
-      "x-cobot": {
+      "x-pigeon": {
         "module": "iam-application",
         "for_each": "$item.name",
         "inputs": {

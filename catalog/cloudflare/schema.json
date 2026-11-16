@@ -5,7 +5,7 @@
   "type": "object",
   "additionalProperties": false,
   "required": ["zones", "rotation", "tokens"],
-  "x-cobot": {
+  "x-pigeon": {
     "version": "0.1.20",
     "secrets": ["account_id", "provisioner_token"],
     "providers": {
@@ -92,7 +92,7 @@
       "type": "array",
       "items": { "type": "string", "pattern": "^[a-z0-9-]+(\\.[a-z0-9-]+)+$" },
       "uniqueItems": true,
-      "x-cobot": {
+      "x-pigeon": {
         "module": "zone",
         "for_each": "$item",
         "inputs": { "name": "$item", "account_id": "$secret.account_id" }
@@ -134,7 +134,7 @@
           }
         }
       },
-      "x-cobot": {
+      "x-pigeon": {
         "module": "api-token",
         "for_each": "$item.name",
         "rotate": {

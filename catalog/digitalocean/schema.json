@@ -10,7 +10,7 @@
     "ssh_keys",
     "buckets"
   ],
-  "x-cobot": {
+  "x-pigeon": {
     "version": "0.1.2",
     "secrets": [],
     "providers": {
@@ -108,7 +108,7 @@
           }
         }
       },
-      "x-cobot": {
+      "x-pigeon": {
         "module": "ssh-key",
         "for_each": "$item.name",
         "inputs": {
@@ -137,7 +137,7 @@
           }
         }
       },
-      "x-cobot": {
+      "x-pigeon": {
         "module": "spaces-bucket",
         "for_each": "$item.name",
         "inputs": {

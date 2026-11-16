@@ -171,7 +171,7 @@ fn a_credential_draws_its_capabilities_and_a_unit_dir_policy_its_unit() {
     let schema = root.path().join("infra/pigeon/schema.json");
     let mut s: Value =
         serde_json::from_str(&fs::read_to_string(&schema).expect("read")).expect("json");
-    s["x-cobot"]["credentials"] = serde_json::json!({
+    s["x-pigeon"]["credentials"] = serde_json::json!({
         "deploy": { "provider": "cloudflare", "scope": "account", "capabilities": ["r2.write"] }
     });
     fs::write(&schema, serde_json::to_string_pretty(&s).expect("json")).expect("write");
