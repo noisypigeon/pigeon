@@ -501,3 +501,21 @@ fn the_control_plane_runs_owner_items_itself() {
         assert!(op.control_plane(), "{name}");
     }
 }
+
+// See `.claude/decisions/2026-11-16-development-session-bench-containers.md` §3.
+#[test]
+fn the_control_plane_runs_benches_itself() {
+    let benches: Vec<_> = catalog()
+        .iter()
+        .filter(|o| o.name.starts_with("bench."))
+        .collect();
+    assert_eq!(
+        benches.len(),
+        7,
+        "{:?}",
+        benches.iter().map(|o| o.name).collect::<Vec<_>>()
+    );
+    for op in benches {
+        assert!(op.control_plane(), "{}", op.name);
+    }
+}

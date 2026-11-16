@@ -172,6 +172,7 @@ impl Operation {
             || self.name.starts_with("ios.")
             || self.name.starts_with("grant.")
             || self.name.starts_with("owner.")
+            || self.name.starts_with("bench.")
     }
 }
 
