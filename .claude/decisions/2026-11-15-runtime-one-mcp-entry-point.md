@@ -227,3 +227,20 @@ adds `/v0/app/*` routes on a standalone (!563, !587) and on the platform
   - Each write is still checked where it is stored, on the `Instance`.
 
 Neither ADR changes.
+### 2026-11-15: Reviewed against !606: they agree
+
+[`2026-11-15-runtime-ios-app-now-tab.md`](2026-11-15-runtime-ios-app-now-tab.md)
+(!606, its step 2) works in `worker/app.rs`, `worker/devices.rs` and
+`worker/mod.rs`, as §1 and §7 rule:
+
+- **No new operation.** `change.status` gains `position`, `model` and
+  `approval`, as §7's last paragraph names; its arguments are unchanged.
+- **`GET /v0/app/changes/<n>` is §7's shim:** it calls `run()` with
+  `change.status` as the owner (`account::approver`) and answers its result
+  unchanged. It runs as the device's account once `run()` makes the members
+  check (step 2), and goes at step 6.
+- **The tracker's `queue` and a lapsed ticket's class** are built in the
+  pure `tracker::build` that `GET /v0/app/tracker` already calls, so the
+  result is the shape `tracker.show` (§1) returns at step 4.
+
+!606 needs no change.
