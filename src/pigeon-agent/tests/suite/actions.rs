@@ -1,10 +1,8 @@
 //! A change's code checks on GitHub Actions; see
 //! `.claude/decisions/2026-11-10-development-code-checks-github-actions.md` §3–§5.
 
-use backplane::actions::{
-    Actions, Due, FIND_WITHIN, Finished, Mirror, POLL, dispatch_body, on_github,
-};
-use backplane::core::change::Check;
+use agent::actions::{Actions, Due, FIND_WITHIN, Finished, Mirror, POLL, dispatch_body, on_github};
+use agent::core::change::Check;
 use serde_json::{Value, json};
 
 const A: &str = "0123456789abcdef0123456789abcdef01234567";

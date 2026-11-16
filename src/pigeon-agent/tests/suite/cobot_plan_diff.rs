@@ -1,7 +1,7 @@
 //! A stored plan's attribute-level diff, for `pigeon infra show`: what changes, never a
 //! sensitive value.
 
-use backplane::cobot::plan_diff;
+use agent::cobot::plan_diff;
 
 const SHOWN: &str = r#"{
   "resource_changes": [

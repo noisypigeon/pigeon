@@ -14,7 +14,7 @@ name = "pigeon_ios"
 
 [dev-dependencies]
 # The catalog; pigeon-core's from step 6 of .claude/decisions/2026-11-16-development-src-crates-neutral-names.md.
-backplane.workspace = true
+agent.workspace = true
 serde-saphyr.workspace = true
 serde_json.workspace = true
 

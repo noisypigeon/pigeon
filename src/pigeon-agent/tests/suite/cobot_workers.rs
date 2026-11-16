@@ -6,7 +6,7 @@ use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 
-use backplane::cobot::workers::{self, Found, Tools};
+use agent::cobot::workers::{self, Found, Tools};
 use serde_json::{Map, Value, json};
 use tempfile::TempDir;
 
@@ -106,7 +106,7 @@ fn bad_specs_are_refused_with_every_problem() {
     let unknown = fixture(&format!("{SPEC}zone: x\n"));
     assert!(matches!(
         workers::discover(unknown.path()),
-        Err(backplane::cobot::Error::Invalid(p)) if p[0].message.contains("zone")
+        Err(agent::cobot::Error::Invalid(p)) if p[0].message.contains("zone")
     ));
 }
 
@@ -198,15 +198,15 @@ fn a_plan_expires_and_a_bad_id_is_refused() {
     );
     assert!(matches!(
         workers::load(state.path(), &stored.id, stored.expires),
-        Err(backplane::cobot::Error::Plan(m)) if m.contains("expired")
+        Err(agent::cobot::Error::Plan(m)) if m.contains("expired")
     ));
     assert!(matches!(
         workers::load(state.path(), "../x", 1001),
-        Err(backplane::cobot::Error::Plan(_))
+        Err(agent::cobot::Error::Plan(_))
     ));
     assert!(matches!(
         workers::load(state.path(), &"0".repeat(32), 1001),
-        Err(backplane::cobot::Error::Plan(m)) if m.contains("no stored")
+        Err(agent::cobot::Error::Plan(m)) if m.contains("no stored")
     ));
 }
 
@@ -370,7 +370,7 @@ fn a_secret_is_put_through_stdin_and_never_shown() {
     assert!(!logged.contains("the-secret-value"));
     assert!(matches!(
         workers::put_secret(&f, "NOPE", "v", &t, root.path()),
-        Err(backplane::cobot::Error::Invalid(_))
+        Err(agent::cobot::Error::Invalid(_))
     ));
 }
 
@@ -458,8 +458,7 @@ fn images_push_logs_in_with_minted_credentials_on_stdin_and_logs_out() {
     .expect("write");
     fs::set_permissions(&docker, fs::Permissions::from_mode(0o755)).expect("chmod");
     t.docker = docker;
-    let api =
-        backplane::cobot::cloudflare::Api::new(Some(&registry_api()), "token-0123456789".into());
+    let api = agent::cobot::cloudflare::Api::new(Some(&registry_api()), "token-0123456789".into());
     let images =
         workers::push_images(root.path(), &f, "abc123", ACCOUNT, &api, 240, &t).expect("pushes");
     let remote = format!("registry.cloudflare.com/{ACCOUNT}/pigeon-control-runner:abc123");
@@ -508,8 +507,7 @@ fn a_failed_push_still_logs_out_and_never_shows_the_password() {
     .expect("write");
     fs::set_permissions(&docker, fs::Permissions::from_mode(0o755)).expect("chmod");
     t.docker = docker;
-    let api =
-        backplane::cobot::cloudflare::Api::new(Some(&registry_api()), "token-0123456789".into());
+    let api = agent::cobot::cloudflare::Api::new(Some(&registry_api()), "token-0123456789".into());
     let waits = [std::time::Duration::ZERO; 2];
     let e = workers::push_images_waiting(root.path(), &f, "abc123", ACCOUNT, &api, 240, &t, &waits)
         .expect_err("the push fails");
@@ -547,8 +545,7 @@ fn a_dropped_push_is_retried_and_succeeds() {
     .expect("write");
     fs::set_permissions(&docker, fs::Permissions::from_mode(0o755)).expect("chmod");
     t.docker = docker;
-    let api =
-        backplane::cobot::cloudflare::Api::new(Some(&registry_api()), "token-0123456789".into());
+    let api = agent::cobot::cloudflare::Api::new(Some(&registry_api()), "token-0123456789".into());
     let waits = [std::time::Duration::ZERO; 2];
     let images =
         workers::push_images_waiting(root.path(), &f, "abc123", ACCOUNT, &api, 240, &t, &waits)
@@ -595,7 +592,7 @@ fn an_image_is_built_once_and_pushed_under_each_class_that_uses_it() {
         fs::set_permissions(&p, fs::Permissions::from_mode(0o755)).expect("chmod");
         p
     };
-    let builder = backplane::cobot::imagebuild::Builder {
+    let builder = agent::cobot::imagebuild::Builder {
         rootlesskit: script(
             "rootlesskit",
             &format!(
@@ -612,11 +609,10 @@ fn an_image_is_built_once_and_pushed_under_each_class_that_uses_it() {
             ),
         ),
     };
-    let api =
-        backplane::cobot::cloudflare::Api::new(Some(&registry_api()), "token-0123456789".into());
+    let api = agent::cobot::cloudflare::Api::new(Some(&registry_api()), "token-0123456789".into());
     let t = tools(root.path(), &root.path().join("tools.log"));
     let mut said = String::new();
-    let images = backplane::cobot::imagebuild::build_and_push(
+    let images = agent::cobot::imagebuild::build_and_push(
         root.path(),
         &f,
         "abc123",
@@ -655,7 +651,7 @@ fn an_image_is_built_once_and_pushed_under_each_class_that_uses_it() {
         log.contains("--rootless") && log.contains("--oci-worker-no-process-sandbox"),
         "{log}"
     );
-    let auth = backplane::cobot::imagebuild::base64(b"v1:registry-password-0123");
+    let auth = agent::cobot::imagebuild::base64(b"v1:registry-password-0123");
     assert!(
         log.contains(&auth),
         "the credentials reach BuildKit in its Docker config: {log}"
@@ -678,20 +674,17 @@ fn an_image_is_built_once_and_pushed_under_each_class_that_uses_it() {
 
 #[test]
 fn base64_and_checksums_are_exact() {
-    assert_eq!(
-        backplane::cobot::imagebuild::base64(b"v1:pass"),
-        "djE6cGFzcw=="
-    );
-    assert_eq!(backplane::cobot::imagebuild::base64(b"ab"), "YWI=");
-    assert_eq!(backplane::cobot::imagebuild::base64(b"abc"), "YWJj");
+    assert_eq!(agent::cobot::imagebuild::base64(b"v1:pass"), "djE6cGFzcw==");
+    assert_eq!(agent::cobot::imagebuild::base64(b"ab"), "YWI=");
+    assert_eq!(agent::cobot::imagebuild::base64(b"abc"), "YWJj");
     let dir = TempDir::new().expect("tempdir");
     let f = dir.path().join("x");
     fs::write(&f, b"abc").expect("write");
-    assert!(backplane::cobot::imagebuild::verified(
+    assert!(agent::cobot::imagebuild::verified(
         &f,
         "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
     ));
-    assert!(!backplane::cobot::imagebuild::verified(&f, &"0".repeat(64)));
+    assert!(!agent::cobot::imagebuild::verified(&f, &"0".repeat(64)));
 }
 
 const STACK_SPEC: &str = r#"description: The platform's control plane.

@@ -4,8 +4,8 @@
 use std::collections::BTreeMap;
 use std::fs;
 
-use backplane::cobot::ship::{self, Images};
-use backplane::cobot::workers;
+use agent::cobot::ship::{self, Images};
+use agent::cobot::workers;
 use serde_json::{Map, Value, json};
 use tempfile::TempDir;
 
@@ -144,7 +144,7 @@ fn ids_names_and_images_are_scrubbed() {
 #[test]
 fn image_inputs_block_only_on_the_image_tools() {
     let files = |f: &[&str]| f.iter().map(|s| (*s).to_string()).collect::<Vec<_>>();
-    let blocks = backplane::cobot::scope::image_inputs(&files(&[
+    let blocks = agent::cobot::scope::image_inputs(&files(&[
         "src/pigeon-cli/Dockerfile",
         "src/pigeon-agent/src/jobs.rs",
         "src/pigeon-cli/pigeon-start",
@@ -165,14 +165,14 @@ fn image_inputs_block_only_on_the_image_tools() {
 #[test]
 fn a_deploy_builds_pigeon_only_when_the_workspace_changed() {
     let files = |f: &[&str]| f.iter().map(|s| (*s).to_string()).collect::<Vec<_>>();
-    assert!(backplane::cobot::scope::builds(None));
-    assert!(backplane::cobot::scope::builds(Some(&files(&[
+    assert!(agent::cobot::scope::builds(None));
+    assert!(agent::cobot::scope::builds(Some(&files(&[
         "src/pigeon-agent/src/jobs.rs"
     ]))));
-    assert!(backplane::cobot::scope::builds(Some(&files(&[
+    assert!(agent::cobot::scope::builds(Some(&files(&[
         "src/pigeon-cli/Cargo.lock"
     ]))));
-    assert!(!backplane::cobot::scope::builds(Some(&files(&[
+    assert!(!agent::cobot::scope::builds(Some(&files(&[
         ".claude/decisions/x.md",
         "infra/pigeon/sites/docs/config.yaml"
     ]))));

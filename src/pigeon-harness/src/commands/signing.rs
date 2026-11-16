@@ -1,4 +1,4 @@
-//! `pigeon signing`, the shell around `backplane::signing`; see
+//! `pigeon signing`, the shell around `agent::signing`; see
 //! `.claude/decisions/2026-11-11-release-ios-app-buildkite-testflight.md` §6.
 
 use std::fs;
@@ -8,8 +8,8 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::Duration;
 
-use backplane::push::{b64url, b64url_decode};
-use backplane::signing::{
+use agent::push::{b64url, b64url_decode};
+use agent::signing::{
     self, Grant, INTERMEDIATE_URL, Layout, ROUTE, SECURITY, State, Step, check_step, clean_plan,
     intermediate_ok, load_plan, oidc_argv, parse_search_list,
 };
@@ -366,7 +366,7 @@ fn apply(step: &Step) -> Result<(), Failure> {
     }
 }
 
-fn execute(cmd: &backplane::signing::Cmd) -> Result<(), Failure> {
+fn execute(cmd: &agent::signing::Cmd) -> Result<(), Failure> {
     let status = Command::new(&cmd.argv[0])
         .args(&cmd.argv[1..])
         .envs(cmd.env.iter().map(|(k, v)| (k, v)))

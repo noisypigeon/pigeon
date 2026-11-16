@@ -172,7 +172,7 @@ pub enum SigningCommand {
 #[derive(Args, Debug)]
 pub struct SigningArgs {
     /// The control plane to ask
-    #[arg(long, default_value = backplane::signing::PLATFORM)]
+    #[arg(long, default_value = agent::signing::PLATFORM)]
     pub platform: String,
 }
 

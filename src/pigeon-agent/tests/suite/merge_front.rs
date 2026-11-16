@@ -3,7 +3,7 @@
 
 use crate::harness::step;
 
-use backplane::core::change::queue::{self as merges, MergeQueue, Queued};
+use agent::core::change::queue::{self as merges, MergeQueue, Queued};
 use step::Queue;
 
 /// Change 1000 merging and `n` waiting behind it, 2001 to 2000 + `n`, as `queued 2/…` onwards.

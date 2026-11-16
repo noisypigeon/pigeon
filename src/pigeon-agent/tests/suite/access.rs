@@ -1,7 +1,7 @@
 //! Access tokens: claims, keys and who may run what (control-plane ADR §9).
 
-use backplane::access::{self, Identity};
-use backplane::wire::catalog;
+use agent::access::{self, Identity};
+use agent::wire::catalog;
 use serde_json::{Value, json};
 
 fn b64(bytes: &[u8]) -> String {

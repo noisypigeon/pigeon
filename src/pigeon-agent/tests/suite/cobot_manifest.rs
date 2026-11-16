@@ -1,7 +1,7 @@
 //! An instance's manifest v1 of kind-typed units; see
 //! `.claude/decisions/2026-11-05-runtime-instance-config-kind-units.md`.
 
-use backplane::cobot::providers::LoadAllowlist;
+use agent::cobot::providers::LoadAllowlist;
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
 use std::fs;
@@ -118,29 +118,29 @@ fn instance(manifest: &str) -> TempDir {
 }
 
 fn problems(root: &Path, platform: &Path) -> Vec<String> {
-    let allow = backplane::cobot::providers::Allowlist::load(&platform.join(".config"))
+    let allow = agent::cobot::providers::Allowlist::load(&platform.join(".config"))
         .expect("allowlist loads");
-    backplane::cobot::unit::validate_in(root, platform, &allow)
+    agent::cobot::unit::validate_in(root, platform, &allow)
         .into_iter()
         .map(|p| format!("{}: {}", p.path, p.message))
         .collect()
 }
 
 fn render(root: &Path, platform: &Path, unit: &str) -> Value {
-    let (units, problems) = backplane::cobot::unit::discover_in(root, platform);
+    let (units, problems) = agent::cobot::unit::discover_in(root, platform);
     assert!(problems.is_empty(), "{problems:?}");
     let unit = units
         .iter()
         .find(|u| u.path == unit)
         .unwrap_or_else(|| panic!("no unit {unit}"));
     let allow =
-        backplane::cobot::providers::Allowlist::load(&platform.join(".config")).expect("allowlist");
-    backplane::cobot::render_json(
+        agent::cobot::providers::Allowlist::load(&platform.join(".config")).expect("allowlist");
+    agent::cobot::render_json(
         unit,
         Path::new("/state"),
         &allow,
         0,
-        &backplane::cobot::config::Existing::new(),
+        &agent::cobot::config::Existing::new(),
     )
 }
 
@@ -155,7 +155,7 @@ fn items(rendered: &Value, block: &str) -> Map<String, Value> {
 fn the_manifest_declares_units_by_kind() {
     let platform = platform();
     let inst = instance(&manifest());
-    let (units, found) = backplane::cobot::unit::discover_in(inst.path(), platform.path());
+    let (units, found) = agent::cobot::unit::discover_in(inst.path(), platform.path());
     assert!(found.is_empty(), "{found:?}");
     assert_eq!(
         units
@@ -275,7 +275,7 @@ fn content_through_a_symlink_is_refused() {
         "{got:?}"
     );
     assert!(
-        backplane::cobot::sites::find_in(inst.path(), platform.path(), &[]).is_err(),
+        agent::cobot::sites::find_in(inst.path(), platform.path(), &[]).is_err(),
         "an invalid instance builds nothing"
     );
 }
@@ -286,18 +286,14 @@ fn a_stored_plan_sees_a_change_to_its_units_settings() {
     let inst = instance(&manifest());
     let state = TempDir::new().expect("state");
     let digest = |root: &Path| {
-        let (units, _) = backplane::cobot::unit::discover_in(root, platform.path());
+        let (units, _) = agent::cobot::unit::discover_in(root, platform.path());
         units
             .iter()
             .map(|u| {
-                let work = backplane::cobot::render(
-                    root,
-                    &platform.path().join(".config"),
-                    u,
-                    state.path(),
-                )
-                .expect("render");
-                backplane::cobot::plans::digest(u, &work).expect("digest")
+                let work =
+                    agent::cobot::render(root, &platform.path().join(".config"), u, state.path())
+                        .expect("render");
+                agent::cobot::plans::digest(u, &work).expect("digest")
             })
             .collect::<Vec<_>>()
     };
@@ -396,7 +392,7 @@ fn moved_units_keep_every_address_and_item() {
 fn a_site_unit_builds_from_its_content_at_its_own_hosts() {
     let platform = platform();
     let inst = instance(&manifest());
-    let sites = backplane::cobot::sites::find_in(inst.path(), platform.path(), &[]).expect("found");
+    let sites = agent::cobot::sites::find_in(inst.path(), platform.path(), &[]).expect("found");
     assert_eq!(sites.len(), 1);
     let blog = &sites[0];
     assert_eq!(
@@ -450,7 +446,7 @@ fn a_served_site_builds_at_its_platforms_path_and_claims_no_domain() {
     let inst = instance(&served_manifest());
     let got = problems(inst.path(), platform.path());
     assert!(got.is_empty(), "{got:?}");
-    let sites = backplane::cobot::sites::find_in(inst.path(), platform.path(), &[]).expect("found");
+    let sites = agent::cobot::sites::find_in(inst.path(), platform.path(), &[]).expect("found");
     let blog = &sites[0];
     assert!(blog.hosts.is_empty(), "{:?}", blog.hosts);
     assert_eq!(
@@ -466,8 +462,7 @@ fn a_served_site_builds_at_its_platforms_path_and_claims_no_domain() {
 fn a_site_served_by_no_platform_is_refused() {
     let platform = platform();
     let inst = instance(&served_manifest().replace("unit: platform/blue", "unit: platform/nope"));
-    let err =
-        backplane::cobot::sites::find_in(inst.path(), platform.path(), &[]).expect_err("refused");
+    let err = agent::cobot::sites::find_in(inst.path(), platform.path(), &[]).expect_err("refused");
     assert!(err.to_string().contains("served_by"), "{err}");
 }
 
@@ -479,7 +474,7 @@ fn the_runs_token_fills_each_cloudflare_credential_it_is_not_given() {
         ("store".to_string(), "backblaze".to_string()),
     ]);
     let filled: Value = serde_json::from_str(
-        &backplane::cobot::fill_credentials(
+        &agent::cobot::fill_credentials(
             Some(r#"{"cloudflare_zone":{"api_token":"minted"}}"#),
             &providers,
             Some(TOKEN),
@@ -494,12 +489,9 @@ fn the_runs_token_fills_each_cloudflare_credential_it_is_not_given() {
             "cloudflare_zone": { "api_token": "minted" }
         })
     );
+    assert_eq!(agent::cobot::fill_credentials(None, &providers, None), None);
     assert_eq!(
-        backplane::cobot::fill_credentials(None, &providers, None),
-        None
-    );
-    assert_eq!(
-        backplane::cobot::fill_credentials(Some("{}"), &providers, Some("")).as_deref(),
+        agent::cobot::fill_credentials(Some("{}"), &providers, Some("")).as_deref(),
         Some("{}")
     );
 }
@@ -633,15 +625,15 @@ fn fake_api() -> String {
     })
 }
 
-fn ctx(root: &Path, platform: &Path, state: &Path, api: &str) -> backplane::cobot::Context {
-    backplane::cobot::Context {
+fn ctx(root: &Path, platform: &Path, state: &Path, api: &str) -> agent::cobot::Context {
+    agent::cobot::Context {
         root: root.to_path_buf(),
         providers: platform.join(".config"),
         state: state.to_path_buf(),
         state_passphrase: STATE_PASS.into(),
         secrets_passphrase: None,
         workload_secrets_passphrase: None,
-        today: backplane::cobot::generations::day("2026-11-05").expect("day"),
+        today: agent::cobot::generations::day("2026-11-05").expect("day"),
         credentials: None,
         cloudflare_token: Some(TOKEN.into()),
         cloudflare_api: Some(api.into()),
@@ -682,24 +674,24 @@ fn the_first_plan_of_moved_units_destroys_and_replaces_nothing() {
     let api = fake_api();
 
     let old = old_instance();
-    let units = backplane::cobot::select_in(old.path(), p, &p.join(".config"), &[]).expect("valid");
+    let units = agent::cobot::select_in(old.path(), p, &p.join(".config"), &[]).expect("valid");
     let applied =
-        backplane::cobot::apply(&ctx(old.path(), p, state.path(), &api), &units).expect("apply");
+        agent::cobot::apply(&ctx(old.path(), p, state.path(), &api), &units).expect("apply");
     assert_eq!(
         applied
             .iter()
-            .map(backplane::cobot::UnitPlan::counts)
+            .map(agent::cobot::UnitPlan::counts)
             .collect::<Vec<_>>(),
         [(11, 0, 0), (3, 0, 0)],
         "{}",
-        backplane::cobot::summary(&applied)
+        agent::cobot::summary(&applied)
     );
 
     let new = instance(&manifest());
-    let units = backplane::cobot::select_in(new.path(), p, &p.join(".config"), &[]).expect("valid");
+    let units = agent::cobot::select_in(new.path(), p, &p.join(".config"), &[]).expect("valid");
     let run = ctx(new.path(), p, state.path(), &api);
-    let plans = backplane::cobot::plan(&run, &units).expect("plan");
-    let summary = backplane::cobot::summary(&plans);
+    let plans = agent::cobot::plan(&run, &units).expect("plan");
+    let summary = agent::cobot::summary(&plans);
     for plan in &plans {
         assert_eq!(
             plan.counts(),
@@ -713,11 +705,11 @@ fn the_first_plan_of_moved_units_destroys_and_replaces_nothing() {
             "{summary}"
         );
     }
-    let applied = backplane::cobot::apply(&run, &units).expect("apply moved");
+    let applied = agent::cobot::apply(&run, &units).expect("apply moved");
     assert!(
         applied.iter().all(|p| p.counts() == (2, 0, 0)),
         "{}",
-        backplane::cobot::summary(&applied)
+        agent::cobot::summary(&applied)
     );
     assert!(
         !state
@@ -740,14 +732,13 @@ fn a_tree_pin_reads_head_only_for_a_template_in_the_instances_own_tree() {
     let platform = platform();
     let pinned = manifest().replace("version: 1.0.2", "version: tree");
     let inst = instance(&pinned);
-    let err =
-        backplane::cobot::sites::find_in(inst.path(), platform.path(), &[]).expect_err("refused");
+    let err = agent::cobot::sites::find_in(inst.path(), platform.path(), &[]).expect_err("refused");
     assert!(err.to_string().contains("own tree"), "{err}");
 
     let template = inst.path().join("src/pigeon-site-templates/blog");
     fs::create_dir_all(&template).expect("mkdir");
     fs::write(template.join("template.yaml"), "version: 0.1.0\n").expect("write");
-    let sites = backplane::cobot::sites::find_in(inst.path(), platform.path(), &[]).expect("found");
+    let sites = agent::cobot::sites::find_in(inst.path(), platform.path(), &[]).expect("found");
     assert_eq!(
         (sites[0].revision(), sites[0].tag()),
         ("HEAD".to_string(), "site-template-blog@tree".to_string())
@@ -758,7 +749,7 @@ fn a_tree_pin_reads_head_only_for_a_template_in_the_instances_own_tree() {
 fn a_released_pin_still_reads_its_tag() {
     let platform = platform();
     let inst = instance(&manifest());
-    let sites = backplane::cobot::sites::find_in(inst.path(), platform.path(), &[]).expect("found");
+    let sites = agent::cobot::sites::find_in(inst.path(), platform.path(), &[]).expect("found");
     assert_eq!(sites[0].revision(), "site-template-blog/v1.0.2");
 }
 

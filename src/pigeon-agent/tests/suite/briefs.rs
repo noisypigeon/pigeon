@@ -1,7 +1,7 @@
 //! Briefs; see `.claude/decisions/2026-11-13-development-model-tiered-agent-briefs.md` §3.
 
-use backplane::core::brief::{Brief, Budget, Commit, Draft, Step, open_choice, validate};
-use backplane::sessions::Class;
+use agent::core::brief::{Brief, Budget, Commit, Draft, Step, open_choice, validate};
+use agent::sessions::Class;
 
 const PLANNER: &str = "https://claude.ai/code/planner";
 
@@ -193,7 +193,7 @@ fn a_brief_round_trips_with_do_as_its_step_field() {
 
 #[test]
 fn the_store_numbers_briefs_and_amends_only_by_their_planner() {
-    use backplane::briefs::{Briefs, number};
+    use agent::briefs::{Briefs, number};
     let mut all = Briefs::default();
     let a = all.create(PLANNER, draft(Class::Haiku), 1).expect("b1");
     let b = all
@@ -245,8 +245,8 @@ fn a_brief_never_touches_an_adr() {
 
 mod executor {
     use super::{Class, PLANNER, draft};
-    use backplane::core::brief::Brief;
-    use backplane::core::brief::executor::{Proposal, Proposer, check, commit};
+    use agent::core::brief::Brief;
+    use agent::core::brief::executor::{Proposal, Proposer, check, commit};
 
     fn brief(model: Class) -> Brief {
         Brief::create(4, PLANNER, draft(model), 1).expect("valid")
@@ -344,8 +344,8 @@ mod executor {
 
 #[test]
 fn a_briefs_change_is_refused_only_the_planners_tiers() {
-    use backplane::core::approval::tiers::{Tier, Tiered, Tiers};
-    use backplane::core::brief::executor::refused;
+    use agent::core::approval::tiers::{Tier, Tiered, Tiers};
+    use agent::core::brief::executor::refused;
     let t = |authorize: &str, merge: &str| Tiers {
         authorize: Tiered {
             tier: Tier::Confirm,
@@ -378,7 +378,7 @@ fn a_briefs_change_is_refused_only_the_planners_tiers() {
 
 #[test]
 fn an_executor_takes_only_tasks_on_its_briefs_changes() {
-    use backplane::core::brief::executor::claim_refused;
+    use agent::core::brief::executor::claim_refused;
     let code = vec!["src/sessions.rs".to_string()];
     let adr = vec![
         "src/sessions.rs".to_string(),
@@ -411,8 +411,8 @@ mod report {
     use std::collections::BTreeMap;
 
     use super::{Class, PLANNER, draft};
-    use backplane::briefs::Briefs;
-    use backplane::core::brief::report::{RECENT, Tally, lines};
+    use agent::briefs::Briefs;
+    use agent::core::brief::report::{RECENT, Tally, lines};
 
     #[test]
     fn the_digest_shows_active_briefs_and_each_steps_briefs_by_class() {

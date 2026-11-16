@@ -6,7 +6,7 @@ use std::fs;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
-use backplane::cobot::s3::{Bucket, Credentials, md5_hex, sha256_hex};
+use agent::cobot::s3::{Bucket, Credentials, md5_hex, sha256_hex};
 use tempfile::TempDir;
 
 type Store = Arc<Mutex<BTreeMap<String, (Vec<u8>, String)>>>;
@@ -116,7 +116,7 @@ fn a_sync_puts_what_changed_writes_index_copies_and_deletes_stale_keys() {
     write(public.path(), "index.html", "<html>home</html>");
     write(public.path(), "posts/a/index.html", "<html>a, new</html>");
     write(public.path(), "assets/site.css", "body {}");
-    let expected = backplane::cobot::sites::expected(public.path()).expect("walk");
+    let expected = agent::cobot::sites::expected(public.path()).expect("walk");
     assert_eq!(
         expected.keys().collect::<Vec<_>>(),
         [
@@ -151,7 +151,7 @@ fn a_sync_puts_what_changed_writes_index_copies_and_deletes_stale_keys() {
             secret_key: sha256_hex(b"token-value"),
         },
     };
-    let done = backplane::cobot::sites::sync(&bucket, &expected).expect("sync");
+    let done = agent::cobot::sites::sync(&bucket, &expected).expect("sync");
     assert_eq!(
         done.put,
         [
@@ -166,27 +166,27 @@ fn a_sync_puts_what_changed_writes_index_copies_and_deletes_stale_keys() {
     assert_eq!(done.deleted, ["stale & gone.html"]);
     let held: Vec<String> = store.lock().expect("lock").keys().cloned().collect();
     let mut want: Vec<String> = expected.keys().cloned().collect();
-    want.insert(0, backplane::cobot::sites::TYPES.to_string());
+    want.insert(0, agent::cobot::sites::TYPES.to_string());
     assert_eq!(held, want);
 
-    let again = backplane::cobot::sites::sync(&bucket, &expected).expect("resync");
+    let again = agent::cobot::sites::sync(&bucket, &expected).expect("resync");
     assert!(again.put.is_empty() && again.deleted.is_empty());
     assert_eq!(again.unchanged, 5);
 
     {
         let mut s = store.lock().expect("lock");
-        let (body, _) = s[backplane::cobot::sites::TYPES].clone();
+        let (body, _) = s[agent::cobot::sites::TYPES].clone();
         let mut types: BTreeMap<String, String> = serde_json::from_slice(&body).expect("json");
         types.insert("assets/site.css".into(), "application/octet-stream".into());
         let body = serde_json::to_vec(&types).expect("json");
         let etag = md5_hex(&body);
-        s.insert(backplane::cobot::sites::TYPES.into(), (body, etag));
+        s.insert(agent::cobot::sites::TYPES.into(), (body, etag));
     }
-    let retyped = backplane::cobot::sites::sync(&bucket, &expected).expect("retype");
+    let retyped = agent::cobot::sites::sync(&bucket, &expected).expect("retype");
     assert_eq!(retyped.put, ["assets/site.css"]);
 
-    write(public.path(), backplane::cobot::sites::TYPES, "{}");
-    let err = backplane::cobot::sites::expected(public.path())
+    write(public.path(), agent::cobot::sites::TYPES, "{}");
+    let err = agent::cobot::sites::expected(public.path())
         .expect_err("reserved")
         .to_string();
     assert!(err.contains("is cobot's own key"), "{err}");
@@ -198,7 +198,7 @@ fn a_sync_puts_what_changed_writes_index_copies_and_deletes_stale_keys() {
         },
         ..bucket
     };
-    let err = backplane::cobot::sites::sync(&wrong, &expected)
+    let err = agent::cobot::sites::sync(&wrong, &expected)
         .expect_err("refused")
         .to_string();
     assert!(

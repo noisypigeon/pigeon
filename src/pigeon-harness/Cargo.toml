@@ -13,19 +13,19 @@ autotests = false
 default = ["eviction", "infra", "agent", "signing", "session"]
 # One per command group; see .claude/decisions/2026-11-16-development-src-crates-neutral-names.md §3.
 eviction = []
-infra = ["dep:backplane", "backplane/engines", "dep:serde", "dep:serde_json"]
-agent = ["infra", "session", "dep:backplane", "backplane/engines", "dep:serde", "dep:serde_json", "dep:signal-hook"]
+infra = ["dep:agent", "agent/engines", "dep:serde", "dep:serde_json"]
+agent = ["infra", "session", "dep:agent", "agent/engines", "dep:serde", "dep:serde_json", "dep:signal-hook"]
 # `pigeon signing` alone, for Buildkite's `macos-sign` agents; see
 # .claude/decisions/2026-11-11-release-ios-app-buildkite-testflight.md §6.
-signing = ["dep:backplane", "dep:serde_json", "dep:ureq"]
+signing = ["dep:agent", "dep:serde_json", "dep:ureq"]
 # `pigeon session`, for cloud agent sessions; see
 # .claude/decisions/2026-11-13-development-rust-session-event-follower.md §2.
-session = ["dep:backplane", "dep:serde_json", "dep:signal-hook", "dep:ureq"]
+session = ["dep:agent", "dep:serde_json", "dep:signal-hook", "dep:ureq"]
 # The job images' `FEATURES` in worker.yaml, until it names `agent`; see the src-crates ADR §5.
-backplane = ["agent", "dep:backplane"]
+backplane = ["agent", "dep:agent"]
 
 [dependencies]
-backplane = { workspace = true, optional = true }
+agent = { workspace = true, optional = true }
 clap.workspace = true
 serde = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }

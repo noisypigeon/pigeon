@@ -1,11 +1,11 @@
-//! `backplane::cobot::release` against throwaway git repositories.
+//! `agent::cobot::release` against throwaway git repositories.
 
-use backplane::cobot::release::LoadConfig;
+use agent::cobot::release::LoadConfig;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use backplane::cobot::release::{self, Config, Outcome};
+use agent::cobot::release::{self, Config, Outcome};
 use tempfile::TempDir;
 
 const CONFIG: &str = "description: test.

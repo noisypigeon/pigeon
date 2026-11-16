@@ -1,9 +1,9 @@
 //! The approval page: every value escaped, no script, one form back to itself with the
 //! owner's code; see `.claude/decisions/2026-11-08-security-tiered-approvals-task-mandates.md` §4.
 
-use backplane::approve;
-use backplane::core::approval::grants::Grant;
-use backplane::core::change::{Change, State};
+use agent::approve;
+use agent::core::approval::grants::Grant;
+use agent::core::change::{Change, State};
 
 #[test]
 fn values_are_escaped_for_text_and_attributes() {
@@ -177,7 +177,7 @@ fn a_confirm_grant_asks_for_no_code() {
         number: 8,
         head: c.head.clone(),
         expires: 1,
-        tier: Some(backplane::core::approval::tiers::Tier::Confirm),
+        tier: Some(agent::core::approval::tiers::Tier::Confirm),
         used: None,
     };
     let html = approve::page(&c, &grant, "tok");
@@ -185,7 +185,7 @@ fn a_confirm_grant_asks_for_no_code() {
     assert!(html.contains("one tap approves it"), "{html}");
     assert_eq!(html.matches("<button").count(), 1);
     let coded = Grant {
-        tier: Some(backplane::core::approval::tiers::Tier::Code),
+        tier: Some(agent::core::approval::tiers::Tier::Code),
         ..grant.clone()
     };
     assert!(approve::page(&c, &coded, "tok").contains("name=\"code\""));
@@ -229,10 +229,10 @@ fn the_inbox_installs_as_a_home_screen_app_for_ios_push() {
 
 #[test]
 fn a_platform_plan_page_asks_for_the_token_and_an_apply_page_shows_the_changes() {
-    use backplane::core::platform::platforms::{Runs, Stage};
+    use agent::core::platform::platforms::{Runs, Stage};
     let mut runs = Runs::default();
     let run = stepped!(runs.propose("platform/blue", "tok", 0)).expect("proposes");
-    let page = backplane::approve::platform_page(&run, "tok<");
+    let page = agent::approve::platform_page(&run, "tok<");
     assert!(
         page.contains("name=\"account_token\" type=\"password\""),
         "{page}"
@@ -247,7 +247,7 @@ fn a_platform_plan_page_asks_for_the_token_and_an_apply_page_shows_the_changes()
     let change = serde_json::json!({ "action": "update", "address": "module.d1.<x>" });
     let run = stepped!(runs.planned(1, Ok(("p1".into(), vec![change])), "t2", 2)).expect("planned");
     assert_eq!(run.stage, Stage::Planned);
-    let page = backplane::approve::platform_page(&run, "t2");
+    let page = agent::approve::platform_page(&run, "t2");
     assert!(page.contains("update module.d1.&lt;x&gt;"), "{page}");
     assert!(page.contains("value=\"refuse\""));
     assert!(!page.contains("account_token"));

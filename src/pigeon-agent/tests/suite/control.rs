@@ -3,9 +3,9 @@
 
 use crate::harness::step;
 
-use backplane::control::{self, Outcome, Pipeline, Push, Report, Routed, Target};
-use backplane::core::change::{BOUND, Change, Check, Event};
-use backplane::wire::Request;
+use agent::control::{self, Outcome, Pipeline, Push, Report, Routed, Target};
+use agent::core::change::{BOUND, Change, Check, Event};
+use agent::wire::Request;
 use serde_json::json;
 use step::Apply;
 
@@ -463,7 +463,7 @@ fn main_deploys_one_at_a_time_and_always_the_newest_push() {
 
 #[test]
 fn a_merge_is_carried_by_the_deploys_of_it_and_later_pushes() {
-    use backplane::core::change::stage::Deploy;
+    use agent::core::change::stage::Deploy;
     let mut p = Pipeline::default();
     assert_eq!(p.carrying(A), Deploy::Unknown, "a push not kept");
     p.pushed(A);
@@ -499,7 +499,7 @@ fn a_merge_is_carried_by_the_deploys_of_it_and_later_pushes() {
 
 #[test]
 fn the_newest_build_a_deploy_stored_is_what_jobs_run() {
-    let build = |sha: &str| backplane::control::Build {
+    let build = |sha: &str| agent::control::Build {
         sha: sha.into(),
         sha256: "ab".repeat(32),
         sentinel_sha256: None,
@@ -555,7 +555,7 @@ fn a_lost_deploy_retries_then_fails() {
     let mut p = Pipeline::default();
     p.pushed(A);
     p.start();
-    for _ in 1..backplane::core::platform::runs::MAX_ATTEMPTS {
+    for _ in 1..agent::core::platform::runs::MAX_ATTEMPTS {
         assert_eq!(p.lost(1).as_deref(), Some(A));
     }
     assert_eq!(p.lost(1), None);
@@ -565,7 +565,7 @@ fn a_lost_deploy_retries_then_fails() {
 
 #[test]
 fn a_deploy_main_moved_past_is_superseded_and_the_newest_push_goes_next() {
-    use backplane::core::change::stage::Deploy;
+    use agent::core::change::stage::Deploy;
     let mut p = Pipeline::default();
     p.pushed(A);
     p.start();
@@ -651,7 +651,7 @@ fn a_mirror_runs_on_runner_and_never_shows_its_tokens() {
     );
     assert_eq!(
         control::class_of(control::MIRROR),
-        backplane::control::Class::Runner
+        agent::control::Class::Runner
     );
 }
 
@@ -666,7 +666,7 @@ fn a_change_is_unmirrored_by_its_branch_on_a_runner() {
     assert!(!format!("{s:?}").contains("ghs-unmirror"));
     assert_eq!(
         control::class_of(control::UNMIRROR),
-        backplane::control::Class::Runner
+        agent::control::Class::Runner
     );
     let refused = Event::Bounded {
         sha: A.into(),
@@ -697,8 +697,8 @@ fn no_free_container_is_waiting_not_a_lost_job() {
 
 #[test]
 fn checks_and_deploys_run_on_checker_and_git_jobs_on_runner() {
-    use backplane::control::Class;
-    use backplane::core::change::MERGE;
+    use agent::control::Class;
+    use agent::core::change::MERGE;
     assert_eq!(control::class_of(BOUND), Class::Runner);
     assert_eq!(control::class_of(MERGE), Class::Runner);
     assert_eq!(
@@ -783,7 +783,7 @@ fn a_deploy_is_retried_on_request_and_only_then() {
 
 #[test]
 fn deploys_reference_the_newest_images_and_the_owners_push_wins() {
-    let imgs = |source: &str| backplane::control::Images {
+    let imgs = |source: &str| agent::control::Images {
         source: source.into(),
         images: [(
             "pigeon-control/Checker".to_string(),
@@ -894,7 +894,7 @@ fn a_merge_commit_names_the_approvals_kind_never_an_identity() {
 
 #[test]
 fn code_checks_go_to_github_only_on_a_mirrored_change() {
-    use backplane::actions::Mirror;
+    use agent::actions::Mirror;
     let mut c = pushed();
     c.apply(control::with_mirror(Event::Bounded {
         sha: A.into(),
@@ -952,12 +952,8 @@ fn code_checks_go_to_github_only_on_a_mirrored_change() {
     assert_eq!(control::mirror_state(&plain), Mirror::Failed);
 }
 
-fn job(
-    name: &str,
-    cmd: &str,
-    status: backplane::core::change::JobStatus,
-) -> backplane::core::change::Job {
-    backplane::core::change::Job {
+fn job(name: &str, cmd: &str, status: agent::core::change::JobStatus) -> agent::core::change::Job {
+    agent::core::change::Job {
         name: name.into(),
         argv: cmd.split(' ').map(str::to_string).collect(),
         status,
@@ -1005,8 +1001,8 @@ fn ci_rerun_on_cloudflare_is_the_owners_break_glass() {
 
 #[test]
 fn the_break_glass_moves_a_heads_unpassed_code_checks_to_the_checker() {
-    use backplane::actions::Actions;
-    use backplane::core::change::{JobStatus, State};
+    use agent::actions::Actions;
+    use agent::core::change::{JobStatus, State};
     let mut c = pushed();
     c.state = State::Bounded;
     c.jobs = vec![
@@ -1063,8 +1059,8 @@ fn the_break_glass_moves_a_heads_unpassed_code_checks_to_the_checker() {
 
 #[test]
 fn opening_the_ci_window_moves_a_change_waiting_on_github() {
-    use backplane::actions::Actions;
-    use backplane::core::change::{JobStatus, State};
+    use agent::actions::Actions;
+    use agent::core::change::{JobStatus, State};
     let mut c = pushed();
     c.state = State::Bounded;
     c.jobs = vec![
@@ -1151,7 +1147,7 @@ fn an_eviction_job_runs_on_mains_head_with_its_candidates_and_one_id_an_hour() {
 
 #[test]
 fn a_failed_deploy_always_says_why_and_the_deployed_head_never_starts_again() {
-    use backplane::control::{Outcome, Pipeline, Report, failure};
+    use agent::control::{Outcome, Pipeline, Report, failure};
     let sha = "0123456789abcdef0123456789abcdef01234567";
     let mut p = Pipeline::default();
     p.pushed(sha);
@@ -1186,7 +1182,7 @@ fn a_failed_deploy_always_says_why_and_the_deployed_head_never_starts_again() {
 
 #[test]
 fn a_pin_and_a_resumed_proposal_are_routed() {
-    let req = |op: &str, args: serde_json::Value| backplane::wire::Request {
+    let req = |op: &str, args: serde_json::Value| agent::wire::Request {
         operation: op.into(),
         args: args.as_object().cloned().unwrap_or_default(),
     };
@@ -1239,7 +1235,7 @@ fn a_pin_and_a_resumed_proposal_are_routed() {
 
 #[test]
 fn a_yield_names_the_change_it_waits_for_unless_it_ends() {
-    let req = |args: serde_json::Value| backplane::wire::Request {
+    let req = |args: serde_json::Value| agent::wire::Request {
         operation: "change.yield".into(),
         args: args.as_object().cloned().unwrap_or_default(),
     };
@@ -1284,7 +1280,7 @@ fn a_yield_names_the_change_it_waits_for_unless_it_ends() {
 
 #[test]
 fn a_note_and_a_handoff_are_routed() {
-    let req = |op: &str, args: serde_json::Value| backplane::wire::Request {
+    let req = |op: &str, args: serde_json::Value| agent::wire::Request {
         operation: op.into(),
         args: args.as_object().cloned().unwrap_or_default(),
     };
@@ -1435,20 +1431,20 @@ fn a_deploy_main_moved_past_is_superseded_before_its_builds() {
     );
     let remote = remote.to_str().expect("utf8");
     let spec = |sha: &str| {
-        backplane::control::deploy_spec(remote, "", sha, None, std::collections::BTreeMap::new())
+        agent::control::deploy_spec(remote, "", sha, None, std::collections::BTreeMap::new())
     };
     assert_eq!(
-        backplane::ship::superseded(&spec(&a), &job),
+        agent::ship::superseded(&spec(&a), &job),
         None,
         "main is still there"
     );
     git_in(&work, &["commit", "-q", "--allow-empty", "-m", "b"]);
     let b = git_in(&work, &["rev-parse", "HEAD"]);
     git_in(&work, &["push", "-q", remote, "main"]);
-    let why = backplane::ship::superseded(&spec(&a), &job).expect("superseded");
+    let why = agent::ship::superseded(&spec(&a), &job).expect("superseded");
     assert!(why.contains(&b), "{why}");
     assert_eq!(
-        backplane::ship::superseded(&spec(&a), &t.path().join("missing")),
+        agent::ship::superseded(&spec(&a), &t.path().join("missing")),
         None,
         "an unreadable head never stops a deploy"
     );

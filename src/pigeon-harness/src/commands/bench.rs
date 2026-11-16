@@ -6,8 +6,8 @@ use std::process::{Command, Stdio};
 use std::thread::sleep;
 use std::time::{Duration, Instant};
 
-use backplane::core::bench::deal::{Check, deal};
-use backplane::core::bench::{report, scratch_ref, session_id};
+use agent::core::bench::deal::{Check, deal};
+use agent::core::bench::{report, scratch_ref, session_id};
 use serde_json::{Value, json};
 
 use super::session::{agent, home, host};

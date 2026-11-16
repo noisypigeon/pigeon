@@ -3,7 +3,7 @@
 
 use crate::harness::step;
 
-use backplane::core::change::eviction::{Facts, Holds, Session, candidate, kind};
+use agent::core::change::eviction::{Facts, Holds, Session, candidate, kind};
 
 const NOW: u64 = 1_000_000;
 
@@ -112,8 +112,8 @@ fn what_holds_a_change_is_carried() {
 
 mod acting {
     use super::step::Apply;
-    use backplane::core::change::eviction::{PER_RUN, incomplete, pick, remains};
-    use backplane::core::change::{Change, Event, State};
+    use agent::core::change::eviction::{PER_RUN, incomplete, pick, remains};
+    use agent::core::change::{Change, Event, State};
     use serde_json::json;
 
     const A: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";

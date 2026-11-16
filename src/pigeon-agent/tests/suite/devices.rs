@@ -1,8 +1,8 @@
 //! The `Instance`'s `/devices/check` as the Worker drives it: stored state, a retried delivery and
 //! a true replay; see the iOS ADR's 2026-11-16 amendment.
 
-use backplane::core::app::devices::{Devices, canonical, link_message};
-use backplane::push::b64url;
+use agent::core::app::devices::{Devices, canonical, link_message};
+use agent::push::b64url;
 use p256::ecdsa::signature::Signer as _;
 use p256::ecdsa::{Signature, SigningKey};
 

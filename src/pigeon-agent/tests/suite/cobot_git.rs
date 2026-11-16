@@ -1,16 +1,16 @@
 //! Git repositories on Cloudflare Artifacts, against a fake API and local remotes; see
 //! `.claude/decisions/2026-11-05-development-git-hosting-cloudflare-artifacts.md`.
 
-use backplane::cobot::providers::LoadAllowlist;
+use agent::cobot::providers::LoadAllowlist;
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::{Arc, Mutex};
 
-use backplane::cobot::artifacts::{Client, Scope};
-use backplane::cobot::cloudflare::Api;
-use backplane::cobot::git::{self, Outcome};
+use agent::cobot::artifacts::{Client, Scope};
+use agent::cobot::cloudflare::Api;
+use agent::cobot::git::{self, Outcome};
 use serde_json::{Value, json};
 use tempfile::TempDir;
 
@@ -425,7 +425,7 @@ fn each_instance_uses_its_own_namespace_in_the_account_its_token_sees() {
 fn a_git_repo_unit_never_plans_and_its_settings_are_checked() {
     let platform = platform();
     let inst = instance("pigeon", PIGEON_UNITS);
-    let (units, problems) = backplane::cobot::unit::discover_in(inst.path(), platform.path());
+    let (units, problems) = agent::cobot::unit::discover_in(inst.path(), platform.path());
     assert!(problems.is_empty(), "{problems:?}");
     assert!(
         units.is_empty(),
@@ -443,10 +443,10 @@ fn a_git_repo_unit_never_plans_and_its_settings_are_checked() {
             "pigeon",
             &format!("  repos/bad:\n    kind: cloudflare/git-repo\n    {bad}\n"),
         );
-        let allow = backplane::cobot::providers::Allowlist::load(&platform.path().join(".config"))
+        let allow = agent::cobot::providers::Allowlist::load(&platform.path().join(".config"))
             .expect("allow");
         let got: Vec<String> =
-            backplane::cobot::unit::validate_in(inst.path(), platform.path(), &allow)
+            agent::cobot::unit::validate_in(inst.path(), platform.path(), &allow)
                 .into_iter()
                 .map(|p| format!("{}: {}", p.path, p.message))
                 .collect();

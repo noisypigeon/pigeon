@@ -4,7 +4,7 @@
 use std::fs;
 use std::path::PathBuf;
 
-use backplane::{Instance, Request, Response, run_with};
+use agent::{Instance, Request, Response, run_with};
 
 use crate::harness as common;
 use serde_json::Value;
@@ -199,9 +199,9 @@ fn a_credential_draws_its_capabilities_and_a_unit_dir_policy_its_unit() {
 #[test]
 fn every_link_is_evidenced_by_the_tree() {
     let root = repo_root();
-    let missing: Vec<&str> = backplane::architecture::LINKS
+    let missing: Vec<&str> = agent::architecture::LINKS
         .iter()
-        .filter(|r| !backplane::architecture::evidenced(&root, r))
+        .filter(|r| !agent::architecture::evidenced(&root, r))
         .map(|r| r.id)
         .collect();
     assert!(missing.is_empty(), "no evidence for {missing:?}");
@@ -213,7 +213,7 @@ fn every_link_is_evidenced_by_the_tree() {
         .iter()
         .filter_map(|l| l["id"].as_str())
         .collect();
-    for row in backplane::architecture::LINKS {
+    for row in agent::architecture::LINKS {
         assert!(kept.contains(&row.id), "{} is not drawn", row.id);
     }
     let parts: Vec<&str> = network["parts"]
@@ -260,7 +260,7 @@ fn an_instance_without_the_worker_has_no_network() {
 
 #[test]
 fn a_row_whose_evidence_is_gone_is_not_evidenced() {
-    use backplane::architecture::{Row, evidenced};
+    use agent::architecture::{Row, evidenced};
     let dir = TempDir::new().expect("tempdir");
     let worker = dir.path().join("src/pigeon-agent/src/worker");
     fs::create_dir_all(&worker).expect("mkdir");
@@ -270,7 +270,7 @@ fn a_row_whose_evidence_is_gone_is_not_evidenced() {
         from: "a",
         to: "b",
         label: "",
-        kind: backplane::architecture::Kind::Call,
+        kind: agent::architecture::Kind::Call,
         evidence,
     };
     let ordered = row(&[
@@ -383,12 +383,12 @@ fn served(root: &std::path::Path) -> Vec<String> {
         let text = fs::read_to_string(f).expect("read");
         let text = text.split("#[cfg(test)]").next().unwrap_or("");
         out.extend(table_paths(text));
-        out.extend(backplane::architecture::literals(text, "/v0/app/"));
+        out.extend(agent::architecture::literals(text, "/v0/app/"));
     }
     let main = fs::read_to_string(worker.join("mod.rs")).expect("read");
     let body = &main[main.find("async fn fetch(").expect("fetch")..];
     let body = &body[..body.find("\n}\n").expect("fetch's end")];
-    out.extend(backplane::architecture::literals(body, "/"));
+    out.extend(agent::architecture::literals(body, "/"));
     // `module::NAME` constants, resolved in `worker/<module>.rs` or `<module>.rs`.
     for piece in body.split("::").skip(1) {
         let name: String = piece
@@ -469,7 +469,7 @@ fn route_gaps(root: &std::path::Path, net: &Value) -> Vec<String> {
 /// Every field of the Worker's spec is known, and each holds what the network shows.
 fn spec_gaps(root: &std::path::Path, net: &Value) -> Vec<String> {
     let mut gaps = Vec::new();
-    let found = backplane::cobot::workers::discover(root)
+    let found = agent::cobot::workers::discover(root)
         .expect("discovers")
         .into_iter()
         .find(|f| f.spec.entry.krate.ends_with("pigeon-agent"))
@@ -540,7 +540,7 @@ fn spec_gaps(root: &std::path::Path, net: &Value) -> Vec<String> {
             .expect("object")
             .keys()
         {
-            if !backplane::architecture::ROUTE_KEYS.contains(&k.as_str()) {
+            if !agent::architecture::ROUTE_KEYS.contains(&k.as_str()) {
                 gaps.push(format!("route kind {k}"));
             }
         }
@@ -554,11 +554,11 @@ fn spec_gaps(root: &std::path::Path, net: &Value) -> Vec<String> {
 /// Each outbound host is the platform's own, a test's, or a service's; each link ends at parts.
 fn outbound_gaps(root: &std::path::Path, net: &Value) -> Vec<String> {
     let mut gaps = Vec::new();
-    for file in backplane::architecture::outbound_files(root) {
+    for file in agent::architecture::outbound_files(root) {
         let text = fs::read_to_string(&file).expect("read");
-        for host in backplane::architecture::hosts_in(&text) {
-            let known = backplane::architecture::internal(&host)
-                || backplane::architecture::SERVICES
+        for host in agent::architecture::hosts_in(&text) {
+            let known = agent::architecture::internal(&host)
+                || agent::architecture::SERVICES
                     .iter()
                     .any(|s| s.hosts.contains(&host.as_str()));
             if !known {
@@ -628,7 +628,7 @@ fn the_graph_names_only_pigeon_dev() {
     {
         let h = h.as_str().expect("host");
         assert!(
-            h.ends_with("pigeon.dev") || h == backplane::architecture::STANDALONE,
+            h.ends_with("pigeon.dev") || h == agent::architecture::STANDALONE,
             "{h}"
         );
     }
@@ -637,15 +637,15 @@ fn the_graph_names_only_pigeon_dev() {
 #[test]
 fn the_network_renders_as_text_and_svg() {
     let r = describe(&repo_root());
-    let text = backplane::architecture::render::text(&r.result);
+    let text = agent::architecture::render::text(&r.result);
     for want in ["clients", "iOS app", "GRANTER", "APNs", "-> Secrets Store"] {
         assert!(text.contains(want), "{want} is missing from the text");
     }
-    let svg = backplane::architecture::render::svg(&r.result);
+    let svg = agent::architecture::render::svg(&r.result);
     assert!(svg.starts_with("<svg xmlns=\"http://www.w3.org/2000/svg\""));
     assert!(svg.contains("Cloudflare API") && svg.trim_end().ends_with("</svg>"));
     assert!(
-        backplane::architecture::render::formatted(r.result.clone(), Some("dot")).is_err(),
+        agent::architecture::render::formatted(r.result.clone(), Some("dot")).is_err(),
         "an unknown format is refused"
     );
 }

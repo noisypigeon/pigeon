@@ -1,8 +1,8 @@
 //! pigeon's MCP server: its tools are the catalog's operations (control-plane ADR §10).
 
-use backplane::Error;
-use backplane::mcp::{self, Action, PROTOCOL, PROTOCOL_URL, Session, code};
-use backplane::wire::{Response, catalog};
+use agent::Error;
+use agent::mcp::{self, Action, PROTOCOL, PROTOCOL_URL, Session, code};
+use agent::wire::{Response, catalog};
 use serde_json::{Value, json};
 
 fn reply(message: &Value) -> Value {

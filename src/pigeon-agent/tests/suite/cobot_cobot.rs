@@ -34,7 +34,7 @@ fn proof_repo() -> TempDir {
 }
 
 fn messages(root: &Path) -> Vec<String> {
-    backplane::cobot::unit::validate(root, &backplane::cobot::providers::Allowlist::default())
+    agent::cobot::unit::validate(root, &agent::cobot::providers::Allowlist::default())
         .into_iter()
         .map(|p| format!("{}: {}", p.path, p.message))
         .collect()
@@ -45,7 +45,7 @@ fn a_valid_unit_passes() {
     let repo = proof_repo();
     assert_eq!(messages(repo.path()), Vec::<String>::new());
     let units =
-        backplane::cobot::select(repo.path(), &repo.path().join(".config"), &[]).expect("valid");
+        agent::cobot::select(repo.path(), &repo.path().join(".config"), &[]).expect("valid");
     assert_eq!(units.len(), 1);
     assert_eq!(units[0].path, "infra/bootstrap");
 }
@@ -171,13 +171,13 @@ fn units_do_not_nest() {
 fn render_points_modules_and_state_at_absolute_paths() {
     let repo = proof_repo();
     let units =
-        backplane::cobot::select(repo.path(), &repo.path().join(".config"), &[]).expect("valid");
-    let json = backplane::cobot::render_json(
+        agent::cobot::select(repo.path(), &repo.path().join(".config"), &[]).expect("valid");
+    let json = agent::cobot::render_json(
         &units[0],
         Path::new("/state"),
-        &backplane::cobot::providers::Allowlist::default(),
+        &agent::cobot::providers::Allowlist::default(),
         0,
-        &backplane::cobot::config::Existing::new(),
+        &agent::cobot::config::Existing::new(),
     );
     assert_eq!(
         json["terraform"]["backend"]["local"]["path"],
@@ -194,13 +194,13 @@ fn render_points_modules_and_state_at_absolute_paths() {
 
 #[test]
 fn passphrase_is_required() {
-    assert!(backplane::cobot::passphrase(None).is_err());
-    assert!(backplane::cobot::passphrase(Some("short".into())).is_err());
-    assert!(backplane::cobot::passphrase(Some(PASSPHRASE.into())).is_ok());
+    assert!(agent::cobot::passphrase(None).is_err());
+    assert!(agent::cobot::passphrase(Some("short".into())).is_err());
+    assert!(agent::cobot::passphrase(Some(PASSPHRASE.into())).is_ok());
 }
 
-fn ctx(root: &Path, state: &Path, passphrase: &str) -> backplane::cobot::Context {
-    backplane::cobot::Context {
+fn ctx(root: &Path, state: &Path, passphrase: &str) -> agent::cobot::Context {
+    agent::cobot::Context {
         root: root.to_path_buf(),
         providers: root.join(".config"),
         state: state.to_path_buf(),
@@ -227,16 +227,16 @@ fn plan_and_apply_write_only_encrypted_state() {
     let repo = proof_repo();
     let state = TempDir::new().expect("tempdir");
     let units =
-        backplane::cobot::select(repo.path(), &repo.path().join(".config"), &[]).expect("valid");
+        agent::cobot::select(repo.path(), &repo.path().join(".config"), &[]).expect("valid");
 
     let plans =
-        backplane::cobot::plan(&ctx(repo.path(), state.path(), PASSPHRASE), &units).expect("plan");
+        agent::cobot::plan(&ctx(repo.path(), state.path(), PASSPHRASE), &units).expect("plan");
     assert_eq!(plans[0].changes.len(), 1);
     assert_eq!(
         plans[0].changes[0].address,
         "module.proof.terraform_data.this"
     );
-    let summary = backplane::cobot::summary(&plans);
+    let summary = agent::cobot::summary(&plans);
     assert!(
         summary.contains("create `module.proof.terraform_data.this`"),
         "{summary}"
@@ -246,18 +246,18 @@ fn plan_and_apply_write_only_encrypted_state() {
         "summary leaked a value: {summary}"
     );
 
-    backplane::cobot::apply(&ctx(repo.path(), state.path(), PASSPHRASE), &units).expect("apply");
+    agent::cobot::apply(&ctx(repo.path(), state.path(), PASSPHRASE), &units).expect("apply");
     let written = fs::read_to_string(state.path().join("infra/bootstrap/terraform.tfstate"))
         .expect("state written");
     assert!(written.contains("encrypted_data"), "state is not encrypted");
     assert!(!written.contains("hello"), "state holds plaintext");
     assert!(!written.contains("terraform_data"), "state holds plaintext");
 
-    let again = backplane::cobot::plan(&ctx(repo.path(), state.path(), PASSPHRASE), &units)
-        .expect("replan");
+    let again =
+        agent::cobot::plan(&ctx(repo.path(), state.path(), PASSPHRASE), &units).expect("replan");
     assert!(!again[0].has_changes());
 
-    let wrong = backplane::cobot::plan(
+    let wrong = agent::cobot::plan(
         &ctx(repo.path(), state.path(), "another-passphrase-0123"),
         &units,
     );
@@ -327,8 +327,8 @@ fn a_unit_without_providers_plans_beside_a_lockfile() {
     fs::write(&unit, yaml.replace("hello", "cloudflare/cloudflare")).expect("write");
     let state = TempDir::new().expect("tempdir");
     let units =
-        backplane::cobot::select(repo.path(), &repo.path().join(".config"), &[]).expect("valid");
+        agent::cobot::select(repo.path(), &repo.path().join(".config"), &[]).expect("valid");
     let plans =
-        backplane::cobot::plan(&ctx(repo.path(), state.path(), PASSPHRASE), &units).expect("plan");
+        agent::cobot::plan(&ctx(repo.path(), state.path(), PASSPHRASE), &units).expect("plan");
     assert_eq!(plans[0].changes.len(), 1);
 }

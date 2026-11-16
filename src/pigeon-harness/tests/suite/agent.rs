@@ -26,7 +26,7 @@ fn version_is_backplanes() {
         .args(["agent", "--version"])
         .assert()
         .success()
-        .stdout(format!("pigeon-agent {}\n", backplane::VERSION));
+        .stdout(format!("pigeon-agent {}\n", agent::VERSION));
 }
 
 #[test]
@@ -107,9 +107,6 @@ fn enroll_secret_prints_the_stored_form_and_keeps_the_token_off_stdout() {
         .find(|l| !l.trim().is_empty())
         .expect("a token");
     assert!(is_hex(token), "{token}");
-    assert_eq!(
-        backplane::core::approval::enroll::stored(token, expires),
-        line
-    );
+    assert_eq!(agent::core::approval::enroll::stored(token, expires), line);
     assert!(!stdout.contains(token), "the token stays off stdout");
 }

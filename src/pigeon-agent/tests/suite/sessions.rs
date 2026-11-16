@@ -1,8 +1,8 @@
 //! Overlaps among the open changes; see
 //! `.claude/decisions/2026-11-08-development-concurrent-agent-sessions.md` §2.
 
-use backplane::control::open_rows;
-use backplane::sessions::{Class, Open, declare, overlaps, session};
+use agent::control::open_rows;
+use agent::sessions::{Class, Open, declare, overlaps, session};
 use serde_json::json;
 
 fn globs(list: &[&str]) -> Vec<String> {
@@ -126,7 +126,7 @@ fn a_class_covers_its_own_work_and_less_capable_classes() {
 #[test]
 fn a_session_id_is_its_labels_last_segment() {
     assert_eq!(
-        backplane::sessions::session_id("https://claude.ai/code/session_015X/"),
+        agent::sessions::session_id("https://claude.ai/code/session_015X/"),
         "session_015X"
     );
 }

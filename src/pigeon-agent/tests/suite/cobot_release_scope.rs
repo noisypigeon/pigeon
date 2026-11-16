@@ -1,11 +1,11 @@
 //! Which units release, against a small path-only cargo workspace.
 
-use backplane::cobot::release::LoadConfig;
+use agent::cobot::release::LoadConfig;
 use std::fs;
 use std::path::Path;
 use std::process::Command;
 
-use backplane::cobot::release::{self, Config, Outcome};
+use agent::cobot::release::{self, Config, Outcome};
 use tempfile::TempDir;
 
 const CONFIG: &str = r"description: test.

@@ -1,4 +1,4 @@
-//! `pigeon session`: the shell around `backplane::core::session`, through the agent's proxy,
+//! `pigeon session`: the shell around `agent::core::session`, through the agent's proxy,
 //! which authenticates the host; see
 //! `.claude/decisions/2026-11-13-development-rust-session-event-follower.md` and
 //! `.claude/decisions/2026-11-15-development-no-python-rust-tooling.md`.
@@ -10,8 +10,8 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use backplane::core::session::launch;
-use backplane::core::session::{self as core, Effect, Follow, HOLD, Outcome, Reply, START, Status};
+use agent::core::session::launch;
+use agent::core::session::{self as core, Effect, Follow, HOLD, Outcome, Reply, START, Status};
 use serde_json::{Value, json};
 
 use crate::cli::SessionCommand;

@@ -1,7 +1,7 @@
 //! A run's own Cloudflare token against a fake API; see
 //! `.claude/decisions/2026-11-05-development-pigeon-its-own-instance.md` §4.
 
-use backplane::cobot::cloudflare::Api;
+use agent::cobot::cloudflare::Api;
 use serde_json::{Value, json};
 
 use crate::harness::http::{self, Reply};
@@ -73,7 +73,7 @@ fn errors_name_the_call_never_the_token() {
 
 #[test]
 fn a_context_never_prints_its_secrets() {
-    let ctx = backplane::cobot::Context {
+    let ctx = agent::cobot::Context {
         root: "/r".into(),
         providers: "/r/.config".into(),
         state: "/s".into(),

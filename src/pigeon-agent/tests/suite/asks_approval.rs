@@ -1,11 +1,11 @@
 //! A change's asks on the approval page and in the app; see
 //! `.claude/decisions/2026-11-13-security-approvals-ask-owner-inputs.md` §4-§5.
 
-use backplane::approve;
-use backplane::core::app::approvals;
-use backplane::core::approval::grants::Grant;
-use backplane::core::change::Change;
-use backplane::core::change::asks;
+use agent::approve;
+use agent::core::app::approvals;
+use agent::core::approval::grants::Grant;
+use agent::core::change::Change;
+use agent::core::change::asks;
 use serde_json::json;
 
 const ASKS: &str = r#"[

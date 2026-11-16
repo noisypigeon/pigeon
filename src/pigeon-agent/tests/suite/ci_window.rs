@@ -2,7 +2,7 @@
 //! `.claude/decisions/2026-11-10-development-code-checks-github-actions.md`, its 2026-11-11
 //! amendment.
 
-use backplane::ci_window::{self, CiWindow, Window};
+use agent::ci_window::{self, CiWindow, Window};
 
 const HOUR: u64 = 3600;
 

@@ -10,11 +10,11 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 use crate::harness::tools::tofu_available;
-use backplane::serve::{
+use agent::serve::{
     NONCE_HEADER, SIGNATURE_HEADER, Server, TIMESTAMP_HEADER, Tls, WORKERS, sign_request,
     sign_response,
 };
-use backplane::{Error, Instance, Request, run_with};
+use agent::{Error, Instance, Request, run_with};
 use rcgen::{
     BasicConstraints, CertificateParams, DnType, ExtendedKeyUsagePurpose, IsCa, Issuer, KeyPair,
     KeyUsagePurpose,
@@ -448,7 +448,7 @@ fn the_wire_form_round_trips(tls: Option<&Pki>, signed: bool) {
     assert_eq!(status, 200);
     assert_eq!(shown["operation"], "instance.show");
     assert_eq!(shown["result"]["name"], "test");
-    let local: backplane::Response = run_with(
+    let local: agent::Response = run_with(
         &Instance::load(root.path()).expect("valid"),
         &request("instance.show", &json!({})),
         var,
@@ -565,8 +565,7 @@ fn the_workers_client_signing_agrees_with_serve() {
     let state = TempDir::new().expect("state");
     let c = serving_as(root.path(), state.path(), None, true);
     let body = br#"{"operation":"instance.show","args":{}}"#;
-    let signed =
-        backplane::cobot::link::sign(TOKEN, "POST", "/v0/run", unix_now(), [0x5a; 32], body);
+    let signed = agent::cobot::link::sign(TOKEN, "POST", "/v0/run", unix_now(), [0x5a; 32], body);
     let extra = format!(
         "{TIMESTAMP_HEADER}: {}\r\n{NONCE_HEADER}: {}\r\n{SIGNATURE_HEADER}: {}\r\n",
         signed.timestamp, signed.nonce, signed.signature
@@ -574,7 +573,7 @@ fn the_workers_client_signing_agrees_with_serve() {
     let (status, text, sig) = parse(&c.exchange(&raw_request("POST", "/v0/run", body, &extra)));
     assert_eq!(status, 200, "{text}");
     assert_eq!(
-        backplane::cobot::link::verify_response(
+        agent::cobot::link::verify_response(
             TOKEN,
             &signed.nonce,
             status,
@@ -585,7 +584,7 @@ fn the_workers_client_signing_agrees_with_serve() {
         "the Worker verifies serve's answer"
     );
     assert!(
-        backplane::cobot::link::verify_response(
+        agent::cobot::link::verify_response(
             TOKEN,
             &signed.nonce,
             500,

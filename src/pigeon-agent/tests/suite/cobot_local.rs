@@ -36,7 +36,7 @@ fn repo() -> TempDir {
     dir
 }
 
-fn paths(units: &[backplane::cobot::Unit]) -> Vec<&str> {
+fn paths(units: &[agent::cobot::Unit]) -> Vec<&str> {
     units.iter().map(|u| u.path.as_str()).collect()
 }
 
@@ -45,11 +45,11 @@ fn a_local_unit_is_validated_but_skipped_unless_named() {
     let repo = repo();
     let root = repo.path();
     let providers = root.join(".config");
-    let all = backplane::cobot::validate(root, &providers).expect("valid");
+    let all = agent::cobot::validate(root, &providers).expect("valid");
     assert_eq!(paths(&all), ["infra/boot", "infra/shared"]);
-    let unnamed = backplane::cobot::select(root, &providers, &[]).expect("select");
+    let unnamed = agent::cobot::select(root, &providers, &[]).expect("select");
     assert_eq!(paths(&unnamed), ["infra/shared"]);
-    let named = backplane::cobot::select(root, &providers, &["infra/boot".into()]).expect("select");
+    let named = agent::cobot::select(root, &providers, &["infra/boot".into()]).expect("select");
     assert_eq!(paths(&named), ["infra/boot"]);
     assert!(named[0].is_local());
     assert!(!unnamed[0].is_local());
@@ -60,7 +60,7 @@ fn local_false_runs_like_any_unit() {
     let dir = TempDir::new().expect("tempdir");
     unit(dir.path(), "infra/plain", Some(Value::Bool(false)));
     let selected =
-        backplane::cobot::select(dir.path(), &dir.path().join(".config"), &[]).expect("select");
+        agent::cobot::select(dir.path(), &dir.path().join(".config"), &[]).expect("select");
     assert_eq!(paths(&selected), ["infra/plain"]);
 }
 
@@ -69,9 +69,9 @@ fn a_non_boolean_local_fails() {
     for bad in [json!("yes"), json!(1), json!(null)] {
         let dir = TempDir::new().expect("tempdir");
         unit(dir.path(), "infra/boot", Some(bad.clone()));
-        let problems = backplane::cobot::unit::validate(
+        let problems = agent::cobot::unit::validate(
             dir.path(),
-            &backplane::cobot::providers::Allowlist::default(),
+            &agent::cobot::providers::Allowlist::default(),
         );
         assert!(
             problems

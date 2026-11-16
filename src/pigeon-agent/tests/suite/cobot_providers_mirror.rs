@@ -3,7 +3,7 @@
 
 use std::path::Path;
 
-use backplane::cobot::providers::{mirror_config, mirror_path, package};
+use agent::cobot::providers::{mirror_config, mirror_path, package};
 
 #[test]
 fn a_package_is_named_and_placed_as_a_packed_mirror_expects() {

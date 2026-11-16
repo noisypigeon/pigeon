@@ -1,7 +1,7 @@
 //! The router's lookup: each surface's routes, joined into one table; see
 //! `.claude/decisions/2026-11-10-development-factory-crates-functional-core.md` §4.
 
-use backplane::routes::{Path, Route, find};
+use agent::routes::{Path, Route, find};
 
 const GIT: &[Route<&str, &str>] = &[Route::any(Path::Prefix("/git/"), "git")];
 const APPROVE: &[Route<&str, &str>] = &[

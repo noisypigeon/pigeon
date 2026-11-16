@@ -5,15 +5,15 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::Arc;
 
-use backplane::control::{JobSpec, Outcome};
-use backplane::core::change::{BOUND, MERGE};
-use backplane::jobs::{self, Board};
+use agent::control::{JobSpec, Outcome};
+use agent::core::change::{BOUND, MERGE};
+use agent::jobs::{self, Board};
 use tempfile::TempDir;
 
 use crate::harness as common;
 
 /// Runs `spec` with the built `pigeon-sentinel` as the bound job's judge.
-fn run_job(spec: &JobSpec, dir: &Path) -> backplane::control::Report {
+fn run_job(spec: &JobSpec, dir: &Path) -> agent::control::Report {
     jobs::run_judged(spec, dir, common::sentinel())
 }
 
@@ -237,7 +237,7 @@ fn the_merge_job_squashes_the_checked_tree_onto_main_and_deletes_the_branch() {
     let mut s = spec(&bare, &sha, MERGE, &["CLAUDE.md"], &[]);
     s.approver = Some("owner@example.com".into());
     s.env.insert(
-        backplane::control::COMMIT_AUTHOR.into(),
+        agent::control::COMMIT_AUTHOR.into(),
         "Owner <1+owner@users.noreply.github.com>".into(),
     );
     let r = run_job(&s, &tmp.path().join("m"));
@@ -288,7 +288,7 @@ fn a_merge_with_no_author_is_pigeons_and_a_malformed_author_is_refused() {
     let mut s = spec(&bare, &sha, MERGE, &["CLAUDE.md"], &[]);
     s.approver = Some("grant:owner@example.com".into());
     s.env.insert(
-        backplane::control::COMMIT_AUTHOR.into(),
+        agent::control::COMMIT_AUTHOR.into(),
         "no-angle-brackets@example.com".into(),
     );
     let r = run_job(&s, &tmp.path().join("bad"));
@@ -355,7 +355,7 @@ fn every_deploy_publishes_the_architecture_site() {
     git(&work, &["push", "-q", "origin", "main"]);
     let docs_only = git(&work, &["rev-parse", "HEAD"]);
     let deploy = |sha: &str, since: Option<&str>, dir: &str| {
-        let s = backplane::control::deploy_spec(
+        let s = agent::control::deploy_spec(
             &format!("file://{}", bare.display()),
             "a-token-never-shown",
             sha,
@@ -420,7 +420,7 @@ fn a_merge_whose_report_was_lost_is_found_on_main_when_run_again() {
 #[test]
 fn a_platform_apply_checks_out_where_its_plan_did() {
     let sha = "0123456789abcdef0123";
-    let mut s = spec(Path::new("/x"), sha, backplane::control::PLATFORM, &[], &[]);
+    let mut s = spec(Path::new("/x"), sha, agent::control::PLATFORM, &[], &[]);
     for (id, dir) in [
         ("platform-14-plan", "platform-14-plan"),
         ("platform-14-apply", "platform-14-plan"),
@@ -464,7 +464,7 @@ fn a_mirror_job_moves_main_and_tags_and_never_shows_its_token() {
     git(&work, &["push", "-q", from_path, "main:change/2-x"]);
     let sha = git(&work, &["rev-parse", "HEAD"]);
     let to_url = format!("file://{}", to.display());
-    let s = backplane::control::mirror_spec(
+    let s = agent::control::mirror_spec(
         &format!("file://{}", from.display()),
         "a-token-never-shown",
         &sha,
@@ -482,7 +482,7 @@ fn a_mirror_job_moves_main_and_tags_and_never_shows_its_token() {
     );
     assert!(!r.log.contains("ghs-never-shown"));
 
-    let gone = backplane::control::mirror_spec(
+    let gone = agent::control::mirror_spec(
         &format!("file://{}", from.display()),
         "a-token-never-shown",
         &sha,
@@ -505,11 +505,11 @@ fn a_bounded_change_head_reaches_its_branch_on_the_mirror_and_leaves_it_once_don
         &["init", "-q", "--bare", to.to_str().expect("utf-8")],
     );
     let to_url = format!("file://{}", to.display());
-    let mut s = spec(&from, &sha, backplane::control::MIRROR, &[], &[]);
+    let mut s = spec(&from, &sha, agent::control::MIRROR, &[], &[]);
     s.env = std::collections::BTreeMap::from([
-        (backplane::control::MIRROR_TO.into(), to_url.clone()),
+        (agent::control::MIRROR_TO.into(), to_url.clone()),
         (
-            backplane::control::MIRROR_TOKEN.into(),
+            agent::control::MIRROR_TOKEN.into(),
             "ghs-never-shown".into(),
         ),
     ]);
@@ -535,9 +535,9 @@ fn a_bounded_change_head_reaches_its_branch_on_the_mirror_and_leaves_it_once_don
             .contains("ghs-never-shown")
     );
 
-    let mut change = backplane::core::change::Change::propose(1, "x", "docs: x", "p", vec![], "a");
+    let mut change = agent::core::change::Change::propose(1, "x", "docs: x", "p", vec![], "a");
     change.head = Some(sha);
-    let u = backplane::control::unmirror_spec(&change, &to_url, "ghs-never-shown");
+    let u = agent::control::unmirror_spec(&change, &to_url, "ghs-never-shown");
     let r = run_job(&u, &tmp.path().join("job"));
     assert_eq!(r.outcome, Outcome::Passed, "{}", r.log);
     assert_eq!(
@@ -622,7 +622,7 @@ fn a_sentinel_binary_that_cant_judge_is_an_error_not_a_pass() {
 fn eviction_job(tmp: &Path, candidates: &serde_json::Value) -> JobSpec {
     let (bare, _) = remote(tmp, &["x.txt"]);
     let main = git(&bare, &["rev-parse", "main"]);
-    backplane::control::eviction_spec(
+    agent::control::eviction_spec(
         &format!("file://{}", bare.display()),
         "a-token-never-shown",
         &main,
@@ -640,8 +640,8 @@ fn the_eviction_job_asks_mains_sentinel_about_each_candidate() {
     ]);
     let spec = eviction_job(tmp.path(), &candidates);
     assert_eq!(
-        backplane::control::class_of(&spec.job),
-        backplane::control::Class::Runner
+        agent::control::class_of(&spec.job),
+        agent::control::Class::Runner
     );
     let bin = stand_in(
         tmp.path(),
@@ -669,7 +669,7 @@ esac"#,
             (80, serde_json::Value::Null)
         ]
     );
-    let judged = backplane::control::Judged {
+    let judged = agent::control::Judged {
         verdicts: r.evictions,
         passed: true,
         ..Default::default()
@@ -690,7 +690,7 @@ fn an_eviction_job_whose_judge_cant_answer_fails_and_grants_nothing() {
     let mut garbled = spec.clone();
     garbled
         .env
-        .insert(backplane::control::CANDIDATES.into(), "not json".into());
+        .insert(agent::control::CANDIDATES.into(), "not json".into());
     let r = jobs::run_judged(&garbled, &tmp.path().join("job2"), &bad);
     assert_eq!(r.outcome, Outcome::Failed);
 }
@@ -702,7 +702,7 @@ fn the_unscratch_job_deletes_only_a_sessions_scratch_ref() {
     let scratch = "refs/heads/scratch/session_abc";
     git(&remote, &["update-ref", scratch, &sha]);
     let url = remote.to_str().expect("utf-8");
-    let u = backplane::control::unscratch_spec("session_abc", url, "a-token-never-shown");
+    let u = agent::control::unscratch_spec("session_abc", url, "a-token-never-shown");
     assert_eq!(u.id, "unscratch-session-abc");
     let r = run_job(&u, &tmp.path().join("job"));
     assert_eq!(r.outcome, Outcome::Passed, "{}", r.log);
@@ -785,7 +785,7 @@ fn unreleased(tmp: &Path) -> (PathBuf, PathBuf, String) {
 }
 
 fn release_spec(bare: &Path, sha: &str) -> JobSpec {
-    backplane::control::release_spec(
+    agent::control::release_spec(
         &format!("file://{}", bare.display()),
         "a-token-never-shown",
         sha,
@@ -852,7 +852,7 @@ fn a_release_of_a_deploy_main_has_moved_past_does_nothing() {
 
 #[test]
 fn a_release_with_no_unit_is_a_changelog_commit() {
-    use backplane::cobot::release::Released;
+    use agent::cobot::release::Released;
     let unit = |u: &str| Released {
         unit: u.into(),
         version: "1.2.3".into(),
@@ -869,7 +869,7 @@ fn a_release_with_no_unit_is_a_changelog_commit() {
 
 #[test]
 fn a_release_push_refused_because_main_moved_lands_nothing() {
-    use backplane::cobot::ci::{self, Landed};
+    use agent::cobot::ci::{self, Landed};
     let tmp = TempDir::new().expect("tempdir");
     let (bare, work, sha) = unreleased(tmp.path());
     let url = format!("file://{}", bare.display());

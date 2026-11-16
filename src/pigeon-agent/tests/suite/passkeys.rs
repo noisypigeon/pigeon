@@ -1,11 +1,11 @@
 //! Passkeys: registering and asserting with ES256; see
 //! `.claude/decisions/2026-11-09-security-approvals-once-passkeys.md` §4.
 
-use backplane::core::approval::passkeys::{
+use agent::core::approval::passkeys::{
     ADD, Bound, Keyring, LOCK_AFTER, MAX_KEYS, Passkey, Proofs, RECENT, REGISTER, assert,
     bound_challenge, der_signature, grant_purpose, register, relying_party, remove_purpose,
 };
-use backplane::push::b64url;
+use agent::push::b64url;
 use p256::ecdsa::signature::Signer as _;
 use p256::ecdsa::{Signature, SigningKey};
 use sha2::{Digest as _, Sha256};

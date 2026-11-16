@@ -91,21 +91,20 @@ fn repo(area: &str) -> TempDir {
 }
 
 fn problems(root: &Path) -> Vec<String> {
-    backplane::cobot::unit::validate(root, &backplane::cobot::providers::Allowlist::default())
+    agent::cobot::unit::validate(root, &agent::cobot::providers::Allowlist::default())
         .into_iter()
         .map(|p| format!("{}: {}", p.path, p.message))
         .collect()
 }
 
 fn sources(root: &Path) -> (String, String) {
-    let units =
-        backplane::cobot::select(root, &root.join(".config"), &[UNIT.into()]).expect("valid");
-    let json = backplane::cobot::render_json(
+    let units = agent::cobot::select(root, &root.join(".config"), &[UNIT.into()]).expect("valid");
+    let json = agent::cobot::render_json(
         &units[0],
         Path::new("/state"),
-        &backplane::cobot::providers::Allowlist::default(),
+        &agent::cobot::providers::Allowlist::default(),
         0,
-        &backplane::cobot::config::Existing::new(),
+        &agent::cobot::config::Existing::new(),
     );
     let m = &json["module"];
     let get = |k: &str| m[k]["source"].as_str().expect("source").to_string();
@@ -142,7 +141,7 @@ fn moved_catalogs_resolve_from_catalog() {
         Path::new(&own).ends_with("catalog/proof/modules/item"),
         "{own}"
     );
-    let units = backplane::cobot::validate(root, &root.join(".config")).expect("valid");
+    let units = agent::cobot::validate(root, &root.join(".config")).expect("valid");
     let proof = units.iter().find(|u| u.path == UNIT).expect("unit");
     assert!(proof.dir.ends_with(UNIT), "units stay in infra/");
 }
@@ -198,7 +197,7 @@ fn capabilities_load_from_catalog_or_infra() {
     let root = repo.path();
     write(root, "catalog/proof/capabilities.yaml", CAPS);
     write(root, "infra/legacy/capabilities.yaml", CAPS);
-    let (catalogs, problems_found) = backplane::cobot::catalog::capabilities(root);
+    let (catalogs, problems_found) = agent::cobot::catalog::capabilities(root);
     assert_eq!(problems_found, Vec::new());
     let found: Vec<(&str, &str)> = catalogs
         .iter()
@@ -266,30 +265,30 @@ fn home_prefers_a_catalog_with_a_schema() {
     let dir = TempDir::new().expect("tempdir");
     let root = dir.path();
     assert_eq!(
-        backplane::cobot::catalog::home(root, "cloudflare"),
+        agent::cobot::catalog::home(root, "cloudflare"),
         root.join("infra/cloudflare")
     );
     fs::create_dir_all(root.join("catalog/cloudflare")).expect("mkdir");
     assert_eq!(
-        backplane::cobot::catalog::home(root, "cloudflare"),
+        agent::cobot::catalog::home(root, "cloudflare"),
         root.join("infra/cloudflare"),
         "an empty catalog directory is not a catalog"
     );
     write(root, "catalog/cloudflare/schema.json", "{}");
     assert_eq!(
-        backplane::cobot::catalog::home(root, "cloudflare"),
+        agent::cobot::catalog::home(root, "cloudflare"),
         root.join("catalog/cloudflare")
     );
     assert_eq!(
-        backplane::cobot::catalog::for_unit(root, "infra/cloudflare"),
+        agent::cobot::catalog::for_unit(root, "infra/cloudflare"),
         Some(root.join("catalog/cloudflare"))
     );
     assert_eq!(
-        backplane::cobot::catalog::for_unit(root, "infra/cloudflare/x"),
+        agent::cobot::catalog::for_unit(root, "infra/cloudflare/x"),
         None
     );
     assert_eq!(
-        backplane::cobot::catalog::for_unit(root, "workloads/cloudflare"),
+        agent::cobot::catalog::for_unit(root, "workloads/cloudflare"),
         None
     );
 }
@@ -306,14 +305,14 @@ fn a_local_schema_wins_over_its_catalog_copy() {
         );
     }
     module(root, "catalog/proof/modules/item", &["name"], "");
-    let (units, _) = backplane::cobot::unit::discover(root);
+    let (units, _) = agent::cobot::unit::discover(root);
     let unit = units.iter().find(|u| u.path == UNIT).expect("unit");
-    let json = backplane::cobot::render_json(
+    let json = agent::cobot::render_json(
         unit,
         Path::new("/state"),
-        &backplane::cobot::providers::Allowlist::default(),
+        &agent::cobot::providers::Allowlist::default(),
         0,
-        &backplane::cobot::config::Existing::new(),
+        &agent::cobot::config::Existing::new(),
     );
     let get = |k: &str| {
         json["module"][k]["source"]
@@ -330,11 +329,11 @@ fn a_local_schema_wins_over_its_catalog_copy() {
         Path::new(&own).ends_with("infra/proof/modules/item"),
         "{own}"
     );
-    assert_eq!(backplane::cobot::catalog::for_unit(root, UNIT), None);
+    assert_eq!(agent::cobot::catalog::for_unit(root, UNIT), None);
     write(root, "infra/cloudflare/schema.json", "{}");
     write(root, "catalog/cloudflare/schema.json", "{}");
     assert_eq!(
-        backplane::cobot::catalog::home(root, "cloudflare"),
+        agent::cobot::catalog::home(root, "cloudflare"),
         root.join("infra/cloudflare")
     );
     write(root, "infra/cloudflare/capabilities.yaml", CAPS);
@@ -343,7 +342,7 @@ fn a_local_schema_wins_over_its_catalog_copy() {
         "catalog/cloudflare/capabilities.yaml",
         "description: Other.\ncapabilities:\n  zone.read: { permissions: [Zone Read], scope: zone }\n",
     );
-    let (catalogs, found) = backplane::cobot::catalog::capabilities(root);
+    let (catalogs, found) = agent::cobot::catalog::capabilities(root);
     let cf = catalogs
         .iter()
         .find(|c| c.provider == "cloudflare")

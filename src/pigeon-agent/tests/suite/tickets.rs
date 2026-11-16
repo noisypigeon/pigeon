@@ -1,7 +1,7 @@
 //! Session tickets; see `.claude/decisions/2026-11-08-development-events-tickets-digest-mandate.md` §5.
 
-use backplane::sessions::{Class, declare};
-use backplane::tickets::{REMEMBER, TTL, Tickets, guarded, holder, require, sign, verify};
+use agent::sessions::{Class, declare};
+use agent::tickets::{REMEMBER, TTL, Tickets, guarded, holder, require, sign, verify};
 
 const KEY: &[u8] = b"a session key for the tests only";
 const A: &str = "https://claude.ai/code/session_a";
@@ -153,7 +153,7 @@ fn a_handoff_needs_the_change_holders_ticket_not_the_recipients() {
 const P: &str = "https://claude.ai/code/session_planner";
 const Q: &str = "https://claude.ai/code/session_status";
 
-fn handoff(change: u32, to: &str, claimed: Option<&str>) -> backplane::tasks::Task {
+fn handoff(change: u32, to: &str, claimed: Option<&str>) -> agent::tasks::Task {
     serde_json::from_value(serde_json::json!({
         "id": change, "kind": "handoff", "change": change, "session": to,
         "note": "offered", "created": 0, "claimed_by": claimed,
@@ -163,7 +163,7 @@ fn handoff(change: u32, to: &str, claimed: Option<&str>) -> backplane::tasks::Ta
 
 #[test]
 fn an_end_is_clean_only_when_every_held_change_is_offered_to_another_session() {
-    use backplane::tickets::clean;
+    use agent::tickets::clean;
     assert!(clean(A, &[], &[]), "nothing held");
     assert!(clean(A, &[7], &[handoff(7, P, None)]));
     assert!(!clean(A, &[7], &[]), "held with no hand-off");
@@ -244,7 +244,7 @@ fn an_archiver_reports_without_a_ticket_of_its_own_but_no_other_session_does() {
 
 #[test]
 fn a_silent_session_holding_nothing_lapses_after_idle() {
-    use backplane::tickets::IDLE;
+    use agent::tickets::IDLE;
     use std::collections::{BTreeMap, BTreeSet};
     const B: &str = "https://claude.ai/code/session_b";
     const C: &str = "https://claude.ai/code/session_c";
@@ -311,7 +311,7 @@ fn an_unclean_end_is_never_archived_nor_listed() {
 
 #[test]
 fn a_clean_end_is_listed_unarchived_from_an_hour_to_a_day() {
-    use backplane::tickets::UNARCHIVED;
+    use agent::tickets::UNARCHIVED;
     let mut t = Tickets::default();
     t.start(A, false, 0).expect("issues");
     t.end(A, 10);

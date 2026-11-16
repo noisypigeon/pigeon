@@ -6,14 +6,14 @@ use std::fmt::Write as _;
 use std::fs;
 use std::sync::{Arc, Mutex};
 
-use backplane::cobot::s3::{Bucket, Credentials};
-use backplane::cobot::state::{Mirror, Store};
+use agent::cobot::s3::{Bucket, Credentials};
+use agent::cobot::state::{Mirror, Store};
 use tempfile::TempDir;
 
 type Objects = Arc<Mutex<BTreeMap<String, Vec<u8>>>>;
 
 fn etag(body: &[u8]) -> String {
-    backplane::cobot::s3::md5_hex(body)
+    agent::cobot::s3::md5_hex(body)
 }
 
 fn decode(path: &str) -> String {
@@ -134,7 +134,7 @@ fn stores_parse_without_echoing_values() {
     assert!(matches!(Store::parse("../state", none), Ok(Store::Dir(_))));
     let vars = |k: &str| {
         k.starts_with("PIGEON_").then_some(())?;
-        Some(if k == backplane::cobot::state::ENDPOINT_VAR {
+        Some(if k == agent::cobot::state::ENDPOINT_VAR {
             "https://r2.example".into()
         } else {
             format!("value-of-{k}")
@@ -154,7 +154,7 @@ fn stores_parse_without_echoing_values() {
     ] {
         let err = Store::parse("r2://b/p", |k: &str| {
             k.starts_with("PIGEON_").then_some(())?;
-            Some(if k == backplane::cobot::state::ENDPOINT_VAR {
+            Some(if k == agent::cobot::state::ENDPOINT_VAR {
                 insecure.into()
             } else {
                 "v".into()
@@ -165,7 +165,7 @@ fn stores_parse_without_echoing_values() {
     }
     let missing = Store::parse("r2://b/p", none).expect_err("no endpoint");
     assert!(
-        missing.contains(backplane::cobot::state::ENDPOINT_VAR),
+        missing.contains(agent::cobot::state::ENDPOINT_VAR),
         "{missing}"
     );
     for bad in ["r2://b", "r2://b/", "r2://b/../x", "r2://b/a//c", "r2:///p"] {
@@ -217,7 +217,7 @@ fn a_mirror_round_trips_changes_and_skips_other_prefixes() {
     );
     assert_eq!(
         get(&objects, "p/infra/old/terraform.tfstate").as_deref(),
-        Some(backplane::cobot::state::TOMBSTONE),
+        Some(agent::cobot::state::TOMBSTONE),
         "removal overwrites with a tombstone, never a DELETE"
     );
     assert_eq!(

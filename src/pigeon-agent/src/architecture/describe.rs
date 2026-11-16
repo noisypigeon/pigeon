@@ -82,7 +82,7 @@ fn engines_and_operations(g: &mut Graph) {
         "engine",
         Lane::Run,
         "backplane",
-        "backplane::engines()",
+        "agent::engines()",
     ));
     for e in engines() {
         let name = e.engine.name();
@@ -91,7 +91,7 @@ fn engines_and_operations(g: &mut Graph) {
             "engine",
             Lane::Run,
             name,
-            "backplane::engines()",
+            "agent::engines()",
         ));
     }
     for op in catalog() {
@@ -101,13 +101,13 @@ fn engines_and_operations(g: &mut Graph) {
             "operation",
             Lane::Operations,
             op.name,
-            "backplane::catalog()",
+            "agent::catalog()",
         ));
         g.edges.push(edge(
             &id,
             &format!("engine:{}", op.engine.name()),
             "runs",
-            "backplane::catalog()",
+            "agent::catalog()",
         ));
     }
 }

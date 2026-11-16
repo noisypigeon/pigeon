@@ -1,9 +1,9 @@
 //! The owner's digest; see
 //! `.claude/decisions/2026-11-08-development-events-tickets-digest-mandate.md` §4.
 
-use backplane::approve::Waiting;
-use backplane::core::approval::mandates::{Mandates, State};
-use backplane::tasks::{DigestInput, STALE, Tasks, digest};
+use agent::approve::Waiting;
+use agent::core::approval::mandates::{Mandates, State};
+use agent::tasks::{DigestInput, STALE, Tasks, digest};
 
 const ADR: &str = ".claude/decisions/2026-11-08-development-events-tickets-digest-mandate.md";
 
@@ -141,7 +141,7 @@ fn a_mirror_behind_needs_the_owner() {
 
 #[test]
 fn sessions_are_shown_but_never_pushed() {
-    use backplane::tasks::{Digest, SessionLine};
+    use agent::tasks::{Digest, SessionLine};
     let d = Digest {
         sessions: vec![SessionLine {
             label: "https://claude.ai/code/session_abc".into(),
@@ -167,7 +167,7 @@ fn sessions_are_shown_but_never_pushed() {
 fn a_change_needing_a_session_that_isnt_listening_is_pushed_as_stalled() {
     // !364 waited on its unattended session, and !374 on it; see the session-stages ADR's
     // 2026-11-13 amendment on stalls.
-    use backplane::tasks::{STALL, Stall, stalled};
+    use agent::tasks::{STALL, Stall, stalled};
     assert_eq!(stalled(Some(0), None, "agent", STALL - 1), None, "not yet");
     assert_eq!(stalled(Some(0), None, "agent", STALL), Some(Some(STALL)));
     assert_eq!(stalled(None, None, "agent", 0), Some(None), "never polled");
@@ -200,8 +200,8 @@ fn a_change_needing_a_session_that_isnt_listening_is_pushed_as_stalled() {
 #[test]
 fn a_sessions_class_is_named_on_its_lines() {
     // See the model-tiered briefs ADR §7.
-    use backplane::sessions::Class;
-    use backplane::tasks::{Digest, SessionLine, Stall};
+    use agent::sessions::Class;
+    use agent::tasks::{Digest, SessionLine, Stall};
     let d = Digest {
         sessions: vec![SessionLine {
             label: "https://claude.ai/code/session_h".into(),
@@ -263,7 +263,7 @@ fn the_digest_names_a_mandate_held_by_a_failed_deploy() {
 
 #[test]
 fn failed_starts_and_lost_containers_are_counted_in_a_line_that_is_never_pushed_alone() {
-    let event = |id: u64, kind: &str, summary: &str| backplane::events::Event {
+    let event = |id: u64, kind: &str, summary: &str| agent::events::Event {
         id,
         at: id,
         kind: kind.into(),
@@ -287,13 +287,13 @@ fn failed_starts_and_lost_containers_are_counted_in_a_line_that_is_never_pushed_
             "!464 job `restack` didn't start (1 of 8): 502",
         ),
     ];
-    let line = backplane::tasks::containers(&events).expect("a line");
+    let line = agent::tasks::containers(&events).expect("a line");
     assert!(line.contains("2 failed start(s)"), "{line}");
     assert!(
         line.ends_with("!464 job `restack` didn't start (1 of 8): 502"),
         "{line}"
     );
-    assert_eq!(backplane::tasks::containers(&events[1..2]), None);
+    assert_eq!(agent::tasks::containers(&events[1..2]), None);
     let mut d = digest(&DigestInput::default(), 100);
     d.containers = Some(line.clone());
     assert!(!d.needs_owner(), "never pushed alone");
@@ -304,7 +304,7 @@ fn failed_starts_and_lost_containers_are_counted_in_a_line_that_is_never_pushed_
         "job.redispatched",
         "!506 job `restack` was queued with no start pending; dispatched again",
     );
-    let line = backplane::tasks::containers(&[stalled]).expect("names it");
+    let line = agent::tasks::containers(&[stalled]).expect("names it");
     assert!(
         line.contains("0 failed start(s) or loss(es), 1 stalled job(s)"),
         "{line}"
@@ -317,7 +317,7 @@ fn failed_starts_and_lost_containers_are_counted_in_a_line_that_is_never_pushed_
 // See `.claude/decisions/2026-11-15-development-sessions-stop-only-for-oversight.md` §5.
 #[test]
 fn the_digest_counts_stops_by_kind_and_shows_none_without_them() {
-    use backplane::events::Event;
+    use agent::events::Event;
     let e = |id: u64, kind: &str, summary: &str| Event {
         id,
         at: id,
@@ -329,11 +329,8 @@ fn the_digest_counts_stops_by_kind_and_shows_none_without_them() {
         stage: None,
         model: None,
     };
-    assert_eq!(backplane::tasks::stops(&[]), None);
-    assert_eq!(
-        backplane::tasks::stops(&[e(1, "change.checked", "x")]),
-        None
-    );
+    assert_eq!(agent::tasks::stops(&[]), None);
+    assert_eq!(agent::tasks::stops(&[e(1, "change.checked", "x")]), None);
     let events = [
         e(
             1,
@@ -356,7 +353,7 @@ fn the_digest_counts_stops_by_kind_and_shows_none_without_them() {
         e(7, "task.made", "task (review) on !6: x"),
     ];
     assert_eq!(
-        backplane::tasks::stops(&events).as_deref(),
+        agent::tasks::stops(&events).as_deref(),
         Some(
             "stops since last digest: owner 4 (approve 2, authorize 1, grant 1); agent nudged 1; escalated 1"
         )
@@ -365,7 +362,7 @@ fn the_digest_counts_stops_by_kind_and_shows_none_without_them() {
 
 #[test]
 fn the_digest_shows_archives_and_clean_ends_not_archived_without_pushing() {
-    let lines = backplane::tasks::archive_lines(
+    let lines = agent::tasks::archive_lines(
         &["session_a archived by session_p: !9 merged".into()],
         &[("https://claude.ai/code/session_b".into(), None)],
     );
@@ -376,9 +373,9 @@ fn the_digest_shows_archives_and_clean_ends_not_archived_without_pushing() {
             "ended clean, not archived: session_b (archiver none)".to_string(),
         ]
     );
-    let d = backplane::tasks::Digest {
+    let d = agent::tasks::Digest {
         archives: lines,
-        ..backplane::tasks::Digest::default()
+        ..agent::tasks::Digest::default()
     };
     assert!(!d.needs_owner(), "shown, never pushed");
     assert_eq!(d.lines().len(), 2);
@@ -390,7 +387,7 @@ fn the_digest_shows_archives_and_clean_ends_not_archived_without_pushing() {
 // amendment on stalls.
 #[test]
 fn a_change_authorized_minutes_ago_is_not_stalled_whatever_its_sessions_last_poll() {
-    use backplane::tasks::{STALL, stalled};
+    use agent::tasks::{STALL, stalled};
     let now = 100_000;
     let authorized = now - 5 * 60;
     assert_eq!(
@@ -419,7 +416,7 @@ fn a_change_authorized_minutes_ago_is_not_stalled_whatever_its_sessions_last_pol
 // See `.claude/decisions/2026-11-15-security-standing-auto-owner-flags.md` §4.
 #[test]
 fn an_open_owner_item_is_pushed_first_and_counted_in_the_stops() {
-    let d = backplane::tasks::Digest {
+    let d = agent::tasks::Digest {
         items: vec!["decision #1 from session_a, 0h05m: Which region?".into()],
         unlisted: vec![464],
         ..Default::default()
@@ -429,7 +426,7 @@ fn an_open_owner_item_is_pushed_first_and_counted_in_the_stops() {
         d.owner_lines()[0],
         "for you: decision #1 from session_a, 0h05m: Which region?"
     );
-    let e = |id: u64, summary: &str| backplane::events::Event {
+    let e = |id: u64, summary: &str| agent::events::Event {
         id,
         at: id,
         kind: "owner.asked".into(),
@@ -441,7 +438,7 @@ fn an_open_owner_item_is_pushed_first_and_counted_in_the_stops() {
         model: None,
     };
     assert_eq!(
-        backplane::tasks::stops(&[e(1, "decision #1: x"), e(2, "action #2: y")]).as_deref(),
+        agent::tasks::stops(&[e(1, "decision #1: x"), e(2, "action #2: y")]).as_deref(),
         Some(
             "stops since last digest: owner 2 (action 1, decision 1); agent nudged 0; escalated 0"
         )
@@ -450,7 +447,7 @@ fn an_open_owner_item_is_pushed_first_and_counted_in_the_stops() {
 
 #[test]
 fn the_digest_shows_each_move_to_the_front() {
-    use backplane::events::Event;
+    use agent::events::Event;
     let e = |id: u64, kind: &str, summary: &str| Event {
         id,
         at: id,
@@ -463,7 +460,7 @@ fn the_digest_shows_each_move_to_the_front() {
         model: None,
     };
     let moved = "!585 was moved to the front of the merge queue by owner, from 17/17";
-    let lines = backplane::tasks::queue_lines(&[
+    let lines = agent::tasks::queue_lines(&[
         e(1, "merge.kept", "!9 keeps its merge turn"),
         e(2, "merge.fronted", moved),
     ]);

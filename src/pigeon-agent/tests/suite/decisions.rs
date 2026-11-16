@@ -1,7 +1,7 @@
 //! Which ADRs govern a path; see
 //! `.claude/decisions/2026-11-10-development-factory-crates-functional-core.md` §4.
 
-use backplane::decisions::{governing, parse};
+use agent::decisions::{governing, parse};
 
 const ADR: &str = "## The factory's code\n\n* Date: 2026-11-10\n* Category: development\n\
 * Governs: `src/pigeon-cli/crates/sentinel/**`, `tooling/ci/test-map.sh`\n\n## Context\n\n\

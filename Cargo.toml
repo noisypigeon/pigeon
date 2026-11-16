@@ -23,7 +23,7 @@ publish = false
 common = { path = "src/common", package = "pigeon-common" }
 pigeon-core = { path = "src/pigeon-core" }
 eviction = { path = "src/pigeon-eviction", package = "pigeon-eviction" }
-backplane = { path = "src/pigeon-agent", package = "pigeon-agent", default-features = false }
+agent = { path = "src/pigeon-agent", package = "pigeon-agent", default-features = false }
 age = { version = "0.12.1", default-features = false }
 aes-gcm = { version = "0.10.3", default-features = false, features = ["aes", "alloc"] }
 assert_cmd = "2.2.2"

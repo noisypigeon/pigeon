@@ -3,7 +3,7 @@
 
 use std::path::{Path, PathBuf};
 
-use backplane::cobot::scope::{Job, jobs};
+use agent::cobot::scope::{Job, jobs};
 
 fn repo_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
@@ -210,7 +210,7 @@ fn site_templates_build_the_sites() {
 fn deploys_name_the_sites_a_change_to_main_publishes() {
     let root = repo_root();
     let files = |f: &[&str]| f.iter().map(|s| (*s).to_string()).collect::<Vec<_>>();
-    let all = backplane::cobot::scope::deploys(&root, None).expect("finds");
+    let all = agent::cobot::scope::deploys(&root, None).expect("finds");
     assert_eq!(all, ["sites/docs"], "only the instance's manifest sites");
     for changed in [
         &["catalog/cloudflare/capabilities.yaml"][..],
@@ -219,7 +219,7 @@ fn deploys_name_the_sites_a_change_to_main_publishes() {
         &["src/pigeon-site-templates/blog/templates/index.html"],
         &["src/pigeon-agent/src/worker/mod.rs", "CLAUDE.md"],
     ] {
-        let got = backplane::cobot::scope::deploys(&root, Some(&files(changed))).expect("finds");
+        let got = agent::cobot::scope::deploys(&root, Some(&files(changed))).expect("finds");
         assert_eq!(
             got,
             ["sites/docs"],
@@ -233,7 +233,7 @@ fn workers_deploy_when_their_spec_crates_or_migrations_change() {
     let workers = |files: Option<&[&str]>| {
         let files: Option<Vec<String>> =
             files.map(|f| f.iter().map(|s| (*s).to_string()).collect());
-        backplane::cobot::scope::workers(&repo_root(), files.as_deref()).expect("scopes")
+        agent::cobot::scope::workers(&repo_root(), files.as_deref()).expect("scopes")
     };
     let control = vec!["pigeon-control".to_string()];
     for hit in [
@@ -284,7 +284,7 @@ fn a_spike_runs_as_its_own_check() {
 
 #[test]
 fn the_full_set_is_what_a_workspace_wide_change_runs() {
-    let full: Vec<String> = backplane::cobot::scope::full(&repo_root())
+    let full: Vec<String> = agent::cobot::scope::full(&repo_root())
         .expect("reads")
         .into_iter()
         .map(|j| j.name)
@@ -306,7 +306,7 @@ fn the_test_map_runs_when_its_script_changes() {
         ["test map", "policy.check"]
     );
     assert_eq!(
-        backplane::cobot::scope::test_map().argv,
+        agent::cobot::scope::test_map().argv,
         ["bash", "../../tooling/ci/test-map.sh"],
         "as backplane's actions::on_github knows it"
     );
@@ -315,15 +315,14 @@ fn the_test_map_runs_when_its_script_changes() {
 
 const BACKPLANE: &str = "src/pigeon-agent/";
 
-fn map() -> backplane::cobot::scope::TestMap {
-    let bin =
-        |package: &str, kind: &str, name: &str, files: &[&str]| backplane::cobot::scope::Binary {
-            package: package.into(),
-            kind: kind.into(),
-            name: name.into(),
-            filter: String::new(),
-            files: files.iter().map(|f| format!("{BACKPLANE}{f}")).collect(),
-        };
+fn map() -> agent::cobot::scope::TestMap {
+    let bin = |package: &str, kind: &str, name: &str, files: &[&str]| agent::cobot::scope::Binary {
+        package: package.into(),
+        kind: kind.into(),
+        name: name.into(),
+        filter: String::new(),
+        files: files.iter().map(|f| format!("{BACKPLANE}{f}")).collect(),
+    };
     let mut binaries = vec![
         bin(
             "pigeon-agent",
@@ -342,7 +341,7 @@ fn map() -> backplane::cobot::scope::TestMap {
     for n in 0..2 {
         binaries.push(bin("pigeon", "test", &format!("t{n}"), &["src/other.rs"]));
     }
-    backplane::cobot::scope::TestMap {
+    agent::cobot::scope::TestMap {
         sha: "a".repeat(40),
         binaries,
     }
@@ -350,7 +349,7 @@ fn map() -> backplane::cobot::scope::TestMap {
 
 fn with_map(files: &[&str]) -> Vec<String> {
     let files: Vec<String> = files.iter().map(|f| (*f).to_string()).collect();
-    backplane::cobot::scope::jobs_with(&repo_root(), &files, Some(&map()))
+    agent::cobot::scope::jobs_with(&repo_root(), &files, Some(&map()))
         .expect("scopes")
         .into_iter()
         .map(|Job { name, .. }| name)
@@ -382,7 +381,7 @@ fn the_test_map_runs_the_binaries_that_ran_a_changed_file() {
         ["test pigeon-agent: suite cobot_scope"],
         "its own binary, now its suite module"
     );
-    let jobs = backplane::cobot::scope::jobs_with(
+    let jobs = agent::cobot::scope::jobs_with(
         &repo_root(),
         &["src/pigeon-agent/src/cobot/release.rs".to_string()],
         Some(&map()),
@@ -495,9 +494,9 @@ fn a_unit_test_module_the_map_doesnt_know_runs_its_lib() {
     }
 }
 
-fn suite_map() -> backplane::cobot::scope::TestMap {
+fn suite_map() -> agent::cobot::scope::TestMap {
     let unit = |package: &str, kind: &str, name: &str, filter: &str, files: &[&str]| {
-        backplane::cobot::scope::Binary {
+        agent::cobot::scope::Binary {
             package: package.into(),
             kind: kind.into(),
             name: name.into(),
@@ -544,7 +543,7 @@ fn suite_map() -> backplane::cobot::scope::TestMap {
             &["src/other.rs"],
         ));
     }
-    backplane::cobot::scope::TestMap {
+    agent::cobot::scope::TestMap {
         sha: "a".repeat(40),
         binaries,
     }
@@ -552,7 +551,7 @@ fn suite_map() -> backplane::cobot::scope::TestMap {
 
 fn with_suite_map(files: &[&str]) -> Vec<Job> {
     let files: Vec<String> = files.iter().map(|f| (*f).to_string()).collect();
-    backplane::cobot::scope::jobs_with(&repo_root(), &files, Some(&suite_map()))
+    agent::cobot::scope::jobs_with(&repo_root(), &files, Some(&suite_map()))
         .expect("scopes")
         .into_iter()
         .filter(|j| j.name.starts_with("test "))
@@ -637,7 +636,7 @@ fn a_map_by_module_runs_only_the_suite_modules_a_change_reaches() {
 
 #[test]
 fn a_map_without_filters_reads_as_whole_targets() {
-    let map: backplane::cobot::scope::TestMap = serde_json::from_str(
+    let map: agent::cobot::scope::TestMap = serde_json::from_str(
         r#"{"version":1,"sha":"a","binaries":[{"package":"p","kind":"test","name":"x","argv":["cargo"],"files":["f.rs"]}]}"#,
     )
     .expect("a version 1 map reads");
@@ -649,8 +648,8 @@ fn a_map_without_filters_reads_as_whole_targets() {
 /// 2026-11-16 amendment.
 #[test]
 fn a_deploy_releases_the_ios_app_only_when_it_changed_it() {
-    use backplane::control::Report;
-    use backplane::iosrelease::{INPUTS, NOT_INPUTS, triggers};
+    use agent::control::Report;
+    use agent::iosrelease::{INPUTS, NOT_INPUTS, triggers};
     let root = repo_root();
     for p in INPUTS.iter().chain(NOT_INPUTS) {
         let (dir, name) = p.rsplit_once('/').expect("a path");
@@ -676,7 +675,7 @@ fn a_deploy_releases_the_ios_app_only_when_it_changed_it() {
     ]))));
     let report = Report {
         ios: true,
-        ..Report::of("deploy-x", backplane::control::Outcome::Passed, "")
+        ..Report::of("deploy-x", agent::control::Outcome::Passed, "")
     };
     let wire = serde_json::to_value(&report).expect("serializes");
     assert_eq!(wire["ios"], true, "the Worker reads it");

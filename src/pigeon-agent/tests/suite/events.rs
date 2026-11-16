@@ -2,8 +2,8 @@
 
 use crate::harness::step;
 
-use backplane::core::change::stage::{Needs, Stage};
-use backplane::events::{
+use agent::core::change::stage::{Needs, Stage};
+use agent::events::{
     Filter, KEEP, KEEP_FOR, Log, NUDGE_AFTER, NUDGE_EVERY, NUDGED, due, look, moves, wakes,
 };
 
@@ -89,8 +89,8 @@ fn the_log_keeps_the_newest_and_drops_the_old() {
 }
 
 mod of_change {
-    use backplane::core::change::{Change, Check, Event};
-    use backplane::events::of_change;
+    use agent::core::change::{Change, Check, Event};
+    use agent::events::of_change;
 
     use super::step::Apply;
 
@@ -166,7 +166,7 @@ mod of_change {
 
 #[test]
 fn an_event_keeps_its_changes_stage_and_one_without_reads_as_before() {
-    let old: backplane::events::Event = serde_json::from_value(serde_json::json!({
+    let old: agent::events::Event = serde_json::from_value(serde_json::json!({
         "id": 1, "at": 2, "kind": "change.checked", "change": 3, "summary": "s"
     }))
     .expect("an event from before stages reads");
@@ -175,7 +175,7 @@ fn an_event_keeps_its_changes_stage_and_one_without_reads_as_before() {
         "id": 1, "at": 2, "kind": "change.checked", "change": 3, "summary": "s",
         "stage": { "stage": "checked", "needs": "agent", "next": "ask" }
     });
-    let e: backplane::events::Event = serde_json::from_value(staged.clone()).expect("reads");
+    let e: agent::events::Event = serde_json::from_value(staged.clone()).expect("reads");
     assert_eq!(e.stage.as_ref().map(|s| s.stage.as_str()), Some("checked"));
     assert_eq!(serde_json::to_value(&e).expect("writes"), staged);
 }
@@ -220,7 +220,7 @@ fn wake_lets_through_only_what_the_agent_acts_on() {
 
 #[test]
 fn a_session_resumes_from_its_cursor_and_a_new_one_from_now() {
-    use backplane::events::{After, Cursors};
+    use agent::events::{After, Cursors};
     let mut c = Cursors::default();
     assert_eq!(
         c.poll("s", After::Session, 40, 100),
@@ -254,13 +254,13 @@ fn a_session_resumes_from_its_cursor_and_a_new_one_from_now() {
 
 #[test]
 fn an_event_carries_its_session_s_class_and_an_older_one_reads_without() {
-    let old: backplane::events::Event = serde_json::from_str(
+    let old: agent::events::Event = serde_json::from_str(
         r#"{"id":1,"at":2,"kind":"change.checked","session":"s","summary":"checked"}"#,
     )
     .expect("an event logged before classes");
     assert_eq!(old.model, None);
     let mut e = old;
-    e.model = Some(backplane::sessions::Class::Haiku);
+    e.model = Some(agent::sessions::Class::Haiku);
     let v = serde_json::to_value(&e).expect("json");
     assert_eq!(v["model"], "haiku");
 }
@@ -374,8 +374,8 @@ fn a_clean_end_wakes_its_archiver() {
 // amendment on generated changes.
 #[test]
 fn a_control_plane_review_awaiting_its_plan_is_due_the_windows_authorization() {
-    use backplane::core::change::{Approval, Change, State};
-    use backplane::events::authorize_due;
+    use agent::core::change::{Approval, Change, State};
+    use agent::events::authorize_due;
     let mut review = Change::propose(
         559,
         "review-549-555",

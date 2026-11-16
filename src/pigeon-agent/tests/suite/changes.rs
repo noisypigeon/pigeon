@@ -3,11 +3,11 @@
 
 use crate::harness::step;
 
-use backplane::control;
-use backplane::core::change::{
+use agent::control;
+use agent::core::change::{
     BOUND, Change, Check, Effect, Event, JobStatus, MERGE, MIRROR, State, branch, is_sha,
 };
-use backplane::core::platform::runs::MAX_ATTEMPTS;
+use agent::core::platform::runs::MAX_ATTEMPTS;
 use step::Apply;
 
 const A: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -270,7 +270,7 @@ fn a_lost_job_retries_until_its_attempts_are_used() {
             })
             .expect("lost");
         if n < MAX_ATTEMPTS {
-            let secs = backplane::core::change::LOST_BACKOFF[n as usize - 1];
+            let secs = agent::core::change::LOST_BACKOFF[n as usize - 1];
             let job = "fmt".into();
             assert_eq!(effects, [Effect::StartAfter { job, secs }]);
         }
@@ -428,17 +428,17 @@ fn a_new_push_clears_the_old_heads_tiers() {
         sha: "a".repeat(40),
     })
     .expect("pushed");
-    c.tiers = Some(backplane::core::approval::tiers::Tiers {
-        authorize: backplane::core::approval::tiers::Tiered {
-            tier: backplane::core::approval::tiers::Tier::Code,
+    c.tiers = Some(agent::core::approval::tiers::Tiers {
+        authorize: agent::core::approval::tiers::Tiered {
+            tier: agent::core::approval::tiers::Tier::Code,
             rule: "r".into(),
         },
-        merge: backplane::core::approval::tiers::Tiered {
-            tier: backplane::core::approval::tiers::Tier::Confirm,
+        merge: agent::core::approval::tiers::Tiered {
+            tier: agent::core::approval::tiers::Tier::Confirm,
             rule: "r".into(),
         },
-        close: backplane::core::approval::tiers::Tiered {
-            tier: backplane::core::approval::tiers::Tier::Confirm,
+        close: agent::core::approval::tiers::Tiered {
+            tier: agent::core::approval::tiers::Tier::Confirm,
             rule: "r".into(),
         },
     });

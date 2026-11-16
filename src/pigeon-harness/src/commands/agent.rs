@@ -1,6 +1,6 @@
 //! `pigeon agent`; see `.claude/decisions/2026-11-03-development-backplane-platform-composition-layer.md`.
 
-use backplane::{Instance, Request, Response};
+use agent::{Instance, Request, Response};
 
 use super::{INVALID, SUCCESS, VIOLATION};
 use crate::cli::{AgentOp, DecisionsArgs, JobsArgs, RootArgs, ServeArgs};
@@ -11,7 +11,7 @@ pub fn run(command: AgentOp) -> i32 {
     match command {
         AgentOp::Instance(args) => operation("instance.show", &[], &[], &args),
         AgentOp::Engines(args) => {
-            let engines = backplane::engines();
+            let engines = agent::engines();
             if args.json {
                 print_json(&engines);
             } else {
@@ -22,7 +22,7 @@ pub fn run(command: AgentOp) -> i32 {
             SUCCESS
         }
         AgentOp::Operations(args) => {
-            let ops = backplane::catalog();
+            let ops = agent::catalog();
             if args.json {
                 print_json(&ops);
             } else {
@@ -58,7 +58,7 @@ fn totp_secret() -> i32 {
         eprintln!("backplane: no randomness: {e}");
         return INVALID;
     }
-    let secret = backplane::core::approval::totp::base32_encode(&bytes);
+    let secret = agent::core::approval::totp::base32_encode(&bytes);
     eprintln!(
         "Add this to your authenticator app (it is shown once; nothing stores it but the app and the Worker):\n\
          otpauth://totp/pigeon:owner?secret={secret}&issuer=pigeon&algorithm=SHA1&digits=6&period=30"
@@ -72,7 +72,7 @@ fn enroll_secret() -> i32 {
     use std::io::Read;
     use std::time::{SystemTime, UNIX_EPOCH};
 
-    use backplane::core::approval::enroll;
+    use agent::core::approval::enroll;
     let mut bytes = [0u8; 32];
     if let Err(e) = std::fs::File::open("/dev/urandom").and_then(|mut f| f.read_exact(&mut bytes)) {
         eprintln!("backplane: no randomness: {e}");
@@ -102,8 +102,8 @@ fn vapid_key() -> i32 {
             eprintln!("backplane: no randomness: {e}");
             return INVALID;
         }
-        let secret = backplane::push::b64url(&bytes);
-        if let Ok(v) = backplane::push::Vapid::from_secret(&secret) {
+        let secret = agent::push::b64url(&bytes);
+        if let Ok(v) = agent::push::Vapid::from_secret(&secret) {
             eprintln!("Web Push public key: {}", v.public_key());
             println!("{secret}");
             return SUCCESS;
@@ -114,12 +114,12 @@ fn vapid_key() -> i32 {
 }
 
 fn serve(args: &ServeArgs) -> i32 {
-    let token = std::env::var(backplane::serve::TOKEN_VAR)
+    let token = std::env::var(agent::serve::TOKEN_VAR)
         .ok()
         .unwrap_or_default();
-    let bound = backplane::serve::Tls::from_vars(|k| std::env::var(k).ok()).and_then(|tls| {
+    let bound = agent::serve::Tls::from_vars(|k| std::env::var(k).ok()).and_then(|tls| {
         let instance = load(&args.root, args.instance.as_deref())?;
-        backplane::serve::Server::bind(
+        agent::serve::Server::bind(
             instance,
             &args.listen,
             &args.state,
@@ -151,11 +151,11 @@ fn serve(args: &ServeArgs) -> i32 {
 }
 
 fn jobs(args: &JobsArgs) -> i32 {
-    let token = std::env::var(backplane::serve::TOKEN_VAR)
+    let token = std::env::var(agent::serve::TOKEN_VAR)
         .ok()
         .unwrap_or_default();
-    let board = std::sync::Arc::new(backplane::jobs::Board::new(args.work.clone()));
-    let server = match backplane::serve::Server::bind_jobs(&args.listen, &token, board) {
+    let board = std::sync::Arc::new(agent::jobs::Board::new(args.work.clone()));
+    let server = match agent::serve::Server::bind_jobs(&args.listen, &token, board) {
         Ok(s) if args.bench => {
             // The sandbox mounts its own /tmp, which would hide a checkout there.
             let Some(work) = args.work.clone().filter(|w| !w.starts_with("/tmp")) else {
@@ -163,9 +163,9 @@ fn jobs(args: &JobsArgs) -> i32 {
                 return INVALID;
             };
             let work = work.join("bench");
-            s.with_bench(std::sync::Arc::new(backplane::cobot::bench::Bench::new(
+            s.with_bench(std::sync::Arc::new(agent::cobot::bench::Bench::new(
                 work,
-                backplane::cobot::bench::Sandbox::Unshare,
+                agent::cobot::bench::Sandbox::Unshare,
                 |k| std::env::var(k).ok(),
             )))
         }
@@ -222,7 +222,7 @@ fn operation(name: &str, raw: &[String], text: &[String], args: &RootArgs) -> i3
         operation: name.to_string(),
         args: parsed,
     };
-    match load(&args.root, args.instance.as_deref()).and_then(|i| backplane::run(&i, &request)) {
+    match load(&args.root, args.instance.as_deref()).and_then(|i| agent::run(&i, &request)) {
         Ok(response) => {
             if args.json {
                 print_json(&response);
@@ -251,7 +251,7 @@ fn print_text(response: &Response) {
 
 /// `pigeon decisions`: the ADRs governing each path.
 fn decisions(args: &DecisionsArgs) -> i32 {
-    let dir = args.root.join(backplane::decisions::DIR);
+    let dir = args.root.join(agent::decisions::DIR);
     let entries = match std::fs::read_dir(&dir) {
         Ok(e) => e,
         Err(e) => {
@@ -269,7 +269,7 @@ fn decisions(args: &DecisionsArgs) -> i32 {
             continue;
         }
         match std::fs::read_to_string(entry.path()) {
-            Ok(text) => all.push(backplane::decisions::parse(&name, &text)),
+            Ok(text) => all.push(agent::decisions::parse(&name, &text)),
             Err(e) => {
                 eprintln!("backplane: {name}: {e}");
                 return INVALID;
@@ -277,10 +277,10 @@ fn decisions(args: &DecisionsArgs) -> i32 {
         }
     }
     all.sort_by(|a, b| a.file.cmp(&b.file));
-    let found: Vec<(&str, Vec<&backplane::decisions::Decision>)> = args
+    let found: Vec<(&str, Vec<&agent::decisions::Decision>)> = args
         .paths
         .iter()
-        .map(|p| (p.as_str(), backplane::decisions::governing(&all, p)))
+        .map(|p| (p.as_str(), agent::decisions::governing(&all, p)))
         .collect();
     if args.json {
         let v: serde_json::Map<String, serde_json::Value> = found
@@ -310,7 +310,7 @@ fn print_json<T: serde::Serialize + ?Sized>(value: &T) {
 fn load(
     root: &std::path::Path,
     instance: Option<&std::path::Path>,
-) -> Result<Instance, backplane::Error> {
+) -> Result<Instance, agent::Error> {
     match instance {
         Some(dir) => Instance::load_on(dir, Some(root)),
         None => Instance::load(root),

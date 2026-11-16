@@ -1,7 +1,7 @@
 //! Agnostic module references and `x-pigeon.each` blocks; see
 //! `.claude/decisions/2026-11-03-runtime-infra-agnostic-shared-modules.md`.
 
-use backplane::cobot::providers::LoadAllowlist;
+use agent::cobot::providers::LoadAllowlist;
 use std::fmt::Write as _;
 use std::fs;
 use std::path::Path;
@@ -105,7 +105,7 @@ fn repo() -> TempDir {
 }
 
 fn problems(root: &Path) -> Vec<String> {
-    backplane::cobot::unit::validate(root, &backplane::cobot::providers::Allowlist::default())
+    agent::cobot::unit::validate(root, &agent::cobot::providers::Allowlist::default())
         .into_iter()
         .map(|p| format!("{}: {}", p.path, p.message))
         .collect()
@@ -120,14 +120,13 @@ fn assert_fails(root: &Path, want: &str) {
 }
 
 fn render(root: &Path) -> Value {
-    let units =
-        backplane::cobot::select(root, &root.join(".config"), &[UNIT.into()]).expect("valid");
-    backplane::cobot::render_json(
+    let units = agent::cobot::select(root, &root.join(".config"), &[UNIT.into()]).expect("valid");
+    agent::cobot::render_json(
         &units[0],
         Path::new("/state"),
-        &backplane::cobot::providers::Allowlist::default(),
+        &agent::cobot::providers::Allowlist::default(),
         0,
-        &backplane::cobot::config::Existing::new(),
+        &agent::cobot::config::Existing::new(),
     )
 }
 
@@ -216,31 +215,30 @@ fn providers_follow_agnostic_modules() {
         ".config/providers.yaml",
         "description: Test allowlist.\nproviders:\n  hashicorp/random: 3.9.1\n",
     );
-    let allow =
-        backplane::cobot::providers::Allowlist::load(&root.join(".config")).expect("allowlist");
+    let allow = agent::cobot::providers::Allowlist::load(&root.join(".config")).expect("allowlist");
     let rendered = root.join("main.tf.json");
     fs::write(&rendered, render(root).to_string()).expect("write render");
     assert_eq!(
-        backplane::cobot::providers::used(&allow, &root.join(UNIT), &rendered),
+        agent::cobot::providers::used(&allow, &root.join(UNIT), &rendered),
         ["hashicorp/random"]
     );
     assert_eq!(
-        backplane::cobot::providers::used(&allow, &root.join(UNIT), &root.join("absent.json")),
+        agent::cobot::providers::used(&allow, &root.join(UNIT), &root.join("absent.json")),
         Vec::<&str>::new()
     );
-    let units = backplane::cobot::select(root, &root.join(".config"), &["infra/agnostic".into()])
+    let units = agent::cobot::select(root, &root.join(".config"), &["infra/agnostic".into()])
         .expect("valid");
     let own = root.join("agnostic.tf.json");
-    let json = backplane::cobot::render_json(
+    let json = agent::cobot::render_json(
         &units[0],
         Path::new("/state"),
         &allow,
         0,
-        &backplane::cobot::config::Existing::new(),
+        &agent::cobot::config::Existing::new(),
     );
     fs::write(&own, json.to_string()).expect("write render");
     assert_eq!(
-        backplane::cobot::providers::used(&allow, &root.join("infra/agnostic"), &own),
+        agent::cobot::providers::used(&allow, &root.join("infra/agnostic"), &own),
         Vec::<&str>::new(),
         "a module the unit does not compose brings no provider"
     );
@@ -255,7 +253,7 @@ fn a_unit_composing_an_agnostic_module_applies_end_to_end() {
     let repo = repo();
     let root = repo.path();
     let state = TempDir::new().expect("state");
-    let ctx = backplane::cobot::Context {
+    let ctx = agent::cobot::Context {
         root: root.to_path_buf(),
         providers: root.join(".config"),
         state: state.path().to_path_buf(),
@@ -271,35 +269,30 @@ fn a_unit_composing_an_agnostic_module_applies_end_to_end() {
         provider_config: None,
         provider_token: false,
     };
-    let units =
-        backplane::cobot::select(root, &root.join(".config"), &[UNIT.into()]).expect("valid");
-    let applied = backplane::cobot::apply(&ctx, &units).expect("apply");
+    let units = agent::cobot::select(root, &root.join(".config"), &[UNIT.into()]).expect("valid");
+    let applied = agent::cobot::apply(&ctx, &units).expect("apply");
     assert_eq!(
         applied[0].counts(),
         (4, 0, 0),
         "{}",
-        backplane::cobot::summary(&applied)
+        agent::cobot::summary(&applied)
     );
-    let again = backplane::cobot::plan(&ctx, &units).expect("replan");
-    assert!(
-        !again[0].has_changes(),
-        "{}",
-        backplane::cobot::summary(&again)
-    );
+    let again = agent::cobot::plan(&ctx, &units).expect("replan");
+    assert!(!again[0].has_changes(), "{}", agent::cobot::summary(&again));
 }
 
 #[test]
 fn a_unit_without_blocks_renders_no_module_and_plans_clean() {
     let repo = repo();
     let root = repo.path();
-    let units = backplane::cobot::select(root, &root.join(".config"), &["infra/agnostic".into()])
+    let units = agent::cobot::select(root, &root.join(".config"), &["infra/agnostic".into()])
         .expect("valid");
-    let json = backplane::cobot::render_json(
+    let json = agent::cobot::render_json(
         &units[0],
         Path::new("/state"),
-        &backplane::cobot::providers::Allowlist::default(),
+        &agent::cobot::providers::Allowlist::default(),
         0,
-        &backplane::cobot::config::Existing::new(),
+        &agent::cobot::config::Existing::new(),
     );
     assert!(json.get("module").is_none(), "{json}");
     if !tofu_available() {
@@ -307,7 +300,7 @@ fn a_unit_without_blocks_renders_no_module_and_plans_clean() {
         return;
     }
     let state = TempDir::new().expect("state");
-    let ctx = backplane::cobot::Context {
+    let ctx = agent::cobot::Context {
         root: root.to_path_buf(),
         providers: root.join(".config"),
         state: state.path().to_path_buf(),
@@ -323,12 +316,8 @@ fn a_unit_without_blocks_renders_no_module_and_plans_clean() {
         provider_config: None,
         provider_token: false,
     };
-    let plans = backplane::cobot::plan(&ctx, &units).expect("plan");
-    assert!(
-        !plans[0].has_changes(),
-        "{}",
-        backplane::cobot::summary(&plans)
-    );
+    let plans = agent::cobot::plan(&ctx, &units).expect("plan");
+    assert!(!plans[0].has_changes(), "{}", agent::cobot::summary(&plans));
 }
 
 /// Points `items` at `module`; see the separation ADR's catalog-composition amendment.

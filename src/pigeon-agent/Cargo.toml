@@ -10,7 +10,7 @@ publish.workspace = true
 autotests = false
 
 [lib]
-name = "backplane"
+name = "agent"
 # A cdylib for `worker-build`; see .claude/decisions/2026-11-05-development-cobot-workers-area.md.
 crate-type = ["cdylib", "rlib"]
 

@@ -1,7 +1,7 @@
 //! The git credentials path's decisions: retries and reuse; see
 //! `.claude/decisions/2026-11-06-security-git-front-door-spike.md`.
 
-use backplane::gitcreds::{BACKOFF_MS, Kept, retryable};
+use agent::gitcreds::{BACKOFF_MS, Kept, retryable};
 
 #[test]
 fn only_a_missing_answer_too_many_requests_or_a_server_error_is_retried() {

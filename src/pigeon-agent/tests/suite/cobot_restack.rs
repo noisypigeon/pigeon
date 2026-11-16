@@ -4,7 +4,7 @@
 use std::path::Path;
 use std::process::Command;
 
-use backplane::cobot::ci::{
+use agent::cobot::ci::{
     Relation, built_on_head, changed, checkout, fetch_branch, forecast, head_patch, restack,
 };
 
@@ -76,7 +76,7 @@ fn diverge(work: &Path, url: &str, files: &[(&str, &str)], moved: &[(&str, &str)
     head
 }
 
-fn run(url: &str, head: &str) -> (tempfile::TempDir, backplane::cobot::ci::Restack) {
+fn run(url: &str, head: &str) -> (tempfile::TempDir, agent::cobot::ci::Restack) {
     let job = tempfile::tempdir().expect("tmp");
     checkout(job.path(), url, "", "main", "change/1-x", head).expect("checks out");
     let r = restack(
@@ -272,7 +272,7 @@ fn a_changed_line_is_a_changed_patch() {
     let (j, r) = run(&url, &head);
     assert!(r.same_patch, "a distant line of main's leaves it");
     let base = git(j.path(), &["rev-parse", "HEAD"]);
-    let own = backplane::cobot::ci::own_lines(j.path(), &base, &base).expect("diff");
+    let own = agent::cobot::ci::own_lines(j.path(), &base, &base).expect("diff");
     assert_eq!(own, Some(Vec::new()));
 }
 

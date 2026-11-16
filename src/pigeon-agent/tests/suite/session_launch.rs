@@ -2,7 +2,7 @@
 
 use std::path::PathBuf;
 
-use backplane::core::session::launch;
+use agent::core::session::launch;
 
 fn repo_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")

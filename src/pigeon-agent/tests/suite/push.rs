@@ -1,7 +1,7 @@
 //! Web Push's VAPID signing and the device list; see
 //! `.claude/decisions/2026-11-08-development-events-tickets-digest-mandate.md` §3.
 
-use backplane::push::{Devices, MAX_DEVICES, Vapid, audience, b64url, b64url_decode};
+use agent::push::{Devices, MAX_DEVICES, Vapid, audience, b64url, b64url_decode};
 use p256::ecdsa::signature::Verifier;
 use p256::ecdsa::{Signature, VerifyingKey};
 
@@ -45,7 +45,7 @@ fn a_vapid_header_verifies_with_its_own_public_key() {
     let claims: serde_json::Value =
         serde_json::from_slice(&b64url_decode(parts[1]).expect("claims")).expect("JSON");
     assert_eq!(claims["aud"], "https://fcm.googleapis.com");
-    assert_eq!(claims["exp"], 1000 + backplane::push::TOKEN_TTL);
+    assert_eq!(claims["exp"], 1000 + agent::push::TOKEN_TTL);
     assert_eq!(claims["sub"], "https://pigeon.example");
     let sig = Signature::from_slice(&b64url_decode(parts[2]).expect("sig")).expect("64 bytes");
     VerifyingKey::from_sec1_bytes(&key)

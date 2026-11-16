@@ -1,8 +1,8 @@
 //! Tasks and session limits; see
 //! `.claude/decisions/2026-11-08-development-concurrent-agent-sessions.md` §5, §6.
 
-use backplane::sessions::{MAX_OPEN, MAX_PER_SESSION, Open, family, limit};
-use backplane::tasks::{KEPT, OWN, Tasks};
+use agent::sessions::{MAX_OPEN, MAX_PER_SESSION, Open, family, limit};
+use agent::tasks::{KEPT, OWN, Tasks};
 
 #[test]
 fn a_task_is_its_sessions_first_then_anyones() {
@@ -155,8 +155,8 @@ fn a_change_and_its_unpushed_generated_changes_hold_one_slot() {
 
 #[test]
 fn a_brief_task_goes_to_its_own_class_first_and_never_to_a_lesser_one() {
-    use backplane::sessions::Class;
-    use backplane::tasks::{OWN, Tasks};
+    use agent::sessions::Class;
+    use agent::tasks::{OWN, Tasks};
     let mut t = Tasks::default();
     let id = t.add_brief("b3", Class::Sonnet, "b3 (sonnet): covers", 100);
     assert_eq!(
@@ -202,8 +202,8 @@ fn a_brief_task_goes_to_its_own_class_first_and_never_to_a_lesser_one() {
 
 #[test]
 fn tasks_without_a_class_keep_their_rules_and_brief_tasks_are_never_swept() {
-    use backplane::sessions::Class;
-    use backplane::tasks::Tasks;
+    use agent::sessions::Class;
+    use agent::tasks::Tasks;
     let mut t = Tasks::default();
     let r = t.add("reconcile", 9, Some(8), None, "fix", 1);
     t.add_brief("b1", Class::Haiku, "b1", 1);
@@ -216,8 +216,8 @@ fn tasks_without_a_class_keep_their_rules_and_brief_tasks_are_never_swept() {
     assert_eq!(swept, vec![r], "the brief task outlives the sweep");
 }
 
-fn line(changes: &[(u32, &str, &str)]) -> backplane::tasks::SessionLine {
-    backplane::tasks::SessionLine {
+fn line(changes: &[(u32, &str, &str)]) -> agent::tasks::SessionLine {
+    agent::tasks::SessionLine {
         label: "https://claude.ai/code/session_x".into(),
         listening: true,
         changes: changes
@@ -228,8 +228,8 @@ fn line(changes: &[(u32, &str, &str)]) -> backplane::tasks::SessionLine {
     }
 }
 
-fn listed(number: u32, operation: &str) -> backplane::approve::Waiting {
-    backplane::approve::Waiting {
+fn listed(number: u32, operation: &str) -> agent::approve::Waiting {
+    agent::approve::Waiting {
         number,
         operation: operation.into(),
         title: "t".into(),
@@ -240,7 +240,7 @@ fn listed(number: u32, operation: &str) -> backplane::approve::Waiting {
 
 #[test]
 fn a_change_needing_the_owner_with_no_approval_listed_is_unlisted() {
-    use backplane::tasks::unlisted;
+    use agent::tasks::unlisted;
     // !464: checked, the owner's to approve, and nothing on /approvals.
     let sessions = [line(&[
         (464, "checked", "owner"),
@@ -258,7 +258,7 @@ fn a_change_needing_the_owner_with_no_approval_listed_is_unlisted() {
 
 #[test]
 fn an_unlisted_change_needs_the_owner_and_has_its_line() {
-    let d = backplane::tasks::Digest {
+    let d = agent::tasks::Digest {
         unlisted: vec![464],
         ..Default::default()
     };
@@ -271,7 +271,7 @@ fn an_unlisted_change_needs_the_owner_and_has_its_line() {
 
 #[test]
 fn case_748_a_done_reconciliation_that_never_pushed_closes_with_its_task() {
-    use backplane::tasks::finished;
+    use agent::tasks::finished;
     let row = |number: u32, slug: &str, state: &str| Open {
         number,
         state: state.into(),

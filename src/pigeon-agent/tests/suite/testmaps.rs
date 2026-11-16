@@ -1,8 +1,8 @@
 //! `main`'s test map: dispatched on each mirrored commit, its map copied when it passes; see the
 //! 2026-11-11 amendment to `.claude/decisions/2026-11-10-development-factory-crates-functional-core.md`.
 
-use backplane::actions::{Due, Mirror};
-use backplane::core::deploy::testmaps::{self, TestMaps};
+use agent::actions::{Due, Mirror};
+use agent::core::deploy::testmaps::{self, TestMaps};
 use serde_json::json;
 
 const A: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -64,7 +64,7 @@ fn a_newer_commit_replaces_an_older_ones_dispatch() {
     t = t.mirrored(B);
     assert_eq!(t.actions.dispatches.len(), 1);
     assert_eq!(t.actions.dispatches[0].sha, B);
-    let body = backplane::actions::dispatch_body(
+    let body = agent::actions::dispatch_body(
         &t.actions.dispatches[0],
         testmaps::MAIN,
         &[testmaps::check()],

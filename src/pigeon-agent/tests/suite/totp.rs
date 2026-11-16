@@ -1,6 +1,6 @@
 //! The owner's authenticator code: RFC 6238, each step once, a lockout after wrong codes.
 
-use backplane::core::approval::totp::{self, Guard, LOCKOUT, MAX_FAILURES, STEP};
+use agent::core::approval::totp::{self, Guard, LOCKOUT, MAX_FAILURES, STEP};
 
 const SECRET: &[u8] = b"12345678901234567890";
 

@@ -3,9 +3,9 @@
 
 use crate::harness::step;
 
-use backplane::core::change::{Change, ConflictContext, Event, Relation, Restacked, State};
-use backplane::reconcile::{ADR, adrs, conflict, existing, gone, retired, review};
-use backplane::sessions::Open;
+use agent::core::change::{Change, ConflictContext, Event, Relation, Restacked, State};
+use agent::reconcile::{ADR, adrs, conflict, existing, gone, retired, review};
+use agent::sessions::Open;
 use step::Apply;
 
 const A: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -178,7 +178,7 @@ fn a_change_that_conflicts_again_reuses_its_open_reconciliation() {
 fn a_change_ending_or_its_conflict_clearing_retires_what_it_generated() {
     let open = change("no ADR");
     let mut conflicted = open.clone();
-    conflicted.conflict = Some(backplane::core::change::Conflicted {
+    conflicted.conflict = Some(agent::core::change::Conflicted {
         onto: MAIN.into(),
         paths: vec!["src/a.rs".into()],
         proposal: None,
@@ -220,7 +220,7 @@ fn a_change_ending_or_its_conflict_clearing_retires_what_it_generated() {
 
 #[test]
 fn a_generated_change_is_known_by_its_slug_and_is_never_reviewed() {
-    use backplane::reconcile::generated as is_generated;
+    use agent::reconcile::generated as is_generated;
     assert!(is_generated("review-191-360"));
     assert!(is_generated("reconcile-363"));
     assert!(!is_generated("remove-gantry"));

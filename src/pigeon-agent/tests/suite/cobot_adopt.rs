@@ -1,7 +1,7 @@
 //! Adopting existing resources by name; see
 //! `.claude/decisions/2026-11-08-runtime-blue-green-self-standup.md`, step 4's amendment.
 
-use backplane::cobot::adopt::{self, Found, Kind, Lookup};
+use agent::cobot::adopt::{self, Found, Kind, Lookup};
 use serde_json::{Value, json};
 
 struct Fake;

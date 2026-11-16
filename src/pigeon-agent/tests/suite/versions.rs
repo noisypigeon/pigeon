@@ -2,7 +2,7 @@
 //! `.claude/decisions/2026-11-08-development-events-tickets-digest-mandate.md`, the amendment on
 //! busy Durable Objects.
 
-use backplane::core::deploy::versions::{caller_is_newer, stamp};
+use agent::core::deploy::versions::{caller_is_newer, stamp};
 
 #[test]
 fn only_a_later_caller_with_another_id_makes_an_object_stale() {
@@ -28,7 +28,7 @@ fn only_a_later_caller_with_another_id_makes_an_object_stale() {
 
 #[test]
 fn an_object_without_the_handshake_counts_as_current_and_a_silent_one_does_not() {
-    use backplane::core::deploy::versions::object_current;
+    use agent::core::deploy::versions::object_current;
     let mine = stamp("2026-11-08T21:00:00Z", "new");
     assert!(object_current(Some(""), &mine));
     assert!(object_current(Some(&mine), &mine));

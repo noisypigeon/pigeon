@@ -1,11 +1,11 @@
 //! A change's asks, answered only at its plan approval; see
 //! `.claude/decisions/2026-11-13-security-approvals-ask-owner-inputs.md`.
 
-use backplane::control::{self, Routed};
-use backplane::core::change::asks::{self, Chars};
-use backplane::core::change::stage::{self, Context, Needs};
-use backplane::core::change::{self as changes, Change, Event, State};
-use backplane::wire::Request;
+use agent::control::{self, Routed};
+use agent::core::change::asks::{self, Chars};
+use agent::core::change::stage::{self, Context, Needs};
+use agent::core::change::{self as changes, Change, Event, State};
+use agent::wire::Request;
 use serde_json::json;
 
 const ASKS: &str = r#"[

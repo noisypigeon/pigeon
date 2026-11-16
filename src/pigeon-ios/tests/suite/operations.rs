@@ -3,7 +3,7 @@
 use std::collections::BTreeSet;
 
 fn catalog() -> BTreeSet<&'static str> {
-    backplane::wire::catalog().iter().map(|o| o.name).collect()
+    agent::wire::catalog().iter().map(|o| o.name).collect()
 }
 
 #[test]

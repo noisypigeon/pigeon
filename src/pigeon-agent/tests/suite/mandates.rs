@@ -1,9 +1,9 @@
 //! Mandates: proposed, granted once with the code, bounded by scope, budget and expiry; see
 //! `.claude/decisions/2026-11-08-security-tiered-approvals-task-mandates.md` §3.
 
-use backplane::core::approval::mandates::{Decision, Mandate, Mandates, State};
-use backplane::core::approval::tiers::{Tier, Tiered, Tiers};
-use backplane::core::change::Change;
+use agent::core::approval::mandates::{Decision, Mandate, Mandates, State};
+use agent::core::approval::tiers::{Tier, Tiered, Tiers};
+use agent::core::change::Change;
 
 fn globs(list: &[&str]) -> Vec<String> {
     list.iter().map(|g| (*g).to_string()).collect()
@@ -103,7 +103,7 @@ fn the_grant_page_shows_the_mandate_escaped_and_asks_for_the_code() {
         Some(12),
     )
     .expect("valid");
-    let html = backplane::approve::mandate_page(&m, "tok\"x");
+    let html = agent::approve::mandate_page(&m, "tok\"x");
     assert!(!html.contains("<b>this</b>"), "{html}");
     assert!(html.contains("do &lt;b&gt;this&lt;/b&gt;"));
     assert!(html.contains("name=\"code\""));
@@ -260,16 +260,16 @@ fn a_mandate_never_moves_checks_to_cloudflare() {
     let plan = format!("Per {ADR}.");
     let c = change(&["tooling/x/**"], &plan, Some((Tier::Confirm, "routine")));
     assert!(matches!(
-        decision(&mut all, &c, backplane::control::BREAK_GLASS),
+        decision(&mut all, &c, agent::control::BREAK_GLASS),
         Decision::Ask(_)
     ));
 }
 
 #[test]
 fn case_713_a_sentinel_head_under_a_mandate_needs_the_owner_in_its_stage() {
-    use backplane::core::approval::mandates::decide;
-    use backplane::core::change::State as ChangeState;
-    use backplane::core::change::stage::{self, Context, Needs};
+    use agent::core::approval::mandates::decide;
+    use agent::core::change::State as ChangeState;
+    use agent::core::change::stage::{self, Context, Needs};
     // !713: tier `code (sentinel: …)`, naming mandate 3, and no window covers it.
     let all = active(5, false);
     let mut c = change(

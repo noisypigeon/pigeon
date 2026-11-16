@@ -1,7 +1,7 @@
 //! Credentials requested by capability; see the phase 3 amendment of
 //! `.claude/decisions/2026-11-04-development-platform-instance-separation.md`.
 
-use backplane::cobot::providers::LoadAllowlist;
+use agent::cobot::providers::LoadAllowlist;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::Path;
@@ -56,9 +56,8 @@ fn repo() -> TempDir {
 }
 
 fn problems(root: &Path) -> Vec<String> {
-    let allow =
-        backplane::cobot::providers::Allowlist::load(&root.join(".config")).expect("allowlist");
-    backplane::cobot::unit::validate(root, &allow)
+    let allow = agent::cobot::providers::Allowlist::load(&root.join(".config")).expect("allowlist");
+    agent::cobot::unit::validate(root, &allow)
         .into_iter()
         .map(|p| format!("{}: {}", p.path, p.message))
         .collect()
@@ -69,16 +68,14 @@ fn a_requested_credential_renders_into_one_sensitive_variable() {
     let repo = repo();
     let root = repo.path();
     assert_eq!(problems(root), Vec::<String>::new());
-    let allow =
-        backplane::cobot::providers::Allowlist::load(&root.join(".config")).expect("allowlist");
-    let units =
-        backplane::cobot::select(root, &root.join(".config"), &[UNIT.into()]).expect("valid");
-    let json = backplane::cobot::render_json(
+    let allow = agent::cobot::providers::Allowlist::load(&root.join(".config")).expect("allowlist");
+    let units = agent::cobot::select(root, &root.join(".config"), &[UNIT.into()]).expect("valid");
+    let json = agent::cobot::render_json(
         &units[0],
         Path::new("/state"),
         &allow,
         0,
-        &backplane::cobot::config::Existing::new(),
+        &agent::cobot::config::Existing::new(),
     );
     assert_eq!(
         json["provider"]["cloudflare"]["api_token"],
@@ -146,7 +143,7 @@ fn the_runner_supplies_only_the_fields_a_unit_references() {
     let wanted = BTreeMap::from([("dns".to_string(), BTreeSet::from(["api_token".to_string()]))]);
     let json =
         r#"{ "dns": { "api_token": "t0ken", "extra": "n0t-needed" }, "other": { "key": 42 } }"#;
-    let got = backplane::cobot::pick_credentials(Some(json), &wanted, UNIT).expect("picked");
+    let got = agent::cobot::pick_credentials(Some(json), &wanted, UNIT).expect("picked");
     assert_eq!(
         got.len(),
         1,
@@ -166,22 +163,21 @@ fn the_runner_supplies_only_the_fields_a_unit_references() {
         (r#"{ "dns": "t0ken" }"#, "credential `dns`"),
         ("[\"t0ken\"]", "JSON object"),
     ] {
-        let err = backplane::cobot::pick_credentials(Some(json), &wanted, UNIT).expect_err(json);
+        let err = agent::cobot::pick_credentials(Some(json), &wanted, UNIT).expect_err(json);
         assert!(err.contains(want), "want `{want}` in {err}");
         assert!(!err.contains("t0ken"), "never echoes a value: {err}");
     }
-    assert!(backplane::cobot::pick_credentials(None, &wanted, UNIT).is_err());
+    assert!(agent::cobot::pick_credentials(None, &wanted, UNIT).is_err());
 
     let unreferenced = BTreeMap::from([("dns".to_string(), BTreeSet::new())]);
     for json in [r#"{ "dns": null }"#, r#"{ "dns": "t0ken" }"#] {
-        let err =
-            backplane::cobot::pick_credentials(Some(json), &unreferenced, UNIT).expect_err(json);
+        let err = agent::cobot::pick_credentials(Some(json), &unreferenced, UNIT).expect_err(json);
         assert!(
             err.contains("as an object") && !err.contains("t0ken"),
             "{err}"
         );
     }
-    let empty = backplane::cobot::pick_credentials(Some(r#"{ "dns": {} }"#), &unreferenced, UNIT)
+    let empty = agent::cobot::pick_credentials(Some(r#"{ "dns": {} }"#), &unreferenced, UNIT)
         .expect("object");
     assert!(empty["dns"].is_empty());
 }
@@ -190,11 +186,10 @@ fn the_runner_supplies_only_the_fields_a_unit_references() {
 fn the_fields_a_unit_references_are_collected() {
     let repo = repo();
     let root = repo.path();
-    let units =
-        backplane::cobot::select(root, &root.join(".config"), &[UNIT.into()]).expect("valid");
+    let units = agent::cobot::select(root, &root.join(".config"), &[UNIT.into()]).expect("valid");
     let c = units[0].config.as_ref().expect("config unit");
     assert_eq!(
-        backplane::cobot::config::credential_fields(c),
+        agent::cobot::config::credential_fields(c),
         BTreeMap::from([("dns".to_string(), BTreeSet::from(["api_token".to_string()]))])
     );
 }
@@ -202,20 +197,19 @@ fn the_fields_a_unit_references_are_collected() {
 #[test]
 fn the_repositorys_directory_units_request_no_credentials() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let allow =
-        backplane::cobot::providers::Allowlist::load(&root.join(".config")).expect("allowlist");
+    let allow = agent::cobot::providers::Allowlist::load(&root.join(".config")).expect("allowlist");
     // A manifest unit's kind requests credentials by design, filled from the run's token.
-    for unit in backplane::cobot::validate(&root, &root.join(".config"))
+    for unit in agent::cobot::validate(&root, &root.join(".config"))
         .expect("valid")
         .into_iter()
         .filter(|u| u.path.starts_with("infra/") || u.path.starts_with("workloads/"))
     {
-        let json = backplane::cobot::render_json(
+        let json = agent::cobot::render_json(
             &unit,
             Path::new("/state"),
             &allow,
             0,
-            &backplane::cobot::config::Existing::new(),
+            &agent::cobot::config::Existing::new(),
         );
         assert!(
             json["variable"].get("credentials").is_none(),
@@ -281,7 +275,7 @@ fn an_instance_unit_apart_from_its_platform_finds_platform_modules_and_its_own_c
     );
 
     let config = platform.path().join(".config");
-    let units = backplane::cobot::validate_in(instance.path(), platform.path(), &config)
+    let units = agent::cobot::validate_in(instance.path(), platform.path(), &config)
         .unwrap_or_else(|e| panic!("valid: {e}"));
     assert_eq!(
         units.iter().map(|u| u.path.as_str()).collect::<Vec<_>>(),

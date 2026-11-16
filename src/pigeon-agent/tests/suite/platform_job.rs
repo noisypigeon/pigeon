@@ -1,7 +1,7 @@
 //! The platform job's arguments, state bucket and refusals; see
 //! `.claude/decisions/2026-11-08-runtime-blue-green-self-standup.md`, step 4's amendment.
 
-use backplane::platform_job::{Task, destroys, state_bucket};
+use agent::platform_job::{Task, destroys, state_bucket};
 
 fn argv(a: &[&str]) -> Vec<String> {
     a.iter().map(|s| (*s).to_string()).collect()
@@ -56,24 +56,24 @@ fn the_state_bucket_is_the_one_suffixed_bucket_of_its_name() {
 
 #[test]
 fn a_plan_that_destroys_anything_is_refused() {
-    let change = |address: &str, action| backplane::cobot::Change {
+    let change = |address: &str, action| agent::cobot::Change {
         address: address.into(),
         action,
         attributes: Vec::new(),
     };
     let safe = [change(
         "module.d1.cloudflare_d1_database.this",
-        backplane::cobot::Action::Update,
+        agent::cobot::Action::Update,
     )];
     assert_eq!(destroys(&safe), None);
     let gone = [
         change(
             "module.queue.cloudflare_queue.this",
-            backplane::cobot::Action::Create,
+            agent::cobot::Action::Create,
         ),
         change(
             "module.buckets[\"pigeon-ci\"].cloudflare_r2_bucket.this",
-            backplane::cobot::Action::Replace,
+            agent::cobot::Action::Replace,
         ),
     ];
     let why = destroys(&gone).unwrap_or_default();

@@ -1,7 +1,7 @@
 //! Approval tiers from `.config/approvals.yaml`; see
 //! `.claude/decisions/2026-11-08-security-tiered-approvals-task-mandates.md`.
 
-use backplane::core::approval::tiers::{
+use agent::core::approval::tiers::{
     AUTO_COVERS, Facts, Rules, Tier, Tiers, classify, matches, mixed_with_sentinel,
 };
 
@@ -153,7 +153,7 @@ fn the_approval_core_needs_the_code_as_the_files_it_moved_from_did() {
 
 #[test]
 fn an_operation_needs_the_tier_its_head_was_given_and_code_without_one() {
-    use backplane::core::change::{Change, State};
+    use agent::core::change::{Change, State};
     let mut c = Change::propose(
         9,
         "x",
@@ -164,25 +164,25 @@ fn an_operation_needs_the_tier_its_head_was_given_and_code_without_one() {
     );
     c.state = State::Checked;
     assert_eq!(
-        backplane::core::approval::tiers::tier_of(&c, "change.approve"),
+        agent::core::approval::tiers::tier_of(&c, "change.approve"),
         Tier::Code,
         "no tiers yet"
     );
     assert_eq!(
-        backplane::core::approval::tiers::tier_of(&c, "change.close"),
+        agent::core::approval::tiers::tier_of(&c, "change.close"),
         Tier::Confirm
     );
     assert_eq!(
-        backplane::core::approval::tiers::tier_of(&c, "change.authorize"),
+        agent::core::approval::tiers::tier_of(&c, "change.authorize"),
         Tier::Code
     );
     c.tiers = Some(tiers_of(&["tooling/**"], &["tooling/README.md"], PLAIN));
     assert_eq!(
-        backplane::core::approval::tiers::tier_of(&c, "change.approve"),
+        agent::core::approval::tiers::tier_of(&c, "change.approve"),
         Tier::Confirm
     );
     assert_eq!(
-        backplane::core::approval::tiers::tier_of(&c, "change.merge"),
+        agent::core::approval::tiers::tier_of(&c, "change.merge"),
         Tier::Confirm
     );
     let adr = [".claude/decisions/2026-11-07-development-job-images-on-cloudflare.md"];
@@ -196,21 +196,21 @@ fn an_operation_needs_the_tier_its_head_was_given_and_code_without_one() {
         },
     ));
     assert_eq!(
-        backplane::core::approval::tiers::tier_of(&c, "change.merge"),
+        agent::core::approval::tiers::tier_of(&c, "change.merge"),
         Tier::Confirm,
         "auto counts as confirm until automatic approval lands"
     );
     c.tiers = Some(tiers_of(&["Dockerfile"], &["Dockerfile"], PLAIN));
     assert_eq!(
-        backplane::core::approval::tiers::tier_of(&c, "change.merge"),
+        agent::core::approval::tiers::tier_of(&c, "change.merge"),
         Tier::Code
     );
 }
 
 #[test]
 fn the_control_plane_approves_and_merges_only_what_is_auto_or_confirm() {
-    use backplane::core::approval::tiers::{Tiered, by_policy};
-    use backplane::core::change::Change;
+    use agent::core::approval::tiers::{Tiered, by_policy};
+    use agent::core::change::Change;
     let mut c = Change::propose(
         9,
         "x",
@@ -247,8 +247,8 @@ fn the_control_plane_approves_and_merges_only_what_is_auto_or_confirm() {
 
 #[test]
 fn secrets_and_destruction_need_the_owner_each_time() {
-    use backplane::core::approval::tiers::{by_policy, lengthens, tier_of};
-    use backplane::core::change::Change;
+    use agent::core::approval::tiers::{by_policy, lengthens, tier_of};
+    use agent::core::change::Change;
     let t = tiers_of(&["infra/x/**"], &["infra/x/secrets.config.yaml"], PLAIN);
     assert_eq!(t.merge.tier, Tier::Owner, "{t:?}");
     let t = tiers_of(&[".mcp.json"], &[".mcp.json"], PLAIN);
@@ -297,8 +297,8 @@ fn secrets_and_destruction_need_the_owner_each_time() {
 
 #[test]
 fn one_proof_covers_a_changes_later_stages_up_to_the_code_tier() {
-    use backplane::core::approval::tiers::by_grant;
-    use backplane::core::change::{Change, ChangeGrant};
+    use agent::core::approval::tiers::by_grant;
+    use agent::core::change::{Change, ChangeGrant};
     let mut c = Change::propose(9, "x", "feat: x", "plan", vec!["infra/**".into()], "agent");
     assert_eq!(by_grant(&c, "change.authorize", 100), None, "no proof yet");
     c.grant = Some(ChangeGrant {
@@ -438,9 +438,9 @@ fn a_sentinel_change_holds_nothing_but_sentinel_and_its_adr() {
 
 #[test]
 fn the_break_glass_is_the_owners_alone() {
-    use backplane::control::BREAK_GLASS;
-    use backplane::core::approval::tiers::{by_grant, by_policy, tier_of};
-    use backplane::core::change::{Change, ChangeGrant};
+    use agent::control::BREAK_GLASS;
+    use agent::core::approval::tiers::{by_grant, by_policy, tier_of};
+    use agent::core::change::{Change, ChangeGrant};
     let mut c = Change::propose(9, "x", "feat: x", "plan", vec!["src/**".into()], "agent");
     c.head = Some("abc".into());
     c.grant = Some(ChangeGrant {

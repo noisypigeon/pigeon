@@ -1,7 +1,7 @@
 //! The git front door's push rule and its answers.
 
-use backplane::core::change::{Change, State};
-use backplane::gitdoor::{self, RefUpdate, Service};
+use agent::core::change::{Change, State};
+use agent::gitdoor::{self, RefUpdate, Service};
 
 const SA: &str = "https://claude.ai/code/session_a";
 const SB: &str = "https://claude.ai/code/session_b";
@@ -203,7 +203,7 @@ fn an_escalated_changes_branch_takes_no_push_until_its_planner_answers() {
     let branch = "refs/heads/change/18-front-door";
     let mut c = change(State::Failed);
     c.brief = Some("b4".into());
-    c.escalated = Some(backplane::core::change::Escalated {
+    c.escalated = Some(agent::core::change::Escalated {
         by: "https://claude.ai/code/executor".into(),
         question: "the brief names no error type".into(),
         at: 1,

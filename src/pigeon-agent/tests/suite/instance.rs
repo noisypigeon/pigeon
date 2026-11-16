@@ -3,7 +3,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use backplane::{Effect, Error, Instance, Request, Response, catalog, run_with};
+use agent::{Effect, Error, Instance, Request, Response, catalog, run_with};
 
 use crate::harness as common;
 

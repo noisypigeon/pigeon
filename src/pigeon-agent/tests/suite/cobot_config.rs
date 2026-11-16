@@ -125,14 +125,14 @@ fn repo(unit: &str, secrets: &[&str]) -> TempDir {
 }
 
 fn problems(root: &Path) -> Vec<String> {
-    backplane::cobot::unit::validate(root, &backplane::cobot::providers::Allowlist::default())
+    agent::cobot::unit::validate(root, &agent::cobot::providers::Allowlist::default())
         .into_iter()
         .map(|p| format!("{}: {}", p.path, p.message))
         .collect()
 }
 
-fn ctx(root: &Path, state: &Path, today: i64) -> backplane::cobot::Context {
-    backplane::cobot::Context {
+fn ctx(root: &Path, state: &Path, today: i64) -> agent::cobot::Context {
+    agent::cobot::Context {
         root: root.to_path_buf(),
         providers: root.join(".config"),
         state: state.to_path_buf(),
@@ -155,14 +155,14 @@ fn a_valid_config_unit_passes_and_renders() {
     let repo = repo("infra/proof", &[]);
     assert_eq!(problems(repo.path()), Vec::<String>::new());
     let units =
-        backplane::cobot::select(repo.path(), &repo.path().join(".config"), &[]).expect("valid");
-    let today = backplane::cobot::generations::day("2026-11-02").expect("day");
-    let json = backplane::cobot::render_json(
+        agent::cobot::select(repo.path(), &repo.path().join(".config"), &[]).expect("valid");
+    let today = agent::cobot::generations::day("2026-11-02").expect("day");
+    let json = agent::cobot::render_json(
         &units[0],
         Path::new("/state"),
-        &backplane::cobot::providers::Allowlist::default(),
+        &agent::cobot::providers::Allowlist::default(),
         today,
-        &backplane::cobot::config::Existing::new(),
+        &agent::cobot::config::Existing::new(),
     );
     let m = &json["module"];
     assert_eq!(m["single"]["label"], "proof");
@@ -173,8 +173,8 @@ fn a_valid_config_unit_passes_and_renders() {
     let start = (today / 90) * 90;
     let want = format!(
         "deploy@{}..{}",
-        backplane::cobot::generations::date(start),
-        backplane::cobot::generations::date(start + 97)
+        agent::cobot::generations::date(start),
+        agent::cobot::generations::date(start + 97)
     );
     assert_eq!(tokens.keys().collect::<Vec<_>>(), [&want]);
     assert_eq!(
@@ -197,13 +197,13 @@ fn literal_template_sequences_are_escaped() {
         &CONFIG.replace("label: proof", "label: \"${var.secrets}\""),
     );
     let units =
-        backplane::cobot::select(repo.path(), &repo.path().join(".config"), &[]).expect("valid");
-    let json = backplane::cobot::render_json(
+        agent::cobot::select(repo.path(), &repo.path().join(".config"), &[]).expect("valid");
+    let json = agent::cobot::render_json(
         &units[0],
         Path::new("/s"),
-        &backplane::cobot::providers::Allowlist::default(),
+        &agent::cobot::providers::Allowlist::default(),
         0,
-        &backplane::cobot::config::Existing::new(),
+        &agent::cobot::config::Existing::new(),
     );
     assert_eq!(json["module"]["single"]["label"], "$${var.secrets}");
 }
@@ -397,14 +397,14 @@ fn secrets_are_infra_only_and_always_encrypted() {
     assert!(problems(repo.path()).iter().any(|p| p.contains("not ENC")));
     let path = repo.path().join("infra/proof/secrets.config.yaml");
     fs::remove_file(&path).expect("rm");
-    backplane::cobot::secrets::set(&path, "token", "value-1", SECRETS_PASS).expect("set");
+    agent::cobot::secrets::set(&path, "token", "value-1", SECRETS_PASS).expect("set");
     assert_eq!(problems(repo.path()), Vec::<String>::new());
-    backplane::cobot::secrets::set(&path, "extra", "value-2", SECRETS_PASS).expect("set");
+    agent::cobot::secrets::set(&path, "extra", "value-2", SECRETS_PASS).expect("set");
     assert!(problems(repo.path()).iter().any(|p| p.contains("differ")));
 
     let workload = self::repo("infra/proof", &["provisioner_token"]);
     let path = workload.path().join("infra/proof/secrets.config.yaml");
-    backplane::cobot::secrets::set(&path, "provisioner_token", "v", SECRETS_PASS).expect("set");
+    agent::cobot::secrets::set(&path, "provisioner_token", "v", SECRETS_PASS).expect("set");
     assert_eq!(problems(workload.path()), Vec::<String>::new());
     fs::rename(
         workload.path().join("infra"),
@@ -423,57 +423,53 @@ fn rotation_and_secrets_end_to_end() {
     }
     let repo = repo("infra/proof", &["token"]);
     let secrets = repo.path().join("infra/proof/secrets.config.yaml");
-    backplane::cobot::secrets::set(&secrets, "token", "very-secret-value-42", SECRETS_PASS)
+    agent::cobot::secrets::set(&secrets, "token", "very-secret-value-42", SECRETS_PASS)
         .expect("set");
     let state = TempDir::new().expect("tempdir");
     let units =
-        backplane::cobot::select(repo.path(), &repo.path().join(".config"), &[]).expect("valid");
-    let day = |s| backplane::cobot::generations::day(s).expect("day");
+        agent::cobot::select(repo.path(), &repo.path().join(".config"), &[]).expect("valid");
+    let day = |s| agent::cobot::generations::day(s).expect("day");
     let start = (day("2026-11-02") / 90) * 90;
 
     let plans =
-        backplane::cobot::plan(&ctx(repo.path(), state.path(), start + 5), &units).expect("plan");
-    let summary = backplane::cobot::summary(&plans);
+        agent::cobot::plan(&ctx(repo.path(), state.path(), start + 5), &units).expect("plan");
+    let summary = agent::cobot::summary(&plans);
     assert_eq!(plans[0].counts(), (4, 0, 0), "{summary}");
     assert!(!summary.contains("very-secret-value-42"), "{summary}");
 
-    backplane::cobot::apply(&ctx(repo.path(), state.path(), start + 5), &units).expect("apply");
+    agent::cobot::apply(&ctx(repo.path(), state.path(), start + 5), &units).expect("apply");
     let written =
         fs::read_to_string(state.path().join("infra/proof/terraform.tfstate")).expect("state");
     assert!(!written.contains("very-secret-value-42") && written.contains("encrypted_data"));
 
     let same =
-        backplane::cobot::plan(&ctx(repo.path(), state.path(), start + 6), &units).expect("replan");
-    assert!(
-        !same[0].has_changes(),
-        "{}",
-        backplane::cobot::summary(&same)
-    );
+        agent::cobot::plan(&ctx(repo.path(), state.path(), start + 6), &units).expect("replan");
+    assert!(!same[0].has_changes(), "{}", agent::cobot::summary(&same));
 
     let next = start + 90;
     let rotated =
-        backplane::cobot::apply(&ctx(repo.path(), state.path(), next + 2), &units).expect("rotate");
+        agent::cobot::apply(&ctx(repo.path(), state.path(), next + 2), &units).expect("rotate");
     assert_eq!(
         rotated[0].counts(),
         (1, 0, 0),
         "{}",
-        backplane::cobot::summary(&rotated)
+        agent::cobot::summary(&rotated)
     );
 
     let expired =
-        backplane::cobot::apply(&ctx(repo.path(), state.path(), next + 8), &units).expect("expire");
+        agent::cobot::apply(&ctx(repo.path(), state.path(), next + 8), &units).expect("expire");
     assert_eq!(
         expired[0].counts(),
         (0, 0, 1),
         "{}",
-        backplane::cobot::summary(&expired)
+        agent::cobot::summary(&expired)
     );
 
     let mut no_pass = ctx(repo.path(), state.path(), next + 8);
     no_pass.secrets_passphrase = None;
     assert!(matches!(
-        backplane::cobot::plan(&no_pass, &units),
-        Err(backplane::cobot::Error::SecretsPassphrase)
+        agent::cobot::plan(&no_pass, &units),
+        Err(agent::cobot::Error::SecretsPassphrase)
     ));
 }
 
@@ -514,20 +510,20 @@ fn platform_blue(extra: &str) -> Value {
     let edited = format!("{}{unit}{extra}{}", &config[..at], &config[end..]);
     let instance = TempDir::new().expect("tempdir");
     write(instance.path(), "config.yaml", &edited);
-    let units = backplane::cobot::select_in(
+    let units = agent::cobot::select_in(
         instance.path(),
         &root,
         &root.join(".config"),
         &["platform/blue".to_string()],
     )
     .expect("platform/blue is valid");
-    let today = backplane::cobot::generations::day("2026-11-11").expect("day");
-    backplane::cobot::render_json(
+    let today = agent::cobot::generations::day("2026-11-11").expect("day");
+    agent::cobot::render_json(
         &units[0],
         Path::new("/state"),
-        &backplane::cobot::providers::Allowlist::default(),
+        &agent::cobot::providers::Allowlist::default(),
         today,
-        &backplane::cobot::config::Existing::new(),
+        &agent::cobot::config::Existing::new(),
     )
 }
 
@@ -600,14 +596,14 @@ fn an_absent_each_list_is_empty() {
     );
     assert_eq!(problems(repo.path()), Vec::<String>::new());
     let units =
-        backplane::cobot::select(repo.path(), &repo.path().join(".config"), &[]).expect("valid");
-    let today = backplane::cobot::generations::day("2026-11-11").expect("day");
-    let json = backplane::cobot::render_json(
+        agent::cobot::select(repo.path(), &repo.path().join(".config"), &[]).expect("valid");
+    let today = agent::cobot::generations::day("2026-11-11").expect("day");
+    let json = agent::cobot::render_json(
         &units[0],
         Path::new("/state"),
-        &backplane::cobot::providers::Allowlist::default(),
+        &agent::cobot::providers::Allowlist::default(),
         today,
-        &backplane::cobot::config::Existing::new(),
+        &agent::cobot::config::Existing::new(),
     );
     assert_eq!(json["module"]["items"]["for_each"], json!({}));
 }
