@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en-US" dir="auto">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>{% block title %}{{ config.title }}{% endblock title %}</title>
+  <meta name="color-scheme" content="light dark">
+  <meta name="description" content="{% block description %}{{ config.description }}{% endblock description %}">
+
+  <link rel="canonical" href="{% block canonical %}{{ config.base_url }}/{% endblock canonical %}">
+
+  <link rel="icon" href="/assets/images/site/favicon-32x32.png" sizes="32x32" type="image/png">
+  <link rel="icon" href="/assets/images/site/favicon-16x16.png" sizes="16x16" type="image/png">
+  <link rel="apple-touch-icon" href="/assets/images/site/apple-touch-icon.png">
+  <link rel="manifest" href="/manifest.json">
+
+  <meta property="og:site_name" content="{{ config.title }}">
+  <meta property="og:type" content="{% block og_type %}website{% endblock og_type %}">
+  <meta property="og:url" content="{% block og_url %}{{ config.base_url }}/{% endblock og_url %}">
+  <meta property="og:title" content="{% block og_title %}{{ config.title }}{% endblock og_title %}">
+  <meta property="og:description" content="{% block og_description %}{{ config.description }}{% endblock og_description %}">
+  <meta property="og:image" content="{% block og_image %}{{ config.base_url }}{{ config.extra.social_preview }}{% endblock og_image %}">
+  {% block og_image_extra %}
+  <meta property="og:image:width" content="{{ config.extra.og_image_size.width }}">
+  <meta property="og:image:height" content="{{ config.extra.og_image_size.height }}">
+  {% endblock og_image_extra %}
+
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="{% block twitter_title %}{{ config.title }}{% endblock twitter_title %}">
+  <meta name="twitter:description" content="{% block twitter_description %}{{ config.description }}{% endblock twitter_description %}">
+  <meta name="twitter:image" content="{% block twitter_image %}{{ config.base_url }}{{ config.extra.social_preview }}{% endblock twitter_image %}">
+
+  {%- if config.extra.features.feed %}
+  <link rel="alternate" type="application/atom+xml" title="{{ config.title }}" href="/posts/posts_feed.xml" />
+  {%- endif %}
+
+  <link rel="stylesheet" href="/assets/css/main.css">
+  {%- if config.extra.features.math %}
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.css" integrity="sha384-5TcZemv2l/9On385z///+d7MSYlvIEw9FuZTIdZ14vJLqWphw7e7ZPuOiCHJcFCP" crossorigin="anonymous">
+  {%- endif %}
+  {%- if config.extra.features.fonts %}
+
+  <link rel="preconnect" href="https://fonts.bunny.net" crossorigin>
+  <link rel="stylesheet" href="https://fonts.bunny.net/css?family={{ config.extra.look.font_family }}&display=swap">
+  {%- endif %}
+
+  <meta name="theme-color" media="(prefers-color-scheme: light)" content="{{ config.extra.theme_color.light }}">
+  <meta name="theme-color" media="(prefers-color-scheme: dark)" content="{{ config.extra.theme_color.dark }}">
+
+  {% block extra_head %}{% endblock extra_head %}
+</head>
+<body class="site-view {% block body_class %}{% endblock body_class %} color-theme-{{ config.extra.look.color }} font-theme-{{ config.extra.look.font }}">
+  <a class="skip-link" href="#main">Skip to content</a>{%- if config.extra.features.banner and config.extra.banner.message %}
+  <aside class="site-banner" aria-label="Site notice">
+    <p>{{ config.extra.banner.message }}{% if config.extra.banner.link %} <a href="{{ config.extra.banner.link }}">{{ config.extra.banner.link_text }}</a>{% endif %}</p>
+  </aside>{%- endif %}
+
+  {% include "header.html" %}
+
+  <main id="main" class="site-main">
+    {% block content %}{% endblock content %}
+  </main>
+
+  <footer class="footer">
+    {{ config.title }} {{ now() | date(format="%Y") }}{% if config.extra.features.commit %} * {{ get_env(name="SITE_COMMIT_SHA", default="dev") }}{% endif %}{% if config.extra.features.changelog %} * <a href="/changelog">Changelog</a>{% endif %}
+  </footer>
+
+  {%- if config.extra.features.math %}
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.js" integrity="sha384-cMkvdD8LoxVzGF/RPUKAcvmm49FQ0oxwDF3BGKtDXcEc+T1b2N+teh/OJfpU0jr6" crossorigin="anonymous"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/contrib/auto-render.min.js" integrity="sha384-hCXGrW6PitJEwbkoStFjeJxv+fSOOQKOPbJxSfM6G5sWZjAyWhXiTIIAmQqnlLlh" crossorigin="anonymous"
+    onload="renderMathInElement(document.body, {delimiters: [
+      {left: '\\[', right: '\\]', display: true},
+      {left: '\\(', right: '\\)', display: false}
+    ]});"></script>
+  {%- endif %}
+</body>
+</html>

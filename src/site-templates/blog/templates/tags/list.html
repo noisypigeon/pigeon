@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+
+{% block title %}Tags - {{ config.title }}{% endblock title %}
+{% block description %}Browse posts by topic.{% endblock description %}
+{% block canonical %}{{ config.base_url }}/tags/{% endblock canonical %}
+{% block og_url %}{{ config.base_url }}/tags/{% endblock og_url %}
+{% block og_title %}Tags - {{ config.title }}{% endblock og_title %}
+{% block og_description %}Browse posts by topic.{% endblock og_description %}
+{% block twitter_title %}Tags - {{ config.title }}{% endblock twitter_title %}
+{% block twitter_description %}Browse posts by topic.{% endblock twitter_description %}
+{% block body_class %}site-page-body{% endblock body_class %}
+
+{% block content %}
+<div class="site-page zoomable">
+  <div class="trix-content e-content">
+    <h1>Tags</h1>
+    <ul class="site-list-of-tags">
+      {% for term in terms %}
+        <li><a href="{{ term.permalink }}">{{ term.name }}</a> ({{ term.page_count }})</li>
+      {% endfor %}
+    </ul>
+  </div>
+</div>
+{% endblock content %}
