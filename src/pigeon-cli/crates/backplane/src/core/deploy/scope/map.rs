@@ -49,7 +49,7 @@ impl TestMap {
     /// targets share one check, and its suite's modules another.
     pub(super) fn select(&self, crates: &Crates, files: &[&str]) -> Option<Vec<Job>> {
         let mut picked: BTreeSet<&Binary> = BTreeSet::new();
-        for f in files.iter().filter(|f| !super::wasm_only(f)) {
+        for f in files.iter().filter(|f| !crates.layout.wasm_only(f)) {
             let Some((dir, package)) = crates
                 .by_dir
                 .iter()

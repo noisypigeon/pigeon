@@ -191,7 +191,7 @@ pub fn build(
     let reference = reference
         .ok_or_else(|| format!("no Worker binds {BUILDS_BINDING}, where builds are stored"))?;
     let bucket = workers::resolve(&reference, &outputs)?;
-    let workspace = dir.join(crate::cobot::scope::WORKSPACE);
+    let workspace = crate::cobot::scope::workspace(dir);
     let target = std::env::var_os("CARGO_TARGET_DIR")
         .map_or_else(|| workspace.join("target"), std::path::PathBuf::from);
     let compile = |argv: &[&str], name: &str, log: &mut String| {
