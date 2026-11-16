@@ -10,7 +10,7 @@ use super::elicit;
 use super::platform::{self, Settings, now, random_hex};
 use crate::access::Identity;
 use crate::approve as page;
-use crate::devices::{self, Device, Devices};
+use crate::core::app::devices::{self, Device, Devices};
 use crate::push::{b64url, b64url_decode};
 
 /// Where the `Instance` keeps the devices.
@@ -252,7 +252,7 @@ async fn signed(
                 .find(|(n, _)| n == "range")
                 .and_then(|(_, v)| v.parse().ok())
                 .unwrap_or(1);
-            if !crate::insights::ops::RANGES.contains(&range) {
+            if !crate::core::insights::ops::RANGES.contains(&range) {
                 return Response::error("range is 1, 7 or 30", 400);
             }
             Response::from_json(&super::insights::ops(env, s, range).await?)

@@ -17,7 +17,7 @@ use super::platform::{self, Settings, job_stub, json_request, now, secret};
 use crate::access::Identity;
 use crate::approve::{self, Waiting};
 use crate::control::{self, JobSpec, Outcome, Report};
-use crate::platforms::{Kept, Run, Runs, Stage};
+use crate::core::platform::platforms::{Kept, Run, Runs, Stage};
 
 const RUNS: &str = "platform-runs";
 
@@ -258,7 +258,7 @@ async fn decide(
         let _ = super::events::append(env, s, "platform.failed", None, None, &said, false).await;
         return page::html(200, &approve::outcome("Refused", &said));
     }
-    let purpose = crate::passkeys::grant_purpose(token);
+    let purpose = crate::core::approval::passkeys::grant_purpose(token);
     let shown = format!("/platform/{id}?grant={token}");
     let proved = super::passkeys::on_page(env, s, form, &purpose, host, &shown).await?;
     if let Err(why) = proved {
@@ -366,7 +366,7 @@ pub async fn serve(state: &State, path: &str, body: &Value) -> Result<Response> 
         }
         "reoffer" => match runs.list.iter_mut().find(|r| r.id == id) {
             Some(r) if r.stage == Stage::Planned => {
-                r.offer = Some(crate::platforms::hash(&s("token")));
+                r.offer = Some(crate::core::platform::platforms::hash(&s("token")));
                 Ok(r.clone())
             }
             _ => Err(format!(
@@ -467,7 +467,7 @@ pub async fn tick(state: &State, env: &Env, sha: Option<&str>) -> Result<()> {
                 .list
                 .iter()
                 .find(|r| r.id == id)
-                .and_then(crate::platforms::finish_event)
+                .and_then(crate::core::platform::platforms::finish_event)
             else {
                 continue;
             };

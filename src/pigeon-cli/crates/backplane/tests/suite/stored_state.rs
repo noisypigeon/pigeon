@@ -8,13 +8,13 @@ use std::path::{Path, PathBuf};
 
 use backplane::actions::Actions;
 use backplane::approve::Waiting;
-use backplane::changes::{Change, Event};
 use backplane::control::{JobSpec, Pipeline, Report};
-use backplane::grants::Grant;
-use backplane::mandates::Mandates;
+use backplane::core::approval::grants::Grant;
+use backplane::core::approval::mandates::Mandates;
+use backplane::core::change::{Change, Event};
+use backplane::core::deploy::testmaps::TestMaps;
+use backplane::core::platform::runs::Queue;
 use backplane::mirroring::Mirroring;
-use backplane::runs::Queue;
-use backplane::testmaps::TestMaps;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use serde_json::Value;

@@ -8,9 +8,9 @@ use worker::Result;
 use super::super::platform::{self, Settings, now};
 use super::{ChangeRun, MACOS, Pending};
 use crate::actions::{self, Actions};
-use crate::changes::{Change, Event, JobStatus};
 use crate::control::{self, Outcome as JobOutcome, Report};
-use crate::macos::{self, Job, Kind, Outcome, Placed, Provider, Settled};
+use crate::core::change::{Change, Event, JobStatus};
+use crate::core::macos::{self, Job, Kind, Outcome, Placed, Provider, Settled};
 
 /// The `ios` check's name, as `cobot::scope` names it.
 pub const IOS: &str = "ios";

@@ -112,8 +112,8 @@ fn what_holds_a_change_is_carried() {
 
 mod acting {
     use super::step::Apply;
-    use backplane::changes::{Change, Event, State};
     use backplane::core::change::eviction::{PER_RUN, incomplete, pick, remains};
+    use backplane::core::change::{Change, Event, State};
     use serde_json::json;
 
     const A: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";

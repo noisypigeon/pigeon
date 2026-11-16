@@ -46,8 +46,8 @@ pub async fn append(
 /// Appends what happened to `after` since `before`, logging a failure rather than failing.
 pub async fn changed(
     env: &Env,
-    before: Option<&crate::changes::Change>,
-    after: &crate::changes::Change,
+    before: Option<&crate::core::change::Change>,
+    after: &crate::core::change::Change,
 ) {
     let found = crate::events::of_change(before, after);
     if found.is_empty() {
@@ -85,8 +85,9 @@ pub async fn nudge(env: &Env) -> Result<()> {
     for o in crate::control::open_rows(&rows) {
         let (_, mut view) =
             super::to_change(env, &s.repo, o.number, worker::Method::Get, "/status", None).await?;
-        let authorize = serde_json::from_value::<crate::changes::Change>(view["change"].clone())
-            .is_ok_and(|c| crate::events::authorize_due(&c));
+        let authorize =
+            serde_json::from_value::<crate::core::change::Change>(view["change"].clone())
+                .is_ok_and(|c| crate::events::authorize_due(&c));
         if authorize {
             super::briefs::by_window(env, &s, o.number, "change.authorize", None).await;
             (_, view) =
@@ -96,7 +97,8 @@ pub async fn nudge(env: &Env) -> Result<()> {
         let Some(session) = o.session else {
             continue;
         };
-        let Ok(c) = serde_json::from_value::<crate::changes::Change>(view["change"].clone()) else {
+        let Ok(c) = serde_json::from_value::<crate::core::change::Change>(view["change"].clone())
+        else {
             continue;
         };
         let stage = super::stages::of(env, &s, &c, &q).await;

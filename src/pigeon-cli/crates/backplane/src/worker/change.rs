@@ -11,9 +11,9 @@ use worker::{DurableObject, Env, Method, Request, Response, Result, State, durab
 
 use super::platform::{self, Settings, job_stub, json_request, now};
 use crate::actions::{self, Actions, Due};
-use crate::changes::{Change, Effect, Event, JobStatus};
 use crate::control::{self, Outcome, Report};
-use crate::grants::{Grant, Grants};
+use crate::core::approval::grants::{Grant, Grants};
+use crate::core::change::{Change, Effect, Event, JobStatus};
 
 const CHANGE: &str = "change";
 const PENDING: &str = "pending";
@@ -95,9 +95,9 @@ impl ChangeRun {
             return Ok(());
         }
         let mut change = change.clone();
-        change.grant = Some(crate::changes::ChangeGrant {
+        change.grant = Some(crate::core::change::ChangeGrant {
             by: by.to_string(),
-            expires: now() + crate::grants::PAGE_TTL,
+            expires: now() + crate::core::approval::grants::PAGE_TTL,
             review: body["review"].as_bool().unwrap_or_default(),
         });
         self.state.storage().put(CHANGE, &change).await
@@ -147,7 +147,7 @@ impl ChangeRun {
         pending: &mut Vec<Pending>,
     ) -> std::result::Result<(), String> {
         let head = change.head.clone();
-        let (next, effects) = crate::changes::step(change, event).map_err(|r| r.0)?;
+        let (next, effects) = crate::core::change::step(change, event).map_err(|r| r.0)?;
         *change = next;
         for e in effects {
             match e {
@@ -252,13 +252,15 @@ impl ChangeRun {
         asked: &str,
         pending: &mut Vec<Pending>,
     ) -> Vec<Event> {
-        let dropped = change.state == crate::changes::State::Checked
+        let dropped = change.state == crate::core::change::State::Checked
             && change.approval.is_none()
             && change.merge_after.is_none();
         let Some(head) = change.head.clone().filter(|_| dropped) else {
             return Vec::new();
         };
-        let by = if let Some(rule) = crate::approvals::by_policy(change, "change.approve") {
+        let by = if let Some(rule) =
+            crate::core::approval::tiers::by_policy(change, "change.approve")
+        {
             format!("policy:{rule}")
         } else {
             let Ok(s) = Settings::from(&self.env) else {
@@ -455,7 +457,7 @@ impl ChangeRun {
     /// shows open; see the concurrent-sessions ADR's 2026-11-13 amendment.
     async fn heal(&self, existing: Option<Change>) -> Result<Response> {
         let done = |c: &Change| {
-            use crate::changes::State as S;
+            use crate::core::change::State as S;
             matches!(c.state, S::Merged | S::Closed)
         };
         let Some(change) = existing.filter(done) else {
@@ -520,13 +522,13 @@ impl ChangeRun {
     }
 
     async fn start(&self, change: &Change, job: &str) -> std::result::Result<(), String> {
-        let write = job == crate::changes::MERGE || job == crate::changes::RESTACK;
+        let write = job == crate::core::change::MERGE || job == crate::core::change::RESTACK;
         let (remote, token) =
             platform::credentials(&self.env, write, crate::cobot::artifacts_wire::TOKEN_TTL)
                 .await
                 .map_err(|e| e.to_string())?;
         let mut spec = control::spec(change, job, &remote, &token)?;
-        if job == crate::changes::BOUND {
+        if job == crate::core::change::BOUND {
             let overlaps = super::overlapping(&self.env, change)
                 .await
                 .map_err(|e| e.to_string())?;
@@ -538,7 +540,7 @@ impl ChangeRun {
         }
         // Past the commit the bound job saw it built on, which survives a restack of the change
         // it is built on; else that change's last head. See the yield ADR's 2026-11-14 amendment.
-        if job == crate::changes::RESTACK && change.after.is_some() {
+        if job == crate::core::change::RESTACK && change.after.is_some() {
             let seen: Option<String> = self.state.storage().get(AFTER_SEEN).await.ok().flatten();
             let last = change.after.as_ref().and_then(|a| a.head.clone());
             if let Some(h) = seen.or(last) {
@@ -550,7 +552,7 @@ impl ChangeRun {
             spec.env.insert(control::MIRROR_TO.into(), to);
             spec.env.insert(control::MIRROR_TOKEN.into(), to_token);
         }
-        if job == crate::changes::MERGE
+        if job == crate::core::change::MERGE
             && let Ok(author) = self.env.var(control::COMMIT_AUTHOR)
             && !author.to_string().is_empty()
         {
@@ -779,7 +781,7 @@ impl ChangeRun {
         Ok(())
     }
 
-    /// Each queued job with no start pending, and each queued [`crate::changes::STALL_SECS`] with
+    /// Each queued job with no start pending, and each queued [`crate::core::change::STALL_SECS`] with
     /// no attempt, started again and recorded as `job.redispatched`; see the job-start ADR's
     /// yield-end amendment.
     async fn redispatch(
@@ -799,9 +801,9 @@ impl ChangeRun {
                 _ => None,
             })
             .collect();
-        let missing = crate::changes::undispatched(change, &named, elsewhere);
+        let missing = crate::core::change::undispatched(change, &named, elsewhere);
         let since: std::collections::BTreeMap<String, u64> = self.load(QUEUED).await?;
-        let (since, stalled) = crate::changes::stalled(change, &since, now());
+        let (since, stalled) = crate::core::change::stalled(change, &since, now());
         self.state.storage().put(QUEUED, &since).await?;
         let n = change.number;
         let mut notes = Vec::new();
@@ -810,7 +812,7 @@ impl ChangeRun {
                 continue;
             }
             pending.retain(|p| !matches!(p, Pending::Start(x) | Pending::StartAt(x, _) if *x == j));
-            let mins = crate::changes::STALL_SECS / 60;
+            let mins = crate::core::change::STALL_SECS / 60;
             notes.push(format!(
                 "!{n} job `{j}` sat queued {mins} min with no attempt; dispatched again"
             ));
@@ -990,10 +992,10 @@ impl ChangeRun {
                 if report.outcome != Outcome::Running {
                     self.keep_log(job, &id, &report).await?;
                 }
-                if job == crate::changes::BOUND && !report.forecast.is_empty() {
+                if job == crate::core::change::BOUND && !report.forecast.is_empty() {
                     self.state.storage().put(FORECAST, &report.forecast).await?;
                 }
-                if job == crate::changes::BOUND
+                if job == crate::core::change::BOUND
                     && let Some(seen) = &report.built_on
                 {
                     self.state.storage().put(AFTER_SEEN, seen).await?;
@@ -1034,7 +1036,7 @@ impl ChangeRun {
         let mut logs: Map<String, Value> = self.load(LOGS).await?;
         logs.insert(job.into(), key.into());
         storage.put(LOGS, &logs).await?;
-        if job == crate::changes::BOUND {
+        if job == crate::core::change::BOUND {
             storage
                 .put(BOUND_LOG, &control::last(&report.log, SHOWN).to_string())
                 .await?;
@@ -1084,9 +1086,9 @@ impl DurableObject for ChangeRun {
                 let failures: Map<String, Value> = self.load(FAILURES).await?;
                 let bound_log: Option<String> = self.state.storage().get(BOUND_LOG).await?;
                 let github: Actions = self.load(ACTIONS).await?;
-                let macos: Option<crate::macos::Job> = self.load(MACOS).await?;
+                let macos: Option<crate::core::macos::Job> = self.load(MACOS).await?;
                 Response::from_json(&json!({
-                    "macos": macos.as_ref().map(crate::macos::view),
+                    "macos": macos.as_ref().map(crate::core::macos::view),
                     "change": change,
                     "branch": change.branch(),
                     "failures": failures,
@@ -1107,9 +1109,9 @@ impl DurableObject for ChangeRun {
                 let token = platform::random_hex(32)?;
                 let grants: Grants = self.load(GRANTS).await?;
                 let ttl = if body["page"].as_bool() == Some(true) {
-                    crate::grants::PAGE_TTL
+                    crate::core::approval::grants::PAGE_TTL
                 } else {
-                    crate::grants::TTL
+                    crate::core::approval::grants::TTL
                 };
                 let (grants, minted) = grants.mint_for(&change, operation, &token, now(), ttl);
                 match minted {
@@ -1252,7 +1254,7 @@ impl DurableObject for ChangeRun {
         let restack_status = |c: &Change| {
             c.jobs
                 .iter()
-                .find(|j| j.name == crate::changes::RESTACK)
+                .find(|j| j.name == crate::core::change::RESTACK)
                 .map(|j| j.status)
         };
         let restack_before = restack_status(&change);

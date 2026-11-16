@@ -3,13 +3,13 @@
 
 use crate::harness::step;
 
-use backplane::approvals::{Tier, Tiered, Tiers};
-use backplane::changes::stage::{self, Needs};
-use backplane::changes::{
+use backplane::control;
+use backplane::core::approval::tiers::{Tier, Tiered, Tiers};
+use backplane::core::change::queue::{self as merges, MergeQueue, Queued};
+use backplane::core::change::stage::{self, Needs};
+use backplane::core::change::{
     Change, Check, Effect, Event, GATE, MERGE, RESTACK, Relation, Restacked, State,
 };
-use backplane::control;
-use backplane::merges::{self, MergeQueue, Queued};
 use step::{Apply, Queue};
 const A: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const C: &str = "cccccccccccccccccccccccccccccccccccccccc";

@@ -117,7 +117,7 @@ pub async fn trigger(
     ))
 }
 
-/// Build `slug`: its `data`, which [`crate::macos::bitrise`] reads.
+/// Build `slug`: its `data`, which [`crate::core::macos::bitrise`] reads.
 ///
 /// # Errors
 ///
@@ -195,6 +195,6 @@ pub async fn config_mismatch(env: &Env) -> Result<Option<String>, String> {
     {
         return Ok(Some("its bitrise.yml is read from the repository".into()));
     }
-    Ok((!crate::macos::same_config(&held, CONFIG))
+    Ok((!crate::core::macos::same_config(&held, CONFIG))
         .then(|| "its bitrise.yml differs from main's tooling/ci/bitrise/bitrise.yml".into()))
 }

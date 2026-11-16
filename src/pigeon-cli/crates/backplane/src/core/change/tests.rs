@@ -769,19 +769,19 @@ fn of_two_changes_forecast_to_conflict_the_one_less_far_along_yields() {
     );
 }
 
-fn tiered(rule: &str) -> crate::approvals::Tiers {
-    let t = |r: &str| crate::approvals::Tiered {
-        tier: crate::approvals::Tier::Code,
+fn tiered(rule: &str) -> crate::core::approval::tiers::Tiers {
+    let t = |r: &str| crate::core::approval::tiers::Tiered {
+        tier: crate::core::approval::tiers::Tier::Code,
         rule: r.into(),
     };
-    crate::approvals::Tiers {
+    crate::core::approval::tiers::Tiers {
         authorize: t("routine"),
         merge: t(rule),
         close: t("close"),
     }
 }
 
-fn bounded_with(tiers: crate::approvals::Tiers) -> Event {
+fn bounded_with(tiers: crate::core::approval::tiers::Tiers) -> Event {
     Event::Bounded {
         sha: A.into(),
         violations: Vec::new(),
@@ -1156,7 +1156,7 @@ fn a_job_queued_that_never_started_is_dispatched_again_and_a_started_one_is_not(
     );
 }
 
-fn bounded_at(sha: &str, merge: crate::approvals::Tier, patch: Option<&str>) -> Event {
+fn bounded_at(sha: &str, merge: crate::core::approval::tiers::Tier, patch: Option<&str>) -> Event {
     let mut tiers = tiered("routine");
     tiers.merge.tier = merge;
     Event::Bounded {
@@ -1171,7 +1171,7 @@ fn bounded_at(sha: &str, merge: crate::approvals::Tier, patch: Option<&str>) -> 
 }
 
 /// !464: approved on `5f1bccf`, then the session rebased and pushed `efd44b8`, the same patch.
-fn approved_then_pushed(merge: crate::approvals::Tier) -> Change {
+fn approved_then_pushed(merge: crate::core::approval::tiers::Tier) -> Change {
     run(
         planned(),
         vec![
@@ -1189,7 +1189,7 @@ fn approved_then_pushed(merge: crate::approvals::Tier) -> Change {
 
 #[test]
 fn case_464_a_session_push_of_the_same_patch_carries_the_owners_approval() {
-    use crate::approvals::Tier;
+    use crate::core::approval::tiers::Tier;
     let c = approved_then_pushed(Tier::Code);
     assert_eq!(c.state, State::Pushed);
     assert_eq!(
@@ -1205,7 +1205,7 @@ fn case_464_a_session_push_of_the_same_patch_carries_the_owners_approval() {
 
 #[test]
 fn a_session_push_of_another_patch_asks_the_owner_again() {
-    use crate::approvals::Tier;
+    use crate::core::approval::tiers::Tier;
     let c = run(
         approved_then_pushed(Tier::Code),
         vec![bounded_at(B, Tier::Code, Some("other"))],
@@ -1218,7 +1218,7 @@ fn a_session_push_of_another_patch_asks_the_owner_again() {
 
 #[test]
 fn a_session_push_with_no_patch_reported_asks_the_owner_again() {
-    use crate::approvals::Tier;
+    use crate::core::approval::tiers::Tier;
     let c = run(
         approved_then_pushed(Tier::Code),
         vec![bounded_at(B, Tier::Code, None)],
@@ -1231,7 +1231,7 @@ fn a_session_push_with_no_patch_reported_asks_the_owner_again() {
 
 #[test]
 fn a_session_push_whose_merge_tier_rose_asks_the_owner_again() {
-    use crate::approvals::Tier;
+    use crate::core::approval::tiers::Tier;
     let c = run(
         approved_then_pushed(Tier::Confirm),
         vec![bounded_at(B, Tier::Code, Some("p464"))],
@@ -1244,7 +1244,7 @@ fn a_session_push_whose_merge_tier_rose_asks_the_owner_again() {
 
 #[test]
 fn a_push_before_any_approval_carries_nothing() {
-    use crate::approvals::Tier;
+    use crate::core::approval::tiers::Tier;
     let c = run(
         planned(),
         vec![

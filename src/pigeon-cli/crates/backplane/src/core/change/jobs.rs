@@ -7,7 +7,7 @@ use super::types::{
     BOUND, Change, Check, Effect, GATE, Job, JobStatus, MERGE, MIRROR, RESTACK, State, refuse,
 };
 
-use crate::runs::MAX_ATTEMPTS;
+use crate::core::platform::runs::MAX_ATTEMPTS;
 
 /// Failed starts before a job fails; see
 /// `.claude/decisions/2026-11-15-development-job-start-failures-backoff.md` §1.

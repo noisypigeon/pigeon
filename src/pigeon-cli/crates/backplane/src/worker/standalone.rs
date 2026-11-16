@@ -11,9 +11,9 @@ use super::elicit;
 use super::passkeys::KEYRING;
 use super::platform::{self, Settings, now};
 use crate::core::account::{self, Accounts};
+use crate::core::app::devices::{Device, Devices};
 use crate::core::member::handover::{Handover, Seeded};
 use crate::core::member::{self, Members, Roles, check_roles};
-use crate::devices::{Device, Devices};
 
 /// The release's roles, as a standalone holds them.
 const ROLES: &str = include_str!("../../../../../../.config/roles.yaml");

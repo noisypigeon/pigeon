@@ -6,10 +6,10 @@ use worker::{Env, Method, Result};
 
 use super::mandates::to_instance;
 use super::platform::{self, Settings, json_request};
-use crate::changes::{Change, State};
+use crate::core::change::queue::MergeQueue;
 use crate::core::change::stage::{self, Context, Deploy, Stage};
+use crate::core::change::{Change, State};
 use crate::events::PAGE;
-use crate::merges::MergeQueue;
 
 /// The most pages of a change's events read for `since`.
 const PAGES: usize = 10;

@@ -96,7 +96,7 @@ pub async fn build(env: &Env, s: &Settings) -> Result<(Digest, u64)> {
         list: serde_json::from_value(open_tasks["tasks"].clone()).unwrap_or_default(),
     };
     let (_, all_mandates) = to_instance(env, s, "/mandates/list", &json!({})).await?;
-    let mandates: Vec<crate::mandates::Mandate> =
+    let mandates: Vec<crate::core::approval::mandates::Mandate> =
         serde_json::from_value(all_mandates["mandates"].clone()).unwrap_or_default();
     let events = since(env, s, after).await?;
     let last = events.last().map_or(after, |x| x.id);
@@ -225,7 +225,8 @@ async fn sessions(
         let mut changes = Vec::new();
         for n in numbers {
             let (_, view) = super::to_change(env, &s.repo, n, Method::Get, "/status", None).await?;
-            let Ok(c) = serde_json::from_value::<crate::changes::Change>(view["change"].clone())
+            let Ok(c) =
+                serde_json::from_value::<crate::core::change::Change>(view["change"].clone())
             else {
                 continue;
             };
@@ -263,7 +264,7 @@ async fn sessions(
 
 /// The digest's macOS lines, from the events since the last digest and this month's minutes.
 async fn macos_lines(env: &Env, events: &[crate::events::Event]) -> Vec<String> {
-    let Ok(cfg) = crate::macos::config() else {
+    let Ok(cfg) = crate::core::macos::config() else {
         return Vec::new();
     };
     let usage = super::macos::usage(env).await.unwrap_or_default();
@@ -271,7 +272,7 @@ async fn macos_lines(env: &Env, events: &[crate::events::Event]) -> Vec<String> 
         .iter()
         .map(|x| (x.kind.clone(), x.summary.clone()))
         .collect();
-    crate::macos::digest_lines(&pairs, &cfg, &usage)
+    crate::core::macos::digest_lines(&pairs, &cfg, &usage)
 }
 
 /// Why the GitHub mirror needs the owner, per `MainRun`; none when it can't be asked.
@@ -311,7 +312,7 @@ pub async fn hourly(env: &Env) -> Result<()> {
     }
     let (d, last) = build(env, &s).await?;
     let lines = d.owner_lines();
-    let hash = super::super::grants::hex(&Sha256::digest(lines.join("\n").as_bytes()));
+    let hash = crate::core::approval::grants::hex(&Sha256::digest(lines.join("\n").as_bytes()));
     let (_, cursor) = to_instance(env, &s, "/digest/cursor", &json!({})).await?;
     if d.needs_owner() && cursor["pushed"].as_str() != Some(hash.as_str()) {
         let more = lines.len().saturating_sub(1);

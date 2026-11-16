@@ -3,8 +3,8 @@
 
 use crate::harness::step;
 
-use backplane::changes::{BOUND, Change, Check, Event};
 use backplane::control::{self, Outcome, Pipeline, Push, Report, Routed, Target};
+use backplane::core::change::{BOUND, Change, Check, Event};
 use backplane::wire::Request;
 use serde_json::json;
 use step::Apply;
@@ -553,7 +553,7 @@ fn a_lost_deploy_retries_then_fails() {
     let mut p = Pipeline::default();
     p.pushed(A);
     p.start();
-    for _ in 1..backplane::runs::MAX_ATTEMPTS {
+    for _ in 1..backplane::core::platform::runs::MAX_ATTEMPTS {
         assert_eq!(p.lost(1).as_deref(), Some(A));
     }
     assert_eq!(p.lost(1), None);
@@ -695,8 +695,8 @@ fn no_free_container_is_waiting_not_a_lost_job() {
 
 #[test]
 fn checks_and_deploys_run_on_checker_and_git_jobs_on_runner() {
-    use backplane::changes::MERGE;
     use backplane::control::Class;
+    use backplane::core::change::MERGE;
     assert_eq!(control::class_of(BOUND), Class::Runner);
     assert_eq!(control::class_of(MERGE), Class::Runner);
     assert_eq!(
@@ -950,8 +950,12 @@ fn code_checks_go_to_github_only_on_a_mirrored_change() {
     assert_eq!(control::mirror_state(&plain), Mirror::Failed);
 }
 
-fn job(name: &str, cmd: &str, status: backplane::changes::JobStatus) -> backplane::changes::Job {
-    backplane::changes::Job {
+fn job(
+    name: &str,
+    cmd: &str,
+    status: backplane::core::change::JobStatus,
+) -> backplane::core::change::Job {
+    backplane::core::change::Job {
         name: name.into(),
         argv: cmd.split(' ').map(str::to_string).collect(),
         status,
@@ -1000,7 +1004,7 @@ fn ci_rerun_on_cloudflare_is_the_owners_break_glass() {
 #[test]
 fn the_break_glass_moves_a_heads_unpassed_code_checks_to_the_checker() {
     use backplane::actions::Actions;
-    use backplane::changes::{JobStatus, State};
+    use backplane::core::change::{JobStatus, State};
     let mut c = pushed();
     c.state = State::Bounded;
     c.jobs = vec![
@@ -1054,7 +1058,7 @@ fn the_break_glass_moves_a_heads_unpassed_code_checks_to_the_checker() {
 #[test]
 fn opening_the_ci_window_moves_a_change_waiting_on_github() {
     use backplane::actions::Actions;
-    use backplane::changes::{JobStatus, State};
+    use backplane::core::change::{JobStatus, State};
     let mut c = pushed();
     c.state = State::Bounded;
     c.jobs = vec![

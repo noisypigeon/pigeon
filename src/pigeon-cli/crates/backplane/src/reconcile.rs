@@ -6,7 +6,7 @@ use std::fmt::Write as _;
 
 use serde::{Deserialize, Serialize};
 
-use crate::changes::{Change, Restacked, State};
+use crate::core::change::{Change, Restacked, State};
 
 /// The ADR that decides reconciliation, which every plan cites.
 pub const ADR: &str = ".claude/decisions/2026-11-08-development-concurrent-agent-sessions.md";

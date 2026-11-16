@@ -10,8 +10,8 @@ use worker::{Env, Fetch, Headers, Method, Request, RequestInit, Response, Result
 use super::platform::{self, Settings, now};
 use super::to_change;
 use crate::access::Identity;
-use crate::changes::Change;
 use crate::control;
+use crate::core::change::Change;
 use crate::gitdoor::{self, Service};
 
 /// How long a front-door token lives, in seconds; one request's worth.

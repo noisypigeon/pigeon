@@ -326,10 +326,10 @@ pub async fn latest(env: &Env, s: &Settings, id: &str) -> Option<Draft> {
 pub async fn review_needed(
     env: &Env,
     s: &Settings,
-    before: Option<&crate::changes::Change>,
-    after: &crate::changes::Change,
+    before: Option<&crate::core::change::Change>,
+    after: &crate::core::change::Change,
 ) -> Result<()> {
-    use crate::changes::State as Stage;
+    use crate::core::change::State as Stage;
     let newly = after.state == Stage::Checked
         && before.is_none_or(|b| b.state != Stage::Checked || b.head != after.head);
     let Some(id) = after

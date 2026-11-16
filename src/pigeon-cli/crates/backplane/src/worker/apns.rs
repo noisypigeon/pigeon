@@ -5,8 +5,8 @@ use serde_json::{Value, json};
 use worker::{Env, Fetch, Headers, Method, Request, RequestInit, Result};
 
 use super::platform::{Settings, now, secret};
+use crate::core::app::devices::Device;
 use crate::core::app::push;
-use crate::devices::Device;
 
 /// The `.p8` key, PEM.
 const KEY: &str = "APNS_KEY";

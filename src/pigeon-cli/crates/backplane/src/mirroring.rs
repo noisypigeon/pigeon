@@ -5,7 +5,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
-use crate::changes;
+use crate::core::change as changes;
 
 /// How often both sides' refs are compared, in seconds.
 pub const RECONCILE: u64 = 3600;
@@ -122,7 +122,7 @@ impl Mirroring {
     /// The running job's Container was lost: the same job, again, until its attempts are used.
     pub fn lost(&mut self, at: u64) -> Option<String> {
         let (sha, attempts) = self.running.clone()?;
-        if attempts < crate::runs::MAX_ATTEMPTS {
+        if attempts < crate::core::platform::runs::MAX_ATTEMPTS {
             self.running = Some((sha.clone(), attempts + 1));
             return Some(sha);
         }

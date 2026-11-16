@@ -2,7 +2,7 @@
 //! 2026-11-11 amendment to `.claude/decisions/2026-11-10-development-factory-crates-functional-core.md`.
 
 use backplane::actions::{Due, Mirror};
-use backplane::testmaps::{self, TestMaps};
+use backplane::core::deploy::testmaps::{self, TestMaps};
 use serde_json::json;
 
 const A: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";

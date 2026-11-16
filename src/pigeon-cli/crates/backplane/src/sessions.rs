@@ -5,7 +5,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::approvals;
+use crate::core::approval::tiers as approvals;
 
 /// The longest session label.
 pub const MAX_SESSION: usize = 200;

@@ -255,8 +255,8 @@ fn run(db: &Connection, statements: &[backplane::control::Statement]) {
 
 #[test]
 fn a_change_closed_before_its_plan_was_authorized_mirrors() {
-    use backplane::changes::{Change, Event};
     use backplane::control;
+    use backplane::core::change::{Change, Event};
     let db = migrated();
     let mut c = Change::propose(
         9,
@@ -290,8 +290,8 @@ fn a_change_closed_before_its_plan_was_authorized_mirrors() {
 
 #[test]
 fn a_change_closed_after_its_approval_mirrors_without_an_approver() {
-    use backplane::changes::{Change, Event};
     use backplane::control;
+    use backplane::core::change::{Change, Event};
     let db = migrated();
     let mut c = Change::propose(191, "x", "refactor: x", "p", vec!["a/**".into()], "agent");
     let sha = "a".repeat(40);

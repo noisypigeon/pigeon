@@ -60,7 +60,7 @@ fn totp_secret() -> i32 {
         eprintln!("backplane: no randomness: {e}");
         return INVALID;
     }
-    let secret = backplane::totp::base32_encode(&bytes);
+    let secret = backplane::core::approval::totp::base32_encode(&bytes);
     eprintln!(
         "Add this to your authenticator app (it is shown once; nothing stores it but the app and the Worker):\n\
          otpauth://totp/pigeon:owner?secret={secret}&issuer=pigeon&algorithm=SHA1&digits=6&period=30"

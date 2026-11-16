@@ -86,7 +86,8 @@ impl CiWindow {
             hours,
             expires,
         };
-        self.offers.insert(crate::grants::key(token), offer.clone());
+        self.offers
+            .insert(crate::core::approval::grants::key(token), offer.clone());
         offer
     }
 
@@ -98,7 +99,7 @@ impl CiWindow {
     pub fn peek(&self, token: &str, now: u64) -> Result<&Offer, String> {
         let o = self
             .offers
-            .get(&crate::grants::key(token))
+            .get(&crate::core::approval::grants::key(token))
             .ok_or("this link is not valid; ask for a new one")?;
         if o.expires <= now {
             return Err("this link has expired; ask for a new one".into());
@@ -114,7 +115,8 @@ impl CiWindow {
     /// When the token names no live offer.
     pub fn grant(&mut self, token: &str, by: &str, now: u64) -> Result<Option<Window>, String> {
         let hours = self.peek(token, now)?.hours;
-        self.offers.remove(&crate::grants::key(token));
+        self.offers
+            .remove(&crate::core::approval::grants::key(token));
         self.window = (hours > 0).then(|| Window {
             until: now + u64::from(hours) * 3600,
             by: by.to_string(),

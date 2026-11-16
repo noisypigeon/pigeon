@@ -2,7 +2,7 @@
 //! `.claude/decisions/2026-11-08-development-events-tickets-digest-mandate.md` §4.
 
 use backplane::approve::Waiting;
-use backplane::mandates::{Mandates, State};
+use backplane::core::approval::mandates::{Mandates, State};
 use backplane::tasks::{DigestInput, STALE, Tasks, digest};
 
 const ADR: &str = ".claude/decisions/2026-11-08-development-events-tickets-digest-mandate.md";

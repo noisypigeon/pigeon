@@ -8,9 +8,9 @@ use super::devices::DEVICES;
 use super::elicit;
 use super::platform::{self, Settings, now};
 use crate::core::account::{self, Accounts};
+use crate::core::app::devices::{Device, Devices};
 use crate::core::member::join::{self, JoinRequest, Joins};
 use crate::core::member::{self, Members, Role};
-use crate::devices::{Device, Devices};
 
 /// The route a device's signature lets through.
 pub const PATH: &str = "/v0/app/members";

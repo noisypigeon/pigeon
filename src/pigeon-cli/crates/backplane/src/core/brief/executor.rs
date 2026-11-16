@@ -2,7 +2,7 @@
 //! `.claude/decisions/2026-11-13-development-model-tiered-agent-briefs.md` §2, §4.
 
 use super::Brief;
-use crate::approvals::Tiers;
+use crate::core::approval::tiers::Tiers;
 use crate::sessions::Class;
 
 /// The tier rules a brief's change may never carry: they are the planner's work.

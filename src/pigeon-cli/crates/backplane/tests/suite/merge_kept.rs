@@ -3,12 +3,12 @@
 
 use crate::harness::step;
 
-use backplane::approvals::{Tier, Tiered, Tiers};
-use backplane::changes::{
+use backplane::control;
+use backplane::core::approval::tiers::{Tier, Tiered, Tiers};
+use backplane::core::change::queue::{HOLD, MergeQueue, PROTECT, Queued};
+use backplane::core::change::{
     Change, Check, Effect, Event, GATE, MERGE, RESTACK, Relation, Restacked, STALE_BASE, State,
 };
-use backplane::control;
-use backplane::merges::{HOLD, MergeQueue, PROTECT, Queued};
 use step::{Apply, Queue};
 
 const A: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -364,7 +364,7 @@ fn replay_543_a_merge_refused_on_a_stale_base_restacks_and_keeps_its_turn() {
     let effects = c.apply(refused.clone()).expect("refused");
     assert_eq!(effects, [Effect::Start(RESTACK.into())]);
     assert_eq!(c.merge_after.as_deref(), Some(WINDOW));
-    assert!(backplane::merges::holds_turn(&c));
+    assert!(backplane::core::change::queue::holds_turn(&c));
     assert_eq!(control::merge_ended(&refused, &c), None, "the turn is kept");
     // A disjoint restack of the same patch carries its approval, and it merges on its turn.
     c.apply(Event::Restacked {

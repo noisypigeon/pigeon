@@ -10,7 +10,7 @@ use super::elicit;
 use super::platform::{self, Settings, now};
 use crate::core::account::{self, Accounts};
 use crate::core::app::approvals;
-use crate::devices::{Device, Devices};
+use crate::core::app::devices::{Device, Devices};
 use crate::push::{b64url, b64url_decode};
 
 const PROFILE: &str = "/v0/app/profile";

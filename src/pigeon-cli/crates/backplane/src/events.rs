@@ -120,8 +120,8 @@ pub fn moves(kind: &str) -> bool {
 /// `.claude/decisions/2026-11-15-development-sessions-stop-only-for-oversight.md`'s 2026-11-15
 /// amendment on generated changes.
 #[must_use]
-pub fn authorize_due(c: &crate::changes::Change) -> bool {
-    c.state == crate::changes::State::Proposed && c.plan_approval.is_none()
+pub fn authorize_due(c: &crate::core::change::Change) -> bool {
+    c.state == crate::core::change::State::Proposed && c.plan_approval.is_none()
 }
 
 /// Whether a change at `stage` is due a nudge at `now`: it has needed its session for at least
@@ -301,16 +301,16 @@ impl Log {
 /// starts and ends, and its falling behind or into conflict.
 #[must_use]
 pub fn of_change(
-    before: Option<&crate::changes::Change>,
-    after: &crate::changes::Change,
+    before: Option<&crate::core::change::Change>,
+    after: &crate::core::change::Change,
 ) -> Vec<(String, String)> {
-    use crate::changes::JobStatus;
+    use crate::core::change::JobStatus;
     let n = after.number;
     let mut out = Vec::new();
     if before.is_none_or(|b| b.state != after.state) {
         let mut summary = format!("!{n} {}: {}", after.title, after.state.name());
         if let Some(a) = &after.approval
-            && after.state == crate::changes::State::Approved
+            && after.state == crate::core::change::State::Approved
         {
             let _ = write!(summary, " by {}", a.by);
         }
@@ -362,11 +362,11 @@ pub fn of_change(
 /// failed start or a lost Container; see
 /// `.claude/decisions/2026-11-15-development-job-start-failures-backoff.md` §3.
 fn retrying(
-    before: Option<&crate::changes::Change>,
-    after: &crate::changes::Change,
-    j: &crate::changes::Job,
+    before: Option<&crate::core::change::Change>,
+    after: &crate::core::change::Change,
+    j: &crate::core::change::Job,
 ) -> Option<String> {
-    use crate::changes::JobStatus;
+    use crate::core::change::JobStatus;
     let b = before
         .filter(|b| b.head == after.head)?
         .jobs
@@ -378,7 +378,7 @@ fn retrying(
     let why = j.last_error.as_deref().unwrap_or("no reason was given");
     let n = after.number;
     if j.start_failures > b.start_failures {
-        let max = crate::changes::MAX_START_FAILURES;
+        let max = crate::core::change::MAX_START_FAILURES;
         let k = j.start_failures;
         return Some(format!(
             "!{n} job `{}` didn't start ({k} of {max}): {why}",
@@ -387,7 +387,7 @@ fn retrying(
     }
     (b.status == JobStatus::Running).then(|| {
         let a = j.attempts;
-        let max = crate::runs::MAX_ATTEMPTS;
+        let max = crate::core::platform::runs::MAX_ATTEMPTS;
         format!("!{n} job `{}`: {why} (attempt {a} of {max})", j.name)
     })
 }

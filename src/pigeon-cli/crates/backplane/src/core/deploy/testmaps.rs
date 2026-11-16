@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 use crate::actions::{self, Actions, Finished};
-use crate::changes::Check;
+use crate::core::change::Check;
 
 /// The check's name, as `crate::cobot::scope::test_map` names it.
 pub const CHECK: &str = "test map";

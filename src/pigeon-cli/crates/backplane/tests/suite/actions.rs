@@ -4,7 +4,7 @@
 use backplane::actions::{
     Actions, Due, FIND_WITHIN, Finished, Mirror, POLL, dispatch_body, on_github,
 };
-use backplane::changes::Check;
+use backplane::core::change::Check;
 use serde_json::{Value, json};
 
 const A: &str = "0123456789abcdef0123456789abcdef01234567";

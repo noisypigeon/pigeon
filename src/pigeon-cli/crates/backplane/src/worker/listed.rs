@@ -6,9 +6,9 @@ use worker::{Env, Result};
 
 use super::platform::{self, Settings, now};
 use crate::approve::Waiting;
-use crate::changes::{Change, State};
+use crate::core::approval::grants::{self, Grants};
 use crate::core::approval::listed::{self, Action, Listed};
-use crate::grants::{self, Grants};
+use crate::core::change::{Change, State};
 
 /// The operations a change lists for the owner.
 const LISTED: [&str; 2] = ["change.authorize", "change.approve"];

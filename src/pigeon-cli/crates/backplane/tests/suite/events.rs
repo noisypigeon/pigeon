@@ -89,7 +89,7 @@ fn the_log_keeps_the_newest_and_drops_the_old() {
 }
 
 mod of_change {
-    use backplane::changes::{Change, Check, Event};
+    use backplane::core::change::{Change, Check, Event};
     use backplane::events::of_change;
 
     use super::step::Apply;
@@ -374,7 +374,7 @@ fn a_clean_end_wakes_its_archiver() {
 // amendment on generated changes.
 #[test]
 fn a_control_plane_review_awaiting_its_plan_is_due_the_windows_authorization() {
-    use backplane::changes::{Approval, Change, State};
+    use backplane::core::change::{Approval, Change, State};
     use backplane::events::authorize_due;
     let mut review = Change::propose(
         559,

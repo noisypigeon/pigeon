@@ -15,10 +15,10 @@ use super::github;
 use super::platform::{self, job_stub, json_request, now, secret};
 use crate::actions::Due;
 use crate::control::{self, Outcome, Pipeline, Report};
+use crate::core::deploy::testmaps::{self, TestMaps};
+use crate::core::macos::{self, Placed, Provider, Settled};
 use crate::iosrelease::{self, IosReleases, Moved};
-use crate::macos::{self, Placed, Provider, Settled};
 use crate::mirroring::{self, Mirroring};
-use crate::testmaps::{self, TestMaps};
 
 const PIPELINE: &str = "pipeline";
 const MIRRORING: &str = "mirroring";
@@ -809,7 +809,7 @@ impl MainRun {
             let got = github::artifact(&token, &owner, &repo, run, testmaps::ARTIFACT).await;
             match got.and_then(|b| testmaps::invalid(&b, &sha).map_or(Ok(b), Err)) {
                 Ok(body) => {
-                    let sum = crate::grants::hex(&sha2::Sha256::digest(&body));
+                    let sum = crate::core::approval::grants::hex(&sha2::Sha256::digest(&body));
                     self.env
                         .bucket("CI_LOGS")?
                         .put(testmaps::key(&sha), body)
@@ -993,7 +993,9 @@ impl MainRun {
             .await
             .map_err(|e| e.to_string())?;
         let secret_outputs = env.get(crate::cobot::ship_wire::OUTPUTS_VAR).cloned();
-        if let Some(o) = crate::platforms::merged_outputs(secret_outputs.as_deref(), &kept) {
+        if let Some(o) =
+            crate::core::platform::platforms::merged_outputs(secret_outputs.as_deref(), &kept)
+        {
             env.insert(crate::cobot::ship_wire::OUTPUTS_VAR.to_string(), o);
         }
         // The newest images, which a deploy may have built since the secret was set; see

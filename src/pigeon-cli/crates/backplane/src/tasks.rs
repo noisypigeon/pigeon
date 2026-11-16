@@ -270,7 +270,7 @@ pub struct DigestInput<'a> {
     /// Every task.
     pub tasks: Option<&'a Tasks>,
     /// Every mandate.
-    pub mandates: &'a [crate::mandates::Mandate],
+    pub mandates: &'a [crate::core::approval::mandates::Mandate],
     /// Deploys that failed since the last digest: the commit and why.
     pub failed_deploys: &'a [(String, String)],
     /// Changes merged without the owner since the last digest: the change and who approved.
@@ -581,7 +581,7 @@ pub fn unlisted(sessions: &[SessionLine], waiting: &[crate::approve::Waiting]) -
 
 /// The digest's line for `what`, held by `h` at `now`.
 #[must_use]
-pub fn held_line(what: &str, h: &crate::mandates::Hold, now: u64) -> String {
+pub fn held_line(what: &str, h: &crate::core::approval::mandates::Hold, now: u64) -> String {
     let n = h.failures;
     format!(
         "held: {what} for {} min, {n} failed deploy{}: {}; resumes when a deploy passes",
@@ -634,7 +634,7 @@ pub fn digest(input: &DigestInput<'_>, now: u64) -> Digest {
         paused: input
             .mandates
             .iter()
-            .filter(|m| m.state == crate::mandates::State::Paused)
+            .filter(|m| m.state == crate::core::approval::mandates::State::Paused)
             .map(|m| (m.id, m.why.clone().unwrap_or_default()))
             .collect(),
         held: input

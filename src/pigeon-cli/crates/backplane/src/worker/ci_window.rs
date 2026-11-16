@@ -24,7 +24,7 @@ const KEY: &str = "ci-window";
 /// When a binding fails.
 pub async fn run(env: &Env, s: &Settings, hours: u32) -> Result<(u16, Value)> {
     let token = platform::random_hex(32)?;
-    let expires = now() + crate::grants::PAGE_TTL;
+    let expires = now() + crate::core::approval::grants::PAGE_TTL;
     let body = json!({ "hours": hours, "token": token, "expires": expires });
     let (status, v) = to_instance(env, s, "/ci-window/offer", &body).await?;
     if status != 200 {
@@ -172,7 +172,7 @@ pub async fn page_serve(
             let Some(token) = approve::field(&form, "grant") else {
                 return page::refused(400, "the form is missing its grant");
             };
-            let purpose = crate::passkeys::grant_purpose(&token);
+            let purpose = crate::core::approval::passkeys::grant_purpose(&token);
             let shown = format!("/ci-window/{id}?grant={token}");
             let proved = super::passkeys::on_page(env, s, &form, &purpose, &host, &shown).await?;
             if let Err(why) = proved {

@@ -16,11 +16,11 @@ use super::elicit;
 use super::passkeys::KEYRING;
 use super::platform::{self, Settings, job_stub, json_request, now};
 use crate::control::{self, JobSpec, Outcome, Report};
+use crate::core::app::devices::{Device, Devices};
 use crate::core::approval::passkeys::Keyring;
 use crate::core::member::handover::{HandedDevice, HandedPasskey, Handover};
 use crate::core::member::listing::{self, Listing, STACK_INSTANCE};
 use crate::core::member::{self, Members, Role};
-use crate::devices::{Device, Devices};
 
 fn fail(why: &str, code: u16) -> Result<Response> {
     Ok(Response::from_json(&json!({ "error": why, "code": code }))?.with_status(code))
@@ -196,7 +196,7 @@ pub async fn list(env: &Env, s: &Settings, device: &Device) -> Result<Response> 
 /// The SHA-256 of `token`, hex, as the stand-up's passkey challenge is bound to it.
 #[must_use]
 pub fn token_sha(token: &str) -> String {
-    crate::grants::hex(&Sha256::digest(token.as_bytes()))
+    crate::core::approval::grants::hex(&Sha256::digest(token.as_bytes()))
 }
 
 /// `POST /v0/app/instances/standup` with `{name, accent, token, passkey}`: the passkey proved

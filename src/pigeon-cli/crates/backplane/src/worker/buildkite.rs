@@ -116,7 +116,7 @@ pub async fn create_build(
     Ok((number, answer["web_url"].as_str().map(String::from)))
 }
 
-/// `pigeon-ios-build` build `number`'s one job, which [`crate::macos::buildkite`] reads.
+/// `pigeon-ios-build` build `number`'s one job, which [`crate::core::macos::buildkite`] reads.
 ///
 /// # Errors
 ///
@@ -216,6 +216,6 @@ pub async fn artifact(env: &Env, number: u64, job: &str, name: &str) -> Result<V
 pub async fn config_mismatch(env: &Env) -> Result<Option<String>, String> {
     let p = call(env, Method::Get, &build_path(""), None).await?;
     let held = p["configuration"].as_str().unwrap_or_default();
-    Ok((!crate::macos::same_config(held, BUILD_CONFIG))
+    Ok((!crate::core::macos::same_config(held, BUILD_CONFIG))
         .then(|| "its steps differ from main's tooling/ci/buildkite/ios-build.yml".to_string()))
 }

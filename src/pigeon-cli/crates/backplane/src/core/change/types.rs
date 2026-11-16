@@ -284,7 +284,7 @@ pub struct Carried {
     /// The head they approved.
     pub from: String,
     /// That head's merge tier.
-    pub merge: crate::approvals::Tier,
+    pub merge: crate::core::approval::tiers::Tier,
     /// The restacked head it carries to, once the restack job reports it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub to: Option<String>,
@@ -344,7 +344,7 @@ pub struct Change {
     pub merged_as: Option<String>,
     /// The head's approval tiers, as the bound job classified it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub tiers: Option<crate::approvals::Tiers>,
+    pub tiers: Option<crate::core::approval::tiers::Tiers>,
     /// The mandate it is carried out under, if any.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mandate: Option<u32>,
@@ -488,7 +488,7 @@ pub enum Event {
         full: Vec<Check>,
         /// The head's approval tiers, shown only for now.
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        tiers: Option<crate::approvals::Tiers>,
+        tiers: Option<crate::core::approval::tiers::Tiers>,
         /// How much of `full` the merge gate runs; none from a bound job before the 2026-11-12
         /// amendment on the merge gate, which gates in full.
         #[serde(default, skip_serializing_if = "Option::is_none")]

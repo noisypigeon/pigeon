@@ -12,10 +12,10 @@ use std::sync::{Arc, Mutex};
 
 use serde_json::{Map, Value, json};
 
-use crate::changes::{BOUND, Check, ConflictContext, MERGE, RESTACK, Relation, Restacked};
 use crate::control::{
     DEPLOY, JobSpec, MIRROR, MIRROR_TO, MIRROR_TOKEN, Outcome, Report, UNMIRROR, tail,
 };
+use crate::core::change::{BOUND, Check, ConflictContext, MERGE, RESTACK, Relation, Restacked};
 use crate::{Instance, Request, run_with};
 
 /// Where jobs check out, under the Container's temporary directory.
@@ -355,7 +355,7 @@ fn mirror(spec: &JobSpec, dir: &Path) -> Report {
             Err(e) => scrub(e),
         };
     }
-    if crate::changes::branch(&spec.branch).is_some() {
+    if crate::core::change::branch(&spec.branch).is_some() {
         return match crate::cobot::git::push_change(
             &spec.remote,
             &spec.token,
@@ -675,7 +675,7 @@ fn bound(spec: &JobSpec, dir: &Path, sentinel: &Path) -> Report {
     violations.extend(
         rules
             .as_ref()
-            .and_then(|r| crate::approvals::mixed_with_sentinel(r, &files)),
+            .and_then(|r| crate::core::approval::tiers::mixed_with_sentinel(r, &files)),
     );
     for v in &violations {
         let _ = writeln!(log, "violation: {v}");
@@ -810,8 +810,8 @@ fn tiers(
     spec: &JobSpec,
     dir: &Path,
     files: &[String],
-    rules: &crate::approvals::Rules,
-) -> crate::approvals::Tiers {
+    rules: &crate::core::approval::tiers::Rules,
+) -> crate::core::approval::tiers::Tiers {
     let decisions = rules.decisions.clone().unwrap_or_default();
     let appends_only = !decisions.is_empty()
         && files
@@ -824,21 +824,21 @@ fn tiers(
             rules
                 .secret_lists
                 .iter()
-                .any(|g| crate::approvals::matches(g, f))
+                .any(|g| crate::core::approval::tiers::matches(g, f))
         })
         .any(|f| adds_secret(dir, &spec.base, f));
-    let facts = crate::approvals::Facts {
+    let facts = crate::core::approval::tiers::Facts {
         deploys_worker: crate::cobot::scope::workers(dir, Some(files))
             .map_or(true, |w| !w.is_empty()),
         appends_only,
         adds_secret,
     };
-    crate::approvals::classify(rules, &spec.scope, files, facts)
+    crate::core::approval::tiers::classify(rules, &spec.scope, files, facts)
 }
 
 /// The approval rules on the base branch; none when it has none, or they don't read.
-fn base_rules(spec: &JobSpec, dir: &Path) -> Option<crate::approvals::Rules> {
-    let text = crate::cobot::ci::base_file(dir, &spec.base, crate::approvals::RULES)?;
+fn base_rules(spec: &JobSpec, dir: &Path) -> Option<crate::core::approval::tiers::Rules> {
+    let text = crate::cobot::ci::base_file(dir, &spec.base, crate::core::approval::tiers::RULES)?;
     serde_saphyr::from_str(&text).ok()
 }
 
@@ -867,7 +867,7 @@ fn adds_secret(dir: &Path, base: &str, path: &str) -> bool {
     let before = crate::cobot::ci::base_file(dir, base, path)
         .and_then(|t| names(&t))
         .unwrap_or_default();
-    crate::approvals::lengthens(&before, &head)
+    crate::core::approval::tiers::lengthens(&before, &head)
 }
 
 /// The head's violations of the base's policies, judged by `sentinel`, `main`'s

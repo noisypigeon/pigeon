@@ -51,6 +51,10 @@ pub fn parse(file: &str, text: &str) -> Decision {
 pub fn governing<'a>(all: &'a [Decision], path: &str) -> Vec<&'a Decision> {
     let path = path.trim_start_matches("./");
     all.iter()
-        .filter(|d| d.governs.iter().any(|g| crate::approvals::matches(g, path)))
+        .filter(|d| {
+            d.governs
+                .iter()
+                .any(|g| crate::core::approval::tiers::matches(g, path))
+        })
         .collect()
 }

@@ -198,7 +198,7 @@ async fn handed(env: &Env, s: &Settings, t: &Value, session: &str) -> Result<()>
 /// # Errors
 ///
 /// When a binding fails.
-pub async fn restack_failed(env: &Env, c: &crate::changes::Change) -> Result<()> {
+pub async fn restack_failed(env: &Env, c: &crate::core::change::Change) -> Result<()> {
     let s = Settings::from(env)?;
     let note = format!(
         "{}'s restack onto main failed; rebase it onto main and push",

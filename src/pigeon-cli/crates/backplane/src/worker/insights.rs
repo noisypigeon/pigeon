@@ -7,8 +7,8 @@ use serde_json::{Value, json};
 use worker::{Env, Fetch, Method, Result};
 
 use super::platform::{Settings, account, d1, d1_rows, json_request, now, secret};
-use crate::insights::cloudflare::{self, Collected, Dataset, Usage};
-use crate::insights::{self, CLOUDFLARE, Row, ops};
+use crate::core::insights::cloudflare::{self, Collected, Dataset, Usage};
+use crate::core::insights::{self, CLOUDFLARE, Row, ops};
 
 /// Fills each hour due: GitHub's, macOS's and Buildkite's rows, then Cloudflare's, each source
 /// failing alone; see the ADR's 2026-11-15 amendment "Cloudflare is collected".
@@ -28,7 +28,7 @@ pub async fn collect(env: &Env) -> Result<()> {
             Ok(jobs) => rows.extend(insights::github(hour, &jobs)),
             Err(e) => worker::console_warn!("insights: GitHub's rows for {hour}: {e}"),
         }
-        let attempts = match d1_rows(env, &crate::macos::ended_in(hour)).await {
+        let attempts = match d1_rows(env, &crate::core::macos::ended_in(hour)).await {
             Ok(a) => {
                 rows.extend(insights::macos(hour, &a));
                 a
@@ -307,11 +307,11 @@ pub async fn ops(env: &Env, s: &Settings, range: u64) -> Result<Value> {
         .await
         .unwrap_or_default();
 
-    let providers = match crate::macos::config() {
+    let providers = match crate::core::macos::config() {
         Ok(cfg) => {
             let health = super::macos::health(env, s).await;
             let usage = super::macos::usage(env).await.unwrap_or_default();
-            crate::macos::status(&cfg, &health, &usage, t)["providers"]
+            crate::core::macos::status(&cfg, &health, &usage, t)["providers"]
                 .as_array()
                 .cloned()
                 .unwrap_or_default()

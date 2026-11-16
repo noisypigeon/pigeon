@@ -1,9 +1,9 @@
 //! Mandates: proposed, granted once with the code, bounded by scope, budget and expiry; see
 //! `.claude/decisions/2026-11-08-security-tiered-approvals-task-mandates.md` §3.
 
-use backplane::approvals::{Tier, Tiered, Tiers};
-use backplane::changes::Change;
-use backplane::mandates::{Decision, Mandate, Mandates, State};
+use backplane::core::approval::mandates::{Decision, Mandate, Mandates, State};
+use backplane::core::approval::tiers::{Tier, Tiered, Tiers};
+use backplane::core::change::Change;
 
 fn globs(list: &[&str]) -> Vec<String> {
     list.iter().map(|g| (*g).to_string()).collect()

@@ -8,11 +8,11 @@ use super::approve::live;
 use super::platform::Settings;
 use super::{elicit, run, to_change};
 use crate::access::Identity;
-use crate::changes::Change;
 use crate::core::app::{approvals, tracker};
+use crate::core::approval::grants::Grant;
+use crate::core::approval::passkeys;
 use crate::core::approval::windows;
-use crate::grants::Grant;
-use crate::passkeys;
+use crate::core::change::Change;
 use crate::wire;
 
 /// The relying party the app's passkey answers for; its client data's origin is this host.

@@ -60,11 +60,11 @@ pub use main_run::MainRun;
 use platform::{Settings, json_request, now};
 
 use crate::access::{self, Identity};
-use crate::changes::{Change, Event};
 use crate::control::{self, Routed};
-use crate::grants;
+use crate::core::approval::grants;
+use crate::core::change::{Change, Event};
+use crate::core::platform::runs::{Lost, Queue, Run};
 use crate::mcp::{self, Action};
-use crate::runs::{Lost, Queue, Run};
 use crate::wire::{self, Response as WireResponse};
 
 /// The storage key holding an instance's [`Queue`].
@@ -292,7 +292,7 @@ async fn merge_asks_approval(
     let (status, v) = to_change(env, &s.repo, number, Method::Get, "/status", None).await?;
     let unapproved = status == 200
         && serde_json::from_value::<Change>(v["change"].clone())
-            .is_ok_and(|c| c.state == crate::changes::State::Checked && c.approval.is_none());
+            .is_ok_and(|c| c.state == crate::core::change::State::Checked && c.approval.is_none());
     if !unapproved {
         return Ok(request.clone());
     }
@@ -415,7 +415,7 @@ async fn under_policy(
     let Ok(change) = serde_json::from_value::<Change>(v["change"].clone()) else {
         return Ok(None);
     };
-    let Some(rule) = crate::approvals::by_policy(&change, &request.operation) else {
+    let Some(rule) = crate::core::approval::tiers::by_policy(&change, &request.operation) else {
         return Ok(None);
     };
     let who = Identity {
@@ -440,7 +440,8 @@ async fn under_change_grant(
     let Ok(change) = serde_json::from_value::<Change>(v["change"].clone()) else {
         return Ok(None);
     };
-    let Some(by) = crate::approvals::by_grant(&change, &request.operation, now()) else {
+    let Some(by) = crate::core::approval::tiers::by_grant(&change, &request.operation, now())
+    else {
         return Ok(None);
     };
     let who = Identity {
@@ -992,10 +993,10 @@ async fn deploy_status(
     let mut v: Value = r.json().await?;
     v["pipeline"]["last_log"] = json!(last_log(env, &v).await?);
     v["ci_window"] = json!(ci_window::current(env, s).await?);
-    if let Ok(cfg) = crate::macos::config() {
+    if let Ok(cfg) = crate::core::macos::config() {
         let health = macos::health(env, s).await;
         let usage = macos::usage(env).await.unwrap_or_default();
-        v["macos"] = crate::macos::status(&cfg, &health, &usage, platform::now());
+        v["macos"] = crate::core::macos::status(&cfg, &health, &usage, platform::now());
     }
     Ok((None, respond(operation, r.status_code(), v)))
 }
@@ -1297,7 +1298,8 @@ async fn evictable(env: &Env, s: &Settings) -> Result<Vec<Value>> {
     let (_, t) = mandates::to_instance(env, s, "/tickets/list", &json!({})).await?;
     let tickets: crate::tickets::Tickets = serde_json::from_value(t).unwrap_or_default();
     let (_, q) = mandates::to_instance(env, s, "/merges/list", &json!({})).await?;
-    let queue: crate::merges::MergeQueue = serde_json::from_value(q).unwrap_or_default();
+    let queue: crate::core::change::queue::MergeQueue =
+        serde_json::from_value(q).unwrap_or_default();
     let mut queued: Vec<u32> = queue.waiting.iter().map(|e| e.number).collect();
     queued.extend(queue.merging.as_ref().map(|e| e.number));
     let (_, pins) = mandates::to_instance(env, s, "/pins/list", &json!({})).await?;
@@ -1372,7 +1374,7 @@ async fn health(env: &Env, s: &Settings) -> Result<Response> {
     let main = ask("https://main/version").await;
     let instance = ask("https://instance/version").await;
     let object = instance.is_some();
-    let current = crate::versions::object_current(instance.as_deref(), &mine);
+    let current = crate::core::deploy::versions::object_current(instance.as_deref(), &mine);
     let ok = d1 && object && current && !version.is_empty();
     Ok(Response::from_json(&json!({
         "ok": ok,
@@ -1504,7 +1506,7 @@ async fn build(env: &Env, path: &str) -> Result<Response> {
     let key = if binary == crate::cobot::ship_wire::SENTINEL_BINARY {
         crate::cobot::ship_wire::sentinel_key(sha)
     } else if binary == crate::cobot::ship_wire::TEST_MAP_FILE {
-        crate::testmaps::key(sha)
+        crate::core::deploy::testmaps::key(sha)
     } else {
         crate::cobot::ship_wire::build_key(sha)
     };
@@ -1548,13 +1550,14 @@ pub(super) async fn latest_build(env: &Env) -> Option<crate::cobot::worker::Jobs
             sum,
         )
     });
-    let test_map =
-        serde_json::from_value::<crate::testmaps::Map>(v["test_map"]["latest_map"].clone())
-            .ok()
-            .map(|m| {
-                let file = crate::cobot::ship_wire::TEST_MAP_FILE;
-                (format!("https://{host}/builds/{}/{file}", m.sha), m.sha256)
-            });
+    let test_map = serde_json::from_value::<crate::core::deploy::testmaps::Map>(
+        v["test_map"]["latest_map"].clone(),
+    )
+    .ok()
+    .map(|m| {
+        let file = crate::cobot::ship_wire::TEST_MAP_FILE;
+        (format!("https://{host}/builds/{}/{file}", m.sha), m.sha256)
+    });
     Some(crate::cobot::worker::JobsBuild {
         url: format!("https://{host}/builds/{}/pigeon", b.sha),
         sha256: b.sha256,
@@ -1634,7 +1637,7 @@ async fn yields(state: &State, path: &str, body: &Value) -> Result<Response> {
     let n = |k: &str| body[k].as_u64().and_then(|n| u32::try_from(n).ok());
     let answer: Vec<u32> = match (path, n("from"), n("to")) {
         ("/yields/set", Some(from), Some(to)) => {
-            if crate::merges::closes_cycle(&all, from, to) {
+            if crate::core::change::queue::closes_cycle(&all, from, to) {
                 let why = format!("!{to} already waits on !{from}; yielding would close a cycle");
                 return Response::error(why, 409);
             }
@@ -1780,7 +1783,7 @@ async fn built_on(
     env: &Env,
     s: &Settings,
     n: u32,
-) -> Result<std::result::Result<crate::changes::After, String>> {
+) -> Result<std::result::Result<crate::core::change::After, String>> {
     let (status, v) = to_change(env, &s.repo, n, Method::Get, "/status", None).await?;
     let open = (status == 200)
         .then(|| serde_json::from_value::<Change>(v["change"].clone()).ok())
@@ -1788,11 +1791,11 @@ async fn built_on(
         .filter(|c| {
             !matches!(
                 c.state,
-                crate::changes::State::Merged | crate::changes::State::Closed
+                crate::core::change::State::Merged | crate::core::change::State::Closed
             )
         });
     Ok(open
-        .map(|c| crate::changes::After {
+        .map(|c| crate::core::change::After {
             number: n,
             branch: c.branch(),
             head: None,

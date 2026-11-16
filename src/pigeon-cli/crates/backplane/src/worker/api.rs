@@ -9,7 +9,7 @@ use super::platform::{self, Settings};
 use super::{Route, elicit, events, offer, run, wait};
 use crate::access::Identity;
 use crate::control;
-use crate::grants;
+use crate::core::approval::grants;
 use crate::mcp::{self, Action};
 use crate::routes::Path;
 use crate::wire;

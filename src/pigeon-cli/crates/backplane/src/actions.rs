@@ -5,7 +5,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
-use crate::changes::Check;
+use crate::core::change::Check;
 
 /// The workflow dispatched, always from `main`.
 pub const WORKFLOW: &str = "ci.yml";

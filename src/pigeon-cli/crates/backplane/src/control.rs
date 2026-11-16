@@ -6,7 +6,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
-use crate::changes::{self, BOUND, Change, Check, Event, Job, MERGE};
+use crate::core::change::{self as changes, BOUND, Change, Check, Event, Job, MERGE};
 use crate::wire::Request;
 
 /// A request for the control plane, as the Worker routes it.
@@ -705,7 +705,7 @@ pub struct Report {
     pub images: Option<Images>,
     /// For the bound job: the head's approval tiers, when `main` has rules.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub tiers: Option<crate::approvals::Tiers>,
+    pub tiers: Option<crate::core::approval::tiers::Tiers>,
     /// For the restack job: what it did.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub restack: Option<changes::Restacked>,
@@ -1880,7 +1880,7 @@ impl Pipeline {
             });
             return self.start();
         }
-        if attempts < crate::runs::MAX_ATTEMPTS {
+        if attempts < crate::core::platform::runs::MAX_ATTEMPTS {
             self.running = Some((sha.clone(), attempts + 1));
             return Some(sha);
         }
@@ -1895,7 +1895,7 @@ impl Pipeline {
             workers: Vec::new(),
             violations: vec![format!(
                 "the deploy's Container was lost {} times",
-                crate::runs::MAX_ATTEMPTS
+                crate::core::platform::runs::MAX_ATTEMPTS
             )],
         });
         None

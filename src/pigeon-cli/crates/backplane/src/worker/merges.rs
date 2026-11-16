@@ -8,9 +8,9 @@ use worker::{Env, Method, Response, Result, State};
 use super::mandates::to_instance;
 use super::platform::{self, Settings, now};
 use super::to_change;
-use crate::changes::{Change, Event};
 use crate::control;
-use crate::merges::{self, Entry, MergeQueue, Queued};
+use crate::core::change::queue::{self as merges, Entry, MergeQueue, Queued};
+use crate::core::change::{Change, Event};
 use crate::reconcile::{PROPOSER, Proposal};
 use crate::sessions;
 

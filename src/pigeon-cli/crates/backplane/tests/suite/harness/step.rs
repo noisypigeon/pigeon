@@ -2,8 +2,8 @@
 //! before: a refusal leaves the value unchanged.
 #![allow(dead_code)]
 
-use backplane::changes::{self, Change, Effect, Event, Refusal};
-use backplane::merges::{self, Entry, MergeQueue, Queued};
+use backplane::core::change::queue::{self as merges, Entry, MergeQueue, Queued};
+use backplane::core::change::{self as changes, Change, Effect, Event, Refusal};
 
 /// `Change` stepped in place.
 pub trait Apply {

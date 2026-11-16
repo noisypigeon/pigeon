@@ -286,7 +286,9 @@ async fn held(env: &Env, s: &Settings, label: &str) -> Result<Vec<Value>> {
         let (status, v) =
             super::to_change(env, &s.repo, o.number, worker::Method::Get, "/status", None).await?;
         let Some(c) = (status == 200)
-            .then(|| serde_json::from_value::<crate::changes::Change>(v["change"].clone()).ok())
+            .then(|| {
+                serde_json::from_value::<crate::core::change::Change>(v["change"].clone()).ok()
+            })
             .flatten()
         else {
             continue;

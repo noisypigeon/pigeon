@@ -3,7 +3,7 @@
 
 use crate::harness::step;
 
-use backplane::changes::{Change, ConflictContext, Event, Relation, Restacked, State};
+use backplane::core::change::{Change, ConflictContext, Event, Relation, Restacked, State};
 use backplane::reconcile::{ADR, adrs, conflict, existing, gone, retired, review};
 use backplane::sessions::Open;
 use step::Apply;
@@ -178,7 +178,7 @@ fn a_change_that_conflicts_again_reuses_its_open_reconciliation() {
 fn a_change_ending_or_its_conflict_clearing_retires_what_it_generated() {
     let open = change("no ADR");
     let mut conflicted = open.clone();
-    conflicted.conflict = Some(backplane::changes::Conflicted {
+    conflicted.conflict = Some(backplane::core::change::Conflicted {
         onto: MAIN.into(),
         paths: vec!["src/a.rs".into()],
         proposal: None,

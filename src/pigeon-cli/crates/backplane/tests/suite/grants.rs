@@ -1,7 +1,7 @@
 //! Grants: one use, a deadline, the head they were made for, the operation they name.
 
-use backplane::changes::{Change, State};
-use backplane::grants::{self, Grants, TTL};
+use backplane::core::approval::grants::{self, Grants, TTL};
+use backplane::core::change::{Change, State};
 
 const HEAD: &str = "1111111111111111111111111111111111111111";
 const NEXT: &str = "2222222222222222222222222222222222222222";
@@ -31,7 +31,10 @@ fn a_grant_is_redeemed_once_for_its_operation_and_head() {
     assert_eq!(g.peek("tok", 7, 200).expect("peek"), &minted);
     let used = kept!(g.redeem("tok", "change.approve", &c, 200)).expect("redeems");
     assert_eq!(used.used, Some(200));
-    assert_eq!(backplane::grants::Grant { used: None, ..used }, minted);
+    assert_eq!(
+        backplane::core::approval::grants::Grant { used: None, ..used },
+        minted
+    );
     let again = kept!(g.redeem("tok", "change.approve", &c, 201)).expect_err("single use");
     assert_eq!(
         again,
@@ -119,21 +122,24 @@ fn a_grant_still_applies_only_while_its_operation_and_head_do() {
     let mut c = change(State::Checked, Some(HEAD));
     let mut g = Grants::default();
     let grant = kept!(g.mint(&c, "change.approve", "tok", 0)).expect("mint");
-    assert!(backplane::grants::still_applies(&c, &grant));
+    assert!(backplane::core::approval::grants::still_applies(&c, &grant));
     c.state = State::Merged;
     assert!(
-        !backplane::grants::still_applies(&c, &grant),
+        !backplane::core::approval::grants::still_applies(&c, &grant),
         "merged since"
     );
     c.state = State::Checked;
     c.head = Some(NEXT.into());
-    assert!(!backplane::grants::still_applies(&c, &grant), "a new head");
+    assert!(
+        !backplane::core::approval::grants::still_applies(&c, &grant),
+        "a new head"
+    );
 }
 
 #[test]
 fn the_break_glass_is_offered_only_on_an_open_head_with_a_code_check_not_passed() {
-    use backplane::changes::{Job, JobStatus};
     use backplane::control::BREAK_GLASS;
+    use backplane::core::change::{Job, JobStatus};
     let job = |name: &str, cmd: &str, status: JobStatus| Job {
         name: name.into(),
         argv: cmd.split(' ').map(str::to_string).collect(),

@@ -2,10 +2,10 @@
 //! `.claude/decisions/2026-11-13-security-approvals-ask-owner-inputs.md` §4-§5.
 
 use backplane::approve;
-use backplane::changes::Change;
 use backplane::core::app::approvals;
+use backplane::core::approval::grants::Grant;
+use backplane::core::change::Change;
 use backplane::core::change::asks;
-use backplane::grants::Grant;
 use serde_json::json;
 
 const ASKS: &str = r#"[

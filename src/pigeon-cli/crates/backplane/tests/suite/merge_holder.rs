@@ -3,10 +3,10 @@
 
 use crate::harness::step;
 
-use backplane::changes::{Change, Effect, Event, GATE, JobStatus, MERGE, RESTACK, State};
 use backplane::control;
-use backplane::merges::{MergeQueue, Queued, SETTLE, holds_turn};
-use backplane::runs::MAX_ATTEMPTS;
+use backplane::core::change::queue::{MergeQueue, Queued, SETTLE, holds_turn};
+use backplane::core::change::{Change, Effect, Event, GATE, JobStatus, MERGE, RESTACK, State};
+use backplane::core::platform::runs::MAX_ATTEMPTS;
 use serde_json::{Value, json};
 use step::{Apply, Queue};
 

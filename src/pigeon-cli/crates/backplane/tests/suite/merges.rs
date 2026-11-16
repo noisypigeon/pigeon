@@ -2,12 +2,12 @@
 
 use crate::harness::step;
 
-use backplane::approvals::{Tier, Tiered, Tiers};
-use backplane::changes::{
+use backplane::control;
+use backplane::core::approval::tiers::{Tier, Tiered, Tiers};
+use backplane::core::change::queue::{MergeQueue, Queued, STUCK};
+use backplane::core::change::{
     Change, Check, Effect, Event, GATE, MERGE, RESTACK, Relation, Restacked, State,
 };
-use backplane::control;
-use backplane::merges::{MergeQueue, Queued, STUCK};
 use step::{Apply, Queue};
 
 const A: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -66,14 +66,14 @@ fn a_yielded_change_keeps_its_place_and_merges_when_its_yield_ends() {
     );
     q.yielded.clear();
     assert_eq!(q.done(364, 6).map(|e| e.number), Some(374), "ahead of 375");
-    let (_, none) = backplane::merges::advance(q.clone(), 7);
+    let (_, none) = backplane::core::change::queue::advance(q.clone(), 7);
     assert_eq!(none, None, "nothing starts while one merges");
 }
 
 #[test]
 fn a_yield_that_closes_a_cycle_is_found() {
     // !376, built on !375, yielded to it; the forecast then yielded !375 to !376.
-    use backplane::merges::closes_cycle;
+    use backplane::core::change::queue::closes_cycle;
     let mut y = std::collections::BTreeMap::new();
     y.insert(376, 375);
     assert!(closes_cycle(&y, 375, 376));
@@ -93,7 +93,7 @@ fn a_yielded_change_waits_even_with_nothing_merging() {
     );
     assert_eq!(q.merging, None);
     q.yielded.clear();
-    let (q, next) = backplane::merges::advance(q, 2);
+    let (q, next) = backplane::core::change::queue::advance(q, 2);
     assert_eq!(
         next.map(|e| e.number),
         Some(374),
@@ -475,7 +475,7 @@ fn a_merge_on_a_checked_unapproved_head_is_refused_not_parked() {
 #[test]
 fn a_merge_whose_container_never_starts_releases_its_turn() {
     use backplane::control::merge_ended_by;
-    use backplane::runs::MAX_ATTEMPTS;
+    use backplane::core::platform::runs::MAX_ATTEMPTS;
 
     // !175: its merge job's Container failed to start three times, and the queue kept its turn.
     let mut c = approved();
@@ -516,7 +516,7 @@ fn a_merge_whose_container_never_starts_releases_its_turn() {
 #[test]
 fn a_merge_whose_container_is_lost_on_every_attempt_releases_its_turn() {
     use backplane::control::merge_ended;
-    use backplane::runs::MAX_ATTEMPTS;
+    use backplane::core::platform::runs::MAX_ATTEMPTS;
 
     // !142: its merge job's Container was lost three times, and the queue kept its turn.
     let mut c = approved();
@@ -887,7 +887,7 @@ fn a_turn_moved_past_is_handed_back_even_when_the_ask_is_refused() {
     let mut q = MergeQueue::default();
     q.enqueue(181, "owner", 0).expect("181 merges");
     q.enqueue(185, "owner", 1).expect("185 waits");
-    let late = backplane::merges::STUCK + 10;
+    let late = backplane::core::change::queue::STUCK + 10;
     let (resumed, queued) = q.ask(185, "owner", late);
     assert_eq!(
         resumed.map(|e| e.number),
@@ -984,10 +984,10 @@ fn a_carried_head_re_runs_its_crate_clippy_and_not_a_feature_one() {
     };
     let mut c = approved_with(&["fmt", "clippy"], &["fmt", "clippy"]);
     c.full.push(feature.clone());
-    c.jobs.push(backplane::changes::Job {
+    c.jobs.push(backplane::core::change::Job {
         name: feature.name.clone(),
         argv: feature.argv.clone(),
-        status: backplane::changes::JobStatus::Passed,
+        status: backplane::core::change::JobStatus::Passed,
         ..c.jobs[0].clone()
     });
     c.gate = Some(backplane::core::deploy::gate::Gate::Scoped);
@@ -1073,8 +1073,8 @@ fn behind_for_turn(c: &mut Change) -> Vec<Effect> {
 
 #[test]
 fn a_merge_that_fails_its_last_start_releases_its_turn_and_earlier_ones_keep_it() {
-    use backplane::changes::MAX_START_FAILURES;
     use backplane::control::merge_ended;
+    use backplane::core::change::MAX_START_FAILURES;
 
     // !461: its merge job's Container failed to start, and each failure was counted as lost.
     let mut c = approved();

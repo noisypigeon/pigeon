@@ -7,7 +7,7 @@ use worker::{Env, Response, Result, State};
 
 use super::elicit;
 use super::platform::{Settings, d1_rows, now};
-use crate::macos::{self, Health, Job, Kind, Outcome, Provider, Usage};
+use crate::core::macos::{self, Health, Job, Kind, Outcome, Provider, Usage};
 
 /// The storage key of every provider's health.
 const KEY: &str = "macos-health";

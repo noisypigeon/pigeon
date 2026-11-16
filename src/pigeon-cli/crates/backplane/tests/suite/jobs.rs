@@ -5,8 +5,8 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::Arc;
 
-use backplane::changes::{BOUND, MERGE};
 use backplane::control::{JobSpec, Outcome};
+use backplane::core::change::{BOUND, MERGE};
 use backplane::jobs::{self, Board};
 use tempfile::TempDir;
 
@@ -535,7 +535,7 @@ fn a_bounded_change_head_reaches_its_branch_on_the_mirror_and_leaves_it_once_don
             .contains("ghs-never-shown")
     );
 
-    let mut change = backplane::changes::Change::propose(1, "x", "docs: x", "p", vec![], "a");
+    let mut change = backplane::core::change::Change::propose(1, "x", "docs: x", "p", vec![], "a");
     change.head = Some(sha);
     let u = backplane::control::unmirror_spec(&change, &to_url, "ghs-never-shown");
     let r = run_job(&u, &tmp.path().join("job"));

@@ -11,11 +11,11 @@ use worker::{Env, Method, Response, Result, State};
 use super::devices::DEVICES;
 use super::elicit;
 use super::platform::{self, Settings};
+use crate::core::app::devices::{Device, Devices};
 use crate::core::learner::{
     self, Attempt, Form, INDEX, Index, PREFIX, Progress, Sync, attempt_key, form_key, progress_key,
 };
 use crate::core::member::{self, Members};
-use crate::devices::{Device, Devices};
 
 /// The bucket binding.
 const BUCKET: &str = "LEARNER";

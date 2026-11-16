@@ -1,7 +1,7 @@
 //! The control plane's git front door: the pure parts of judging a push, shared by both builds;
 //! see `.claude/decisions/2026-11-06-security-git-front-door-spike.md` §2.
 
-use crate::changes::{self, Change, State};
+use crate::core::change::{self as changes, Change, State};
 
 /// A git smart-HTTP endpoint.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

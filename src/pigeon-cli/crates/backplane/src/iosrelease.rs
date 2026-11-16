@@ -7,9 +7,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 use crate::actions::{self, Actions};
-use crate::changes::Check;
 use crate::control::Statement;
-use crate::macos::{Job, Kind, Provider};
+use crate::core::change::Check;
+use crate::core::macos::{Job, Kind, Provider};
 
 /// The check that archives a release, as `ci.yml` runs it.
 pub const CHECK: &str = "ios.archive";
@@ -242,7 +242,7 @@ impl IosReleases {
                 "since": c.since,
             })),
             "dispatches": self.actions.view(),
-            "macos": self.macos.as_ref().map(crate::macos::view),
+            "macos": self.macos.as_ref().map(crate::core::macos::view),
         })
     }
 }

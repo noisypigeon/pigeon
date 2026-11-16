@@ -344,7 +344,7 @@ mod executor {
 
 #[test]
 fn a_briefs_change_is_refused_only_the_planners_tiers() {
-    use backplane::approvals::{Tier, Tiered, Tiers};
+    use backplane::core::approval::tiers::{Tier, Tiered, Tiers};
     use backplane::core::brief::executor::refused;
     let t = |authorize: &str, merge: &str| Tiers {
         authorize: Tiered {
