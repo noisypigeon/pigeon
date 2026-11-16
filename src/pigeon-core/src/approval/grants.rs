@@ -212,3 +212,80 @@ impl Grants {
         (next, Ok(g))
     }
 }
+
+/// A change's open page tokens, by operation: the link `approval_wait` and `ask` hand out again
+/// while it applies; see the 2026-11-16 amendment to
+/// `.claude/decisions/2026-11-15-security-owner-approvals-always-listed.md`.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Pages(pub BTreeMap<String, String>);
+
+/// A page grant handed out: its token and grant, and whether it was handed out before.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Page {
+    /// The token.
+    pub token: String,
+    /// Its grant.
+    pub grant: Grant,
+    /// Whether the token was already open, not minted now.
+    pub reused: bool,
+}
+
+impl Grants {
+    /// `pages`' open grant of `operation` on `change`, while it can be handed out again: known,
+    /// unused, for the change's head and tier, with more than
+    /// [`super::listed::REISSUE_BEFORE`] left.
+    #[must_use]
+    pub fn reusable<'a>(
+        &self,
+        pages: &'a Pages,
+        change: &Change,
+        operation: &str,
+        now: u64,
+    ) -> Option<(&'a str, &Grant)> {
+        let token = pages.0.get(operation)?;
+        let g = self.0.get(&key(token))?;
+        let tier = super::tiers::tier_of(change, operation);
+        (g.operation == operation
+            && g.used.is_none()
+            && g.expires > now + super::listed::REISSUE_BEFORE
+            && g.tier == Some(tier)
+            && still_applies(change, g))
+        .then_some((token.as_str(), g))
+    }
+
+    /// The page grant of `operation` on `change`: the open one while [`Self::reusable`], else one
+    /// minted under `fresh` for [`PAGE_TTL`]. Answers the next grants and pages; pages whose grant
+    /// is gone are dropped.
+    pub fn page(
+        &self,
+        pages: &Pages,
+        change: &Change,
+        operation: &str,
+        fresh: &str,
+        now: u64,
+    ) -> (Self, Pages, Result<Page, String>) {
+        if let Some((token, g)) = self.reusable(pages, change, operation, now) {
+            let page = Page {
+                token: token.to_string(),
+                grant: g.clone(),
+                reused: true,
+            };
+            return (self.clone(), pages.clone(), Ok(page));
+        }
+        let (next, minted) = self.mint_for(change, operation, fresh, now, PAGE_TTL);
+        let grant = match minted {
+            Ok(g) => g,
+            Err(why) => return (self.clone(), pages.clone(), Err(why)),
+        };
+        let mut open = pages.clone();
+        open.0.insert(operation.to_string(), fresh.to_string());
+        open.0
+            .retain(|_, t| next.0.get(&key(t)).is_some_and(|g| g.used.is_none()));
+        let page = Page {
+            token: fresh.to_string(),
+            grant,
+            reused: false,
+        };
+        (next, open, Ok(page))
+    }
+}

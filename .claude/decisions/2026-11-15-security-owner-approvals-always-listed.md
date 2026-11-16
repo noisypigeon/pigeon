@@ -320,3 +320,59 @@ glob under `src/pigeon-cli/` or `src/site-templates/` becomes `src/**/<tail>`
 (or `**<file>` for a workspace root file), which matches the file both before
 and after the restructure moves it. That ADR's step 12 tightens them to the
 new paths.
+
+### 2026-11-16: A change hands out its open page link again while it applies
+
+- **Found on 2026-11-16, 19:00–20:20 UTC.** Willow reported it, through the
+  status session.
+  - Repeated `approval_wait` calls on one pending approval each answered a new
+    `?grant=` link. The head hadn't moved.
+  - The link the owner already held then failed.
+  - Several sessions check or relay links with `approval_wait`, so every check
+    cost the owner a re-tap.
+  - !794's log holds a single `approval.pending` (event 34986). `wait` mints
+    without an event, so the extra links aren't recorded.
+- **The cause.** §3's reuse lived in the Worker. `wait` and
+  `approve::pending` read the token back from the `Instance`'s inbox, then
+  asked `ChangeRun` to mint whenever that lookup missed. A lookup missed in
+  three cases:
+  - two calls raced;
+  - `listed::reconcile` saved a stale `GRANTS` over a concurrent mint (it
+    reads the grants before its calls to other objects, and writes after);
+  - `approval_wait(n, change.merge)` on a checked head, where `ask` lists
+    `change.approve` instead.
+- **The rule.** `ChangeRun` decides, in one storage step, which link a page
+  grant gets.
+  - It keeps `PAGES`, its open page token for each operation, next to
+    `GRANTS`.
+  - A page grant is handed out again (`Grants::page`, `Grants::reusable`)
+    while it is all of these:
+    - known and unused;
+    - for the change's head and current tier (`tiers::tier_of`), on an
+      operation still offered (`still_applies`);
+    - more than `listed::REISSUE_BEFORE` (2 hours) from expiry.
+  - Otherwise a new one is minted, and recorded in `PAGES`.
+  - An older link stays valid until it's used, expires or the head moves.
+    Nothing revokes it.
+  - `POST /grant` with `page` returns `reused`.
+- **The security properties are kept.**
+  - A grant stays bound to its change, operation and head, and is used once.
+  - A moved head refuses the old link on redeem, as before.
+  - The plaintext token in `PAGES` is the one the `Instance`'s inbox entry
+    already holds in its path. `GRANTS` stays keyed by hash.
+- **Every path uses it.**
+  - `approve::pending` (`ask` and `wait`) asks `ChangeRun` directly. The
+    inbox lookup (`listed`) is gone.
+  - `wait` maps `change.merge` on an unapproved checked head to
+    `change.approve`, as `ask` does.
+  - `listed::reconcile`'s `Issue` reads `GRANTS` and `PAGES` again just
+    before it mints, and mints through `Grants::page`, so the link it lists
+    is the one `approval_wait` answers.
+- **Tests** (`tests/suite/grants.rs`):
+  - two calls answer the same token;
+  - a moved head mints a new one and refuses the old;
+  - a used grant is replaced;
+  - under 2 hours left, or a new tier, mints anew;
+  - each operation has its own.
+- **Execution:** one `fix(backplane)` change. `core/approval/**` is guarded,
+  so it merges with the owner's passkey.

@@ -474,16 +474,19 @@ async fn wait(env: &Env, id: &Value, request: &wire::Request) -> Result<Response
         .var(crate::cobot::ship_wire::HOST_VAR)
         .map(|v| v.to_string())
         .unwrap_or_default();
-    let waiting = approve::live(env, &s).await?;
-    let link = match waiting
-        .iter()
-        .find(|w| w.number == number && w.operation == operation)
-    {
-        Some(w) => format!("https://{host}{}", w.path),
-        None => match approve::pending(env, &s, &host, number, &operation).await {
-            Ok((link, _)) => link,
-            Err(why) => return refused(why),
-        },
+    // As `ask` does: a merge of a checked head no one approved waits on its approval.
+    let asked = wire::Request {
+        operation: operation.clone(),
+        args: request.args.clone(),
+    };
+    let operation = merge_asks_approval(env, &s, number, &asked)
+        .await?
+        .operation;
+    // The change hands out its open link while it applies; see the 2026-11-16 amendment to
+    // `.claude/decisions/2026-11-15-security-owner-approvals-always-listed.md`.
+    let link = match approve::pending(env, &s, &host, number, &operation).await {
+        Ok((link, _)) => link,
+        Err(why) => return refused(why),
     };
     let message = format!(
         "`{operation}` on change {number} waits for the owner's passkey at {link}; it is listed on /approvals and pushed, and its stage moves when it lands"

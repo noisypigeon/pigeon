@@ -12,7 +12,7 @@ use worker::{DurableObject, Env, Method, Request, Response, Result, State, durab
 use super::platform::{self, Settings, job_stub, json_request, now};
 use crate::actions::{self, Actions, Due};
 use crate::control::{self, Outcome, Report};
-use crate::core::approval::grants::{Grant, Grants};
+use crate::core::approval::grants::{Grant, Grants, Pages};
 use crate::core::change::{Change, Effect, Event, JobStatus};
 
 const CHANGE: &str = "change";
@@ -27,6 +27,8 @@ const BREAKER: &str = "breaker";
 /// The storage key of the last bound job's log tail, shown in its status.
 const BOUND_LOG: &str = "bound_log";
 const GRANTS: &str = "grants";
+/// The open page tokens, by operation; see the always-listed ADR's 2026-11-16 amendment.
+const PAGES: &str = "pages";
 /// The storage key of the change's dispatches to GitHub Actions.
 const ACTIONS: &str = "actions";
 /// The bound job's last conflict forecast, applied once its events are.
@@ -396,8 +398,14 @@ impl ChangeRun {
         // on generated work following its parent's own record.
         self.mirror(change).await?;
         super::events::changed(&self.env, before.as_ref(), change).await;
-        if let Err(e) =
-            super::listed::reconcile(&self.env, &storage, GRANTS, before.as_ref(), change).await
+        if let Err(e) = super::listed::reconcile(
+            &self.env,
+            &storage,
+            (GRANTS, PAGES),
+            before.as_ref(),
+            change,
+        )
+        .await
         {
             worker::console_error!("listed for !{}: {e}", change.number);
         }
@@ -1108,11 +1116,28 @@ impl DurableObject for ChangeRun {
                 let operation = body["operation"].as_str().unwrap_or_default();
                 let token = platform::random_hex(32)?;
                 let grants: Grants = self.load(GRANTS).await?;
-                let ttl = if body["page"].as_bool() == Some(true) {
-                    crate::core::approval::grants::PAGE_TTL
-                } else {
-                    crate::core::approval::grants::TTL
-                };
+                if body["page"].as_bool() == Some(true) {
+                    let pages: Pages = self.load(PAGES).await?;
+                    let (grants, pages, page) =
+                        grants.page(&pages, &change, operation, &token, now());
+                    return match page {
+                        Ok(p) => {
+                            if !p.reused {
+                                let storage = self.state.storage();
+                                storage.put(GRANTS, &grants).await?;
+                                storage.put(PAGES, &pages).await?;
+                            }
+                            Response::from_json(&json!({
+                                "token": p.token,
+                                "grant": p.grant,
+                                "title": change.title,
+                                "reused": p.reused,
+                            }))
+                        }
+                        Err(why) => Response::error(why, 409),
+                    };
+                }
+                let ttl = crate::core::approval::grants::TTL;
                 let (grants, minted) = grants.mint_for(&change, operation, &token, now(), ttl);
                 match minted {
                     Ok(grant) => {
@@ -1129,8 +1154,14 @@ impl DurableObject for ChangeRun {
                     return Response::error("no such change", 404);
                 };
                 let storage = self.state.storage();
-                super::listed::reconcile(&self.env, &storage, GRANTS, Some(&change), &change)
-                    .await?;
+                super::listed::reconcile(
+                    &self.env,
+                    &storage,
+                    (GRANTS, PAGES),
+                    Some(&change),
+                    &change,
+                )
+                .await?;
                 Response::from_json(&json!({ "status": "reconciled" }))
             }
             (Method::Post, "peek") => {

@@ -499,8 +499,13 @@ pigeon-agent test suite grants::a_grant_is_only_for_its_operation_and_change
 pigeon-agent test suite grants::a_grant_is_redeemed_once_for_its_operation_and_head
 pigeon-agent test suite grants::a_grant_is_void_once_the_head_moves
 pigeon-agent test suite grants::a_grant_still_applies_only_while_its_operation_and_head_do
+pigeon-agent test suite grants::a_moved_head_mints_a_new_page_grant_and_voids_the_old
+pigeon-agent test suite grants::a_page_grant_is_handed_out_again_while_it_applies
 pigeon-agent test suite grants::a_page_grant_lives_a_day_and_a_card_grant_fifteen_minutes
+pigeon-agent test suite grants::a_page_grant_near_its_end_or_of_another_tier_is_minted_anew
+pigeon-agent test suite grants::a_used_page_grant_is_replaced_by_a_new_one
 pigeon-agent test suite grants::an_expired_grant_is_refused_and_pruned
+pigeon-agent test suite grants::each_operation_has_its_own_page_grant
 pigeon-agent test suite grants::the_break_glass_is_offered_only_on_an_open_head_with_a_code_check_not_passed
 pigeon-agent test suite instance::a_missing_manifest_is_io
 pigeon-agent test suite instance::a_symlink_out_of_the_root_fails

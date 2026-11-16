@@ -172,3 +172,104 @@ fn the_break_glass_is_offered_only_on_an_open_head_with_a_code_check_not_passed(
     assert!(g.needs_code(), "the owner proves it each time");
     assert!(grants::OPERATIONS.contains(&BREAK_GLASS));
 }
+
+/// Hands out `op`'s page grant on `c` at `now`, keeping the next grants and pages.
+fn page(
+    g: &mut Grants,
+    pages: &mut grants::Pages,
+    c: &Change,
+    op: &str,
+    fresh: &str,
+    now: u64,
+) -> grants::Page {
+    let (next, open, out) = g.page(pages, c, op, fresh, now);
+    *g = next;
+    *pages = open;
+    out.expect("a page grant")
+}
+
+#[test]
+fn a_page_grant_is_handed_out_again_while_it_applies() {
+    let c = change(State::Checked, Some(HEAD));
+    let (mut g, mut pages) = (Grants::default(), grants::Pages::default());
+    let first = page(&mut g, &mut pages, &c, "change.approve", "one", 100);
+    assert!(!first.reused);
+    assert_eq!(first.grant.expires, 100 + grants::PAGE_TTL);
+    let again = page(&mut g, &mut pages, &c, "change.approve", "two", 400);
+    assert!(again.reused);
+    assert_eq!(again.token, "one", "the same link, not a new one");
+    assert_eq!(g.0.len(), 1, "nothing new is minted");
+    assert!(g.peek("one", 7, 400).is_ok(), "the first link still works");
+}
+
+#[test]
+fn a_moved_head_mints_a_new_page_grant_and_voids_the_old() {
+    let c = change(State::Checked, Some(HEAD));
+    let (mut g, mut pages) = (Grants::default(), grants::Pages::default());
+    page(&mut g, &mut pages, &c, "change.approve", "old", 0);
+    let moved = change(State::Checked, Some(NEXT));
+    let fresh = page(&mut g, &mut pages, &moved, "change.approve", "new", 10);
+    assert!(!fresh.reused);
+    assert_eq!(fresh.token, "new");
+    assert_eq!(fresh.grant.head.as_deref(), Some(NEXT));
+    let why = kept!(g.redeem("old", "change.approve", &moved, 20)).expect_err("void");
+    assert!(why.contains("moved since this link was made"), "{why}");
+    assert!(kept!(g.redeem("new", "change.approve", &moved, 20)).is_ok());
+}
+
+#[test]
+fn a_used_page_grant_is_replaced_by_a_new_one() {
+    let c = change(State::Checked, Some(HEAD));
+    let (mut g, mut pages) = (Grants::default(), grants::Pages::default());
+    page(&mut g, &mut pages, &c, "change.approve", "one", 0);
+    kept!(g.redeem("one", "change.approve", &c, 5)).expect("redeems");
+    let next = page(&mut g, &mut pages, &c, "change.approve", "two", 10);
+    assert!(!next.reused);
+    assert_eq!(next.token, "two");
+    assert!(g.peek("one", 7, 10).is_err(), "a link is used once");
+}
+
+#[test]
+fn a_page_grant_near_its_end_or_of_another_tier_is_minted_anew() {
+    use backplane::core::approval::listed::REISSUE_BEFORE;
+    use backplane::core::approval::tiers::{Tier, Tiered, Tiers};
+    let mut c = change(State::Checked, Some(HEAD));
+    let (mut g, mut pages) = (Grants::default(), grants::Pages::default());
+    page(&mut g, &mut pages, &c, "change.approve", "one", 0);
+    let late = grants::PAGE_TTL - REISSUE_BEFORE;
+    let renewed = page(&mut g, &mut pages, &c, "change.approve", "two", late);
+    assert!(!renewed.reused, "under {REISSUE_BEFORE}s left, a new link");
+    assert!(
+        g.peek("one", 7, late).is_ok(),
+        "the old link works until it ends"
+    );
+    let tiered = |tier| Tiered {
+        tier,
+        rule: "r".into(),
+    };
+    c.tiers = Some(Tiers {
+        authorize: tiered(Tier::Code),
+        merge: tiered(Tier::Owner),
+        close: tiered(Tier::Confirm),
+    });
+    let raised = page(&mut g, &mut pages, &c, "change.approve", "three", late + 1);
+    assert!(!raised.reused, "a new tier, a new link");
+    assert_eq!(raised.grant.tier, Some(Tier::Owner));
+}
+
+#[test]
+fn each_operation_has_its_own_page_grant() {
+    let c = change(State::Checked, Some(HEAD));
+    let (mut g, mut pages) = (Grants::default(), grants::Pages::default());
+    page(&mut g, &mut pages, &c, "change.approve", "a", 0);
+    let close = page(&mut g, &mut pages, &c, "change.close", "b", 1);
+    assert!(!close.reused);
+    assert_eq!(
+        page(&mut g, &mut pages, &c, "change.approve", "c", 2).token,
+        "a"
+    );
+    assert_eq!(
+        page(&mut g, &mut pages, &c, "change.close", "d", 3).token,
+        "b"
+    );
+}

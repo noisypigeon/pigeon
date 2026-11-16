@@ -6,21 +6,23 @@ use worker::{Env, Result};
 
 use super::platform::{self, Settings, now};
 use crate::approve::Waiting;
-use crate::core::approval::grants::{self, Grants};
+use crate::core::approval::grants::{self, Grants, Pages};
 use crate::core::approval::listed::{self, Action, Listed};
 use crate::core::change::{Change, State};
 
 /// The operations a change lists for the owner.
 const LISTED: [&str; 2] = ["change.authorize", "change.approve"];
 
-/// Lists, re-issues or removes `change`'s approval in the inbox, minting into `grants_key`.
+/// Lists, re-issues or removes `change`'s approval in the inbox, minting into `keys`' grants
+/// and open pages.
 pub(super) async fn reconcile(
     env: &Env,
     storage: &worker::Storage,
-    grants_key: &str,
+    keys: (&str, &str),
     before: Option<&Change>,
     change: &Change,
 ) -> Result<()> {
+    let (grants_key, pages_key) = keys;
     let live = |c: &Change| matches!(c.state, State::Proposed | State::Checked);
     if !(live(change) || before.is_some_and(live)) {
         return Ok(());
@@ -70,17 +72,23 @@ pub(super) async fn reconcile(
             let Some(o) = owed else {
                 return Ok(());
             };
-            let token = platform::random_hex(32)?;
-            let (next, minted) =
-                grants.mint_for(change, o.operation, &token, now(), grants::PAGE_TTL);
-            let grant = match minted {
-                Ok(g) => g,
+            // Read again: a `/grant` may have minted while the inbox was read.
+            let grants: Grants = storage.get(grants_key).await?.unwrap_or_default();
+            let pages: Pages = storage.get(pages_key).await?.unwrap_or_default();
+            let fresh = platform::random_hex(32)?;
+            let (next, open, page) = grants.page(&pages, change, o.operation, &fresh, now());
+            let (token, grant) = match page {
+                Ok(p) if p.reused => (p.token, p.grant),
+                Ok(p) => {
+                    storage.put(grants_key, &next).await?;
+                    storage.put(pages_key, &open).await?;
+                    (p.token, p.grant)
+                }
                 Err(why) => {
                     worker::console_warn!("listed !{}: {why}", change.number);
                     return Ok(());
                 }
             };
-            storage.put(grants_key, &next).await?;
             let path = format!("{prefix}{token}");
             let w = Waiting {
                 number: change.number,
