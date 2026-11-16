@@ -192,6 +192,7 @@
 - feat(core): pigeon-core::provider: the MCP provider registry, the pure call decision, and an MCP client codec (!802) ([265005d](https://github.com/noisypigeon/pigeon/commit/265005dbb225b9d11830e1ae25b4b4d5e0ab2467))
 - docs(adr): authorizing a plan is code and Auto covers it; the merge tier is the secrets gate (!814) ([af8454f](https://github.com/noisypigeon/pigeon/commit/af8454fee8c620cc5ac9dbb4ef036eb7e0afcb34))
 - test(agent): the sentinel tiers test holds with or without approvals.yaml's gate (!815) ([ccf989e](https://github.com/noisypigeon/pigeon/commit/ccf989e622be825c191b649928ac9e4d037c2787))
+- docs(adr): faster merges: the release bot takes a merge turn, the head's jobs overlap, and two owner decisions (!818) ([38cb8fb](https://github.com/noisypigeon/pigeon/commit/38cb8fb9d275639390b2a177dba656414cbc9273))
 
 ## 2026-11-15
 
