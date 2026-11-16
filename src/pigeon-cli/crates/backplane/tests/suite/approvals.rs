@@ -410,6 +410,26 @@ fn a_sentinel_change_holds_nothing_but_sentinel_and_its_adr() {
         None,
         "no sentinel path, nothing to keep apart"
     );
+    let moved = paths(&[
+        "src/pigeon-cli/crates/sentinel/src/rules.rs",
+        "Cargo.toml",
+        "Cargo.lock",
+    ]);
+    let mut bare = r.clone();
+    bare.sentinel_bookkeeping.clear();
+    let why = mixed_with_sentinel(&bare, &moved).expect("no bookkeeping listed");
+    assert!(why.contains("Cargo.toml"), "{why}");
+    let mut kept = r.clone();
+    kept.sentinel_bookkeeping = paths(&["Cargo.toml", "Cargo.lock"]);
+    assert_eq!(
+        mixed_with_sentinel(&kept, &moved),
+        None,
+        "a sentinel change may carry the workspace's bookkeeping"
+    );
+    assert!(
+        mixed_with_sentinel(&kept, &mixed).is_some(),
+        "but nothing else"
+    );
     assert_eq!(
         mixed_with_sentinel(&rules(), &mixed).is_some(),
         !rules().sentinel.is_empty(),

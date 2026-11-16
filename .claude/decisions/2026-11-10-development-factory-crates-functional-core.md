@@ -509,3 +509,26 @@ glob under `src/pigeon-cli/` or `src/site-templates/` becomes `src/**/<tail>`
 (or `**<file>` for a workspace root file), which matches the file both before
 and after the restructure moves it. That ADR's step 12 tightens them to the
 new paths.
+
+### 2026-11-16: A sentinel change may carry the workspace's bookkeeping
+
+The owner decided this (owner question #7) when the restructure's step 5
+([`2026-11-16-development-src-crates-neutral-names.md`](2026-11-16-development-src-crates-neutral-names.md))
+was refused. Moving or renaming the sentinel crate must also edit:
+
+- the root `Cargo.toml`, because its old directory keeps a `CHANGELOG.md`;
+- `Cargo.lock` and the behaviour ledger, for the package name;
+- `.config/releases.yaml`, for its unit.
+
+`.config/approvals.yaml` gains a `sentinel_bookkeeping:` list of those files.
+`mixed_with_sentinel` lets a sentinel change touch them too. Everything else in
+§2 stands: such a change is still its own grant, `code` tier at least, and no
+mandate covers it.
+
+Steps:
+
+1. The approval rules read `sentinel_bookkeeping`, an empty list by default.
+   Merged and deployed first, because `Rules` refuses unknown keys.
+2. A sentinel change adds the list to `.config/approvals.yaml`:
+   `Cargo.toml`, `Cargo.lock`, `tooling/ci/tests.ledger`,
+   `tooling/ci/tests.moves` and `.config/releases.yaml`.

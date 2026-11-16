@@ -68,6 +68,11 @@ pub struct Rules {
     /// `.claude/decisions/2026-11-10-development-factory-crates-functional-core.md` §2.
     #[serde(default)]
     pub sentinel: Vec<String>,
+    /// Workspace bookkeeping a sentinel change may also carry, as its crate moves or is renamed;
+    /// see `.claude/decisions/2026-11-10-development-factory-crates-functional-core.md`'s
+    /// 2026-11-16 amendment.
+    #[serde(default)]
+    pub sentinel_bookkeeping: Vec<String>,
 }
 
 /// Whether `path` matches `glob`.
@@ -207,20 +212,22 @@ pub fn classify(rules: &Rules, scope: &[String], files: &[String], facts: Facts)
 }
 
 /// Why a head touching sentinel's paths is refused: it also touches `file`, which is neither a
-/// sentinel path nor under the decisions directory; none when it touches no sentinel path, or
-/// only those.
+/// sentinel path, under the decisions directory, nor sentinel bookkeeping; none when it touches
+/// no sentinel path, or only those.
 #[must_use]
 pub fn mixed_with_sentinel(rules: &Rules, files: &[String]) -> Option<String> {
     let sentinel = |f: &str| rules.sentinel.iter().any(|g| matches(g, f));
     if !files.iter().any(|f| sentinel(f)) {
         return None;
     }
+    let bookkeeping = |f: &str| rules.sentinel_bookkeeping.iter().any(|g| matches(g, f));
     let decisions = rules.decisions.as_deref().unwrap_or("\u{0}");
     let other = files
         .iter()
-        .find(|f| !sentinel(f) && !f.starts_with(decisions))?;
+        .find(|f| !sentinel(f) && !f.starts_with(decisions) && !bookkeeping(f))?;
     Some(format!(
-        "a sentinel change touches only sentinel's paths and its ADR, as its own grant; this one \
+        "a sentinel change touches only sentinel's paths, its ADR and the workspace's bookkeeping, \
+         as its own grant; this one \
          also touches {other}; see \
          .claude/decisions/2026-11-10-development-factory-crates-functional-core.md §2"
     ))
