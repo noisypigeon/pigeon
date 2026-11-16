@@ -461,3 +461,23 @@ Step 2 of the amendment above. `approvals.yaml`'s `gate:` names:
 
 Auto covers every other guarded and eviction path from the next head
 classified after this merges.
+
+### 2026-11-16: The gate takes the credential plane
+
+The review of !812 against !801 noted that the code which redeems grants
+and mints credentials was never guarded. The owner agreed to gate it
+(relayed by the status session), so `gate:` also names:
+
+- **the Worker's `change.rs`,** whose ChangeRun redeems approval grants;
+- **`minting.rs` in core and the Worker,** which mint and run grants on the
+  owner's proof;
+- **`.config/grants.yaml` and core's `ledger.rs`,** the grants ledger: what
+  each minted secret is and where it goes. Editing it widens what a token
+  can do;
+- **the app's `devices.rs` in core and the Worker:** a device is linked on
+  the owner's proof, and its signature then stands in for Access.
+
+R2's signing (`sites/credentials.rs`) stays out: it proves nothing about the
+owner. A gate file merges under `guarded: <file>`, so briefs no longer touch
+`worker/change.rs`. Its work goes to a planner and the owner's passkey,
+which the owner accepted.
