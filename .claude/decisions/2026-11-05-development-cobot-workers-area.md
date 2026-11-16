@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: development
-* Governs: `infra/pigeon/workers/**`, `src/**/workers.rs`, `src/**/tests/suite/*workers.rs`, `src/**/commands/workers.rs`, `src/**/dev.rs`
+* Governs: `infra/pigeon/workers/**`, `src/**/workers.rs`, `src/**/tests/suite/workers.rs`, `src/**/commands/workers.rs`, `src/**/dev.rs`
 
 ## Context
 
