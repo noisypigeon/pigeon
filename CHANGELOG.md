@@ -35,6 +35,7 @@
 - infra-scaleway-iam-policy v0.1.2
 - infra-scaleway-project v0.1.2
 - infra-scaleway-schema v0.1.2
+- pigeon-eviction v0.1.18
 - sentinel v0.1.17
 - site-template-architecture v0.1.1
 - site-template-blog v1.0.3
@@ -129,6 +130,8 @@
 - docs(adr): review !736 against !756 (!759) ([4ab244c](https://github.com/noisypigeon/pigeon/commit/4ab244c84a80d16b9fa4cd31334389f624c74596))
 - docs(adr): review !713 against !757 (!762) ([444f3c8](https://github.com/noisypigeon/pigeon/commit/444f3c863cb9d0ab89acb20b2edb8568edcb1934))
 - docs(adr): review !736 against !757 (!763) ([70827aa](https://github.com/noisypigeon/pigeon/commit/70827aaa2c3d1f3456bd6eb956d40e8d768336e4))
+- refactor: the policy engine is the pigeon-eviction crate in src/pigeon-eviction (!713) ([b00defc](https://github.com/noisypigeon/pigeon/commit/b00defc8b43dccc1d0f0e52c8ec7b4aa6e380c49)) · pigeon-eviction
+- units renamed · sentinel → pigeon-eviction
 
 ## 2026-11-15
 
