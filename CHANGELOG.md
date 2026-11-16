@@ -12,6 +12,7 @@
 - backplane v0.1.36
 - backplane v0.1.37
 - backplane v0.1.38
+- backplane v0.1.39
 - infra-agnostic-random-string v0.1.3
 - infra-agnostic-schema v0.1.3
 - infra-agnostic-schema v0.1.4
@@ -181,6 +182,10 @@
 - chore(approvals): the judge's keys are eviction and eviction_bookkeeping (!800) ([ee0abb1](https://github.com/noisypigeon/pigeon/commit/ee0abb1bc17915394cb794b8c3c1dd4f5069e2f9))
 - feat(core): Auto covers guarded and sentinel paths once approvals.yaml names a gate, which alone still asks the owner (!794) ([2cc254b](https://github.com/noisypigeon/pigeon/commit/2cc254b9b65b574b6edc36fff30770fae189d053))
 - docs(adr): the provider broker records the owner's three answers, and the one MCP entry point's session ID is signed but not bound (!805) ([7a93042](https://github.com/noisypigeon/pigeon/commit/7a930429c2407268d47119f9c53a5aa5080e978a))
+- feat(ios): release each merge that changes the app to TestFlight automatically (!799) ([5b6046d](https://github.com/noisypigeon/pigeon/commit/5b6046dae755e05beaafab9613da34114a09c56f)) · backplane
+- fix(agent): a bench derives its key from the stored signing key, so benches answer again (!810) ([7e5b781](https://github.com/noisypigeon/pigeon/commit/7e5b781b0f9898449af807df2ca1eb1153e1eeeb)) · backplane
+- docs: eight ADRs' Governs globs match the agent suite's files under their cobot and group names (!806) ([efa8411](https://github.com/noisypigeon/pigeon/commit/efa84117d193bc853321fd6b837672729d44d8a3))
+- docs(adr): pigeon's Claude Platform API traffic goes through one authenticated Cloudflare AI Gateway, behind the pool's metering route (!807) ([a661bd1](https://github.com/noisypigeon/pigeon/commit/a661bd1bd46c8e13d313d70a67c2629134c60275))
 
 ## 2026-11-15
 
