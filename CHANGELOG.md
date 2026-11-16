@@ -8,6 +8,7 @@
 - backplane v0.1.32
 - backplane v0.1.33
 - backplane v0.1.34
+- backplane v0.1.35
 - infra-agnostic-random-string v0.1.3
 - infra-agnostic-schema v0.1.3
 - infra-agnostic-schema v0.1.4
@@ -159,6 +160,7 @@
 - refactor: src/pigeon-core is the pigeon-core crate: backplane's functional core, its pure modules and the wire form, built alone for native and wasm (!770) ([c446ce8](https://github.com/noisypigeon/pigeon/commit/c446ce8a38176dec4d6e73bae59a291576e283d9)) · backplane
 - refactor: the pigeon binary's crate moves to src/pigeon-harness (!772) ([0633627](https://github.com/noisypigeon/pigeon/commit/06336271f79bed3ecadbe44c81fdbfdc2bc497be)) · backplane
 - test: the stored-state fixtures move ahead to src/pigeon-agent/tests/state (!777) ([9483ac0](https://github.com/noisypigeon/pigeon/commit/9483ac01b71e5534998eaf5b3544984db92f042c))
+- refactor: the agent crate moves to src/pigeon-agent (!778) ([d220329](https://github.com/noisypigeon/pigeon/commit/d22032901c824a8f3d60c8fd94d6231ebe6d0279)) · backplane
 
 ## 2026-11-15
 
