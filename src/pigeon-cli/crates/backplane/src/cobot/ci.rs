@@ -703,11 +703,13 @@ fn merge_by_union(dir: &Path, union: &[&str]) -> Result<(), Error> {
         })
 }
 
-/// The open changes in `others` (number, branch) whose heads would conflict with `sha` in paths
-/// both edit against `base`, each with those paths: fetched read-only and merged with
-/// `git merge-tree`, paths matching a `union` glob by union as a restack would, nothing pushed;
-/// a branch that can't be fetched or merged is skipped; see
-/// `.claude/decisions/2026-11-12-development-grants-applies-rescue-yield.md` §5.
+/// The open changes in `others` (number, branch) whose heads would conflict with `sha` once both
+/// are restacked onto `base`, each with those paths: fetched read-only, each head rebased onto
+/// `base` in memory and the two merged with `base` as their merge base, paths matching a `union`
+/// glob by union as a restack would, nothing pushed; a branch that can't be fetched, or conflicts
+/// with `base` itself, is skipped; see
+/// `.claude/decisions/2026-11-12-development-grants-applies-rescue-yield.md` §5 and its
+/// 2026-11-16 amendment.
 #[must_use]
 pub fn forecast(
     dir: &Path,
@@ -722,17 +724,12 @@ pub fn forecast(
         return Vec::new();
     }
     let main = format!("refs/remotes/origin/{base}");
-    let edits = |head: &str| -> Option<Vec<String>> {
-        let out = git(
-            dir,
-            "",
-            "",
-            &["diff", "--name-only", &format!("{main}...{head}")],
-        )
-        .ok()?;
-        Some(out.lines().map(str::to_string).collect())
+    // `head`'s tree rebased onto `main`; none when it conflicts with `main` itself.
+    let onto_main = |head: &str| -> Option<String> {
+        let fork = git(dir, "", "", &["merge-base", &main, head]).ok()?;
+        merge_from(dir, &fork, &main, head).ok()?.ok()
     };
-    let Some(mine) = edits(sha) else {
+    let Some(mine) = onto_main(sha) else {
         return Vec::new();
     };
     let mut out = Vec::new();
@@ -742,16 +739,13 @@ pub fn forecast(
         if git(dir, remote, token, &["fetch", "-q", remote, &spec]).is_err() {
             continue;
         }
-        let (Ok(Err(paths)), Some(theirs)) = (merge_tree(dir, sha, &local), edits(&local)) else {
+        let Some(theirs) = onto_main(&local) else {
             continue;
         };
-        // `main`'s drift under an older branch isn't the two changes' conflict.
-        let both: Vec<String> = paths
-            .into_iter()
-            .filter(|p| mine.contains(p) && theirs.contains(p))
-            .collect();
-        if !both.is_empty() {
-            out.push((*n, both));
+        if let Ok(Err(paths)) = merge_from(dir, &main, &mine, &theirs)
+            && !paths.is_empty()
+        {
+            out.push((*n, paths));
         }
     }
     out

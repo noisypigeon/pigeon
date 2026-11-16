@@ -430,6 +430,50 @@ fn main_drift_under_an_older_branch_is_not_forecast() {
     );
 }
 
+/// `change/2-y` is cut from main and writes `y_text` to a.txt, repeating the edit of line 3
+/// that then lands on main; `change/1-x` is cut from main after it and writes `x_text`.
+fn both_repeat_main(x_text: &str, y_text: &str) -> Vec<(u32, Vec<String>)> {
+    let (_t, url, work) = remote();
+    git(&work, &["checkout", "-q", "-B", "change/2-y", "main"]);
+    write(&work, "a.txt", y_text);
+    git(&work, &["commit", "-qam", "change/2-y"]);
+    git(&work, &["push", "-q", &url, "HEAD:refs/heads/change/2-y"]);
+    git(&work, &["checkout", "-q", "main"]);
+    write(&work, "a.txt", "one\ntwo\nTHREE\nfour\nfive\nsix\n");
+    git(&work, &["commit", "-qam", "landed"]);
+    git(&work, &["push", "-q", &url, "HEAD:refs/heads/main"]);
+    let head = diverge(&work, &url, &[("a.txt", x_text)], &[]);
+    let job = tempfile::tempdir().expect("tmp");
+    checkout(job.path(), &url, "", "main", "change/1-x", &head).expect("checks out");
+    let others = [(2, "change/2-y".to_string())];
+    forecast(job.path(), &url, "", "main", &head, &others, &["*.md"])
+}
+
+#[test]
+fn an_edit_both_branches_repeat_from_main_is_not_forecast() {
+    // From their old common base both rewrite line 3; restacked, x edits line 2 and y line 5.
+    assert_eq!(
+        both_repeat_main(
+            "one\nTWO\nTHREE\nfour\nfive\nsix\n",
+            "one\ntwo\nTHREE\nfour\nFIVE\nsix\n",
+        ),
+        Vec::<(u32, Vec<String>)>::new(),
+        "restacked onto main, the two edit apart"
+    );
+}
+
+#[test]
+fn a_real_overlap_on_top_of_main_is_still_forecast() {
+    assert_eq!(
+        both_repeat_main(
+            "one\nTWO\nTHREE\nfour\nfive\n6\n",
+            "one\ntwo\nTHREE\nfour\nfive\nSIX\n",
+        ),
+        [(2, vec!["a.txt".to_string()])],
+        "both rewrite line 6"
+    );
+}
+
 #[test]
 fn two_amendments_to_one_adr_are_not_forecast_to_conflict() {
     let (_t, url, work) = remote();

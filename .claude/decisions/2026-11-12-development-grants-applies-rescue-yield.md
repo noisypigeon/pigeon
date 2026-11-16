@@ -1304,3 +1304,18 @@ glob under `src/pigeon-cli/` or `src/site-templates/` becomes `src/**/<tail>`
 (or `**<file>` for a workspace root file), which matches the file both before
 and after the restructure moves it. That ADR's step 12 tightens them to the
 new paths.
+
+### 2026-11-16: Forecasts restack both heads onto main before merging them
+
+- **A forecast merged each pair from their own old merge base.** A branch cut
+  before a large move on `main` (!695) then carried `main`'s edits into the
+  pair's merge, and the forecast reported conflicts that vanish once the
+  branch is restacked. !714 yielded twice this way though it rebases cleanly.
+- **Each head is now restacked onto current `main` in memory first:**
+  `merge-tree` from its fork point, recommitted on `main`. Nothing is pushed.
+  - A head that conflicts with `main` itself isn't forecast against: that is
+    its own conflict (F1), not the pair's.
+  - The two restacked trees merge with `main` as their base, so an edit
+    already on `main` never counts, and only the paths both change against
+    `main` can conflict.
+- **Yields are unchanged:** who yields, when, and `change_yield off`.
