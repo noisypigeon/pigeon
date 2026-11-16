@@ -9,7 +9,7 @@ pub const TOKENS: &str = include_str!("look/tokens.css");
 /// The rules over the pages' plain elements.
 pub const STYLE: &str = include_str!("look/style.css");
 
-/// The avatar, a 144 px WebP of the app's `Avatar.png`.
+/// The avatar, a 144 px WebP of the app's `Avatar.png`, shown at its 40 pt header size.
 const AVATAR: &[u8] = include_bytes!("look/avatar.webp");
 
 /// The page background, for `theme-color` and the web app manifest.
@@ -18,7 +18,7 @@ pub const BACKGROUND: &str = "#14121A";
 /// The avatar's `<img>`, its image a `data:` URI, so the CSP needs only `img-src data:`.
 static AVATAR_IMG: LazyLock<String> = LazyLock::new(|| {
     format!(
-        "<img class=\"avatar\" src=\"data:image/webp;base64,{}\" width=\"72\" height=\"72\" alt=\"\">",
+        "<img class=\"avatar\" src=\"data:image/webp;base64,{}\" width=\"40\" height=\"40\" alt=\"\">",
         base64(AVATAR)
     )
 });

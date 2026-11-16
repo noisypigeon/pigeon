@@ -20,11 +20,12 @@ main {
 }
 .avatar {
   display: block;
-  width: 72px;
-  height: 72px;
-  margin: 12px 0 var(--space-gap);
-  border: 2px solid var(--ink);
+  width: 40px;
+  height: 40px;
+  margin: 8px 0 var(--space-gap);
+  border: 2px solid var(--card);
   border-radius: 50%;
+  box-shadow: 2px 2px 0 var(--shadow);
 }
 
 h1 { font: var(--type-display); margin: 0 0 14px; overflow-wrap: anywhere; }

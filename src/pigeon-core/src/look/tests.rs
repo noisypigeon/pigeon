@@ -46,6 +46,10 @@ fn a_page_has_one_avatar_inline_and_loads_nothing() {
         "a WebP"
     );
     assert!(html.contains("<main><img class=\"avatar\""));
+    assert!(
+        html.contains("width=\"40\" height=\"40\""),
+        "the app's 40 pt header size"
+    );
     assert!(html.ends_with("<h1>x</h1></main></body></html>"));
     for css in [TOKENS, STYLE] {
         assert!(!css.contains("url("), "no image or font is fetched");
