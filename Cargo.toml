@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["src/pigeon-cli/crates/*"]
+members = ["src/pigeon-cli/crates/*", "src/pigeon-ios"]
 exclude = ["src/pigeon-cli/crates/cobot", "src/pigeon-cli/crates/gantry"]
 
 [workspace.package]

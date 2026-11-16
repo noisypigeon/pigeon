@@ -60,11 +60,11 @@ fn the_catalog_runs_infra_checks_and_no_rust_build() {
 fn backplanes_cobot_runs_backplane_its_dependants_and_the_worker() {
     let got = names(&["src/pigeon-cli/crates/backplane/src/cobot/git.rs"]);
     assert!(
-        got.contains(&"clippy pigeon pigeon-backplane".to_string()),
+        got.contains(&"clippy pigeon pigeon-backplane pigeon-ios".to_string()),
         "{got:?}"
     );
     assert!(
-        got.contains(&"test pigeon pigeon-backplane".to_string()),
+        got.contains(&"test pigeon pigeon-backplane pigeon-ios".to_string()),
         "{got:?}"
     );
     assert!(
@@ -150,10 +150,17 @@ fn a_workspace_setting_runs_everything() {
 }
 
 #[test]
-fn the_ios_app_runs_its_macos_check_and_no_rust_build() {
+fn the_ios_app_runs_its_macos_check_and_its_check_crate() {
     assert_eq!(
         names(&["src/pigeon-ios/Pigeon/ContentView.swift"]),
-        ["ios", "policy.check"]
+        [
+            "fmt",
+            "clippy pigeon-ios",
+            "test pigeon-ios",
+            "ios",
+            "policy.check"
+        ],
+        "its check crate reads the Swift"
     );
     let ios = jobs(&repo_root(), &["src/pigeon-ios/project.yml".to_string()])
         .expect("scopes")
@@ -346,7 +353,7 @@ fn the_test_map_runs_the_binaries_that_ran_a_changed_file() {
         "{got:?}"
     );
     assert!(
-        got.contains(&"clippy pigeon pigeon-backplane".to_string()),
+        got.contains(&"clippy pigeon pigeon-backplane pigeon-ios".to_string()),
         "clippy still covers the dependants: {got:?}"
     );
     let got = with_map(&["src/pigeon-cli/crates/backplane/tests/cobot_scope.rs"]);
@@ -383,7 +390,7 @@ fn the_test_map_runs_the_binaries_that_ran_a_changed_file() {
 
 #[test]
 fn the_test_map_falls_back_to_crates_when_it_cannot_say() {
-    let by_crate = ["test pigeon pigeon-backplane"];
+    let by_crate = ["test pigeon pigeon-backplane pigeon-ios"];
     for (files, why) in [
         (
             &["src/pigeon-cli/crates/backplane/src/cobot/new.rs"][..],

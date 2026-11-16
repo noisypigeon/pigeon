@@ -1,0 +1,26 @@
+[package]
+name = "pigeon-ios"
+description = "Checks the iOS app's manifest and the operations its Swift names, on Linux; never builds Swift."
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+autotests = false
+
+[lib]
+name = "pigeon_ios"
+
+[dev-dependencies]
+# The catalog; pigeon-core's from step 6 of .claude/decisions/2026-11-16-development-src-crates-neutral-names.md.
+backplane.workspace = true
+serde-saphyr.workspace = true
+serde_json.workspace = true
+
+[[test]]
+name = "suite"
+path = "tests/suite/main.rs"
+
+[lints]
+workspace = true

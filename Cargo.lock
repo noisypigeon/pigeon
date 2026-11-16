@@ -1866,6 +1866,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "pigeon-ios"
+version = "0.1.0"
+dependencies = [
+ "pigeon-backplane",
+ "serde-saphyr",
+ "serde_json",
+]
+
+[[package]]
 name = "pigeon-sentinel"
 version = "0.1.16"
 dependencies = [

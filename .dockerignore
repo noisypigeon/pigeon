@@ -5,6 +5,9 @@
 !pigeon-start
 !src/
 src/pigeon-ios/
+!src/pigeon-ios/Cargo.toml
+!src/pigeon-ios/src/
+!src/pigeon-ios/tests/
 src/site-templates/
 **/target/
 **/CHANGELOG.md
