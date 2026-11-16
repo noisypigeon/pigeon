@@ -971,7 +971,7 @@ pub fn render_with(
         for c in &spec.containers {
             if !images.contains_key(&image_key(spec, &c.class)) {
                 problems.push(format!(
-                    "no image for `{}`; push one with `pigeon cobot workers images push`",
+                    "no image for `{}`; push one with `pigeon workers images push`",
                     image_key(spec, &c.class)
                 ));
             }
@@ -1159,7 +1159,7 @@ pub fn text(value: &Value) -> String {
 #[must_use]
 pub fn container_dockerfile(spec: &Spec, class: &str, plan: &str) -> String {
     format!(
-        "# Built by `pigeon cobot workers deploy` from its spec's stage; never committed.\nFROM --platform={PLATFORM} {}\n",
+        "# Built by `pigeon workers deploy` from its spec's stage; never committed.\nFROM --platform={PLATFORM} {}\n",
         image_tag(spec, class, plan)
     )
 }

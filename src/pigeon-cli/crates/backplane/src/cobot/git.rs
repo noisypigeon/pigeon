@@ -192,7 +192,7 @@ pub fn live(
         .map_err(api_error)?
         .ok_or_else(|| {
             api_error(format!(
-                "repository `{name}` does not exist; run `pigeon cobot git apply`"
+                "repository `{name}` does not exist; run `pigeon git apply`"
             ))
         })?;
     Ok((d, repo))
@@ -440,7 +440,7 @@ pub fn mirror_from(
         Error::Tool { message, .. } if message.contains("rejected") => Error::Tool {
             command: "git mirror".into(),
             message: format!(
-                "{to} has commits or tags Artifacts lacks; run `pigeon cobot git sync {name}` first"
+                "{to} has commits or tags Artifacts lacks; run `pigeon git sync {name}` first"
             ),
         },
         other => other,

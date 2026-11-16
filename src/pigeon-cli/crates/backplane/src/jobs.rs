@@ -1,4 +1,4 @@
-//! A job Container's work: `pigeon backplane jobs` takes a [`JobSpec`] over the signed link,
+//! A job Container's work: `pigeon agent listen` takes a [`JobSpec`] over the signed link,
 //! checks out its head, runs it in the background, and reports; see
 //! `.claude/decisions/2026-11-05-development-changes-through-pigeon-mcp.md` §3, §4.
 //!

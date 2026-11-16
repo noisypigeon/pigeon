@@ -67,7 +67,7 @@ impl Launch {
     pub fn entrypoint(&self) -> Vec<String> {
         [
             "/usr/local/bin/pigeon",
-            "backplane",
+            "agent",
             "serve",
             "--listen",
             &format!("0.0.0.0:{PORT}"),
@@ -156,7 +156,7 @@ impl std::fmt::Debug for JobsLaunch {
 }
 
 impl JobsLaunch {
-    /// The Container's command line: `pigeon backplane jobs`, signed; through [`START`] when a
+    /// The Container's command line: `pigeon agent listen`, signed; through [`START`] when a
     /// build is named.
     #[must_use]
     pub fn entrypoint(&self) -> Vec<String> {
@@ -167,8 +167,8 @@ impl JobsLaunch {
         };
         [
             program,
-            "backplane",
-            "jobs",
+            "agent",
+            "listen",
             "--listen",
             &format!("0.0.0.0:{PORT}"),
         ]
@@ -470,7 +470,7 @@ mod tests {
             launch.entrypoint(),
             [
                 "/usr/local/bin/pigeon",
-                "backplane",
+                "agent",
                 "serve",
                 "--listen",
                 "0.0.0.0:8080",
@@ -516,8 +516,8 @@ mod tests {
             jobs.entrypoint(),
             [
                 "/usr/local/bin/pigeon-start",
-                "backplane",
-                "jobs",
+                "agent",
+                "listen",
                 "--listen",
                 "0.0.0.0:8080"
             ]

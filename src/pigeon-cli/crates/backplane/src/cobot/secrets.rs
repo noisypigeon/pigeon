@@ -154,7 +154,7 @@ pub fn decrypt_all_named(
                     .filter(|o| open(&v, o.passphrase).is_ok())
                     .map(|o| {
                         format!(
-                            "; it decrypts with {}, so re-encrypt it under {} with `pigeon cobot secrets set` from a current build",
+                            "; it decrypts with {}, so re-encrypt it under {} with `pigeon infra secrets set` from a current build",
                             o.var, using.var
                         )
                     })

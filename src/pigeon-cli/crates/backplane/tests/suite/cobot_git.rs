@@ -655,10 +655,7 @@ fn a_mirror_that_moved_ahead_is_refused_until_synced() {
     )
     .expect_err("refused")
     .to_string();
-    assert!(
-        err.contains("run `pigeon cobot git sync pigeon` first"),
-        "{err}"
-    );
+    assert!(err.contains("run `pigeon git sync pigeon` first"), "{err}");
     assert_eq!(
         run_git(&github, &["rev-parse", "refs/heads/main"]),
         released,

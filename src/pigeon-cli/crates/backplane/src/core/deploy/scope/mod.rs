@@ -99,8 +99,8 @@ impl Default for Layout {
                     "cobot_credentials::",
                 ]),
             }),
-            run: strings(&["backplane", "run"]),
-            instance: strings(&["backplane", "instance"]),
+            run: strings(&["run"]),
+            instance: strings(&["instance"]),
         }
     }
 }

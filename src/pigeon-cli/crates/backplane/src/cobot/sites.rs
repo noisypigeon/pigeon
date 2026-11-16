@@ -1,4 +1,4 @@
-//! `pigeon cobot sites`: build each static site with its pinned template, and
+//! `pigeon sites`: build each static site with its pinned template, and
 //! publish it to its R2 bucket; see
 //! `.claude/decisions/2026-11-03-runtime-cloudflare-static-sites-r2.md` §5 and §7,
 //! `.claude/decisions/2026-11-03-runtime-static-site-config-contract.md`, and

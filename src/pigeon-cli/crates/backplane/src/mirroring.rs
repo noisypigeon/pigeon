@@ -462,7 +462,7 @@ mod tests {
         m.start(0);
         m.finished(
             false,
-            "https://github.com/x/y has commits or tags Artifacts lacks; run `pigeon cobot git sync y` first",
+            "https://github.com/x/y has commits or tags Artifacts lacks; run `pigeon git sync y` first",
             1,
         );
         assert!(m.behind(1).is_some_and(|b| b.contains("Artifacts lacks")));

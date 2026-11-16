@@ -54,8 +54,8 @@ fn only_code_checks_run_on_github() {
         assert!(on_github(&argv(code)), "{code}");
     }
     for platform in [
-        "cargo run -q --locked -p pigeon -- backplane run policy.check --root ../..",
-        "cargo run -q --locked -p pigeon -- backplane run infra.validate --root ../..",
+        "cargo run -q --locked -p pigeon -- run policy.check --root ../..",
+        "cargo run -q --locked -p pigeon -- run infra.validate --root ../..",
         "sh ../../spikes/1/run.sh",
         "bash ../../tooling/ci/other.sh",
         "bash ../pigeon-ios/other.sh",

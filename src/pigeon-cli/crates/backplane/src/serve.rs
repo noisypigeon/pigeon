@@ -1,4 +1,4 @@
-//! `pigeon backplane serve`: the wire form over HTTP, in mutual TLS or signed mode beyond
+//! `pigeon agent serve`: the wire form over HTTP, in mutual TLS or signed mode beyond
 //! loopback; see the phase 3 amendment §6, the "Worker–Container mutual TLS" amendment and the
 //! "Phase 3 spike report" amendment §2 of
 //! `.claude/decisions/2026-11-04-development-platform-instance-separation.md`.
