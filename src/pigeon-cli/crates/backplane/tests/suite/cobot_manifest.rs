@@ -5,8 +5,8 @@ use std::collections::BTreeMap;
 use std::fmt::Write as _;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
+use crate::harness::tools::tofu_available;
 use serde_json::{Map, Value, json};
 use tempfile::TempDir;
 
@@ -524,13 +524,6 @@ fn a_credentials_target_is_a_name_or_a_config_path() {
     );
 }
 
-fn tofu_available() -> bool {
-    Command::new("tofu")
-        .arg("version")
-        .output()
-        .is_ok_and(|o| o.status.success())
-}
-
 fn data_module(root: &Path, rel: &str, vars: &[&str], output: &str) {
     let mut tf = String::new();
     for v in vars {
@@ -627,37 +620,16 @@ fn offline_platform() -> TempDir {
 
 /// A fake Cloudflare API that sees one account and `noisypigeon.com`.
 fn fake_api() -> String {
-    use std::io::{BufRead, BufReader, Write as _};
-    let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind");
-    let addr = listener.local_addr().expect("addr");
-    std::thread::spawn(move || {
-        for stream in listener.incoming().flatten() {
-            let mut reader = BufReader::new(stream.try_clone().expect("clone"));
-            let mut line = String::new();
-            reader.read_line(&mut line).expect("request line");
-            loop {
-                let mut h = String::new();
-                if reader.read_line(&mut h).is_err() || h.trim_end().is_empty() {
-                    break;
-                }
-            }
-            let body = if line.contains("/zones?name=noisypigeon.com") {
-                json!({ "success": true, "result": [{ "id": "zone-np", "name": ZONE }] })
-            } else if line.contains("/accounts?") {
-                json!({ "success": true, "result": [{ "id": "acct-1" }] })
-            } else {
-                json!({ "success": false })
-            };
-            let text = body.to_string();
-            let mut out = stream;
-            let _ = write!(
-                out,
-                "HTTP/1.1 200 OK\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{text}",
-                text.len()
-            );
-        }
-    });
-    format!("http://{addr}")
+    crate::harness::http::serve(|r| {
+        let body = if r.target.contains("/zones?name=noisypigeon.com") {
+            json!({ "success": true, "result": [{ "id": "zone-np", "name": ZONE }] })
+        } else if r.target.contains("/accounts?") {
+            json!({ "success": true, "result": [{ "id": "acct-1" }] })
+        } else {
+            json!({ "success": false })
+        };
+        crate::harness::http::Reply::json(200, &body)
+    })
 }
 
 fn ctx(root: &Path, platform: &Path, state: &Path, api: &str) -> backplane::cobot::Context {

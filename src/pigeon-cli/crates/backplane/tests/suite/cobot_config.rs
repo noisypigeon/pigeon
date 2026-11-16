@@ -3,8 +3,8 @@
 use std::fmt::Write as _;
 use std::fs;
 use std::path::Path;
-use std::process::Command;
 
+use crate::harness::tools::tofu_available;
 use serde_json::{Value, json};
 use tempfile::TempDir;
 
@@ -411,13 +411,6 @@ fn secrets_are_infra_only_and_always_encrypted() {
     .expect("mv");
     let got = problems(workload.path());
     assert!(got.iter().any(|p| p.contains("break-glass")), "{got:?}");
-}
-
-fn tofu_available() -> bool {
-    Command::new("tofu")
-        .arg("version")
-        .output()
-        .is_ok_and(|o| o.status.success())
 }
 
 #[test]

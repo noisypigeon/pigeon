@@ -3,8 +3,6 @@
 
 use std::collections::BTreeMap;
 use std::fs;
-use std::io::{BufRead, BufReader, Read, Write};
-use std::net::TcpListener;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::{Arc, Mutex};
@@ -14,6 +12,8 @@ use backplane::cobot::cloudflare::Api;
 use backplane::cobot::git::{self, Outcome};
 use serde_json::{Value, json};
 use tempfile::TempDir;
+
+use crate::harness::http::{self, Reply};
 
 const TOKEN: &str = "run-token-0123456789";
 const GIT_TOKEN: &str = "git-token-abcdef0123";
@@ -38,54 +38,26 @@ fn serve(account: &str, remote: &Path, source: Option<&Path>) -> (String, Arc<Mu
         source: source.map(Path::to_path_buf),
         ..Fake::default()
     }));
-    let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
-    let addr = listener.local_addr().expect("addr");
-    let shared = fake.clone();
-    std::thread::spawn(move || {
-        for stream in listener.incoming().flatten() {
-            let mut reader = BufReader::new(stream.try_clone().expect("clone"));
-            let mut line = String::new();
-            reader.read_line(&mut line).expect("request line");
-            let mut parts = line.split_whitespace();
-            let (method, path) = (
-                parts.next().unwrap_or_default().to_string(),
-                parts.next().unwrap_or_default().to_string(),
-            );
-            let (mut authorized, mut length) = (false, 0usize);
-            loop {
-                let mut h = String::new();
-                reader.read_line(&mut h).expect("header");
-                let h = h.trim_end();
-                if h.is_empty() {
-                    break;
-                }
-                if let Some((k, v)) = h.split_once(':') {
-                    if k.eq_ignore_ascii_case("authorization") {
-                        authorized = v.trim() == format!("Bearer {TOKEN}");
-                    }
-                    if k.eq_ignore_ascii_case("content-length") {
-                        length = v.trim().parse().unwrap_or(0);
-                    }
-                }
-            }
-            let mut body = vec![0; length];
-            reader.read_exact(&mut body).expect("body");
-            let body: Value = serde_json::from_slice(&body).unwrap_or(Value::Null);
-            let (status, result) = if authorized {
-                route(&mut shared.lock().expect("lock"), &method, &path, &body)
-            } else {
-                (403, Value::Null)
-            };
-            let text = json!({ "success": status == 200, "result": result }).to_string();
-            let mut out = stream;
-            let _ = write!(
-                out,
-                "HTTP/1.1 {status} X\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{text}",
-                text.len()
-            );
-        }
+    let shared = Arc::clone(&fake);
+    let url = http::serve(move |r| {
+        let authorized = r.header("authorization") == Some(format!("Bearer {TOKEN}").as_str());
+        let body: Value = serde_json::from_slice(&r.body).unwrap_or(Value::Null);
+        let (status, result) = if authorized {
+            route(
+                &mut shared.lock().expect("lock"),
+                &r.method,
+                &r.target,
+                &body,
+            )
+        } else {
+            (403, Value::Null)
+        };
+        Reply::json(
+            status,
+            &json!({ "success": status == 200, "result": result }),
+        )
     });
-    (format!("http://{addr}"), fake)
+    (url, fake)
 }
 
 fn route(f: &mut Fake, method: &str, path: &str, body: &Value) -> (u16, Value) {

@@ -1,5 +1,8 @@
 //! Helpers shared by the suite's modules.
 
+#[allow(dead_code)]
+pub mod http;
+pub mod tools;
 #[macro_use]
 pub mod kept;
 pub mod step;

@@ -3,8 +3,8 @@
 
 use std::fs;
 use std::path::Path;
-use std::process::Command;
 
+use crate::harness::tools::tofu_available;
 use tempfile::TempDir;
 
 const PASSPHRASE: &str = "test-passphrase-0123456789";
@@ -52,13 +52,6 @@ fn ctx(root: &Path, state: &Path) -> backplane::cobot::Context {
         provider_config: None,
         provider_token: false,
     }
-}
-
-fn tofu_available() -> bool {
-    Command::new("tofu")
-        .arg("version")
-        .output()
-        .is_ok_and(|o| o.status.success())
 }
 
 fn units(root: &Path) -> Vec<backplane::cobot::Unit> {

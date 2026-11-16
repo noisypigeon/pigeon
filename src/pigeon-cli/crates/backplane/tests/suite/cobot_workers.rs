@@ -425,48 +425,20 @@ fn a_binding_named_like_a_durable_object_is_refused() {
 
 /// A Cloudflare API that answers every request with registry credentials.
 fn registry_api() -> String {
-    use std::io::{BufRead, BufReader, Write};
-    let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind");
-    let addr = listener.local_addr().expect("addr");
-    std::thread::spawn(move || {
-        for stream in listener.incoming().flatten() {
-            let mut reader = BufReader::new(stream.try_clone().expect("clone"));
-            let mut line = String::new();
-            reader.read_line(&mut line).expect("request line");
-            let mut length = 0;
-            loop {
-                let mut h = String::new();
-                reader.read_line(&mut h).expect("header");
-                let h = h.trim_end().to_ascii_lowercase();
-                if h.is_empty() {
-                    break;
-                }
-                if let Some(v) = h.strip_prefix("content-length:") {
-                    length = v.trim().parse().unwrap_or(0);
-                }
-            }
-            let mut body = vec![0; length];
-            std::io::Read::read_exact(&mut reader, &mut body).expect("body");
-            let body: Value = serde_json::from_slice(&body).unwrap_or(Value::Null);
-            let ok = line.starts_with("POST ")
-                && line.contains("/containers/registries/registry.cloudflare.com/credentials")
-                && body["expiration_minutes"] == 240
-                && body["permissions"] == json!(["push", "pull"]);
-            let answer = if ok {
-                json!({ "success": true, "result": { "username": "v1", "password": "registry-password-0123" } })
-            } else {
-                json!({ "success": false, "errors": [{ "message": "unexpected request" }] })
-            };
-            let text = answer.to_string();
-            let mut s = stream;
-            let _ = write!(
-                s,
-                "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{text}",
-                text.len()
-            );
-        }
-    });
-    format!("http://{addr}")
+    crate::harness::http::serve(|r| {
+        let body: Value = serde_json::from_slice(&r.body).unwrap_or(Value::Null);
+        let ok = r.method == "POST"
+            && r.target
+                .contains("/containers/registries/registry.cloudflare.com/credentials")
+            && body["expiration_minutes"] == 240
+            && body["permissions"] == json!(["push", "pull"]);
+        let answer = if ok {
+            json!({ "success": true, "result": { "username": "v1", "password": "registry-password-0123" } })
+        } else {
+            json!({ "success": false, "errors": [{ "message": "unexpected request" }] })
+        };
+        crate::harness::http::Reply::json(200, &answer)
+    })
 }
 
 #[test]

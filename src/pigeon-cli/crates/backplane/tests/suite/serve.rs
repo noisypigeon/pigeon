@@ -5,11 +5,11 @@ use std::fs;
 use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpStream};
 use std::path::Path;
-use std::process::Command;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
+use crate::harness::tools::tofu_available;
 use backplane::serve::{
     NONCE_HEADER, SIGNATURE_HEADER, Server, TIMESTAMP_HEADER, Tls, WORKERS, sign_request,
     sign_response,
@@ -66,13 +66,6 @@ fn var(k: &str) -> Option<String> {
 
 fn request(operation: &str, args: &Value) -> Request {
     serde_json::from_value(json!({ "operation": operation, "args": args })).expect("request")
-}
-
-fn tofu_available() -> bool {
-    Command::new("tofu")
-        .arg("version")
-        .output()
-        .is_ok_and(|o| o.status.success())
 }
 
 #[test]

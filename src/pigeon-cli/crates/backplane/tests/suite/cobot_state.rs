@@ -4,8 +4,6 @@
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
 use std::fs;
-use std::io::{BufRead, BufReader, Read, Write};
-use std::net::TcpListener;
 use std::sync::{Arc, Mutex};
 
 use backplane::cobot::s3::{Bucket, Credentials};
@@ -37,98 +35,72 @@ fn decode(path: &str) -> String {
 
 /// A fake S3 bucket `b` on 127.0.0.1: listing, `GET` with `ETag`, conditional `PUT`, `DELETE`.
 fn serve() -> (String, Objects) {
-    let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
-    let endpoint = format!("http://{}", listener.local_addr().expect("addr"));
     let objects: Objects = Arc::default();
     let store = Arc::clone(&objects);
-    std::thread::spawn(move || {
-        for stream in listener.incoming().flatten() {
-            let store = Arc::clone(&store);
-            std::thread::spawn(move || {
-                let mut reader = BufReader::new(stream.try_clone().expect("clone"));
-                let mut line = String::new();
-                reader.read_line(&mut line).expect("request line");
-                let mut parts = line.split_whitespace();
-                let (method, target) = (parts.next().unwrap_or(""), parts.next().unwrap_or(""));
-                let mut headers = BTreeMap::new();
-                loop {
-                    let mut h = String::new();
-                    reader.read_line(&mut h).expect("header");
-                    let h = h.trim_end();
-                    if h.is_empty() {
-                        break;
+    let endpoint = crate::harness::http::serve(move |r| {
+        let crate::harness::http::Request {
+            method,
+            target,
+            headers,
+            body,
+        } = r;
+        let (method, target) = (method.as_str(), target.as_str());
+        let (path, query) = target.split_once('?').unwrap_or((target, ""));
+        let key = decode(path.trim_start_matches("/b").trim_start_matches('/'));
+        let mut objects = store.lock().expect("lock");
+        let (status, out, tag): (u16, Vec<u8>, Option<String>) = match method {
+            "GET" if query.contains("list-type=2") => {
+                let contents = objects.iter().fold(String::new(), |mut out, (k, v)| {
+                    let _ = write!(
+                        out,
+                        "<Contents><Key>{k}</Key><ETag>&quot;{}&quot;</ETag></Contents>",
+                        etag(v)
+                    );
+                    out
+                });
+                (200, format!("<ListBucketResult><IsTruncated>false</IsTruncated>{contents}</ListBucketResult>").into_bytes(), None)
+            }
+            "GET" => match objects.get(&key) {
+                Some(v) => (200, v.clone(), Some(etag(v))),
+                None => (404, Vec::new(), None),
+            },
+            "PUT" => {
+                let current = objects.get(&key).map(|v| etag(v));
+                let refused = match (headers.get("if-none-match"), headers.get("if-match")) {
+                    (Some(_), _) => current.is_some(),
+                    (_, Some(want)) => current.as_deref() != Some(want.trim_matches('"')),
+                    _ => false,
+                };
+                if refused {
+                    (412, Vec::new(), None)
+                } else {
+                    let t = etag(&body);
+                    objects.insert(key, body);
+                    (200, Vec::new(), Some(t))
+                }
+            }
+            "DELETE" => {
+                let current = objects.get(&key).map(|v| etag(v));
+                match headers.get("if-match") {
+                    Some(want) if current.as_deref() != Some(want.trim_matches('"')) => {
+                        (412, Vec::new(), None)
                     }
-                    if let Some((k, v)) = h.split_once(':') {
-                        headers.insert(k.trim().to_ascii_lowercase(), v.trim().to_string());
+                    _ => {
+                        objects.remove(&key);
+                        (204, Vec::new(), None)
                     }
                 }
-                let len: usize = headers
-                    .get("content-length")
-                    .and_then(|l| l.parse().ok())
-                    .unwrap_or(0);
-                let mut body = vec![0; len];
-                reader.read_exact(&mut body).expect("body");
-                let (path, query) = target.split_once('?').unwrap_or((target, ""));
-                let key = decode(path.trim_start_matches("/b").trim_start_matches('/'));
-                let mut objects = store.lock().expect("lock");
-                let (status, out, tag): (u16, Vec<u8>, Option<String>) = match method {
-                    "GET" if query.contains("list-type=2") => {
-                        let contents = objects.iter().fold(String::new(), |mut out, (k, v)| {
-                            let _ = write!(
-                                out,
-                                "<Contents><Key>{k}</Key><ETag>&quot;{}&quot;</ETag></Contents>",
-                                etag(v)
-                            );
-                            out
-                        });
-                        (200, format!("<ListBucketResult><IsTruncated>false</IsTruncated>{contents}</ListBucketResult>").into_bytes(), None)
-                    }
-                    "GET" => match objects.get(&key) {
-                        Some(v) => (200, v.clone(), Some(etag(v))),
-                        None => (404, Vec::new(), None),
-                    },
-                    "PUT" => {
-                        let current = objects.get(&key).map(|v| etag(v));
-                        let refused = match (headers.get("if-none-match"), headers.get("if-match"))
-                        {
-                            (Some(_), _) => current.is_some(),
-                            (_, Some(want)) => current.as_deref() != Some(want.trim_matches('"')),
-                            _ => false,
-                        };
-                        if refused {
-                            (412, Vec::new(), None)
-                        } else {
-                            let t = etag(&body);
-                            objects.insert(key, body);
-                            (200, Vec::new(), Some(t))
-                        }
-                    }
-                    "DELETE" => {
-                        let current = objects.get(&key).map(|v| etag(v));
-                        match headers.get("if-match") {
-                            Some(want) if current.as_deref() != Some(want.trim_matches('"')) => {
-                                (412, Vec::new(), None)
-                            }
-                            _ => {
-                                objects.remove(&key);
-                                (204, Vec::new(), None)
-                            }
-                        }
-                    }
-                    _ => (400, Vec::new(), None),
-                };
-                drop(objects);
-                let mut stream = stream;
-                let tag = tag
-                    .map(|t| format!("etag: \"{t}\"\r\n"))
-                    .unwrap_or_default();
-                let _ = write!(
-                    stream,
-                    "HTTP/1.1 {status} X\r\n{tag}content-length: {}\r\nconnection: close\r\n\r\n",
-                    out.len()
-                );
-                let _ = stream.write_all(&out);
-            });
+            }
+            _ => (400, Vec::new(), None),
+        };
+        drop(objects);
+        crate::harness::http::Reply {
+            status,
+            headers: tag
+                .map(|t| ("etag".to_string(), format!("\"{t}\"")))
+                .into_iter()
+                .collect(),
+            body: out,
         }
     });
     (endpoint, objects)

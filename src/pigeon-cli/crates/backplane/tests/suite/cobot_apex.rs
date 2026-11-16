@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::{LazyLock, Mutex};
 
+use crate::harness::tools::{tofu_available, zola_available};
 use serde_json::{Value, json};
 use tempfile::TempDir;
 
@@ -729,13 +730,6 @@ fn workload_secrets_are_their_own_and_never_break_glass() {
     ));
 }
 
-fn tofu_available() -> bool {
-    Command::new("tofu")
-        .arg("version")
-        .output()
-        .is_ok_and(|o| o.status.success())
-}
-
 fn data_module(root: &Path, rel: &str, vars: &[&str], output: &str) {
     let mut tf = String::new();
     for v in vars {
@@ -958,35 +952,14 @@ fn the_apex_token_is_handed_off_after_infra_applies() {
 
 /// A fake Cloudflare API that sees `noisypigeon.com`, for a run's own token.
 fn fake_api() -> String {
-    use std::io::{BufRead, BufReader, Write as _};
-    let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind");
-    let addr = listener.local_addr().expect("addr");
-    std::thread::spawn(move || {
-        for stream in listener.incoming().flatten() {
-            let mut reader = BufReader::new(stream.try_clone().expect("clone"));
-            let mut line = String::new();
-            reader.read_line(&mut line).expect("request line");
-            loop {
-                let mut h = String::new();
-                if reader.read_line(&mut h).is_err() || h.trim_end().is_empty() {
-                    break;
-                }
-            }
-            let body = if line.contains("/zones?name=noisypigeon.com") {
-                json!({ "success": true, "result": [{ "id": "zone-np", "name": ZONE }] })
-            } else {
-                json!({ "success": false })
-            };
-            let text = body.to_string();
-            let mut out = stream;
-            let _ = write!(
-                out,
-                "HTTP/1.1 200 OK\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{text}",
-                text.len()
-            );
-        }
-    });
-    format!("http://{addr}")
+    crate::harness::http::serve(|r| {
+        let body = if r.target.contains("/zones?name=noisypigeon.com") {
+            json!({ "success": true, "result": [{ "id": "zone-np", "name": ZONE }] })
+        } else {
+            json!({ "success": false })
+        };
+        crate::harness::http::Reply::json(200, &body)
+    })
 }
 
 #[test]
@@ -1545,13 +1518,6 @@ fn a_site_token_is_handed_off_after_infra_applies() {
             Vec::<PathBuf>::new()
         );
     }
-}
-
-fn zola_available() -> bool {
-    Command::new("zola")
-        .arg("--version")
-        .output()
-        .is_ok_and(|o| o.status.success())
 }
 
 fn git_in(root: &Path, args: &[&str]) {

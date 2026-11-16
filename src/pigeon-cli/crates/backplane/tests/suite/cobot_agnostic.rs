@@ -4,8 +4,8 @@
 use std::fmt::Write as _;
 use std::fs;
 use std::path::Path;
-use std::process::Command;
 
+use crate::harness::tools::tofu_available;
 use serde_json::{Value, json};
 use tempfile::TempDir;
 
@@ -243,13 +243,6 @@ fn providers_follow_agnostic_modules() {
         Vec::<&str>::new(),
         "a module the unit does not compose brings no provider"
     );
-}
-
-fn tofu_available() -> bool {
-    Command::new("tofu")
-        .arg("version")
-        .output()
-        .is_ok_and(|o| o.status.success())
 }
 
 #[test]

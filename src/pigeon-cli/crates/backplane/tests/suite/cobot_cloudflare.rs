@@ -1,57 +1,24 @@
 //! A run's own Cloudflare token against a fake API; see
 //! `.claude/decisions/2026-11-05-development-pigeon-its-own-instance.md` §4.
 
-use std::io::{BufRead, BufReader, Write};
-use std::net::TcpListener;
-
 use backplane::cobot::cloudflare::Api;
 use serde_json::{Value, json};
+
+use crate::harness::http::{self, Reply};
 
 const TOKEN: &str = "run-token-0123456789";
 
 /// Answers each `GET` with `route(path)`'s result, or 404; every request must carry `TOKEN`.
 fn serve(route: fn(&str) -> Option<Value>) -> String {
-    let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
-    let addr = listener.local_addr().expect("addr");
-    std::thread::spawn(move || {
-        for stream in listener.incoming().flatten() {
-            let mut reader = BufReader::new(stream.try_clone().expect("clone"));
-            let mut line = String::new();
-            reader.read_line(&mut line).expect("request line");
-            let target = line
-                .split_whitespace()
-                .nth(1)
-                .unwrap_or_default()
-                .to_string();
-            let mut authorized = false;
-            loop {
-                let mut h = String::new();
-                reader.read_line(&mut h).expect("header");
-                let h = h.trim_end();
-                if h.is_empty() {
-                    break;
-                }
-                if let Some((k, v)) = h.split_once(':')
-                    && k.eq_ignore_ascii_case("authorization")
-                {
-                    authorized = v.trim() == format!("Bearer {TOKEN}");
-                }
-            }
-            let (status, body) = match (authorized, route(&target)) {
-                (false, _) => (403, json!({ "success": false })),
-                (true, Some(result)) => (200, json!({ "success": true, "result": result })),
-                (true, None) => (404, json!({ "success": false })),
-            };
-            let text = body.to_string();
-            let mut out = stream;
-            let _ = write!(
-                out,
-                "HTTP/1.1 {status} X\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{text}",
-                text.len()
-            );
-        }
-    });
-    format!("http://{addr}")
+    http::serve(move |r| {
+        let authorized = r.header("authorization") == Some(format!("Bearer {TOKEN}").as_str());
+        let (status, body) = match (authorized, route(&r.target)) {
+            (false, _) => (403, json!({ "success": false })),
+            (true, Some(result)) => (200, json!({ "success": true, "result": result })),
+            (true, None) => (404, json!({ "success": false })),
+        };
+        Reply::json(status, &body)
+    })
 }
 
 fn one_account(path: &str) -> Option<Value> {
