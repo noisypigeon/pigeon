@@ -49,7 +49,7 @@ final class Store: ObservableObject {
         do {
             home = try await api().call("GET", "/v0/app/home", as: Home.self)
             error = nil
-        } catch let e as APIError where e.status == 401 {
+        } catch let e as APIError where e.unlinks {
             unlink(because: e)
         } catch {
             self.error = error.localizedDescription
@@ -61,7 +61,7 @@ final class Store: ObservableObject {
         guard linked else { return }
         do {
             tracker = try await api().call("GET", "/v0/app/tracker", as: Tracker.self)
-        } catch let e as APIError where e.status == 401 {
+        } catch let e as APIError where e.unlinks {
             unlink(because: e)
         } catch {
             self.error = error.localizedDescription
@@ -73,7 +73,7 @@ final class Store: ObservableObject {
         guard linked else { return }
         do {
             ops = try await api().call("GET", "/v0/app/ops?range=\(range)", as: Ops.self)
-        } catch let e as APIError where e.status == 401 {
+        } catch let e as APIError where e.unlinks {
             unlink(because: e)
         } catch {
             self.error = error.localizedDescription
@@ -104,7 +104,7 @@ final class Store: ObservableObject {
                         await refresh()
                     }
                 }
-            } catch let e as APIError where e.status == 401 {
+            } catch let e as APIError where e.unlinks {
                 unlink(because: e)
                 return
             } catch {
@@ -158,7 +158,7 @@ final class Store: ObservableObject {
         guard linked else { return }
         do {
             instances = try await api().call("GET", "/v0/app/instances", as: InstanceList.self).instances
-        } catch let e as APIError where e.status == 401 {
+        } catch let e as APIError where e.unlinks {
             unlink(because: e)
         } catch {
             self.error = error.localizedDescription
@@ -221,7 +221,7 @@ final class Store: ObservableObject {
                 avatar = nil
             }
             error = nil
-        } catch let e as APIError where e.status == 401 {
+        } catch let e as APIError where e.unlinks {
             unlink(because: e)
         } catch {
             self.error = error.localizedDescription

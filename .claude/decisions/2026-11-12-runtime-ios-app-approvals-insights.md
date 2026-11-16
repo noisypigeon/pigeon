@@ -770,3 +770,44 @@ glob under `src/pigeon-cli/` or `src/site-templates/` becomes `src/**/<tail>`
 (or `**<file>` for a workspace root file), which matches the file both before
 and after the restructure moves it. That ADR's step 12 tightens them to the
 new paths.
+
+### 2026-11-16: A Worker's retry of a device check isn't a replay, and only an unknown device is unlinked
+
+On 2026-11-16 at about 19:25 UTC, while `pigeon-control` was rolling out
+!782 and !784, the app fell back to "Link this iPhone" with `unauthorized:
+the request was replayed`. The app hadn't resent anything: it signs each call
+afresh, and the Secure Enclave's ECDSA signatures are randomized. The Worker
+had. `platform::call` retries a Durable Object fetch once when the first
+fetch fails, as when the object resets onto new code. The first
+`/devices/check` could record the signature in `seen` and then lose its
+answer, and the retry found the signature already there. The app then
+unlinked on any `401`.
+
+§2.5's rule stands: a signature seen inside the window is refused. Two
+deliveries of the same request are what that rule refuses. One delivery
+retried inside the Worker is not.
+
+- **The Worker names each delivery.** `authenticate` mints a random attempt
+  ID and sends it in the body of `/devices/check`. The client can't set it,
+  and `platform::call`'s retry resends the same body. `Seen` keeps it beside
+  the signature's hash. A blank ID is never matched, so entries from before
+  the change still refuse any repeat.
+- **The same signature with the same attempt gets the answer the first one
+  got**: the device, with `seen` kept. Any other repeat is still `the
+  request was replayed`. The state stays in the `Instance`'s storage, which
+  every Worker version shares.
+- **The app re-signs and retries a call that isn't a `POST` once** when a `401` says the request was
+  replayed or its time was too far off. The retry has a new time and a new
+  signature, so it is a new request and not a replay. A `POST` may already have
+  been applied, so it is never sent twice. The app **unlinks only
+  on `no such device`**, a key the Worker doesn't know because it was
+  unlinked, idled out or never linked. Any other `401` is shown as an error,
+  and the link is kept.
+
+**Execution,** one change, then an `ios.release`:
+
+1. `core::app::devices`: `Seen.attempt` and `Devices::check_attempt`, with
+   tests for the retry, a true replay and two requests at once;
+   `worker/devices.rs` passes the attempt.
+2. `PigeonCore`: `DeviceRefusal` classifies a `401`'s text, with tests. `API`
+   retries once on `.retry`, and `Store` unlinks only on `.unlinked`.

@@ -8,6 +8,8 @@ struct APIError: Error, LocalizedError {
     let status: Int
     let message: String
     var errorDescription: String? { message.isEmpty ? "The control plane answered \(status)." : message }
+    /// Whether the Worker no longer knows this device's key.
+    var unlinks: Bool { deviceRefusal(status: status, message: message) == .unlinked }
 }
 
 struct API {
@@ -29,6 +31,17 @@ struct API {
     /// A signed request's raw answer.
     @discardableResult
     func send(_ method: String, _ path: String, body: [String: Any]? = nil) async throws -> Data {
+        do {
+            return try await sendOnce(method, path, body: body)
+        } catch let e as APIError
+            where method != "POST" && deviceRefusal(status: e.status, message: e.message) == .retry
+        {
+            // Signed afresh, so a new request; see the iOS ADR's 2026-11-16 amendment.
+            return try await sendOnce(method, path, body: body)
+        }
+    }
+
+    private func sendOnce(_ method: String, _ path: String, body: [String: Any]?) async throws -> Data {
         let bytes = try body.map { try JSONSerialization.data(withJSONObject: $0) } ?? Data()
         let at = Int(Date().timeIntervalSince1970)
         let pathOnly = path.split(separator: "?", maxSplits: 1).first.map(String.init) ?? path

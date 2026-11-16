@@ -48,7 +48,14 @@ pub async fn serve(state: &State, path: &str, body: Value) -> Result<Response> {
         }
         "/devices/check" => {
             let body = b64url_decode(&s("body")).unwrap_or_default();
-            let (next, r) = d.check(&s("header"), &s("method"), &s("path"), &body, t);
+            let (next, r) = d.check_attempt(
+                &s("header"),
+                &s("method"),
+                &s("path"),
+                &body,
+                &s("attempt"),
+                t,
+            );
             (next, device(r))
         }
         "/devices/list" => {
@@ -103,6 +110,8 @@ pub async fn authenticate(
         &json!({
             "header": header, "method": req.method().to_string(), "path": req.path(),
             "body": b64url(body),
+            // One per delivery, resent by `platform::call`'s retry; see the iOS ADR's 2026-11-16 amendment.
+            "attempt": random_hex(16)?,
         }),
     )
     .await?;

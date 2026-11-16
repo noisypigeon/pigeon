@@ -46,3 +46,23 @@ public func fromBase64url(_ text: String) -> Data? {
     while s.count % 4 != 0 { s += "=" }
     return Data(base64Encoded: s)
 }
+
+/// What a signed call's refusal means for the device; see the iOS ADR's 2026-11-16 amendment.
+public enum DeviceRefusal: Equatable {
+    /// The Worker doesn't know the key: link again.
+    case unlinked
+    /// A replay or a time too far off: sign afresh and retry once.
+    case retry
+    /// Anything else: show it, and keep the link.
+    case other
+}
+
+/// How the app treats a call answered `status` with `message`.
+public func deviceRefusal(status: Int, message: String) -> DeviceRefusal {
+    guard status == 401 else { return .other }
+    if message.contains("no such device") { return .unlinked }
+    if message.contains("the request was replayed") || message.contains("time is too far") {
+        return .retry
+    }
+    return .other
+}

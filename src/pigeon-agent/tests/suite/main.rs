@@ -38,6 +38,7 @@ mod cobot_state;
 mod cobot_workers;
 mod control;
 mod decisions;
+mod devices;
 mod digest;
 mod enroll;
 mod events;

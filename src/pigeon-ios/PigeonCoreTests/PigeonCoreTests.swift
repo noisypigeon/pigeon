@@ -37,6 +37,17 @@ import PigeonCore
         #expect(id.count == 32)
         #expect(id == fingerprint(x963: key.publicKey.x963Representation))
     }
+
+    @Test func onlyAnUnknownDeviceUnlinksAndAReplayRetries() {
+        #expect(deviceRefusal(status: 401, message: "unauthorized: no such device; link it again") == .unlinked)
+        #expect(deviceRefusal(status: 401, message: "unauthorized: the request was replayed") == .retry)
+        #expect(
+            deviceRefusal(status: 401, message: "unauthorized: the request's time is too far from the Worker's")
+                == .retry)
+        #expect(deviceRefusal(status: 401, message: "unauthorized: the request's signature doesn't verify") == .other)
+        #expect(deviceRefusal(status: 503, message: "no such device") == .other)
+        #expect(deviceRefusal(status: 0, message: "") == .other)
+    }
 }
 
 @Suite struct ModelTests {

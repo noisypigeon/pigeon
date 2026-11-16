@@ -115,6 +115,73 @@ fn a_signed_request_names_its_device_once() {
     assert!(replay.expect_err("replayed").contains("replayed"));
 }
 
+#[test]
+fn a_worker_retry_of_one_delivery_gets_the_same_answer() {
+    let k = key(7);
+    let (d, id) = linked(&k);
+    let h = header(&k, &id, "GET", "/v0/app/home", NOW, b"");
+    // The first attempt is recorded, then its answer is lost as the object resets.
+    let (d, first) = d.check_attempt(&h, "GET", "/v0/app/home", b"", "a1", NOW);
+    assert_eq!(first.expect("checked").id, id);
+    let (d, retry) = d.check_attempt(&h, "GET", "/v0/app/home", b"", "a1", NOW + 1);
+    assert_eq!(retry.expect("the retry is the same delivery").id, id);
+    assert_eq!(d.seen.len(), 1, "recorded once");
+    // Another delivery of the same header is still a replay, as is one without an attempt.
+    let (d, again) = d.check_attempt(&h, "GET", "/v0/app/home", b"", "a2", NOW + 2);
+    assert!(again.expect_err("replayed").contains("replayed"));
+    let (_, bare) = d.check(&h, "GET", "/v0/app/home", b"", NOW + 2);
+    assert!(bare.expect_err("replayed").contains("replayed"));
+}
+
+#[test]
+fn a_blank_attempt_never_matches_a_recorded_one() {
+    let k = key(7);
+    let (d, id) = linked(&k);
+    let h = header(&k, &id, "GET", "/v0/app/home", NOW, b"");
+    let (d, r) = d.check(&h, "GET", "/v0/app/home", b"", NOW);
+    assert!(r.is_ok());
+    let (_, r) = d.check_attempt(&h, "GET", "/v0/app/home", b"", "", NOW);
+    assert!(r.expect_err("replayed").contains("replayed"));
+}
+
+#[test]
+fn requests_at_once_and_out_of_order_are_each_accepted_once() {
+    let k = key(7);
+    let (mut d, id) = linked(&k);
+    let paths = [
+        "/v0/app/home",
+        "/v0/app/tracker",
+        "/v0/app/ops",
+        "/v0/app/approvals",
+    ];
+    let headers: Vec<_> = paths
+        .iter()
+        .enumerate()
+        .map(|(n, p)| header(&k, &id, "GET", p, NOW + n as u64, b""))
+        .collect();
+    // Arriving in reverse, with the later timestamps first, each is its own request.
+    for (n, (h, p)) in headers.iter().zip(paths).enumerate().rev() {
+        let (next, r) = d.check_attempt(h, "GET", p, b"", &format!("a{n}"), NOW + 3);
+        assert!(r.is_ok(), "{p}");
+        d = next;
+    }
+    assert_eq!(d.seen.len(), paths.len());
+    for (h, p) in headers.iter().zip(paths) {
+        let (next, r) = d.check_attempt(h, "GET", p, b"", "later", NOW + 4);
+        assert!(r.expect_err("replayed").contains("replayed"), "{p}");
+        d = next;
+    }
+}
+
+#[test]
+fn a_seen_entry_from_before_attempts_still_reads() {
+    let old = r#"{"devices":[],"offers":[],"seen":[{"sig":"ab","until":1}]}"#;
+    let d: Devices = serde_json::from_str(old).expect("reads");
+    assert_eq!(d.seen[0].attempt, "");
+    let back = serde_json::to_string(&d).expect("writes");
+    assert_eq!(back, old, "a blank attempt isn't written");
+}
+
 /// What a request case names: what differs, its header, method, path, body and time.
 type Case<'a> = (&'a str, String, &'a str, &'a str, &'a [u8], u64);
 

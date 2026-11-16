@@ -61,6 +61,9 @@ pub struct Seen {
     pub sig: String,
     /// When it lapses from the window.
     pub until: u64,
+    /// The Worker's ID for the delivery that recorded it; blank before it was kept.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub attempt: String,
 }
 
 /// An instance's devices, link offers and recent signatures.
@@ -256,6 +259,21 @@ impl Devices {
         body: &[u8],
         now: u64,
     ) -> (Self, Result<Device, String>) {
+        self.check_attempt(header, method, path, body, "", now)
+    }
+
+    /// [`Devices::check`] for the Worker's delivery `attempt`: a signature already recorded under
+    /// the same non-blank attempt is that delivery retried, and gets the same answer; see the iOS
+    /// ADR's 2026-11-16 amendment.
+    pub fn check_attempt(
+        self,
+        header: &str,
+        method: &str,
+        path: &str,
+        body: &[u8],
+        attempt: &str,
+        now: u64,
+    ) -> (Self, Result<Device, String>) {
         let mut d = self.prune(now);
         let (id, at, sig) = match parse_header(header) {
             Ok(x) => x,
@@ -277,13 +295,17 @@ impl Devices {
             return (d, Err("the request's signature doesn't verify".into()));
         }
         let seen = sha256_hex(sig.as_bytes());
-        if d.seen.iter().any(|s| s.sig == seen) {
-            return (d, Err("the request was replayed".into()));
+        if let Some(s) = d.seen.iter().find(|s| s.sig == seen) {
+            if attempt.is_empty() || s.attempt != attempt {
+                return (d, Err("the request was replayed".into()));
+            }
+        } else {
+            d.seen.push(Seen {
+                sig: seen,
+                until: now + 2 * SKEW,
+                attempt: attempt.to_string(),
+            });
         }
-        d.seen.push(Seen {
-            sig: seen,
-            until: now + 2 * SKEW,
-        });
         d.devices[i].seen = now;
         let device = d.devices[i].clone();
         (d, Ok(device))
