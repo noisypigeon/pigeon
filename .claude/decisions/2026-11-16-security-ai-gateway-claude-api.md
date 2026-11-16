@@ -425,3 +425,39 @@ pool's, and the pool's switch is the owner's.
    Its log shows the five metadata entries and no body, and the ledger and
    the gateway agree within one cent. (planner)
 8. **This ADR is amended with the outcome.** (planner)
+
+## Amendments
+
+### 2026-11-16: The owner's answers: BYOK, no gateway spend limits, metadata-only logs
+
+The owner answered §12's three decisions, owner items #16 to #18 on !807.
+
+- **#16, the key: A, stored in the gateway (BYOK).**
+  - §4's option A applies: `byok_only = true`, and `store_id` is the
+    account's one Secrets Store.
+  - The Worker sends no `x-api-key`, and removes any the caller sent.
+  - `POOL_ANTHROPIC_KEY` is never declared or put. The pool ADR's §10.8 drops
+    that one secret. In its place, the owner adds the key under the gateway's
+    **Provider Keys**, filed as an owner item once step 3 has deployed the
+    gateway.
+  - Option B is not built.
+- **#17, spend limits: none at the gateway.**
+  - §6's spend-limit rules are not set: `spend_limits` is absent or
+    `enabled = false`.
+  - The pool ADR's four layers (billing, ledger, task budget, harness) are
+    the hard cap. The gateway adds no fifth.
+  - `GatewayCapped` is dropped from `classify`. A gateway `429` is
+    `GatewayLimited`, the rate limit, and passes through for the harness's
+    `retry-after`.
+  - `GatewayNoKey` and `GatewayUnauthorized` still pause the pool and file an
+    owner item.
+  - The 120-requests-per-minute sliding rate limit stays, as the backstop
+    for runaway loops.
+  - Step 2's spike drops its spend-limit case.
+- **#18, logging: metadata only.**
+  - §8 stands: `collect_logs = true`, and every request carries
+    `cf-aig-collect-log-payload: false`.
+  - `anthropic.gateway_payloads` isn't added to `.config/pool.yaml`. Turning
+    bodies on later takes an amendment and an owner-tier change.
+
+Steps 3 and 4 take these values.
