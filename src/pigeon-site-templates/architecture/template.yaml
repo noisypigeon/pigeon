@@ -1,5 +1,5 @@
 # pigeon's architecture template; see .claude/decisions/2026-11-05-runtime-architecture-site-through-backplane.md §3.
-version: 0.1.1
+version: 0.1.2
 description: One diagram of the platform, drawn from architecture.describe.
 license: GPL-3.0-or-later
 zola: 0.23.6

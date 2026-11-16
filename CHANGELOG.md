@@ -10,6 +10,7 @@
 - backplane v0.1.34
 - backplane v0.1.35
 - backplane v0.1.36
+- backplane v0.1.37
 - infra-agnostic-random-string v0.1.3
 - infra-agnostic-schema v0.1.3
 - infra-agnostic-schema v0.1.4
@@ -48,8 +49,10 @@
 - infra-scaleway-schema v0.1.3
 - pigeon-eviction v0.1.18
 - pigeon-eviction v0.1.19
+- pigeon-eviction v0.1.20
 - sentinel v0.1.17
 - site-template-architecture v0.1.1
+- site-template-architecture v0.1.2
 - site-template-blog v1.0.3
 
 ### Merged
@@ -164,6 +167,13 @@
 - refactor: the agent crate moves to src/pigeon-agent (!778) ([d220329](https://github.com/noisypigeon/pigeon/commit/d22032901c824a8f3d60c8fd94d6231ebe6d0279)) · backplane
 - feat(backplane): the deploy builds the judge under whichever binary name the tree declares, and its readers find either (!780) ([349afc9](https://github.com/noisypigeon/pigeon/commit/349afc9db8187664c218d43dcd16b0e96e4bce7c)) · backplane
 - refactor(backplane): only x-pigeon, ENC[pigeon:v1:] and .pigeon/ are read: the old data names go (!781) ([aed7f44](https://github.com/noisypigeon/pigeon/commit/aed7f444193cb903df2b4eb07ed833fa5e988e1a)) · backplane
+- refactor: the packages are pigeon-agent and pigeon-harness (!782) ([c21c122](https://github.com/noisypigeon/pigeon/commit/c21c1223a576c3f85b7b5b70979d9ad8178fc524)) · backplane, pigeon-eviction
+- refactor(harness): the old command spellings go, and the CLI's files and types take their groups' names (!784) ([27114f0](https://github.com/noisypigeon/pigeon/commit/27114f02f5e6956c82929225bb25614343cdbd70)) · backplane, pigeon-eviction, site-template-architecture
+- test(agent): the approval and architecture tests name the new layout's paths and a stable policy (!788) ([60b55e1](https://github.com/noisypigeon/pigeon/commit/60b55e10fdd0fb69853590165478422e36ac4351))
+- fix(core): a test map naming a package the workspace no longer has picks no tests (!792) ([e78cbeb](https://github.com/noisypigeon/pigeon/commit/e78cbeb01cb6dc21aa2fc9c2018e28f2883761e9))
+- refactor(core): a bench runs only `pigeon dev` tasks and the new command spellings (!785) ([e4985b3](https://github.com/noisypigeon/pigeon/commit/e4985b342ac7e5517853a9e0fa048436bd802416)) · backplane
+- feat(core): approvals.yaml's judge keys read as eviction and eviction_bookkeeping too, and either rule prefix counts (!789) ([ca0783e](https://github.com/noisypigeon/pigeon/commit/ca0783e1b320b54458333da0fcce4ed78aefd611))
+- fix(app): a Worker retry of a device check isn't a replay, and the app unlinks only an unknown device (!793) ([6c01a15](https://github.com/noisypigeon/pigeon/commit/6c01a15576de46e9467340401d47716a8ce67eb5)) · backplane
 
 ## 2026-11-15
 
