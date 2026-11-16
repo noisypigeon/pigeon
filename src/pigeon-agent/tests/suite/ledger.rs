@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use backplane::cobot::catalog::{ledger as read, ledger_resolved as resolve};
 
 fn repo_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../..")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
 
 #[test]

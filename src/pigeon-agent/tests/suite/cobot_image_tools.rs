@@ -37,9 +37,9 @@ fn rust_images(text: &str) -> Vec<String> {
 
 #[test]
 fn image_tools_match_the_checks_and_the_toolchain() {
-    let dockerfile = read("../../../../Dockerfile");
-    let workflow = read("../../../../.github/workflows/ci.yml");
-    let toolchain = read("../../../../rust-toolchain.toml");
+    let dockerfile = read("../../Dockerfile");
+    let workflow = read("../../.github/workflows/ci.yml");
+    let toolchain = read("../../rust-toolchain.toml");
     for key in ["TOFU_VERSION", "TOFU_SHA256", "ZOLA_VERSION", "ZOLA_SHA256"] {
         let want = workflow_env(&workflow, key);
         let got = defaults(&dockerfile, key);
@@ -96,14 +96,14 @@ fn included_config(dir: &std::path::Path, out: &mut Vec<String>) {
 
 #[test]
 fn the_image_build_sees_every_config_file_a_crate_includes() {
-    let dockerfile = read("../../../../Dockerfile");
+    let dockerfile = read("../../Dockerfile");
     assert!(
         dockerfile
             .lines()
             .any(|l| l.trim() == "COPY --from=config . /src/.config/"),
         "the build stage copies the whole `config` context, so no include_str! of .config/ misses"
     );
-    let src = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    let src = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
     let mut names = Vec::new();
     included_config(&src, &mut names);
     assert!(names.iter().any(|n| n == "pool.yaml"), "{names:?}");
@@ -176,8 +176,8 @@ fn declared_targets(workspace: &std::path::Path) -> Vec<String> {
 
 #[test]
 fn the_recipe_stubs_every_declared_target() {
-    let dockerfile = read("../../../../Dockerfile");
-    let workspace = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../..");
+    let dockerfile = read("../../Dockerfile");
+    let workspace = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let tmp = tempfile::tempdir().expect("tempdir");
     let out = tmp.path().join("recipe");
     let script = recipe_run(&dockerfile).replace("/recipe", out.to_str().expect("utf-8"));

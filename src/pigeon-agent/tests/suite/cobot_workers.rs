@@ -376,7 +376,7 @@ fn a_secret_is_put_through_stdin_and_never_shown() {
 
 #[test]
 fn this_repositorys_specs_validate() {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../..");
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     for f in workers::discover(&root).expect("discovers") {
         let problems = workers::validate(&root, &f);
         assert!(problems.is_empty(), "{}: {problems:?}", f.dir);

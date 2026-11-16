@@ -38,17 +38,14 @@ fn a_change_fits_when_each_glob_lies_inside_the_mandates() {
         1,
         ADR,
         "task",
-        globs(&["src/pigeon-cli/crates/backplane/**", "CLAUDE.md"]),
+        globs(&["src/pigeon-agent/**", "CLAUDE.md"]),
         true,
         None,
         None,
     )
     .expect("valid");
-    assert!(m.covers(&globs(&[
-        "src/pigeon-cli/crates/backplane/src/**",
-        "CLAUDE.md"
-    ])));
-    assert!(m.covers(&globs(&["src/pigeon-cli/crates/backplane/src/jobs.rs"])));
+    assert!(m.covers(&globs(&["src/pigeon-agent/src/**", "CLAUDE.md"])));
+    assert!(m.covers(&globs(&["src/pigeon-agent/src/jobs.rs"])));
     assert!(
         !m.covers(&globs(&["src/pigeon-cli/crates/**"])),
         "wider than the mandate"

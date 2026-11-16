@@ -20,7 +20,7 @@ pub const ARCHIVE_WORKFLOW: &str = "ios-archive";
 /// The archive, as `ios-archive` deploys it.
 pub const ARTIFACT: &str = "Pigeon.xcarchive.zip";
 /// `main`'s `bitrise.yml`, which the app must hold.
-pub const CONFIG: &str = include_str!("../../../../../../tooling/ci/bitrise/bitrise.yml");
+pub const CONFIG: &str = include_str!("../../../../tooling/ci/bitrise/bitrise.yml");
 
 fn creds(env: &Env) -> Result<(String, String), String> {
     let token = secret(env, TOKEN).map_err(|_| format!("the secret `{TOKEN}` is not set"))?;

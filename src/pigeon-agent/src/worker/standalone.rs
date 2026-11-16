@@ -16,7 +16,7 @@ use crate::core::member::handover::{Handover, Seeded};
 use crate::core::member::{self, Members, Roles, check_roles};
 
 /// The release's roles, as a standalone holds them.
-const ROLES: &str = include_str!("../../../../../../.config/roles.yaml");
+const ROLES: &str = include_str!("../../../../.config/roles.yaml");
 
 /// Where the `Instance` notes that it was seeded.
 const SEEDED: &str = "standalone.seeded";

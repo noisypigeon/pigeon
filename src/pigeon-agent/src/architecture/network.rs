@@ -9,7 +9,7 @@ use serde::Serialize;
 
 /// The control plane's sources, from the platform's root: agent's, which holds the Worker, then
 /// core's.
-const SOURCES: [&str; 2] = ["src/pigeon-cli/crates/backplane/src", "src/pigeon-core/src"];
+const SOURCES: [&str; 2] = ["src/pigeon-agent/src", "src/pigeon-core/src"];
 
 /// What a link carries.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -593,6 +593,12 @@ pub fn evidenced(platform: &Path, row: &Row) -> bool {
     })
 }
 
+/// Whether `krate` is the agent's crate, at its path before or after step 7b of
+/// `.claude/decisions/2026-11-16-development-src-crates-neutral-names.md`.
+fn is_agent(krate: &str) -> bool {
+    krate.ends_with("pigeon-agent") || krate.ends_with("crates/backplane")
+}
+
 /// The network of the instance at `root`, served by the platform at `platform`; none when the
 /// platform has no backplane Worker.
 #[must_use]
@@ -600,7 +606,7 @@ pub fn network(root: &Path, platform: &Path) -> Option<Network> {
     let found = crate::cobot::workers::discover(platform)
         .ok()?
         .into_iter()
-        .find(|f| f.spec.entry.krate.ends_with("crates/backplane"))?;
+        .find(|f| is_agent(&f.spec.entry.krate))?;
     let kind = found.spec.deployment.clone();
     let (manifest, _) = crate::cobot::manifest::load(root, platform)?;
     let stacks: Vec<&crate::cobot::manifest::Entry> = manifest

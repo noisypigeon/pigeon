@@ -146,7 +146,7 @@ fn image_inputs_block_only_on_the_image_tools() {
     let files = |f: &[&str]| f.iter().map(|s| (*s).to_string()).collect::<Vec<_>>();
     let blocks = backplane::cobot::scope::image_inputs(&files(&[
         "src/pigeon-cli/Dockerfile",
-        "src/pigeon-cli/crates/backplane/src/jobs.rs",
+        "src/pigeon-agent/src/jobs.rs",
         "src/pigeon-cli/pigeon-start",
         "src/pigeon-cli/Cargo.lock",
         "mise.toml",
@@ -167,7 +167,7 @@ fn a_deploy_builds_pigeon_only_when_the_workspace_changed() {
     let files = |f: &[&str]| f.iter().map(|s| (*s).to_string()).collect::<Vec<_>>();
     assert!(backplane::cobot::scope::builds(None));
     assert!(backplane::cobot::scope::builds(Some(&files(&[
-        "src/pigeon-cli/crates/backplane/src/jobs.rs"
+        "src/pigeon-agent/src/jobs.rs"
     ]))));
     assert!(backplane::cobot::scope::builds(Some(&files(&[
         "src/pigeon-cli/Cargo.lock"
@@ -181,7 +181,7 @@ fn a_deploy_builds_pigeon_only_when_the_workspace_changed() {
 #[test]
 fn a_deploy_is_whole_for_a_new_worker_its_own_files_or_new_images() {
     let dir = "infra/pigeon/workers/control";
-    let code = vec!["src/pigeon-cli/crates/backplane/src/lib.rs".to_string()];
+    let code = vec!["src/pigeon-agent/src/lib.rs".to_string()];
     let spec = vec![format!("{dir}/worker.yaml")];
     assert_eq!(
         ship::whole_deploy(dir, Some(&code), false, Some("blue")),

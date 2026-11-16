@@ -201,7 +201,7 @@ fn the_fields_a_unit_references_are_collected() {
 
 #[test]
 fn the_repositorys_directory_units_request_no_credentials() {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../..");
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let allow =
         backplane::cobot::providers::Allowlist::load(&root.join(".config")).expect("allowlist");
     // A manifest unit's kind requests credentials by design, filled from the run's token.
@@ -227,7 +227,7 @@ fn the_repositorys_directory_units_request_no_credentials() {
 
 #[test]
 fn an_instance_unit_apart_from_its_platform_finds_platform_modules_and_its_own_capabilities() {
-    let repo_root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../..");
+    let repo_root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let platform = TempDir::new().expect("platform");
     for rel in [".config/providers.yaml", ".config/providers.lock.hcl"] {
         write(

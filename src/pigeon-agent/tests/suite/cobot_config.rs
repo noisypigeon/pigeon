@@ -477,7 +477,7 @@ fn rotation_and_secrets_end_to_end() {
 
 /// The repository's root, whose catalog and `config.yaml` the platform kind's tests use.
 fn repo_root() -> std::path::PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../..")
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
 
 /// `platform/blue` rendered from the repository's `config.yaml`, with `extra` appended to its

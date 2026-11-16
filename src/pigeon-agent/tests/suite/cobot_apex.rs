@@ -46,7 +46,7 @@ fn rec<'a>(got: &'a serde_json::Map<String, Value>, key: &str) -> &'a Value {
 }
 
 fn repo_root() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../..")
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
 
 fn write(root: &Path, rel: &str, content: &str) {

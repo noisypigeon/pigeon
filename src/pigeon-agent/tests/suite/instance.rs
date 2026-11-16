@@ -18,7 +18,7 @@ const MANIFEST: &str = "description: A test instance.\nschema: v0\nname: test\nr
 const POLICY: &str = "description: f starts with ok.\ntarget: { file: f.md }\nrules:\n  - line: { at: 1, matches: '^ok$' }\n";
 
 fn repo_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../..")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
 
 fn fixture(manifest: &str, f: &str) -> TempDir {

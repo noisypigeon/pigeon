@@ -108,7 +108,7 @@ fn a_commit_with_no_rust_input_keeps_the_newest_map() {
 #[test]
 fn rust_inputs_are_sources_manifests_and_toolchains() {
     let has = |f: &str| testmaps::rust_inputs(&[f.to_string()]);
-    assert!(has("src/pigeon-cli/crates/backplane/src/testmaps.rs"));
+    assert!(has("src/pigeon-agent/src/testmaps.rs"));
     assert!(has("src/pigeon-cli/Cargo.lock"));
     assert!(has("src/pigeon-harness/Cargo.toml"));
     assert!(has("src/pigeon-cli/.cargo/config.toml"));

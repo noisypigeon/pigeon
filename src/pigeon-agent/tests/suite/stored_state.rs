@@ -22,20 +22,10 @@ use serde_json::Value;
 /// A field no release has written.
 const LATER: &str = "from_a_later_release";
 
-/// The stored-state fixtures: the crate's own `tests/state`, else their place at
-/// `src/pigeon-agent/tests/state` while step 7b of
-/// `.claude/decisions/2026-11-16-development-src-crates-neutral-names.md` moves the crate.
-fn state_dir() -> PathBuf {
-    let own = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/state");
-    if own.is_dir() {
-        own
-    } else {
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../pigeon-agent/tests/state")
-    }
-}
-
 fn fixtures(name: &str) -> Vec<PathBuf> {
-    let dir = state_dir().join(name);
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/state")
+        .join(name);
     let mut all: Vec<PathBuf> = std::fs::read_dir(&dir)
         .unwrap_or_else(|e| panic!("{}: {e}", dir.display()))
         .map(|e| e.expect("entry").path())
@@ -147,7 +137,7 @@ fn the_run_queue() {
 
 #[test]
 fn every_fixture_directory_is_checked() {
-    let dir = state_dir();
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/state");
     let mut names: Vec<String> = std::fs::read_dir(dir)
         .expect("reads")
         .map(|e| e.expect("entry").file_name().to_string_lossy().into_owned())

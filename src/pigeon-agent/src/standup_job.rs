@@ -301,7 +301,7 @@ mod tests {
 
     #[test]
     fn the_template_binds_to_an_app_stack() {
-        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../..");
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
         let text = std::fs::read_to_string(root.join(TEMPLATE)).unwrap();
         let spec: Spec = serde_saphyr::from_str(&text).unwrap();
         let found = Found {

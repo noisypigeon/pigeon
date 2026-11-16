@@ -24,29 +24,20 @@ fn open(number: u32, session: Option<&str>, scope: &[&str], affects: &[&str]) ->
 #[test]
 fn a_proposal_sees_the_open_changes_it_meets() {
     let others = [
-        open(
-            60,
-            Some("s-a"),
-            &["src/pigeon-cli/crates/backplane/src/merge*.rs"],
-            &[],
-        ),
+        open(60, Some("s-a"), &["src/pigeon-agent/src/merge*.rs"], &[]),
         open(61, Some("s-b"), &["infra/**"], &[]),
         open(
             62,
             None,
             &[".claude/decisions/2026-11-09-development-merge-queue.md"],
-            &["src/pigeon-cli/crates/backplane/**"],
+            &["src/pigeon-agent/**"],
         ),
     ];
-    let found = overlaps(
-        &globs(&["src/pigeon-cli/crates/backplane/**"]),
-        &[],
-        &others,
-    );
+    let found = overlaps(&globs(&["src/pigeon-agent/**"]), &[], &others);
     let numbers: Vec<u32> = found.iter().map(|o| o.number).collect();
     assert_eq!(numbers, [60, 62], "infra/** is apart");
     assert_eq!(found[0].session.as_deref(), Some("s-a"));
-    assert_eq!(found[1].globs, ["src/pigeon-cli/crates/backplane/**"]);
+    assert_eq!(found[1].globs, ["src/pigeon-agent/**"]);
     assert!(found.iter().all(|o| o.same.is_empty()));
 }
 

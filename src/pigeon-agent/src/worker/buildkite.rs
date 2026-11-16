@@ -76,7 +76,7 @@ pub async fn state(env: &Env, number: u64) -> Result<String, String> {
 /// `.claude/decisions/2026-11-12-development-macos-builds-provider-failover.md` §3.
 pub const BUILD_PIPELINE: &str = "pigeon-ios-build";
 /// `main`'s steps for it, which its settings must hold.
-pub const BUILD_CONFIG: &str = include_str!("../../../../../../tooling/ci/buildkite/ios-build.yml");
+pub const BUILD_CONFIG: &str = include_str!("../../../../tooling/ci/buildkite/ios-build.yml");
 
 fn build_path(rest: &str) -> String {
     format!(

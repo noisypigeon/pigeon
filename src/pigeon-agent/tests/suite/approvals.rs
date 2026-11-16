@@ -7,7 +7,7 @@ use backplane::core::approval::tiers::{
 
 fn rules() -> Rules {
     let path =
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../../.config/approvals.yaml");
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../.config/approvals.yaml");
     serde_saphyr::from_str(&std::fs::read_to_string(path).expect("read")).expect("parses")
 }
 
@@ -46,7 +46,7 @@ fn globs_match_within_and_across_segments() {
     ));
     assert!(matches(
         "**/migrations/**",
-        "src/pigeon-cli/crates/backplane/migrations/0001.sql"
+        "src/pigeon-agent/migrations/0001.sql"
     ));
     assert!(!matches(".config/policies/**", ".config/approvals.yaml"));
 }
@@ -78,8 +78,8 @@ fn what_deploys_needs_the_code() {
     assert_eq!(tiers.authorize.tier, Tier::Code);
     assert_eq!(tiers.merge.tier, Tier::Code);
     let worker = tiers_of(
-        &["src/pigeon-cli/crates/backplane/**"],
-        &["src/pigeon-cli/crates/backplane/src/ship.rs"],
+        &["src/pigeon-agent/**"],
+        &["src/pigeon-agent/src/ship.rs"],
         Facts {
             deploys_worker: true,
             appends_only: false,
@@ -400,15 +400,12 @@ fn a_sentinel_change_holds_nothing_but_sentinel_and_its_adr() {
     assert_eq!(mixed_with_sentinel(&r, &alone), None);
     let mixed = paths(&[
         ".config/policies/change.yaml",
-        "src/pigeon-cli/crates/backplane/src/jobs.rs",
+        "src/pigeon-agent/src/jobs.rs",
     ]);
     let why = mixed_with_sentinel(&r, &mixed).expect("refused");
-    assert!(
-        why.contains("src/pigeon-cli/crates/backplane/src/jobs.rs"),
-        "{why}"
-    );
+    assert!(why.contains("src/pigeon-agent/src/jobs.rs"), "{why}");
     assert_eq!(
-        mixed_with_sentinel(&r, &paths(&["src/pigeon-cli/crates/backplane/src/jobs.rs"])),
+        mixed_with_sentinel(&r, &paths(&["src/pigeon-agent/src/jobs.rs"])),
         None,
         "no sentinel path, nothing to keep apart"
     );

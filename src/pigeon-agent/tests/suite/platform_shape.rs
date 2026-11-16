@@ -7,7 +7,7 @@ use serde_json::{Value, json};
 
 fn valid(unit: &Value) -> bool {
     let schema: Value = serde_json::from_str(include_str!(
-        "../../../../../../catalog/pigeon/kinds/platform/schema.json"
+        "../../../../catalog/pigeon/kinds/platform/schema.json"
     ))
     .expect("schema parses");
     jsonschema::validator_for(&schema)
@@ -52,7 +52,7 @@ fn a_full_shape_still_needs_the_whole_stack() {
 #[test]
 fn the_app_worker_template_is_a_worker_spec_with_no_container_or_domain() {
     let spec: backplane::cobot::workers::Spec = serde_saphyr::from_str(include_str!(
-        "../../../../../../catalog/pigeon/kinds/platform/app-worker.yaml"
+        "../../../../catalog/pigeon/kinds/platform/app-worker.yaml"
     ))
     .expect("template parses");
     assert!(spec.workers_dev);

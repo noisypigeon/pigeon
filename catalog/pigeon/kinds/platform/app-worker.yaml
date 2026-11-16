@@ -3,7 +3,7 @@
 description: An app-only standalone instance's control Worker.
 name: $deployment.worker
 deployment: pigeon/platform
-entry: { crate: src/pigeon-cli/crates/backplane, features: [worker] }
+entry: { crate: src/pigeon-agent, features: [worker] }
 compatibility_date: "2026-10-01"
 workers_dev: true
 durable_objects:

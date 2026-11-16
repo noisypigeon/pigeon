@@ -44,7 +44,7 @@ fn remote(tmp: &Path, paths: &[&str]) -> (PathBuf, String) {
 
 /// As [`remote`], the change also deleting `removed`.
 fn remote_removing(tmp: &Path, paths: &[&str], removed: &[&str]) -> (PathBuf, String) {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../..");
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let bare = tmp.join("remote.git");
     let work = tmp.join("work");
     let bare_path = bare.to_str().expect("utf-8");

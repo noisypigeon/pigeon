@@ -13,7 +13,7 @@ use tempfile::TempDir;
 const MANIFEST: &str = "description: A test instance.\nschema: v0\nname: test\nrepository: https://example.invalid/test\npaths:\n  policies: .config/policies\n  providers: .config/providers.yaml\n  releases: .config/releases.yaml\n";
 
 fn repo_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../..")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
 
 fn describe(root: &std::path::Path) -> Response {
@@ -262,9 +262,7 @@ fn an_instance_without_the_worker_has_no_network() {
 fn a_row_whose_evidence_is_gone_is_not_evidenced() {
     use backplane::architecture::{Row, evidenced};
     let dir = TempDir::new().expect("tempdir");
-    let worker = dir
-        .path()
-        .join("src/pigeon-cli/crates/backplane/src/worker");
+    let worker = dir.path().join("src/pigeon-agent/src/worker");
     fs::create_dir_all(&worker).expect("mkdir");
     fs::write(worker.join("merges.rs"), "Event::Behind; to_change(x)").expect("write");
     let row = |evidence| Row {
@@ -371,8 +369,8 @@ fn table_paths(text: &str) -> Vec<String> {
 /// Every route the Worker serves, from the platform's own sources: each surface's table, the
 /// literals and constants in `fetch`'s body, and each app API literal.
 fn served(root: &std::path::Path) -> Vec<String> {
-    let worker = root.join("src/pigeon-cli/crates/backplane/src/worker");
-    let src = root.join("src/pigeon-cli/crates/backplane/src");
+    let worker = root.join("src/pigeon-agent/src/worker");
+    let src = root.join("src/pigeon-agent/src");
     let mut out = Vec::new();
     let mut files: Vec<_> = fs::read_dir(&worker)
         .expect("worker sources")
@@ -474,7 +472,7 @@ fn spec_gaps(root: &std::path::Path, net: &Value) -> Vec<String> {
     let found = backplane::cobot::workers::discover(root)
         .expect("discovers")
         .into_iter()
-        .find(|f| f.spec.entry.krate.ends_with("crates/backplane"))
+        .find(|f| f.spec.entry.krate.ends_with("pigeon-agent"))
         .expect("the control plane's Worker");
     let spec = &found.spec;
     let w = &net["worker"];
