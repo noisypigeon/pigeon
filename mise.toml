@@ -11,29 +11,23 @@ node = "24.22.0"
 "cargo:worker-build" = "0.8.7"
 
 [tasks.build]
-dir = "src/pigeon-cli"
 run = "cargo build --workspace --locked"
 
 [tasks.test]
-dir = "src/pigeon-cli"
 run = [
   "cargo test --workspace --locked",
 ]
 
 [tasks.fmt]
-dir = "src/pigeon-cli"
 run = "cargo fmt --all"
 
 [tasks.fmt-check]
-dir = "src/pigeon-cli"
 run = "cargo fmt --all -- --check"
 
 [tasks.lint]
-dir = "src/pigeon-cli"
 run = "cargo clippy --workspace --all-targets --locked -- -D warnings"
 
 [tasks.features]
-dir = "src/pigeon-cli"
 run = [
   "cargo clippy -p pigeon --all-targets --locked --no-default-features -- -D warnings",
   "cargo clippy -p pigeon --all-targets --locked --no-default-features --features sentinel -- -D warnings",
@@ -50,29 +44,25 @@ depends = ["fmt-check", "lint", "features", "test"]
 # policy.check runs pigeon-sentinel, built beside pigeon; see
 # .claude/decisions/2026-11-10-development-factory-crates-functional-core.md §1.
 [tasks.sentinel-build]
-dir = "src/pigeon-cli"
 run = "cargo build -q --locked -p pigeon-sentinel"
 
 [tasks.sentinel]
 depends = ["sentinel-build"]
-dir = "src/pigeon-cli"
-run = "cargo run -q --locked -p pigeon -- backplane run policy.check --root ../.."
+run = "cargo run -q --locked -p pigeon -- backplane run policy.check --root ."
 
 [tasks.sentinel-pr]
 depends = ["sentinel-build"]
-dir = "src/pigeon-cli"
-run = 'cargo run -q --locked -p pigeon -- backplane run policy.check --root ../.. --text "title=$PR_TITLE" --text "body=$PR_BODY" --text "number=$PR_NUMBER" --text "files=$PR_FILES"'
+run = 'cargo run -q --locked -p pigeon -- backplane run policy.check --root . --text "title=$PR_TITLE" --text "body=$PR_BODY" --text "number=$PR_NUMBER" --text "files=$PR_FILES"'
 
 [tasks.sentinel-change]
 depends = ["sentinel-build"]
 description = "policy.check on this branch as a change: its branch, files against CHANGE_BASE (default origin/main), and its first commit's title, body and Change-Scope trailers"
-dir = "src/pigeon-cli"
 run = '''
 base="${CHANGE_BASE:-origin/main}"
 branch="$(git rev-parse --abbrev-ref HEAD)"
 first="$(git rev-list --reverse "$base"..HEAD | head -n 1)"
 number="$(printf '%s' "$branch" | sed -n 's#^change/\([0-9]*\)-.*#\1#p')"
-cargo run -q --locked -p pigeon -- backplane run policy.check --root ../.. \
+cargo run -q --locked -p pigeon -- backplane run policy.check --root . \
   --text "branch=$branch" \
   --text "number=${number:-0}" \
   --text "title=$(git log -1 --format=%s "$first")" \
@@ -82,13 +72,11 @@ cargo run -q --locked -p pigeon -- backplane run policy.check --root ../.. \
 '''
 
 [tasks.backplane]
-dir = "src/pigeon-cli"
-run = "cargo run -q --locked -p pigeon -- backplane instance --root ../.."
+run = "cargo run -q --locked -p pigeon -- backplane instance --root ."
 
 [tasks.ci]
 depends = ["rust", "sentinel", "backplane"]
 
 [tasks.ci-scoped]
 description = "Only the checks this branch's paths need, against CHANGE_BASE (default origin/main); see the lifecycle ADR §4"
-dir = "src/pigeon-cli"
-run = 'cargo run -q --locked -p pigeon -- cobot scope --root ../.. --base "${CHANGE_BASE:-origin/main}" --run'
+run = 'cargo run -q --locked -p pigeon -- cobot scope --root . --base "${CHANGE_BASE:-origin/main}" --run'

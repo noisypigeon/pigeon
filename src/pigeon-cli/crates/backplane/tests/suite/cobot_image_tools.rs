@@ -32,7 +32,7 @@ fn mise(manifest: &str, tool: &str) -> String {
 
 #[test]
 fn image_tools_match_mise() {
-    let dockerfile = read("../../Dockerfile");
+    let dockerfile = read("../../../../Dockerfile");
     let toml = read("../../../../mise.toml");
     for (key, tool) in [
         ("TOFU_VERSION", "opentofu"),
@@ -73,11 +73,11 @@ fn included_config(dir: &std::path::Path, out: &mut Vec<String>) {
 
 #[test]
 fn the_image_build_sees_every_config_file_a_crate_includes() {
-    let dockerfile = read("../../Dockerfile");
+    let dockerfile = read("../../../../Dockerfile");
     assert!(
         dockerfile
             .lines()
-            .any(|l| l.trim() == "COPY --from=config . /.config/"),
+            .any(|l| l.trim() == "COPY --from=config . /src/.config/"),
         "the build stage copies the whole `config` context, so no include_str! of .config/ misses"
     );
     let crates = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
@@ -108,10 +108,16 @@ fn recipe_run(dockerfile: &str) -> String {
 /// `src/main.rs` when they exist; relative to the workspace.
 fn declared_targets(workspace: &std::path::Path) -> Vec<String> {
     let mut out = Vec::new();
-    for entry in std::fs::read_dir(workspace.join("crates"))
-        .expect("crates")
-        .flatten()
-    {
+    let dirs = ["src", "src/pigeon-cli/crates"]
+        .into_iter()
+        .flat_map(|base| {
+            std::fs::read_dir(workspace.join(base))
+                .into_iter()
+                .flatten()
+                .flatten()
+                .map(move |e| (base, e))
+        });
+    for (base, entry) in dirs {
         let dir = entry.path();
         let Ok(manifest) = std::fs::read_to_string(dir.join("Cargo.toml")) else {
             continue;
@@ -122,7 +128,7 @@ fn declared_targets(workspace: &std::path::Path) -> Vec<String> {
             .unwrap_or_default();
         for default in ["src/lib.rs", "src/main.rs"] {
             if dir.join(default).is_file() {
-                out.push(format!("crates/{name}/{default}"));
+                out.push(format!("{base}/{name}/{default}"));
             }
         }
         for line in manifest.lines() {
@@ -137,7 +143,7 @@ fn declared_targets(workspace: &std::path::Path) -> Vec<String> {
                     .extension()
                     .is_some_and(|x| x.eq_ignore_ascii_case("rs"))
                 {
-                    out.push(format!("crates/{name}/{value}"));
+                    out.push(format!("{base}/{name}/{value}"));
                 }
             }
         }
@@ -147,8 +153,8 @@ fn declared_targets(workspace: &std::path::Path) -> Vec<String> {
 
 #[test]
 fn the_recipe_stubs_every_declared_target() {
-    let dockerfile = read("../../Dockerfile");
-    let workspace = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let dockerfile = read("../../../../Dockerfile");
+    let workspace = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../..");
     let tmp = tempfile::tempdir().expect("tempdir");
     let out = tmp.path().join("recipe");
     let script = recipe_run(&dockerfile).replace("/recipe", out.to_str().expect("utf-8"));

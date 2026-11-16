@@ -9,7 +9,7 @@ FROM scratch AS config
 FROM docker.io/library/rust:1.99.1-slim-bookworm@sha256:24707e70a4f1e23d9a7b25202ec43126d28a52294b96aad5c670df1fd1f1d400 AS build
 ARG FEATURES
 WORKDIR /src
-COPY --from=config . /.config/
+COPY --from=config . /src/.config/
 COPY . .
 RUN cargo build --release --locked -p pigeon --no-default-features --features "$FEATURES"
 
@@ -58,7 +58,8 @@ WORKDIR /src
 COPY . .
 RUN mkdir /recipe \
  && cp Cargo.toml Cargo.lock /recipe/ \
- && for m in crates/*/Cargo.toml; do \
+ && for m in src/*/Cargo.toml src/pigeon-cli/crates/*/Cargo.toml; do \
+      [ -f "$m" ] || continue; \
       d="$(dirname "$m")"; mkdir -p "/recipe/$d/src"; cp "$m" "/recipe/$d/"; \
       if [ -f "$d/src/lib.rs" ]; then : > "/recipe/$d/src/lib.rs"; fi; \
       if [ -f "$d/src/main.rs" ]; then echo 'fn main() {}' > "/recipe/$d/src/main.rs"; fi; \
@@ -104,10 +105,9 @@ COPY pigeon-start /usr/local/bin/pigeon-start
 # Only third-party dependencies are warmed, from the recipe, so this layer changes only with
 # them; the stubs' own artifacts are removed (job images ADR §2).
 WORKDIR /warm
-COPY --from=recipe /recipe src/pigeon-cli
+COPY --from=recipe /recipe .
 RUN export CARGO_BUILD_JOBS="$WARM_JOBS" \
- && cd src/pigeon-cli \
- && members="$(awk '/^\[package\]/{p=1;next} /^\[/{p=0} p && /^name = /{gsub(/"/,"",$3); printf "-p %s ", $3}' crates/*/Cargo.toml)" \
+ && members="$(find src -mindepth 2 -name Cargo.toml -exec awk '/^\[package\]/{p=1;next} /^\[/{p=0} p && /^name = /{gsub(/"/,"",$3); printf "-p %s ", $3}' {} +)" \
  && cargo fetch --locked \
  && cargo build --workspace --all-targets --locked \
  && cargo clippy --workspace --all-targets --locked \

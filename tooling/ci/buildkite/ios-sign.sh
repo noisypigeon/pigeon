@@ -21,8 +21,8 @@ fi
 export PATH="$HOME/.cargo/bin:$PATH"
 rustup toolchain install "$rust" --profile minimal
 cargo +"$rust" build --release --locked -p pigeon --no-default-features --features signing \
-  --manifest-path src/pigeon-cli/Cargo.toml
-pigeon="$PWD/src/pigeon-cli/target/release/pigeon"
+  --manifest-path Cargo.toml
+pigeon="$PWD/target/release/pigeon"
 
 work="$(mktemp -d)"
 trap '"$pigeon" backplane signing clean || true; rm -rf "$work"' EXIT

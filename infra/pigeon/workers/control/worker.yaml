@@ -29,16 +29,16 @@ durable_objects:
 # .claude/decisions/2026-11-06-development-control-plane-approvals-images-state.md §4.
 containers:
   - class: Checker
-    image: { dockerfile: src/pigeon-cli/Dockerfile, target: ci, args: { FEATURES: backplane } }
+    image: { dockerfile: Dockerfile, target: ci, args: { FEATURES: backplane } }
     instance_type: standard-4
     max_instances: 12
   - class: Runner
-    image: { dockerfile: src/pigeon-cli/Dockerfile, target: ci, args: { FEATURES: backplane } }
+    image: { dockerfile: Dockerfile, target: ci, args: { FEATURES: backplane } }
     instance_type: standard-1
     max_instances: 8
   # The hard ceiling; the control plane admits 24 (core::bench::DEFAULT_MAX).
   - class: Bench
-    image: { dockerfile: src/pigeon-cli/Dockerfile, target: ci, args: { FEATURES: backplane } }
+    image: { dockerfile: Dockerfile, target: ci, args: { FEATURES: backplane } }
     instance_type: standard-4
     max_instances: 32
 bindings:

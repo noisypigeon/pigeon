@@ -8,10 +8,10 @@ units:
     image: ghcr.io/noisypigeon/pigeon-sentinel
     paths:
       - src/pigeon-cli/crates/sentinel/
-      - src/pigeon-cli/Dockerfile
-      - src/pigeon-cli/.dockerignore
+      - Dockerfile
+      - .dockerignore
     exclude: [tests/, benches/, '*.md']
-    cargo: { workspace: src/pigeon-cli, package: pigeon-sentinel }
+    cargo: { workspace: ., package: pigeon-sentinel }
   backplane:
     manifest: src/pigeon-cli/crates/backplane/Cargo.toml
     features: backplane
@@ -28,10 +28,10 @@ units:
       - src/pigeon-cli/crates/pigeon/src/cli/mod.rs
       - src/pigeon-cli/crates/pigeon/src/commands/mod.rs
       - src/pigeon-cli/crates/pigeon/Cargo.toml
-      - src/pigeon-cli/Dockerfile
-      - src/pigeon-cli/.dockerignore
+      - Dockerfile
+      - .dockerignore
     exclude: [tests/, benches/, '*.md']
-    cargo: { workspace: src/pigeon-cli, package: pigeon }
+    cargo: { workspace: ., package: pigeon }
   infra-cloudflare-zone:
     manifest: catalog/cloudflare/modules/zone/module.yaml
     paths: [catalog/cloudflare/modules/zone/]
@@ -161,7 +161,7 @@ units:
     paths: [src/site-templates/blog/]
     exclude: ['*.md']
 settings:
-  - { file: src/pigeon-cli/Cargo.toml, tables: '^\[profile\.', keys: '^(edition|rust-version)\s*=' }
+  - { file: Cargo.toml, tables: '^\[profile\.', keys: '^(edition|rust-version)\s*=' }
   - { file: mise.toml, keys: '^rust\s*=' }
 tiers:
   - { file: CHANGELOG.md, paths: [''] }

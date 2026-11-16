@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # The test map: each test binary and the workspace files it runs, as tests.json; see
 # .claude/decisions/2026-11-10-development-factory-crates-functional-core.md, 2026-11-11 amendment.
-# Run from src/pigeon-cli with cargo-llvm-cov and llvm-tools installed; TEST_MAP_OUT names the output.
+# Run from the workspace with cargo-llvm-cov and llvm-tools installed; TEST_MAP_OUT names the output.
 set -euo pipefail
 
 out=${TEST_MAP_OUT:-tests.json}

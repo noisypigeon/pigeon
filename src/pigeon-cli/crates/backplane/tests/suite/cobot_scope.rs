@@ -131,7 +131,7 @@ fn pigeons_sentinel_command_runs_its_feature_apart_from_the_release_units() {
 
 #[test]
 fn a_workspace_setting_runs_everything() {
-    let got = names(&["src/pigeon-cli/Cargo.lock"]);
+    let got = names(&["Cargo.lock"]);
     for want in [
         "fmt",
         "clippy",
@@ -209,8 +209,8 @@ fn workers_deploy_when_their_spec_crates_or_migrations_change() {
         "src/pigeon-cli/crates/backplane/src/cobot/workers.rs",
         "src/pigeon-cli/crates/backplane/migrations/0003_x.sql",
         "infra/pigeon/workers/control/worker.yaml",
-        "src/pigeon-cli/Dockerfile",
-        "src/pigeon-cli/Cargo.lock",
+        "Dockerfile",
+        "Cargo.lock",
     ] {
         assert_eq!(workers(Some(&[hit])), control, "{hit}");
     }
@@ -242,10 +242,7 @@ fn a_spike_runs_as_its_own_check() {
         .collect();
     assert_eq!(spikes.len(), 1, "one check per well-named spike");
     assert_eq!(spikes[0].name, "spike buildkit");
-    assert_eq!(
-        spikes[0].argv,
-        ["sh", "../../tooling/spikes/buildkit/run.sh"]
-    );
+    assert_eq!(spikes[0].argv, ["sh", "tooling/spikes/buildkit/run.sh"]);
     assert_eq!(
         names(&["tooling/README.md"]),
         ["policy.check"],
@@ -263,7 +260,7 @@ fn the_full_set_is_what_a_workspace_wide_change_runs() {
     for want in ["fmt", "clippy", "test", "clippy backplane worker (wasm)"] {
         assert!(full.contains(&want.to_string()), "{want}: {full:?}");
     }
-    let wide = names(&["src/pigeon-cli/Cargo.lock"]);
+    let wide = names(&["Cargo.lock"]);
     assert!(
         full.iter().all(|n| wide.contains(n)),
         "{full:?} within {wide:?}"
@@ -281,7 +278,7 @@ fn the_test_map_runs_when_its_script_changes() {
         ["bash", "../../tooling/ci/test-map.sh"],
         "as backplane's actions::on_github knows it"
     );
-    assert!(!names(&["src/pigeon-cli/Cargo.lock"]).contains(&"test map".to_string()));
+    assert!(!names(&["Cargo.lock"]).contains(&"test map".to_string()));
 }
 
 const BACKPLANE: &str = "src/pigeon-cli/crates/backplane/";
@@ -431,7 +428,7 @@ fn a_mapped_test_check_does_not_stand_in_for_a_crates_whole_suite() {
 fn no_check_name_holds_a_comma_which_a_github_cache_key_refuses() {
     for files in [
         &["src/pigeon-cli/crates/backplane/src/cobot/git.rs"][..],
-        &["src/pigeon-cli/Cargo.lock"][..],
+        &["Cargo.lock"][..],
         &["catalog/cloudflare/kinds/git-repo/schema.json"][..],
     ] {
         for name in with_map(files) {

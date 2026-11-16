@@ -1,12 +1,13 @@
 #!/bin/sh
 # The behaviour ledger: every test `cargo test --workspace` runs, one line each; see
 # .claude/decisions/2026-11-16-development-one-test-binary-per-crate.md §4.
-# Run from src/pigeon-cli. `behaviours.sh` writes tests.ledger; `behaviours.sh --check [BASE]`
+# Run from the workspace. `behaviours.sh` writes tooling/ci/tests.ledger; `behaviours.sh --check [BASE]`
 # fails when the ledger is stale, or a test in BASE's ledger is gone without a line in tests.moves.
 set -eu
 
-ledger=tests.ledger
-moves=tests.moves
+root=$(git rev-parse --show-toplevel)
+ledger="$root/tooling/ci/tests.ledger"
+moves="$root/tooling/ci/tests.moves"
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 
@@ -52,7 +53,9 @@ case "${1:-}" in
     exit 1
   fi
   suffixes "$work/now"
-  if ! git show "$base:src/pigeon-cli/$ledger" >"$work/base" 2>/dev/null; then
+  # The ledger lived in src/pigeon-cli until the workspace moved to the root.
+  if ! git show "$base:tooling/ci/tests.ledger" >"$work/base" 2>/dev/null \
+    && ! git show "$base:src/pigeon-cli/tests.ledger" >"$work/base" 2>/dev/null; then
     echo "behaviours: $base has no ledger; $(wc -l <"$work/now") tests listed"
     exit 0
   fi

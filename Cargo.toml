@@ -1,7 +1,7 @@
 [workspace]
 resolver = "3"
-members = ["crates/*"]
-exclude = ["crates/cobot", "crates/gantry"]
+members = ["src/pigeon-cli/crates/*"]
+exclude = ["src/pigeon-cli/crates/cobot", "src/pigeon-cli/crates/gantry"]
 
 [workspace.package]
 version = "0.1.0"
@@ -12,8 +12,8 @@ repository = "https://github.com/noisypigeon/pigeon"
 publish = false
 
 [workspace.dependencies]
-sentinel = { path = "crates/sentinel", package = "pigeon-sentinel" }
-backplane = { path = "crates/backplane", package = "pigeon-backplane", default-features = false }
+sentinel = { path = "src/pigeon-cli/crates/sentinel", package = "pigeon-sentinel" }
+backplane = { path = "src/pigeon-cli/crates/backplane", package = "pigeon-backplane", default-features = false }
 age = { version = "0.12.1", default-features = false }
 aes-gcm = { version = "0.10.3", default-features = false, features = ["aes", "alloc"] }
 assert_cmd = "2.2.2"

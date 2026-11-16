@@ -1,0 +1,10 @@
+# The context is the root; only the Rust workspace and the image's entrypoint go in.
+*
+!Cargo.toml
+!Cargo.lock
+!pigeon-start
+!src/
+src/pigeon-ios/
+src/site-templates/
+**/target/
+**/CHANGELOG.md
