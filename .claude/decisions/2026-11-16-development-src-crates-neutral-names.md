@@ -649,5 +649,13 @@ does the one-place alias above, and removes the `AGENT_TOKEN` entry from
 over `src/**/mcp.rs`, `src/**/wire.rs`, `src/**/routes.rs` and the Worker's
 `api`, `app`, `devices` and `mod` files. !746 (step 6) touches none of them:
 it rewrites import paths in the guarded callers to name `core::` modules and
+### 2026-11-16: Review of !746 against !766: they agree
+
+!766 amended
+[`2026-11-15-development-sessions-stop-only-for-oversight.md`](2026-11-15-development-sessions-stop-only-for-oversight.md)
+over `src/**/change/stage.rs`, `src/**/wire.rs`, `src/**/mcp.rs`,
+`src/**/sessions.rs`, `src/**/tasks.rs`, `src/**/session/launch.rs` and the
+Worker's `mod`, `api` and `push` files. !746 (step 6) touches none of them: it
+rewrites import paths in the guarded callers to name `core::` modules and
 deletes the 14 three-line re-export shims. The `src/**/…` globs still match.
 Neither decision changes.
