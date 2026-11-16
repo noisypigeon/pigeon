@@ -4,7 +4,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::cobot::release::Config;
 
@@ -14,13 +14,174 @@ use super::gate::{Gate, MAX_PACKAGES};
 
 pub use map::{Binary, TestMap};
 
-/// The Rust workspace, from the root.
+/// The Rust workspace, from the root, where its manifest has no `[workspace]` at the root.
 pub const WORKSPACE: &str = "src/pigeon-cli";
+
+/// The workspace's layout, from its manifest's `[workspace.metadata.pigeon]`; the defaults are
+/// `src/pigeon-cli`'s. See the 2026-11-16 amendments to
+/// `.claude/decisions/2026-11-16-development-src-crates-neutral-names.md`.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(default, rename_all = "kebab-case")]
+pub struct Layout {
+    /// The workspace's directory, from the root; empty for the root. Set by the shell.
+    #[serde(skip)]
+    pub workspace: String,
+    /// The package of the `pigeon` binary.
+    pub cli: String,
+    /// The CLI's files, from its crate's directory, that every feature builds.
+    pub cli_shared: Vec<String>,
+    /// The package whose `worker` build compiles to wasm.
+    pub worker: Option<Worker>,
+    /// The packages whose tests read this repository's own policies.
+    pub policy_tests: Vec<String>,
+    /// The suite modules a change to the infrastructure runs.
+    pub infra_tests: Option<InfraTests>,
+    /// `pigeon`'s arguments, before an operation's name, that run it.
+    pub run: Vec<String>,
+    /// `pigeon`'s arguments that validate the instance.
+    pub instance: Vec<String>,
+}
+
+/// A package whose `worker` feature builds for wasm.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub struct Worker {
+    /// The package.
+    pub package: String,
+    /// Its check's name.
+    pub name: String,
+    /// The directories, from the root, only its wasm build compiles.
+    pub only: Vec<String>,
+}
+
+/// The suite modules of `package`'s `test` target that an infrastructure change runs.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub struct InfraTests {
+    /// The package.
+    pub package: String,
+    /// Its test target.
+    pub test: String,
+    /// The module filters, each ending `::`.
+    pub modules: Vec<String>,
+}
+
+fn strings(s: &[&str]) -> Vec<String> {
+    s.iter().map(|s| (*s).to_string()).collect()
+}
+
+impl Default for Layout {
+    fn default() -> Self {
+        Self {
+            workspace: WORKSPACE.into(),
+            cli: "pigeon".into(),
+            cli_shared: strings(&[
+                "src/main.rs",
+                "src/lib.rs",
+                "src/cli/mod.rs",
+                "src/commands/mod.rs",
+                "Cargo.toml",
+            ]),
+            worker: Some(Worker {
+                package: "pigeon-backplane".into(),
+                name: "clippy backplane worker (wasm)".into(),
+                only: strings(&["src/pigeon-cli/crates/backplane/src/worker/"]),
+            }),
+            policy_tests: strings(&["pigeon-sentinel", "pigeon", "pigeon-backplane"]),
+            infra_tests: Some(InfraTests {
+                package: "pigeon-backplane".into(),
+                test: "suite".into(),
+                modules: strings(&[
+                    "cobot_catalog::",
+                    "cobot_manifest::",
+                    "cobot_apex::",
+                    "cobot_git::",
+                    "cobot_credentials::",
+                ]),
+            }),
+            run: strings(&["backplane", "run"]),
+            instance: strings(&["backplane", "instance"]),
+        }
+    }
+}
+
+impl Layout {
+    /// `path`, from the root, as seen from the workspace.
+    #[must_use]
+    pub fn from_workspace(&self, path: &str) -> String {
+        let depth = self.workspace.split('/').filter(|s| !s.is_empty()).count();
+        format!("{}{path}", "../".repeat(depth))
+    }
+
+    /// The root, as seen from the workspace.
+    #[must_use]
+    pub fn root(&self) -> String {
+        let up = self.from_workspace("");
+        if up.is_empty() {
+            ".".into()
+        } else {
+            up.trim_end_matches('/').into()
+        }
+    }
+
+    /// `path`, from the workspace, as seen from the root.
+    #[must_use]
+    pub fn in_workspace(&self, path: &str) -> String {
+        if self.workspace.is_empty() {
+            path.into()
+        } else {
+            format!("{}/{path}", self.workspace.trim_end_matches('/'))
+        }
+    }
+
+    /// Paths whose change runs every check.
+    #[must_use]
+    pub fn everything(&self) -> Vec<String> {
+        let mut out: Vec<String> = ["Cargo.toml", "Cargo.lock", ".cargo/"]
+            .iter()
+            .map(|p| self.in_workspace(p))
+            .collect();
+        out.extend(["mise.toml".to_string(), RELEASES.to_string()]);
+        out
+    }
+
+    /// `pigeon`'s command line for `args`, run in the workspace.
+    fn pigeon(&self, args: &[&str]) -> Vec<String> {
+        [
+            "cargo",
+            "run",
+            "-q",
+            "--locked",
+            "-p",
+            self.cli.as_str(),
+            "--",
+        ]
+        .iter()
+        .chain(args)
+        .map(|s| (*s).to_string())
+        .collect()
+    }
+
+    /// `pigeon`'s command line that runs operation `op` on the root.
+    fn operation(&self, op: &str) -> Vec<String> {
+        let root = self.root();
+        let mut args: Vec<&str> = self.run.iter().map(String::as_str).collect();
+        args.extend([op, "--root", root.as_str()]);
+        self.pigeon(&args)
+    }
+
+    /// Whether only the wasm `worker` build compiles `path`.
+    fn wasm_only(&self, path: &str) -> bool {
+        self.worker
+            .iter()
+            .any(|w| w.only.iter().any(|d| path.starts_with(d.as_str())))
+    }
+}
 
 /// The release configuration, from the root.
 pub const RELEASES: &str = ".config/releases.yaml";
 
-/// Paths whose change runs every check.
+/// Paths whose change runs every check, in the default layout; see [`Layout::everything`].
 pub const EVERYTHING: [&str; 5] = [
     "src/pigeon-cli/Cargo.toml",
     "src/pigeon-cli/Cargo.lock",
@@ -43,33 +204,24 @@ const INFRA: [&str; 6] = [
 const POLICIES: [&str; 1] = [".config/policies/"];
 
 /// Paths whose change rebuilds the sites.
-const SITES: [&str; 4] = ["src/site-templates/", "workloads/", "sites/", "config.yaml"];
+const SITES: [&str; 5] = [
+    "src/site-templates/",
+    "src/pigeon-site-templates/",
+    "workloads/",
+    "sites/",
+    "config.yaml",
+];
 
 /// The iOS app, which its `ios` check builds on macOS; see
 /// `.claude/decisions/2026-11-11-release-ios-app-buildkite-testflight.md`.
 const IOS: [&str; 1] = ["src/pigeon-ios/"];
 
-/// The crates whose `worker` build compiles to wasm.
-const WORKER: [&str; 1] = ["pigeon-backplane"];
-
-/// Paths only the wasm `worker` build compiles, and their crate; see
-/// `.claude/decisions/2026-11-15-development-code-checks-by-reach.md` §1.
-const WASM_ONLY: [(&str, &str); 1] = [(
-    "src/pigeon-cli/crates/backplane/src/worker/",
-    "pigeon-backplane",
-)];
-
-/// Whether only the wasm `worker` build compiles `path`.
-fn wasm_only(path: &str) -> bool {
-    WASM_ONLY.iter().any(|(dir, _)| path.starts_with(dir))
-}
-
-/// One check: a name, and the command to run in [`WORKSPACE`].
+/// One check: a name, and the command to run in the workspace.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Job {
     /// What it checks.
     pub name: String,
-    /// The command, run in [`WORKSPACE`].
+    /// The command, run in the workspace.
     pub argv: Vec<String>,
 }
 
@@ -78,14 +230,6 @@ fn job(name: impl Into<String>, argv: &[&str]) -> Job {
         name: name.into(),
         argv: argv.iter().map(|s| (*s).to_string()).collect(),
     }
-}
-
-fn pigeon(args: &[&str]) -> Vec<String> {
-    ["cargo", "run", "-q", "--locked", "-p", "pigeon", "--"]
-        .iter()
-        .chain(args)
-        .map(|s| (*s).to_string())
-        .collect()
 }
 
 /// The workspace's crates, as the shell reads them from its manifests: each crate directory's package, and each package's workspace
@@ -101,6 +245,8 @@ pub struct Crates {
     /// Each package's integration test targets, where known; a map unit naming one that is gone
     /// runs as its `suite` module instead.
     pub tests: BTreeMap<String, BTreeSet<String>>,
+    /// Where the workspace and its special crates are.
+    pub layout: Layout,
 }
 
 impl Crates {
@@ -113,16 +259,23 @@ impl Crates {
             .filter(|p| self.by_dir.values().any(|n| n == p))
             .collect()
     }
-}
 
-/// `pigeon`'s files every command shares.
-const PIGEON_SHARED: [&str; 5] = [
-    "src/main.rs",
-    "src/lib.rs",
-    "src/cli/mod.rs",
-    "src/commands/mod.rs",
-    "Cargo.toml",
-];
+    /// The CLI crate's directory, from the root, when the workspace has it.
+    fn cli_dir(&self) -> Option<&str> {
+        self.by_dir
+            .iter()
+            .find(|(_, p)| **p == self.layout.cli)
+            .map(|(d, _)| d.as_str())
+    }
+
+    /// The worker package, when the workspace has it.
+    fn worker(&self) -> Option<&Worker> {
+        self.layout
+            .worker
+            .as_ref()
+            .filter(|w| self.by_dir.values().any(|p| *p == w.package))
+    }
+}
 
 impl Crates {
     /// The `pigeon` features whose build `files` and the `affected` packages change: a feature
@@ -133,12 +286,17 @@ impl Crates {
         affected: &BTreeSet<String>,
         files: &[&str],
     ) -> BTreeSet<String> {
-        let prefix = format!("{WORKSPACE}/crates/pigeon/");
-        let pigeon: Vec<&str> = files
+        let pigeon: Vec<&str> = match self.cli_dir() {
+            Some(prefix) => files
+                .iter()
+                .filter_map(|f| f.strip_prefix(prefix))
+                .collect(),
+            None => Vec::new(),
+        };
+        if pigeon
             .iter()
-            .filter_map(|f| f.strip_prefix(&prefix))
-            .collect();
-        if pigeon.iter().any(|f| PIGEON_SHARED.contains(f)) {
+            .any(|f| self.layout.cli_shared.iter().any(|s| s == f))
+        {
             return self.features.keys().cloned().collect();
         }
         self.features
@@ -193,13 +351,14 @@ fn everything(features: &BTreeSet<String>, crates: &Crates) -> Vec<Job> {
             ],
         ),
     ];
+    let cli = crates.layout.cli.as_str();
     out.push(job(
-        "clippy pigeon (no features)",
+        format!("clippy {cli} (no features)"),
         &[
             "cargo",
             "clippy",
             "-p",
-            "pigeon",
+            cli,
             "--all-targets",
             "--locked",
             "--no-default-features",
@@ -208,24 +367,27 @@ fn everything(features: &BTreeSet<String>, crates: &Crates) -> Vec<Job> {
             "warnings",
         ],
     ));
-    out.extend(features.iter().map(feature_clippy));
-    out.extend(worker_jobs(&crates.of(&WORKER)));
+    out.extend(features.iter().map(|f| feature_clippy(cli, f)));
+    out.extend(crates.worker().map(worker_job));
     out.push(job("test", &["cargo", "test", "--workspace", "--locked"]));
+    let root = crates.layout.root();
+    let mut instance: Vec<&str> = crates.layout.instance.iter().map(String::as_str).collect();
+    instance.extend(["--root", root.as_str()]);
     out.push(Job {
         name: "backplane instance".into(),
-        argv: pigeon(&["backplane", "instance", "--root", "../.."]),
+        argv: crates.layout.pigeon(&instance),
     });
     out
 }
 
-fn feature_clippy(f: &String) -> Job {
+fn feature_clippy(cli: &str, f: &String) -> Job {
     job(
-        format!("clippy pigeon --features {f}"),
+        format!("clippy {cli} --features {f}"),
         &[
             "cargo",
             "clippy",
             "-p",
-            "pigeon",
+            cli,
             "--all-targets",
             "--locked",
             "--no-default-features",
@@ -238,47 +400,40 @@ fn feature_clippy(f: &String) -> Job {
     )
 }
 
-/// The `worker` builds' checks for `crates`, among [`WORKER`].
-fn worker_jobs(crates: &[&str]) -> Vec<Job> {
-    let clippy = |name: &str, package: &str, wasm: bool| {
-        let mut argv = vec![
+/// The wasm `worker` build's check for `worker`.
+fn worker_job(worker: &Worker) -> Job {
+    job(
+        worker.name.as_str(),
+        &[
             "cargo",
             "clippy",
             "-p",
-            package,
+            worker.package.as_str(),
             "--lib",
             "--locked",
             "--no-default-features",
             "--features",
             "worker",
-        ];
-        if wasm {
-            argv.extend(["--target", "wasm32-unknown-unknown"]);
-        }
-        argv.extend(["--", "-D", "warnings"]);
-        job(name, &argv)
-    };
-    let mut out = Vec::new();
-    if crates.contains(&"pigeon-backplane") {
-        out.push(clippy(
-            "clippy backplane worker (wasm)",
-            "pigeon-backplane",
-            true,
-        ));
-    }
-    out
+            "--target",
+            "wasm32-unknown-unknown",
+            "--",
+            "-D",
+            "warnings",
+        ],
+    )
 }
 
 /// The Rust checks for the crates `files` touch and their dependants; with `map`, their tests are
 /// the binaries [`TestMap::select`] picks. A wasm-only path adds only its crate's wasm clippy.
 fn rust_jobs(crates: &Crates, config: &Config, files: &[&str], map: Option<&TestMap>) -> Vec<Job> {
     let mut out = Vec::new();
-    let wasm: BTreeSet<&str> = WASM_ONLY
+    let layout = &crates.layout;
+    let wasm = files.iter().any(|f| layout.wasm_only(f));
+    let native: Vec<&str> = files
         .iter()
-        .filter(|(dir, _)| files.iter().any(|f| f.starts_with(dir)))
-        .map(|(_, c)| *c)
+        .copied()
+        .filter(|f| !layout.wasm_only(f))
         .collect();
-    let native: Vec<&str> = files.iter().copied().filter(|f| !wasm_only(f)).collect();
     let files = native.as_slice();
     let changed: BTreeSet<String> = files
         .iter()
@@ -291,10 +446,9 @@ fn rust_jobs(crates: &Crates, config: &Config, files: &[&str], map: Option<&Test
         })
         .collect();
     let affected = crates.with_dependants(&changed);
-    if affected.is_empty() && !wasm.is_empty() {
+    if affected.is_empty() && wasm {
         out.push(job("fmt", &["cargo", "fmt", "--all", "--", "--check"]));
-        let w: Vec<&str> = wasm.iter().copied().collect();
-        out.extend(worker_jobs(&crates.of(&w)));
+        out.extend(crates.worker().map(worker_job));
     }
     if !affected.is_empty() {
         let packages: Vec<&str> = affected.iter().map(String::as_str).collect();
@@ -311,7 +465,8 @@ fn rust_jobs(crates: &Crates, config: &Config, files: &[&str], map: Option<&Test
             "clippy",
             &["--all-targets", "--locked", "--", "-D", "warnings"],
         ));
-        if affected.contains("pigeon") {
+        if affected.contains(&layout.cli) {
+            let cli_dir = crates.cli_dir().unwrap_or_default();
             let unit_crate = |paths: &[String]| {
                 crates
                     .by_dir
@@ -326,21 +481,22 @@ fn rust_jobs(crates: &Crates, config: &Config, files: &[&str], map: Option<&Test
                 .filter(|u| {
                     unit_crate(&u.paths).is_some_and(|c| affected.contains(&c))
                         || files.iter().any(|f| {
-                            f.starts_with(&format!("{WORKSPACE}/crates/pigeon/"))
+                            !cli_dir.is_empty()
+                                && f.starts_with(cli_dir)
                                 && u.paths.iter().any(|p| f.starts_with(p.as_str()))
                         })
                 })
                 .map(|u| u.features.clone())
                 .collect();
             features.extend(crates.pigeon_features_touched(&affected, files));
-            out.extend(features.iter().map(feature_clippy));
+            out.extend(features.iter().map(|f| feature_clippy(&layout.cli, f)));
         }
-        let workers: Vec<&str> = WORKER
-            .iter()
-            .copied()
-            .filter(|w| affected.contains(*w) || wasm.contains(w))
-            .collect();
-        out.extend(worker_jobs(&workers));
+        out.extend(
+            crates
+                .worker()
+                .filter(|w| wasm || affected.contains(&w.package))
+                .map(worker_job),
+        );
         match map.and_then(|m| m.select(crates, files)) {
             Some(picked) => out.extend(picked),
             None => out.push(with_p("test", &["--locked"])),
@@ -360,7 +516,11 @@ pub fn gate_of(crates: &Crates, files: &[String], map: Option<&TestMap>) -> Gate
         .map(|f| f.trim())
         .filter(|f| !f.is_empty())
         .collect();
-    if let Some(f) = files.iter().find(|f| under(f, &EVERYTHING)) {
+    let everything = crates.layout.everything();
+    if let Some(f) = files
+        .iter()
+        .find(|f| everything.iter().any(|e| f.starts_with(e.as_str())))
+    {
         return Gate::Full(format!("{f} runs every check"));
     }
     match map.and_then(|m| m.select(crates, &files)) {
@@ -419,74 +579,77 @@ pub fn jobs_of(
         .filter(|f| !f.is_empty())
         .collect();
     let all_features = all_features(config, crates);
+    let layout = &crates.layout;
+    let wide = layout.everything();
     let mut out = Vec::new();
-    if files.iter().any(|f| under(f, &EVERYTHING)) {
+    if files
+        .iter()
+        .any(|f| wide.iter().any(|e| f.starts_with(e.as_str())))
+    {
         out.extend(everything(&all_features, crates));
     } else {
         out.extend(rust_jobs(crates, config, &files, map));
     }
-    let ran_backplane = ran_tests_of(&out, "pigeon-backplane");
     if files.iter().any(|f| under(f, &INFRA)) {
         out.push(Job {
             name: "infra.validate".into(),
-            argv: pigeon(&["backplane", "run", "infra.validate", "--root", "../.."]),
+            argv: layout.operation("infra.validate"),
         });
-        if !ran_backplane {
-            out.push(job(
-                "test pigeon-backplane: suite cobot_catalog cobot_manifest cobot_apex cobot_git cobot_credentials",
-                &[
-                    "cargo",
-                    "test",
-                    "-p",
-                    "pigeon-backplane",
-                    "--test",
-                    "suite",
-                    "--locked",
-                    "--",
-                    "cobot_catalog::",
-                    "cobot_manifest::",
-                    "cobot_apex::",
-                    "cobot_git::",
-                    "cobot_credentials::",
-                ],
-            ));
+        if let Some(t) = &layout.infra_tests
+            && !ran_tests_of(&out, &t.package)
+        {
+            let modules: Vec<&str> = t.modules.iter().map(|m| m.trim_end_matches("::")).collect();
+            // Before its suite exists, each module is its own test target.
+            let own_targets = crates.tests.get(&t.package).is_some_and(|known| {
+                !known.contains(&t.test) && modules.iter().all(|m| known.contains(*m))
+            });
+            let mut argv = vec!["cargo", "test", "-p", t.package.as_str()];
+            let name = if own_targets {
+                argv.push("--locked");
+                for m in &modules {
+                    argv.extend(["--test", m]);
+                }
+                format!("test {}: {}", t.package, modules.join(" "))
+            } else {
+                argv.extend(["--test", t.test.as_str(), "--locked", "--"]);
+                argv.extend(t.modules.iter().map(String::as_str));
+                format!("test {}: {} {}", t.package, t.test, modules.join(" "))
+            };
+            out.push(job(name, &argv));
         }
     }
-    let policy_tests = ["pigeon-sentinel", "pigeon", "pigeon-backplane"];
+    let policy_tests: Vec<&str> = crates.of(&layout
+        .policy_tests
+        .iter()
+        .map(String::as_str)
+        .collect::<Vec<_>>());
     if files.iter().any(|f| under(f, &POLICIES))
+        && !policy_tests.is_empty()
         && !policy_tests.iter().all(|p| ran_tests_of(&out, p))
     {
-        out.push(job(
-            "test this repository's policies",
-            &[
-                "cargo",
-                "test",
-                "-p",
-                "pigeon-sentinel",
-                "-p",
-                "pigeon",
-                "-p",
-                "pigeon-backplane",
-                "--locked",
-            ],
-        ));
+        let mut argv = vec!["cargo", "test"];
+        for p in &policy_tests {
+            argv.extend(["-p", p]);
+        }
+        argv.push("--locked");
+        out.push(job("test this repository's policies", &argv));
     }
     if files.iter().any(|f| under(f, &SITES)) {
         out.push(Job {
             name: "sites.build".into(),
-            argv: pigeon(&["backplane", "run", "sites.build", "--root", "../.."]),
+            argv: layout.operation("sites.build"),
         });
     }
     if files.iter().any(|f| under(f, &IOS)) {
         out.push(job("ios", &["bash", crate::actions::IOS_CHECK]));
     }
-    out.extend(spikes(&files));
+    out.extend(spikes(layout, &files));
     if files.contains(&TEST_MAP) {
         out.push(test_map());
     }
     out.push(Job {
         name: "policy.check".into(),
-        argv: pigeon(&["backplane", "run", "policy.check", "--root", "../.."]),
+        argv: layout.operation("policy.check"),
     });
     out
 }
@@ -509,7 +672,7 @@ pub fn test_map() -> Job {
 pub const SPIKES: &str = "tooling/spikes/";
 
 /// One `spike <name>` check per spike a change touches, running its `run.sh` from the workspace.
-fn spikes(files: &[&str]) -> Vec<Job> {
+fn spikes(layout: &Layout, files: &[&str]) -> Vec<Job> {
     let names: BTreeSet<&str> = files
         .iter()
         .filter_map(|f| f.strip_prefix(SPIKES)?.split_once('/'))
@@ -524,7 +687,10 @@ fn spikes(files: &[&str]) -> Vec<Job> {
         .into_iter()
         .map(|n| Job {
             name: format!("spike {n}"),
-            argv: vec!["sh".into(), format!("../../{SPIKES}{n}/run.sh")],
+            argv: vec![
+                "sh".into(),
+                layout.from_workspace(&format!("{SPIKES}{n}/run.sh")),
+            ],
         })
         .collect()
 }
@@ -534,11 +700,27 @@ fn spikes(files: &[&str]) -> Vec<Job> {
 /// deploy waits for a new image; jobs run `main`'s newest `pigeon` from `builds/`, so its code
 /// is not among them; see `.claude/decisions/2026-11-07-development-job-images-on-cloudflare.md`
 /// §3.
-pub const IMAGE_BLOCKS: [&str; 4] = [
+/// Each is listed in both layouts while the workspace moves to the root.
+pub const IMAGE_BLOCKS: [&str; 7] = [
     "src/pigeon-cli/Dockerfile",
     "src/pigeon-cli/pigeon-start",
     "mise.toml",
     "src/pigeon-cli/rust-toolchain.toml",
+    "Dockerfile",
+    "pigeon-start",
+    "rust-toolchain.toml",
+];
+
+/// The Rust workspace's paths in both layouts: its crates under `src/`, and the root's manifest
+/// and lockfile once it is there.
+const RUST: [&str; 7] = [
+    "src/pigeon-cli/",
+    "src/common/",
+    "src/pigeon-core/",
+    "src/pigeon-eviction/",
+    "src/pigeon-agent/",
+    "src/pigeon-harness/",
+    "Cargo.",
 ];
 
 /// The files among `files` that make the job image block a Worker deploy.
@@ -555,14 +737,14 @@ pub fn image_inputs(files: &[String]) -> Vec<String> {
 /// workspace changed; `files` of `None` means everything.
 #[must_use]
 pub fn builds(files: Option<&[String]>) -> bool {
-    files.is_none_or(|f| f.iter().any(|f| f.starts_with("src/pigeon-cli/")))
+    files.is_none_or(|f| f.iter().any(|f| under(f, &RUST)))
 }
 
 #[cfg(test)]
 mod tests {
     use std::collections::{BTreeMap, BTreeSet};
 
-    use super::{Crates, WORKER, everything};
+    use super::{Crates, Layout, everything};
 
     #[test]
     fn a_workspace_setting_builds_only_the_workers_the_tree_has() {
@@ -575,8 +757,9 @@ mod tests {
             deps: BTreeMap::default(),
             features: BTreeMap::default(),
             tests: BTreeMap::default(),
+            layout: Layout::default(),
         };
-        assert_eq!(crates.of(&WORKER), ["pigeon-backplane"]);
+        assert_eq!(crates.of(&["pigeon-backplane"]), ["pigeon-backplane"]);
         let names: Vec<String> = everything(&BTreeSet::default(), &crates)
             .into_iter()
             .map(|j| j.name)
@@ -602,6 +785,7 @@ mod tests {
             deps: BTreeMap::default(),
             features: BTreeMap::default(),
             tests: BTreeMap::default(),
+            layout: Layout::default(),
         };
         let bin = |package: &str, name: &str, file: &str| Binary {
             package: package.into(),
@@ -656,6 +840,128 @@ mod tests {
         }
     }
 
+    fn root_layout() -> Crates {
+        let layout = Layout {
+            workspace: String::new(),
+            cli: "pigeon-harness".into(),
+            worker: Some(super::Worker {
+                package: "pigeon-agent".into(),
+                name: "clippy agent worker (wasm)".into(),
+                only: vec!["src/pigeon-agent/src/worker/".into()],
+            }),
+            policy_tests: vec!["pigeon-eviction".into(), "pigeon-gone".into()],
+            infra_tests: None,
+            run: vec!["run".into()],
+            instance: vec!["instance".into()],
+            ..Layout::default()
+        };
+        Crates {
+            by_dir: [
+                ("src/pigeon-agent/".to_string(), "pigeon-agent".to_string()),
+                (
+                    "src/pigeon-harness/".to_string(),
+                    "pigeon-harness".to_string(),
+                ),
+                (
+                    "src/pigeon-eviction/".to_string(),
+                    "pigeon-eviction".to_string(),
+                ),
+            ]
+            .into(),
+            deps: [(
+                "pigeon-harness".to_string(),
+                ["pigeon-agent".to_string()].into(),
+            )]
+            .into(),
+            features: [("infra".to_string(), ["pigeon-agent".to_string()].into())].into(),
+            tests: BTreeMap::default(),
+            layout,
+        }
+    }
+
+    #[test]
+    fn the_default_layout_is_src_pigeon_clis() {
+        let l = Layout::default();
+        assert_eq!(l.root(), "../..");
+        assert_eq!(l.from_workspace("tooling/x.sh"), "../../tooling/x.sh");
+        assert_eq!(l.in_workspace("Cargo.toml"), "src/pigeon-cli/Cargo.toml");
+        assert_eq!(l.everything(), super::EVERYTHING.map(String::from).to_vec());
+    }
+
+    #[test]
+    fn a_layout_at_the_root_runs_its_checks_from_the_root() {
+        let crates = root_layout();
+        let l = &crates.layout;
+        assert_eq!(l.root(), ".");
+        assert_eq!(l.from_workspace("tooling/x.sh"), "tooling/x.sh");
+        assert_eq!(l.everything()[..2], ["Cargo.toml", "Cargo.lock"]);
+        let config = crate::cobot::release::Config::parse(
+            "description: t\nrepository: https://example.test/r\nunits: {}\ntiers: []\n",
+        )
+        .expect("config");
+        let jobs = super::jobs_of(
+            &config,
+            &crates,
+            &[
+                "src/pigeon-agent/src/worker/x.rs".to_string(),
+                "src/pigeon-agent/src/lib.rs".to_string(),
+                ".config/policies/a.yaml".to_string(),
+                "tooling/spikes/s/run.sh".to_string(),
+            ],
+            None,
+        );
+        let names: Vec<&str> = jobs.iter().map(|j| j.name.as_str()).collect();
+        assert!(names.contains(&"clippy agent worker (wasm)"), "{names:?}");
+        assert!(
+            names.contains(&"clippy pigeon-harness --features infra"),
+            "{names:?}"
+        );
+        let argv = |name: &str| {
+            jobs.iter()
+                .find(|j| j.name == name)
+                .map(|j| j.argv.join(" "))
+                .unwrap_or_default()
+        };
+        assert_eq!(
+            argv("policy.check"),
+            "cargo run -q --locked -p pigeon-harness -- run policy.check --root ."
+        );
+        assert_eq!(argv("spike s"), "sh tooling/spikes/s/run.sh");
+        assert_eq!(
+            argv("test this repository's policies"),
+            "cargo test -p pigeon-eviction --locked"
+        );
+        let wide = super::jobs_of(&config, &crates, &["Cargo.lock".to_string()], None);
+        assert_eq!(
+            wide.last().map(|j| j.argv.join(" ")),
+            Some("cargo run -q --locked -p pigeon-harness -- run policy.check --root .".into())
+        );
+        assert!(
+            wide.iter().any(|j| j.argv.join(" ")
+                == "cargo run -q --locked -p pigeon-harness -- instance --root .")
+        );
+    }
+
+    #[test]
+    fn a_deploy_builds_and_waits_for_an_image_in_either_layout() {
+        let f = |p: &str| vec![p.to_string()];
+        for p in [
+            "src/pigeon-cli/crates/x/a.rs",
+            "src/pigeon-core/src/a.rs",
+            "Cargo.lock",
+        ] {
+            assert!(super::builds(Some(&f(p))), "{p}");
+        }
+        for p in ["src/pigeon-ios/a.swift", "docs/Cargo.md"] {
+            assert!(!super::builds(Some(&f(p))), "{p}");
+        }
+        assert_eq!(super::image_inputs(&f("Dockerfile")), ["Dockerfile"]);
+        assert_eq!(
+            super::image_inputs(&f("src/pigeon-cli/Dockerfile")),
+            ["src/pigeon-cli/Dockerfile"]
+        );
+    }
+
     #[test]
     fn a_mapped_target_that_is_gone_runs_as_its_suite_module() {
         use super::{Binary, TestMap};
@@ -681,6 +987,7 @@ mod tests {
                 ),
             ]
             .into(),
+            layout: Layout::default(),
         };
         let unit = |package: &str, name: &str, file: &str| Binary {
             package: package.into(),

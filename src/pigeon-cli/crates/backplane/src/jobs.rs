@@ -203,7 +203,7 @@ pub fn run_judged(spec: &JobSpec, dir: &Path, sentinel: &Path) -> Report {
     if let Err(e) = crate::cobot::ci::fetch_tags(dir, &spec.remote, &spec.token) {
         return report(spec, Outcome::Failed, &e.to_string());
     }
-    let workspace = dir.join(crate::cobot::scope::WORKSPACE);
+    let workspace = crate::cobot::scope::workspace(dir);
     let (ok, log) = crate::cobot::ci::exec(
         &workspace,
         &spec.argv,

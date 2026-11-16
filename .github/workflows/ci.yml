@@ -26,7 +26,7 @@ env:
   CARGO_TERM_COLOR: never
   CARGO_PROFILE_DEV_DEBUG: "0"
   CARGO_PROFILE_TEST_DEBUG: "0"
-  # Equal to src/pigeon-cli/Dockerfile's tools stage, as its ci image has them.
+  # Equal to the Dockerfile's tools stage, as its ci image has them.
   TOFU_VERSION: 1.13.1
   TOFU_SHA256: 378ada19d4bc70c43732004e8159be771b23b9a5afdf059e5f8a2b3fa2c70a69
   ZOLA_VERSION: 0.23.6
@@ -77,6 +77,13 @@ jobs:
         with:
           ref: ${{ inputs.sha }}
           persist-credentials: false
+      # The workspace: the root when its Cargo.toml has [workspace], else src/pigeon-cli; see
+      # .claude/decisions/2026-11-16-development-src-crates-neutral-names.md's 2026-11-16 amendments.
+      - name: Workspace
+        id: workspace
+        run: |
+          if grep -q '^\[workspace\]' Cargo.toml 2>/dev/null; then dir=.; else dir=src/pigeon-cli; fi
+          echo "dir=$dir" >>"$GITHUB_OUTPUT"
       # Keyed by check kind, not name, so each lockfile saves about four entries; fmt needs none.
       # See .claude/decisions/2026-11-15-development-code-checks-by-reach.md §5.
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -85,11 +92,11 @@ jobs:
           path: |
             /usr/local/cargo/registry
             /usr/local/cargo/git
-            src/pigeon-cli/target
-          key: cargo-${{ hashFiles('src/pigeon-cli/Cargo.lock') }}-${{ contains(matrix.check.name, '(wasm)') && 'wasm' || matrix.check.name == 'test map' && 'map' || contains(matrix.check.name, 'clippy') && 'clippy' || contains(matrix.check.name, 'test') && 'test' || 'other' }}
-          restore-keys: cargo-${{ hashFiles('src/pigeon-cli/Cargo.lock') }}-
+            ${{ steps.workspace.outputs.dir }}/target
+          key: cargo-${{ hashFiles('**/Cargo.lock') }}-${{ contains(matrix.check.name, '(wasm)') && 'wasm' || matrix.check.name == 'test map' && 'map' || contains(matrix.check.name, 'clippy') && 'clippy' || contains(matrix.check.name, 'test') && 'test' || 'other' }}
+          restore-keys: cargo-${{ hashFiles('**/Cargo.lock') }}-
       - name: ${{ matrix.check.name }}
-        working-directory: src/pigeon-cli
+        working-directory: ${{ steps.workspace.outputs.dir }}
         env:
           ARGV: ${{ toJSON(matrix.check.argv) }}
           SHA: ${{ inputs.sha }}
@@ -97,12 +104,17 @@ jobs:
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           # Bash 3 on macOS has no mapfile, so the argv is unpacked shell-quoted.
           eval "set -- $(jq -r 'map(@sh) | join(" ")' <<<"$ARGV")"
+          # A script's path is from src/pigeon-cli; from the root, its leading ../ go.
+          if [ "$#" -ge 2 ] && [ "$1" = bash ] && [ ! -f "$2" ]; then
+            script=${2#../}; script=${script#../}
+            [ -f "$GITHUB_WORKSPACE/$script" ] && { shift 2; set -- bash "$GITHUB_WORKSPACE/$script" "$@"; }
+          fi
           # macOS checks run through ci.sh, as on every provider; see
           # .claude/decisions/2026-11-12-development-macos-builds-provider-failover.md §3.
           if [ "$RUNNER_OS" = macOS ]; then
             case "$#:$*" in
-              "2:bash ../pigeon-ios/check.sh") set -- bash ../pigeon-ios/ci.sh check "$SHA" ;;
-              "3:bash ../pigeon-ios/archive.sh "*) set -- bash ../pigeon-ios/ci.sh archive "$SHA" "$3" ;;
+              "2:bash "*pigeon-ios/check.sh) set -- bash "$GITHUB_WORKSPACE/src/pigeon-ios/ci.sh" check "$SHA" ;;
+              "3:bash "*pigeon-ios/archive.sh" "*) set -- bash "$GITHUB_WORKSPACE/src/pigeon-ios/ci.sh" archive "$SHA" "$3" ;;
               *) echo "not a macOS check: $*" >&2; exit 2 ;;
             esac
           fi
@@ -119,6 +131,6 @@ jobs:
       - if: matrix.check.name == 'test map'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          path: src/pigeon-cli/tests.json
+          path: ${{ steps.workspace.outputs.dir }}/tests.json
           archive: false
           if-no-files-found: error

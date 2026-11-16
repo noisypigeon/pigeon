@@ -22,9 +22,76 @@ fn read_toml(path: &Path) -> Result<toml::Value, Error> {
         .map_err(|e: toml::de::Error| io(e.to_string()))
 }
 
+/// The Rust workspace's directory, from `root`: the root itself when its `Cargo.toml` has
+/// `[workspace]`, else [`WORKSPACE`]; empty for the root.
+#[must_use]
+pub fn workspace_dir(root: &Path) -> String {
+    let at_root = fs::read_to_string(root.join("Cargo.toml"))
+        .ok()
+        .and_then(|t| t.parse::<toml::Value>().ok())
+        .is_some_and(|m| m.get("workspace").is_some());
+    if at_root {
+        String::new()
+    } else {
+        WORKSPACE.into()
+    }
+}
+
+/// The Rust workspace's directory under `root`, where every check runs.
+#[must_use]
+pub fn workspace(root: &Path) -> std::path::PathBuf {
+    root.join(workspace_dir(root))
+}
+
+/// The crate directories, from the workspace, that `members` names, without `exclude`'s: an
+/// entry ending `/*` names each directory under it holding a `Cargo.toml`.
+fn member_dirs(ws: &Path, members: &[&str], exclude: &[&str]) -> Vec<String> {
+    let mut out = BTreeSet::new();
+    for m in members {
+        let m = m.trim_end_matches('/');
+        if let Some(parent) = m.strip_suffix("/*") {
+            for entry in fs::read_dir(ws.join(parent))
+                .into_iter()
+                .flatten()
+                .flatten()
+            {
+                out.insert(format!("{parent}/{}", entry.file_name().to_string_lossy()));
+            }
+        } else {
+            out.insert(m.to_string());
+        }
+    }
+    out.into_iter()
+        .filter(|d| !exclude.iter().any(|x| x.trim_end_matches('/') == d))
+        .filter(|d| ws.join(d).join("Cargo.toml").is_file())
+        .collect()
+}
+
+fn strs(v: Option<&toml::Value>) -> Vec<&str> {
+    v.and_then(toml::Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(toml::Value::as_str)
+        .collect()
+}
+
 fn crates(root: &Path) -> Result<Crates, Error> {
-    let ws = root.join(WORKSPACE);
+    let dir = workspace_dir(root);
+    let ws = root.join(&dir);
     let workspace = read_toml(&ws.join("Cargo.toml"))?;
+    let mut layout: Layout = workspace
+        .get("workspace")
+        .and_then(|w| w.get("metadata"))
+        .and_then(|m| m.get("pigeon"))
+        .cloned()
+        .map(toml::Value::try_into)
+        .transpose()
+        .map_err(|e: toml::de::Error| Error::Io {
+            path: ws.join("Cargo.toml"),
+            message: format!("[workspace.metadata.pigeon]: {e}"),
+        })?
+        .unwrap_or_default();
+    layout.workspace.clone_from(&dir);
     let members: BTreeMap<String, String> = workspace["workspace"]["dependencies"]
         .as_table()
         .into_iter()
@@ -42,22 +109,21 @@ fn crates(root: &Path) -> Result<Crates, Error> {
     let mut deps = BTreeMap::new();
     let mut features = BTreeMap::new();
     let mut tests = BTreeMap::new();
-    for entry in fs::read_dir(ws.join("crates"))
-        .map_err(|e| Error::Io {
-            path: ws.join("crates"),
-            message: e.to_string(),
-        })?
-        .flatten()
-    {
-        let manifest = entry.path().join("Cargo.toml");
-        if !manifest.is_file() {
-            continue;
-        }
-        let m = read_toml(&manifest)?;
-        let Some(name) = m["package"]["name"].as_str() else {
+    let table = workspace.get("workspace");
+    let found = member_dirs(
+        &ws,
+        &strs(table.and_then(|w| w.get("members"))),
+        &strs(table.and_then(|w| w.get("exclude"))),
+    );
+    for member in found {
+        let m = read_toml(&ws.join(&member).join("Cargo.toml"))?;
+        let Some(name) = m
+            .get("package")
+            .and_then(|p| p.get("name"))
+            .and_then(toml::Value::as_str)
+        else {
             continue;
         };
-        let dir = entry.file_name().to_string_lossy().into_owned();
         let mine: BTreeSet<String> = ["dependencies", "dev-dependencies"]
             .iter()
             .filter_map(|t| m.get(*t).and_then(toml::Value::as_table))
@@ -65,11 +131,11 @@ fn crates(root: &Path) -> Result<Crates, Error> {
             .filter_map(|k| members.get(k))
             .filter_map(|p| p.rsplit('/').next().map(str::to_string))
             .collect();
-        if name == "pigeon" {
+        if name == layout.cli {
             features = pigeon_features(&m, &members);
         }
-        by_dir.insert(format!("{WORKSPACE}/crates/{dir}/"), name.to_string());
-        tests.insert(name.to_string(), test_targets(&entry.path(), &m));
+        by_dir.insert(layout.in_workspace(&format!("{member}/")), name.to_string());
+        tests.insert(name.to_string(), test_targets(&ws.join(&member), &m));
         deps.insert(name.to_string(), mine);
     }
     Ok(Crates {
@@ -77,6 +143,7 @@ fn crates(root: &Path) -> Result<Crates, Error> {
         deps,
         features,
         tests,
+        layout,
     })
 }
 
@@ -211,7 +278,7 @@ pub fn changed(root: &Path, base: &str) -> Result<Vec<String>, Error> {
     Ok(files.into_iter().collect())
 }
 
-/// Runs `jobs` one after another in [`WORKSPACE`], each with its output shown; every job runs,
+/// Runs `jobs` one after another in the workspace, each with its output shown; every job runs,
 /// and the names of those that failed are returned.
 ///
 /// # Errors
@@ -226,7 +293,7 @@ pub fn run(root: &Path, jobs: &[Job]) -> Result<Vec<String>, Error> {
         eprintln!("cobot: scope: {}", j.name);
         let status = std::process::Command::new(program)
             .args(args)
-            .current_dir(root.join(WORKSPACE))
+            .current_dir(workspace(root))
             .status()
             .map_err(|e| Error::Tool {
                 command: program.clone(),
@@ -322,7 +389,7 @@ pub fn workers(root: &Path, files: Option<&[String]>) -> Result<Vec<String>, Err
                 .map(|m| format!("{}/", m.trim_end_matches('/'))),
         );
         inputs.extend(f.spec.containers.iter().map(|c| c.image.dockerfile.clone()));
-        inputs.extend(EVERYTHING.iter().map(|p| (*p).to_string()));
+        inputs.extend(crates.layout.everything());
         let entry = format!("{}/", f.spec.entry.krate.trim_end_matches('/'));
         if let Some(package) = crates.by_dir.get(&entry) {
             let mut wanted = BTreeSet::from([package.clone()]);
@@ -386,4 +453,62 @@ fn test_targets(dir: &Path, m: &toml::Value) -> BTreeSet<String> {
         }
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use std::fs;
+
+    use super::{crates, workspace_dir};
+
+    fn write(root: &std::path::Path, path: &str, text: &str) {
+        let p = root.join(path);
+        fs::create_dir_all(p.parent().expect("parent")).expect("dirs");
+        fs::write(p, text).expect("write");
+    }
+
+    #[test]
+    fn a_workspace_at_the_root_is_read_from_its_members_and_metadata() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let root = dir.path();
+        assert_eq!(workspace_dir(root), "src/pigeon-cli");
+        write(
+            root,
+            "Cargo.toml",
+            "[workspace]\nmembers = [\"src/*\"]\nexclude = [\"src/pigeon-ios\"]\n\n\
+             [workspace.dependencies]\nagent = { path = \"src/pigeon-agent\", package = \"pigeon-agent\" }\n\n\
+             [workspace.metadata.pigeon]\ncli = \"pigeon-harness\"\nrun = [\"run\"]\nlater = 1\n",
+        );
+        write(
+            root,
+            "src/pigeon-agent/Cargo.toml",
+            "[package]\nname = \"pigeon-agent\"\n",
+        );
+        write(
+            root,
+            "src/pigeon-harness/Cargo.toml",
+            "[package]\nname = \"pigeon-harness\"\n\n[dependencies]\nagent = { workspace = true, optional = true }\n\n\
+             [features]\ndefault = [\"infra\"]\ninfra = [\"dep:agent\"]\n",
+        );
+        write(
+            root,
+            "src/pigeon-ios/Cargo.toml",
+            "[package]\nname = \"pigeon-ios\"\n",
+        );
+        write(root, "src/notes/README.md", "");
+        assert_eq!(workspace_dir(root), "");
+        let c = crates(root).expect("crates");
+        assert_eq!(
+            c.by_dir.keys().collect::<Vec<_>>(),
+            ["src/pigeon-agent/", "src/pigeon-harness/"]
+        );
+        assert_eq!(
+            c.deps["pigeon-harness"],
+            ["pigeon-agent".to_string()].into()
+        );
+        assert_eq!(c.features["infra"], ["pigeon-agent".to_string()].into());
+        assert_eq!(c.layout.cli, "pigeon-harness");
+        assert_eq!(c.layout.run, ["run"]);
+        assert_eq!(c.layout.root(), ".");
+    }
 }
