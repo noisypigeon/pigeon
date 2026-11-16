@@ -642,3 +642,12 @@ spelling, beside `.cobot/types.json` and tofu's `cobot` key provider:
 `BACKPLANE_TOKEN`, with its one accessor, and the state repository's name. It
 does the one-place alias above, and removes the `AGENT_TOKEN` entry from
 `worker.yaml`.
+### 2026-11-16: Review of !746 against !757: they agree
+
+!757 amended
+[`2026-11-15-runtime-one-mcp-entry-point.md`](2026-11-15-runtime-one-mcp-entry-point.md)
+over `src/**/mcp.rs`, `src/**/wire.rs`, `src/**/routes.rs` and the Worker's
+`api`, `app`, `devices` and `mod` files. !746 (step 6) touches none of them:
+it rewrites import paths in the guarded callers to name `core::` modules and
+deletes the 14 three-line re-export shims. The `src/**/…` globs still match.
+Neither decision changes.
