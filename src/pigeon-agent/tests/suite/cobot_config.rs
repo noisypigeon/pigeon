@@ -1,4 +1,4 @@
-//! Config units: validation, `x-cobot` rendering, secrets, and rotation end to end.
+//! Config units: validation, `x-pigeon` rendering, secrets, and rotation end to end.
 
 use std::fmt::Write as _;
 use std::fs;
@@ -52,7 +52,7 @@ fn schema(secrets: &[&str]) -> Value {
         "type": "object",
         "additionalProperties": false,
         "required": ["label", "items", "tokens", "rotation"],
-        "x-cobot": {
+        "x-pigeon": {
             "version": "0.1.0",
             "secrets": secrets,
             "singletons": {
@@ -68,7 +68,7 @@ fn schema(secrets: &[&str]) -> Value {
             "items": {
                 "type": "array",
                 "items": { "type": "string" },
-                "x-cobot": {
+                "x-pigeon": {
                     "module": "item",
                     "for_each": "$item",
                     "inputs": { "name": "$item", "single": "$module.single.id" }
@@ -77,7 +77,7 @@ fn schema(secrets: &[&str]) -> Value {
             "tokens": {
                 "type": "array",
                 "items": { "type": "object", "properties": { "name": { "type": "string" } }, "required": ["name"] },
-                "x-cobot": {
+                "x-pigeon": {
                     "module": "token",
                     "for_each": "$item.name",
                     "rotate": { "period_days": "$config.rotation.period_days", "overlap_days": "$config.rotation.overlap_days" },
@@ -92,7 +92,7 @@ fn schema(secrets: &[&str]) -> Value {
         }
     });
     if !secrets.is_empty() {
-        s["properties"]["items"]["x-cobot"]["inputs"]["secret"] =
+        s["properties"]["items"]["x-pigeon"]["inputs"]["secret"] =
             json!(format!("$secret.{}", secrets[0]));
     }
     s
@@ -215,21 +215,21 @@ fn bad_schemas_and_configs_fail_for_their_reasons() {
         (
             "unknown expression",
             Box::new(|s| {
-                s["properties"]["items"]["x-cobot"]["inputs"]["name"] = json!("$env.HOME");
+                s["properties"]["items"]["x-pigeon"]["inputs"]["name"] = json!("$env.HOME");
             }),
             "unknown expression",
         ),
         (
             "undeclared input",
             Box::new(|s| {
-                s["properties"]["items"]["x-cobot"]["inputs"]["nope"] = json!("$item");
+                s["properties"]["items"]["x-pigeon"]["inputs"]["nope"] = json!("$item");
             }),
             "undeclared input",
         ),
         (
             "missing output",
             Box::new(|s| {
-                s["properties"]["tokens"]["x-cobot"]["inputs"]["items"] =
+                s["properties"]["tokens"]["x-pigeon"]["inputs"]["items"] =
                     json!("$module.items[*].nope");
             }),
             "no output",
@@ -237,28 +237,29 @@ fn bad_schemas_and_configs_fail_for_their_reasons() {
         (
             "unknown block",
             Box::new(|s| {
-                s["properties"]["tokens"]["x-cobot"]["inputs"]["items"] = json!("$module.ghost.id");
+                s["properties"]["tokens"]["x-pigeon"]["inputs"]["items"] =
+                    json!("$module.ghost.id");
             }),
             "unknown block",
         ),
         (
             "missing module",
             Box::new(|s| {
-                s["properties"]["items"]["x-cobot"]["module"] = json!("ghost");
+                s["properties"]["items"]["x-pigeon"]["module"] = json!("ghost");
             }),
             "missing module",
         ),
         (
             "undeclared secret",
             Box::new(|s| {
-                s["properties"]["items"]["x-cobot"]["inputs"]["name"] = json!("$secret.nope");
+                s["properties"]["items"]["x-pigeon"]["inputs"]["name"] = json!("$secret.nope");
             }),
-            "not in x-cobot.secrets",
+            "not in x-pigeon.secrets",
         ),
         (
             "generation outside rotation",
             Box::new(|s| {
-                s["properties"]["items"]["x-cobot"]["inputs"]["name"] =
+                s["properties"]["items"]["x-pigeon"]["inputs"]["name"] =
                     json!("$generation.not_before");
             }),
             "rotating block",
@@ -266,30 +267,31 @@ fn bad_schemas_and_configs_fail_for_their_reasons() {
         (
             "absent config path",
             Box::new(|s| {
-                s["x-cobot"]["singletons"]["single"]["inputs"]["label"] = json!("$config.nope");
+                s["x-pigeon"]["singletons"]["single"]["inputs"]["label"] = json!("$config.nope");
             }),
             "absent from config.yaml",
         ),
         (
             "unindexed list reference",
             Box::new(|s| {
-                s["properties"]["tokens"]["x-cobot"]["inputs"]["items"] = json!("$module.items.id");
+                s["properties"]["tokens"]["x-pigeon"]["inputs"]["items"] =
+                    json!("$module.items.id");
             }),
             "a list block needs",
         ),
         (
             "escaping module",
             Box::new(|s| {
-                s["properties"]["items"]["x-cobot"]["module"] = json!("../../escape");
+                s["properties"]["items"]["x-pigeon"]["module"] = json!("../../escape");
             }),
             "lowercase-dash name",
         ),
         (
             "no version",
             Box::new(|s| {
-                s["x-cobot"]["version"] = json!("one");
+                s["x-pigeon"]["version"] = json!("one");
             }),
-            "x-cobot.version",
+            "x-pigeon.version",
         ),
     ];
     for (what, edit, want) in cases {

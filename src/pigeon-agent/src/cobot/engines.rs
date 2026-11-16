@@ -19,7 +19,7 @@ pub use crate::cobot::unit::{Problem, Unit};
 pub use crate::core::infra::engines::*;
 
 /// The work directory under the root, gitignored.
-pub const WORK_DIR: &str = crate::names::WORK_DIRS[0];
+pub const WORK_DIR: &str = crate::names::WORK_DIR;
 
 /// The environment variable holding the state passphrase.
 pub const PASSPHRASE_VAR: &str = "PIGEON_STATE_PASSPHRASE";

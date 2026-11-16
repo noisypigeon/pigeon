@@ -18,7 +18,7 @@ use super::{JobsArgs, ServeArgs};
 pub enum InfraCommand {
     /// Check every unit under infra/ and workloads/; exit 1 on a problem
     Validate(CobotRoot),
-    /// Write each unit's main.tf.json under <ROOT>/.cobot/
+    /// Write each unit's main.tf.json under <ROOT>/.pigeon/
     Render(CobotRun),
     /// Plan units against the state repository; print a summary
     Plan(CobotPlan),

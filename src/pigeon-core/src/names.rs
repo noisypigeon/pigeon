@@ -62,31 +62,26 @@ pub fn lookup(get: impl Fn(&str) -> Option<String>) -> impl Fn(&str) -> Option<S
     move |k| read(k, &get)
 }
 
-/// The schema extension's key, and the old one read beside it.
+/// The schema extension's key.
 pub const SCHEMA_KEY: &str = "x-pigeon";
-/// See [`SCHEMA_KEY`].
-pub const OLD_SCHEMA_KEY: &str = "x-cobot";
 
-/// `schema`'s extension: `x-pigeon` if present, else `x-cobot` (`Null` when neither is).
+/// `schema`'s extension, `Null` when it has none.
 #[must_use]
 pub fn ext(schema: &Value) -> &Value {
-    schema
-        .get(SCHEMA_KEY)
-        .or_else(|| schema.get(OLD_SCHEMA_KEY))
-        .unwrap_or(&Value::Null)
+    schema.get(SCHEMA_KEY).unwrap_or(&Value::Null)
 }
 
-/// The ciphertext tags read, the written one first.
-pub const ENC_PREFIXES: [&str; 2] = ["ENC[pigeon:v1:", "ENC[cobot:v1:"];
+/// The ciphertext tag.
+pub const ENC_PREFIX: &str = "ENC[pigeon:v1:";
 
-/// The ciphertext body after either tag in [`ENC_PREFIXES`].
+/// The ciphertext body after [`ENC_PREFIX`].
 #[must_use]
 pub fn enc_body(text: &str) -> Option<&str> {
-    ENC_PREFIXES.iter().find_map(|p| text.strip_prefix(p))
+    text.strip_prefix(ENC_PREFIX)
 }
 
-/// Work directories at the root, the written one first; both are git-ignored.
-pub const WORK_DIRS: [&str; 2] = [".pigeon", ".cobot"];
+/// The work directory at the root; git-ignored.
+pub const WORK_DIR: &str = ".pigeon";
 
 #[cfg(test)]
 mod tests {
@@ -159,24 +154,19 @@ mod tests {
     }
 
     #[test]
-    fn x_pigeon_reads_beside_x_cobot_and_wins() {
-        assert_eq!(
-            ext(&json!({"x-cobot": {"local": true}}))["local"],
-            json!(true)
-        );
+    fn only_x_pigeon_is_read() {
         assert_eq!(
             ext(&json!({"x-pigeon": {"local": true}}))["local"],
             json!(true)
         );
-        let both = json!({"x-pigeon": {"v": "new"}, "x-cobot": {"v": "old"}});
-        assert_eq!(ext(&both)["v"], json!("new"));
+        assert!(ext(&json!({"x-cobot": {"local": true}})).is_null());
         assert!(ext(&json!({})).is_null());
     }
 
     #[test]
-    fn both_ciphertext_tags_read() {
-        assert_eq!(enc_body("ENC[cobot:v1:abc]"), Some("abc]"));
+    fn only_the_pigeon_ciphertext_tag_reads() {
         assert_eq!(enc_body("ENC[pigeon:v1:abc]"), Some("abc]"));
+        assert_eq!(enc_body("ENC[cobot:v1:abc]"), None);
         assert_eq!(enc_body("ENC[gantry:v1:abc]"), None);
     }
 }

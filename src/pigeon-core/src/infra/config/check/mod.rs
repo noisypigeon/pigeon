@@ -37,7 +37,7 @@ pub fn validate(
     problems
 }
 
-/// Checks `x-cobot.credentials` against the catalogs' capabilities, and each
+/// Checks `x-pigeon.credentials` against the catalogs' capabilities, and each
 /// `$credential` reference against it.
 pub(crate) fn check_credentials(
     unit: &ConfigUnit,
@@ -48,7 +48,7 @@ pub(crate) fn check_credentials(
     let x = x_cobot(&unit.schema);
     if let Some(c) = x.get("credentials") {
         let Some(entries) = c.as_object() else {
-            add("`x-cobot.credentials` must map names to requests".into());
+            add("`x-pigeon.credentials` must map names to requests".into());
             return;
         };
         for (name, req) in entries {
@@ -111,7 +111,7 @@ pub(crate) fn check_credentials(
     let declared = declared_credentials(unit);
     for (text, name, field) in credential_refs(unit) {
         if !declared.contains(&name) {
-            add(format!("`{text}` is not in x-cobot.credentials"));
+            add(format!("`{text}` is not in x-pigeon.credentials"));
         } else if !BLOCK.is_match(&field) {
             add(format!(
                 "`{text}`: the field must be lowercase with underscores"
@@ -216,10 +216,10 @@ pub(crate) fn check_top(unit: &ConfigUnit, problems: &mut Vec<(String, String)>)
     let mut add = |file: &str, m: String| problems.push((file.to_string(), m));
     let x = x_cobot(&unit.schema);
     if !x["version"].as_str().is_some_and(|v| SEMVER.is_match(v)) {
-        add(SCHEMA, "`x-cobot.version` must be X.Y.Z".into());
+        add(SCHEMA, "`x-pigeon.version` must be X.Y.Z".into());
     }
     if x.get("local").is_some_and(|l| !l.is_boolean()) {
-        add(SCHEMA, "`x-cobot.local` must be true or false".into());
+        add(SCHEMA, "`x-pigeon.local` must be true or false".into());
     }
     match jsonschema::validator_for(&unit.schema) {
         Ok(validator) => {
@@ -274,15 +274,12 @@ pub(crate) fn check_secrets(
             if present != declared {
                 add(
                     secrets::FILE,
-                    format!("keys {present:?} differ from x-cobot.secrets {declared:?}"),
+                    format!("keys {present:?} differ from x-pigeon.secrets {declared:?}"),
                 );
             }
             for (k, v) in values {
                 if !secrets::is_encrypted(v) {
-                    add(
-                        secrets::FILE,
-                        format!("`{k}` is not ENC[cobot:v1:…] or ENC[pigeon:v1:…]"),
-                    );
+                    add(secrets::FILE, format!("`{k}` is not ENC[pigeon:v1:…]"));
                 }
             }
         }

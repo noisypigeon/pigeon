@@ -343,7 +343,7 @@ fn workload(root: &Path, name: &str, config: &str) {
     write(
         root,
         &format!("workloads/noisypigeon.com/{name}/schema.json"),
-        r#"{ "type": "object", "x-cobot": { "version": "0.1.0" }, "properties": { "ingress": { "type": "object" } } }"#,
+        r#"{ "type": "object", "x-pigeon": { "version": "0.1.0" }, "properties": { "ingress": { "type": "object" } } }"#,
     );
     write(
         root,
@@ -709,7 +709,7 @@ fn workload_secrets_are_their_own_and_never_break_glass() {
 
     let repo = self::repo(PROTON);
     set_secrets(repo.path(), &["protonmail_verification"]);
-    assert_fails(repo.path(), "differ from x-cobot.secrets");
+    assert_fails(repo.path(), "differ from x-pigeon.secrets");
 
     let w = Some(WORKLOAD_PASS.to_string());
     let i = Some(SECRETS_PASS.to_string());
@@ -801,7 +801,7 @@ fn builtin_repo() -> TempDir {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
         "$defs": real["$defs"],
-        "x-cobot": {
+        "x-pigeon": {
             "version": "0.1.0",
             "apex": apex_x,
             "workload": workload_x,
@@ -814,11 +814,11 @@ fn builtin_repo() -> TempDir {
             }
         },
         "properties": {
-            "zones": { "type": "array", "x-cobot": { "module": "zone", "for_each": "$item", "inputs": { "name": "$item" } } },
+            "zones": { "type": "array", "x-pigeon": { "module": "zone", "for_each": "$item", "inputs": { "name": "$item" } } },
             "rotation": { "type": "object" },
             "tokens": {
                 "type": "array",
-                "x-cobot": {
+                "x-pigeon": {
                     "module": "token",
                     "for_each": "$item.name",
                     "rotate": { "period_days": "$config.rotation.period_days", "overlap_days": "$config.rotation.overlap_days" },
@@ -1102,7 +1102,7 @@ fn items_unit(root: &Path, rel: &str, items: &str) {
     write(
         root,
         &format!("{rel}/schema.json"),
-        r#"{ "type": "object", "x-cobot": { "version": "0.1.0" }, "properties": { "items": { "type": "array", "x-cobot": { "module": "item", "for_each": "$item", "inputs": { "name": "$item" } } } } }"#,
+        r#"{ "type": "object", "x-pigeon": { "version": "0.1.0" }, "properties": { "items": { "type": "array", "x-pigeon": { "module": "item", "for_each": "$item", "inputs": { "name": "$item" } } } } }"#,
     );
     data_module(root, &format!("{rel}/modules/item"), &["name"], "");
     write(
@@ -1458,7 +1458,7 @@ fn bad_static_sites_fail_for_their_own_reason() {
     write(
         repo.path(),
         "workloads/noisypigeon.com/shop/schema.json",
-        r#"{ "type": "object", "x-cobot": { "version": "0.1.0", "workload": {} } }"#,
+        r#"{ "type": "object", "x-pigeon": { "version": "0.1.0", "workload": {} } }"#,
     );
     write(
         repo.path(),
@@ -1467,7 +1467,7 @@ fn bad_static_sites_fail_for_their_own_reason() {
     );
     assert_fails(
         repo.path(),
-        "`x-cobot.workload` belongs only in infra/cloudflare",
+        "`x-pigeon.workload` belongs only in infra/cloudflare",
     );
 }
 

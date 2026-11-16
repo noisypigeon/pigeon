@@ -62,7 +62,7 @@ fn reads_and_bumps_the_package_version_line() {
     let yaml = "description: x\nversion: 1.2.3\n";
     let (s, e, p, mm) = read_version(yaml).expect("yaml");
     assert_eq!((&yaml[s..e], p, mm.as_str()), ("1.2.3", 3, "1.2"));
-    let json = "{\n  \"x-cobot\": { \"version\": \"0.4.0\" }\n}\n";
+    let json = "{\n  \"x-pigeon\": { \"version\": \"0.4.0\" }\n}\n";
     let (s, e, p, _) = read_version(json).expect("json");
     assert_eq!((&json[s..e], p), ("0.4.0", 0));
 }

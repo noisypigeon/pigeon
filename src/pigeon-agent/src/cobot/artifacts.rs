@@ -5,7 +5,7 @@ use serde_json::{Value, json};
 
 use crate::cobot::cloudflare::Api;
 
-/// The `x-cobot.api` of a kind this module applies.
+/// The `x-pigeon.api` of a kind this module applies.
 pub const API: &str = "artifacts";
 
 pub use crate::cobot::artifacts_wire::TOKEN_TTL;

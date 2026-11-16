@@ -1,4 +1,4 @@
-//! A config unit's `main.tf.json`, rendered from its schema's `x-cobot` and its config.
+//! A config unit's `main.tf.json`, rendered from its schema's `x-pigeon` and its config.
 
 use std::collections::BTreeMap;
 

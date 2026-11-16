@@ -79,7 +79,7 @@ pub struct Unit {
 }
 
 impl Unit {
-    /// Whether its schema sets `x-cobot.local`: it runs only when named; see
+    /// Whether its schema sets `x-pigeon.local`: it runs only when named; see
     /// `.claude/decisions/2026-11-04-development-platform-instance-separation.md`.
     #[must_use]
     pub fn is_local(&self) -> bool {
@@ -150,7 +150,7 @@ pub fn check_tf(rel: &str, text: &str, allow: &Allowlist) -> Vec<Problem> {
     out
 }
 
-/// A problem when a unit other than `infra/cloudflare` declares `x-cobot.apex` or `x-cobot.workload`.
+/// A problem when a unit other than `infra/cloudflare` declares `x-pigeon.apex` or `x-pigeon.workload`.
 #[must_use]
 pub fn misplaced_apex(unit: &Unit) -> Option<Problem> {
     let c = unit.config.as_ref()?;
@@ -161,7 +161,7 @@ pub fn misplaced_apex(unit: &Unit) -> Option<Problem> {
         problem(
             format!("{}/{}", unit.path, crate::infra::config::SCHEMA),
             format!(
-                "`x-cobot.{kind}` belongs only in {}",
+                "`x-pigeon.{kind}` belongs only in {}",
                 crate::infra::apex::CLOUDFLARE
             ),
         )

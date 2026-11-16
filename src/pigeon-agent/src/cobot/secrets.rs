@@ -18,8 +18,8 @@ pub const PASSPHRASE_VAR: &str = "PIGEON_SECRETS_PASSPHRASE";
 /// `.claude/decisions/2026-11-02-runtime-workloads-zone-apex.md` §10.
 pub const WORKLOAD_PASSPHRASE_VAR: &str = "PIGEON_WORKLOAD_SECRETS_PASSPHRASE";
 
-/// The tag written; both of [`crate::names::ENC_PREFIXES`] are read.
-const PREFIX: &str = crate::names::ENC_PREFIXES[0];
+/// The tag written and read.
+const PREFIX: &str = crate::names::ENC_PREFIX;
 
 fn failed(path: &Path, message: impl Into<String>) -> Error {
     Error::Io {
@@ -67,7 +67,7 @@ enum Closed {
 fn open(value: &str, passphrase: &str) -> Result<String, Closed> {
     let body = crate::names::enc_body(value)
         .and_then(|v| v.strip_suffix(']'))
-        .ok_or(Closed::Malformed("not ENC[cobot:v1:…] or ENC[pigeon:v1:…]"))?;
+        .ok_or(Closed::Malformed("not ENC[pigeon:v1:…]"))?;
     let bytes = unbase64(body).ok_or(Closed::Malformed("bad base64"))?;
     let decryptor =
         age::Decryptor::new(&bytes[..]).map_err(|_| Closed::Malformed("not an age file"))?;
@@ -279,19 +279,21 @@ mod tests {
     }
 
     #[test]
-    fn values_are_written_pigeon_tagged_and_read_under_either_tag() {
+    fn values_are_written_and_read_only_under_the_pigeon_tag() {
         let enc = encrypt("s3cret-value", "secrets-passphrase-0123").expect("encrypts");
-        assert!(
-            enc.starts_with("ENC[pigeon:v1:"),
-            "written under the new tag"
-        );
-        let renamed = enc.replacen("ENC[pigeon:v1:", "ENC[cobot:v1:", 1);
-        assert!(is_encrypted(&renamed));
+        assert!(enc.starts_with("ENC[pigeon:v1:"), "{enc}");
         assert_eq!(
-            decrypt(&renamed, "secrets-passphrase-0123").expect("decrypts"),
+            decrypt(&enc, "secrets-passphrase-0123").expect("decrypts"),
             "s3cret-value"
         );
-        assert!(!is_encrypted(&enc.replacen("pigeon", "gantry", 1)));
+        for old in ["cobot", "gantry"] {
+            let renamed = enc.replacen("pigeon", old, 1);
+            assert!(!is_encrypted(&renamed), "{old}");
+            assert!(
+                decrypt(&renamed, "secrets-passphrase-0123").is_err(),
+                "{old}"
+            );
+        }
     }
 
     #[test]

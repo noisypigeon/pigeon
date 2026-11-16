@@ -88,14 +88,13 @@ mod readers {
     }
 
     #[test]
-    fn both_work_directories_are_git_ignored() {
+    fn the_work_directory_is_git_ignored() {
         let root = Path::new(env!("CARGO_MANIFEST_DIR"))
             .ancestors()
             .find(|p| p.join(".config/approvals.yaml").is_file())
             .expect("the repository root");
         let ignore = std::fs::read_to_string(root.join(".gitignore")).expect(".gitignore");
-        for d in WORK_DIRS {
-            assert!(ignore.lines().any(|l| l == format!("/{d}/")), "{d}");
-        }
+        let dir = format!("/{WORK_DIR}/");
+        assert!(ignore.lines().any(|l| l == dir), "{dir}");
     }
 }

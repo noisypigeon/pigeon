@@ -1,8 +1,8 @@
-//! `x-cobot` expressions: `$item`, `$config`, `$secret`, `$generation` and `$module`.
+//! `x-pigeon` expressions: `$item`, `$config`, `$secret`, `$generation` and `$module`.
 
 use super::MODULE_REF;
 
-/// One `x-cobot` expression.
+/// One `x-pigeon` expression.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Expr {
     /// `$item` or `$item.<path>`.
@@ -17,7 +17,7 @@ pub enum Expr {
     Handoff(String),
     /// `$credential.<name>.<field>`, a field of a credential the runner supplies.
     Credential {
-        /// The credential, named in `x-cobot.credentials`.
+        /// The credential, named in `x-pigeon.credentials`.
         name: String,
         /// Its field, such as `api_token`.
         field: String,

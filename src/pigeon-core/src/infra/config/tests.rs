@@ -12,7 +12,7 @@ use crate::infra::providers::Allowlist;
 fn unit() -> super::ConfigUnit {
     let schema = json!({
         "type": "object",
-        "x-cobot": { "singletons": { "zone": { "module": "zone", "inputs": {} } } }
+        "x-pigeon": { "singletons": { "zone": { "module": "zone", "inputs": {} } } }
     });
     from_kind(json!({}), schema, Path::new("/unit"), None)
 }
@@ -84,7 +84,7 @@ fn a_secrets_file_is_judged_by_what_the_shell_read() {
     assert!(
         stray
             .iter()
-            .any(|m| m.contains("differ from x-cobot.secrets")),
+            .any(|m| m.contains("differ from x-pigeon.secrets")),
         "{stray:?}"
     );
     assert!(stray.iter().any(|m| m.contains("is not ENC")), "{stray:?}");

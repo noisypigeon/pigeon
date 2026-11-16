@@ -1,4 +1,4 @@
-//! Agnostic module references and `x-cobot.each` blocks; see
+//! Agnostic module references and `x-pigeon.each` blocks; see
 //! `.claude/decisions/2026-11-03-runtime-infra-agnostic-shared-modules.md`.
 
 use backplane::cobot::providers::LoadAllowlist;
@@ -46,7 +46,7 @@ fn schema(each: &Value) -> Value {
         "type": "object",
         "additionalProperties": false,
         "required": ["label", "items"],
-        "x-cobot": { "version": "0.1.0", "each": each },
+        "x-pigeon": { "version": "0.1.0", "each": each },
         "properties": {
             "label": { "type": "string" },
             "items": {
@@ -57,7 +57,7 @@ fn schema(each: &Value) -> Value {
                     "required": ["name"],
                     "properties": { "name": { "type": "string" } }
                 },
-                "x-cobot": {
+                "x-pigeon": {
                     "module": "item",
                     "for_each": "$item.name",
                     "inputs": { "name": "$item.name", "suffix": "$module.suffixes[$item.name].result" }
@@ -86,7 +86,7 @@ fn repo() -> TempDir {
     write(
         root,
         "infra/agnostic/schema.json",
-        r#"{ "type": "object", "additionalProperties": false, "x-cobot": { "version": "0.1.0", "secrets": [], "providers": {} } }"#,
+        r#"{ "type": "object", "additionalProperties": false, "x-pigeon": { "version": "0.1.0", "secrets": [], "providers": {} } }"#,
     );
     module(root, "infra/agnostic/modules/suffix", &["length"], "");
     write(
@@ -334,7 +334,7 @@ fn a_unit_without_blocks_renders_no_module_and_plans_clean() {
 /// Points `items` at `module`; see the separation ADR's catalog-composition amendment.
 fn set_item_module(root: &Path, module: &str) {
     let mut s = schema(&suffixes());
-    s["properties"]["items"]["x-cobot"]["module"] = json!(module);
+    s["properties"]["items"]["x-pigeon"]["module"] = json!(module);
     write(
         root,
         &format!("{UNIT}/schema.json"),

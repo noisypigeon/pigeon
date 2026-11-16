@@ -23,7 +23,7 @@ fn set_unit(root: &Path, credentials: &Value, token: &str) {
         "type": "object",
         "additionalProperties": false,
         "properties": { "name": { "type": "string" } },
-        "x-cobot": {
+        "x-pigeon": {
             "version": "0.1.0",
             "secrets": [],
             "credentials": credentials,
@@ -123,7 +123,7 @@ fn bad_requests_and_references_fail() {
         (
             dns(json!(["dns.write"]), "zone"),
             "$credential.other.api_token",
-            "`$credential.other.api_token` is not in x-cobot.credentials",
+            "`$credential.other.api_token` is not in x-pigeon.credentials",
         ),
         (
             json!(["dns"]),
@@ -257,7 +257,7 @@ fn an_instance_unit_apart_from_its_platform_finds_platform_modules_and_its_own_c
         "type": "object",
         "additionalProperties": false,
         "properties": { "name": { "type": "string" } },
-        "x-cobot": {
+        "x-pigeon": {
             "version": "0.1.0",
             "secrets": [],
             "credentials": { "store": { "provider": "custom", "capabilities": ["custom.write"], "scope": "bucket" } },

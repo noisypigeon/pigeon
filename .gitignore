@@ -1,6 +1,5 @@
 /target
 /src/pigeon-cli/target
-/.cobot/
 /.pigeon/
 /src/pigeon-ios/*.xcodeproj
 /src/pigeon-ios/build

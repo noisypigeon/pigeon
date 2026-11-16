@@ -711,7 +711,7 @@ fn stacks(root: &Path) {
     fs::create_dir_all(p.join("catalog/pigeon/kinds/platform")).expect("mkdir");
     fs::write(
         p.join("catalog/pigeon/kinds/platform/schema.json"),
-        r#"{"type":"object","x-cobot":{"version":"0.1.0","local":true}}"#,
+        r#"{"type":"object","x-pigeon":{"version":"0.1.0","local":true}}"#,
     )
     .expect("write");
     fs::write(
@@ -780,7 +780,7 @@ fn a_static_sites_bucket_is_an_output_derived_from_its_zone_and_name() {
     fs::create_dir_all(p.join("catalog/cloudflare/kinds/static-site")).expect("mkdir");
     fs::write(
         p.join("catalog/cloudflare/kinds/static-site/schema.json"),
-        r#"{"type":"object","x-cobot":{"version":"0.1.0","local":true}}"#,
+        r#"{"type":"object","x-pigeon":{"version":"0.1.0","local":true}}"#,
     )
     .expect("write");
     let config = p.join("config.yaml");

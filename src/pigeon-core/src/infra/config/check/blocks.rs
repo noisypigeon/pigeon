@@ -66,7 +66,7 @@ pub(crate) fn check_module(
     Some(m.info)
 }
 
-/// Checks `x-cobot.each`: blocks over another array property's items.
+/// Checks `x-pigeon.each`: blocks over another array property's items.
 pub(crate) fn check_each(schema: &Value, add: &mut impl FnMut(&str, String)) {
     let Some(each) = x_cobot(schema).get("each") else {
         return;
@@ -203,7 +203,7 @@ pub(crate) fn check_blocks(
     }
 }
 
-/// Checks `x-cobot.outputs`: each a `$module` expression.
+/// Checks `x-pigeon.outputs`: each a `$module` expression.
 pub(crate) fn check_outputs(unit: &ConfigUnit, disk: &Disk, problems: &mut Vec<(String, String)>) {
     let Some(outputs) = x_cobot(&unit.schema).get("outputs") else {
         return;
@@ -285,7 +285,7 @@ pub(crate) fn check_exprs(
                 add(SCHEMA, format!("`{text}` needs a rotating block"));
             }
             Some(Expr::Secret(k)) if !declared.contains(&k) => {
-                add(SCHEMA, format!("`{text}` is not in x-cobot.secrets"));
+                add(SCHEMA, format!("`{text}` is not in x-pigeon.secrets"));
             }
             Some(Expr::Handoff(_)) if !handoff => {
                 add(SCHEMA, format!("`{text}` needs `handoff`"));

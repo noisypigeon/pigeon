@@ -23,7 +23,7 @@ fn unit(root: &Path, rel: &str, local: Option<Value>) {
         "type": "object",
         "additionalProperties": false,
         "properties": { "name": { "type": "string" } },
-        "x-cobot": x
+        "x-pigeon": x
     });
     write(root, &format!("{rel}/schema.json"), &schema.to_string());
     write(root, &format!("{rel}/config.yaml"), "name: unit\n");
@@ -74,9 +74,10 @@ fn a_non_boolean_local_fails() {
             &backplane::cobot::providers::Allowlist::default(),
         );
         assert!(
-            problems.iter().any(
-                |p| p.path == "infra/boot/schema.json" && p.message.contains("`x-cobot.local`")
-            ),
+            problems
+                .iter()
+                .any(|p| p.path == "infra/boot/schema.json"
+                    && p.message.contains("`x-pigeon.local`")),
             "{bad}: {problems:?}"
         );
     }

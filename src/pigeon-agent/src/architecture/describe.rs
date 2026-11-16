@@ -172,14 +172,14 @@ fn units(instance: &Instance, g: &mut Graph, problems: &mut Vec<String>) -> Vec<
                 &id,
                 &format!("provider:{provider}"),
                 "apply",
-                &format!("{schema}/schema.json x-cobot.providers"),
+                &format!("{schema}/schema.json x-pigeon.providers"),
             ));
         }
         for (name, request) in x["credentials"].as_object().into_iter().flatten() {
             let Some(provider) = request["provider"].as_str() else {
                 continue;
             };
-            let source = format!("{schema}/schema.json x-cobot.credentials.{name}");
+            let source = format!("{schema}/schema.json x-pigeon.credentials.{name}");
             for cap in request["capabilities"]
                 .as_array()
                 .into_iter()

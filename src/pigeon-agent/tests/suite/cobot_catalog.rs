@@ -41,7 +41,7 @@ fn schema() -> Value {
         "type": "object",
         "additionalProperties": false,
         "required": ["items"],
-        "x-cobot": {
+        "x-pigeon": {
             "version": "0.1.0",
             "each": { "suffixes": { "module": "agnostic/suffix", "over": "items", "for_each": "$item.name", "inputs": { "length": 6 } } }
         },
@@ -54,7 +54,7 @@ fn schema() -> Value {
                     "required": ["name"],
                     "properties": { "name": { "type": "string" } }
                 },
-                "x-cobot": { "module": "item", "for_each": "$item.name", "inputs": { "name": "$item.name" } }
+                "x-pigeon": { "module": "item", "for_each": "$item.name", "inputs": { "name": "$item.name" } }
             }
         }
     })
@@ -68,7 +68,7 @@ fn repo(area: &str) -> TempDir {
     write(
         root,
         &format!("{area}/agnostic/schema.json"),
-        r#"{ "type": "object", "additionalProperties": false, "x-cobot": { "version": "0.1.0", "secrets": [], "providers": {} } }"#,
+        r#"{ "type": "object", "additionalProperties": false, "x-pigeon": { "version": "0.1.0", "secrets": [], "providers": {} } }"#,
     );
     module(
         root,

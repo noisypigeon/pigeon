@@ -1,4 +1,4 @@
-//! Config units: `config.yaml` validated by `schema.json`, rendered from its `x-cobot`
+//! Config units: `config.yaml` validated by `schema.json`, rendered from its `x-pigeon`
 //! annotations, from what the shell reads first; see
 //! `.claude/decisions/2026-11-02-runtime-cloudflare-provisioner-unit.md` §1–§3,
 //! `.claude/decisions/2026-11-02-runtime-workloads-zone-apex.md` §7 and
@@ -83,7 +83,7 @@ pub struct ConfigUnit {
 struct Block {
     name: String,
     module: String,
-    /// The property whose items a keyed block iterates: its own, or `x-cobot.each`'s `over`.
+    /// The property whose items a keyed block iterates: its own, or `x-pigeon.each`'s `over`.
     over: String,
     for_each: Option<String>,
     derived: Option<String>,
@@ -224,7 +224,7 @@ pub fn from_kind(config: Value, schema: Value, home: &Path, site: Option<Site>) 
     }
 }
 
-/// An apex's or a workload's schema: `home`'s `$defs.<kind>`, composed by its `x-cobot.<kind>`.
+/// An apex's or a workload's schema: `home`'s `$defs.<kind>`, composed by its `x-pigeon.<kind>`.
 #[must_use]
 pub fn composed_schema(root: &Value, kind: &str) -> Value {
     let mut x = x_cobot(root)[kind].clone();
@@ -235,7 +235,7 @@ pub fn composed_schema(root: &Value, kind: &str) -> Value {
         "$schema": root["$schema"],
         "$defs": root["$defs"],
         "$ref": format!("#/$defs/{kind}"),
-        "x-cobot": x,
+        "x-pigeon": x,
     })
 }
 

@@ -68,7 +68,7 @@ pub struct Entry {
     pub role: Role,
     /// Its settings: the entry without `kind`.
     pub settings: Value,
-    /// The API that applies it, `x-cobot.api`, for a kind cobot applies without `OpenTofu`.
+    /// The API that applies it, `x-pigeon.api`, for a kind cobot applies without `OpenTofu`.
     pub api: Option<String>,
 }
 
