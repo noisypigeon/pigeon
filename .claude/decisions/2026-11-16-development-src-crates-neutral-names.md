@@ -438,8 +438,8 @@ boundary. The other steps are briefs for Sonnet executors.
 ### 2026-11-16: The checks read the layout from the tree, before anything moves (step 4 splits)
 
 - **The gate runs `main`'s `pigeon`, not the change's.** The bound job and
-  every check job run `main`'s newest build from `builds/`. `main`'s
-  `GitHub` checks run `main`'s `ci.yml`. Today both have the layout built in:
+  every check job run `main`'s newest build from `builds/`. The GitHub
+  checks run `main`'s `ci.yml`. Today both have the layout built in:
   - `scope::WORKSPACE = "src/pigeon-cli"`, the directory every check runs in;
   - crates found by reading `<WORKSPACE>/crates/`;
   - `WORKER` and `WASM_ONLY` (`pigeon-backplane` and its `worker/` directory);
