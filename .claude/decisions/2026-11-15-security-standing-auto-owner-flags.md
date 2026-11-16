@@ -442,3 +442,22 @@ Steps:
   redeems grants, and `minting.rs` in core and the Worker, which mint
   credentials, were never guarded, so Auto covered them before !812 too. A
   later change may guard them.
+### 2026-11-16: The gate, as approvals.yaml names it
+
+Step 2 of the amendment above. `approvals.yaml`'s `gate:` names:
+
+- **the whole approval core** (`src/pigeon-core/src/approval/**`): beside
+  the tier, window and mandate code, it holds the owner's proofs: one-time
+  grants and their redemption (`grants.rs`), passkeys, the authenticator
+  code (`totp.rs`) and the break-glass enrolment (`enroll.rs`);
+- `approve.rs` and `access.rs` in core and the Worker, the Worker's
+  `elicit.rs`, which checks the authenticator code, and its passkey files;
+- **the Worker's `mandates.rs`,** which applies Auto's and a mandate's
+  decisions, so an edit there could skip them;
+- **`.config/policies/secrets*.yaml`,** the secrets pins: a change to them is
+  a secrets change;
+- **`.github/**`,** whose workflows can read CI secrets;
+- `.config/approvals.yaml`, which `secrets:` already makes the owner's.
+
+Auto covers every other guarded and eviction path from the next head
+classified after this merges.
