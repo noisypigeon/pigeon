@@ -157,12 +157,24 @@ pub fn setting_lines(text: &str, setting: &Setting) -> String {
     out
 }
 
+/// Whether `subject` is the release bot's own commit: `chore(release):`, without a merged
+/// change's ` (!n)` or ` (#n)`.
+///
+/// # Panics
+///
+/// Never: its pattern is a constant.
+#[must_use]
+pub fn is_release(subject: &str) -> bool {
+    let merged = Regex::new(r" \((?:!|#)[0-9]+\)$").expect("valid regex");
+    subject.starts_with(RELEASE_PREFIX) && !merged.is_match(subject)
+}
+
 /// `commits` without the release bot's own.
 #[must_use]
 pub fn user_only(commits: Vec<Commit>) -> Vec<Commit> {
     commits
         .into_iter()
-        .filter(|c| !c.subject.starts_with(RELEASE_PREFIX))
+        .filter(|c| !is_release(&c.subject))
         .collect()
 }
 

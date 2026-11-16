@@ -6,7 +6,7 @@ use std::fmt::Write as _;
 use regex::Regex;
 use serde::Deserialize;
 
-use super::lines::{self, Commit, RELEASE_PREFIX};
+use super::lines::{self, Commit};
 
 /// A unit as a past `releases.yaml` declared it: only what the changelog needs.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
@@ -134,7 +134,7 @@ pub fn render(repository: &str, merged: &[Merged], tags: &[Tagged]) -> String {
     let mut commits: BTreeMap<&str, Vec<&Merged>> = BTreeMap::new();
     for m in merged
         .iter()
-        .filter(|m| !m.commit.subject.starts_with(RELEASE_PREFIX))
+        .filter(|m| !lines::is_release(&m.commit.subject))
     {
         commits.entry(m.commit.date.as_str()).or_default().push(m);
     }
@@ -312,6 +312,31 @@ mod tests {
         assert!(!out.contains("junk"));
         let only_release = render(REPO, &merged[2..], &[tag("nope", "2026-01-05")]);
         assert_eq!(only_release, "# Changelog\n");
+    }
+
+    #[test]
+    fn a_merged_release_change_keeps_its_line() {
+        let merged = vec![
+            Merged {
+                commit: commit('d', "2026-01-04", "chore(release): one changelog (!9)", &[]),
+                units: vec![],
+                renames: vec![],
+            },
+            Merged {
+                commit: commit('e', "2026-01-04", "chore(release): a v0.1.2", &[]),
+                units: vec![],
+                renames: vec![],
+            },
+        ];
+        let out = render(REPO, &merged, &[]);
+        assert!(
+            out.contains("- chore(release): one changelog (!9) ("),
+            "{out}"
+        );
+        assert!(!out.contains("a v0.1.2"), "{out}");
+        assert!(lines::is_release("chore(release): a v0.1.2"));
+        assert!(!lines::is_release("chore(release): x (#3)"));
+        assert!(!lines::is_release("fix: y"));
     }
 
     #[test]
