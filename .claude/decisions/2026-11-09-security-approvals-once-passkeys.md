@@ -318,3 +318,38 @@ whose `src/**/migrations/**` scope reached `secrets:` only through the shared
   `secrets: <scope> (the merge decides)`. That change lands with the next
   change that edits `tiers.rs` (the restructure's k3), so no passkey is
   spent on a label.
+### 2026-11-16: An owner's approval of a head is not followed by a merge ask for it
+
+The owner answered item #19 (filed on !818): one approval covers the merge
+of an unchanged head. This is what the 2026-11-12 amendment decided, but it
+wasn't what happened on 2026-11-16, measured in
+[`2026-11-16-development-merge-path-measured-faster.md`](2026-11-16-development-merge-path-measured-faster.md):
+
+- **All 6 merge taps of the day were for a head the owner had just
+  approved.** On !778, !782 (twice), !784, !787 and !800, `approval.pending`
+  for `change.merge` came 6 to 70 s after the owner's `change.approved`,
+  with no push between. Those taps waited a median 809 s.
+- **The rest were re-approvals after a restack.** !782, !785, !789 and !794
+  were approved 2 or 3 times, when a restack changed their own lines or
+  their merge failed to a release commit.
+
+Decided:
+
+- **A `change.merge` on a head the owner approved files no ask.** It
+  answers the queue's place, as the 2026-11-12 amendment says, whoever calls
+  it: the session, the window, or the kept turn's re-ask.
+- **"Unchanged" means the approved SHA.** A restack's new head asks again
+  unless an existing carry rule carries it. This amendment widens no carry
+  rule at the `owner` tier.
+- **`hold: true` still holds,** and an approval older than 24 hours still
+  asks again.
+
+**Execution,** held until the restructure's k3 merges, after checking with
+its step 12 helper. Its files are on `approvals.yaml`'s `gate:` list, so the
+owner approves it with a passkey:
+
+- a test replays !800's sequence: approve, then `change.merge` on the same
+  head, with no `approval.pending`;
+- the fix sits where `change.merge` meets the owner check (`by_grant` and
+  the owner check named in the 2026-11-12 execution);
+- `approvals.yaml` doesn't change.

@@ -184,3 +184,64 @@ then.
 - Replays of the window's sequences in the agent suite: a release during a
   held turn waits; !782's `Cargo.lock` conflict restacks clean.
 - The step 7 measures, against this ADR's.
+
+## Amendments
+
+### 2026-11-16: The owner's answers to §5
+
+The owner agreed to both of §5's decisions (items #19 and #20).
+
+- **#19, one approval covers the merge of an unchanged head.**
+  - The 2026-11-12 amendment to
+    [`2026-11-09-security-approvals-once-passkeys.md`](2026-11-09-security-approvals-once-passkeys.md)
+    already decided this, but every merge tap measured here was a
+    `change.merge` ask for the head just approved.
+  - That ADR's 2026-11-16 amendment records the defect and its fix. No carry
+    rule widens.
+- **#20, checks carry across a clean restack outside the change's reach.**
+  Reach is computed as selection already computes it, per
+  [`2026-11-16-development-one-test-binary-per-crate.md`](2026-11-16-development-one-test-binary-per-crate.md):
+  - **Units are the test map's.** Since version 2, each crate's `suite` is
+    mapped per top-level module, and `TestMap::select` resolves by module.
+    A check is reached when `main`'s diff since the change's old base
+    touches a file of any unit the check runs.
+  - **`tests/suite/main.rs` and `tests/suite/harness/**`** reach every
+    module of their crate's suite.
+  - **These files always reach:**
+    - any non-Rust file, unless `pigeon dev scope` maps it to no check of
+      the change;
+    - `Cargo.toml`, `Cargo.lock`, `rust-toolchain.toml` and `build.rs`;
+    - a file the map doesn't know, which reaches its whole crate, as
+      selection falls back.
+  - **A reached check runs again,** and so does the gate's set for it.
+    Checks nothing reaches keep their results, recorded as carried with both
+    SHAs. Everything else about a clean restack is unchanged.
+  - **A failed `test map` on `main` stops carrying,** as it makes gates full,
+    until a run passes.
+
+**Execution,** added to the steps, held as they are:
+
+- **6a. Brief: the owner's merge ask** (sonnet), per the approvals ADR's
+  2026-11-16 amendment. It goes after k3, with the owner's passkey.
+- **6b. Brief: checks carried by reach** (sonnet), in the restack's carry
+  rule and the gate's set. Replays: a restack over an ADR-only merge keeps
+  every check; one over a `Cargo.lock` change re-runs them all. The tests
+  planner reviews the brief.
+
+### 2026-11-16: Review of !818 against !801: they agree
+
+!801 amended
+[`2026-11-15-security-owner-approvals-always-listed.md`](2026-11-15-security-owner-approvals-always-listed.md):
+`ChangeRun` hands out the same page link while the head, tier and operation
+still apply.
+
+- **They agree.** This ADR changes nothing in that ADR's files
+  (`worker/approve.rs`, `app/approvals.rs`, `approval/listed.rs`,
+  `worker/listed.rs`), and no step here mints or lists an approval.
+- **They meet at #19.** !801 makes one pending ask answer one link. #19 (the
+  approvals ADR's 2026-11-16 amendment) removes the merge ask itself on a head
+  the owner just approved. Its fix must leave !801's `wait` mapping as it is:
+  `change.merge` on an unapproved checked head is shown as `change.approve`.
+- **§4's re-ask** goes through `change.merge`, like a session's ask. When it
+  needs the owner, it lists through !801's `Grants::page`, so it reuses the
+  open link and mints none.
