@@ -4,7 +4,7 @@
 use serde_json::{Map, Value, json};
 use worker::{Env, Method, Result};
 
-use super::mandates::{Verdict, to_instance, window_verdict};
+use super::mandates::to_instance;
 use super::platform::{self, Settings, json_request};
 use crate::changes::{Change, State};
 use crate::core::change::stage::{self, Context, Deploy, Stage};
@@ -28,7 +28,8 @@ async fn carrying(env: &Env, s: &Settings, merged: &str) -> Deploy {
     read.await.unwrap_or_default()
 }
 
-/// The window or mandate that would allow `c`'s next authorization or approval.
+/// The window or mandate that would allow `c`'s next authorization or approval, asked without
+/// counting a merge; see the standing Auto ADR §3.
 async fn covered(env: &Env, s: &Settings, c: &Change) -> Option<String> {
     let operation = match c.state {
         State::Proposed => "change.authorize",
@@ -38,10 +39,14 @@ async fn covered(env: &Env, s: &Settings, c: &Change) -> Option<String> {
     if let Some(m) = c.mandate {
         return Some(format!("mandate:{m}"));
     }
-    match window_verdict(env, s, c, operation).await.ok()? {
-        Verdict::Allow(id) | Verdict::ApproveHeld(id, _) => Some(format!("window:{id}")),
-        _ => None,
-    }
+    let (_, current) = to_instance(env, s, "/windows/current", &json!({}))
+        .await
+        .ok()?;
+    let w: crate::core::approval::windows::Window =
+        serde_json::from_value(current["window"].clone()).ok()?;
+    let decided = crate::core::approval::windows::decide(&w, c, operation, platform::now());
+    (decided == crate::core::approval::mandates::Decision::Allow)
+        .then(|| format!("window:{}", w.id))
 }
 
 /// What a hold defers approved `c`'s merge on, when its mandate or the Auto window is held.

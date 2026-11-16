@@ -49,3 +49,5 @@ units:
       - { name: pigeon-control apple release, paths: [platform.pigeon.dev/v0/apple/release, blue.platform.pigeon.dev/v0/apple/release] }
       - { name: pigeon-control app api, paths: [platform.pigeon.dev/v0/app, blue.platform.pigeon.dev/v0/app] }
       - { name: pigeon-control app association, paths: [platform.pigeon.dev/.well-known/apple-app-site-association, blue.platform.pigeon.dev/.well-known/apple-app-site-association] }
+      # Standalones' hosts; see .claude/decisions/2026-11-15-runtime-standalone-hostnames-platform-zone.md.
+      - { name: pigeon-control standalone hosts, paths: ["*.pigeon.dev/v0/app"] }

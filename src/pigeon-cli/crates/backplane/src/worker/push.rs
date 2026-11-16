@@ -149,6 +149,9 @@ pub async fn build(env: &Env, s: &Settings) -> Result<(Digest, u64)> {
         let line = crate::tasks::held_line(&format!("Auto window {id}"), h, now());
         d.held.insert(0, line);
     }
+    if let Some(line) = w.as_ref().and_then(window_line) {
+        d.held.insert(0, line);
+    }
     d.stops = crate::tasks::stops(&events);
     d.items = super::owner_items::lines(env, s).await?;
     d.queue = crate::tasks::queue_lines(&events);
@@ -465,4 +468,20 @@ fn serve_route<'a>(
     who: &'a Identity,
 ) -> futures_util::future::LocalBoxFuture<'a, Result<Response>> {
     Box::pin(page_serve(req, env, s, who))
+}
+
+/// The digest's line for an Auto window the rate breaker holds or that is paused, which a
+/// deploy hold's line doesn't cover; see the standing Auto ADR's 2026-11-15 amendment on the
+/// rate breaker.
+fn window_line(w: &crate::core::approval::windows::Window) -> Option<String> {
+    use crate::core::approval::mandates::State;
+    let why = w.why.clone().unwrap_or_default();
+    match w.state {
+        State::Held if w.quiet.is_some() => Some(format!("held: Auto window {}: {why}", w.id)),
+        State::Paused => Some(format!(
+            "paused: Auto window {}: {why}; resume it in the app",
+            w.id
+        )),
+        _ => None,
+    }
 }

@@ -203,10 +203,10 @@
             "type": "array",
             "minItems": 1,
             "uniqueItems": true,
-            "description": "The path on each of the stack's domains, as hostname and path.",
+            "description": "The path on each of the stack's domains, as hostname and path; a hostname may start with `*.`, one label, for standalones' hosts (see .claude/decisions/2026-11-15-runtime-standalone-hostnames-platform-zone.md).",
             "items": {
               "type": "string",
-              "pattern": "^[a-z0-9.-]+/[A-Za-z0-9/._-]+$"
+              "pattern": "^(\\*\\.)?[a-z0-9.-]+/[A-Za-z0-9/._-]+$"
             }
           }
         }

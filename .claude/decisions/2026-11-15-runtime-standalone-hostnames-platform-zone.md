@@ -309,3 +309,40 @@ Neither ADR changes.
   guarded nothing, and it kept the noisypigeon standalone of
   [`2026-11-15-runtime-zoned-standalone-account-imports.md`](2026-11-15-runtime-zoned-standalone-account-imports.md)
   from its own label. `pigeon` stays reserved.
+
+### 2026-11-15: the `*` record was made in the dashboard, and is adopted later
+
+- **The owner created §1's record by hand**, in the Cloudflare dashboard:
+  `*` AAAA `100::`, proxied, in pigeon.dev. `infra.plan` isn't dispatched
+  yet, and an apply by hand is barred, so this was the owner's choice.
+- **It is adopted, not created again.** Once
+  [`2026-11-15-runtime-zoned-standalone-account-imports.md`](2026-11-15-runtime-zoned-standalone-account-imports.md)
+  §5's `plan --adopt` for DNS records (!640) is on `main` and `infra.plan`
+  runs, `zones/pigeon.dev`'s first plan adopts the record by name, type and
+  content. That plan must show no other change; one that would create a
+  second `*` record is refused.
+- **The live check needs the owner.** A cloud session's network proxy
+  refuses hosts outside its allowlist, so it can't reach an unused label.
+  From any machine:
+  `curl -sI https://example-check.pigeon.dev/v0/app/instances` answers 404
+  with an empty body, and `curl -sI https://example-check.pigeon.dev/healthz`
+  answers 404 too, not the platform's health.
+
+### 2026-11-15: `*.pigeon.dev/v0/app` is reached without an Access login
+
+- **The owner's live check found Access in front of the proxy.**
+  `example-check.pigeon.dev/healthz` redirected to the Access login. The
+  owners-only application has a `worker` destination, the control Worker's
+  ID, so it covers every hostname the Worker serves, the wildcard route
+  included.
+- **`*.pigeon.dev/v0/app` gets a bypass,** as `platform.pigeon.dev/v0/app`
+  has: a `public_paths` entry on `platform/blue`, its own application with a
+  bypass policy, more specific than the Worker-wide one. `public_paths` may
+  name a host as `*.` and one label.
+- **Nothing else opens.** Every other path on `*.pigeon.dev` stays behind the
+  owners' login; there the proxy answers only 404 anyway. The platform's own
+  hosts are unchanged.
+- **It applies through the pipeline:** `platform.plan` on `platform/blue`,
+  then `platform.apply`, which the owner grants with a passkey. The plan
+  should create one Access application and one policy, and change nothing
+  else.

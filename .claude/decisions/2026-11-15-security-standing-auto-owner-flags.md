@@ -343,3 +343,34 @@ other's views or types. !547 needs no change.
   edits` removal holds: Now has no such switch.
 
 !547 needs no change.
+
+### 2026-11-15: The rate breaker holds at 150 merges in 6 hours and releases after a quiet hour; Auto's moves are told
+
+The breaker paused Auto at 22:12 UTC, about six hours after standing Auto
+went live. That night's throughput was about 18 changes an hour, over §3's 48
+in 6 hours. The pause was silent: no `auto.paused` event and no push. The
+digest didn't show it, because its `paused` field lists mandates only. The
+owner decided (relayed by the status session):
+
+- **`RATE` is 150** merges in 6 hours.
+- **Reaching it holds Auto; it doesn't pause it.** As in a deploy hold,
+  approvals still land, and only a merge that isn't a `fix` or `revert`
+  waits. The hold releases by itself once an hour passes with no counted
+  merge, and the count starts afresh. A passed deploy doesn't release it. A
+  failed deploy takes it over, and the deploy hold's own rules then apply.
+  The owner is never asked to resume after a breaker.
+- **Every move nobody asked for is told once.** When `/windows/decide`
+  settles a window into held, released or paused, it answers the move, and
+  the Worker records `auto.held`, `auto.resumed` or `auto.paused` and pushes
+  it. Reading the window (`/windows/current`) no longer stores a settle, so
+  a move is stored, and told, by the decide that makes it. Before this, a
+  move made in the settle at the start of a call was stored but never told.
+- **The digest names a paused or breaker-held window** among its held lines,
+  so `needs_owner` is true while one waits.
+- **§3's table** now reads: "The rate breaker: Auto has merged 150 changes in
+  the last 6 hours | **held**: only `fix` and `revert` merges go through | by
+  itself, after an hour with no merge".
+- **!631** stops a change's stage from counting a merge when it asks whether
+  Auto covers the change.
+
+The owner approves this change with a passkey: it loosens an approval rule.

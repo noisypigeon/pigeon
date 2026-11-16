@@ -29,6 +29,8 @@
       "mcp__pigeon__session_status",
       "mcp__pigeon__session_end",
       "mcp__pigeon__events_wait",
+      "mcp__pigeon__owner_ask",
+      "mcp__pigeon__owner_withdraw",
       "mcp__pigeon__mandate_propose",
       "mcp__pigeon__mandate_status",
       "mcp__pigeon__mandate_end",

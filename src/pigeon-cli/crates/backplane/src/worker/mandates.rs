@@ -322,9 +322,9 @@ pub async fn window_verdict(
         &json!({ "change": change, "operation": operation }),
     )
     .await?;
-    if let (Some(id), Some(why)) = (v["id"].as_u64(), v["paused"].as_str()) {
-        let said = format!("Auto window {id} paused: {why}; resume it in the app");
-        tell(env, s, "auto.paused", "Auto paused", &said).await;
+    let moved: Vec<windows::Moved> = serde_json::from_value(v["moved"].clone()).unwrap_or_default();
+    for m in &moved {
+        tell_moved(env, s, m).await;
     }
     let id = v["id"].as_u64().and_then(|i| u32::try_from(i).ok());
     match (
@@ -345,14 +345,13 @@ pub async fn window_verdict(
 /// When storage fails.
 pub async fn serve_windows(state: &State, path: &str, body: Value) -> Result<Response> {
     let storage = state.storage();
-    let all: Windows = storage.get(WINDOWS).await?.unwrap_or_default();
+    let raw: Windows = storage.get(WINDOWS).await?.unwrap_or_default();
     let t = now();
-    let all = all.settle(t);
+    let all = raw.settle(t);
     let s = |k: &str| body[k].as_str().unwrap_or_default().to_string();
     let (all, answer): (Windows, std::result::Result<Value, String>) = match path {
         "/windows/current" => {
-            let current = all.current().cloned();
-            (all, Ok(json!({ "window": current })))
+            return Response::from_json(&json!({ "window": all.current().cloned() }));
         }
         "/windows/start" => match all.start(&s("by"), t) {
             Ok((next, w)) => (next, Ok(json!({ "window": w }))),
@@ -385,11 +384,14 @@ pub async fn serve_windows(state: &State, path: &str, body: Value) -> Result<Res
                 .and_then(|w| held_merge(windows::decide(w, &change, "change.merge", t)));
             match all.decide(&change, &s("operation"), t) {
                 (next, Some((id, d))) => {
-                    let paused = paused_by(&all, &next, id);
-                    let v = json!({ "id": id, "decision": d, "held": held, "paused": paused });
+                    let moved = windows::moved(&raw, &next);
+                    let v = json!({ "id": id, "decision": d, "held": held, "moved": moved });
                     (next, Ok(v))
                 }
-                (next, None) => (next, Err("no Auto window is active".into())),
+                (next, None) => {
+                    let moved = windows::moved(&raw, &next);
+                    (next, Ok(json!({ "moved": moved })))
+                }
             }
         }
         _ => return Response::error("not found", 404),
@@ -594,13 +596,29 @@ fn serve_route<'a>(
     Box::pin(page_serve(req, env, s, who))
 }
 
-/// Why window `id` went from active in `before` to paused in `after`, as the rate breaker
-/// pauses it; see `.claude/decisions/2026-11-15-security-standing-auto-owner-flags.md` §3.
-fn paused_by(before: &Windows, after: &Windows, id: u32) -> Option<String> {
+/// Tells a window's move that no one asked for, once: an event and a push; see the standing
+/// Auto ADR's 2026-11-15 amendment on the rate breaker.
+async fn tell_moved(env: &Env, s: &Settings, m: &windows::Moved) {
     use crate::core::approval::mandates::State;
-    let was = before.list.iter().find(|w| w.id == id)?;
-    let now = after.list.iter().find(|w| w.id == id)?;
-    (was.state == State::Active && now.state == State::Paused)
-        .then(|| now.why.clone())
-        .flatten()
+    let why = m.why.clone().unwrap_or_default();
+    let id = m.id;
+    let (kind, title, said) = match (m.from, m.to) {
+        (_, State::Held) => (
+            "auto.held",
+            "Auto held",
+            format!("Auto window {id} held: {why}"),
+        ),
+        (State::Held, State::Active) => (
+            "auto.resumed",
+            "Auto resumed",
+            format!("Auto window {id} resumed: an hour passed with no merge"),
+        ),
+        (_, State::Paused) => (
+            "auto.paused",
+            "Auto paused",
+            format!("Auto window {id} paused: {why}; resume it in the app"),
+        ),
+        _ => return,
+    };
+    tell(env, s, kind, title, &said).await;
 }

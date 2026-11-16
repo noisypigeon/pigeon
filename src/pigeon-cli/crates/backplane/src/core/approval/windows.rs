@@ -4,11 +4,13 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::mandates::{Decision, Hold, State, defers};
+use super::mandates::{Decision, Hold, State, defers, fixes};
 use super::tiers::{Tier, tier_of};
 
-/// The merges in [`SPAN`] that pause Auto: the rate breaker.
-pub const RATE: usize = 48;
+/// The merges in [`SPAN`] that hold Auto: the rate breaker.
+pub const RATE: usize = 150;
+/// How long without a counted merge before the rate breaker's hold releases, in seconds.
+pub const QUIET: u64 = 3_600;
 /// The rate breaker's span, in seconds.
 pub const SPAN: u64 = 6 * 3_600;
 /// The passkey purpose for starting a window.
@@ -48,6 +50,9 @@ pub struct Window {
     /// When each merge in the last [`SPAN`] was counted, for the rate breaker.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub recent: Vec<u64>,
+    /// When the rate breaker held it, while that hold is the one it has.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub quiet: Option<u64>,
 }
 
 impl Window {
@@ -88,9 +93,7 @@ pub struct Windows {
 #[must_use]
 pub fn decide(w: &Window, change: &crate::changes::Change, operation: &str, now: u64) -> Decision {
     match judge(w, change, operation, now) {
-        Decision::Allow => {
-            defers(w.hold.as_ref(), change, operation).map_or(Decision::Allow, Decision::Hold)
-        }
+        Decision::Allow => waits(w, change, operation).map_or(Decision::Allow, Decision::Hold),
         d => d,
     }
 }
@@ -134,7 +137,8 @@ impl Windows {
         self.list.iter().rev().find(|w| w.running())
     }
 
-    /// Pauses a window whose hold is spent or whose merges trip the rate breaker.
+    /// Pauses a window whose hold is spent; holds one whose merges trip the rate breaker, and
+    /// releases that hold, with a fresh count, after [`QUIET`] without a counted merge.
     #[must_use]
     pub fn settle(&self, now: u64) -> Self {
         let mut next = self.clone();
@@ -142,11 +146,17 @@ impl Windows {
             w.recent.retain(|t| now.saturating_sub(*t) < SPAN);
             let spent = w.hold.as_ref().and_then(|h| h.spent(now));
             if let (State::Held, Some(why)) = (w.state, spent) {
-                (w.state, w.why, w.hold) = (State::Paused, Some(why), None);
+                (w.state, w.why, w.hold, w.quiet) = (State::Paused, Some(why), None, None);
             }
-            if w.state == State::Active && w.rate(now) >= RATE {
-                w.state = State::Paused;
-                w.why = Some(format!("{RATE} merges in {} hours", SPAN / 3_600));
+            if let (State::Held, Some(since)) = (w.state, w.quiet) {
+                let last = w.recent.last().copied().unwrap_or(since).max(since);
+                if now.saturating_sub(last) >= QUIET {
+                    (w.state, w.why, w.hold, w.quiet) = (State::Active, None, None, None);
+                    w.recent.clear();
+                }
+            } else if w.state == State::Active && w.rate(now) >= RATE {
+                w.why = Some(rate_waits());
+                (w.state, w.quiet) = (State::Held, Some(now));
             }
         }
         let ended = next.list.iter().filter(|w| w.state == State::Ended).count();
@@ -190,6 +200,7 @@ impl Windows {
             merged: Vec::new(),
             hold: None,
             recent: Vec::new(),
+            quiet: None,
         };
         next.list.push(w.clone());
         Ok((next, w))
@@ -239,6 +250,7 @@ impl Windows {
             return (next, None);
         };
         let h = Hold::after(w.hold.as_ref(), sha, why, now);
+        w.quiet = None;
         let ended = h.spent(now);
         (w.state, w.why, w.hold) = match ended.clone() {
             Some(why) => (State::Paused, Some(why), None),
@@ -248,11 +260,16 @@ impl Windows {
         (next, Some((id, ended.is_some())))
     }
 
-    /// Resumes the held window at `now`: the next windows, and the window resumed.
+    /// Resumes the window a failed deploy held at `now`, not one the rate breaker holds: the next
+    /// windows, and the window resumed.
     #[must_use]
     pub fn resume_all(&self, now: u64) -> (Self, Option<Window>) {
         let mut next = self.settle(now);
-        let Some(w) = next.list.iter_mut().find(|w| w.state == State::Held) else {
+        let Some(w) = next
+            .list
+            .iter_mut()
+            .find(|w| w.state == State::Held && w.quiet.is_none())
+        else {
             return (next, None);
         };
         (w.state, w.why, w.hold) = (State::Active, None, None);
@@ -293,8 +310,58 @@ impl Windows {
 fn merges(w: &Window, change: &crate::changes::Change, operation: &str, d: &Decision) -> bool {
     let queues = match operation {
         "change.merge" => true,
-        "change.approve" => defers(w.hold.as_ref(), change, "change.merge").is_none(),
+        "change.approve" => waits(w, change, "change.merge").is_none(),
         _ => false,
     };
     *d == Decision::Allow && queues && !w.merged.contains(&change.number)
+}
+
+/// A window's move between `before` and `after`: held, released, paused or ended without the
+/// owner, for the event and push that tell it; see the standing Auto ADR's 2026-11-15 amendment
+/// on the rate breaker.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Moved {
+    /// The window.
+    pub id: u32,
+    /// Where it was.
+    pub from: State,
+    /// Where it is.
+    pub to: State,
+    /// Why, as the window says.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub why: Option<String>,
+}
+
+/// Each window whose state differs between `before` and `after`.
+#[must_use]
+pub fn moved(before: &Windows, after: &Windows) -> Vec<Moved> {
+    after
+        .list
+        .iter()
+        .filter_map(|w| {
+            let was = before.list.iter().find(|b| b.id == w.id)?;
+            (was.state != w.state).then(|| Moved {
+                id: w.id,
+                from: was.state,
+                to: w.state,
+                why: w.why.clone(),
+            })
+        })
+        .collect()
+}
+
+/// What the rate breaker's hold says a merge waits on.
+fn rate_waits() -> String {
+    format!(
+        "merges once an hour passes with none: {RATE} merges in {} hours; `fix` and `revert` go through",
+        SPAN / 3_600
+    )
+}
+
+/// What `w`'s hold, a failed deploy's or the rate breaker's, defers `operation` on `change` on:
+/// only a merge that isn't a `fix` or `revert`.
+fn waits(w: &Window, change: &crate::changes::Change, operation: &str) -> Option<String> {
+    defers(w.hold.as_ref(), change, operation).or_else(|| {
+        (w.quiet.is_some() && operation == "change.merge" && !fixes(change)).then(rate_waits)
+    })
 }

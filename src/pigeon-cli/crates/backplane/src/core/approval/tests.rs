@@ -95,7 +95,7 @@ fn a_registration_uses_its_challenge_up_even_when_refused() {
 mod windows {
     use super::super::mandates::{Decision, State};
     use super::super::tiers::{Tier, Tiered, Tiers};
-    use super::super::windows::{RATE, SPAN, Windows};
+    use super::super::windows::{QUIET, RATE, SPAN, Windows};
     use crate::core::change::Change;
 
     const NOW: u64 = 1_800_000_000;
@@ -181,25 +181,64 @@ mod windows {
     }
 
     #[test]
-    fn the_rate_breaker_pauses_auto_and_the_owner_resumes_it() {
+    fn the_rate_breaker_holds_merges_and_releases_after_a_quiet_hour() {
         let (mut w, _) = Windows::default().start("owner", NOW).expect("started");
         for n in 0..u32::try_from(RATE).expect("small") {
             let (next, d) = w.decide(&numbered(n, Tier::Code, "rule"), "change.approve", NOW);
             assert_eq!(d, Some((1, Decision::Allow)), "{n}");
             w = next;
         }
-        assert_eq!(w.list[0].state, State::Paused);
+        assert_eq!((w.list[0].state, w.list[0].quiet), (State::Held, Some(NOW)));
         assert!(
             w.list[0]
                 .why
                 .as_deref()
-                .is_some_and(|y| y.contains("48 merges"))
+                .is_some_and(|y| y.contains("150 merges"))
         );
-        let (_, d) = w.decide(&change(Tier::Code), "change.merge", NOW);
-        assert_eq!(d, None, "a paused window approves nothing");
-        assert!(w.current().is_some(), "it waits for the owner");
-        let (w, second) = w.start("owner", NOW + 60).expect("resumed");
-        assert_eq!((w.list[0].state, second.id), (State::Ended, 2));
+        let late = NOW + 1_800;
+        let (w, d) = w.decide(&titled("feat: x"), "change.merge", late);
+        assert!(matches!(d, Some((1, Decision::Hold(_)))), "{d:?}");
+        let (w, d) = w.decide(&numbered(900, Tier::Code, "rule"), "change.approve", late);
+        assert_eq!(d, Some((1, Decision::Allow)), "approvals still land");
+        assert!(
+            !w.list[0].merged.contains(&900),
+            "a held approval isn't counted"
+        );
+        let fix = Change {
+            number: 901,
+            ..titled("fix: x")
+        };
+        let (w, d) = w.decide(&fix, "change.merge", late);
+        assert_eq!(
+            d,
+            Some((1, Decision::Allow)),
+            "a fix goes through, and is counted"
+        );
+        let (still, _) = w.resume_all(late);
+        assert_eq!(
+            still.list[0].state,
+            State::Held,
+            "a passed deploy doesn't release it"
+        );
+        let quiet = late + QUIET;
+        let released = w.settle(quiet);
+        assert_eq!(
+            (
+                released.list[0].state,
+                released.list[0].quiet,
+                released.list[0].rate(quiet)
+            ),
+            (State::Active, None, 0),
+            "an hour with no counted merge releases it, with a fresh count"
+        );
+        assert_eq!(super::super::windows::moved(&w, &released).len(), 1);
+        let (_, d) = released.decide(&titled("feat: x"), "change.merge", quiet);
+        assert_eq!(d, Some((1, Decision::Allow)));
+        assert_eq!(
+            w.settle(quiet - 60).list[0].state,
+            State::Held,
+            "not before the hour"
+        );
 
         let (mut w, _) = Windows::default().start("owner", NOW).expect("started");
         for n in 0..u32::try_from(RATE).expect("small") {
@@ -337,6 +376,7 @@ fn closing_a_landed_head_is_code_and_an_auto_window_approves_it_but_not_another_
         merged: Vec::new(),
         hold: None,
         recent: Vec::new(),
+        quiet: None,
     };
     let pushed = checked();
     let mut landed = checked();
