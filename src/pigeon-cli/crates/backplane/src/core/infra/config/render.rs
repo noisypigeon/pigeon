@@ -8,7 +8,7 @@ use super::{
     Block, ConfigUnit, Disk, Expr, ZONE_ALIAS, blocks, declared_credentials, declared_secrets,
     has_handoff, parse, x_cobot,
 };
-use crate::cobot::apex;
+use crate::core::infra::apex;
 use crate::core::infra::generations::{self, Day, Generation};
 use crate::core::infra::providers::Allowlist;
 

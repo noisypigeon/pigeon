@@ -117,6 +117,7 @@ fn dir_config(
         zone: zone.to_string(),
         workload: workload.map(str::to_string),
         manifest: None,
+        files: crate::cobot::apex::disk(),
     };
     let (home, site) = match (crate::cobot::apex::zone_apex(rel), workload) {
         (Some(zone), _) => (
@@ -173,6 +174,7 @@ fn manifest_units(
                 zone,
                 workload: (role == Role::Site).then(|| manifest::name(id).to_string()),
                 manifest: Some(m.clone()),
+                files: crate::cobot::apex::disk(),
             }),
         };
         let mut config = e.settings.clone();

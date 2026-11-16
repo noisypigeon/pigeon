@@ -132,9 +132,9 @@ fn role(schema: &Value) -> Role {
             .flatten()
             .any(|(_, b)| b["expand"] == e)
     };
-    if expands(crate::cobot::apex::EXPANDER) {
+    if expands(crate::core::infra::apex::EXPANDER) {
         Role::Zone
-    } else if expands(crate::cobot::static_site::BUCKET) {
+    } else if expands(crate::core::infra::static_site::BUCKET) {
         Role::Site
     } else {
         Role::Plain
@@ -419,13 +419,13 @@ impl Manifest {
                     format!("serves {zone} under the same name as {first}"),
                 ));
             }
-            let bucket = crate::cobot::static_site::bucket_name(zone, name(id));
-            if bucket.len() > crate::cobot::static_site::BUCKET_MAX {
+            let bucket = crate::core::infra::static_site::bucket_name(zone, name(id));
+            if bucket.len() > crate::core::infra::static_site::BUCKET_MAX {
                 out.push((
                     at.clone(),
                     format!(
                         "bucket `{bucket}` is longer than R2's {} characters",
-                        crate::cobot::static_site::BUCKET_MAX
+                        crate::core::infra::static_site::BUCKET_MAX
                     ),
                 ));
             }

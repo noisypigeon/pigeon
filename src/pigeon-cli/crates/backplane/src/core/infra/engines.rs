@@ -7,7 +7,7 @@ use std::fmt::Write as _;
 
 use serde_json::{Map, Value, json};
 
-use crate::cobot::{apex, static_site};
+use crate::core::infra::{apex, static_site};
 
 /// What `tofu` will do to a resource.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]

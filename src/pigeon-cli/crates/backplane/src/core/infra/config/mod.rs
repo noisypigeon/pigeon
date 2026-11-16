@@ -11,7 +11,7 @@ use std::sync::LazyLock;
 use regex::Regex;
 use serde_json::{Map, Value, json};
 
-use crate::cobot::apex::{self, Site};
+use crate::core::infra::apex::{self, Site};
 
 mod check;
 mod expr;
@@ -243,16 +243,16 @@ pub fn composed_schema(root: &Value, kind: &str) -> Value {
 fn allowed(site: Option<&Site>) -> (&'static str, [&'static str; 2]) {
     if site.is_some_and(|s| s.workload.is_some()) {
         (
-            crate::cobot::static_site::HANDOFF,
+            crate::core::infra::static_site::HANDOFF,
             [
-                crate::cobot::static_site::BUCKET,
-                crate::cobot::static_site::DOMAINS,
+                crate::core::infra::static_site::BUCKET,
+                crate::core::infra::static_site::DOMAINS,
             ],
         )
     } else {
         (
             apex::HANDOFF,
-            [apex::EXPANDER, crate::cobot::static_site::RULESETS],
+            [apex::EXPANDER, crate::core::infra::static_site::RULESETS],
         )
     }
 }

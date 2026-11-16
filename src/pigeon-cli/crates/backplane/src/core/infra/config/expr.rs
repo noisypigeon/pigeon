@@ -82,7 +82,7 @@ pub fn parse(text: &str) -> Option<Expr> {
             });
     }
     if let Some(key) = text.strip_prefix("$handoff.")
-        && crate::cobot::static_site::HANDOFF_KEYS.contains(&key)
+        && crate::core::infra::static_site::HANDOFF_KEYS.contains(&key)
     {
         return Some(Expr::Handoff(key.to_string()));
     }

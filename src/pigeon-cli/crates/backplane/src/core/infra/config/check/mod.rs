@@ -8,7 +8,8 @@ use super::{
     BLOCK, CONFIG, CREDENTIAL, ConfigUnit, Disk, Expr, SCHEMA, SEMVER, allowed, blocks,
     declared_credentials, declared_secrets, exprs_in, parse, walk_strings, x_cobot,
 };
-use crate::cobot::{apex, secrets};
+use crate::cobot::secrets;
+use crate::core::infra::apex;
 use crate::core::infra::providers::Allowlist;
 
 mod blocks;
@@ -234,7 +235,7 @@ pub(crate) fn check_top(unit: &ConfigUnit, problems: &mut Vec<(String, String)>)
         .site
         .as_ref()
         .filter(|s| s.workload.is_none())
-        .map(|s| crate::cobot::apex::published_values(&s.composed(&unit.config), &unit.home))
+        .map(|s| apex::published_values(&s.composed(&unit.config), &*s.files, &unit.home))
         .unwrap_or_default();
     if strings
         .iter()

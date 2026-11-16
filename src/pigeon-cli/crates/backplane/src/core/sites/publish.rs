@@ -6,8 +6,8 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use serde_json::Value;
 
-use crate::cobot::{apex, static_site};
 use crate::core::infra::generations::Day;
+use crate::core::infra::{apex, static_site};
 
 use super::credentials::{Credentials, md5_hex, sha256_hex};
 

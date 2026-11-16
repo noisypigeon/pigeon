@@ -1040,6 +1040,7 @@ fn secret_mail_policies_are_claimed_once_decrypted() {
         zone: ZONE.into(),
         workload: None,
         manifest: None,
+        files: backplane::cobot::apex::disk(),
     };
     let home = backplane::cobot::catalog::home(repo.path(), "cloudflare");
     let mut secrets = BTreeMap::new();
