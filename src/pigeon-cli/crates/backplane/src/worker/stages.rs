@@ -28,25 +28,37 @@ async fn carrying(env: &Env, s: &Settings, merged: &str) -> Deploy {
     read.await.unwrap_or_default()
 }
 
-/// The window or mandate that would allow `c`'s next authorization or approval, asked without
-/// counting a merge; see the standing Auto ADR §3.
-async fn covered(env: &Env, s: &Settings, c: &Change) -> Option<String> {
+/// The mandate or window that would allow `c`'s next authorization or approval, else why the
+/// owner acts: each judged without counting a merge or pausing anything; see the standing Auto
+/// ADR §3 and the oversight ADR's 2026-11-16 amendment.
+async fn covered(env: &Env, s: &Settings, c: &Change) -> (Option<String>, Option<String>) {
+    use crate::core::approval::{mandates, windows};
     let operation = match c.state {
         State::Proposed => "change.authorize",
         State::Checked => "change.approve",
-        _ => return None,
+        _ => return (None, None),
     };
-    if let Some(m) = c.mandate {
-        return Some(format!("mandate:{m}"));
+    let at = platform::now();
+    let mut mandate = None;
+    if let Some(id) = c.mandate {
+        let listed = to_instance(env, s, "/mandates/list", &json!({})).await.ok();
+        let all: Vec<mandates::Mandate> = listed
+            .and_then(|(_, v)| serde_json::from_value(v["mandates"].clone()).ok())
+            .unwrap_or_default();
+        let d = all.iter().find(|m| m.id == id).map_or_else(
+            || mandates::Decision::Ask(format!("no mandate {id}")),
+            |m| mandates::decide(m, c, operation, at),
+        );
+        mandate = Some((id, d));
     }
-    let (_, current) = to_instance(env, s, "/windows/current", &json!({}))
-        .await
-        .ok()?;
-    let w: crate::core::approval::windows::Window =
-        serde_json::from_value(current["window"].clone()).ok()?;
-    let decided = crate::core::approval::windows::decide(&w, c, operation, platform::now());
-    (decided == crate::core::approval::mandates::Decision::Allow)
-        .then(|| format!("window:{}", w.id))
+    let window = async {
+        let (_, current) = to_instance(env, s, "/windows/current", &json!({}))
+            .await
+            .ok()?;
+        let w: windows::Window = serde_json::from_value(current["window"].clone()).ok()?;
+        Some((w.id, windows::decide(&w, c, operation, at)))
+    };
+    stage::coverage(mandate, window.await)
 }
 
 /// What a hold defers approved `c`'s merge on, when its mandate or the Auto window is held.
@@ -110,11 +122,13 @@ pub async fn stage(env: &Env, s: &Settings, c: &Change, queue: &MergeQueue) -> S
         (State::Merged, Some(sha)) => carrying(env, s, sha).await,
         _ => Deploy::Unknown,
     };
+    let (covered, uncovered) = covered(env, s, c).await;
     let cx = Context {
         place: stage::place(queue, c.number),
         deploy,
-        covered: covered(env, s, c).await,
+        covered,
         held: held(env, s, c).await,
+        uncovered,
     };
     stage::of(c, &cx)
 }

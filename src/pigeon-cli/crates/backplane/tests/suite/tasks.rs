@@ -268,3 +268,66 @@ fn an_unlisted_change_needs_the_owner_and_has_its_line() {
         ["unlisted: !464 needs you but had no approval listed; re-issued"]
     );
 }
+
+#[test]
+fn case_748_a_done_reconciliation_that_never_pushed_closes_with_its_task() {
+    use backplane::tasks::finished;
+    let row = |number: u32, slug: &str, state: &str| Open {
+        number,
+        state: state.into(),
+        session: Some("s-a".into()),
+        scope: vec!["**".into()],
+        affects: Vec::new(),
+        plan: String::new(),
+        slug: slug.into(),
+    };
+    let mut t = Tasks::default();
+    let id = t.add(
+        "reconcile",
+        748,
+        Some(716),
+        Some("s-a".into()),
+        "fix: reconcile !716",
+        100,
+    );
+    let open = vec![
+        row(748, "reconcile-716", "planned"),
+        row(716, "feature", "pushed"),
+    ];
+    let own = t.done(id).expect("done");
+    assert_eq!(
+        finished(&own, Some("s-a"), &open),
+        Some(748),
+        "its own, unclaimed"
+    );
+    assert_eq!(
+        finished(&own, Some("s-b"), &open),
+        None,
+        "not another session's"
+    );
+    assert_eq!(finished(&own, None, &open), None, "not without a ticket");
+    let mut claimed = own.clone();
+    claimed.claimed_by = Some("s-b".into());
+    assert_eq!(
+        finished(&claimed, Some("s-b"), &open),
+        Some(748),
+        "its claimer"
+    );
+    assert_eq!(finished(&claimed, Some("s-a"), &open), None, "claimed away");
+    let pushed = vec![row(748, "reconcile-716", "pushed")];
+    assert_eq!(
+        finished(&own, Some("s-a"), &pushed),
+        None,
+        "pushed work is kept"
+    );
+    let mut real = own.clone();
+    real.change = 716;
+    assert_eq!(
+        finished(&real, Some("s-a"), &open),
+        None,
+        "never a session's own change"
+    );
+    let mut restack = own;
+    restack.kind = "restack-failed".into();
+    assert_eq!(finished(&restack, Some("s-a"), &open), None);
+}

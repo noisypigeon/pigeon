@@ -409,3 +409,64 @@ glob under `src/pigeon-cli/` or `src/site-templates/` becomes `src/**/<tail>`
 (or `**<file>` for a workspace root file), which matches the file both before
 and after the restructure moves it. That ADR's step 12 tightens them to the
 new paths.
+
+### 2026-11-16: A session never closes a generated change, and a stage counts a mandate only where it covers the head
+
+- **What went wrong: `change_close` prompts.**
+  - On 2026-11-16 two restructure sessions each tried to close an empty
+    reconciliation (!748 for !716, and !755 for !713). Each sat in "Waiting on
+    permission: pigeon — Change Close" for hours: 07:00 to 07:29, and 07:21
+    to about 14:30.
+  - Neither close was needed. Both changes had never pushed, and the control
+    plane retired each one (`reconcile.retired`) within minutes of its
+    reason going.
+  - `change_close` stays in `.claude/settings.json`'s `ask` list (§6 and the
+    standing Auto ADR §3: it is destructive for a pushed change). So the gap
+    is that nothing told a session it could stop without calling it.
+  - The planned stage of a generated change named only "push", and
+    `task_done` only marked the task done.
+- **What went wrong: a mandate in the stage.** !713, tier `code (sentinel:
+  …)`, named `mandate: 3`. Its stage read `needs: agent`, "ask to merge now
+  (`change_merge`): mandate:3, the owner's, approves the head".
+  - `worker/stages.rs::covered` returned `mandate:<id>` for any change naming
+    a mandate, without asking whether the mandate covers the head.
+    `mandates::decide` never covers a guarded or sentinel rule.
+  - So `change_merge` only listed the owner's approval, and the hourly nudge
+    went to the planner while the owner, the real blocker, was never shown.
+- **The rules.**
+  - **`task_done` finishes a generated change.** When the session that
+    claimed a `reconcile` or `review` task marks it done, the control plane
+    closes the task's change. It does this only if that change is generated
+    (`reconcile-…` or `review-…`), still open and never pushed
+    (`proposed` or `planned`). Closing it then loses nothing, as with
+    `reconcile.retired`. It appends `reconcile.finished`. The pure choice is
+    `tasks::finished`. The claimer is the session holding the call's ticket.
+  - **The stage says so.** A planned generated change's `next` reads "push
+    `<branch>`, or, with nothing left to reconcile, `task_done` its task: the
+    control plane closes it". No stage names `change_close`.
+  - **`change.close`'s description** adds: "A session never closes a
+    generated change (`reconcile-…`, `review-…`): `task_done` on its task
+    closes it, and the control plane retires it once its reason is gone".
+  - **A mandate covers a stage only where `mandates::decide` allows it.** The
+    stage reads the change's mandate from `/mandates/list` and judges it
+    purely (`mandates::decide`, which counts and pauses nothing). It reads
+    the window the same way.
+  - **Coverage follows `worker/mod.rs::ask`'s order.** In order:
+    - the mandate, when it allows or holds;
+    - else the window, when it allows or holds;
+    - else nobody: the stage is `needs: owner` with `next` "the owner
+      approves the head on `/approvals`: <the mandate's or window's reason>".
+      `stage::coverage` composes this and is tested with !713's case.
+  - **The stalled-change detector is unchanged.** A harness permission
+    prompt can't be seen from the control plane. A change at `needs: agent`
+    whose session is quiet for `STALL` is already listed and pushed in the
+    digest (the session-stages ADR's 2026-11-13 amendment). This fix removes
+    the cause, the close that a session never needed to call.
+- **Unchanged:**
+  - `.claude/settings.json`. Whether `change_close` leaves `ask` is the
+    owner's, for the reasons in §6's step 4.
+  - What a mandate or window covers (`core/approval/**`).
+- **Execution.** One `fix(backplane)` change with this amendment:
+  - `core/change/stage.rs`, `worker/stages.rs`, `tasks.rs`,
+    `worker/tasks.rs` and `wire.rs`;
+  - tests that replay !713's stage and !748's finished reconciliation.

@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use super::queue::MergeQueue;
 use super::types::{BOUND, Change, Job, JobStatus, MERGE, MIRROR, RESTACK, State};
+use crate::core::approval::mandates::Decision;
 
 /// Who acts next.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -74,6 +75,8 @@ pub struct Context {
     /// For an approved change: what its merge waits on while a hold defers it; see the
     /// session-stages ADR's 2026-11-15 amendment.
     pub held: Option<String>,
+    /// When nothing covers it: why the owner acts, from its mandate or the window.
+    pub uncovered: Option<String>,
 }
 
 /// A change's place in the merge queue.
@@ -176,16 +179,53 @@ fn authorize(covered: Option<&String>) -> Stage {
 }
 
 /// A checked head: a covered one is asked to merge by its session and approved in the control
-/// plane; see `.claude/decisions/2026-11-15-development-sessions-stop-only-for-oversight.md` §2.
-fn ask_merge(covered: Option<&String>) -> Stage {
-    match covered {
-        Some(by) => at(
+/// plane, an uncovered one waits on the owner's listed approval; see
+/// `.claude/decisions/2026-11-15-development-sessions-stop-only-for-oversight.md` §2 and its
+/// 2026-11-16 amendment.
+fn ask_merge(covered: Option<&String>, uncovered: Option<&String>) -> Stage {
+    match (covered, uncovered) {
+        (Some(by), _) => at(
             "checked",
             Needs::Agent,
             format!("ask to merge now (`change_merge`): {by}, the owner's, approves the head"),
         ),
-        None => at("checked", Needs::Owner, "approve the head"),
+        (None, Some(why)) => at(
+            "checked",
+            Needs::Owner,
+            format!("the owner approves the head on `/approvals`: {why}"),
+        ),
+        (None, None) => at("checked", Needs::Owner, "approve the head"),
     }
+}
+
+/// What covers a change's next authorization or approval, in `worker/mod.rs::ask`'s order: its
+/// mandate's decision, else the window's, each with its id. Answers `(covered, uncovered)`:
+/// `mandate:<id>` or `window:<id>` when one allows or holds it, else why the owner acts; see the
+/// oversight ADR's 2026-11-16 amendment.
+#[must_use]
+pub fn coverage(
+    mandate: Option<(u32, Decision)>,
+    window: Option<(u32, Decision)>,
+) -> (Option<String>, Option<String>) {
+    let covers = |d: &Decision| matches!(d, Decision::Allow | Decision::Hold(_));
+    let mut why = None;
+    if let Some((id, d)) = mandate {
+        if covers(&d) {
+            return (Some(format!("mandate:{id}")), None);
+        }
+        if let Decision::Ask(w) | Decision::Pause(w) = d {
+            why = Some(format!("mandate:{id} doesn't cover it: {w}"));
+        }
+    }
+    if let Some((id, d)) = window {
+        if covers(&d) {
+            return (Some(format!("window:{id}")), None);
+        }
+        if let (None, Decision::Ask(w) | Decision::Pause(w)) = (&why, d) {
+            why = Some(format!("window:{id} doesn't cover it: {w}"));
+        }
+    }
+    (None, why)
 }
 
 fn merged(deploy: &Deploy) -> Stage {
@@ -227,6 +267,13 @@ pub fn of(c: &Change, cx: &Context) -> Stage {
             format!(
                 "its planner answers {} (`brief_amend`, or `brief_review` take)",
                 c.brief.as_deref().unwrap_or_default()
+            ),
+        ),
+        State::Planned if crate::reconcile::generated(&c.slug) => at(
+            "authorized",
+            Needs::Agent,
+            format!(
+                "push `{branch}`, or, with nothing left to reconcile, `task_done` its task: the control plane closes it"
             ),
         ),
         State::Planned => at("authorized", Needs::Agent, format!("push `{branch}`")),
@@ -279,7 +326,7 @@ pub fn of(c: &Change, cx: &Context) -> Stage {
                 c.brief.as_deref().unwrap_or_default()
             ),
         ),
-        State::Checked => ask_merge(covered),
+        State::Checked => ask_merge(covered, cx.uncovered.as_ref()),
         State::Approved => approved(c, place, cx.held.as_deref()),
     }
 }
@@ -560,6 +607,46 @@ mod tests {
             (s.needs, s.next.as_str()),
             (Needs::Owner, "approve the head")
         );
+    }
+
+    #[test]
+    fn coverage_asks_the_mandate_then_the_window() {
+        let ask = |w: &str| Decision::Ask(w.into());
+        assert_eq!(
+            coverage(Some((3, Decision::Allow)), Some((9, ask("x")))),
+            (Some("mandate:3".into()), None)
+        );
+        assert_eq!(
+            coverage(Some((3, Decision::Hold("a deploy".into()))), None),
+            (Some("mandate:3".into()), None),
+            "a held approval is still the mandate's"
+        );
+        assert_eq!(
+            coverage(Some((3, ask("sentinel"))), Some((9, Decision::Allow))),
+            (Some("window:9".into()), None),
+            "the window after a mandate that asks, as `ask` runs them"
+        );
+        assert_eq!(
+            coverage(Some((3, ask("sentinel"))), Some((9, ask("guarded")))),
+            (None, Some("mandate:3 doesn't cover it: sentinel".into()))
+        );
+        assert_eq!(
+            coverage(None, Some((9, ask("guarded")))),
+            (None, Some("window:9 doesn't cover it: guarded".into()))
+        );
+        assert_eq!(coverage(None, None), (None, None));
+    }
+
+    #[test]
+    fn an_authorized_generated_change_names_task_done_never_change_close() {
+        let mut c = change(State::Planned);
+        c.slug = "reconcile-716".into();
+        let s = of(&c, &Context::default());
+        assert_eq!(s.needs, Needs::Agent);
+        assert!(s.next.contains("`task_done`"), "{}", s.next);
+        assert!(!s.next.contains("change_close"), "{}", s.next);
+        c.slug = "x".into();
+        assert_eq!(of(&c, &Context::default()).next, "push `change/7-x`");
     }
 
     #[test]

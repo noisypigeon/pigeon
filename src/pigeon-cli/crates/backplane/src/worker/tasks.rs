@@ -119,7 +119,15 @@ pub async fn run(
             }
             Ok((status, v))
         }
-        "task.done" => to_instance(env, s, "/tasks/done", &json!({ "id": id })).await,
+        "task.done" => {
+            let (status, mut v) = to_instance(env, s, "/tasks/done", &json!({ "id": id })).await?;
+            if status == 200
+                && let Some(n) = finish(env, s, &v, text(args, "ticket").as_deref()).await?
+            {
+                v["closed"] = json!(n);
+            }
+            Ok((status, v))
+        }
         "task.wait" => {
             let seconds = text(args, "seconds")
                 .and_then(|v| v.parse::<u64>().ok())
@@ -298,4 +306,39 @@ pub async fn serve(state: &State, path: &str, body: &Value) -> Result<Response> 
         Ok(v) => Response::from_json(&v),
         Err(why) => Response::error(why, 409),
     }
+}
+
+/// Closes the generated change a done task leaves, as [`crate::tasks::finished`] chooses for the
+/// session holding `ticket`: never pushed, so the close loses nothing; see
+/// `.claude/decisions/2026-11-15-development-sessions-stop-only-for-oversight.md`'s 2026-11-16
+/// amendment.
+async fn finish(
+    env: &Env,
+    s: &Settings,
+    task: &Value,
+    ticket: Option<&str>,
+) -> Result<Option<u32>> {
+    let Ok(task) = serde_json::from_value::<crate::tasks::Task>(task.clone()) else {
+        return Ok(None);
+    };
+    let by = super::tickets::holder(env, s, ticket).await?.ok();
+    let rows = super::platform::d1_rows(env, &crate::control::open(&s.instance, &s.repo)).await?;
+    let open = crate::control::open_rows(&rows);
+    let Some(n) = crate::tasks::finished(&task, by.as_deref(), &open) else {
+        return Ok(None);
+    };
+    let close = serde_json::to_value(crate::core::change::Event::Close)?;
+    let path = "/event";
+    let (status, v) =
+        super::to_change(env, &s.repo, n, worker::Method::Post, path, Some(&close)).await?;
+    if status != 200 {
+        worker::console_warn!("finish !{n}: {v}");
+        return Ok(None);
+    }
+    let why = format!("!{n} closed: its task is done and it never pushed");
+    let added = super::events::append(env, s, "reconcile.finished", Some(n), None, &why, false);
+    if let Err(e) = added.await {
+        worker::console_error!("reconcile.finished: {e}");
+    }
+    Ok(Some(n))
 }

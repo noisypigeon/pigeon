@@ -388,6 +388,27 @@ pub fn stalled(
     }
 }
 
+/// The change a done `task` leaves to close: its own generated change (`reconcile-…` or
+/// `review-…`), open and never pushed, when `by`, the session marking it done, claimed it, or it is that
+/// session's own and unclaimed; see
+/// `.claude/decisions/2026-11-15-development-sessions-stop-only-for-oversight.md`'s 2026-11-16
+/// amendment.
+#[must_use]
+pub fn finished(task: &Task, by: Option<&str>, open: &[crate::sessions::Open]) -> Option<u32> {
+    if !matches!(task.kind.as_str(), "reconcile" | "review") {
+        return None;
+    }
+    let holder = task.claimed_by.as_deref().or(task.session.as_deref());
+    if by.is_none() || holder != by {
+        return None;
+    }
+    open.iter()
+        .find(|o| o.number == task.change)
+        .filter(|o| crate::reconcile::generated(&o.slug))
+        .filter(|o| matches!(o.state.as_str(), "proposed" | "planned"))
+        .map(|o| o.number)
+}
+
 /// A change that needs its session, which isn't listening.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Stall {

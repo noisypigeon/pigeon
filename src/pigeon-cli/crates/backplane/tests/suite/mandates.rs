@@ -267,3 +267,51 @@ fn a_mandate_never_moves_checks_to_cloudflare() {
         Decision::Ask(_)
     ));
 }
+
+#[test]
+fn case_713_a_sentinel_head_under_a_mandate_needs_the_owner_in_its_stage() {
+    use backplane::core::approval::mandates::decide;
+    use backplane::core::change::State as ChangeState;
+    use backplane::core::change::stage::{self, Context, Needs};
+    // !713: tier `code (sentinel: …)`, naming mandate 3, and no window covers it.
+    let all = active(5, false);
+    let mut c = change(
+        &["tooling/**"],
+        &format!("Per {ADR}."),
+        Some((Tier::Code, "sentinel: src/pigeon-eviction/Cargo.toml")),
+    );
+    c.state = ChangeState::Checked;
+    let m = all.get(1).expect("one");
+    let d = decide(m, &c, "change.approve", 10);
+    assert!(matches!(d, Decision::Ask(_)), "{d:?}");
+    let window =
+        Decision::Ask("touches a guarded or sentinel path, which Auto never covers".into());
+    let (covered, uncovered) = stage::coverage(Some((1, d)), Some((11, window)));
+    assert_eq!(covered, None, "no mandate covers a sentinel rule");
+    let why = uncovered.expect("says why");
+    assert!(why.starts_with("mandate:1 doesn't cover it: "), "{why}");
+    let cx = Context {
+        covered,
+        uncovered: Some(why),
+        ..Context::default()
+    };
+    let s = stage::of(&c, &cx);
+    assert_eq!((s.stage.as_str(), s.needs), ("checked", Needs::Owner));
+    assert!(
+        s.next
+            .starts_with("the owner approves the head on `/approvals`: "),
+        "{}",
+        s.next
+    );
+    assert!(!s.next.contains("change_merge"), "{}", s.next);
+    // A routine head under the same mandate stays the session's to ask.
+    c.tiers.as_mut().expect("tiered").merge = Tiered {
+        tier: Tier::Confirm,
+        rule: "routine".into(),
+    };
+    let d = decide(m, &c, "change.approve", 10);
+    assert_eq!(
+        stage::coverage(Some((1, d)), None),
+        (Some("mandate:1".into()), None)
+    );
+}

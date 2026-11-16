@@ -368,7 +368,7 @@ const CATALOG: &[Operation] = &[
         name: "change.close",
         engine: Engine::Backplane,
         effect: Effect::Apply,
-        summary: "Close a change unmerged, stopping its jobs",
+        summary: "Close a change unmerged, stopping its jobs. A session never closes a generated change (`reconcile-…`, `review-…`): `task_done` on its task closes it, and the control plane retires it once its reason is gone",
         args: &[NUMBER, arg("ticket", false, Kind::String)],
     },
     Operation {
@@ -797,7 +797,7 @@ const CATALOG: &[Operation] = &[
         name: "task.done",
         engine: Engine::Backplane,
         effect: Effect::Build,
-        summary: "Mark task `id` done; a task on a change that merges is done by itself",
+        summary: "Mark task `id` done; a task on a change that merges is done by itself, and a reconciliation or review you hold that never pushed closes with its task",
         args: &[
             arg("id", true, Kind::Text),
             arg("ticket", false, Kind::String),
