@@ -120,6 +120,7 @@
 - feat(ci): the test map maps each suite module, so a change runs only the modules it reaches (!714) ([3210642](https://github.com/noisypigeon/pigeon/commit/32106429ee5ae375bc2d3386328f89f82151a7e4))
 - fix(backplane): the release bot reads each revision's own workspace, so a tag from before a move still compares (!750) ([84c6cd0](https://github.com/noisypigeon/pigeon/commit/84c6cd0bc666f21cfcc1a0a4568026538ebf6183)) · backplane
 - fix(backplane): a bench runs pigeon and git at the checkout's root, and bench ci stops passing scope --root ../.. (!753) ([9ad26b3](https://github.com/noisypigeon/pigeon/commit/9ad26b3a489ab5409f253bcb2d8cb37baaf59b3e)) · backplane
+- docs(adr): the bench ADR's step 9, the demo of record: three sessions at once, every check on benches (!754) ([dba4118](https://github.com/noisypigeon/pigeon/commit/dba41182aff71e5224bb19660831ac3efe860a64))
 
 ## 2026-11-15
 
