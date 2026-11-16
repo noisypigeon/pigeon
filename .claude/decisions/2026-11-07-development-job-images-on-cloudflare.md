@@ -398,3 +398,19 @@ Each step is its own change, in this order:
 - **Proved by a build.** A spike, closed unmerged, builds `--target ci` from
   this change on a `Checker` with the deploy job's own BuildKit, so the image
   is built before it merges.
+### 2026-11-16: A new Container class is built like a changed image
+
+- **What broke.** The deploy of `0754026` (!684) added the `Bench` class and
+  failed with "no image for `pigeon-control/Bench`". The deploy job builds
+  images only when `scope::image_inputs` names a change, and a new class
+  changes none of those files. So `deploy_retry` failed the same way, contrary
+  to what
+  [`2026-11-16-development-session-bench-containers.md`](2026-11-16-development-session-bench-containers.md)
+  §7 expected.
+- **The fix.** Before deploying, `ship.rs` lists the image keys
+  (`<worker>/<class>`) of the Workers' containers that `images` lacks. Any it
+  finds join `image_inputs` as reasons to build. So the deploy job builds and
+  pushes every class's image, the new one included, as for a Dockerfile
+  change, and a retry then deploys.
+- `DEPLOY_IMAGES` stays the seed and break-glass. The owner's
+  `pigeon cobot workers images push` still works and isn't needed.

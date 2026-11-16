@@ -78,7 +78,14 @@ pub fn workers(
         ("CLOUDFLARE_API_TOKEN".into(), token.clone()),
     ];
     tools.secrets = vec![token.clone(), get(ship::ACCESS_SECRET_VAR)];
-    let blocks = crate::cobot::scope::image_inputs(&since_image);
+    let mut blocks = crate::cobot::scope::image_inputs(&since_image);
+    // A container class new since the images were built has none; it is built like a changed
+    // image. See the job-images ADR's 2026-11-16 amendment.
+    blocks.extend(
+        unimaged(dir, &names, deployment.as_deref(), &images.images)?
+            .into_iter()
+            .map(|k| format!("no image for {k}")),
+    );
     if !blocks.is_empty() {
         let _ = writeln!(
             log,
@@ -262,6 +269,29 @@ pub fn build(
         sha256,
         sentinel_sha256: Some(sentinel_sha256),
     }))
+}
+
+/// The image keys, `<worker>/<class>`, of `names`' containers that `images` lacks.
+fn unimaged(
+    dir: &Path,
+    names: &[String],
+    deployment: Option<&str>,
+    images: &std::collections::BTreeMap<String, String>,
+) -> Result<Vec<String>, String> {
+    let mut out = Vec::new();
+    for name in names {
+        let found = workers::select_bound(dir, std::slice::from_ref(name), deployment)
+            .map_err(|e| e.to_string())?;
+        for f in found {
+            for c in &f.spec.containers {
+                let key = workers::image_key(&f.spec, &c.class);
+                if !images.contains_key(&key) {
+                    out.push(key);
+                }
+            }
+        }
+    }
+    Ok(out)
 }
 
 /// The job images of the Workers `names` that have containers, built from the checkout at `dir`
