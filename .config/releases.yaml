@@ -163,7 +163,7 @@ units:
     exclude: ['*.md']
 settings:
   - { file: Cargo.toml, tables: '^\[profile\.', keys: '^(edition|rust-version)\s*=' }
-  - { file: mise.toml, keys: '^rust\s*=' }
+  - { file: rust-toolchain.toml, keys: '^(channel|components|targets)\s*=' }
 retired:
   - catalog/agnostic/CHANGELOG.md
   - catalog/agnostic/modules/random-string/CHANGELOG.md

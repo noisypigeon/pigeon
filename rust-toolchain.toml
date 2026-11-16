@@ -1,0 +1,7 @@
+# The Rust toolchain rustup, the images and ios-sign.sh build with; see
+# .claude/decisions/2026-11-16-development-src-crates-neutral-names.md §4.
+[toolchain]
+channel = "1.99.1"
+profile = "minimal"
+components = ["clippy", "rustfmt"]
+targets = ["wasm32-unknown-unknown"]
