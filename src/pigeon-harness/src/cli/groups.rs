@@ -61,10 +61,10 @@ pub enum ReleaseCommand {
 #[derive(Subcommand, Debug)]
 pub enum AgentCommand {
     /// Answer operations over HTTP (GET /healthz, GET /v0/operations, POST /v0/run); needs
-    /// `BACKPLANE_TOKEN`
+    /// `AGENT_TOKEN`
     Serve(ServeArgs),
     /// Take a change's jobs over signed HTTP (POST /v0/jobs, GET /v0/jobs/<id>), in a job
-    /// Container; needs `BACKPLANE_TOKEN`
+    /// Container; needs `AGENT_TOKEN`
     Listen(ListenArgs),
 }
 

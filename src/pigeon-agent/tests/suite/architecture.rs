@@ -237,7 +237,7 @@ fn every_link_is_evidenced_by_the_tree() {
     assert!(network["worker"]["secrets"].as_u64().is_some_and(|n| n > 0));
     let text = network.to_string();
     for secret in [
-        "BACKPLANE_TOKEN",
+        "AGENT_TOKEN",
         "SESSION_KEY",
         "APPROVER_TOTP",
         "GITHUB_APP_KEY",

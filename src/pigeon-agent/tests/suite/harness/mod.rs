@@ -35,10 +35,10 @@ pub fn sentinel() -> &'static Path {
     })
 }
 
-/// A run's variables: the process's, with `PIGEON_SENTINEL` naming [`sentinel`].
+/// A run's variables: the process's, with `PIGEON_EVICTION` naming [`sentinel`].
 #[allow(dead_code)]
 pub fn var(k: &str) -> Option<String> {
-    if k == "PIGEON_SENTINEL" {
+    if k == "PIGEON_EVICTION" {
         return Some(sentinel().display().to_string());
     }
     std::env::var(k).ok()

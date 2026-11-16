@@ -125,7 +125,9 @@ fn tools() -> Result<Tools, backplane::cobot::Error> {
 fn account_tools()
 -> Result<(Tools, backplane::cobot::cloudflare::Api, String), backplane::cobot::Error> {
     let token = backplane::cobot::cloudflare::token(
-        backplane::names::env(backplane::cobot::CREDENTIALS_VAR).as_deref(),
+        std::env::var(backplane::cobot::CREDENTIALS_VAR)
+            .ok()
+            .as_deref(),
         env::var(backplane::cobot::cloudflare::TOKEN_VAR).ok(),
     )
     .ok_or_else(|| backplane::cobot::Error::Tool {

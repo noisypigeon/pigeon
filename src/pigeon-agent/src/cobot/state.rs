@@ -45,7 +45,6 @@ impl Store {
     ///
     /// A message naming what is malformed or missing; never a value.
     pub fn parse(spec: &str, var: impl Fn(&str) -> Option<String>) -> Result<Self, String> {
-        let var = crate::names::lookup(var);
         let Some(rest) = spec.strip_prefix(SCHEME) else {
             return Ok(Self::Dir(PathBuf::from(spec)));
         };

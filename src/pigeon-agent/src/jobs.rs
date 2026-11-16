@@ -516,9 +516,7 @@ fn publish_sites(
     // The architecture data names the policies, through the Container's pigeon-sentinel.
     let var = |k: &str| {
         spec.env.get(k).cloned().or_else(|| {
-            crate::names::both(crate::sentinel::VAR)
-                .iter()
-                .any(|n| n == k)
+            (k == crate::sentinel::VAR)
                 .then(|| std::env::var(k).ok())
                 .flatten()
         })
@@ -882,7 +880,9 @@ fn policy(
     sentinel: &Path,
     log: &mut String,
 ) -> Result<Vec<String>, String> {
-    let sum = crate::names::env(crate::cobot::ship_wire::SENTINEL_SHA256_VAR).unwrap_or_default();
+    let sum = std::env::var(crate::cobot::ship_wire::JUDGE_SHA256_VAR)
+        .ok()
+        .unwrap_or_default();
     let _ = writeln!(log, "sentinel: {} (sha256 {sum})", sentinel.display());
     match base_policies(spec, dir)? {
         Some(p) => judge_with(sentinel, spec, dir, files, &p),

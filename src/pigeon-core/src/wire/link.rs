@@ -1,4 +1,4 @@
-//! The signed Worker–Container link: request and response signatures under `BACKPLANE_TOKEN`,
+//! The signed Worker–Container link: request and response signatures under `AGENT_TOKEN`,
 //! per the "Phase 3 spike report" amendment §2 of
 //! `.claude/decisions/2026-11-04-development-platform-instance-separation.md`. Pure: the caller
 //! supplies the clock and the randomness.

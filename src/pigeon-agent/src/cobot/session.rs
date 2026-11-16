@@ -39,7 +39,6 @@ pub fn open(
     state: &str,
     var: impl Fn(&str) -> Option<String>,
 ) -> Result<Session, Error> {
-    let var = crate::names::lookup(var);
     let (dir, mirror) = match Store::parse(state, &var).map_err(Error::State)? {
         Store::Dir(dir) => (dir, None),
         Store::R2 { bucket, prefix } => {

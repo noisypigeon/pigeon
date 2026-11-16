@@ -7,12 +7,13 @@ use worker::{DurableObject, Env, Method, Request, Response, Result, State, durab
 
 use super::platform::secret;
 
-/// The signing key: `AGENT_TOKEN`, else `BACKPLANE_TOKEN`; see `crate::names`.
+/// The signing key's stored secret name, which keeps its old spelling (owner decision #8); the
+/// one place it appears. See `.claude/decisions/2026-11-16-development-src-crates-neutral-names.md`.
+pub(crate) const AGENT_TOKEN_STORED: &str = "BACKPLANE_TOKEN";
+
+/// The signing key, `AGENT_TOKEN`, from its stored secret.
 pub(crate) fn signing_key(env: &Env) -> Result<String> {
-    let old = crate::cobot::worker::TOKEN_VAR;
-    crate::names::renamed(old)
-        .and_then(|new| secret(env, &new).ok())
-        .map_or_else(|| secret(env, old), Ok)
+    secret(env, AGENT_TOKEN_STORED)
 }
 
 /// One check's Container, on `standard-4` (its name is the job's ID).

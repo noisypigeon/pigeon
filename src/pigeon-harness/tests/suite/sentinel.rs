@@ -19,7 +19,7 @@ fn stand_in(dir: &Path, code: i32) -> PathBuf {
 
 fn pigeon(sentinel: &Path) -> Command {
     let mut cmd = Command::cargo_bin("pigeon").expect("binary");
-    cmd.env("PIGEON_SENTINEL", sentinel);
+    cmd.env("PIGEON_EVICTION", sentinel);
     cmd
 }
 

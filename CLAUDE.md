@@ -199,7 +199,7 @@ Where each check runs:
   hourly digest (`digest_show`) needs them, per
   [`2026-11-08-development-events-tickets-digest-mandate.md`](.claude/decisions/2026-11-08-development-events-tickets-digest-mandate.md).
 - `pigeon agent listen ADDR`: a job Container's server, signed under
-  `BACKPLANE_TOKEN`; the control plane's `Checker` runs it. The Worker
+  `AGENT_TOKEN`; the control plane's `Checker` runs it. The Worker
   (`infra/pigeon/workers/control/`) serves MCP on `/mcp` behind Access: tools
   `change_propose`, `change_status`, `change_pushed`, `ci_rerun` (`on:
   cloudflare` asks the owner), and the

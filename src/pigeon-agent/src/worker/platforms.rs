@@ -1,6 +1,6 @@
 //! Platform runs in the control plane: `platform.plan`, `platform.apply` and
 //! `platform.status`; each step granted on `/platform/<id>` with the owner's code, the plan's
-//! page also taking a one-time account token, sealed under `BACKPLANE_TOKEN` and kept in the
+//! page also taking a one-time account token, sealed under `AGENT_TOKEN` and kept in the
 //! `MainRun` object only while the run needs it; the jobs run on a Runner, polled by `MainRun`'s
 //! alarm; see `.claude/decisions/2026-11-08-runtime-blue-green-self-standup.md`, step 4's
 //! amendment.

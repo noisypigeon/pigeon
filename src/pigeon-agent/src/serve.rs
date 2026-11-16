@@ -36,7 +36,7 @@ const IO_TIMEOUT: Duration = Duration::from_secs(30);
 pub const DEADLINE: Duration = Duration::from_secs(60);
 
 /// The environment variable holding the bearer token every `/v0/` request must carry.
-pub const TOKEN_VAR: &str = "BACKPLANE_TOKEN";
+pub const TOKEN_VAR: &str = "AGENT_TOKEN";
 
 /// The environment variable holding the server's certificate chain, as PEM.
 pub const TLS_CERT_VAR: &str = "AGENT_TLS_CERT";
@@ -79,7 +79,6 @@ impl Tls {
     ///
     /// [`Error::Invalid`] when only some are set.
     pub fn from_vars(var: impl Fn(&str) -> Option<String>) -> Result<Option<Self>, Error> {
-        let var = crate::names::lookup(var);
         let get = |k: &str| var(k).filter(|v| !v.trim().is_empty());
         match (get(TLS_CERT_VAR), get(TLS_KEY_VAR), get(TLS_CLIENT_CA_VAR)) {
             (Some(cert), Some(key), Some(client_ca)) => Ok(Some(Self {

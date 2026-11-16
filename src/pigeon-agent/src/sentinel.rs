@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use serde_json::Value;
 
 /// The variable naming the binary: set by `pigeon-start` in job Containers, or by the caller.
-pub const VAR: &str = "PIGEON_SENTINEL";
+pub const VAR: &str = "PIGEON_EVICTION";
 
 /// The binary's name.
 pub const BINARY: &str = crate::cobot::ship_wire::SENTINEL_BINARY;
@@ -16,7 +16,6 @@ pub const BINARY: &str = crate::cobot::ship_wire::SENTINEL_BINARY;
 /// directory or on `PATH`, else [`BINARY`]'s bare name.
 #[must_use]
 pub fn locate(var: &dyn Fn(&str) -> Option<String>) -> PathBuf {
-    let var = crate::names::lookup(var);
     if let Some(p) = var(VAR).filter(|p| !p.is_empty()) {
         return PathBuf::from(p);
     }

@@ -60,7 +60,6 @@ pub fn describe_with(
     instance: &Instance,
     var: &dyn Fn(&str) -> Option<String>,
 ) -> Result<(Graph, Vec<String>), Error> {
-    let var = &crate::names::lookup(var);
     let mut g = Graph::default();
     let mut problems = Vec::new();
     engines_and_operations(&mut g);

@@ -8,7 +8,7 @@ use crate::cobot::link;
 pub const PORT: u16 = 8080;
 
 /// The environment variable `serve` reads its signing key from.
-pub const TOKEN_VAR: &str = "BACKPLANE_TOKEN";
+pub const TOKEN_VAR: &str = "AGENT_TOKEN";
 
 /// The variables cobot reads an `r2://` state's access from; equal to `state.rs`'s and
 /// `engines.rs`'s, which a test checks.
@@ -48,7 +48,7 @@ pub struct Launch {
     pub state: String,
     /// Access to that state.
     pub access: StateAccess,
-    /// The signing key, `BACKPLANE_TOKEN`.
+    /// The signing key, `AGENT_TOKEN`.
     pub token: String,
 }
 
@@ -102,7 +102,7 @@ pub const BUILD_URL_VAR: &str = "PIGEON_BUILD_URL";
 /// The variable holding that build's SHA-256.
 pub const BUILD_SHA256_VAR: &str = "PIGEON_BUILD_SHA256";
 pub use crate::cobot::ship_wire::{
-    SENTINEL_SHA256_VAR, SENTINEL_URL_VAR, TEST_MAP_SHA256_VAR, TEST_MAP_URL_VAR,
+    JUDGE_SHA256_VAR, JUDGE_URL_VAR, TEST_MAP_SHA256_VAR, TEST_MAP_URL_VAR,
 };
 /// The variable holding the builds token's client ID.
 pub const BUILD_ACCESS_ID_VAR: &str = "PIGEON_BUILD_ACCESS_ID";
@@ -186,8 +186,8 @@ impl JobsLaunch {
             env.push((BUILD_ACCESS_ID_VAR, b.access.0.as_str()));
             env.push((BUILD_ACCESS_SECRET_VAR, b.access.1.as_str()));
             if let Some((url, sha256)) = &b.sentinel {
-                env.push((SENTINEL_URL_VAR, url.as_str()));
-                env.push((SENTINEL_SHA256_VAR, sha256.as_str()));
+                env.push((JUDGE_URL_VAR, url.as_str()));
+                env.push((JUDGE_SHA256_VAR, sha256.as_str()));
             }
             if let Some((url, sha256)) = &b.test_map {
                 env.push((TEST_MAP_URL_VAR, url.as_str()));
@@ -485,7 +485,7 @@ mod tests {
         assert_eq!(
             launch.env(),
             [
-                ("BACKPLANE_TOKEN", TOKEN),
+                ("AGENT_TOKEN", TOKEN),
                 ("PIGEON_STATE_R2_ENDPOINT", "https://r2.example"),
                 ("PIGEON_STATE_R2_ACCESS_KEY_ID", "key-id"),
                 ("PIGEON_STATE_R2_SECRET_ACCESS_KEY", "secret"),
@@ -501,7 +501,7 @@ mod tests {
             build: None,
         };
         assert_eq!(jobs.entrypoint()[0], "/usr/local/bin/pigeon");
-        assert_eq!(jobs.env(), [("BACKPLANE_TOKEN", TOKEN)]);
+        assert_eq!(jobs.env(), [("AGENT_TOKEN", TOKEN)]);
         let sha256 = "ab".repeat(32);
         jobs.build = Some(super::JobsBuild {
             url: "https://control.example/builds/x/pigeon".into(),
@@ -525,7 +525,7 @@ mod tests {
         assert_eq!(
             jobs.env(),
             [
-                ("BACKPLANE_TOKEN", TOKEN),
+                ("AGENT_TOKEN", TOKEN),
                 (
                     "PIGEON_BUILD_URL",
                     "https://control.example/builds/x/pigeon"
@@ -546,10 +546,10 @@ mod tests {
             jobs.env()[5..],
             [
                 (
-                    "PIGEON_SENTINEL_URL",
+                    "PIGEON_EVICTION_URL",
                     "https://control.example/builds/x/pigeon-sentinel"
                 ),
-                ("PIGEON_SENTINEL_SHA256", sentinel.as_str()),
+                ("PIGEON_EVICTION_SHA256", sentinel.as_str()),
             ]
         );
         let map = "ef".repeat(32);

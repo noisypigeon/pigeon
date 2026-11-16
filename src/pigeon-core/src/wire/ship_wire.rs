@@ -51,9 +51,9 @@ pub const SENTINEL_BINARY: &str = "pigeon-sentinel";
 pub const JUDGE_BINARIES: [&str; 2] = ["pigeon-eviction", SENTINEL_BINARY];
 
 /// The variable naming the `pigeon-sentinel` build a job Container downloads.
-pub const SENTINEL_URL_VAR: &str = "PIGEON_SENTINEL_URL";
+pub const JUDGE_URL_VAR: &str = "PIGEON_EVICTION_URL";
 /// The variable holding that build's SHA-256.
-pub const SENTINEL_SHA256_VAR: &str = "PIGEON_SENTINEL_SHA256";
+pub const JUDGE_SHA256_VAR: &str = "PIGEON_EVICTION_SHA256";
 
 /// The test map kept beside a build; see the 2026-11-11 amendment to
 /// `.claude/decisions/2026-11-10-development-factory-crates-functional-core.md`.

@@ -21,16 +21,11 @@ pub fn run(command: EvictionCommand) -> i32 {
     }
 }
 
-/// `PIGEON_EVICTION`, else `PIGEON_SENTINEL` with a warning, else either of [`BINARIES`] beside
-/// this executable, in its parent directory or on `PATH`, else [`BINARY`]. This feature links no
-/// backplane, so it reads both names itself; see `backplane::names`.
+/// `PIGEON_EVICTION`, else either of [`BINARIES`] beside this executable, in its parent directory
+/// or on `PATH`, else [`BINARY`].
 fn locate() -> PathBuf {
     let set = |k: &str| env::var_os(k).filter(|p| !p.is_empty());
     if let Some(p) = set("PIGEON_EVICTION") {
-        return PathBuf::from(p);
-    }
-    if let Some(p) = set("PIGEON_SENTINEL") {
-        eprintln!("warning: PIGEON_SENTINEL is deprecated; set PIGEON_EVICTION");
         return PathBuf::from(p);
     }
     let exe = env::current_exe().ok();

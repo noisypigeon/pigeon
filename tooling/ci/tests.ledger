@@ -51,11 +51,7 @@ pigeon-agent lib backplane cobot::worker::tests::a_launch_never_prints_a_secret
 pigeon-agent lib backplane cobot::worker::tests::a_run_launches_serve_signed_for_its_instance_and_state
 pigeon-agent lib backplane cobot::worker::tests::only_a_signed_answer_is_read
 pigeon-agent lib backplane cobot::worker::tests::the_state_variables_are_cobots
-pigeon-agent lib backplane names::readers::r2_state_reads_only_pigeon_variables
-pigeon-agent lib backplane names::readers::the_judge_is_found_under_pigeon_eviction_or_pigeon_sentinel
-pigeon-agent lib backplane names::readers::the_work_directory_is_git_ignored
-pigeon-agent lib backplane names::readers::tls_reads_only_agent_variables
-pigeon-agent lib backplane names::readers::tools_read_only_pigeon_variables
+pigeon-agent lib backplane names::tests::the_work_directory_is_git_ignored
 pigeon-agent lib backplane platform_job::tests::values_group_by_resource_and_keep_outputs
 pigeon-agent lib backplane sentinel::tests::the_judge_is_found_under_either_name_the_new_first
 pigeon-agent lib backplane ship::tests::the_judge_is_built_under_the_name_the_tree_declares
@@ -1184,13 +1180,8 @@ pigeon-core lib pigeon_core mirroring::tests::a_reconcile_of_equal_sides_starts_
 pigeon-core lib pigeon_core mirroring::tests::advertised_refs_are_read_from_info_refs
 pigeon-core lib pigeon_core mirroring::tests::only_a_pkcs8_key_is_taken
 pigeon-core lib pigeon_core mirroring::tests::the_jwt_input_is_two_base64url_parts
-pigeon-core lib pigeon_core names::tests::an_empty_new_name_falls_back_to_the_old
-pigeon-core lib pigeon_core names::tests::each_old_prefix_has_its_new_name
-pigeon-core lib pigeon_core names::tests::neither_name_reads_none_and_an_unrenamed_one_reads_itself
 pigeon-core lib pigeon_core names::tests::only_the_pigeon_ciphertext_tag_reads
 pigeon-core lib pigeon_core names::tests::only_x_pigeon_is_read
-pigeon-core lib pigeon_core names::tests::the_new_name_wins_over_the_old
-pigeon-core lib pigeon_core names::tests::the_old_name_still_reads_with_a_warning
 pigeon-core lib pigeon_core owner::items::tests::a_decision_is_filed_answered_once_and_kept
 pigeon-core lib pigeon_core owner::items::tests::a_session_holds_at_most_five_and_withdraws_only_its_own
 pigeon-core lib pigeon_core owner::items::tests::bad_asks_are_refused

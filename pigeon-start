@@ -2,7 +2,7 @@
 # A job Container's entrypoint: runs main's newest pigeon build when the Worker names one and
 # its SHA-256 matches, else the image's own; see
 # .claude/decisions/2026-11-07-development-job-images-on-cloudflare.md §3. A named
-# pigeon-sentinel that matches is exported as PIGEON_SENTINEL, for the bound job; see
+# judge, pigeon-eviction, that matches is exported as PIGEON_EVICTION, for the bound job; see
 # .claude/decisions/2026-11-10-development-factory-crates-functional-core.md §2. A named test
 # map that matches is exported as PIGEON_TEST_MAP, per that ADR's 2026-11-11 amendment.
 set -u
@@ -23,17 +23,15 @@ fetch() {
   return 1
 }
 
-unset PIGEON_EVICTION PIGEON_SENTINEL
-# PIGEON_EVICTION_* win over PIGEON_SENTINEL_*; both names are exported (src-crates ADR §5).
-judge_url="${PIGEON_EVICTION_URL:-${PIGEON_SENTINEL_URL:-}}"
-judge_sha="${PIGEON_EVICTION_SHA256:-${PIGEON_SENTINEL_SHA256:-}}"
+unset PIGEON_EVICTION
+judge_url="${PIGEON_EVICTION_URL:-}"
+judge_sha="${PIGEON_EVICTION_SHA256:-}"
 if [ -n "$judge_url" ] && [ -n "$judge_sha" ]; then
-  if fetch "$judge_url" "$judge_sha" "$dir/pigeon-sentinel"; then
-    export PIGEON_SENTINEL="$dir/pigeon-sentinel"
-    export PIGEON_EVICTION="$PIGEON_SENTINEL"
-    echo "pigeon-start: judging with sentinel build $judge_sha" >&2
+  if fetch "$judge_url" "$judge_sha" "$dir/pigeon-eviction"; then
+    export PIGEON_EVICTION="$dir/pigeon-eviction"
+    echo "pigeon-start: judging with judge build $judge_sha" >&2
   else
-    echo "pigeon-start: the sentinel build at $judge_url is missing or its checksum differs; judging with the linked library" >&2
+    echo "pigeon-start: the judge build at $judge_url is missing or its checksum differs; judging with the linked library" >&2
   fi
 fi
 

@@ -23,11 +23,11 @@ pub enum AgentOp {
     #[cfg(feature = "agent")]
     Decisions(DecisionsArgs),
     /// Answer operations over HTTP (GET /healthz, GET /v0/operations, POST /v0/run); needs
-    /// `BACKPLANE_TOKEN`
+    /// `AGENT_TOKEN`
     #[cfg(feature = "agent")]
     Serve(ServeArgs),
     /// Take a change's jobs over signed HTTP (POST /v0/jobs, GET /v0/jobs/<id>), in a job
-    /// Container; needs `BACKPLANE_TOKEN`
+    /// Container; needs `AGENT_TOKEN`
     #[cfg(feature = "agent")]
     Jobs(JobsArgs),
     /// Print a new authenticator secret for approvals in the card: base32 on stdout, for

@@ -144,7 +144,7 @@ fn scrubbed() -> Vec<String> {
         crate::cobot::secrets::WORKLOAD_PASSPHRASE_VAR,
     ]
     .into_iter()
-    .flat_map(crate::names::both)
+    .map(String::from)
     .collect()
 }
 
