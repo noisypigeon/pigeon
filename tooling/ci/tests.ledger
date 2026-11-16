@@ -843,6 +843,7 @@ pigeon-core lib pigeon_core approval::tests::windows::auto_is_standing_and_one_r
 pigeon-core lib pigeon_core approval::tests::windows::auto_lets_the_code_tier_through_but_not_guarded_sentinel_or_owner
 pigeon-core lib pigeon_core approval::tests::windows::every_merge_counts_once_however_it_was_asked_for
 pigeon-core lib pigeon_core approval::tests::windows::the_rate_breaker_holds_merges_and_releases_after_a_quiet_hour
+pigeon-core lib pigeon_core approval::tests::with_a_gate_auto_covers_guarded_and_sentinel_paths_but_not_the_gate_or_secrets
 pigeon-core lib pigeon_core architecture::layout::tests::an_empty_graph_lays_out_empty
 pigeon-core lib pigeon_core architecture::layout::tests::generated_graphs_lay_out_without_overlap_and_on_their_borders
 pigeon-core lib pigeon_core bench::admit::tests::budget_bounds

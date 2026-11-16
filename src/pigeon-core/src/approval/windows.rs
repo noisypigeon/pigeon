@@ -1,5 +1,6 @@
-//! Auto: a standing window that lets every change at the code tier or lower through, guarded
-//! and sentinel paths cut out, started and paused with a passkey; see
+//! Auto: a standing window that lets every change at the code tier or lower through, the
+//! gate (or, with no gate set, every guarded and sentinel path) cut out, started and paused with
+//! a passkey; see
 //! `.claude/decisions/2026-11-15-security-standing-auto-owner-flags.md`.
 
 use serde::{Deserialize, Serialize};
@@ -113,12 +114,14 @@ fn judge(w: &Window, change: &crate::change::Change, operation: &str, _now: u64)
     }
     if matches!(operation, "change.approve" | "change.merge")
         && change.tiers.as_ref().is_some_and(|t| {
-            t.merge.rule.starts_with("guarded")
-                || crate::approval::tiers::is_judge_rule(&t.merge.rule)
+            (t.merge.rule.starts_with("guarded")
+                || crate::approval::tiers::is_judge_rule(&t.merge.rule))
+                && !t.merge.rule.ends_with(crate::approval::tiers::AUTO_COVERS)
         })
     {
         return Decision::Ask(format!(
-            "change {} touches a guarded or sentinel path, which Auto never covers",
+            "change {} touches a gate path, or a guarded or sentinel one without a gate set, which \
+             Auto never covers",
             change.number
         ));
     }

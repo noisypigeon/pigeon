@@ -73,7 +73,16 @@ pub struct Rules {
     /// 2026-11-16 amendment.
     #[serde(default, alias = "eviction_bookkeeping")]
     pub sentinel_bookkeeping: Vec<String>,
+    /// The guarded paths Auto never covers: the code that sets the owner tier and proves the owner.
+    /// While set, Auto covers every other guarded and sentinel path; unset, it covers none. See the
+    /// standing Auto ADR's 2026-11-16 amendment.
+    #[serde(default)]
+    pub gate: Option<Vec<String>>,
 }
+
+/// The suffix of a guarded or sentinel merge rule that Auto covers, because `gate:` is set and
+/// the head touches no gate path.
+pub const AUTO_COVERS: &str = " (Auto covers it)";
 
 /// Whether `rule` is the judge's, under its old `sentinel` prefix or its new `eviction` one; see
 /// `.claude/decisions/2026-11-16-development-src-crates-neutral-names.md` step 12.
@@ -185,14 +194,27 @@ pub fn classify(rules: &Rules, scope: &[String], files: &[String], facts: Facts)
     } else {
         tiered(Tier::Confirm, "routine")
     };
+    let gate_file = rules
+        .gate
+        .as_ref()
+        .and_then(|gate| files.iter().find(|f| gate.iter().any(|g| matches(g, f))));
+    let covered = |rule: String| {
+        if rules.gate.is_some() {
+            rule + AUTO_COVERS
+        } else {
+            rule
+        }
+    };
     let merge = if let Some(f) = secret_file {
         tiered(Tier::Owner, format!("secrets: {f}"))
     } else if facts.adds_secret {
         tiered(Tier::Owner, "adds a secret")
-    } else if let Some(f) = sentinel_file {
-        tiered(Tier::Code, format!("sentinel: {f}"))
-    } else if let Some(f) = guarded_file {
+    } else if let Some(f) = gate_file {
         tiered(Tier::Code, format!("guarded: {f}"))
+    } else if let Some(f) = sentinel_file {
+        tiered(Tier::Code, covered(format!("sentinel: {f}")))
+    } else if let Some(f) = guarded_file {
+        tiered(Tier::Code, covered(format!("guarded: {f}")))
     } else if spike(files, &|g, f| matches(g, f)) {
         tiered(Tier::Confirm, "spike, merged")
     } else if adr_only {

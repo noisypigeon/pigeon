@@ -382,3 +382,41 @@ glob under `src/pigeon-cli/` or `src/site-templates/` becomes `src/**/<tail>`
 (or `**<file>` for a workspace root file), which matches the file both before
 and after the restructure moves it. That ADR's step 12 tightens them to the
 new paths.
+
+### 2026-11-16: Auto covers guarded and sentinel paths; only the gate, secrets and destruction ask
+
+The owner's goal: no manual approval except destructive actions and
+secrets. §2 cut guarded and sentinel paths out of Auto. That made every
+guarded change of the restructure's step 12 wait for a passkey. The owner
+decided (owner_ask #10 and in session):
+
+- **Auto covers guarded and sentinel paths,** except the **gate**: the code
+  that sets the owner tier and proves the owner. A change that edits the gate
+  could drop secrets out of the owner tier, and Auto would then merge
+  secrets. File paths can't tell that edit from a harmless one, so the gate
+  keeps the passkey.
+- **`approvals.yaml` gains `gate:`**, a list of guarded globs. While it is
+  set, `tiers::classify` marks a guarded or sentinel merge rule with
+  `tiers::AUTO_COVERS`, unless the head touches a gate path, whose rule stays
+  `guarded: <file>`. `windows::judge` asks only for unmarked guarded or
+  sentinel rules. With `gate:` unset, nothing is marked and Auto behaves as
+  §2 says, as do records classified before this change.
+- **Unchanged:** the owner tier (`secrets:`, `adds a secret`, destruction,
+  `change.front` and `change.pin`, break-glass), each time. Mandates still cut
+  guarded and sentinel paths out. Executors still never touch them (the
+  rule's prefix is kept). `approvals.yaml` is on `secrets:`, so any change to
+  it, this list included, is the owner's.
+- **The gate:** `src/**/approval/tiers.rs`, `src/**/approval/windows.rs`,
+  `src/**/approval/mandates.rs`, `src/**/approval/passkeys.rs`, the
+  `approve.rs`, `access.rs` and passkey Worker files `guarded:` names, and
+  `.config/approvals.yaml`.
+
+Steps:
+
+1. **!794**, after !789: `Rules::gate`, the mark, the window's check, and a
+   test (a guarded and a sentinel file are covered under a gate, a gate file
+   and a secrets file are not, and no gate changes nothing). It touches the
+   gate, so the owner approves it.
+2. **Once !794 deploys,** a change adds `gate:` to `approvals.yaml`
+   (`deny_unknown_fields`: the deployed code reads the key first). The owner
+   approves it: it loosens an approval rule.

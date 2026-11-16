@@ -459,3 +459,46 @@ fn the_judges_rules_read_under_eviction_too() {
     assert!(is_judge_rule("eviction: a/b.rs"));
     assert!(!is_judge_rule("guarded: a/b.rs"));
 }
+
+#[test]
+fn with_a_gate_auto_covers_guarded_and_sentinel_paths_but_not_the_gate_or_secrets() {
+    use super::mandates::Decision;
+    use super::tiers::{AUTO_COVERS, Facts, Rules, Tier, classify};
+    use super::windows::Windows;
+    let yaml = "guarded: [.mcp.json, core/approval/**]\nsentinel: [.config/policies/**]\n\
+                secrets: [secrets.config.yaml]\n";
+    let ungated: Rules = serde_saphyr::from_str(yaml).expect("ungated");
+    let gated: Rules =
+        serde_saphyr::from_str(&format!("{yaml}gate: [core/approval/**]\n")).expect("gated");
+    let (w, _) = Windows::default()
+        .start("owner", 1_800_000_000)
+        .expect("started");
+    let decide = |rules: &Rules, file: &str| {
+        let files = vec![file.to_string()];
+        let mut c = Change::propose(5, "x", "feat: x", "p", files.clone(), "agent");
+        c.tiers = Some(classify(rules, &files, &files, Facts::default()));
+        let rule = c.tiers.as_ref().expect("tiers").merge.clone();
+        let (_, d) = w.decide(&c, "change.merge", 1_800_000_010);
+        (rule, d.map(|(_, d)| d == Decision::Allow))
+    };
+    for (file, covered) in [
+        (".mcp.json", true),
+        (".config/policies/x.yaml", true),
+        ("core/approval/tiers.rs", false),
+        ("secrets.config.yaml", false),
+    ] {
+        let (rule, allowed) = decide(&gated, file);
+        assert_eq!(allowed, Some(covered), "{file}: {}", rule.rule);
+        assert_eq!(rule.rule.ends_with(AUTO_COVERS), covered, "{file}");
+        let (rule, allowed) = decide(&ungated, file);
+        assert_eq!(allowed, Some(false), "no gate, no change: {file}");
+        assert!(!rule.rule.ends_with(AUTO_COVERS));
+    }
+    assert_eq!(decide(&gated, "secrets.config.yaml").0.tier, Tier::Owner);
+    let files = vec![".mcp.json".to_string(), "core/approval/x.rs".to_string()];
+    let t = classify(&gated, &files, &files, Facts::default());
+    assert_eq!(
+        t.merge.rule, "guarded: core/approval/x.rs",
+        "a gate file wins"
+    );
+}
