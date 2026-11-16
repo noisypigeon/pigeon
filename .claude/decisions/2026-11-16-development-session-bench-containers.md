@@ -499,3 +499,54 @@ and
   - After step 4, about 4 to 5 GB, so benches stay warm.
   - The spike (!657) measures the bench's side.
   - `TARGET_CEILING` stays 10 GB, and is revisited with the spike's numbers.
+
+### 2026-11-16: The sandbox spike's findings: `--map-auto` with uid 1000, no network, and a 3.7 GB full test target
+
+The spike (!657, `tooling/spikes/bench-sandbox/run.sh`) ran as a check on a
+`Checker`, then was closed, per step 2.
+
+- **The Container:**
+  - `6.18.56-cloudflare-microvm`, 4 CPUs, 12 GB of memory;
+  - user 65532, util-linux 2.38.1, `newuidmap`, and `nonroot:100000:65536`;
+  - no `mise`;
+  - 14.3 GB free of 18.3 GB;
+  - `/cache/target` owned by 65532, at 1.5 GB of warmed dependencies.
+- **The sandbox works.**
+  - `unshare --user --map-root-user --map-auto --net --pid --fork
+    --mount-proc --kill-child` maps 0 to 65532, and 1 to 65535 to 100000
+    and up.
+  - Inside it, root can `chown` to 1000.
+  - As uid 1000 (`setpriv --reuid=1000 --regid=1000 --clear-groups`), a
+    command:
+    - writes its own directory;
+    - is refused the parent's `/proc/<pid>/environ`;
+    - sees only `lo` and unconfigured links, with 1.1.1.1 unreachable.
+- **So §5's sandbox is settled:**
+  - The server runs every command through that `unshare`, then `setpriv` to
+    uid 1000.
+  - When the bench starts, the server chowns `/work/pigeon` and
+    `/cache/target` to 1000 from inside the namespace.
+  - Its own `git` and `cargo fetch` run as uid 1000 through `unshare` without
+    `--net`, so the files stay that uid's. The token is passed only to those
+    processes.
+  - `--map-root-user` alone is refused for commands: its root is 65532
+    outside, the server's own uid.
+- **Builds, offline in the sandbox, from the image's warm dependencies:**
+
+  | Command | Time | `/cache/target` |
+  |---|---|---|
+  | `cargo fetch --locked`, outside | 2 s | |
+  | `cargo clippy --workspace --all-targets -D warnings` | 22 s | 1.5 → 1.8 GB |
+  | `cargo test --workspace --no-run` (119 test binaries) | 50 s | 1.8 → 3.7 GB |
+  | wasm clippy (warm in the image) | 0 s | |
+  | `cargo fmt --all --check` | 2 s | |
+
+  Nothing asked for the network once fetched.
+- **Disk.** The image sets `CARGO_PROFILE_DEV_DEBUG=0`, so a full test target
+  is about 3.7 GB here, not the 16 GB of a debug build. The one-test-binary
+  ADR's figure is for local targets with debug info.
+  - `TARGET_CEILING` stays 10 GB.
+  - A bench stays warm across runs today, without waiting for that ADR.
+- **Not measured, left to step 5's verification:**
+  - the `chown` of `/cache/target` at bench start;
+  - a build as uid 1000 rather than as the namespace's root.
