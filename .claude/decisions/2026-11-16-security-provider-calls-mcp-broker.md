@@ -382,3 +382,23 @@ modules in `catalog/`. That is row C4's engine exemption, so each becomes an
 - DigitalOcean has an official hosted MCP server. Backblaze has an official
   local (stdio) one. Scaleway has none.
 - A direct call added later goes through `provider.call`.
+
+### 2026-11-16: Reviewed !802 against !801: they agree
+
+!801 amends
+[`2026-11-15-security-owner-approvals-always-listed.md`](2026-11-15-security-owner-approvals-always-listed.md):
+`approval_wait` hands out the same page grant while a pending approval is
+unchanged. !802 (this ADR's step 3) touches none of the files that ADR
+governs. It adds only `src/pigeon-core/src/provider/**` and one line in
+`lib.rs`: pure code that nothing calls yet.
+
+- **Where they will meet.** An `apply` tool's call waits as `pending` for
+  the owner's proof (§4 step 3). When step 5 wires `provider.call` into
+  `run()`, that pending answer lists its grant through the always-listed
+  path that !801 changed. Its link is then reused while the call's head,
+  operation and tier are unchanged, as !801 decides. No other rule applies
+  to it.
+- **Unchanged.** A grant stays bound and single-use. A moved head still
+  refuses the old link. `admit` and `verdict` read no grant.
+
+Neither ADR changes.
