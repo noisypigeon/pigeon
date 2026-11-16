@@ -574,3 +574,16 @@ This agrees with §7 as amended by !711. Step 5 leaves the sentinel crate's
 both name. Step 5 then holds only the judge's paths and that bookkeeping, as
 the owner's own grant, never a mandate. Step 12's binary rename follows the
 same rule.
+### 2026-11-16: Steps 8 and 9 both join the workspace (!726 reconciles !697)
+
+- **Neither side's decision changes.** The site-templates crate (step 8,
+  !697) and the pigeon-ios check crate (step 9, !702) both join the root
+  workspace: `members` names `src/pigeon-ios` and
+  `src/pigeon-site-templates`.
+- **`.dockerignore`** keeps !702's lines that admit pigeon-ios's
+  `Cargo.toml`, `src/` and `tests/`. It drops `src/site-templates/`, which
+  holds only the two template changelogs now, so the image's workspace finds
+  `src/pigeon-site-templates/`.
+- **`tooling/ci/tests.moves`** keeps both changes' lines.
+- **!697, rebased onto main, carries those three files.** This change carries
+  only this entry.
