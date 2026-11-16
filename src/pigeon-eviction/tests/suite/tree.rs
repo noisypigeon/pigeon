@@ -2,7 +2,7 @@
 
 use std::path::Path;
 
-use sentinel::{LoadedPolicy, Policy};
+use eviction::{LoadedPolicy, Policy};
 
 fn run(rule: &str, root: &Path) -> Vec<String> {
     let yaml = format!("description: test.\ntarget: tree\nrules:\n  - {rule}\n");
@@ -10,7 +10,7 @@ fn run(rule: &str, root: &Path) -> Vec<String> {
         name: "t".into(),
         policy: Policy::parse(&yaml).expect("valid"),
     };
-    sentinel::check(&[loaded], root, None)
+    eviction::check(&[loaded], root, None)
         .expect("check runs")
         .violations
         .iter()
@@ -76,7 +76,7 @@ mod tree_tests {
 mod find_tests {
     use std::fs;
 
-    use sentinel::Policy;
+    use eviction::Policy;
     use tempfile::TempDir;
 
     use super::run;

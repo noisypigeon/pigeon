@@ -2,7 +2,7 @@
 //! violations being the grant; see
 //! `.claude/decisions/2026-11-10-development-change-slot-eviction-policy.md` §4.
 
-use sentinel::{Candidate, LoadedPolicy, Policy, PullRequest};
+use eviction::{Candidate, LoadedPolicy, Policy, PullRequest};
 use tempfile::TempDir;
 
 const SESSION_GONE: &str = r"description: A change whose session has gone two hours, idle as long, is evicted.
@@ -65,7 +65,7 @@ fn with(mut c: Candidate, key: &str, value: &str) -> Candidate {
 
 #[test]
 fn a_gone_sessions_idle_change_is_granted_by_its_policy() {
-    let (verdicts, granted) = sentinel::evict(&policies(), &gone());
+    let (verdicts, granted) = eviction::evict(&policies(), &gone());
     assert_eq!(granted.as_deref(), Some("eviction-session-gone"));
     assert_eq!(verdicts.len(), 2, "every eviction policy answers");
     assert_eq!(
@@ -90,12 +90,12 @@ fn what_the_adr_protects_is_never_granted() {
         ("not a number", with(gone(), "idle", "soon")),
     ];
     for (name, c) in table {
-        let (_, granted) = sentinel::evict(&policies(), &c);
+        let (_, granted) = eviction::evict(&policies(), &c);
         assert_eq!(granted, None, "{name}");
     }
     let mut missing = gone();
     missing.remove("pinned");
-    let (verdicts, granted) = sentinel::evict(&policies(), &missing);
+    let (verdicts, granted) = eviction::evict(&policies(), &missing);
     assert_eq!(granted, None, "a missing field never grants");
     assert!(verdicts.iter().any(|v| {
         v.violations
@@ -107,16 +107,16 @@ fn what_the_adr_protects_is_never_granted() {
 #[test]
 fn numeric_bounds_hold_at_both_ends() {
     let proposed = with(with(gone(), "state", "proposed"), "idle", "86400");
-    let (_, granted) = sentinel::evict(&[loaded("p", STALE_PROPOSED)], &proposed);
+    let (_, granted) = eviction::evict(&[loaded("p", STALE_PROPOSED)], &proposed);
     assert_eq!(granted.as_deref(), Some("p"), "at the bound");
     let over = with(proposed.clone(), "idle", "31536001");
     assert_eq!(
-        sentinel::evict(&[loaded("p", STALE_PROPOSED)], &over).1,
+        eviction::evict(&[loaded("p", STALE_PROPOSED)], &over).1,
         None
     );
     let under = with(proposed, "idle", "86399");
     assert_eq!(
-        sentinel::evict(&[loaded("p", STALE_PROPOSED)], &under).1,
+        eviction::evict(&[loaded("p", STALE_PROPOSED)], &under).1,
         None
     );
 }
@@ -128,7 +128,7 @@ fn check_skips_eviction_policies() {
         branch: Some("change/1-x".into()),
         ..PullRequest::default()
     };
-    let report = sentinel::check(&policies(), root.path(), Some(&pr)).expect("runs");
+    let report = eviction::check(&policies(), root.path(), Some(&pr)).expect("runs");
     assert_eq!((report.ran, report.skipped), (0, 2));
     assert_eq!(report.violations.len(), 0);
 }

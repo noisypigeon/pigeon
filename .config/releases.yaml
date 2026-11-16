@@ -3,16 +3,17 @@ repository: https://github.com/noisypigeon/pigeon
 changelog: CHANGELOG.md
 units:
   # Its own crate alone; see .claude/decisions/2026-11-10-development-factory-crates-functional-core.md §1.
-  sentinel:
-    manifest: src/pigeon-cli/crates/sentinel/Cargo.toml
+  pigeon-eviction:
+    previous: sentinel
+    manifest: src/pigeon-eviction/Cargo.toml
     features: ""
-    image: ghcr.io/noisypigeon/pigeon-sentinel
+    image: ghcr.io/noisypigeon/pigeon-eviction
     paths:
-      - src/pigeon-cli/crates/sentinel/
+      - src/pigeon-eviction/
       - Dockerfile
       - .dockerignore
     exclude: [tests/, benches/, '*.md']
-    cargo: { workspace: ., package: pigeon-sentinel }
+    cargo: { workspace: ., package: pigeon-eviction }
   backplane:
     manifest: src/pigeon-cli/crates/backplane/Cargo.toml
     features: backplane

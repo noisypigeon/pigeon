@@ -5,7 +5,7 @@ use std::env;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-use sentinel::PullRequest;
+use eviction::PullRequest;
 
 /// Every policy held.
 const SUCCESS: u8 = 0;
@@ -85,7 +85,7 @@ fn evict(check: &Check, candidate: &str) -> u8 {
         .policies
         .clone()
         .unwrap_or_else(|| check.root.join(".config/policies"));
-    let policies = match sentinel::load_dir(&dir) {
+    let policies = match eviction::load_dir(&dir) {
         Ok(p) => p,
         Err(e) => {
             eprintln!("sentinel: {e}");
@@ -99,7 +99,7 @@ fn evict(check: &Check, candidate: &str) -> u8 {
             return INVALID;
         }
     };
-    let candidate: sentinel::Candidate = fields
+    let candidate: eviction::Candidate = fields
         .into_iter()
         .map(|(k, v)| {
             let text = match v {
@@ -109,7 +109,7 @@ fn evict(check: &Check, candidate: &str) -> u8 {
             (k, text)
         })
         .collect();
-    let (results, granted) = sentinel::evict(&policies, &candidate);
+    let (results, granted) = eviction::evict(&policies, &candidate);
     println!(
         "{}",
         serde_json::json!({ "granted": granted, "results": results })
@@ -126,9 +126,9 @@ fn describe(check: &Check) -> u8 {
         .policies
         .clone()
         .unwrap_or_else(|| check.root.join(".config/policies"));
-    match sentinel::load_dir(&dir) {
+    match eviction::load_dir(&dir) {
         Ok(policies) => {
-            println!("{}", sentinel::describe(&policies));
+            println!("{}", eviction::describe(&policies));
             SUCCESS
         }
         Err(e) => {
@@ -143,7 +143,7 @@ fn run(check: &Check) -> u8 {
         .policies
         .clone()
         .unwrap_or_else(|| check.root.join(".config/policies"));
-    let policies = match sentinel::load_dir(&dir) {
+    let policies = match eviction::load_dir(&dir) {
         Ok(p) => p,
         Err(e) => {
             eprintln!("sentinel: {e}");
@@ -158,7 +158,7 @@ fn run(check: &Check) -> u8 {
         branch: env::var("PR_BRANCH").ok(),
         scope: env::var("PR_SCOPE").ok(),
     });
-    match sentinel::check(&policies, &check.root, pull_request.as_ref()) {
+    match eviction::check(&policies, &check.root, pull_request.as_ref()) {
         Ok(report) => {
             if check.json {
                 let violations: Vec<String> =
@@ -190,7 +190,7 @@ fn main() -> ExitCode {
     let args: Vec<String> = env::args().skip(1).collect();
     ExitCode::from(match parse(&args) {
         Ok(Command::Version) => {
-            println!("pigeon-sentinel {}", sentinel::VERSION);
+            println!("pigeon-sentinel {}", eviction::VERSION);
             SUCCESS
         }
         Ok(Command::Check(check)) => run(&check),

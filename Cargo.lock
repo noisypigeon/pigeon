@@ -1885,16 +1885,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "pigeon-ios"
-version = "0.1.0"
-dependencies = [
- "pigeon-backplane",
- "serde-saphyr",
- "serde_json",
-]
-
-[[package]]
-name = "pigeon-sentinel"
+name = "pigeon-eviction"
 version = "0.1.17"
 dependencies = [
  "regex",
@@ -1902,6 +1893,15 @@ dependencies = [
  "serde-saphyr",
  "serde_json",
  "tempfile",
+]
+
+[[package]]
+name = "pigeon-ios"
+version = "0.1.0"
+dependencies = [
+ "pigeon-backplane",
+ "serde-saphyr",
+ "serde_json",
 ]
 
 [[package]]

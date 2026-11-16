@@ -3,7 +3,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use sentinel::{LoadedPolicy, PullRequest};
+use eviction::{LoadedPolicy, PullRequest};
 use tempfile::TempDir;
 
 const URL: &str = "https://github.com/noisypigeon/pigeon";
@@ -12,13 +12,13 @@ const GOOD_NAME: &str = "2026-01-02-development-a-sample-decision.md";
 
 fn policy(name: &str) -> LoadedPolicy {
     let path = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../../../.config/policies")
+        .join("../../.config/policies")
         .join(format!("{name}.yaml"));
-    sentinel::load_file(&path).expect("policy loads")
+    eviction::load_file(&path).expect("policy loads")
 }
 
 fn violations(name: &str, root: &Path, pr: Option<&PullRequest>) -> Vec<String> {
-    sentinel::check(&[policy(name)], root, pr)
+    eviction::check(&[policy(name)], root, pr)
         .expect("check runs")
         .violations
         .iter()
@@ -237,7 +237,7 @@ fn pull_request() {
 
 #[test]
 fn pull_request_skipped_without_one() {
-    let report = sentinel::check(&[policy("pull-request")], pr_root().path(), None).expect("runs");
+    let report = eviction::check(&[policy("pull-request")], pr_root().path(), None).expect("runs");
     assert_eq!((report.ran, report.skipped), (0, 1));
 }
 
@@ -290,8 +290,8 @@ fn changelog_rules() {
 
 #[test]
 fn every_policy_is_valid() {
-    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../../.config/policies");
-    assert_eq!(sentinel::load_dir(&dir).expect("loads").len(), 21);
+    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../.config/policies");
+    assert_eq!(eviction::load_dir(&dir).expect("loads").len(), 21);
 }
 
 fn layout_root(skip: &[&str], extra: &[&str]) -> TempDir {

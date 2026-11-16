@@ -1,7 +1,12 @@
 [workspace]
 resolver = "3"
-members = ["src/pigeon-cli/crates/*", "src/pigeon-ios", "src/pigeon-site-templates"]
-exclude = ["src/pigeon-cli/crates/cobot", "src/pigeon-cli/crates/gantry"]
+members = ["src/pigeon-cli/crates/*", "src/pigeon-ios", "src/pigeon-site-templates", "src/pigeon-eviction"]
+exclude = ["src/pigeon-cli/crates/cobot", "src/pigeon-cli/crates/gantry", "src/pigeon-cli/crates/sentinel"]
+
+# What the checks need to know of this layout; see
+# .claude/decisions/2026-11-16-development-src-crates-neutral-names.md's 2026-11-16 amendments.
+[workspace.metadata.pigeon]
+policy-tests = ["pigeon-eviction", "pigeon", "pigeon-backplane"]
 
 [workspace.package]
 version = "0.1.0"
@@ -12,7 +17,7 @@ repository = "https://github.com/noisypigeon/pigeon"
 publish = false
 
 [workspace.dependencies]
-sentinel = { path = "src/pigeon-cli/crates/sentinel", package = "pigeon-sentinel" }
+eviction = { path = "src/pigeon-eviction", package = "pigeon-eviction" }
 backplane = { path = "src/pigeon-cli/crates/backplane", package = "pigeon-backplane", default-features = false }
 age = { version = "0.12.1", default-features = false }
 aes-gcm = { version = "0.10.3", default-features = false, features = ["aes", "alloc"] }

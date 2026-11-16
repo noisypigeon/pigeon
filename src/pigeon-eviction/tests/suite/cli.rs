@@ -48,7 +48,7 @@ fn it_names_its_version() {
     assert_eq!(o.status.code(), Some(0));
     assert_eq!(
         stdout(&o).trim(),
-        format!("pigeon-sentinel {}", sentinel::VERSION)
+        format!("pigeon-sentinel {}", eviction::VERSION)
     );
 }
 

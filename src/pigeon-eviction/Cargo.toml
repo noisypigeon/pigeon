@@ -1,5 +1,5 @@
 [package]
-name = "pigeon-sentinel"
+name = "pigeon-eviction"
 description = "A policy engine that checks a repository against YAML policies."
 version = "0.1.17"
 edition.workspace = true
@@ -10,9 +10,10 @@ publish.workspace = true
 autotests = false
 
 [lib]
-name = "sentinel"
+name = "eviction"
 
 [[bin]]
+# The stored build keeps its name until the restructure ADR's step 12.
 name = "pigeon-sentinel"
 path = "src/main.rs"
 

@@ -4,7 +4,7 @@
 use std::fs;
 use std::path::Path;
 
-use sentinel::Invocation;
+use eviction::Invocation;
 use tempfile::TempDir;
 
 const ZONES: &str = "description: Workloads sit only under the instance's zones.\nparams:\n  zones: { type: list, description: Workload directories the instance owns. }\ntarget: tree\nrules:\n  - find:\n      match: '^workloads/[^/]+/config\\.yaml$'\n      allow_under: ${{ zones }}\n";
@@ -32,12 +32,12 @@ fn invocations(yaml: &str) -> Vec<Invocation> {
 #[test]
 fn an_instance_invokes_definitions_by_name() {
     let dir = definitions();
-    let loaded = sentinel::load_definitions(dir.path()).expect("loads");
+    let loaded = eviction::load_definitions(dir.path()).expect("loads");
     assert_eq!(
         loaded.keys().map(String::as_str).collect::<Vec<_>>(),
         ["readme", "zones"]
     );
-    let policies = sentinel::invoke(
+    let policies = eviction::invoke(
         &loaded,
         &invocations("- use: readme\n- use: zones\n  with: { zones: [workloads/a.com/] }\n"),
         Path::new(".config/instance.yaml"),
@@ -51,11 +51,11 @@ fn an_instance_invokes_definitions_by_name() {
     let root = TempDir::new().expect("root");
     write(root.path(), "README.md", "# An instance\n");
     write(root.path(), "workloads/a.com/config.yaml", "zone: a.com\n");
-    let report = sentinel::check(&policies, root.path(), None).expect("checks");
+    let report = eviction::check(&policies, root.path(), None).expect("checks");
     assert!(report.violations.is_empty(), "{:?}", report.violations);
 
     write(root.path(), "workloads/b.org/config.yaml", "zone: b.org\n");
-    let report = sentinel::check(&policies, root.path(), None).expect("checks");
+    let report = eviction::check(&policies, root.path(), None).expect("checks");
     assert_eq!(report.violations.len(), 1, "{:?}", report.violations);
     assert_eq!(report.violations[0].policy, "zones");
     assert!(report.violations[0].path.contains("b.org"));
@@ -64,7 +64,7 @@ fn an_instance_invokes_definitions_by_name() {
 #[test]
 fn an_unknown_name_or_a_refused_parameter_names_the_invocation() {
     let dir = definitions();
-    let loaded = sentinel::load_definitions(dir.path()).expect("loads");
+    let loaded = eviction::load_definitions(dir.path()).expect("loads");
     for (yaml, want) in [
         ("- use: nope\n", "policy `nope`: no such definition"),
         (
@@ -76,7 +76,7 @@ fn an_unknown_name_or_a_refused_parameter_names_the_invocation() {
             "policy `readme`: unknown parameter `zones`",
         ),
     ] {
-        let err = sentinel::invoke(
+        let err = eviction::invoke(
             &loaded,
             &invocations(yaml),
             Path::new(".config/instance.yaml"),
@@ -95,7 +95,7 @@ fn a_bad_definition_fails_the_load_at_its_file() {
         "broken.yaml",
         "description: x\ntarget: { file: f }\nrules:\n  - contains: { file: f, text: '${{ missing }}' }\n",
     );
-    let err = sentinel::load_definitions(dir.path())
+    let err = eviction::load_definitions(dir.path())
         .expect_err("broken")
         .to_string();
     assert!(

@@ -1,7 +1,7 @@
 //! The `change` target: a change's branch, scope and size; see
 //! `.claude/decisions/2026-11-05-development-changes-through-pigeon-mcp.md` §3.
 
-use sentinel::{LoadedPolicy, Policy, PullRequest};
+use eviction::{LoadedPolicy, Policy, PullRequest};
 use tempfile::TempDir;
 
 const POLICY: &str = r"description: A change stays on its branch and inside its scope.
@@ -38,7 +38,7 @@ fn change(branch: Option<&str>, files: &str, scope: &str) -> PullRequest {
 
 fn check(pr: Option<&PullRequest>) -> (usize, Vec<String>) {
     let root = TempDir::new().expect("tempdir");
-    let report = sentinel::check(&[loaded(POLICY).expect("valid")], root.path(), pr).expect("runs");
+    let report = eviction::check(&[loaded(POLICY).expect("valid")], root.path(), pr).expect("runs");
     (
         report.skipped,
         report.violations.iter().map(ToString::to_string).collect(),
