@@ -132,6 +132,7 @@
 - docs(adr): review !736 against !757 (!763) ([70827aa](https://github.com/noisypigeon/pigeon/commit/70827aaa2c3d1f3456bd6eb956d40e8d768336e4))
 - refactor: the policy engine is the pigeon-eviction crate in src/pigeon-eviction (!713) ([b00defc](https://github.com/noisypigeon/pigeon/commit/b00defc8b43dccc1d0f0e52c8ec7b4aa6e380c49)) · pigeon-eviction
 - units renamed · sentinel → pigeon-eviction
+- docs(adr): step 11 as the owner decided: BACKPLANE_TOKEN and the state repository keep their stored names (!767) ([426f97c](https://github.com/noisypigeon/pigeon/commit/426f97cb85c6f511e434a18ad6a70958736d1495))
 
 ## 2026-11-15
 
