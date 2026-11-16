@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: release
-* Governs: `**Dockerfile`, `**.dockerignore`, `src/**/tests/suite/cobot_image_tools.rs`, `rust-toolchain.toml`
+* Governs: `**Dockerfile`, `**.dockerignore`, `src/**/tests/suite/*_image_tools.rs`, `rust-toolchain.toml`
 
 ## Context
 

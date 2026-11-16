@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: runtime
-* Governs: `catalog/agnostic/**`, `catalog/digitalocean/modules/spaces-bucket/**`, `src/**/catalog.rs`, `src/**/config.rs`, `src/**/tests/suite/cobot_agnostic.rs`
+* Governs: `catalog/agnostic/**`, `catalog/digitalocean/modules/spaces-bucket/**`, `src/**/catalog.rs`, `src/**/config.rs`, `src/**/tests/suite/*_agnostic.rs`
 
 ## Context
 

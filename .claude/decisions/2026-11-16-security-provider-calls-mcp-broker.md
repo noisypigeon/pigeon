@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: security
-* Governs: `src/**/worker/github.rs`, `src/**/worker/buildkite.rs`, `src/**/worker/bitrise.rs`, `src/**/worker/apple.rs`, `src/**/worker/insights.rs`, `src/**/cobot/cloudflare.rs`, `src/**/architecture/network.rs`
+* Governs: `src/**/worker/github.rs`, `src/**/worker/buildkite.rs`, `src/**/worker/bitrise.rs`, `src/**/worker/apple.rs`, `src/**/worker/insights.rs`, `src/pigeon-agent/src/*/cloudflare.rs`, `src/**/architecture/network.rs`
 
 ## Context
 
