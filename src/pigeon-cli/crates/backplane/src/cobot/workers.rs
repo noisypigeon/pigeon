@@ -1057,12 +1057,18 @@ fn render_script(spec: &Spec, images: Option<&BTreeMap<String, String>>) -> Valu
                         .unwrap_or_else(|| format!("./{}.Dockerfile", c.class)),
                     "instance_type": c.instance_type,
                     "max_instances": c.max_instances,
+                    "rollout_active_grace_period": ROLLOUT_GRACE_SECONDS,
                 })
             })
             .collect();
     }
     out
 }
+
+/// Seconds a rollout waits before replacing an active Container: a job's longest run and a
+/// margin, so no job, the deploy itself included, is stopped by its own rollout; see the
+/// 2026-11-16 amendments of `.claude/decisions/2026-11-07-development-job-images-on-cloudflare.md`.
+pub const ROLLOUT_GRACE_SECONDS: u64 = crate::cobot::ci::TIMEOUT.as_secs() + 300;
 
 /// D1, R2, Secrets Store, queues and vars, with references resolved through `get`.
 /// The jurisdiction of every R2 bucket a Worker binds: the catalog's `cloudflare/r2-bucket`

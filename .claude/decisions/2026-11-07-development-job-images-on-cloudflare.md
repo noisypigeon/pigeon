@@ -421,3 +421,22 @@ glob under `src/pigeon-cli/` or `src/site-templates/` becomes `src/**/<tail>`
 (or `**<file>` for a workspace root file), which matches the file both before
 and after the restructure moves it. That ADR's step 12 tightens them to the
 new paths.
+
+### 2026-11-16: A rollout waits out a job before replacing its Container
+
+- **What broke.**
+  - The deploy of `12a26c5` lost its `Checker` twice, each about a minute
+    in, with "Container exited (code: 0)".
+  - The superseded `34ce5d2` deploy had pushed new images and deployed them.
+    Cloudflare's default rollout replaced active Containers at once, with a
+    graceful stop, and that took out the Containers running the next deploy.
+  - With the images still unrecorded, every later deploy rebuilds them,
+    deploys them, and so replaces the Container it runs in. That can loop.
+- **The fix.** `cobot::workers` renders `rollout_active_grace_period` on every
+  container class: `cobot::ci::TIMEOUT` plus 5 minutes, 3000 s.
+  - Wrangler 4.151.3's schema calls it "the grace period (in seconds) for
+    active instances before being shutdown during a rollout", default 0.
+  - A rollout then waits for a running job, the deploy itself included,
+    before replacing its Container. New instances start on the new image.
+  - A bench, which lives longer than a job, also gets 50 minutes before it is
+    replaced.

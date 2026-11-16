@@ -173,6 +173,8 @@ fn render_is_stable_and_resolves_every_binding() {
         json!({ "name": "RUNNER", "class_name": "Runner" })
     );
     assert_eq!(w["containers"][0]["image"], "./Runner.Dockerfile");
+    // A rollout waits out a job's longest run before replacing an active Container.
+    assert_eq!(w["containers"][0]["rollout_active_grace_period"], 3000);
     assert_eq!(
         w["routes"][0],
         json!({ "pattern": "pigeon.dev", "custom_domain": true })
