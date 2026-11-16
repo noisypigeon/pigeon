@@ -37,6 +37,7 @@ pub mod names;
 pub mod owner;
 pub mod platform;
 pub mod pool;
+pub mod provider;
 pub mod push;
 pub mod reconcile;
 pub mod release;
