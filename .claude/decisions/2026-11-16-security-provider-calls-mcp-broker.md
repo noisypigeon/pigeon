@@ -349,3 +349,36 @@ three-line re-export shims. It touches none of the files this ADR governs
 (`worker/{github,buildkite,bitrise,apple,insights}.rs`, `cobot/cloudflare.rs`,
 `architecture/network.rs`), so no provider call, route or credential changes,
 and the `src/**/…` globs still match. Neither decision changes.
+
+### 2026-11-16: The owner's answers: per-call Cloudflare tokens, the vendors' hosted servers, and a github shim if needed
+
+The owner answered the three questions filed on !756:
+
+- **#12: Cloudflare tokens are minted per call.** Each Cloudflare tool call
+  gets a token minted from `GRANTER`, holding only that tool's permission
+  groups. The token expires in 5 minutes and is revoked after the call (§4).
+  - The widened set is a credential grant. The owner approves it on
+    `/grants/<id>` with a passkey, and the grants ledger records it (§5).
+  - Until that grant exists, Cloudflare tools run on today's tokens, as §5
+    says.
+- **#13: the vendors' hosted servers.**
+  - Buildkite goes to `mcp.buildkite.com` (its token pass-through endpoint,
+    with the `builds` and `pipelines` toolsets).
+  - Bitrise goes to `mcp.bitrise.io`.
+  - Both use the `BUILDKITE_TOKEN` and `BITRISE_TOKEN` the Worker already
+    holds, injected as a header per call.
+- **#14: a `github` shim if the hosted server refuses App tokens.**
+  - Step 6 tries GitHub's hosted server with a per-call installation token.
+  - If it is refused, `github` becomes an `inproc:github` server: an
+    in-process shim over `worker/github.rs`'s client, with the same per-call
+    installation tokens.
+  - No personal access token is created.
+
+**The inventory's last providers.** DigitalOcean, Scaleway and Backblaze have
+no direct call in pigeon; they are reached only through tofu's provider
+modules in `catalog/`. That is row C4's engine exemption, so each becomes an
+`exempt:` entry.
+
+- DigitalOcean has an official hosted MCP server. Backblaze has an official
+  local (stdio) one. Scaleway has none.
+- A direct call added later goes through `provider.call`.

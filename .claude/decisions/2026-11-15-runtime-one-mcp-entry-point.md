@@ -280,3 +280,16 @@ have merged.
   [`2026-11-16-security-provider-calls-mcp-broker.md`](2026-11-16-security-provider-calls-mcp-broker.md)
   builds `provider.call` on steps 1 to 3. Its step 2 is this ADR's steps 1
   to 5, 8 and 9.
+
+### 2026-11-16: The session ID is signed, but bound to neither door nor caller
+
+The entry above says `/mcp` mints `Mcp-Session-Id` and never checks it.
+That overstates the gap:
+
+- `mcp::session_id` signs the negotiated protocol and the elicitation
+  capabilities with an HMAC.
+- `mcp::session` verifies and decodes them on later requests.
+
+What §2 still lacks is the binding: the ID names neither the door nor the
+caller, so a mismatch isn't refused. Step 3's session check adds that
+binding, as written.
