@@ -615,3 +615,30 @@ governs (`mcp.rs`, `wire.rs`, `routes.rs`, `worker/{api,app,devices,mod}.rs`,
 `cli/mod.rs`, the `Dockerfile`'s comments and the tests that read
 `mise.toml`. !757 re-briefs that ADR's steps against this ADR's layout after
 step 12, which !736 doesn't change.
+
+### 2026-11-16: Step 11 as the owner decided: two stored names stay
+
+The owner answered action #8:
+
+- **The control Worker's signing secret keeps its stored name, `BACKPLANE_TOKEN`.**
+  It is not re-put as `AGENT_TOKEN`, because platform tokens are sealed with
+  its value and no session should handle it. Code names it `AGENT_TOKEN`
+  everywhere. The mapping to the stored name lives in one place: a single
+  constant and accessor in the Worker. A Cloudflare secret binds only under
+  its stored name, so `worker.yaml` cannot alias it. That accessor is the only
+  reader of the stored secret. The Worker hands Containers the value under
+  `AGENT_TOKEN`. `worker.yaml`'s `secrets:` lists the stored name alone, so the
+  `AGENT_TOKEN` entry !752 added goes. A later rotation or rename of the
+  stored secret then changes that one constant and the `secrets:` entry.
+- **The state repository keeps its name.** Nothing names it but `CLAUDE.md`'s
+  rule against applying by hand, and the goal is to retire that repository
+  altogether, in a later ADR.
+- The owner renames the old variable names on their own machines (`COBOT_*` →
+  `PIGEON_*`, `BACKPLANE_TLS_*` → `AGENT_TLS_*`) without any value passing
+  through a session.
+
+Step 12's names list records these as stored names that keep their old
+spelling, beside `.cobot/types.json` and tofu's `cobot` key provider:
+`BACKPLANE_TOKEN`, with its one accessor, and the state repository's name. It
+does the one-place alias above, and removes the `AGENT_TOKEN` entry from
+`worker.yaml`.
