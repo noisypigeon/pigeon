@@ -216,6 +216,18 @@ pub fn package_manifest<'a>(manifests: &'a [(String, String)], name: &str) -> Op
         .map(|(path, _)| path.as_str())
 }
 
+/// Of `manifests`, each a path and its text, the directory of the shallowest one with a
+/// `[workspace]` table: `.` for the root's. Ties go to the first by path.
+#[must_use]
+pub fn workspace_dir(manifests: &[(String, String)]) -> Option<String> {
+    manifests
+        .iter()
+        .filter(|(_, text)| text.lines().any(|l| l.trim() == "[workspace]"))
+        .map(|(path, _)| path.as_str())
+        .min_by_key(|p| (p.matches('/').count(), *p))
+        .map(|p| p.strip_suffix("/Cargo.toml").unwrap_or(".").to_string())
+}
+
 /// `manifest` with the version at `start..end` replaced by `version`.
 #[must_use]
 pub fn bumped(manifest: &str, start: usize, end: usize, version: &str) -> String {

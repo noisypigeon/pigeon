@@ -12,7 +12,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use crate::cobot::Error;
 use crate::core::release::lines::{
     bumped, first_lines, next_lines, package_manifest, package_name, read_version, released,
-    setting_lines, tag_rows, tree_of, user_only,
+    setting_lines, tag_rows, tree_of, user_only, workspace_dir,
 };
 
 pub use crate::core::release::*;
@@ -56,6 +56,27 @@ fn settings_commits<'a>(root: &Path, config: &Config, range: &'a [Commit]) -> Ve
 
 static SCRATCH: AtomicUsize = AtomicUsize::new(0);
 
+/// The workspace directory at `rev`: `cargo.workspace` when it holds a `Cargo.toml` there,
+/// else the shallowest manifest at `rev` with a `[workspace]` table, as before a move.
+fn workspace_at(root: &Path, rev: &str, cargo: &CargoTree) -> Result<String, Error> {
+    let ws = cargo.workspace.trim_end_matches('/');
+    let manifest = if ws == "." || ws.is_empty() {
+        "Cargo.toml".to_string()
+    } else {
+        format!("{ws}/Cargo.toml")
+    };
+    if !git::show(root, rev, &manifest).is_empty() {
+        return Ok(cargo.workspace.clone());
+    }
+    let listed = git::run(root, &["ls-tree", "-r", "--name-only", rev])?;
+    let manifests: Vec<(String, String)> = listed
+        .lines()
+        .filter(|p| *p == "Cargo.toml" || p.ends_with("/Cargo.toml"))
+        .map(|p| (p.to_string(), git::show(root, rev, p)))
+        .collect();
+    Ok(workspace_dir(&manifests).unwrap_or_else(|| cargo.workspace.clone()))
+}
+
 /// A unit's resolved dependencies at `rev`, workspace crates by name, and
 /// those crates' repository-relative paths.
 fn dependency_tree(
@@ -65,6 +86,7 @@ fn dependency_tree(
     package: &str,
     features: &str,
 ) -> Result<(BTreeSet<String>, Vec<String>), Error> {
+    let workspace = workspace_at(root, rev, cargo)?;
     let dir = std::env::temp_dir().join(format!(
         "cobot-tree-{}-{}",
         std::process::id(),
@@ -86,11 +108,11 @@ fn dependency_tree(
                 &archive.display().to_string(),
                 rev,
                 "--",
-                &cargo.workspace,
+                &workspace,
             ],
         )?;
         tool(&dir, "tar", &["-xf", "tree.tar"])?;
-        let manifest = dir.join(&cargo.workspace).join("Cargo.toml");
+        let manifest = dir.join(&workspace).join("Cargo.toml");
         let mut args = vec![
             "tree".to_string(),
             "--locked".into(),
@@ -200,8 +222,9 @@ fn unit_release(
         };
         let (now, workspace) = dependency_tree(root, to, cargo, &name_at(to), &unit.features)?;
         prefixes.extend(workspace);
-        let (before, _) = dependency_tree(root, last, cargo, &name_at(last), &unit.features)?;
-        dependencies_changed = before != now;
+        // A tree the last tag can't resolve (its package or workspace since moved) has changed.
+        dependencies_changed = dependency_tree(root, last, cargo, &name_at(last), &unit.features)
+            .map_or(true, |(before, _)| before != now);
     }
     let settings: Vec<&str> = settings_commits(root, config, &range)
         .into_iter()

@@ -3,7 +3,7 @@
 use super::config::{Config, Unit};
 use super::lines::{
     Commit, bumped, first_lines, line, next_lines, package_manifest, package_name, read_version,
-    tag_rows, tree_of,
+    tag_rows, tree_of, workspace_dir,
 };
 
 fn commit(sha: &str, subject: &str, paths: &[&str]) -> Commit {
@@ -218,4 +218,29 @@ fn a_package_is_found_by_its_name_and_a_rename_shows_in_its_manifest() {
         Some("ws/crates/sentinel/Cargo.toml")
     );
     assert_eq!(package_manifest(&manifests, "sentinel"), None);
+}
+
+#[test]
+fn the_workspace_is_the_shallowest_manifest_with_a_workspace_table() {
+    let ws = "[workspace]\nmembers = [\"crates/*\"]\n";
+    let pkg = "[package]\nname = \"a\"\n";
+    let nested = vec![
+        ("src/pigeon-cli/Cargo.toml".to_string(), ws.to_string()),
+        (
+            "src/pigeon-cli/crates/a/Cargo.toml".to_string(),
+            pkg.to_string(),
+        ),
+    ];
+    assert_eq!(workspace_dir(&nested).as_deref(), Some("src/pigeon-cli"));
+    let root = vec![
+        ("Cargo.toml".to_string(), ws.to_string()),
+        (
+            "src/pigeon-cli/crates/a/Cargo.toml".to_string(),
+            pkg.to_string(),
+        ),
+        ("vendor/x/Cargo.toml".to_string(), ws.to_string()),
+    ];
+    assert_eq!(workspace_dir(&root).as_deref(), Some("."));
+    let none = vec![("a/Cargo.toml".to_string(), pkg.to_string())];
+    assert_eq!(workspace_dir(&none), None);
 }
