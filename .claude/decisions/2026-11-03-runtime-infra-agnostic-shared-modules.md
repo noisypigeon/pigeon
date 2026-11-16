@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: runtime
-* Governs: `catalog/agnostic/**`, `catalog/digitalocean/modules/spaces-bucket/**`, `src/pigeon-cli/crates/backplane/src/cobot/catalog.rs`, `src/pigeon-cli/crates/backplane/src/cobot/config.rs`, `src/**/tests/suite/cobot_agnostic.rs`
+* Governs: `catalog/agnostic/**`, `catalog/digitalocean/modules/spaces-bucket/**`, `src/**/catalog.rs`, `src/**/config.rs`, `src/**/tests/suite/cobot_agnostic.rs`
 
 ## Context
 
@@ -165,3 +165,11 @@ Each property's `x-cobot` drives exactly one block. A random suffix per bucket n
   [`2026-11-16-development-one-test-binary-per-crate.md`](2026-11-16-development-one-test-binary-per-crate.md)
   steps 3 and 4 move it.
 - Once those steps merge, the globs become the suite's paths.
+
+### 2026-11-16: Governs globs match the old and the new crate layout
+
+Per [`2026-11-16-development-src-crates-neutral-names.md`](2026-11-16-development-src-crates-neutral-names.md) §6, each
+glob under `src/pigeon-cli/` or `src/site-templates/` becomes `src/**/<tail>`
+(or `**<file>` for a workspace root file), which matches the file both before
+and after the restructure moves it. That ADR's step 12 tightens them to the
+new paths.

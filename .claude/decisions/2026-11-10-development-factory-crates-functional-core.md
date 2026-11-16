@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: development
-* Governs: `src/pigeon-cli/crates/sentinel/**`, `src/pigeon-cli/crates/backplane/src/sentinel.rs`, `src/pigeon-cli/crates/backplane/src/testmaps.rs`, `src/pigeon-cli/crates/backplane/src/cobot/scope.rs`, `tooling/ci/test-map.sh`, `.config/policies/layout.yaml`, `.config/policies/decisions.yaml`
+* Governs: `src/**/definition.rs`, `src/**/markdown.rs`, `src/**/policy.rs`, `src/**/report.rs`, `src/**/rules.rs`, `src/**/target.rs`, `src/**/sentinel.rs`, `src/**/testmaps.rs`, `src/**/scope.rs`, `tooling/ci/test-map.sh`, `.config/policies/layout.yaml`, `.config/policies/decisions.yaml`
 
 ## Context
 
@@ -501,3 +501,11 @@ head.
 4. **Tests:** a table of the rules, and replays where a scoped head merges
    without `gate: test` while a clean restack, a red `main` or a request
    brings it back.
+
+### 2026-11-16: Governs globs match the old and the new crate layout
+
+Per [`2026-11-16-development-src-crates-neutral-names.md`](2026-11-16-development-src-crates-neutral-names.md) §6, each
+glob under `src/pigeon-cli/` or `src/site-templates/` becomes `src/**/<tail>`
+(or `**<file>` for a workspace root file), which matches the file both before
+and after the restructure moves it. That ADR's step 12 tightens them to the
+new paths.

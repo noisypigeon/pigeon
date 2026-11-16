@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: runtime
-* Governs: `workloads/*/apex/**`, `workloads/README.md`, `catalog/cloudflare/schema.json`, `catalog/cloudflare/modules/dns-record/**`, `catalog/cloudflare/presets/**`, `src/pigeon-cli/crates/backplane/src/cobot/apex.rs`
+* Governs: `workloads/*/apex/**`, `workloads/README.md`, `catalog/cloudflare/schema.json`, `catalog/cloudflare/modules/dns-record/**`, `catalog/cloudflare/presets/**`, `src/**/apex.rs`
 
 ## Context
 
@@ -744,3 +744,11 @@ records: {}
 - Workloads move to the platform's desired state, and their site content to the instance's repository.
 
 The text above stays as written.
+
+### 2026-11-16: Governs globs match the old and the new crate layout
+
+Per [`2026-11-16-development-src-crates-neutral-names.md`](2026-11-16-development-src-crates-neutral-names.md) §6, each
+glob under `src/pigeon-cli/` or `src/site-templates/` becomes `src/**/<tail>`
+(or `**<file>` for a workspace root file), which matches the file both before
+and after the restructure moves it. That ADR's step 12 tightens them to the
+new paths.

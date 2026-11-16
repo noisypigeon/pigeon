@@ -4,8 +4,8 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: development
-* Governs: `src/pigeon-cli/crates/backplane/src/sessions.rs`, `src/pigeon-cli/crates/backplane/src/tasks.rs`, `tooling/session/session.sh`, `tooling/session/models.json`, `src/pigeon-cli/crates/backplane/src/core/brief/**`, `src/pigeon-cli/crates/backplane/src/briefs.rs`, `src/pigeon-cli/crates/backplane/src/worker/briefs.rs`, `src/pigeon-cli/crates/backplane/src/worker/merges.rs`, `src/pigeon-cli/crates/backplane/src/worker/tickets.rs`
-* Governs: `src/pigeon-cli/crates/backplane/src/sessions.rs`, `src/pigeon-cli/crates/backplane/src/tasks.rs`, `tooling/session/session.py`, `tooling/session/models.json`, `src/pigeon-cli/crates/backplane/src/core/brief/**`, `src/pigeon-cli/crates/backplane/src/briefs.rs`, `src/pigeon-cli/crates/backplane/src/worker/briefs.rs`, `src/pigeon-cli/crates/backplane/src/worker/merges.rs`, `src/pigeon-cli/crates/backplane/src/worker/tickets.rs`
+* Governs: `src/**/sessions.rs`, `src/**/tasks.rs`, `tooling/session/session.sh`, `tooling/session/models.json`, `src/**/brief/**`, `src/**/briefs.rs`, `src/**/worker/briefs.rs`, `src/**/worker/merges.rs`, `src/**/worker/tickets.rs`
+* Governs: `src/**/sessions.rs`, `src/**/tasks.rs`, `tooling/session/session.py`, `tooling/session/models.json`, `src/**/brief/**`, `src/**/briefs.rs`, `src/**/worker/briefs.rs`, `src/**/worker/merges.rs`, `src/**/worker/tickets.rs`
 
 ## Context
 
@@ -920,3 +920,11 @@ Per
 ### 2026-11-15: `session.py` is gone
 
 Per [`2026-11-15-development-no-python-rust-tooling.md`](2026-11-15-development-no-python-rust-tooling.md) step 3, `tooling/session/session.py` is deleted, so `Governs` names `tooling/session/session.sh` in its place.
+
+### 2026-11-16: Governs globs match the old and the new crate layout
+
+Per [`2026-11-16-development-src-crates-neutral-names.md`](2026-11-16-development-src-crates-neutral-names.md) §6, each
+glob under `src/pigeon-cli/` or `src/site-templates/` becomes `src/**/<tail>`
+(or `**<file>` for a workspace root file), which matches the file both before
+and after the restructure moves it. That ADR's step 12 tightens them to the
+new paths.

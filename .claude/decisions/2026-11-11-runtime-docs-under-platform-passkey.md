@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: runtime
-* Governs: `config.yaml`, `infra/pigeon/workers/control/worker.yaml`, `catalog/cloudflare/kinds/static-site/schema.json`, `catalog/pigeon/kinds/platform/schema.json`, `src/pigeon-cli/crates/backplane/src/cobot/sites.rs`, `src/pigeon-cli/crates/backplane/src/cobot/static_site.rs`, `src/site-templates/architecture/templates/index.html`, `src/pigeon-cli/crates/backplane/src/worker/mod.rs`, `src/pigeon-cli/crates/backplane/src/worker/passkeys.rs`
+* Governs: `config.yaml`, `infra/pigeon/workers/control/worker.yaml`, `catalog/cloudflare/kinds/static-site/schema.json`, `catalog/pigeon/kinds/platform/schema.json`, `src/**/sites.rs`, `src/**/static_site.rs`, `src/**/architecture/templates/index.html`, `src/**/worker/mod.rs`, `src/**/worker/passkeys.rs`
 
 ## Context
 
@@ -176,3 +176,11 @@ whose step 6b (!198) moves the `cobot` crate into `backplane` as
   scripts stay `'self'`.
 - **Until step 5,** the site is built for `platform.pigeon.dev/docs`, so
   `docs.pigeon.dev`'s page links its assets there, behind Access.
+
+### 2026-11-16: Governs globs match the old and the new crate layout
+
+Per [`2026-11-16-development-src-crates-neutral-names.md`](2026-11-16-development-src-crates-neutral-names.md) §6, each
+glob under `src/pigeon-cli/` or `src/site-templates/` becomes `src/**/<tail>`
+(or `**<file>` for a workspace root file), which matches the file both before
+and after the restructure moves it. That ADR's step 12 tightens them to the
+new paths.

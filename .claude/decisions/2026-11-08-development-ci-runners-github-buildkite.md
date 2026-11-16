@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: development
-* Governs: `.github/workflows/ci.yml`, `src/pigeon-cli/crates/backplane/src/actions.rs`, `src/pigeon-cli/crates/backplane/src/worker/github.rs`, `src/pigeon-cli/crates/backplane/src/worker/checker.rs`, `.config/policies/mirror.yaml`
+* Governs: `.github/workflows/ci.yml`, `src/**/actions.rs`, `src/**/worker/github.rs`, `src/**/worker/checker.rs`, `.config/policies/mirror.yaml`
 
 ## Context
 
@@ -239,3 +239,13 @@ A `Backends` Durable Object, shared by every change, marks each backend **health
   - with GitHub's dispatch blocked and Buildkite at its budget, the jobs finish on `Checker`, and Cloudflare's routed use rises by only those jobs.
 - No token appears in `pigeon-ci`, a run's log, a Buildkite build, a change row or R2.
 - After a month, `ci.backends` shows most tests on GitHub, and Cloudflare's routed use well under its budget.
+
+## Amendments
+
+### 2026-11-16: Governs globs match the old and the new crate layout
+
+Per [`2026-11-16-development-src-crates-neutral-names.md`](2026-11-16-development-src-crates-neutral-names.md) §6, each
+glob under `src/pigeon-cli/` or `src/site-templates/` becomes `src/**/<tail>`
+(or `**<file>` for a workspace root file), which matches the file both before
+and after the restructure moves it. That ADR's step 12 tightens them to the
+new paths.

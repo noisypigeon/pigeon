@@ -4,7 +4,7 @@
 * Model: Claude Fable 5.2
 * Author: Willow Graysen (@noisypigeon).
 * Category: security
-* Governs: `src/pigeon-cli/crates/backplane/src/access.rs`
+* Governs: `src/**/access.rs`
 
 ## Context
 
@@ -550,3 +550,11 @@ The planner ran on Claude Fable 5.2, declared to the control plane as class
 - **For tuning the briefs ADR:** a brief's `stop_if` that counts lines
   should be computed, not typed; and a brief should say how its executor
   hands back work it can't push, since all three needed to.
+
+### 2026-11-16: Governs globs match the old and the new crate layout
+
+Per [`2026-11-16-development-src-crates-neutral-names.md`](2026-11-16-development-src-crates-neutral-names.md) §6, each
+glob under `src/pigeon-cli/` or `src/site-templates/` becomes `src/**/<tail>`
+(or `**<file>` for a workspace root file), which matches the file both before
+and after the restructure moves it. That ADR's step 12 tightens them to the
+new paths.

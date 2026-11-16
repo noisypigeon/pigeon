@@ -2,5 +2,5 @@ description: Sentinel only judges; actions are cobot's, per 2026-11-02-developme
 target: tree
 rules:
   - find:
-      match: '^src/pigeon-cli/crates/sentinel/src/'
+      match: '^src/(pigeon-cli/crates/sentinel|pigeon-eviction)/src/'
       forbid_content: 'std::process::Command|Command::new|fs::write'

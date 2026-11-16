@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: runtime
-* Governs: `src/pigeon-cli/crates/backplane/src/mcp.rs`, `src/pigeon-cli/crates/backplane/src/wire.rs`, `src/pigeon-cli/crates/backplane/src/routes.rs`, `src/pigeon-cli/crates/backplane/src/worker/api.rs`, `src/pigeon-cli/crates/backplane/src/worker/app.rs`, `src/pigeon-cli/crates/backplane/src/worker/devices.rs`, `src/pigeon-cli/crates/backplane/src/worker/mod.rs`, `src/pigeon-ios/Pigeon/API.swift`
+* Governs: `src/**/mcp.rs`, `src/**/wire.rs`, `src/**/routes.rs`, `src/**/worker/api.rs`, `src/**/worker/app.rs`, `src/**/worker/devices.rs`, `src/**/worker/mod.rs`, `src/pigeon-ios/Pigeon/API.swift`
 
 ## Context
 
@@ -244,3 +244,11 @@ Neither ADR changes.
   result is the shape `tracker.show` (§1) returns at step 4.
 
 !606 needs no change.
+
+### 2026-11-16: Governs globs match the old and the new crate layout
+
+Per [`2026-11-16-development-src-crates-neutral-names.md`](2026-11-16-development-src-crates-neutral-names.md) §6, each
+glob under `src/pigeon-cli/` or `src/site-templates/` becomes `src/**/<tail>`
+(or `**<file>` for a workspace root file), which matches the file both before
+and after the restructure moves it. That ADR's step 12 tightens them to the
+new paths.

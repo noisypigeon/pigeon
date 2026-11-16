@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: security
-* Governs: `.config/approvals.yaml`, `src/pigeon-cli/crates/backplane/src/approv*.rs`, `src/pigeon-cli/crates/backplane/src/worker/approve.rs`, `src/pigeon-cli/crates/backplane/src/mandates.rs`, `src/pigeon-cli/crates/backplane/src/worker/mandates.rs`, `src/pigeon-cli/crates/backplane/src/grants.rs`
+* Governs: `.config/approvals.yaml`, `src/**/approv*.rs`, `src/**/worker/approve.rs`, `src/**/mandates.rs`, `src/**/worker/mandates.rs`, `src/**/grants.rs`
 
 ## Context
 
@@ -435,3 +435,11 @@ Per the iOS approvals ADR's 2026-11-15 amendment,
 - **The cap ends it:** 6 hours held, or 3 failed deploys in one hold.
 - **A change reaching outside the scope still pauses it,** and only the owner
   resumes it.
+
+### 2026-11-16: Governs globs match the old and the new crate layout
+
+Per [`2026-11-16-development-src-crates-neutral-names.md`](2026-11-16-development-src-crates-neutral-names.md) §6, each
+glob under `src/pigeon-cli/` or `src/site-templates/` becomes `src/**/<tail>`
+(or `**<file>` for a workspace root file), which matches the file both before
+and after the restructure moves it. That ADR's step 12 tightens them to the
+new paths.

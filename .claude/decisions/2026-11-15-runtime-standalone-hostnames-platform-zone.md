@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: runtime
-* Governs: `src/pigeon-cli/crates/backplane/src/core/platform/**`, `src/pigeon-cli/crates/backplane/src/worker/mod.rs`, `src/pigeon-cli/crates/backplane/src/cobot/workers.rs`, `catalog/cloudflare/kinds/zone/schema.json`, `catalog/pigeon/kinds/platform/schema.json`, `infra/pigeon/workers/control/worker.yaml`
+* Governs: `src/**/platform/**`, `src/**/worker/mod.rs`, `src/**/workers.rs`, `catalog/cloudflare/kinds/zone/schema.json`, `catalog/pigeon/kinds/platform/schema.json`, `infra/pigeon/workers/control/worker.yaml`
 
 ## Context
 
@@ -346,3 +346,11 @@ Neither ADR changes.
   then `platform.apply`, which the owner grants with a passkey. The plan
   should create one Access application and one policy, and change nothing
   else.
+
+### 2026-11-16: Governs globs match the old and the new crate layout
+
+Per [`2026-11-16-development-src-crates-neutral-names.md`](2026-11-16-development-src-crates-neutral-names.md) §6, each
+glob under `src/pigeon-cli/` or `src/site-templates/` becomes `src/**/<tail>`
+(or `**<file>` for a workspace root file), which matches the file both before
+and after the restructure moves it. That ADR's step 12 tightens them to the
+new paths.

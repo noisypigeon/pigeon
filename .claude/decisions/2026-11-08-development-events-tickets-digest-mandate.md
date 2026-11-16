@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: development
-* Governs: `src/pigeon-cli/crates/backplane/src/events.rs`, `src/pigeon-cli/crates/backplane/src/tickets.rs`, `src/pigeon-cli/crates/backplane/src/push.rs`, `src/pigeon-cli/crates/backplane/src/worker/events.rs`, `src/pigeon-cli/crates/backplane/src/worker/tickets.rs`, `src/pigeon-cli/crates/backplane/src/worker/push.rs`
+* Governs: `src/**/events.rs`, `src/**/tickets.rs`, `src/**/push.rs`, `src/**/worker/events.rs`, `src/**/worker/tickets.rs`, `src/**/worker/push.rs`
 
 ## Context
 
@@ -534,3 +534,11 @@ The fix:
   while that session hasn't polled for 30 minutes.
 - **It is pushed,** since nothing automatic resolves it. See the
   session-stages ADR's 2026-11-13 amendment on stalls.
+
+### 2026-11-16: Governs globs match the old and the new crate layout
+
+Per [`2026-11-16-development-src-crates-neutral-names.md`](2026-11-16-development-src-crates-neutral-names.md) §6, each
+glob under `src/pigeon-cli/` or `src/site-templates/` becomes `src/**/<tail>`
+(or `**<file>` for a workspace root file), which matches the file both before
+and after the restructure moves it. That ADR's step 12 tightens them to the
+new paths.

@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: development
-* Governs: `.config/policies/change.yaml`, `src/pigeon-cli/crates/backplane/src/changes.rs`, `src/pigeon-cli/crates/backplane/src/jobs.rs`, `src/pigeon-cli/crates/backplane/migrations/0002_changes.sql`, `src/pigeon-cli/crates/backplane/src/cobot/scope.rs`, `src/pigeon-cli/crates/backplane/src/cobot/ci.rs`
+* Governs: `.config/policies/change.yaml`, `src/**/change/mod.rs`, `src/**/jobs.rs`, `src/**/migrations/0002_changes.sql`, `src/**/scope.rs`, `src/**/ci.rs`
 
 ## Context
 
@@ -258,3 +258,11 @@ What changes:
   higher. See
   [`2026-11-15-security-owner-approvals-always-listed.md`](2026-11-15-security-owner-approvals-always-listed.md)'s
   2026-11-15 amendment.
+
+### 2026-11-16: Governs globs match the old and the new crate layout
+
+Per [`2026-11-16-development-src-crates-neutral-names.md`](2026-11-16-development-src-crates-neutral-names.md) §6, each
+glob under `src/pigeon-cli/` or `src/site-templates/` becomes `src/**/<tail>`
+(or `**<file>` for a workspace root file), which matches the file both before
+and after the restructure moves it. That ADR's step 12 tightens them to the
+new paths.

@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: development
-* Governs: `src/pigeon-cli/crates/backplane/src/core/deploy/scope/**`, `src/pigeon-cli/crates/backplane/src/core/deploy/gate.rs`, `src/pigeon-cli/crates/backplane/src/core/change/gate.rs`
+* Governs: `src/**/deploy/scope/**`, `src/**/deploy/gate.rs`, `src/**/change/gate.rs`
 
 ## Context
 
@@ -287,3 +287,11 @@ Container. The checks and the gate share the change's 6 running jobs.
 merge starting falls from about 5.5 minutes to the merge's own start, as
 measured from `job.passed` and `job.started` events on the next full-gate
 merges.
+
+### 2026-11-16: Governs globs match the old and the new crate layout
+
+Per [`2026-11-16-development-src-crates-neutral-names.md`](2026-11-16-development-src-crates-neutral-names.md) §6, each
+glob under `src/pigeon-cli/` or `src/site-templates/` becomes `src/**/<tail>`
+(or `**<file>` for a workspace root file), which matches the file both before
+and after the restructure moves it. That ADR's step 12 tightens them to the
+new paths.

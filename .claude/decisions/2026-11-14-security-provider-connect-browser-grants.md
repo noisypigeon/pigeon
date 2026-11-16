@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: security
-* Governs: `src/pigeon-cli/crates/backplane/src/core/minting.rs`, `src/pigeon-cli/crates/backplane/src/worker/minting.rs`, `src/pigeon-cli/crates/backplane/src/core/connect/**`, `catalog/*/connect.yaml`
+* Governs: `src/**/minting.rs`, `src/**/worker/minting.rs`, `src/**/connect/**`, `catalog/*/connect.yaml`
 
 ## Context
 
@@ -677,3 +677,11 @@ through the status-review session:
 non-platform-profiles ADR's steps 3 and 4, which the accounts planner now
 holds, and which wait on the grants ADR's steps 1b and 1d. The OAuth client
 no longer blocks it.
+
+### 2026-11-16: Governs globs match the old and the new crate layout
+
+Per [`2026-11-16-development-src-crates-neutral-names.md`](2026-11-16-development-src-crates-neutral-names.md) §6, each
+glob under `src/pigeon-cli/` or `src/site-templates/` becomes `src/**/<tail>`
+(or `**<file>` for a workspace root file), which matches the file both before
+and after the restructure moves it. That ADR's step 12 tightens them to the
+new paths.

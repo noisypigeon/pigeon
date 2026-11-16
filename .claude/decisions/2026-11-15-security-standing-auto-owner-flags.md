@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: security
-* Governs: `src/pigeon-cli/crates/backplane/src/core/approval/windows.rs`, `src/pigeon-cli/crates/backplane/src/worker/app.rs`, `src/pigeon-cli/crates/backplane/src/core/owner/**`, `src/pigeon-cli/crates/backplane/src/worker/owner_items.rs`, `src/pigeon-cli/crates/backplane/src/tasks.rs`, `src/pigeon-cli/crates/backplane/src/worker/push.rs`, `src/pigeon-ios/Pigeon/HomeView.swift`, `src/pigeon-ios/Pigeon/Sheets.swift`, `src/pigeon-ios/Pigeon/Store.swift`, `src/pigeon-ios/PigeonCore/Models.swift`
+* Governs: `src/**/approval/windows.rs`, `src/**/worker/app.rs`, `src/**/owner/**`, `src/**/worker/owner_items.rs`, `src/**/tasks.rs`, `src/**/worker/push.rs`, `src/pigeon-ios/Pigeon/HomeView.swift`, `src/pigeon-ios/Pigeon/Sheets.swift`, `src/pigeon-ios/Pigeon/Store.swift`, `src/pigeon-ios/PigeonCore/Models.swift`
 
 ## Context
 
@@ -374,3 +374,11 @@ owner decided (relayed by the status session):
   Auto covers the change.
 
 The owner approves this change with a passkey: it loosens an approval rule.
+
+### 2026-11-16: Governs globs match the old and the new crate layout
+
+Per [`2026-11-16-development-src-crates-neutral-names.md`](2026-11-16-development-src-crates-neutral-names.md) §6, each
+glob under `src/pigeon-cli/` or `src/site-templates/` becomes `src/**/<tail>`
+(or `**<file>` for a workspace root file), which matches the file both before
+and after the restructure moves it. That ADR's step 12 tightens them to the
+new paths.

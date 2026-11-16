@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: runtime
-* Governs: `src/pigeon-cli/crates/backplane/src/worker/**`, `src/pigeon-cli/crates/backplane/src/mcp.rs`, `src/pigeon-cli/crates/backplane/src/runs.rs`, `src/pigeon-cli/crates/backplane/migrations/0001_schema_v0.sql`, `src/pigeon-cli/crates/backplane/src/cobot/worker.rs`, `infra/pigeon/workers/control/worker.yaml`
+* Governs: `src/**/worker/**`, `src/**/mcp.rs`, `src/**/runs.rs`, `src/**/migrations/0001_schema_v0.sql`, `src/**/worker.rs`, `infra/pigeon/workers/control/worker.yaml`
 
 ## Context
 
@@ -276,3 +276,11 @@ Before step 8, each released first:
 - An apply runs against its plan's bundle, even after a newer version is pushed.
 - No bundle contains `ENC[`, a credential, an ID or a policy definition.
 - An instance invoking an unknown policy, or passing a parameter its schema refuses, fails validation.
+
+### 2026-11-16: Governs globs match the old and the new crate layout
+
+Per [`2026-11-16-development-src-crates-neutral-names.md`](2026-11-16-development-src-crates-neutral-names.md) §6, each
+glob under `src/pigeon-cli/` or `src/site-templates/` becomes `src/**/<tail>`
+(or `**<file>` for a workspace root file), which matches the file both before
+and after the restructure moves it. That ADR's step 12 tightens them to the
+new paths.

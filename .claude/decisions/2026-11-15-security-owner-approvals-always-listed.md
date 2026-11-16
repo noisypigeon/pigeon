@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: security
-* Governs: `src/pigeon-cli/crates/backplane/src/worker/approve.rs`, `src/pigeon-cli/crates/backplane/src/core/app/approvals.rs`, `src/pigeon-cli/crates/backplane/src/core/approval/listed.rs`, `src/pigeon-cli/crates/backplane/src/worker/listed.rs`
+* Governs: `src/**/worker/approve.rs`, `src/**/app/approvals.rs`, `src/**/approval/listed.rs`, `src/**/worker/listed.rs`
 
 ## Context
 
@@ -312,3 +312,11 @@ passkey on this change's merge records it. It amends §4 and
     append `approval.pending`, so the log can show this. It's a follow-up,
     not part of this step.
 - **Step 5 is done.**
+
+### 2026-11-16: Governs globs match the old and the new crate layout
+
+Per [`2026-11-16-development-src-crates-neutral-names.md`](2026-11-16-development-src-crates-neutral-names.md) §6, each
+glob under `src/pigeon-cli/` or `src/site-templates/` becomes `src/**/<tail>`
+(or `**<file>` for a workspace root file), which matches the file both before
+and after the restructure moves it. That ADR's step 12 tightens them to the
+new paths.

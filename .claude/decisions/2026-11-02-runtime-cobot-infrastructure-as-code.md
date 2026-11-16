@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: runtime
-* Governs: `src/pigeon-cli/crates/backplane/src/cobot/tofu.rs`, `src/pigeon-cli/crates/backplane/src/cobot/state.rs`, `src/pigeon-cli/crates/backplane/src/cobot/plans.rs`, `src/pigeon-cli/crates/backplane/src/cobot/moves.rs`, `.config/moves.yaml`, `.config/policies/terraform.yaml`
+* Governs: `src/**/tofu.rs`, `src/**/state.rs`, `src/**/plans.rs`, `src/**/moves.rs`, `.config/moves.yaml`, `.config/policies/terraform.yaml`
 
 ## Context
 
@@ -294,3 +294,11 @@ Unit tests cover each `validate` rejection.
 ### 2026-11-04: Runs move to the platform
 
 [`2026-11-04-development-platform-instance-separation.md`](2026-11-04-development-platform-instance-separation.md) moves plan and apply off GitHub Actions. A Worker on `pigeon.dev` runs them in Cloudflare Containers, and an approved plan, not a merge, gates an apply. Encrypted state moves from the state repository to R2. The CI plan and apply in this ADR, and the state repository, stay until that ADR's phase 6 cut-over. The text above stays as written.
+
+### 2026-11-16: Governs globs match the old and the new crate layout
+
+Per [`2026-11-16-development-src-crates-neutral-names.md`](2026-11-16-development-src-crates-neutral-names.md) §6, each
+glob under `src/pigeon-cli/` or `src/site-templates/` becomes `src/**/<tail>`
+(or `**<file>` for a workspace root file), which matches the file both before
+and after the restructure moves it. That ADR's step 12 tightens them to the
+new paths.

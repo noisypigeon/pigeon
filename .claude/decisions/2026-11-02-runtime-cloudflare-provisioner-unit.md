@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: runtime
-* Governs: `infra/cloudflare/**`, `catalog/cloudflare/schema.json`, `catalog/cloudflare/modules/**`, `src/pigeon-cli/crates/backplane/src/cobot/config.rs`, `src/pigeon-cli/crates/backplane/src/cobot/secrets.rs`, `.config/providers*`
+* Governs: `infra/cloudflare/**`, `catalog/cloudflare/schema.json`, `catalog/cloudflare/modules/**`, `src/**/config.rs`, `src/**/secrets.rs`, `.config/providers*`
 
 ## Context
 
@@ -401,3 +401,11 @@ The steps are that ADR's §9.
 - the hand-made `provisioner_token` kept in the repository.
 
 The instance's Cloudflare grant lives in the pigeon account's Secrets Store. Tokens are minted per run, from capabilities declared in `catalog/cloudflare/capabilities.yaml`. `infra/cloudflare`'s schema, modules and presets move to `catalog/cloudflare/`. `pigeon.dev` leaves its zones. All of this happens in that ADR's phases 1 to 7. The text above stays as written.
+
+### 2026-11-16: Governs globs match the old and the new crate layout
+
+Per [`2026-11-16-development-src-crates-neutral-names.md`](2026-11-16-development-src-crates-neutral-names.md) §6, each
+glob under `src/pigeon-cli/` or `src/site-templates/` becomes `src/**/<tail>`
+(or `**<file>` for a workspace root file), which matches the file both before
+and after the restructure moves it. That ADR's step 12 tightens them to the
+new paths.

@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: security
-* Governs: `src/pigeon-cli/crates/backplane/src/approve.rs`, `src/pigeon-cli/crates/backplane/src/worker/approve.rs`, `src/pigeon-cli/crates/backplane/src/worker/app.rs`, `src/pigeon-cli/crates/backplane/src/core/app/approvals.rs`, `src/pigeon-ios/Pigeon/Sheets.swift`, `src/pigeon-ios/PigeonCore/Models.swift`
+* Governs: `src/**/approve.rs`, `src/**/worker/approve.rs`, `src/**/worker/app.rs`, `src/**/app/approvals.rs`, `src/pigeon-ios/Pigeon/Sheets.swift`, `src/pigeon-ios/PigeonCore/Models.swift`
 
 ## Context
 
@@ -205,3 +205,11 @@ the grant.
   neither decision changes.
 - **How it was carried.** !363 merges `main` rather than rebasing onto it,
   since its branch is only fast-forwarded.
+
+### 2026-11-16: Governs globs match the old and the new crate layout
+
+Per [`2026-11-16-development-src-crates-neutral-names.md`](2026-11-16-development-src-crates-neutral-names.md) §6, each
+glob under `src/pigeon-cli/` or `src/site-templates/` becomes `src/**/<tail>`
+(or `**<file>` for a workspace root file), which matches the file both before
+and after the restructure moves it. That ADR's step 12 tightens them to the
+new paths.

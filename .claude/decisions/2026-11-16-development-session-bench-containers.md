@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: development
-* Governs: `src/pigeon-cli/crates/backplane/src/jobs.rs`, `src/pigeon-cli/crates/backplane/src/gitdoor.rs`, `src/pigeon-cli/crates/backplane/src/worker/gitdoor.rs`, `src/pigeon-cli/crates/backplane/src/worker/checker.rs`, `tooling/session/session.sh`
+* Governs: `src/**/jobs.rs`, `src/**/gitdoor.rs`, `src/**/worker/gitdoor.rs`, `src/**/worker/checker.rs`, `tooling/session/session.sh`
 
 ## Context
 
@@ -585,3 +585,11 @@ is served by `pigeon backplane jobs --listen ADDR --work DIR --bench`.
   against a local bare repository: sync, mise tasks, exit codes, one run at a
   time, cancel, paging and refusals. The sandbox's wrapping is tested as
   argv. The sandbox itself is proved live in step 9.
+
+### 2026-11-16: Governs globs match the old and the new crate layout
+
+Per [`2026-11-16-development-src-crates-neutral-names.md`](2026-11-16-development-src-crates-neutral-names.md) §6, each
+glob under `src/pigeon-cli/` or `src/site-templates/` becomes `src/**/<tail>`
+(or `**<file>` for a workspace root file), which matches the file both before
+and after the restructure moves it. That ADR's step 12 tightens them to the
+new paths.

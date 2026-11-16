@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: development
-* Governs: `.config/instance.yaml`, `config.yaml`, `src/pigeon-cli/crates/backplane/src/instance.rs`, `src/pigeon-cli/crates/backplane/src/cobot/engines.rs`, `.config/policies/secrets*.yaml`, `workloads/README.md`
+* Governs: `.config/instance.yaml`, `config.yaml`, `src/**/instance.rs`, `src/**/engines.rs`, `.config/policies/secrets*.yaml`, `workloads/README.md`
 
 ## Context
 
@@ -165,3 +165,11 @@ pigeon backplane run infra.apply --instance ../noisypigeon --arg state=<…> --a
   - each state path is relative to the instance.
 - Without `--instance`, every existing test holds unchanged.
 - `policy.check --instance` runs none of the platform's `.config/policies/`.
+
+### 2026-11-16: Governs globs match the old and the new crate layout
+
+Per [`2026-11-16-development-src-crates-neutral-names.md`](2026-11-16-development-src-crates-neutral-names.md) §6, each
+glob under `src/pigeon-cli/` or `src/site-templates/` becomes `src/**/<tail>`
+(or `**<file>` for a workspace root file), which matches the file both before
+and after the restructure moves it. That ADR's step 12 tightens them to the
+new paths.

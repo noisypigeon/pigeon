@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: development
-* Governs: `src/pigeon-cli/crates/backplane/src/sessions.rs`, `src/pigeon-cli/crates/backplane/src/merges.rs`, `src/pigeon-cli/crates/backplane/src/reconcile.rs`, `src/pigeon-cli/crates/backplane/src/tasks.rs`, `src/pigeon-cli/crates/backplane/src/worker/merges.rs`, `src/pigeon-cli/crates/backplane/migrations/0003_change_sessions.sql`
+* Governs: `src/**/sessions.rs`, `src/**/merges.rs`, `src/**/reconcile.rs`, `src/**/tasks.rs`, `src/**/worker/merges.rs`, `src/**/migrations/0003_change_sessions.sql`
 
 ## Context
 
@@ -787,3 +787,11 @@ replay !546's, !549's, !481's and !543's sequences.
 **Execution,** in one change (!591), built on !585: `merges::front`, the
 `change.front` operation, its tier and grant, `merge.fronted` and the digest
 line, with tests.
+
+### 2026-11-16: Governs globs match the old and the new crate layout
+
+Per [`2026-11-16-development-src-crates-neutral-names.md`](2026-11-16-development-src-crates-neutral-names.md) §6, each
+glob under `src/pigeon-cli/` or `src/site-templates/` becomes `src/**/<tail>`
+(or `**<file>` for a workspace root file), which matches the file both before
+and after the restructure moves it. That ADR's step 12 tightens them to the
+new paths.

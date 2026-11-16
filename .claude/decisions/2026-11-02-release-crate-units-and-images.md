@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: release
-* Governs: `.config/releases.yaml`, `.config/policies/*changelog.yaml`, `src/pigeon-cli/Dockerfile`, `src/pigeon-cli/crates/backplane/src/cobot/release/**`, `src/pigeon-cli/crates/pigeon/src/cli/*.rs`
+* Governs: `.config/releases.yaml`, `.config/policies/*changelog.yaml`, `**Dockerfile`, `src/**/release/**`, `src/**/cli/*.rs`
 
 ## Context
 
@@ -455,3 +455,11 @@ The previous amendment's §4 says the move PR needs `from` support only merged, 
 - **Older tags.** `cobot tags` rows also carry `changelog_from`. The `image` job falls back to it in a tag's checkout, so a tag cut before a move keeps its release notes.
 
 This supersedes step 2 of that §4. The earlier text stays as written.
+
+### 2026-11-16: Governs globs match the old and the new crate layout
+
+Per [`2026-11-16-development-src-crates-neutral-names.md`](2026-11-16-development-src-crates-neutral-names.md) §6, each
+glob under `src/pigeon-cli/` or `src/site-templates/` becomes `src/**/<tail>`
+(or `**<file>` for a workspace root file), which matches the file both before
+and after the restructure moves it. That ADR's step 12 tightens them to the
+new paths.

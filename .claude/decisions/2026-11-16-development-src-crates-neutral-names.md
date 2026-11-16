@@ -417,3 +417,20 @@ boundary. The other steps are briefs for Sonnet executors.
   - Backplane's split (steps 6 and 7) follows the test ADR's briefs 2b, 5a
     and 5b1 to 5b4, which touch only `backplane/tests/suite/**` and
     `tooling/ci/test-map.sh`.
+
+### 2026-11-16: Step 2 as built, and the changelog's `### Merged` heading
+
+- **Step 2** (this ADR's change after !674):
+  - 66 ADRs' `Governs` globs take §6's form, each with an amendment. The
+    test globs !674 wrote are already in that form and are left alone.
+  - `.config/approvals.yaml` guards each new path beside its old one, so it
+    guards the same files and loosens nothing.
+  - `backplane.yaml`, `sentinel-actions.yaml` and `layout.yaml` match both
+    places. `layout.yaml` also allows the root workspace files and
+    `rust-toolchain.toml`, ignores `.pigeon/` and `target/`, and no longer
+    requires `src/pigeon-cli`.
+  - The ledger's count rule is the test ADR's own, shipped in !674.
+- **§7's layout.** Each day's commit lines sit under `### Merged`, below
+  `### Released`. Without a heading, a blank line doesn't stop CommonMark
+  from joining the two lists into one. Agreed with the changelog-backfill
+  planner.
