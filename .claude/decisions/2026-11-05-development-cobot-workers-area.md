@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: development
-* Governs: `infra/pigeon/workers/**`, `src/**/workers.rs`, `src/**/tests/suite/cobot_workers.rs`, `src/**/commands/workers.rs`, `mise.toml`
+* Governs: `infra/pigeon/workers/**`, `src/**/workers.rs`, `src/**/tests/suite/cobot_workers.rs`, `src/**/commands/workers.rs`, `src/**/dev.rs`
 
 ## Context
 
@@ -164,3 +164,12 @@ glob under `src/pigeon-cli/` or `src/site-templates/` becomes `src/**/<tail>`
 (or `**<file>` for a workspace root file), which matches the file both before
 and after the restructure moves it. That ADR's step 12 tightens them to the
 new paths.
+
+### 2026-11-16: `Governs` names `rust-toolchain.toml` and `dev.rs` in place of `mise.toml`
+
+Step 10 of
+[`2026-11-16-development-src-crates-neutral-names.md`](2026-11-16-development-src-crates-neutral-names.md)
+deletes `mise.toml`. The toolchain pin it held is now `/rust-toolchain.toml`
+(!728), and its task graph is now `pigeon dev`'s, in `src/**/dev.rs` (!696).
+This ADR's `Governs` line names whichever of the two took over the part it
+rules.

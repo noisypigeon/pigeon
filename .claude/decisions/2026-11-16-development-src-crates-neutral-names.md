@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: development
-* Governs: `src/**/Cargo.toml`, `mise.toml`, `.config/releases.yaml`, `CHANGELOG.md`
+* Governs: `src/**/Cargo.toml`, `src/**/dev.rs`, `rust-toolchain.toml`, `.config/releases.yaml`, `CHANGELOG.md`
 
 ## Context
 
@@ -587,3 +587,11 @@ same rule.
 - **`tooling/ci/tests.moves`** keeps both changes' lines.
 - **!697, rebased onto main, carries those three files.** This change carries
   only this entry.
+### 2026-11-16: `Governs` names `rust-toolchain.toml` and `dev.rs` in place of `mise.toml`
+
+Step 10 of
+[`2026-11-16-development-src-crates-neutral-names.md`](2026-11-16-development-src-crates-neutral-names.md)
+deletes `mise.toml`. The toolchain pin it held is now `/rust-toolchain.toml`
+(!728), and its task graph is now `pigeon dev`'s, in `src/**/dev.rs` (!696).
+This ADR's `Governs` line names whichever of the two took over the part it
+rules.
