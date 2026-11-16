@@ -1,161 +1,1046 @@
 # Changelog
 
+## 2026-11-16
+
+### Released
+
+- backplane v0.1.31
+- infra-agnostic-random-string v0.1.3
+- infra-agnostic-schema v0.1.3
+- infra-backblaze-bucket v0.1.2
+- infra-backblaze-schema v0.1.2
+- infra-cloudflare-access-application v0.1.0
+- infra-cloudflare-access-policy v0.1.0
+- infra-cloudflare-access-service-token v0.1.0
+- infra-cloudflare-account v0.1.3
+- infra-cloudflare-api-token v0.1.3
+- infra-cloudflare-d1-database v0.1.4
+- infra-cloudflare-dns-record v0.1.3
+- infra-cloudflare-permission-groups v0.1.3
+- infra-cloudflare-queue v0.1.0
+- infra-cloudflare-r2-bucket v0.1.4
+- infra-cloudflare-r2-custom-domain v0.1.3
+- infra-cloudflare-ruleset v0.1.3
+- infra-cloudflare-schema v0.1.20
+- infra-cloudflare-secrets-store v0.1.0
+- infra-cloudflare-worker v0.1.0
+- infra-cloudflare-zone v0.1.4
+- infra-digitalocean-project v0.1.2
+- infra-digitalocean-project-resources v0.1.2
+- infra-digitalocean-schema v0.1.2
+- infra-digitalocean-spaces-bucket v0.1.2
+- infra-digitalocean-ssh-key v0.1.2
+- infra-pigeon-schema v0.1.6
+- infra-scaleway-iam-application v0.1.2
+- infra-scaleway-iam-policy v0.1.2
+- infra-scaleway-project v0.1.2
+- infra-scaleway-schema v0.1.2
+- sentinel v0.1.17
+- site-template-architecture v0.1.1
+- site-template-blog v1.0.3
+
+### Merged
+
+- feat(backplane): core::pool's ledger and router: windows, holds, task budgets, the admit and stop lines, and signals (!615) ([fa1039f](https://github.com/noisypigeon/pigeon/commit/fa1039f7a0848e407ed9e2f5f3f01679370943f0)) · backplane
+- docs(adr): review !563 against !605 (!619) ([31aebc8](https://github.com/noisypigeon/pigeon/commit/31aebc86697321ea9312d9671b00d881bea8e058))
+- docs(adr): capacity pools under Ultra: a $200 credit, $100 Console limits, and step 2 in three briefs (!623) ([ed85ce5](https://github.com/noisypigeon/pigeon/commit/ed85ce560ffd959c9cf2e6de3eb583625b42efe0))
+- docs(adr): review !606 against !605 (!620) ([f7caf4b](https://github.com/noisypigeon/pigeon/commit/f7caf4ba3a3fc59dc05e500a02957c62ab0e1b1e))
+- feat(backplane): one merge for five queued changes: Auto's stage check and rate-breaker hold, the pigeon.dev wildcard record, the standalone hosts' Access bypass, and owner_ask allowed (!653) ([912bbc7](https://github.com/noisypigeon/pigeon/commit/912bbc7127a1dfa315e34ed0359c7c4db67673f8)) · backplane
+- fix(backplane): a silent session holding nothing lapses after two hours, leaving Active sessions, and an archive is reported without the archiver's ticket (!654) ([101ca44](https://github.com/noisypigeon/pigeon/commit/101ca446706d9db0cf0a1aea6f79f9eb746689c6)) · backplane
+- docs(adr): benches: each agent session builds and tests only in its own warm Cloudflare Containers (!655) ([480e1bc](https://github.com/noisypigeon/pigeon/commit/480e1bcba480186391e6654bfc53e70bfb850a07))
+- docs(adr): one test binary per crate, mechanism modules, and a test map by module (!659) ([25ab925](https://github.com/noisypigeon/pigeon/commit/25ab925aa0e8fef0376915e74a565d2f060e08df))
+- docs(adr): review !658 against !659 (!660) ([6507020](https://github.com/noisypigeon/pigeon/commit/650702095275dd33648d75e9ac1daec177f1f4e5))
+- chore(ci): the behaviour ledger: every test the workspace runs, and a check that none is gone (!661) ([922e056](https://github.com/noisypigeon/pigeon/commit/922e05692b787d1fa3765e2277027270f5ab3e1e))
+- docs(adr): benches: the sandbox spike's findings: map-auto with uid 1000, no network, and a 3.7 GB full test target (!662) ([bb5b2ba](https://github.com/noisypigeon/pigeon/commit/bb5b2ba2254606574313adc19d0ab5c348cfd039))
+- docs(adr): Governs globs follow test files into their suites (!664) ([70912cc](https://github.com/noisypigeon/pigeon/commit/70912ccec6b4742fe4f27f0050323edec6626832))
+- feat(backplane): core::bench: bench names, scratch refs, the command allowlist, admission under the cap and budget, and fan-out lanes (!658) ([c836a8a](https://github.com/noisypigeon/pigeon/commit/c836a8a65bed222fb14be1e27d7aad70193f12b9)) · backplane
+- feat(backplane): selection by module: a test map unit may be one suite module, and a change runs only those it reaches (!665) ([62547c9](https://github.com/noisypigeon/pigeon/commit/62547c935abb8559d998283db0c3b012863c211e)) · backplane
+- test: pigeon and pigeon-sentinel run one integration suite each, their test files its modules (!666) ([227b37c](https://github.com/noisypigeon/pigeon/commit/227b37ca8dd7dc8349a30d7ebfecc5a4b6a89515)) · backplane
+- test(sentinel): pigeon-sentinel's integration tests run as one suite, its test files the modules (!668) ([409285c](https://github.com/noisypigeon/pigeon/commit/409285cefdefecb4b484244e5b226251e4238c28)) · sentinel
+- feat(backplane): the bench job server: sync a scratch ref, run allowed commands in a no-network uid-1000 sandbox, and read logs by offset (!667) ([6e7edbb](https://github.com/noisypigeon/pigeon/commit/6e7edbb65f72599bdfb770d04a98b964820f4e78)) · backplane
+- docs(adr): one crate per src directory, neutral names, one changelog, and no mise (!670) ([c0a4834](https://github.com/noisypigeon/pigeon/commit/c0a4834b10da8755bf717cd1b9a1ae5720d7a46f))
+- feat(backplane): the front door takes a session's scratch ref with its live ticket, and starts nothing (!669) ([a4f10bb](https://github.com/noisypigeon/pigeon/commit/a4f10bb343cad2fd1daa62848db3056f88844c79)) · backplane
+- docs(adr): review !674 against !670 (!677) ([910c171](https://github.com/noisypigeon/pigeon/commit/910c171d948a67c0f9ff1cfdd9fad8f2177c36a5))
+- docs(adr): review !669 against !670 (!676) ([8f9e1d9](https://github.com/noisypigeon/pigeon/commit/8f9e1d906c6e2bdce33d6b2292582f2b3cf54b05))
+- chore(ci): the behaviour ledger counts each moved test under the package it moved to (!678) ([cb7f240](https://github.com/noisypigeon/pigeon/commit/cb7f2408a5d986dd69becc4122c9f9d65da9cc91))
+- feat(pigeon): pigeon session bench: push the working tree to the scratch ref, run on a bench, and fan the checks out (!673) ([2669a5b](https://github.com/noisypigeon/pigeon/commit/2669a5ba94ddc5c43de13ec335b3d4a175938230)) · backplane
+- feat(backplane): core::release::history renders the one CHANGELOG.md from first-parent history and release tags (!672) ([3cd25e6](https://github.com/noisypigeon/pigeon/commit/3cd25e6787ed3afa4f1f4321cab00de9fc539fba)) · backplane
+- fix(backplane): a test map unit whose target is gone runs as its suite module (!679) ([87f281d](https://github.com/noisypigeon/pigeon/commit/87f281d0733e9db6d6440b3581caee26fd1a1680)) · backplane
+- feat(backplane): the Bench Durable Object and Container, the fleet under the cap, the bench.* operations, and teardown at session end (!684) ([0754026](https://github.com/noisypigeon/pigeon/commit/07540263dc83dd4acc45028edcb005ce0f2a2daa)) · backplane
+- fix(backplane): a failed head or a yield gives the merge turn back (!681) ([94b535e](https://github.com/noisypigeon/pigeon/commit/94b535eac45e780de3ce792203f25f4d8c3507a5)) · backplane
+- fix(backplane): a holder's new head that carries no approval gives its turn back at once (!687) ([1b813fa](https://github.com/noisypigeon/pigeon/commit/1b813fa537871300023261b36a2f75964aedfa2f)) · backplane
+- fix(images): the build stage copies the whole .config/, and the local images push passes it as the config context (!693) ([e99e7c9](https://github.com/noisypigeon/pigeon/commit/e99e7c941d129d924252c3539821a0731e3ed3d6)) · backplane, sentinel
+- fix(backplane): the deploy job builds the image of a Container class that has none, so a new class deploys (!689) ([d89c953](https://github.com/noisypigeon/pigeon/commit/d89c95305103a17aaee8b379b4c87643da491865)) · backplane
+- test(backplane): backplane's 70 integration test files run as one suite, each file a module (!686) ([34ce5d2](https://github.com/noisypigeon/pigeon/commit/34ce5d21c1d0b3648fbd47c1345b4f7b0d77a358)) · backplane
+- docs(adr): Governs globs, approval paths and policies match both the old and the new crate layout (!691) ([d541939](https://github.com/noisypigeon/pigeon/commit/d541939a60e5cc0696b80e3c7eaff55c80cdeab2))
+- feat(backplane): the checks read the workspace's layout from the tree they check, so crates can move (!692) ([2cd158e](https://github.com/noisypigeon/pigeon/commit/2cd158e912138a015227f411e4649362018990c0)) · backplane
+- feat(backplane): the release bot renders the one root CHANGELOG.md from history, with --replay and previous (!694) ([b298ea9](https://github.com/noisypigeon/pigeon/commit/b298ea934ca6d6852eb952098ca5ee2f9849efee)) · backplane
+- docs(claude): the release bot alone writes the one root CHANGELOG.md (!699) ([12a26c5](https://github.com/noisypigeon/pigeon/commit/12a26c5af5501d3221e0cc875690640e4515c183))
+- test(backplane): a check's working-directory test holds wherever the workspace is (!703) ([f6943da](https://github.com/noisypigeon/pigeon/commit/f6943da5c8cb48220061155d8d528d751262afaf))
+- fix(backplane): the control plane dispatches bench.* operations itself (!705) ([426186c](https://github.com/noisypigeon/pigeon/commit/426186c7e99929950bc78f73eaa82b16f9570757)) · backplane
+- fix(backplane): a Container rollout waits out a job before replacing it, so a deploy no longer stops itself (!707) ([c777839](https://github.com/noisypigeon/pigeon/commit/c7778395596bc61dd31c8cf63cb1bdd7ebb405db)) · backplane
+- fix(backplane): the deploy builds pigeon and pigeon-sentinel by binary name, so a package rename doesn't break it (!708) ([f9e0fe2](https://github.com/noisypigeon/pigeon/commit/f9e0fe245b5a65af8c81554bf9cbfdbd2ef7f1d8)) · backplane
+- fix(backplane): a deploy main has moved past is superseded, not failed, and stops before its builds (!709) ([c552e79](https://github.com/noisypigeon/pigeon/commit/c552e791326ecfbb45b845d21e018b8a08cec010)) · backplane
+- refactor: the Rust workspace moves to the root; the behaviour ledger to tooling/ci (!695) ([e5f750c](https://github.com/noisypigeon/pigeon/commit/e5f750cbf0db62fb2eae23425f5eacf122a457e9)) · backplane, sentinel
+- chore(policies): the secrets pins accept ENC[pigeon:v1:] beside cobot:v1; terraform and no-python skip .pigeon/ (!704) ([1b5dfb9](https://github.com/noisypigeon/pigeon/commit/1b5dfb9c7602c67005a711eb4361a1284b0496b8))
+- chore(release): releases.yaml names the one CHANGELOG.md and retires the other 32 (!710) ([869fbaa](https://github.com/noisypigeon/pigeon/commit/869fbaab1582591b74c70ad9b552b7fe726937f3))
+- chore(policies): changelog.yaml checks the one root CHANGELOG.md, and the release job's first run is the backfill (!711) ([420332c](https://github.com/noisypigeon/pigeon/commit/420332cb0ba2d98167af7dbd8bb7441884eb660a))
+- feat(pigeon): pigeon infra|sites|git|workers|release|dev|agent|keys|eviction, with hidden aliases for the old spellings, and pigeon dev's task graph (!696) ([4c337d0](https://github.com/noisypigeon/pigeon/commit/4c337d0fa4bdfa023780cf2a3ee1d1ce06d84fcf)) · backplane
+- feat(backplane): new names read beside the old: PIGEON_*, AGENT_*, PIGEON_EVICTION*, ENC[pigeon:v1:], x-pigeon, .pigeon/ (!698) ([21cb8f7](https://github.com/noisypigeon/pigeon/commit/21cb8f7285b522c80065270c77499185c1fdbf13)) · backplane
+- fix(backplane): a bench's sandbox brings loopback up and keeps the sentinel build (!715) ([bce3353](https://github.com/noisypigeon/pigeon/commit/bce335320f05aeb40065fa71934bf54b43a7c792)) · backplane, sentinel
+- feat(ios): pigeon-ios gets a thin check crate for project.yml, its Info.plist keys and the operations its Swift names (!702) ([ef059aa](https://github.com/noisypigeon/pigeon/commit/ef059aa1775f53f44b2a59a0a34d7b49430e2694)) · backplane, sentinel
+- test(backplane): the suite's modules share one fake HTTP server and one tool check (!717) ([45ac17d](https://github.com/noisypigeon/pigeon/commit/45ac17d1a257b8f56d6df1f005c4b6b6e59644a1))
+- feat(backplane): a sentinel change may carry the workspace's bookkeeping (!718) ([1d418ca](https://github.com/noisypigeon/pigeon/commit/1d418caebbfb5b291fb53f31c4d7e147ea6a7b9e)) · backplane
+- docs(adr): review !715 against !711 (!722) ([633beaf](https://github.com/noisypigeon/pigeon/commit/633beafa14aa1931268606045c2bb9293195f06d))
+- docs(adr): review !714 against !711 (!721) ([4a30a46](https://github.com/noisypigeon/pigeon/commit/4a30a46cdc844d30346a39016a65b990ccc93e5f))
+- docs(adr): review !718 against !711 (!723) ([9fbed7a](https://github.com/noisypigeon/pigeon/commit/9fbed7a630ed542d2d8c6d175c1595f71e5ddcf6))
+- fix(backplane): the release bot skips only its own commits, so a merged chore(release) change keeps its changelog line (!725) ([ef95119](https://github.com/noisypigeon/pigeon/commit/ef95119bf25450a8e2c3eea7dd43dd9932bb73e6)) · backplane
+- feat(approvals): a sentinel change may carry Cargo.toml, Cargo.lock, the behaviour ledger and releases.yaml (!724) ([34e4767](https://github.com/noisypigeon/pigeon/commit/34e4767d8944215f9e5d377134bfc3857f685354))
+- fix: reconcile !697 with main (!726) ([9760edc](https://github.com/noisypigeon/pigeon/commit/9760edcb24ce47637335c22cdab2ba4d97c87570))
+- refactor: the site templates become the pigeon-site-templates crate, which embeds and validates them (!697) ([9e90017](https://github.com/noisypigeon/pigeon/commit/9e90017b387a7e7e1d91ce117ead37678cdde20e)) · backplane, infra-cloudflare-schema, sentinel, site-template-architecture, site-template-blog
+- docs: the decisions README, infra/pigeon's README and the Workers' comments use the new CLI spellings (!729) ([41ea84b](https://github.com/noisypigeon/pigeon/commit/41ea84be74a76f1b13698f9c49a8fdaf57ab1a32))
+- chore(toolchain): /rust-toolchain.toml pins Rust 1.99.1, and releases.yaml's settings read it (!728) ([02758d3](https://github.com/noisypigeon/pigeon/commit/02758d30e07d747e11e0f005d706666e64b1a6f3))
+- build: mise's and pigeon dev's sentinel-build build the judge by binary name (!733) ([04d10ce](https://github.com/noisypigeon/pigeon/commit/04d10cea8fb0a550002941ec63febde3d79a142d))
+- test: the harnesses build the judge by binary name, and the scope tests find its crate (!719) ([86debf1](https://github.com/noisypigeon/pigeon/commit/86debf16765b561c48d83b51b3bbe3835ea83b85))
+- fix(sites): the deploy's previous pigeon finds the site templates at their old path until it's replaced (!742) ([80fecaf](https://github.com/noisypigeon/pigeon/commit/80fecafcd47b1427680ebd3838d67f22aea36704))
+- feat(backplane): a bench runs `pigeon dev <task>` beside `mise run`, and the commit's own harness once mise.toml is gone (!732) ([9e0f911](https://github.com/noisypigeon/pigeon/commit/9e0f9113502afd1d94b47c48d61375cea372e5b8)) · backplane
+- refactor(backplane): the pure cobot types and helpers core names move into core: generations, tofu's plan types, s3's credentials and hashes (!727) ([b396136](https://github.com/noisypigeon/pigeon/commit/b3961368fcc8dd49721d7fe60a58c2a4348b9cef)) · backplane
+- docs(adr): Governs names rust-toolchain.toml and dev.rs in place of mise.toml (!738) ([1a39fc4](https://github.com/noisypigeon/pigeon/commit/1a39fc4f94734f3203a211a4e5c923f9ac7ab7d2))
+- fix(backplane): conflict forecasts restack both heads onto main first, so main's edits never count (!731) ([0b07c63](https://github.com/noisypigeon/pigeon/commit/0b07c632a25618be65ef7078a6b72234c057d18e)) · backplane
+- docs(claude): CLAUDE.md and ios-sign.sh use the new CLI spellings, and `pigeon dev ci` must pass (!735) ([641f36b](https://github.com/noisypigeon/pigeon/commit/641f36b258def2197164d1c7ada09d5a4c9d4726))
+- feat(backplane): MainRun runs the release bot after each passed deploy, and commits and tags its output on main (!712) ([13a4bed](https://github.com/noisypigeon/pigeon/commit/13a4beddca01513d15feb9240391ef10e6947d87)) · backplane
+- fix(backplane): a bench clears the git locks a cancelled run left, so the next run syncs (!741) ([2b624b6](https://github.com/noisypigeon/pigeon/commit/2b624b6cf209847f738b3798ff5e8cc919fa5639)) · backplane
+- feat(backplane): Containers start `pigeon agent serve|listen`, checks run `pigeon run|instance`, and messages name the new commands (!740) ([8ee7eef](https://github.com/noisypigeon/pigeon/commit/8ee7eefd722f19adbc7a65e7eb378689f1a3c983)) · backplane
+- refactor(backplane): apex's and static_site's logic moves into core, reading files through a Files trait that agent implements on disk (!730) ([de28b83](https://github.com/noisypigeon/pigeon/commit/de28b83c71e3d0adea03dae1a2993e19dde595c8)) · backplane
+- fix(backplane): a bench finds the workspace at the root, so it fetches a changed Cargo.lock (!745) ([ce8ceee](https://github.com/noisypigeon/pigeon/commit/ce8ceee9f3bdb99092a7c3b1b5bd0bd7b9f16edb)) · backplane
+- refactor(backplane): core's ledger checks text it is handed, the Catalog type, secrets' file and tag check and the Error type move into core, and core loses its engines gates (!743) ([4b74270](https://github.com/noisypigeon/pigeon/commit/4b74270fa2e1aa6f8aafa702cb8ea69bf77fbbcb)) · backplane
+- refactor(backplane): callers name core's paths, not the re-export shims, outside the guarded files (!744) ([26bea99](https://github.com/noisypigeon/pigeon/commit/26bea995c2a0a85d34567aa93c54f89b3c1a5b89)) · backplane
+- chore(sites): the template copies at src/site-templates go, now the deployed pigeon reads src/pigeon-site-templates (!749) ([16ce22f](https://github.com/noisypigeon/pigeon/commit/16ce22f93931dcf6dd62efcfc124283ad5010e7b))
+- feat(backplane): new secrets are written ENC[pigeon:v1:], and work directories under .pigeon/ (!716) ([3adf990](https://github.com/noisypigeon/pigeon/commit/3adf9909f60abaf2f059a73891be02176353b4f0)) · backplane
+- feat(ci): the test map maps each suite module, so a change runs only the modules it reaches (!714) ([3210642](https://github.com/noisypigeon/pigeon/commit/32106429ee5ae375bc2d3386328f89f82151a7e4))
+- fix(backplane): the release bot reads each revision's own workspace, so a tag from before a move still compares (!750) ([84c6cd0](https://github.com/noisypigeon/pigeon/commit/84c6cd0bc666f21cfcc1a0a4568026538ebf6183)) · backplane
+- fix(backplane): a bench runs pigeon and git at the checkout's root, and bench ci stops passing scope --root ../.. (!753) ([9ad26b3](https://github.com/noisypigeon/pigeon/commit/9ad26b3a489ab5409f253bcb2d8cb37baaf59b3e)) · backplane
+
+## 2026-11-15
+
+### Merged
+
+- feat(backplane): the minting-grant, CI-window and platform pages take the owner's proof through on_page (!447) ([00f57c3](https://github.com/noisypigeon/pigeon/commit/00f57c31ac9c1e4e62c455dc2f6bfabf8a051d7a)) · backplane
+- feat(backplane): the passkey-only cutover needs one passkey, synced or not, and an enrolment drill (!463) ([c82ae23](https://github.com/noisypigeon/pigeon/commit/c82ae23d2d10097cd02b0160e8afc52b9127bf30)) · backplane
+- ci(ios): run GitHub's ios jobs on macos-26 (!465) ([9db3fc8](https://github.com/noisypigeon/pigeon/commit/9db3fc815a76f520b7ebb3c609895d77ad52e928)) · backplane
+- feat(pigeon): pigeon backplane enroll-secret prints a one-time passkey enrolment (!453) ([07be810](https://github.com/noisypigeon/pigeon/commit/07be81084db372f1d32d4e60660267f02f099191)) · backplane
+- docs(adr): provider connect: the Cloudflare OAuth client is registered, with Account API Tokens Write (!466) ([485cba4](https://github.com/noisypigeon/pigeon/commit/485cba4096691f2e18613715b099b858ea2ad8f8))
+- fix(catalog): the platform reads the account's one Secrets Store instead of creating one (!461) ([9c9e7d6](https://github.com/noisypigeon/pigeon/commit/9c9e7d6fd6bdda29e9d969a2c59fa9b336e08d6f)) · infra-cloudflare-schema, infra-cloudflare-secrets-store
+- ci(ios): pin Xcode 26.6 on every macOS provider (!464) ([a5862df](https://github.com/noisypigeon/pigeon/commit/a5862df70e00ca75616ea156dc08b0bd9f0c343a))
+- feat(backplane): with PROOFS set and the cutover's proofs on record, codes are refused and a person's direct call waits for a passkey (!467) ([d076162](https://github.com/noisypigeon/pigeon/commit/d0761620abe1d0d00e8477d2adf94de597d87963)) · backplane
+- docs(adr): the control plane lists, pushes and re-issues an owner's approval whenever a change needs the owner (!468) ([61e70de](https://github.com/noisypigeon/pigeon/commit/61e70deb63268183b52d323340896cb18bbcc41b))
+- docs(adr): a job Container that fails to start backs off instead of counting as lost, and a stalled change wakes itself (!469) ([03bd122](https://github.com/noisypigeon/pigeon/commit/03bd122548582aab7792a207b344dbd9eacb230d))
+- fix(session): an executor starts with the repository checked out and the pigeon tools, or says so and stops (!472) ([182783c](https://github.com/noisypigeon/pigeon/commit/182783cc6e86f799b0582581d291e9d997180c2a))
+- feat(infra): the control plane binds GRANTER from the account's Secrets Store (!470) ([5835a85](https://github.com/noisypigeon/pigeon/commit/5835a850e58104e6304d70bba0083869289f4bf5))
+- docs(adr): the iOS app's three tabs: a tracker of sessions and changes, Approvals, and operational insights (!477) ([38206f9](https://github.com/noisypigeon/pigeon/commit/38206f93c9a359b5368a7db42d4a32e42e8ef315))
+- feat(infra): PROOFS is passkey, so the control plane refuses authenticator codes once its proofs are on record (!474) ([f1b4005](https://github.com/noisypigeon/pigeon/commit/f1b40050c95b5b4afb9103c597ded18e8b80700c))
+- docs(adr): a failed deploy holds Auto windows and mandates, and a passed deploy resumes them (!484) ([da91a12](https://github.com/noisypigeon/pigeon/commit/da91a1280d1dd2a457fcea251ef38896ac8f6183))
+- docs(adr): no Python: the repository's tooling is Rust (pigeon …) or POSIX sh (!479) ([6c4ac3b](https://github.com/noisypigeon/pigeon/commit/6c4ac3bfd005c8686316ea8425008290e0213451))
+- docs(adr): a learner practice app on a slim, app-only standalone instance, listed privately (!478) ([3811916](https://github.com/noisypigeon/pigeon/commit/38119166406ca9f1eb842c5a479f32d7f607f23c))
+- feat(grants): the observability grant: Workers Observability and Account Analytics Read, minted into OBSERVABILITY_TOKEN (!473) ([eb731f8](https://github.com/noisypigeon/pigeon/commit/eb731f8e22dab2f29fbd8d3f9292eaed0e0b8e08)) · infra-cloudflare-schema
+- docs(adr): job start failures: steps split to fit a change, a start only of a queued job, and ci_rerun with no wait (!485) ([7c448f9](https://github.com/noisypigeon/pigeon/commit/7c448f95b7e8957f864385043f2be3d299c9198c))
+- fix(backplane): the passkey-only cutover is made when /passkeys is opened or a direct call asks, not only when a code is tried (!476) ([d53ab64](https://github.com/noisypigeon/pigeon/commit/d53ab64d6ce7cccf923329a23a7012a06fa12fbf)) · backplane
+- fix(backplane): a job Container that fails to start backs off and keeps its job queued, instead of counting as lost (!475) ([ea0da51](https://github.com/noisypigeon/pigeon/commit/ea0da51f9aeeaf68519f765967a1aca4ec89c680)) · backplane
+- docs(adr): review !492 against !484 (!493) ([ef562f0](https://github.com/noisypigeon/pigeon/commit/ef562f067fdfda011b39d7617a3a2b56bea9345c))
+- feat(backplane): core::approval::listed, what a change owes the owner and whether its listed approval is kept, issued or removed (!490) ([e7c17f8](https://github.com/noisypigeon/pigeon/commit/e7c17f8fcc1674ff960dd3b2598fea070914f135)) · backplane
+- docs(adr): the learner ADR's question bank lands as an app resource, and a form keeps its circles' positions (!498) ([19d9832](https://github.com/noisypigeon/pigeon/commit/19d9832718993f6dfd877f43e90c9321d52fab85))
+- fix(backplane): the control plane dispatches grant.* itself (!495) ([52f3acb](https://github.com/noisypigeon/pigeon/commit/52f3acb4f112811b7f07aba878735bfac745c2ad)) · backplane
+- feat(ios): PigeonCore's learner model: questions, forms and the code strip, with tests (!499) ([928e5fc](https://github.com/noisypigeon/pigeon/commit/928e5fc0224fc741f17eb1b97165a781d688cdc2))
+- docs(adr): a session that ends clean is archived by the session that created it (!501) ([dabb55d](https://github.com/noisypigeon/pigeon/commit/dabb55d65853cac17c020cd8afa274d4e90a3daa))
+- docs(adr): review !482 against !478 (!496) ([7fdbae4](https://github.com/noisypigeon/pigeon/commit/7fdbae4fc927fc5ef998ec9122b27526024abda2))
+- feat(backplane): the app's operational insights: GET /v0/app/ops answers deploys, merge and approval waits, throughput, providers and failed jobs (!483) ([225eede](https://github.com/noisypigeon/pigeon/commit/225eede2b33b72a9ac7b001431183f45d6e5bdf7)) · backplane
+- feat(ios): PigeonCore's tracker and ops models, the rail's words, filters and elapsed time, with tests (!482) ([4f592c3](https://github.com/noisypigeon/pigeon/commit/4f592c398011825628a3dd59087eb24d03f2bf13))
+- feat(pigeon): pigeon session executor and install, and session.sh without Python (!481) ([e953a4d](https://github.com/noisypigeon/pigeon/commit/e953a4d4efe06e58d0f0a2de980dd1ede868d9d3)) · backplane
+- feat(backplane): the app's tracker: GET /v0/app/tracker answers each session and its changes on a ten-stop rail, and /v0/app/events long-polls as the owner (!480) ([d0cb4de](https://github.com/noisypigeon/pigeon/commit/d0cb4dec7e4982d45e0b9ab972a237c25ca40f5c)) · backplane
+- docs(backplane): CLAUDE.md, the tool summaries and the server's instructions say passkey where they said code (!502) ([94bcb0b](https://github.com/noisypigeon/pigeon/commit/94bcb0b6e015074ca4052af8e4c77932edd8be97)) · backplane
+- docs(adr): code checks by reach: wasm-only paths, a gate that adds only the suite, and a cache by check kind (!504) ([28eb425](https://github.com/noisypigeon/pigeon/commit/28eb42513e205d2de7ad7535a89bef1a912090fd))
+- feat(approval): a failed deploy holds Auto windows and mandates, letting only fixes merge, and a passed deploy resumes them (!486) ([d5733e0](https://github.com/noisypigeon/pigeon/commit/d5733e0a71687069f52edcbf3bbd2dbcd096c368)) · backplane
+- feat(backplane): ChangeRun lists, re-issues and pushes the owner's approval itself whenever its stage needs the owner (!492) ([59efcbc](https://github.com/noisypigeon/pigeon/commit/59efcbc491f3dc20be2a044b9a34fdf3bc3bb4d0)) · backplane
+- docs(adr): a change built on another compares its patch from that change's head, so its approval carries when the base merges (!505) ([ca0db70](https://github.com/noisypigeon/pigeon/commit/ca0db70ec8c3e2b84fd129681a13b50e1eb53f71))
+- feat(ios): PigeonCore's learner page: its geometry and the layout of 25 questions, with tests (!508) ([ca56953](https://github.com/noisypigeon/pigeon/commit/ca569532ef46e078b36c5696bdb61026bfcbf81e))
+- feat(ios): PigeonCore's learner scores: marks against the key, progress by topic and study hints, with tests (!509) ([61f0083](https://github.com/noisypigeon/pigeon/commit/61f0083ac3faddb3b410be20e58d0eba710fcfb5))
+- chore(policies): no Python: a sentinel policy, a CLAUDE.md rule, and session.py deleted (!488) ([13e1eeb](https://github.com/noisypigeon/pigeon/commit/13e1eeb98a58e1024d086e27f0aaef63d6a3d8c2))
+- feat(ios): three tabs: a live Tracker of sessions and changes, Approvals, and operational Insights, and a push opens its approval from a cold start (!510) ([e28a8c1](https://github.com/noisypigeon/pigeon/commit/e28a8c1cc6f5d156f75d2c822dbdbe0eae68e111))
+- fix(backplane): a job whose Container fails to start waits and starts again, keeping its attempts and its merge turn (!512) ([34ef6b1](https://github.com/noisypigeon/pigeon/commit/34ef6b12680ed00c60e922af4c9d57cc60c7b391)) · backplane
+- ci: the cargo cache is keyed by check kind, not name, and fmt restores none (!513) ([9530355](https://github.com/noisypigeon/pigeon/commit/95303553f4f2998b631030915fdc65a542b6d974))
+- feat(backplane): code checks by reach: a wasm-only path runs only the wasm clippy, and a test map that can't choose leaves the merge gate scoped (!514) ([0c7c5fe](https://github.com/noisypigeon/pigeon/commit/0c7c5fe4c6476881597df0c39530eff6e8752a64)) · backplane
+- feat(backplane): the merge gate runs the head's own checks, adding the whole suite only when full, and a carried head's clippy again (!515) ([8173faf](https://github.com/noisypigeon/pigeon/commit/8173fafc8fffba3b4422b64329e448c3430bd709)) · backplane
+- feat(control): MainRun holds Auto on a failed deploy and resumes it on a passed one, and a held merge asks nobody (!491) ([9be1bd4](https://github.com/noisypigeon/pigeon/commit/9be1bd4fbd05530c45340ee4cf21b4d5f8fd5fa0)) · backplane
+- docs(adr): a session stops for the owner only where the owner adds oversight (!511) ([d913e99](https://github.com/noisypigeon/pigeon/commit/d913e99f416e6095867c10ffd9b8d955299b5bda))
+- feat(ios): the learner's printable test as a PDF, and the on-phone store of forms and scored pages (!516) ([9c40428](https://github.com/noisypigeon/pigeon/commit/9c404289a735399006ed76e96873904cc45c61f8))
+- feat(policies): no-python: fail Python files, shebangs and invocations (!497) ([55e5fc2](https://github.com/noisypigeon/pigeon/commit/55e5fc2ef69a3e2a964f1506f701e730b2223086))
+- feat(backplane): a job that fails to start or loses its Container records job.retrying with why, and core tests replay !461 and !464 (!507) ([1c7893c](https://github.com/noisypigeon/pigeon/commit/1c7893cfc15105794237ecdccc94bf853ba9ceae)) · backplane
+- feat(session): a merge a hold defers is `held`, `auto.*` events wake agents, and the digest names each hold (!494) ([bf3577e](https://github.com/noisypigeon/pigeon/commit/bf3577e4826416d94a2d6c1c3ac46b0c426b23a3)) · backplane
+- docs(adr): review !503 against !511 (!520) ([1d20400](https://github.com/noisypigeon/pigeon/commit/1d2040089551857b5bfc85d5ff80c236f41305f4))
+- fix(control): under a hold, a window's or mandate's approval doesn't queue a non-fix merge (!521) ([325ffe6](https://github.com/noisypigeon/pigeon/commit/325ffe6239dc8ba777c956a497c76bee8620cabe)) · backplane
+- feat(backplane): approval_wait answers with the approval's link, never a card that blocks the session (!523) ([fc011ad](https://github.com/noisypigeon/pigeon/commit/fc011ad6adb4fd360cb29937f9885aee250e1f7e)) · backplane
+- docs(adr): no Python: step 4, the tooling verified in a fresh cloud session with no Python (!517) ([ea3b8e6](https://github.com/noisypigeon/pigeon/commit/ea3b8e6bc90b106d63053064ebe9cc2ada47f54a))
+- docs(adr): review !494 against !511 (!518) ([96f5863](https://github.com/noisypigeon/pigeon/commit/96f5863a285b56915ae8b708229482e38bd7e2be))
+- feat(ios): the learner's score and study-tip screens (!526) ([c6116b8](https://github.com/noisypigeon/pigeon/commit/c6116b8ce0453c494d2a7a44548f697f08528ebf))
+- feat(ios): the learner's home and answer-entry screens, opened from the link screen (!531) ([8268ba0](https://github.com/noisypigeon/pigeon/commit/8268ba0d94d20ee9696c7e8d3e071aae6fa8dfd7))
+- feat(ios): PigeonCore's learner page reader: anchors, perspective, code strip and circle darkness (!532) ([de11071](https://github.com/noisypigeon/pigeon/commit/de1107190044a6f9229de9f2f730e47eb03d46ce))
+- feat(ios): the learner scans a printed page with the camera and checks its marks before scoring (!534) ([4703ef0](https://github.com/noisypigeon/pigeon/commit/4703ef07da251ac933fb6583107606f2e6304f36))
+- test(ios): PigeonCore's learner page reader, on pages drawn as a camera sees them (!533) ([dfbef27](https://github.com/noisypigeon/pigeon/commit/dfbef27a06f5d9bd6c7bcfd37d4f8f458c27abae))
+- feat(backplane): a session asks to merge, and the owner's window approves in the control plane (!524) ([f8f339b](https://github.com/noisypigeon/pigeon/commit/f8f339b99a0093543dce86c791a203a64d6b792b)) · backplane
+- feat(backplane): ci_rerun re-dispatches a job that never started, a start is never queued twice, and the digest counts failed starts (!525) ([4368433](https://github.com/noisypigeon/pigeon/commit/4368433c934f3e64a559111e892e0dce35166837)) · backplane
+- docs(adr): review !500 against !511 (!519) ([7524dbf](https://github.com/noisypigeon/pigeon/commit/7524dbf967d14bf2b161dadb2886cdc19adc5ff5))
+- feat(backplane): capacity refusals say wait, executors retry them, and the digest counts stops by kind (!522) ([0532211](https://github.com/noisypigeon/pigeon/commit/0532211a93e677dc7b1fe8b3e6b2c7063fb13fca)) · backplane
+- feat(backplane): a clean session_end wakes the creator to archive, and session_archived records it (!503) ([e760c08](https://github.com/noisypigeon/pigeon/commit/e760c0805977de586a7826593e3296ec0d16a36f)) · backplane
+- feat(backplane): the digest names and re-issues any change that needs the owner but has no approval listed (!535) ([e6ccbcd](https://github.com/noisypigeon/pigeon/commit/e6ccbcd12abce941f4d6f499022521c4e273fdb4)) · backplane
+- fix(backplane): the digest reads every event since its cursor, not only the first 200 (!539) ([3861c42](https://github.com/noisypigeon/pigeon/commit/3861c4272ff37ae9b1aadd8a9dc29fe24bc1073c)) · backplane
+- fix(backplane): an approval an agent asked the owner for stays listed while it still applies (!540) ([f010b6e](https://github.com/noisypigeon/pigeon/commit/f010b6eb933a3e1ddee01edd57b13a5e838957c1)) · backplane
+- feat(backplane): the owner's approval carries to a session's push of the same patch, checked in full at no higher tier (!500) ([11726f2](https://github.com/noisypigeon/pigeon/commit/11726f2f363628b1e6f4ffa9a3424b84d2fbb739)) · backplane
+- fix(backplane): a change is stalled only once its session has been quiet since the change last moved (!545) ([022aa86](https://github.com/noisypigeon/pigeon/commit/022aa8622fc9b6d344cdb73629d3bd313740950f)) · backplane
+- fix(backplane): Cloudflare's insights are collected with OBSERVABILITY_TOKEN, and the note says what actually happened (!542) ([9afe53b](https://github.com/noisypigeon/pigeon/commit/9afe53b194c1df2b1177df89dc4bc03b253a12a8)) · backplane
+- docs(adr): the tracker's cards are glanceable, a tap opens a change's sheet, and silent sessions are hidden by default (!548) ([da98ced](https://github.com/noisypigeon/pigeon/commit/da98ced16d83837c94e5b431523d09ecc0f189e6))
+- fix(backplane): a change built on another compares its patch from that change's head, so its approval carries when the base merges (!506) ([2fa9974](https://github.com/noisypigeon/pigeon/commit/2fa9974abedb32a43218c7ba747f3fbc8f4d27d3)) · backplane
+- feat(backplane): a carried head's gate re-runs only its crate clippy and its wasm clippy, and the ADR records the measured savings (!544) ([83e8dea](https://github.com/noisypigeon/pigeon/commit/83e8dea7cd2092ca946c79acced43078f6cc6f75)) · backplane
+- chore(claude): allow the pigeon tools that only ask the owner or read, and ask before ci_cloudflare (!551) ([46aff1d](https://github.com/noisypigeon/pigeon/commit/46aff1d7b7dbe2a722355de604b69b6a61e478f3))
+- docs(adr): a start queued while an alarm saves is not lost, and a job left queued is dispatched again (!552) ([3ef4e16](https://github.com/noisypigeon/pigeon/commit/3ef4e16382f727f0f64430fc13e8f30a1fb4684c))
+- fix(backplane): a queued job with no start pending, or stalled at 0 attempts, is found, and the digest names it (!553) ([cd44ea8](https://github.com/noisypigeon/pigeon/commit/cd44ea84dc793933b536c38031a8315216e0aee7)) · backplane
+- feat(ios): a sample learner page, form 1023, that runs print, scan, check and score and keeps nothing (!555) ([c96344c](https://github.com/noisypigeon/pigeon/commit/c96344c910df528af9b7d0e1beef3906318920ca))
+- feat(ios): the Tracker's cards are glanceable, a tap opens a change's sheet with a link into Claude, and silent sessions are hidden by default (!549) ([9b4e259](https://github.com/noisypigeon/pigeon/commit/9b4e25992de01156a050322e1c1a6f13786e7935))
+- feat(backplane): Auto is standing, not an expiring window; guarded paths leave it, and every merge it makes counts (!543) ([6cc7aa5](https://github.com/noisypigeon/pigeon/commit/6cc7aa597caacc91a18e53c066fbc297d0032121)) · backplane
+- feat(ios): the learner scan counts down 3-2-1 on a steady page before it captures, with a manual shutter (!556) ([8e5defb](https://github.com/noisypigeon/pigeon/commit/8e5defb14d85b8c9be29fee4c3921279299f5a86))
+- fix(backplane): a start queued while ChangeRun's alarm saves is kept, and each alarm dispatches any queued job left without one (!554) ([b44f737](https://github.com/noisypigeon/pigeon/commit/b44f7373bce1c80c69c72fa83423353c9615e2e2)) · backplane
+- docs(adr): the learner's standalone joins, stands up and carries over on its own, and steps 4 to 8 are split (!561) ([ef96e7b](https://github.com/noisypigeon/pigeon/commit/ef96e7b9d070f402302583001bd2d2fe02c04a6a))
+- fix(backplane): the control plane's review and reconcile changes are authorized under the owner's window, and no stage asks a session to authorize (!564) ([9160401](https://github.com/noisypigeon/pigeon/commit/91604014513d6d21768637c1741e68f31a50c647)) · backplane
+- docs(adr): each standalone is <label>.pigeon.dev, served through the platform's wildcard route (!565) ([e6c6a9a](https://github.com/noisypigeon/pigeon/commit/e6c6a9a1f3cd698733f45a8a44f76da6f6e77b54))
+- docs(adr): review !543 against !548 (!550) ([c11e93c](https://github.com/noisypigeon/pigeon/commit/c11e93c2d5ef0040ac51031ef90643a092c2cfda))
+- feat(roles): the learner capability, held by users and administrators (!562) ([9b9a611](https://github.com/noisypigeon/pigeon/commit/9b9a61137d392c79016c0f4bc5f6e24c5be169a0))
+- feat(cobot): worker.yaml's subdomains_of route serves *.<zone>/* and sets INSTANCE_ZONE, and a zone record may be a bare * (!570) ([dec506a](https://github.com/noisypigeon/pigeon/commit/dec506adde8fcd73c85f8408719c6b5ece8880cf)) · backplane
+- docs(adr): approvals always listed, step 5 verified live on !551; !543's listing left no event (!572) ([3e5d6a4](https://github.com/noisypigeon/pigeon/commit/3e5d6a4d90e67ccac7253ea7ca2182170e5990bd))
+- feat(backplane): core::platform::hosts, a standalone's label check, its host under the zone, and what the proxy passes (!571) ([c738e24](https://github.com/noisypigeon/pigeon/commit/c738e2477a55a2c33388eefb5adcc3cbac6abecb)) · backplane
+- docs(adr): standalone hostnames agree with !561, and carry their own hooks in the learner stand-up (!580) ([4c0ebeb](https://github.com/noisypigeon/pigeon/commit/4c0ebebb4eb68c0285781cc5f8358ec16fa18a42))
+- docs(adr): review !556 against !543 (!566) ([5d9adf5](https://github.com/noisypigeon/pigeon/commit/5d9adf528cf0a380434b5134e194d9949095a925))
+- docs(adr): review !547 against !561 (!575) ([6ac5527](https://github.com/noisypigeon/pigeon/commit/6ac552747ee9cae9273d250aa4654dd81361a0e8))
+- docs(adr): review !547 against !556 (!573) ([abd2316](https://github.com/noisypigeon/pigeon/commit/abd23168325a2e6ffbfaa6fec3a40909aeb664b7))
+- feat(ios): the learner's practice carries over to their instance, kept on the phone until it confirms (!577) ([de9df7c](https://github.com/noisypigeon/pigeon/commit/de9df7c93bf341b26457fbc9251ab71466f9482b))
+- feat(ios): join a learner's instance from its link, and see and admit the learner from the owner's instance list (!578) ([dbb76a9](https://github.com/noisypigeon/pigeon/commit/dbb76a9633123f254b2addd9b33f6aa87635861c))
+- feat(roles): users and administrators hold the learner capability (!568) ([13e5248](https://github.com/noisypigeon/pigeon/commit/13e524829e8cd6af0045257daabe54feda921aa0)) · backplane
+- docs(adr): noisypigeon is a standalone in its own account, with imported zones, its own repository and a granter per account (!581) ([42e51f6](https://github.com/noisypigeon/pigeon/commit/42e51f6fb4b4ebc2e7ce2d73da1e5bc079e59b7a))
+- feat(backplane): owner_ask flags the owner for a decision or action only they can settle, pushed, in the digest and answered from the app (!546) ([e0424a0](https://github.com/noisypigeon/pigeon/commit/e0424a0dd8d08b7d1e1489882a79dafe388e1895)) · backplane
+- docs(adr): the architecture is complete, read by agents through architecture_describe, and published on every deploy (!582) ([f039186](https://github.com/noisypigeon/pigeon/commit/f039186a2381544fa41d97c2e303f50bad4927e2))
+- chore(infra): the legacy Cloudflare unit stops listing the owner's personal zone (!584) ([08e883c](https://github.com/noisypigeon/pigeon/commit/08e883ceb214348f3e2029746bd4fff1f0b1e01d))
+- fix(ios): a tracker filter that matches nothing falls back to all, and the silent count and title follow the filter (!586) ([1a7853b](https://github.com/noisypigeon/pigeon/commit/1a7853b81ef408cde341c555b7bf0dffc05723fd))
+- docs(adr): capacity pools, the Claude Platform API's included credit first, under a hard spend cap (!588) ([7c384f7](https://github.com/noisypigeon/pigeon/commit/7c384f7074d51704a27e4a5549e4029212cc0d8d))
+- fix(backplane): a change that loses its merge turn only because main moved keeps its place at the front of the queue (!585) ([c9be8be](https://github.com/noisypigeon/pigeon/commit/c9be8be66f1bbf7455ed02338ad351ca1a76a8f4)) · backplane
+- feat(backplane): core::platform::hosts says which hosts the proxy answers, finds a host's origin, and builds its target (!590) ([4776843](https://github.com/noisypigeon/pigeon/commit/477684307364dc7db44a97dcfca871b17e3f1ca9)) · backplane
+- feat(backplane): the control Worker proxies a standalone's host under its zone to the stack's origin, before any other route (!593) ([a2453a9](https://github.com/noisypigeon/pigeon/commit/a2453a9c6fc71080777723b728f900d0bdf303b6)) · backplane
+- fix(cobot): a zone unit's record may be named a bare *, as its schema already allows (!594) ([373e3e5](https://github.com/noisypigeon/pigeon/commit/373e3e57b2acd48fdfd79d07e2e6f1f884dd873f)) · backplane
+- docs(adr): the app's Tracker and Approvals become one tab, Now: active sessions by class, needs me, and the merge queue (!596) ([00031fd](https://github.com/noisypigeon/pigeon/commit/00031fd6456d9b6e665aa9d295c81b8d57071e7d))
+- feat(backplane): the architecture covers every route, binding and outbound service, publishes on every deploy, and answers agents as json, text or svg (!592) ([baf332f](https://github.com/noisypigeon/pigeon/commit/baf332f7bb444bebb2ce49b106aaf6050282e9d6)) · backplane, site-template-architecture
+- docs(adr): review !594 against !581 (!597) ([22a0c22](https://github.com/noisypigeon/pigeon/commit/22a0c22f305065e8d6e1ac337edab14a4cc7be01))
+- docs(adr): review !563 against !582 (!601) ([c4bd6ce](https://github.com/noisypigeon/pigeon/commit/c4bd6ce9af4706b42a1ff683c72a52db88ef2719))
+- docs(adr): review !593 against !582 (!603) ([2014b80](https://github.com/noisypigeon/pigeon/commit/2014b800f32b4fa62c029450d16ab79d7ba7dda9))
+- feat(ios): Accept edits goes; Approvals shows Auto's state with Pause and Resume, and the owner's items under For you (!547) ([6d05f2f](https://github.com/noisypigeon/pigeon/commit/6d05f2f304d67ca5c0a663e3ca1ade8c1ff9d8ea))
+- feat(backplane): the instance holds 50 open changes, raised in steps toward no cap (!599) ([822d2b7](https://github.com/noisypigeon/pigeon/commit/822d2b7eb99d0e725d6c0f180b37fbf54087a15c)) · backplane
+- docs(adr): review !563 against !565 (!579) ([a6d0c89](https://github.com/noisypigeon/pigeon/commit/a6d0c894f486db37f1d3aab37c783194bef806ac))
+- docs(adr): review !588 against !582 (!602) ([6dd9537](https://github.com/noisypigeon/pigeon/commit/6dd95375cceac92eef24b8c93c40b8ba778e1442))
+- docs(adr): review !592 against !588 (!604) ([c5aa809](https://github.com/noisypigeon/pigeon/commit/c5aa8099f5793fead2e532e90f83c534622e72cd))
+- docs(adr): one MCP entry point for agents, the app and the owner's pages, with passkey proofs in a call's _meta (!605) ([fa9ed44](https://github.com/noisypigeon/pigeon/commit/fa9ed443aad548c69773ec2e24f24b7bb91ffe29))
+- feat(backplane): core::pool, money in micro-dollars, UTC dates, and .config/pool.yaml parsed and validated (!589) ([a75424b](https://github.com/noisypigeon/pigeon/commit/a75424b2c5548e997512290db0c1ace15dcd4d8b)) · backplane
+- feat(ios): the owner names a practice instance's <label>.pigeon.dev at stand-up, the list shows it, and join links may use it (!607) ([4941ab3](https://github.com/noisypigeon/pigeon/commit/4941ab3885a638aa4bef63293c688aab1277a64c))
+- docs(adr): review !547 against !596 (!611) ([298884e](https://github.com/noisypigeon/pigeon/commit/298884e41164e52fc469ec4bad64df4bd739ead5))
+- feat(backplane): an app-shape standalone serves only /v0/app/*, seeded once from its hand-over (!563) ([37a06c8](https://github.com/noisypigeon/pigeon/commit/37a06c82e873f5335155fe10bc124676122181c2)) · backplane
+- feat(backplane): the standalone keeps the learner's practice sealed, syncs it idempotently, and admits the learner by invitation (!587) ([7f338da](https://github.com/noisypigeon/pigeon/commit/7f338da071db5b442f464a4152963a2677fcfef2)) · backplane
+- feat(backplane): the owner stands up a learner instance from the app, listed privately with its progress (!595) ([8ecf0ba](https://github.com/noisypigeon/pigeon/commit/8ecf0ba9e8df4ff8a86c60c1a61380c4d030ac17)) · backplane
+- feat(backplane): a learner stand-up takes a label, its entry's base URL is its host, and its origin stays in the Instance (!598) ([0bd2652](https://github.com/noisypigeon/pigeon/commit/0bd265200461bdb7d8e6ec889c750a1499eb4e55)) · backplane
+- feat(infra): pigeon.dev's wildcard record and the control Worker's *.pigeon.dev route serve standalones' hosts (!610) ([77b04ad](https://github.com/noisypigeon/pigeon/commit/77b04adb111727bfa02284cf51cb5be3d601b125))
+- feat(backplane): change_front, the owner's move of a queued change to the front of the merge queue (!591) ([cf236c5](https://github.com/noisypigeon/pigeon/commit/cf236c5fd798d26892ef01ea468faa813b72f0bc)) · backplane
+- fix(backplane): noisypigeon is no longer a reserved standalone label, so its own instance can take it (!614) ([4141eed](https://github.com/noisypigeon/pigeon/commit/4141eedfa968ae58e05d5869c43a315779bd0aea)) · backplane
+- fix(backplane): owner_ask and owner_withdraw run in the control plane, not refused as a Container's (!624) ([44963a5](https://github.com/noisypigeon/pigeon/commit/44963a556152cb9f8eabf6c3f90309ba8367cf0c)) · backplane
+- fix(backplane): a restacked head holding the merge turn runs its full gate's `test` beside its checks, and its stage names what the merge waits on (!643) ([a975a3b](https://github.com/noisypigeon/pigeon/commit/a975a3b6e0dd547952943bfaadbc4ec2c82bc697)) · backplane
+- feat(backplane): Fable joins the model classes; the app's tracker gains the merge queue and a lapsed ticket's class; change.status answers a change's sheet (!630) ([26bdeea](https://github.com/noisypigeon/pigeon/commit/26bdeea91030c7078667a2fa42361358cc5e1a1d)) · backplane
+- feat(ios): Tracker and Approvals become one tab, Now: active sessions by class, needs me, and the merge queue in order (!618) ([d31b451](https://github.com/noisypigeon/pigeon/commit/d31b451304aadc296c79ed98dc88c47f524c7dcf))
+- docs(adr): the owner sets the open-change cap with limits_set, granted with a passkey, without an ADR per step (!617) ([fdf511e](https://github.com/noisypigeon/pigeon/commit/fdf511effd66e550abde855f5aae76e99373f8fb))
+
+## 2026-11-14
+
+### Merged
+
+- fix(backplane): a long poll answers at its deadline to the millisecond, and session.py holds 20 seconds (!383) ([2d5a9b3](https://github.com/noisypigeon/pigeon/commit/2d5a9b30f7c21db7d07d0b73e142d70047f5a1e8)) · backplane
+- fix(backplane): reviews, reconciliations and tasks follow their change's own record, and an ended change D1 shows open is healed (!386) ([e619f1e](https://github.com/noisypigeon/pigeon/commit/e619f1e447fbae69c34b9505374af7e973928045)) · backplane
+- fix(pigeon): the backplane feature includes session, so main's pipeline build has pigeon session (!397) ([80cb788](https://github.com/noisypigeon/pigeon/commit/80cb7882f202802988761b42d4b8375a6b1d2eb1)) · backplane
+- fix(backplane): a change built on another restacks past the commit it was built on, keeping its own message (!399) ([c580cf2](https://github.com/noisypigeon/pigeon/commit/c580cf27e160cad0fed500e9107d1cd5458d7e4d)) · backplane
+- feat(tooling): session.sh runs pigeon session from main's build, which session.py install fetches, and CLAUDE.md arms Monitor with it (!394) ([6effc95](https://github.com/noisypigeon/pigeon/commit/6effc95a29c3f8644dfa4e0253f6bf0240d9da8b)) · backplane
+- feat(backplane): the digest names and pushes changes stalled on a session that isn't listening (!387) ([4fd50c2](https://github.com/noisypigeon/pigeon/commit/4fd50c234d742bb6f1e29062287e3387b0c01e82)) · backplane
+- feat(backplane): core::brief, a planner's work order, validated so it leaves the executor no choice (!400) ([f8de246](https://github.com/noisypigeon/pigeon/commit/f8de2463c1e4db5bd22c3e660759baa742dd64c6)) · backplane
+- fix(cobot): a change built on another restacks with that change's head as the merge base, so its edits to a file the other added survive (!401) ([35c543f](https://github.com/noisypigeon/pigeon/commit/35c543fdc5d9ee70edb6db1ad0b2d66369a630e3)) · backplane
+- feat(backplane): briefs are kept by the Instance, and brief.create, amend, show and list write and read them for opus planners (!403) ([e5da993](https://github.com/noisypigeon/pigeon/commit/e5da993ecd4d624cf90e4dbfdeb0f3271f37fb6a)) · backplane
+- fix(cobot): a tool whose program is busy being written is spawned again, ending the cobot_workers ETXTBSY flake (!405) ([57f74cb](https://github.com/noisypigeon/pigeon/commit/57f74cb56c8c9ba08d3a2f9ecd746757d36b66bb)) · backplane
+- feat(policies): .config/macos.yaml holds the order, start time and caps, and nothing else (!321) ([d285872](https://github.com/noisypigeon/pigeon/commit/d28587226d879551bc2093264851a71a8046f235))
+- feat(backplane): a brief becomes a task its own class takes first, a more capable one after 30 minutes, and a lesser one never (!406) ([3b9eefb](https://github.com/noisypigeon/pigeon/commit/3b9eefb09d8adcbc814b99527aa67d7174418156)) · backplane
+- feat(backplane): an executor proposes only its brief's change, whose title, plan and scope the brief writes (!407) ([8dc9be2](https://github.com/noisypigeon/pigeon/commit/8dc9be21bd3998e2eef08794306192f310ed501d)) · backplane
+- feat(backplane): a brief's change is refused at bound when it reaches a guarded, secret or sentinel path (!408) ([da82f3d](https://github.com/noisypigeon/pigeon/commit/da82f3d96c200b7fcbbab938716e4ca02fe5e417)) · backplane
+- feat(tooling): session.py executor prints a brief's create_session arguments, and CLAUDE.md gives planners and executors their rules (!410) ([c2e1e17](https://github.com/noisypigeon/pigeon/commit/c2e1e171dd3174c15127c1770bd7e4c6d6b01fb5))
+- feat(backplane): an executor claims only tasks on its brief's changes; handoffs, reconciliations and reviews stay the planner's (!409) ([0fa7e7d](https://github.com/noisypigeon/pigeon/commit/0fa7e7d418ffbea3efa83e97f3fc51c595f5756a)) · backplane
+- feat(backplane): a brief's change waits in review until its planner accepts the head, before any window, mandate or policy approves it (!411) ([cf5624e](https://github.com/noisypigeon/pigeon/commit/cf5624eadfc79c17f09f71a31b059d718194c999)) · backplane
+- ci(ios): every macOS provider runs src/pigeon-ios/ci.sh on the pinned Xcode (!313) ([40193be](https://github.com/noisypigeon/pigeon/commit/40193bee4e7327950f72754d3817b0c33d55284f))
+- feat(backplane): an executor escalates to its planner instead of improvising, and its branch takes no push until the planner answers (!412) ([59c8abc](https://github.com/noisypigeon/pigeon/commit/59c8abcbd2245b7a1029b64b647d84ed674c9b61)) · backplane
+- feat(backplane): the ios check and a release's archive move from GitHub to Bitrise, then Buildkite, when a provider gives no machine (!413) ([dbbe8af](https://github.com/noisypigeon/pigeon/commit/dbbe8af5569b26ef8a6d31f289102dad0620f383)) · backplane
+- chore(claude): settings.json runs the hooks and the status line through session.sh (!402) ([50e068e](https://github.com/noisypigeon/pigeon/commit/50e068eea6a09d0a9978ec438719f3e855376a1b))
+- docs(decisions): accounts, profiles and instances; what the app called a profile is an instance (!419) ([8f4c293](https://github.com/noisypigeon/pigeon/commit/8f4c293409467e4dccbb99fbfc3872cfe4651414))
+- docs(claude): a window or mandate the owner granted is their approval, and a change that needs its session is nudged (!420) ([b1ae588](https://github.com/noisypigeon/pigeon/commit/b1ae5888a5536a8e48c23e48f71f15871813682b))
+- docs(adr): connect a provider account from a browser, by OAuth or a key page, and turn it into a granter (!416) ([192946e](https://github.com/noisypigeon/pigeon/commit/192946eca98e5e664b1691e82a37ba9d08064ce8))
+- docs(adr): a passkey is the only proof, and authenticator codes are removed (!417) ([a855bff](https://github.com/noisypigeon/pigeon/commit/a855bff07abc862260579b353364b7a0b097d0f0))
+- docs(adr): members of an instance, invited with a passkey, as Administrator, User or Service Account (!418) ([6ac0875](https://github.com/noisypigeon/pigeon/commit/6ac087500688523a4d1c55dc133827706af59cb1))
+- docs(adr): review !424 against !417 (!427) ([3f6d36c](https://github.com/noisypigeon/pigeon/commit/3f6d36c6e0ed48520ffa9cf4213d18ec7ce1787b))
+- feat(backplane): a change that needs its session is nudged hourly, and `next` says a window approves on the agent's ask (!422) ([966d6f5](https://github.com/noisypigeon/pigeon/commit/966d6f58e00ec4ff9ad07f2f1d8e11b3965b72de)) · backplane
+- docs(decisions): no window, mandate or policy approves a brief's head awaiting review or escalated (!433) ([b59c6ec](https://github.com/noisypigeon/pigeon/commit/b59c6ec21761556acda1918ac5a387d7f8d84e24))
+- docs(decisions): every approval names the account that gave it, and how (!424) ([344a6c5](https://github.com/noisypigeon/pigeon/commit/344a6c5c18adb59ec3155a5b9afe1ce2a880993f))
+- feat(backplane): accounts and profiles, the owner's account migration, and /v0/app/profile (!423) ([6cac989](https://github.com/noisypigeon/pigeon/commit/6cac9890b4ba88b25e6f38038aba8d0e234b1860)) · backplane
+- docs(adr): under an Auto window a brief runs end to end, and only destructive actions stop (!436) ([4615fa3](https://github.com/noisypigeon/pigeon/commit/4615fa3aad80eb73bc70d532efbd424e1c66e5fb))
+- docs(adr): review !423 against !420 (!425) ([d53c2c7](https://github.com/noisypigeon/pigeon/commit/d53c2c7eeab267f6d963ac87c8740ddd29c9e0c9))
+- feat(policies): .config/roles.yaml holds three roles' capability lists and nothing else, and is guarded as a secret path (!429) ([03d38a8](https://github.com/noisypigeon/pigeon/commit/03d38a8d444dfa7dc8f5768a44a896b7dc6b9fb2))
+- fix(backplane): a brief's review goes to its planner, and change_handoff checks the caller's ticket (!437) ([27a9f1c](https://github.com/noisypigeon/pigeon/commit/27a9f1c938082a89fbaff112b8cd73c7d0dc1ef7)) · backplane
+- chore(claude): allow the pigeon tools the control plane bounds, and ask before destructive ones (!438) ([bafc029](https://github.com/noisypigeon/pigeon/commit/bafc029c1efeb43f5054489becd30b256c675387))
+- feat(config): .config/roles.yaml, each role's capabilities: administrator all eight, user none, service read and propose (!439) ([b083443](https://github.com/noisypigeon/pigeon/commit/b083443aca49485696c2e94558aa10a66c25486a))
+- feat(backplane): a passkey's challenge is bound to what it approves, and each passkey locks alone (!426) ([4fc6fbb](https://github.com/noisypigeon/pigeon/commit/4fc6fbb70fae4aa82317c1063f6b64cffbb9ad14)) · backplane
+- docs(adr): review !432 against !424 (!435) ([52ed0a9](https://github.com/noisypigeon/pigeon/commit/52ed0a9e8035b83768d31694d9d28cad58051abd))
+- feat(backplane): an Auto window or policy re-approves a restacked head whose approval didn't carry, and its merge keeps its turn (!415) ([1eca3a5](https://github.com/noisypigeon/pigeon/commit/1eca3a5ef49c29d6290544eeec1474fe1123be36)) · backplane
+- feat(backplane): approvals, mandates and /passkeys take a passkey through one bound proof (!432) ([6377486](https://github.com/noisypigeon/pigeon/commit/6377486906f8f48e72e4be0a62b54a89dd81d3d6)) · backplane
+- feat(backplane): core::member, an instance's roles, memberships and invitations, and the check every operation will take (!428) ([6d4026a](https://github.com/noisypigeon/pigeon/commit/6d4026a44b448542c304ac4a18ede9274c11d605)) · backplane
+- docs(adr): memberships live in the Instance's storage beside accounts, not D1, and step 2 landed (!440) ([eff55ce](https://github.com/noisypigeon/pigeon/commit/eff55ceecb1bcce6c03ed8979f85bffe2ff7219b))
+- feat(backplane): the breaker counts a brief's change at its class's thresholds and budget, in shadow (!434) ([2fcf7be](https://github.com/noisypigeon/pigeon/commit/2fcf7be397a3dd14bd7aa53d6084efc0fc10c0c2)) · backplane
+- feat(backplane): the grant, CI-window, platform and devices pages offer a passkey, bound to what they show (!441) ([b06f69f](https://github.com/noisypigeon/pigeon/commit/b06f69fc9ec97ced9bc6d896dd309f73a973f5f6)) · backplane
+- feat(backplane): approval_wait shows the approval page's link, and the code card is removed (!444) ([a1a21f5](https://github.com/noisypigeon/pigeon/commit/a1a21f5f0b7ef9c28872b45c7336a93a75751fe0)) · backplane
+- feat(backplane): the Instance keeps its members, seeds the owner's account as the first administrator, and GET /v0/app/members shows them (!442) ([f4165cf](https://github.com/noisypigeon/pigeon/commit/f4165cfe29c18d58ab1345f2f7c814befeb764a8)) · backplane
+- feat(backplane): the digest names each session's class on its session and stall lines (!445) ([93c39ed](https://github.com/noisypigeon/pigeon/commit/93c39ede9b93fab050e1d646390d927c95852fdd)) · backplane
+- feat(backplane): a one-time enrolment registers a passkey when none is left (!446) ([4e97150](https://github.com/noisypigeon/pigeon/commit/4e97150dd7fbe91b31a94c4ae6cc4b8aa59472c4)) · backplane
+- feat(backplane): core::connect, the provider connection flow's states, transitions and checks (!430) ([8735a1f](https://github.com/noisypigeon/pigeon/commit/8735a1f369f1016158a516102afef539e39fa2f3)) · backplane
+- docs(adr): members ADR, steps 4 and 8 land, steps 5 to 9 replanned on the accounts and passkey-only ADRs, and model variance (!448) ([c7f032a](https://github.com/noisypigeon/pigeon/commit/c7f032a9e47f6d9ae9fd2bcc4bb9767ec99ba4e5))
+- feat(backplane): the digest shows the briefs being carried out, and each step's heads, reviews and escalations by class (!449) ([42a81e1](https://github.com/noisypigeon/pigeon/commit/42a81e195579c034ff82b0ed564048d2a3e62c30)) · backplane
+- feat(backplane): a person's approval names the owner's account, on every surface (!451) ([ba86552](https://github.com/noisypigeon/pigeon/commit/ba865525d7257ca1546c62197168c447143b5888)) · backplane
+- fix(backplane): a change's ios check dispatches again: its finished macOS job is deleted, not put as undefined, and it is never polled as a Container job (!454) ([4de1f2d](https://github.com/noisypigeon/pigeon/commit/4de1f2d49f7fe2f76cac0a63e33a6b2ccddd5dd2)) · backplane
+- feat(backplane): /passkeys shows what the passkey-only cutover still needs, and the gate that decides it (!455) ([e8efa1e](https://github.com/noisypigeon/pigeon/commit/e8efa1e2b4f635ac72bf9319adbab02368b85bfc)) · backplane
+- feat(infra): the control plane may hold PASSKEY_ENROLL, a one-time passkey enrolment (!452) ([bebdf80](https://github.com/noisypigeon/pigeon/commit/bebdf80cd20ecaec6a2677a785037256c15589e4))
+- feat(catalog): Cloudflare's connect metadata, and fixtures of its OAuth, accounts and verify responses (!431) ([9dbcf03](https://github.com/noisypigeon/pigeon/commit/9dbcf03d6a2da7196ed2effd1c2fdd8566277fa2))
+- docs(adr): under an Auto window the control plane authorizes and approves a brief's change itself (!456) ([24c9a06](https://github.com/noisypigeon/pigeon/commit/24c9a06a41cd77445c045add8dcd8ecd9edc1db8))
+- docs(decisions): the accounts ADR's model variance: each brief's class, heads, escalations and review findings (!458) ([ab10814](https://github.com/noisypigeon/pigeon/commit/ab10814bf3f5024ae2f6c3b1222ae947926adc59))
+- refactor(ios): what the app called Profiles is Instances (!421) ([9ea5181](https://github.com/noisypigeon/pigeon/commit/9ea51812d5628964040220150dff06796eb9c010))
+- feat(ios): the approval card's badge and Auto's banner say administrator where they said owner (!443) ([b9ac599](https://github.com/noisypigeon/pigeon/commit/b9ac5994edb6505b60f8506f1054c45259cc54bb))
+- docs(adr): provider connect: steps 3 and 4 land, step 5 waits on instance granters, and model variance (!459) ([6dbdf14](https://github.com/noisypigeon/pigeon/commit/6dbdf140c17764a154226294d9f93ce1d6a0f664))
+- feat(backplane): the owner's Auto window authorizes a brief's change at proposal and approves its accepted head (!457) ([30a8bcf](https://github.com/noisypigeon/pigeon/commit/30a8bcf4676db3508d6adadce5c6aa3842335c8d)) · backplane
+- feat(ios): the profile: Home's instance chip and avatar, the Profile sheet, and appearance kept in the profile (!450) ([a3b1e1c](https://github.com/noisypigeon/pigeon/commit/a3b1e1ce9ba488a9b1e818b6b5c82c716599844a))
+- docs(decisions): the accounts ADR's steps 2 and 4 land, and b9's second finding (!460) ([fe30130](https://github.com/noisypigeon/pigeon/commit/fe301308f4bdfd7a4c24d9e4ca388975d58dc192))
+
+## 2026-11-13
+
+### Merged
+
+- fix(backplane): the link page loads its passkey script and may return to the app (!303) ([7dd87d4](https://github.com/noisypigeon/pigeon/commit/7dd87d4e88f9a6daac662b33e4b3e8c0a8f03159)) · backplane
+- fix(ios): the app is signed with its passkey and push entitlements (!304) ([dcd83ce](https://github.com/noisypigeon/pigeon/commit/dcd83cef5067ee5ef6152c9973ff4dd287d364cd))
+- fix(backplane): starting, ending and pausing Auto are events (!305) ([ba638a8](https://github.com/noisypigeon/pigeon/commit/ba638a85aa28d6a9cde5cbecd0b8310207b443ef)) · backplane
+- docs(adr): minted secrets, state on R2, applies in Containers, a rescue plane, and sessions that yield (!291) ([f87961b](https://github.com/noisypigeon/pigeon/commit/f87961b0a4ac6b50b59b382aafe789c661ed21b4))
+- docs(decisions): macOS jobs fail over from GitHub Actions to Bitrise, then Buildkite, when a provider gives no machine (!301) ([87ff6d2](https://github.com/noisypigeon/pigeon/commit/87ff6d2b331236d15617fc3dcf32c48da302ab59))
+- feat(backplane): the control Worker declares BITRISE_TOKEN and BITRISE_APP_SLUG (!309) ([dfff06e](https://github.com/noisypigeon/pigeon/commit/dfff06e24c25a34018c3e8c3ff8720af69d454b5))
+- fix(backplane): a change that conflicts again reuses its open reconciliation instead of proposing another (!308) ([d6fbe12](https://github.com/noisypigeon/pigeon/commit/d6fbe12d86ed2558f2b8c899d5ec7a8aecd33142)) · backplane
+- fix(site-templates): the network diagram stacks top to bottom on narrow screens (!314) ([2fb5112](https://github.com/noisypigeon/pigeon/commit/2fb51121ab3a2a72910a9cb08f0f82391a2cf09c)) · site-template-architecture
+- fix(ios): cards draw their shadow behind them, and insights say why a source is empty (!310) ([75dc1d2](https://github.com/noisypigeon/pigeon/commit/75dc1d2590c1e5761e6a86793f4a41310e7de64c)) · backplane
+- docs(decisions): where a session is, subscriptions held by the control plane, and a breaker that takes a stuck change out of Auto (!312) ([be009e5](https://github.com/noisypigeon/pigeon/commit/be009e58437259173e45ba3a986822db7a213e3a))
+- fix(backplane): a generated reconciliation or review closes itself once its reason is gone (!316) ([64a28a1](https://github.com/noisypigeon/pigeon/commit/64a28a1fceaaac3e18889864dbb3f6dbe854ac1f)) · backplane
+- feat(backplane): backplane::macos decides where a macOS job runs, and when it moves (!315) ([e649462](https://github.com/noisypigeon/pigeon/commit/e649462d853b68ee6bee1a107fd05e5ae8c2859c)) · backplane
+- fix(cobot): a site pinning `version: tree` republishes when its template changes (!319) ([5c5ba52](https://github.com/noisypigeon/pigeon/commit/5c5ba52affb5ca8a0814523adbc33091f142ea75)) · backplane
+- feat(backplane): a change whose patch already landed on main asks to close, at the code tier, which an Auto window approves (!320) ([fab2ad6](https://github.com/noisypigeon/pigeon/commit/fab2ad6ea4258fcd594d9cce9d8930f509cb57e5)) · backplane
+- feat(sentinel): an eviction target, numeric and equality field rules, and `pigeon-sentinel evict` (!325) ([bdefbe0](https://github.com/noisypigeon/pigeon/commit/bdefbe09eaa278c737b099856293340ed771624f)) · sentinel
+- docs: sessions push with a large http.postBuffer, and follow events on platform.pigeon.dev (!322) ([dc1d4da](https://github.com/noisypigeon/pigeon/commit/dc1d4dac3e009f42db595efbb0b5129bec49c391))
+- feat(backplane): change_evictable lists each open change as an eviction candidate, and ended tickets are remembered a week (!326) ([dd93693](https://github.com/noisypigeon/pigeon/commit/dd936932a855637d9f86880d413d1db0bd6d3f69)) · backplane
+- fix(backplane): a change and its unpushed reconciliation and reviews hold one slot (!323) ([fb9acb5](https://github.com/noisypigeon/pigeon/commit/fb9acb5242a62f07410abe0e9fbc3bc925a411de)) · backplane
+- feat(backplane): an hourly eviction job judges every candidate with main's eviction policies, and change_evictable shows the verdicts (!327) ([f9b85dd](https://github.com/noisypigeon/pigeon/commit/f9b85ddc49f91c1cf2d8bc0e9c644f45acc496ea)) · backplane
+- feat(backplane): change.status answers a change's stage, who acts next and what that is (!328) ([595c308](https://github.com/noisypigeon/pigeon/commit/595c308a58fbfa96d73dea0e73f5a8cc58ed05d2)) · backplane
+- fix(backplane): the git front door answers git's flush probe before a large push with 200 (!329) ([d636192](https://github.com/noisypigeon/pigeon/commit/d636192aef3b5cc69e2ca6da51830dc137cb994d)) · backplane
+- fix(backplane): a deploy of the head already deployed is dropped, and a failed deploy always says why (!330) ([45d9735](https://github.com/noisypigeon/pigeon/commit/45d973594bea45a1ae72e382c513bfafb11d105e)) · backplane
+- fix(backplane): a restack lost on its last attempt ends as a failed one: its held push applies, its parked merge moves on, and its session is told (!331) ([c1c467c](https://github.com/noisypigeon/pigeon/commit/c1c467c36a78bc918ffd9fe9c6f6a0dd4bf5c679)) · backplane
+- feat(backplane): the control plane evicts what a policy grants, keeping the work and what remains, and the owner pins and sessions resume (!335) ([ac866af](https://github.com/noisypigeon/pigeon/commit/ac866af9e984cfd258005f9b0831829e8bdda6c6)) · backplane
+- feat(backplane): a change restacks when its merge turn comes, and an approval carries across a clean restack of the same patch (!333) ([6c5400f](https://github.com/noisypigeon/pigeon/commit/6c5400fe6e7301811774bfdebfb47cb6cbbc8797)) · backplane
+- feat(policies): eviction policies for a gone session's change, a stale proposal and a stale pushed change (!337) ([9548275](https://github.com/noisypigeon/pigeon/commit/954827590ce94d47aa2c99a0aaf7eb40f2664720))
+- feat(backplane): session_end remembers when it ended and answers what each held change has left, and CLAUDE.md says how to stop (!338) ([3387ecf](https://github.com/noisypigeon/pigeon/commit/3387ecf5cbb1d432b75a7f47b1317eb144f3bd0a)) · backplane
+- feat(backplane): change_yield parks a session's change behind another until that one merges or closes (!339) ([2a6036e](https://github.com/noisypigeon/pigeon/commit/2a6036edae0b46bba86cac138003c3b731d9ed3f)) · backplane
+- feat(backplane): a change's stage follows its deploy and its window, and session_status shows a session's changes (!340) ([9282bac](https://github.com/noisypigeon/pigeon/commit/9282bacf526456c762f2c53a554c7b894b76a3c2)) · backplane
+- feat(backplane): change_note leaves another session a note on a change, and change_handoff offers a change to another session (!341) ([dd88875](https://github.com/noisypigeon/pigeon/commit/dd88875bd352bb67829b1a2a5017e585587c7764)) · backplane
+- feat(backplane): events and change.list carry each change's stage, and session_status lists only the session's tasks (!344) ([c611450](https://github.com/noisypigeon/pigeon/commit/c611450413a271d78989be2b4c5e6221d3e07b5a)) · backplane
+- feat(backplane): the bound job forecasts conflicts with overlapping open changes, and the change less far along yields (!342) ([13bc85b](https://github.com/noisypigeon/pigeon/commit/13bc85b2482444db8376a4fc09217ae6633f70f9)) · backplane
+- feat(backplane): change_propose takes `after`, a change built on another open change's branch, which waits for it and restacks onto main when it merges (!343) ([f7bd200](https://github.com/noisypigeon/pigeon/commit/f7bd20069a377c4c91358f2ae0537522d1dcc152)) · backplane
+- docs(adr): zone DNS vendors placed at the apex or any subdomain, Proton Mail first on pigeon.dev (!345) ([2e2cc68](https://github.com/noisypigeon/pigeon/commit/2e2cc68ff5722ace757c05d6e000ab7ff49ad100))
+- feat(backplane): the control plane keeps each session's event cursor, wake=agent answers only what it acts on, and session_status says whether it listens (!346) ([d6b84cd](https://github.com/noisypigeon/pigeon/commit/d6b84cd5b47ad04f86b950e574f3ace369ba5c66)) · backplane
+- feat(backplane): a zone's service is a preset placed at any name, with preset placements and docs (!348) ([2291599](https://github.com/noisypigeon/pigeon/commit/2291599cf6ad37dcff08b8f5b4f1126af7692b7e)) · backplane
+- feat(tooling): session.py follows a session's events, briefs it and feeds its status line, and CLAUDE.md says how (!347) ([1c2b7a9](https://github.com/noisypigeon/pigeon/commit/1c2b7a9065d513fd0e5f40124d01a2b3056e7f3c))
+- feat(backplane): a zone claims its platforms' domains, and a service yields to an inner zone unit (!351) ([ad94da1](https://github.com/noisypigeon/pigeon/commit/ad94da10702f5215d568e5f15777b17575ac4ec6)) · backplane
+- fix(backplane): wake=agent never wakes a session for a job's event, which comes with its change's own (!354) ([12d017c](https://github.com/noisypigeon/pigeon/commit/12d017c7bf84a6234eccfaa1a58e214a39e4be1f)) · backplane
+- feat(catalog): proton is Proton's alias domains, placeable at the apex or a subdomain (!352) ([2c20f99](https://github.com/noisypigeon/pigeon/commit/2c20f99468303e9457c597e8830999a0b609e5ef)) · infra-cloudflare-schema
+- fix(backplane): merge.released and change.note carry the change's session, so they wake only its session (!355) ([b40c1e5](https://github.com/noisypigeon/pigeon/commit/b40c1e5d56089ff84f9c304dec958fb57f39c06c)) · backplane
+- feat(backplane): the grants ledger, .config/grants.yaml, and its checks (!349) ([faf3b17](https://github.com/noisypigeon/pigeon/commit/faf3b17b46d47274402c4825353703bad341cd91)) · backplane
+- fix(backplane): a conflict forecast counts only paths both changes edit, not main's drift under an older branch (!356) ([78cecfb](https://github.com/noisypigeon/pigeon/commit/78cecfb761084419539221984194d865b6a96ba6)) · backplane
+- chore(claude): settings.json briefs a session on start, shows its stages in the status line, and reminds it on stop (!357) ([288dee2](https://github.com/noisypigeon/pigeon/commit/288dee2726319176f72704b9179cd9ca0b9cddb6))
+- docs(adr): non-platform profiles, managed in another Cloudflare account or standalone on their own stack (!353) ([27ecfb8](https://github.com/noisypigeon/pigeon/commit/27ecfb8a21d3a9d142654637dabdefcdb5f509c1))
+- docs(adr): a change's plan approval asks the owner for its inputs, on the approval page and in the app (!360) ([8056855](https://github.com/noisypigeon/pigeon/commit/8056855fce56f96ad1f00d46068b8d5946c189bb))
+- feat(backplane): the grants' functional core: requests, records, the token body and rotation (!358) ([4127100](https://github.com/noisypigeon/pigeon/commit/41271004f3435cdfc97f0e9490d10a62d80154ce)) · backplane
+- feat(backplane): the breaker counts each change's heads and logs, in shadow, what would take it out of Auto (!361) ([be69b11](https://github.com/noisypigeon/pigeon/commit/be69b1129a2039b9d7b8f05435bd7fd167769a72)) · backplane
+- fix(backplane): long polls wait at most 25 seconds, under the 30-second cut, and a session's cursor never passes the log (!365) ([4305da2](https://github.com/noisypigeon/pigeon/commit/4305da224f52e7df146ab9aea8e1bce2b9958fee)) · backplane
+- fix: reconcile !363 with main (!367) ([80bdcce](https://github.com/noisypigeon/pigeon/commit/80bdccece76e1aa7b851f3bfe1dab1eb93489041))
+- feat(ios): the approval sheet asks for a plan's inputs and sends them with the approval (!366) ([44071a0](https://github.com/noisypigeon/pigeon/commit/44071a0d029e31ebb2f5508a73f94588e49d90dd))
+- feat(backplane): a change asks the owner for inputs, answered only with its plan's approval (!363) ([0e9aae4](https://github.com/noisypigeon/pigeon/commit/0e9aae453bb841b481029c0747929382ca9eb5f3)) · backplane
+- feat(catalog): a secrets-store module, and the pigeon/platform kind's own store for `granter` (!368) ([e6a8730](https://github.com/noisypigeon/pigeon/commit/e6a8730725d4662e7b5b8e2287a00920642d2ea1)) · infra-cloudflare-schema, infra-cloudflare-secrets-store
+- feat(backplane): the digest and /approvals show each session, whether it listens and where its changes are, and list Auto window merges (!369) ([e1e1f52](https://github.com/noisypigeon/pigeon/commit/e1e1f526b85015cdb63c330610bb76a1408359d1)) · backplane
+- docs(adr): pigeon session, a Rust follower whose polls stay under the proxy's 30-second cut (!372) ([b37811e](https://github.com/noisypigeon/pigeon/commit/b37811e7f72c900c4aa586a416a38bfee407efef))
+- feat(backplane): each deploy reports main's grants ledger, resolved against the catalogs, and MainRun keeps it (!371) ([fe6a570](https://github.com/noisypigeon/pigeon/commit/fe6a570dcac3dfa7e98d1f0fc942ae794ab26c24)) · backplane
+- docs(decisions): sessions declare a model; Opus plans and writes briefs, Sonnet and Haiku execute them (!374) ([234b833](https://github.com/noisypigeon/pigeon/commit/234b83387ba93104838265d7c27fa5465f19a8e9))
+- docs(adr): review !373 against !372 (!379) ([7c9b3d6](https://github.com/noisypigeon/pigeon/commit/7c9b3d6709d31ad1d9c4b9770eb34bdb17f346cf))
+- docs(adr): review !383 against !374 (!391) ([6e37c4f](https://github.com/noisypigeon/pigeon/commit/6e37c4fe1bbe2f2f121b130ae0f455dcbee29b80))
+- feat(pigeon): pigeon session follow, brief, statusline and stop, on a pure core in backplane (!385) ([edf855f](https://github.com/noisypigeon/pigeon/commit/edf855f8a7cc87eef299ffabcbf9d41d74dd3a48)) · backplane
+- feat(backplane): grant.request, grant.rotate, grant.revoke and grant.list, and /grants/<id>, which mints, puts, verifies and records on the owner's code (!373) ([e61609b](https://github.com/noisypigeon/pigeon/commit/e61609bad33e762734ccc028084a287d5a38533e)) · backplane
+- feat(backplane): the approval page and the app ask for a change's inputs with its plan's approval (!364) ([2473dba](https://github.com/noisypigeon/pigeon/commit/2473dba0d5fc6ddeb6cc14e2e65b8e1ad0884df2)) · backplane
+- fix(cobot): a restacked change keeps its approval when its own lines are unchanged, blank lines aside (!388) ([f801374](https://github.com/noisypigeon/pigeon/commit/f801374514b54b97293ade8121e64973d41079f5)) · backplane
+- feat(backplane): a session declares its model class at start, and session_status shows it (!375) ([84423f5](https://github.com/noisypigeon/pigeon/commit/84423f56e26d9b1739414594c6d56f25f9a210ae)) · backplane
+- fix(backplane): the job image build passes the repository's .config as a named context, so the includes of macos.yaml and insights.yaml build (!395) ([ca885e5](https://github.com/noisypigeon/pigeon/commit/ca885e52184e3ed466b071593a8e787c2f0f5e49)) · backplane, sentinel
+- fix(backplane): the merge queue keeps a yielded change's place and merges it when its yield ends (!384) ([4c0445e](https://github.com/noisypigeon/pigeon/commit/4c0445eb458761450fde0562ed999c7ce8d98407)) · backplane
+- docs(adr): review !386 against !374 (!392) ([4aaa5c3](https://github.com/noisypigeon/pigeon/commit/4aaa5c3c6c7085c5cb796b3531a067becbdb0ecc))
+- feat(backplane): events and change_list rows carry their session's model class (!376) ([7bb3087](https://github.com/noisypigeon/pigeon/commit/7bb3087ef29f360c17cccf05c6e0705626b5cabe)) · backplane
+
+## 2026-11-12
+
+### Merged
+
+- test(backplane): the platform kind's tests hold when config.yaml declares public paths (!228) ([2523288](https://github.com/noisypigeon/pigeon/commit/2523288870a68e964784e8e43865a595dcf35eb5))
+- feat(infra): platform/blue declares /v0/apple/release a public path (!227) ([5ea54de](https://github.com/noisypigeon/pigeon/commit/5ea54de9030d85808a7edcd6f94c9d82bf228863))
+- feat(policies): backplane's core::change does no I/O, reads no clock and takes no &mut self (!225) ([e74b3f1](https://github.com/noisypigeon/pigeon/commit/e74b3f1ee11cee525c607a6f0d59bc08b4c665a4))
+- refactor(backplane): the change lifecycle and merge queue are backplane's core::change, as step functions (!224) ([766ae83](https://github.com/noisypigeon/pigeon/commit/766ae83b543f8c8f6e93640ee0a82344b8a4c500)) · backplane
+- ci: the ios check builds the app on GitHub's macOS runners (!231) ([2735edc](https://github.com/noisypigeon/pigeon/commit/2735edcec636707c370e853690d7f235190c8a62)) · backplane
+- fix(backplane): the ios check runs on GitHub, never on the Checker (!233) ([9284a65](https://github.com/noisypigeon/pigeon/commit/9284a65dcc802c93ab52958570ad18c3da20e231)) · backplane
+- ci: run each check's argv without mapfile, for macOS's bash 3 (!234) ([d99bf97](https://github.com/noisypigeon/pigeon/commit/d99bf973d367238bbf20d719468c5edd10a854fd))
+- docs(adr): the iOS release, on demand, with the archive served by the signing route (!235) ([e303f4a](https://github.com/noisypigeon/pigeon/commit/e303f4af4eee407a815f342bf99fcadf02fa29a1))
+- feat(ios): an app icon, which App Store Connect requires (!232) ([3a41e7c](https://github.com/noisypigeon/pigeon/commit/3a41e7cd882b87252201712a5c52a1b6340d9107))
+- ci: ios.archive builds a release's unsigned archive on GitHub's macOS runner (!236) ([d3e18d7](https://github.com/noisypigeon/pigeon/commit/d3e18d7981adbdef70499b70f9c6f4ca6aa17ed8)) · backplane
+- feat(backplane): ios.release moves a release from GitHub's archive through Buildkite to TestFlight (!237) ([67653e7](https://github.com/noisypigeon/pigeon/commit/67653e77f32cc405bd49b505ca7a58f568557088)) · backplane
+- feat(backplane): the sign step: ios-sign.sh, and the harness loads Apple's intermediate (!238) ([06770b8](https://github.com/noisypigeon/pigeon/commit/06770b8827101e25c9c439ed8fd7b54543b00db4)) · backplane
+- fix(backplane): the sign step carries on when the machine already holds Apple's intermediate (!239) ([518cdab](https://github.com/noisypigeon/pigeon/commit/518cdab1125b1e183b7ae68ab4d3ea7649a9e748)) · backplane
+- docs(decisions): code checks run once per patch, and approving a head consents to its merge (!240) ([43e7561](https://github.com/noisypigeon/pigeon/commit/43e7561e6868674b864af32dd436950127385685))
+- feat(backplane): a disjoint restack carries its checks, and approving a head queues its merge (!241) ([72e6f78](https://github.com/noisypigeon/pigeon/commit/72e6f78bfb11ff73a45a427f0c480309ece9e827)) · backplane
+- feat(backplane): main's test map runs only when a merge changed Rust inputs (!242) ([8c067d5](https://github.com/noisypigeon/pigeon/commit/8c067d503d0a5d96ed5dde79f8ccd3e42f966f44)) · backplane
+- docs(decisions): the iOS upload uses App Store Connect's Build Uploads API, not Transporter (!243) ([5fb462d](https://github.com/noisypigeon/pigeon/commit/5fb462ded1fdae5353618e5c9efebf13867de4a8))
+- feat(signing): upload the IPA through App Store Connect's Build Uploads API (!244) ([d21a230](https://github.com/noisypigeon/pigeon/commit/d21a2300d66013b63b89fd58d3d4982d82678950)) · backplane
+- chore(approvals): backplane's core::approval is guarded, as the files it moves from are (!230) ([ac9b0f9](https://github.com/noisypigeon/pigeon/commit/ac9b0f954fc5277ef697dd61f777931113feb98b))
+- refactor(backplane): tiers, grants, mandates, passkeys and TOTP are backplane's core::approval, as transitions (!229) ([561ced9](https://github.com/noisypigeon/pigeon/commit/561ced927ddce732519e8853a18ddd35df338661)) · backplane
+- feat(policies): backplane's core::approval does no I/O, reads no clock and takes no &mut self (!245) ([1d199a7](https://github.com/noisypigeon/pigeon/commit/1d199a780e0fce9149877dfa71b07788f77aee08))
+- refactor(backplane): change scope, the ship plan, versions and the test map are backplane's core::deploy (!247) ([4409e3c](https://github.com/noisypigeon/pigeon/commit/4409e3c7d020a1ad278ce51e2c5b0f085e277725)) · backplane
+- feat(policies): backplane's core::deploy does no I/O, reads no clock and takes no &mut self (!248) ([2543f25](https://github.com/noisypigeon/pigeon/commit/2543f25a0d2b79ea7a4fb359fd9accafa8279686))
+- feat(policies): backplane's core::platform does no I/O, reads no clock and takes no &mut self (!250) ([1004ca3](https://github.com/noisypigeon/pigeon/commit/1004ca31a8c928730c4afdbc1ab8297844bf5d70))
+- docs(adr): the merge gate skips the full test run when the test map chose a change's tests (!251) ([3964308](https://github.com/noisypigeon/pigeon/commit/3964308c04e0144ff2be05440cd24d01afc70162))
+- refactor(backplane): an instance's runs and its platform runs are backplane's core::platform, as transitions (!249) ([8283fa5](https://github.com/noisypigeon/pigeon/commit/8283fa5afa35d3f4e01b96acc87f629a2690aace)) · backplane
+- feat(backplane): the bound job reports whether a head's merge gate is scoped or full, and why (!252) ([00bf958](https://github.com/noisypigeon/pigeon/commit/00bf958561567e827286a232cac9c94dfd24b2f7)) · backplane
+- docs(decisions): the Pigeon iOS app, phase one: insights, approvals with a passkey, Auto windows, and the backplane it needs (!254) ([ea423c7](https://github.com/noisypigeon/pigeon/commit/ea423c7cce84dcf2651bf9730bedacea51da75fd))
+- fix(backplane): an iOS release waits for the mirror instead of archiving an older commit (!246) ([10019aa](https://github.com/noisypigeon/pigeon/commit/10019aa67994a7ad504800ab6e4f1a36aa3ef684)) · backplane
+- feat(backplane): the owner's CI window, ci_window runs every change's code checks on the Checker for N hours (!214) ([8c2de05](https://github.com/noisypigeon/pigeon/commit/8c2de058c92402441b118fc760839e9aeaf0b633)) · backplane
+- feat(backplane): a head whose gate is scoped merges without the whole test suite (!253) ([cf4aeec](https://github.com/noisypigeon/pigeon/commit/cf4aeec3ccd21d915af2eda897b0e1fc3c271b89)) · backplane
+- refactor(backplane): config units are validated and rendered by backplane's core::infra, from what the shell reads (!258) ([3f7df53](https://github.com/noisypigeon/pigeon/commit/3f7df53343213de0f3e00b382034f8ba29c8a8f0)) · backplane
+- refactor(backplane): the infra manifest and unit checks move to the functional core (!259) ([083c463](https://github.com/noisypigeon/pigeon/commit/083c4633406e8d063d8076abddb0c1d6b61e8637)) · backplane
+- feat(backplane): a change's merge gate runs the full test suite when asked, and change_status shows the gate and why (!256) ([f822956](https://github.com/noisypigeon/pigeon/commit/f822956fe3d008ea9cc00921054295d876f53e71)) · backplane
+- refactor(backplane): a site's layout checks and assembled config are backplane's core::sites, from what the shell reads (!264) ([00d1515](https://github.com/noisypigeon/pigeon/commit/00d15154eb37c7f35d1724cdbaf3a284b488b81d)) · backplane
+- refactor(backplane): providers, moves, stored plans and plan diffs are checked by backplane's core::infra (!261) ([00e57c6](https://github.com/noisypigeon/pigeon/commit/00e57c654292b06605d681b9f59bbcd475efe23d)) · backplane
+- refactor(backplane): a site's sync and live checks are decided by backplane's core::sites (!265) ([91fc399](https://github.com/noisypigeon/pigeon/commit/91fc39999edeb898217993273eca67159848f833)) · backplane
+- feat(policies): backplane's core::infra and core::sites do no I/O, read no clock and take no &mut self (!269) ([e456f6f](https://github.com/noisypigeon/pigeon/commit/e456f6f13e00b0afe43f71668b480ba8faa43308))
+- refactor(backplane): release units, changelog lines, version bumps and tiers are backplane's core::release, from what the shell reads (!270) ([f7549eb](https://github.com/noisypigeon/pigeon/commit/f7549ebfdd15e9a911b7452da7128129de81ce1f)) · backplane
+- feat(policies): backplane's core::release does no I/O, reads no clock and takes no &mut self (!274) ([960b457](https://github.com/noisypigeon/pigeon/commit/960b45747493ff17ede0df3d6429578676b2ea46))
+- fix(backplane): a head checked or refused at merge while behind main restacks, and a renamed crate's release finds its package (!277) ([e19f119](https://github.com/noisypigeon/pigeon/commit/e19f11967b39d232a92e098540b7d356e4145a3c)) · backplane
+- feat(backplane): a static site may be served by the platform at a path, with served_by (!220) ([68eaf8e](https://github.com/noisypigeon/pigeon/commit/68eaf8e45fe4ed4ab48f5d999f9054e854b3d475)) · backplane, site-template-architecture
+- feat(backplane): core::sites::view, the docs gate's paths, view cookie and gate page (!279) ([aea92c9](https://github.com/noisypigeon/pigeon/commit/aea92c9d4106e3045e29b0500deebfd72bd12c29)) · backplane
+- feat(backplane): the Worker serves /docs/ from its bucket, behind a passkey (!280) ([4879f41](https://github.com/noisypigeon/pigeon/commit/4879f41fd6f71fe321cc69aec6aa9800f1a8f331)) · backplane
+- feat(infra): the control plane binds the docs bucket, and sites/docs is served by platform/blue at /docs (!284) ([da89fdb](https://github.com/noisypigeon/pigeon/commit/da89fdbb5eb56a8c29b5c7d37b821cbc473a7f59)) · backplane
+- feat(backplane): the architecture diagram draws the Worker reading the docs site from R2 (!286) ([38bc68a](https://github.com/noisypigeon/pigeon/commit/38bc68ae6fcaacc1d4a1f9d5b768544101518ee2)) · backplane
+- chore(infra): sites/docs drops docs.pigeon.dev, served only at platform.pigeon.dev/docs (!287) ([1e6a188](https://github.com/noisypigeon/pigeon/commit/1e6a188b28be23514a447147816578f6f8dec95f))
+- feat(backplane): the iOS app links a device with the owner's proof and signs every API call with its key (!255) ([627b0f0](https://github.com/noisypigeon/pigeon/commit/627b0f0937924fa64166d227b2aeaab861ed0888)) · backplane
+- feat(backplane): hourly insights of cost and errors by source and kind, and the app's home and insights routes (!257) ([96bad47](https://github.com/noisypigeon/pigeon/commit/96bad4774862e555b10d262bb3f525d3858a55bf)) · backplane
+- feat(backplane): the app lists waiting approvals and approves one with the owner's passkey (!290) ([56c6910](https://github.com/noisypigeon/pigeon/commit/56c69102c7454302a00c8b6e6e068e3fffef8055)) · backplane
+- feat(policies): the app's prices file holds a number or null for each rate, and nothing else (!294) ([ba3e97d](https://github.com/noisypigeon/pigeon/commit/ba3e97d8eebfe0438ac010c6cc5dc7a677d1076e))
+- feat(backplane): Auto windows approve code-tier changes for 1 to 24 hours, started and ended with the owner's passkey (!293) ([02a06fb](https://github.com/noisypigeon/pigeon/commit/02a06fb4f98a95df93468d09df9b16db27225eed)) · backplane
+- feat(ios): phase one of the Pigeon app: insights, approvals with Face ID, Auto, profiles and settings (!296) ([8844923](https://github.com/noisypigeon/pigeon/commit/8844923b4c598ee93ffe7db34c424580e5dd3b40))
+- feat(backplane): the app's devices are pushed to through APNs beside Web Push (!295) ([17cfa72](https://github.com/noisypigeon/pigeon/commit/17cfa72be085a33ea6642ba62e122c0741f19b68)) · backplane
+- fix(ios): the release archive allows ad hoc signing, so it carries its entitlements (!300) ([cc070a0](https://github.com/noisypigeon/pigeon/commit/cc070a0da4dcd4d6345c16a35266ad9fc25913c3))
+- fix(ios): PigeonCore is a static framework, so the app has nothing to load at launch (!302) ([9eada79](https://github.com/noisypigeon/pigeon/commit/9eada79a88f0aefd004b0fa73e83cb161b0bad44))
+
+## 2026-11-11
+
+### Merged
+
+- feat(backplane): the merge gate: the full set of code checks on the exact head, before it is squashed (!160) ([8cbed83](https://github.com/noisypigeon/pigeon/commit/8cbed83f7b1b12b6434e0896bafec56aee600d3d)) · backplane, cobot
+- docs(adr): the test map is per test binary, and built after each merge on main (!161) ([eafaf8c](https://github.com/noisypigeon/pigeon/commit/eafaf8c28b9135816dda6ffc84f4fdd700287867))
+- feat(ci): the test map check, mapping each test binary to the files it runs (!162) ([3bc7195](https://github.com/noisypigeon/pigeon/commit/3bc719597e5486b03d4b913fefa175b6c50bcc9d)) · backplane, cobot
+- feat(backplane): MainRun builds the test map after each merge and keeps it beside the build (!163) ([db38de1](https://github.com/noisypigeon/pigeon/commit/db38de1c77c00e7153afc3179a6071082e1ef2fc)) · backplane
+- feat(cobot): job Containers get main's newest test map as PIGEON_TEST_MAP (!164) ([6ff311d](https://github.com/noisypigeon/pigeon/commit/6ff311d43f271f38c793fb85d5398c0473ed9eac)) · backplane, cobot
+- feat(cobot): change.scope runs the test binaries the test map ties to a change (!165) ([93438e3](https://github.com/noisypigeon/pigeon/commit/93438e364754ddb13e811dcb7539a5e03605108c)) · backplane, cobot
+- docs(adr): an agent carries an ADR's execution through, step after step, unless stopped (!166) ([37282da](https://github.com/noisypigeon/pigeon/commit/37282daf342bf6922fed50f682791dfb02212717))
+- refactor(backplane): each Worker surface exports its routes, and the router is a table (!167) ([a881a88](https://github.com/noisypigeon/pigeon/commit/a881a883cc11bef207ef1c42fbc4a1722ae5837f)) · backplane
+- docs(adr): each ADR names the paths it governs (!171) ([bae6356](https://github.com/noisypigeon/pigeon/commit/bae635644721cff76bbf8b8b17e083d2b896a8d7))
+- docs(adr): the architecture site is a network diagram, derived; its template is read from the tree while releases pause (!173) ([6920d85](https://github.com/noisypigeon/pigeon/commit/6920d852d63597029680d6825e0f0861cfeee337))
+- fix(cobot): no check's name holds a comma, which a GitHub cache key refuses (!170) ([b28cd67](https://github.com/noisypigeon/pigeon/commit/b28cd67c3ce1701f69d86fb47bc6092f113715fe)) · cobot
+- feat(backplane): architecture.describe returns the network, with a link table the tree must evidence (!174) ([2b4ef2b](https://github.com/noisypigeon/pigeon/commit/2b4ef2b2fbfce05096f6f4ee708c06bc965f3087)) · backplane
+- feat(sentinel): a field can be a list of path globs that must each match a file (!168) ([fb394e2](https://github.com/noisypigeon/pigeon/commit/fb394e20851c30df7c897487f5de73637d52b67f)) · sentinel
+- feat(backplane): the network's boxes are placed and its links routed by describe (!176) ([a80ba08](https://github.com/noisypigeon/pigeon/commit/a80ba08cf5825886ebdabcf413588f40bf364285)) · backplane
+- feat(site-templates): the architecture page is the network diagram (!177) ([1cec619](https://github.com/noisypigeon/pigeon/commit/1cec619b39a99f89447d7303398d045c6cd42958)) · site-template-architecture
+- fix(site-templates): the architecture page builds with Zola's filters, and its tests follow the network (!183) ([3f53290](https://github.com/noisypigeon/pigeon/commit/3f53290a540fc59638fb7be6cac25b5deebdced4)) · site-template-architecture
+- test(sentinel): the sample ADR in the policy tests names the paths it governs (!182) ([e0a3630](https://github.com/noisypigeon/pigeon/commit/e0a3630657d9bbf33589fa45cb26fd84cd2d4051))
+- feat(policies): every ADR names the paths it governs, and each glob matches a file (!179) ([196ce62](https://github.com/noisypigeon/pigeon/commit/196ce62bf4dafcabf83d24418d247f7799d486e2))
+- feat(backplane): `pigeon backplane decisions <path>` lists the ADRs that govern a path (!172) ([6ea29fb](https://github.com/noisypigeon/pigeon/commit/6ea29fbc3e7d167486cc4988020aa0dc943fd3bc)) · backplane
+- fix(backplane): a queued merge keeps its turn through a carried approval, and a lost turn says why (!186) ([76ef63e](https://github.com/noisypigeon/pigeon/commit/76ef63ede589e90838502c0153099dd95f09d86f)) · backplane
+- docs(adr): a queued merge keeps its turn, and a turn is never lost silently (!185) ([f641ded](https://github.com/noisypigeon/pigeon/commit/f641dedeac9efc032520d5739201e6a5af15ced1))
+- fix(backplane): closing a change ends its merge turn, and the queue starts a merge it moves on to (!189) ([e1d1063](https://github.com/noisypigeon/pigeon/commit/e1d106326e83ab291541ac5d89481a36eeae79bf)) · backplane
+- fix(backplane): a change's alarm keeps the events and work that arrived while it ran, and a head checked at bound carries its approval (!187) ([bce3e17](https://github.com/noisypigeon/pigeon/commit/bce3e17dfe1b8747b1d2e1a6fe288add633459de)) · backplane
+- docs: CLAUDE.md keeps the workflow, the rules and the commands, and points to the ADRs by path (!188) ([0c2b77f](https://github.com/noisypigeon/pigeon/commit/0c2b77f9e27c125eb2e8203f9f9bb045b8c8e5dd))
+- fix(backplane): a merge job lost when it can't start gives its merge turn back (!192) ([b2c0dbd](https://github.com/noisypigeon/pigeon/commit/b2c0dbd351f3967d6bf1dd29e209596d10ecd1eb)) · backplane
+- docs(adr): a merge that can't finish gives its turn back, and a turn held by no merge is handed back (!193) ([e00029b](https://github.com/noisypigeon/pigeon/commit/e00029be15107cb5afaa19702c99f954d6abb95a))
+- fix(backplane): the merge queue hands back a turn held by no merge, and a merge job runs again only through the queue (!194) ([5c2f25d](https://github.com/noisypigeon/pigeon/commit/5c2f25dc5ca0b0c6b2d88dc5c27121825bc6c8c8)) · backplane
+- fix(backplane): a change closed or failed after its approval mirrors to D1 (!196) ([8e32edb](https://github.com/noisypigeon/pigeon/commit/8e32edb1c3c8be929fc1c13ee533d761e83c3d2f)) · backplane
+- feat(cobot): a site may pin its template at version tree, read from its own instance's tree (!175) ([faacdac](https://github.com/noisypigeon/pigeon/commit/faacdac49fdf2be79ea37bb6b466c01ba348c7ec)) · cobot
+- refactor: remove the gantry placeholder crate, its pigeon feature and its release unit (!195) ([494220c](https://github.com/noisypigeon/pigeon/commit/494220ca6e12f599349fdc3203f3f1784ae3372f)) · backplane, cobot, sentinel
+- feat(sites): docs.pigeon.dev reads its template from the tree (!178) ([6f6e88c](https://github.com/noisypigeon/pigeon/commit/6f6e88c8a6ca30f86c88067bcc2ec1356301ed31))
+- fix(backplane): a merge that ends without merging in ChangeRun's alarm records merge.released (!197) ([f7a160a](https://github.com/noisypigeon/pigeon/commit/f7a160aaf3cdd7db37feb3a4081cd642f318e54a)) · backplane
+- docs(adr): a native iOS app in src/pigeon-ios, built on Buildkite macOS and delivered to TestFlight (!201) ([0295815](https://github.com/noisypigeon/pigeon/commit/0295815f15c4f03c2a63828f4319dc6794f03f6f))
+- docs(adr): the architecture site at platform.pigeon.dev/docs/, behind a passkey, and docs.pigeon.dev torn down (!199) ([cb8f493](https://github.com/noisypigeon/pigeon/commit/cb8f4935a6b360b84170089d85bba1a59cc409b7))
+- feat(policies): backplane's cobot module, its shell, may write files and start processes (!200) ([89cd443](https://github.com/noisypigeon/pigeon/commit/89cd4436631351c6a9407f12dd89d6ad21ea233c))
+- docs(adr): review !198 against !199 (!205) ([3bc8d75](https://github.com/noisypigeon/pigeon/commit/3bc8d75ffdebf95dc8e6405f1280d2f32fd3cfac))
+- feat(ios): a blank screen with "Pigeon" centred (!202) ([820518b](https://github.com/noisypigeon/pigeon/commit/820518b6759aefb4952d0478d5adbf70feb8bdb7))
+- fix(cobot): scope's worker checks name only the packages the checked tree has (!209) ([8b0b025](https://github.com/noisypigeon/pigeon/commit/8b0b025d2b6160adda39d2c3d88330ceb4239408)) · cobot
+- feat(backplane): pigeon backplane signing, the Buildkite runner's harness for the signing identity (!208) ([e6fe61d](https://github.com/noisypigeon/pigeon/commit/e6fe61d912445720fe689389986ab6d0d7a864f5)) · backplane, cobot
+- feat(ios): the bundle ID is dev.pigeon.app (!210) ([5e1b0f4](https://github.com/noisypigeon/pigeon/commit/5e1b0f4b3e143c183c5a332cec9f1df0269a8695))
+- docs(adr): GitHub Actions builds and tests the iOS app; Buildkite's hosted agents only sign (!212) ([1908c84](https://github.com/noisypigeon/pigeon/commit/1908c84f2f26d5126ccf1101b7fd85a4a95da489))
+- docs(adr): the owner's CI window, every change's code checks on the Checker for N hours (!213) ([be9abce](https://github.com/noisypigeon/pigeon/commit/be9abce3170434124712daf8af61719fa4ae65af))
+- docs(adr): review !198 against !213 (!218) ([8ed0a4a](https://github.com/noisypigeon/pigeon/commit/8ed0a4ab3ac1ceeb5ff1606ee33a4a80eef0a7af))
+- refactor: cobot moves into backplane as backplane::cobot, and its release unit and image end (!198) ([daa00c9](https://github.com/noisypigeon/pigeon/commit/daa00c9292df557e88c36d032b865a131c3c3d6c)) · backplane, sentinel
+- docs(adr): a platform may declare public paths, each a bypass Access application (!216) ([c67e392](https://github.com/noisypigeon/pigeon/commit/c67e392a0b6101673ca7c15a4923ccd9b089b8ed))
+- chore(approvals): the Apple connection and the signing harness need the owner each time (!215) ([e47ada2](https://github.com/noisypigeon/pigeon/commit/e47ada2d9b5ced13ca021771cf146b896c29e61b))
+- feat(catalog): a platform may declare public paths, each a bypass Access application (!221) ([e0bd7a8](https://github.com/noisypigeon/pigeon/commit/e0bd7a859a7f2053807496cfe58ceb2217e8d520)) · backplane, infra-cloudflare-access-policy, infra-cloudflare-schema
+- feat(backplane): the Apple connection, apple.check and the sign step's grant at /v0/apple/release (!223) ([1d18700](https://github.com/noisypigeon/pigeon/commit/1d18700d6393602a7b4511c13a7b0c8e6713e3ba)) · backplane
+- fix(backplane): the control plane runs apple.check itself (!226) ([37d4fc0](https://github.com/noisypigeon/pigeon/commit/37d4fc08eb37ccf44b94f193a178f1cec0794f0b)) · backplane
+
+## 2026-11-10
+
+### Merged
+
+- docs(adr): the platform at platform.pigeon.dev, a dashboard at its root, and observability over MCP (!118) ([604edab](https://github.com/noisypigeon/pigeon/commit/604edab277464c4cf0f7b90d8cea2830b97563ea))
+- docs(adr): change slots are freed: unauthorized closes, one reconciliation per change, eviction by policy (!125) ([52d2e20](https://github.com/noisypigeon/pigeon/commit/52d2e202ecaace4f585d14caafdb38908305cd83))
+- fix(backplane): a change closed before its plan was authorized mirrors to D1 (!124) ([eb92fd9](https://github.com/noisypigeon/pigeon/commit/eb92fd93fdd6cf739dc4f5d3d44e7eddfebe7276)) · backplane
+- feat(catalog): a platform stack's Access covers its domains, platform.pigeon.dev and blue.platform.pigeon.dev (!128) ([f550b10](https://github.com/noisypigeon/pigeon/commit/f550b10877dad87023da54c0196b39f5f7e5695c)) · infra-cloudflare-access-application, infra-cloudflare-schema
+- feat(cobot): a Worker spec binds a list setting's item, such as $deployment.domains[0] (!129) ([538d596](https://github.com/noisypigeon/pigeon/commit/538d596a36d28081192a3103e7364d33a74098f8)) · cobot
+- feat(infra): the control plane serves platform.pigeon.dev and blue.platform.pigeon.dev (!130) ([0dd851d](https://github.com/noisypigeon/pigeon/commit/0dd851ddb989cdf4da900ba2888123baf9df5233))
+- feat: clients use platform.pigeon.dev, and passkeys its relying party (!131) ([d7570ab](https://github.com/noisypigeon/pigeon/commit/d7570ab3fd8fe77a3e6ce38a02704d7ade9c29cb)) · backplane
+- feat(infra): the control plane is served only at platform.pigeon.dev; workers.dev is off (!133) ([179730d](https://github.com/noisypigeon/pigeon/commit/179730d1d83b0d0729e7180ac7c775cb8cd390ab))
+- docs(adr): the factory's code: pigeon-sentinel apart, cobot into backplane, a functional core, tests by code path (!135) ([dcb3526](https://github.com/noisypigeon/pigeon/commit/dcb352682e3cb5f4dcb121a801c8e85db099b671))
+- feat(backplane): the control plane mirrors to GitHub on every push to main (!126) ([070fb7d](https://github.com/noisypigeon/pigeon/commit/070fb7d37714305dcb028399fa2d4aa87440b8f4)) · backplane, cobot
+- fix(backplane): the bound job judges a change with main's policies, not the change's own (!137) ([324ad22](https://github.com/noisypigeon/pigeon/commit/324ad22f349cc4228bcf0e07f9aa91559af4a88c)) · backplane, cobot
+- fix(backplane): merges are authored by the instance's owner, and name no approver's email (!139) ([3ca5b2e](https://github.com/noisypigeon/pigeon/commit/3ca5b2ef026042db0063d0793b1029bf7c803ab2)) · backplane, cobot
+- docs(adr): code checks build and test on GitHub Actions; judging, validation and the platform stay on Cloudflare (!138) ([3e77fdc](https://github.com/noisypigeon/pigeon/commit/3e77fdc346eb802d1b61652c37b91030a8e1f2d0))
+- fix(backplane): a merge asked for on a checked, unapproved head is refused, so its queue turn is released (!140) ([7cac2be](https://github.com/noisypigeon/pigeon/commit/7cac2be97f42202dab0664d9ce825ff1046ccebe)) · backplane
+- fix(backplane): a merge job whose Container is lost releases the merge queue's turn (!143) ([2914ba8](https://github.com/noisypigeon/pigeon/commit/2914ba833d1d27f3ad48b62f241a77513abf11e1)) · backplane
+- feat(policies): GitHub runs only ci.yml, dispatch-only, read-only and pinned; .github/** is guarded (!142) ([b9411fd](https://github.com/noisypigeon/pigeon/commit/b9411fd07299860b59c1e45e36e8204c0c0a4e2b))
+- feat(ci): the code checks' workflow, dispatched by the control plane on a change's head (!146) ([64aceac](https://github.com/noisypigeon/pigeon/commit/64aceac5c652d227556896add76548589628be1c))
+- fix(backplane): a session holds 5 open changes and the instance 20 (!145) ([1b9434a](https://github.com/noisypigeon/pigeon/commit/1b9434abb6444455716a3f2c0191a9a7487a5ed6)) · backplane
+- feat(backplane): a bounded change head is pushed to GitHub as its branch, and deleted on merge or close (!147) ([6a6caff](https://github.com/noisypigeon/pigeon/commit/6a6caff061f2d2d63d73068edb3fe1b5b3b5b39a)) · backplane, cobot
+- feat(sentinel): the pigeon-sentinel package and binary, and a release unit of sentinel's own paths (!148) ([37fc6de](https://github.com/noisypigeon/pigeon/commit/37fc6de39ac92364ac73a6612498da8a26e6f787)) · cobot, sentinel
+- feat(backplane): a change's code checks run on GitHub Actions, dispatched on its head and followed through the App (!149) ([0a3d8f5](https://github.com/noisypigeon/pigeon/commit/0a3d8f5e25e86c44403efcb61a1a36924b5e7786)) · backplane
+- feat(backplane): the bound job judges with main's pigeon-sentinel build, pinned by SHA-256 (!151) ([c2ece30](https://github.com/noisypigeon/pigeon/commit/c2ece30c09d9d855abede764f3efca1ce8f96845)) · backplane, cobot
+- feat(sentinel): pigeon-sentinel describe lists each policy and what it targets, as JSON (!153) ([d2e644b](https://github.com/noisypigeon/pigeon/commit/d2e644b6a9ca0ae1c6d01dbd84a5aa88475eeeca)) · sentinel
+- refactor: pigeon and backplane run the pigeon-sentinel binary and no longer link sentinel (!155) ([7d1a65e](https://github.com/noisypigeon/pigeon/commit/7d1a65eaaf8da40347b1016731f5e64fc882168f)) · backplane, cobot, gantry
+- feat(backplane): a sentinel change is its own grant: code tier, never a mandate, and nothing else in it (!156) ([761e27b](https://github.com/noisypigeon/pigeon/commit/761e27be963112063910a11df224a9d12d5041b8)) · backplane
+- feat(policies): sentinel's paths are named in the approval rules, so a sentinel change is its own grant (!157) ([afaab3b](https://github.com/noisypigeon/pigeon/commit/afaab3be52eff56e56a91af3e031c7737da9e4b2))
+- feat(backplane): the owner runs a change's code checks on Cloudflare with ci_rerun on: cloudflare (!152) ([9788428](https://github.com/noisypigeon/pigeon/commit/97884286911aacb40bb237a1dd18b27633f70861)) · backplane
+- fix(backplane): git credentials cache the account and remote, reuse minted tokens, retry brief API errors, and name the failing step (!158) ([34a892c](https://github.com/noisypigeon/pigeon/commit/34a892ca810316e3c0f008e2a1a79466a4c1af06)) · backplane
+- docs(claude): CLAUDE.md says where each check runs (!159) ([5cbdc32](https://github.com/noisypigeon/pigeon/commit/5cbdc3265f99370fee9f10425d88d5857f31f753))
+
+## 2026-11-09
+
+### Merged
+
+- docs(adr): step 4 runs on the engine, through platform.plan and platform.apply (!80) ([602312d](https://github.com/noisypigeon/pigeon/commit/602312dc4268b4dc167658b887704bdec45d1862))
+- feat(cobot): plan --adopt imports the resources an account already holds by name (!82) ([beb2ad6](https://github.com/noisypigeon/pigeon/commit/beb2ad6e50dd0d5a2392410e737833fb4f8a9473)) · backplane, cobot, infra-agnostic-random-string, infra-agnostic-schema, infra-backblaze-schema, infra-digitalocean-schema, infra-pigeon-schema
+- feat(backplane): a platform job plans or applies a pigeon/platform unit on a Runner (!83) ([891dd3b](https://github.com/noisypigeon/pigeon/commit/891dd3bfdf9fe2f949584c0deed21c69c2c628d4)) · backplane, cobot
+- feat(backplane): platform.plan and platform.apply, granted on a page that takes a one-time account token (!84) ([631b994](https://github.com/noisypigeon/pigeon/commit/631b994680c051b8e55d335ea3bad7f0a81abc43)) · backplane
+- fix(backplane): change checks fetch tags, so sites.build finds its released template (!88) ([b62a80d](https://github.com/noisypigeon/pigeon/commit/b62a80d8ab62b1fb55df661969a10a55ef35c55d)) · backplane
+- feat(infra): declare platform/blue with today's names, and model today's Access in the platform kind (!87) ([5f126c8](https://github.com/noisypigeon/pigeon/commit/5f126c8420f788f8dabf6edc63efbdf2646fa977)) · cobot, infra-cloudflare-access-application, infra-cloudflare-access-policy, infra-cloudflare-schema, infra-cloudflare-worker
+- fix(cobot): the platform's state bucket is listed and created in the EU jurisdiction its endpoint reaches (!89) ([58a7236](https://github.com/noisypigeon/pigeon/commit/58a7236ed1b63bbd42b0cad6eb094654c3b15838)) · cobot
+- fix(backplane): a platform run keeps its job's log, and a tofu error names its resource (!90) ([3f0f54d](https://github.com/noisypigeon/pigeon/commit/3f0f54dc1dc70c863a5873069a564800f18e5214)) · backplane, cobot
+- fix(cobot): tofu failures keep their detail, and init and plan retry network failures (!91) ([bf275e7](https://github.com/noisypigeon/pigeon/commit/bf275e7bda9d49f5d3e2b372970eb8ef943ad3bb)) · cobot
+- feat(cobot): a platform job installs providers from its state bucket, not the registry (!92) ([a54d46e](https://github.com/noisypigeon/pigeon/commit/a54d46e3e7a77ea49ac4fe7302a40c2e9c49500e)) · backplane, cobot
+- fix(cobot): a platform job hands its account token to tofu's Cloudflare provider (!93) ([78d156b](https://github.com/noisypigeon/pigeon/commit/78d156b4ea0c1cdf61ac84963701b93cb36eb920)) · backplane, cobot
+- fix(backplane): a platform run asks for Workers Scripts Read, and tofu errors keep their status (!94) ([63efb26](https://github.com/noisypigeon/pigeon/commit/63efb26902f5b02ec5ea6442b9c5b734bebdaa04)) · backplane, cobot
+- fix(cobot): adopting a service token never rotates it, and a platform plan shows its values (!95) ([045bb13](https://github.com/noisypigeon/pigeon/commit/045bb13010233a79d8cff8802868245c6ec43d90)) · backplane, infra-cloudflare-access-service-token, infra-cloudflare-schema
+- fix(catalog): the platform's Worker lookup returns its ID, and adopting its Access app keeps its settings (!96) ([6550051](https://github.com/noisypigeon/pigeon/commit/65500517a6a0a4cb9ea80fd8bbfe7d6e6d06f68c)) · infra-cloudflare-access-application, infra-cloudflare-schema, infra-cloudflare-worker
+- fix(catalog): a platform's service tokens carry their secret version, so adopting one never rotates it (!97) ([e00c990](https://github.com/noisypigeon/pigeon/commit/e00c990c64655ed7bdb4f84249b9480001203196)) · infra-cloudflare-access-service-token, infra-cloudflare-schema
+- docs(adr): step 4 adopted platform/blue; step 4c in three changes (!98) ([247c26a](https://github.com/noisypigeon/pigeon/commit/247c26a9220b81a9d5c0c9877ad5614dd30b9a51))
+- feat(backplane): a platform apply keeps the stack's outputs, and the deploy job reads them (!99) ([36b3f5f](https://github.com/noisypigeon/pigeon/commit/36b3f5f4ab5a0511538ff266af8fa37ef0294057)) · backplane
+- fix(cobot): reading a unit's outputs installs providers from the run's mirror (!100) ([896b85b](https://github.com/noisypigeon/pigeon/commit/896b85b5a1dafa144c3d22e1d7813aeaa604f773)) · cobot
+- fix(backplane): a platform apply runs in its plan's directory, so its state is written back (!103) ([13969be](https://github.com/noisypigeon/pigeon/commit/13969be076c9fd89f326769fff7a12dbdb33ae9a)) · backplane
+- feat(cobot): a Worker spec binds nested stack settings, and the deploy job binds to the only stack (!105) ([ed70a23](https://github.com/noisypigeon/pigeon/commit/ed70a234b25771549080bae51fe6a30241bd0518)) · backplane, cobot
+- feat(infra): the control plane's worker.yaml binds to its platform stack (!107) ([8bf592b](https://github.com/noisypigeon/pigeon/commit/8bf592bfc2e3eae3d8777e7df471f1c8bf12350a))
+- fix(infra): the control plane's queue consumer takes the stack's queue setting (!109) ([836de1c](https://github.com/noisypigeon/pigeon/commit/836de1cb1a35026b0c23ecbabcc7ad872fd9a4db))
+- docs(adr): approvals: routine automatic, one proof per change, owner for destruction and secrets, passkeys (!110) ([d85bf6b](https://github.com/noisypigeon/pigeon/commit/d85bf6bbe7a4f48c85579e8343bbe251eb81ac9e))
+- feat(backplane): the control plane approves confirm-tier heads, and stack-bound Workers keep their names (!114) ([96980aa](https://github.com/noisypigeon/pigeon/commit/96980aa4d7f6e6d384f1c4fc521b42eff4f52679)) · backplane, cobot
+- feat(backplane): secrets and destruction need the owner each time (!115) ([e3410ac](https://github.com/noisypigeon/pigeon/commit/e3410ac9a8ba7638cf46398332ab7c2fa3702f1b)) · backplane
+- feat(backplane): one proof covers a change's remaining stages (!116) ([8b5e549](https://github.com/noisypigeon/pigeon/commit/8b5e54904fab2642acc2b01382e611f0834d364d)) · backplane
+- feat(backplane): passkeys prove the owner on approval pages, registered with the code (!117) ([bc3a232](https://github.com/noisypigeon/pigeon/commit/bc3a2326589c4bd0bfc86110e52b5746398484c5)) · backplane
+
+## 2026-11-08
+
+### Merged
+
+- docs(adr): tiered approvals, task mandates and an approval page for mobile (!43) ([53a9b40](https://github.com/noisypigeon/pigeon/commit/53a9b404116a8b83bf812cfe0a1a2c2137961eaf))
+- feat(backplane): the bound job classifies each head's approval tiers, shown only (!44) ([3e2e9e0](https://github.com/noisypigeon/pigeon/commit/3e2e9e017f55ec003b9f3c925e52924c13a773d0)) · backplane, cobot
+- feat(backplane): pending approvals with a page and inbox, and approval_wait for the card (!45) ([20cd632](https://github.com/noisypigeon/pigeon/commit/20cd6325642d027610afe88a35f2c7dd9c6b31e7)) · backplane
+- feat(backplane): the confirm tier: one tap approves low-risk merges and closes (!46) ([fb9b3fc](https://github.com/noisypigeon/pigeon/commit/fb9b3fc8a4405f047e6f7bd8b1914aade0910509)) · backplane
+- feat(backplane): mandates, proposed by the agent and granted once with the code (!47) ([ea5f978](https://github.com/noisypigeon/pigeon/commit/ea5f97818b16389455b7b251ad00b68a48f721ab)) · backplane
+- feat(backplane): approve a change's operations inside its mandate (!49) ([3cef787](https://github.com/noisypigeon/pigeon/commit/3cef7874d07b0886d6b3349f7824d2f131b08168)) · backplane
+- docs(adr): concurrent agent sessions, a merge queue and reconciliation planned on conflict (!50) ([4aecf62](https://github.com/noisypigeon/pigeon/commit/4aecf620707d13cfc755b87690636bce783ad46c))
+- docs(adr): blue-green deployments, and a platform that stands up a fresh copy of itself (!51) ([e7afc26](https://github.com/noisypigeon/pigeon/commit/e7afc269ad346ab79636c5ec83bdc7058da03d50))
+- fix(backplane): stored state reads records a later release wrote (!52) ([c9fd4a3](https://github.com/noisypigeon/pigeon/commit/c9fd4a39d7876a4eccf57a46ba26fb8b30a6e0d2)) · backplane
+- feat(backplane): proposals name their session and see the open changes they overlap (!53) ([5d0d7bc](https://github.com/noisypigeon/pigeon/commit/5d0d7bcbf8322e48fb89f389acf9bce472bdc715)) · backplane
+- feat(backplane): one merge queue, and merges mark the other open changes behind (!54) ([10eef23](https://github.com/noisypigeon/pigeon/commit/10eef23264b50de08f46effded061081ed5fd8cf)) · backplane
+- feat(backplane): restack checked and approved changes onto main, carrying approvals (!55) ([7b4ca76](https://github.com/noisypigeon/pigeon/commit/7b4ca76a1f77f9227a5878b6b46b174e64a2acb4)) · backplane, cobot
+- fix(backplane): a queued merge waits through its change's restack (!56) ([6aaf3c5](https://github.com/noisypigeon/pigeon/commit/6aaf3c5a169ea619694e7554351127e1f1ed9492)) · backplane
+- feat(backplane): a conflict or an overlapping ADR proposes its own reconciliation (!57) ([f1ab62e](https://github.com/noisypigeon/pigeon/commit/f1ab62e2428c836dad56fc33da232bbdbc05e77b)) · backplane, cobot
+- fix(backplane): mandate operations reach the control plane, and a used link says so (!58) ([a6af1ce](https://github.com/noisypigeon/pigeon/commit/a6af1ce12acdbf9c6b9ba3214b80c639d6b55e1b)) · backplane
+- feat(backplane): tasks tell a session its work, and limits bound open changes (!59) ([ac6b45d](https://github.com/noisypigeon/pigeon/commit/ac6b45dda28797014f0efad8fb366b3ce824dd54)) · backplane
+- docs(adr): events instead of polling, session tickets, the owner's digest, and a first mandate (!60) ([a8a786b](https://github.com/noisypigeon/pigeon/commit/a8a786b1d683125e43faedaa64f881fda3fe21c0))
+- feat(backplane): the instance's event log (!61) ([d8c9d71](https://github.com/noisypigeon/pigeon/commit/d8c9d71c4f462baa8eff9881df9f92e070aefba6)) · backplane
+- feat(backplane): the owner's digest, built from what waits on them (!62) ([8ac3205](https://github.com/noisypigeon/pigeon/commit/8ac3205f3c4c39dacd5f2fd1a9369ade2943961e)) · backplane
+- feat(backplane): events from every completion, and a long poll sessions follow (!63) ([5953451](https://github.com/noisypigeon/pigeon/commit/5953451852422eda1acfba6d2bc9eab654bebefa)) · backplane
+- feat(backplane): Web Push to the owner, and the hourly digest (!64) ([d67e05b](https://github.com/noisypigeon/pigeon/commit/d67e05b713bea004e1c398565d1c658a230fc136)) · backplane
+- fix(backplane): the inbox installs on iOS, says why a push wasn't saved, and drops dead links (!65) ([0d7824e](https://github.com/noisypigeon/pigeon/commit/0d7824e687f4c574cd8aaa8c39f6831dded4a28b)) · backplane
+- fix(backplane): the inbox drops approvals whose change moved on (!66) ([313d5e0](https://github.com/noisypigeon/pigeon/commit/313d5e0747c0e430e631357a0c3ef8b4525243ce)) · backplane
+- feat(backplane): session tickets bind a session to its changes and pushes (!67) ([7145861](https://github.com/noisypigeon/pigeon/commit/71458615baf5f5eed005bcd5d014d5e56c10d5a5)) · backplane
+- docs(adr): busy Durable Objects keep old code, so objects check their version (!68) ([40eeeb1](https://github.com/noisypigeon/pigeon/commit/40eeeb14850b4c5f1ec76b6cd662c238f26591f1))
+- fix(backplane): an object older than its caller resets itself, and the deploy waits for its objects (!69) ([6792df7](https://github.com/noisypigeon/pigeon/commit/6792df79548c4ccc3781b4012090ce1a9a734ed6)) · backplane
+- fix(backplane): the health check spares the deploying MainRun and tolerates objects without the handshake (!70) ([fd96d1c](https://github.com/noisypigeon/pigeon/commit/fd96d1c8de227c565b28ebecff3c3db6b46c9a40)) · backplane
+- docs(adr): step 2's spike, and version blue-green through a 0% green and an override smoke (!71) ([c8d88ab](https://github.com/noisypigeon/pigeon/commit/c8d88ab112ab3417c3605e39bec3027686758566))
+- feat(cobot): version blue-green deploys through a 0% green and an override smoke (!72) ([7a215eb](https://github.com/noisypigeon/pigeon/commit/7a215ebf9925d5082b5e435e147ecec868d55d54)) · backplane, cobot
+- feat(backplane): deploy.status answers the newest deploy's log (!73) ([8cd82bb](https://github.com/noisypigeon/pigeon/commit/8cd82bbb4e7bea61ce67f02c58cb7651936a8cf0)) · backplane
+- docs(adr): step 3's design: a stack is a pigeon/platform kind unit, and a Worker names it by $deployment (!74) ([efc3dd0](https://github.com/noisypigeon/pigeon/commit/efc3dd098f2de1d9ae3538c352fa8394438133a4))
+- feat(catalog): queue and Access modules, and the pigeon/platform kind (!75) ([2d48807](https://github.com/noisypigeon/pigeon/commit/2d48807b1e9c8f2c9106c1369713aa25d29978e5)) · infra-cloudflare-access-application, infra-cloudflare-access-policy, infra-cloudflare-access-service-token, infra-cloudflare-queue, infra-cloudflare-schema
+- feat(cobot): a Worker spec names its stack with deployment: and $deployment (!76) ([ef83263](https://github.com/noisypigeon/pigeon/commit/ef83263fd97f305f56f7f583c938ab097cde99c1)) · backplane, cobot
+- docs(claude): sessions go through change_propose and Artifacts, never GitHub (!77) ([e35a15c](https://github.com/noisypigeon/pigeon/commit/e35a15c695191e0b88be73b1af50ecc296864140))
+- docs(adr): mirror to GitHub on merge; route tests to GitHub Actions and Buildkite (!78) ([5fe8ea8](https://github.com/noisypigeon/pigeon/commit/5fe8ea8d01bd2c59e8519da3dc685d3fb6783488))
+
+## 2026-11-07
+
+### Merged
+
+- docs(adr): the approval card shows for a project .mcp.json server (!22) ([eae175e](https://github.com/noisypigeon/pigeon/commit/eae175e7736b2a71175c433be920f74538bc2d51))
+- feat(backplane): approvals made in the card, proven by the owner's authenticator code (!23) ([8cbf4f7](https://github.com/noisypigeon/pigeon/commit/8cbf4f73a9087761a8f27c95f93400ef3695bd32)) · backplane
+- refactor(backplane): approvals no longer go through a website (!24) ([bd43011](https://github.com/noisypigeon/pigeon/commit/bd430110eefdcc2eb68a7156ce16c62193c45a70)) · backplane
+- docs(adr): the control plane deploys itself, with no local step (!25) ([1721fdc](https://github.com/noisypigeon/pigeon/commit/1721fdc3e0fc0b8f858b12d6ac7cd3ee86463ede))
+- feat(backplane): main's pipeline deploys the Workers whose inputs changed (!26) ([1f5aecd](https://github.com/noisypigeon/pigeon/commit/1f5aecd88fec0f169834d251e6aa8c3570fe2ff8)) · backplane, cobot, gantry, sentinel
+- fix(cobot): the ci image builds worker-build, and a Worker secret is never set empty (!27) ([5a0d8cd](https://github.com/noisypigeon/pigeon/commit/5a0d8cd4affd58c22fa9ffba8c7b997855633f68)) · backplane, cobot, gantry, sentinel
+- feat(backplane): /healthz names the instance it serves (!28) ([0cc58dc](https://github.com/noisypigeon/pigeon/commit/0cc58dcbbf11a1974490ee287cb946ef15b4d09d)) · backplane
+- docs(adr): job images on Cloudflare: a longer registry login, a smaller image, pigeon from builds (!29) ([e064913](https://github.com/noisypigeon/pigeon/commit/e0649137177e6da123ec517d9e6e7cf1ef35eaf5))
+- feat(cobot): images push logs in to the registry for as long as the push takes (!30) ([191a60f](https://github.com/noisypigeon/pigeon/commit/191a60fd0c59ff669462d6505242dc29b899fd96)) · cobot
+- build(cobot): the job image warms only dependencies, and carries pigeon-start (!31) ([0bb56fe](https://github.com/noisypigeon/pigeon/commit/0bb56fe499c39d4c46b0614e366af250e6836870)) · backplane, cobot, gantry, sentinel
+- fix(cobot): images push retries a dropped upload, and knows a fetched main (!32) ([e28955b](https://github.com/noisypigeon/pigeon/commit/e28955b58e5a5bcfc38507143503c092941531eb)) · cobot
+- feat(backplane): jobs run main's newest pigeon from builds (!34) ([47f2b1e](https://github.com/noisypigeon/pigeon/commit/47f2b1e5abc41ba7d4201e8e40edb85fc9472d31)) · backplane, cobot
+- feat(backplane): the deploy log says how long pigeon's build took (!35) ([d4c6ca6](https://github.com/noisypigeon/pigeon/commit/d4c6ca665824adf3dd963dc211e4b0276d231506)) · backplane
+- feat(cobot): a spike under tooling/spikes runs as its own check (!36) ([1adfedd](https://github.com/noisypigeon/pigeon/commit/1adfeddd6d2231604e999036b0fbb8601c2884a9)) · cobot
+- fix(cobot): R2 bindings name the EU jurisdiction their buckets are in (!38) ([a2f3e0d](https://github.com/noisypigeon/pigeon/commit/a2f3e0dc91db9727a5fbeff6f3244cf4fe2e358b)) · cobot
+- feat(backplane): deploy_retry redeploys main's newest push after it passed (!39) ([1ed553a](https://github.com/noisypigeon/pigeon/commit/1ed553a41767ff9808f6d2b41ab61741e1e66336)) · backplane
+- build(cobot): the job image carries rootless BuildKit's prerequisites (!41) ([35cf1b8](https://github.com/noisypigeon/pigeon/commit/35cf1b8d98c295a6551c52fd9b86875e77c423f0)) · backplane, cobot, gantry, sentinel
+- feat(backplane): the deploy job builds and pushes the job image when its inputs change (!42) ([8c4ed62](https://github.com/noisypigeon/pigeon/commit/8c4ed622ecfb3e64fa258fe50da3f59de683613c)) · backplane, cobot
+
+## 2026-11-06
+
+### Released
+
+- backplane v0.1.30
+- cobot v0.1.38
+- gantry v0.1.10
+- infra-cloudflare-schema v0.1.19
+- sentinel v0.1.16
+
+### Merged
+
+- ci: GitHub is a source mirror only; its workflows are removed ([7e26385](https://github.com/noisypigeon/pigeon/commit/7e26385fbfd0ca37bb82c6fe2fcc13863caf9032))
+- feat(backplane): change.merge, the control plane merges an approved head ([f810797](https://github.com/noisypigeon/pigeon/commit/f810797a0d1d2118cc6b0cb08f2e15b6098abcba)) · backplane, cobot
+- feat(infra): the architecture site's units, sites/docs on docs.pigeon.dev ([9cd932b](https://github.com/noisypigeon/pigeon/commit/9cd932b6610acd4085d8ef56b6987e00fd807d2a))
+- feat(backplane): each push to main publishes the sites it changed ([86574c5](https://github.com/noisypigeon/pigeon/commit/86574c577e05bde62772e60b55d08e612a6e9816)) · backplane, cobot
+- feat(cobot): pigeon cobot show, a stored plan's attribute-level diff ([19d45ca](https://github.com/noisypigeon/pigeon/commit/19d45ca60b3ab9a651d2f4317bc7af00e66633b6)) · cobot
+- fix(cobot): a Worker spec's reference picks a for_each output's entry by key ([c2938ab](https://github.com/noisypigeon/pigeon/commit/c2938abb4d2a2bbc2817dc84b838ed28e7ec912a)) · cobot
+- fix(cobot): a Worker binding may not share a Durable Object's name ([181c441](https://github.com/noisypigeon/pigeon/commit/181c44199f1771435da732362eb963d899e0dde4)) · backplane, cobot
+- fix(cobot): Worker images build for linux/amd64, and the ci warm-up fits in memory ([f2bb01b](https://github.com/noisypigeon/pigeon/commit/f2bb01bae65f7c8b0f50b941d98f1213ec1783ff)) · backplane, cobot, gantry, sentinel
+- fix(cobot): a Container starts with its environment, as a plain object ([5532c75](https://github.com/noisypigeon/pigeon/commit/5532c75fdd595d27c27996a39b1d818e442bbc50)) · backplane, cobot
+- docs(adr): the control plane's runbook, as the first deploy ran (!12) ([3e256a0](https://github.com/noisypigeon/pigeon/commit/3e256a0ab33c942846afd3ccf9adb34b6aa88595))
+- fix(backplane): job Containers live as long as their job, and a merge can be repeated ([1df0c9e](https://github.com/noisypigeon/pigeon/commit/1df0c9efab5cd5c98209dff83bb4d49475165187)) · backplane, cobot
+- fix(backplane): a finished job frees its Container, and a full fleet is waited for ([ea39464](https://github.com/noisypigeon/pigeon/commit/ea394647a264997e0fa0c7eee930ef827c421356)) · backplane
+- docs(adr): approvals in Claude, images and state on Cloudflare, and more Containers (!14) ([07b9507](https://github.com/noisypigeon/pigeon/commit/07b9507cfa30523dccc0da701af2a43ec4c3201b))
+- fix(backplane): a Durable Object with work in flight re-arms its alarm when asked (!13) ([87a9a6c](https://github.com/noisypigeon/pigeon/commit/87a9a6ca86ad00127498ccf4d063e48c2a184abc)) · backplane
+- docs(adr): the architecture site's units applied, with a token of their own (!15) ([790907d](https://github.com/noisypigeon/pigeon/commit/790907dd3ab7ea0a585a0cea60f29c20d2856fb4))
+- feat(backplane): checks run on Checker, git jobs on a smaller Runner, at most six at once (!17) ([53ce815](https://github.com/noisypigeon/pigeon/commit/53ce815767226df97a9d6a72933bfe7c813fca6d)) · backplane
+- docs(adr): git through the control plane's front door, after a spike on the session token (!18) ([dc151be](https://github.com/noisypigeon/pigeon/commit/dc151bec56e38e0170dc0b940ccb7f149cace89f))
+- feat(backplane): git's front door on the control plane, and git.tokens (!19) ([dc5ab21](https://github.com/noisypigeon/pigeon/commit/dc5ab2153b39812a1c2365a2f29a8196ce076692)) · backplane
+- feat(backplane): approvals offered as URL elicitations, approved on an Access page (!20) ([eaab020](https://github.com/noisypigeon/pigeon/commit/eaab020ec50c56baef528d38e126c1cd70790144)) · backplane
+- fix(backplane): the front door's tokens live two minutes (!21) ([3fe1c70](https://github.com/noisypigeon/pigeon/commit/3fe1c701276db8ad5301d717291fc125b8b5758f)) · backplane
+
 ## 2026-11-05
 
-- feat(infra): the control plane's Worker spec, ready for the owner's deploy ([7d013aa](https://github.com/noisypigeon/pigeon/commit/7d013aabcf2d545536400b5a2a189a2602c356ca))
-- feat(backplane): a change's jobs run in a job Container, from a pre-built CI image ([47f922a](https://github.com/noisypigeon/pigeon/commit/47f922aa8d479fcd2213bdd4c11b9b30bd6fe922))
-- feat(backplane): the Worker serves changes over MCP, behind Access ([49f9dc5](https://github.com/noisypigeon/pigeon/commit/49f9dc507835a4cf03c9d96ac54fe788b1336f6b))
-- feat(backplane): change.* operations, the MCP handler and Access checks ([c80edf9](https://github.com/noisypigeon/pigeon/commit/c80edf99727be4bb159cd0bf2e63aec76b31e9e6))
-- feat(backplane): the change state machine and its D1 tables ([17a80be](https://github.com/noisypigeon/pigeon/commit/17a80be9f87879a51b8f4b8f01ce4773af2052a9))
-- feat(cobot): pigeon cobot workers, specs rendered to wrangler and deployed from a plan ([c9c12c1](https://github.com/noisypigeon/pigeon/commit/c9c12c1379981879dacf361f84e73a08bbe42a0b))
-- feat(sentinel): the change policy, branch, scope and size ([6b99841](https://github.com/noisypigeon/pigeon/commit/6b998411722d651a313405edba69951a66561321))
-- feat(backplane): targeted checks, change.scope ([d9f0a81](https://github.com/noisypigeon/pigeon/commit/d9f0a81cb72b5e5ed1f9be18663427a20cf5fe22))
-- feat(sentinel): the change target, with within and max_lines field rules ([b2e479d](https://github.com/noisypigeon/pigeon/commit/b2e479d9474a428c97933dade06a9579ce48db09))
-- fix(cobot): the mirror only fast-forwards and adds tags; git sync brings releases back ([6d46cc1](https://github.com/noisypigeon/pigeon/commit/6d46cc1ad046d4364b66243e85ab0ee71880f72d))
-- docs(adr): a change is planned, bounded, checked and rolled out through pigeon ([81fef25](https://github.com/noisypigeon/pigeon/commit/81fef259eb0fde8242cd61cc953fc22907f51de9))
-- chore: bring GitHub's release of #140 into Artifacts ([32a3ada](https://github.com/noisypigeon/pigeon/commit/32a3ada04e8c6265a3350f73d2b9778bf1ffb011))
-- chore: pigeon declares its repository ([e9aebe2](https://github.com/noisypigeon/pigeon/commit/e9aebe2b1793966b96fb8ba98db5f3c352cfd4ad))
-- feat: git is hosted on Cloudflare Artifacts; GitHub is a mirror ([#140](https://github.com/noisypigeon/pigeon/pull/140))
-- feat(catalog): cloudflare/zone and cloudflare/static-site kinds; the zone lookup's id is sensitive ([#139](https://github.com/noisypigeon/pigeon/pull/139))
-- feat(cobot): an instance's config.yaml declares units by kind ([#138](https://github.com/noisypigeon/pigeon/pull/138))
-- fix(cobot): discovery makes both roots absolute; Proton's verification inputs are published ([#137](https://github.com/noisypigeon/pigeon/pull/137))
-- docs(adr): an instance is one config.yaml of kind-typed units ([#136](https://github.com/noisypigeon/pigeon/pull/136))
-- feat(cobot): the CLI runs from pigeon with --instance naming the instance ([#135](https://github.com/noisypigeon/pigeon/pull/135))
-- docs(adr): the CLI runs from pigeon; --instance names the instance ([#134](https://github.com/noisypigeon/pigeon/pull/134))
-- feat(backplane): policy.check takes the pull request; sites.build ([#132](https://github.com/noisypigeon/pigeon/pull/132))
-- feat(site-templates): the architecture template ([#133](https://github.com/noisypigeon/pigeon/pull/133))
-- feat(cobot): workloads take the run's own Cloudflare token ([#131](https://github.com/noisypigeon/pigeon/pull/131))
-- docs(adr): pigeon is its own instance; noisypigeon moves to its own repository ([#130](https://github.com/noisypigeon/pigeon/pull/130))
-- feat(cobot): sites build takes data files ([#129](https://github.com/noisypigeon/pigeon/pull/129))
-- feat(sentinel): platform-defined policies an instance invokes with parameters ([#128](https://github.com/noisypigeon/pigeon/pull/128))
-- feat(backplane): architecture.describe and its layout ([#126](https://github.com/noisypigeon/pigeon/pull/126))
-- docs(adr): a run's instance root from D1; the platform defines rules, an instance invokes them ([#127](https://github.com/noisypigeon/pigeon/pull/127))
-- refactor(cobot): every site names its template ([#125](https://github.com/noisypigeon/pigeon/pull/125))
-- feat(cobot): signed Container dispatch ([#123](https://github.com/noisypigeon/pigeon/pull/123))
-- chore(workloads): the blog names its template ([#124](https://github.com/noisypigeon/pigeon/pull/124))
-- refactor(site-templates): the blog template moves to src/site-templates/blog ([#122](https://github.com/noisypigeon/pigeon/pull/122))
-- feat(cobot): named site templates, and sites without content ([#121](https://github.com/noisypigeon/pigeon/pull/121))
-- feat(backplane): the Instance Durable Object, its run queue, and D1 schema v0 ([#119](https://github.com/noisypigeon/pigeon/pull/119))
-- docs(adr): the architecture site on docs.pigeon.dev, through backplane ([#120](https://github.com/noisypigeon/pigeon/pull/120))
-- refactor(backplane): shared wire types, and both worker builds compiling ([#118](https://github.com/noisypigeon/pigeon/pull/118))
-- feat(backplane): serve drains on SIGTERM ([#117](https://github.com/noisypigeon/pigeon/pull/117))
-- feat(cobot): write state back per unit, and record a completed apply ([#116](https://github.com/noisypigeon/pigeon/pull/116))
-- docs(adr): the control plane, phase 4 ([#115](https://github.com/noisypigeon/pigeon/pull/115))
-- docs(adr): pigeon cobot workers, Workers and Containers through wrangler ([#114](https://github.com/noisypigeon/pigeon/pull/114))
-- chore(tooling): remove the containers spike kit ([#113](https://github.com/noisypigeon/pigeon/pull/113))
-- feat(backplane): signed requests for serve ([#112](https://github.com/noisypigeon/pigeon/pull/112))
-- docs(adr): phase 3 spike report ([#111](https://github.com/noisypigeon/pigeon/pull/111))
+### Released
+
+- backplane v0.1.14
+- backplane v0.1.15
+- backplane v0.1.16
+- backplane v0.1.17
+- backplane v0.1.18
+- backplane v0.1.19
+- backplane v0.1.20
+- backplane v0.1.21
+- backplane v0.1.22
+- backplane v0.1.23
+- backplane v0.1.24
+- backplane v0.1.25
+- backplane v0.1.26
+- backplane v0.1.27
+- backplane v0.1.28
+- backplane v0.1.29
+- cobot v0.1.27
+- cobot v0.1.28
+- cobot v0.1.29
+- cobot v0.1.30
+- cobot v0.1.31
+- cobot v0.1.32
+- cobot v0.1.33
+- cobot v0.1.34
+- cobot v0.1.35
+- cobot v0.1.36
+- cobot v0.1.37
+- gantry v0.1.8
+- gantry v0.1.9
+- infra-agnostic-random-string v0.1.2
+- infra-agnostic-schema v0.1.2
+- infra-backblaze-bucket v0.1.1
+- infra-backblaze-schema v0.1.1
+- infra-cloudflare-account v0.1.2
+- infra-cloudflare-api-token v0.1.2
+- infra-cloudflare-d1-database v0.1.2
+- infra-cloudflare-d1-database v0.1.3
+- infra-cloudflare-dns-record v0.1.2
+- infra-cloudflare-permission-groups v0.1.2
+- infra-cloudflare-r2-bucket v0.1.3
+- infra-cloudflare-r2-custom-domain v0.1.2
+- infra-cloudflare-ruleset v0.1.2
+- infra-cloudflare-schema v0.1.12
+- infra-cloudflare-schema v0.1.13
+- infra-cloudflare-schema v0.1.14
+- infra-cloudflare-schema v0.1.15
+- infra-cloudflare-schema v0.1.16
+- infra-cloudflare-schema v0.1.17
+- infra-cloudflare-schema v0.1.18
+- infra-cloudflare-zone v0.1.2
+- infra-cloudflare-zone v0.1.3
+- infra-digitalocean-project v0.1.1
+- infra-digitalocean-project-resources v0.1.1
+- infra-digitalocean-schema v0.1.1
+- infra-digitalocean-spaces-bucket v0.1.1
+- infra-digitalocean-ssh-key v0.1.1
+- infra-pigeon-schema v0.1.4
+- infra-pigeon-schema v0.1.5
+- infra-scaleway-iam-application v0.1.1
+- infra-scaleway-iam-policy v0.1.1
+- infra-scaleway-project v0.1.1
+- infra-scaleway-schema v0.1.1
+- sentinel v0.1.13
+- sentinel v0.1.14
+- sentinel v0.1.15
+- site-template-architecture v0.1.0
+- site-template-blog v1.0.2
+- static-site-template v1.0.2
+
+### Merged
+
+- docs(infra): note the D1 provider update; keep the location guard ([#109](https://github.com/noisypigeon/pigeon/pull/109)) · infra-cloudflare-d1-database, infra-cloudflare-schema, infra-pigeon-schema
 - docs(tooling): spike runbook needs Workers Paid, --remote and its own token ([#110](https://github.com/noisypigeon/pigeon/pull/110))
-- docs(infra): note the D1 provider update; keep the location guard ([#109](https://github.com/noisypigeon/pigeon/pull/109))
+- docs(adr): phase 3 spike report ([#111](https://github.com/noisypigeon/pigeon/pull/111))
+- feat(backplane): signed requests for serve ([#112](https://github.com/noisypigeon/pigeon/pull/112)) · backplane
+- chore(tooling): remove the containers spike kit ([#113](https://github.com/noisypigeon/pigeon/pull/113))
+- docs(adr): pigeon cobot workers, Workers and Containers through wrangler ([#114](https://github.com/noisypigeon/pigeon/pull/114))
+- docs(adr): the control plane, phase 4 ([#115](https://github.com/noisypigeon/pigeon/pull/115))
+- feat(cobot): write state back per unit, and record a completed apply ([#116](https://github.com/noisypigeon/pigeon/pull/116)) · backplane, cobot
+- feat(backplane): serve drains on SIGTERM ([#117](https://github.com/noisypigeon/pigeon/pull/117)) · backplane, cobot, gantry, sentinel
+- refactor(backplane): shared wire types, and both worker builds compiling ([#118](https://github.com/noisypigeon/pigeon/pull/118)) · backplane, cobot, gantry, sentinel
+- docs(adr): the architecture site on docs.pigeon.dev, through backplane ([#120](https://github.com/noisypigeon/pigeon/pull/120))
+- feat(backplane): the Instance Durable Object, its run queue, and D1 schema v0 ([#119](https://github.com/noisypigeon/pigeon/pull/119)) · backplane
+- feat(cobot): named site templates, and sites without content ([#121](https://github.com/noisypigeon/pigeon/pull/121)) · cobot, infra-cloudflare-schema
+- refactor(site-templates): the blog template moves to src/site-templates/blog ([#122](https://github.com/noisypigeon/pigeon/pull/122)) · site-template-blog
+- chore(workloads): the blog names its template ([#124](https://github.com/noisypigeon/pigeon/pull/124))
+- feat(cobot): signed Container dispatch ([#123](https://github.com/noisypigeon/pigeon/pull/123)) · backplane, cobot
+- refactor(cobot): every site names its template ([#125](https://github.com/noisypigeon/pigeon/pull/125)) · cobot, infra-cloudflare-schema
+- docs(adr): a run's instance root from D1; the platform defines rules, an instance invokes them ([#127](https://github.com/noisypigeon/pigeon/pull/127))
+- feat(backplane): architecture.describe and its layout ([#126](https://github.com/noisypigeon/pigeon/pull/126)) · backplane
+- feat(sentinel): platform-defined policies an instance invokes with parameters ([#128](https://github.com/noisypigeon/pigeon/pull/128)) · sentinel
+- feat(cobot): sites build takes data files ([#129](https://github.com/noisypigeon/pigeon/pull/129)) · cobot
+- docs(adr): pigeon is its own instance; noisypigeon moves to its own repository ([#130](https://github.com/noisypigeon/pigeon/pull/130))
+- feat(cobot): workloads take the run's own Cloudflare token ([#131](https://github.com/noisypigeon/pigeon/pull/131)) · cobot
+- feat(site-templates): the architecture template ([#133](https://github.com/noisypigeon/pigeon/pull/133)) · site-template-architecture
+- feat(backplane): policy.check takes the pull request; sites.build ([#132](https://github.com/noisypigeon/pigeon/pull/132)) · backplane
+- docs(adr): the CLI runs from pigeon; --instance names the instance ([#134](https://github.com/noisypigeon/pigeon/pull/134))
+- feat(cobot): the CLI runs from pigeon with --instance naming the instance ([#135](https://github.com/noisypigeon/pigeon/pull/135)) · backplane, cobot
+- docs(adr): an instance is one config.yaml of kind-typed units ([#136](https://github.com/noisypigeon/pigeon/pull/136))
+- fix(cobot): discovery makes both roots absolute; Proton's verification inputs are published ([#137](https://github.com/noisypigeon/pigeon/pull/137)) · cobot, infra-cloudflare-schema
+- feat(cobot): an instance's config.yaml declares units by kind ([#138](https://github.com/noisypigeon/pigeon/pull/138)) · cobot
+- feat(catalog): cloudflare/zone and cloudflare/static-site kinds; the zone lookup's id is sensitive ([#139](https://github.com/noisypigeon/pigeon/pull/139)) · infra-cloudflare-schema, infra-cloudflare-zone
+- feat: git is hosted on Cloudflare Artifacts; GitHub is a mirror ([#140](https://github.com/noisypigeon/pigeon/pull/140)) · cobot, infra-cloudflare-schema
+- chore: pigeon declares its repository ([e9aebe2](https://github.com/noisypigeon/pigeon/commit/e9aebe2b1793966b96fb8ba98db5f3c352cfd4ad))
+- chore: bring GitHub's release of #140 into Artifacts ([32a3ada](https://github.com/noisypigeon/pigeon/commit/32a3ada04e8c6265a3350f73d2b9778bf1ffb011)) · backplane, cobot, infra-cloudflare-schema
+- docs(adr): a change is planned, bounded, checked and rolled out through pigeon ([81fef25](https://github.com/noisypigeon/pigeon/commit/81fef259eb0fde8242cd61cc953fc22907f51de9))
+- fix(cobot): the mirror only fast-forwards and adds tags; git sync brings releases back ([6d46cc1](https://github.com/noisypigeon/pigeon/commit/6d46cc1ad046d4364b66243e85ab0ee71880f72d)) · cobot
+- feat(sentinel): the change target, with within and max_lines field rules ([b2e479d](https://github.com/noisypigeon/pigeon/commit/b2e479d9474a428c97933dade06a9579ce48db09)) · backplane, sentinel
+- feat(backplane): targeted checks, change.scope ([d9f0a81](https://github.com/noisypigeon/pigeon/commit/d9f0a81cb72b5e5ed1f9be18663427a20cf5fe22)) · backplane, cobot
+- feat(sentinel): the change policy, branch, scope and size ([6b99841](https://github.com/noisypigeon/pigeon/commit/6b998411722d651a313405edba69951a66561321)) · cobot
+- feat(cobot): pigeon cobot workers, specs rendered to wrangler and deployed from a plan ([c9c12c1](https://github.com/noisypigeon/pigeon/commit/c9c12c1379981879dacf361f84e73a08bbe42a0b)) · backplane, cobot, gantry, sentinel
+- feat(backplane): the change state machine and its D1 tables ([17a80be](https://github.com/noisypigeon/pigeon/commit/17a80be9f87879a51b8f4b8f01ce4773af2052a9)) · backplane
+- feat(backplane): change.* operations, the MCP handler and Access checks ([c80edf9](https://github.com/noisypigeon/pigeon/commit/c80edf99727be4bb159cd0bf2e63aec76b31e9e6)) · backplane
+- feat(backplane): the Worker serves changes over MCP, behind Access ([49f9dc5](https://github.com/noisypigeon/pigeon/commit/49f9dc507835a4cf03c9d96ac54fe788b1336f6b)) · backplane, cobot
+- feat(backplane): a change's jobs run in a job Container, from a pre-built CI image ([47f922a](https://github.com/noisypigeon/pigeon/commit/47f922aa8d479fcd2213bdd4c11b9b30bd6fe922)) · backplane, cobot, gantry, sentinel
+- feat(infra): the control plane's Worker spec, ready for the owner's deploy ([7d013aa](https://github.com/noisypigeon/pigeon/commit/7d013aabcf2d545536400b5a2a189a2602c356ca)) · backplane, cobot
 
 ## 2026-11-04
 
-- feat(cobot): name the attributes an update changes ([#108](https://github.com/noisypigeon/pigeon/pull/108))
-- fix(catalog): ignore the D1 location hint after creation ([#107](https://github.com/noisypigeon/pigeon/pull/107))
-- fix(catalog): one Cloudflare account lookup, and cobot step progress ([#106](https://github.com/noisypigeon/pigeon/pull/106))
-- feat(backplane): mutual TLS for serve ([#105](https://github.com/noisypigeon/pigeon/pull/105))
-- feat(tooling): spike TLS checks ([#104](https://github.com/noisypigeon/pigeon/pull/104))
-- docs(adr): Worker–Container mutual TLS ([#103](https://github.com/noisypigeon/pigeon/pull/103))
-- feat(backplane): plan, apply and serve ([#102](https://github.com/noisypigeon/pigeon/pull/102))
-- feat(cobot): stored plans ([#101](https://github.com/noisypigeon/pigeon/pull/101))
-- feat(cobot): state in R2 ([#100](https://github.com/noisypigeon/pigeon/pull/100))
-- feat(cobot): credentials requested by capability ([#99](https://github.com/noisypigeon/pigeon/pull/99))
-- feat(tooling): the Cloudflare Containers spike kit ([#98](https://github.com/noisypigeon/pigeon/pull/98))
-- docs(adr): phase 3, the runner spike and engine changes ([#97](https://github.com/noisypigeon/pigeon/pull/97))
-- refactor(infra): infra/pigeon composes the Cloudflare catalog; infra/agnostic retires ([#96](https://github.com/noisypigeon/pigeon/pull/96))
-- feat(catalog): account and d1-database modules, and an optional r2-bucket suffix ([#95](https://github.com/noisypigeon/pigeon/pull/95))
-- feat(cobot): catalog module references and retired changelogs ([#94](https://github.com/noisypigeon/pigeon/pull/94))
-- docs(adr): the bootstrap composes the Cloudflare catalog ([#93](https://github.com/noisypigeon/pigeon/pull/93))
-- feat(infra): the pigeon-account bootstrap unit ([#92](https://github.com/noisypigeon/pigeon/pull/92))
-- feat(cobot): local units run only when named ([#91](https://github.com/noisypigeon/pigeon/pull/91))
-- docs(adr): phase 2, the pigeon-account bootstrap ([#90](https://github.com/noisypigeon/pigeon/pull/90))
-- feat(catalog): digitalocean, scaleway and backblaze catalogs ([#89](https://github.com/noisypigeon/pigeon/pull/89))
-- feat(catalog): cloudflare capabilities ([#88](https://github.com/noisypigeon/pigeon/pull/88))
-- refactor(infra): pigeon.dev leaves the cloudflare zones ([#87](https://github.com/noisypigeon/pigeon/pull/87))
-- refactor(infra): move the cloudflare and agnostic catalogs to catalog/ ([#86](https://github.com/noisypigeon/pigeon/pull/86))
-- docs(adr): a moved tier waits for the cobot image ([#85](https://github.com/noisypigeon/pigeon/pull/85))
-- feat(cobot): a release tier can move with from ([#84](https://github.com/noisypigeon/pigeon/pull/84))
-- docs(adr): a release tier can move, and the bot moves its file ([#83](https://github.com/noisypigeon/pigeon/pull/83))
-- feat(sentinel): freeze repository secrets ([#82](https://github.com/noisypigeon/pigeon/pull/82))
-- fix(sentinel): never echo an unexpected line's text ([#81](https://github.com/noisypigeon/pigeon/pull/81))
-- feat(cobot): catalog/ resolution with an infra/ fallback, and capabilities ([#80](https://github.com/noisypigeon/pigeon/pull/80))
-- feat(sentinel): a fields rule can forbid extra fields ([#79](https://github.com/noisypigeon/pigeon/pull/79))
-- docs(adr): the control plane is Rust, built from backplane ([#78](https://github.com/noisypigeon/pigeon/pull/78))
+### Released
+
+- backplane v0.1.1
+- backplane v0.1.2
+- backplane v0.1.3
+- backplane v0.1.4
+- backplane v0.1.5
+- backplane v0.1.6
+- backplane v0.1.7
+- backplane v0.1.8
+- backplane v0.1.9
+- backplane v0.1.10
+- backplane v0.1.11
+- backplane v0.1.12
+- backplane v0.1.13
+- cobot v0.1.17
+- cobot v0.1.18
+- cobot v0.1.19
+- cobot v0.1.20
+- cobot v0.1.21
+- cobot v0.1.22
+- cobot v0.1.23
+- cobot v0.1.24
+- cobot v0.1.25
+- cobot v0.1.26
+- infra-agnostic-random-string v0.1.1
+- infra-agnostic-schema v0.1.1
+- infra-backblaze-bucket v0.1.0
+- infra-backblaze-schema v0.1.0
+- infra-cloudflare-account v0.1.0
+- infra-cloudflare-account v0.1.1
+- infra-cloudflare-api-token v0.1.1
+- infra-cloudflare-d1-database v0.1.0
+- infra-cloudflare-d1-database v0.1.1
+- infra-cloudflare-dns-record v0.1.1
+- infra-cloudflare-permission-groups v0.1.1
+- infra-cloudflare-r2-bucket v0.1.1
+- infra-cloudflare-r2-bucket v0.1.2
+- infra-cloudflare-r2-custom-domain v0.1.1
+- infra-cloudflare-ruleset v0.1.1
+- infra-cloudflare-schema v0.1.7
+- infra-cloudflare-schema v0.1.8
+- infra-cloudflare-schema v0.1.9
+- infra-cloudflare-schema v0.1.10
+- infra-cloudflare-schema v0.1.11
+- infra-cloudflare-zone v0.1.1
+- infra-digitalocean-project v0.1.0
+- infra-digitalocean-project-resources v0.1.0
+- infra-digitalocean-schema v0.1.0
+- infra-digitalocean-spaces-bucket v0.1.0
+- infra-digitalocean-ssh-key v0.1.0
+- infra-pigeon-account v0.1.0
+- infra-pigeon-d1-database v0.1.0
+- infra-pigeon-r2-bucket v0.1.0
+- infra-pigeon-schema v0.1.0
+- infra-pigeon-schema v0.1.1
+- infra-pigeon-schema v0.1.2
+- infra-pigeon-schema v0.1.3
+- infra-scaleway-iam-application v0.1.0
+- infra-scaleway-iam-policy v0.1.0
+- infra-scaleway-project v0.1.0
+- infra-scaleway-schema v0.1.0
+- sentinel v0.1.11
+- sentinel v0.1.12
+
+### Merged
+
 - docs(adr): separate the pigeon platform from its instances ([#77](https://github.com/noisypigeon/pigeon/pull/77))
+- docs(adr): the control plane is Rust, built from backplane ([#78](https://github.com/noisypigeon/pigeon/pull/78))
+- feat(sentinel): a fields rule can forbid extra fields ([#79](https://github.com/noisypigeon/pigeon/pull/79)) · sentinel
+- feat(cobot): catalog/ resolution with an infra/ fallback, and capabilities ([#80](https://github.com/noisypigeon/pigeon/pull/80)) · cobot
+- fix(sentinel): never echo an unexpected line's text ([#81](https://github.com/noisypigeon/pigeon/pull/81)) · sentinel
+- feat(sentinel): freeze repository secrets ([#82](https://github.com/noisypigeon/pigeon/pull/82))
+- docs(adr): a release tier can move, and the bot moves its file ([#83](https://github.com/noisypigeon/pigeon/pull/83))
+- feat(cobot): a release tier can move with from ([#84](https://github.com/noisypigeon/pigeon/pull/84)) · cobot
+- docs(adr): a moved tier waits for the cobot image ([#85](https://github.com/noisypigeon/pigeon/pull/85))
+- refactor(infra): move the cloudflare and agnostic catalogs to catalog/ ([#86](https://github.com/noisypigeon/pigeon/pull/86)) · infra-agnostic-random-string, infra-agnostic-schema, infra-cloudflare-api-token, infra-cloudflare-dns-record, infra-cloudflare-permission-groups, infra-cloudflare-r2-bucket, infra-cloudflare-r2-custom-domain, infra-cloudflare-ruleset, infra-cloudflare-schema, infra-cloudflare-zone
+- refactor(infra): pigeon.dev leaves the cloudflare zones ([#87](https://github.com/noisypigeon/pigeon/pull/87))
+- feat(catalog): cloudflare capabilities ([#88](https://github.com/noisypigeon/pigeon/pull/88)) · infra-cloudflare-schema
+- feat(catalog): digitalocean, scaleway and backblaze catalogs ([#89](https://github.com/noisypigeon/pigeon/pull/89)) · infra-backblaze-bucket, infra-backblaze-schema, infra-digitalocean-project, infra-digitalocean-project-resources, infra-digitalocean-schema, infra-digitalocean-spaces-bucket, infra-digitalocean-ssh-key, infra-scaleway-iam-application, infra-scaleway-iam-policy, infra-scaleway-project, infra-scaleway-schema
+- docs(adr): phase 2, the pigeon-account bootstrap ([#90](https://github.com/noisypigeon/pigeon/pull/90))
+- feat(cobot): local units run only when named ([#91](https://github.com/noisypigeon/pigeon/pull/91)) · cobot
+- feat(infra): the pigeon-account bootstrap unit ([#92](https://github.com/noisypigeon/pigeon/pull/92)) · infra-pigeon-account, infra-pigeon-d1-database, infra-pigeon-r2-bucket, infra-pigeon-schema
+- docs(adr): the bootstrap composes the Cloudflare catalog ([#93](https://github.com/noisypigeon/pigeon/pull/93))
+- feat(cobot): catalog module references and retired changelogs ([#94](https://github.com/noisypigeon/pigeon/pull/94)) · cobot
+- feat(catalog): account and d1-database modules, and an optional r2-bucket suffix ([#95](https://github.com/noisypigeon/pigeon/pull/95)) · infra-cloudflare-account, infra-cloudflare-d1-database, infra-cloudflare-r2-bucket, infra-cloudflare-schema
+- refactor(infra): infra/pigeon composes the Cloudflare catalog; infra/agnostic retires ([#96](https://github.com/noisypigeon/pigeon/pull/96)) · infra-pigeon-schema
+- docs(adr): phase 3, the runner spike and engine changes ([#97](https://github.com/noisypigeon/pigeon/pull/97))
+- feat(tooling): the Cloudflare Containers spike kit ([#98](https://github.com/noisypigeon/pigeon/pull/98))
+- feat(cobot): credentials requested by capability ([#99](https://github.com/noisypigeon/pigeon/pull/99)) · cobot
+- feat(cobot): state in R2 ([#100](https://github.com/noisypigeon/pigeon/pull/100)) · cobot
+- feat(cobot): stored plans ([#101](https://github.com/noisypigeon/pigeon/pull/101)) · cobot
+- feat(backplane): plan, apply and serve ([#102](https://github.com/noisypigeon/pigeon/pull/102)) · backplane, cobot
+- docs(adr): Worker–Container mutual TLS ([#103](https://github.com/noisypigeon/pigeon/pull/103))
+- feat(tooling): spike TLS checks ([#104](https://github.com/noisypigeon/pigeon/pull/104))
+- feat(backplane): mutual TLS for serve ([#105](https://github.com/noisypigeon/pigeon/pull/105)) · backplane
+- fix(catalog): one Cloudflare account lookup, and cobot step progress ([#106](https://github.com/noisypigeon/pigeon/pull/106)) · cobot, infra-cloudflare-account, infra-cloudflare-schema, infra-pigeon-schema
+- fix(catalog): ignore the D1 location hint after creation ([#107](https://github.com/noisypigeon/pigeon/pull/107)) · infra-cloudflare-d1-database, infra-cloudflare-schema, infra-pigeon-schema
+- feat(cobot): name the attributes an update changes ([#108](https://github.com/noisypigeon/pigeon/pull/108)) · cobot
 
 ## 2026-11-03
 
-- ci: check the instance manifest with the pigeon-backplane image ([#76](https://github.com/noisypigeon/pigeon/pull/76))
-- feat(backplane): pigeon-backplane crate, instance manifest and pigeon backplane ([#75](https://github.com/noisypigeon/pigeon/pull/75))
-- docs(adr): backplane, the platform's composition layer ([#74](https://github.com/noisypigeon/pigeon/pull/74))
-- build(cobot): allow the scaleway and b2 providers ([#71](https://github.com/noisypigeon/pigeon/pull/71))
-- docs(adr): infra/scaleway and infra/backblaze provisioner units ([#70](https://github.com/noisypigeon/pigeon/pull/70))
-- feat(infra): infra/agnostic and its random-string module ([#68](https://github.com/noisypigeon/pigeon/pull/68))
-- feat(cobot): agnostic modules and each blocks ([#67](https://github.com/noisypigeon/pigeon/pull/67))
-- build(cobot): allow the random provider ([#66](https://github.com/noisypigeon/pigeon/pull/66))
-- docs(adr): infra/agnostic and random resource names ([#65](https://github.com/noisypigeon/pigeon/pull/65))
-- docs(adr): require bucket versioning in infra/digitalocean ([#63](https://github.com/noisypigeon/pigeon/pull/63))
-- build(cobot): allow the digitalocean provider ([#62](https://github.com/noisypigeon/pigeon/pull/62))
-- docs(adr): infra/digitalocean provisioner unit ([#61](https://github.com/noisypigeon/pigeon/pull/61))
-- refactor(cobot): only the site config contract ([#60](https://github.com/noisypigeon/pigeon/pull/60))
-- feat(workloads): the blog's config from config.yaml ([#59](https://github.com/noisypigeon/pigeon/pull/59))
-- feat(cobot): build static sites from config.yaml ([#58](https://github.com/noisypigeon/pigeon/pull/58))
-- feat(static-site-template): a site config contract and dated posts ([#57](https://github.com/noisypigeon/pigeon/pull/57))
-- ci: run cobot workflows from the pigeon-cobot image ([#56](https://github.com/noisypigeon/pigeon/pull/56))
-- docs(adr): static site config from config.yaml, by a template contract ([#55](https://github.com/noisypigeon/pigeon/pull/55))
-- feat(cobot): release a pigeon-cobot image ([#53](https://github.com/noisypigeon/pigeon/pull/53))
-- docs(adr): no safe.directory in the cobot image ([#54](https://github.com/noisypigeon/pigeon/pull/54))
-- docs(adr): a released cobot image for the cobot workflows ([#52](https://github.com/noisypigeon/pigeon/pull/52))
-- feat(workloads): the blog on R2 ([#50](https://github.com/noisypigeon/pigeon/pull/50))
-- fix(cobot): the apex token's transform rules permission ([#51](https://github.com/noisypigeon/pigeon/pull/51))
-- feat(cobot): sites build and publish ([#49](https://github.com/noisypigeon/pigeon/pull/49))
-- feat(infra): the apex's site rulesets and the account outputs ([#48](https://github.com/noisypigeon/pigeon/pull/48))
-- feat(cobot): static-site workloads on R2 ([#47](https://github.com/noisypigeon/pigeon/pull/47))
-- docs(adr): two static-site engine PRs, the token's id and the template's defaults ([#46](https://github.com/noisypigeon/pigeon/pull/46))
-- fix(cobot): name the unit and passphrase in decrypt errors ([#45](https://github.com/noisypigeon/pigeon/pull/45))
-- feat(static-site-template): port the Zola theme ([#44](https://github.com/noisypigeon/pigeon/pull/44))
-- refactor(cobot): drop the all-zones apex ([#43](https://github.com/noisypigeon/pigeon/pull/43))
-- refactor(workloads): move the noisypigeon.com apex to its zone ([#42](https://github.com/noisypigeon/pigeon/pull/42))
-- feat(cobot): per-zone apexes and unit moves ([#41](https://github.com/noisypigeon/pigeon/pull/41))
-- docs(adr): one apex per zone, and moving a unit's state ([#40](https://github.com/noisypigeon/pigeon/pull/40))
-- feat(workloads): noisypigeon.com apex with Proton Mail ([#39](https://github.com/noisypigeon/pigeon/pull/39))
+### Released
+
+- backplane v0.1.0
+- cobot v0.1.6
+- cobot v0.1.7
+- cobot v0.1.8
+- cobot v0.1.9
+- cobot v0.1.10
+- cobot v0.1.11
+- cobot v0.1.12
+- cobot v0.1.13
+- cobot v0.1.14
+- cobot v0.1.15
+- cobot v0.1.16
+- gantry v0.1.6
+- gantry v0.1.7
+- infra-agnostic-random-string v0.1.0
+- infra-agnostic-schema v0.1.0
+- infra-cloudflare-r2-bucket v0.1.0
+- infra-cloudflare-r2-custom-domain v0.1.0
+- infra-cloudflare-ruleset v0.1.0
+- infra-cloudflare-schema v0.1.2
+- infra-cloudflare-schema v0.1.3
+- infra-cloudflare-schema v0.1.4
+- infra-cloudflare-schema v0.1.5
+- infra-cloudflare-schema v0.1.6
+- sentinel v0.1.9
+- sentinel v0.1.10
+- static-site-template v1.0.0
+- static-site-template v1.0.1
+
+### Merged
+
 - docs(adr): static sites on Cloudflare R2, and the site template ([#38](https://github.com/noisypigeon/pigeon/pull/38))
+- feat(workloads): noisypigeon.com apex with Proton Mail ([#39](https://github.com/noisypigeon/pigeon/pull/39))
+- docs(adr): one apex per zone, and moving a unit's state ([#40](https://github.com/noisypigeon/pigeon/pull/40))
+- feat(cobot): per-zone apexes and unit moves ([#41](https://github.com/noisypigeon/pigeon/pull/41)) · cobot
+- refactor(workloads): move the noisypigeon.com apex to its zone ([#42](https://github.com/noisypigeon/pigeon/pull/42))
+- refactor(cobot): drop the all-zones apex ([#43](https://github.com/noisypigeon/pigeon/pull/43)) · cobot, infra-cloudflare-schema
+- feat(static-site-template): port the Zola theme ([#44](https://github.com/noisypigeon/pigeon/pull/44)) · static-site-template
+- fix(cobot): name the unit and passphrase in decrypt errors ([#45](https://github.com/noisypigeon/pigeon/pull/45)) · cobot
+- docs(adr): two static-site engine PRs, the token's id and the template's defaults ([#46](https://github.com/noisypigeon/pigeon/pull/46))
+- feat(cobot): static-site workloads on R2 ([#47](https://github.com/noisypigeon/pigeon/pull/47)) · cobot, infra-cloudflare-r2-bucket, infra-cloudflare-r2-custom-domain, infra-cloudflare-ruleset, infra-cloudflare-schema
+- feat(infra): the apex's site rulesets and the account outputs ([#48](https://github.com/noisypigeon/pigeon/pull/48)) · infra-cloudflare-schema
+- feat(cobot): sites build and publish ([#49](https://github.com/noisypigeon/pigeon/pull/49)) · cobot
+- fix(cobot): the apex token's transform rules permission ([#51](https://github.com/noisypigeon/pigeon/pull/51)) · cobot
+- feat(workloads): the blog on R2 ([#50](https://github.com/noisypigeon/pigeon/pull/50))
+- docs(adr): a released cobot image for the cobot workflows ([#52](https://github.com/noisypigeon/pigeon/pull/52))
+- docs(adr): no safe.directory in the cobot image ([#54](https://github.com/noisypigeon/pigeon/pull/54))
+- feat(cobot): release a pigeon-cobot image ([#53](https://github.com/noisypigeon/pigeon/pull/53)) · cobot, gantry, sentinel
+- docs(adr): static site config from config.yaml, by a template contract ([#55](https://github.com/noisypigeon/pigeon/pull/55))
+- ci: run cobot workflows from the pigeon-cobot image ([#56](https://github.com/noisypigeon/pigeon/pull/56))
+- feat(static-site-template): a site config contract and dated posts ([#57](https://github.com/noisypigeon/pigeon/pull/57)) · static-site-template
+- feat(cobot): build static sites from config.yaml ([#58](https://github.com/noisypigeon/pigeon/pull/58)) · cobot, infra-cloudflare-schema
+- feat(workloads): the blog's config from config.yaml ([#59](https://github.com/noisypigeon/pigeon/pull/59))
+- refactor(cobot): only the site config contract ([#60](https://github.com/noisypigeon/pigeon/pull/60)) · cobot, infra-cloudflare-schema
+- docs(adr): infra/digitalocean provisioner unit ([#61](https://github.com/noisypigeon/pigeon/pull/61))
+- build(cobot): allow the digitalocean provider ([#62](https://github.com/noisypigeon/pigeon/pull/62))
+- docs(adr): require bucket versioning in infra/digitalocean ([#63](https://github.com/noisypigeon/pigeon/pull/63))
+- docs(adr): infra/agnostic and random resource names ([#65](https://github.com/noisypigeon/pigeon/pull/65))
+- build(cobot): allow the random provider ([#66](https://github.com/noisypigeon/pigeon/pull/66))
+- feat(cobot): agnostic modules and each blocks ([#67](https://github.com/noisypigeon/pigeon/pull/67)) · cobot
+- feat(infra): infra/agnostic and its random-string module ([#68](https://github.com/noisypigeon/pigeon/pull/68)) · infra-agnostic-random-string, infra-agnostic-schema
+- docs(adr): infra/scaleway and infra/backblaze provisioner units ([#70](https://github.com/noisypigeon/pigeon/pull/70))
+- build(cobot): allow the scaleway and b2 providers ([#71](https://github.com/noisypigeon/pigeon/pull/71))
+- docs(adr): backplane, the platform's composition layer ([#74](https://github.com/noisypigeon/pigeon/pull/74))
+- feat(backplane): pigeon-backplane crate, instance manifest and pigeon backplane ([#75](https://github.com/noisypigeon/pigeon/pull/75)) · backplane, cobot, gantry, sentinel
+- ci: check the instance manifest with the pigeon-backplane image ([#76](https://github.com/noisypigeon/pigeon/pull/76))
 
 ## 2026-11-02
 
-- feat(cobot): apexes from infra/cloudflare, workload secrets and token handoff ([#37](https://github.com/noisypigeon/pigeon/pull/37))
-- docs(adr): apex constituents live in infra/cloudflare ([#36](https://github.com/noisypigeon/pigeon/pull/36))
-- docs(adr): workloads by zone, each with an apex ([#34](https://github.com/noisypigeon/pigeon/pull/34))
-- refactor(cobot): move release machinery from sentinel to cobot ([#33](https://github.com/noisypigeon/pigeon/pull/33))
-- docs(adr): sentinel is policy, cobot performs actions ([#31](https://github.com/noisypigeon/pigeon/pull/31))
-- feat(infra): cloudflare provisioner unit ([#30](https://github.com/noisypigeon/pigeon/pull/30))
-- docs(adr): account tokens and permission groups by scope ([#29](https://github.com/noisypigeon/pigeon/pull/29))
-- fix(sentinel): release a unit only when its build changed ([#28](https://github.com/noisypigeon/pigeon/pull/28))
-- fix(cobot): copy only the lockfile blocks a unit uses ([#27](https://github.com/noisypigeon/pigeon/pull/27))
-- docs(adr): path-gated Rust CI and dependency-aware releases ([#26](https://github.com/noisypigeon/pigeon/pull/26))
-- build(cobot): allow the cloudflare provider ([#25](https://github.com/noisypigeon/pigeon/pull/25))
-- fix(cobot): stop the plan, not fail it, on provider changes ([#24](https://github.com/noisypigeon/pigeon/pull/24))
-- feat(cobot): config units, secrets and pinned providers ([#23](https://github.com/noisypigeon/pigeon/pull/23))
-- docs(adr): infra/cloudflare, the provisioner unit ([#22](https://github.com/noisypigeon/pigeon/pull/22))
-- feat(cobot): plan on PR, apply on merge ([#21](https://github.com/noisypigeon/pigeon/pull/21))
-- feat(cobot): the cobot crate and pigeon cobot ([#20](https://github.com/noisypigeon/pigeon/pull/20))
-- feat(sentinel): find rule and optional release images ([#19](https://github.com/noisypigeon/pigeon/pull/19))
-- docs(adr): amend cobot with engine-first execution and safe plans ([#18](https://github.com/noisypigeon/pigeon/pull/18))
-- docs(adr): cobot, infrastructure as code with state in git ([#17](https://github.com/noisypigeon/pigeon/pull/17))
-- fix(sentinel): publish every unpublished release tag ([#16](https://github.com/noisypigeon/pigeon/pull/16))
-- docs(adr): publish every unpublished release tag ([#15](https://github.com/noisypigeon/pigeon/pull/15))
-- ci: run lifecycle checks from the pigeon-sentinel image ([#14](https://github.com/noisypigeon/pigeon/pull/14))
-- fix(sentinel): recoverable release bot ([#13](https://github.com/noisypigeon/pigeon/pull/13))
-- docs(adr): amend the release ADR with a bot user and recoverable publishing ([#12](https://github.com/noisypigeon/pigeon/pull/12))
-- feat(sentinel): release units, generated changelogs, gantry and images ([#11](https://github.com/noisypigeon/pigeon/pull/11))
-- docs(adr): release sentinel and gantry independently with generated changelogs ([#10](https://github.com/noisypigeon/pigeon/pull/10))
-- build: move pigeon/ to src/pigeon-cli and add tooling, infra and workloads ([#9](https://github.com/noisypigeon/pigeon/pull/9))
-- docs(adr): establish the src, tooling, infra and workloads areas ([#8](https://github.com/noisypigeon/pigeon/pull/8))
-- feat(sentinel): replace the lint scripts with pigeon sentinel and YAML policies ([#7](https://github.com/noisypigeon/pigeon/pull/7))
-- docs(adr): amend the cargo workspace ADR with pigeon sentinel ([#6](https://github.com/noisypigeon/pigeon/pull/6))
-- build: set up the Cargo workspace and Mise toolchain ([#5](https://github.com/noisypigeon/pigeon/pull/5))
-- docs(adr): adopt a Cargo workspace with a Mise-managed toolchain ([#4](https://github.com/noisypigeon/pigeon/pull/4))
-- chore: move scripts under .github, terse comments, add CHANGELOG ([#3](https://github.com/noisypigeon/pigeon/pull/3))
-- docs(adr): amend the lifecycle ADR with scripts, comments and a changelog ([#2](https://github.com/noisypigeon/pigeon/pull/2))
-- ci: enforce the ADR-driven lifecycle ([#1](https://github.com/noisypigeon/pigeon/pull/1))
+### Released
+
+- cobot v0.1.0
+- cobot v0.1.1
+- cobot v0.1.2
+- cobot v0.1.3
+- cobot v0.1.4
+- cobot v0.1.5
+- gantry v0.1.0
+- gantry v0.1.1
+- gantry v0.1.2
+- gantry v0.1.3
+- gantry v0.1.4
+- gantry v0.1.5
+- infra-cloudflare-api-token v0.1.0
+- infra-cloudflare-dns-record v0.1.0
+- infra-cloudflare-permission-groups v0.1.0
+- infra-cloudflare-schema v0.1.0
+- infra-cloudflare-schema v0.1.1
+- infra-cloudflare-zone v0.1.0
+- sentinel v0.1.0
+- sentinel v0.1.1
+- sentinel v0.1.2
+- sentinel v0.1.3
+- sentinel v0.1.4
+- sentinel v0.1.5
+- sentinel v0.1.6
+- sentinel v0.1.7
+- sentinel v0.1.8
+
+### Merged
+
 - docs(adr): adopt an ADR-driven development lifecycle ([ed4fd77](https://github.com/noisypigeon/pigeon/commit/ed4fd77cf0682ae6b49bf489dd19d659e1f50e7d))
+- ci: enforce the ADR-driven lifecycle ([#1](https://github.com/noisypigeon/pigeon/pull/1))
+- docs(adr): amend the lifecycle ADR with scripts, comments and a changelog ([#2](https://github.com/noisypigeon/pigeon/pull/2))
+- chore: move scripts under .github, terse comments, add CHANGELOG ([#3](https://github.com/noisypigeon/pigeon/pull/3))
+- docs(adr): adopt a Cargo workspace with a Mise-managed toolchain ([#4](https://github.com/noisypigeon/pigeon/pull/4))
+- build: set up the Cargo workspace and Mise toolchain ([#5](https://github.com/noisypigeon/pigeon/pull/5))
+- docs(adr): amend the cargo workspace ADR with pigeon sentinel ([#6](https://github.com/noisypigeon/pigeon/pull/6))
+- feat(sentinel): replace the lint scripts with pigeon sentinel and YAML policies ([#7](https://github.com/noisypigeon/pigeon/pull/7))
+- docs(adr): establish the src, tooling, infra and workloads areas ([#8](https://github.com/noisypigeon/pigeon/pull/8))
+- build: move pigeon/ to src/pigeon-cli and add tooling, infra and workloads ([#9](https://github.com/noisypigeon/pigeon/pull/9))
+- docs(adr): release sentinel and gantry independently with generated changelogs ([#10](https://github.com/noisypigeon/pigeon/pull/10))
+- feat(sentinel): release units, generated changelogs, gantry and images ([#11](https://github.com/noisypigeon/pigeon/pull/11)) · gantry, sentinel
+- docs(adr): amend the release ADR with a bot user and recoverable publishing ([#12](https://github.com/noisypigeon/pigeon/pull/12))
+- fix(sentinel): recoverable release bot ([#13](https://github.com/noisypigeon/pigeon/pull/13)) · gantry, sentinel
+- ci: run lifecycle checks from the pigeon-sentinel image ([#14](https://github.com/noisypigeon/pigeon/pull/14))
+- docs(adr): publish every unpublished release tag ([#15](https://github.com/noisypigeon/pigeon/pull/15))
+- fix(sentinel): publish every unpublished release tag ([#16](https://github.com/noisypigeon/pigeon/pull/16)) · gantry, sentinel
+- docs(adr): cobot, infrastructure as code with state in git ([#17](https://github.com/noisypigeon/pigeon/pull/17))
+- docs(adr): amend cobot with engine-first execution and safe plans ([#18](https://github.com/noisypigeon/pigeon/pull/18))
+- feat(sentinel): find rule and optional release images ([#19](https://github.com/noisypigeon/pigeon/pull/19)) · sentinel
+- feat(cobot): the cobot crate and pigeon cobot ([#20](https://github.com/noisypigeon/pigeon/pull/20)) · cobot, gantry, sentinel
+- feat(cobot): plan on PR, apply on merge ([#21](https://github.com/noisypigeon/pigeon/pull/21)) · sentinel
+- docs(adr): infra/cloudflare, the provisioner unit ([#22](https://github.com/noisypigeon/pigeon/pull/22))
+- feat(cobot): config units, secrets and pinned providers ([#23](https://github.com/noisypigeon/pigeon/pull/23)) · cobot, gantry, sentinel
+- fix(cobot): stop the plan, not fail it, on provider changes ([#24](https://github.com/noisypigeon/pigeon/pull/24))
+- build(cobot): allow the cloudflare provider ([#25](https://github.com/noisypigeon/pigeon/pull/25))
+- docs(adr): path-gated Rust CI and dependency-aware releases ([#26](https://github.com/noisypigeon/pigeon/pull/26))
+- fix(cobot): copy only the lockfile blocks a unit uses ([#27](https://github.com/noisypigeon/pigeon/pull/27)) · cobot
+- fix(sentinel): release a unit only when its build changed ([#28](https://github.com/noisypigeon/pigeon/pull/28)) · cobot, gantry, sentinel
+- docs(adr): account tokens and permission groups by scope ([#29](https://github.com/noisypigeon/pigeon/pull/29))
+- feat(infra): cloudflare provisioner unit ([#30](https://github.com/noisypigeon/pigeon/pull/30)) · infra-cloudflare-api-token, infra-cloudflare-permission-groups, infra-cloudflare-schema, infra-cloudflare-zone, sentinel
+- docs(adr): sentinel is policy, cobot performs actions ([#31](https://github.com/noisypigeon/pigeon/pull/31))
+- refactor(cobot): move release machinery from sentinel to cobot ([#33](https://github.com/noisypigeon/pigeon/pull/33)) · cobot, gantry, sentinel
+- docs(adr): workloads by zone, each with an apex ([#34](https://github.com/noisypigeon/pigeon/pull/34))
+- docs(adr): apex constituents live in infra/cloudflare ([#36](https://github.com/noisypigeon/pigeon/pull/36))
+- feat(cobot): apexes from infra/cloudflare, workload secrets and token handoff ([#37](https://github.com/noisypigeon/pigeon/pull/37)) · cobot, infra-cloudflare-dns-record, infra-cloudflare-schema

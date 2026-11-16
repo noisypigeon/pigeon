@@ -1857,7 +1857,7 @@ dependencies = [
 
 [[package]]
 name = "pigeon-backplane"
-version = "0.1.30"
+version = "0.1.31"
 dependencies = [
  "aes-gcm",
  "age",
@@ -1895,7 +1895,7 @@ dependencies = [
 
 [[package]]
 name = "pigeon-sentinel"
-version = "0.1.16"
+version = "0.1.17"
 dependencies = [
  "regex",
  "serde",

@@ -1,5 +1,5 @@
 # pigeon's blog template; see .claude/decisions/2026-11-03-runtime-cloudflare-static-sites-r2.md and 2026-11-05-runtime-architecture-site-through-backplane.md.
-version: 1.0.2
+version: 1.0.3
 description: A Zola theme for static sites on Cloudflare R2.
 license: GPL-3.0-or-later
 zola: 0.23.6
