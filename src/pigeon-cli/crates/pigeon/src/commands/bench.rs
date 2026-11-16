@@ -272,15 +272,13 @@ fn run_one(bench: u8, argv: &[String], timeout: Option<u32>) -> i32 {
 fn ci(benches: u8) -> i32 {
     let n = benches.clamp(1, 3);
     if n == 1 {
-        let argv = ["mise", "run", "ci-scoped"].map(String::from);
+        let argv = ["pigeon", "dev", "ci-scoped"].map(String::from);
         return run_one(0, &argv, None);
     }
     let scope: Vec<String> = [
         "pigeon",
         "cobot",
         "scope",
-        "--root",
-        "../..",
         "--base",
         "artifacts/main",
         "--json",

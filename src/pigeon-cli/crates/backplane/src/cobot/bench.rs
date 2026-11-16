@@ -328,6 +328,16 @@ pub fn check_step(scope_json: &str, name: &str, dir: &str) -> Result<Step, Strin
         .ok_or_else(|| format!("bench: no check `{name}` in this change's scope"))
 }
 
+/// Where an allowed `argv` runs: `cargo` in the workspace `ws`, anything else (`pigeon`, `git`)
+/// at the checkout's root, which their own `--root` defaults to.
+fn argv_dir(argv: &[String], ws: &str) -> String {
+    if argv.first().is_some_and(|p| p == "cargo") {
+        ws.into()
+    } else {
+        String::new()
+    }
+}
+
 /// The checkout's root, relative to its workspace directory `ws`.
 fn root_from(ws: &str) -> String {
     if ws.is_empty() {
@@ -873,7 +883,7 @@ impl Bench {
             Command::Argv { argv } => {
                 bench::allow::allow(argv).map_err(|r| r.to_string())?;
                 Ok(vec![Step {
-                    dir: self.workspace(),
+                    dir: argv_dir(argv, &self.workspace()),
                     argv: argv.clone(),
                 }])
             }
@@ -1324,6 +1334,13 @@ run = "sleep 30"
     fn scope_finds_the_root_from_either_workspace_layout() {
         assert_eq!(root_from(""), ".");
         assert_eq!(root_from(WORKSPACE), "../..");
+    }
+
+    #[test]
+    fn cargo_runs_in_the_workspace_and_pigeon_and_git_at_the_root() {
+        assert_eq!(argv_dir(&s(&["cargo", "test"]), WORKSPACE), WORKSPACE);
+        assert_eq!(argv_dir(&s(&["pigeon", "cobot", "scope"]), WORKSPACE), "");
+        assert_eq!(argv_dir(&s(&["git", "status"]), WORKSPACE), "");
     }
 
     #[test]
