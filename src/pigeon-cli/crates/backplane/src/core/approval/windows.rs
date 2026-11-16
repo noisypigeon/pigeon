@@ -91,14 +91,19 @@ pub struct Windows {
 /// and closing at the code tier or lower. The owner tier and break-glass still ask, and a hold
 /// defers what it would allow.
 #[must_use]
-pub fn decide(w: &Window, change: &crate::changes::Change, operation: &str, now: u64) -> Decision {
+pub fn decide(
+    w: &Window,
+    change: &crate::core::change::Change,
+    operation: &str,
+    now: u64,
+) -> Decision {
     match judge(w, change, operation, now) {
         Decision::Allow => waits(w, change, operation).map_or(Decision::Allow, Decision::Hold),
         d => d,
     }
 }
 
-fn judge(w: &Window, change: &crate::changes::Change, operation: &str, _now: u64) -> Decision {
+fn judge(w: &Window, change: &crate::core::change::Change, operation: &str, _now: u64) -> Decision {
     if !w.usable() {
         return Decision::Ask(format!("Auto window {} has ended or paused", w.id));
     }
@@ -282,7 +287,7 @@ impl Windows {
     #[must_use]
     pub fn decide(
         &self,
-        change: &crate::changes::Change,
+        change: &crate::core::change::Change,
         operation: &str,
         now: u64,
     ) -> (Self, Option<(u32, Decision)>) {
@@ -307,7 +312,7 @@ impl Windows {
 
 /// Whether `d` on `operation` merges `change` under `w` for the first time: an allowed merge, or
 /// an allowed approval, which queues its merge unless a hold defers it.
-fn merges(w: &Window, change: &crate::changes::Change, operation: &str, d: &Decision) -> bool {
+fn merges(w: &Window, change: &crate::core::change::Change, operation: &str, d: &Decision) -> bool {
     let queues = match operation {
         "change.merge" => true,
         "change.approve" => waits(w, change, "change.merge").is_none(),
@@ -360,7 +365,7 @@ fn rate_waits() -> String {
 
 /// What `w`'s hold, a failed deploy's or the rate breaker's, defers `operation` on `change` on:
 /// only a merge that isn't a `fix` or `revert`.
-fn waits(w: &Window, change: &crate::changes::Change, operation: &str) -> Option<String> {
+fn waits(w: &Window, change: &crate::core::change::Change, operation: &str) -> Option<String> {
     defers(w.hold.as_ref(), change, operation).or_else(|| {
         (w.quiet.is_some() && operation == "change.merge" && !fixes(change)).then(rate_waits)
     })

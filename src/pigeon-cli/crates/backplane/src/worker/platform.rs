@@ -410,14 +410,14 @@ pub fn random_hex(n: u32) -> Result<String> {
     let crypto = Reflect::get(&js_sys::global(), &"crypto".into())?;
     let bytes = Uint8Array::new_with_length(n);
     method(&crypto, "getRandomValues")?.call1(&crypto, &bytes)?;
-    Ok(crate::grants::hex(&bytes.to_vec()))
+    Ok(crate::core::approval::grants::hex(&bytes.to_vec()))
 }
 
 /// This code's version, as `versions::HEADER` carries it; empty where it isn't known.
 #[must_use]
 pub fn version(env: &Env) -> String {
     env.get_binding::<worker::WorkerVersionMetadata>("CF_VERSION_METADATA")
-        .map(|v| crate::versions::stamp(&v.timestamp(), &v.id()))
+        .map(|v| crate::core::deploy::versions::stamp(&v.timestamp(), &v.id()))
         .unwrap_or_default()
 }
 
@@ -430,7 +430,8 @@ pub fn version(env: &Env) -> String {
 pub async fn call(env: &Env, stub: &worker::Stub, mut req: Request) -> Result<Response> {
     let v = version(env);
     if !v.is_empty() {
-        req.headers_mut()?.set(crate::versions::HEADER, &v)?;
+        req.headers_mut()?
+            .set(crate::core::deploy::versions::HEADER, &v)?;
     }
     let again = req.clone()?;
     match stub.fetch_with_request(req).await {
@@ -491,8 +492,8 @@ pub async fn seal(secret: &str, plain: &str) -> Result<String> {
     let bytes = Uint8Array::new(&out).to_vec();
     Ok(format!(
         "{}.{}",
-        crate::grants::hex(&iv),
-        crate::grants::hex(&bytes)
+        crate::core::approval::grants::hex(&iv),
+        crate::core::approval::grants::hex(&bytes)
     ))
 }
 

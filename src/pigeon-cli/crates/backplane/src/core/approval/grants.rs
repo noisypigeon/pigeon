@@ -41,7 +41,7 @@ pub struct Grant {
     pub expires: u64,
     /// The tier it needs, from the head's tiers when minted; none is code.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub tier: Option<crate::approvals::Tier>,
+    pub tier: Option<crate::core::approval::tiers::Tier>,
     /// When it was used; a used grant is kept until it expires, to say so.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub used: Option<u64>,
@@ -51,7 +51,7 @@ impl Grant {
     /// Whether redeeming it needs the owner's code, not one tap.
     #[must_use]
     pub fn needs_code(&self) -> bool {
-        self.tier != Some(crate::approvals::Tier::Confirm)
+        self.tier != Some(crate::core::approval::tiers::Tier::Confirm)
     }
 }
 

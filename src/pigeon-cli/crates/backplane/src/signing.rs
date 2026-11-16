@@ -29,7 +29,7 @@ pub const INTERMEDIATE_SHA256: &str =
 #[must_use]
 pub fn intermediate_ok(der: &[u8]) -> bool {
     use sha2::Digest;
-    crate::grants::hex(&sha2::Sha256::digest(der)) == INTERMEDIATE_SHA256
+    crate::core::approval::grants::hex(&sha2::Sha256::digest(der)) == INTERMEDIATE_SHA256
 }
 
 /// The prefix of every keychain the harness creates.

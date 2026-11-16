@@ -9,8 +9,8 @@ use super::platform::{Settings, now};
 use super::{elicit, run, to_change};
 use crate::access::Identity;
 use crate::approve::{self, Waiting};
-use crate::changes::Change;
-use crate::grants::Grant;
+use crate::core::approval::grants::Grant;
+use crate::core::change::Change;
 use crate::wire;
 
 pub(super) fn html(status: u16, body: &str) -> Result<Response> {
@@ -98,7 +98,7 @@ async fn listed(
         .ok()?;
     let change: Change = serde_json::from_value(v["change"].clone()).ok()?;
     let grant: Grant = serde_json::from_value(v["grant"].clone()).ok()?;
-    (status == 200 && crate::grants::still_applies(&change, &grant))
+    (status == 200 && crate::core::approval::grants::still_applies(&change, &grant))
         .then(|| (format!("https://{host}{}", w.path), w.expires))
 }
 
@@ -138,7 +138,7 @@ pub(super) async fn live(env: &Env, s: &Settings) -> Result<Vec<Waiting>> {
                             serde_json::from_value::<Change>(v["change"].clone()),
                             serde_json::from_value::<Grant>(v["grant"].clone()),
                         ) {
-                            (Ok(c), Ok(g)) => crate::grants::still_applies(&c, &g),
+                            (Ok(c), Ok(g)) => crate::core::approval::grants::still_applies(&c, &g),
                             _ => false,
                         }
                 }
@@ -260,7 +260,7 @@ async fn post(
         return refused(400, &why);
     }
     if peeked.needs_code() {
-        let purpose = crate::passkeys::grant_purpose(&token);
+        let purpose = crate::core::approval::passkeys::grant_purpose(&token);
         let shown = format!("/approve/{n}?grant={token}");
         let proved = super::passkeys::on_page(env, s, &form, &purpose, host, &shown).await?;
         if let Err(why) = proved {

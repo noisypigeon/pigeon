@@ -9,9 +9,9 @@ use super::platform::{self, Settings, json_request, now};
 use super::{approve as page, elicit};
 use crate::access::Identity;
 use crate::approve::{self, Waiting};
-use crate::changes::Change;
+use crate::core::approval::mandates::{Decision, Mandate, Mandates};
 use crate::core::approval::windows::{self, SPAN, Window, Windows};
-use crate::mandates::{Decision, Mandate, Mandates};
+use crate::core::change::Change;
 
 /// The storage key of every mandate.
 const MANDATES: &str = "mandates";
@@ -97,7 +97,7 @@ pub async fn run(
 /// Mints a page grant for mandate `m`, puts it in the inbox, and answers its link.
 async fn offer(env: &Env, s: &Settings, m: &Mandate) -> Result<String> {
     let token = platform::random_hex(32)?;
-    let expires = now() + crate::grants::PAGE_TTL;
+    let expires = now() + crate::core::approval::grants::PAGE_TTL;
     let (status, v) = to_instance(
         env,
         s,
@@ -197,7 +197,7 @@ fn allowed(id: Option<u32>, operation: &str, decided: &Value) -> Verdict {
 }
 
 /// What a hold defers a merge of `change` on under `decided`, if anything.
-fn held_merge(decided: crate::mandates::Decision) -> Option<String> {
+fn held_merge(decided: crate::core::approval::mandates::Decision) -> Option<String> {
     match decided {
         Decision::Hold(why) => Some(why),
         _ => None,
@@ -459,7 +459,12 @@ pub async fn serve(state: &State, path: &str, body: Value) -> Result<Response> {
                 Err(e) => return Response::error(format!("unreadable change: {e}"), 400),
             };
             let held = change.mandate.and_then(|id| all.get(id)).and_then(|m| {
-                held_merge(crate::mandates::decide(m, &change, "change.merge", now()))
+                held_merge(crate::core::approval::mandates::decide(
+                    m,
+                    &change,
+                    "change.merge",
+                    now(),
+                ))
             });
             match all.decide(&change, &s("operation"), now()) {
                 (all, Some((id, d))) => (all, Ok(json!({ "id": id, "decision": d, "held": held }))),
@@ -543,7 +548,7 @@ pub async fn page_serve(
             let Some(token) = approve::field(&form, "grant") else {
                 return page::refused(400, "the form is missing its grant");
             };
-            let purpose = crate::passkeys::grant_purpose(&token);
+            let purpose = crate::core::approval::passkeys::grant_purpose(&token);
             let shown = format!("/mandate/{id}?grant={token}");
             let proved = super::passkeys::on_page(env, s, &form, &purpose, &host, &shown).await?;
             if let Err(why) = proved {

@@ -5,7 +5,7 @@ use serde_json::{Value, json};
 use worker::{Env, Method, Response, Result, State};
 
 use super::platform::{self, Settings, json_request, now};
-use crate::totp::{self, Guard};
+use crate::core::approval::totp::{self, Guard};
 
 /// The storage key of the code's [`Guard`].
 pub(super) const GUARD: &str = "totp";
@@ -117,7 +117,7 @@ async fn verify(state: &State, env: &Env, code: &str) -> Result<std::result::Res
 /// makes it; see `.claude/decisions/2026-11-14-security-passkey-only-owner-proofs.md` §4.
 async fn refused(state: &State, env: &Env) -> Result<bool> {
     use super::passkeys::{KEYRING, PROOFS, PROOFS_PASSKEY, PROOFS_VAR};
-    use crate::passkeys::{Keyring, Proofs};
+    use crate::core::approval::passkeys::{Keyring, Proofs};
     let storage = state.storage();
     let proofs: Proofs = storage.get(PROOFS).await?.unwrap_or_default();
     let ring: Keyring = storage.get(KEYRING).await?.unwrap_or_default();

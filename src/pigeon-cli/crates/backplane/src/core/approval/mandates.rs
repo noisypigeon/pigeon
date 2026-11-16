@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
-use crate::approvals::matches;
+use crate::core::approval::tiers::matches;
 
 /// The most merges a mandate allows.
 pub const MAX_BUDGET: u32 = 10;
@@ -93,7 +93,7 @@ impl Hold {
 
 /// Whether `change`'s title is a `fix` or `revert`, which a hold lets merge.
 #[must_use]
-pub fn fixes(change: &crate::changes::Change) -> bool {
+pub fn fixes(change: &crate::core::change::Change) -> bool {
     ["fix", "revert"].iter().any(|t| {
         change
             .title
@@ -106,7 +106,7 @@ pub fn fixes(change: &crate::changes::Change) -> bool {
 #[must_use]
 pub fn defers(
     hold: Option<&Hold>,
-    change: &crate::changes::Change,
+    change: &crate::core::change::Change,
     operation: &str,
 ) -> Option<String> {
     let h = hold?;
@@ -402,7 +402,12 @@ pub enum Decision {
 
 /// Whether `m` approves `operation` on `change` at `now`; a hold defers what it would allow.
 #[must_use]
-pub fn decide(m: &Mandate, change: &crate::changes::Change, operation: &str, now: u64) -> Decision {
+pub fn decide(
+    m: &Mandate,
+    change: &crate::core::change::Change,
+    operation: &str,
+    now: u64,
+) -> Decision {
     match judge(m, change, operation, now) {
         Decision::Allow => {
             defers(m.hold.as_ref(), change, operation).map_or(Decision::Allow, Decision::Hold)
@@ -415,8 +420,8 @@ pub fn decide(m: &Mandate, change: &crate::changes::Change, operation: &str, now
 /// - It must be usable, cited by the change's plan, and cover the change's scope.
 /// - Approving and merging also need the head classified, never by a guarded or sentinel path,
 ///   and at most confirm, or code only because it deploys and the mandate may deploy.
-fn judge(m: &Mandate, change: &crate::changes::Change, operation: &str, now: u64) -> Decision {
-    use crate::approvals::Tier;
+fn judge(m: &Mandate, change: &crate::core::change::Change, operation: &str, now: u64) -> Decision {
+    use crate::core::approval::tiers::Tier;
     if !m.usable(now) {
         return Decision::Ask(format!(
             "mandate {} is {:?}, expired or used up",
@@ -479,7 +484,7 @@ impl Mandates {
     #[must_use]
     pub fn decide(
         &self,
-        change: &crate::changes::Change,
+        change: &crate::core::change::Change,
         operation: &str,
         now: u64,
     ) -> (Self, Option<(u32, Decision)>) {

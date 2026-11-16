@@ -13,9 +13,9 @@ use super::platform::{self, Settings, now};
 use crate::access::Identity;
 use crate::approve as page;
 use crate::core::approval::enroll::Enrolments;
-use crate::passkeys::{self, Bound, Keyring, Proofs};
+use crate::core::approval::passkeys::{self, Bound, Keyring, Proofs};
+use crate::core::approval::totp::Guard;
 use crate::push::{b64url, b64url_decode};
-use crate::totp::Guard;
 
 /// Where the `Instance` keeps the keyring.
 pub(super) const KEYRING: &str = "passkeys";
@@ -349,7 +349,9 @@ async fn bound_for(env: &Env, s: &Settings, path: &str) -> Result<Option<(Option
         let body = json!({ "token": token });
         let (status, v) =
             super::to_change(env, &s.repo, n, Method::Post, "/peek", Some(&body)).await?;
-        let Ok(grant) = serde_json::from_value::<crate::grants::Grant>(v["grant"].clone()) else {
+        let Ok(grant) =
+            serde_json::from_value::<crate::core::approval::grants::Grant>(v["grant"].clone())
+        else {
             return Ok(None);
         };
         return Ok((status == 200).then(|| {
@@ -367,7 +369,9 @@ async fn bound_for(env: &Env, s: &Settings, path: &str) -> Result<Option<(Option
             let bound = Bound {
                 operation: operation.to_string(),
                 target: id.to_string(),
-                head: crate::grants::hex(&sha2::Sha256::digest(v.to_string().as_bytes())),
+                head: crate::core::approval::grants::hex(&sha2::Sha256::digest(
+                    v.to_string().as_bytes(),
+                )),
             };
             (purpose.clone(), bound)
         })

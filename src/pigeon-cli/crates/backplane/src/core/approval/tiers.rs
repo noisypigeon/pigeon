@@ -243,7 +243,7 @@ pub fn lengthens(before: &[String], head: &[String]) -> bool {
 /// or merging a head whose merge tier is auto or confirm; see
 /// `.claude/decisions/2026-11-09-security-approvals-once-passkeys.md` §1.
 #[must_use]
-pub fn by_policy(change: &crate::changes::Change, operation: &str) -> Option<String> {
+pub fn by_policy(change: &crate::core::change::Change, operation: &str) -> Option<String> {
     if operation == "change.close" {
         // Closing loses nothing until something was pushed.
         return change.head.is_none().then(|| "unpushed".to_string());
@@ -260,7 +260,7 @@ pub fn by_policy(change: &crate::changes::Change, operation: &str) -> Option<Str
 /// unless the owner kept the merge; see
 /// `.claude/decisions/2026-11-09-security-approvals-once-passkeys.md` §3.
 #[must_use]
-pub fn by_grant(change: &crate::changes::Change, operation: &str, now: u64) -> Option<String> {
+pub fn by_grant(change: &crate::core::change::Change, operation: &str, now: u64) -> Option<String> {
     let g = change.grant.as_ref()?;
     let stage = matches!(
         operation,
@@ -276,7 +276,7 @@ pub fn by_grant(change: &crate::changes::Change, operation: &str, now: u64) -> O
 /// - Auto counts as confirm until automatic approval lands.
 /// - No tiers means code, except to close, which takes nothing from `main`.
 #[must_use]
-pub fn tier_of(change: &crate::changes::Change, operation: &str) -> Tier {
+pub fn tier_of(change: &crate::core::change::Change, operation: &str) -> Tier {
     let tiers = change.tiers.as_ref();
     let at_least_confirm = |t: &Tiered| t.tier.max(Tier::Confirm);
     match operation {

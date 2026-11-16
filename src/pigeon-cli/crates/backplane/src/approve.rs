@@ -5,8 +5,8 @@ use std::fmt::Write as _;
 
 use serde::{Deserialize, Serialize};
 
-use crate::changes::Change;
-use crate::grants::Grant;
+use crate::core::approval::grants::Grant;
+use crate::core::change::Change;
 
 /// The page's Content-Security-Policy: no scripts, no external loads, forms only to itself.
 pub const CSP: &str = "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'";
@@ -266,7 +266,7 @@ pub fn page(change: &Change, grant: &Grant, token: &str) -> String {
     );
     row("Plan", format!("<pre>{}</pre>", escape(&change.plan)));
     if let Some(t) = &change.tiers {
-        let tier = |x: &crate::approvals::Tiered| {
+        let tier = |x: &crate::core::approval::tiers::Tiered| {
             let name = serde_json::to_value(x.tier)
                 .ok()
                 .and_then(|v| v.as_str().map(str::to_string))
@@ -305,7 +305,7 @@ fn proof_fields(grant: &Grant, token: &str) -> String {
     if grant.needs_code() && grant.operation != "change.close" {
         format!(
             "{}{CODE_FIELD}{}{COVERS}",
-            passkey_button(&crate::passkeys::grant_purpose(token)),
+            passkey_button(&crate::core::approval::passkeys::grant_purpose(token)),
             if grant.operation == "change.approve" {
                 MERGES_NOTE
             } else {
@@ -315,7 +315,7 @@ fn proof_fields(grant: &Grant, token: &str) -> String {
     } else if grant.needs_code() {
         format!(
             "{}{CODE_FIELD}",
-            passkey_button(&crate::passkeys::grant_purpose(token))
+            passkey_button(&crate::core::approval::passkeys::grant_purpose(token))
         )
     } else {
         CONFIRM_NOTE.to_string()
@@ -404,7 +404,7 @@ authenticator code; removing one takes either.</p>",
                 k.used.map_or(String::new(), |u| format!(", last used {u}")),
                 escape(&k.id),
                 proof_button(
-                    &crate::passkeys::remove_purpose(&k.id),
+                    &crate::core::approval::passkeys::remove_purpose(&k.id),
                     "Remove with a passkey"
                 )
             );
@@ -438,7 +438,10 @@ made.</p>",
         let _ = write!(
             b,
             "<form method=\"post\" action=\"/passkeys\"><input type=\"hidden\" name=\"add\" value=\"1\">{}</form>",
-            proof_button(crate::passkeys::ADD, "Prove with an existing passkey first")
+            proof_button(
+                crate::core::approval::passkeys::ADD,
+                "Prove with an existing passkey first"
+            )
         );
     }
     let _ = write!(
@@ -449,7 +452,7 @@ made.</p>",
 <small data-passkey-status></small></p></form>{PASSKEY_SCRIPT}\
 <p><small><a href=\"/approvals\">Everything waiting</a></small></p>",
         if adding { "" } else { CODE_FIELD },
-        escape(crate::passkeys::REGISTER)
+        escape(crate::core::approval::passkeys::REGISTER)
     );
     shell("Passkeys", &b)
 }
@@ -476,7 +479,7 @@ minlength=\"32\" required></label></p>\
 <p><button type=\"button\" data-passkey=\"register\" data-purpose=\"{}\" hidden>Create a passkey</button> \
 <small data-passkey-status></small></p></form>{PASSKEY_SCRIPT}\
 <p><small><a href=\"/passkeys\">Passkeys</a></small></p>",
-        escape(crate::passkeys::REGISTER)
+        escape(crate::core::approval::passkeys::REGISTER)
     );
     shell("Enrol a passkey", &b)
 }
@@ -596,7 +599,7 @@ pub fn same_origin(origin: Option<&str>, fetch_site: Option<&str>, host: &str) -
 
 /// The page granting `mandate`, posting `token` and the owner's code back to `/mandate/<id>`.
 #[must_use]
-pub fn mandate_page(m: &crate::mandates::Mandate, token: &str) -> String {
+pub fn mandate_page(m: &crate::core::approval::mandates::Mandate, token: &str) -> String {
     let mut b = String::new();
     let _ = write!(
         b,
@@ -628,7 +631,7 @@ code.</p><form method=\"post\" action=\"/mandate/{}\">\
 <p><small><a href=\"/approvals\">Everything waiting</a></small></p>",
         m.id,
         escape(token),
-        passkey_button(&crate::passkeys::grant_purpose(token))
+        passkey_button(&crate::core::approval::passkeys::grant_purpose(token))
     );
     shell(&format!("Grant mandate {}", m.id), &b)
 }
@@ -670,7 +673,7 @@ pub fn grant_page(
         escape(&spec),
         o.id,
         escape(token),
-        passkey_button(&crate::passkeys::grant_purpose(token))
+        passkey_button(&crate::core::approval::passkeys::grant_purpose(token))
     );
     shell(&title, &b)
 }
@@ -703,7 +706,7 @@ pub fn ci_window_page(o: &crate::ci_window::Offer, token: &str) -> String {
         escape(&what),
         o.id,
         escape(token),
-        passkey_button(&crate::passkeys::grant_purpose(token))
+        passkey_button(&crate::core::approval::passkeys::grant_purpose(token))
     );
     shell(&title, &b)
 }
@@ -713,8 +716,8 @@ pub fn ci_window_page(o: &crate::ci_window::Offer, token: &str) -> String {
 /// the plan's changes, the code, and a refusal; see
 /// `.claude/decisions/2026-11-08-runtime-blue-green-self-standup.md`, step 4's amendment.
 #[must_use]
-pub fn platform_page(run: &crate::platforms::Run, token: &str) -> String {
-    use crate::platforms::Stage;
+pub fn platform_page(run: &crate::core::platform::platforms::Run, token: &str) -> String {
+    use crate::core::platform::platforms::Stage;
     let mut b = String::new();
     let planning = run.stage == Stage::Offered;
     let title = if planning {
@@ -759,7 +762,7 @@ destroyed (a plan that destroys is refused before it reaches you).</p><pre>",
 <input type=\"hidden\" name=\"grant\" value=\"{}\">{}{CODE_FIELD}",
         run.id,
         escape(token),
-        passkey_button(&crate::passkeys::grant_purpose(token))
+        passkey_button(&crate::core::approval::passkeys::grant_purpose(token))
     );
     if planning {
         b.push_str(
