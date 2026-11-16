@@ -439,3 +439,23 @@ fn a_move_to_the_front_is_the_owners_each_time_and_offered_only_on_an_open_chang
     merged.state = ChangeState::Merged;
     assert!(offerable(&merged, "change.front").is_err());
 }
+
+#[test]
+fn the_judges_rules_read_under_eviction_too() {
+    use super::tiers::{Rules, is_judge_rule};
+    let old: Rules = serde_saphyr::from_str(
+        "guarded: []\nsentinel: [a/**]\nsentinel_bookkeeping: [Cargo.toml]\n",
+    )
+    .expect("old");
+    let new: Rules = serde_saphyr::from_str(
+        "guarded: []\neviction: [a/**]\neviction_bookkeeping: [Cargo.toml]\n",
+    )
+    .expect("new");
+    assert_eq!(new.sentinel, ["a/**"]);
+    assert_eq!(new.sentinel_bookkeeping, ["Cargo.toml"]);
+    assert_eq!(old.sentinel, new.sentinel);
+    assert_eq!(old.sentinel_bookkeeping, new.sentinel_bookkeeping);
+    assert!(is_judge_rule("sentinel: a/b.rs"));
+    assert!(is_judge_rule("eviction: a/b.rs"));
+    assert!(!is_judge_rule("guarded: a/b.rs"));
+}

@@ -448,7 +448,7 @@ fn judge(m: &Mandate, change: &crate::change::Change, operation: &str, now: u64)
         return Decision::Ask(format!("change {}'s head has no tiers yet", change.number));
     };
     let merge = &tiers.merge;
-    if merge.rule.starts_with("guarded") || merge.rule.starts_with("sentinel") {
+    if merge.rule.starts_with("guarded") || crate::approval::tiers::is_judge_rule(&merge.rule) {
         return Decision::Ask(format!(
             "change {} touches a guarded or sentinel path ({}), which always needs the code",
             change.number, merge.rule

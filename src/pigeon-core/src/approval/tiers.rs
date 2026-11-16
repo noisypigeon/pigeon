@@ -66,13 +66,20 @@ pub struct Rules {
     /// Sentinel's paths: the judge and its rules. A change touching them is its own grant: code,
     /// never a mandate, and nothing else in it; see
     /// `.claude/decisions/2026-11-10-development-factory-crates-functional-core.md` §2.
-    #[serde(default)]
+    #[serde(default, alias = "eviction")]
     pub sentinel: Vec<String>,
     /// Workspace bookkeeping a sentinel change may also carry, as its crate moves or is renamed;
     /// see `.claude/decisions/2026-11-10-development-factory-crates-functional-core.md`'s
     /// 2026-11-16 amendment.
-    #[serde(default)]
+    #[serde(default, alias = "eviction_bookkeeping")]
     pub sentinel_bookkeeping: Vec<String>,
+}
+
+/// Whether `rule` is the judge's, under its old `sentinel` prefix or its new `eviction` one; see
+/// `.claude/decisions/2026-11-16-development-src-crates-neutral-names.md` step 12.
+#[must_use]
+pub fn is_judge_rule(rule: &str) -> bool {
+    rule.starts_with("sentinel") || rule.starts_with("eviction")
 }
 
 /// Whether `path` matches `glob`.

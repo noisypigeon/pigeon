@@ -113,7 +113,8 @@ fn judge(w: &Window, change: &crate::change::Change, operation: &str, _now: u64)
     }
     if matches!(operation, "change.approve" | "change.merge")
         && change.tiers.as_ref().is_some_and(|t| {
-            t.merge.rule.starts_with("guarded") || t.merge.rule.starts_with("sentinel")
+            t.merge.rule.starts_with("guarded")
+                || crate::approval::tiers::is_judge_rule(&t.merge.rule)
         })
     {
         return Decision::Ask(format!(
