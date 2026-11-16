@@ -93,7 +93,7 @@
       "x-site": [{ "file": "config.toml", "key": "extra.labels" }]
     },
     "look": {
-      "description": "The color-theme-* and font-theme-* classes, and the Bunny Fonts family for the fonts feature; default gameboy, ibm-plex and IBM Plex Sans.",
+      "description": "The color-theme-* and font-theme-* classes, and the Bunny Fonts family for the fonts feature; default pigeon (the iOS app's look), ibm-plex and IBM Plex Sans; gameboy is the other colour.",
       "type": "object",
       "additionalProperties": false,
       "required": ["color", "font", "font_family"],

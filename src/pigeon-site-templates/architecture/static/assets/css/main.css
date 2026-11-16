@@ -1,10 +1,11 @@
 /* The architecture template's look; see the 2026-11-11 amendment of
-   .claude/decisions/2026-11-05-runtime-architecture-site-through-backplane.md. */
+   .claude/decisions/2026-11-05-runtime-architecture-site-through-backplane.md. Neutrals, text and
+   links come from tokens.css, the iOS app's; see .claude/decisions/2026-11-16-runtime-owner-pages-app-look.md. */
 :root {
-  --bg: #0b0b0c; --region: #0d0d0e; --card: #141416; --pill: #1b1b1e;
-  --border: #2c2c30; --border-2: #3a3a40; --hair: #232326; --hair-2: #1d1d20;
-  --fg: #ededed; --fg-2: #d4d4d8; --muted: #a3a3a8; --line: #55555c; --head: #8a8a92;
-  --cloudflare: #f6821f; --github: #6e6e75; --link: #7cb4ff;
+  --bg: var(--background); --region: var(--background); --pill: var(--chip);
+  --border: var(--line); --border-2: var(--line); --hair: var(--chip); --hair-2: var(--chip);
+  --fg: var(--ink); --fg-2: var(--ink2); --head: var(--muted); --link: var(--accent);
+  --cloudflare: #f6821f; --github: #6e6e75;
   --k-call: #a3a3a8; --k-job: #fbbf6a; --k-store: #7cb4ff; --k-git: #f9a8d4;
   --object: #38d6c4; --container: #fbbf6a; --storage: #7cb4ff; --git: #f9a8d4; --gh: #c9c9ce;
   --rail-bg: #141210; --rail-border: #5a4520;
@@ -14,10 +15,7 @@
 }
 @media (prefers-color-scheme: light) {
   :root {
-    --bg: #f7f7f8; --region: #fbfbfc; --card: #ffffff; --pill: #f4f4f5;
-    --border: #d9d9de; --border-2: #c9c9cf; --hair: #e7e7ea; --hair-2: #efeff1;
-    --fg: #141416; --fg-2: #2c2c30; --muted: #5f5f66; --line: #a3a3a8; --head: #7a7a82;
-    --cloudflare: #d9690a; --github: #8a8a92; --link: #1f6fd6;
+    --cloudflare: #d9690a; --github: #8a8a92;
     --k-call: #6e6e75; --k-job: #b9770e; --k-store: #1f6fd6; --k-git: #c0367f;
     --object: #0f8f83; --container: #b9770e; --storage: #1f6fd6; --git: #c0367f; --gh: #6e6e75;
     --rail-bg: #fff8ec; --rail-border: #e2bf86;
@@ -26,21 +24,25 @@
 }
 *, *::before, *::after { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; }
-body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.5 var(--sans); overflow-x: hidden; }
+body {
+  margin: 0; background-color: var(--bg); color: var(--fg); font: 14px/1.5 var(--sans); overflow-x: hidden;
+  background-image: radial-gradient(circle, var(--dot) var(--dot-size), transparent calc(var(--dot-size) + 0.4px));
+  background-size: var(--grid-step) var(--grid-step);
+}
 a { color: var(--link); text-decoration: none; }
 a:hover { text-decoration: underline; }
 .mono, code { font-family: var(--mono); }
 .muted { color: var(--muted); font-size: 12px; }
 .grow { flex-grow: 1; }
 
-.top { padding: 16px 32px; border-bottom: 1px solid var(--hair); }
+.top { padding: 16px 32px; border-bottom: 1px solid var(--hair); background: var(--bg); }
 .brand { font-size: 18px; font-weight: 600; letter-spacing: -0.01em; }
 main { width: 100%; max-width: 1120px; margin: 0 auto; padding: 32px 24px 48px; display: flex; flex-direction: column; }
-h1 { margin: 0 0 28px; font-size: 26px; font-weight: 600; letter-spacing: -0.01em; }
+h1 { margin: 0 0 28px; font: var(--type-display); letter-spacing: -0.01em; }
 .label { font-size: 12px; color: var(--muted); margin-bottom: 8px; }
 
 /* Cards. */
-.card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; min-width: 0; }
+.card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-card); overflow: hidden; min-width: 0; box-shadow: var(--shadow-offset) var(--shadow-offset) 0 var(--shadow); }
 .pill { font-size: 11.5px; color: var(--fg-2); border: 1px solid var(--border-2); border-radius: 999px; padding: 1px 8px; white-space: nowrap; background: var(--pill); }
 .panel-h, details.card > summary { display: flex; align-items: center; gap: 10px; min-height: 46px; padding: 0 14px; border-bottom: 1px solid var(--hair); font-weight: 500; }
 .panel-h svg, summary svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }

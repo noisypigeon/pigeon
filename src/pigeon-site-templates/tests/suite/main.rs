@@ -3,4 +3,5 @@
 
 mod build;
 mod cobot_template;
+mod look;
 mod manifest;
