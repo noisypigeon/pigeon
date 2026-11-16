@@ -15,6 +15,7 @@
 - backplane v0.1.39
 - backplane v0.1.40
 - backplane v0.1.41
+- backplane v0.1.42
 - infra-agnostic-random-string v0.1.3
 - infra-agnostic-schema v0.1.3
 - infra-agnostic-schema v0.1.4
@@ -197,6 +198,7 @@
 - docs(adr): the owner's answers on merges: an owner approval covers its head's merge, and checks carry across a restack outside their reach (!820) ([f3c9428](https://github.com/noisypigeon/pigeon/commit/f3c94289da06ebee71a7479c42b262f3638f51cb))
 - docs(adr): review !797 against !801 (!822) ([5c4c6cc](https://github.com/noisypigeon/pigeon/commit/5c4c6cc3d3545bd2473ccb896b93b2e423938eba))
 - refactor: the agent crate's library is `agent`, and the harness's test modules take the groups' names (!797) ([3daef0b](https://github.com/noisypigeon/pigeon/commit/3daef0b4d7f43b18df02017022d02da09e92e6dc)) · backplane
+- feat(look): the owner pages' design tokens and stylesheet, mirrored from the iOS app (!804) ([3d821ff](https://github.com/noisypigeon/pigeon/commit/3d821ffb598a3661967eb17ec72961dd1643d73c))
 
 ## 2026-11-15
 
