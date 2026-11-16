@@ -2,7 +2,7 @@
 //! `.claude/decisions/2026-11-08-security-tiered-approvals-task-mandates.md`.
 
 use backplane::core::approval::tiers::{
-    Facts, Rules, Tier, Tiers, classify, matches, mixed_with_sentinel,
+    AUTO_COVERS, Facts, Rules, Tier, Tiers, classify, matches, mixed_with_sentinel,
 };
 
 fn rules() -> Rules {
@@ -367,7 +367,15 @@ fn a_sentinel_change_needs_the_code_and_says_why() {
     assert_eq!(tiers.authorize.tier, Tier::Code);
     assert!(tiers.authorize.rule.starts_with("sentinel"), "{tiers:?}");
     assert_eq!(tiers.merge.tier, Tier::Code);
-    assert_eq!(tiers.merge.rule, format!("sentinel: {file}"));
+    let mark = if r.gate.is_some() { AUTO_COVERS } else { "" };
+    assert_eq!(tiers.merge.rule, format!("sentinel: {file}{mark}"));
+    let gate = "src/pigeon-core/src/approval/tiers.rs";
+    let gated = classify(&r, &paths(&[gate]), &paths(&[gate]), PLAIN);
+    assert_eq!(
+        gated.merge.rule,
+        format!("guarded: {gate}"),
+        "the gate stays plain"
+    );
     let rules_file = classify(
         &r,
         &paths(&[".config/approvals.yaml"]),
