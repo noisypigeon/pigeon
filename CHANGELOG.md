@@ -121,6 +121,10 @@
 - fix(backplane): the release bot reads each revision's own workspace, so a tag from before a move still compares (!750) ([84c6cd0](https://github.com/noisypigeon/pigeon/commit/84c6cd0bc666f21cfcc1a0a4568026538ebf6183)) · backplane
 - fix(backplane): a bench runs pigeon and git at the checkout's root, and bench ci stops passing scope --root ../.. (!753) ([9ad26b3](https://github.com/noisypigeon/pigeon/commit/9ad26b3a489ab5409f253bcb2d8cb37baaf59b3e)) · backplane
 - docs(adr): the bench ADR's step 9, the demo of record: three sessions at once, every check on benches (!754) ([dba4118](https://github.com/noisypigeon/pigeon/commit/dba41182aff71e5224bb19660831ac3efe860a64))
+- feat(infra): the control Worker declares AGENT_TOKEN beside BACKPLANE_TOKEN (!752) ([a95c258](https://github.com/noisypigeon/pigeon/commit/a95c25831274eaf4acabaad4621a890f0982936e))
+- docs(adr): provider calls go through MCP, brokered by one checked operation, provider.call, credentialed per call (!756) ([badc987](https://github.com/noisypigeon/pigeon/commit/badc98775bf9bf5999f6abedfc21b6b32ef16241))
+- docs(adr): review !757 against !756 (!761) ([7c7edf0](https://github.com/noisypigeon/pigeon/commit/7c7edf0f5a7f922fbcf19b41cf962c58ef130cdf))
+- docs(adr): the one MCP entry point records that only its ADR shipped, and its steps are re-briefed after the src/ restructure (!757) ([e54f471](https://github.com/noisypigeon/pigeon/commit/e54f471fe4f1ff5141f4c8efb3995c41bb59c28d))
 
 ## 2026-11-15
 
