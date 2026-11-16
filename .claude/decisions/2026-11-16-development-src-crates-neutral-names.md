@@ -595,3 +595,14 @@ deletes `mise.toml`. The toolchain pin it held is now `/rust-toolchain.toml`
 (!728), and its task graph is now `pigeon dev`'s, in `src/**/dev.rs` (!696).
 This ADR's `Governs` line names whichever of the two took over the part it
 rules.
+
+### 2026-11-16: Review of !713 against !757: they agree
+
+!757 amended
+[`2026-11-15-runtime-one-mcp-entry-point.md`](2026-11-15-runtime-one-mcp-entry-point.md)
+over `src/**/mcp.rs`, `src/**/wire.rs`, `src/**/routes.rs` and the Worker's
+`api`, `app`, `devices` and `mod` files. !713 (step 5) touches none of them:
+it moves only the policy engine to `src/pigeon-eviction`, with the
+workspace's bookkeeping. Step 6 moves those files into `pigeon-core` and
+`pigeon-agent` with their names kept, so the `src/**/…` globs still match them.
+Neither decision changes.
