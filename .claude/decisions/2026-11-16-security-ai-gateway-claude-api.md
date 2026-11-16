@@ -461,3 +461,40 @@ The owner answered §12's three decisions, owner items #16 to #18 on !807.
     bodies on later takes an amendment and an owner-tier change.
 
 Steps 3 and 4 take these values.
+
+### 2026-11-16: The gateway is an optional `ai_gateways` list on the `pigeon/platform` kind, and DLP gets its own step
+
+Reading the platform kind for step 3's brief corrected §10.
+
+- **Where it is configured.**
+  - The platform's units are in the root `config.yaml`: `platform/blue`, of
+    kind `pigeon/platform`. `infra/pigeon/config.yaml` is the account's
+    bootstrap, so it gains nothing.
+  - The kind's schema, `catalog/pigeon/kinds/platform/schema.json`, gains an
+    optional property, `ai_gateways`: a list of at most one
+    `{name, rate_limit_per_minute}`.
+  - The kind expands it with `x-pigeon.each` into
+    `catalog/cloudflare/modules/ai-gateway`:
+    - `store_id` comes from the existing `secrets_store` singleton;
+    - the output `ai_gateway_names` joins `DEPLOY_OUTPUTS`.
+  - A unit with no `ai_gateways`, such as an app standalone, gets no
+    gateway. That is §2's "instances get none".
+  - `platform/blue` gets
+    `ai_gateways: [ { name: pigeon-claude, rate_limit_per_minute: 120 } ]`.
+- **The module sets §3, §6 to §8 and the first amendment:**
+  - `authentication = true`;
+  - `byok_only = true`, with `store_id`;
+  - `collect_logs = true`;
+  - `cache_ttl = 0`;
+  - the rate limit, sliding over 60 seconds;
+  - `retry_max_attempts = 1`;
+  - `log_management = 100000`, `DELETE_OLDEST`;
+  - `logpush = false`;
+  - no `spend_limits`, `dlp`, `guardrails`, `otel` or `stripe`.
+- **DLP moves to a new step 3b, after step 2.**
+  - Looking up Cloudflare One's predefined profiles by name, with the pinned
+    provider, is unverified. Writing a profile's ID into the repository is
+    what §9 rules out.
+  - Until 3b merges, DLP is off. §9's flag-only design stands for it.
+- **`Governs` gains `catalog/cloudflare/modules/ai-gateway/**`** when step 3
+  merges, by this planner.
