@@ -659,3 +659,29 @@ One helper's stream ended in "Connection reset by peer" after 148 s. That
 could be the proxy or the Container, and the rerun says which. `--timeout` is
 in minutes, as §3 says; the helpers' `60` was the brief's slip. The rerun
 after this change's deploy is the demo of record.
+
+### 2026-11-16: `pigeon dev` on a bench, beside `mise run` until `mise.toml` goes
+
+This carries out what the neutral-names ADR's !669 review settled for
+restructure step 7, now that `pigeon dev` is on `main` (!696):
+
+- **§3.1's allowlist** takes `pigeon dev <task>` beside `mise run <task>`.
+  Both name the same task list: `pigeon dev`'s names (`policy`,
+  `policy-build`, `policy-change`, `instance`, and the rest) and the old ones
+  it still accepts (`sentinel*`, `backplane`). `ci` stays the gate's, under
+  either spelling.
+- **§3.2's task resolution** follows the commit:
+  - While the checkout has a `mise.toml`, a task resolves through it, step by
+    step, as before.
+  - Without one, a task is a single step from the checkout's root:
+    `cargo run -q --locked --bin pigeon -- dev <task>`. That is the
+    commit's own harness, whose own log names each command.
+  - A task's commands can span lines, so the bench doesn't split `--dry-run`
+    output into steps.
+  - `--bin pigeon` survives a package rename.
+- **Step 10e can delete `mise.toml`** once this merges, and benches then run
+  `pigeon dev` alone. Step 12 removes `mise_steps` and the `mise run`
+  spelling.
+- **The Container argv** (`cobot/worker.rs`, `jobs.rs`, `serve.rs`) is the
+  restructure's step 10d, as agreed with its helper. This change touches only
+  `cobot/bench.rs` and `core/bench/allow.rs`.

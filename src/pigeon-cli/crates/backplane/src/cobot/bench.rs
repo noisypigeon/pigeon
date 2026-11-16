@@ -207,6 +207,28 @@ pub struct Step {
     pub argv: Vec<String>,
 }
 
+/// The steps of task `name`: through `mise_toml` while the commit has one, else one step running
+/// the commit's own `pigeon dev <name>` from its root (bench ADR's step-7 amendment).
+///
+/// # Errors
+///
+/// As [`mise_steps`], or a task the allowlist doesn't name.
+pub fn task_steps(mise_toml: Option<&str>, name: &str) -> Result<Vec<Step>, String> {
+    if let Some(text) = mise_toml {
+        return mise_steps(text, name);
+    }
+    if !bench::allow::TASKS.contains(&name) {
+        return Err(format!("bench: task `{name}` isn't allowed"));
+    }
+    let argv = [
+        "cargo", "run", "-q", "--locked", "--bin", "pigeon", "--", "dev", name,
+    ];
+    Ok(vec![Step {
+        dir: String::new(),
+        argv: argv.map(String::from).to_vec(),
+    }])
+}
+
 /// The steps of mise task `name` in `mise_toml`: its `depends` depth first, each once, then its
 /// `run`, each line under `sh -c` in its `dir`; every task reached must be allowed.
 ///
@@ -821,9 +843,12 @@ impl Bench {
                 }])
             }
             Command::Task { name } => {
-                let text = std::fs::read_to_string(self.checkout().join("mise.toml"))
-                    .map_err(|e| format!("bench: mise.toml: {e}"))?;
-                mise_steps(&text, name)
+                let text = match std::fs::read_to_string(self.checkout().join("mise.toml")) {
+                    Ok(t) => Some(t),
+                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
+                    Err(e) => return Err(format!("bench: mise.toml: {e}")),
+                };
+                task_steps(text.as_deref(), name)
             }
             Command::Check { name } => {
                 let _ = (&*log).write_all(b"bench: reading this change's checks from scope\n");
@@ -1233,6 +1258,28 @@ run = "sleep 30"
             "bench: mise.toml has no task `backplane`"
         );
         assert!(mise_steps("not toml [", "fmt").is_err());
+    }
+
+    #[test]
+    fn without_mise_toml_a_task_runs_the_commits_own_pigeon_dev_from_its_root() {
+        let steps = task_steps(None, "policy").expect("allowed");
+        assert_eq!(
+            steps,
+            vec![Step {
+                dir: String::new(),
+                argv: s(&[
+                    "cargo", "run", "-q", "--locked", "--bin", "pigeon", "--", "dev", "policy"
+                ]),
+            }]
+        );
+        assert_eq!(
+            task_steps(None, "deploy").unwrap_err(),
+            "bench: task `deploy` isn't allowed"
+        );
+        assert_eq!(
+            task_steps(Some(MISE), "fmt").expect("mise"),
+            mise_steps(MISE, "fmt").expect("mise")
+        );
     }
 
     #[test]

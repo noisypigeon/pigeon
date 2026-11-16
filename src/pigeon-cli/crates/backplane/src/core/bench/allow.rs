@@ -2,8 +2,9 @@
 
 use serde::{Deserialize, Serialize};
 
-/// `mise` tasks a bench may run.
-pub const TASKS: [&str; 12] = [
+/// Tasks a bench may run, through `pigeon dev` or `mise run`: `pigeon dev`'s names, then the old
+/// ones it still accepts.
+pub const TASKS: [&str; 16] = [
     "ci-scoped",
     "build",
     "test",
@@ -12,6 +13,10 @@ pub const TASKS: [&str; 12] = [
     "lint",
     "rust",
     "features",
+    "policy",
+    "policy-build",
+    "policy-change",
+    "instance",
     "sentinel",
     "sentinel-build",
     "sentinel-change",
@@ -72,6 +77,19 @@ fn r(s: impl Into<String>) -> Result<Command, Refusal> {
     Err(Refusal(s.into()))
 }
 
+/// Task `t`, run as `how` (`mise run` or `pigeon dev`), if a bench may run it.
+fn task(t: &str, how: &str) -> Result<Command, Refusal> {
+    if t == "ci" {
+        r(format!(
+            "bench: `{how} ci` runs on the gate; use `bench ci`"
+        ))
+    } else if TASKS.contains(&t) {
+        Ok(Command::Task { name: t.into() })
+    } else {
+        r(format!("bench: task `{t}` isn't allowed"))
+    }
+}
+
 /// Judges an argv against the allowlist.
 ///
 /// # Errors
@@ -95,16 +113,7 @@ pub fn allow(argv: &[String]) -> Result<Command, Refusal> {
             if argv.len() != 3 || argv[1] != "run" {
                 return r("bench: only `mise run <task>`");
             }
-            let t = argv[2].as_str();
-            if t == "ci" {
-                r("bench: `mise run ci` runs on the gate; use `bench ci`")
-            } else if TASKS.contains(&t) {
-                Ok(Command::Task {
-                    name: t.to_string(),
-                })
-            } else {
-                r(format!("bench: mise task `{t}` isn't allowed"))
-            }
+            task(&argv[2], "mise run")
         }
         "bench" => {
             let ok = argv.len() == 3
@@ -138,6 +147,12 @@ pub fn allow(argv: &[String]) -> Result<Command, Refusal> {
             Ok(Command::Argv {
                 argv: argv.to_vec(),
             })
+        }
+        "pigeon" if argv.get(1).is_some_and(|a| a == "dev") => {
+            if argv.len() != 3 {
+                return r("bench: only `pigeon dev <task>`");
+            }
+            task(&argv[2], "pigeon dev")
         }
         "pigeon" => {
             let ok = argv.len() >= 3
@@ -241,7 +256,31 @@ mod tests {
     fn rule3_mise_other() {
         assert_eq!(
             refused(&["mise", "run", "deploy"]),
-            "bench: mise task `deploy` isn't allowed"
+            "bench: task `deploy` isn't allowed"
+        );
+    }
+
+    #[test]
+    fn rule3_pigeon_dev_runs_the_same_tasks() {
+        for t in TASKS {
+            assert_eq!(
+                allow(&v(&["pigeon", "dev", t])),
+                Ok(Command::Task {
+                    name: t.to_string()
+                })
+            );
+        }
+        assert_eq!(
+            refused(&["pigeon", "dev", "ci"]),
+            "bench: `pigeon dev ci` runs on the gate; use `bench ci`"
+        );
+        assert_eq!(
+            refused(&["pigeon", "dev", "fmt", "x"]),
+            "bench: only `pigeon dev <task>`"
+        );
+        assert_eq!(
+            refused(&["pigeon", "dev", "deploy"]),
+            "bench: task `deploy` isn't allowed"
         );
     }
 
