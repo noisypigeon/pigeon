@@ -367,3 +367,34 @@ Each step is its own change, in this order:
   two errors without it.
 - **Execution:** one change. A new `include_str!` that leaves
   `src/pigeon-cli` needs its file in the Dockerfile's copy too.
+
+### 2026-11-16: The build stage copies the whole `.config/`, and the local push passes it
+
+- **What broke.** The owner's break-glass image push at `0754026` failed
+  with "couldn't read …/.config/pool.yaml". The build stage copied only
+  `macos.yaml` and `insights.yaml` from the `config` context, and the pool
+  work had since `include_str!`ed `.config/pool.yaml`. No image had been
+  rebuilt since, so nothing failed until one was. The pipeline's own build
+  would have failed the same way.
+- **The fix:**
+  - The build stage copies the whole `config` context
+    (`COPY --from=config . /.config/`). It's this public repository's
+    `.config/`, so a new `include_str!` can't miss a file.
+  - A test pins that line and checks every included `.config/` file exists.
+  - `cobot::workers::build_images`, the local `images push`, passes
+    `--build-context config=<root>/.config`, as the pipeline's `buildctl`
+    already does. The owner's push then needs no hand argument.
+- **The recipe stubs every declared target.**
+  - The same build then failed in the `ci` warm-up: "can't find
+    integration-test `suite`". Since !666 and !668, pigeon and sentinel
+    declare `[[test]] suite` at `tests/suite/main.rs` with
+    `autotests = false`, and the recipe stubbed only `src/lib.rs` and
+    `src/main.rs`.
+  - The recipe now stubs every `path = "….rs"` a manifest declares:
+    empty under `tests/`, else `fn main() {}`.
+  - A test runs the recipe's own `RUN` against the workspace and checks each
+    declared target is stubbed. It fails on the old recipe, at
+    `crates/sentinel/tests/suite/main.rs`.
+- **Proved by a build.** A spike, closed unmerged, builds `--target ci` from
+  this change on a `Checker` with the deploy job's own BuildKit, so the image
+  is built before it merges.

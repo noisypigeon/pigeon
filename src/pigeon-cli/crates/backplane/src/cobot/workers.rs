@@ -1526,6 +1526,9 @@ pub fn build_images(
             tag(&c.class),
             "-f".into(),
             file.to_string_lossy().into_owned(),
+            // The repository's `.config/`, the Dockerfile's `config` stage, as the pipeline passes it.
+            "--build-context".into(),
+            format!("config={}", root.join(".config").display()),
             context.to_string_lossy().into_owned(),
         ]);
         tools.run(&tools.docker, &args, root, None)?;

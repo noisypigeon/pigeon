@@ -300,6 +300,10 @@ fn deploy_migrates_builds_then_deploys_and_shows_no_id() {
         "{calls:?}"
     );
     assert!(
+        calls[1].contains("--build-context config=") && calls[1].contains(".config "),
+        "the local build passes the repository's .config as the `config` context: {calls:?}"
+    );
+    assert!(
         calls[2].starts_with("wrangler deploy -c wrangler.jsonc"),
         "{calls:?}"
     );

@@ -9,7 +9,7 @@ FROM scratch AS config
 FROM docker.io/library/rust:1.99.1-slim-bookworm@sha256:24707e70a4f1e23d9a7b25202ec43126d28a52294b96aad5c670df1fd1f1d400 AS build
 ARG FEATURES
 WORKDIR /src
-COPY --from=config macos.yaml insights.yaml /.config/
+COPY --from=config . /.config/
 COPY . .
 RUN cargo build --release --locked -p pigeon --no-default-features --features "$FEATURES"
 
@@ -62,6 +62,13 @@ RUN mkdir /recipe \
       d="$(dirname "$m")"; mkdir -p "/recipe/$d/src"; cp "$m" "/recipe/$d/"; \
       if [ -f "$d/src/lib.rs" ]; then : > "/recipe/$d/src/lib.rs"; fi; \
       if [ -f "$d/src/main.rs" ]; then echo 'fn main() {}' > "/recipe/$d/src/main.rs"; fi; \
+      for p in $(sed -n 's/^path *= *"\([^"]*\.rs\)"$/\1/p' "$m"); do \
+        mkdir -p "/recipe/$d/$(dirname "$p")"; \
+        [ -f "/recipe/$d/$p" ] || case "$p" in \
+          tests/*) : > "/recipe/$d/$p" ;; \
+          *) echo 'fn main() {}' > "/recipe/$d/$p" ;; \
+        esac; \
+      done; \
     done
 
 # A change's jobs run here (lifecycle ADR §4): the toolchain mise.toml pins, git, backplane's
