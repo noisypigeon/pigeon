@@ -1,5 +1,5 @@
 //! `pigeon backplane` end to end.
-#![cfg(feature = "backplane")]
+#![cfg(feature = "agent")]
 
 use std::fs;
 use std::path::PathBuf;

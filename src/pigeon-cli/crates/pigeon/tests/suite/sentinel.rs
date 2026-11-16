@@ -1,6 +1,6 @@
 //! `pigeon sentinel check` hands its arguments to `pigeon-sentinel` and returns its exit code;
 //! the judge's own behaviour is tested with the binary, in `crates/sentinel/tests/cli.rs`.
-#![cfg(feature = "sentinel")]
+#![cfg(feature = "eviction")]
 
 use std::os::unix::fs::PermissionsExt as _;
 use std::path::{Path, PathBuf};

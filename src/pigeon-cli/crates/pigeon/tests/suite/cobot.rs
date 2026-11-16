@@ -1,5 +1,5 @@
 //! `pigeon cobot` end to end.
-#![cfg(feature = "cobot")]
+#![cfg(feature = "infra")]
 
 use assert_cmd::Command;
 use predicates::prelude::*;

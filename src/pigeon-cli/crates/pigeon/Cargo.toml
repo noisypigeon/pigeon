@@ -10,16 +10,21 @@ publish.workspace = true
 autotests = false
 
 [features]
-default = ["sentinel", "cobot", "backplane", "signing", "session"]
-sentinel = []
-cobot = ["dep:backplane", "backplane/engines", "dep:serde", "dep:serde_json"]
-backplane = ["cobot", "session", "dep:backplane", "backplane/engines", "dep:serde", "dep:serde_json", "dep:signal-hook"]
-# `pigeon backplane signing` alone, for Buildkite's `macos-sign` agents; see
+default = ["eviction", "infra", "agent", "signing", "session"]
+# One per command group; see .claude/decisions/2026-11-16-development-src-crates-neutral-names.md §3.
+eviction = []
+infra = ["dep:backplane", "backplane/engines", "dep:serde", "dep:serde_json"]
+agent = ["infra", "session", "dep:backplane", "backplane/engines", "dep:serde", "dep:serde_json", "dep:signal-hook"]
+# `pigeon signing` alone, for Buildkite's `macos-sign` agents; see
 # .claude/decisions/2026-11-11-release-ios-app-buildkite-testflight.md §6.
 signing = ["dep:backplane", "dep:serde_json", "dep:ureq"]
 # `pigeon session`, for cloud agent sessions; see
 # .claude/decisions/2026-11-13-development-rust-session-event-follower.md §2.
 session = ["dep:backplane", "dep:serde_json", "dep:signal-hook", "dep:ureq"]
+# The old names, until step 12; their `dep:` keeps the scope's per-feature clippy on them.
+sentinel = ["eviction"]
+cobot = ["infra", "dep:backplane"]
+backplane = ["agent", "dep:backplane"]
 
 [dependencies]
 backplane = { workspace = true, optional = true }

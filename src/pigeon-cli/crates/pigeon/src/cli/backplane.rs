@@ -8,41 +8,41 @@ use clap::{Args, Subcommand};
 #[derive(Subcommand, Debug)]
 pub enum BackplaneCommand {
     /// Validate and show the instance manifest; exit 2 if invalid
-    #[cfg(feature = "backplane")]
+    #[cfg(feature = "agent")]
     Instance(RootArgs),
     /// List the engines, their versions and roles
-    #[cfg(feature = "backplane")]
+    #[cfg(feature = "agent")]
     Engines(JsonArgs),
     /// List the operations a surface may request
-    #[cfg(feature = "backplane")]
+    #[cfg(feature = "agent")]
     Operations(JsonArgs),
     /// Run an operation; exit 1 on a violation, 2 on an error
-    #[cfg(feature = "backplane")]
+    #[cfg(feature = "agent")]
     Run(RunArgs),
     /// List the ADRs that govern each path, by their `Governs` globs
-    #[cfg(feature = "backplane")]
+    #[cfg(feature = "agent")]
     Decisions(DecisionsArgs),
     /// Answer operations over HTTP (GET /healthz, GET /v0/operations, POST /v0/run); needs
     /// `BACKPLANE_TOKEN`
-    #[cfg(feature = "backplane")]
+    #[cfg(feature = "agent")]
     Serve(ServeArgs),
     /// Take a change's jobs over signed HTTP (POST /v0/jobs, GET /v0/jobs/<id>), in a job
     /// Container; needs `BACKPLANE_TOKEN`
-    #[cfg(feature = "backplane")]
+    #[cfg(feature = "agent")]
     Jobs(JobsArgs),
     /// Print a new authenticator secret for approvals in the card: base32 on stdout, for
     /// `pigeon cobot workers secrets put … APPROVER_TOTP`, and its `otpauth://` URI on stderr,
     /// for the authenticator app
-    #[cfg(feature = "backplane")]
+    #[cfg(feature = "agent")]
     TotpSecret,
     /// Print a one-time passkey enrolment: its stored form on stdout, for
     /// `pigeon cobot workers secrets put … PASSKEY_ENROLL`, and its token on stderr, to type at
     /// `/passkeys/enroll` within the hour
-    #[cfg(feature = "backplane")]
+    #[cfg(feature = "agent")]
     EnrollSecret,
     /// Print a new Web Push key: its private half, base64url, on stdout, for
     /// `pigeon cobot workers secrets put … PUSH_VAPID_KEY`, and its public half on stderr
-    #[cfg(feature = "backplane")]
+    #[cfg(feature = "agent")]
     VapidKey,
     /// Load the release's signing identity into a throwaway keychain, upload the signed app,
     /// and clean up, in Buildkite's `sign` step

@@ -20,6 +20,29 @@ fn version_flag() {
 fn only_built_subcommands_exist() {
     let help = pigeon().arg("--help").assert().success();
     let out = String::from_utf8(help.get_output().stdout.clone()).expect("utf-8");
-    assert_eq!(out.contains("sentinel"), cfg!(feature = "sentinel"));
-    assert_eq!(out.contains("backplane"), cfg!(feature = "backplane"));
+    let listed = |name: &str| {
+        out.lines()
+            .any(|l| l.split_whitespace().next() == Some(name))
+    };
+    assert_eq!(listed("eviction"), cfg!(feature = "eviction"));
+    for group in ["infra", "sites", "git", "workers", "release"] {
+        assert_eq!(listed(group), cfg!(feature = "infra"), "{group}");
+    }
+    for group in [
+        "instance",
+        "engines",
+        "ops",
+        "run",
+        "decisions",
+        "agent",
+        "keys",
+    ] {
+        assert_eq!(listed(group), cfg!(feature = "agent"), "{group}");
+    }
+    assert_eq!(listed("signing"), cfg!(feature = "signing"));
+    assert_eq!(listed("session"), cfg!(feature = "session"));
+    assert!(listed("dev"));
+    for old in ["sentinel", "cobot", "backplane"] {
+        assert!(!listed(old), "{old} is hidden");
+    }
 }
