@@ -300,3 +300,21 @@ glob under `src/pigeon-cli/` or `src/site-templates/` becomes `src/**/<tail>`
 (or `**<file>` for a workspace root file), which matches the file both before
 and after the restructure moves it. That ADR's step 12 tightens them to the
 new paths.
+
+### 2026-11-16: Authorizing a plan is code; the merge tier is the secrets gate
+
+§2's "Authorize: a scope reaching `secrets:` is `owner`" was never built.
+`tiers::tier_of` makes every `change.authorize` code tier, and the bound job
+only prints the authorize tier. So an Auto window authorizes such a plan (!799,
+whose `src/**/migrations/**` scope reached `secrets:` only through the shared
+`src/` prefix). The owner decided to keep that behaviour:
+
+- **Authorizing is code tier, and Auto covers it.** An authorized plan only
+  lets the agent push a branch and run checks, which hold no secrets.
+- **The merge tier is the secrets gate.** It is judged on the head's real
+  files: touching `secrets:` or lengthening a secret list is `owner`, each
+  time, and nothing covers it.
+- **The label follows.** `classify` names a scope reaching `secrets:` as code,
+  `secrets: <scope> (the merge decides)`. That change lands with the next
+  change that edits `tiers.rs` (the restructure's k3), so no passkey is
+  spent on a label.
