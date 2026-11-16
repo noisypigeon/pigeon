@@ -680,3 +680,14 @@ governs (`change/stage.rs`, `worker/{mod,api,push}.rs`, `wire.rs`, `mcp.rs`,
 files, and edits `dev.rs`, `cli/mod.rs`, the `Dockerfile`'s comments and the
 tests that read `mise.toml`. !766 changes how a stage counts a mandate and how
 a generated change closes, which !736 neither relies on nor changes.
+
+### 2026-11-16: Review of !768 against !766: they agree
+
+- !768 renames `x-cobot` to `x-pigeon` in the catalog and `infra/pigeon`
+  schemas (§5). It also changes three tests that read the real schemas:
+  `tests/suite/{architecture,cobot_apex,cobot_manifest}.rs`.
+- [`2026-11-15-development-sessions-stop-only-for-oversight.md`](2026-11-15-development-sessions-stop-only-for-oversight.md),
+  as !766 amended it, governs none of those paths. The two changes met only
+  through !766's scope `tests/**`. Its own tests are `mandates.rs` and
+  `tasks.rs`.
+- Nothing either ADR decides changes.
