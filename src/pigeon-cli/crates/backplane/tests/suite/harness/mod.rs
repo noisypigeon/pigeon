@@ -24,7 +24,7 @@ pub fn sentinel() -> &'static Path {
         let target = Path::new(env!("CARGO_TARGET_TMPDIR")).join("pigeon-sentinel");
         let workspace = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
         let status = std::process::Command::new(env!("CARGO"))
-            .args(["build", "--quiet", "--locked", "-p", "pigeon-sentinel"])
+            .args(["build", "--quiet", "--locked", "--bin", "pigeon-sentinel"])
             .arg("--target-dir")
             .arg(&target)
             .current_dir(&workspace)

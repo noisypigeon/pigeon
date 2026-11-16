@@ -9,6 +9,23 @@ fn repo_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../..")
 }
 
+/// The judge's crate: its directory and package, wherever the restructure has put it; see
+/// `.claude/decisions/2026-11-16-development-src-crates-neutral-names.md` step 5.
+fn judge() -> (String, String) {
+    let dir = ["src/pigeon-eviction", "src/pigeon-cli/crates/sentinel"]
+        .into_iter()
+        .find(|d| repo_root().join(d).join("Cargo.toml").is_file())
+        .expect("the judge's crate");
+    let manifest = std::fs::read_to_string(repo_root().join(dir).join("Cargo.toml")).expect("read");
+    let package = manifest
+        .lines()
+        .find_map(|l| l.trim().strip_prefix("name = "))
+        .expect("a package name")
+        .trim_matches('"')
+        .to_string();
+    (dir.to_string(), package)
+}
+
 fn names(files: &[&str]) -> Vec<String> {
     let files: Vec<String> = files.iter().map(|f| (*f).to_string()).collect();
     jobs(&repo_root(), &files)
@@ -32,7 +49,7 @@ fn docs_only_runs_the_policies_only() {
     assert_eq!(
         names(&[
             ".config/policies/layout.yaml",
-            "src/pigeon-cli/crates/sentinel/src/rules.rs"
+            &format!("{}/src/rules.rs", judge().0)
         ])
         .iter()
         .filter(|n| *n == "test this repository's policies")
@@ -93,16 +110,17 @@ fn backplanes_cobot_runs_backplane_its_dependants_and_the_worker() {
 
 #[test]
 fn sentinel_runs_only_its_own_checks_as_nothing_links_it() {
-    let got = names(&["src/pigeon-cli/crates/sentinel/src/rules.rs"]);
+    let (dir, package) = judge();
+    let got = names(&[&format!("{dir}/src/rules.rs")]);
     assert_eq!(
         got,
         [
-            "fmt",
-            "clippy pigeon-sentinel",
-            "test pigeon-sentinel",
-            "policy.check"
+            "fmt".to_string(),
+            format!("clippy {package}"),
+            format!("test {package}"),
+            "policy.check".to_string()
         ],
-        "pigeon and backplane run pigeon-sentinel, so they don't rebuild for it; see \
+        "pigeon and backplane run the judge, so they don't rebuild for it; see \
          .claude/decisions/2026-11-10-development-factory-crates-functional-core.md §1"
     );
 }
