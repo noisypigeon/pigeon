@@ -2,6 +2,8 @@
 //! `.claude/decisions/2026-11-15-development-capacity-pools-hard-spend-cap.md`.
 
 pub mod config;
+pub mod ledger;
+pub mod route;
 
 /// Money, in micro-dollars.
 pub type Micros = u64;
