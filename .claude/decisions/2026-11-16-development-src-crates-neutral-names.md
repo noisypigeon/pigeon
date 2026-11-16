@@ -417,3 +417,25 @@ boundary. The other steps are briefs for Sonnet executors.
   - Backplane's split (steps 6 and 7) follows the test ADR's briefs 2b, 5a
     and 5b1 to 5b4, which touch only `backplane/tests/suite/**` and
     `tooling/ci/test-map.sh`.
+### 2026-11-16: Reviewed against the bench ADR (!669); they agree
+
+Reviews !669, the bench ADR's step 4, against this ADR and
+[`2026-11-16-development-session-bench-containers.md`](2026-11-16-development-session-bench-containers.md).
+
+- **They agree. !669 changes nothing either ADR decides differently.**
+  - It touches no `Cargo.toml`. Its files are `gitdoor.rs`, `tickets.rs`,
+    `worker/gitdoor.rs`, `worker/tickets.rs`, and backplane's
+    `tests/gitdoor.rs` and `tests/tickets.rs`.
+  - They move with §2's module map, as any file of theirs does.
+  - The scratch ref `refs/heads/scratch/<session_id>` is a ref name, not a
+    path, so no move renames it.
+- **What the two planners settled, so nothing waits:**
+  - Bench files move only after the bench change holding them merges:
+    - step 4 (workspace to the root, touching `worker.yaml`) after !675;
+    - step 6 (`core/bench`) after `pigeon session bench`, brief b57;
+    - step 7 after the bench ADR's step 8.
+  - From step 7, a bench runs `pigeon dev <task>` through the commit's own
+    harness: `cargo run -q --locked -p pigeon-harness -- dev <task>` from the
+    root. It accepts `mise run <task>` beside it until step 12.
+  - The bench ADR records this in its own amendment when step 7 merges.
+  - The `Bench` class and its migration tag `v4` keep their names.
