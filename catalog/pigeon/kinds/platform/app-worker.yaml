@@ -1,4 +1,4 @@
-# An app-shape standalone's Worker, rendered by `instance.standup`, never by `pigeon cobot workers`;
+# An app-shape standalone's Worker, rendered by `instance.standup`, never by `pigeon workers`;
 # see .claude/decisions/2026-11-15-runtime-learner-practice-standalone-app.md, its 2026-11-15 amendment.
 description: An app-only standalone instance's control Worker.
 name: $deployment.worker

@@ -77,19 +77,19 @@ bindings:
   version_metadata: CF_VERSION_METADATA
 # DEPLOY_TOKEN: an account token with Workers R2 Storage Edit and Zone Read, for publishing sites.
 # SESSION_KEY: 32 random bytes, hex; signs MCP session IDs.
-# APPROVER_TOTP: the owner's authenticator secret, base32, from `pigeon backplane totp-secret`.
+# APPROVER_TOTP: the owner's authenticator secret, base32, from `pigeon keys totp`.
 # APPROVER: the owner's email, recorded on approvals made in the card.
-# PASSKEY_ENROLL: a one-time passkey enrolment, from `pigeon backplane enroll-secret`; optional, see
+# PASSKEY_ENROLL: a one-time passkey enrolment, from `pigeon keys enroll`; optional, see
 # .claude/decisions/2026-11-14-security-passkey-only-owner-proofs.md §3.
 # The deploy job's alone, per .claude/decisions/2026-11-07-development-control-plane-deploys-itself.md:
-# WORKERS_DEPLOY_TOKEN: an account token with `pigeon cobot workers permissions`;
-# DEPLOY_OUTPUTS: `pigeon cobot workers outputs`; DEPLOY_IMAGES: `pigeon cobot workers images push`;
+# WORKERS_DEPLOY_TOKEN: an account token with `pigeon workers permissions`;
+# DEPLOY_OUTPUTS: `pigeon workers outputs`; DEPLOY_IMAGES: `pigeon workers images push`;
 # DEPLOYER_ACCESS_ID, DEPLOYER_ACCESS_SECRET: an Access service token, for /healthz only.
 # BUILDS_ACCESS_ID, BUILDS_ACCESS_SECRET: an Access service token job Containers download main's
 # pigeon with, for /builds/ only; see .claude/decisions/2026-11-07-development-job-images-on-cloudflare.md.
 # GITHUB_APP_ID, GITHUB_APP_KEY: the mirror's GitHub App and its PKCS#8 key; until set, the
 # mirror fails and the digest names it, per .claude/decisions/2026-11-08-development-github-mirror-on-merge.md §3.
-# PUSH_VAPID_KEY: the Web Push key, from `pigeon backplane vapid-key`; optional, see
+# PUSH_VAPID_KEY: the Web Push key, from `pigeon keys vapid`; optional, see
 # .claude/decisions/2026-11-08-development-events-tickets-digest-mandate.md §3.
 # PLATFORM_STATE_KEY: 32 random bytes, hex; platform runs' state passphrase, the platform's
 # alone; see .claude/decisions/2026-11-08-runtime-blue-green-self-standup.md, step 4's amendment.
