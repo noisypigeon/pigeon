@@ -659,3 +659,14 @@ Worker's `mod`, `api` and `push` files. !746 (step 6) touches none of them: it
 rewrites import paths in the guarded callers to name `core::` modules and
 deletes the 14 three-line re-export shims. The `src/**/…` globs still match.
 Neither decision changes.
+
+### 2026-11-16: Review of !772 against !766: they agree
+
+!766 amended
+[`2026-11-15-development-sessions-stop-only-for-oversight.md`](2026-11-15-development-sessions-stop-only-for-oversight.md)
+over `src/**/change/stage.rs`, `src/**/worker/{mod,api,push}.rs`,
+`src/**/wire.rs`, `src/**/mcp.rs`, `src/**/sessions.rs`, `src/**/tasks.rs`
+and `src/**/session/launch.rs`. !772 (step 7a) moves the `pigeon` binary's
+crate to `src/pigeon-harness` with its file names kept. It changes no code in
+those files, and the `src/**/…` globs match them at either path. Neither
+decision changes.
