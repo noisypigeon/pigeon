@@ -4,6 +4,7 @@
 
 pub mod changelog;
 pub mod config;
+pub mod history;
 pub mod lines;
 #[cfg(test)]
 mod tests;
