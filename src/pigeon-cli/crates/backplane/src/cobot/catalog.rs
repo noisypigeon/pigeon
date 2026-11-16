@@ -7,9 +7,10 @@ use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 
 use regex::Regex;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
 use crate::cobot::unit::Problem;
+pub use crate::core::infra::capabilities::{Capability, Catalog};
 
 /// The catalog area under the root.
 pub const DIR: &str = "catalog";
@@ -114,32 +115,11 @@ pub fn dirs(root: &Path) -> Vec<PathBuf> {
     out
 }
 
-/// One capability: provider permissions, minted at one scope.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct Capability {
-    /// The provider's permission names.
-    pub permissions: Vec<String>,
-    /// What it is minted on, such as `zone` or `bucket`.
-    pub scope: String,
-}
-
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct File {
     description: String,
     capabilities: BTreeMap<String, Capability>,
-}
-
-/// A provider's declared capabilities.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub struct Catalog {
-    /// The provider, the catalog directory's name.
-    pub provider: String,
-    /// The capabilities file, from the root.
-    pub path: String,
-    /// The capabilities, by name.
-    pub capabilities: BTreeMap<String, Capability>,
 }
 
 /// [`capabilities`] for the instance at `root` on the platform at `platform`: the platform's,
@@ -248,4 +228,40 @@ pub fn capabilities(root: &Path) -> (Vec<Catalog>, Vec<Problem>) {
     }
     problems.extend(duplicates(root));
     (catalogs, problems)
+}
+
+/// Reads `root`'s ledger and checks it against the catalogs under `platform`: none when the
+/// instance has no ledger.
+///
+/// # Errors
+///
+/// The ledger's problems, when it doesn't read or doesn't check.
+pub fn ledger(
+    root: &Path,
+    platform: &Path,
+) -> Result<Option<crate::core::ledger::Ledger>, Vec<String>> {
+    let text = fs::read_to_string(root.join(crate::core::ledger::LEDGER)).ok();
+    if text.is_none() {
+        return Ok(None);
+    }
+    let (catalogs, _) = capabilities_in(root, platform);
+    crate::core::ledger::parse(text.as_deref(), &catalogs)
+}
+
+/// [`ledger`], with each capability the ledger names resolved from the catalogs under
+/// `platform`, as deployed at `sha`: none when the instance has no ledger.
+///
+/// # Errors
+///
+/// As [`ledger`].
+pub fn ledger_resolved(
+    root: &Path,
+    platform: &Path,
+    sha: &str,
+) -> Result<Option<crate::core::minting::Resolved>, Vec<String>> {
+    let Some(ledger) = ledger(root, platform)? else {
+        return Ok(None);
+    };
+    let (catalogs, _) = capabilities_in(root, platform);
+    Ok(Some(crate::core::ledger::resolved(ledger, catalogs, sha)))
 }

@@ -461,7 +461,7 @@ fn deploy(spec: &JobSpec, dir: &Path) -> Report {
             None
         }
     };
-    let ledger = match crate::core::ledger::resolve(dir, dir, &spec.sha) {
+    let ledger = match crate::cobot::catalog::ledger_resolved(dir, dir, &spec.sha) {
         Ok(l) => l,
         Err(problems) => {
             let _ = writeln!(log, "grants ledger not kept: {}", problems.join("; "));

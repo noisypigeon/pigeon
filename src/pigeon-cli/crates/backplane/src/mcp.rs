@@ -7,8 +7,8 @@ use hmac::{Hmac, Mac};
 use serde_json::{Value, json};
 use sha2::Sha256;
 
-use crate::Error;
 use crate::grants::hex;
+use crate::wire::Error;
 use crate::wire::{Operation, Request, Response, catalog};
 
 /// The protocol version this server speaks by default.

@@ -9,9 +9,7 @@ use std::path::Path;
 use age::secrecy::SecretString;
 
 use crate::cobot::Error;
-
-/// The secrets file name inside a unit.
-pub const FILE: &str = "secrets.config.yaml";
+pub use crate::core::infra::secrets::{FILE, is_encrypted};
 
 /// The environment variable holding the infra secrets passphrase.
 pub const PASSPHRASE_VAR: &str = "COBOT_SECRETS_PASSPHRASE";
@@ -22,12 +20,6 @@ pub const WORKLOAD_PASSPHRASE_VAR: &str = "COBOT_WORKLOAD_SECRETS_PASSPHRASE";
 
 /// The tag written; both of [`crate::names::ENC_PREFIXES`] are read.
 const PREFIX: &str = crate::names::ENC_PREFIXES[0];
-
-/// Whether `value` is an encrypted value.
-#[must_use]
-pub fn is_encrypted(value: &str) -> bool {
-    crate::names::enc_body(value).is_some() && value.ends_with(']')
-}
 
 fn failed(path: &Path, message: impl Into<String>) -> Error {
     Error::Io {

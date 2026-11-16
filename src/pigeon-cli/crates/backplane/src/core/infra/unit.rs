@@ -13,7 +13,8 @@ use crate::core::infra::providers::Allowlist;
 /// The areas that may hold units.
 pub const AREAS: [&str; 2] = ["infra", "workloads"];
 
-pub(crate) const UNIT_FILE: &str = "unit.yaml";
+/// A plain unit's file.
+pub const UNIT_FILE: &str = "unit.yaml";
 
 /// Functions that read the runner's files or environment during a plan.
 const FORBIDDEN_FUNCTIONS: &str = r"\b(file|fileexists|fileset|filebase64|filebase64sha256|filebase64sha512|filemd5|filesha1|filesha256|filesha512|templatefile|abspath|pathexpand)\s*\(";
@@ -97,7 +98,9 @@ pub struct Problem {
     pub message: String,
 }
 
-pub(crate) fn problem(path: impl Into<String>, message: impl Into<String>) -> Problem {
+/// A problem at `path`.
+#[must_use]
+pub fn problem(path: impl Into<String>, message: impl Into<String>) -> Problem {
     Problem {
         path: path.into(),
         message: message.into(),
@@ -105,14 +108,16 @@ pub(crate) fn problem(path: impl Into<String>, message: impl Into<String>) -> Pr
 }
 
 /// Whether `name` ends with `suffix`, ignoring ASCII case.
-pub(crate) fn suffix(name: &str, suffix: &str) -> bool {
+#[must_use]
+pub fn suffix(name: &str, suffix: &str) -> bool {
     name.len() >= suffix.len()
         && name.is_char_boundary(name.len() - suffix.len())
         && name[name.len() - suffix.len()..].eq_ignore_ascii_case(suffix)
 }
 
 /// Whether `source` is a relative path that stays inside the unit.
-pub(crate) fn stays_inside(source: &str) -> bool {
+#[must_use]
+pub fn stays_inside(source: &str) -> bool {
     let path = Path::new(source);
     if path.is_absolute() {
         return false;
@@ -133,7 +138,7 @@ pub(crate) fn stays_inside(source: &str) -> bool {
 }
 
 /// A `.tf` file's problems at `rel`: provisioners, runner reads and providers outside `allow`.
-pub(crate) fn check_tf(rel: &str, text: &str, allow: &Allowlist) -> Vec<Problem> {
+pub fn check_tf(rel: &str, text: &str, allow: &Allowlist) -> Vec<Problem> {
     let mut out = Vec::new();
     if PROVISIONER.is_match(text) {
         out.push(problem(rel, "provisioners are not allowed"));
@@ -146,7 +151,8 @@ pub(crate) fn check_tf(rel: &str, text: &str, allow: &Allowlist) -> Vec<Problem>
 }
 
 /// A problem when a unit other than `infra/cloudflare` declares `x-cobot.apex` or `x-cobot.workload`.
-pub(crate) fn misplaced_apex(unit: &Unit) -> Option<Problem> {
+#[must_use]
+pub fn misplaced_apex(unit: &Unit) -> Option<Problem> {
     let c = unit.config.as_ref()?;
     let kind = ["apex", "workload"]
         .into_iter()
@@ -164,12 +170,8 @@ pub(crate) fn misplaced_apex(unit: &Unit) -> Option<Problem> {
 
 /// A schema v0 unit's `unit.yaml` problems; `dirs` are the module sources the shell found to be
 /// directories inside the unit.
-pub(crate) fn check_spec(
-    unit: &Unit,
-    spec: &Spec,
-    area: &str,
-    dirs: &BTreeSet<String>,
-) -> Vec<Problem> {
+#[must_use]
+pub fn check_spec(unit: &Unit, spec: &Spec, area: &str, dirs: &BTreeSet<String>) -> Vec<Problem> {
     let mut problems = Vec::new();
     let file = format!("{}/{UNIT_FILE}", unit.path);
     let name_re = &*NAME;

@@ -231,27 +231,24 @@ pub fn due(grant: &Grant, last: u64, now: u64) -> bool {
         .is_some_and(|age| now.saturating_sub(last) >= age)
 }
 
-/// Reads `root`'s ledger and checks it against the catalogs under `platform`: none when the
-/// instance has no ledger.
+/// The ledger in `text`, checked against `catalogs`: none when the instance has no ledger
+/// (`text` is `None`).
 ///
 /// # Errors
 ///
-/// The ledger's problems, when it doesn't read or doesn't check.
-#[cfg(feature = "engines")]
-pub fn read(
-    root: &std::path::Path,
-    platform: &std::path::Path,
+/// The ledger's problems, when it doesn't parse or doesn't check.
+pub fn parse(
+    text: Option<&str>,
+    catalogs: &[super::infra::capabilities::Catalog],
 ) -> Result<Option<Ledger>, Vec<String>> {
-    let path = root.join(LEDGER);
-    let Ok(text) = std::fs::read_to_string(&path) else {
+    let Some(text) = text else {
         return Ok(None);
     };
     let ledger: Ledger =
-        serde_saphyr::from_str(&text).map_err(|e| vec![format!("{LEDGER}: {e}")])?;
-    let (catalogs, _) = crate::cobot::catalog::capabilities_in(root, platform);
+        serde_saphyr::from_str(text).map_err(|e| vec![format!("{LEDGER}: {e}")])?;
     let known: BTreeSet<String> = catalogs
-        .into_iter()
-        .flat_map(|c| c.capabilities.into_keys())
+        .iter()
+        .flat_map(|c| c.capabilities.keys().cloned())
         .collect();
     let problems = check(&ledger, &known);
     if problems.is_empty() {
@@ -261,21 +258,13 @@ pub fn read(
     }
 }
 
-/// [`read`], with each capability the ledger names resolved from the catalogs under
-/// `platform`, as deployed at `sha`: none when the instance has no ledger.
-///
-/// # Errors
-///
-/// As [`read`].
-#[cfg(feature = "engines")]
-pub fn resolve(
-    root: &std::path::Path,
-    platform: &std::path::Path,
+/// `ledger` with each capability it names resolved from `catalogs`, as deployed at `sha`.
+#[must_use]
+pub fn resolved(
+    ledger: Ledger,
+    catalogs: Vec<super::infra::capabilities::Catalog>,
     sha: &str,
-) -> Result<Option<super::minting::Resolved>, Vec<String>> {
-    let Some(ledger) = read(root, platform)? else {
-        return Ok(None);
-    };
+) -> super::minting::Resolved {
     let named: BTreeSet<&String> = ledger
         .grants
         .values()
@@ -285,7 +274,6 @@ pub fn resolve(
         })
         .flatten()
         .collect();
-    let (catalogs, _) = crate::cobot::catalog::capabilities_in(root, platform);
     let capabilities = catalogs
         .into_iter()
         .flat_map(|c| c.capabilities)
@@ -298,11 +286,11 @@ pub fn resolve(
             (name, declared)
         })
         .collect();
-    Ok(Some(super::minting::Resolved {
+    super::minting::Resolved {
         sha: sha.to_string(),
         ledger,
         capabilities,
-    }))
+    }
 }
 
 #[cfg(test)]

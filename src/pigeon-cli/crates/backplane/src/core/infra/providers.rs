@@ -121,7 +121,8 @@ impl Allowlist {
 }
 
 /// The `source` of every provider a HCL file's `required_providers` declares.
-pub(crate) fn declared(tf: &str) -> Vec<String> {
+#[must_use]
+pub fn declared(tf: &str) -> Vec<String> {
     required_blocks(tf)
         .into_iter()
         .flat_map(|b| ENTRY.captures_iter(b))

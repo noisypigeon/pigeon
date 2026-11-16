@@ -9,7 +9,6 @@ pub mod brief;
 pub mod change;
 pub mod connect;
 pub mod deploy;
-#[cfg(feature = "engines")]
 pub mod infra;
 pub mod insights;
 pub mod learner;
@@ -20,7 +19,6 @@ pub mod minting;
 pub mod owner;
 pub mod platform;
 pub mod pool;
-#[cfg(feature = "engines")]
 pub mod release;
 pub mod session;
 pub mod sites;

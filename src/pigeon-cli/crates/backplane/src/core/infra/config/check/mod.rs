@@ -8,9 +8,9 @@ use super::{
     BLOCK, CONFIG, CREDENTIAL, ConfigUnit, Disk, Expr, SCHEMA, SEMVER, allowed, blocks,
     declared_credentials, declared_secrets, exprs_in, parse, walk_strings, x_cobot,
 };
-use crate::cobot::secrets;
 use crate::core::infra::apex;
 use crate::core::infra::providers::Allowlist;
+use crate::core::infra::secrets;
 
 mod blocks;
 
@@ -25,7 +25,7 @@ pub fn validate(
     area: &str,
     allow: &Allowlist,
     infra_keys: &BTreeSet<String>,
-    catalogs: &[crate::cobot::catalog::Catalog],
+    catalogs: &[crate::core::infra::capabilities::Catalog],
 ) -> Vec<(String, String)> {
     let mut problems = Vec::new();
     check_top(unit, &mut problems);
@@ -41,7 +41,7 @@ pub fn validate(
 /// `$credential` reference against it.
 pub(crate) fn check_credentials(
     unit: &ConfigUnit,
-    catalogs: &[crate::cobot::catalog::Catalog],
+    catalogs: &[crate::core::infra::capabilities::Catalog],
     problems: &mut Vec<(String, String)>,
 ) {
     let mut add = |m: String| problems.push((SCHEMA.into(), m));
