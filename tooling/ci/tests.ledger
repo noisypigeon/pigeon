@@ -1448,6 +1448,7 @@ pigeon-eviction test suite tree::find_tests::symlinks_are_reported_not_followed
 pigeon-eviction test suite tree::tree_tests::absent_lists_allow_nothing_and_ignore_skips
 pigeon-eviction test suite tree::tree_tests::allows_by_kind
 pigeon-eviction test suite tree::tree_tests::require_and_unlistable_paths
+pigeon-harness lib pigeon commands::bench::tests::every_command_ci_sends_is_allowed
 pigeon-harness test suite agent::an_invalid_manifest_exits_2
 pigeon-harness test suite agent::an_unknown_operation_exits_2
 pigeon-harness test suite agent::engines_and_operations_list

@@ -269,22 +269,36 @@ fn run_one(bench: u8, argv: &[String], timeout: Option<u32>) -> i32 {
     }
 }
 
-fn ci(benches: u8) -> i32 {
-    let n = benches.clamp(1, 3);
-    if n == 1 {
-        let argv = ["pigeon", "dev", "ci-scoped"].map(String::from);
-        return run_one(0, &argv, None);
-    }
-    let scope: Vec<String> = [
+/// `ci`'s one-bench command.
+fn ci_scoped_argv() -> Vec<String> {
+    ["pigeon", "dev", "ci-scoped"].map(String::from).to_vec()
+}
+
+/// `ci`'s first step: the checks this change needs, as JSON.
+fn scope_argv() -> Vec<String> {
+    [
         "pigeon",
-        "cobot",
+        "dev",
         "scope",
         "--base",
         "artifacts/main",
         "--json",
     ]
     .map(String::from)
-    .to_vec();
+    .to_vec()
+}
+
+/// One of `ci`'s checks, by name.
+fn check_argv(name: &str) -> Vec<String> {
+    ["bench", "check", name].map(String::from).to_vec()
+}
+
+fn ci(benches: u8) -> i32 {
+    let n = benches.clamp(1, 3);
+    if n == 1 {
+        return run_one(0, &ci_scoped_argv(), None);
+    }
+    let scope = scope_argv();
     let mut log = String::new();
     let sha = match push() {
         Ok(s) => s,
@@ -334,7 +348,7 @@ fn lane(k: u8, list: &[Check], sha: &str) -> Vec<(String, bool, String)> {
     let mut done = Vec::new();
     for check in list {
         let began = Instant::now();
-        let argv = ["bench", "check", &check.name].map(String::from);
+        let argv = check_argv(&check.name);
         let mut out = String::new();
         let ok = match start(k, &argv, None, Some(sha)) {
             Ok(run) => follow(&run, k, Some(&mut out)) == 0,
@@ -352,4 +366,20 @@ fn lane(k: u8, list: &[Check], sha: &str) -> Vec<(String, bool, String)> {
         done.push((check.name.clone(), ok, out));
     }
     done
+}
+
+#[cfg(test)]
+mod tests {
+    use agent::core::bench::allow::allow;
+
+    #[test]
+    fn every_command_ci_sends_is_allowed() {
+        for argv in [
+            super::ci_scoped_argv(),
+            super::scope_argv(),
+            super::check_argv("clippy"),
+        ] {
+            assert!(allow(&argv).is_ok(), "{argv:?}");
+        }
+    }
 }
