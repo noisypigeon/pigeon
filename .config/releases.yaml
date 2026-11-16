@@ -1,5 +1,6 @@
-description: Release units and changelog tiers; only the release bot writes versions and changelogs.
+description: Release units and the one changelog; only the release bot writes versions and CHANGELOG.md.
 repository: https://github.com/noisypigeon/pigeon
+changelog: CHANGELOG.md
 units:
   # Its own crate alone; see .claude/decisions/2026-11-10-development-factory-crates-functional-core.md §1.
   sentinel:
@@ -163,41 +164,36 @@ units:
 settings:
   - { file: Cargo.toml, tables: '^\[profile\.', keys: '^(edition|rust-version)\s*=' }
   - { file: mise.toml, keys: '^rust\s*=' }
-tiers:
-  - { file: CHANGELOG.md, paths: [''] }
-  - { file: src/pigeon-cli/CHANGELOG.md, paths: [src/pigeon-cli/] }
-  - { file: src/pigeon-cli/crates/pigeon/CHANGELOG.md, paths: [src/pigeon-cli/crates/pigeon/] }
-  - { file: src/pigeon-cli/crates/sentinel/CHANGELOG.md, unit: sentinel }
-  - { file: src/pigeon-cli/crates/backplane/CHANGELOG.md, unit: backplane }
-  - { file: catalog/cloudflare/modules/zone/CHANGELOG.md, unit: infra-cloudflare-zone, from: infra/cloudflare/modules/zone/CHANGELOG.md }
-  - { file: catalog/cloudflare/modules/permission-groups/CHANGELOG.md, unit: infra-cloudflare-permission-groups, from: infra/cloudflare/modules/permission-groups/CHANGELOG.md }
-  - { file: catalog/cloudflare/modules/api-token/CHANGELOG.md, unit: infra-cloudflare-api-token, from: infra/cloudflare/modules/api-token/CHANGELOG.md }
-  - { file: catalog/cloudflare/CHANGELOG.md, unit: infra-cloudflare-schema, from: infra/cloudflare/CHANGELOG.md }
-  - { file: catalog/cloudflare/modules/dns-record/CHANGELOG.md, unit: infra-cloudflare-dns-record, from: infra/cloudflare/modules/dns-record/CHANGELOG.md }
-  - { file: catalog/cloudflare/modules/r2-bucket/CHANGELOG.md, unit: infra-cloudflare-r2-bucket, from: infra/cloudflare/modules/r2-bucket/CHANGELOG.md }
-  - { file: catalog/cloudflare/modules/r2-custom-domain/CHANGELOG.md, unit: infra-cloudflare-r2-custom-domain, from: infra/cloudflare/modules/r2-custom-domain/CHANGELOG.md }
-  - { file: catalog/cloudflare/modules/ruleset/CHANGELOG.md, unit: infra-cloudflare-ruleset, from: infra/cloudflare/modules/ruleset/CHANGELOG.md }
-  - { file: catalog/cloudflare/modules/account/CHANGELOG.md, unit: infra-cloudflare-account }
-  - { file: catalog/cloudflare/modules/d1-database/CHANGELOG.md, unit: infra-cloudflare-d1-database }
-  - { file: catalog/cloudflare/modules/worker/CHANGELOG.md, unit: infra-cloudflare-worker }
-  - { file: catalog/cloudflare/modules/queue/CHANGELOG.md, unit: infra-cloudflare-queue }
-  - { file: catalog/cloudflare/modules/secrets-store/CHANGELOG.md, unit: infra-cloudflare-secrets-store }
-  - { file: catalog/cloudflare/modules/access-application/CHANGELOG.md, unit: infra-cloudflare-access-application }
-  - { file: catalog/cloudflare/modules/access-policy/CHANGELOG.md, unit: infra-cloudflare-access-policy }
-  - { file: catalog/cloudflare/modules/access-service-token/CHANGELOG.md, unit: infra-cloudflare-access-service-token }
-  - { file: catalog/agnostic/modules/random-string/CHANGELOG.md, unit: infra-agnostic-random-string, from: infra/agnostic/modules/random-string/CHANGELOG.md }
-  - { file: catalog/agnostic/CHANGELOG.md, unit: infra-agnostic-schema, from: infra/agnostic/CHANGELOG.md }
-  - { file: catalog/digitalocean/modules/project-resources/CHANGELOG.md, unit: infra-digitalocean-project-resources }
-  - { file: catalog/digitalocean/modules/project/CHANGELOG.md, unit: infra-digitalocean-project }
-  - { file: catalog/digitalocean/modules/spaces-bucket/CHANGELOG.md, unit: infra-digitalocean-spaces-bucket }
-  - { file: catalog/digitalocean/modules/ssh-key/CHANGELOG.md, unit: infra-digitalocean-ssh-key }
-  - { file: catalog/digitalocean/CHANGELOG.md, unit: infra-digitalocean-schema }
-  - { file: catalog/scaleway/modules/iam-application/CHANGELOG.md, unit: infra-scaleway-iam-application }
-  - { file: catalog/scaleway/modules/iam-policy/CHANGELOG.md, unit: infra-scaleway-iam-policy }
-  - { file: catalog/scaleway/modules/project/CHANGELOG.md, unit: infra-scaleway-project }
-  - { file: catalog/scaleway/CHANGELOG.md, unit: infra-scaleway-schema }
-  - { file: catalog/backblaze/modules/bucket/CHANGELOG.md, unit: infra-backblaze-bucket }
-  - { file: catalog/backblaze/CHANGELOG.md, unit: infra-backblaze-schema }
-  - { file: infra/pigeon/CHANGELOG.md, unit: infra-pigeon-schema }
-  - { file: src/site-templates/architecture/CHANGELOG.md, unit: site-template-architecture }
-  - { file: src/site-templates/blog/CHANGELOG.md, unit: site-template-blog }
+retired:
+  - catalog/agnostic/CHANGELOG.md
+  - catalog/agnostic/modules/random-string/CHANGELOG.md
+  - catalog/backblaze/CHANGELOG.md
+  - catalog/backblaze/modules/bucket/CHANGELOG.md
+  - catalog/cloudflare/CHANGELOG.md
+  - catalog/cloudflare/modules/account/CHANGELOG.md
+  - catalog/cloudflare/modules/api-token/CHANGELOG.md
+  - catalog/cloudflare/modules/d1-database/CHANGELOG.md
+  - catalog/cloudflare/modules/dns-record/CHANGELOG.md
+  - catalog/cloudflare/modules/permission-groups/CHANGELOG.md
+  - catalog/cloudflare/modules/r2-bucket/CHANGELOG.md
+  - catalog/cloudflare/modules/r2-custom-domain/CHANGELOG.md
+  - catalog/cloudflare/modules/ruleset/CHANGELOG.md
+  - catalog/cloudflare/modules/zone/CHANGELOG.md
+  - catalog/digitalocean/CHANGELOG.md
+  - catalog/digitalocean/modules/project-resources/CHANGELOG.md
+  - catalog/digitalocean/modules/project/CHANGELOG.md
+  - catalog/digitalocean/modules/spaces-bucket/CHANGELOG.md
+  - catalog/digitalocean/modules/ssh-key/CHANGELOG.md
+  - catalog/scaleway/CHANGELOG.md
+  - catalog/scaleway/modules/iam-application/CHANGELOG.md
+  - catalog/scaleway/modules/iam-policy/CHANGELOG.md
+  - catalog/scaleway/modules/project/CHANGELOG.md
+  - infra/pigeon/CHANGELOG.md
+  - src/pigeon-cli/CHANGELOG.md
+  - src/pigeon-cli/crates/backplane/CHANGELOG.md
+  - src/pigeon-cli/crates/cobot/CHANGELOG.md
+  - src/pigeon-cli/crates/gantry/CHANGELOG.md
+  - src/pigeon-cli/crates/pigeon/CHANGELOG.md
+  - src/pigeon-cli/crates/sentinel/CHANGELOG.md
+  - src/site-templates/architecture/CHANGELOG.md
+  - src/site-templates/blog/CHANGELOG.md
