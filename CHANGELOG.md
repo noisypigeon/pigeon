@@ -193,6 +193,7 @@
 - docs(adr): authorizing a plan is code and Auto covers it; the merge tier is the secrets gate (!814) ([af8454f](https://github.com/noisypigeon/pigeon/commit/af8454fee8c620cc5ac9dbb4ef036eb7e0afcb34))
 - test(agent): the sentinel tiers test holds with or without approvals.yaml's gate (!815) ([ccf989e](https://github.com/noisypigeon/pigeon/commit/ccf989e622be825c191b649928ac9e4d037c2787))
 - docs(adr): faster merges: the release bot takes a merge turn, the head's jobs overlap, and two owner decisions (!818) ([38cb8fb](https://github.com/noisypigeon/pigeon/commit/38cb8fb9d275639390b2a177dba656414cbc9273))
+- docs(adr): the owner's answers on merges: an owner approval covers its head's merge, and checks carry across a restack outside their reach (!820) ([f3c9428](https://github.com/noisypigeon/pigeon/commit/f3c94289da06ebee71a7479c42b262f3638f51cb))
 
 ## 2026-11-15
 
