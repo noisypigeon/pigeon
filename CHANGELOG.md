@@ -9,6 +9,7 @@
 - backplane v0.1.33
 - backplane v0.1.34
 - backplane v0.1.35
+- backplane v0.1.36
 - infra-agnostic-random-string v0.1.3
 - infra-agnostic-schema v0.1.3
 - infra-agnostic-schema v0.1.4
@@ -161,6 +162,8 @@
 - refactor: the pigeon binary's crate moves to src/pigeon-harness (!772) ([0633627](https://github.com/noisypigeon/pigeon/commit/06336271f79bed3ecadbe44c81fdbfdc2bc497be)) · backplane
 - test: the stored-state fixtures move ahead to src/pigeon-agent/tests/state (!777) ([9483ac0](https://github.com/noisypigeon/pigeon/commit/9483ac01b71e5534998eaf5b3544984db92f042c))
 - refactor: the agent crate moves to src/pigeon-agent (!778) ([d220329](https://github.com/noisypigeon/pigeon/commit/d22032901c824a8f3d60c8fd94d6231ebe6d0279)) · backplane
+- feat(backplane): the deploy builds the judge under whichever binary name the tree declares, and its readers find either (!780) ([349afc9](https://github.com/noisypigeon/pigeon/commit/349afc9db8187664c218d43dcd16b0e96e4bce7c)) · backplane
+- refactor(backplane): only x-pigeon, ENC[pigeon:v1:] and .pigeon/ are read: the old data names go (!781) ([aed7f44](https://github.com/noisypigeon/pigeon/commit/aed7f444193cb903df2b4eb07ed833fa5e988e1a)) · backplane
 
 ## 2026-11-15
 
