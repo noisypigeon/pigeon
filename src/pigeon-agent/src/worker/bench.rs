@@ -6,7 +6,7 @@ use serde_json::{Value, json};
 use worker::{DurableObject, Env, Method, Request, Response, Result, State, durable_object};
 
 use super::mandates::to_instance;
-use super::platform::{self, Settings, json_request, now, secret};
+use super::platform::{self, Settings, json_request, now};
 use crate::core::bench::{
     self as rules,
     admit::{Admit, Fleet, Limits},
@@ -91,7 +91,7 @@ const TICK_MS: i64 = 5 * 60 * 1000;
 
 /// The bench's own signing key, derived from the Worker's, so a leak opens only this bench.
 fn key(env: &Env, name: &str) -> Result<String> {
-    let token = secret(env, crate::cobot::worker::TOKEN_VAR)?;
+    let token = super::checker::signing_key(env)?;
     Ok(crate::cobot::link::derive(&token, &format!("bench:{name}")))
 }
 

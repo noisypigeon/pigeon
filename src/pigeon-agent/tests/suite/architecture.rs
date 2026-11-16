@@ -649,3 +649,20 @@ fn the_network_renders_as_text_and_svg() {
         "an unknown format is refused"
     );
 }
+
+#[test]
+fn the_worker_reads_the_signing_key_only_under_its_stored_name() {
+    let dir = repo_root().join("src/pigeon-agent/src/worker");
+    for entry in std::fs::read_dir(&dir).expect("worker sources") {
+        let path = entry.expect("entry").path();
+        if path.extension().is_none_or(|e| e != "rs") {
+            continue;
+        }
+        let text = std::fs::read_to_string(&path).expect("source");
+        assert!(
+            !text.contains("cobot::worker::TOKEN_VAR"),
+            "{}: the Worker's secret is read through checker::signing_key",
+            path.display()
+        );
+    }
+}

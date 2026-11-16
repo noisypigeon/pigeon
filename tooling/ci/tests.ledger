@@ -111,6 +111,7 @@ pigeon-agent test suite architecture::no_bucket_name_reaches_the_output
 pigeon-agent test suite architecture::the_graph_names_only_pigeon_dev
 pigeon-agent test suite architecture::the_network_diagram_is_placed_without_overlaps
 pigeon-agent test suite architecture::the_network_renders_as_text_and_svg
+pigeon-agent test suite architecture::the_worker_reads_the_signing_key_only_under_its_stored_name
 pigeon-agent test suite architecture::this_repository_is_described_the_same_way_twice
 pigeon-agent test suite asks_approval::the_apps_detail_lists_the_asks_for_the_plans_approval_only
 pigeon-agent test suite asks_approval::the_form_and_the_app_body_give_only_the_asked_answers
