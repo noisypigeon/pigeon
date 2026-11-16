@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: runtime
-* Governs: `src/pigeon-cli/crates/backplane/src/architecture/**`, `src/pigeon-cli/crates/backplane/tests/**architecture.rs`, `src/pigeon-cli/crates/backplane/src/catalog.rs`, `src/pigeon-cli/crates/backplane/src/cobot/scope.rs`, `src/pigeon-cli/crates/backplane/src/jobs.rs`, `src/pigeon-cli/crates/backplane/src/wire.rs`, `src/pigeon-cli/crates/backplane/src/worker/mod.rs`, `src/site-templates/architecture/templates/index.html`, `src/site-templates/architecture/static/assets/css/main.css`, `CLAUDE.md`
+* Governs: `src/pigeon-cli/crates/backplane/src/architecture/**`, `src/**/tests/suite/architecture.rs`, `src/pigeon-cli/crates/backplane/src/catalog.rs`, `src/pigeon-cli/crates/backplane/src/cobot/scope.rs`, `src/pigeon-cli/crates/backplane/src/jobs.rs`, `src/pigeon-cli/crates/backplane/src/wire.rs`, `src/pigeon-cli/crates/backplane/src/worker/mod.rs`, `src/site-templates/architecture/templates/index.html`, `src/site-templates/architecture/static/assets/css/main.css`, `CLAUDE.md`
 
 ## Context
 

@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: runtime
-* Governs: `catalog/pigeon/kinds/platform/**`, `src/pigeon-cli/crates/backplane/src/platform*.rs`, `src/pigeon-cli/crates/backplane/src/worker/platform*.rs`, `src/pigeon-cli/crates/backplane/src/versions.rs`, `src/pigeon-cli/crates/backplane/tests/state/**`, `src/pigeon-cli/crates/backplane/tests/**state.rs`
+* Governs: `catalog/pigeon/kinds/platform/**`, `src/pigeon-cli/crates/backplane/src/platform*.rs`, `src/pigeon-cli/crates/backplane/src/worker/platform*.rs`, `src/pigeon-cli/crates/backplane/src/versions.rs`, `src/pigeon-cli/crates/backplane/tests/state/**`, `src/**/tests/suite/stored_state.rs`
 
 ## Context
 

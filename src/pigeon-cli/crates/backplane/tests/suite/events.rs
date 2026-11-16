@@ -1,7 +1,6 @@
 //! The event log; see `.claude/decisions/2026-11-08-development-events-tickets-digest-mandate.md` §1.
 
-#[path = "common/step.rs"]
-mod step;
+use crate::harness::step;
 
 use backplane::core::change::stage::{Needs, Stage};
 use backplane::events::{

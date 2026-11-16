@@ -433,23 +433,21 @@ pub fn jobs_of(
         });
         if !ran_backplane {
             out.push(job(
-                "test pigeon-backplane: cobot_catalog cobot_manifest cobot_apex cobot_git cobot_credentials",
+                "test pigeon-backplane: suite cobot_catalog cobot_manifest cobot_apex cobot_git cobot_credentials",
                 &[
                     "cargo",
                     "test",
                     "-p",
                     "pigeon-backplane",
+                    "--test",
+                    "suite",
                     "--locked",
-                    "--test",
-                    "cobot_catalog",
-                    "--test",
-                    "cobot_manifest",
-                    "--test",
-                    "cobot_apex",
-                    "--test",
-                    "cobot_git",
-                    "--test",
-                    "cobot_credentials",
+                    "--",
+                    "cobot_catalog::",
+                    "cobot_manifest::",
+                    "cobot_apex::",
+                    "cobot_git::",
+                    "cobot_credentials::",
                 ],
             ));
         }

@@ -1,9 +1,5 @@
 //! Grants: one use, a deadline, the head they were made for, the operation they name.
 
-#[macro_use]
-#[path = "common/kept.rs"]
-mod kept;
-
 use backplane::changes::{Change, State};
 use backplane::grants::{self, Grants, TTL};
 

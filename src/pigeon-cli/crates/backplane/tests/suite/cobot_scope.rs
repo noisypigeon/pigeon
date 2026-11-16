@@ -50,7 +50,7 @@ fn the_catalog_runs_infra_checks_and_no_rust_build() {
         got,
         [
             "infra.validate",
-            "test pigeon-backplane: cobot_catalog cobot_manifest cobot_apex cobot_git cobot_credentials",
+            "test pigeon-backplane: suite cobot_catalog cobot_manifest cobot_apex cobot_git cobot_credentials",
             "policy.check"
         ]
     );
@@ -342,7 +342,10 @@ fn the_test_map_runs_the_binaries_that_ran_a_changed_file() {
     let got = with_map(&["src/pigeon-cli/crates/backplane/src/cobot/git.rs"]);
     assert_eq!(
         tests_of(&got),
-        ["test pigeon-backplane: lib cobot_git"],
+        [
+            "test pigeon-backplane: lib",
+            "test pigeon-backplane: suite cobot_git"
+        ],
         "{got:?}"
     );
     assert!(
@@ -352,8 +355,8 @@ fn the_test_map_runs_the_binaries_that_ran_a_changed_file() {
     let got = with_map(&["src/pigeon-cli/crates/backplane/tests/cobot_scope.rs"]);
     assert_eq!(
         tests_of(&got),
-        ["test pigeon-backplane: cobot_scope"],
-        "its own binary"
+        ["test pigeon-backplane: suite cobot_scope"],
+        "its own binary, now its suite module"
     );
     let jobs = backplane::cobot::scope::jobs_with(
         &repo_root(),
@@ -373,8 +376,10 @@ fn the_test_map_runs_the_binaries_that_ran_a_changed_file() {
             "-p",
             "pigeon-backplane",
             "--test",
-            "cobot_scope",
-            "--locked"
+            "suite",
+            "--locked",
+            "--",
+            "cobot_scope::"
         ]
     );
 }
@@ -417,7 +422,7 @@ fn a_mapped_test_check_does_not_stand_in_for_a_crates_whole_suite() {
         "catalog/cloudflare/kinds/git-repo/schema.json",
     ]);
     assert!(
-        got.contains(&"test pigeon-backplane: cobot_catalog cobot_manifest cobot_apex cobot_git cobot_credentials".to_string()),
+        got.contains(&"test pigeon-backplane: suite cobot_catalog cobot_manifest cobot_apex cobot_git cobot_credentials".to_string()),
         "{got:?}"
     );
 }
@@ -445,7 +450,10 @@ fn a_wasm_only_path_runs_fmt_and_the_wasm_clippy_alone() {
     let got = with_map(&[worker, "src/pigeon-cli/crates/backplane/src/cobot/git.rs"]);
     assert_eq!(
         tests_of(&got),
-        ["test pigeon-backplane: lib cobot_git"],
+        [
+            "test pigeon-backplane: lib",
+            "test pigeon-backplane: suite cobot_git"
+        ],
         "the native file's tests, chosen by the map: {got:?}"
     );
     assert_eq!(

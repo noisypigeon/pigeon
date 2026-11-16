@@ -1,10 +1,6 @@
 //! Passkeys: registering and asserting with ES256; see
 //! `.claude/decisions/2026-11-09-security-approvals-once-passkeys.md` §4.
 
-#[macro_use]
-#[path = "common/kept.rs"]
-mod kept;
-
 use backplane::passkeys::{
     ADD, Bound, Keyring, LOCK_AFTER, MAX_KEYS, Passkey, Proofs, RECENT, REGISTER, assert,
     bound_challenge, der_signature, grant_purpose, register, relying_party, remove_purpose,

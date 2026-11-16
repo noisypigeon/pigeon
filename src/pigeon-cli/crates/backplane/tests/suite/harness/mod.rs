@@ -1,4 +1,8 @@
-//! Helpers shared by the integration tests.
+//! Helpers shared by the suite's modules.
+
+#[macro_use]
+pub mod kept;
+pub mod step;
 
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;

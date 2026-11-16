@@ -1,14 +1,13 @@
 //! D1 schema v0 applies to SQLite and enforces its constraints; see the control-plane ADR §4,
 //! `.claude/decisions/2026-11-05-runtime-control-plane-worker.md`.
 
-#[path = "common/step.rs"]
-mod step;
+use crate::harness::step;
 
 use rusqlite::Connection;
 use step::Apply;
 
-const SCHEMA_V0: &str = include_str!("../migrations/0001_schema_v0.sql");
-const CHANGES: &str = include_str!("../migrations/0002_changes.sql");
+const SCHEMA_V0: &str = include_str!("../../migrations/0001_schema_v0.sql");
+const CHANGES: &str = include_str!("../../migrations/0002_changes.sql");
 
 fn applied() -> Connection {
     let db = Connection::open_in_memory().expect("sqlite");

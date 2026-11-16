@@ -6,7 +6,7 @@ use std::path::PathBuf;
 
 use backplane::{Instance, Request, Response, run_with};
 
-mod common;
+use crate::harness as common;
 use serde_json::Value;
 use tempfile::TempDir;
 

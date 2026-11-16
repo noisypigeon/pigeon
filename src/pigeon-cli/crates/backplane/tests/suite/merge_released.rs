@@ -1,8 +1,7 @@
 //! A head that fails, or a holder that yields, gives its turn back; see the 2026-11-16 amendment
 //! to `.claude/decisions/2026-11-08-development-concurrent-agent-sessions.md`.
 
-#[path = "common/step.rs"]
-mod step;
+use crate::harness::step;
 
 use backplane::approvals::{Tier, Tiered, Tiers};
 use backplane::changes::stage::{self, Needs};

@@ -1,10 +1,6 @@
 //! Platform runs: offers, grants, the sealed token's lifetime; see
 //! `.claude/decisions/2026-11-08-runtime-blue-green-self-standup.md`, step 4's amendment.
 
-#[macro_use]
-#[path = "common/kept.rs"]
-mod kept;
-
 use backplane::platforms::{Kept, LIFETIME, Runs, Stage, finish_event, merged_outputs};
 use serde_json::json;
 
