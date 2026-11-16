@@ -136,26 +136,28 @@ pub fn workers(
 /// The R2 binding, in some Worker's spec, of the bucket builds are stored in and served from.
 pub const BUILDS_BINDING: &str = "CI_LOGS";
 
-/// The command that builds the `pigeon` jobs run.
+/// The command that builds the `pigeon` jobs run, by its binary's name, so it builds whichever
+/// package holds it.
 pub const BUILD: [&str; 9] = [
     "cargo",
     "build",
     "--release",
     "--locked",
-    "-p",
+    "--bin",
     "pigeon",
     "--no-default-features",
     "--features",
     "backplane",
 ];
 
-/// The command that builds the `pigeon-sentinel` the bound job judges with.
+/// The command that builds the `pigeon-sentinel` the bound job judges with, by its binary's name,
+/// so it builds whichever package holds it.
 pub const SENTINEL_BUILD: [&str; 6] = [
     "cargo",
     "build",
     "--release",
     "--locked",
-    "-p",
+    "--bin",
     crate::cobot::ship_wire::SENTINEL_BINARY,
 ];
 
