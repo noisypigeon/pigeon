@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["src/common", "src/pigeon-cli/crates/*", "src/pigeon-ios", "src/pigeon-site-templates", "src/pigeon-eviction"]
+members = ["src/common", "src/pigeon-core", "src/pigeon-cli/crates/*", "src/pigeon-ios", "src/pigeon-site-templates", "src/pigeon-eviction"]
 exclude = ["src/pigeon-cli/crates/cobot", "src/pigeon-cli/crates/gantry", "src/pigeon-cli/crates/sentinel"]
 
 # What the checks need to know of this layout; see
@@ -18,6 +18,7 @@ publish = false
 
 [workspace.dependencies]
 common = { path = "src/common", package = "pigeon-common" }
+pigeon-core = { path = "src/pigeon-core" }
 eviction = { path = "src/pigeon-eviction", package = "pigeon-eviction" }
 backplane = { path = "src/pigeon-cli/crates/backplane", package = "pigeon-backplane", default-features = false }
 age = { version = "0.12.1", default-features = false }

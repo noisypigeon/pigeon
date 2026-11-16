@@ -27,6 +27,7 @@ worker = ["dep:futures-util", "dep:wasm-bindgen", "dep:worker", "worker/d1", "wo
 [dependencies]
 aes-gcm.workspace = true
 common.workspace = true
+pigeon-core.workspace = true
 age = { workspace = true, optional = true }
 futures-util = { workspace = true, optional = true }
 hkdf.workspace = true

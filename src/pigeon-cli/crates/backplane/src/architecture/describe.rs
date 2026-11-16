@@ -4,6 +4,7 @@ use std::collections::BTreeSet;
 use std::path::Path;
 
 use super::{Edge, Graph, Group, Lane, Node};
+use crate::cobot::unit::IsConfig;
 use crate::wire::{Engine, catalog};
 use crate::{Error, Instance, engines};
 

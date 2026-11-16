@@ -9,13 +9,18 @@ use crate::cobot::Error;
 
 pub use crate::core::infra::providers::*;
 
-impl Allowlist {
+/// Reads an [`Allowlist`] from disk.
+pub trait LoadAllowlist: Sized {
     /// Loads `<dir>/providers.yaml`; a missing file allows nothing.
     ///
     /// # Errors
     ///
     /// [`Error::Io`] if the file exists but is unreadable or invalid.
-    pub fn load(dir: &Path) -> Result<Self, Error> {
+    fn load(dir: &Path) -> Result<Self, Error>;
+}
+
+impl LoadAllowlist for Allowlist {
+    fn load(dir: &Path) -> Result<Self, Error> {
         let path = dir.join(ALLOWLIST);
         if !path.exists() {
             return Ok(Self::default());

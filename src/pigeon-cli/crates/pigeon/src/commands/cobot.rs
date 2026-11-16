@@ -2,6 +2,8 @@
 //! `.claude/decisions/2026-11-02-runtime-cloudflare-provisioner-unit.md` and
 //! `.claude/decisions/2026-11-02-development-sentinel-policy-cobot-actions.md`.
 
+use backplane::cobot::release::LoadConfig;
+use backplane::cobot::scope::ReadTestMap;
 use std::env;
 use std::fs;
 use std::io::Read;

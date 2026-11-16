@@ -1,6 +1,7 @@
 //! An instance's manifest v1 of kind-typed units; see
 //! `.claude/decisions/2026-11-05-runtime-instance-config-kind-units.md`.
 
+use backplane::cobot::providers::LoadAllowlist;
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
 use std::fs;

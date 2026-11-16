@@ -12,6 +12,8 @@ use std::sync::{Arc, Mutex};
 
 use serde_json::{Map, Value, json};
 
+use crate::cobot::release::LoadConfig;
+use crate::cobot::scope::ReadTestMap;
 use crate::control::{
     DEPLOY, JobSpec, MIRROR, MIRROR_TO, MIRROR_TOKEN, Outcome, Report, UNMIRROR, tail,
 };

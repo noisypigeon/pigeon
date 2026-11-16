@@ -1,5 +1,6 @@
 //! Which units release, against a small path-only cargo workspace.
 
+use backplane::cobot::release::LoadConfig;
 use std::fs;
 use std::path::Path;
 use std::process::Command;

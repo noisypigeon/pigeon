@@ -17,13 +17,18 @@ use crate::core::release::lines::{
 
 pub use crate::core::release::*;
 
-impl Config {
+/// Reads a release [`Config`] from disk.
+pub trait LoadConfig: Sized {
     /// Loads and checks `path`.
     ///
     /// # Errors
     ///
     /// [`Error::Io`] if unreadable or invalid.
-    pub fn load(path: &Path) -> Result<Self, Error> {
+    fn load(path: &Path) -> Result<Self, Error>;
+}
+
+impl LoadConfig for Config {
+    fn load(path: &Path) -> Result<Self, Error> {
         let text = fs::read_to_string(path).map_err(|source| Error::Io {
             path: path.to_path_buf(),
             message: source.to_string(),

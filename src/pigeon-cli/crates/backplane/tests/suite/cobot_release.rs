@@ -1,5 +1,6 @@
 //! `backplane::cobot::release` against throwaway git repositories.
 
+use backplane::cobot::release::LoadConfig;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;

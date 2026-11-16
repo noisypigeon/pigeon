@@ -8,10 +8,14 @@ use crate::cobot::providers::Allowlist;
 
 pub use crate::core::infra::unit::*;
 
-impl Unit {
+/// Whether a [`Unit`] on disk is a config unit.
+pub trait IsConfig {
     /// Whether this is a config unit.
-    #[must_use]
-    pub fn is_config(&self) -> bool {
+    fn is_config(&self) -> bool;
+}
+
+impl IsConfig for Unit {
+    fn is_config(&self) -> bool {
         self.kind.is_some() || self.dir.join(crate::cobot::config::CONFIG).is_file()
     }
 }

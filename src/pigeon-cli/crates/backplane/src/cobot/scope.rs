@@ -8,6 +8,7 @@ use std::path::Path;
 
 use crate::cobot::Error;
 use crate::cobot::release::Config;
+use crate::cobot::release::LoadConfig;
 
 pub use crate::core::deploy::scope::*;
 
@@ -219,13 +220,18 @@ pub fn gate(
     Ok(gate_of(&crates(root)?, files, map))
 }
 
-impl TestMap {
+/// Reads a [`TestMap`] from disk.
+pub trait ReadTestMap: Sized {
     /// The map in `path`.
     ///
     /// # Errors
     ///
     /// [`Error::Io`] when it can't be read, [`Error::Tool`] when it isn't a map.
-    pub fn read(path: &Path) -> Result<Self, Error> {
+    fn read(path: &Path) -> Result<Self, Error>;
+}
+
+impl ReadTestMap for TestMap {
+    fn read(path: &Path) -> Result<Self, Error> {
         let text = fs::read_to_string(path).map_err(|e| Error::Io {
             path: path.to_path_buf(),
             message: e.to_string(),

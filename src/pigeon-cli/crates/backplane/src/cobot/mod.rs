@@ -8,8 +8,7 @@ pub mod adopt;
 pub mod apex;
 #[cfg(feature = "engines")]
 pub mod artifacts;
-#[cfg(any(feature = "engines", feature = "worker"))]
-pub mod artifacts_wire;
+pub use pigeon_core::wire::artifacts_wire;
 #[cfg(feature = "engines")]
 pub mod bench;
 #[cfg(feature = "engines")]
@@ -28,8 +27,7 @@ pub mod generations;
 pub mod git;
 #[cfg(feature = "engines")]
 pub mod imagebuild;
-#[cfg(any(feature = "engines", feature = "worker"))]
-pub mod link;
+pub use pigeon_core::wire::link;
 #[cfg(feature = "engines")]
 pub mod manifest;
 #[cfg(feature = "engines")]
@@ -50,8 +48,7 @@ pub mod secrets;
 pub mod session;
 #[cfg(feature = "engines")]
 pub mod ship;
-#[cfg(any(feature = "engines", feature = "worker"))]
-pub mod ship_wire;
+pub use pigeon_core::wire::ship_wire;
 #[cfg(feature = "engines")]
 pub mod sites;
 #[cfg(feature = "engines")]

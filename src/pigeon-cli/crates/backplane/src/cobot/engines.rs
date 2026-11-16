@@ -1,6 +1,7 @@
 //! The `engines` build: everything that runs `tofu`, `zola` or `git`, or touches files and R2
 //! (control-plane ADR §1).
 
+use crate::cobot::providers::LoadAllowlist;
 use crate::cobot::{
     apex, cloudflare, config, generations, moves, plans, providers, s3, secrets, sites,
     static_site, tofu, unit,

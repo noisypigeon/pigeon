@@ -103,11 +103,11 @@ fn the_image_build_sees_every_config_file_a_crate_includes() {
             .any(|l| l.trim() == "COPY --from=config . /src/.config/"),
         "the build stage copies the whole `config` context, so no include_str! of .config/ misses"
     );
-    let crates = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+    let src = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
     let mut names = Vec::new();
-    included_config(&crates, &mut names);
+    included_config(&src, &mut names);
     assert!(names.iter().any(|n| n == "pool.yaml"), "{names:?}");
-    let root = crates.join("../../../.config");
+    let root = src.join("../.config");
     for n in &names {
         assert!(
             root.join(n).is_file(),

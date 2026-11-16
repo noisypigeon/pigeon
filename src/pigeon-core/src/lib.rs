@@ -1,0 +1,50 @@
+//! The control plane's pure logic and wire form: types, transitions and judgements, with no
+//! I/O, clock or `&mut` receiver; see
+//! `.claude/decisions/2026-11-10-development-factory-crates-functional-core.md` §3 and
+//! `.claude/decisions/2026-11-16-development-src-crates-neutral-names.md` §1.
+
+pub mod access;
+pub mod account;
+pub mod actions;
+pub mod app;
+pub mod apple;
+pub mod approval;
+pub mod approve;
+pub mod architecture;
+pub mod bench;
+pub mod brief;
+pub mod briefs;
+pub mod change;
+pub mod ci_window;
+pub mod connect;
+pub mod control;
+pub mod decisions;
+pub mod deploy;
+pub mod events;
+pub mod gitcreds;
+pub mod gitdoor;
+pub mod infra;
+pub mod insights;
+pub mod iosrelease;
+pub mod learner;
+pub mod ledger;
+pub mod macos;
+pub mod mcp;
+pub mod member;
+pub mod minting;
+pub mod mirroring;
+pub mod names;
+pub mod owner;
+pub mod platform;
+pub mod pool;
+pub mod push;
+pub mod reconcile;
+pub mod release;
+pub mod routes;
+pub mod session;
+pub mod sessions;
+pub mod signing;
+pub mod sites;
+pub mod tasks;
+pub mod tickets;
+pub mod wire;

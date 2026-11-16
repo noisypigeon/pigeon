@@ -1,6 +1,7 @@
 //! Agnostic module references and `x-cobot.each` blocks; see
 //! `.claude/decisions/2026-11-03-runtime-infra-agnostic-shared-modules.md`.
 
+use backplane::cobot::providers::LoadAllowlist;
 use std::fmt::Write as _;
 use std::fs;
 use std::path::Path;

@@ -1868,6 +1868,7 @@ dependencies = [
  "jsonschema",
  "p256",
  "pigeon-common",
+ "pigeon-core",
  "rcgen",
  "regex",
  "rusqlite",
@@ -1890,6 +1891,25 @@ version = "0.1.0"
 dependencies = [
  "md-5",
  "sha2 0.10.9",
+]
+
+[[package]]
+name = "pigeon-core"
+version = "0.1.0"
+dependencies = [
+ "aes-gcm",
+ "hkdf",
+ "hmac",
+ "jsonschema",
+ "p256",
+ "pigeon-common",
+ "regex",
+ "serde",
+ "serde-saphyr",
+ "serde_json",
+ "sha1",
+ "sha2 0.10.9",
+ "toml",
 ]
 
 [[package]]

@@ -1,5 +1,6 @@
 //! Zone apexes: layout, presets, claims, workload secrets and the token handoff.
 
+use backplane::cobot::providers::LoadAllowlist;
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
 use std::fs;

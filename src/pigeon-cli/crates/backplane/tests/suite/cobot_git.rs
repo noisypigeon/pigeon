@@ -1,6 +1,7 @@
 //! Git repositories on Cloudflare Artifacts, against a fake API and local remotes; see
 //! `.claude/decisions/2026-11-05-development-git-hosting-cloudflare-artifacts.md`.
 
+use backplane::cobot::providers::LoadAllowlist;
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};

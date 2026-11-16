@@ -1,0 +1,1329 @@
+//! Zone apexes: layout, presets, records, claims and the token handoff; see
+//! `.claude/decisions/2026-11-02-runtime-workloads-zone-apex.md`.
+
+use std::collections::{BTreeMap, BTreeSet};
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, LazyLock};
+
+use regex::Regex;
+use serde::Deserialize;
+use serde_json::{Map, Value, json};
+
+use crate::infra::files::Files;
+use crate::infra::generations::{Day, Generation};
+
+/// A name no workload may take.
+pub const APEX: &str = "apex";
+/// The unit that mints apex tokens.
+pub const CLOUDFLARE: &str = "infra/cloudflare";
+/// The only permission an apex token holds.
+pub const DNS_WRITE: &str = "DNS Write";
+/// The only handoff kind.
+pub const HANDOFF: &str = "zone-token";
+/// The only derived-list expander.
+pub const EXPANDER: &str = "zone-records";
+/// An apex's handoff keys.
+pub const HANDOFF_KEYS: [&str; 2] = ["api_token", "zone_id"];
+/// Inert values a plan uses while the handoff is pending.
+pub const PLACEHOLDER_TOKEN: &str = "0000000000000000000000000000000000000000";
+/// See [`PLACEHOLDER_TOKEN`].
+pub const PLACEHOLDER_ZONE_ID: &str = "00000000000000000000000000000000";
+
+/// The kind whose `domains` a zone claims; see `.claude/decisions/2026-11-13-runtime-zone-vendor-dns-placements.md` §4.
+const PLATFORM_KIND: &str = "pigeon/platform";
+const RECORD_TYPES: [&str; 5] = ["A", "AAAA", "CNAME", "MX", "TXT"];
+const ADDRESS_TYPES: [&str; 3] = ["A", "AAAA", "CNAME"];
+
+static NAME: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^[a-z0-9]+(-[a-z0-9]+)*$").expect("valid regex"));
+static ZONE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^[a-z0-9-]+(\.[a-z0-9-]+)+$").expect("valid regex"));
+static PLACE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"\$\{([^}]*)\}").expect("valid regex"));
+static HOST: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(
+        r"^(@|(\*\.)?[a-z0-9_]([a-z0-9_-]*[a-z0-9_])?(\.[a-z0-9_]([a-z0-9_-]*[a-z0-9_])?)*)$",
+    )
+    .expect("valid regex")
+});
+static SECRET_KEY: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^[a-z0-9_]+$").expect("valid regex"));
+static INPUT: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^[a-z0-9_]+(\.[a-z0-9_]+)*$").expect("valid regex"));
+
+/// Where an apex or a schema-less workload sits: the repository root, its
+/// zone, and the workload's name for a workload.
+#[derive(Debug, Clone)]
+pub struct Site {
+    /// The repository root.
+    pub root: PathBuf,
+    /// The zone of `workloads/<zone>/…`, or a manifest unit's zone.
+    pub zone: String,
+    /// The workload of `workloads/<zone>/<workload>`, or a site unit's name; `None` for a zone.
+    pub workload: Option<String>,
+    /// The instance manifest, for a unit it declares: its zone and sites come from it, never
+    /// from another unit's file.
+    pub manifest: Option<Arc<crate::infra::manifest::Manifest>>,
+    /// Where its files are read.
+    pub files: Arc<dyn Files>,
+}
+
+impl Site {
+    /// The workload units in `zone`, by name; `true` for config units.
+    #[must_use]
+    pub fn workloads(&self, zone: &str) -> BTreeMap<String, bool> {
+        match &self.manifest {
+            Some(m) => m.sites(zone).into_keys().map(|w| (w, true)).collect(),
+            None => workloads(&*self.files, &self.root, zone),
+        }
+    }
+
+    /// A workload's config, as a `workloads/<zone>/<w>/config.yaml` would hold it.
+    #[must_use]
+    pub fn config_of(&self, zone: &str, workload: &str) -> Option<Value> {
+        match &self.manifest {
+            Some(m) => m
+                .sites(zone)
+                .remove(workload)
+                .map(|e| json!({ "static_site": e.settings })),
+            None => workload_config(&*self.files, &self.root, zone, workload),
+        }
+    }
+
+    /// `zone`'s apex config: the manifest's zone unit with its sites' hosts, or the apex's file.
+    #[must_use]
+    pub fn apex_config(&self, zone: &str) -> Value {
+        match &self.manifest {
+            Some(m) => m.apex_config(zone),
+            None => workload_config(&*self.files, &self.root, zone, APEX).unwrap_or(Value::Null),
+        }
+    }
+
+    /// The `pigeon/platform` units' domains in `zone`, as `(unit, name relative to the zone)`.
+    #[must_use]
+    pub fn platform_domains(&self, zone: &str) -> Vec<(String, String)> {
+        let Some(m) = &self.manifest else {
+            return Vec::new();
+        };
+        let suffix = format!(".{zone}");
+        m.units
+            .iter()
+            .filter(|(_, e)| e.kind == PLATFORM_KIND)
+            .flat_map(|(id, e)| {
+                e.settings["domains"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .filter_map(Value::as_str)
+                    .filter_map(|d| match d.strip_suffix(&suffix) {
+                        _ if d == zone => Some("@".to_string()),
+                        Some(rel) => Some(rel.to_string()),
+                        None => None,
+                    })
+                    .map(|rel| (id.clone(), rel))
+                    .collect::<Vec<_>>()
+            })
+            .collect()
+    }
+
+    /// The zone unit, other than `zone`, that holds `host`, if the manifest has one.
+    #[must_use]
+    pub fn inner_zone(&self, zone: &str, host: &str) -> Option<String> {
+        let m = self.manifest.as_ref()?;
+        m.units
+            .iter()
+            .filter(|(_, e)| e.role == crate::infra::manifest::Role::Zone)
+            .map(|(id, _)| crate::infra::manifest::name(id))
+            .find(|z| *z != zone && (host == *z || host.ends_with(&format!(".{z}"))))
+            .map(str::to_string)
+    }
+
+    /// A zone unit's config as an apex composes it, under `zones.<zone>`; any other config as is.
+    #[must_use]
+    pub fn composed(&self, config: &Value) -> Value {
+        match (&self.manifest, &self.workload) {
+            (Some(m), None) => json!({ "zones": { self.zone.clone(): m.apex_config(&self.zone) } }),
+            _ => config.clone(),
+        }
+    }
+}
+
+/// Whether `name` is shaped like a zone.
+#[must_use]
+pub fn is_zone(name: &str) -> bool {
+    ZONE.is_match(name)
+}
+
+/// Whether `name` is a lowercase-dash workload name.
+#[must_use]
+pub fn is_name(name: &str) -> bool {
+    NAME.is_match(name)
+}
+
+/// The zone of an apex path, `workloads/<zone>/apex`.
+#[must_use]
+pub fn zone_apex(path: &str) -> Option<&str> {
+    let mut parts = path.split('/');
+    match (parts.next(), parts.next(), parts.next(), parts.next()) {
+        (Some("workloads"), Some(zone), Some(APEX), None) if ZONE.is_match(zone) => Some(zone),
+        _ => None,
+    }
+}
+
+/// The zones an apex config names, in order.
+#[must_use]
+pub fn zones(config: &Value) -> Vec<String> {
+    config["zones"]
+        .as_object()
+        .map(|z| z.keys().cloned().collect())
+        .unwrap_or_default()
+}
+
+/// The token `infra/cloudflare` mints for a zone's apex.
+#[must_use]
+pub fn token_name(zone: &str) -> String {
+    format!("apex-{zone}")
+}
+
+/// Escapes a literal for an HCL template.
+fn escape(text: &str) -> String {
+    text.replace("${", "$${").replace("%{", "%%{")
+}
+
+fn secret_ref(key: &str) -> String {
+    format!("${{var.secrets[\"{key}\"]}}")
+}
+
+/// `{ secret: <key> }`'s key, when it is a plain key.
+fn as_secret(value: &Value) -> Option<&str> {
+    let o = value.as_object()?;
+    (o.len() == 1)
+        .then(|| o.get("secret")?.as_str())?
+        .filter(|k| SECRET_KEY.is_match(k))
+}
+
+/// `{ secret: … }` values whose key is not a plain key.
+fn bad_secrets(v: &Value, at: &str, out: &mut Vec<String>) {
+    match v {
+        Value::Object(o) if o.contains_key("secret") && as_secret(v).is_none() => {
+            out.push(format!("{at}: a secret is `{{ secret: <key> }}`, its key lowercase letters, digits and underscores"));
+        }
+        Value::Object(o) => o
+            .iter()
+            .for_each(|(k, x)| bad_secrets(x, &format!("{at}.{k}"), out)),
+        Value::Array(a) => a.iter().for_each(|x| bad_secrets(x, at, out)),
+        _ => {}
+    }
+}
+
+/// Every `{ secret: <key> }` key in `config`.
+#[must_use]
+pub fn referenced_secrets(config: &Value) -> BTreeSet<String> {
+    fn walk(v: &Value, out: &mut BTreeSet<String>) {
+        if let Some(k) = as_secret(v) {
+            out.insert(k.to_string());
+            return;
+        }
+        match v {
+            Value::Array(a) => a.iter().for_each(|x| walk(x, out)),
+            Value::Object(o) => o.values().for_each(|x| walk(x, out)),
+            _ => {}
+        }
+    }
+    let mut out = BTreeSet::new();
+    walk(config, &mut out);
+    out
+}
+
+/// A preset file, `infra/cloudflare/presets/<service>.yaml`.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Preset {
+    /// One line saying what it is.
+    pub description: String,
+    /// Inputs by dotted path.
+    #[serde(default)]
+    pub inputs: BTreeMap<String, InputSpec>,
+    /// What it owns.
+    #[serde(default)]
+    pub claims: Vec<ClaimSpec>,
+    /// Its records by short key.
+    pub records: BTreeMap<String, RecordSpec>,
+    /// Where it may be placed; both when absent.
+    pub placements: Option<Vec<Placement>>,
+    /// The vendor's page for its per-domain values.
+    pub docs: Option<String>,
+}
+
+/// Where a service sits; see `.claude/decisions/2026-11-13-runtime-zone-vendor-dns-placements.md`.
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum Placement {
+    /// At the zone's `@`.
+    Apex,
+    /// At a name under it.
+    Subdomain,
+}
+
+/// A service's preset (its key by default), its `at` (`@` by default) and its inputs.
+fn placed<'a>(service: &'a str, cfg: &'a Value) -> (&'a str, &'a str, Value) {
+    let preset = cfg["preset"].as_str().unwrap_or(service);
+    let at = cfg["at"].as_str().unwrap_or("@");
+    let mut inputs = cfg.clone();
+    if let Some(o) = inputs.as_object_mut() {
+        o.remove("preset");
+        o.remove("at");
+    }
+    (preset, at, inputs)
+}
+
+/// Checks a service's `at`: `@`, or a relative host with no wildcard or `_` label.
+fn check_at(at: &str, zone: &str) -> Result<(), String> {
+    if at == "@" {
+        return Ok(());
+    }
+    if !HOST.is_match(at) || at.contains('*') || at.split('.').any(|l| l.starts_with('_')) {
+        return Err(format!(
+            "`{at}` is not a host name without a wildcard or `_` label"
+        ));
+    }
+    if at.ends_with(&format!(".{zone}")) {
+        return Err(format!("`{at}` must be relative to the zone"));
+    }
+    Ok(())
+}
+
+/// A preset's name placed at `at`.
+fn rebase(name: &str, at: &str) -> String {
+    match (name, at) {
+        (n, "@") => n.to_string(),
+        ("@", a) => a.to_string(),
+        (n, a) => format!("{n}.{a}"),
+    }
+}
+
+/// One preset input.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct InputSpec {
+    /// Its type.
+    #[serde(rename = "type")]
+    pub kind: InputType,
+    /// Whether it may be `{ secret: <key> }`.
+    #[serde(default)]
+    pub secret: bool,
+    /// Whether it may be unset.
+    #[serde(default)]
+    pub optional: bool,
+    /// Whether its value is public by design, such as a DNS verification code: a literal is
+    /// expected, never mistaken for a credential.
+    #[serde(default)]
+    pub published: bool,
+    /// The value when absent or `default`.
+    pub default: Option<Value>,
+}
+
+/// A preset input's type.
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum InputType {
+    /// A string.
+    String,
+    /// An integer.
+    Integer,
+    /// A boolean.
+    Boolean,
+}
+
+/// What a claim reserves at a name.
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+pub enum ClaimType {
+    /// `A`, `AAAA` or `CNAME`.
+    #[serde(rename = "ADDRESS")]
+    Address,
+    /// `MX`.
+    #[serde(rename = "MX")]
+    Mx,
+    /// A `v=spf1` `TXT`.
+    #[serde(rename = "SPF")]
+    Spf,
+    /// A `v=DMARC1` `TXT`.
+    #[serde(rename = "DMARC")]
+    Dmarc,
+}
+
+impl ClaimType {
+    fn word(self) -> &'static str {
+        match self {
+            Self::Address => "ADDRESS",
+            Self::Mx => "MX",
+            Self::Spf => "SPF",
+            Self::Dmarc => "DMARC",
+        }
+    }
+}
+
+/// One declared claim.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ClaimSpec {
+    /// A name relative to the zone.
+    pub name: String,
+    /// What it reserves.
+    #[serde(rename = "type")]
+    pub kind: ClaimType,
+    /// Held only while this input is set.
+    pub when: Option<String>,
+}
+
+/// One preset record.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RecordSpec {
+    /// A name relative to the zone.
+    pub name: String,
+    /// Its DNS type.
+    #[serde(rename = "type")]
+    pub kind: String,
+    /// Its content, with `${input}` placeholders.
+    pub content: String,
+    /// Its TTL.
+    pub ttl: Option<i64>,
+    /// Its priority.
+    pub priority: Option<i64>,
+    /// Whether Cloudflare proxies it.
+    pub proxied: Option<bool>,
+}
+
+/// A record being assembled: content is already an HCL template.
+#[derive(Debug, Clone)]
+struct Rec {
+    owner: String,
+    name: String,
+    kind: String,
+    content: String,
+    /// The content as published, when known: literals, plus secrets once decrypted.
+    raw: Option<String>,
+    ttl: i64,
+    priority: Option<i64>,
+    proxied: Option<bool>,
+}
+
+/// A resolved input value.
+#[derive(Debug, Clone)]
+enum Resolved {
+    Literal(String),
+    Secret(String),
+}
+
+impl Resolved {
+    fn template(&self) -> String {
+        match self {
+            Self::Literal(s) => escape(s),
+            Self::Secret(k) => secret_ref(k),
+        }
+    }
+}
+
+/// Loads a preset.
+///
+/// # Errors
+///
+/// A message if the file is missing or invalid.
+pub fn load_preset(files: &dyn Files, home: &Path, service: &str) -> Result<Preset, String> {
+    let path = home.join("presets").join(format!("{service}.yaml"));
+    let text = files
+        .read(&path)
+        .ok_or_else(|| format!("service `{service}` has no preset at presets/{service}.yaml"))?;
+    serde_saphyr::from_str(&text).map_err(|e| format!("presets/{service}.yaml: {e}"))
+}
+
+/// The literal values an apex's `config`, as composed under `zones.<zone>`, gives its
+/// presets' published inputs.
+#[must_use]
+pub fn published_values(
+    config: &Value,
+    files: &dyn Files,
+    home: &Path,
+) -> std::collections::BTreeSet<String> {
+    let mut out = std::collections::BTreeSet::new();
+    let services = config["zones"]
+        .as_object()
+        .into_iter()
+        .flatten()
+        .filter_map(|(_, zone)| zone["services"].as_object())
+        .flatten();
+    for (service, cfg) in services {
+        let (name, _, inputs) = placed(service, cfg);
+        let Ok(preset) = load_preset(files, home, name) else {
+            continue;
+        };
+        for (path, spec) in &preset.inputs {
+            if !spec.published {
+                continue;
+            }
+            let value = path.split('.').try_fold(&inputs, |v, k| v.get(k));
+            if let Some(Value::String(s)) = value {
+                out.insert(s.clone());
+            }
+        }
+    }
+    out
+}
+
+/// Checks a preset on its own; problems are messages.
+#[must_use]
+pub fn check_preset(service: &str, p: &Preset) -> Vec<String> {
+    let mut out = Vec::new();
+    if p.placements.as_ref().is_some_and(Vec::is_empty) {
+        out.push(format!("preset `{service}`: placements is empty"));
+    }
+    if p.docs.as_ref().is_some_and(|d| !d.starts_with("https://")) {
+        out.push(format!("preset `{service}`: docs is not an https:// link"));
+    }
+    for (path, spec) in &p.inputs {
+        if matches!(path.split('.').next(), Some("preset" | "at")) {
+            out.push(format!(
+                "preset `{service}`: input `{path}` uses a reserved name"
+            ));
+        }
+        if !INPUT.is_match(path) {
+            out.push(format!(
+                "preset `{service}`: input `{path}` is not a dotted name"
+            ));
+        }
+        if let Some(d) = &spec.default
+            && !type_ok(spec.kind, d)
+        {
+            out.push(format!(
+                "preset `{service}`: input `{path}`'s default has the wrong type"
+            ));
+        }
+    }
+    for c in &p.claims {
+        if let Some(w) = &c.when
+            && !p.inputs.contains_key(w)
+        {
+            out.push(format!(
+                "preset `{service}`: claim names unknown input `{w}`"
+            ));
+        }
+    }
+    for (key, r) in &p.records {
+        if !NAME.is_match(key) {
+            out.push(format!(
+                "preset `{service}`: record key `{key}` is not kebab-case"
+            ));
+        }
+        for c in PLACE.captures_iter(&r.content) {
+            if !p.inputs.contains_key(&c[1]) {
+                out.push(format!(
+                    "preset `{service}`: record `{key}` names unknown input `{}`",
+                    &c[1]
+                ));
+            }
+        }
+    }
+    out
+}
+
+fn type_ok(kind: InputType, v: &Value) -> bool {
+    match kind {
+        InputType::String => v.is_string(),
+        InputType::Integer => v.is_i64(),
+        InputType::Boolean => v.is_boolean(),
+    }
+}
+
+fn literal_of(v: &Value) -> String {
+    v.as_str().map_or_else(|| v.to_string(), str::to_string)
+}
+
+/// Flattens a service's config into dotted input paths.
+fn flatten(
+    service: &str,
+    p: &Preset,
+    value: &Value,
+    prefix: &str,
+    out: &mut BTreeMap<String, Value>,
+    problems: &mut Vec<String>,
+) {
+    let Some(o) = value.as_object() else {
+        problems.push(format!("services.{service}: must be a map of inputs"));
+        return;
+    };
+    for (k, v) in o {
+        let path = if prefix.is_empty() {
+            k.clone()
+        } else {
+            format!("{prefix}.{k}")
+        };
+        if p.inputs.contains_key(&path) {
+            out.insert(path, v.clone());
+        } else if v.is_object()
+            && as_secret(v).is_none()
+            && p.inputs.keys().any(|i| i.starts_with(&format!("{path}.")))
+        {
+            flatten(service, p, v, &path, out, problems);
+        } else {
+            problems.push(format!("services.{service}: unknown input `{path}`"));
+        }
+    }
+}
+
+/// Resolves a service's inputs; unset inputs are absent.
+fn resolve(
+    service: &str,
+    p: &Preset,
+    config: &Value,
+    problems: &mut Vec<String>,
+) -> BTreeMap<String, Resolved> {
+    let mut given = BTreeMap::new();
+    flatten(service, p, config, "", &mut given, problems);
+    let mut out = BTreeMap::new();
+    for (path, spec) in &p.inputs {
+        let at = format!("services.{service}.{path}");
+        let value = match given.get(path) {
+            Some(Value::String(s)) if s == "default" && spec.default.is_some() => {
+                spec.default.clone()
+            }
+            Some(Value::Bool(false)) if spec.optional => None,
+            Some(v) => Some(v.clone()),
+            None => spec.default.clone(),
+        };
+        match value {
+            None if spec.optional => {}
+            None => problems.push(match &p.docs {
+                Some(d) => format!("{at}: is required; see {d}"),
+                None => format!("{at}: is required"),
+            }),
+            Some(v) => {
+                if let Some(k) = as_secret(&v) {
+                    if spec.secret {
+                        out.insert(path.clone(), Resolved::Secret(k.to_string()));
+                    } else {
+                        problems.push(format!("{at}: may not come from a secret"));
+                    }
+                } else if type_ok(spec.kind, &v) {
+                    out.insert(path.clone(), Resolved::Literal(literal_of(&v)));
+                } else {
+                    problems.push(format!("{at}: must be a {:?}", spec.kind).to_lowercase());
+                }
+            }
+        }
+    }
+    out
+}
+
+/// A preset template as published; `None` when a secret is not decrypted.
+fn fill_raw(
+    template: &str,
+    values: &BTreeMap<String, Resolved>,
+    secrets: &BTreeMap<String, String>,
+) -> Option<String> {
+    let mut out = String::new();
+    let mut last = 0;
+    for c in PLACE.captures_iter(template) {
+        let m = c.get(0).expect("match");
+        out.push_str(&template[last..m.start()]);
+        match values.get(&c[1])? {
+            Resolved::Literal(l) => out.push_str(l),
+            Resolved::Secret(k) => out.push_str(secrets.get(k)?),
+        }
+        last = m.end();
+    }
+    out.push_str(&template[last..]);
+    Some(out)
+}
+
+/// Renders a preset template; `None` when it names an unset input.
+fn fill(template: &str, values: &BTreeMap<String, Resolved>) -> Option<String> {
+    let mut out = String::new();
+    let mut last = 0;
+    for c in PLACE.captures_iter(template) {
+        let m = c.get(0).expect("match");
+        out.push_str(&escape(&template[last..m.start()]));
+        out.push_str(&values.get(&c[1])?.template());
+        last = m.end();
+    }
+    out.push_str(&escape(&template[last..]));
+    Some(out)
+}
+
+/// One owner's claim.
+type Claim = (String, ClaimType, String);
+
+/// What `content` claims, for an explicit record of `kind`.
+fn implied_claim(kind: &str, content: Option<&str>) -> Option<ClaimType> {
+    if ADDRESS_TYPES.contains(&kind) {
+        return Some(ClaimType::Address);
+    }
+    match (kind, content) {
+        ("MX", _) => Some(ClaimType::Mx),
+        ("TXT", Some(c)) if c.starts_with("v=spf1") => Some(ClaimType::Spf),
+        ("TXT", Some(c)) if c.starts_with("v=DMARC1") => Some(ClaimType::Dmarc),
+        _ => None,
+    }
+}
+
+/// A host's key part: `apex` for `@`, dashes for dots.
+pub(crate) fn label(host: &str) -> String {
+    if host == "@" {
+        "apex".into()
+    } else {
+        host.replace(['.', '_', '*'], "-")
+            .split('-')
+            .filter(|s| !s.is_empty())
+            .collect::<Vec<_>>()
+            .join("-")
+    }
+}
+
+/// The workload units in a zone, by name; `true` for config units.
+#[must_use]
+pub fn workloads(files: &dyn Files, root: &Path, zone: &str) -> BTreeMap<String, bool> {
+    let mut out = BTreeMap::new();
+    let parent = root.join("workloads").join(zone);
+    for name in files.dirs(&parent) {
+        if name == APEX {
+            continue;
+        }
+        let dir = parent.join(&name);
+        if files.is_file(&dir.join(crate::infra::config::CONFIG)) {
+            out.insert(name, true);
+        } else if files.is_file(&dir.join("unit.yaml")) {
+            out.insert(name, false);
+        }
+    }
+    out
+}
+
+/// A workload's `config.yaml`, if it parses.
+#[must_use]
+pub fn workload_config(
+    files: &dyn Files,
+    root: &Path,
+    zone: &str,
+    workload: &str,
+) -> Option<Value> {
+    let text = files.read(
+        &root
+            .join("workloads")
+            .join(zone)
+            .join(workload)
+            .join(crate::infra::config::CONFIG),
+    )?;
+    serde_saphyr::from_str(&text).ok()
+}
+
+/// A workload's `ingress`, if its config has one.
+fn ingress(site: &Site, zone: &str, workload: &str) -> Option<Value> {
+    site.config_of(zone, workload)?.get("ingress").cloned()
+}
+
+/// Each workload's hosts in one zone's apex config: the apex workload at `@`
+/// and `www`, every other at its name, unless `hosts` replaces them. Hosts
+/// that are not relative host names are left out.
+pub(crate) fn assignments(
+    config: &Value,
+    units: &BTreeMap<String, bool>,
+    zone: &str,
+) -> BTreeMap<String, Vec<String>> {
+    let mut assigned: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    if let Some(a) = config["apex"].as_str() {
+        assigned.insert(a.to_string(), vec!["@".into(), "www".into()]);
+    }
+    for w in units.keys() {
+        assigned.entry(w.clone()).or_insert_with(|| vec![w.clone()]);
+    }
+    let overrides = config["hosts"].as_object().cloned().unwrap_or_default();
+    for (w, hosts) in &mut assigned {
+        if let Some(list) = overrides.get(w).and_then(Value::as_array) {
+            *hosts = list
+                .iter()
+                .filter_map(Value::as_str)
+                .map(str::to_string)
+                .collect();
+        }
+        hosts.retain(|h| HOST.is_match(h) && h != zone && !h.ends_with(&format!(".{zone}")));
+    }
+    assigned
+}
+
+fn check_ingress(v: &Value) -> Result<(String, String, bool), String> {
+    let o = v.as_object().ok_or("must be a map")?;
+    if let Some(k) = o
+        .keys()
+        .find(|k| !["type", "content", "proxied"].contains(&k.as_str()))
+    {
+        return Err(format!("unknown key `{k}`"));
+    }
+    let kind = o.get("type").and_then(Value::as_str).unwrap_or_default();
+    if !ADDRESS_TYPES.contains(&kind) {
+        return Err("`type` must be A, AAAA or CNAME".into());
+    }
+    let content = o
+        .get("content")
+        .and_then(Value::as_str)
+        .filter(|c| !c.is_empty())
+        .ok_or("needs a non-empty `content`")?;
+    let proxied = match o.get("proxied") {
+        None => true,
+        Some(Value::Bool(b)) => *b,
+        Some(_) => return Err("`proxied` must be a boolean".into()),
+    };
+    Ok((kind.to_string(), content.to_string(), proxied))
+}
+
+/// An apex's records and claims as they are assembled.
+#[derive(Default)]
+struct Expansion {
+    /// Decrypted secrets, when planning; empty when validating.
+    secrets: BTreeMap<String, String>,
+    recs: BTreeMap<String, Rec>,
+    claims: Vec<Claim>,
+    prefixes: Vec<String>,
+    problems: Vec<String>,
+}
+
+impl Expansion {
+    /// Each enabled service: its preset's records and claims, placed at its `at`.
+    fn services(ex: &mut Self, config: &Value, home: &Path, site: &Site, zone: &str) {
+        for (service, cfg) in config["services"].as_object().into_iter().flatten() {
+            ex.prefixes.push(format!("{service}-"));
+            for key in ["preset", "at"] {
+                if !cfg[key].is_null() && !cfg[key].is_string() {
+                    ex.problems
+                        .push(format!("services.{service}.{key}: must be a string"));
+                }
+            }
+            let (name, at, inputs) = placed(service, cfg);
+            if let Err(e) = check_at(at, zone) {
+                ex.problems.push(format!("services.{service}.at: {e}"));
+                continue;
+            }
+            if let Some(z) = site.inner_zone(zone, &fqdn(at, zone)) {
+                ex.problems.push(format!(
+                    "services.{service}.at: {z} is its own zone unit; place the service there at @"
+                ));
+                continue;
+            }
+            let preset = match load_preset(&*site.files, home, name) {
+                Ok(p) => p,
+                Err(e) => {
+                    ex.problems.push(format!("services.{service}: {e}"));
+                    continue;
+                }
+            };
+            let place = if at == "@" {
+                Placement::Apex
+            } else {
+                Placement::Subdomain
+            };
+            if let Some(ps) = preset.placements.as_ref().filter(|ps| !ps.contains(&place)) {
+                let ps: Vec<String> = ps.iter().map(|p| format!("{p:?}").to_lowercase()).collect();
+                ex.problems.push(format!(
+                    "services.{service}: preset {name} allows only {}",
+                    ps.join(", ")
+                ));
+                continue;
+            }
+            ex.problems.extend(check_preset(name, &preset));
+            let values = resolve(service, &preset, &inputs, &mut ex.problems);
+            for c in &preset.claims {
+                if c.when.as_ref().is_none_or(|w| values.contains_key(w)) {
+                    ex.claims
+                        .push((rebase(&c.name, at), c.kind, service.clone()));
+                }
+            }
+            for (key, r) in &preset.records {
+                if let Some(content) = fill(&r.content, &values) {
+                    let raw = fill_raw(&r.content, &values, &ex.secrets);
+                    let k = format!("{service}-{key}");
+                    if let Some(prev) = ex.recs.get(&k) {
+                        ex.problems.push(format!(
+                            "record key `{k}` is made by both {} and {service}",
+                            prev.owner
+                        ));
+                        continue;
+                    }
+                    ex.recs.insert(
+                        k,
+                        Rec {
+                            owner: service.clone(),
+                            name: rebase(&r.name, at),
+                            kind: r.kind.clone(),
+                            content,
+                            raw,
+                            ttl: r.ttl.unwrap_or(1),
+                            priority: r.priority,
+                            proxied: r.proxied,
+                        },
+                    );
+                }
+            }
+        }
+    }
+
+    /// Each workload's hosts: claimed always, rendered from its `ingress`.
+    fn hosts(ex: &mut Self, config: &Value, site: &Site, zone: &str) {
+        ex.prefixes.push("host-".into());
+        let units = site.workloads(zone);
+        let overrides = config["hosts"].as_object().cloned().unwrap_or_default();
+        for w in overrides.keys() {
+            if !units.contains_key(w) && config["apex"].as_str() != Some(w) {
+                ex.problems
+                    .push(format!("hosts.{w}: no workload at workloads/{zone}/{w}"));
+            }
+        }
+        for (w, list) in &overrides {
+            for h in list
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(Value::as_str)
+            {
+                if !HOST.is_match(h) {
+                    ex.problems
+                        .push(format!("hosts.{w}: `{h}` is not a host name"));
+                } else if h == zone || h.ends_with(&format!(".{zone}")) {
+                    ex.problems
+                        .push(format!("hosts.{w}: `{h}` must be relative to the zone"));
+                }
+            }
+        }
+        let assigned = assignments(config, &units, zone);
+        for (w, hosts) in &assigned {
+            let mut keys: BTreeMap<String, &str> = BTreeMap::new();
+            for h in hosts {
+                let key = format!("host-{w}-{}", label(h));
+                if let Some(first) = keys.insert(key.clone(), h) {
+                    ex.problems.push(format!(
+                        "hosts.{w}: `{first}` and `{h}` would share the record key `{key}`"
+                    ));
+                }
+            }
+            for h in hosts {
+                ex.claims
+                    .push((h.clone(), ClaimType::Address, format!("workload {w}")));
+            }
+            if units.get(w) != Some(&true) {
+                continue;
+            }
+            let own = site.config_of(zone, w);
+            let is_site = own
+                .as_ref()
+                .is_some_and(crate::infra::static_site::is_static);
+            // A site a platform serves at a path claims no host.
+            let served = own
+                .as_ref()
+                .is_some_and(|c| c["static_site"].get("served_by").is_some());
+            if is_site && hosts.is_empty() && !served {
+                ex.problems.push(format!(
+                    "workloads/{zone}/{w}: a static site needs a host; the apex assigns it none"
+                ));
+            }
+            let Some(ing) = ingress(site, zone, w) else {
+                continue;
+            };
+            if is_site {
+                ex.problems.push(format!(
+                    "workloads/{zone}/{w}: ingress and static_site cannot both serve a workload"
+                ));
+                continue;
+            }
+            match check_ingress(&ing) {
+                Ok((kind, content, proxied)) => {
+                    for h in hosts {
+                        ex.recs.insert(
+                            format!("host-{w}-{}", label(h)),
+                            Rec {
+                                owner: format!("workload {w}"),
+                                name: h.clone(),
+                                kind: kind.clone(),
+                                content: escape(&content),
+                                raw: Some(content.clone()),
+                                ttl: 1,
+                                priority: None,
+                                proxied: Some(proxied),
+                            },
+                        );
+                    }
+                }
+                Err(e) => ex
+                    .problems
+                    .push(format!("workloads/{zone}/{w}: ingress {e}")),
+            }
+        }
+    }
+
+    /// The explicit `records`: drops, field-by-field overrides, and new records.
+    fn records(ex: &mut Self, config: &Value) {
+        for (key, v) in config["records"].as_object().into_iter().flatten() {
+            let at = format!("records.{key}");
+            if v == &Value::Bool(false) {
+                if ex.recs.remove(key).is_none() {
+                    ex.problems
+                        .push(format!("{at}: drops no preset or host record"));
+                }
+                continue;
+            }
+            let Some(o) = v.as_object() else {
+                ex.problems.push(format!("{at}: must be a record or false"));
+                continue;
+            };
+            if let Some(r) = ex.recs.get_mut(key) {
+                Rec::merge(r, o);
+                if let Some(c) = o.get("content") {
+                    r.raw = raw_of(c, &ex.secrets);
+                }
+                continue;
+            }
+            if let Some(p) = ex.prefixes.iter().find(|p| key.starts_with(p.as_str())) {
+                ex.problems.push(format!(
+                    "{at}: `{}` names no such record",
+                    p.trim_end_matches('-')
+                ));
+                continue;
+            }
+            let (Some(name), Some(kind), Some(content)) = (
+                o.get("name").and_then(Value::as_str),
+                o.get("type").and_then(Value::as_str),
+                o.get("content").map(content_of),
+            ) else {
+                ex.problems
+                    .push(format!("{at}: a new record needs name, type and content"));
+                continue;
+            };
+            let raw = o.get("content").and_then(|c| raw_of(c, &ex.secrets));
+            let mut rec = Rec {
+                owner: at.clone(),
+                name: name.to_string(),
+                kind: kind.to_string(),
+                content,
+                raw,
+                ttl: 1,
+                priority: None,
+                proxied: None,
+            };
+            Rec::merge(&mut rec, o);
+            ex.recs.insert(key.clone(), rec);
+        }
+    }
+
+    /// Rejects claims made twice and CNAMEs that share a name; renders and checks every record.
+    fn finish(mut ex: Self, zone: &str) -> (Map<String, Value>, Vec<String>) {
+        let mut by_name: BTreeMap<&str, Vec<(&str, &Rec)>> = BTreeMap::new();
+        for (key, r) in &ex.recs {
+            if let Some(c) = implied_claim(&r.kind, r.raw.as_deref()) {
+                ex.claims.push((r.name.clone(), c, r.owner.clone()));
+            }
+            by_name.entry(&r.name).or_default().push((key, r));
+        }
+        for (name, recs) in by_name.iter().filter(|(n, rs)| **n != "@" && rs.len() > 1) {
+            for (key, _) in recs.iter().filter(|(_, r)| r.kind == "CNAME") {
+                let others: Vec<&str> = recs.iter().map(|(k, _)| *k).filter(|k| k != key).collect();
+                ex.problems.push(format!(
+                    "{name} holds a CNAME ({key}), which shares its name with no other record: {}",
+                    others.join(", ")
+                ));
+            }
+        }
+        let mut seen: BTreeMap<(String, ClaimType), String> = BTreeMap::new();
+        for (name, kind, owner) in std::mem::take(&mut ex.claims) {
+            match seen.get(&(name.clone(), kind)) {
+                Some(first) if first != &owner => ex.problems.push(format!(
+                    "{name} {} is claimed by {first} and {owner}",
+                    kind.word()
+                )),
+                Some(_) => {}
+                None => {
+                    seen.insert((name, kind), owner);
+                }
+            }
+        }
+        let mut out = Map::new();
+        for (key, r) in std::mem::take(&mut ex.recs) {
+            match check_record(&r, zone) {
+                Ok(()) => {
+                    out.insert(
+                        key,
+                        json!({
+                            "name": fqdn(&r.name, zone),
+                            "type": r.kind,
+                            "content": r.content,
+                            "ttl": r.ttl,
+                            "priority": r.priority,
+                            "proxied": r.proxied.unwrap_or(false),
+                        }),
+                    );
+                }
+                Err(e) => ex.problems.push(format!("record `{key}`: {e}")),
+            }
+        }
+        (out, ex.problems)
+    }
+}
+
+impl Rec {
+    /// Overrides the fields `o` sets.
+    fn merge(ex: &mut Self, o: &Map<String, Value>) {
+        if let Some(n) = o.get("name").and_then(Value::as_str) {
+            ex.name = n.to_string();
+        }
+        if let Some(t) = o.get("type").and_then(Value::as_str) {
+            if t != "MX" && !o.contains_key("priority") {
+                ex.priority = None;
+            }
+            ex.kind = t.to_string();
+        }
+        if let Some(c) = o.get("content") {
+            ex.content = content_of(c);
+        }
+        if let Some(t) = o.get("ttl").and_then(Value::as_i64) {
+            ex.ttl = t;
+        }
+        match o.get("priority") {
+            Some(Value::Null) => ex.priority = None,
+            Some(p) => ex.priority = p.as_i64().or(ex.priority),
+            None => {}
+        }
+        if let Some(p) = o.get("proxied").and_then(Value::as_bool) {
+            ex.proxied = Some(p);
+        }
+    }
+}
+
+/// An explicit record's content as published, when known.
+fn raw_of(c: &Value, secrets: &BTreeMap<String, String>) -> Option<String> {
+    as_secret(c).map_or_else(
+        || c.as_str().map(str::to_string),
+        |k| secrets.get(k).cloned(),
+    )
+}
+
+/// An explicit record's content as an HCL template.
+fn content_of(c: &Value) -> String {
+    as_secret(c).map_or_else(|| escape(c.as_str().unwrap_or_default()), secret_ref)
+}
+
+/// One zone's records, keyed by record key, and its problems.
+fn expand_zone(
+    config: &Value,
+    home: &Path,
+    site: &Site,
+    zone: &str,
+    secrets: &BTreeMap<String, String>,
+) -> (Map<String, Value>, Vec<String>) {
+    let mut e = Expansion {
+        secrets: secrets.clone(),
+        ..Expansion::default()
+    };
+    bad_secrets(config, "config", &mut e.problems);
+    Expansion::services(&mut e, config, home, site, zone);
+    for (unit, name) in site.platform_domains(zone) {
+        e.claims
+            .push((name, ClaimType::Address, format!("platform {unit}")));
+    }
+    Expansion::hosts(&mut e, config, site, zone);
+    Expansion::records(&mut e, config);
+    Expansion::finish(e, zone)
+}
+
+/// Every zone's records, keyed `<zone>:<record key>`, each with its `zone`, and their problems.
+#[must_use]
+pub fn expand(config: &Value, home: &Path, site: &Site) -> (Map<String, Value>, Vec<String>) {
+    expand_with(config, home, site, &BTreeMap::new())
+}
+
+/// A derived block's items and their problems, by its expander.
+#[must_use]
+pub fn derive(
+    expander: &str,
+    config: &Value,
+    home: &Path,
+    site: &Site,
+) -> (Map<String, Value>, Vec<String>) {
+    match expander {
+        EXPANDER => expand(config, home, site),
+        crate::infra::static_site::RULESETS => (
+            crate::infra::static_site::rulesets(&site.composed(config), site),
+            Vec::new(),
+        ),
+        crate::infra::static_site::BUCKET => {
+            (crate::infra::static_site::bucket(config, site), Vec::new())
+        }
+        crate::infra::static_site::DOMAINS => crate::infra::static_site::domains(config, site),
+        _ => (Map::new(), vec![format!("unknown expander `{expander}`")]),
+    }
+}
+
+/// The problems once secret-backed records are classified by their decrypted
+/// content; messages name records and claims, never values.
+#[must_use]
+pub fn check_decrypted(
+    config: &Value,
+    home: &Path,
+    site: &Site,
+    secrets: &BTreeMap<String, String>,
+) -> Vec<String> {
+    expand_with(config, home, site, secrets).1
+}
+
+fn expand_with(
+    config: &Value,
+    home: &Path,
+    site: &Site,
+    secrets: &BTreeMap<String, String>,
+) -> (Map<String, Value>, Vec<String>) {
+    let mut out = Map::new();
+    let mut problems = Vec::new();
+    let config = &site.composed(config);
+    for zone in zones(config) {
+        let (recs, ps) = expand_zone(&config["zones"][&zone], home, site, &zone, secrets);
+        problems.extend(ps.into_iter().map(|p| format!("zones.{zone}: {p}")));
+        for (key, mut item) in recs {
+            item["zone"] = Value::String(zone.clone());
+            out.insert(format!("{zone}:{key}"), item);
+        }
+    }
+    (out, problems)
+}
+
+/// A record name's fully qualified form in `zone`.
+#[must_use]
+pub fn fqdn(name: &str, zone: &str) -> String {
+    if name == "@" {
+        zone.to_string()
+    } else {
+        format!("{name}.{zone}")
+    }
+}
+
+fn check_record(r: &Rec, zone: &str) -> Result<(), String> {
+    if r.name.ends_with(&format!(".{zone}")) || r.name == zone {
+        return Err(format!("name `{}` must be relative to the zone", r.name));
+    }
+    // A bare `*` is the zone's wildcard; see
+    // .claude/decisions/2026-11-15-runtime-standalone-hostnames-platform-zone.md §1.
+    if r.name != "*" && !HOST.is_match(&r.name) {
+        return Err(format!("name `{}` is not a DNS name", r.name));
+    }
+    let full = fqdn(&r.name, zone);
+    if full.len() > 253 || full.split('.').any(|l| l.len() > 63) {
+        return Err(format!("name `{}` is too long for DNS", r.name));
+    }
+    if !RECORD_TYPES.contains(&r.kind.as_str()) {
+        return Err(format!("type `{}` is not one of {RECORD_TYPES:?}", r.kind));
+    }
+    if r.ttl != 1 && !(60..=86_400).contains(&r.ttl) {
+        return Err("ttl must be 1 or 60 to 86400".into());
+    }
+    match (r.kind.as_str(), r.priority) {
+        ("MX", None) => return Err("an MX record needs a priority".into()),
+        ("MX", Some(p)) if !(0..=65_535).contains(&p) => {
+            return Err("priority must be 0 to 65535".into());
+        }
+        ("MX", _) | (_, None) => {}
+        _ => return Err("only MX records take a priority".into()),
+    }
+    if r.proxied == Some(true) && !ADDRESS_TYPES.contains(&r.kind.as_str()) {
+        return Err("only A, AAAA and CNAME records can be proxied".into());
+    }
+    if r.content.is_empty() {
+        return Err("content is empty".into());
+    }
+    Ok(())
+}
+
+/// Each zone's handed-off values, from `infra/cloudflare`'s `tofu show -json` state;
+/// a zone lacks a key until state holds it.
+#[must_use]
+pub fn handoff(
+    state_json: &str,
+    zones: &[String],
+    today: Day,
+) -> BTreeMap<String, BTreeMap<String, String>> {
+    let state = serde_json::from_str::<Value>(state_json).unwrap_or(Value::Null);
+    let outputs = &state["values"]["outputs"];
+    let mut out = BTreeMap::new();
+    for zone in zones {
+        let mut values = BTreeMap::new();
+        if let Some(id) = outputs["zone_ids"]["value"][zone].as_str() {
+            values.insert("zone_id".to_string(), id.to_string());
+        }
+        if let Some((_, v)) = live_token(outputs, "tokens", &token_name(zone), today) {
+            values.insert("api_token".to_string(), v);
+        }
+        out.insert(zone.clone(), values);
+    }
+    out
+}
+
+/// The live generation of `token` in an output map keyed by generation, and its value there.
+pub(crate) fn live_token(
+    outputs: &Value,
+    output: &str,
+    token: &str,
+    today: Day,
+) -> Option<(Generation, String)> {
+    outputs[output]["value"]
+        .as_object()
+        .into_iter()
+        .flatten()
+        .filter_map(|(k, v)| {
+            let (name, g) = Generation::parse(k)?;
+            (name == token && g.not_before <= today && today < g.expires_on)
+                .then_some((g, v.as_str()?.to_string()))
+        })
+        .max_by_key(|(g, _)| *g)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Resolved, fill, handoff, label};
+    use std::collections::BTreeMap;
+
+    #[test]
+    fn templates_escape_literals_and_reference_secrets() {
+        let mut v = BTreeMap::new();
+        v.insert("a".to_string(), Resolved::Literal("x${y}".into()));
+        v.insert("s".to_string(), Resolved::Secret("k".into()));
+        assert_eq!(
+            fill("p=${a};${s}%{", &v).as_deref(),
+            Some("p=x$${y};${var.secrets[\"k\"]}%%{")
+        );
+        assert_eq!(fill("${missing}", &v), None);
+    }
+
+    #[test]
+    fn labels_are_kebab() {
+        assert_eq!(label("@"), "apex");
+        assert_eq!(label("www"), "www");
+        assert_eq!(label("a.b"), "a-b");
+    }
+
+    #[test]
+    fn the_live_generation_is_the_latest_started() {
+        let d = |s| crate::infra::generations::day(s).expect("day");
+        let state = serde_json::json!({ "values": { "outputs": {
+            "zone_ids": { "value": { "z.com": "zid" } },
+            "tokens": { "value": {
+                "apex-z.com@2026-08-04..2026-11-09": "old",
+                "apex-z.com@2026-11-02..2027-02-07": "new",
+                "apex-other.com@2026-11-02..2027-02-07": "other"
+            } }
+        } } })
+        .to_string();
+        let z = ["z.com".to_string()];
+        let inside = handoff(&state, &z, d("2026-11-05"));
+        assert_eq!(inside["z.com"]["api_token"], "new");
+        assert_eq!(inside["z.com"]["zone_id"], "zid");
+        assert_eq!(
+            handoff(&state, &z, d("2026-11-01"))["z.com"]["api_token"],
+            "old"
+        );
+        assert!(!handoff(&state, &z, d("2027-03-01"))["z.com"].contains_key("api_token"));
+        assert!(handoff("{}", &z, 0)["z.com"].is_empty());
+    }
+}

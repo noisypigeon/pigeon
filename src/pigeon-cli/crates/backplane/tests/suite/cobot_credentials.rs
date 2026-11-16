@@ -1,6 +1,7 @@
 //! Credentials requested by capability; see the phase 3 amendment of
 //! `.claude/decisions/2026-11-04-development-platform-instance-separation.md`.
 
+use backplane::cobot::providers::LoadAllowlist;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::Path;

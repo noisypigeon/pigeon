@@ -7,8 +7,9 @@ use std::path::Path;
 
 use serde::Serialize;
 
-/// Backplane's sources, from the platform's root.
-const SOURCES: &str = "src/pigeon-cli/crates/backplane/src";
+/// The control plane's sources, from the platform's root: agent's, which holds the Worker, then
+/// core's.
+const SOURCES: [&str; 2] = ["src/pigeon-cli/crates/backplane/src", "src/pigeon-core/src"];
 
 /// What a link carries.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -373,19 +374,22 @@ pub fn outbound_files(platform: &Path) -> Vec<std::path::PathBuf> {
         }
     }
     let mut out = Vec::new();
-    walk(&platform.join(SOURCES), &mut out);
+    for s in SOURCES {
+        walk(&platform.join(s), &mut out);
+    }
     out
 }
 
 /// The outbound services kept, each with the files it was found in.
 fn services(platform: &Path) -> Vec<(Service, String)> {
-    let root = platform.join(SOURCES);
+    let roots: Vec<_> = SOURCES.iter().map(|s| platform.join(s)).collect();
     let found: Vec<(String, Vec<String>)> = outbound_files(platform)
         .iter()
         .filter_map(|p| {
             let text = std::fs::read_to_string(p).ok()?;
-            let rel = p
-                .strip_prefix(&root)
+            let rel = roots
+                .iter()
+                .find_map(|r| p.strip_prefix(r).ok())
                 .map(|r| r.to_string_lossy().into_owned())
                 .unwrap_or_default();
             Some((rel, hosts_in(&text)))
@@ -551,7 +555,18 @@ pub struct Network {
 }
 
 fn read(platform: &Path, file: &str) -> Option<String> {
-    std::fs::read_to_string(platform.join(SOURCES).join(file)).ok()
+    SOURCES
+        .iter()
+        .find_map(|s| std::fs::read_to_string(platform.join(s).join(file)).ok())
+}
+
+/// `file` from the root, under the first of [`SOURCES`] that holds it.
+fn located(platform: &Path, file: &str) -> String {
+    let s = SOURCES
+        .iter()
+        .find(|s| platform.join(s).join(file).is_file())
+        .unwrap_or(&SOURCES[0]);
+    format!("{s}/{file}")
 }
 
 /// Whether `row`'s evidence is in the tree at `platform`.
@@ -628,7 +643,7 @@ pub fn network(root: &Path, platform: &Path) -> Option<Network> {
             many: false,
             source: source
                 .split(' ')
-                .map(|f| format!("{SOURCES}/{f}"))
+                .map(|f| located(platform, f))
                 .collect::<Vec<_>>()
                 .join(" "),
         });
@@ -760,7 +775,7 @@ fn own_routes(platform: &Path) -> Vec<(String, Vec<String>)> {
 /// The app's API: each `"<api>…"` literal in the Worker's sources, with its method when a
 /// `Method::` precedes it on its line.
 fn app_api(platform: &Path, api: &str) -> Vec<String> {
-    let dir = platform.join(SOURCES).join("worker");
+    let dir = platform.join(SOURCES[0]).join("worker");
     let mut files: Vec<_> = std::fs::read_dir(&dir)
         .into_iter()
         .flatten()
@@ -865,7 +880,7 @@ fn const_value(platform: &Path, path: &str) -> Option<String> {
 
 /// Each surface's routes, by its file's stem, as `METHOD path`; a prefix ends in `…`.
 fn routes(platform: &Path) -> Vec<(String, Vec<String>)> {
-    let dir = platform.join(SOURCES).join("worker");
+    let dir = platform.join(SOURCES[0]).join("worker");
     let mut files: Vec<_> = std::fs::read_dir(&dir)
         .into_iter()
         .flatten()
@@ -1030,7 +1045,7 @@ fn runner_jobs(platform: &Path) -> Vec<String> {
 /// The doc comment above `pub struct <class>` in the Worker's sources: its first clause, and
 /// whether its name carries a change's number.
 fn doc(platform: &Path, class: &str) -> Option<(String, bool, String)> {
-    let dir = platform.join(SOURCES).join("worker");
+    let dir = platform.join(SOURCES[0]).join("worker");
     let mut files: Vec<_> = std::fs::read_dir(&dir)
         .ok()?
         .flatten()
@@ -1066,7 +1081,8 @@ fn doc(platform: &Path, class: &str) -> Option<(String, bool, String)> {
             .unwrap_or("")
             .replace('`', "");
         let file = format!(
-            "{SOURCES}/worker/{}",
+            "{}/worker/{}",
+            SOURCES[0],
             path.file_name()
                 .map(|f| f.to_string_lossy().into_owned())
                 .unwrap_or_default()

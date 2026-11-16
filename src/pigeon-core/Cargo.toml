@@ -1,0 +1,30 @@
+[package]
+name = "pigeon-core"
+description = "The control plane's pure logic and wire form: no features, no I/O; builds for native and wasm32."
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lib]
+name = "pigeon_core"
+
+[dependencies]
+aes-gcm.workspace = true
+common.workspace = true
+hkdf.workspace = true
+hmac.workspace = true
+jsonschema.workspace = true
+p256.workspace = true
+regex.workspace = true
+serde.workspace = true
+serde-saphyr.workspace = true
+serde_json.workspace = true
+sha1.workspace = true
+sha2.workspace = true
+toml.workspace = true
+
+[lints]
+workspace = true
