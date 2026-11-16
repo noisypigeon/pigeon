@@ -2,6 +2,8 @@
 
 #[cfg(feature = "backplane")]
 pub mod backplane;
+#[cfg(feature = "session")]
+pub mod bench;
 #[cfg(feature = "cobot")]
 pub mod cobot;
 #[cfg(feature = "sentinel")]

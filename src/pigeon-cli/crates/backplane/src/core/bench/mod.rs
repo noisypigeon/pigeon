@@ -4,6 +4,7 @@
 pub mod admit;
 pub mod allow;
 pub mod deal;
+pub mod report;
 
 /// Benches one session may hold.
 pub const MAX_PER_SESSION: u8 = 3;

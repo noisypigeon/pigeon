@@ -54,6 +54,7 @@ pub fn run(command: &SessionCommand) -> i32 {
         }
         SessionCommand::Executor { brief, tags } => executor(brief, tags),
         SessionCommand::Install => install(),
+        SessionCommand::Bench { command } => crate::commands::bench::run(command),
     }
 }
 
@@ -271,7 +272,7 @@ fn mark_executable(_: &Path) -> std::io::Result<()> {
     Ok(())
 }
 
-fn agent(seconds: u64) -> ureq::Agent {
+pub(crate) fn agent(seconds: u64) -> ureq::Agent {
     ureq::Agent::config_builder()
         .http_status_as_error(false)
         .timeout_global(Some(Duration::from_secs(seconds)))
@@ -303,11 +304,11 @@ fn tls() -> ureq::tls::TlsConfig {
     }
 }
 
-fn host() -> String {
+pub(crate) fn host() -> String {
     std::env::var("PIGEON_HOST").unwrap_or_else(|_| "platform.pigeon.dev".into())
 }
 
-fn home() -> Option<PathBuf> {
+pub(crate) fn home() -> Option<PathBuf> {
     std::env::var_os("HOME").map(PathBuf::from)
 }
 
