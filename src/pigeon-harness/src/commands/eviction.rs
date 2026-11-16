@@ -1,4 +1,4 @@
-//! `pigeon sentinel`: runs the `pigeon-sentinel` binary; see
+//! `pigeon eviction`: runs the `pigeon-sentinel` binary; see
 //! `.claude/decisions/2026-11-10-development-factory-crates-functional-core.md` §1.
 
 use std::env;
@@ -6,18 +6,18 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use super::INVALID;
-use crate::cli::{CheckArgs, SentinelCommand};
+use crate::cli::{CheckArgs, EvictionCommand};
 
 /// The binary's name, and its new one, found first; see
 /// `.claude/decisions/2026-11-16-development-src-crates-neutral-names.md` §3.
 const BINARY: &str = "pigeon-sentinel";
 const BINARIES: [&str; 2] = ["pigeon-eviction", BINARY];
 
-/// Runs a `pigeon sentinel` command and returns its exit code.
+/// Runs a `pigeon eviction` command and returns its exit code.
 #[must_use]
-pub fn run(command: SentinelCommand) -> i32 {
+pub fn run(command: EvictionCommand) -> i32 {
     match command {
-        SentinelCommand::Check(args) => check(&args),
+        EvictionCommand::Check(args) => check(&args),
     }
 }
 

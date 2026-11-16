@@ -7,7 +7,7 @@ use clap::Subcommand;
 
 #[cfg(feature = "infra")]
 use super::{
-    CobotApply, CobotPlan, CobotRoot, CobotRun, CobotShow, ReleaseArgs, SecretsCommand, TagsArgs,
+    InfraApply, InfraPlan, InfraRoot, InfraRun, InfraShow, ReleaseArgs, SecretsCommand, TagsArgs,
 };
 #[cfg(feature = "agent")]
 use super::{JobsArgs, ServeArgs};
@@ -17,19 +17,19 @@ use super::{JobsArgs, ServeArgs};
 #[derive(Subcommand, Debug)]
 pub enum InfraCommand {
     /// Check every unit under infra/ and workloads/; exit 1 on a problem
-    Validate(CobotRoot),
+    Validate(InfraRoot),
     /// Write each unit's main.tf.json under <ROOT>/.pigeon/
-    Render(CobotRun),
+    Render(InfraRun),
     /// Plan units against the state repository; print a summary
-    Plan(CobotPlan),
+    Plan(InfraPlan),
     /// Plan, then apply units with changes
-    Apply(CobotApply),
+    Apply(InfraApply),
     /// Print a stored plan's changes attribute by attribute; sensitive values stay hidden
-    Show(CobotShow),
+    Show(InfraShow),
     /// Write <PROVIDERS>/providers.lock.hcl for the allowlist
-    Lock(CobotRoot),
+    Lock(InfraRoot),
     /// Print each catalog's capabilities as JSON; exit 1 on an invalid one
-    Capabilities(CobotRoot),
+    Capabilities(InfraRoot),
     /// Manage a unit's encrypted secrets.config.yaml
     #[command(subcommand)]
     Secrets(SecretsCommand),
@@ -68,7 +68,7 @@ pub enum AgentCommand {
     Listen(ListenArgs),
 }
 
-/// `pigeon agent listen` arguments: `pigeon backplane jobs`'s, with the address also positional.
+/// `pigeon agent listen` arguments: `pigeon agent listen`'s, with the address also positional.
 #[cfg(feature = "agent")]
 #[derive(Args, Debug)]
 pub struct ListenArgs {
@@ -98,7 +98,7 @@ pub struct JobsArgsOptional {
 
 #[cfg(feature = "agent")]
 impl ListenArgs {
-    /// The `pigeon backplane jobs` arguments these are.
+    /// The `pigeon agent listen` arguments these are.
     #[must_use]
     pub fn into_jobs(self) -> JobsArgs {
         JobsArgs {

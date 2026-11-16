@@ -16,14 +16,14 @@ units:
     cargo: { workspace: ., package: pigeon-eviction }
   backplane:
     manifest: src/pigeon-agent/Cargo.toml
-    features: backplane
+    features: agent
     image: ghcr.io/noisypigeon/pigeon-backplane
     paths:
       - src/pigeon-agent/
-      - src/pigeon-harness/src/commands/backplane.rs
-      - src/pigeon-harness/src/cli/backplane.rs
-      - src/pigeon-harness/src/commands/cobot.rs
-      - src/pigeon-harness/src/cli/cobot.rs
+      - src/pigeon-harness/src/commands/agent.rs
+      - src/pigeon-harness/src/cli/agent.rs
+      - src/pigeon-harness/src/commands/infra.rs
+      - src/pigeon-harness/src/cli/infra.rs
       - src/pigeon-harness/src/commands/workers.rs
       - src/pigeon-harness/src/main.rs
       - src/pigeon-harness/src/lib.rs

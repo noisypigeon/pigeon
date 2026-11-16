@@ -1,4 +1,4 @@
-//! `pigeon backplane signing`, the parts that run off macOS.
+//! `pigeon signing`, the parts that run off macOS.
 #![cfg(feature = "signing")]
 
 use std::fs;
@@ -9,7 +9,7 @@ use tempfile::TempDir;
 
 fn signing(tmp: &TempDir) -> Command {
     let mut cmd = Command::cargo_bin("pigeon").expect("binary");
-    cmd.args(["backplane", "signing"])
+    cmd.arg("signing")
         .env("TMPDIR", tmp.path())
         .env("BUILDKITE_JOB_ID", "0190-abcd")
         .env("HOME", tmp.path())

@@ -1,4 +1,4 @@
-//! `pigeon sentinel check` hands its arguments to `pigeon-sentinel` and returns its exit code;
+//! `pigeon eviction check` hands its arguments to `pigeon-sentinel` and returns its exit code;
 //! the judge's own behaviour is tested with the binary, in `crates/sentinel/tests/cli.rs`.
 #![cfg(feature = "eviction")]
 
@@ -28,7 +28,7 @@ fn check_hands_its_arguments_to_pigeon_sentinel() {
     let tmp = TempDir::new().expect("tempdir");
     pigeon(&stand_in(tmp.path(), 0))
         .args([
-            "sentinel",
+            "eviction",
             "check",
             "--root",
             "r",
@@ -50,7 +50,7 @@ fn check_returns_pigeon_sentinels_exit_code() {
         let dir = tmp.path().join(code.to_string());
         std::fs::create_dir_all(&dir).expect("mkdir");
         pigeon(&stand_in(&dir, code))
-            .args(["sentinel", "check"])
+            .args(["eviction", "check"])
             .assert()
             .code(code);
     }
@@ -59,7 +59,7 @@ fn check_returns_pigeon_sentinels_exit_code() {
 #[test]
 fn a_missing_pigeon_sentinel_exits_2() {
     pigeon(Path::new("/nonexistent/pigeon-sentinel"))
-        .args(["sentinel", "check"])
+        .args(["eviction", "check"])
         .assert()
         .code(2)
         .stderr(predicate::str::contains("didn't run"));

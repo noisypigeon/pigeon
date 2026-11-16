@@ -24,9 +24,7 @@ fn every_name_is_unique_and_dependencies_use_new_names() {
             "{} does something",
             task.name
         );
-        for name in std::iter::once(task.name).chain(task.old) {
-            assert!(seen.insert(name), "`{name}` names two tasks");
-        }
+        assert!(seen.insert(task.name), "`{}` names two tasks", task.name);
         for dep in task.depends {
             let found = find(dep).unwrap_or_else(|| panic!("{}: no task `{dep}`", task.name));
             assert_eq!(
@@ -90,19 +88,6 @@ fn a_plan_runs_each_dependency_once_before_its_dependents() {
 }
 
 #[test]
-fn old_names_find_their_tasks() {
-    for (old, new) in [
-        ("sentinel", "policy"),
-        ("sentinel-pr", "policy-pr"),
-        ("sentinel-change", "policy-change"),
-        ("sentinel-build", "policy-build"),
-        ("backplane", "instance"),
-    ] {
-        assert_eq!(find(old).expect(old).name, new);
-    }
-}
-
-#[test]
 fn dry_run_prints_the_plan_in_order() {
     let out = pigeon()
         .args(["dev", "rust", "--dry-run"])
@@ -124,25 +109,9 @@ fn dry_run_prints_the_plan_in_order() {
 }
 
 #[test]
-fn an_old_task_name_runs_its_task_after_one_line_on_stderr() {
-    let out = pigeon()
-        .args(["dev", "backplane", "--dry-run"])
-        .assert()
-        .success();
-    let o = out.get_output();
-    assert_eq!(
-        String::from_utf8_lossy(&o.stderr),
-        "pigeon: `pigeon dev backplane` is now `pigeon dev instance`\n"
-    );
-    assert_eq!(
-        String::from_utf8_lossy(&o.stdout),
-        "instance: cargo run -q --locked -p pigeon-harness -- instance --root .\n"
-    );
-}
-
-#[test]
 fn an_unknown_task_is_a_usage_error_and_old_names_stay_out_of_help() {
     pigeon().args(["dev", "nope"]).assert().code(2);
+    pigeon().args(["dev", "backplane"]).assert().code(2);
     pigeon().arg("dev").assert().code(2);
     let help = pigeon().args(["dev", "--help"]).assert().success();
     let text = String::from_utf8(help.get_output().stdout.clone()).expect("utf-8");

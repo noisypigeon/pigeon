@@ -1,4 +1,4 @@
-//! `pigeon cobot`; see `.claude/decisions/2026-11-02-runtime-cobot-infrastructure-as-code.md`,
+//! `pigeon infra`; see `.claude/decisions/2026-11-02-runtime-cobot-infrastructure-as-code.md`,
 //! `.claude/decisions/2026-11-02-runtime-cloudflare-provisioner-unit.md` and
 //! `.claude/decisions/2026-11-02-development-sentinel-policy-cobot-actions.md`.
 
@@ -12,35 +12,35 @@ use backplane::cobot::release::{self, Config};
 
 use super::{INVALID, SUCCESS, VIOLATION};
 use crate::cli::{
-    CobotApply, CobotCommand, CobotPlan, CobotRoot, CobotRun, CobotShow, GitCommand, GitMirror,
-    GitRun, ReleaseArgs, ScopeArgs, SecretsCommand, SecretsKey, SecretsUnit, SitesBuild,
-    SitesCommand, SitesPublish, TagsArgs,
+    GitCommand, GitMirror, GitRun, InfraApply, InfraOp, InfraPlan, InfraRoot, InfraRun, InfraShow,
+    ReleaseArgs, ScopeArgs, SecretsCommand, SecretsKey, SecretsUnit, SitesBuild, SitesCommand,
+    SitesPublish, TagsArgs,
 };
 
-/// Runs a `pigeon cobot` command and returns its exit code.
+/// Runs a `pigeon infra` command and returns its exit code.
 #[must_use]
-pub fn run(command: CobotCommand) -> i32 {
+pub fn run(command: InfraOp) -> i32 {
     let result = match command {
-        CobotCommand::Validate(args) => {
+        InfraOp::Validate(args) => {
             backplane::cobot::validate_in(args.instance_root(), &args.root, &args.providers_dir())
         }
         .map(|units| println!("cobot: {} unit(s) valid", units.len())),
-        CobotCommand::Render(args) => render(&args),
-        CobotCommand::Plan(args) => plan(&args),
-        CobotCommand::Apply(args) => apply(&args),
-        CobotCommand::Show(args) => show(&args),
-        CobotCommand::Lock(args) => backplane::cobot::lock(&args.root, &args.providers_dir())
+        InfraOp::Render(args) => render(&args),
+        InfraOp::Plan(args) => plan(&args),
+        InfraOp::Apply(args) => apply(&args),
+        InfraOp::Show(args) => show(&args),
+        InfraOp::Lock(args) => backplane::cobot::lock(&args.root, &args.providers_dir())
             .map(|path| println!("cobot: wrote {}", path.display())),
-        CobotCommand::Capabilities(args) => capabilities(&args.root),
-        CobotCommand::Secrets(SecretsCommand::Set(args)) => secrets_set(&args),
-        CobotCommand::Secrets(SecretsCommand::Check(args)) => secrets_check(&args),
-        CobotCommand::Sites(SitesCommand::Build(args)) => sites_build(&args),
-        CobotCommand::Sites(SitesCommand::Publish(args)) => sites_publish(&args),
-        CobotCommand::Git(command) => git(command),
-        CobotCommand::Workers(command) => super::workers::run(command),
-        CobotCommand::Scope(args) => return scope(&args),
-        CobotCommand::Release(args) => return release(&args),
-        CobotCommand::Tags(args) => return tags(&args),
+        InfraOp::Capabilities(args) => capabilities(&args.root),
+        InfraOp::Secrets(SecretsCommand::Set(args)) => secrets_set(&args),
+        InfraOp::Secrets(SecretsCommand::Check(args)) => secrets_check(&args),
+        InfraOp::Sites(SitesCommand::Build(args)) => sites_build(&args),
+        InfraOp::Sites(SitesCommand::Publish(args)) => sites_publish(&args),
+        InfraOp::Git(command) => git(command),
+        InfraOp::Workers(command) => super::workers::run(command),
+        InfraOp::Scope(args) => return scope(&args),
+        InfraOp::Release(args) => return release(&args),
+        InfraOp::Tags(args) => return tags(&args),
     };
     match result {
         Ok(()) => SUCCESS,
@@ -69,7 +69,7 @@ fn capabilities(root: &std::path::Path) -> Result<(), backplane::cobot::Error> {
     Ok(())
 }
 
-fn render(args: &CobotRun) -> Result<(), backplane::cobot::Error> {
+fn render(args: &InfraRun) -> Result<(), backplane::cobot::Error> {
     let providers = args.at.providers_dir();
     let instance = args.at.instance_root();
     for unit in backplane::cobot::select_in(instance, &args.at.root, &providers, &args.units)? {
@@ -180,7 +180,7 @@ fn sites_publish(args: &SitesPublish) -> Result<(), backplane::cobot::Error> {
 }
 
 /// The run's context, with its state pulled; see [`backplane::cobot::session`].
-fn context(args: &CobotRun) -> Result<backplane::cobot::session::Session, backplane::cobot::Error> {
+fn context(args: &InfraRun) -> Result<backplane::cobot::session::Session, backplane::cobot::Error> {
     let mut session = backplane::cobot::session::open(
         args.at.instance_root(),
         &args.at.providers_dir(),
@@ -210,7 +210,7 @@ fn cloudflare() -> Result<backplane::cobot::cloudflare::Api, backplane::cobot::E
 }
 
 fn git(command: GitCommand) -> Result<(), backplane::cobot::Error> {
-    let at: &CobotRoot = match &command {
+    let at: &InfraRoot = match &command {
         GitCommand::Apply(a) | GitCommand::Status(a) => a,
         GitCommand::Push(r) | GitCommand::Fetch(r) | GitCommand::Clone(r) => &r.at,
         GitCommand::Mirror(m) | GitCommand::Sync(m) => &m.at,
@@ -265,7 +265,7 @@ fn git(command: GitCommand) -> Result<(), backplane::cobot::Error> {
                 Err(backplane::cobot::Error::Tool {
                     command: "git status".into(),
                     message: format!(
-                        "{} differ from their mirror; run `pigeon cobot git mirror`",
+                        "{} differ from their mirror; run `pigeon git mirror`",
                         out_of_sync.join(", ")
                     ),
                 })
@@ -321,7 +321,7 @@ fn git_run(
     }
 }
 
-/// `pigeon cobot scope`: the checks a change needs; see
+/// `pigeon dev scope`: the checks a change needs; see
 /// `.claude/decisions/2026-11-05-development-changes-through-pigeon-mcp.md` §4.
 fn scope(args: &ScopeArgs) -> i32 {
     let jobs = if args.files.is_empty() {
@@ -429,7 +429,7 @@ fn now() -> u64 {
     backplane::cobot::session::now()
 }
 
-fn plan(args: &CobotPlan) -> Result<(), backplane::cobot::Error> {
+fn plan(args: &InfraPlan) -> Result<(), backplane::cobot::Error> {
     let mut session = context(&args.run)?;
     session.ctx.adopt = args.adopt;
     let ctx = &session.ctx;
@@ -463,7 +463,7 @@ fn plan(args: &CobotPlan) -> Result<(), backplane::cobot::Error> {
     Ok(())
 }
 
-fn show(args: &CobotShow) -> Result<(), backplane::cobot::Error> {
+fn show(args: &InfraShow) -> Result<(), backplane::cobot::Error> {
     let session = context(&args.run)?;
     for (unit, diff) in backplane::cobot::show_stored(&session.ctx, &args.plan, now())? {
         println!("{unit}: {} attribute change(s)", diff.len());
@@ -480,7 +480,7 @@ fn show(args: &CobotShow) -> Result<(), backplane::cobot::Error> {
     Ok(())
 }
 
-fn apply(args: &CobotApply) -> Result<(), backplane::cobot::Error> {
+fn apply(args: &InfraApply) -> Result<(), backplane::cobot::Error> {
     let mut session = context(&args.run)?;
     let applied = if let Some(id) = &args.plan {
         session.apply_stored(id, now())

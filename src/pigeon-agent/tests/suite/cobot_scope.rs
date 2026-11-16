@@ -85,15 +85,15 @@ fn backplanes_cobot_runs_backplane_its_dependants_and_the_worker() {
         "{got:?}"
     );
     assert!(
-        got.contains(&"clippy pigeon-harness --features cobot".to_string()),
+        got.contains(&"clippy pigeon-harness --features infra".to_string()),
         "{got:?}"
     );
     assert!(
-        got.contains(&"clippy pigeon-harness --features backplane".to_string()),
+        got.contains(&"clippy pigeon-harness --features agent".to_string()),
         "{got:?}"
     );
     assert!(
-        !got.contains(&"clippy pigeon-harness --features sentinel".to_string()),
+        !got.contains(&"clippy pigeon-harness --features eviction".to_string()),
         "{got:?}"
     );
     assert!(
@@ -127,26 +127,26 @@ fn sentinel_runs_only_its_own_checks_as_nothing_links_it() {
 
 #[test]
 fn a_pigeon_command_runs_the_features_that_build_it() {
-    let got = names(&["src/pigeon-harness/src/commands/cobot.rs"]);
+    let got = names(&["src/pigeon-harness/src/commands/infra.rs"]);
     assert!(got.contains(&"test pigeon-harness".to_string()), "{got:?}");
     let features: Vec<&String> = got.iter().filter(|n| n.contains("--features")).collect();
     assert_eq!(
         features,
         [
-            "clippy pigeon-harness --features backplane",
-            "clippy pigeon-harness --features cobot"
+            "clippy pigeon-harness --features agent",
+            "clippy pigeon-harness --features infra"
         ],
-        "backplane's feature builds `pigeon cobot` too: {got:?}"
+        "agent's feature builds `pigeon infra` too: {got:?}"
     );
 }
 
 #[test]
 fn pigeons_sentinel_command_runs_its_feature_apart_from_the_release_units() {
-    let got = names(&["src/pigeon-harness/src/commands/sentinel.rs"]);
+    let got = names(&["src/pigeon-harness/src/commands/eviction.rs"]);
     let features: Vec<&String> = got.iter().filter(|n| n.contains("--features")).collect();
     assert_eq!(
         features,
-        ["clippy pigeon-harness --features sentinel"],
+        ["clippy pigeon-harness --features eviction"],
         "{got:?}"
     );
 }
@@ -158,9 +158,9 @@ fn a_workspace_setting_runs_everything() {
         "fmt",
         "clippy",
         "clippy pigeon-harness (no features)",
-        "clippy pigeon-harness --features sentinel",
-        "clippy pigeon-harness --features cobot",
-        "clippy pigeon-harness --features backplane",
+        "clippy pigeon-harness --features eviction",
+        "clippy pigeon-harness --features infra",
+        "clippy pigeon-harness --features agent",
         "clippy agent worker (wasm)",
         "test",
         "backplane instance",

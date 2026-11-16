@@ -1,12 +1,12 @@
-//! `pigeon backplane` arguments.
+//! `pigeon agent` arguments.
 
 use std::path::PathBuf;
 
 use clap::{Args, Subcommand};
 
-/// `pigeon backplane` commands.
+/// `pigeon agent` commands.
 #[derive(Subcommand, Debug)]
-pub enum BackplaneCommand {
+pub enum AgentOp {
     /// Validate and show the instance manifest; exit 2 if invalid
     #[cfg(feature = "agent")]
     Instance(RootArgs),
@@ -31,17 +31,17 @@ pub enum BackplaneCommand {
     #[cfg(feature = "agent")]
     Jobs(JobsArgs),
     /// Print a new authenticator secret for approvals in the card: base32 on stdout, for
-    /// `pigeon cobot workers secrets put … APPROVER_TOTP`, and its `otpauth://` URI on stderr,
+    /// `pigeon workers secrets put … APPROVER_TOTP`, and its `otpauth://` URI on stderr,
     /// for the authenticator app
     #[cfg(feature = "agent")]
     TotpSecret,
     /// Print a one-time passkey enrolment: its stored form on stdout, for
-    /// `pigeon cobot workers secrets put … PASSKEY_ENROLL`, and its token on stderr, to type at
+    /// `pigeon workers secrets put … PASSKEY_ENROLL`, and its token on stderr, to type at
     /// `/passkeys/enroll` within the hour
     #[cfg(feature = "agent")]
     EnrollSecret,
     /// Print a new Web Push key: its private half, base64url, on stdout, for
-    /// `pigeon cobot workers secrets put … PUSH_VAPID_KEY`, and its public half on stderr
+    /// `pigeon workers secrets put … PUSH_VAPID_KEY`, and its public half on stderr
     #[cfg(feature = "agent")]
     VapidKey,
     /// Load the release's signing identity into a throwaway keychain, upload the signed app,
@@ -51,7 +51,7 @@ pub enum BackplaneCommand {
     Signing(SigningCommand),
 }
 
-/// `pigeon backplane decisions` arguments.
+/// `pigeon decisions` arguments.
 #[derive(Args, Debug)]
 pub struct DecisionsArgs {
     /// Repository paths
@@ -65,7 +65,7 @@ pub struct DecisionsArgs {
     pub json: bool,
 }
 
-/// `pigeon backplane jobs` arguments.
+/// `pigeon agent listen` arguments.
 #[derive(Args, Debug)]
 pub struct JobsArgs {
     /// The address to listen on, e.g. 0.0.0.0:8080
@@ -80,7 +80,7 @@ pub struct JobsArgs {
     pub bench: bool,
 }
 
-/// `pigeon backplane serve` arguments.
+/// `pigeon agent serve` arguments.
 #[derive(Args, Debug)]
 pub struct ServeArgs {
     /// The address to listen on, e.g. 127.0.0.1:8787; there is no default
@@ -135,10 +135,10 @@ pub struct RootArgs {
     pub json: bool,
 }
 
-/// `pigeon backplane run` arguments.
+/// `pigeon run` arguments.
 #[derive(Args, Debug)]
 pub struct RunArgs {
-    /// The operation, as `pigeon backplane operations` lists it
+    /// The operation, as `pigeon ops` lists it
     pub operation: String,
 
     /// An argument as `name=value`; a value that parses as JSON is JSON, else a string
@@ -154,7 +154,7 @@ pub struct RunArgs {
     pub root: RootArgs,
 }
 
-/// `pigeon backplane signing` commands.
+/// `pigeon signing` commands.
 #[cfg(feature = "signing")]
 #[derive(Subcommand, Debug)]
 pub enum SigningCommand {
@@ -176,7 +176,7 @@ pub struct SigningArgs {
     pub platform: String,
 }
 
-/// `pigeon backplane signing upload` arguments.
+/// `pigeon signing upload` arguments.
 #[cfg(feature = "signing")]
 #[derive(Args, Debug)]
 pub struct UploadArgs {

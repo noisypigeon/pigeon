@@ -1,4 +1,4 @@
-//! `pigeon backplane` end to end.
+//! `pigeon instance`, `engines`, `ops`, `run`, `agent` and `keys` end to end.
 #![cfg(feature = "agent")]
 
 use std::fs;
@@ -14,25 +14,24 @@ fn repo_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
 
-fn backplane() -> Command {
+fn pigeon() -> Command {
     let mut cmd = Command::cargo_bin("pigeon").expect("binary");
-    cmd.arg("backplane")
-        .env("PIGEON_SENTINEL", common::sentinel());
+    cmd.env("PIGEON_SENTINEL", common::sentinel());
     cmd
 }
 
 #[test]
 fn version_is_backplanes() {
-    backplane()
-        .arg("--version")
+    pigeon()
+        .args(["agent", "--version"])
         .assert()
         .success()
-        .stdout(format!("pigeon-backplane {}\n", backplane::VERSION));
+        .stdout(format!("pigeon-agent {}\n", backplane::VERSION));
 }
 
 #[test]
 fn this_instance_is_valid() {
-    backplane()
+    pigeon()
         .args(["instance", "--root"])
         .arg(repo_root())
         .assert()
@@ -42,13 +41,13 @@ fn this_instance_is_valid() {
 
 #[test]
 fn engines_and_operations_list() {
-    backplane()
+    pigeon()
         .args(["engines", "--json"])
         .assert()
         .code(0)
         .stdout(predicate::str::contains("\"role\": \"policy\""));
-    backplane()
-        .arg("operations")
+    pigeon()
+        .arg("ops")
         .assert()
         .code(0)
         .stdout(predicate::str::contains("policy.check (sentinel, read)"));
@@ -56,7 +55,7 @@ fn engines_and_operations_list() {
 
 #[test]
 fn run_prints_the_json_response() {
-    let out = backplane()
+    let out = pigeon()
         .args(["run", "policy.check", "--json", "--root"])
         .arg(repo_root())
         .assert()
@@ -71,7 +70,7 @@ fn an_invalid_manifest_exits_2() {
     let root = TempDir::new().expect("tempdir");
     fs::create_dir_all(root.path().join(".config")).expect("mkdir");
     fs::write(root.path().join(".config/instance.yaml"), "schema: v0\n").expect("write");
-    backplane()
+    pigeon()
         .args(["instance", "--root"])
         .arg(root.path())
         .assert()
@@ -80,7 +79,7 @@ fn an_invalid_manifest_exits_2() {
 
 #[test]
 fn an_unknown_operation_exits_2() {
-    backplane()
+    pigeon()
         .args(["run", "nope.nope", "--root"])
         .arg(repo_root())
         .assert()
@@ -91,7 +90,7 @@ fn an_unknown_operation_exits_2() {
 // See `.claude/decisions/2026-11-14-security-passkey-only-owner-proofs.md` §3.
 #[test]
 fn enroll_secret_prints_the_stored_form_and_keeps_the_token_off_stdout() {
-    let out = backplane().arg("enroll-secret").assert().success();
+    let out = pigeon().args(["keys", "enroll"]).assert().success();
     let out = out.get_output();
     let stdout = String::from_utf8(out.stdout.clone()).expect("UTF-8");
     let stderr = String::from_utf8(out.stderr.clone()).expect("UTF-8");

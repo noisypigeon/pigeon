@@ -1,4 +1,4 @@
-//! `pigeon backplane signing`, the shell around `backplane::signing`; see
+//! `pigeon signing`, the shell around `backplane::signing`; see
 //! `.claude/decisions/2026-11-11-release-ios-app-buildkite-testflight.md` §6.
 
 use std::fs;
@@ -18,7 +18,7 @@ use serde_json::Value;
 use super::{INVALID, SUCCESS, VIOLATION};
 use crate::cli::{SigningArgs, SigningCommand, UploadArgs};
 
-/// Runs a `pigeon backplane signing` command and returns its exit code.
+/// Runs a `pigeon signing` command and returns its exit code.
 #[must_use]
 pub fn run(command: SigningCommand) -> i32 {
     let result = match command {

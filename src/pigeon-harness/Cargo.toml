@@ -21,9 +21,7 @@ signing = ["dep:backplane", "dep:serde_json", "dep:ureq"]
 # `pigeon session`, for cloud agent sessions; see
 # .claude/decisions/2026-11-13-development-rust-session-event-follower.md §2.
 session = ["dep:backplane", "dep:serde_json", "dep:signal-hook", "dep:ureq"]
-# The old names, until step 12; their `dep:` keeps the scope's per-feature clippy on them.
-sentinel = ["eviction"]
-cobot = ["infra", "dep:backplane"]
+# The job images' `FEATURES` in worker.yaml, until it names `agent`; see the src-crates ADR §5.
 backplane = ["agent", "dep:backplane"]
 
 [dependencies]

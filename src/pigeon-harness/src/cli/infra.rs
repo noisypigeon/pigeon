@@ -1,26 +1,26 @@
-//! `pigeon cobot` arguments.
+//! `pigeon infra` arguments.
 
 use std::path::PathBuf;
 
 use clap::{Args, Subcommand};
 
-/// `pigeon cobot` commands.
+/// `pigeon infra` commands.
 #[derive(Subcommand, Debug)]
-pub enum CobotCommand {
+pub enum InfraOp {
     /// Check every unit under infra/ and workloads/; exit 1 on a problem
-    Validate(CobotRoot),
+    Validate(InfraRoot),
     /// Write each unit's main.tf.json under <ROOT>/.pigeon/
-    Render(CobotRun),
+    Render(InfraRun),
     /// Plan units against the state repository; print a summary
-    Plan(CobotPlan),
+    Plan(InfraPlan),
     /// Plan, then apply units with changes
-    Apply(CobotApply),
+    Apply(InfraApply),
     /// Print a stored plan's changes attribute by attribute; sensitive values stay hidden
-    Show(CobotShow),
+    Show(InfraShow),
     /// Write <PROVIDERS>/providers.lock.hcl for the allowlist
-    Lock(CobotRoot),
+    Lock(InfraRoot),
     /// Print each catalog's capabilities as JSON; exit 1 on an invalid one
-    Capabilities(CobotRoot),
+    Capabilities(InfraRoot),
     /// Manage a unit's encrypted secrets.config.yaml
     #[command(subcommand)]
     Secrets(SecretsCommand),
@@ -43,7 +43,7 @@ pub enum CobotCommand {
 
 /// The repository root and its provider allowlist.
 #[derive(Args, Debug)]
-pub struct CobotRoot {
+pub struct InfraRoot {
     /// The repository root
     #[arg(long, default_value = ".")]
     pub root: PathBuf,
@@ -56,7 +56,7 @@ pub struct CobotRoot {
     pub instance: Option<PathBuf>,
 }
 
-impl CobotRoot {
+impl InfraRoot {
     /// The instance's root: `--instance`, else the repository root.
     #[must_use]
     pub fn instance_root(&self) -> &std::path::Path {
@@ -74,10 +74,10 @@ impl CobotRoot {
 
 /// Units and their state.
 #[derive(Args, Debug)]
-pub struct CobotRun {
+pub struct InfraRun {
     /// The repository root and providers
     #[command(flatten)]
-    pub at: CobotRoot,
+    pub at: InfraRoot,
     /// The state repository's checkout, or `r2://<bucket>/<prefix>` with `PIGEON_STATE_R2_*` set
     #[arg(long)]
     pub state: PathBuf,
@@ -85,12 +85,12 @@ pub struct CobotRun {
     pub units: Vec<String>,
 }
 
-/// `pigeon cobot plan` arguments.
+/// `pigeon infra plan` arguments.
 #[derive(Args, Debug)]
-pub struct CobotPlan {
+pub struct InfraPlan {
     /// Units and their state
     #[command(flatten)]
-    pub run: CobotRun,
+    pub run: InfraRun,
     /// Also write the Markdown summary here
     #[arg(long)]
     pub summary: Option<PathBuf>,
@@ -102,29 +102,29 @@ pub struct CobotPlan {
     pub adopt: bool,
 }
 
-/// `pigeon cobot show` arguments.
+/// `pigeon infra show` arguments.
 #[derive(Args, Debug)]
-pub struct CobotShow {
+pub struct InfraShow {
     /// The state holding the plan
     #[command(flatten)]
-    pub run: CobotRun,
+    pub run: InfraRun,
     /// The stored plan, from `plan --store`
     #[arg(long)]
     pub plan: String,
 }
 
-/// `pigeon cobot apply` arguments.
+/// `pigeon infra apply` arguments.
 #[derive(Args, Debug)]
-pub struct CobotApply {
+pub struct InfraApply {
     /// Units and their state
     #[command(flatten)]
-    pub run: CobotRun,
+    pub run: InfraRun,
     /// Apply exactly this stored plan, from `plan --store`, instead of planning again
     #[arg(long, conflicts_with = "units")]
     pub plan: Option<String>,
 }
 
-/// `pigeon cobot secrets` commands; there is deliberately no `get`.
+/// `pigeon infra secrets` commands; there is deliberately no `get`.
 #[derive(Subcommand, Debug)]
 pub enum SecretsCommand {
     /// Encrypt a value read from stdin into <UNIT>/secrets.config.yaml
@@ -133,7 +133,7 @@ pub enum SecretsCommand {
     Check(SecretsUnit),
 }
 
-/// `pigeon cobot sites` commands.
+/// `pigeon sites` commands.
 #[derive(Subcommand, Debug)]
 pub enum SitesCommand {
     /// Build each static site with its pinned template; needs no secrets
@@ -142,14 +142,14 @@ pub enum SitesCommand {
     Publish(SitesPublish),
 }
 
-/// `pigeon cobot git` commands; each uses `CLOUDFLARE_API_TOKEN`, scoped to the instance's own
+/// `pigeon git` commands; each uses `CLOUDFLARE_API_TOKEN`, scoped to the instance's own
 /// account.
 #[derive(Subcommand, Debug)]
 pub enum GitCommand {
     /// Create the instance's namespace and repositories, importing new ones from their mirror
-    Apply(CobotRoot),
+    Apply(InfraRoot),
     /// Print each repository's remote and its head on Artifacts and on its mirror
-    Status(CobotRoot),
+    Status(InfraRoot),
     /// `git push <remote> [ARGS…]` with a short-lived write token
     Push(GitRun),
     /// `git fetch <remote> [ARGS…]` with a short-lived read token
@@ -167,7 +167,7 @@ pub enum GitCommand {
 pub struct GitRun {
     /// The repository root and instance
     #[command(flatten)]
-    pub at: CobotRoot,
+    pub at: InfraRoot,
     /// The repository, e.g. pigeon
     pub repo: String,
     /// Arguments after the remote, e.g. HEAD:main
@@ -175,7 +175,7 @@ pub struct GitRun {
     pub args: Vec<String>,
 }
 
-/// `pigeon cobot workers` commands; see
+/// `pigeon workers` commands; see
 /// `.claude/decisions/2026-11-05-development-cobot-workers-area.md`.
 #[derive(Subcommand, Debug)]
 pub enum WorkersCommand {
@@ -204,7 +204,7 @@ pub enum WorkersCommand {
     Images(WorkersImages),
 }
 
-/// `pigeon cobot workers images` commands.
+/// `pigeon workers images` commands.
 #[derive(Subcommand, Debug)]
 pub enum WorkersImages {
     /// Build each container's image with Docker and push it to Cloudflare's registry, logged in
@@ -213,7 +213,7 @@ pub enum WorkersImages {
     Push(ImagesPush),
 }
 
-/// `pigeon cobot workers images push` arguments.
+/// `pigeon workers images push` arguments.
 #[derive(Args, Debug)]
 pub struct ImagesPush {
     /// Workers, and the root
@@ -243,7 +243,7 @@ pub struct WorkersState {
     /// Workers, and the root
     #[command(flatten)]
     pub at: WorkersAt,
-    /// The state, as for `pigeon cobot plan`
+    /// The state, as for `pigeon infra plan`
     #[arg(long)]
     pub state: PathBuf,
     /// The directory holding providers.yaml and providers.lock.hcl [default: ./.config]
@@ -251,7 +251,7 @@ pub struct WorkersState {
     pub providers: Option<PathBuf>,
 }
 
-/// `pigeon cobot workers deploy` arguments.
+/// `pigeon workers deploy` arguments.
 #[derive(Args, Debug)]
 pub struct WorkersDeploy {
     /// The state, and the root
@@ -275,14 +275,14 @@ pub struct WorkersOne {
     pub name: String,
 }
 
-/// `pigeon cobot workers secrets` commands; there is deliberately no `get`.
+/// `pigeon workers secrets` commands; there is deliberately no `get`.
 #[derive(Subcommand, Debug)]
 pub enum WorkersSecrets {
     /// Set KEY on a Worker from stdin
     Put(WorkersSecret),
 }
 
-/// `pigeon cobot workers secrets put` arguments.
+/// `pigeon workers secrets put` arguments.
 #[derive(Args, Debug)]
 pub struct WorkersSecret {
     /// The Worker
@@ -292,7 +292,7 @@ pub struct WorkersSecret {
     pub key: String,
 }
 
-/// `pigeon cobot scope` arguments.
+/// `pigeon dev scope` arguments.
 #[derive(Args, Debug)]
 pub struct ScopeArgs {
     /// The repository root
@@ -315,17 +315,17 @@ pub struct ScopeArgs {
     pub test_map: Option<PathBuf>,
 }
 
-/// `pigeon cobot git mirror` arguments.
+/// `pigeon git mirror` arguments.
 #[derive(Args, Debug)]
 pub struct GitMirror {
     /// The repository root and instance
     #[command(flatten)]
-    pub at: CobotRoot,
+    pub at: InfraRoot,
     /// Repositories [default: every one with a mirror]
     pub repos: Vec<String>,
 }
 
-/// `pigeon cobot sites build` arguments.
+/// `pigeon sites build` arguments.
 #[derive(Args, Debug)]
 pub struct SitesBuild {
     /// The repository root
@@ -342,12 +342,12 @@ pub struct SitesBuild {
     pub data: Vec<String>,
 }
 
-/// `pigeon cobot sites publish` arguments.
+/// `pigeon sites publish` arguments.
 #[derive(Args, Debug)]
 pub struct SitesPublish {
     /// Workloads and their state
     #[command(flatten)]
-    pub run: CobotRun,
+    pub run: InfraRun,
     /// How many times each live check is tried, 15 seconds apart; 0 skips them
     #[arg(long, default_value_t = 12)]
     pub checks: u32,
@@ -376,7 +376,7 @@ pub struct SecretsKey {
     pub key: String,
 }
 
-/// `pigeon cobot tags` arguments.
+/// `pigeon release tags` arguments.
 #[derive(Args, Debug)]
 pub struct TagsArgs {
     /// The repository root
@@ -388,7 +388,7 @@ pub struct TagsArgs {
     pub config: Option<PathBuf>,
 }
 
-/// `pigeon cobot release` arguments.
+/// `pigeon release` arguments.
 #[derive(Args, Debug)]
 pub struct ReleaseArgs {
     /// The repository root

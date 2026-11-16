@@ -1,5 +1,5 @@
-//! The old spellings of §3's commands parse, run the same code and print the new one on
-//! stderr; see .claude/decisions/2026-11-16-development-src-crates-neutral-names.md §3.
+//! §3's commands parse under their new spellings only; see
+//! .claude/decisions/2026-11-16-development-src-crates-neutral-names.md §3.
 #![cfg(all(
     feature = "eviction",
     feature = "infra",
@@ -7,12 +7,10 @@
     feature = "signing"
 ))]
 
-use assert_cmd::Command;
 use clap::Parser as _;
 use pigeon::cli::Cli;
-use pigeon::commands::renamed;
 
-/// Each old spelling, its new one, and the arguments both take.
+/// Each old spelling, its new one, and the arguments the new one takes.
 const SPELLINGS: &[(&str, &str, &[&str])] = &[
     ("sentinel check", "eviction check", &[]),
     ("cobot validate", "infra validate", &[]),
@@ -102,115 +100,13 @@ fn argv(words: &str, args: &[&str]) -> Vec<String> {
 }
 
 #[test]
-fn every_old_spelling_parses_and_names_its_new_one() {
+fn an_old_spelling_is_refused_and_its_new_one_parses() {
     for (old, new, args) in SPELLINGS {
-        let parsed =
-            Cli::try_parse_from(argv(old, args)).unwrap_or_else(|e| panic!("`pigeon {old}`: {e}"));
-        assert_eq!(renamed(&parsed.command), Some((*old, *new)), "{old}");
-    }
-}
-
-#[test]
-fn every_new_spelling_parses_and_is_not_renamed() {
-    for (_, new, args) in SPELLINGS {
-        let parsed =
-            Cli::try_parse_from(argv(new, args)).unwrap_or_else(|e| panic!("`pigeon {new}`: {e}"));
-        assert_eq!(renamed(&parsed.command), None, "{new}");
-    }
-}
-
-#[test]
-fn every_old_command_has_a_spelling() {
-    let help = |words: &str| {
-        let out = Command::cargo_bin("pigeon")
-            .expect("binary")
-            .args(words.split(' '))
-            .arg("--help")
-            .output()
-            .expect("run");
-        assert!(out.status.success(), "{words} --help");
-        String::from_utf8(out.stdout).expect("utf-8")
-    };
-    // Each subcommand an old group's help lists, and those of its nested groups.
-    let commands = |text: &str| -> Vec<String> {
-        text.split("Commands:")
-            .nth(1)
-            .and_then(|s| s.split("\n\n").next())
-            .unwrap_or("")
-            .lines()
-            .filter_map(|l| l.split_whitespace().next())
-            .filter(|c| *c != "help")
-            .map(String::from)
-            .collect()
-    };
-    let mut seen = Vec::new();
-    let mut groups = vec!["sentinel".to_string(), "cobot".into(), "backplane".into()];
-    while let Some(group) = groups.pop() {
-        for c in commands(&help(&group)) {
-            let words = format!("{group} {c}");
-            if help(&words).contains("Commands:") {
-                groups.push(words);
-            } else {
-                seen.push(words);
-            }
-        }
-    }
-    for words in seen {
         assert!(
-            SPELLINGS.iter().any(|(old, _, _)| *old == words),
-            "`pigeon {words}` has no new spelling"
+            Cli::try_parse_from(argv(old, args)).is_err(),
+            "`pigeon {old}` still parses"
         );
-    }
-}
-
-fn run(words: &str, args: &[&str], dir: &std::path::Path) -> std::process::Output {
-    Command::cargo_bin("pigeon")
-        .expect("binary")
-        .current_dir(dir)
-        .args(words.split(' '))
-        .args(args)
-        .env_remove("BACKPLANE_TOKEN")
-        .output()
-        .expect("run")
-}
-
-#[test]
-fn an_old_spelling_runs_the_same_command_after_one_line_on_stderr() {
-    let dir = tempfile::tempdir().expect("tempdir");
-    let cases: &[(&str, &str, &[&str])] = &[
-        ("backplane operations", "ops", &[]),
-        ("backplane engines", "engines", &["--json"]),
-        ("backplane instance", "instance", &[]),
-        ("backplane run", "run", &["nope.nope"]),
-        ("backplane decisions", "decisions", &["src/x.rs"]),
-        (
-            "backplane serve",
-            "agent serve",
-            &["--listen", "127.0.0.1:0", "--state", "s"],
-        ),
-        ("cobot validate", "infra validate", &[]),
-        (
-            "cobot scope",
-            "dev scope",
-            &["--file", "mise.toml", "--json"],
-        ),
-        ("cobot tags", "release tags", &[]),
-        ("cobot workers validate", "workers validate", &[]),
-    ];
-    for (old, new, args) in cases {
-        let a = run(old, args, dir.path());
-        let b = run(new, args, dir.path());
-        assert_eq!(a.status.code(), b.status.code(), "{old}");
-        assert_eq!(a.stdout, b.stdout, "{old}");
-        let a_err = String::from_utf8(a.stderr).expect("utf-8");
-        let b_err = String::from_utf8(b.stderr).expect("utf-8");
-        let (first, rest) = a_err.split_once('\n').expect("a notice");
-        assert_eq!(
-            first,
-            format!("pigeon: `pigeon {old}` is now `pigeon {new}`")
-        );
-        assert_eq!(rest, b_err, "{old}");
-        assert!(!b_err.contains("is now"), "{new}");
+        Cli::try_parse_from(argv(new, args)).unwrap_or_else(|e| panic!("`pigeon {new}`: {e}"));
     }
 }
 
@@ -248,21 +144,4 @@ fn agent_listen_takes_its_address_either_way() {
     }
     assert!(Cli::try_parse_from(["pigeon", "agent", "listen"]).is_err());
     assert!(Cli::try_parse_from(["pigeon", "agent", "listen", "a", "--listen", "b"]).is_err());
-}
-
-#[test]
-fn keys_print_a_secret_on_stdout_under_each_spelling() {
-    let dir = tempfile::tempdir().expect("tempdir");
-    for (old, new) in [
-        ("backplane totp-secret", "keys totp"),
-        ("backplane vapid-key", "keys vapid"),
-        ("backplane enroll-secret", "keys enroll"),
-    ] {
-        let a = run(old, &[], dir.path());
-        let b = run(new, &[], dir.path());
-        assert!(a.status.success() && b.status.success(), "{old}");
-        assert!(!a.stdout.is_empty() && !b.stdout.is_empty(), "{old}");
-        assert_ne!(a.stdout, b.stdout, "{old}: each is new");
-        assert!(String::from_utf8_lossy(&a.stderr).starts_with("pigeon: `pigeon backplane"));
-    }
 }

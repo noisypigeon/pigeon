@@ -1448,11 +1448,7 @@ pigeon-eviction test suite tree::tree_tests::absent_lists_allow_nothing_and_igno
 pigeon-eviction test suite tree::tree_tests::allows_by_kind
 pigeon-eviction test suite tree::tree_tests::require_and_unlistable_paths
 pigeon-harness test suite aliases::agent_listen_takes_its_address_either_way
-pigeon-harness test suite aliases::an_old_spelling_runs_the_same_command_after_one_line_on_stderr
-pigeon-harness test suite aliases::every_new_spelling_parses_and_is_not_renamed
-pigeon-harness test suite aliases::every_old_command_has_a_spelling
-pigeon-harness test suite aliases::every_old_spelling_parses_and_names_its_new_one
-pigeon-harness test suite aliases::keys_print_a_secret_on_stdout_under_each_spelling
+pigeon-harness test suite aliases::an_old_spelling_is_refused_and_its_new_one_parses
 pigeon-harness test suite aliases::release_and_release_tags_are_one_group
 pigeon-harness test suite backplane::an_invalid_manifest_exits_2
 pigeon-harness test suite backplane::an_unknown_operation_exits_2
@@ -1475,13 +1471,11 @@ pigeon-harness test suite cobot::validate_fails_with_exit_1
 pigeon-harness test suite cobot::validate_passes_on_an_empty_repository
 pigeon-harness test suite dev::a_plan_runs_each_dependency_once_before_its_dependents
 pigeon-harness test suite dev::a_task_runs_from_the_root_and_its_failure_is_the_exit_code
-pigeon-harness test suite dev::an_old_task_name_runs_its_task_after_one_line_on_stderr
 pigeon-harness test suite dev::an_unknown_task_is_a_usage_error_and_old_names_stay_out_of_help
 pigeon-harness test suite dev::dry_run_prints_the_plan_in_order
 pigeon-harness test suite dev::every_name_is_unique_and_dependencies_use_new_names
 pigeon-harness test suite dev::list_names_every_task
 pigeon-harness test suite dev::no_dev_command_names_an_old_spelling
-pigeon-harness test suite dev::old_names_find_their_tasks
 pigeon-harness test suite dev::without_root_it_finds_the_workspace_above_the_working_directory
 pigeon-harness test suite sentinel::a_missing_pigeon_sentinel_exits_2
 pigeon-harness test suite sentinel::check_hands_its_arguments_to_pigeon_sentinel

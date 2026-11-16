@@ -111,7 +111,7 @@ RUN export CARGO_BUILD_JOBS="$WARM_JOBS" \
  && cargo fetch --locked \
  && cargo build --workspace --all-targets --locked \
  && cargo clippy --workspace --all-targets --locked \
- && cargo build --release --locked -p pigeon-harness --no-default-features --features backplane \
+ && cargo build --release --locked -p pigeon-harness --no-default-features --features agent \
  && cargo build --release --locked -p pigeon-agent --lib --no-default-features --features worker --target wasm32-unknown-unknown \
  && cargo clean $members \
  && cargo clean --release $members \

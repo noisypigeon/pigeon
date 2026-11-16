@@ -1,16 +1,16 @@
-//! `pigeon backplane`; see `.claude/decisions/2026-11-03-development-backplane-platform-composition-layer.md`.
+//! `pigeon agent`; see `.claude/decisions/2026-11-03-development-backplane-platform-composition-layer.md`.
 
 use backplane::{Instance, Request, Response};
 
 use super::{INVALID, SUCCESS, VIOLATION};
-use crate::cli::{BackplaneCommand, DecisionsArgs, JobsArgs, RootArgs, ServeArgs};
+use crate::cli::{AgentOp, DecisionsArgs, JobsArgs, RootArgs, ServeArgs};
 
-/// Runs a `pigeon backplane` command and returns its exit code.
+/// Runs a `pigeon agent` command and returns its exit code.
 #[must_use]
-pub fn run(command: BackplaneCommand) -> i32 {
+pub fn run(command: AgentOp) -> i32 {
     match command {
-        BackplaneCommand::Instance(args) => operation("instance.show", &[], &[], &args),
-        BackplaneCommand::Engines(args) => {
+        AgentOp::Instance(args) => operation("instance.show", &[], &[], &args),
+        AgentOp::Engines(args) => {
             let engines = backplane::engines();
             if args.json {
                 print_json(&engines);
@@ -21,7 +21,7 @@ pub fn run(command: BackplaneCommand) -> i32 {
             }
             SUCCESS
         }
-        BackplaneCommand::Operations(args) => {
+        AgentOp::Operations(args) => {
             let ops = backplane::catalog();
             if args.json {
                 print_json(&ops);
@@ -38,17 +38,15 @@ pub fn run(command: BackplaneCommand) -> i32 {
             }
             SUCCESS
         }
-        BackplaneCommand::Run(args) => {
-            operation(&args.operation, &args.args, &args.text, &args.root)
-        }
-        BackplaneCommand::Decisions(args) => decisions(&args),
-        BackplaneCommand::Serve(args) => serve(&args),
-        BackplaneCommand::Jobs(args) => jobs(&args),
-        BackplaneCommand::TotpSecret => totp_secret(),
-        BackplaneCommand::EnrollSecret => enroll_secret(),
-        BackplaneCommand::VapidKey => vapid_key(),
+        AgentOp::Run(args) => operation(&args.operation, &args.args, &args.text, &args.root),
+        AgentOp::Decisions(args) => decisions(&args),
+        AgentOp::Serve(args) => serve(&args),
+        AgentOp::Jobs(args) => jobs(&args),
+        AgentOp::TotpSecret => totp_secret(),
+        AgentOp::EnrollSecret => enroll_secret(),
+        AgentOp::VapidKey => vapid_key(),
         #[cfg(feature = "signing")]
-        BackplaneCommand::Signing(c) => super::signing::run(c),
+        AgentOp::Signing(c) => super::signing::run(c),
     }
 }
 
@@ -247,7 +245,7 @@ fn print_text(response: &Response) {
     );
 }
 
-/// `pigeon backplane decisions`: the ADRs governing each path.
+/// `pigeon decisions`: the ADRs governing each path.
 fn decisions(args: &DecisionsArgs) -> i32 {
     let dir = args.root.join(backplane::decisions::DIR);
     let entries = match std::fs::read_dir(&dir) {

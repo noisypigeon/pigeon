@@ -9,8 +9,6 @@ use std::process::Command;
 pub struct Task {
     /// Its name.
     pub name: &'static str,
-    /// Its old name, when that differs; accepted until step 12.
-    pub old: Option<&'static str>,
     /// What it does.
     pub about: &'static str,
     /// The tasks that run first, in order.
@@ -25,42 +23,36 @@ const POLICY: &str = "cargo run -q --locked -p pigeon-harness -- run policy.chec
 pub const TASKS: &[Task] = &[
     Task {
         name: "build",
-        old: None,
         about: "Build the workspace",
         depends: &[],
         run: &["cargo build --workspace --locked"],
     },
     Task {
         name: "test",
-        old: None,
         about: "Run every test",
         depends: &[],
         run: &["cargo test --workspace --locked"],
     },
     Task {
         name: "fmt",
-        old: None,
         about: "Format the workspace",
         depends: &[],
         run: &["cargo fmt --all"],
     },
     Task {
         name: "fmt-check",
-        old: None,
         about: "Check the workspace is formatted",
         depends: &[],
         run: &["cargo fmt --all -- --check"],
     },
     Task {
         name: "lint",
-        old: None,
         about: "clippy, every target, -D warnings",
         depends: &[],
         run: &["cargo clippy --workspace --all-targets --locked -- -D warnings"],
     },
     Task {
         name: "features",
-        old: None,
         about: "clippy on pigeon with each command group's feature alone, and the Worker for wasm",
         depends: &[],
         run: &[
@@ -75,28 +67,24 @@ pub const TASKS: &[Task] = &[
     },
     Task {
         name: "rust",
-        old: None,
         about: "Every Rust check",
         depends: &["fmt-check", "lint", "features", "test"],
         run: &[],
     },
     Task {
         name: "policy-build",
-        old: Some("sentinel-build"),
         about: "Build pigeon-sentinel, which policy.check runs",
         depends: &[],
         run: &["cargo build -q --locked --bin pigeon-sentinel"],
     },
     Task {
         name: "policy",
-        old: Some("sentinel"),
         about: "policy.check on the working tree",
         depends: &["policy-build"],
         run: &[POLICY],
     },
     Task {
         name: "policy-pr",
-        old: Some("sentinel-pr"),
         about: "policy.check with the pull-request policy, from PR_TITLE, PR_BODY, PR_NUMBER and PR_FILES",
         depends: &["policy-build"],
         run: &[concat!(
@@ -106,7 +94,6 @@ pub const TASKS: &[Task] = &[
     },
     Task {
         name: "policy-change",
-        old: Some("sentinel-change"),
         about: "policy.check on this branch as a change, against CHANGE_BASE (default origin/main)",
         depends: &["policy-build"],
         run: &[r#"base="${CHANGE_BASE:-origin/main}"
@@ -124,21 +111,18 @@ cargo run -q --locked -p pigeon-harness -- run policy.check --root . \
     },
     Task {
         name: "instance",
-        old: Some("backplane"),
         about: "Validate the instance manifest",
         depends: &[],
         run: &["cargo run -q --locked -p pigeon-harness -- instance --root ."],
     },
     Task {
         name: "ci",
-        old: None,
         about: "Every check",
         depends: &["rust", "policy", "instance"],
         run: &[],
     },
     Task {
         name: "ci-scoped",
-        old: None,
         about: "Only the checks this branch's paths need, against CHANGE_BASE (default origin/main)",
         depends: &[],
         run: &[
@@ -147,26 +131,19 @@ cargo run -q --locked -p pigeon-harness -- run policy.check --root . \
     },
 ];
 
-/// The task named `name`, by its name or its old one.
+/// The task named `name`.
 #[must_use]
 pub fn find(name: &str) -> Option<&'static Task> {
-    TASKS.iter().find(|t| t.name == name || t.old == Some(name))
+    TASKS.iter().find(|t| t.name == name)
 }
 
-/// The names `pigeon dev` takes; the old ones are hidden.
+/// The names `pigeon dev` takes.
 #[must_use]
 pub fn names() -> Vec<clap::builder::PossibleValue> {
-    let mut out: Vec<_> = TASKS
+    TASKS
         .iter()
         .map(|t| clap::builder::PossibleValue::new(t.name).help(t.about))
-        .collect();
-    out.extend(
-        TASKS
-            .iter()
-            .filter_map(|t| t.old)
-            .map(|o| clap::builder::PossibleValue::new(o).hide(true)),
-    );
-    out
+        .collect()
 }
 
 /// The tasks `name` runs, dependencies first, each once.
@@ -221,12 +198,6 @@ pub fn run(root: &Path, name: &str, dry_run: bool) -> i32 {
             return 2;
         }
     };
-    if let Some(old) = find(name).filter(|t| t.old == Some(name)) {
-        eprintln!(
-            "pigeon: `pigeon dev {name}` is now `pigeon dev {}`",
-            old.name
-        );
-    }
     for task in tasks {
         for command in task.run {
             if dry_run {
@@ -263,7 +234,6 @@ pub fn list() {
         } else {
             format!(" (after {})", t.depends.join(", "))
         };
-        let old = t.old.map(|o| format!(" [was {o}]")).unwrap_or_default();
-        println!("{:<14} {}{depends}{old}", t.name, t.about);
+        println!("{:<14} {}{depends}", t.name, t.about);
     }
 }

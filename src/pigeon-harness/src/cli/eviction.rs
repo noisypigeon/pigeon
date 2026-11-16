@@ -1,17 +1,17 @@
-//! `pigeon sentinel` arguments.
+//! `pigeon eviction` arguments.
 
 use std::path::PathBuf;
 
 use clap::{Args, Subcommand};
 
-/// `pigeon sentinel` commands.
+/// `pigeon eviction` commands.
 #[derive(Subcommand, Debug)]
-pub enum SentinelCommand {
+pub enum EvictionCommand {
     /// Run every policy; exit 1 on a violation, 2 on an invalid policy
     Check(CheckArgs),
 }
 
-/// `pigeon sentinel check` arguments.
+/// `pigeon eviction check` arguments.
 #[derive(Args, Debug)]
 pub struct CheckArgs {
     /// The repository root that policies resolve paths against

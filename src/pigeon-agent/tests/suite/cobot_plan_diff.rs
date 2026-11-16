@@ -1,4 +1,4 @@
-//! A stored plan's attribute-level diff, for `pigeon cobot show`: what changes, never a
+//! A stored plan's attribute-level diff, for `pigeon infra show`: what changes, never a
 //! sensitive value.
 
 use backplane::cobot::plan_diff;

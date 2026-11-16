@@ -1,21 +1,21 @@
-//! `pigeon cobot` end to end.
+//! `pigeon infra` and `pigeon workers` end to end.
 #![cfg(feature = "infra")]
 
 use assert_cmd::Command;
 use predicates::prelude::*;
 use tempfile::TempDir;
 
-fn cobot() -> Command {
+fn pigeon() -> Command {
     let mut cmd = Command::cargo_bin("pigeon").expect("binary");
-    cmd.arg("cobot").env_remove("PIGEON_STATE_PASSPHRASE");
+    cmd.env_remove("PIGEON_STATE_PASSPHRASE");
     cmd
 }
 
 #[test]
 fn validate_passes_on_an_empty_repository() {
     let root = TempDir::new().expect("tempdir");
-    cobot()
-        .args(["validate", "--root"])
+    pigeon()
+        .args(["infra", "validate", "--root"])
         .arg(root.path())
         .assert()
         .code(0)
@@ -31,8 +31,8 @@ fn validate_fails_with_exit_1() {
         "schema: 0\nname: u\nkind: workload\nmodules: []\n",
     )
     .expect("write");
-    cobot()
-        .args(["validate", "--root"])
+    pigeon()
+        .args(["infra", "validate", "--root"])
         .arg(root.path())
         .assert()
         .code(1)
@@ -49,8 +49,8 @@ fn capabilities_print_json_and_reject_invalid_files() {
         "description: X.\ncapabilities:\n  dns.write: { permissions: [DNS Write], scope: zone }\n",
     )
     .expect("write");
-    let out = cobot()
-        .args(["capabilities", "--root"])
+    let out = pigeon()
+        .args(["infra", "capabilities", "--root"])
         .arg(root.path())
         .assert()
         .code(0);
@@ -58,8 +58,8 @@ fn capabilities_print_json_and_reject_invalid_files() {
     assert_eq!(json[0]["provider"], "x");
     assert_eq!(json[0]["capabilities"]["dns.write"]["scope"], "zone");
     std::fs::write(&caps, "description: X.\ncapabilities: {}\n").expect("write");
-    cobot()
-        .args(["capabilities", "--root"])
+    pigeon()
+        .args(["infra", "capabilities", "--root"])
         .arg(root.path())
         .assert()
         .code(1)
@@ -69,8 +69,8 @@ fn capabilities_print_json_and_reject_invalid_files() {
 #[test]
 fn plan_refuses_without_a_passphrase() {
     let root = TempDir::new().expect("tempdir");
-    cobot()
-        .args(["plan", "--root"])
+    pigeon()
+        .args(["infra", "plan", "--root"])
         .arg(root.path())
         .args(["--state"])
         .arg(root.path().join("state"))
@@ -83,8 +83,8 @@ fn plan_refuses_without_a_passphrase() {
 
 #[test]
 fn cobot_reports_its_own_version() {
-    cobot()
-        .arg("--version")
+    pigeon()
+        .args(["infra", "--version"])
         .assert()
         .success()
         .stdout(predicate::str::contains(backplane::cobot::VERSION));
@@ -105,9 +105,9 @@ fn render_with_relative_root_and_state_writes_absolute_paths() {
         "resource \"terraform_data\" \"this\" {}\n",
     )
     .expect("write");
-    cobot()
+    pigeon()
         .current_dir(repo.path())
-        .args(["render", "--state", "./state"])
+        .args(["infra", "render", "--state", "./state"])
         .assert()
         .code(0);
     let json: serde_json::Value = serde_json::from_str(
@@ -147,10 +147,10 @@ fn plan_names_each_tofu_step_on_stderr() {
     )
     .expect("write");
     let passphrase = "progress-passphrase-0123456789";
-    let output = cobot()
+    let output = pigeon()
         .current_dir(repo.path())
         .env("PIGEON_STATE_PASSPHRASE", passphrase)
-        .args(["plan", "--state", "./state"])
+        .args(["infra", "plan", "--state", "./state"])
         .output()
         .expect("run");
     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -172,7 +172,7 @@ fn plan_names_each_tofu_step_on_stderr() {
 #[test]
 fn a_worker_secret_is_never_set_empty() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-    cobot()
+    pigeon()
         .args(["workers", "secrets", "put", "--root"])
         .arg(&root)
         .args(["pigeon-control", "DEPLOY_IMAGES"])
@@ -203,7 +203,7 @@ fn images_push_refuses_uncommitted_changes() {
     git(&["add", "Dockerfile"]);
     git(&["commit", "-q", "-m", "init"]);
     std::fs::write(root.path().join("Dockerfile"), "FROM scratch AS ci\n").expect("write");
-    cobot()
+    pigeon()
         .args(["workers", "images", "push", "--root"])
         .arg(root.path())
         .env_remove("CLOUDFLARE_API_TOKEN")
@@ -230,7 +230,7 @@ fn images_push_counts_a_main_fetched_into_fetch_head() {
     git(&["add", "Dockerfile"]);
     git(&["commit", "-q", "-m", "init"]);
     let push = || {
-        cobot()
+        pigeon()
             .args(["workers", "images", "push", "--root"])
             .arg(root.path())
             .env_remove("CLOUDFLARE_API_TOKEN")

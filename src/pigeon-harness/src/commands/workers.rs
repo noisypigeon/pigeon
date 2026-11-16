@@ -1,4 +1,4 @@
-//! `pigeon cobot workers`; see `.claude/decisions/2026-11-05-development-cobot-workers-area.md`.
+//! `pigeon workers`; see `.claude/decisions/2026-11-05-development-cobot-workers-area.md`.
 
 use std::collections::BTreeMap;
 use std::env;
@@ -11,7 +11,7 @@ use serde_json::{Map, Value};
 
 use crate::cli::{ImagesPush, WorkersCommand, WorkersImages, WorkersSecrets, WorkersState};
 
-/// Runs a `pigeon cobot workers` command.
+/// Runs a `pigeon workers` command.
 ///
 /// # Errors
 ///
@@ -88,7 +88,7 @@ pub fn run(command: WorkersCommand) -> Result<(), backplane::cobot::Error> {
             let snapshot = backplane::cobot::ship::snapshot(&specs, &outputs);
             println!("{}", serde_json::to_string(&snapshot).unwrap_or_default());
             eprintln!(
-                "cobot: {} unit(s) of outputs; pipe this to `pigeon cobot workers secrets put --root . <worker> {}`",
+                "cobot: {} unit(s) of outputs; pipe this to `pigeon workers secrets put --root . <worker> {}`",
                 snapshot.len(),
                 backplane::cobot::ship::OUTPUTS_VAR
             );
@@ -131,7 +131,7 @@ fn account_tools()
     .ok_or_else(|| backplane::cobot::Error::Tool {
         command: "workers".into(),
         message: format!(
-            "set {} to a token with `pigeon cobot workers permissions`",
+            "set {} to a token with `pigeon workers permissions`",
             backplane::cobot::cloudflare::TOKEN_VAR
         ),
     })?;
@@ -253,7 +253,7 @@ fn images_push(p: &ImagesPush) -> Result<(), backplane::cobot::Error> {
         .any(|r| git(root, &["merge-base", "--is-ancestor", "HEAD", r]).is_some());
     if !on_main {
         eprintln!(
-            "cobot: warning: {} is on no fetched main; a deploy can't diff from a commit outside main's history, so push from main after `pigeon cobot git fetch <repo> main`",
+            "cobot: warning: {} is on no fetched main; a deploy can't diff from a commit outside main's history, so push from main after `pigeon git fetch <repo> main`",
             &source[..12]
         );
     }
@@ -273,7 +273,7 @@ fn images_push(p: &ImagesPush) -> Result<(), backplane::cobot::Error> {
     }
     println!("{}", serde_json::to_string(&images).unwrap_or_default());
     eprintln!(
-        "cobot: pipe this to `pigeon cobot workers secrets put --root . <worker> {}`",
+        "cobot: pipe this to `pigeon workers secrets put --root . <worker> {}`",
         backplane::cobot::ship::IMAGES_VAR
     );
     Ok(())
@@ -324,7 +324,7 @@ fn deploy(s: &WorkersState, id: &str) -> Result<(), backplane::cobot::Error> {
         let missing = workers::missing_secrets(f, &tools, &dir)?;
         if !missing.is_empty() {
             println!(
-                "cobot: {} still needs secret(s) {}; set each with `pigeon cobot workers secrets put {} KEY`",
+                "cobot: {} still needs secret(s) {}; set each with `pigeon workers secrets put {} KEY`",
                 f.spec.name,
                 missing.join(", "),
                 f.spec.name

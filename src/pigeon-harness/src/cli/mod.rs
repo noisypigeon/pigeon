@@ -1,29 +1,28 @@
 //! Command-line arguments; each command group is a cargo feature, and `dev` is always built.
-//! The groups are .claude/decisions/2026-11-16-development-src-crates-neutral-names.md §3's;
-//! the old spellings stay as hidden aliases until its step 12.
+//! The groups are .claude/decisions/2026-11-16-development-src-crates-neutral-names.md §3's.
 
 use clap::{Parser, Subcommand};
 
 #[cfg(any(feature = "agent", feature = "signing"))]
-mod backplane;
-#[cfg(feature = "infra")]
-mod cobot;
+mod agent;
 mod dev;
-mod groups;
 #[cfg(feature = "eviction")]
-mod sentinel;
+mod eviction;
+mod groups;
+#[cfg(feature = "infra")]
+mod infra;
 #[cfg(feature = "session")]
 mod session;
 
 #[cfg(any(feature = "agent", feature = "signing"))]
-pub use backplane::*;
-#[cfg(feature = "infra")]
-pub use cobot::*;
+pub use agent::*;
 pub use dev::*;
+#[cfg(feature = "eviction")]
+pub use eviction::*;
 #[cfg(any(feature = "infra", feature = "agent"))]
 pub use groups::*;
-#[cfg(feature = "eviction")]
-pub use sentinel::*;
+#[cfg(feature = "infra")]
+pub use infra::*;
 #[cfg(feature = "session")]
 pub use session::*;
 
@@ -42,7 +41,7 @@ pub enum Commands {
     /// Check the repository against its policies
     #[cfg(feature = "eviction")]
     #[command(subcommand)]
-    Eviction(SentinelCommand),
+    Eviction(EvictionCommand),
     /// Validate, render, plan and apply infrastructure units, and manage their secrets
     #[cfg(feature = "infra")]
     #[command(subcommand, version = ::backplane::cobot::VERSION)]
@@ -96,17 +95,4 @@ pub enum Commands {
     Session(SessionCommand),
     /// Build, test and check the workspace: its tasks, run from the workspace root
     Dev(DevArgs),
-    /// `pigeon eviction`'s old spelling
-    #[cfg(feature = "eviction")]
-    #[command(subcommand, hide = true)]
-    Sentinel(SentinelCommand),
-    /// The old spellings of `pigeon infra`, `sites`, `git`, `workers`, `release` and `dev scope`
-    #[cfg(feature = "infra")]
-    #[command(subcommand, hide = true, version = ::backplane::cobot::VERSION)]
-    Cobot(CobotCommand),
-    /// The old spellings of `pigeon instance`, `engines`, `ops`, `run`, `decisions`, `agent`,
-    /// `keys` and `signing`
-    #[cfg(any(feature = "agent", feature = "signing"))]
-    #[command(subcommand, hide = true, version = ::backplane::VERSION)]
-    Backplane(BackplaneCommand),
 }
