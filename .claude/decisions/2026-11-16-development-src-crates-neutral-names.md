@@ -691,3 +691,16 @@ a generated change closes, which !736 neither relies on nor changes.
   through !766's scope `tests/**`. Its own tests are `mandates.rs` and
   `tasks.rs`.
 - Nothing either ADR decides changes.
+
+### 2026-11-16: Review of !797 against !801: they agree
+
+- !797 renames agent's library from `backplane` to `agent` (§1). It touches
+  none of the four paths
+  [`2026-11-15-security-owner-approvals-always-listed.md`](2026-11-15-security-owner-approvals-always-listed.md)
+  governs: `worker/approve.rs`, `app/approvals.rs`, `approval/listed.rs`
+  and `worker/listed.rs`. The two changes met only through !797's scope
+  `src/**`.
+- Its one shared file is `tests/suite/grants.rs`, where `backplane::` paths
+  become `agent::`. The tests !801 added there follow that rename when
+  !797 restacks, and nothing they assert changes.
+- Nothing either ADR decides changes.
