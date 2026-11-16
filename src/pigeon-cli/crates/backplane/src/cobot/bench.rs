@@ -356,6 +356,27 @@ pub struct Bench {
     inner: Mutex<Inner>,
 }
 
+/// Removes the `*.lock` files a git killed by a cancel or timeout left in `git_dir`'s top level
+/// and under `refs/`; runs are one at a time, so none is live.
+fn clear_locks(git_dir: &std::path::Path) {
+    fn walk(dir: &std::path::Path, deep: bool) {
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            return;
+        };
+        for e in entries.flatten() {
+            let path = e.path();
+            let is_dir = e.file_type().is_ok_and(|t| t.is_dir());
+            if is_dir && deep {
+                walk(&path, true);
+            } else if !is_dir && path.extension().is_some_and(|x| x == "lock") {
+                let _ = std::fs::remove_file(&path);
+            }
+        }
+    }
+    walk(git_dir, false);
+    walk(&git_dir.join("refs"), true);
+}
+
 /// `pigeon-start`'s sentinel build copied under `work`, out of the `/tmp` the sandbox hides; its
 /// path, or none if it can't be copied.
 fn keep_sentinel(from: &str, work: &std::path::Path) -> Option<String> {
@@ -714,7 +735,9 @@ impl Bench {
                 Ended::NotStarted(e) => Err(format!("bench: git did not start: {e}")),
             }
         };
-        if !self.checkout().join(".git").exists() {
+        if self.checkout().join(".git").exists() {
+            clear_locks(&self.checkout().join(".git"));
+        } else {
             git(&["init", "-q"], Mode::Command, &[])?;
         }
         let head = format!("+{}:refs/bench/head", spec.reference);
@@ -1412,6 +1435,24 @@ run = "sleep 30"
         assert_eq!(b.about().1["sha"], json!(sha));
         let (_, page) = b.status(json!({ "run": "r1", "offset": 3 }).to_string().as_bytes());
         assert!(log[3..].starts_with(page["log"].as_str().expect("page")));
+    }
+
+    #[test]
+    fn locks_a_killed_git_left_do_not_stop_the_next_run() {
+        let root = tempfile::tempdir().expect("tmp");
+        let (bare, sha) = remote(root.path());
+        let work = root.path().join("work");
+        let b = bench(&work);
+        b.start(spec(&bare, &sha, "r1", &["git", "status"]));
+        assert_eq!(done(&b, "r1")["state"], "passed");
+        let git_dir = work.join("pigeon").join(".git");
+        std::fs::write(git_dir.join("index.lock"), "").expect("lock");
+        std::fs::create_dir_all(git_dir.join("refs/bench")).expect("refs");
+        std::fs::write(git_dir.join("refs/bench/head.lock"), "").expect("ref lock");
+        b.start(spec(&bare, &sha, "r2", &["git", "status"]));
+        let v = done(&b, "r2");
+        assert_eq!(v["state"], "passed", "{v}");
+        assert!(!git_dir.join("index.lock").exists());
     }
 
     #[test]
