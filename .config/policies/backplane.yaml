@@ -2,6 +2,6 @@ description: Backplane composes; it writes no file and starts no process, per 20
 target: tree
 rules:
   - find:
-      match: '^src/pigeon-cli/crates/backplane/src/'
+      match: '^src/(pigeon-cli/crates/backplane/src|pigeon-core/src)/'
       allow_under: [src/pigeon-cli/crates/backplane/src/cobot/]
       forbid_content: 'std::process::Command|Command::new|fs::write'

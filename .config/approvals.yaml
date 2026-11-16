@@ -21,8 +21,16 @@ guarded:
   - src/pigeon-cli/crates/backplane/src/passkeys.rs
   - src/pigeon-cli/crates/backplane/src/worker/passkeys.rs
   - src/pigeon-cli/crates/backplane/src/worker/passkey.js
+  - src/pigeon-core/src/approve.rs
+  - src/pigeon-core/src/access.rs
+  - src/pigeon-agent/src/worker/approve.rs
+  - src/pigeon-agent/src/worker/mandates.rs
+  - src/pigeon-agent/src/worker/elicit.rs
+  - src/pigeon-agent/src/worker/passkeys.rs
+  - src/pigeon-agent/src/worker/passkey.js
   # The approval domain's core; see .claude/decisions/2026-11-10-development-factory-crates-functional-core.md §3.
   - src/pigeon-cli/crates/backplane/src/core/approval/**
+  - src/pigeon-core/src/approval/**
   # Each role's capabilities; see .claude/decisions/2026-11-14-security-instance-members-roles-invitations.md §2.
   - .config/roles.yaml
 # The code without a mandate that may deploy; every Worker's inputs count too.
@@ -30,6 +38,8 @@ deploying:
   - infra/**
   - src/pigeon-cli/Dockerfile
   - src/pigeon-cli/pigeon-start
+  - Dockerfile
+  - pigeon-start
   - "**/migrations/**"
 spikes:
   - tooling/spikes/**
@@ -52,6 +62,12 @@ secrets:
   - src/pigeon-cli/crates/backplane/src/worker/apple.rs
   - src/pigeon-cli/crates/backplane/src/signing.rs
   - src/pigeon-cli/crates/pigeon/src/commands/signing.rs
+  - src/pigeon-agent/src/worker/platform.rs
+  - src/pigeon-agent/src/platform_job.rs
+  - src/pigeon-core/src/apple.rs
+  - src/pigeon-agent/src/worker/apple.rs
+  - src/pigeon-core/src/signing.rs
+  - src/pigeon-harness/src/commands/signing.rs
   - tooling/ci/buildkite/ios-sign.sh
   # What each role may do; see .claude/decisions/2026-11-14-security-instance-members-roles-invitations.md §2.
   - .config/roles.yaml
@@ -63,6 +79,7 @@ secret_lists:
 # .claude/decisions/2026-11-10-development-factory-crates-functional-core.md §2.
 sentinel:
   - src/pigeon-cli/crates/sentinel/**
+  - src/pigeon-eviction/**
   - .config/policies/**
   - catalog/policies/**
   - .config/approvals.yaml

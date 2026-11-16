@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: development
-* Governs: `src/pigeon-cli/crates/backplane/src/jobs.rs`, `src/pigeon-cli/crates/backplane/src/core/brief/mod.rs`, `src/pigeon-cli/crates/backplane/src/core/insights/mod.rs`, `tooling/session/models.json`
+* Governs: `src/**/jobs.rs`, `src/**/brief/mod.rs`, `src/**/insights/mod.rs`, `tooling/session/models.json`
 
 ## Context
 
@@ -690,3 +690,11 @@ spend switch.
 
   Each later brief is stacked on the one before with `after`, so the merge
   queue holds them in order. `Governs` gains `core/pool/**` when 2b merges.
+
+### 2026-11-16: Governs globs match the old and the new crate layout
+
+Per [`2026-11-16-development-src-crates-neutral-names.md`](2026-11-16-development-src-crates-neutral-names.md) §6, each
+glob under `src/pigeon-cli/` or `src/site-templates/` becomes `src/**/<tail>`
+(or `**<file>` for a workspace root file), which matches the file both before
+and after the restructure moves it. That ADR's step 12 tightens them to the
+new paths.

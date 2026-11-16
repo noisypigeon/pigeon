@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: development
-* Governs: `src/pigeon-cli/crates/backplane/src/sessions.rs`
+* Governs: `src/**/sessions.rs`
 
 ## Context
 
@@ -88,3 +88,13 @@ keeps an offer, the owner grants it on its page with a passkey, and the
 4. Opus: set the cap once live through the tool, from 50 to 50 as a no-op
    grant, and amend this ADR with the result. Each later step is a
    `limits_set`, not an amendment.
+
+## Amendments
+
+### 2026-11-16: Governs globs match the old and the new crate layout
+
+Per [`2026-11-16-development-src-crates-neutral-names.md`](2026-11-16-development-src-crates-neutral-names.md) §6, each
+glob under `src/pigeon-cli/` or `src/site-templates/` becomes `src/**/<tail>`
+(or `**<file>` for a workspace root file), which matches the file both before
+and after the restructure moves it. That ADR's step 12 tightens them to the
+new paths.

@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: development
-* Governs: `src/pigeon-cli/crates/backplane/src/cobot/state.rs`, `src/pigeon-cli/crates/backplane/src/cobot/secrets.rs`, `src/pigeon-cli/crates/backplane/src/core/infra/**`, `src/pigeon-cli/crates/backplane/src/core/change/queue.rs`, `src/pigeon-cli/crates/backplane/src/core/change/restack.rs`, `src/pigeon-cli/crates/backplane/src/reconcile.rs`, `src/pigeon-cli/crates/backplane/src/worker/merges.rs`, `src/pigeon-cli/crates/backplane/src/jobs.rs`, `catalog/cloudflare/capabilities.yaml`
+* Governs: `src/**/state.rs`, `src/**/secrets.rs`, `src/**/infra/**`, `src/**/change/queue.rs`, `src/**/change/restack.rs`, `src/**/reconcile.rs`, `src/**/worker/merges.rs`, `src/**/jobs.rs`, `catalog/cloudflare/capabilities.yaml`
 
 ## Context
 
@@ -1296,3 +1296,11 @@ The first, the ledger:
   - So the first real grant's page is what checks `granter`: it reads the
     binding, resolves the account, mints and verifies.
   - A standalone check page is still to do.
+
+### 2026-11-16: Governs globs match the old and the new crate layout
+
+Per [`2026-11-16-development-src-crates-neutral-names.md`](2026-11-16-development-src-crates-neutral-names.md) §6, each
+glob under `src/pigeon-cli/` or `src/site-templates/` becomes `src/**/<tail>`
+(or `**<file>` for a workspace root file), which matches the file both before
+and after the restructure moves it. That ADR's step 12 tightens them to the
+new paths.

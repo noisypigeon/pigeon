@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: development
-* Governs: `src/pigeon-cli/crates/backplane/src/core/change/lifecycle.rs`, `src/pigeon-cli/crates/backplane/src/core/change/stage.rs`, `src/pigeon-cli/crates/backplane/src/worker/stages.rs`, `src/pigeon-cli/crates/backplane/src/core/change/breaker.rs`, `src/pigeon-cli/crates/backplane/src/core/approval/windows.rs`, `src/pigeon-cli/crates/backplane/src/sessions.rs`, `src/pigeon-cli/crates/backplane/src/worker/tasks.rs`, `tooling/session/session.sh`, `.claude/settings.json`
+* Governs: `src/**/change/lifecycle.rs`, `src/**/change/stage.rs`, `src/**/worker/stages.rs`, `src/**/change/breaker.rs`, `src/**/approval/windows.rs`, `src/**/sessions.rs`, `src/**/worker/tasks.rs`, `tooling/session/session.sh`, `.claude/settings.json`
 
 ## Context
 
@@ -778,3 +778,11 @@ windows and mandates, and their merges wait for a deploy to pass.
 ### 2026-11-15: `session.py` is gone
 
 Per [`2026-11-15-development-no-python-rust-tooling.md`](2026-11-15-development-no-python-rust-tooling.md) step 3, `tooling/session/session.py` is deleted, so `Governs` names `tooling/session/session.sh` in its place.
+
+### 2026-11-16: Governs globs match the old and the new crate layout
+
+Per [`2026-11-16-development-src-crates-neutral-names.md`](2026-11-16-development-src-crates-neutral-names.md) §6, each
+glob under `src/pigeon-cli/` or `src/site-templates/` becomes `src/**/<tail>`
+(or `**<file>` for a workspace root file), which matches the file both before
+and after the restructure moves it. That ADR's step 12 tightens them to the
+new paths.

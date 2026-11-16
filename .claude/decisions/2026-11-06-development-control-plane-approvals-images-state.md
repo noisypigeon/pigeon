@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: development
-* Governs: `src/pigeon-cli/crates/backplane/src/grants.rs`, `src/pigeon-cli/crates/backplane/src/totp.rs`, `src/pigeon-cli/crates/backplane/src/worker/elicit.rs`, `src/pigeon-cli/crates/backplane/src/cobot/state.rs`, `infra/pigeon/workers/control/worker.yaml`, `.mcp.json`
+* Governs: `src/**/grants.rs`, `src/**/totp.rs`, `src/**/worker/elicit.rs`, `src/**/state.rs`, `infra/pigeon/workers/control/worker.yaml`, `.mcp.json`
 
 ## Context
 
@@ -305,3 +305,11 @@ What it is:
   the two ways left: `cloudflared` with a person's Access identity, or a
   client that shows forms.
 - **Grants stay.** They bind a card's code to one operation, change and head.
+
+### 2026-11-16: Governs globs match the old and the new crate layout
+
+Per [`2026-11-16-development-src-crates-neutral-names.md`](2026-11-16-development-src-crates-neutral-names.md) §6, each
+glob under `src/pigeon-cli/` or `src/site-templates/` becomes `src/**/<tail>`
+(or `**<file>` for a workspace root file), which matches the file both before
+and after the restructure moves it. That ADR's step 12 tightens them to the
+new paths.

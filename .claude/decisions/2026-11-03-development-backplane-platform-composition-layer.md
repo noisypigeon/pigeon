@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: development
-* Governs: `.config/instance.yaml`, `.config/policies/backplane.yaml`, `src/pigeon-cli/crates/backplane/src/engine.rs`, `src/pigeon-cli/crates/backplane/src/catalog.rs`, `src/pigeon-cli/crates/pigeon/src/commands/backplane.rs`, `src/pigeon-cli/crates/pigeon/src/cli/backplane.rs`
+* Governs: `.config/instance.yaml`, `.config/policies/backplane.yaml`, `src/**/engine.rs`, `src/**/catalog.rs`, `src/**/commands/backplane.rs`, `src/**/cli/backplane.rs`
 
 ## Context
 
@@ -226,3 +226,11 @@ paths:
 - in phase 7, the platform's D1 instance records replace `.config/instance.yaml`.
 
 The text above stays as written.
+
+### 2026-11-16: Governs globs match the old and the new crate layout
+
+Per [`2026-11-16-development-src-crates-neutral-names.md`](2026-11-16-development-src-crates-neutral-names.md) §6, each
+glob under `src/pigeon-cli/` or `src/site-templates/` becomes `src/**/<tail>`
+(or `**<file>` for a workspace root file), which matches the file both before
+and after the restructure moves it. That ADR's step 12 tightens them to the
+new paths.

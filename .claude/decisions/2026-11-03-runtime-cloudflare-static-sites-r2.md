@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: runtime
-* Governs: `catalog/cloudflare/modules/r2-*/**`, `catalog/cloudflare/modules/ruleset/**`, `src/pigeon-cli/crates/backplane/src/cobot/sites.rs`, `src/pigeon-cli/crates/backplane/src/cobot/s3.rs`, `src/pigeon-cli/crates/backplane/src/cobot/static_site.rs`, `src/site-templates/blog/**`
+* Governs: `catalog/cloudflare/modules/r2-*/**`, `catalog/cloudflare/modules/ruleset/**`, `src/**/sites.rs`, `src/**/s3.rs`, `src/**/static_site.rs`, `src/**/blog/**`
 
 ## Context
 
@@ -410,3 +410,11 @@ The earlier text stays as written. Workloads without `static_site.site` build as
 - a unit may hold sites in `<unit>/sites/<name>/`, which `sites build` and `publish` find.
 
 Past `static-site-template/v*` tags stay, and the blog builds from them until it re-pins.
+
+### 2026-11-16: Governs globs match the old and the new crate layout
+
+Per [`2026-11-16-development-src-crates-neutral-names.md`](2026-11-16-development-src-crates-neutral-names.md) §6, each
+glob under `src/pigeon-cli/` or `src/site-templates/` becomes `src/**/<tail>`
+(or `**<file>` for a workspace root file), which matches the file both before
+and after the restructure moves it. That ADR's step 12 tightens them to the
+new paths.

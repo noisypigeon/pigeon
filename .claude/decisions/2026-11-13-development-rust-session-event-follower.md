@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: development
-* Governs: `.claude/settings.json`, `src/pigeon-cli/crates/backplane/src/worker/events.rs`, `src/pigeon-cli/crates/backplane/src/core/session/*.rs`, `src/pigeon-cli/crates/pigeon/src/cli/session.rs`, `src/pigeon-cli/crates/pigeon/src/commands/session.rs`, `tooling/session/session.sh`
+* Governs: `.claude/settings.json`, `src/**/worker/events.rs`, `src/**/session/*.rs`, `src/**/cli/session.rs`, `src/**/commands/session.rs`, `tooling/session/session.sh`
 
 ## Context
 
@@ -292,3 +292,11 @@ Per
 ### 2026-11-15: `session.py` is gone
 
 Per [`2026-11-15-development-no-python-rust-tooling.md`](2026-11-15-development-no-python-rust-tooling.md) step 3, `tooling/session/session.py` is deleted, so `Governs` drops it; `tooling/session/session.sh` was already named.
+
+### 2026-11-16: Governs globs match the old and the new crate layout
+
+Per [`2026-11-16-development-src-crates-neutral-names.md`](2026-11-16-development-src-crates-neutral-names.md) §6, each
+glob under `src/pigeon-cli/` or `src/site-templates/` becomes `src/**/<tail>`
+(or `**<file>` for a workspace root file), which matches the file both before
+and after the restructure moves it. That ADR's step 12 tightens them to the
+new paths.

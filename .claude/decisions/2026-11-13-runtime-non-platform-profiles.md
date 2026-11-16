@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: runtime
-* Governs: `catalog/pigeon/kinds/**`, `catalog/cloudflare/capabilities.yaml`, `src/pigeon-cli/crates/backplane/src/instance.rs`, `src/pigeon-cli/crates/backplane/src/worker/app.rs`, `src/pigeon-ios/Pigeon/**`, `src/pigeon-ios/PigeonCore/**`
+* Governs: `catalog/pigeon/kinds/**`, `catalog/cloudflare/capabilities.yaml`, `src/**/instance.rs`, `src/**/worker/app.rs`, `src/pigeon-ios/Pigeon/**`, `src/pigeon-ios/PigeonCore/**`
 
 ## Context
 
@@ -328,3 +328,11 @@ this ADR means an **instance**, and its names follow that ADR's §5 table:
 - the app's **Add profile** is **Add instance**.
 
 Step 3 builds under these names from the start, so nothing is renamed twice.
+
+### 2026-11-16: Governs globs match the old and the new crate layout
+
+Per [`2026-11-16-development-src-crates-neutral-names.md`](2026-11-16-development-src-crates-neutral-names.md) §6, each
+glob under `src/pigeon-cli/` or `src/site-templates/` becomes `src/**/<tail>`
+(or `**<file>` for a workspace root file), which matches the file both before
+and after the restructure moves it. That ADR's step 12 tightens them to the
+new paths.

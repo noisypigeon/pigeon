@@ -417,6 +417,7 @@ boundary. The other steps are briefs for Sonnet executors.
   - Backplane's split (steps 6 and 7) follows the test ADR's briefs 2b, 5a
     and 5b1 to 5b4, which touch only `backplane/tests/suite/**` and
     `tooling/ci/test-map.sh`.
+
 ### 2026-11-16: Reviewed against the bench ADR (!669); they agree
 
 Reviews !669, the bench ADR's step 4, against this ADR and
@@ -439,3 +440,58 @@ Reviews !669, the bench ADR's step 4, against this ADR and
     root. It accepts `mise run <task>` beside it until step 12.
   - The bench ADR records this in its own amendment when step 7 merges.
   - The `Bench` class and its migration tag `v4` keep their names.
+
+### 2026-11-16: Step 2 as built, and the changelog's `### Merged` heading
+
+- **Step 2** (this ADR's change after !674):
+  - 66 ADRs' `Governs` globs take §6's form, each with an amendment. The
+    test globs !674 wrote are already in that form and are left alone.
+  - `.config/approvals.yaml` guards each new path beside its old one, so it
+    guards the same files and loosens nothing.
+  - `backplane.yaml`, `sentinel-actions.yaml` and `layout.yaml` match both
+    places. `layout.yaml` also allows the root workspace files and
+    `rust-toolchain.toml`, ignores `.pigeon/` and `target/`, and no longer
+    requires `src/pigeon-cli`.
+  - The ledger's count rule is the test ADR's own, shipped in !674.
+- **§7's layout.** Each day's commit lines sit under `### Merged`, below
+  `### Released`. Without a heading, a blank line doesn't stop CommonMark
+  from joining the two lists into one. Agreed with the changelog-backfill
+  planner.
+
+### 2026-11-16: The checks read the layout from the tree, before anything moves (step 4 splits)
+
+- **The gate runs `main`'s `pigeon`, not the change's.** The bound job and
+  every check job run `main`'s newest build from `builds/`. The GitHub
+  checks run `main`'s `ci.yml`. Today both have the layout built in:
+  - `scope::WORKSPACE = "src/pigeon-cli"`, the directory every check runs in;
+  - crates found by reading `<WORKSPACE>/crates/`;
+  - `WORKER` and `WASM_ONLY` (`pigeon-backplane` and its `worker/` directory);
+  - `PIGEON_SHARED` and the per-feature clippies of package `pigeon`;
+  - `IMAGE_BLOCKS` and `builds()` (`src/pigeon-cli/…` paths);
+  - `--root ../..` in check argv, and `actions::TEST_MAP`;
+  - `ci.yml`'s `working-directory`, cache paths and `tests.json` path.
+
+  A change that moves the workspace or renames a package would be checked
+  by a `main` that looks for the old layout, and would fail its own gate.
+- **So the layout becomes data in the checked tree.** Step 4 splits in two:
+  - **4a (planner; guarded for `ci.yml`).** Each item above is read from the
+    checked-out tree, not from constants:
+    - the workspace is the root `Cargo.toml` when it has `[workspace]`, else
+      `src/pigeon-cli/Cargo.toml`;
+    - crates come from its `members` globs;
+    - the worker package, its feature and target, its wasm-only directories,
+      the CLI package and its shared files, and the image inputs are in that
+      manifest's `[workspace.metadata.pigeon]`;
+    - argv's `--root` is the workspace's path back to the root;
+    - `ci.yml` finds the workspace the same way, in a first step that sets
+      `working-directory`, and keys its cache on `**/Cargo.lock`;
+    - `behaviours.sh` and `test-map.sh` find it the same way.
+
+    4a moves nothing. Its tests cover both layouts.
+  - **4b (brief)** is the move itself, as step 4 described. It changes only
+    data (manifests, metadata, paths), and no code.
+- **Order.** 4b, and every later crate move, merges only after a deploy of
+  `main` holding 4a has passed. From then on, the checking `pigeon` reads the
+  layout from the tree it checks. The same rule makes steps 5 to 7 data
+  edits for the checks: each renames or moves a package in the manifests
+  and in `[workspace.metadata.pigeon]` together.

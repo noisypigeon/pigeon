@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: development
-* Governs: `src/pigeon-cli/crates/backplane/src/worker/main_run.rs`, `src/pigeon-cli/crates/backplane/src/ship.rs`, `src/pigeon-cli/crates/backplane/src/cobot/ship*.rs`, `src/pigeon-cli/crates/backplane/migrations/**`, `.config/policies/migrations.yaml`, `infra/pigeon/workers/control/worker.yaml`
+* Governs: `src/**/worker/main_run.rs`, `src/**/ship.rs`, `src/**/ship*.rs`, `src/**/migrations/**`, `.config/policies/migrations.yaml`, `infra/pigeon/workers/control/worker.yaml`
 
 ## Context
 
@@ -274,3 +274,11 @@ Each step is a change through the pipeline, in this order:
   `deploy_retry` of the same SHA.
 - See the iOS approvals ADR's 2026-11-15 amendment,
   [`2026-11-12-runtime-ios-app-approvals-insights.md`](2026-11-12-runtime-ios-app-approvals-insights.md).
+
+### 2026-11-16: Governs globs match the old and the new crate layout
+
+Per [`2026-11-16-development-src-crates-neutral-names.md`](2026-11-16-development-src-crates-neutral-names.md) §6, each
+glob under `src/pigeon-cli/` or `src/site-templates/` becomes `src/**/<tail>`
+(or `**<file>` for a workspace root file), which matches the file both before
+and after the restructure moves it. That ADR's step 12 tightens them to the
+new paths.

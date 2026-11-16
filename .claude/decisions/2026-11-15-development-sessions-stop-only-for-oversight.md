@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: development
-* Governs: `CLAUDE.md`, `.claude/settings.json`, `src/pigeon-cli/crates/backplane/src/core/change/stage.rs`, `src/pigeon-cli/crates/backplane/src/worker/mod.rs`, `src/pigeon-cli/crates/backplane/src/worker/api.rs`, `src/pigeon-cli/crates/backplane/src/wire.rs`, `src/pigeon-cli/crates/backplane/src/mcp.rs`, `src/pigeon-cli/crates/backplane/src/sessions.rs`, `src/pigeon-cli/crates/backplane/src/tasks.rs`, `src/pigeon-cli/crates/backplane/src/worker/push.rs`, `src/pigeon-cli/crates/backplane/src/core/session/launch.rs`
+* Governs: `CLAUDE.md`, `.claude/settings.json`, `src/**/change/stage.rs`, `src/**/worker/mod.rs`, `src/**/worker/api.rs`, `src/**/wire.rs`, `src/**/mcp.rs`, `src/**/sessions.rs`, `src/**/tasks.rs`, `src/**/worker/push.rs`, `src/**/session/launch.rs`
 
 ## Context
 
@@ -401,3 +401,11 @@ builds on §1 without changing it:
     `change_authorize` to a session.
 - **Execution.** One `fix(backplane)` change, with this amendment and a test
   that replays !559.
+
+### 2026-11-16: Governs globs match the old and the new crate layout
+
+Per [`2026-11-16-development-src-crates-neutral-names.md`](2026-11-16-development-src-crates-neutral-names.md) §6, each
+glob under `src/pigeon-cli/` or `src/site-templates/` becomes `src/**/<tail>`
+(or `**<file>` for a workspace root file), which matches the file both before
+and after the restructure moves it. That ADR's step 12 tightens them to the
+new paths.

@@ -4,8 +4,8 @@
 * Model: Claude
 * Author: Willow Graysen (@noisypigeon).
 * Category: runtime
-* Governs: `src/pigeon-ios/Pigeon/**`, `src/pigeon-ios/PigeonCore/**`, `src/pigeon-ios/PigeonCoreTests/**`, `src/pigeon-ios/project.yml`, `src/pigeon-cli/crates/backplane/src/core/app/**`, `src/pigeon-cli/crates/backplane/src/devices.rs`, `src/pigeon-cli/crates/backplane/src/worker/devices.rs`, `src/pigeon-cli/crates/backplane/src/core/insights/**`, `src/pigeon-cli/crates/backplane/src/insights.rs`, `src/pigeon-cli/crates/backplane/src/worker/insights.rs`, `src/pigeon-cli/crates/backplane/migrations/0005_insights.sql`, `src/pigeon-cli/crates/backplane/migrations/0007_insights_sources.sql`, `.config/insights.yaml`, `src/pigeon-cli/crates/backplane/src/worker/app.rs`
-* Governs: `src/pigeon-ios/Pigeon/**`, `src/pigeon-ios/project.yml`, `src/pigeon-cli/crates/backplane/src/core/app/**`, `src/pigeon-cli/crates/backplane/src/devices.rs`, `src/pigeon-cli/crates/backplane/src/worker/devices.rs`, `src/pigeon-cli/crates/backplane/src/core/insights/**`, `src/pigeon-cli/crates/backplane/src/insights.rs`, `src/pigeon-cli/crates/backplane/src/worker/insights.rs`, `src/pigeon-cli/crates/backplane/migrations/0005_insights.sql`, `.config/insights.yaml`, `src/pigeon-cli/crates/backplane/src/worker/app.rs`, `src/pigeon-cli/crates/backplane/src/worker/apns.rs`
+* Governs: `src/pigeon-ios/Pigeon/**`, `src/pigeon-ios/PigeonCore/**`, `src/pigeon-ios/PigeonCoreTests/**`, `src/pigeon-ios/project.yml`, `src/**/app/**`, `src/**/devices.rs`, `src/**/worker/devices.rs`, `src/**/insights/**`, `src/**/insights.rs`, `src/**/worker/insights.rs`, `src/**/migrations/0005_insights.sql`, `src/**/migrations/0007_insights_sources.sql`, `.config/insights.yaml`, `src/**/worker/app.rs`
+* Governs: `src/pigeon-ios/Pigeon/**`, `src/pigeon-ios/project.yml`, `src/**/app/**`, `src/**/devices.rs`, `src/**/worker/devices.rs`, `src/**/insights/**`, `src/**/insights.rs`, `src/**/worker/insights.rs`, `src/**/migrations/0005_insights.sql`, `.config/insights.yaml`, `src/**/worker/app.rs`, `src/**/worker/apns.rs`
 
 ## Context
 
@@ -762,3 +762,11 @@ was taken over every session, so it disagreed with the empty list.
 1. `PigeonCore`: `effectiveFilter(_:_:)`, `silentCount(_:by:)` and
    `visible(_:by:showSilent:)` through it, with tests; `TrackerView` uses
    them for the chips, the list and the counts.
+
+### 2026-11-16: Governs globs match the old and the new crate layout
+
+Per [`2026-11-16-development-src-crates-neutral-names.md`](2026-11-16-development-src-crates-neutral-names.md) §6, each
+glob under `src/pigeon-cli/` or `src/site-templates/` becomes `src/**/<tail>`
+(or `**<file>` for a workspace root file), which matches the file both before
+and after the restructure moves it. That ADR's step 12 tightens them to the
+new paths.

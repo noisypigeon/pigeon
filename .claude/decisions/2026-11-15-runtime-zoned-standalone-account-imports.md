@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: runtime
-* Governs: `catalog/cloudflare/kinds/zone/schema.json`, `catalog/cloudflare/kinds/git-repo/schema.json`, `src/pigeon-cli/crates/backplane/src/cobot/apex.rs`, `src/pigeon-cli/crates/backplane/src/cobot/adopt.rs`, `src/pigeon-cli/crates/backplane/src/cobot/git.rs`, `infra/cloudflare/config.yaml`
+* Governs: `catalog/cloudflare/kinds/zone/schema.json`, `catalog/cloudflare/kinds/git-repo/schema.json`, `src/**/apex.rs`, `src/**/adopt.rs`, `src/**/git.rs`, `infra/cloudflare/config.yaml`
 
 ## Context
 
@@ -308,3 +308,11 @@ The owner moved one piece of §8 step 4 ahead of the rest:
 - **One note for §5's import.** A record key is `[a-z0-9]` words joined by
   `-`, so an imported record at `*` can't be keyed `*-<type>`. Step 3's brief
   names its key; the rest of §5 is unchanged.
+
+### 2026-11-16: Governs globs match the old and the new crate layout
+
+Per [`2026-11-16-development-src-crates-neutral-names.md`](2026-11-16-development-src-crates-neutral-names.md) §6, each
+glob under `src/pigeon-cli/` or `src/site-templates/` becomes `src/**/<tail>`
+(or `**<file>` for a workspace root file), which matches the file both before
+and after the restructure moves it. That ADR's step 12 tightens them to the
+new paths.

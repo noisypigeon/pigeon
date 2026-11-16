@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: development
-* Governs: `src/pigeon-cli/crates/backplane/src/changes.rs`, `src/pigeon-cli/crates/backplane/src/reconcile.rs`, `src/pigeon-cli/crates/backplane/src/sessions.rs`, `src/pigeon-cli/crates/backplane/src/tasks.rs`, `src/pigeon-cli/crates/backplane/src/worker/change.rs`, `src/pigeon-cli/crates/sentinel/src/target.rs`
+* Governs: `src/**/change/mod.rs`, `src/**/reconcile.rs`, `src/**/sessions.rs`, `src/**/tasks.rs`, `src/**/worker/change.rs`, `src/**/target.rs`
 
 ## Context
 
@@ -335,3 +335,11 @@ Steps 2 and 3 landed there as F1, F2 and the family slot.
   close as §2 says.
 - **This is not an eviction.** It closes only never-pushed generated changes
   and tasks on changes that have ended.
+
+### 2026-11-16: Governs globs match the old and the new crate layout
+
+Per [`2026-11-16-development-src-crates-neutral-names.md`](2026-11-16-development-src-crates-neutral-names.md) §6, each
+glob under `src/pigeon-cli/` or `src/site-templates/` becomes `src/**/<tail>`
+(or `**<file>` for a workspace root file), which matches the file both before
+and after the restructure moves it. That ADR's step 12 tightens them to the
+new paths.

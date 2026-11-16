@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: development
-* Governs: `src/pigeon-cli/crates/backplane/src/mirroring.rs`, `src/pigeon-cli/crates/backplane/src/worker/github.rs`, `src/pigeon-cli/crates/backplane/src/worker/main_run.rs`, `src/pigeon-cli/crates/backplane/tests/state/mirroring/**`, `src/pigeon-cli/crates/backplane/src/cobot/git.rs`
+* Governs: `src/**/mirroring.rs`, `src/**/worker/github.rs`, `src/**/worker/main_run.rs`, `src/**/tests/state/mirroring/**`, `src/**/git.rs`
 
 ## Context
 
@@ -115,3 +115,11 @@ A mirror job is one fetch and one push: seconds of `standard-1`, once per merge.
 - **The mirror is set by the Worker var `MIRROR`.** Without it nothing is mirrored, so another instance's control plane opts in by setting it.
 - **Until the App's secrets are set,** each mirror fails with "the secret `GITHUB_APP_ID` is not set". It backs off to hourly, and the digest names it after 24 hours.
 - **`deploy_retry`** also clears the mirror's wait, and answers 409 only when neither a deploy nor a mirror can start.
+
+### 2026-11-16: Governs globs match the old and the new crate layout
+
+Per [`2026-11-16-development-src-crates-neutral-names.md`](2026-11-16-development-src-crates-neutral-names.md) §6, each
+glob under `src/pigeon-cli/` or `src/site-templates/` becomes `src/**/<tail>`
+(or `**<file>` for a workspace root file), which matches the file both before
+and after the restructure moves it. That ADR's step 12 tightens them to the
+new paths.

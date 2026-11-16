@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: development
-* Governs: `src/pigeon-cli/crates/backplane/src/core/change/jobs.rs`, `src/pigeon-cli/crates/backplane/src/worker/change.rs`
+* Governs: `src/**/change/jobs.rs`, `src/**/worker/change.rs`
 
 ## Context
 
@@ -250,3 +250,11 @@ storage leaves an executor nothing to follow to the letter.
 - Live: no job sits `queued` with 0 attempts beyond 60 s with capacity free.
   If one does, `job.redispatched` names it within 5 minutes, and the digest
   names it too.
+
+### 2026-11-16: Governs globs match the old and the new crate layout
+
+Per [`2026-11-16-development-src-crates-neutral-names.md`](2026-11-16-development-src-crates-neutral-names.md) §6, each
+glob under `src/pigeon-cli/` or `src/site-templates/` becomes `src/**/<tail>`
+(or `**<file>` for a workspace root file), which matches the file both before
+and after the restructure moves it. That ADR's step 12 tightens them to the
+new paths.

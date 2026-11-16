@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: runtime
-* Governs: `src/pigeon-ios/Pigeon/**`, `src/pigeon-ios/PigeonCore/**`, `.config/roles.yaml`, `catalog/pigeon/kinds/platform/schema.json`, `infra/pigeon/workers/control/worker.yaml`, `src/pigeon-cli/crates/backplane/src/worker/members.rs`
+* Governs: `src/pigeon-ios/Pigeon/**`, `src/pigeon-ios/PigeonCore/**`, `.config/roles.yaml`, `catalog/pigeon/kinds/platform/schema.json`, `infra/pigeon/workers/control/worker.yaml`, `src/**/worker/members.rs`
 
 ## Context
 
@@ -405,3 +405,11 @@ This amendment adds `src/pigeon-cli/crates/backplane/src/standup_job.rs`,
 `src/pigeon-cli/crates/backplane/src/worker/instances.rs` and
 `src/pigeon-cli/crates/backplane/src/cobot/workers.rs`'s `bind_settings` to
 what the ADR governs.
+
+### 2026-11-16: Governs globs match the old and the new crate layout
+
+Per [`2026-11-16-development-src-crates-neutral-names.md`](2026-11-16-development-src-crates-neutral-names.md) §6, each
+glob under `src/pigeon-cli/` or `src/site-templates/` becomes `src/**/<tail>`
+(or `**<file>` for a workspace root file), which matches the file both before
+and after the restructure moves it. That ADR's step 12 tightens them to the
+new paths.

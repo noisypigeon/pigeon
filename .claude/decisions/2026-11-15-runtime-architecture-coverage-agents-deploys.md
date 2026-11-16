@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: runtime
-* Governs: `src/pigeon-cli/crates/backplane/src/architecture/**`, `src/**/tests/suite/architecture.rs`, `src/pigeon-cli/crates/backplane/src/catalog.rs`, `src/pigeon-cli/crates/backplane/src/cobot/scope.rs`, `src/pigeon-cli/crates/backplane/src/jobs.rs`, `src/pigeon-cli/crates/backplane/src/wire.rs`, `src/pigeon-cli/crates/backplane/src/worker/mod.rs`, `src/site-templates/architecture/templates/index.html`, `src/site-templates/architecture/static/assets/css/main.css`, `CLAUDE.md`
+* Governs: `src/**/architecture/**`, `src/**/tests/suite/architecture.rs`, `src/**/catalog.rs`, `src/**/scope.rs`, `src/**/jobs.rs`, `src/**/wire.rs`, `src/**/worker/mod.rs`, `src/**/architecture/templates/index.html`, `src/**/architecture/static/assets/css/main.css`, `CLAUDE.md`
 
 ## Context
 
@@ -222,3 +222,11 @@ either change what it lacks.
   [`2026-11-16-development-one-test-binary-per-crate.md`](2026-11-16-development-one-test-binary-per-crate.md)
   steps 3 and 4 move it.
 - Once those steps merge, the globs become the suite's paths.
+
+### 2026-11-16: Governs globs match the old and the new crate layout
+
+Per [`2026-11-16-development-src-crates-neutral-names.md`](2026-11-16-development-src-crates-neutral-names.md) §6, each
+glob under `src/pigeon-cli/` or `src/site-templates/` becomes `src/**/<tail>`
+(or `**<file>` for a workspace root file), which matches the file both before
+and after the restructure moves it. That ADR's step 12 tightens them to the
+new paths.

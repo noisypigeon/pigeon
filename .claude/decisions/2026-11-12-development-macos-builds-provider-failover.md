@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: development
-* Governs: `src/pigeon-ios/check.sh`, `src/pigeon-ios/archive.sh`, `.github/workflows/ci.yml`, `tooling/ci/buildkite/ios-sign.sh`, `src/pigeon-cli/crates/backplane/src/iosrelease.rs`, `src/pigeon-cli/crates/backplane/src/actions.rs`, `src/pigeon-cli/crates/backplane/src/worker/buildkite.rs`, `.config/insights.yaml`
+* Governs: `src/pigeon-ios/check.sh`, `src/pigeon-ios/archive.sh`, `.github/workflows/ci.yml`, `tooling/ci/buildkite/ios-sign.sh`, `src/**/iosrelease.rs`, `src/**/actions.rs`, `src/**/worker/buildkite.rs`, `.config/insights.yaml`
 
 ## Context
 
@@ -293,3 +293,11 @@ Verification, after the change merges:
 4. A release's `sign` is proven on 26.6 only by an `ios.release`, which the
    owner starts: the archive, on GitHub's `macos-26`, carries `DTXcode`
    `2660`, and `ios-sign.sh` exports and uploads it.
+
+### 2026-11-16: Governs globs match the old and the new crate layout
+
+Per [`2026-11-16-development-src-crates-neutral-names.md`](2026-11-16-development-src-crates-neutral-names.md) §6, each
+glob under `src/pigeon-cli/` or `src/site-templates/` becomes `src/**/<tail>`
+(or `**<file>` for a workspace root file), which matches the file both before
+and after the restructure moves it. That ADR's step 12 tightens them to the
+new paths.

@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: development
-* Governs: `catalog/README.md`, `catalog/*/capabilities.yaml`, `infra/README.md`, `infra/pigeon/**`, `.config/policies/secrets*.yaml`, `src/pigeon-cli/crates/backplane/src/cobot/catalog.rs`
+* Governs: `catalog/README.md`, `catalog/*/capabilities.yaml`, `infra/README.md`, `infra/pigeon/**`, `.config/policies/secrets*.yaml`, `src/**/catalog.rs`
 
 ## Context
 
@@ -661,3 +661,11 @@ So phase 4 designs every run to survive a stop, rather than relying on a run's l
 - A signed request without a bearer header is accepted, and an unsigned one is refused.
 - `--network` with neither mode is refused.
 - Every existing `serve` test still passes in plain, TLS and signed modes.
+
+### 2026-11-16: Governs globs match the old and the new crate layout
+
+Per [`2026-11-16-development-src-crates-neutral-names.md`](2026-11-16-development-src-crates-neutral-names.md) §6, each
+glob under `src/pigeon-cli/` or `src/site-templates/` becomes `src/**/<tail>`
+(or `**<file>` for a workspace root file), which matches the file both before
+and after the restructure moves it. That ADR's step 12 tightens them to the
+new paths.

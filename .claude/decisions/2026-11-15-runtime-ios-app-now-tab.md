@@ -4,7 +4,7 @@
 * Model: Claude
 * Author: Willow Graysen (@noisypigeon).
 * Category: runtime
-* Governs: `src/pigeon-ios/Pigeon/RootView.swift`, `src/pigeon-ios/Pigeon/TrackerView.swift`, `src/pigeon-ios/PigeonCore/Tracker.swift`, `src/pigeon-ios/PigeonCoreTests/TrackerTests.swift`, `src/pigeon-cli/crates/backplane/src/core/app/tracker.rs`
+* Governs: `src/pigeon-ios/Pigeon/RootView.swift`, `src/pigeon-ios/Pigeon/TrackerView.swift`, `src/pigeon-ios/PigeonCore/Tracker.swift`, `src/pigeon-ios/PigeonCoreTests/TrackerTests.swift`, `src/**/app/tracker.rs`
 
 ## Context
 
@@ -204,3 +204,11 @@ own:
   existing tracker read, which the single-entry-point ADR names
   `tracker.show`; its result keeps this shape when it becomes that
   operation.
+
+### 2026-11-16: Governs globs match the old and the new crate layout
+
+Per [`2026-11-16-development-src-crates-neutral-names.md`](2026-11-16-development-src-crates-neutral-names.md) §6, each
+glob under `src/pigeon-cli/` or `src/site-templates/` becomes `src/**/<tail>`
+(or `**<file>` for a workspace root file), which matches the file both before
+and after the restructure moves it. That ADR's step 12 tightens them to the
+new paths.
