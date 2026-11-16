@@ -632,3 +632,61 @@ spend switch.
   - no Container, log, event or report holds `POOL_ANTHROPIC_KEY`, checked
     by `grep` of the R2 logs for its prefix;
   - a task token stops working at its task's close.
+
+## Amendments
+
+### 2026-11-15: The owner is on Ultra: a $200 credit, $100 Console limits, and step 2 in three briefs
+
+- **What changed.** The owner moved from Max to Ultra. Ultra's included
+  Claude Platform credit is **$200 USD a month**, against Max's $100
+  ([API credits for Max, Ultra, and Team plans](https://platform.claude.com/docs/en/about-claude/api-credits-for-subscribers)).
+  - On an upgrade from Max, a prorated credit arrives at once, then $200 each
+    billing cycle.
+  - A linked organization stays linked.
+  - Credit of exactly $200 isn't "over $200", so the organization stays at
+    least the Start tier, with a $500 tier cap.
+- **The numbers.** The rules of §2 are unchanged; their values follow the
+  credit.
+
+  | | Max (as written) | Ultra (now) |
+  | --- | --- | --- |
+  | `cycle` limit: the credit | $100 | **$200** |
+  | Admit line, 90% of `cycle` | $90 | **$180** |
+  | Stop line, 97% of `cycle` | $97 | **$194** |
+  | Workspace monthly spend limit (`month`) | $50 | **$100** |
+  | Organization monthly spend limit | $50 | **$100** |
+  | `month`'s admit and stop lines | $45, $48.50 | **$90, $97** |
+
+  - The workspace limit is half the credit for §2's reason: two calendar
+    months fall in one billing cycle.
+  - pigeon can use up to about $180 a cycle, about $90 in each month's part.
+- **The hard rule holds.** Spend never exceeds the included credit.
+  - Layer A is unchanged: no purchased balance, auto-reload off, no payment
+    method. The provider stops at zero whatever pigeon's numbers say.
+  - **The first, prorated cycle** may hold less than $200. pigeon's ledger
+    assumes $200 from the first full cycle; step 9 turns the pool on no
+    earlier than that. If it's on sooner, the provider stops at the real
+    balance. A stop under half the ledger's limit trips §2's
+    meter-disagrees tripwire, which pauses the pool and files an owner item.
+  - **A later downgrade** to Max is the same case until `.config/pool.yaml`
+    is changed back to $100 and $50, an owner-tier edit.
+- **`.config/pool.yaml`.**
+  - `anthropic.credit_usd` becomes `200` and `anthropic.month_limit_usd`
+    becomes `100`.
+  - The change is in step 3, the owner-tier change that makes the file
+    guarded, so the new spend limit carries the owner's passkey.
+  - !589 merged the file with Max's values. It is disabled and reads no
+    key, so nothing can spend at either value until step 9.
+- **The owner's steps, §10, with the new numbers:**
+  - step 2 now expects **$200** under Promotional credits;
+  - step 4 sets the workspace's **and** the organization's Monthly spend
+    limit to **$100**.
+
+  Nothing else changes.
+- **Step 2 splits in three, and its first part lands.**
+  - **2a:** b37, `core/pool/mod.rs` and `config.rs`, merged as !589.
+  - **2a2:** b40, `ledger.rs` and `route.rs`, accepted as !615.
+  - **2b:** b41, `gateway.rs` and `anthropic.rs`, after !615.
+
+  Each later brief is stacked on the one before with `after`, so the merge
+  queue holds them in order. `Governs` gains `core/pool/**` when 2b merges.
