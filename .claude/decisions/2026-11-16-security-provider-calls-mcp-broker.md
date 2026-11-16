@@ -1,0 +1,298 @@
+## Provider calls go through MCP: one brokered operation, `provider.call`, checked like every other and credentialed per call
+
+* Date: 2026-11-16
+* Model: Claude Opus 5.5
+* Author: Willow Graysen (@noisypigeon).
+* Category: security
+* Governs: `src/**/worker/github.rs`, `src/**/worker/buildkite.rs`, `src/**/worker/bitrise.rs`, `src/**/worker/apple.rs`, `src/**/worker/insights.rs`, `src/**/cobot/cloudflare.rs`, `src/**/architecture/network.rs`
+
+## Context
+
+The owner's goal:
+
+1. Every place pigeon calls a provider's API directly calls that provider's
+   MCP server instead, where one exists and is suitable.
+2. Where none is usable, this ADR records the alternative.
+3. Every external MCP call goes through one pigeon operation. That operation
+   runs the same checks as any other operation before it forwards the call.
+
+It builds on:
+
+- [`2026-11-15-runtime-one-mcp-entry-point.md`](2026-11-15-runtime-one-mcp-entry-point.md),
+  for `run()` as the one authorizer and the registry's `asks`, `capability`
+  and `doors`;
+- [`2026-11-12-development-grants-applies-rescue-yield.md`](2026-11-12-development-grants-applies-rescue-yield.md),
+  for `GRANTER` and `core::minting`;
+- [`2026-11-14-security-provider-connect-browser-grants.md`](2026-11-14-security-provider-connect-browser-grants.md),
+  for provider adapters;
+- [`2026-11-15-runtime-architecture-coverage-agents-deploys.md`](2026-11-15-runtime-architecture-coverage-agents-deploys.md),
+  for the outbound-host test.
+
+### What ships today (artifacts/main, 2026-11-16)
+
+**The one MCP entry point: only the ADR has merged (!605).**
+
+- Its execution changes were all closed unmerged:
+  - !626, the registry's `asks`, `capability` and `doors`;
+  - !627, the route inventory;
+  - !629, the session check;
+  - !637 and !641, the bound app proofs.
+- Briefs b42, b43, b45 and b47 have no merged change.
+- `/mcp` still has none of its planned checks:
+  - it mints an `Mcp-Session-Id` and never checks it;
+  - it has no `GET` stream;
+  - `/v0/events` is unaudited;
+  - 19 of the 20 `/v0/app/*` routes bypass `run()`;
+  - the app's proofs are unbound.
+
+**Direct provider calls.** pigeon has no MCP client. Every provider call
+below is plain HTTP, made in one of three ways:
+
+- `worker::Fetch` in the Worker;
+- `ureq` in Containers and the CLI;
+- `curl` in shell scripts.
+
+| # | Provider | Where | What | Credential today |
+|---|---|---|---|---|
+| G1 | GitHub REST | `worker/github.rs` (ChangeRun, MainRun) | dispatch `ci.yml`, list and get runs and jobs, job logs, artifacts, cancel, compare, get commit | an installation token minted per job from the App key |
+| G2 | GitHub git | `cobot/git.rs` (Runner) | mirror push and branch delete | an installation token in the job spec |
+| C1 | Cloudflare REST, credential plane | `worker/platform.rs`, `worker/minting.rs`, `worker/mod.rs` | mint, list, verify and revoke tokens; put Worker secrets with a helper token | `ARTIFACTS_TOKEN`, `GRANTER` |
+| C2 | Cloudflare GraphQL | `worker/insights.rs` | Analytics, hourly | `OBSERVABILITY_TOKEN` |
+| C3 | Cloudflare REST, admin | `cobot/cloudflare.rs`, `cobot/artifacts.rs`, `cobot/ship.rs`, `standup_job.rs` (Containers, CLI) | accounts, zones, R2 buckets, Artifacts repos, deployments, subdomain | `CLOUDFLARE_API_TOKEN` handed to the job |
+| C4 | Cloudflare engines | `cobot/tofu.rs`, `cobot/workers.rs` (wrangler) | plan, apply, deploy, secrets, containers | the same, minted |
+| C5 | Cloudflare data | R2 S3 (state, sites, mirror), registry push, Artifacts git | bytes | SigV4 keys, minted git tokens |
+| B1 | Buildkite REST | `worker/buildkite.rs`, `worker/insights.rs` | create, get, cancel builds; jobs; artifacts; pipeline config | `BUILDKITE_TOKEN` |
+| R1 | Bitrise REST | `worker/bitrise.rs` | trigger, get, abort builds; artifacts; `bitrise.yml` | `BITRISE_TOKEN` |
+| A1 | App Store Connect | `worker/apple.rs` | bundle IDs, profiles, apps, builds | an ES256 JWT signed in the Worker |
+| A2 | App Store Connect upload | `pigeon … signing upload` on the Buildkite agent | Build Uploads and presigned parts | an upload JWT from the Worker's grant |
+| P1 | APNs, Web Push | `worker/apns.rs`, `worker/push.rs` | notification delivery | the APNs key, VAPID |
+| V1 | Verifiers | Access JWKS, Buildkite agent JWKS | public key fetch | none |
+| D1 | Build inputs | `Dockerfile`, `ci.yml`, `imagebuild.rs`, `ios/ci.sh`, `ios-sign.sh` | pinned tarballs, npm, rustup | none |
+
+Anthropic's API is not called anywhere. `core::pool`'s gateway is config
+only, and disabled.
+
+**The coverage test has gaps.** `architecture/network.rs` reads only
+literal `"https://` hosts in the backplane crate, and skips `cobot/`. So
+these hosts are invisible to it:
+
+- the Container and CLI calls;
+- R2;
+- the Access certs.
+
+### Which providers have a usable MCP server (2026-11)
+
+| Provider | Server | Auth for a headless caller | Fit |
+|---|---|---|---|
+| GitHub | GitHub's hosted remote server; toolsets `actions`, `repos` | a bearer token; whether it takes an App installation token is unconfirmed (step 2) | G1, except `compare`, which `list_commits` and `get_commit` cover |
+| Cloudflare | `mcp.cloudflare.com/mcp`, the whole API, Code Mode or one tool per endpoint; domain servers such as GraphQL and observability | an API token | C2, C3 |
+| Buildkite | `mcp.buildkite.com/mcp`; toolsets in `X-Buildkite-Toolsets`; a read-only mode; a token pass-through endpoint for headless agents | `BUILDKITE_TOKEN` | B1 |
+| Bitrise | `mcp.bitrise.io`, Streamable HTTP | a PAT | R1 |
+| Apple | none of Apple's; only community wrappers | — | none |
+
+Hosted servers change their tools without versions; Buildkite says so.
+That is why §3 pins each tool.
+
+## Implementation plan.
+
+### 1. What moves to MCP, and what stays
+
+| # | Decision |
+|---|---|
+| G1 | GitHub's MCP server, through the broker. |
+| C2, C3 | Cloudflare's MCP server, through the broker. It uses one tool per endpoint (`codemode=false`), never Code Mode's `execute`: a policy can read a tool name and arguments, not a script. |
+| B1 | Buildkite's MCP server, through the broker. |
+| R1 | Bitrise's MCP server, through the broker. |
+| A1 | Apple has no usable server. pigeon serves **`asc`**, an in-process MCP shim over the existing client in `worker/apple.rs`. It is listed in the registry like a remote server, and called through the same broker. |
+| G2, C5, A2 | **Stay: protocols, not provider APIs.** git smart HTTP, S3, registry pushes and Build Uploads parts move bytes. Their credentials are already minted per job or per call. |
+| C1 | **Stays: the credential plane.** Minting and revoking are what the broker itself uses to credential a call. Routing them through the broker would make it its own dependency. |
+| C4 | **Stays: the engines.** tofu and wrangler are the deploy path CLAUDE.md requires (`pigeon infra`, `pigeon workers`). They keep their minted tokens. |
+| P1, V1, D1 | **Stay.** Delivery protocols, public-key fetches, and digest-pinned downloads have no MCP form and carry no provider authority. |
+
+Every row that stays is listed as an exemption in the registry, with its
+evidence, so no direct call is left unaccounted for (§6).
+
+### 2. The broker: `provider.call`
+
+- One registry operation:
+  - its arguments are `provider.call {server, tool, arguments, change?}`;
+  - its engine is the control plane;
+  - its door is `/mcp` only.
+- `provider.tools {server}` is a read-only companion. It answers the
+  server's live `tools/list` against the registry's pins.
+- **In-process callers use the same function.** ChangeRun, MainRun, the
+  macOS failover and insights call `provider::call` directly. Their caller
+  is the platform's account, so the same checks and events apply as on the
+  wire.
+- **Containers and the CLI call it over `/mcp`**, with the job's signed
+  token or the session's ticket. They no longer get
+  `CLOUDFLARE_API_TOKEN` for REST.
+- **The client.**
+  - `core::provider::mcp` is a pure Streamable-HTTP client:
+    - `initialize`;
+    - `tools/list`;
+    - `tools/call`;
+    - session-ID handling.
+  - The Worker supplies its `Fetch`.
+  - The `asc` shim answers the same messages in-process.
+
+### 3. The registry: `.config/providers/mcp.yaml` (guarded)
+
+Each server entry names:
+
+- `url`;
+- the credential's **kind**: `github-installation`, `cloudflare-minted`,
+  `secret:<NAME>` or `asc-jwt`. It holds names only, never a value;
+- `headers`, such as toolsets or read-only;
+- `tools`. Each listed tool has:
+  - `effect`: `read`, `write` or `apply`;
+  - the `capability` a caller needs;
+  - the credential scope it needs. For GitHub that is the installation
+    permissions; for Cloudflare, the permission groups;
+  - `schema`: the SHA-256 of its `inputSchema`.
+
+A tool the registry doesn't list is refused. A listed tool whose live schema
+hash differs is also refused, with `provider.drift`, until the registry is
+updated.
+
+`exempt:` lists §1's rows that stay, each with its code evidence, for §6.
+
+### 4. The checks, in `run()`'s order, before anything leaves
+
+1. **Who, membership and capability.** These are the members ADR's §8 steps,
+   with the tool's `capability`.
+2. **Ticket.**
+   - An agent's call carries a live ticket.
+   - A call naming `change` must name a change the session holds.
+   - A change that is evicted or closed, or a ticket that is revoked or
+     lapsed, is refused. These are the eviction rules: only the control
+     plane evicts, and an evicted change's calls stop at once.
+3. **Tier, by effect:**
+   - `read` runs on the capability;
+   - `write` needs the change's code tier, or a window, mandate or policy
+     grant that covers it;
+   - `apply` is owner-tier, so it is `pending`, then a `_meta` proof, per
+     the one-MCP ADR's §3.
+4. **Policy.** `policy.check` runs `.config/policies/provider-calls.yaml`
+   (guarded) on a call document: `{server, tool, effect, arguments, caller,
+   change}`. For example:
+   - GitHub writes only to the mirror repository;
+   - a Cloudflare tool only on the instance's accounts and the zones the
+     instance lists;
+   - Buildkite only on the two named pipelines;
+   - no tool's arguments carry a secret-shaped value.
+5. **Credential, per call.**
+   - A GitHub installation token is minted with exactly the tool's
+     permissions, for one repository.
+   - A Cloudflare token is minted from `GRANTER` with the tool's permission
+     groups and a 5-minute expiry, and revoked after the call.
+   - Buildkite's and Bitrise's tokens stay Worker secrets, injected as a
+     header.
+   - The `asc` JWT is signed per call.
+
+   A credential never enters an argument, a result, an event or a
+   workload.
+6. **Record.**
+   - A forwarded call writes `provider.called`: server, tool, effect,
+     caller, change, outcome and duration, with a SHA-256 of its
+     arguments.
+   - A refusal writes `provider.refused`, with the step and reason. It shows
+     in the digest.
+
+A tool result is returned as data. Nothing in it is instruction to the
+caller.
+
+### 5. Credentials and the owner
+
+Minting Cloudflare tokens per call widens what `GRANTER` mints, up to the
+union of the registry's permission groups. That is a credential grant, so
+it is the owner's.
+
+- It is asked with `owner_ask`.
+- It is granted on `/grants/<id>` with a passkey.
+- The grants ledger records it.
+
+Until it is granted, C2 and C3 run on the existing tokens through the broker.
+
+### 6. Coverage
+
+- `architecture/network.rs` gains MCP servers as services.
+- Its extractor reads every crate, `cobot/` included, plus shell scripts,
+  `Dockerfile` and CI. It also reads hosts built with `format!` from
+  `const` bases.
+- `tests/architecture.rs` fails on any provider host that is neither:
+  - an MCP server in the registry; nor
+  - an `exempt:` row whose evidence matches its code.
+
+### 7. The one MCP entry point is finished first
+
+`provider.call` needs `run()` as the authorizer and the registry's `asks`,
+`capability` and `doors`. Those are the one-MCP ADR's steps 1 to 3. So that
+ADR's steps 1 to 5, 8 and 9 are re-briefed against the new crate layout and
+land first.
+
+- Its step 6 (the app's `MCPClient`, TestFlight) and its step 10 need the
+  owner's phone.
+- Its step 7 (the on-device coordinator) is not a dependency.
+
+### Execution
+
+Each step is its own change. "(planner)" steps change guarded files or
+settle a boundary. The other steps are briefs. Code briefs start after the
+src/ restructure's step 12. Each step that adds a file amends `Governs` with
+its glob (`src/**/provider/**`, `src/**/worker/provider.rs`,
+`.config/providers/mcp.yaml`, `.config/policies/provider-calls.yaml`).
+
+1. **This ADR.** It comes with an amendment to the one-MCP ADR recording
+   what shipped, and its re-briefed steps. (planner)
+2. **The one-MCP ADR's steps 1 to 5, 8 and 9**, in its order: the
+   inventory; the registry; `run()` as the authorizer; the session check,
+   the `GET` stream and `_meta` proofs; the app operations and shims;
+   `/v0/app/mcp`; the web shell; the follower on `/mcp`. (briefs; the
+   Worker parts need the owner's approval)
+3. **`core::provider`:**
+   - the registry's types, parse and validation;
+   - the call document;
+   - the pure decision (steps 1 to 4 of §4);
+   - the MCP client's message codec;
+   - table tests. (brief)
+4. **The registry and policy files:**
+   - `.config/providers/mcp.yaml`, with no tools yet;
+   - `provider-calls.yaml`;
+   - `approvals.yaml` guards both. (planner, owner approves)
+5. **`provider.call` and `provider.tools` in the Worker:**
+   - the Fetch transport;
+   - credential minting by kind;
+   - the `provider.*` events;
+   - the `asc` shim.
+
+   (brief; Worker, owner approves)
+6. **A live `provider.tools` for each server.**
+   - The tools and schema hashes are recorded in the registry.
+   - Step 2's unknowns are settled: does GitHub's server take an
+     installation token, and are Bitrise's and Buildkite's artifact tools
+     there?
+   - A server that fails gets a shim here, as `asc` has.
+
+   (planner, owner approves)
+7. **Migrations, one brief each.** Each moves a module's calls to
+   `provider::call` and deletes the direct client:
+   - Buildkite (`macos.rs`, `insights.rs`, `main_run.rs`);
+   - Bitrise;
+   - GitHub Actions (ChangeRun, MainRun);
+   - Cloudflare Analytics;
+   - App Store Connect through `asc`.
+8. **Containers and the CLI.**
+   - `cobot` REST moves to `provider.call` over `/mcp`.
+   - Jobs no longer get `CLOUDFLARE_API_TOKEN` except for tofu and
+     wrangler.
+   - This follows §5's grant. (brief)
+9. **Coverage:** §6's extractor and test. (brief)
+10. **Deploy and verify live.**
+    - Each migrated path runs once: a change's CI dispatch, the hourly
+      insights, a macOS build on each provider, and `ios.status`.
+    - Each shows `provider.called`.
+    - A refused call shows `provider.refused`.
+
+    (planner)
+11. **This ADR is amended with the outcome.** (planner)
