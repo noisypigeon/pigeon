@@ -127,6 +127,8 @@
 - docs(adr): the one MCP entry point records that only its ADR shipped, and its steps are re-briefed after the src/ restructure (!757) ([e54f471](https://github.com/noisypigeon/pigeon/commit/e54f471fe4f1ff5141f4c8efb3995c41bb59c28d))
 - docs(adr): review !713 against !756 (!758) ([976b2e4](https://github.com/noisypigeon/pigeon/commit/976b2e4cda92a064634a04b8d4d4da96571141ad))
 - docs(adr): review !736 against !756 (!759) ([4ab244c](https://github.com/noisypigeon/pigeon/commit/4ab244c84a80d16b9fa4cd31334389f624c74596))
+- docs(adr): review !713 against !757 (!762) ([444f3c8](https://github.com/noisypigeon/pigeon/commit/444f3c863cb9d0ab89acb20b2edb8568edcb1934))
+- docs(adr): review !736 against !757 (!763) ([70827aa](https://github.com/noisypigeon/pigeon/commit/70827aaa2c3d1f3456bd6eb956d40e8d768336e4))
 
 ## 2026-11-15
 
