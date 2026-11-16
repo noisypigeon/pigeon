@@ -292,6 +292,7 @@ fn map() -> backplane::cobot::scope::TestMap {
             package: package.into(),
             kind: kind.into(),
             name: name.into(),
+            filter: String::new(),
             files: files.iter().map(|f| format!("{BACKPLANE}{f}")).collect(),
         };
     let mut binaries = vec![

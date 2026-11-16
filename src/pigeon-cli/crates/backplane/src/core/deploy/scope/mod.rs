@@ -604,6 +604,7 @@ mod tests {
             package: package.into(),
             kind: "test".into(),
             name: name.into(),
+            filter: String::new(),
             files: vec![file.into()],
         };
         let a = "src/pigeon-cli/crates/backplane/src/a.rs";
