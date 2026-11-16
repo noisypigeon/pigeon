@@ -10,7 +10,7 @@ pub mod step;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
-/// `pigeon-sentinel`, built once from this workspace into the tests' own target directory, for
+/// The judge, `pigeon-eviction` or its old name, built once from this workspace into the tests' own target directory, for
 /// the tests that need the real judge; see
 /// `.claude/decisions/2026-11-10-development-factory-crates-functional-core.md` §1.
 ///
@@ -21,17 +21,28 @@ use std::sync::OnceLock;
 pub fn sentinel() -> &'static Path {
     static BUILT: OnceLock<PathBuf> = OnceLock::new();
     BUILT.get_or_init(|| {
-        let target = Path::new(env!("CARGO_TARGET_TMPDIR")).join("pigeon-sentinel");
+        let target = Path::new(env!("CARGO_TARGET_TMPDIR")).join("pigeon-eviction");
         let workspace = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
         let status = std::process::Command::new(env!("CARGO"))
-            .args(["build", "--quiet", "--locked", "--bin", "pigeon-sentinel"])
+            .args([
+                "build",
+                "--quiet",
+                "--locked",
+                "-p",
+                "pigeon-eviction",
+                "--bins",
+            ])
             .arg("--target-dir")
             .arg(&target)
             .current_dir(&workspace)
             .status()
             .expect("cargo runs");
-        assert!(status.success(), "pigeon-sentinel builds");
-        target.join("debug").join("pigeon-sentinel")
+        assert!(status.success(), "the judge builds");
+        ["pigeon-eviction", "pigeon-sentinel"]
+            .into_iter()
+            .map(|n| target.join("debug").join(n))
+            .find(|p| p.is_file())
+            .expect("the judge is built")
     })
 }
 
