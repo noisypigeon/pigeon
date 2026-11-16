@@ -420,3 +420,25 @@ Steps:
 2. **Once !794 deploys,** a change adds `gate:` to `approvals.yaml`
    (`deny_unknown_fields`: the deployed code reads the key first). The owner
    approves it: it loosens an approval rule.
+
+### 2026-11-16: Review of !812 against !801: the gate takes the whole approval core
+
+- !801 (merged), under
+  [`2026-11-15-security-owner-approvals-always-listed.md`](2026-11-15-security-owner-approvals-always-listed.md),
+  makes `approval_wait` hand out the same link while a pending
+  approval is unchanged. It adds `Pages`, `Grants::reusable` and
+  `Grants::page` to `core/approval/grants.rs`, and changes the Worker's
+  `approve.rs`, `change.rs`, `listed.rs` and `mod.rs`.
+- !812's first gate list named four files of the approval core. That left
+  `grants.rs` (one-time grants and their redemption), `totp.rs` (the
+  authenticator code), `enroll.rs` (break-glass passkey enrolment) and the
+  Worker's `elicit.rs` (which checks the code) guarded but outside the gate.
+  So Auto would have covered changes to how the owner is proven.
+- !812 now names `src/pigeon-core/src/approval/**` and the Worker's
+  `elicit.rs`, as the amendment above lists. The two agree on everything else: nothing !801 decides changes;
+  its files stay where they were, and `worker/approve.rs` was already in the
+  gate.
+- Outside this ADR, and unchanged by it: the Worker's `change.rs`, which
+  redeems grants, and `minting.rs` in core and the Worker, which mint
+  credentials, were never guarded, so Auto covered them before !812 too. A
+  later change may guard them.
