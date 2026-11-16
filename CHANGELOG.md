@@ -13,6 +13,7 @@
 - backplane v0.1.37
 - backplane v0.1.38
 - backplane v0.1.39
+- backplane v0.1.40
 - infra-agnostic-random-string v0.1.3
 - infra-agnostic-schema v0.1.3
 - infra-agnostic-schema v0.1.4
@@ -186,6 +187,11 @@
 - fix(agent): a bench derives its key from the stored signing key, so benches answer again (!810) ([7e5b781](https://github.com/noisypigeon/pigeon/commit/7e5b781b0f9898449af807df2ca1eb1153e1eeeb)) · backplane
 - docs: eight ADRs' Governs globs match the agent suite's files under their cobot and group names (!806) ([efa8411](https://github.com/noisypigeon/pigeon/commit/efa84117d193bc853321fd6b837672729d44d8a3))
 - docs(adr): pigeon's Claude Platform API traffic goes through one authenticated Cloudflare AI Gateway, behind the pool's metering route (!807) ([a661bd1](https://github.com/noisypigeon/pigeon/commit/a661bd1bd46c8e13d313d70a67c2629134c60275))
+- fix(agent): approval_wait hands out the same link while a pending approval is unchanged (!801) ([ef180bb](https://github.com/noisypigeon/pigeon/commit/ef180bb3a346cba0596ee83465d573dc115f75bb)) · backplane
+- docs(adr): the AI Gateway ADR records the owner's answers: BYOK, no gateway spend limits, metadata-only logs (!813) ([e2a5f6f](https://github.com/noisypigeon/pigeon/commit/e2a5f6f4403f411839dabef0b203beac630fa219))
+- feat(core): pigeon-core::provider: the MCP provider registry, the pure call decision, and an MCP client codec (!802) ([265005d](https://github.com/noisypigeon/pigeon/commit/265005dbb225b9d11830e1ae25b4b4d5e0ab2467))
+- docs(adr): authorizing a plan is code and Auto covers it; the merge tier is the secrets gate (!814) ([af8454f](https://github.com/noisypigeon/pigeon/commit/af8454fee8c620cc5ac9dbb4ef036eb7e0afcb34))
+- test(agent): the sentinel tiers test holds with or without approvals.yaml's gate (!815) ([ccf989e](https://github.com/noisypigeon/pigeon/commit/ccf989e622be825c191b649928ac9e4d037c2787))
 
 ## 2026-11-15
 
