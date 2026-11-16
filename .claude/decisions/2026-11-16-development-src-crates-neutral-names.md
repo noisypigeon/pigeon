@@ -520,3 +520,21 @@ one release per changed unit, tagged as usual.
 - **The release job in `MainRun`** commits the bot's output to `main` after
   each deploy that passes. It is step 3's last part, and its first run is the
   backfill.
+
+### 2026-11-16: Reviewed against the bench ADR (!715); they agree
+
+Reviews !715 against this ADR and
+[`2026-11-16-development-session-bench-containers.md`](2026-11-16-development-session-bench-containers.md),
+whose demo amendment it adds.
+
+- **They agree. !715 changes nothing either ADR decides differently.**
+  - It touches no `Cargo.toml`. Its files are `cobot/bench.rs`, `/Dockerfile`
+    and the bench ADR.
+  - `cobot/bench.rs` moves to `bench.rs` per §2, as any file of its does.
+  - It names the sentinel only through `crate::sentinel::{VAR, BINARY}`: the
+    `PIGEON_SENTINEL` variable and the `<work>/bin/pigeon-sentinel` copy.
+    So §5's rename to `PIGEON_EVICTION` and `pigeon-eviction` carries them
+    with the constants, with no change of its own.
+  - Its `/Dockerfile` edit adds `iproute2` to the `ci` stage's
+    post-warm-up layer. That isn't a stage §5 renames, nor one of the `ARG`s
+    §4 pins.
