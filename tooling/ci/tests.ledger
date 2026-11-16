@@ -93,6 +93,7 @@ pigeon-backplane lib backplane cobot::scope::tests::a_workspace_at_the_root_is_r
 pigeon-backplane lib backplane cobot::secrets::tests::base64_round_trips
 pigeon-backplane lib backplane cobot::secrets::tests::keys_must_be_plain_names
 pigeon-backplane lib backplane cobot::secrets::tests::named_failures_say_which_key_variable_and_fix
+pigeon-backplane lib backplane cobot::secrets::tests::values_are_written_cobot_tagged_and_read_under_either_tag
 pigeon-backplane lib backplane cobot::secrets::tests::values_round_trip_and_wrong_passphrases_fail_quietly
 pigeon-backplane lib backplane cobot::sites::tests::a_copy_refuses_a_symlink_anywhere_in_the_tree
 pigeon-backplane lib backplane cobot::sites::tests::a_named_template_has_its_own_project_theme_and_tag
@@ -113,6 +114,7 @@ pigeon-backplane lib backplane cobot::tofu::tests::changes_keep_addresses_and_ac
 pigeon-backplane lib backplane cobot::tofu::tests::encryption_quotes_and_escapes_the_passphrase
 pigeon-backplane lib backplane cobot::tofu::tests::quoted_values_are_masked
 pigeon-backplane lib backplane cobot::tofu::tests::redaction_hides_the_passphrase
+pigeon-backplane lib backplane cobot::tofu::tests::tofu_never_sees_a_passphrase_under_either_name
 pigeon-backplane lib backplane cobot::worker::tests::a_build_path_names_one_full_commit_and_nothing_else
 pigeon-backplane lib backplane cobot::worker::tests::a_build_path_names_pigeon_or_pigeon_sentinel_and_nothing_else
 pigeon-backplane lib backplane cobot::worker::tests::a_job_starts_through_pigeon_start_only_when_a_build_is_named
@@ -372,6 +374,7 @@ pigeon-backplane lib backplane core::infra::config::expr::tests::expressions_par
 pigeon-backplane lib backplane core::infra::config::tests::a_module_is_judged_by_what_the_shell_found
 pigeon-backplane lib backplane core::infra::config::tests::a_render_takes_its_module_source_from_the_snapshot
 pigeon-backplane lib backplane core::infra::config::tests::a_secrets_file_is_judged_by_what_the_shell_read
+pigeon-backplane lib backplane core::infra::config::tests::an_x_pigeon_schema_renders_as_its_x_cobot_twin_does
 pigeon-backplane lib backplane core::infra::providers::tests::checks_sources_and_exact_versions
 pigeon-backplane lib backplane core::infra::providers::tests::lockfiles_keep_only_the_named_providers
 pigeon-backplane lib backplane core::infra::providers::tests::only_declarations_count_as_use
@@ -686,6 +689,18 @@ pigeon-backplane lib backplane mirroring::tests::a_reconcile_of_equal_sides_star
 pigeon-backplane lib backplane mirroring::tests::advertised_refs_are_read_from_info_refs
 pigeon-backplane lib backplane mirroring::tests::only_a_pkcs8_key_is_taken
 pigeon-backplane lib backplane mirroring::tests::the_jwt_input_is_two_base64url_parts
+pigeon-backplane lib backplane names::readers::both_work_directories_are_git_ignored
+pigeon-backplane lib backplane names::readers::r2_state_reads_pigeon_or_cobot_variables
+pigeon-backplane lib backplane names::readers::the_judge_is_found_under_pigeon_eviction_or_pigeon_sentinel
+pigeon-backplane lib backplane names::readers::tls_reads_agent_variables
+pigeon-backplane lib backplane names::readers::tools_read_pigeon_or_cobot_variables
+pigeon-backplane lib backplane names::tests::an_empty_new_name_falls_back_to_the_old
+pigeon-backplane lib backplane names::tests::both_ciphertext_tags_read
+pigeon-backplane lib backplane names::tests::each_old_prefix_has_its_new_name
+pigeon-backplane lib backplane names::tests::neither_name_reads_none_and_an_unrenamed_one_reads_itself
+pigeon-backplane lib backplane names::tests::the_new_name_wins_over_the_old
+pigeon-backplane lib backplane names::tests::the_old_name_still_reads_with_a_warning
+pigeon-backplane lib backplane names::tests::x_pigeon_reads_beside_x_cobot_and_wins
 pigeon-backplane lib backplane platform_job::tests::values_group_by_resource_and_keep_outputs
 pigeon-backplane lib backplane signing::tests::a_build_upload_names_the_app_version_and_build
 pigeon-backplane lib backplane signing::tests::clean_restores_the_search_list_and_deletes_the_keychain

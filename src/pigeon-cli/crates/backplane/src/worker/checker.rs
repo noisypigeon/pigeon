@@ -7,6 +7,14 @@ use worker::{DurableObject, Env, Method, Request, Response, Result, State, durab
 
 use super::platform::secret;
 
+/// The signing key: `AGENT_TOKEN`, else `BACKPLANE_TOKEN`; see `crate::names`.
+pub(crate) fn signing_key(env: &Env) -> Result<String> {
+    let old = crate::cobot::worker::TOKEN_VAR;
+    crate::names::renamed(old)
+        .and_then(|new| secret(env, &new).ok())
+        .map_or_else(|| secret(env, old), Ok)
+}
+
 /// One check's Container, on `standard-4` (its name is the job's ID).
 #[durable_object]
 pub struct Checker {
@@ -55,7 +63,7 @@ async fn serve(state: &State, env: &Env, mut req: Request, class: &str) -> Resul
     match (req.method(), segments.as_slice()) {
         (Method::Post, ["start"]) => {
             let body = req.bytes().await?;
-            let token = secret(env, crate::cobot::worker::TOKEN_VAR)?;
+            let token = signing_key(env)?;
             if let Err(e) = crate::cobot::worker::start_jobs(
                 state,
                 &container,
@@ -87,7 +95,7 @@ async fn serve(state: &State, env: &Env, mut req: Request, class: &str) -> Resul
             if !container.running() {
                 return Response::error("the job's Container is not running", 404);
             }
-            let token = secret(env, crate::cobot::worker::TOKEN_VAR)?;
+            let token = signing_key(env)?;
             match crate::cobot::worker::call(
                 &container,
                 &token,

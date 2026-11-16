@@ -160,7 +160,9 @@ fn get(objects: &Objects, key: &str) -> Option<Vec<u8>> {
 fn stores_parse_without_echoing_values() {
     let none = |_: &str| None;
     assert!(matches!(Store::parse("../state", none), Ok(Store::Dir(_))));
+    // Only the old names are set, as before `names`: each read falls back to them.
     let vars = |k: &str| {
+        k.starts_with("COBOT_").then_some(())?;
         Some(if k == backplane::cobot::state::ENDPOINT_VAR {
             "https://r2.example".into()
         } else {
@@ -180,6 +182,7 @@ fn stores_parse_without_echoing_values() {
         "ftp://127.0.0.1",
     ] {
         let err = Store::parse("r2://b/p", |k: &str| {
+            k.starts_with("COBOT_").then_some(())?;
             Some(if k == backplane::cobot::state::ENDPOINT_VAR {
                 insecure.into()
             } else {

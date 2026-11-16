@@ -278,7 +278,10 @@ pub(crate) fn check_secrets(
             }
             for (k, v) in values {
                 if !secrets::is_encrypted(v) {
-                    add(secrets::FILE, format!("`{k}` is not ENC[cobot:v1:…]"));
+                    add(
+                        secrets::FILE,
+                        format!("`{k}` is not ENC[cobot:v1:…] or ENC[pigeon:v1:…]"),
+                    );
                 }
             }
         }

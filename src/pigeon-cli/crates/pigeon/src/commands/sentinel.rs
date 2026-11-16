@@ -19,10 +19,16 @@ pub fn run(command: SentinelCommand) -> i32 {
     }
 }
 
-/// `PIGEON_SENTINEL`, else `pigeon-sentinel` beside this executable or in its parent
-/// directory, else on `PATH`.
+/// `PIGEON_EVICTION`, else `PIGEON_SENTINEL` with a warning, else `pigeon-sentinel` beside this
+/// executable or in its parent directory, else on `PATH`. This feature links no backplane, so
+/// it reads both names itself; see `backplane::names`.
 fn locate() -> PathBuf {
-    if let Some(p) = env::var_os("PIGEON_SENTINEL").filter(|p| !p.is_empty()) {
+    let set = |k: &str| env::var_os(k).filter(|p| !p.is_empty());
+    if let Some(p) = set("PIGEON_EVICTION") {
+        return PathBuf::from(p);
+    }
+    if let Some(p) = set("PIGEON_SENTINEL") {
+        eprintln!("warning: PIGEON_SENTINEL is deprecated; set PIGEON_EVICTION");
         return PathBuf::from(p);
     }
     if let Ok(exe) = env::current_exe() {

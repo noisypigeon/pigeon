@@ -116,7 +116,7 @@ fn vapid_key() -> i32 {
 }
 
 fn serve(args: &ServeArgs) -> i32 {
-    let token = std::env::var(backplane::serve::TOKEN_VAR).unwrap_or_default();
+    let token = backplane::names::env(backplane::serve::TOKEN_VAR).unwrap_or_default();
     let bound = backplane::serve::Tls::from_vars(|k| std::env::var(k).ok()).and_then(|tls| {
         let instance = load(&args.root, args.instance.as_deref())?;
         backplane::serve::Server::bind(
@@ -151,7 +151,7 @@ fn serve(args: &ServeArgs) -> i32 {
 }
 
 fn jobs(args: &JobsArgs) -> i32 {
-    let token = std::env::var(backplane::serve::TOKEN_VAR).unwrap_or_default();
+    let token = backplane::names::env(backplane::serve::TOKEN_VAR).unwrap_or_default();
     let board = std::sync::Arc::new(backplane::jobs::Board::new(args.work.clone()));
     let server = match backplane::serve::Server::bind_jobs(&args.listen, &token, board) {
         Ok(s) if args.bench => {

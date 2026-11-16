@@ -120,7 +120,7 @@ fn split_module(module: &str) -> (Option<&str>, &str) {
 }
 
 fn x_cobot(schema: &Value) -> &Value {
-    &schema["x-cobot"]
+    crate::names::ext(schema)
 }
 
 fn blocks(schema: &Value) -> Vec<Block> {
@@ -142,7 +142,7 @@ fn blocks(schema: &Value) -> Vec<Block> {
     };
     if let Some(props) = schema["properties"].as_object() {
         for (name, prop) in props {
-            if let Some(x) = prop.get("x-cobot") {
+            if let Some(x) = Some(x_cobot(prop)).filter(|x| !x.is_null()) {
                 push(name, x, true, false);
             }
         }
@@ -227,9 +227,9 @@ pub fn from_kind(config: Value, schema: Value, home: &Path, site: Option<Site>) 
 /// An apex's or a workload's schema: `home`'s `$defs.<kind>`, composed by its `x-cobot.<kind>`.
 #[must_use]
 pub fn composed_schema(root: &Value, kind: &str) -> Value {
-    let mut x = root["x-cobot"][kind].clone();
+    let mut x = x_cobot(root)[kind].clone();
     if let Some(o) = x.as_object_mut() {
-        o.insert("version".into(), root["x-cobot"]["version"].clone());
+        o.insert("version".into(), x_cobot(root)["version"].clone());
     }
     json!({
         "$schema": root["$schema"],

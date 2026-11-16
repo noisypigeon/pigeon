@@ -79,6 +79,7 @@ impl Tls {
     ///
     /// [`Error::Invalid`] when only some are set.
     pub fn from_vars(var: impl Fn(&str) -> Option<String>) -> Result<Option<Self>, Error> {
+        let var = crate::names::lookup(var);
         let get = |k: &str| var(k).filter(|v| !v.trim().is_empty());
         match (get(TLS_CERT_VAR), get(TLS_KEY_VAR), get(TLS_CLIENT_CA_VAR)) {
             (Some(cert), Some(key), Some(client_ca)) => Ok(Some(Self {

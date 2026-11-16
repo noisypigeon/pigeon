@@ -33,6 +33,7 @@ pub mod mandates;
 pub mod mcp;
 pub mod merges;
 pub mod mirroring;
+pub mod names;
 pub mod passkeys;
 #[cfg(feature = "engines")]
 pub mod platform_job;

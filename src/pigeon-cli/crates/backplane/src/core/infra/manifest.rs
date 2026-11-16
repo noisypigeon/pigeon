@@ -124,7 +124,7 @@ pub fn is_id(id: &str) -> bool {
 }
 
 fn role(schema: &Value) -> Role {
-    let derived = &schema["x-cobot"]["derived"];
+    let derived = &crate::names::ext(schema)["derived"];
     let expands = |e: &str| {
         derived
             .as_object()
@@ -214,7 +214,9 @@ fn entry(id: &str, value: &Value, kinds: &BTreeMap<String, String>) -> Result<En
         .map(|(k, v)| (k.clone(), v.clone()))
         .collect();
     let settings = Value::Object(settings);
-    let api = schema["x-cobot"]["api"].as_str().map(str::to_string);
+    let api = crate::names::ext(&schema)["api"]
+        .as_str()
+        .map(str::to_string);
     if api.is_some() {
         check_settings(&schema, &settings)?;
     }

@@ -210,14 +210,26 @@ pub const RETRY_WAITS: [std::time::Duration; 2] = [
     std::time::Duration::from_secs(20),
 ];
 
+/// The variables kept from tofu, under their old and new names.
+fn scrubbed() -> Vec<String> {
+    [
+        crate::cobot::PASSPHRASE_VAR,
+        crate::cobot::CREDENTIALS_VAR,
+        crate::cobot::secrets::PASSPHRASE_VAR,
+        crate::cobot::secrets::WORKLOAD_PASSPHRASE_VAR,
+    ]
+    .into_iter()
+    .flat_map(crate::names::both)
+    .collect()
+}
+
 fn run(unit: &str, work: &Path, env: &Env, args: &[&str]) -> Result<Output, Error> {
-    Command::new("tofu")
-        .args(args)
+    let mut cmd = Command::new("tofu");
+    for k in scrubbed() {
+        cmd.env_remove(k);
+    }
+    cmd.args(args)
         .current_dir(work)
-        .env_remove(crate::cobot::PASSPHRASE_VAR)
-        .env_remove(crate::cobot::CREDENTIALS_VAR)
-        .env_remove(crate::cobot::secrets::PASSPHRASE_VAR)
-        .env_remove(crate::cobot::secrets::WORKLOAD_PASSPHRASE_VAR)
         .env("TF_ENCRYPTION", encryption(&env.passphrase))
         .env("TF_IN_AUTOMATION", "1")
         .env("TF_INPUT", "0")
@@ -482,7 +494,24 @@ pub fn apply(unit: &str, work: &Path, env: &Env) -> Result<(), Error> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Action, changes, encryption, redact};
+    use super::{Action, changes, encryption, redact, scrubbed};
+
+    #[test]
+    fn tofu_never_sees_a_passphrase_under_either_name() {
+        let s = scrubbed();
+        for k in [
+            "COBOT_STATE_PASSPHRASE",
+            "PIGEON_STATE_PASSPHRASE",
+            "COBOT_CREDENTIALS",
+            "PIGEON_CREDENTIALS",
+            "COBOT_SECRETS_PASSPHRASE",
+            "PIGEON_SECRETS_PASSPHRASE",
+            "COBOT_WORKLOAD_SECRETS_PASSPHRASE",
+            "PIGEON_WORKLOAD_SECRETS_PASSPHRASE",
+        ] {
+            assert!(s.iter().any(|v| v == k), "{k}");
+        }
+    }
 
     #[test]
     fn changes_keep_addresses_and_actions_only() {

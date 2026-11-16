@@ -270,7 +270,7 @@ async fn decide(
         if let Err(why) = verified(account).await {
             return page::refused(403, &why);
         }
-        let key = secret(env, crate::cobot::worker::TOKEN_VAR)?;
+        let key = super::checker::signing_key(env)?;
         let sealed = platform::seal(&key, account).await?;
         (
             "grant-plan",
@@ -555,7 +555,7 @@ async fn start(env: &Env, run: &Run, sha: Option<&str>) -> std::result::Result<(
     let job = run.job_id().ok_or("the run has no job to start")?;
     let sha = sha.ok_or("main has no deploy yet to run the job from")?;
     let sealed = run.sealed.as_deref().ok_or("the run's token is gone")?;
-    let key = secret(env, crate::cobot::worker::TOKEN_VAR).map_err(|e| e.to_string())?;
+    let key = super::checker::signing_key(env).map_err(|e| e.to_string())?;
     let token = platform::unseal(&key, sealed)
         .await
         .map_err(|e| e.to_string())?;

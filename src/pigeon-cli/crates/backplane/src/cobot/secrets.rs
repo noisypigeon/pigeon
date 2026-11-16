@@ -20,12 +20,13 @@ pub const PASSPHRASE_VAR: &str = "COBOT_SECRETS_PASSPHRASE";
 /// `.claude/decisions/2026-11-02-runtime-workloads-zone-apex.md` §10.
 pub const WORKLOAD_PASSPHRASE_VAR: &str = "COBOT_WORKLOAD_SECRETS_PASSPHRASE";
 
-const PREFIX: &str = "ENC[cobot:v1:";
+/// The tag written; both of [`crate::names::ENC_PREFIXES`] are read.
+const PREFIX: &str = crate::names::ENC_PREFIXES[0];
 
 /// Whether `value` is an encrypted value.
 #[must_use]
 pub fn is_encrypted(value: &str) -> bool {
-    value.starts_with(PREFIX) && value.ends_with(']')
+    crate::names::enc_body(value).is_some() && value.ends_with(']')
 }
 
 fn failed(path: &Path, message: impl Into<String>) -> Error {
@@ -72,10 +73,9 @@ enum Closed {
 }
 
 fn open(value: &str, passphrase: &str) -> Result<String, Closed> {
-    let body = value
-        .strip_prefix(PREFIX)
+    let body = crate::names::enc_body(value)
         .and_then(|v| v.strip_suffix(']'))
-        .ok_or(Closed::Malformed("not ENC[cobot:v1:…]"))?;
+        .ok_or(Closed::Malformed("not ENC[cobot:v1:…] or ENC[pigeon:v1:…]"))?;
     let bytes = unbase64(body).ok_or(Closed::Malformed("bad base64"))?;
     let decryptor =
         age::Decryptor::new(&bytes[..]).map_err(|_| Closed::Malformed("not an age file"))?;
@@ -284,6 +284,22 @@ mod tests {
             "{err}"
         );
         assert!(decrypt("plaintext", "x").is_err());
+    }
+
+    #[test]
+    fn values_are_written_cobot_tagged_and_read_under_either_tag() {
+        let enc = encrypt("s3cret-value", "secrets-passphrase-0123").expect("encrypts");
+        assert!(
+            enc.starts_with("ENC[cobot:v1:"),
+            "the secrets policies pin this tag"
+        );
+        let renamed = enc.replacen("ENC[cobot:v1:", "ENC[pigeon:v1:", 1);
+        assert!(is_encrypted(&renamed));
+        assert_eq!(
+            decrypt(&renamed, "secrets-passphrase-0123").expect("decrypts"),
+            "s3cret-value"
+        );
+        assert!(!is_encrypted(&enc.replacen("cobot", "gantry", 1)));
     }
 
     #[test]

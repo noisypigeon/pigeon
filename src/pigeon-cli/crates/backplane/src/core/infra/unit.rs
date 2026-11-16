@@ -84,7 +84,7 @@ impl Unit {
     pub fn is_local(&self) -> bool {
         self.config
             .as_ref()
-            .is_some_and(|c| c.schema["x-cobot"]["local"] == serde_json::Value::Bool(true))
+            .is_some_and(|c| crate::names::ext(&c.schema)["local"] == serde_json::Value::Bool(true))
     }
 }
 
@@ -150,7 +150,7 @@ pub(crate) fn misplaced_apex(unit: &Unit) -> Option<Problem> {
     let c = unit.config.as_ref()?;
     let kind = ["apex", "workload"]
         .into_iter()
-        .find(|k| c.schema["x-cobot"].get(k).is_some())?;
+        .find(|k| crate::names::ext(&c.schema).get(k).is_some())?;
     (unit.path != crate::cobot::apex::CLOUDFLARE && c.site.is_none()).then(|| {
         problem(
             format!("{}/{}", unit.path, crate::cobot::config::SCHEMA),

@@ -15,6 +15,7 @@ pub const BINARY: &str = crate::cobot::ship_wire::SENTINEL_BINARY;
 /// parent directory, else its bare name, found on `PATH`.
 #[must_use]
 pub fn locate(var: &dyn Fn(&str) -> Option<String>) -> PathBuf {
+    let var = crate::names::lookup(var);
     if let Some(p) = var(VAR).filter(|p| !p.is_empty()) {
         return PathBuf::from(p);
     }

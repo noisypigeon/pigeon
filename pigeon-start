@@ -23,13 +23,17 @@ fetch() {
   return 1
 }
 
-unset PIGEON_SENTINEL
-if [ -n "${PIGEON_SENTINEL_URL:-}" ] && [ -n "${PIGEON_SENTINEL_SHA256:-}" ]; then
-  if fetch "$PIGEON_SENTINEL_URL" "$PIGEON_SENTINEL_SHA256" "$dir/pigeon-sentinel"; then
+unset PIGEON_EVICTION PIGEON_SENTINEL
+# PIGEON_EVICTION_* win over PIGEON_SENTINEL_*; both names are exported (src-crates ADR §5).
+judge_url="${PIGEON_EVICTION_URL:-${PIGEON_SENTINEL_URL:-}}"
+judge_sha="${PIGEON_EVICTION_SHA256:-${PIGEON_SENTINEL_SHA256:-}}"
+if [ -n "$judge_url" ] && [ -n "$judge_sha" ]; then
+  if fetch "$judge_url" "$judge_sha" "$dir/pigeon-sentinel"; then
     export PIGEON_SENTINEL="$dir/pigeon-sentinel"
-    echo "pigeon-start: judging with sentinel build $PIGEON_SENTINEL_SHA256" >&2
+    export PIGEON_EVICTION="$PIGEON_SENTINEL"
+    echo "pigeon-start: judging with sentinel build $judge_sha" >&2
   else
-    echo "pigeon-start: the sentinel build at $PIGEON_SENTINEL_URL is missing or its checksum differs; judging with the linked library" >&2
+    echo "pigeon-start: the sentinel build at $judge_url is missing or its checksum differs; judging with the linked library" >&2
   fi
 fi
 

@@ -59,6 +59,7 @@ pub fn describe_with(
     instance: &Instance,
     var: &dyn Fn(&str) -> Option<String>,
 ) -> Result<(Graph, Vec<String>), Error> {
+    let var = &crate::names::lookup(var);
     let mut g = Graph::default();
     let mut problems = Vec::new();
     engines_and_operations(&mut g);
@@ -143,7 +144,7 @@ fn units(instance: &Instance, g: &mut Graph, problems: &mut Vec<String>) -> Vec<
             &format!("{}/{file}", u.path),
         ));
         let Some(c) = &u.config else { continue };
-        let x = &c.schema["x-cobot"];
+        let x = crate::names::ext(&c.schema);
         let canonical = root.canonicalize().unwrap_or_else(|_| root.clone());
         let schema = c
             .home

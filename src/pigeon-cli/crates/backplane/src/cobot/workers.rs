@@ -1372,6 +1372,7 @@ impl std::fmt::Debug for Tools {
 impl Tools {
     /// From `var`: [`WRANGLER_VAR`] and [`DOCKER_VAR`], else `wrangler` and `docker`.
     pub fn from(var: impl Fn(&str) -> Option<String>) -> Self {
+        let var = crate::names::lookup(var);
         Self {
             wrangler: var(WRANGLER_VAR).map_or_else(|| "wrangler".into(), PathBuf::from),
             docker: var(DOCKER_VAR).map_or_else(|| "docker".into(), PathBuf::from),

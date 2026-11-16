@@ -26,6 +26,7 @@ pub fn run_with(
     request: &Request,
     var: impl Fn(&str) -> Option<String>,
 ) -> Result<Response, Error> {
+    let var = crate::names::lookup(var);
     let op = validate(request)?;
     let respond = |result, violations: Vec<String>| Response {
         operation: op.name.to_string(),

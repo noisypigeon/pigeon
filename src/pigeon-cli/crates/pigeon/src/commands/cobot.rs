@@ -194,7 +194,7 @@ fn context(args: &CobotRun) -> Result<backplane::cobot::session::Session, backpl
 /// The run's Cloudflare API, from `CLOUDFLARE_API_TOKEN` or the runner's credentials.
 fn cloudflare() -> Result<backplane::cobot::cloudflare::Api, backplane::cobot::Error> {
     backplane::cobot::cloudflare::token(
-        env::var(backplane::cobot::CREDENTIALS_VAR).ok().as_deref(),
+        backplane::names::env(backplane::cobot::CREDENTIALS_VAR).as_deref(),
         env::var(backplane::cobot::cloudflare::TOKEN_VAR).ok(),
     )
     .map(|t| backplane::cobot::cloudflare::Api::new(None, t))
@@ -514,8 +514,8 @@ fn apply(args: &CobotApply) -> Result<(), backplane::cobot::Error> {
 fn secrets_pass(args: &SecretsUnit) -> Result<String, backplane::cobot::Error> {
     backplane::cobot::secrets_passphrase_for(
         &args.unit,
-        env::var(backplane::cobot::secrets::PASSPHRASE_VAR).ok(),
-        env::var(backplane::cobot::secrets::WORKLOAD_PASSPHRASE_VAR).ok(),
+        backplane::names::env(backplane::cobot::secrets::PASSPHRASE_VAR),
+        backplane::names::env(backplane::cobot::secrets::WORKLOAD_PASSPHRASE_VAR),
     )
 }
 
@@ -545,8 +545,8 @@ fn secrets_check(args: &SecretsUnit) -> Result<(), backplane::cobot::Error> {
     let (_, values) = backplane::cobot::unit_secrets(
         &args.unit,
         &secrets_path(args),
-        env::var(backplane::cobot::secrets::PASSPHRASE_VAR).ok(),
-        env::var(backplane::cobot::secrets::WORKLOAD_PASSPHRASE_VAR).ok(),
+        backplane::names::env(backplane::cobot::secrets::PASSPHRASE_VAR),
+        backplane::names::env(backplane::cobot::secrets::WORKLOAD_PASSPHRASE_VAR),
     )?;
     for key in values.keys() {
         println!("{key}: decrypts");

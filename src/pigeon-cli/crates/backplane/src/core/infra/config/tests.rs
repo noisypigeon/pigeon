@@ -91,6 +91,34 @@ fn a_secrets_file_is_judged_by_what_the_shell_read() {
 }
 
 #[test]
+fn an_x_pigeon_schema_renders_as_its_x_cobot_twin_does() {
+    let disk = Disk {
+        modules: BTreeMap::from([("zone".to_string(), module(true, "version: 1.0.0\n"))]),
+        ..Disk::default()
+    };
+    let schema = json!({
+        "type": "object",
+        "x-pigeon": { "singletons": { "zone": { "module": "zone", "inputs": {} } } }
+    });
+    let pigeon = from_kind(json!({}), schema, Path::new("/unit"), None);
+    let tf = |u: &super::ConfigUnit| {
+        render(
+            u,
+            &disk,
+            "/state/terraform.tfstate",
+            &Allowlist::default(),
+            Day::default(),
+            &BTreeMap::new(),
+        )
+    };
+    assert_eq!(tf(&pigeon), tf(&unit()));
+    assert_eq!(
+        tf(&pigeon)["module"]["zone"]["source"],
+        "/unit/modules/zone"
+    );
+}
+
+#[test]
 fn a_render_takes_its_module_source_from_the_snapshot() {
     let disk = Disk {
         modules: BTreeMap::from([("zone".to_string(), module(true, "version: 1.0.0\n"))]),
