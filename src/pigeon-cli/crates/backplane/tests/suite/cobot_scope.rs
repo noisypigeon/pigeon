@@ -127,7 +127,7 @@ fn sentinel_runs_only_its_own_checks_as_nothing_links_it() {
 
 #[test]
 fn a_pigeon_command_runs_the_features_that_build_it() {
-    let got = names(&["src/pigeon-cli/crates/pigeon/src/commands/cobot.rs"]);
+    let got = names(&["src/pigeon-harness/src/commands/cobot.rs"]);
     assert!(got.contains(&"test pigeon".to_string()), "{got:?}");
     let features: Vec<&String> = got.iter().filter(|n| n.contains("--features")).collect();
     assert_eq!(
@@ -142,7 +142,7 @@ fn a_pigeon_command_runs_the_features_that_build_it() {
 
 #[test]
 fn pigeons_sentinel_command_runs_its_feature_apart_from_the_release_units() {
-    let got = names(&["src/pigeon-cli/crates/pigeon/src/commands/sentinel.rs"]);
+    let got = names(&["src/pigeon-harness/src/commands/sentinel.rs"]);
     let features: Vec<&String> = got.iter().filter(|n| n.contains("--features")).collect();
     assert_eq!(features, ["clippy pigeon --features sentinel"], "{got:?}");
 }

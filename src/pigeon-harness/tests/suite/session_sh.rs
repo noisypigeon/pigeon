@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use std::process::{Command, Output, Stdio};
 
 fn script() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../../tooling/session/session.sh")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tooling/session/session.sh")
 }
 
 /// Runs the script with `args` and `stdin`, a fresh `HOME`, no `pigeon` or `cargo` on `PATH`,

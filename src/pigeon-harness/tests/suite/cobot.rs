@@ -171,7 +171,7 @@ fn plan_names_each_tofu_step_on_stderr() {
 
 #[test]
 fn a_worker_secret_is_never_set_empty() {
-    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../..");
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     cobot()
         .args(["workers", "secrets", "put", "--root"])
         .arg(&root)

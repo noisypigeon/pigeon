@@ -110,7 +110,7 @@ fn rust_inputs_are_sources_manifests_and_toolchains() {
     let has = |f: &str| testmaps::rust_inputs(&[f.to_string()]);
     assert!(has("src/pigeon-cli/crates/backplane/src/testmaps.rs"));
     assert!(has("src/pigeon-cli/Cargo.lock"));
-    assert!(has("src/pigeon-cli/crates/pigeon/Cargo.toml"));
+    assert!(has("src/pigeon-harness/Cargo.toml"));
     assert!(has("src/pigeon-cli/.cargo/config.toml"));
     assert!(has("mise.toml"));
     assert!(!has(

@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["src/common", "src/pigeon-core", "src/pigeon-cli/crates/*", "src/pigeon-ios", "src/pigeon-site-templates", "src/pigeon-eviction"]
+members = ["src/common", "src/pigeon-core", "src/pigeon-harness", "src/pigeon-cli/crates/*", "src/pigeon-ios", "src/pigeon-site-templates", "src/pigeon-eviction"]
 exclude = ["src/pigeon-cli/crates/cobot", "src/pigeon-cli/crates/gantry", "src/pigeon-cli/crates/sentinel"]
 
 # What the checks need to know of this layout; see

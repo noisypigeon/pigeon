@@ -11,7 +11,7 @@ use tempfile::TempDir;
 use crate::harness as common;
 
 fn repo_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../..")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
 
 fn backplane() -> Command {

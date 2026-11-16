@@ -20,16 +20,16 @@ units:
     image: ghcr.io/noisypigeon/pigeon-backplane
     paths:
       - src/pigeon-cli/crates/backplane/
-      - src/pigeon-cli/crates/pigeon/src/commands/backplane.rs
-      - src/pigeon-cli/crates/pigeon/src/cli/backplane.rs
-      - src/pigeon-cli/crates/pigeon/src/commands/cobot.rs
-      - src/pigeon-cli/crates/pigeon/src/cli/cobot.rs
-      - src/pigeon-cli/crates/pigeon/src/commands/workers.rs
-      - src/pigeon-cli/crates/pigeon/src/main.rs
-      - src/pigeon-cli/crates/pigeon/src/lib.rs
-      - src/pigeon-cli/crates/pigeon/src/cli/mod.rs
-      - src/pigeon-cli/crates/pigeon/src/commands/mod.rs
-      - src/pigeon-cli/crates/pigeon/Cargo.toml
+      - src/pigeon-harness/src/commands/backplane.rs
+      - src/pigeon-harness/src/cli/backplane.rs
+      - src/pigeon-harness/src/commands/cobot.rs
+      - src/pigeon-harness/src/cli/cobot.rs
+      - src/pigeon-harness/src/commands/workers.rs
+      - src/pigeon-harness/src/main.rs
+      - src/pigeon-harness/src/lib.rs
+      - src/pigeon-harness/src/cli/mod.rs
+      - src/pigeon-harness/src/commands/mod.rs
+      - src/pigeon-harness/Cargo.toml
       - Dockerfile
       - .dockerignore
     exclude: [tests/, benches/, '*.md']
