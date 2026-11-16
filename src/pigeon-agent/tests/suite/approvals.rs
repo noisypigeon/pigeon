@@ -73,7 +73,7 @@ fn a_spike_is_authorized_and_closed_automatically_but_never_merged_so() {
 
 #[test]
 fn what_deploys_needs_the_code() {
-    let dockerfile = ["src/pigeon-cli/Dockerfile"];
+    let dockerfile = ["Dockerfile"];
     let tiers = tiers_of(&dockerfile, &dockerfile, PLAIN);
     assert_eq!(tiers.authorize.tier, Tier::Code);
     assert_eq!(tiers.merge.tier, Tier::Code);
@@ -136,7 +136,7 @@ fn the_rules_and_every_policy_always_need_the_code() {
 #[test]
 fn the_approval_core_needs_the_code_as_the_files_it_moved_from_did() {
     for name in ["tiers", "grants", "mandates", "passkeys", "totp"] {
-        let file = format!("src/pigeon-cli/crates/backplane/src/core/approval/{name}.rs");
+        let file = format!("src/pigeon-core/src/approval/{name}.rs");
         let tiers = tiers_of(
             &[file.as_str()],
             &[file.as_str()],
@@ -200,11 +200,7 @@ fn an_operation_needs_the_tier_its_head_was_given_and_code_without_one() {
         Tier::Confirm,
         "auto counts as confirm until automatic approval lands"
     );
-    c.tiers = Some(tiers_of(
-        &["src/pigeon-cli/Dockerfile"],
-        &["src/pigeon-cli/Dockerfile"],
-        PLAIN,
-    ));
+    c.tiers = Some(tiers_of(&["Dockerfile"], &["Dockerfile"], PLAIN));
     assert_eq!(
         backplane::core::approval::tiers::tier_of(&c, "change.merge"),
         Tier::Code
@@ -237,11 +233,7 @@ fn the_control_plane_approves_and_merges_only_what_is_auto_or_confirm() {
         Some("unpushed"),
         "nothing pushed, nothing lost"
     );
-    c.tiers = Some(tiers_of(
-        &["src/pigeon-cli/Dockerfile"],
-        &["src/pigeon-cli/Dockerfile"],
-        PLAIN,
-    ));
+    c.tiers = Some(tiers_of(&["Dockerfile"], &["Dockerfile"], PLAIN));
     assert_eq!(by_policy(&c, "change.merge"), None, "code is the owner's");
     let mut owner = tiers_of(&["tooling/**"], &["tooling/README.md"], PLAIN);
     owner.merge = Tiered {
@@ -355,7 +347,7 @@ fn one_proof_covers_a_changes_later_stages_up_to_the_code_tier() {
 fn with_sentinel() -> Rules {
     let mut r = rules();
     r.sentinel = paths(&[
-        "src/pigeon-cli/crates/sentinel/**",
+        "src/pigeon-eviction/**",
         ".config/policies/**",
         ".config/approvals.yaml",
     ]);
@@ -365,10 +357,10 @@ fn with_sentinel() -> Rules {
 #[test]
 fn a_sentinel_change_needs_the_code_and_says_why() {
     let r = with_sentinel();
-    let file = "src/pigeon-cli/crates/sentinel/src/rules.rs";
+    let file = "src/pigeon-eviction/src/rules.rs";
     let tiers = classify(
         &r,
-        &paths(&["src/pigeon-cli/crates/sentinel/**"]),
+        &paths(&["src/pigeon-eviction/**"]),
         &paths(&[file]),
         PLAIN,
     );
@@ -393,8 +385,8 @@ fn a_sentinel_change_needs_the_code_and_says_why() {
 fn a_sentinel_change_holds_nothing_but_sentinel_and_its_adr() {
     let r = with_sentinel();
     let alone = paths(&[
-        "src/pigeon-cli/crates/sentinel/src/rules.rs",
-        "src/pigeon-cli/crates/sentinel/tests/cli.rs",
+        "src/pigeon-eviction/src/rules.rs",
+        "src/pigeon-eviction/tests/cli.rs",
         ".claude/decisions/2026-11-10-x.md",
     ]);
     assert_eq!(mixed_with_sentinel(&r, &alone), None);
@@ -410,7 +402,7 @@ fn a_sentinel_change_holds_nothing_but_sentinel_and_its_adr() {
         "no sentinel path, nothing to keep apart"
     );
     let moved = paths(&[
-        "src/pigeon-cli/crates/sentinel/src/rules.rs",
+        "src/pigeon-eviction/src/rules.rs",
         "Cargo.toml",
         "Cargo.lock",
     ]);

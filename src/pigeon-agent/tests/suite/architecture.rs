@@ -51,7 +51,7 @@ fn this_repository_is_described_the_same_way_twice() {
     for want in [
         "engine:cobot",
         "operation:architecture.describe",
-        "policy:backplane",
+        "policy:change",
         "repository",
         "unit:infra/pigeon",
         "provider:cloudflare",
