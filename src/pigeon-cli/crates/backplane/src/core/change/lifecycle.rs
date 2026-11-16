@@ -70,6 +70,11 @@ impl Change {
                     self.full = full;
                     self.gate = gate;
                     self = self.carry_patch(&sha, patch.as_ref());
+                    // A session's head that carries no approval can't merge on this turn; see the
+                    // concurrent-sessions ADR's 2026-11-16 amendment on a holder's push.
+                    if self.carried.is_none() && self.restacked_for.is_none() {
+                        self.merge_after = None;
+                    }
                     // A brief's change never reaches guarded, secret or sentinel paths; see
                     // `.claude/decisions/2026-11-13-development-model-tiered-agent-briefs.md` §2.
                     if self.brief.is_some()

@@ -832,3 +832,20 @@ line, with tests.
 `release_reason` naming a yield. Its tests in `tests/merge_released.rs` replay
 !675: its gate fails after the restack, the turn goes back and the next merge
 starts; a yield while holding releases the turn; keep-place still keeps.
+
+### 2026-11-16: A holder's new head that carries no approval gives its turn back at once
+
+- **What went wrong.** A session's push onto a change that holds the turn kept
+  its parked merge. The queue waited through the new head's whole re-check,
+  about 8 minutes, before the carry missed and the turn went back. !674's fix
+  (cefd256) read `merging`, position 0, while its checks were queued.
+- **The rule.** When the bound job reports a head the session pushed, and its
+  approval doesn't carry to it (a different patch, or no approval), the
+  parked merge is dropped. The save's `leaves_merge_queue` records
+  `merge.released` and the next merge starts.
+- **Unchanged:**
+  - a push of the same patch carries its approval and keeps the turn;
+  - a head a restack moved (`restacked_for`) is kept as before (2026-11-15).
+
+**Execution,** in one change (!687), built on !681: the `Bounded` step in
+`core/change/lifecycle.rs`, and tests in `tests/merge_released.rs`.

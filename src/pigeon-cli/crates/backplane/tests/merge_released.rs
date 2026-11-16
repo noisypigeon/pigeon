@@ -415,3 +415,95 @@ fn replay_674_a_fix_pushed_after_its_gate_failed_holds_no_turn() {
     assert_eq!(saved(&mut q, &before, &c, 300), None);
     assert_eq!(place(&q, 674), None);
 }
+
+/// Head `sha` of `c` bounded with patch `patch`, one check `fmt`, a full set of `test`, and
+/// `fmt` passed.
+fn bound_with_patch(c: &mut Change, sha: &str, patch: &str) {
+    let fmt = Check {
+        name: "fmt".into(),
+        argv: vec![],
+    };
+    let test = Check {
+        name: "test".into(),
+        argv: vec!["cargo".into(), "test".into()],
+    };
+    c.apply(Event::Bounded {
+        sha: sha.into(),
+        violations: vec![],
+        checks: vec![fmt],
+        full: vec![test],
+        tiers: Some(tiers(Tier::Code)),
+        gate: None,
+        patch: Some(patch.into()),
+    })
+    .expect("bounded");
+}
+
+/// Change `n`, approved on head `A` with patch `p1`, holding the turn with its merge parked on
+/// its gate.
+fn parked_holder(n: u32) -> Change {
+    let mut c = Change::propose(n, "x", "feat(x): y", "p", vec!["a/**".into()], "agent");
+    c.apply(Event::ApprovePlan {
+        by: WINDOW.into(),
+        at: 1,
+    })
+    .expect("plan");
+    c.apply(Event::Pushed { sha: A.into() }).expect("pushed");
+    bound_with_patch(&mut c, A, "p1");
+    for e in [
+        Event::Started {
+            job: "fmt".into(),
+            sha: A.into(),
+        },
+        Event::Finished {
+            job: "fmt".into(),
+            sha: A.into(),
+            ok: true,
+        },
+        Event::Approve {
+            by: WINDOW.into(),
+            sha: A.into(),
+            at: 5,
+        },
+    ] {
+        c.apply(e).expect("approved");
+    }
+    let gate = c
+        .apply(Event::Merge { by: WINDOW.into() })
+        .expect("its turn");
+    assert_eq!(gate, [Effect::Start(format!("{GATE}test"))]);
+    assert!(merges::holds_turn(&c));
+    c
+}
+
+#[test]
+fn a_new_patch_pushed_onto_the_holder_gives_its_turn_back_at_bound() {
+    let mut q = queue(674, 0, 1);
+    until_turn(&mut q, 674, 100);
+    let mut c = parked_holder(674);
+    c.apply(Event::Pushed { sha: C.into() }).expect("the fix");
+    assert!(c.merge_after.is_some(), "kept until its patch is known");
+    let before = c.clone();
+    bound_with_patch(&mut c, C, "p2");
+    assert_eq!(c.merge_after, None);
+    assert!(!control::keeps_turn(Some(&before), &c));
+    assert_eq!(
+        saved(&mut q, &before, &c, 200),
+        Some(2000),
+        "the next starts"
+    );
+}
+
+#[test]
+fn the_same_patch_pushed_onto_the_holder_keeps_its_turn() {
+    let mut q = queue(674, 0, 1);
+    until_turn(&mut q, 674, 100);
+    let mut c = parked_holder(674);
+    c.apply(Event::Pushed { sha: C.into() }).expect("a reword");
+    let before = c.clone();
+    bound_with_patch(&mut c, C, "p1");
+    assert_eq!(c.merge_after.as_deref(), Some(WINDOW));
+    assert!(merges::holds_turn(&c));
+    assert_eq!(saved(&mut q, &before, &c, 200), None);
+    assert_eq!(place(&q, 674), Some((1, 2)));
+}
