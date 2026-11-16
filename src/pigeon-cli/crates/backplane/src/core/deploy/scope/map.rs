@@ -82,6 +82,10 @@ impl TestMap {
         if picked.len() * 2 > self.binaries.len() {
             return None;
         }
+        let picked: BTreeSet<Binary> = picked
+            .into_iter()
+            .map(|b| current(crates, b))
+            .collect::<Option<_>>()?;
         let mut whole: BTreeMap<&str, BTreeSet<&Binary>> = BTreeMap::new();
         let mut modules: BTreeMap<&str, BTreeSet<&str>> = BTreeMap::new();
         for b in &picked {
@@ -109,6 +113,23 @@ impl TestMap {
         }
         Some(jobs)
     }
+}
+
+/// `b` as the workspace now runs it: a whole test target that is gone runs as the module of its
+/// name in its package's `suite`, and none when there is no suite; see
+/// `.claude/decisions/2026-11-16-development-one-test-binary-per-crate.md` §3.
+fn current(crates: &Crates, b: &Binary) -> Option<Binary> {
+    let Some(targets) = crates.tests.get(&b.package) else {
+        return Some(b.clone());
+    };
+    if b.kind != "test" || !b.filter.is_empty() || targets.contains(&b.name) {
+        return Some(b.clone());
+    }
+    targets.contains(SUITE).then(|| Binary {
+        name: SUITE.into(),
+        filter: format!("{}::", b.name),
+        ..b.clone()
+    })
 }
 
 /// What a changed path picks by itself, before coverage: `tests/<x>.rs` its own binary,

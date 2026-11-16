@@ -98,6 +98,9 @@ pub struct Crates {
     pub deps: BTreeMap<String, BTreeSet<String>>,
     /// `pigeon`'s features, each with the packages it enables.
     pub features: BTreeMap<String, BTreeSet<String>>,
+    /// Each package's integration test targets, where known; a map unit naming one that is gone
+    /// runs as its `suite` module instead.
+    pub tests: BTreeMap<String, BTreeSet<String>>,
 }
 
 impl Crates {
@@ -573,6 +576,7 @@ mod tests {
             .into(),
             deps: BTreeMap::default(),
             features: BTreeMap::default(),
+            tests: BTreeMap::default(),
         };
         assert_eq!(crates.of(&WORKER), ["pigeon-backplane"]);
         let names: Vec<String> = everything(&BTreeSet::default(), &crates)
@@ -599,6 +603,7 @@ mod tests {
             .into(),
             deps: BTreeMap::default(),
             features: BTreeMap::default(),
+            tests: BTreeMap::default(),
         };
         let bin = |package: &str, name: &str, file: &str| Binary {
             package: package.into(),
@@ -651,5 +656,62 @@ mod tests {
         ] {
             assert!(!scoped(&gate_of(&crates, &f, m)), "{name}");
         }
+    }
+
+    #[test]
+    fn a_mapped_target_that_is_gone_runs_as_its_suite_module() {
+        use super::{Binary, TestMap};
+        let crates = Crates {
+            by_dir: [
+                (
+                    "src/pigeon-cli/crates/pigeon/".to_string(),
+                    "pigeon".to_string(),
+                ),
+                (
+                    "src/pigeon-cli/crates/sentinel/".to_string(),
+                    "pigeon-sentinel".to_string(),
+                ),
+            ]
+            .into(),
+            deps: BTreeMap::default(),
+            features: BTreeMap::default(),
+            tests: [
+                ("pigeon".to_string(), BTreeSet::from(["suite".to_string()])),
+                (
+                    "pigeon-sentinel".to_string(),
+                    BTreeSet::from(["cli".to_string()]),
+                ),
+            ]
+            .into(),
+        };
+        let unit = |package: &str, name: &str, file: &str| Binary {
+            package: package.into(),
+            kind: "test".into(),
+            name: name.into(),
+            filter: String::new(),
+            files: vec![file.into()],
+        };
+        let a = "src/pigeon-cli/crates/pigeon/src/a.rs";
+        let b = "src/pigeon-cli/crates/sentinel/src/b.rs";
+        let map = TestMap {
+            sha: "x".into(),
+            binaries: vec![
+                unit("pigeon", "backplane", a),
+                unit("pigeon-sentinel", "tree", b),
+                unit("pigeon", "e1", "elsewhere.rs"),
+                unit("pigeon", "e2", "elsewhere.rs"),
+                unit("pigeon", "e3", "elsewhere.rs"),
+            ],
+        };
+        let jobs = map.select(&crates, &[a]).expect("chosen");
+        assert_eq!(
+            jobs.iter().map(|j| j.argv.join(" ")).collect::<Vec<_>>(),
+            ["cargo test -p pigeon --test suite --locked -- backplane::"],
+            "{jobs:?}"
+        );
+        assert!(
+            map.select(&crates, &[b]).is_none(),
+            "a target that is gone, with no suite, leaves it to the crate"
+        );
     }
 }

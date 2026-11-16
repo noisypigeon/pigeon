@@ -41,6 +41,7 @@ fn crates(root: &Path) -> Result<Crates, Error> {
     let mut by_dir = BTreeMap::new();
     let mut deps = BTreeMap::new();
     let mut features = BTreeMap::new();
+    let mut tests = BTreeMap::new();
     for entry in fs::read_dir(ws.join("crates"))
         .map_err(|e| Error::Io {
             path: ws.join("crates"),
@@ -68,12 +69,14 @@ fn crates(root: &Path) -> Result<Crates, Error> {
             features = pigeon_features(&m, &members);
         }
         by_dir.insert(format!("{WORKSPACE}/crates/{dir}/"), name.to_string());
+        tests.insert(name.to_string(), test_targets(&entry.path(), &m));
         deps.insert(name.to_string(), mine);
     }
     Ok(Crates {
         by_dir,
         deps,
         features,
+        tests,
     })
 }
 
@@ -355,4 +358,32 @@ pub fn workers(root: &Path, files: Option<&[String]>) -> Result<Vec<String>, Err
         }
     }
     Ok(out)
+}
+
+/// The integration test targets of the crate at `dir` with manifest `m`: its `[[test]]` names,
+/// and, unless `autotests = false`, each `tests/<x>.rs` and `tests/<x>/main.rs`.
+fn test_targets(dir: &Path, m: &toml::Value) -> BTreeSet<String> {
+    let mut out: BTreeSet<String> = m
+        .get("test")
+        .and_then(toml::Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|t| t.get("name")?.as_str().map(str::to_string))
+        .collect();
+    if m["package"].get("autotests").and_then(toml::Value::as_bool) != Some(false) {
+        for e in fs::read_dir(dir.join("tests"))
+            .into_iter()
+            .flatten()
+            .flatten()
+        {
+            let p = e.path();
+            let stem = e.file_name().to_string_lossy().into_owned();
+            if p.is_dir() && p.join("main.rs").is_file() {
+                out.insert(stem);
+            } else if let Some(s) = stem.strip_suffix(".rs") {
+                out.insert(s.to_string());
+            }
+        }
+    }
+    out
 }
