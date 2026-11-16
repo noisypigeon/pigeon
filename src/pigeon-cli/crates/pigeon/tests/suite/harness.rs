@@ -1,4 +1,4 @@
-//! Helpers shared by the integration tests.
+//! Helpers shared by the suite's modules.
 
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
