@@ -296,3 +296,23 @@ its glob (`src/**/provider/**`, `src/**/worker/provider.rs`,
 
     (planner)
 11. **This ADR is amended with the outcome.** (planner)
+
+## Amendments
+
+### 2026-11-16: Reviewed against !757: they agree
+
+!757 amends
+[`2026-11-15-runtime-one-mcp-entry-point.md`](2026-11-15-runtime-one-mcp-entry-point.md)
+with what shipped. It changes no code and none of this ADR's decisions:
+
+- **It records the state §7 assumes.** Only that ADR merged. Its steps 1
+  to 3 are not on `main`, so `provider.call` has no authorizer to sit
+  behind yet.
+- **It orders the same way.** That ADR's steps 1 to 5, 8 and 9 are
+  re-briefed after the src/ restructure's step 12, and land ahead of this
+  ADR's step 3. This is this ADR's execution step 2.
+- **No shared file.** The two ADRs' `Governs` globs name no file in common.
+  When `provider.call` is registered (step 5), it is one more operation with
+  `asks`, `capability` and `doors` (`/mcp` only), and adds no route.
+
+Neither ADR changes.
