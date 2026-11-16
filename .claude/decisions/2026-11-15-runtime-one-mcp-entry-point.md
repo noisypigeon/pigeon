@@ -252,3 +252,31 @@ glob under `src/pigeon-cli/` or `src/site-templates/` becomes `src/**/<tail>`
 (or `**<file>` for a workspace root file), which matches the file both before
 and after the restructure moves it. That ADR's step 12 tightens them to the
 new paths.
+
+### 2026-11-16: What shipped: only this ADR; its steps are re-briefed after the src/ restructure, ahead of the provider broker
+
+As of `main` a95c258, only this ADR (!605) and its two reviews (!619, !620)
+have merged.
+
+- **Closed unmerged.** Each was closed while the src/ restructure
+  ([`2026-11-16-development-src-crates-neutral-names.md`](2026-11-16-development-src-crates-neutral-names.md))
+  moved its paths:
+  - !627 (b43): step 1, the route inventory;
+  - !626 (b42): step 2, the registry's `asks`, `capability` and `doors`;
+  - !629 (b45): step 3, the session check;
+  - !637 and !641 (b47): step 3, the bound app proofs.
+- **What that leaves on `main`:**
+  - `/mcp` mints `Mcp-Session-Id` and never checks it;
+  - there is no `GET` stream and no resources;
+  - `/v0/events` runs outside `run()`;
+  - 19 of the 20 `/v0/app/*` routes call Durable Objects directly;
+  - the app's proofs are unbound (purpose `grant:<key>`).
+- **The steps restart unchanged in substance.** Steps 1 to 5, 8 and 9 are
+  briefed again against the new crate layout, once the restructure's
+  step 12 merges.
+  - b42, b43, b45 and b47 are superseded by those briefs.
+  - Steps 6, 7 and 10 still need the owner's phone and TestFlight.
+- **They come first.**
+  [`2026-11-16-security-provider-calls-mcp-broker.md`](2026-11-16-security-provider-calls-mcp-broker.md)
+  builds `provider.call` on steps 1 to 3. Its step 2 is this ADR's steps 1
+  to 5, 8 and 9.
