@@ -552,3 +552,25 @@ whose demo amendment it adds.
 - **The ledger.** A stale `tooling/ci/tests.ledger` is a warning. A move
   still adds its lines to `tests.moves` (§6), and `--check` still fails on a
   test that is gone or a package that runs fewer tests.
+### 2026-11-16: Step 5's sentinel change carries the workspace's bookkeeping (!718 reviewed; they agree)
+
+Step 5 moves and renames the sentinel crate. It was refused (!713) because a
+sentinel change could touch only sentinel's paths and its ADR. The owner
+decided (question #7) that a sentinel change may also carry the workspace's
+bookkeeping. That is recorded in
+[`2026-11-10-development-factory-crates-functional-core.md`](2026-11-10-development-factory-crates-functional-core.md)'s
+2026-11-16 amendment and built in three changes:
+
+- !718: the approval rules read `sentinel_bookkeeping`;
+- !724: `.config/approvals.yaml` lists the bookkeeping files: `Cargo.toml`,
+  `Cargo.lock`, `tooling/ci/tests.ledger`, `tooling/ci/tests.moves` and
+  `.config/releases.yaml`;
+- !719: the test harnesses and `mise`'s `sentinel-build` build the judge with
+  `--bin pigeon-sentinel`, and the scope tests find its crate wherever it is.
+
+This agrees with §7 as amended by !711. Step 5 leaves the sentinel crate's
+`CHANGELOG.md` at its old path, where !710 retires it. It touches no
+`CHANGELOG.md`, so `src/**/Cargo.toml` is the only path that !711 and !718
+both name. Step 5 then holds only the judge's paths and that bookkeeping, as
+the owner's own grant, never a mandate. Step 12's binary rename follows the
+same rule.
