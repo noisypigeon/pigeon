@@ -3,6 +3,7 @@
 
 pub mod config;
 pub mod engines;
+pub mod generations;
 pub mod manifest;
 pub mod moves;
 pub mod plans;

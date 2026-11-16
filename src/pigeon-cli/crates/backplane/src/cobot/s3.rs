@@ -5,52 +5,14 @@ use std::collections::BTreeMap;
 use std::fmt::Write as _;
 
 use hmac::{Hmac, Mac};
-use sha2::{Digest, Sha256};
+use sha2::Sha256;
+
+pub use crate::core::sites::credentials::{Credentials, hex, md5_hex, sha256_hex};
 
 /// R2's signing region.
 pub const REGION: &str = "auto";
 /// The signing service.
 pub const SERVICE: &str = "s3";
-
-/// An access key pair; the secret never appears in `Debug` output.
-#[derive(Clone)]
-pub struct Credentials {
-    /// The access key id.
-    pub access_key: String,
-    /// The secret access key.
-    pub secret_key: String,
-}
-
-impl std::fmt::Debug for Credentials {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Credentials")
-            .field("access_key", &self.access_key)
-            .finish_non_exhaustive()
-    }
-}
-
-/// Lowercase hex of `bytes`.
-#[must_use]
-pub fn hex(bytes: &[u8]) -> String {
-    bytes
-        .iter()
-        .fold(String::with_capacity(bytes.len() * 2), |mut s, b| {
-            let _ = write!(s, "{b:02x}");
-            s
-        })
-}
-
-/// Hex SHA-256 of `bytes`.
-#[must_use]
-pub fn sha256_hex(bytes: &[u8]) -> String {
-    hex(&Sha256::digest(bytes))
-}
-
-/// Hex MD5 of `bytes`, as R2 reports a single-part object's `ETag`.
-#[must_use]
-pub fn md5_hex(bytes: &[u8]) -> String {
-    hex(&md5::Md5::digest(bytes))
-}
 
 fn hmac(key: &[u8], data: &str) -> Vec<u8> {
     let mut m = Hmac::<Sha256>::new_from_slice(key).expect("HMAC takes any key length");

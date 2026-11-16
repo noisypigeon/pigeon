@@ -6,7 +6,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
 
-use crate::cobot::release::Config;
+use crate::core::release::Config;
 
 mod map;
 
@@ -895,7 +895,7 @@ mod tests {
         assert_eq!(l.root(), ".");
         assert_eq!(l.from_workspace("tooling/x.sh"), "tooling/x.sh");
         assert_eq!(l.everything()[..2], ["Cargo.toml", "Cargo.lock"]);
-        let config = crate::cobot::release::Config::parse(
+        let config = crate::core::release::Config::parse(
             "description: t\nrepository: https://example.test/r\nunits: {}\ntiers: []\n",
         )
         .expect("config");

@@ -7,8 +7,83 @@ use std::fmt::Write as _;
 
 use serde_json::{Map, Value, json};
 
-use crate::cobot::UnitPlan;
 use crate::cobot::{apex, static_site};
+
+/// What `tofu` will do to a resource.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Action {
+    /// Create it.
+    Create,
+    /// Update it in place.
+    Update,
+    /// Destroy and recreate it.
+    Replace,
+    /// Destroy it.
+    Delete,
+    /// Move it to a new address, unchanged.
+    Move,
+}
+
+impl Action {
+    /// The word used in summaries.
+    #[must_use]
+    pub fn word(self) -> &'static str {
+        match self {
+            Self::Create => "create",
+            Self::Update => "update",
+            Self::Replace => "replace",
+            Self::Delete => "delete",
+            Self::Move => "move",
+        }
+    }
+}
+
+/// One resource change: an address, an action and, for an update, the names of the attributes
+/// it changes; never values.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct Change {
+    /// The resource address.
+    pub address: String,
+    /// The action.
+    pub action: Action,
+    /// For an update, the top-level attributes that change or become unknown.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub attributes: Vec<String>,
+}
+
+/// A unit's plan.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UnitPlan {
+    /// The unit's path.
+    pub unit: String,
+    /// Its changes; empty when there are none.
+    pub changes: Vec<Change>,
+    /// A line to print beside its changes, e.g. pending credentials.
+    pub note: Option<String>,
+}
+
+impl UnitPlan {
+    /// Whether applying would change anything.
+    #[must_use]
+    pub fn has_changes(&self) -> bool {
+        !self.changes.is_empty()
+    }
+
+    /// Resources to add, change and destroy; a replacement counts as one add and one destroy.
+    #[must_use]
+    pub fn counts(&self) -> (usize, usize, usize) {
+        self.changes
+            .iter()
+            .fold((0, 0, 0), |(a, c, d), ch| match ch.action {
+                Action::Create => (a + 1, c, d),
+                Action::Update => (a, c + 1, d),
+                Action::Replace => (a + 1, c, d + 1),
+                Action::Delete => (a, c, d + 1),
+                Action::Move => (a, c, d),
+            })
+    }
+}
 
 /// The runner's `json` with each requested `cloudflare` credential it does not name filled
 /// from the run's own `token`, per

@@ -153,7 +153,7 @@ pub(crate) fn misplaced_apex(unit: &Unit) -> Option<Problem> {
         .find(|k| crate::names::ext(&c.schema).get(k).is_some())?;
     (unit.path != crate::cobot::apex::CLOUDFLARE && c.site.is_none()).then(|| {
         problem(
-            format!("{}/{}", unit.path, crate::cobot::config::SCHEMA),
+            format!("{}/{}", unit.path, crate::core::infra::config::SCHEMA),
             format!(
                 "`x-cobot.{kind}` belongs only in {}",
                 crate::cobot::apex::CLOUDFLARE

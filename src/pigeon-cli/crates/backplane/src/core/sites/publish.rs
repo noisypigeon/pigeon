@@ -6,9 +6,10 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use serde_json::Value;
 
-use crate::cobot::generations::Day;
-use crate::cobot::s3::{self, Credentials};
 use crate::cobot::{apex, static_site};
+use crate::core::infra::generations::Day;
+
+use super::credentials::{Credentials, md5_hex, sha256_hex};
 
 pub use super::view::content_type;
 
@@ -100,7 +101,7 @@ pub fn sync_plan(
         .collect();
     let mut plan = SyncPlan::default();
     for (key, up) in expected {
-        if have.get(key).is_some_and(|e| *e == s3::md5_hex(&up.body))
+        if have.get(key).is_some_and(|e| *e == md5_hex(&up.body))
             && written.get(key).is_some_and(|t| t == up.content_type)
         {
             plan.unchanged += 1;
@@ -139,7 +140,7 @@ pub fn credentials_of(
     Some((
         Credentials {
             access_key: id.to_string(),
-            secret_key: s3::sha256_hex(value.as_bytes()),
+            secret_key: sha256_hex(value.as_bytes()),
         },
         account.to_string(),
     ))

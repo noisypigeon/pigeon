@@ -7,6 +7,8 @@ pub mod assemble;
 #[cfg(feature = "engines")]
 pub mod checks;
 #[cfg(feature = "engines")]
+pub mod credentials;
+#[cfg(feature = "engines")]
 pub mod layout;
 #[cfg(feature = "engines")]
 pub mod publish;

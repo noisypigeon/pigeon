@@ -6,7 +6,7 @@ use std::path::Path;
 use serde_json::json;
 
 use super::{Disk, Module, ModuleInfo, from_kind, render, validate};
-use crate::cobot::generations::Day;
+use crate::core::infra::generations::Day;
 use crate::core::infra::providers::Allowlist;
 
 fn unit() -> super::ConfigUnit {

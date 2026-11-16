@@ -88,7 +88,7 @@ fn a_sync_puts_only_changed_keys_and_deletes_stale_ones() {
     assert_eq!((fresh.put.len(), fresh.unchanged), (4, 0));
     assert!(fresh.types.is_some());
 
-    let md5 = |b: &str| crate::cobot::s3::md5_hex(b.as_bytes());
+    let md5 = |b: &str| super::credentials::md5_hex(b.as_bytes());
     let have: BTreeMap<String, String> = [
         ("index.html", md5("<html>")),
         ("a", md5("a")),

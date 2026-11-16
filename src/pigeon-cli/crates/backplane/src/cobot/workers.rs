@@ -266,8 +266,8 @@ pub struct Route {
     pub subdomains_of: Option<String>,
 }
 
-/// The var a `subdomains_of` route sets to its zone.
-pub const SUBDOMAINS_VAR: &str = "INSTANCE_ZONE";
+/// The var a `subdomains_of` route sets to its zone, the one the proxy reads.
+pub const SUBDOMAINS_VAR: &str = crate::core::platform::hosts::ZONE_VAR;
 
 /// Durable Object classes; each binding is its class's name in `SCREAMING_SNAKE_CASE`.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]

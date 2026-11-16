@@ -137,8 +137,6 @@ mod tests {
 
     #[test]
     fn the_proxy_answers_hosts_under_the_zone_but_the_platforms_own() {
-        #[cfg(feature = "engines")]
-        assert_eq!(super::ZONE_VAR, crate::cobot::workers::SUBDOMAINS_VAR);
         let own = ["platform.pigeon.dev", "blue.platform.pigeon.dev"];
         for h in [
             "example.pigeon.dev",

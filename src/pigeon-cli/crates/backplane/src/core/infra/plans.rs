@@ -3,7 +3,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::cobot::Change;
+use super::engines::Change;
 
 /// The directory under the state holding stored plans.
 pub const DIR: &str = "plans";
