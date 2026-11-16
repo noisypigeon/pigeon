@@ -606,3 +606,12 @@ it moves only the policy engine to `src/pigeon-eviction`, with the
 workspace's bookkeeping. Step 6 moves those files into `pigeon-core` and
 `pigeon-agent` with their names kept, so the `src/**/…` globs still match them.
 Neither decision changes.
+### 2026-11-16: Review of !736 against !757: they agree
+
+!736, step 10e, touches none of the files
+[`2026-11-15-runtime-one-mcp-entry-point.md`](2026-11-15-runtime-one-mcp-entry-point.md)
+governs (`mcp.rs`, `wire.rs`, `routes.rs`, `worker/{api,app,devices,mod}.rs`,
+`API.swift`). It deletes both `mise.toml` files, and edits `dev.rs`,
+`cli/mod.rs`, the `Dockerfile`'s comments and the tests that read
+`mise.toml`. !757 re-briefs that ADR's steps against this ADR's layout after
+step 12, which !736 doesn't change.
