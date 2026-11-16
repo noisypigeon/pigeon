@@ -14,6 +14,7 @@
 - backplane v0.1.38
 - backplane v0.1.39
 - backplane v0.1.40
+- backplane v0.1.41
 - infra-agnostic-random-string v0.1.3
 - infra-agnostic-schema v0.1.3
 - infra-agnostic-schema v0.1.4
@@ -195,6 +196,7 @@
 - docs(adr): faster merges: the release bot takes a merge turn, the head's jobs overlap, and two owner decisions (!818) ([38cb8fb](https://github.com/noisypigeon/pigeon/commit/38cb8fb9d275639390b2a177dba656414cbc9273))
 - docs(adr): the owner's answers on merges: an owner approval covers its head's merge, and checks carry across a restack outside their reach (!820) ([f3c9428](https://github.com/noisypigeon/pigeon/commit/f3c94289da06ebee71a7479c42b262f3638f51cb))
 - docs(adr): review !797 against !801 (!822) ([5c4c6cc](https://github.com/noisypigeon/pigeon/commit/5c4c6cc3d3545bd2473ccb896b93b2e423938eba))
+- refactor: the agent crate's library is `agent`, and the harness's test modules take the groups' names (!797) ([3daef0b](https://github.com/noisypigeon/pigeon/commit/3daef0b4d7f43b18df02017022d02da09e92e6dc)) · backplane
 
 ## 2026-11-15
 
