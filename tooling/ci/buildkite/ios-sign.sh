@@ -13,8 +13,8 @@ if [ -d "/Applications/Xcode_${want}.app" ]; then
 fi
 xcodebuild -version
 
-# The harness, from this commit, with the toolchain mise.toml pins; built before any secret is here.
-rust="$(sed -n 's/^rust = { version = "\([^"]*\)".*/\1/p' mise.toml)"
+# The harness, from this commit, with the toolchain rust-toolchain.toml pins; built before any secret is here.
+rust="$(sed -n 's/^channel = "\([^"]*\)".*/\1/p' rust-toolchain.toml)"
 if ! command -v rustup >/dev/null; then
   curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain "$rust"
 fi
@@ -25,9 +25,9 @@ cargo +"$rust" build --release --locked -p pigeon --no-default-features --featur
 pigeon="$PWD/target/release/pigeon"
 
 work="$(mktemp -d)"
-trap '"$pigeon" backplane signing clean || true; rm -rf "$work"' EXIT
+trap '"$pigeon" signing clean || true; rm -rf "$work"' EXIT
 
-plist="$("$pigeon" backplane signing load)"
+plist="$("$pigeon" signing load)"
 
 token="$(buildkite-agent oidc request-token --audience https://platform.pigeon.dev --lifetime 300)"
 curl -fsS -H "Authorization: Bearer $token" -o "$work/archive.zip" \
@@ -46,6 +46,6 @@ xcodebuild -exportArchive \
   -exportPath "$work/export"
 version="$(plutil -extract ApplicationProperties.CFBundleShortVersionString raw \
   "$work/Pigeon.xcarchive/Info.plist")"
-"$pigeon" backplane signing upload --ipa "$work/export/Pigeon.ipa" \
+"$pigeon" signing upload --ipa "$work/export/Pigeon.ipa" \
   --version "$version" --build "$build"
 echo "uploaded build $build"

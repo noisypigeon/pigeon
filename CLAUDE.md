@@ -31,7 +31,7 @@ belong in the ADR, never in the file.
   naming, template and amendments are in
   [`.claude/decisions/README.md`](.claude/decisions/README.md).
 - Each ADR's `* Governs:` line names the paths it rules. Before changing a
-  path, run `pigeon backplane decisions <path>` and read the ADRs it lists; a
+  path, run `pigeon decisions <path>` and read the ADRs it lists; a
   design change's `affects` are its ADR's globs.
 - An agent continues through an ADR's execution steps unless stopped, per the
   lifecycle ADR's 2026-11-11 amendment.
@@ -47,10 +47,10 @@ belong in the ADR, never in the file.
 - No change edits `CHANGELOG.md`; the release bot alone writes it, the one at the root,
   rendered from history (`--replay`); see
   [`2026-11-16-development-src-crates-neutral-names.md`](.claude/decisions/2026-11-16-development-src-crates-neutral-names.md) §7.
-- Never run `tofu apply` or `pigeon cobot apply` by hand against
+- Never run `tofu apply` or `pigeon infra apply` by hand against
   `noisypigeon/pigeon-cobot-state`.
 - Workers, Containers, migrations and secrets deploy only through
-  `pigeon cobot workers`; the local deploy is break-glass.
+  `pigeon workers`; the local deploy is break-glass.
 - `infra/` secret keys are break-glass and never handed to a workload, which
   gets only its own secrets and minted tokens.
 - A session never evicts a change; the control plane alone does.
@@ -113,13 +113,13 @@ Per
 
 ## Commands
 
-`mise run ci` must pass before every change is pushed.
+`pigeon dev ci` must pass before every change is pushed.
 
 Where each check runs:
 
-- locally, before a push: `mise run ci`, or `ci-scoped` for this branch's
+- locally, before a push: `pigeon dev ci`, or `ci-scoped` for this branch's
   paths;
-- after a push, on Cloudflare: `bound` and every sentinel policy;
+- after a push, on Cloudflare: `bound` and every policy;
 - then, on GitHub Actions: the code checks `change.scope` selects (fmt,
   clippy, wasm builds, tests), through `main`'s `ci.yml`, with each run's link
   in `change_status` under `github`; while GitHub is down a check shows
@@ -127,32 +127,32 @@ Where each check runs:
 - `ci_rerun` re-dispatches one check; `ci_rerun` with `on: cloudflare` is the
   owner's break-glass, running the head's code checks on the `Checker`.
 
-- `mise run build` / `test` / `fmt` / `lint`
-- `mise run rust`: fmt-check, clippy `-D warnings`, `features`, tests.
-- `mise run features`: clippy with each subcommand feature alone.
-- `pigeon cobot validate|render|plan`: check, render and plan units;
-  `plan` needs `COBOT_STATE_PASSPHRASE` and a `--state` directory.
-- `pigeon cobot secrets set <unit> <key>` (value on stdin) and
-  `pigeon cobot secrets check <unit>`, with `COBOT_SECRETS_PASSPHRASE` (or
-  `COBOT_WORKLOAD_SECRETS_PASSPHRASE` under `workloads/`); there is no `get`.
-- `pigeon cobot lock`: rewrite `.config/providers.lock.hcl` from the allowlist.
-- `pigeon cobot sites build [WORKLOAD…]`: build static sites with Zola, no
+- `pigeon dev build` / `test` / `fmt` / `lint`
+- `pigeon dev rust`: fmt-check, clippy `-D warnings`, `features`, tests.
+- `pigeon dev features`: clippy with each subcommand feature alone.
+- `pigeon infra validate|render|plan`: check, render and plan units;
+  `plan` needs `PIGEON_STATE_PASSPHRASE` and a `--state` directory.
+- `pigeon infra secrets set <unit> <key>` (value on stdin) and
+  `pigeon infra secrets check <unit>`, with `PIGEON_SECRETS_PASSPHRASE` (or
+  `PIGEON_WORKLOAD_SECRETS_PASSPHRASE` under `workloads/`); there is no `get`.
+- `pigeon infra lock`: rewrite `.config/providers.lock.hcl` from the allowlist.
+- `pigeon sites build [WORKLOAD…]`: build static sites with Zola, no
   secrets; `sites publish --state DIR` also syncs them to R2 and checks them
   live; `--data NAME=FILE` hands each template a JSON file as `data/NAME.json`.
-- `pigeon cobot git apply|status|push|fetch|clone|mirror|sync [--instance DIR]`,
+- `pigeon git apply|status|push|fetch|clone|mirror|sync [--instance DIR]`,
   with `CLOUDFLARE_API_TOKEN` scoped to the instance's account: its Artifacts
   repositories; a token is minted per call and never stored. Until releases
   leave GitHub, `mirror` only fast-forwards and adds tags, and `sync` brings the
   release bot's commits and tags back.
-- `pigeon cobot release --dry-run` / `pigeon cobot tags`: preview the bot's
+- `pigeon release --dry-run` / `pigeon release tags`: preview the bot's
   release JSON.
-- `pigeon backplane instance|engines|operations|run <op>` (`--json` for the
-  wire form); `mise run backplane` validates `.config/instance.yaml`; from
-  pigeon, `--instance DIR` runs them, and `pigeon cobot`, against another
+- `pigeon instance|engines|ops|run <op>` (`--json` for the
+  wire form); `pigeon dev instance` validates `.config/instance.yaml`; from
+  pigeon, `--instance DIR` runs them, and `pigeon infra`, against another
   instance.
-- `mise run sentinel`: `pigeon backplane run policy.check` against
-  `.config/policies/`; `pigeon backplane run sites.build` builds every site.
-- `CHANGE_BASE=artifacts/main mise run sentinel-change`: `policy.check` on this
+- `pigeon dev policy`: `pigeon run policy.check` against
+  `.config/policies/`; `pigeon run sites.build` builds every site.
+- `CHANGE_BASE=artifacts/main pigeon dev policy-change`: `policy.check` on this
   branch as a change, its scope from the first commit's `Change-Scope:` trailers.
   Every change's first commit carries those trailers, and passes this before
   it's pushed (`.config/policies/change.yaml`). Git reads trailers from the
@@ -194,11 +194,11 @@ Where each check runs:
   work left, per
   [`2026-11-13-development-session-stages-subscriptions-breaker.md`](.claude/decisions/2026-11-13-development-session-stages-subscriptions-breaker.md).
   The owner is pushed to (Web Push, from
-  `/approvals`, with `PUSH_VAPID_KEY` from `pigeon backplane vapid-key`)
+  `/approvals`, with `PUSH_VAPID_KEY` from `pigeon keys vapid`)
   only when an approval waits, a mandate pauses, a deploy fails or the
   hourly digest (`digest_show`) needs them, per
   [`2026-11-08-development-events-tickets-digest-mandate.md`](.claude/decisions/2026-11-08-development-events-tickets-digest-mandate.md).
-- `pigeon backplane jobs --listen ADDR`: a job Container's server, signed under
+- `pigeon agent listen ADDR`: a job Container's server, signed under
   `BACKPLANE_TOKEN`; the control plane's `Checker` runs it. The Worker
   (`infra/pigeon/workers/control/`) serves MCP on `/mcp` behind Access: tools
   `change_propose`, `change_status`, `change_pushed`, `ci_rerun` (`on:
@@ -219,25 +219,25 @@ Where each check runs:
   the plan as the body.
 - `architecture_describe` (`format`: `json`, `text` or `svg`): the platform's
   graph as of the deployed SHA, each part and link with the code it came
-  from; locally, `pigeon backplane run architecture.describe --text
+  from; locally, `pigeon run architecture.describe --text
   format=text`. Every deploy republishes it; `tests/architecture.rs` fails on
   a route, binding or outbound host it lacks, per
   [`2026-11-15-runtime-architecture-coverage-agents-deploys.md`](.claude/decisions/2026-11-15-runtime-architecture-coverage-agents-deploys.md).
-- `pigeon cobot show --plan ID --state DIR`: a stored plan's changes attribute by
+- `pigeon infra show --plan ID --state DIR`: a stored plan's changes attribute by
   attribute, decrypted with the state passphrase; sensitive values stay hidden.
-- `pigeon cobot workers validate|permissions|render|plan|deploy|status|secrets put|teardown`:
+- `pigeon workers validate|permissions|render|plan|deploy|status|secrets put|teardown`:
   the platform's Workers, from `infra/<unit>/workers/<name>/worker.yaml`, with
   wrangler; `deploy --plan ID` only, from `plan --state …`; this local deploy
   is break-glass once the pipeline deploys Workers.
-- `pigeon cobot workers outputs --state …` and `workers images push`: the JSON
+- `pigeon workers outputs --state …` and `workers images push`: the JSON
   for the `DEPLOY_OUTPUTS` and `DEPLOY_IMAGES` Worker secrets, piped to
   `workers secrets put`; `deploy_retry` deploys `main` again: after a deploy
   failed, as for a missing image, or, after one passed, everything, as for new
   images.
-- `CHANGE_BASE=artifacts/main mise run ci-scoped`: only the checks this branch's
-  paths need (`pigeon cobot scope`; `--file P` to name paths, `--json` to list
-  them; backplane's `change.scope` answers the same); `mise run ci` stays the
+- `CHANGE_BASE=artifacts/main pigeon dev ci-scoped`: only the checks this branch's
+  paths need (`pigeon dev scope`; `--file P` to name paths, `--json` to list
+  them; the agent's `change.scope` answers the same); `pigeon dev ci` stays the
   full set.
-- `PR_TITLE='…' PR_BODY='…' PR_NUMBER=N PR_FILES="$(git diff --name-only main...)" mise run sentinel-pr`:
+- `PR_TITLE='…' PR_BODY='…' PR_NUMBER=N PR_FILES="$(git diff --name-only main...)" pigeon dev policy-pr`:
   adds the pull-request policy, through `policy.check`'s `title`, `body`,
   `number` and `files` arguments.
