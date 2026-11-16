@@ -251,7 +251,7 @@ fn changelog(content: Option<&str>) -> Vec<String> {
 
 fn cl_good() -> String {
     format!(
-        "# Changelog\n\n## 2026-01-03\n\n- ci: second ([#2]({URL}/pull/2))\n- feat: first ([#1]({URL}/pull/1))\n\n## 2026-01-02\n\n- docs(adr): bootstrap ([0123456]({URL}/commit/{SHA}))\n"
+        "# Changelog\n\n## 2026-01-03\n\n### Released\n\n- a v0.1.1\n- b v0.2.0\n\n### Merged\n\n- feat: first ([#1]({URL}/pull/1)) · a\n- ci: second ([#2]({URL}/pull/2))\n- refactor: rename (!7) ([0123456]({URL}/commit/{SHA})) · a, b\n- units renamed · c → b\n\n## 2026-01-02\n\n### Merged\n\n- docs(adr): bootstrap ([0123456]({URL}/commit/{SHA}))\n"
     )
 }
 
@@ -281,6 +281,8 @@ fn changelog_rules() {
         g.replace("[0123456]", "[fedcba9]"),
         format!("{g}  continued\n"),
         g.replace("# Changelog\n", "# Changelog\n\nIntro.\n"),
+        g.replace(" · a\n", " · A\n"),
+        g.replace("### Merged\n\n- feat", "### Notes\n\n- feat"),
     ] {
         fails(&changelog(Some(&content)));
     }
@@ -289,7 +291,7 @@ fn changelog_rules() {
 #[test]
 fn every_policy_is_valid() {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../../.config/policies");
-    assert_eq!(sentinel::load_dir(&dir).expect("loads").len(), 22);
+    assert_eq!(sentinel::load_dir(&dir).expect("loads").len(), 21);
 }
 
 fn layout_root(skip: &[&str], extra: &[&str]) -> TempDir {
@@ -417,30 +419,17 @@ fn layout_keeps_backplane_core_pure() {
     ));
 }
 
-fn release_changelog(content: &str) -> Vec<String> {
-    let root = TempDir::new().expect("tempdir");
-    let path = root
-        .path()
-        .join("src/pigeon-cli/crates/sentinel/CHANGELOG.md");
-    fs::create_dir_all(path.parent().expect("parent")).expect("mkdir");
-    fs::write(path, content).expect("write");
-    violations("release-changelog", root.path(), None)
-}
-
 #[test]
 fn release_changelog_rules() {
-    let g = format!(
-        "# Changelog\n\n## v0.1.1 (2026-01-03)\n\n- feat: b ([#2]({URL}/pull/2))\n\n## v0.1.0 (2026-01-03)\n\n- feat: a ([#1]({URL}/pull/1))\n- chore: x ([0123456]({URL}/commit/{SHA}))\n"
-    );
-    passes(&release_changelog(&g));
+    let g = cl_good();
     for content in [
-        g.replace("v0.1.0 (2026-01-03)", "v0.1.0 (2026-01-04)"),
-        g.replace("v0.1.0", "v0.1.1"),
-        g.replace("## v0.1.0 (2026-01-03)", "## 2026-01-03"),
-        g.replace(&format!("- feat: b ([#2]({URL}/pull/2))\n"), ""),
-        g.replace("[#2]", "[#3]"),
+        g.replace("- a v0.1.1\n", "- a 0.1.1\n"),
+        g.replace("- a v0.1.1\n", "- a v0.1\n"),
+        g.replace("- a v0.1.1\n", "- a/v0.1.1\n"),
+        g.replace("### Released\n\n- a v0.1.1\n- b v0.2.0\n", "### Released\n"),
+        g.replace("- units renamed · c → b\n", "- units renamed · c\n"),
     ] {
-        fails(&release_changelog(&content));
+        fails(&changelog(Some(&content)));
     }
 }
 

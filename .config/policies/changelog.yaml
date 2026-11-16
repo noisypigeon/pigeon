@@ -1,6 +1,6 @@
-description: Generated dated changelogs have dated sections, newest first, one linked line per change.
+description: The one CHANGELOG.md the release bot renders from history; days newest first, each with its releases and merged lines. See .claude/decisions/2026-11-16-development-src-crates-neutral-names.md §7.
 target:
-  files: [CHANGELOG.md, src/pigeon-cli/CHANGELOG.md, src/pigeon-cli/crates/pigeon/CHANGELOG.md]
+  files: [CHANGELOG.md]
   optional: true
 rules:
   - line:
@@ -11,12 +11,25 @@ rules:
       each: '^(?<day>[0-9]{4}-[0-9]{2}-[0-9]{2})$'
       min: 1
       order: { by: day, direction: descending, strict: true }
+  - headings:
+      level: 3
+      each: '^(Released|Merged)$'
   - items:
       under: { level: 2 }
       lines: true
-      matches: '^- .*\S \((?:\[#(?<pr>[0-9]+)\]\(https://github\.com/noisypigeon/pigeon/pull/(?<pr_url>[0-9]+)\)|\[(?<sha>[0-9a-f]{7,40})\]\(https://github\.com/noisypigeon/pigeon/commit/(?<sha_url>[0-9a-f]{40})\))\)$'
+      matches: '^(Released|Merged|- \S.*)$'
       min: 1
       elsewhere: forbid
+  - items:
+      under: { level: 3, text: Released }
+      lines: true
+      matches: '^- [a-z0-9][a-z0-9-]* v[0-9]+\.[0-9]+\.[0-9]+$'
+      min: 1
+  - items:
+      under: { level: 3, text: Merged }
+      lines: true
+      matches: '^- (?:units renamed · [a-z0-9-]+ → [a-z0-9-]+(?:, [a-z0-9-]+ → [a-z0-9-]+)*|.*\S \((?:\[#(?<pr>[0-9]+)\]\(https://github\.com/noisypigeon/pigeon/pull/(?<pr_url>[0-9]+)\)|\[(?<sha>[0-9a-f]{7,40})\]\(https://github\.com/noisypigeon/pigeon/commit/(?<sha_url>[0-9a-f]{40})\))\)(?: · [a-z0-9-]+(?:, [a-z0-9-]+)*)?)$'
+      min: 1
       equal: [pr, pr_url]
       prefix: [sha, sha_url]
       unique: pr

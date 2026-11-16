@@ -495,3 +495,28 @@ Reviews !669, the bench ADR's step 4, against this ADR and
   layout from the tree it checks. The same rule makes steps 5 to 7 data
   edits for the checks: each renames or moves a package in the manifests
   and in `[workspace.metadata.pigeon]` together.
+
+### 2026-11-16: The backfill is the release job's first run
+
+§7's backfill change can't pass `main`'s policies:
+- `pull-request.yaml` refuses any change whose files include a
+  `CHANGELOG.md`, and the bound job applies it to every change;
+- `change.yaml`'s `max_lines` refuses a file of about 900 lines.
+
+It isn't needed either. The bot renders the whole file from first-parent
+history on every run (!694), so its first run writes the backfill: every day
+since 2026-11-02, the 32 retirements of `.config/releases.yaml` (!710), and
+one release per changed unit, tagged as usual.
+
+- **No change commits a `CHANGELOG.md`.** `pull-request.yaml` stays as it is.
+  The rule in `CLAUDE.md` (!699) holds without an exception.
+- **`.config/policies/changelog.yaml`** checks the one file's layout:
+  - `## <day>` sections, newest first;
+  - `### Released` and `### Merged` only;
+  - a released line is `- <unit> v<X.Y.Z>`;
+  - a merged line is a linked subject with an optional ` · <units>` suffix,
+    or the rename line.
+- **`release-changelog.yaml` is deleted.** Every file it named is retired.
+- **The release job in `MainRun`** commits the bot's output to `main` after
+  each deploy that passes. It is step 3's last part, and its first run is the
+  backfill.
