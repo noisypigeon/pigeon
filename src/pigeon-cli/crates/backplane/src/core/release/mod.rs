@@ -1,4 +1,4 @@
-//! The `release` domain: release units, changelog tiers, lines and version bumps, from the
+//! The `release` domain: release units, the changelog, lines and version bumps, from the
 //! commits, files and tags the shell reads; see
 //! `.claude/decisions/2026-11-10-development-factory-crates-functional-core.md` §3.
 
@@ -10,5 +10,5 @@ pub mod lines;
 mod tests;
 
 pub use changelog::Changelog;
-pub use config::{CargoTree, Config, Setting, Tier, Unit};
+pub use config::{CargoTree, Config, Setting, Unit};
 pub use lines::{Commit, Outcome, RELEASE_PREFIX, Released, TagStatus};

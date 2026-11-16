@@ -1,4 +1,4 @@
-//! Release units and generated changelog tiers: git, `cargo tree` and every read and write, around
+//! Release units and the generated changelog: git, `cargo tree` and every read and write, around
 //! [`crate::core::release`]; see `.claude/decisions/2026-11-02-release-crate-units-and-images.md`.
 
 mod git;
@@ -12,7 +12,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use crate::cobot::Error;
 use crate::core::release::lines::{
     bumped, first_lines, next_lines, package_manifest, package_name, read_version, released,
-    setting_lines, tag_rows, tier_text, tree_of, user_only,
+    setting_lines, tag_rows, tree_of, user_only,
 };
 
 pub use crate::core::release::*;
@@ -173,7 +173,12 @@ fn unit_release(
             message: "no `version = \"X.Y.Z\"` line".into(),
         });
     };
-    let tag = git::last_tag(root, name)?;
+    let mut tag = git::last_tag(root, name)?;
+    if tag.is_none()
+        && let Some(previous) = &unit.previous
+    {
+        tag = git::last_tag(root, previous)?;
+    }
     let Some(last) = &tag else {
         let user = user_commits(root, None, to)?;
         let all = git::commits(root, None, to)?;
@@ -221,64 +226,46 @@ fn unit_release(
     Ok(Some((released(name, unit, version), lines)))
 }
 
-/// Renders every tier, recording the ones that changed in `files`.
-fn render_tiers(
+/// The whole changelog at `to`, from first-parent history: each commit's units as the release
+/// config at `config_file` named them then, the release tags reachable from `to`, and `releases`.
+fn history_text(
     root: &Path,
     config: &Config,
-    from: Option<&str>,
+    config_file: &str,
     to: &str,
     releases: &[(Released, Vec<String>)],
-    files: &mut BTreeMap<PathBuf, String>,
-    removed: &mut Vec<PathBuf>,
-) -> Result<(), Error> {
-    let today = git::date(root, to)?;
-    let range = user_commits(root, from, to)?;
-    let mut history: Option<Vec<Commit>> = None;
-    for tier in &config.tiers {
-        let at = |p: &Path| root.join(p).is_file();
-        let moved = match &tier.from {
-            Some(old) if at(old) && at(&tier.file) => {
-                return Err(Error::Io {
-                    path: root.join(old),
-                    message: format!(
-                        "both `{}` and `{}` exist; a tier lives in one place",
-                        old.display(),
-                        tier.file.display()
-                    ),
-                });
-            }
-            Some(old) if at(old) => Some(old.clone()),
-            _ => None,
+) -> Result<String, Error> {
+    type Past = Option<BTreeMap<String, history::PastUnit>>;
+    let mut cache: BTreeMap<String, Past> = BTreeMap::new();
+    let mut merged = Vec::new();
+    let mut before: Past = None;
+    for commit in git::commits(root, None, to)? {
+        let text = git::show(root, &commit.sha, config_file);
+        let units = cache
+            .entry(text)
+            .or_insert_with_key(|t| history::past_units(t))
+            .clone();
+        let renames = match (&before, &units) {
+            (Some(b), Some(a)) => history::renames(b, a),
+            _ => Vec::new(),
         };
-        let existing = match &moved {
-            Some(old) => Some(fs::read_to_string(root.join(old)).map_err(|e| Error::Io {
-                path: root.join(old),
-                message: format!("cannot read the tier to move: {e}"),
-            })?),
-            None => fs::read_to_string(root.join(&tier.file)).ok(),
-        };
-        let commits: &[Commit] = match (&tier.paths, &existing, &mut history) {
-            (None, _, _) => &[],
-            (Some(_), Some(_), _) => &range,
-            (Some(_), None, Some(all)) => all,
-            (Some(_), None, slot @ None) => slot.insert(user_commits(root, None, to)?),
-        };
-        let rendered = tier_text(
-            tier,
-            existing.as_deref(),
-            commits,
-            &config.repository,
-            releases,
-            &today,
-        );
-        if let Some(old) = moved {
-            files.insert(tier.file.clone(), rendered);
-            removed.push(old);
-        } else if existing.as_deref() != Some(rendered.as_str()) {
-            files.insert(tier.file.clone(), rendered);
-        }
+        merged.push(history::Merged {
+            units: units
+                .as_ref()
+                .map(|u| history::units_of(&commit, u))
+                .unwrap_or_default(),
+            renames,
+            commit,
+        });
+        before = units;
     }
-    Ok(())
+    let mut tags = git::tag_dates(root, to)?;
+    let today = git::date(root, to)?;
+    tags.extend(releases.iter().map(|(r, _)| history::Tagged {
+        tag: r.tag.clone(),
+        date: today.clone(),
+    }));
+    Ok(history::render(&config.repository, &merged, &tags))
 }
 
 /// Every release tag of every unit, each unit's newest version first.
@@ -289,13 +276,17 @@ fn render_tiers(
 pub fn tags(root: &Path, config: &Config) -> Result<Vec<TagStatus>, Error> {
     let mut rows = Vec::new();
     for (name, unit) in &config.units {
-        rows.extend(tag_rows(config, name, unit, git::tags(root, name)?));
+        let mut own = git::tags(root, name)?;
+        if let Some(previous) = &unit.previous {
+            own.extend(git::tags(root, previous)?);
+        }
+        rows.extend(tag_rows(config, name, unit, own));
     }
     Ok(rows)
 }
 
-/// Runs a release over `from..to`; with `dry_run`, writes nothing. Without
-/// `from`, the range starts after the last `chore(release):` commit.
+/// Runs a release up to `to`, then renders `config.changelog` from all of history and removes
+/// the retired changelogs. With `replay`, cuts no release; with `dry_run`, writes nothing.
 ///
 /// # Errors
 ///
@@ -304,32 +295,32 @@ pub fn tags(root: &Path, config: &Config) -> Result<Vec<TagStatus>, Error> {
 pub fn run(
     root: &Path,
     config: &Config,
-    from: Option<&str>,
+    config_file: &str,
     to: &str,
     notes_dir: Option<&Path>,
+    replay: bool,
     dry_run: bool,
 ) -> Result<Outcome, Error> {
-    let last_release = match from {
-        Some(_) => None,
-        None => git::last_with_subject(root, to, RELEASE_PREFIX)?,
-    };
-    let from = from.or(last_release.as_deref());
     let mut files: BTreeMap<PathBuf, String> = BTreeMap::new();
     let mut releases = Vec::new();
-    for (name, unit) in &config.units {
-        if let Some(r) = unit_release(root, config, name, unit, to, &mut files)? {
-            releases.push(r);
+    if !replay {
+        for (name, unit) in &config.units {
+            if let Some(r) = unit_release(root, config, name, unit, to, &mut files)? {
+                releases.push(r);
+            }
         }
     }
-    let mut removed = Vec::new();
-    render_tiers(root, config, from, to, &releases, &mut files, &mut removed)?;
-    removed.extend(
-        config
-            .retired
-            .iter()
-            .filter(|p| root.join(p).is_file())
-            .cloned(),
-    );
+    let rendered = history_text(root, config, config_file, to, &releases)?;
+    let current = fs::read_to_string(root.join(&config.changelog)).ok();
+    if current.as_deref() != Some(rendered.as_str()) {
+        files.insert(config.changelog.clone(), rendered);
+    }
+    let removed: Vec<PathBuf> = config
+        .retired
+        .iter()
+        .filter(|p| root.join(p).is_file())
+        .cloned()
+        .collect();
     if !dry_run {
         for (rel, content) in &files {
             let path = root.join(rel);

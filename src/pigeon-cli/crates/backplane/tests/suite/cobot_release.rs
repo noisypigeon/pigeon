@@ -1,7 +1,7 @@
 //! `backplane::cobot::release` against throwaway git repositories.
 
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use backplane::cobot::release::{self, Config, Outcome};
@@ -9,6 +9,7 @@ use tempfile::TempDir;
 
 const CONFIG: &str = "description: test.
 repository: https://x
+changelog: CHANGELOG.md
 units:
   a:
     manifest: a/Cargo.toml
@@ -20,10 +21,6 @@ units:
     features: b
     image: img/b
     paths: [b/, shared/]
-tiers:
-  - { file: CHANGELOG.md, paths: [''] }
-  - { file: a/CHANGELOG.md, unit: a }
-  - { file: b/CHANGELOG.md, unit: b }
 ";
 
 fn git(root: &Path, args: &[&str], date: &str) -> String {
@@ -69,6 +66,7 @@ fn repo() -> (TempDir, String) {
     let dir = TempDir::new().expect("tempdir");
     let root = dir.path();
     git(root, &["init", "-q", "-b", "main"], "2026-01-01");
+    write(root, "releases.yaml", CONFIG);
     write(
         root,
         "a/Cargo.toml",
@@ -83,14 +81,25 @@ fn repo() -> (TempDir, String) {
     (dir, base)
 }
 
-fn run(root: &Path, from: Option<&str>) -> Outcome {
-    let config = Config::load(&{
-        let p = root.join("releases.yaml");
-        fs::write(&p, CONFIG).expect("write");
-        p
-    })
-    .expect("config");
-    release::run(root, &config, from, "HEAD", None, false).expect("release")
+fn config(root: &Path) -> Config {
+    Config::load(&root.join("releases.yaml")).expect("config")
+}
+
+fn run_as(root: &Path, replay: bool, dry_run: bool) -> Outcome {
+    release::run(
+        root,
+        &config(root),
+        "releases.yaml",
+        "HEAD",
+        None,
+        replay,
+        dry_run,
+    )
+    .expect("release")
+}
+
+fn run(root: &Path) -> Outcome {
+    run_as(root, false, false)
 }
 
 /// Commits the bot's output and tags each release, as the workflow does.
@@ -115,61 +124,61 @@ fn released(o: &Outcome) -> Vec<String> {
     o.released.iter().map(|r| r.tag.clone()).collect()
 }
 
+fn link(sha: &str, subject: &str) -> String {
+    format!("- {subject} ([{}](https://x/commit/{sha}))", &sha[..7])
+}
+
 #[test]
 fn first_release_then_only_changed_units() {
     let (dir, _) = repo();
     let root = dir.path();
 
-    let first = run(root, None);
+    let first = run(root);
     assert_eq!(released(&first), ["a/v0.1.0", "b/v0.1.0"]);
     assert_eq!(
         read(root, "CHANGELOG.md"),
-        "# Changelog\n\n## 2026-01-01\n\n- chore: init ([#1](https://x/pull/1))\n"
+        "# Changelog\n\n## 2026-01-01\n\n### Released\n\n- a v0.1.0\n- b v0.1.0\n\n### Merged\n\n- chore: init ([#1](https://x/pull/1)) · a, b\n"
     );
-    assert_eq!(
-        read(root, "a/CHANGELOG.md"),
-        "# Changelog\n\n## v0.1.0 (2026-01-01)\n\n- chore: init ([#1](https://x/pull/1))\n"
-    );
-    let mut before = land(root, &first, "2026-01-01");
+    assert!(!root.join("a/CHANGELOG.md").exists());
+    land(root, &first, "2026-01-01");
 
     let sha = commit(root, "fix: a only", &["a/src.rs"], "2026-01-02");
-    let a_only = run(root, Some(&before));
+    let a_only = run(root);
     assert_eq!(released(&a_only), ["a/v0.1.1"]);
     assert!(read(root, "a/Cargo.toml").contains("version = \"0.1.1\"\n"));
     assert!(read(root, "b/Cargo.toml").contains("version = \"0.1.0\"\n"));
-    assert!(read(root, "a/CHANGELOG.md").starts_with(&format!(
-        "# Changelog\n\n## v0.1.1 (2026-01-02)\n\n- fix: a only ([{}](https://x/commit/{sha}))\n\n## v0.1.0",
-        &sha[..7]
+    assert!(!root.join("a/CHANGELOG.md").exists());
+    assert!(read(root, "CHANGELOG.md").starts_with(&format!(
+        "# Changelog\n\n## 2026-01-02\n\n### Released\n\n- a v0.1.1\n\n### Merged\n\n{} · a\n\n## 2026-01-01\n",
+        link(&sha, "fix: a only")
     )));
-    before = land(root, &a_only, "2026-01-02");
+    land(root, &a_only, "2026-01-02");
 
     commit(root, "build: shared (#3)", &["shared/t"], "2026-01-03");
-    let both = run(root, Some(&before));
+    let both = run(root);
     assert_eq!(released(&both), ["a/v0.1.2", "b/v0.1.1"]);
-    before = land(root, &both, "2026-01-03");
+    land(root, &both, "2026-01-03");
 
     commit(root, "docs: readme (#4)", &["docs/readme"], "2026-01-03");
-    let none = run(root, Some(&before));
+    let none = run(root);
     assert_eq!(released(&none), Vec::<String>::new());
     assert_eq!(none.written, [Path::new("CHANGELOG.md")]);
     assert!(read(root, "CHANGELOG.md").starts_with(
-        "# Changelog\n\n## 2026-01-03\n\n- docs: readme ([#4](https://x/pull/4))\n- build: shared ([#3](https://x/pull/3))\n\n## 2026-01-02\n"
+        "# Changelog\n\n## 2026-01-03\n\n### Released\n\n- a v0.1.2\n- b v0.1.1\n\n### Merged\n\n- build: shared ([#3](https://x/pull/3)) · a, b\n- docs: readme ([#4](https://x/pull/4))\n\n## 2026-01-02\n"
     ));
 
-    let again = run(root, Some(&before));
+    let again = run(root);
     assert_eq!(released(&again), Vec::<String>::new());
-    assert_eq!(again.written, Vec::<std::path::PathBuf>::new());
+    assert_eq!(again.written, Vec::<PathBuf>::new());
 }
 
 #[test]
 fn dry_run_writes_nothing() {
     let (dir, _) = repo();
     let root = dir.path();
-    let config_path = root.join("releases.yaml");
-    fs::write(&config_path, CONFIG).expect("write");
-    let config = Config::load(&config_path).expect("config");
-    let outcome = release::run(root, &config, None, "HEAD", None, true).expect("release");
+    let outcome = run_as(root, false, true);
     assert_eq!(outcome.released.len(), 2);
+    assert_eq!(outcome.written, [Path::new("CHANGELOG.md")]);
     assert!(!root.join("CHANGELOG.md").exists());
 }
 
@@ -177,11 +186,17 @@ fn dry_run_writes_nothing() {
 fn notes_hold_each_release_section() {
     let (dir, _) = repo();
     let root = dir.path();
-    let config_path = root.join("releases.yaml");
-    fs::write(&config_path, CONFIG).expect("write");
-    let config = Config::load(&config_path).expect("config");
     let notes = root.join("notes");
-    release::run(root, &config, None, "HEAD", Some(&notes), false).expect("release");
+    release::run(
+        root,
+        &config(root),
+        "releases.yaml",
+        "HEAD",
+        Some(&notes),
+        false,
+        false,
+    )
+    .expect("release");
     assert_eq!(
         read(root, "notes/b.md"),
         "- chore: init ([#1](https://x/pull/1))\n"
@@ -193,12 +208,9 @@ fn invalid_config_is_rejected() {
     let dir = TempDir::new().expect("tempdir");
     let path = dir.path().join("r.yaml");
     for bad in [
-        CONFIG.replace(
-            "{ file: b/CHANGELOG.md, unit: b }",
-            "{ file: b/CHANGELOG.md, unit: c }",
-        ),
-        CONFIG.replace("unit: b }", "unit: b, paths: [b/] }"),
+        CONFIG.replace("image: img/a", "image: img/a\n    previous: b"),
         CONFIG.replace("image: img/a", "image: img/a\n    extra: 1"),
+        format!("{CONFIG}unknown: 1\n"),
     ] {
         fs::write(&path, bad).expect("write");
         assert!(Config::load(&path).is_err());
@@ -209,7 +221,7 @@ fn invalid_config_is_rejected() {
 fn non_ascii_paths_release_their_unit() {
     let (dir, _) = repo();
     let root = dir.path();
-    let first = run(root, None);
+    let first = run(root);
     land(root, &first, "2026-01-01");
     commit(
         root,
@@ -217,33 +229,14 @@ fn non_ascii_paths_release_their_unit() {
         &["b/caf\u{e9}.md"],
         "2026-01-02",
     );
-    assert_eq!(released(&run(root, None)), ["b/v0.1.1"]);
-}
-
-#[test]
-fn default_range_starts_after_the_last_release_commit() {
-    let (dir, _) = repo();
-    let root = dir.path();
-    let first = run(root, None);
-    land(root, &first, "2026-01-01");
-    commit(root, "docs: one (#2)", &["docs/one"], "2026-01-02");
-    commit(root, "docs: two (#3)", &["docs/two"], "2026-01-02");
-    fs::write(root.join("CHANGELOG.md"), "# Changelog\n").expect("write");
-    let outcome = run(root, None);
-    assert_eq!(released(&outcome), Vec::<String>::new());
-    assert_eq!(
-        read(root, "CHANGELOG.md"),
-        "# Changelog\n\n## 2026-01-02\n\n- docs: two ([#3](https://x/pull/3))\n- docs: one ([#2](https://x/pull/2))\n"
-    );
+    assert_eq!(released(&run(root)), ["b/v0.1.1"]);
 }
 
 #[test]
 fn tags_lists_every_tag_and_flags_the_newest_by_version() {
     let (dir, _) = repo();
     let root = dir.path();
-    let config_path = root.join("releases.yaml");
-    fs::write(&config_path, CONFIG).expect("write");
-    let config = Config::load(&config_path).expect("config");
+    let config = config(root);
     assert_eq!(release::tags(root, &config).expect("tags"), []);
     for tag in ["a/v0.1.0", "a/v0.1.1", "a/v0.1.10", "b/v0.1.0"] {
         git(root, &["tag", tag], "2026-01-01");
@@ -268,10 +261,12 @@ fn tags_lists_every_tag_and_flags_the_newest_by_version() {
 fn a_unit_may_have_no_image() {
     let (dir, _) = repo();
     let root = dir.path();
-    let path = root.join("releases.yaml");
-    fs::write(&path, CONFIG.replace("    image: img/b\n", "")).expect("write");
-    let config = Config::load(&path).expect("config");
-    let outcome = release::run(root, &config, None, "HEAD", None, true).expect("release");
+    write(
+        root,
+        "releases.yaml",
+        &CONFIG.replace("    image: img/b\n", ""),
+    );
+    let outcome = run_as(root, false, true);
     let images: Vec<Option<String>> = outcome.released.iter().map(|r| r.image.clone()).collect();
     assert_eq!(images, [Some("img/a".to_string()), None]);
 }
@@ -280,12 +275,9 @@ fn a_unit_may_have_no_image() {
 fn tags_carry_each_units_changelog() {
     let (dir, _) = repo();
     let root = dir.path();
-    let config_path = root.join("releases.yaml");
-    fs::write(&config_path, CONFIG).expect("write");
-    let config = Config::load(&config_path).expect("config");
     git(root, &["tag", "a/v0.1.0"], "2026-01-01");
-    let rows = release::tags(root, &config).expect("tags");
-    assert_eq!(rows[0].changelog.as_deref(), Some("a/CHANGELOG.md"));
+    let rows = release::tags(root, &config(root)).expect("tags");
+    assert_eq!(rows[0].changelog, "CHANGELOG.md");
 }
 
 #[test]
@@ -297,17 +289,15 @@ fn yaml_manifests_bump_in_place() {
         "m/module.yaml",
         "version: 0.1.0\ndescription: A module.\n",
     );
-    let yaml_config = format!("{CONFIG}  - {{ file: m/CHANGELOG.md, unit: m }}\n").replace(
-        "tiers:\n",
-        "  m:\n    manifest: m/module.yaml\n    paths: [m/]\ntiers:\n",
+    write(
+        root,
+        "releases.yaml",
+        &format!("{CONFIG}  m:\n    manifest: m/module.yaml\n    paths: [m/]\n"),
     );
-    let config_path = root.join("releases.yaml");
-    fs::write(&config_path, &yaml_config).expect("write");
-    let config = Config::load(&config_path).expect("config");
-    let first = release::run(root, &config, None, "HEAD", None, false).expect("first");
+    let first = run(root);
     land(root, &first, "2026-01-01");
     commit(root, "fix: m (#2)", &["m/main.tf"], "2026-01-02");
-    let second = release::run(root, &config, None, "HEAD", None, false).expect("second");
+    let second = run(root);
     assert!(
         second.released.iter().any(|r| r.tag == "m/v0.1.1"),
         "{:?}",
@@ -319,176 +309,35 @@ fn yaml_manifests_bump_in_place() {
     );
 }
 
-/// Runs `release` with `config`; `Err` carries the error text.
-fn run_with(root: &Path, config: &str, dry_run: bool) -> Result<Outcome, String> {
-    let p = root.join("releases.yaml");
-    fs::write(&p, config).expect("write");
-    let config = Config::load(&p).map_err(|e| e.to_string())?;
-    release::run(root, &config, None, "HEAD", None, dry_run).map_err(|e| e.to_string())
-}
-
-fn moved(config: &str) -> String {
-    config
-        .replace(
-            "{ file: a/CHANGELOG.md, unit: a }",
-            "{ file: moved/a/CHANGELOG.md, unit: a, from: a/CHANGELOG.md }",
-        )
-        .replace(
-            "{ file: CHANGELOG.md, paths: [''] }",
-            "{ file: docs/CHANGELOG.md, paths: [''], from: CHANGELOG.md }",
-        )
-}
-
-#[test]
-fn a_moved_tier_keeps_its_history_and_the_bot_moves_its_file() {
-    let (dir, _) = repo();
-    let root = dir.path();
-    let first = run(root, None);
-    land(root, &first, "2026-01-01");
-    commit(root, "feat: a change (#2)", &["a/x"], "2026-01-02");
-    let second = run(root, None);
-    land(root, &second, "2026-01-02");
-    let unit_before = read(root, "a/CHANGELOG.md");
-    let date_before = read(root, "CHANGELOG.md");
-
-    commit(root, "chore: unrelated (#3)", &["shared/t"], "2026-01-03");
-    let out = run_with(root, &moved(CONFIG), false).expect("release");
-    let written: Vec<String> = out
-        .written
-        .iter()
-        .map(|p| p.display().to_string())
-        .collect();
-    for p in [
-        "a/CHANGELOG.md",
-        "moved/a/CHANGELOG.md",
-        "CHANGELOG.md",
-        "docs/CHANGELOG.md",
-    ] {
-        assert!(written.contains(&p.to_string()), "{p} in {written:?}");
-    }
-    assert!(!root.join("a/CHANGELOG.md").exists());
-    assert!(!root.join("CHANGELOG.md").exists());
-    let unit_after = read(root, "moved/a/CHANGELOG.md");
-    assert!(
-        unit_after.ends_with(&unit_before["# Changelog\n".len()..]),
-        "{unit_after}"
-    );
-    assert!(
-        unit_after.contains("v0.1.2"),
-        "the shared change releases a once more: {unit_after}"
-    );
-    let date_after = read(root, "docs/CHANGELOG.md");
-    for l in date_before.lines().filter(|l| l.starts_with("- ")) {
-        assert!(date_after.contains(l), "kept `{l}` in {date_after}");
-    }
-    assert!(date_after.contains("unrelated"), "{date_after}");
-    assert_eq!(
-        date_after.matches("chore: init").count(),
-        1,
-        "not re-backfilled"
-    );
-
-    land(root, &out, "2026-01-03");
-    let again = run_with(root, &moved(CONFIG), false).expect("rerun");
-    assert_eq!(
-        again.written,
-        Vec::<std::path::PathBuf>::new(),
-        "a gone `from` is ignored"
-    );
-}
-
-#[test]
-fn a_tier_in_both_places_fails() {
-    let (dir, _) = repo();
-    let root = dir.path();
-    land(root, &run(root, None), "2026-01-01");
-    write(root, "moved/a/CHANGELOG.md", "# Changelog\n");
-    let err = run_with(root, &moved(CONFIG), false).expect_err("both exist");
-    assert!(err.contains("a tier lives in one place"), "{err}");
-}
-
-#[test]
-fn a_dry_run_moves_nothing() {
-    let (dir, _) = repo();
-    let root = dir.path();
-    land(root, &run(root, None), "2026-01-01");
-    let out = run_with(root, &moved(CONFIG), true).expect("dry run");
-    assert!(
-        out.written
-            .iter()
-            .any(|p| p.ends_with("moved/a/CHANGELOG.md"))
-    );
-    assert!(root.join("a/CHANGELOG.md").exists());
-    assert!(!root.join("moved/a/CHANGELOG.md").exists());
-}
-
-#[test]
-fn bad_froms_are_rejected() {
-    let dir = TempDir::new().expect("tempdir");
-    let path = dir.path().join("r.yaml");
-    for bad in [
-        CONFIG.replace("unit: a }", "unit: a, from: a/CHANGELOG.md }"),
-        CONFIG.replace("unit: b }", "unit: b, from: a/CHANGELOG.md }"),
-        CONFIG
-            .replace("unit: b }", "unit: b, from: x/CHANGELOG.md }")
-            .replace("unit: a }", "unit: a, from: x/CHANGELOG.md }"),
-    ] {
-        fs::write(&path, bad).expect("write");
-        assert!(Config::load(&path).is_err());
-    }
-}
-
-#[test]
-fn an_unreadable_tier_to_move_fails_and_keeps_it() {
-    let (dir, _) = repo();
-    let root = dir.path();
-    land(root, &run(root, None), "2026-01-01");
-    fs::write(root.join("a/CHANGELOG.md"), [0xff, 0xfe, 0x00]).expect("write");
-    let err = run_with(root, &moved(CONFIG), false).expect_err("unreadable");
-    assert!(err.contains("cannot read the tier to move"), "{err}");
-    assert!(root.join("a/CHANGELOG.md").exists());
-    assert!(!root.join("moved/a/CHANGELOG.md").exists());
-}
-
-#[test]
-fn tags_carry_a_moved_tiers_previous_path() {
-    let (dir, _) = repo();
-    let root = dir.path();
-    land(root, &run(root, None), "2026-01-01");
-    let p = root.join("releases.yaml");
-    fs::write(&p, moved(CONFIG)).expect("write");
-    let rows = release::tags(root, &Config::load(&p).expect("config")).expect("tags");
-    let a = rows.iter().find(|r| r.unit == "a").expect("a");
-    assert_eq!(a.changelog.as_deref(), Some("moved/a/CHANGELOG.md"));
-    assert_eq!(a.changelog_from.as_deref(), Some("a/CHANGELOG.md"));
-    let b = rows.iter().find(|r| r.unit == "b").expect("b");
-    assert_eq!(b.changelog_from, None);
+/// Runs `release` with `config` written as the release config.
+fn run_with(root: &Path, text: &str, dry_run: bool) -> Result<Outcome, String> {
+    write(root, "releases.yaml", text);
+    let config = Config::load(&root.join("releases.yaml")).map_err(|e| e.to_string())?;
+    release::run(root, &config, "releases.yaml", "HEAD", None, false, dry_run)
+        .map_err(|e| e.to_string())
 }
 
 fn retire_b(config: &str) -> String {
     let start = config.find("  b:\n").expect("unit b");
-    let end = config.find("tiers:").expect("tiers");
-    let mut out = format!("{}{}", &config[..start], &config[end..]);
-    out = out.replace("  - { file: b/CHANGELOG.md, unit: b }\n", "");
-    out + "retired: [b/CHANGELOG.md]\n"
+    format!("{}retired: [b/CHANGELOG.md]\n", &config[..start])
 }
 
 #[test]
 fn the_bot_removes_a_retired_changelog_once() {
     let (dir, _) = repo();
     let root = dir.path();
-    land(root, &run(root, None), "2026-01-01");
-    assert!(root.join("b/CHANGELOG.md").exists());
+    land(root, &run(root), "2026-01-01");
+    write(root, "b/CHANGELOG.md", "# Changelog\n");
 
     let dry = run_with(root, &retire_b(CONFIG), true).expect("dry run");
-    assert!(dry.written.iter().any(|p| p.ends_with("b/CHANGELOG.md")));
+    assert_eq!(dry.written, [Path::new("b/CHANGELOG.md")]);
     assert!(
         root.join("b/CHANGELOG.md").exists(),
         "a dry run removes nothing"
     );
 
     let out = run_with(root, &retire_b(CONFIG), false).expect("release");
-    assert!(out.written.iter().any(|p| p.ends_with("b/CHANGELOG.md")));
+    assert_eq!(out.written, [Path::new("b/CHANGELOG.md")]);
     assert!(!root.join("b/CHANGELOG.md").exists());
     land(root, &out, "2026-01-02");
     let again = run_with(root, &retire_b(CONFIG), false).expect("rerun");
@@ -508,10 +357,164 @@ fn bad_retired_entries_are_rejected() {
         format!("{CONFIG}retired: [../x/CHANGELOG.md]\n"),
         format!("{CONFIG}retired: [/tmp/x/CHANGELOG.md]\n"),
         format!("{CONFIG}retired: [./x/CHANGELOG.md]\n"),
-        format!("{CONFIG}retired: [b/CHANGELOG.md]\n"),
+        format!("{CONFIG}retired: [CHANGELOG.md]\n"),
         retire_b(CONFIG).replace("[b/CHANGELOG.md]", "[x/CHANGELOG.md, x/CHANGELOG.md]"),
     ] {
         fs::write(&path, bad).expect("write");
         assert!(Config::load(&path).is_err());
+    }
+}
+
+#[test]
+fn replay_renders_history_and_cuts_nothing() {
+    let (dir, _) = repo();
+    let root = dir.path();
+    land(root, &run(root), "2026-01-01");
+    let sha = commit(root, "fix: a only", &["a/src.rs"], "2026-01-02");
+    let out = run_as(root, true, false);
+    assert_eq!(released(&out), Vec::<String>::new());
+    assert_eq!(out.written, [Path::new("CHANGELOG.md")]);
+    assert!(read(root, "a/Cargo.toml").contains("version = \"0.1.0\"\n"));
+    assert_eq!(
+        read(root, "CHANGELOG.md"),
+        format!(
+            "# Changelog\n\n## 2026-01-02\n\n### Merged\n\n{} · a\n\n## 2026-01-01\n\n### Released\n\n- a v0.1.0\n- b v0.1.0\n\n### Merged\n\n- chore: init ([#1](https://x/pull/1)) · a, b\n",
+            link(&sha, "fix: a only")
+        )
+    );
+}
+
+#[test]
+fn a_rerun_writes_nothing() {
+    let (dir, _) = repo();
+    let root = dir.path();
+    let first = run_as(root, true, false);
+    assert_eq!(first.written, [Path::new("CHANGELOG.md")]);
+    let second = run_as(root, true, false);
+    assert_eq!(second.written, Vec::<PathBuf>::new());
+}
+
+#[test]
+fn a_changelog_is_the_same_from_any_checkout() {
+    let (dir, _) = repo();
+    let root = dir.path();
+    land(root, &run(root), "2026-01-01");
+    commit(root, "fix: a only", &["a/src.rs"], "2026-01-02");
+    run_as(root, true, false);
+    let copies = TempDir::new().expect("tempdir");
+    let mut texts = vec![read(root, "CHANGELOG.md")];
+    for name in ["one", "two"] {
+        let copy = copies.path().join(name);
+        git(
+            copies.path(),
+            &[
+                "clone",
+                "-q",
+                &root.display().to_string(),
+                &copy.display().to_string(),
+            ],
+            "2026-01-05",
+        );
+        run_as(&copy, true, false);
+        texts.push(read(&copy, "CHANGELOG.md"));
+    }
+    assert_eq!(texts[0], texts[1]);
+    assert_eq!(texts[1], texts[2]);
+}
+
+#[test]
+fn lines_carry_units_as_named_when_they_merged() {
+    let (dir, _) = repo();
+    let root = dir.path();
+    let one = commit(root, "feat: one", &["a/x"], "2026-01-02");
+    write(
+        root,
+        "releases.yaml",
+        &CONFIG.replace("  a:\n", "  alpha:\n    previous: a\n"),
+    );
+    let two = commit(root, "feat: two", &["a/y"], "2026-01-03");
+    run_as(root, true, false);
+    assert_eq!(
+        read(root, "CHANGELOG.md"),
+        format!(
+            "# Changelog\n\n## 2026-01-03\n\n### Merged\n\n{} · alpha\n- units renamed · a → alpha\n\n## 2026-01-02\n\n### Merged\n\n{} · a\n\n## 2026-01-01\n\n### Merged\n\n- chore: init ([#1](https://x/pull/1)) · a, b\n",
+            link(&two, "feat: two"),
+            link(&one, "feat: one")
+        )
+    );
+}
+
+#[test]
+fn a_renamed_unit_continues_its_previous_tags() {
+    let (dir, _) = repo();
+    let root = dir.path();
+    land(root, &run(root), "2026-01-01");
+    write(
+        root,
+        "releases.yaml",
+        &CONFIG.replace("  a:\n", "  alpha:\n    previous: a\n"),
+    );
+    commit(root, "fix: under a", &["a/z"], "2026-01-02");
+    let rows = |root: &Path| -> Vec<(String, String, bool)> {
+        release::tags(root, &config(root))
+            .expect("tags")
+            .into_iter()
+            .filter(|r| r.unit == "alpha")
+            .map(|r| (r.tag, r.version, r.newest))
+            .collect()
+    };
+    assert_eq!(rows(root), [("a/v0.1.0".into(), "0.1.0".into(), true)]);
+    let out = run(root);
+    assert_eq!(released(&out), ["alpha/v0.1.1"]);
+    land(root, &out, "2026-01-02");
+    assert_eq!(
+        rows(root),
+        [
+            ("alpha/v0.1.1".into(), "0.1.1".into(), true),
+            ("a/v0.1.0".into(), "0.1.0".into(), false),
+        ]
+    );
+}
+
+#[test]
+fn a_commit_before_the_config_has_no_units() {
+    let dir = TempDir::new().expect("tempdir");
+    let root = dir.path();
+    git(root, &["init", "-q", "-b", "main"], "2026-01-01");
+    write(
+        root,
+        "a/Cargo.toml",
+        "[package]\nname = \"a\"\nversion = \"0.1.0\"\n",
+    );
+    write(
+        root,
+        "b/Cargo.toml",
+        "[package]\nname = \"b\"\nversion = \"0.1.0\"\n",
+    );
+    let early = commit(root, "feat: early", &["a/x"], "2026-01-01");
+    write(root, "releases.yaml", CONFIG);
+    let added = commit(root, "chore: config", &[], "2026-01-02");
+    run_as(root, true, false);
+    assert_eq!(
+        read(root, "CHANGELOG.md"),
+        format!(
+            "# Changelog\n\n## 2026-01-02\n\n### Merged\n\n{}\n\n## 2026-01-01\n\n### Merged\n\n{}\n",
+            link(&added, "chore: config"),
+            link(&early, "feat: early")
+        )
+    );
+}
+
+#[test]
+fn bad_changelog_paths_are_rejected() {
+    let dir = TempDir::new().expect("tempdir");
+    let path = dir.path().join("r.yaml");
+    for bad in ["a/NOTES.md", "../CHANGELOG.md"] {
+        fs::write(
+            &path,
+            CONFIG.replace("changelog: CHANGELOG.md", &format!("changelog: {bad}")),
+        )
+        .expect("write");
+        assert!(Config::load(&path).is_err(), "{bad}");
     }
 }

@@ -1,4 +1,4 @@
-//! A release's changelog lines, version bump, tier texts and tag rows, from the commits, files
+//! A release's changelog lines, version bump and tag rows, from the commits, files
 //! and tags the shell reads.
 
 use std::collections::BTreeSet;
@@ -6,8 +6,7 @@ use std::collections::BTreeSet;
 use regex::Regex;
 use serde::Serialize;
 
-use super::changelog::Changelog;
-use super::config::{Config, Setting, Tier, Unit};
+use super::config::{Config, Setting, Unit};
 
 /// The subject prefix of the release bot's own commits.
 pub const RELEASE_PREFIX: &str = "chore(release):";
@@ -64,10 +63,8 @@ pub struct TagStatus {
     pub version: String,
     /// Whether this is the unit's highest version.
     pub newest: bool,
-    /// The unit's release changelog tier, if it has one.
-    pub changelog: Option<String>,
-    /// That tier's previous path, for a tag cut before it moved.
-    pub changelog_from: Option<String>,
+    /// The one changelog, `Config::changelog`.
+    pub changelog: String,
 }
 
 /// The changelog line for a commit.
@@ -320,43 +317,19 @@ pub fn tree_of(out: &str, local: &str, package: &str) -> (BTreeSet<String>, Vec<
     (crates, paths)
 }
 
-/// A tier's text after a release: `existing` (none for a new tier) with, on a paths tier, a
-/// dated line for each of `commits` that touched it and isn't there yet, and on a unit tier, the
-/// unit's release section if `releases` holds one, headed with `today`.
-#[must_use]
-pub fn tier_text(
-    tier: &Tier,
-    existing: Option<&str>,
-    commits: &[Commit],
-    repository: &str,
-    releases: &[(Released, Vec<String>)],
-    today: &str,
-) -> String {
-    let mut log = existing.map(Changelog::parse).unwrap_or_default();
-    if let Some(prefixes) = &tier.paths {
-        for c in commits.iter().filter(|c| touches(c, prefixes)) {
-            let l = line(repository, c);
-            if !log.mentions(link_key(&l)) {
-                log = log.add_dated(&c.date, l);
-            }
-        }
-    } else if let Some(unit) = &tier.unit
-        && let Some((released, lines)) = releases.iter().find(|(r, _)| &r.unit == unit)
-    {
-        log = log.prepend(format!("v{} ({today})", released.version), lines.clone());
-    }
-    log.render()
-}
-
-/// Unit `name`'s rows for its `tags`, newest first as git lists them.
+/// Unit `name`'s rows for its `tags`, newest first as git lists them: those under `<name>/v`,
+/// or `<previous>/v` when the unit has a `previous`.
 #[must_use]
 pub fn tag_rows(config: &Config, name: &str, unit: &Unit, tags: Vec<String>) -> Vec<TagStatus> {
     let prefix = format!("{name}/v");
-    let tier = config.tier_of(name);
+    let old = unit.previous.as_ref().map(|p| format!("{p}/v"));
     tags.into_iter()
         .enumerate()
         .filter_map(|(i, tag)| {
-            let version = tag.strip_prefix(&prefix)?.to_string();
+            let version = tag
+                .strip_prefix(&prefix)
+                .or_else(|| old.as_ref().and_then(|o| tag.strip_prefix(o.as_str())))?
+                .to_string();
             Some(TagStatus {
                 unit: name.to_string(),
                 image: unit.image.clone(),
@@ -364,10 +337,7 @@ pub fn tag_rows(config: &Config, name: &str, unit: &Unit, tags: Vec<String>) -> 
                 tag,
                 version,
                 newest: i == 0,
-                changelog: tier.map(|t| t.file.display().to_string()),
-                changelog_from: tier
-                    .and_then(|t| t.from.as_ref())
-                    .map(|p| p.display().to_string()),
+                changelog: config.changelog.display().to_string(),
             })
         })
         .collect()

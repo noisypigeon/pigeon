@@ -6,6 +6,7 @@ use std::process::Command;
 use crate::cobot::Error;
 
 pub use crate::core::release::Commit;
+use crate::core::release::history::Tagged;
 
 /// Runs git in `root` and returns stdout.
 pub fn run(root: &Path, args: &[&str]) -> Result<String, Error> {
@@ -95,15 +96,6 @@ pub fn commits(root: &Path, from: Option<&str>, to: &str) -> Result<Vec<Commit>,
     Ok(commits)
 }
 
-/// The newest first-parent commit up to `to` whose subject starts with `prefix`.
-pub fn last_with_subject(root: &Path, to: &str, prefix: &str) -> Result<Option<String>, Error> {
-    let log = run(root, &["log", "--first-parent", "--format=%H%x09%s", to])?;
-    Ok(log.lines().find_map(|l| {
-        let (sha, subject) = l.split_once('\t')?;
-        subject.starts_with(prefix).then(|| sha.to_string())
-    }))
-}
-
 /// The newest `<unit>/v*` tag, by version.
 pub fn last_tag(root: &Path, unit: &str) -> Result<Option<String>, Error> {
     Ok(tags(root, unit)?.into_iter().next())
@@ -142,4 +134,27 @@ pub fn show(root: &Path, rev: &str, file: &str) -> String {
         return String::new();
     }
     run(root, &["show", &format!("{rev}:{file}")]).unwrap_or_default()
+}
+
+/// Every release tag reachable from `to`, with the UTC date of the commit it points at.
+pub fn tag_dates(root: &Path, to: &str) -> Result<Vec<Tagged>, Error> {
+    let out = run(
+        root,
+        &[
+            "for-each-ref",
+            &format!("--merged={to}"),
+            "--format=%(refname:strip=2)%09%(*committerdate:format-local:%Y-%m-%d)%(committerdate:format-local:%Y-%m-%d)",
+            "refs/tags",
+        ],
+    )?;
+    Ok(out
+        .lines()
+        .filter_map(|l| {
+            let (tag, date) = l.split_once('\t')?;
+            (!tag.is_empty() && !date.is_empty()).then(|| Tagged {
+                tag: tag.to_string(),
+                date: date.to_string(),
+            })
+        })
+        .collect())
 }

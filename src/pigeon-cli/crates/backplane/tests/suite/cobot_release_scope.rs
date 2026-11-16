@@ -9,6 +9,7 @@ use tempfile::TempDir;
 
 const CONFIG: &str = r"description: test.
 repository: https://x
+changelog: CHANGELOG.md
 units:
   a:
     manifest: ws/liba/Cargo.toml
@@ -24,10 +25,6 @@ units:
     cargo: { workspace: ws, package: app }
 settings:
   - { file: ws/Cargo.toml, tables: '^\[profile\.' }
-tiers:
-  - { file: CHANGELOG.md, paths: [''] }
-  - { file: ws/liba/CHANGELOG.md, unit: a }
-  - { file: ws/libb/CHANGELOG.md, unit: b }
 ";
 
 const WORKSPACE: &str = "[workspace]\nresolver = \"3\"\nmembers = [\"app\", \"liba\", \"libb\", \"extra\"]\n\n[workspace.dependencies]\nextra = { path = \"extra\" }\n";
@@ -124,7 +121,16 @@ fn repo() -> TempDir {
 
 fn run(root: &Path) -> Outcome {
     let config = Config::load(&root.join("releases.yaml")).expect("config");
-    release::run(root, &config, None, "HEAD", None, false).expect("release")
+    release::run(
+        root,
+        &config,
+        "releases.yaml",
+        "HEAD",
+        Some(&root.join("notes")),
+        false,
+        false,
+    )
+    .expect("release")
 }
 
 /// Commits the bot's output and tags each release, as the workflow does.
@@ -215,7 +221,7 @@ fn a_feature_only_dependency_change_releases_its_units() {
         "build: extra std (#2)",
     );
     assert_eq!(released(&o), ["a"]);
-    let log = fs::read_to_string(dir.path().join("ws/liba/CHANGELOG.md")).expect("read");
+    let log = fs::read_to_string(dir.path().join("notes/a.md")).expect("read");
     assert!(
         log.contains("- build: extra std (dependencies) ([#2](https://x/pull/2))"),
         "{log}"
@@ -251,8 +257,8 @@ fn a_first_release_lists_only_its_own_crate() {
     write(root, "ws/libb/src/lib.rs", "// b\n");
     commit(root, "feat: b only (#2)");
     let first = run(root);
-    let a = fs::read_to_string(root.join("ws/liba/CHANGELOG.md")).expect("read");
-    let b = fs::read_to_string(root.join("ws/libb/CHANGELOG.md")).expect("read");
+    let a = fs::read_to_string(root.join("notes/a.md")).expect("read");
+    let b = fs::read_to_string(root.join("notes/b.md")).expect("read");
     assert!(!a.contains("#2"), "{a}");
     assert!(b.contains("#2") && b.contains("#1"), "{b}");
     assert_eq!(released(&first), ["a", "b"]);
@@ -277,6 +283,6 @@ fn a_package_renamed_since_the_last_release_compares_its_own_tree() {
         ["a", "b"],
         "the rename is in both units' trees"
     );
-    let a = fs::read_to_string(root.join("ws/liba/CHANGELOG.md")).expect("read");
+    let a = fs::read_to_string(root.join("notes/a.md")).expect("read");
     assert!(a.contains("- feat: a ([#2](https://x/pull/2))"), "{a}");
 }

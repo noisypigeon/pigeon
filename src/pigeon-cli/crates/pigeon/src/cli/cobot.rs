@@ -35,7 +35,7 @@ pub enum CobotCommand {
     Workers(WorkersCommand),
     /// Print the checks a change needs, from the paths it touches; with --run, run them
     Scope(ScopeArgs),
-    /// Bump changed release units and generate changelogs; print JSON
+    /// Bump changed release units and write CHANGELOG.md; print JSON
     Release(ReleaseArgs),
     /// Print every release tag as JSON, flagging each unit's newest
     Tags(TagsArgs),
@@ -399,9 +399,9 @@ pub struct ReleaseArgs {
     #[arg(long)]
     pub config: Option<PathBuf>,
 
-    /// Start after this commit [default: the last `chore(release):` commit, or all history]
+    /// Render CHANGELOG.md from all of history and retire old changelogs; cut no release
     #[arg(long)]
-    pub from: Option<String>,
+    pub replay: bool,
 
     /// The commit to release up to
     #[arg(long, default_value = "HEAD")]

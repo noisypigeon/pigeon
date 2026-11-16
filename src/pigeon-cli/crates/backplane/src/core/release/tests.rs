@@ -1,9 +1,9 @@
-//! Lines, versions, tiers and the config's checks, from text and commits alone.
+//! Lines, versions, the config's checks, from text and commits alone.
 
-use super::config::{Config, Tier, Unit};
+use super::config::{Config, Unit};
 use super::lines::{
-    Commit, Released, bumped, first_lines, line, next_lines, package_manifest, package_name,
-    read_version, tier_text, tree_of,
+    Commit, bumped, first_lines, line, next_lines, package_manifest, package_name, read_version,
+    tag_rows, tree_of,
 };
 
 fn commit(sha: &str, subject: &str, paths: &[&str]) -> Commit {
@@ -23,6 +23,7 @@ fn unit(exclude: &[&str]) -> Unit {
         paths: vec!["crates/a/".into()],
         exclude: exclude.iter().map(|p| (*p).to_string()).collect(),
         cargo: None,
+        previous: None,
     }
 }
 
@@ -124,53 +125,37 @@ fn a_first_release_falls_back_to_the_newest_commit() {
 }
 
 #[test]
-fn a_paths_tier_adds_each_new_line_once_and_a_unit_tier_its_release() {
-    let paths = Tier {
-        file: "CHANGELOG.md".into(),
-        paths: Some(vec!["crates/a/".into()]),
-        unit: None,
-        from: None,
-    };
-    let c = commit("a", "feat: x", &["crates/a/src/lib.rs"]);
-    let once = tier_text(
-        &paths,
-        None,
-        std::slice::from_ref(&c),
-        "https://x",
-        &[],
-        "2026-01-03",
+fn tag_rows_read_a_previous_units_tags() {
+    let text = "description: x\nrepository: https://x\nchangelog: CHANGELOG.md\nunits:\n  new:\n    manifest: crates/a/Cargo.toml\n    paths: [crates/a/]\n    previous: old\n";
+    let config = Config::parse(text).expect("config");
+    let rows = tag_rows(
+        &config,
+        "new",
+        &config.units["new"],
+        vec![
+            "new/v0.2.0".into(),
+            "old/v0.1.9".into(),
+            "other/v1.0.0".into(),
+        ],
     );
+    let got: Vec<_> = rows
+        .iter()
+        .map(|r| {
+            (
+                r.tag.as_str(),
+                r.version.as_str(),
+                r.newest,
+                r.changelog.as_str(),
+            )
+        })
+        .collect();
     assert_eq!(
-        once,
-        format!(
-            "# Changelog\n\n## 2026-01-02\n\n{}\n",
-            line("https://x", &c)
-        )
+        got,
+        [
+            ("new/v0.2.0", "0.2.0", true, "CHANGELOG.md"),
+            ("old/v0.1.9", "0.1.9", false, "CHANGELOG.md")
+        ]
     );
-    let twice = tier_text(&paths, Some(&once), &[c], "https://x", &[], "2026-01-03");
-    assert_eq!(twice, once);
-    let tier = Tier {
-        file: "crates/a/CHANGELOG.md".into(),
-        paths: None,
-        unit: Some("a".into()),
-        from: None,
-    };
-    let release = Released {
-        unit: "a".into(),
-        version: "0.1.1".into(),
-        tag: "a/v0.1.1".into(),
-        image: None,
-        features: String::new(),
-    };
-    let text = tier_text(
-        &tier,
-        None,
-        &[],
-        "https://x",
-        &[(release, vec!["- y".into()])],
-        "2026-01-03",
-    );
-    assert_eq!(text, "# Changelog\n\n## v0.1.1 (2026-01-03)\n\n- y\n");
 }
 
 #[test]
@@ -185,16 +170,36 @@ fn cargo_tree_output_names_workspace_crates_and_their_paths() {
 }
 
 #[test]
-fn the_config_refuses_a_tier_with_both_or_neither_and_an_unknown_unit() {
+fn the_config_refuses_a_bad_changelog_or_previous() {
     let base = "description: x\nrepository: https://x\nunits:\n  a:\n    manifest: crates/a/Cargo.toml\n    paths: [crates/a/]\n";
-    let ok = format!("{base}tiers:\n  - file: CHANGELOG.md\n    unit: a\n");
-    assert!(Config::parse(&ok).is_ok());
-    let unknown = format!("{base}tiers:\n  - file: CHANGELOG.md\n    unit: b\n");
-    assert!(Config::parse(&unknown).is_err_and(|e| e.contains("unknown unit `b`")));
-    let neither = format!("{base}tiers:\n  - file: CHANGELOG.md\n");
-    assert!(Config::parse(&neither).is_err_and(|e| e.contains("exactly one")));
-    let retired = format!("{base}tiers: []\nretired: [../CHANGELOG.md]\n");
-    assert!(Config::parse(&retired).is_err_and(|e| e.contains("under the root")));
+    assert!(Config::parse(&format!("{base}changelog: CHANGELOG.md\n")).is_ok());
+    for bad in ["NOTES.md", "../CHANGELOG.md", "/CHANGELOG.md"] {
+        let text = format!("{base}changelog: {bad}\n");
+        assert!(
+            Config::parse(&text).is_err_and(|e| e.contains("is not a CHANGELOG.md under the root")),
+            "{bad}"
+        );
+    }
+    let both = format!("{base}changelog: CHANGELOG.md\nretired: [CHANGELOG.md]\n");
+    assert!(Config::parse(&both).is_err_and(|e| e.contains("is both retired and the changelog")));
+    let own = base.replace("    paths:", "    previous: a\n    paths:");
+    let own = format!("{own}changelog: CHANGELOG.md\n");
+    assert!(Config::parse(&own).is_err_and(|e| e.contains("is a current unit")));
+    let two = format!(
+        "{base}  b:\n    manifest: crates/b/Cargo.toml\n    paths: [crates/b/]\n    previous: z\nchangelog: CHANGELOG.md\n"
+    )
+    .replace("    paths: [crates/a/]\n", "    paths: [crates/a/]\n    previous: z\n");
+    assert!(Config::parse(&two).is_err_and(|e| e.contains("names two units")));
+    let current = format!(
+        "{base}  b:\n    manifest: crates/b/Cargo.toml\n    paths: [crates/b/]\n    previous: a\nchangelog: CHANGELOG.md\n"
+    );
+    assert!(Config::parse(&current).is_err_and(|e| e.contains("is a current unit")));
+    let defaulted =
+        Config::parse(&format!("{base}tiers: []\n")).expect("tiers are read and ignored");
+    assert_eq!(
+        defaulted.changelog,
+        std::path::PathBuf::from("CHANGELOG.md")
+    );
 }
 
 #[test]

@@ -580,17 +580,25 @@ fn tags(args: &TagsArgs) -> i32 {
 }
 
 fn release(args: &ReleaseArgs) -> i32 {
+    let default = ".config/releases.yaml";
     let path = args
         .config
         .clone()
-        .unwrap_or_else(|| args.root.join(".config/releases.yaml"));
+        .unwrap_or_else(|| args.root.join(default));
+    let config_file = path
+        .strip_prefix(&args.root)
+        .ok()
+        .and_then(|p| p.to_str())
+        .unwrap_or(default)
+        .to_string();
     print_json(Config::load(&path).and_then(|config| {
         release::run(
             &args.root,
             &config,
-            args.from.as_deref(),
+            &config_file,
             &args.to,
             args.notes_dir.as_deref(),
+            args.replay,
             args.dry_run,
         )
     }))

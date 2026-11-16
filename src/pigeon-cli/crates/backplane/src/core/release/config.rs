@@ -1,4 +1,4 @@
-//! `.config/releases.yaml`: release units, changelog tiers and build settings, parsed and checked
+//! `.config/releases.yaml`: release units, the changelog and build settings, parsed and checked
 //! from its text.
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -17,8 +17,12 @@ pub struct Config {
     pub repository: String,
     /// Release units by name.
     pub units: BTreeMap<String, Unit>,
-    /// Changelog tiers.
-    pub tiers: Vec<Tier>,
+    /// The one changelog, relative to the root.
+    #[serde(default = "default_changelog")]
+    pub changelog: PathBuf,
+    /// Changelog tiers: read and ignored until `releases.yaml` drops them.
+    #[serde(default, rename = "tiers")]
+    _tiers: serde::de::IgnoredAny,
     /// Workspace-wide build settings whose change releases every unit.
     #[serde(default)]
     pub settings: Vec<Setting>,
@@ -71,21 +75,9 @@ pub struct Unit {
     /// Release when its resolved dependency tree changes.
     #[serde(default)]
     pub cargo: Option<CargoTree>,
-}
-
-/// One generated `CHANGELOG.md`. Exactly one of `paths` and `unit` is set.
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct Tier {
-    /// The file, relative to the root.
-    pub file: PathBuf,
-    /// Path prefixes; dated sections.
-    pub paths: Option<Vec<String>>,
-    /// A unit; one section per release.
-    pub unit: Option<String>,
-    /// The file's previous path; the bot moves it to `file`.
+    /// The unit's name before a rename, whose tags it continues.
     #[serde(default)]
-    pub from: Option<PathBuf>,
+    pub previous: Option<String>,
 }
 
 impl Config {
@@ -102,36 +94,28 @@ impl Config {
                 Regex::new(re).map_err(|e| format!("setting `{re}`: {e}"))?;
             }
         }
-        let mut seen = BTreeSet::new();
-        for tier in &config.tiers {
-            if tier.from.as_ref() == Some(&tier.file) {
-                return Err(format!(
-                    "tier `{}`: `from` equals `file`",
-                    tier.file.display()
-                ));
-            }
-            for p in std::iter::once(&tier.file).chain(&tier.from) {
-                if !seen.insert(p.clone()) {
-                    return Err(format!("`{}` names two tiers", p.display()));
-                }
-            }
-            match (&tier.paths, &tier.unit) {
-                (Some(_), None) => {}
-                (None, Some(u)) if config.units.contains_key(u) => {}
-                (None, Some(u)) => return Err(format!("tier names unknown unit `{u}`")),
-                _ => {
-                    return Err(format!(
-                        "tier `{}` takes exactly one of `paths` and `unit`",
-                        tier.file.display()
-                    ));
-                }
-            }
+        let changelog = &config.changelog;
+        let relative = changelog
+            .components()
+            .all(|c| matches!(c, Component::Normal(_)));
+        if !relative || changelog.file_name().is_none_or(|n| n != "CHANGELOG.md") {
+            return Err(format!(
+                "changelog `{}` is not a CHANGELOG.md under the root",
+                changelog.display()
+            ));
         }
+        let mut seen = BTreeSet::new();
         for path in &config.retired {
             let relative = path.components().all(|c| matches!(c, Component::Normal(_)));
             if !relative || path.file_name().is_none_or(|n| n != "CHANGELOG.md") {
                 return Err(format!(
                     "retired `{}` is not a CHANGELOG.md under the root",
+                    path.display()
+                ));
+            }
+            if path == changelog {
+                return Err(format!(
+                    "`{}` is both retired and the changelog",
                     path.display()
                 ));
             }
@@ -142,12 +126,21 @@ impl Config {
                 ));
             }
         }
+        let mut previous = BTreeSet::new();
+        for (name, unit) in &config.units {
+            let Some(p) = &unit.previous else { continue };
+            if p == name || config.units.contains_key(p) {
+                return Err(format!("unit `{name}`: previous `{p}` is a current unit"));
+            }
+            if !previous.insert(p.clone()) {
+                return Err(format!("previous `{p}` names two units"));
+            }
+        }
         Ok(config)
     }
+}
 
-    /// The release tier of unit `name`, if it has one.
-    #[must_use]
-    pub fn tier_of(&self, name: &str) -> Option<&Tier> {
-        self.tiers.iter().find(|t| t.unit.as_deref() == Some(name))
-    }
+/// `changelog`'s value when `releases.yaml` doesn't name one yet.
+fn default_changelog() -> PathBuf {
+    PathBuf::from("CHANGELOG.md")
 }
