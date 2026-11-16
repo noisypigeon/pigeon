@@ -643,3 +643,48 @@ fn a_map_without_filters_reads_as_whole_targets() {
     .expect("a version 1 map reads");
     assert_eq!(map.binaries[0].filter, "", "{map:?}");
 }
+
+/// A deploy releases the iOS app only when it changed the app's own files, and the paths that
+/// say so exist here, so a move never silently stops the releases; see the release ADR's
+/// 2026-11-16 amendment.
+#[test]
+fn a_deploy_releases_the_ios_app_only_when_it_changed_it() {
+    use backplane::control::Report;
+    use backplane::iosrelease::{INPUTS, NOT_INPUTS, triggers};
+    let root = repo_root();
+    for p in INPUTS.iter().chain(NOT_INPUTS) {
+        let (dir, name) = p.rsplit_once('/').expect("a path");
+        let found = std::fs::read_dir(root.join(dir))
+            .expect("its directory")
+            .filter_map(Result::ok)
+            .any(|e| e.file_name().to_string_lossy().starts_with(name));
+        assert!(found, "{p} names nothing in this repository");
+    }
+    let files = |f: &[&str]| f.iter().map(|s| (*s).to_string()).collect::<Vec<_>>();
+    for app in [
+        "src/pigeon-ios/project.yml",
+        "src/pigeon-ios/archive.sh",
+        "src/pigeon-ios/ci.sh",
+        "tooling/ci/buildkite/ios-sign.sh",
+    ] {
+        assert!(root.join(app).is_file(), "{app}");
+        assert!(triggers(Some(&files(&["CLAUDE.md", app]))), "{app}");
+    }
+    assert!(!triggers(Some(&files(&[
+        "src/pigeon-ios/README.md",
+        "src/pigeon-agent/src/worker/main_run.rs",
+    ]))));
+    let report = Report {
+        ios: true,
+        ..Report::of("deploy-x", backplane::control::Outcome::Passed, "")
+    };
+    let wire = serde_json::to_value(&report).expect("serializes");
+    assert_eq!(wire["ios"], true, "the Worker reads it");
+    let back: Report = serde_json::from_value(wire).expect("parses");
+    assert!(back.ios);
+    let older: Report = serde_json::from_value(serde_json::json!({
+        "id": "deploy-y", "outcome": "passed"
+    }))
+    .expect("an older job's report");
+    assert!(!older.ios, "an older job never releases");
+}

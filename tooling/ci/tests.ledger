@@ -330,6 +330,7 @@ pigeon-agent test suite cobot_restack::an_edit_both_branches_repeat_from_main_is
 pigeon-agent test suite cobot_restack::main_drift_under_an_older_branch_is_not_forecast
 pigeon-agent test suite cobot_restack::two_amendments_to_one_adr_are_not_forecast_to_conflict
 pigeon-agent test suite cobot_restack::two_amendments_to_one_adr_merge_by_union
+pigeon-agent test suite cobot_scope::a_deploy_releases_the_ios_app_only_when_it_changed_it
 pigeon-agent test suite cobot_scope::a_map_by_module_runs_only_the_suite_modules_a_change_reaches
 pigeon-agent test suite cobot_scope::a_map_without_filters_reads_as_whole_targets
 pigeon-agent test suite cobot_scope::a_mapped_test_check_does_not_stand_in_for_a_crates_whole_suite
@@ -1067,10 +1068,13 @@ pigeon-core lib pigeon_core insights::tests::macos_attempts_count_by_provider_an
 pigeon-core lib pigeon_core insights::tests::prices_are_read_by_key
 pigeon-core lib pigeon_core insights::tests::stacks_bucket_by_hour_for_a_day_and_by_day_beyond
 pigeon-core lib pigeon_core insights::tests::the_hours_due_are_the_complete_ones_since_the_newest_filled
+pigeon-core lib pigeon_core iosrelease::tests::a_deploy_that_changes_the_app_starts_one_release_after_another
+pigeon-core lib pigeon_core iosrelease::tests::a_failed_automatic_release_holds_until_the_owner_releases
 pigeon-core lib pigeon_core iosrelease::tests::a_release_moves_from_archive_to_delivery
 pigeon-core lib pigeon_core iosrelease::tests::a_release_waits_for_the_mirror
 pigeon-core lib pigeon_core iosrelease::tests::every_failure_ends_the_release
 pigeon-core lib pigeon_core iosrelease::tests::one_release_at_a_time
+pigeon-core lib pigeon_core iosrelease::tests::only_a_change_to_the_app_releases_it
 pigeon-core lib pigeon_core iosrelease::tests::only_a_zip_of_some_size_is_an_archive
 pigeon-core lib pigeon_core iosrelease::tests::processing_state_reads_the_first_build
 pigeon-core lib pigeon_core iosrelease::tests::the_archive_check_and_its_buildkite_build_name_the_build

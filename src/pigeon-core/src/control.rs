@@ -694,6 +694,10 @@ pub struct Report {
     /// For a deploy: the sites it published.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub published: Vec<String>,
+    /// For a deploy: whether it changed an iOS release input, so the app is released; see
+    /// .claude/decisions/2026-11-11-release-ios-app-buildkite-testflight.md's 2026-11-16 amendment.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub ios: bool,
     /// For a deploy: each Worker it deployed, as `<name>: <from> → <to>`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub workers: Vec<String>,
@@ -744,6 +748,7 @@ impl Report {
             patch: None,
             merged: None,
             published: Vec::new(),
+            ios: false,
             workers: Vec::new(),
             build: None,
             images: None,

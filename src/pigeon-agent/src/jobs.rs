@@ -73,6 +73,7 @@ impl Board {
             patch: None,
             merged: None,
             published: Vec::new(),
+            ios: false,
             workers: Vec::new(),
             build: None,
             images: None,
@@ -124,6 +125,7 @@ pub(crate) fn report(spec: &JobSpec, outcome: Outcome, log: &str) -> Report {
         patch: None,
         merged: None,
         published: Vec::new(),
+        ios: false,
         workers: Vec::new(),
         build: None,
         images: None,
@@ -422,6 +424,7 @@ fn deploy(spec: &JobSpec, dir: &Path) -> Report {
             .filter(|s| s.len() >= 8)
             .fold(t.to_string(), |acc, s| acc.replace(s.as_str(), "…"))
     };
+    let ios = crate::iosrelease::triggers(files.as_deref());
     let mut violations = Vec::new();
     let published = match publish_sites(spec, dir, files.as_deref(), &mut log) {
         Ok(p) => p,
@@ -477,6 +480,7 @@ fn deploy(spec: &JobSpec, dir: &Path) -> Report {
     Report {
         published,
         workers,
+        ios,
         build,
         images,
         ledger,
@@ -709,31 +713,21 @@ fn bound(spec: &JobSpec, dir: &Path, sentinel: &Path) -> Report {
     let seen = (since != spec.base)
         .then(|| crate::cobot::ci::built_on_head(dir, since, &spec.sha).ok())
         .flatten();
+    let outcome = if violations.is_empty() {
+        Outcome::Passed
+    } else {
+        Outcome::Failed
+    };
     Report {
-        id: spec.id.clone(),
-        outcome: if violations.is_empty() {
-            Outcome::Passed
-        } else {
-            Outcome::Failed
-        },
-        log: tail(&log).to_string(),
         violations,
         checks,
         full,
         gate,
         patch: crate::cobot::ci::head_patch(dir, since, &spec.sha),
-        merged: None,
-        published: Vec::new(),
-        workers: Vec::new(),
-        build: None,
-        images: None,
         tiers,
-        restack: None,
-        platform: None,
-        evictions: Vec::new(),
         forecast: predicted,
         built_on: seen,
-        ledger: None,
+        ..Report::of(&spec.id, outcome, &log)
     }
 }
 

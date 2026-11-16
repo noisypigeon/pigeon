@@ -82,6 +82,9 @@ pub struct Current {
     pub buildkite: Option<u64>,
     /// When it last moved, in Unix seconds.
     pub since: u64,
+    /// Whether a passed deploy started it, rather than the owner.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub auto: bool,
 }
 
 /// `MainRun`'s iOS releases.
@@ -96,6 +99,21 @@ pub struct IosReleases {
     /// Its archive's macOS job, across providers.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub macos: Option<Job>,
+    /// The newest passed deploy that changed a release input, not yet released.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pending: Option<String>,
+    /// The failed automatic release that holds the next, until the owner releases.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub held: Option<Held>,
+}
+
+/// A failed automatic release, holding automatic releases.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Held {
+    /// Its build number.
+    pub build: u64,
+    /// Why it failed.
+    pub why: String,
 }
 
 /// What became of the release in flight, for D1 and the event log.
@@ -105,6 +123,49 @@ pub enum Moved {
     To(&'static str),
     /// It failed, for this reason.
     Failed(String),
+}
+
+/// The paths whose change releases the app; see the release ADR's 2026-11-16 amendment.
+pub const INPUTS: &[&str] = &["src/pigeon-ios/", "tooling/ci/buildkite/ios-"];
+/// The paths under [`INPUTS`] that never reach the app: the Linux-only crate and the README.
+pub const NOT_INPUTS: &[&str] = &[
+    "src/pigeon-ios/Cargo.toml",
+    "src/pigeon-ios/README.md",
+    "src/pigeon-ios/src/",
+    "src/pigeon-ios/tests/",
+];
+
+/// Whether a deploy of `files`, the paths changed since the last passed deploy, releases the
+/// app; a first deploy, with nothing to compare, never does.
+#[must_use]
+pub fn triggers(files: Option<&[String]>) -> bool {
+    files.is_some_and(|files| {
+        files.iter().any(|f| {
+            INPUTS.iter().any(|i| f.starts_with(i))
+                && !NOT_INPUTS
+                    .iter()
+                    .any(|n| f == n || (n.ends_with('/') && f.starts_with(n)))
+        })
+    })
+}
+
+/// The label owner items about a held release are filed under.
+pub const OWNER_ITEM_SESSION: &str = "ios.release";
+
+impl Held {
+    /// The owner item's title and detail.
+    #[must_use]
+    pub fn item(&self) -> (String, String) {
+        let title: String = format!("iOS build {} failed: {}", self.build, self.why)
+            .chars()
+            .take(120)
+            .collect();
+        let detail = format!(
+            "Automatic TestFlight build {} failed: {}\n\nAutomatic releases are held until you release by hand (`ios_release`), which releases main's head and clears the hold. Merges that change the app meanwhile stay pending.",
+            self.build, self.why
+        );
+        (title, detail)
+    }
 }
 
 /// The commit a release archives: `main`'s head, once GitHub holds it. Refused while the mirror
@@ -140,6 +201,8 @@ impl IosReleases {
                 stage_name(c.stage)
             ));
         }
+        self.pending = None;
+        self.held = None;
         self.actions = Actions::default();
         self.macos = Some(Job::new(Kind::Archive, build, sha, now, None, Vec::new()));
         self.current = Some(Current {
@@ -150,6 +213,7 @@ impl IosReleases {
             archive: None,
             buildkite: None,
             since: now,
+            auto: false,
         });
         Ok(())
     }
@@ -203,7 +267,7 @@ impl IosReleases {
                     c.since = now;
                 }
             }
-            Moved::Failed(_) => self.current = None,
+            Moved::Failed(why) => self.end_failed(why),
         }
         Some(moved)
     }
@@ -218,14 +282,60 @@ impl IosReleases {
             }
             _ => return None,
         };
-        self.current = None;
+        match &moved {
+            Moved::Failed(why) => self.end_failed(why),
+            Moved::To(_) => self.current = None,
+        }
         Some(moved)
     }
 
     /// Ends the release in flight, for `why`.
     pub fn fail(&mut self, why: &str) -> Moved {
-        self.current = None;
+        self.end_failed(why);
         Moved::Failed(why.into())
+    }
+
+    /// Ends the release in flight as failed; an automatic one holds the next.
+    fn end_failed(&mut self, why: &str) {
+        if let Some(c) = self.current.take().filter(|c| c.auto) {
+            self.held = Some(Held {
+                build: c.build,
+                why: why.into(),
+            });
+        }
+    }
+
+    /// A deploy of `sha` passed; `ios` when it changed a release input.
+    pub fn deployed(&mut self, sha: &str, ios: bool) {
+        if ios {
+            self.pending = Some(sha.into());
+        }
+    }
+
+    /// Whether an automatic release should start now: one is pending, none is in flight, and
+    /// none is held.
+    #[must_use]
+    pub fn due(&self) -> bool {
+        self.pending.is_some() && self.current.is_none() && self.held.is_none()
+    }
+
+    /// Starts automatic release `build` of `sha`.
+    ///
+    /// # Errors
+    ///
+    /// When a release is in flight, or a failed one holds.
+    pub fn start_auto(&mut self, build: u64, sha: &str, now: u64) -> Result<(), String> {
+        if let Some(h) = &self.held {
+            return Err(format!(
+                "automatic releases are held since build {} failed: {}",
+                h.build, h.why
+            ));
+        }
+        self.start(build, sha, now)?;
+        if let Some(c) = self.current.as_mut() {
+            c.auto = true;
+        }
+        Ok(())
     }
 
     /// What `ios.status` shows of the release in flight.
@@ -240,9 +350,12 @@ impl IosReleases {
                 "archive": c.archive.as_ref().map(|(p, id)| json!({ "provider": p.name(), "id": id })),
                 "buildkite": c.buildkite,
                 "since": c.since,
+                "auto": c.auto,
             })),
             "dispatches": self.actions.view(),
             "macos": self.macos.as_ref().map(crate::macos::view),
+            "pending": self.pending,
+            "held": self.held.as_ref().map(|h| json!({ "build": h.build, "why": h.why })),
         })
     }
 }
@@ -507,5 +620,88 @@ mod tests {
         let answer = json!({ "data": [{ "attributes": { "processingState": "VALID" } }] });
         assert_eq!(processing_state(&answer), Some("VALID"));
         assert_eq!(processing_state(&json!({ "data": [] })), None);
+    }
+
+    fn files(paths: &[&str]) -> Vec<String> {
+        paths.iter().map(|p| (*p).to_string()).collect()
+    }
+
+    #[test]
+    fn only_a_change_to_the_app_releases_it() {
+        for app in [
+            "src/pigeon-ios/Pigeon/HomeView.swift",
+            "src/pigeon-ios/project.yml",
+            "src/pigeon-ios/archive.sh",
+            "tooling/ci/buildkite/ios-sign.sh",
+        ] {
+            assert!(triggers(Some(&files(&["docs/a.md", app]))), "{app}");
+        }
+        for not in [
+            "src/pigeon-ios/README.md",
+            "src/pigeon-ios/Cargo.toml",
+            "src/pigeon-ios/src/lib.rs",
+            "src/pigeon-ios/tests/suite.rs",
+            ".claude/decisions/2026-11-11-release-ios-app-buildkite-testflight.md",
+            "src/pigeon-core/src/iosrelease.rs",
+            "tooling/ci/buildkite/ci.yml",
+        ] {
+            assert!(!triggers(Some(&files(&[not]))), "{not}");
+        }
+        assert!(!triggers(Some(&[])));
+        assert!(!triggers(None), "a first deploy releases nothing");
+    }
+
+    #[test]
+    fn a_deploy_that_changes_the_app_starts_one_release_after_another() {
+        let mut r = IosReleases::default();
+        r.deployed("a", false);
+        assert!(!r.due(), "nothing changed");
+        r.deployed("a", true);
+        assert!(r.due());
+        r.start_auto(1, SHA, 0).expect("starts");
+        assert_eq!(r.pending, None, "the release takes main's head");
+        assert!(r.current.as_ref().is_some_and(|c| c.auto));
+        r.deployed("b", true);
+        r.deployed("c", true);
+        assert!(!r.due(), "one at a time");
+        assert_eq!(r.pending.as_deref(), Some("c"), "merges coalesce");
+        assert_eq!(r.processed(Some("VALID")), Some(Moved::To("delivered")));
+        assert!(r.due(), "the next starts after it");
+        assert_eq!(r.held, None);
+    }
+
+    #[test]
+    fn a_failed_automatic_release_holds_until_the_owner_releases() {
+        let mut r = IosReleases::default();
+        r.deployed("a", true);
+        r.start_auto(1, SHA, 0).expect("starts");
+        r.fail("github's archive failed");
+        assert_eq!(
+            r.held,
+            Some(Held {
+                build: 1,
+                why: "github's archive failed".into()
+            })
+        );
+        let (title, detail) = r.held.as_ref().expect("held").item();
+        assert_eq!(title, "iOS build 1 failed: github's archive failed");
+        assert!(detail.contains("ios_release"), "{detail}");
+        let long = Held {
+            build: 2,
+            why: "x".repeat(500),
+        };
+        assert_eq!(
+            long.item().0.chars().count(),
+            120,
+            "an owner item's title fits"
+        );
+        r.deployed("b", true);
+        assert!(!r.due(), "held: no retry on its own");
+        assert!(r.start_auto(2, SHA, 0).is_err());
+        r.start(2, SHA, 0).expect("the owner releases");
+        assert_eq!((r.held.clone(), r.pending.clone()), (None, None));
+        assert!(r.current.as_ref().is_some_and(|c| !c.auto));
+        r.fail("again");
+        assert_eq!(r.held, None, "the owner's own release never holds");
     }
 }

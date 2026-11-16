@@ -338,3 +338,61 @@ selects `/Applications/Xcode_26.6.app` through it. GitHub's `macos-15` has no
 "`macos-15` has Xcode 26.1.1" no longer applies to them. The rest of the
 switch, on every provider, is in the 2026-11-15 amendment to
 `2026-11-12-development-macos-builds-provider-failover.md`.
+
+### 2026-11-16: A passed deploy that changes the app releases it to TestFlight
+
+The owner's direction: "make ios build releases automatic instead of asking
+me to approve in session". Their standing goal is no manual approval except
+destructive actions and secrets. Until now a release was cut only by
+`ios.release`, which `.claude/settings.json`'s `ask` list puts to the owner
+each time. This supersedes the 2026-11-12 amendment's §1 ("a release is cut on
+demand"); that text stays as written.
+
+#### 1. The trigger
+
+- **The deploy job already has the paths.** It diffs `main` against the last
+  passed deploy to choose its sites. Its report gains `ios`: whether any of
+  those files is a release input, decided by the pure
+  `iosrelease::triggers`.
+- **Release inputs:** `src/pigeon-ios/**` and `tooling/ci/buildkite/ios-*`,
+  except the Linux-only crate (`src/pigeon-ios/Cargo.toml`, `src/`, `tests/`)
+  and `README.md`. A first deploy, which has nothing to diff, triggers nothing.
+  The release bot has no `pigeon-ios` unit; once it has one, its version bump
+  edits `project.yml` and triggers like any other change.
+- **`MainRun`** marks a release `pending` on a passed deploy with `ios`. On
+  its alarm it starts the pending release, by the same path as `ios.release`
+  (main's mirrored head, the next build number), when no release is in flight
+  and none is held. While the mirror is behind, it waits. Merges that land
+  during a release coalesce into one more release after it.
+
+#### 2. What stays the owner's
+
+- **TestFlight's internal group is the only destination.** Nothing submits a
+  build for App Store review or public release; that stays an owner act, and
+  a future change that adds it needs its own ADR.
+- **Signing is unchanged:** `ios-sign.sh`, the harness's `load`, `upload` and
+  `clean`, `release_grant`'s one redemption, and the Worker secrets. Each is
+  on `approvals.yaml`'s `secrets:`, so any change to them is the owner's.
+- **`ios.release` stays on the `ask` list.** It is now the owner's override:
+  a release outside the trigger, or after a hold.
+- **The macOS failover** (`2026-11-12-development-macos-builds-provider-failover.md`)
+  places an automatic release's archive as it does any other, within its
+  health and minutes caps.
+
+#### 3. A failed automatic release holds
+
+- **No retry on its own.** A failed automatic release sets `held`. Later
+  triggers stay `pending`, and nothing starts while held.
+- **The owner is told once:** the control plane files an owner item (an
+  action, "iOS build N failed: why"), which reaches the digest and the app,
+  besides the existing `ios.failed` event and push.
+- **The owner's `ios.release` clears the hold** and releases main's head.
+- **`ios.status`** shows `pending`, `held` and whether the release in flight
+  is automatic.
+
+#### 4. Execution
+
+1. **`feat(ios)`, this planner:** this amendment; `iosrelease::triggers` and
+   the pending, hold and automatic start in `IosReleases`, with pure tests;
+   the deploy report's `ios`; `MainRun`'s start and owner item; and an agent
+   suite test that a deploy's files set `ios`.

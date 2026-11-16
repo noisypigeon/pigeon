@@ -212,9 +212,15 @@ impl MainRun {
             .unwrap_or_default())
     }
 
-    /// `ios.release`: starts a release of `main`'s mirrored head; see the 2026-11-12 amendment
-    /// to .claude/decisions/2026-11-11-release-ios-app-buildkite-testflight.md.
+    /// `ios.release`: the owner starts a release of `main`'s mirrored head, clearing any hold;
+    /// see the 2026-11-12 amendment to .claude/decisions/2026-11-11-release-ios-app-buildkite-testflight.md.
     async fn ios_release(&self) -> std::result::Result<Value, String> {
+        self.ios_begin(false).await
+    }
+
+    /// Starts a release of `main`'s mirrored head; `auto` when a passed deploy changed the app,
+    /// per the release ADR's 2026-11-16 amendment.
+    async fn ios_begin(&self, auto: bool) -> std::result::Result<Value, String> {
         let m = self.mirroring().await.map_err(|e| e.to_string())?;
         let sha = iosrelease::release_sha(m.target.as_deref(), m.mirrored.as_deref())?;
         let mut r = self.ios_releases().await.map_err(|e| e.to_string())?;
@@ -226,7 +232,11 @@ impl MainRun {
             .map_err(|e| e.to_string())?;
         let build = rows.first().and_then(|v| v["build"].as_u64()).unwrap_or(1);
         let at = now();
-        r.start(build, &sha, at)?;
+        if auto {
+            r.start_auto(build, &sha, at)?;
+        } else {
+            r.start(build, &sha, at)?;
+        }
         platform::d1(&self.env, &[iosrelease::insert(build, &sha, at)])
             .await
             .map_err(|e| e.to_string())?;
@@ -242,10 +252,14 @@ impl MainRun {
             .map_err(|e| e.to_string())?;
         self.ios_event(
             "ios.release",
-            &format!("iOS build {build} of {} started", short(&sha)),
+            &format!(
+                "iOS build {build} of {} started{}",
+                short(&sha),
+                if auto { " automatically" } else { "" }
+            ),
         )
         .await;
-        Ok(json!({ "build": build, "sha": sha, "state": "archiving" }))
+        Ok(json!({ "build": build, "sha": sha, "state": "archiving", "auto": auto }))
     }
 
     /// `ios.status`: the release in flight and the newest releases.
@@ -295,8 +309,15 @@ impl MainRun {
     /// signing, and App Store Connect's processing.
     async fn ios_step(&self) -> Result<()> {
         let mut r = self.ios_releases().await?;
+        if r.due() {
+            match self.ios_begin(true).await {
+                Ok(_) => r = self.ios_releases().await?,
+                Err(why) => worker::console_log!("the automatic iOS release waits: {why}"),
+            }
+        }
+        let held = r.held.clone();
         let Some(c) = r.current.clone() else {
-            return Ok(());
+            return self.ios_poll(&r).await;
         };
         let at = now();
         match c.stage {
@@ -340,7 +361,17 @@ impl MainRun {
             }
         }
         self.state.storage().put(IOS_RELEASES, &r).await?;
-        if r.busy() {
+        if r.held != held
+            && let Some(h) = &r.held
+        {
+            self.ios_held(h).await;
+        }
+        self.ios_poll(&r).await
+    }
+
+    /// Brings the alarm back soon while a release is in flight or due.
+    async fn ios_poll(&self, r: &IosReleases) -> Result<()> {
+        if r.busy() || r.due() {
             let poll_at = i64::try_from((now() + crate::actions::POLL) * 1000).unwrap_or(i64::MAX);
             let storage = self.state.storage();
             if storage.get_alarm().await?.is_none_or(|a| a > poll_at) {
@@ -350,6 +381,32 @@ impl MainRun {
             }
         }
         Ok(())
+    }
+
+    /// A failed automatic release holds the next: the owner is filed an item, once.
+    async fn ios_held(&self, h: &iosrelease::Held) {
+        let Ok(s) = platform::Settings::from(&self.env) else {
+            return;
+        };
+        let (title, detail) = h.item();
+        let mut args = serde_json::Map::new();
+        args.insert("kind".into(), json!("action"));
+        args.insert("session".into(), json!(iosrelease::OWNER_ITEM_SESSION));
+        args.insert("title".into(), json!(title));
+        args.insert("detail".into(), json!(detail));
+        if let Err(e) = super::owner_items::run(&self.env, &s, "owner.ask", &args).await {
+            worker::console_error!("ios hold: {e}");
+        }
+    }
+
+    /// A deploy of `sha` passed; `ios` when it changed a release input.
+    async fn ios_deployed(&self, sha: &str, ios: bool) -> Result<()> {
+        if !ios {
+            return Ok(());
+        }
+        let mut r = self.ios_releases().await?;
+        r.deployed(sha, ios);
+        self.state.storage().put(IOS_RELEASES, &r).await
     }
 
     /// Moves the release's archive on, across macOS providers: drives the attempt in flight,
@@ -1213,6 +1270,7 @@ impl DurableObject for MainRun {
                     deploy_event(&self.env, &sha, &report).await;
                     if report.outcome == Outcome::Passed {
                         self.release_target(&sha).await?;
+                        self.ios_deployed(&sha, report.ios).await?;
                     }
                     // A failed deploy holds Auto, and a passed one resumes it; see the iOS
                     // approvals ADR's 2026-11-15 amendment. A superseded one does neither; see
