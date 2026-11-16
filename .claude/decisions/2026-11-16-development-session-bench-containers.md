@@ -452,3 +452,50 @@ Executors are Sonnet unless marked.
   `Checker`, and no gate job reads a bench.
 - **Cost.** The day's metered Container-hours are compared with the
   account's billing, and §6's estimate is amended with the measured figure.
+
+## Amendments
+
+### 2026-11-16: Reviewed against the one-test-binary ADR (!659); bench ci runs scope's checks by name
+
+Reviews !658 (step 3, `core::bench`) against
+[`2026-11-16-development-one-test-binary-per-crate.md`](2026-11-16-development-one-test-binary-per-crate.md),
+[`2026-11-15-development-code-checks-by-reach.md`](2026-11-15-development-code-checks-by-reach.md)
+and
+[`2026-11-10-development-factory-crates-functional-core.md`](2026-11-10-development-factory-crates-functional-core.md).
+
+- **What agrees.**
+  - !658 adds only `src/` code. Its tests are unit tests in its own files, run
+    by backplane's `--lib` binary. It adds no file under `tests/` and no test
+    target.
+  - `core::bench::deal`'s lanes key on a check's name starting with `test`.
+    The one-test-binary ADR §3 keeps scope's test job names as `test …`,
+    listing modules instead of targets, so the lanes hold.
+  - That ADR §5 keeps `-p` per test job, so one feature set per job. Since
+    `bench ci` runs exactly scope's jobs, a bench builds what the gate
+    builds. It adds no feature variant beyond the gate's.
+- **What doesn't, and what !658 changes.**
+  - The one-test-binary ADR §3 makes a test job's argv
+    `sh -c "cargo test … && cargo test …"`, and §5 sets `PIGEON_SENTINEL`
+    after a `cargo build -p pigeon-sentinel` inside it. §3.1's allowlist
+    refuses `sh`, so `bench ci` couldn't run the gate's own test jobs.
+  - So `allow` gains a third form: `bench check <name>` →
+    `Command::Check { name }`.
+    - The server runs `cargo run -q --locked -p pigeon -- cobot scope --root
+      ../.. --base artifacts/main --json` at the synced commit, in the
+      sandbox.
+    - It then runs the check of that name with the argv scope gave it, in
+      the sandbox.
+    - An unknown name fails the run with "bench: no check `<name>` in this
+      change's scope".
+  - This trusts the commit as far as `build.rs` or a mise task (§3.1)
+    already does. The sandbox stays the boundary.
+  - `bench ci` (§3.3) deals `bench check <name>` commands, not raw argv.
+  - Brief b52 gains this form as revision 3, before !658 merges.
+- **Disk, from the one-test-binary ADR §6.**
+  - A workspace target is 16 GB after one build today, more than
+    `TARGET_CEILING`'s 10 GB, and near a Container's 15 to 18 GB free. Until
+    that ADR's step 4 lands, a bench running the full test set will clean
+    its workspace crates on most runs.
+  - After step 4, about 4 to 5 GB, so benches stay warm.
+  - The spike (!657) measures the bench's side.
+  - `TARGET_CEILING` stays 10 GB, and is revisited with the spike's numbers.
