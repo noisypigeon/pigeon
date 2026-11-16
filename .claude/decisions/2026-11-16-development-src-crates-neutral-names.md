@@ -434,3 +434,41 @@ boundary. The other steps are briefs for Sonnet executors.
   `### Released`. Without a heading, a blank line doesn't stop CommonMark
   from joining the two lists into one. Agreed with the changelog-backfill
   planner.
+
+### 2026-11-16: The checks read the layout from the tree, before anything moves (step 4 splits)
+
+- **The gate runs `main`'s `pigeon`, not the change's.** The bound job and
+  every check job run `main`'s newest build from `builds/`. `main`'s
+  `GitHub` checks run `main`'s `ci.yml`. Today both have the layout built in:
+  - `scope::WORKSPACE = "src/pigeon-cli"`, the directory every check runs in;
+  - crates found by reading `<WORKSPACE>/crates/`;
+  - `WORKER` and `WASM_ONLY` (`pigeon-backplane` and its `worker/` directory);
+  - `PIGEON_SHARED` and the per-feature clippies of package `pigeon`;
+  - `IMAGE_BLOCKS` and `builds()` (`src/pigeon-cli/…` paths);
+  - `--root ../..` in check argv, and `actions::TEST_MAP`;
+  - `ci.yml`'s `working-directory`, cache paths and `tests.json` path.
+
+  A change that moves the workspace or renames a package would be checked
+  by a `main` that looks for the old layout, and would fail its own gate.
+- **So the layout becomes data in the checked tree.** Step 4 splits in two:
+  - **4a (planner; guarded for `ci.yml`).** Each item above is read from the
+    checked-out tree, not from constants:
+    - the workspace is the root `Cargo.toml` when it has `[workspace]`, else
+      `src/pigeon-cli/Cargo.toml`;
+    - crates come from its `members` globs;
+    - the worker package, its feature and target, its wasm-only directories,
+      the CLI package and its shared files, and the image inputs are in that
+      manifest's `[workspace.metadata.pigeon]`;
+    - argv's `--root` is the workspace's path back to the root;
+    - `ci.yml` finds the workspace the same way, in a first step that sets
+      `working-directory`, and keys its cache on `**/Cargo.lock`;
+    - `behaviours.sh` and `test-map.sh` find it the same way.
+
+    4a moves nothing. Its tests cover both layouts.
+  - **4b (brief)** is the move itself, as step 4 described. It changes only
+    data (manifests, metadata, paths), and no code.
+- **Order.** 4b, and every later crate move, merges only after a deploy of
+  `main` holding 4a has passed. From then on, the checking `pigeon` reads the
+  layout from the tree it checks. The same rule makes steps 5 to 7 data
+  edits for the checks: each renames or moves a package in the manifests
+  and in `[workspace.metadata.pigeon]` together.
