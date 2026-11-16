@@ -153,6 +153,7 @@
 - docs(adr): review !772 against !766 (!776) ([d1d97f1](https://github.com/noisypigeon/pigeon/commit/d1d97f16b3abbc942eb7c24b6ecd0bf7ee238b85))
 - docs(adr): review !736 against !766 (!773) ([e7d8ebc](https://github.com/noisypigeon/pigeon/commit/e7d8ebc2b3b1d8c761f0e8631e206d8a0a85b77f))
 - docs(adr): review !768 against !766 (!775) ([aba0930](https://github.com/noisypigeon/pigeon/commit/aba0930fad54539ea66cc51333a98e483beb8429))
+- chore(secrets): the four stored ciphertexts carry the ENC[pigeon:v1:] tag (!769) ([741c355](https://github.com/noisypigeon/pigeon/commit/741c355c46be13d5f4d4ca8143cbcf4a02e8e109))
 
 ## 2026-11-15
 
