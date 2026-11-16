@@ -1866,8 +1866,8 @@ dependencies = [
  "hmac",
  "httparse",
  "jsonschema",
- "md-5",
  "p256",
+ "pigeon-common",
  "rcgen",
  "regex",
  "rusqlite",
@@ -1882,6 +1882,14 @@ dependencies = [
  "ureq",
  "wasm-bindgen",
  "worker",
+]
+
+[[package]]
+name = "pigeon-common"
+version = "0.1.0"
+dependencies = [
+ "md-5",
+ "sha2 0.10.9",
 ]
 
 [[package]]

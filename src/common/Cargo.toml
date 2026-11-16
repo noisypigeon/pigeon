@@ -1,0 +1,19 @@
+[package]
+name = "pigeon-common"
+description = "Encoding helpers every pigeon crate shares: base64url, hex and digests. No domain types, no I/O."
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lib]
+name = "common"
+
+[dependencies]
+md-5.workspace = true
+sha2.workspace = true
+
+[lints]
+workspace = true
