@@ -83,3 +83,11 @@ sentinel:
   - .config/policies/**
   - catalog/policies/**
   - .config/approvals.yaml
+# Workspace bookkeeping a sentinel change may also carry, as its crate moves or is renamed; see
+# the same ADR's 2026-11-16 amendment.
+sentinel_bookkeeping:
+  - Cargo.toml
+  - Cargo.lock
+  - tooling/ci/tests.ledger
+  - tooling/ci/tests.moves
+  - .config/releases.yaml
