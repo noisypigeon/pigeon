@@ -115,12 +115,17 @@ fn form_fields_decode_and_origins_match_exactly() {
 
 #[test]
 fn dark_mode_comes_after_the_light_rules_it_overrides() {
+    // Dark is the default; the light scheme's tokens override it, so they come later. See
+    // .claude/decisions/2026-11-16-runtime-owner-pages-app-look.md §1.
     let html = approve::outcome("t", "m");
-    let light = html.find("code,pre{background:#f2f2f2").expect("light");
-    let dark = html
-        .find("@media (prefers-color-scheme:dark)")
-        .expect("dark");
-    assert!(dark > light, "the later rule wins, so dark mode comes last");
+    let dark = html.find("--background: #14121A;").expect("dark");
+    let light = html
+        .find("@media (prefers-color-scheme: light)")
+        .expect("light");
+    assert!(
+        light > dark,
+        "the later rule wins, so the light override comes last"
+    );
 }
 
 #[test]

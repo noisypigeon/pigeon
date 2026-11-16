@@ -122,3 +122,36 @@ fn every_text_pair_meets_aa_on_both_schemes() {
         }
     }
 }
+
+#[test]
+fn the_csps_add_only_inline_images_to_the_approval_pages() {
+    assert_eq!(
+        approve::CSP,
+        "default-src 'none'; img-src data:; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'"
+    );
+    assert_eq!(
+        approve::PROOF_CSP,
+        "default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'self'; connect-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'"
+    );
+    assert_eq!(
+        approve::INBOX_CSP,
+        "default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'self'; connect-src 'self'; worker-src 'self'; manifest-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'"
+    );
+}
+
+#[test]
+fn every_page_wears_the_look_with_one_avatar() {
+    for (name, html) in fixture_pages() {
+        assert!(html.starts_with("<!doctype html>"), "{name}");
+        assert!(html.contains(TOKENS) && html.contains(STYLE), "{name}");
+        assert_eq!(html.matches("<img").count(), 1, "{name}");
+        assert_eq!(
+            html.matches("<main><img class=\"avatar\"").count(),
+            1,
+            "{name}"
+        );
+        assert!(html.ends_with("</main></body></html>"), "{name}");
+    }
+    let m: serde_json::Value = serde_json::from_str(approve::MANIFEST).expect("JSON");
+    assert_eq!(m["background_color"], super::BACKGROUND);
+}

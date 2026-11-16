@@ -8,18 +8,19 @@ use serde::{Deserialize, Serialize};
 use crate::approval::grants::Grant;
 use crate::change::Change;
 
-/// The page's Content-Security-Policy: no scripts, no external loads, forms only to itself.
-pub const CSP: &str = "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'";
+/// The page's Content-Security-Policy: no scripts, no external loads, forms only to itself;
+/// `img-src data:` for the inline avatar, per `.claude/decisions/2026-11-16-runtime-owner-pages-app-look.md` §3.
+pub const CSP: &str = "default-src 'none'; img-src data:; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'";
 
 /// A page that takes a proof: [`CSP`], plus `/passkey.js` and its fetch of a challenge; see
 /// `.claude/decisions/2026-11-09-security-approvals-once-passkeys.md` §4.
-pub const PROOF_CSP: &str = "default-src 'none'; style-src 'unsafe-inline'; script-src 'self'; connect-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'";
+pub const PROOF_CSP: &str = "default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'self'; connect-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'";
 
 /// The inbox's policy: [`CSP`], plus its own script, its fetches and its service worker.
-pub const INBOX_CSP: &str = "default-src 'none'; style-src 'unsafe-inline'; script-src 'self'; connect-src 'self'; worker-src 'self'; manifest-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'";
+pub const INBOX_CSP: &str = "default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'self'; connect-src 'self'; worker-src 'self'; manifest-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'";
 
 /// The inbox's web app manifest, so iOS installs it to the Home Screen, where Web Push works.
-pub const MANIFEST: &str = r##"{"name":"pigeon approvals","short_name":"pigeon","start_url":"/approvals","scope":"/","display":"standalone","background_color":"#141414","theme_color":"#2b59c3"}"##;
+pub const MANIFEST: &str = r##"{"name":"pigeon approvals","short_name":"pigeon","start_url":"/approvals","scope":"/","display":"standalone","background_color":"#14121A","theme_color":"#14121A"}"##;
 
 /// The inbox's `<head>` additions: its manifest and iOS's standalone flags.
 const INBOX_HEAD: &str = "<link rel=\"manifest\" href=\"/approvals/manifest.json\">\
@@ -130,22 +131,9 @@ fn shell(title: &str, body: &str) -> String {
     shell_with(title, "", body)
 }
 
-/// A page with `head` added to its `<head>`.
+/// A page with `head` added to its `<head>`, in the app's look; see [`crate::look`].
 fn shell_with(title: &str, head: &str, body: &str) -> String {
-    format!(
-        "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">\
-<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">{head}\
-<title>{}</title><style>\
-body{{font:16px/1.5 system-ui,sans-serif;max-width:46rem;margin:2rem auto;padding:0 1rem;color:#1b1b1b;background:#fff}}\
-code,pre{{background:#f2f2f2;color:inherit;border-radius:4px;padding:.1rem .3rem;font-size:.9em}}\
-@media (prefers-color-scheme:dark){{body{{color:#e8e8e8;background:#141414}}code,pre{{background:#262626}}}}\
-pre{{padding:.75rem;white-space:pre-wrap;overflow-wrap:anywhere}}\
-dt{{font-weight:600;margin-top:.5rem}}dd{{margin:0}}\
-button{{font:inherit;padding:.6rem 1.2rem;border-radius:6px;border:0;background:#2b59c3;color:#fff;cursor:pointer}}\
-input{{font:inherit;font-size:1.4rem;letter-spacing:.3rem;width:9rem;padding:.4rem}}a{{color:#2b59c3}}\
-</style></head><body>{body}</body></html>",
-        escape(title)
-    )
+    crate::look::page(title, head, body)
 }
 
 /// One approval waiting in the inbox.
