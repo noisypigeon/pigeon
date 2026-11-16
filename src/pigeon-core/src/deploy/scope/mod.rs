@@ -1019,4 +1019,41 @@ mod tests {
             "a target that is gone, with no suite, leaves it to the crate"
         );
     }
+
+    #[test]
+    fn a_mapped_package_that_was_renamed_leaves_it_to_the_crate() {
+        use super::{Binary, TestMap};
+        let crates = Crates {
+            by_dir: [("src/pigeon-agent/".to_string(), "pigeon-agent".to_string())].into(),
+            deps: BTreeMap::default(),
+            features: BTreeMap::default(),
+            tests: [(
+                "pigeon-agent".to_string(),
+                BTreeSet::from(["suite".to_string()]),
+            )]
+            .into(),
+            layout: Layout::default(),
+        };
+        let unit = |package: &str, file: &str| Binary {
+            package: package.into(),
+            kind: "lib".into(),
+            name: "backplane".into(),
+            filter: String::new(),
+            files: vec![file.into()],
+        };
+        let a = "src/pigeon-agent/src/a.rs";
+        let map = TestMap {
+            sha: "x".into(),
+            binaries: vec![
+                unit("pigeon-backplane", a),
+                unit("pigeon-agent", "e1.rs"),
+                unit("pigeon-agent", "e2.rs"),
+                unit("pigeon-agent", "e3.rs"),
+            ],
+        };
+        assert!(
+            map.select(&crates, &[a]).is_none(),
+            "a unit of a package the workspace no longer has can't say"
+        );
+    }
 }
