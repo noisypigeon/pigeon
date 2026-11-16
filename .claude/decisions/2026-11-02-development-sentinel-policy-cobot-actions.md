@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: development
-* Governs: `.config/policies/sentinel-actions.yaml`, `src/pigeon-cli/crates/sentinel/src/**`, `src/pigeon-cli/crates/backplane/src/cobot/release/**`, `src/pigeon-cli/crates/backplane/tests/cobot_release*.rs`, `src/pigeon-cli/crates/pigeon/src/commands/cobot.rs`
+* Governs: `.config/policies/sentinel-actions.yaml`, `src/pigeon-cli/crates/sentinel/src/**`, `src/pigeon-cli/crates/backplane/src/cobot/release/**`, `src/pigeon-cli/crates/backplane/tests/**cobot_release*.rs`, `src/pigeon-cli/crates/pigeon/src/commands/cobot.rs`
 
 ## Context
 
@@ -120,3 +120,11 @@ rules:
   - It writes no file and starts no process itself.
 - A capability backplane offers is still split by §1: the check goes in sentinel and the action in cobot. Backplane only sequences and exposes them.
 - `.config/policies/backplane.yaml` enforces this, as `sentinel-actions.yaml` does for sentinel.
+
+### 2026-11-16: Governs follows the tests into their suites
+
+- Each test file in `Governs` is now a glob that matches it both where it is and under
+  `tests/suite/`, where
+  [`2026-11-16-development-one-test-binary-per-crate.md`](2026-11-16-development-one-test-binary-per-crate.md)
+  steps 3 and 4 move it.
+- Once those steps merge, the globs become the suite's paths.

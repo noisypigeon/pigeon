@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: runtime
-* Governs: `catalog/pigeon/kinds/platform/**`, `src/pigeon-cli/crates/backplane/src/platform*.rs`, `src/pigeon-cli/crates/backplane/src/worker/platform*.rs`, `src/pigeon-cli/crates/backplane/src/versions.rs`, `src/pigeon-cli/crates/backplane/tests/state/**`, `src/pigeon-cli/crates/backplane/tests/state.rs`
+* Governs: `catalog/pigeon/kinds/platform/**`, `src/pigeon-cli/crates/backplane/src/platform*.rs`, `src/pigeon-cli/crates/backplane/src/worker/platform*.rs`, `src/pigeon-cli/crates/backplane/src/versions.rs`, `src/pigeon-cli/crates/backplane/tests/state/**`, `src/pigeon-cli/crates/backplane/tests/**state.rs`
 
 ## Context
 
@@ -690,3 +690,11 @@ Step 4c is three changes:
   - `POST https://platform.pigeon.dev/v0/apple/release` reaches the Worker, and with no OIDC token answers 401;
   - `GET https://platform.pigeon.dev/v0/apple/release/x` answers 404;
   - `https://platform.pigeon.dev/` and `/mcp` still redirect to the Access login.
+
+### 2026-11-16: Governs follows the tests into their suites
+
+- Each test file in `Governs` is now a glob that matches it both where it is and under
+  `tests/suite/`, where
+  [`2026-11-16-development-one-test-binary-per-crate.md`](2026-11-16-development-one-test-binary-per-crate.md)
+  steps 3 and 4 move it.
+- Once those steps merge, the globs become the suite's paths.

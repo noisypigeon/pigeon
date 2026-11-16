@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: development
-* Governs: `catalog/cloudflare/kinds/git-repo/**`, `src/pigeon-cli/crates/backplane/src/cobot/artifacts*.rs`, `src/pigeon-cli/crates/backplane/src/cobot/git.rs`, `src/pigeon-cli/crates/backplane/tests/cobot_git.rs`, `.config/policies/mirror.yaml`
+* Governs: `catalog/cloudflare/kinds/git-repo/**`, `src/pigeon-cli/crates/backplane/src/cobot/artifacts*.rs`, `src/pigeon-cli/crates/backplane/src/cobot/git.rs`, `src/pigeon-cli/crates/backplane/tests/**cobot_git.rs`, `.config/policies/mirror.yaml`
 
 ## Context
 
@@ -215,3 +215,11 @@ The owner's direction: GitHub is a backup of the source, in case the Artifacts r
   - its site publish of noisypigeon's blog.
 
   The blog stays live as published. Its next publish comes from noisypigeon's own instance, per the kind-units ADR. Platform infrastructure stays a local apply by the owner. A publish runs in the control plane's pipeline once it is deployed.
+
+### 2026-11-16: Governs follows the tests into their suites
+
+- Each test file in `Governs` is now a glob that matches it both where it is and under
+  `tests/suite/`, where
+  [`2026-11-16-development-one-test-binary-per-crate.md`](2026-11-16-development-one-test-binary-per-crate.md)
+  steps 3 and 4 move it.
+- Once those steps merge, the globs become the suite's paths.

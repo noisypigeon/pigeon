@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: development
-* Governs: `.config/policies/layout.yaml`, `infra/README.md`, `tooling/README.md`, `workloads/README.md`, `src/pigeon-cli/crates/sentinel/src/target.rs`, `src/pigeon-cli/crates/sentinel/tests/tree.rs`
+* Governs: `.config/policies/layout.yaml`, `infra/README.md`, `tooling/README.md`, `workloads/README.md`, `src/pigeon-cli/crates/sentinel/src/target.rs`, `src/pigeon-cli/crates/sentinel/tests/**tree.rs`
 
 ## Context
 
@@ -146,3 +146,11 @@ The text above stays as written.
 - A spike is never a release unit, is outside the Cargo workspace, and holds no credential or account ID.
 - Its results are recorded in the ADR that ordered it, and a later PR removes the kit.
 - The first is `containers`, per the phase 3 amendment of [`2026-11-04-development-platform-instance-separation.md`](2026-11-04-development-platform-instance-separation.md).
+
+### 2026-11-16: Governs follows the tests into their suites
+
+- Each test file in `Governs` is now a glob that matches it both where it is and under
+  `tests/suite/`, where
+  [`2026-11-16-development-one-test-binary-per-crate.md`](2026-11-16-development-one-test-binary-per-crate.md)
+  steps 3 and 4 move it.
+- Once those steps merge, the globs become the suite's paths.

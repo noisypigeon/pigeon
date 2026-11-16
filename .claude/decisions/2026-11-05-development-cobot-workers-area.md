@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: development
-* Governs: `infra/pigeon/workers/**`, `src/pigeon-cli/crates/backplane/src/cobot/workers.rs`, `src/pigeon-cli/crates/backplane/tests/cobot_workers.rs`, `src/pigeon-cli/crates/pigeon/src/commands/workers.rs`, `mise.toml`
+* Governs: `infra/pigeon/workers/**`, `src/pigeon-cli/crates/backplane/src/cobot/workers.rs`, `src/pigeon-cli/crates/backplane/tests/**cobot_workers.rs`, `src/pigeon-cli/crates/pigeon/src/commands/workers.rs`, `mise.toml`
 
 ## Context
 
@@ -148,3 +148,11 @@ Built as phase E1 of [`2026-11-05-development-changes-through-pigeon-mcp.md`](20
   a busy program that stays busy, fails as before.
 - **Deployed tools are never written while they run,** so this changes nothing
   outside tests.
+
+### 2026-11-16: Governs follows the tests into their suites
+
+- Each test file in `Governs` is now a glob that matches it both where it is and under
+  `tests/suite/`, where
+  [`2026-11-16-development-one-test-binary-per-crate.md`](2026-11-16-development-one-test-binary-per-crate.md)
+  steps 3 and 4 move it.
+- Once those steps merge, the globs become the suite's paths.

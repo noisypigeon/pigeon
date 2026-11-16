@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: runtime
-* Governs: `config.yaml`, `catalog/*/kinds/**`, `src/pigeon-cli/crates/backplane/src/cobot/manifest.rs`, `src/pigeon-cli/crates/backplane/src/cobot/unit.rs`, `src/pigeon-cli/crates/backplane/src/cobot/moves.rs`, `src/pigeon-cli/crates/backplane/tests/cobot_manifest.rs`
+* Governs: `config.yaml`, `catalog/*/kinds/**`, `src/pigeon-cli/crates/backplane/src/cobot/manifest.rs`, `src/pigeon-cli/crates/backplane/src/cobot/unit.rs`, `src/pigeon-cli/crates/backplane/src/cobot/moves.rs`, `src/pigeon-cli/crates/backplane/tests/**cobot_manifest.rs`
 
 ## Context
 
@@ -141,3 +141,13 @@ Each step is released before the next relies on it.
 - **Credentials.** A run token fills every declared `cloudflare` credential, and appears in no rendered or state file.
 - **The repository.** `noisypigeon/noisypigeon` holds no `ENC[`, ID or bucket name.
 - **The owner's plan** destroys and replaces nothing, and the blog and mail keep working.
+
+## Amendments
+
+### 2026-11-16: Governs follows the tests into their suites
+
+- Each test file in `Governs` is now a glob that matches it both where it is and under
+  `tests/suite/`, where
+  [`2026-11-16-development-one-test-binary-per-crate.md`](2026-11-16-development-one-test-binary-per-crate.md)
+  steps 3 and 4 move it.
+- Once those steps merge, the globs become the suite's paths.

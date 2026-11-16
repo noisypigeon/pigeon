@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: runtime
-* Governs: `catalog/agnostic/**`, `catalog/digitalocean/modules/spaces-bucket/**`, `src/pigeon-cli/crates/backplane/src/cobot/catalog.rs`, `src/pigeon-cli/crates/backplane/src/cobot/config.rs`, `src/pigeon-cli/crates/backplane/tests/cobot_agnostic.rs`
+* Governs: `catalog/agnostic/**`, `catalog/digitalocean/modules/spaces-bucket/**`, `src/pigeon-cli/crates/backplane/src/cobot/catalog.rs`, `src/pigeon-cli/crates/backplane/src/cobot/config.rs`, `src/pigeon-cli/crates/backplane/tests/**cobot_agnostic.rs`
 
 ## Context
 
@@ -157,3 +157,11 @@ Each property's `x-cobot` drives exactly one block. A random suffix per bucket n
 ### 2026-11-04: Modules from any catalog
 
 `agnostic/<name>` becomes one case of `<catalog>/<name>`, which reaches any catalog's modules, and `infra/agnostic` retires, per the amendment "The bootstrap composes the Cloudflare catalog" in [`2026-11-04-development-platform-instance-separation.md`](2026-11-04-development-platform-instance-separation.md).
+
+### 2026-11-16: Governs follows the tests into their suites
+
+- Each test file in `Governs` is now a glob that matches it both where it is and under
+  `tests/suite/`, where
+  [`2026-11-16-development-one-test-binary-per-crate.md`](2026-11-16-development-one-test-binary-per-crate.md)
+  steps 3 and 4 move it.
+- Once those steps merge, the globs become the suite's paths.

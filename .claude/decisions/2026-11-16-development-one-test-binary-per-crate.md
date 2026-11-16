@@ -440,3 +440,19 @@ owner says to start. None starts with this ADR.
 - A module of the suite stops appearing in the test map (no unit), so no
   change could select it.
 - In CI, a tofu- or zola-gated test skips under `PIGEON_REQUIRE_TOOLS`.
+
+## Amendments
+
+### 2026-11-16: ADRs' Governs globs move with the tests; timings come from CI
+
+- **Sixteen ADRs name test files in `Governs`.** The decisions policy needs
+  each glob to match a file, so moving a test file breaks that ADR's line. An
+  executor never amends an ADR, so the planner does it, in two changes.
+  - **Before step 3:** each test path becomes `tests/**<file>`. Under
+    sentinel's matcher, that matches the file both where it is and under
+    `tests/suite/`.
+  - **After step 4:** each becomes the suite's path, `tests/suite/<file>`.
+    `state.rs` becomes `stored_state.rs`.
+- **The timing comparison in step 2's brief is dropped**, at the owner's word.
+  The savings in §6 are measured instead from the CI test job and the test
+  map on `main`, after step 4.

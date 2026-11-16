@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: development
-* Governs: `.github/workflows/ci.yml`, `.config/policies/mirror*.yaml`, `src/pigeon-cli/crates/backplane/src/actions.rs`, `src/pigeon-cli/crates/backplane/src/worker/github.rs`, `src/pigeon-cli/crates/backplane/src/worker/change.rs`, `src/pigeon-cli/crates/backplane/tests/actions.rs`
+* Governs: `.github/workflows/ci.yml`, `.config/policies/mirror*.yaml`, `src/pigeon-cli/crates/backplane/src/actions.rs`, `src/pigeon-cli/crates/backplane/src/worker/github.rs`, `src/pigeon-cli/crates/backplane/src/worker/change.rs`, `src/pigeon-cli/crates/backplane/tests/**actions.rs`
 
 ## Context
 
@@ -192,3 +192,11 @@ On 2026-11-11 around 20:00 UTC, GitHub Actions runners sat in `queued` for over 
 2. `Instance` storage and its route, the `ci.window` operation in the catalog and owner tier, the `ci_window` tool, and the `ci.window` event;
 3. on open, the break-glass for each open change with code checks queued or running on GitHub, tested on a change's dispatches;
 4. `deploy_status` gains `ci_window`.
+
+### 2026-11-16: Governs follows the tests into their suites
+
+- Each test file in `Governs` is now a glob that matches it both where it is and under
+  `tests/suite/`, where
+  [`2026-11-16-development-one-test-binary-per-crate.md`](2026-11-16-development-one-test-binary-per-crate.md)
+  steps 3 and 4 move it.
+- Once those steps merge, the globs become the suite's paths.

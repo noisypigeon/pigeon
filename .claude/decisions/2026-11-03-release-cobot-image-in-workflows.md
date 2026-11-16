@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: release
-* Governs: `src/pigeon-cli/Dockerfile`, `src/pigeon-cli/.dockerignore`, `src/pigeon-cli/crates/backplane/tests/cobot_image_tools.rs`, `mise.toml`
+* Governs: `src/pigeon-cli/Dockerfile`, `src/pigeon-cli/.dockerignore`, `src/pigeon-cli/crates/backplane/tests/**cobot_image_tools.rs`, `mise.toml`
 
 ## Context
 
@@ -156,3 +156,11 @@ A review of #53 flagged §2's `git config --system --add safe.directory '*'`: it
 - The `cobot` stage sets no `safe.directory`. §2's line, and its bullet explaining it, no longer apply.
 - Running the image without `--user`, against a checkout owned by another user, is unsupported: git refuses the checkout, as it should.
 - Execution: this amendment lands first, then #53 without the line.
+
+### 2026-11-16: Governs follows the tests into their suites
+
+- Each test file in `Governs` is now a glob that matches it both where it is and under
+  `tests/suite/`, where
+  [`2026-11-16-development-one-test-binary-per-crate.md`](2026-11-16-development-one-test-binary-per-crate.md)
+  steps 3 and 4 move it.
+- Once those steps merge, the globs become the suite's paths.

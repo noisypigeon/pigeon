@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: security
-* Governs: `.config/approvals.yaml`, `src/pigeon-cli/crates/backplane/src/approvals.rs`, `src/pigeon-cli/crates/backplane/src/passkeys.rs`, `src/pigeon-cli/crates/backplane/src/worker/passkey*`, `src/pigeon-cli/crates/backplane/tests/passkeys.rs`
+* Governs: `.config/approvals.yaml`, `src/pigeon-cli/crates/backplane/src/approvals.rs`, `src/pigeon-cli/crates/backplane/src/passkeys.rs`, `src/pigeon-cli/crates/backplane/src/worker/passkey*`, `src/pigeon-cli/crates/backplane/tests/**passkeys.rs`
 
 ## Context
 
@@ -284,3 +284,11 @@ asked again for the same head.
 **Execution:** `approve` sets the merge to start after the gate, unless held;
 `by_grant` and the owner check accept the merge of a head approved by proof,
 under the conditions above; the approval page gains `hold`.
+
+### 2026-11-16: Governs follows the tests into their suites
+
+- Each test file in `Governs` is now a glob that matches it both where it is and under
+  `tests/suite/`, where
+  [`2026-11-16-development-one-test-binary-per-crate.md`](2026-11-16-development-one-test-binary-per-crate.md)
+  steps 3 and 4 move it.
+- Once those steps merge, the globs become the suite's paths.

@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: runtime
-* Governs: `src/site-templates/*/schema.json`, `src/site-templates/*/template.yaml`, `src/site-templates/*/scaffold/**`, `workloads/*/blog/config.yaml`, `workloads/*/blog/site/**`, `src/pigeon-cli/crates/backplane/tests/cobot_template.rs`
+* Governs: `src/site-templates/*/schema.json`, `src/site-templates/*/template.yaml`, `src/site-templates/*/scaffold/**`, `workloads/*/blog/config.yaml`, `workloads/*/blog/site/**`, `src/pigeon-cli/crates/backplane/tests/**cobot_template.rs`
 
 ## Context
 
@@ -256,3 +256,11 @@ The release bot bumps only a unit's patch version, and a PR never sets one. The 
 - §4's `date-slug` posts apply only to a template whose `template.yaml` sets it. The architecture template has no posts.
 
 The earlier text stays as written.
+
+### 2026-11-16: Governs follows the tests into their suites
+
+- Each test file in `Governs` is now a glob that matches it both where it is and under
+  `tests/suite/`, where
+  [`2026-11-16-development-one-test-binary-per-crate.md`](2026-11-16-development-one-test-binary-per-crate.md)
+  steps 3 and 4 move it.
+- Once those steps merge, the globs become the suite's paths.

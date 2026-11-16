@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: runtime
-* Governs: `src/site-templates/architecture/**`, `src/pigeon-cli/crates/backplane/src/architecture/**`, `src/pigeon-cli/crates/backplane/tests/architecture.rs`, `src/pigeon-cli/crates/backplane/src/cobot/sites.rs`, `config.yaml`
+* Governs: `src/site-templates/architecture/**`, `src/pigeon-cli/crates/backplane/src/architecture/**`, `src/pigeon-cli/crates/backplane/tests/**architecture.rs`, `src/pigeon-cli/crates/backplane/src/cobot/sites.rs`, `config.yaml`
 
 ## Context
 
@@ -364,3 +364,11 @@ every width from 360px, with no sideways scroll in any frame.
 Steps:
 
 1. The template: `index.html` and `main.css`.
+
+### 2026-11-16: Governs follows the tests into their suites
+
+- Each test file in `Governs` is now a glob that matches it both where it is and under
+  `tests/suite/`, where
+  [`2026-11-16-development-one-test-binary-per-crate.md`](2026-11-16-development-one-test-binary-per-crate.md)
+  steps 3 and 4 move it.
+- Once those steps merge, the globs become the suite's paths.

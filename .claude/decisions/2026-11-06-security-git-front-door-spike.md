@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: security
-* Governs: `src/pigeon-cli/crates/backplane/src/gitdoor.rs`, `src/pigeon-cli/crates/backplane/src/gitcreds.rs`, `src/pigeon-cli/crates/backplane/src/worker/gitdoor.rs`, `src/pigeon-cli/crates/backplane/tests/git*.rs`
+* Governs: `src/pigeon-cli/crates/backplane/src/gitdoor.rs`, `src/pigeon-cli/crates/backplane/src/gitcreds.rs`, `src/pigeon-cli/crates/backplane/src/worker/gitdoor.rs`, `src/pigeon-cli/crates/backplane/tests/**git*.rs`
 
 ## Context
 
@@ -228,3 +228,11 @@ Access application as `/mcp`:
 - **A lone flush is now answered 200,** with an empty
   `application/x-git-receive-pack-result`. Nothing is forwarded or audited,
   since it updates nothing. Every real push is judged as before.
+
+### 2026-11-16: Governs follows the tests into their suites
+
+- Each test file in `Governs` is now a glob that matches it both where it is and under
+  `tests/suite/`, where
+  [`2026-11-16-development-one-test-binary-per-crate.md`](2026-11-16-development-one-test-binary-per-crate.md)
+  steps 3 and 4 move it.
+- Once those steps merge, the globs become the suite's paths.
