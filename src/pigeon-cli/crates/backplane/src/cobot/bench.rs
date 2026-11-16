@@ -48,7 +48,8 @@ const TICK: Duration = Duration::from_millis(200);
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Sandbox {
     /// New user, PID and mount namespaces through `unshare --map-auto`, a private `/tmp`, then
-    /// uid 1000 through `setpriv`; a new network namespace unless the step fetches.
+    /// uid 1000 through `setpriv`; a new network namespace, loopback only, unless the step
+    /// fetches.
     Unshare,
     /// The command as it is: for tests, where user namespaces may be refused.
     Plain,
@@ -89,11 +90,17 @@ impl Sandbox {
             ]
             .map(String::from),
         );
+        // Tests serve on 127.0.0.1, which a new network namespace has down.
+        let lo = if mode == Mode::Fetch {
+            ""
+        } else {
+            "ip link set lo up || exit 125; "
+        };
         let inner = if mode == Mode::Own {
             "exec \"$@\"".to_string()
         } else {
             format!(
-                "mount -t tmpfs -o mode=1777 tmpfs /tmp || exit 125; \
+                "{lo}mount -t tmpfs -o mode=1777 tmpfs /tmp || exit 125; \
                  exec setpriv --reuid={UID} --regid={UID} --clear-groups -- \"$@\""
             )
         };
@@ -327,14 +334,35 @@ pub struct Bench {
     inner: Mutex<Inner>,
 }
 
+/// `pigeon-start`'s sentinel build copied under `work`, out of the `/tmp` the sandbox hides; its
+/// path, or none if it can't be copied.
+fn keep_sentinel(from: &str, work: &std::path::Path) -> Option<String> {
+    use std::os::unix::fs::PermissionsExt as _;
+    let dir = work.join("bin");
+    let to = dir.join(crate::sentinel::BINARY);
+    let kept = std::fs::create_dir_all(&dir)
+        .and_then(|()| std::fs::copy(from, &to))
+        .and_then(|_| std::fs::set_permissions(&to, std::fs::Permissions::from_mode(0o755)));
+    match kept {
+        Ok(()) => Some(to.to_string_lossy().into_owned()),
+        Err(e) => {
+            eprintln!("bench: the sentinel build at {from} was not kept: {e}");
+            None
+        }
+    }
+}
+
 impl Bench {
     /// A bench checking out under `work`, keeping [`KEPT`] from `var`.
     #[must_use]
     pub fn new(work: PathBuf, sandbox: Sandbox, var: impl Fn(&str) -> Option<String>) -> Self {
-        let env = KEPT
+        let mut env: Vec<(String, String)> = KEPT
             .iter()
             .filter_map(|k| var(k).map(|v| ((*k).to_string(), v)))
             .collect();
+        if let Some(p) = var(crate::sentinel::VAR).and_then(|from| keep_sentinel(&from, &work)) {
+            env.push((crate::sentinel::VAR.into(), p));
+        }
         Self {
             work,
             sandbox,
@@ -1127,14 +1155,40 @@ run = "sleep 30"
         assert!(command.contains(&"--map-auto".to_string()));
         assert!(command.iter().any(|a| a.contains("setpriv --reuid=1000")));
         assert!(command.iter().any(|a| a.contains("mount -t tmpfs")));
+        assert!(command.iter().any(|a| a.contains("ip link set lo up")));
         assert_eq!(&command[command.len() - 2..], &argv[..]);
         let fetch = Sandbox::Unshare.wrap(&argv, Mode::Fetch);
         assert!(!fetch.contains(&"--net".to_string()));
+        assert!(!fetch.iter().any(|a| a.contains("ip link")));
         assert!(fetch.iter().any(|a| a.contains("setpriv --reuid=1000")));
         let own = Sandbox::Unshare.wrap(&argv, Mode::Own);
         assert!(own.contains(&"--net".to_string()));
         assert!(!own.iter().any(|a| a.contains("setpriv")));
         assert_eq!(Sandbox::Plain.wrap(&argv, Mode::Command), argv);
+    }
+
+    #[test]
+    fn the_sentinel_build_is_kept_out_of_tmp_and_handed_to_commands() {
+        let dir = tempfile::tempdir().expect("dir");
+        let from = dir.path().join("downloaded");
+        std::fs::write(&from, "#!/bin/sh\n").expect("write");
+        let from = from.to_string_lossy().into_owned();
+        let work = dir.path().join("work");
+        let b = Bench::new(work.clone(), Sandbox::Plain, |k| {
+            (k == crate::sentinel::VAR).then(|| from.clone())
+        });
+        let kept = work.join("bin").join(crate::sentinel::BINARY);
+        assert!(kept.is_file());
+        let want = (
+            crate::sentinel::VAR.to_string(),
+            kept.to_string_lossy().into_owned(),
+        );
+        assert!(b.command_env(&[], Mode::Command).contains(&want));
+        let missing = Bench::new(dir.path().join("w2"), Sandbox::Plain, |k| {
+            (k == crate::sentinel::VAR).then(|| "/no/such/sentinel".to_string())
+        });
+        let env = missing.command_env(&[], Mode::Command);
+        assert!(!env.iter().any(|(k, _)| k == crate::sentinel::VAR));
     }
 
     #[test]

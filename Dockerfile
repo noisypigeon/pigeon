@@ -120,9 +120,10 @@ RUN export CARGO_BUILD_JOBS="$WARM_JOBS" \
  && mkdir -p /tmp/.cache \
  && chown -R 65532:65532 /cache /tmp/.cache
 # Rootless BuildKit for image jobs: the job user by name, setuid newuidmap and newgidmap, and its
-# subordinate IDs (job images ADR §4, spike amendment). After the warm-up, so that layer stays.
+# subordinate IDs (job images ADR §4, spike amendment); `ip`, for a bench's loopback (bench ADR's
+# 2026-11-16 demo amendment). After the warm-up, so that layer stays.
 RUN apt-get update \
- && apt-get install -y --no-install-recommends uidmap \
+ && apt-get install -y --no-install-recommends iproute2 uidmap \
  && rm -rf /var/lib/apt/lists/* \
  && echo 'nonroot:x:65532:65532:nonroot:/tmp:/usr/sbin/nologin' >> /etc/passwd \
  && echo 'nonroot:x:65532:' >> /etc/group \

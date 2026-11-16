@@ -625,3 +625,37 @@ glob under `src/pigeon-cli/` or `src/site-templates/` becomes `src/**/<tail>`
 (or `**<file>` for a workspace root file), which matches the file both before
 and after the restructure moves it. That ADR's step 12 tightens them to the
 new paths.
+
+### 2026-11-16: The demo's first run: a bench's loopback is up, and it keeps the sentinel build
+
+Step 9's first demo, at 04:41Z, ran three sessions at once. They were this
+planner, with `bench ci` over 3 benches, and two helpers, each with `bench run --
+mise run ci-scoped`. Every run failed, for two defects in §5's sandbox, not in
+the code under check:
+
+- **No loopback.** `unshare --net` makes a namespace whose `lo` is down. So
+  each integration test that serves a mock on `127.0.0.1` failed with
+  `NetworkUnreachable`, which was 32 tests in `test pigeon pigeon-backplane`.
+  Every step but a fetch now runs `ip link set lo up` as the namespace's root,
+  before `setpriv`. The network stays cut, with loopback only. The `ci`
+  image's post-warm-up layer adds `iproute2`, which leaves the warm layer as
+  it is.
+- **No sentinel.** `pigeon-start` downloads `main`'s `pigeon-sentinel` into
+  `/tmp` and exports `PIGEON_SENTINEL`. A command's cleared environment
+  dropped the variable, and the sandbox's own `/tmp` hid the file. So
+  `policy.check` failed with "pigeon-sentinel didn't run". `Bench::new` now
+  copies that build to `<work>/bin/pigeon-sentinel` (0755), and hands
+  `PIGEON_SENTINEL` to every command. A copy that fails is logged, and the
+  check fails as before.
+
+Measured anyway, before those failures:
+
+- `fmt` took 78 s, the clippy lanes 3–191 s, and `test` 207 s.
+- `bench ci` ended in 271 s.
+- The planner's disk moved by 1 MB, and `/workspace` stayed at 74 MB. The
+  helpers' `/` moved by about 250 KB, with `/workspace` at 69 MB.
+
+One helper's stream ended in "Connection reset by peer" after 148 s. That
+could be the proxy or the Container, and the rerun says which. `--timeout` is
+in minutes, as §3 says; the helpers' `60` was the brief's slip. The rerun
+after this change's deploy is the demo of record.
