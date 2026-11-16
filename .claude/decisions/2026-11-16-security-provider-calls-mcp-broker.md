@@ -326,3 +326,17 @@ this ADR governs. Its other files are the workspace's bookkeeping: `Cargo.toml`,
 `Cargo.lock`, `.config/releases.yaml` and the behaviour ledger. This ADR's
 `src/**/…` globs match the files the restructure moves later, both before and
 after the move. So neither decision changes.
+### 2026-11-16: Reviewed against the src/ restructure's !736 (mise.toml goes); they agree
+
+!736 carries out step 10e of
+[`2026-11-16-development-src-crates-neutral-names.md`](2026-11-16-development-src-crates-neutral-names.md)
+(§4). It touches none of the files this ADR governs.
+- **Build inputs (D1).** With `mise.toml` gone, Rust's version is pinned in
+  `/rust-toolchain.toml` (!728). rustup and `ios-sign.sh` read it, and a test
+  checks the images' `rust:` tags against it. Tofu and Zola stay pinned in
+  the `Dockerfile`'s `ARG`s and `ci.yml`'s `env`; Node, wrangler and
+  worker-build in the `Dockerfile` alone. No download, host or credential is
+  added. D1 stays an exemption.
+- **Coverage (§6).** The extractor reads the `Dockerfile` and CI as planned.
+  `rust-toolchain.toml` names no host, so it needs no reading.
+- **Order.** Neither waits for the other.
