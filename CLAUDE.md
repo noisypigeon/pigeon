@@ -44,7 +44,9 @@ belong in the ADR, never in the file.
   bucket names, in commits, branch names, PR text or CI logs. No new secret
   enters the repository; `.config/policies/secrets*.yaml` pin the two
   `secrets.config.yaml` files to their current keys.
-- No change edits a `CHANGELOG.md`; the release bot generates them.
+- No change edits `CHANGELOG.md`; the release bot alone writes it, the one at the root,
+  rendered from history (`--replay`); see
+  [`2026-11-16-development-src-crates-neutral-names.md`](.claude/decisions/2026-11-16-development-src-crates-neutral-names.md) §7.
 - Never run `tofu apply` or `pigeon cobot apply` by hand against
   `noisypigeon/pigeon-cobot-state`.
 - Workers, Containers, migrations and secrets deploy only through
