@@ -18,7 +18,7 @@ pub use crate::cobot::unit::{Problem, Unit};
 pub use crate::core::infra::engines::*;
 
 /// The work directory under the root, gitignored.
-pub const WORK_DIR: &str = ".cobot";
+pub const WORK_DIR: &str = crate::names::WORK_DIRS[0];
 
 /// The environment variable holding the state passphrase.
 pub const PASSPHRASE_VAR: &str = "COBOT_STATE_PASSPHRASE";
@@ -419,7 +419,7 @@ fn write_render(work: &Path, value: &Value) -> Result<(), Error> {
     fs::write(&file, text + "\n").map_err(io(&file))
 }
 
-/// Writes `<root>/.cobot/<unit>/main.tf.json`, with no retained generations; returns the work directory.
+/// Writes `<root>/.pigeon/<unit>/main.tf.json`, with no retained generations; returns the work directory.
 ///
 /// # Errors
 ///

@@ -279,19 +279,19 @@ mod tests {
     }
 
     #[test]
-    fn values_are_written_cobot_tagged_and_read_under_either_tag() {
+    fn values_are_written_pigeon_tagged_and_read_under_either_tag() {
         let enc = encrypt("s3cret-value", "secrets-passphrase-0123").expect("encrypts");
         assert!(
-            enc.starts_with("ENC[cobot:v1:"),
-            "the secrets policies pin this tag"
+            enc.starts_with("ENC[pigeon:v1:"),
+            "written under the new tag"
         );
-        let renamed = enc.replacen("ENC[cobot:v1:", "ENC[pigeon:v1:", 1);
+        let renamed = enc.replacen("ENC[pigeon:v1:", "ENC[cobot:v1:", 1);
         assert!(is_encrypted(&renamed));
         assert_eq!(
             decrypt(&renamed, "secrets-passphrase-0123").expect("decrypts"),
             "s3cret-value"
         );
-        assert!(!is_encrypted(&enc.replacen("cobot", "gantry", 1)));
+        assert!(!is_encrypted(&enc.replacen("pigeon", "gantry", 1)));
     }
 
     #[test]

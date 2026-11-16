@@ -84,7 +84,7 @@ pub fn ext(schema: &Value) -> &Value {
 }
 
 /// The ciphertext tags read, the written one first.
-pub const ENC_PREFIXES: [&str; 2] = ["ENC[cobot:v1:", "ENC[pigeon:v1:"];
+pub const ENC_PREFIXES: [&str; 2] = ["ENC[pigeon:v1:", "ENC[cobot:v1:"];
 
 /// The ciphertext body after either tag in [`ENC_PREFIXES`].
 #[must_use]
@@ -93,7 +93,7 @@ pub fn enc_body(text: &str) -> Option<&str> {
 }
 
 /// Work directories at the root, the written one first; both are git-ignored.
-pub const WORK_DIRS: [&str; 2] = [".cobot", ".pigeon"];
+pub const WORK_DIRS: [&str; 2] = [".pigeon", ".cobot"];
 
 #[cfg(test)]
 mod tests {

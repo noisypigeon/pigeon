@@ -9,7 +9,7 @@ use clap::{Args, Subcommand};
 pub enum CobotCommand {
     /// Check every unit under infra/ and workloads/; exit 1 on a problem
     Validate(CobotRoot),
-    /// Write each unit's main.tf.json under <ROOT>/.cobot/
+    /// Write each unit's main.tf.json under <ROOT>/.pigeon/
     Render(CobotRun),
     /// Plan units against the state repository; print a summary
     Plan(CobotPlan),
@@ -183,7 +183,7 @@ pub enum WorkersCommand {
     Validate(WorkersAt),
     /// Print the token permissions the specs need, on the account
     Permissions(WorkersAt),
-    /// Write each Worker's wrangler.jsonc under .cobot/workers/, its references resolved from state
+    /// Write each Worker's wrangler.jsonc under .pigeon/workers/, its references resolved from state
     Render(WorkersState),
     /// Render, and store a plan for `deploy --plan`, valid for 24 hours
     Plan(WorkersState),

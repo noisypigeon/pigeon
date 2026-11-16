@@ -726,7 +726,7 @@ fn the_first_plan_of_moved_units_destroys_and_replaces_nothing() {
             .join("apex/terraform.tfstate")
             .exists()
     );
-    for dir in [new.path().join(".cobot"), state.path().to_path_buf()] {
+    for dir in [new.path().join(".pigeon"), state.path().to_path_buf()] {
         assert_eq!(grep(&dir, TOKEN), Vec::<PathBuf>::new());
     }
 }

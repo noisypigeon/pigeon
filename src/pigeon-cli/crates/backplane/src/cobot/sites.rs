@@ -404,7 +404,7 @@ fn copy_dir(from: &Path, to: &Path) -> Result<(), Error> {
     Ok(())
 }
 
-/// Builds each site into `.cobot/<unit>/site/public`, from its template's
+/// Builds each site into `.pigeon/<unit>/site/public`, from its template's
 /// contract and its `static_site.site`.
 ///
 /// # Errors

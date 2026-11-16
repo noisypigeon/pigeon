@@ -72,7 +72,7 @@ fn collect(dir: &Path, sources: &mut Vec<String>) {
 }
 
 /// Fetches each allowlisted provider's package that `store` holds under [`PACKAGES_PREFIX`]
-/// into a packed mirror under `root/.cobot/provider-mirror`, and writes the CLI configuration
+/// into a packed mirror under `root/.pigeon/provider-mirror`, and writes the CLI configuration
 /// that installs from it: that configuration's path (none when the bucket holds no package),
 /// and the sources found. The lock file still checks each package at `tofu init`.
 ///
@@ -85,7 +85,7 @@ pub fn fetch_mirror(
     root: &Path,
     now: u64,
 ) -> Result<(Option<PathBuf>, Vec<String>), String> {
-    let dir = root.join(".cobot/provider-mirror");
+    let dir = root.join(".pigeon/provider-mirror");
     let mut found = Vec::new();
     for (source, version) in &allow.providers {
         let key = format!("{PACKAGES_PREFIX}{}", package(source, version));

@@ -20,7 +20,7 @@ use crate::cobot::unit::Problem;
 pub const SPEC: &str = "worker.yaml";
 
 /// Where `render` writes each Worker's configuration, from the root; gitignored.
-pub const RENDER_DIR: &str = ".cobot/workers";
+pub const RENDER_DIR: &str = ".pigeon/workers";
 
 /// Where stored Worker plans live in the state.
 pub const PLANS_DIR: &str = "workers-plans";

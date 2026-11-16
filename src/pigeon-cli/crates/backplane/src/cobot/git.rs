@@ -12,7 +12,7 @@ use crate::cobot::artifacts::{self, Client, Repo, Scope};
 pub const KIND: &str = "cloudflare/git-repo";
 
 /// Where mirrors are staged, under the instance's root.
-pub const MIRROR_DIR: &str = ".cobot/git";
+pub const MIRROR_DIR: &str = ".pigeon/git";
 
 /// One declared repository.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -347,7 +347,7 @@ pub struct Mirrored {
 
 /// Mirrors repository `name`'s default branch and tags, and nothing else, to `to`: the branch
 /// only fast-forwards and tags are only added, while GitHub's release bot still writes there.
-/// Staged in `<root>/.cobot/git/<name>.git`; the push uses the user's own git credentials,
+/// Staged in `<root>/.pigeon/git/<name>.git`; the push uses the user's own git credentials,
 /// never the Artifacts token.
 ///
 /// # Errors
@@ -585,7 +585,7 @@ pub struct Synced {
 
 /// Brings repository `name` up to its mirror `to`, where GitHub's release bot still commits and
 /// tags: fast-forwards the default branch when Artifacts is behind, and adds the tags it lacks.
-/// Staged in `<root>/.cobot/git/<name>.git`.
+/// Staged in `<root>/.pigeon/git/<name>.git`.
 ///
 /// # Errors
 ///

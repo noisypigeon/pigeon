@@ -75,15 +75,9 @@ pigeon-backplane lib backplane cobot::bench::tests::mise_tasks_run_their_depends
 pigeon-backplane lib backplane cobot::bench::tests::one_run_at_a_time_and_a_cancel_stops_it
 pigeon-backplane lib backplane cobot::bench::tests::the_sandbox_cuts_the_network_except_to_fetch
 pigeon-backplane lib backplane cobot::bench::tests::the_sentinel_build_is_kept_out_of_tmp_and_handed_to_commands
+pigeon-backplane lib backplane cobot::bench::tests::without_mise_toml_a_task_runs_the_commits_own_pigeon_dev_from_its_root
 pigeon-backplane lib backplane cobot::cloudflare::tests::messages_never_show_an_account_id
 pigeon-backplane lib backplane cobot::cloudflare::tests::the_runner_credential_wins_over_the_environment
-pigeon-backplane lib backplane cobot::generations::tests::dates_round_trip
-pigeon-backplane lib backplane cobot::generations::tests::fresh_unit_renders_only_the_current_generation
-pigeon-backplane lib backplane cobot::generations::tests::keys_round_trip
-pigeon-backplane lib backplane cobot::generations::tests::longer_period_with_same_start_mints_a_longer_lived_instance
-pigeon-backplane lib backplane cobot::generations::tests::overlap_change_mid_generation_adds_nothing
-pigeon-backplane lib backplane cobot::generations::tests::overlap_retains_the_previous_generation_then_drops_it
-pigeon-backplane lib backplane cobot::generations::tests::period_change_keeps_live_tokens_and_adds_the_new_current
 pigeon-backplane lib backplane cobot::link::tests::a_response_verifies_only_as_signed
 pigeon-backplane lib backplane cobot::link::tests::sign_uses_the_clock_and_nonce_given
 pigeon-backplane lib backplane cobot::link::tests::signatures_match_known_answers
@@ -94,7 +88,7 @@ pigeon-backplane lib backplane cobot::scope::tests::a_workspace_at_the_root_is_r
 pigeon-backplane lib backplane cobot::secrets::tests::base64_round_trips
 pigeon-backplane lib backplane cobot::secrets::tests::keys_must_be_plain_names
 pigeon-backplane lib backplane cobot::secrets::tests::named_failures_say_which_key_variable_and_fix
-pigeon-backplane lib backplane cobot::secrets::tests::values_are_written_cobot_tagged_and_read_under_either_tag
+pigeon-backplane lib backplane cobot::secrets::tests::values_are_written_pigeon_tagged_and_read_under_either_tag
 pigeon-backplane lib backplane cobot::secrets::tests::values_round_trip_and_wrong_passphrases_fail_quietly
 pigeon-backplane lib backplane cobot::sites::tests::a_copy_refuses_a_symlink_anywhere_in_the_tree
 pigeon-backplane lib backplane cobot::sites::tests::a_named_template_has_its_own_project_theme_and_tag
@@ -228,6 +222,7 @@ pigeon-backplane lib backplane core::bench::allow::tests::rule3_mise_ci
 pigeon-backplane lib backplane core::bench::allow::tests::rule3_mise_other
 pigeon-backplane lib backplane core::bench::allow::tests::rule3_mise_shape
 pigeon-backplane lib backplane core::bench::allow::tests::rule3_mise_tasks_allowed
+pigeon-backplane lib backplane core::bench::allow::tests::rule3_pigeon_dev_runs_the_same_tasks
 pigeon-backplane lib backplane core::bench::allow::tests::rule3b_bench_check
 pigeon-backplane lib backplane core::bench::allow::tests::rule3b_bench_refused
 pigeon-backplane lib backplane core::bench::allow::tests::rule4_cargo_dash_d_allowed
@@ -376,6 +371,13 @@ pigeon-backplane lib backplane core::infra::config::tests::a_module_is_judged_by
 pigeon-backplane lib backplane core::infra::config::tests::a_render_takes_its_module_source_from_the_snapshot
 pigeon-backplane lib backplane core::infra::config::tests::a_secrets_file_is_judged_by_what_the_shell_read
 pigeon-backplane lib backplane core::infra::config::tests::an_x_pigeon_schema_renders_as_its_x_cobot_twin_does
+pigeon-backplane lib backplane core::infra::generations::tests::dates_round_trip
+pigeon-backplane lib backplane core::infra::generations::tests::fresh_unit_renders_only_the_current_generation
+pigeon-backplane lib backplane core::infra::generations::tests::keys_round_trip
+pigeon-backplane lib backplane core::infra::generations::tests::longer_period_with_same_start_mints_a_longer_lived_instance
+pigeon-backplane lib backplane core::infra::generations::tests::overlap_change_mid_generation_adds_nothing
+pigeon-backplane lib backplane core::infra::generations::tests::overlap_retains_the_previous_generation_then_drops_it
+pigeon-backplane lib backplane core::infra::generations::tests::period_change_keeps_live_tokens_and_adds_the_new_current
 pigeon-backplane lib backplane core::infra::providers::tests::checks_sources_and_exact_versions
 pigeon-backplane lib backplane core::infra::providers::tests::lockfiles_keep_only_the_named_providers
 pigeon-backplane lib backplane core::infra::providers::tests::only_declarations_count_as_use
@@ -625,6 +627,7 @@ pigeon-backplane lib backplane core::pool::tests::micros_accepts_decimals
 pigeon-backplane lib backplane core::pool::tests::micros_overflow
 pigeon-backplane lib backplane core::pool::tests::micros_refuses_the_rest
 pigeon-backplane lib backplane core::release::changelog::tests::round_trips_and_orders_dates
+pigeon-backplane lib backplane core::release::history::tests::a_merged_release_change_keeps_its_line
 pigeon-backplane lib backplane core::release::history::tests::entry_links_a_pr_or_a_commit_and_suffixes_its_units
 pigeon-backplane lib backplane core::release::history::tests::past_units_is_none_for_empty_or_unparsable_text
 pigeon-backplane lib backplane core::release::history::tests::past_units_reads_paths_exclude_and_previous_and_ignores_other_keys
@@ -987,7 +990,9 @@ pigeon-backplane test suite cobot_restack::a_conflict_is_reported_and_nothing_is
 pigeon-backplane test suite cobot_restack::a_disjoint_change_is_replayed_with_the_same_patch_and_its_message
 pigeon-backplane test suite cobot_restack::a_forecast_names_the_branches_a_head_would_conflict_with_and_pushes_nothing
 pigeon-backplane test suite cobot_restack::a_head_rebased_with_the_same_patch_has_the_same_patch_id_and_another_patch_does_not
+pigeon-backplane test suite cobot_restack::a_real_overlap_on_top_of_main_is_still_forecast
 pigeon-backplane test suite cobot_restack::an_amendment_restacked_under_another_keeps_its_patch
+pigeon-backplane test suite cobot_restack::an_edit_both_branches_repeat_from_main_is_not_forecast
 pigeon-backplane test suite cobot_restack::main_drift_under_an_older_branch_is_not_forecast
 pigeon-backplane test suite cobot_restack::two_amendments_to_one_adr_are_not_forecast_to_conflict
 pigeon-backplane test suite cobot_restack::two_amendments_to_one_adr_merge_by_union

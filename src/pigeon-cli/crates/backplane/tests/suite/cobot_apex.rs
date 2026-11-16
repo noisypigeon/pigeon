@@ -938,7 +938,7 @@ fn the_apex_token_is_handed_off_after_infra_applies() {
 
     for secret in ["tok-apex-noisypigeon.com", "value-of-pm_verification"] {
         assert_eq!(
-            grep(&root.join(".cobot"), secret),
+            grep(&root.join(".pigeon"), secret),
             Vec::<PathBuf>::new(),
             "{secret}"
         );
@@ -990,7 +990,7 @@ fn the_runs_own_token_hands_off_without_infra_cloudflare_state() {
         "infra/cloudflare is never planned or read"
     );
     assert_eq!(
-        grep(&root.join(".cobot"), "run-token-not-in-any-file"),
+        grep(&root.join(".pigeon"), "run-token-not-in-any-file"),
         Vec::<PathBuf>::new()
     );
     assert_eq!(
@@ -1513,7 +1513,7 @@ fn a_site_token_is_handed_off_after_infra_applies() {
         "{}",
         backplane::cobot::summary(&again)
     );
-    for dir in [root.join(".cobot"), state.path().to_path_buf()] {
+    for dir in [root.join(".pigeon"), state.path().to_path_buf()] {
         assert_eq!(
             grep(&dir, "tok-site-noisypigeon.com-blog"),
             Vec::<PathBuf>::new()

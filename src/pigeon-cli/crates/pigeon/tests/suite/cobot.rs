@@ -111,7 +111,7 @@ fn render_with_relative_root_and_state_writes_absolute_paths() {
         .assert()
         .code(0);
     let json: serde_json::Value = serde_json::from_str(
-        &std::fs::read_to_string(repo.path().join(".cobot/infra/bootstrap/main.tf.json"))
+        &std::fs::read_to_string(repo.path().join(".pigeon/infra/bootstrap/main.tf.json"))
             .expect("rendered"),
     )
     .expect("json");

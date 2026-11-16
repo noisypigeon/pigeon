@@ -7,7 +7,7 @@ use crate::cobot::state::{Mirror, Store};
 use crate::cobot::{Context, Error};
 
 /// Where an R2 store's state is mirrored for a run, under the root.
-pub const MIRROR_DIR: &str = ".cobot/state-r2";
+pub const MIRROR_DIR: &str = ".pigeon/state-r2";
 
 /// A run's context and, for R2 state, the mirror it was pulled into.
 #[derive(Debug)]
