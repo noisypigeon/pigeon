@@ -5,10 +5,13 @@
 ### Released
 
 - backplane v0.1.31
+- backplane v0.1.32
 - infra-agnostic-random-string v0.1.3
 - infra-agnostic-schema v0.1.3
+- infra-agnostic-schema v0.1.4
 - infra-backblaze-bucket v0.1.2
 - infra-backblaze-schema v0.1.2
+- infra-backblaze-schema v0.1.3
 - infra-cloudflare-access-application v0.1.0
 - infra-cloudflare-access-policy v0.1.0
 - infra-cloudflare-access-service-token v0.1.0
@@ -22,20 +25,25 @@
 - infra-cloudflare-r2-custom-domain v0.1.3
 - infra-cloudflare-ruleset v0.1.3
 - infra-cloudflare-schema v0.1.20
+- infra-cloudflare-schema v0.1.21
 - infra-cloudflare-secrets-store v0.1.0
 - infra-cloudflare-worker v0.1.0
 - infra-cloudflare-zone v0.1.4
 - infra-digitalocean-project v0.1.2
 - infra-digitalocean-project-resources v0.1.2
 - infra-digitalocean-schema v0.1.2
+- infra-digitalocean-schema v0.1.3
 - infra-digitalocean-spaces-bucket v0.1.2
 - infra-digitalocean-ssh-key v0.1.2
 - infra-pigeon-schema v0.1.6
+- infra-pigeon-schema v0.1.7
 - infra-scaleway-iam-application v0.1.2
 - infra-scaleway-iam-policy v0.1.2
 - infra-scaleway-project v0.1.2
 - infra-scaleway-schema v0.1.2
+- infra-scaleway-schema v0.1.3
 - pigeon-eviction v0.1.18
+- pigeon-eviction v0.1.19
 - sentinel v0.1.17
 - site-template-architecture v0.1.1
 - site-template-blog v1.0.3
@@ -133,6 +141,18 @@
 - refactor: the policy engine is the pigeon-eviction crate in src/pigeon-eviction (!713) ([b00defc](https://github.com/noisypigeon/pigeon/commit/b00defc8b43dccc1d0f0e52c8ec7b4aa6e380c49)) · pigeon-eviction
 - units renamed · sentinel → pigeon-eviction
 - docs(adr): step 11 as the owner decided: BACKPLANE_TOKEN and the state repository keep their stored names (!767) ([426f97c](https://github.com/noisypigeon/pigeon/commit/426f97cb85c6f511e434a18ad6a70958736d1495))
+- refactor: src/common is the pigeon-common crate, with push's base64url and the hex and digest helpers (!747) ([a6ae8d8](https://github.com/noisypigeon/pigeon/commit/a6ae8d83783e5aa56a17dd6b15939f73c43b52c4)) · backplane
+- fix(backplane): task_done closes an unpushed generated change, and a stage counts a mandate only where it covers the head (!766) ([338963e](https://github.com/noisypigeon/pigeon/commit/338963e7aa147186f4a3afbb7c5512663b89feb2)) · backplane
+- refactor(backplane): the 14 re-export shims go, and the guarded callers name core's paths (!746) ([4bf578d](https://github.com/noisypigeon/pigeon/commit/4bf578d0067d54de94dfd7682de186de6f1895e9)) · backplane
+- chore(dev): both mise.toml files go, and dev.rs is the task graph's only source (!736) ([1d217de](https://github.com/noisypigeon/pigeon/commit/1d217de44a08094f46450f16518bbb6afdff3065)) · backplane, pigeon-eviction
+- docs(adr): review !746 against !757 (!764) ([489a8df](https://github.com/noisypigeon/pigeon/commit/489a8df1b3b7932d454ae340f5e81156c5db050b))
+- docs(adr): review !746 against !756 (!760) ([2558c75](https://github.com/noisypigeon/pigeon/commit/2558c758209f4402077a0ee524f432814496a87c))
+- refactor(catalog): the schemas' extension key is x-pigeon (!768) ([bc187c2](https://github.com/noisypigeon/pigeon/commit/bc187c269229e21777639877c7c39921bf121281)) · infra-agnostic-schema, infra-backblaze-schema, infra-cloudflare-schema, infra-digitalocean-schema, infra-pigeon-schema, infra-scaleway-schema
+- refactor(backplane): the environment is read under its new names only: PIGEON_* and AGENT_TLS_* (!771) ([0cc4001](https://github.com/noisypigeon/pigeon/commit/0cc40012b3f042333bdc1164c493f8c415bc9e03)) · backplane
+- docs(adr): review !746 against !766 (!774) ([cb6c3b5](https://github.com/noisypigeon/pigeon/commit/cb6c3b5739cf30f13221e23643cdd205664a122f))
+- docs(adr): review !772 against !766 (!776) ([d1d97f1](https://github.com/noisypigeon/pigeon/commit/d1d97f16b3abbc942eb7c24b6ecd0bf7ee238b85))
+- docs(adr): review !736 against !766 (!773) ([e7d8ebc](https://github.com/noisypigeon/pigeon/commit/e7d8ebc2b3b1d8c761f0e8631e206d8a0a85b77f))
+- docs(adr): review !768 against !766 (!775) ([aba0930](https://github.com/noisypigeon/pigeon/commit/aba0930fad54539ea66cc51333a98e483beb8429))
 
 ## 2026-11-15
 

@@ -8,7 +8,7 @@
     "buckets"
   ],
   "x-pigeon": {
-    "version": "0.1.2",
+    "version": "0.1.3",
     "secrets": [],
     "providers": {
       "b2": {}
