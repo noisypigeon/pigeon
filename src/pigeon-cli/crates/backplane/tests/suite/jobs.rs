@@ -191,7 +191,8 @@ fn a_check_runs_in_the_workspace_and_its_token_is_cut_from_the_log() {
         &tmp.path().join("c"),
     );
     assert_eq!(r.outcome, Outcome::Failed);
-    assert!(r.log.contains("src/pigeon-cli"), "{}", r.log);
+    let dir = tmp.path().join("c").canonicalize().expect("dir");
+    assert!(r.log.contains(&dir.display().to_string()), "{}", r.log);
     assert!(!r.log.contains("a-token-never-shown"), "{}", r.log);
     let r = run_job(
         &spec(&bare, &sha, "ok", &["**"], &["true"]),
