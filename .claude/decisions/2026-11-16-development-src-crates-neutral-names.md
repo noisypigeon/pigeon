@@ -670,3 +670,13 @@ and `src/**/session/launch.rs`. !772 (step 7a) moves the `pigeon` binary's
 crate to `src/pigeon-harness` with its file names kept. It changes no code in
 those files, and the `src/**/…` globs match them at either path. Neither
 decision changes.
+
+### 2026-11-16: Review of !736 against !766: they agree
+
+!736, step 10e, touches none of the files
+[`2026-11-15-development-sessions-stop-only-for-oversight.md`](2026-11-15-development-sessions-stop-only-for-oversight.md)
+governs (`change/stage.rs`, `worker/{mod,api,push}.rs`, `wire.rs`, `mcp.rs`,
+`sessions.rs`, `tasks.rs`, `session/launch.rs`). It deletes both `mise.toml`
+files, and edits `dev.rs`, `cli/mod.rs`, the `Dockerfile`'s comments and the
+tests that read `mise.toml`. !766 changes how a stage counts a mandate and how
+a generated change closes, which !736 neither relies on nor changes.
