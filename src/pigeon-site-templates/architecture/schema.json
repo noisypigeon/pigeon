@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/noisypigeon/pigeon/tree/main/src/site-templates/architecture/schema.json",
+  "$id": "https://github.com/noisypigeon/pigeon/tree/main/src/pigeon-site-templates/architecture/schema.json",
   "description": "An architecture site's static_site.site; each x-site target names where cobot writes the value. See .claude/decisions/2026-11-05-runtime-architecture-site-through-backplane.md §3.",
   "type": "object",
   "additionalProperties": false,

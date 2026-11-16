@@ -743,7 +743,7 @@ fn a_tree_pin_reads_head_only_for_a_template_in_the_instances_own_tree() {
         backplane::cobot::sites::find_in(inst.path(), platform.path(), &[]).expect_err("refused");
     assert!(err.to_string().contains("own tree"), "{err}");
 
-    let template = inst.path().join("src/site-templates/blog");
+    let template = inst.path().join("src/pigeon-site-templates/blog");
     fs::create_dir_all(&template).expect("mkdir");
     fs::write(template.join("template.yaml"), "version: 0.1.0\n").expect("write");
     let sites = backplane::cobot::sites::find_in(inst.path(), platform.path(), &[]).expect("found");

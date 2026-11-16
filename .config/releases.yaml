@@ -154,12 +154,12 @@ units:
     paths: [infra/pigeon/schema.json, catalog/cloudflare/modules/account/, catalog/cloudflare/modules/d1-database/, catalog/cloudflare/modules/r2-bucket/, catalog/agnostic/modules/random-string/]
     exclude: ['*.md']
   site-template-architecture:
-    manifest: src/site-templates/architecture/template.yaml
-    paths: [src/site-templates/architecture/]
+    manifest: src/pigeon-site-templates/architecture/template.yaml
+    paths: [src/pigeon-site-templates/architecture/]
     exclude: ['*.md']
   site-template-blog:
-    manifest: src/site-templates/blog/template.yaml
-    paths: [src/site-templates/blog/]
+    manifest: src/pigeon-site-templates/blog/template.yaml
+    paths: [src/pigeon-site-templates/blog/]
     exclude: ['*.md']
 settings:
   - { file: Cargo.toml, tables: '^\[profile\.', keys: '^(edition|rust-version)\s*=' }

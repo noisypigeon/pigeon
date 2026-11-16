@@ -35,7 +35,6 @@ mod cobot_scope;
 mod cobot_ship;
 mod cobot_sites;
 mod cobot_state;
-mod cobot_template;
 mod cobot_workers;
 mod control;
 mod decisions;

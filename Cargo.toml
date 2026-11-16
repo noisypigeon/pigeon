@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["src/pigeon-cli/crates/*", "src/pigeon-ios"]
+members = ["src/pigeon-cli/crates/*", "src/pigeon-ios", "src/pigeon-site-templates"]
 exclude = ["src/pigeon-cli/crates/cobot", "src/pigeon-cli/crates/gantry"]
 
 [workspace.package]
@@ -24,6 +24,7 @@ futures-util = { version = "0.3.34", default-features = false }
 hkdf = "0.12.4"
 hmac = "0.12.1"
 p256 = { version = "0.13.2", default-features = false, features = ["ecdsa", "arithmetic"] }
+include_dir = "0.7.4"
 httparse = "1.10.1"
 predicates = "3.1.4"
 rcgen = { version = "0.14.10", default-features = false, features = ["crypto", "ring", "pem"] }

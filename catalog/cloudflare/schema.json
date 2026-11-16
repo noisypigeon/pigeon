@@ -258,7 +258,7 @@
               "required": ["name", "version"],
               "properties": {
                 "name": {
-                  "description": "The template in src/site-templates/<name>/. See .claude/decisions/2026-11-05-runtime-architecture-site-through-backplane.md §1.",
+                  "description": "The template in src/pigeon-site-templates/<name>/. See .claude/decisions/2026-11-05-runtime-architecture-site-through-backplane.md §1.",
                   "type": "string",
                   "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
                 },

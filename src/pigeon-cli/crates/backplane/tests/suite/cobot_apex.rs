@@ -1608,7 +1608,7 @@ const CONTRACT: &str = "static_site:
 fn contract_repo() -> TempDir {
     let repo = site_repo();
     let root = repo.path();
-    copy(root, "src/site-templates/blog");
+    copy(root, "src/pigeon-site-templates/blog");
     write(root, &format!("{BLOG}/config.yaml"), CONTRACT);
     write(
         root,
@@ -1633,11 +1633,16 @@ const NAMED: &str = "static_site:
   site: { title: Diagram, description: A diagram. }
 ";
 
-/// A repo whose blog names a template with no content, `src/site-templates/diagram`.
+/// A repo whose blog names a template with no content, `src/pigeon-site-templates/diagram`.
 fn named_repo() -> TempDir {
+    named_repo_at("src/pigeon-site-templates")
+}
+
+/// [`named_repo`], with its template under `dir`.
+fn named_repo_at(dir: &str) -> TempDir {
     let repo = site_repo();
     let root = repo.path();
-    let t = "src/site-templates/diagram";
+    let t = format!("{dir}/diagram");
     write(
         root,
         &format!("{t}/template.yaml"),
@@ -1688,8 +1693,26 @@ fn a_named_template_resolves_its_own_project_and_tag() {
         (
             "diagram",
             "site-template-diagram/v0.1.0".to_string(),
-            "src/site-templates/diagram".to_string()
+            "src/pigeon-site-templates/diagram".to_string()
         )
+    );
+}
+
+/// A tag made before the templates crate holds its template at the old path; see
+/// `.claude/decisions/2026-11-16-development-src-crates-neutral-names.md` §2.
+#[test]
+fn a_tag_made_before_the_templates_crate_reads_the_old_path() {
+    let old = named_repo_at("src/site-templates");
+    let sites = backplane::cobot::sites::find(old.path(), &[]).expect("find");
+    assert_eq!(
+        sites[0].project_in(old.path()),
+        "src/site-templates/diagram".to_string()
+    );
+    let new = named_repo();
+    let sites = backplane::cobot::sites::find(new.path(), &[]).expect("find");
+    assert_eq!(
+        sites[0].project_in(new.path()),
+        "src/pigeon-site-templates/diagram".to_string()
     );
 }
 
@@ -1777,7 +1800,7 @@ fn the_architecture_template_draws_its_data() {
     }
     let repo = site_repo();
     let root = repo.path();
-    copy(root, "src/site-templates/architecture");
+    copy(root, "src/pigeon-site-templates/architecture");
     write(
         root,
         &format!("{BLOG}/config.yaml"),
@@ -1919,7 +1942,7 @@ fn a_contract_site_rejects_what_breaks_the_contract() {
     let err = build(&CONTRACT.replace("short_name: blog", "short_name: 7"));
     assert!(err.contains("static_site.site.short_name"), "{err}");
 
-    fs::remove_file(root.join("src/site-templates/blog/schema.json")).expect("rm");
+    fs::remove_file(root.join("src/pigeon-site-templates/blog/schema.json")).expect("rm");
     git_in(root, &["commit", "-qam", "no contract"]);
     git_in(root, &["tag", "site-template-blog/v0.9.0"]);
     let err = build(&CONTRACT.replace("1.0.0", "0.9.0"));

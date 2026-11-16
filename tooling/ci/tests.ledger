@@ -74,6 +74,7 @@ pigeon-backplane lib backplane cobot::bench::tests::mise_tasks_outside_the_list_
 pigeon-backplane lib backplane cobot::bench::tests::mise_tasks_run_their_depends_first_and_once
 pigeon-backplane lib backplane cobot::bench::tests::one_run_at_a_time_and_a_cancel_stops_it
 pigeon-backplane lib backplane cobot::bench::tests::the_sandbox_cuts_the_network_except_to_fetch
+pigeon-backplane lib backplane cobot::bench::tests::the_sentinel_build_is_kept_out_of_tmp_and_handed_to_commands
 pigeon-backplane lib backplane cobot::cloudflare::tests::messages_never_show_an_account_id
 pigeon-backplane lib backplane cobot::cloudflare::tests::the_runner_credential_wins_over_the_environment
 pigeon-backplane lib backplane cobot::generations::tests::dates_round_trip
@@ -846,6 +847,7 @@ pigeon-backplane test suite cobot_apex::a_site_whose_template_has_no_content_ref
 pigeon-backplane test suite cobot_apex::a_static_site_needs_its_tokens
 pigeon-backplane test suite cobot_apex::a_static_site_renders_its_bucket_and_a_domain_per_host
 pigeon-backplane test suite cobot_apex::a_static_site_takes_its_template_features_and_needs_its_settings
+pigeon-backplane test suite cobot_apex::a_tag_made_before_the_templates_crate_reads_the_old_path
 pigeon-backplane test suite cobot_apex::absolute_hosts_and_orphan_workloads_are_rejected
 pigeon-backplane test suite cobot_apex::an_instance_apart_from_its_platform_uses_the_platforms_catalogs
 pigeon-backplane test suite cobot_apex::bad_static_sites_fail_for_their_own_reason
@@ -1028,14 +1030,6 @@ pigeon-backplane test suite cobot_state::a_mirror_round_trips_changes_and_skips_
 pigeon-backplane test suite cobot_state::a_plan_marker_never_reaches_r2_before_its_units_state
 pigeon-backplane test suite cobot_state::another_writer_wins_and_the_push_fails
 pigeon-backplane test suite cobot_state::stores_parse_without_echoing_values
-pigeon-backplane test suite cobot_template::every_setting_has_a_target
-pigeon-backplane test suite cobot_template::every_template_names_its_theme_and_scaffold
-pigeon-backplane test suite cobot_template::posts_are_named_by_date
-pigeon-backplane test suite cobot_template::targets_name_a_scaffold_file_and_a_key
-pigeon-backplane test suite cobot_template::the_architecture_template_has_no_content_and_only_its_rail_script
-pigeon-backplane test suite cobot_template::the_architecture_template_links_relative_to_its_base_url
-pigeon-backplane test suite cobot_template::the_blog_settings_validate
-pigeon-backplane test suite cobot_template::the_scaffold_holds_the_sections
 pigeon-backplane test suite cobot_workers::a_binding_named_like_a_durable_object_is_refused
 pigeon-backplane test suite cobot_workers::a_dropped_push_is_retried_and_succeeds
 pigeon-backplane test suite cobot_workers::a_failed_push_still_logs_out_and_never_shows_the_password
@@ -1489,3 +1483,15 @@ pigeon-sentinel test suite tree::find_tests::symlinks_are_reported_not_followed
 pigeon-sentinel test suite tree::tree_tests::absent_lists_allow_nothing_and_ignore_skips
 pigeon-sentinel test suite tree::tree_tests::allows_by_kind
 pigeon-sentinel test suite tree::tree_tests::require_and_unlistable_paths
+pigeon-site-templates test suite build::the_architecture_template_builds_with_zola
+pigeon-site-templates test suite build::the_blog_builds_with_zola
+pigeon-site-templates test suite cobot_template::every_setting_has_a_target
+pigeon-site-templates test suite cobot_template::every_template_names_its_theme_and_scaffold
+pigeon-site-templates test suite cobot_template::posts_are_named_by_date
+pigeon-site-templates test suite cobot_template::targets_name_a_scaffold_file_and_a_key
+pigeon-site-templates test suite cobot_template::the_architecture_template_has_no_content_and_only_its_rail_script
+pigeon-site-templates test suite cobot_template::the_architecture_template_links_relative_to_its_base_url
+pigeon-site-templates test suite cobot_template::the_blog_settings_validate
+pigeon-site-templates test suite cobot_template::the_scaffold_holds_the_sections
+pigeon-site-templates test suite manifest::every_template_yaml_is_valid
+pigeon-site-templates test suite manifest::the_crate_embeds_every_template_and_nothing_else

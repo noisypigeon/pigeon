@@ -4,7 +4,7 @@ pigeon's [Zola](https://www.getzola.org/) theme for static sites on
 Cloudflare R2, ported from runway's theme at 1.3.2. Its design is
 [`2026-11-03-runtime-cloudflare-static-sites-r2.md`](../../../.claude/decisions/2026-11-03-runtime-cloudflare-static-sites-r2.md).
 
-It is the `blog` member of the site templates in `src/site-templates/`, per
+It is the `blog` member of the site templates in `src/pigeon-site-templates/`, per
 [`2026-11-05-runtime-architecture-site-through-backplane.md`](../../../.claude/decisions/2026-11-05-runtime-architecture-site-through-backplane.md),
 and is tagged `site-template-blog/vX.Y.Z`; releases before the move are
 tagged `static-site-template/vX.Y.Z`.

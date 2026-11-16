@@ -23,8 +23,11 @@ pub use crate::core::sites::checks::*;
 pub use crate::core::sites::layout::*;
 pub use crate::core::sites::publish::*;
 
-/// Where templates live, as `<TEMPLATES>/<name>`.
-pub const TEMPLATES: &str = "src/site-templates";
+/// Where templates live, as `<TEMPLATES>/<name>`; see
+/// `.claude/decisions/2026-11-16-development-src-crates-neutral-names.md` §2.
+pub const TEMPLATES: &str = "src/pigeon-site-templates";
+/// Where a tag made before the templates crate holds its template.
+pub const LEGACY_TEMPLATES: &str = "src/site-templates";
 /// A template's theme and tag prefix, as `<PREFIX>-<name>`.
 pub const PREFIX: &str = "site-template";
 
@@ -90,10 +93,22 @@ impl Site {
         format!("{PREFIX}-{}", self.template)
     }
 
-    /// Its template's project, inside a tag's tree.
+    /// Its template's project, inside the tree.
     #[must_use]
     pub fn project(&self) -> String {
         format!("{TEMPLATES}/{}", self.template)
+    }
+
+    /// Its template's project at its revision: [`Self::project`], or
+    /// [`LEGACY_TEMPLATES`] in a tag that predates it.
+    #[must_use]
+    pub fn project_in(&self, root: &Path) -> String {
+        let at = format!("{}:{}/template.yaml", self.revision(), self.project());
+        if self.version == TREE || git(root, &["cat-file", "-e", &at]).is_ok() {
+            self.project()
+        } else {
+            format!("{LEGACY_TEMPLATES}/{}", self.template)
+        }
     }
 
     /// Its bucket.
@@ -343,7 +358,11 @@ pub fn features(
 /// The site's tag's features, their defaults, its post naming and whether it
 /// has content, from its `template.yaml`.
 fn declared(root: &Path, site: &Site) -> Result<Declared, Error> {
-    let at = format!("{}:{}/template.yaml", site.revision(), site.project());
+    let at = format!(
+        "{}:{}/template.yaml",
+        site.revision(),
+        site.project_in(root)
+    );
     let text = git(root, &["show", &at])?;
     let manifest: Manifest =
         serde_saphyr::from_str(&String::from_utf8_lossy(&text)).map_err(|e| Error::Io {
@@ -490,7 +509,7 @@ fn theme(root: &Path, site: &Site, work: &Path) -> Result<(), Error> {
         &[
             "archive",
             "--format=tar",
-            &format!("{}:{}", site.revision(), site.project()),
+            &format!("{}:{}", site.revision(), site.project_in(root)),
         ],
     )?;
     let archive = work.join("themes").join(format!("{}.tar", site.theme()));
@@ -525,7 +544,7 @@ fn assemble(
         root,
         &[
             "show",
-            &format!("{}:{}/schema.json", site.revision(), site.project()),
+            &format!("{}:{}/schema.json", site.revision(), site.project_in(root)),
         ],
     )
     .map_err(|_| {
@@ -538,7 +557,7 @@ fn assemble(
         fail(format!(
             "{}:{}/schema.json: {e}",
             site.tag(),
-            site.project()
+            site.project_in(root)
         ))
     })?;
     check_settings(&schema, settings).map_err(fail)?;
@@ -883,7 +902,7 @@ mod tests {
         assert_eq!(
             (named.project(), named.theme(), named.tag()),
             (
-                "src/site-templates/architecture".to_string(),
+                "src/pigeon-site-templates/architecture".to_string(),
                 "site-template-architecture".to_string(),
                 "site-template-architecture/v1.0.0".to_string()
             )

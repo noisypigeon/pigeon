@@ -1,0 +1,29 @@
+[package]
+name = "pigeon-site-templates"
+description = "pigeon's static-site templates, embedded and validated."
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+autotests = false
+
+[lib]
+name = "site_templates"
+
+[dependencies]
+include_dir.workspace = true
+
+[[test]]
+name = "suite"
+path = "tests/suite/main.rs"
+
+[dev-dependencies]
+jsonschema.workspace = true
+serde-saphyr.workspace = true
+serde_json.workspace = true
+tempfile.workspace = true
+
+[lints]
+workspace = true

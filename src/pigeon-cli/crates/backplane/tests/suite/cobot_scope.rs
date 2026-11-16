@@ -173,8 +173,14 @@ fn the_ios_app_runs_its_macos_check_and_its_check_crate() {
 #[test]
 fn site_templates_build_the_sites() {
     assert_eq!(
-        names(&["src/site-templates/blog/index.html"]),
-        ["sites.build", "policy.check"]
+        names(&["src/pigeon-site-templates/blog/index.html"]),
+        [
+            "fmt",
+            "clippy pigeon-site-templates",
+            "test pigeon-site-templates",
+            "sites.build",
+            "policy.check"
+        ]
     );
 }
 
@@ -188,7 +194,7 @@ fn deploys_name_the_sites_a_change_to_main_publishes() {
         &["catalog/cloudflare/capabilities.yaml"][..],
         &["config.yaml"],
         &["workloads/noisypigeon.com/blog/site/posts/x.md"],
-        &["src/site-templates/blog/templates/index.html"],
+        &["src/pigeon-site-templates/blog/templates/index.html"],
         &[
             "src/pigeon-cli/crates/backplane/src/worker/mod.rs",
             "CLAUDE.md",
@@ -223,7 +229,7 @@ fn workers_deploy_when_their_spec_crates_or_migrations_change() {
     }
     for miss in [
         ".claude/decisions/x.md",
-        "src/site-templates/blog/templates/index.html",
+        "src/pigeon-site-templates/blog/templates/index.html",
         "infra/pigeon/sites/docs/config.yaml",
     ] {
         assert!(workers(Some(&[miss])).is_empty(), "{miss}");
