@@ -3,6 +3,9 @@
 use backplane::changes::{Change, State};
 use backplane::gitdoor::{self, RefUpdate, Service};
 
+const SA: &str = "https://claude.ai/code/session_a";
+const SB: &str = "https://claude.ai/code/session_b";
+
 const A: &str = "1111111111111111111111111111111111111111";
 const B: &str = "2222222222222222222222222222222222222222";
 const ZERO: &str = "0000000000000000000000000000000000000000";
@@ -212,4 +215,33 @@ fn an_escalated_changes_branch_takes_no_push_until_its_planner_answers() {
     );
     c.escalated = None;
     assert_eq!(gitdoor::judge(&update(branch, A), Some(&c)), Ok(()));
+}
+
+#[test]
+fn a_scratch_ref_names_its_session() {
+    let s = |n: &str| update(n, A).scratch().map(str::to_string);
+    assert_eq!(s("refs/heads/scratch/session_a"), Some("session_a".into()));
+    assert_eq!(s("refs/heads/scratch/session_a/x"), None);
+    assert_eq!(s("refs/heads/change/1-x"), None);
+    assert_eq!(s("refs/heads/main"), None);
+}
+
+#[test]
+fn only_its_own_session_pushes_or_deletes_a_scratch_ref() {
+    let name = "refs/heads/scratch/session_a";
+    assert_eq!(gitdoor::judge_scratch(&update(name, A), SA), Ok(()));
+    assert_eq!(gitdoor::judge_scratch(&update(name, B), SA), Ok(()));
+    assert_eq!(gitdoor::judge_scratch(&update(name, ZERO), SA), Ok(()));
+    assert_eq!(
+        gitdoor::judge_scratch(&update(name, A), SB),
+        Err(format!("{name} is another session's scratch ref"))
+    );
+    assert_eq!(
+        gitdoor::judge_scratch(&update("refs/heads/change/1-x", A), SA),
+        Err("not a scratch ref".into())
+    );
+    assert_eq!(
+        gitdoor::judge(&update(name, A), None),
+        Err("only change/<n>-<slug> branches are pushed here".into())
+    );
 }

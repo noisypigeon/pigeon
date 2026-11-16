@@ -1,7 +1,7 @@
 //! Session tickets; see `.claude/decisions/2026-11-08-development-events-tickets-digest-mandate.md` §5.
 
 use backplane::sessions::{Class, declare};
-use backplane::tickets::{REMEMBER, TTL, Tickets, guarded, require, sign, verify};
+use backplane::tickets::{REMEMBER, TTL, Tickets, guarded, holder, require, sign, verify};
 
 const KEY: &[u8] = b"a session key for the tests only";
 const A: &str = "https://claude.ai/code/session_a";
@@ -333,5 +333,30 @@ fn a_session_is_archived_by_its_parent_else_its_planner() {
     assert_eq!(
         t.live(P, 1).expect("live").archiver(),
         Some("https://claude.ai/code/session_s")
+    );
+}
+
+#[test]
+fn a_holder_is_the_label_of_a_live_current_ticket() {
+    let mut t = Tickets::default();
+    t.start(A, false, 0).expect("issues");
+    let a = |g| sign(KEY, A, g, TTL);
+    assert_eq!(holder(KEY, &t, Some(&a(1)), 5), Ok(A.to_string()));
+    let missing = "a scratch ref takes its session's ticket (X-Pigeon-Ticket)";
+    assert_eq!(holder(KEY, &t, None, 5), Err(missing.into()));
+    assert_eq!(holder(KEY, &t, Some("  "), 5), Err(missing.into()));
+    assert!(holder(b"another key", &t, Some(&a(1)), 5).is_err());
+    t.start(A, true, 6).expect("replaces");
+    assert_eq!(
+        holder(KEY, &t, Some(&a(1)), 7),
+        Err(format!(
+            "this ticket was replaced; session {A}'s newer one is needed"
+        ))
+    );
+    assert_eq!(holder(KEY, &t, Some(&a(2)), 7), Ok(A.to_string()));
+    t.end(A, 8);
+    assert_eq!(
+        holder(KEY, &t, Some(&a(2)), 9),
+        Err(format!("session {A}'s ticket has ended"))
     );
 }

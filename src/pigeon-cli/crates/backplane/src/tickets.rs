@@ -413,3 +413,29 @@ pub fn require(
     }
     Ok(())
 }
+
+/// The label of `ticket` when it is live: verified under `key`, its label holding a live ticket of the same generation.
+///
+/// # Errors
+///
+/// Why not, for git's `ng` line.
+pub fn holder(
+    key: &[u8],
+    tickets: &Tickets,
+    ticket: Option<&str>,
+    now: u64,
+) -> Result<String, String> {
+    let Some(t) = ticket.filter(|t| !t.trim().is_empty()) else {
+        return Err("a scratch ref takes its session's ticket (X-Pigeon-Ticket)".into());
+    };
+    let (label, generation) = verify(key, t, now)?;
+    let Some(issued) = tickets.live(&label, now) else {
+        return Err(format!("session {label}'s ticket has ended"));
+    };
+    if issued.generation != generation {
+        return Err(format!(
+            "this ticket was replaced; session {label}'s newer one is needed"
+        ));
+    }
+    Ok(label)
+}

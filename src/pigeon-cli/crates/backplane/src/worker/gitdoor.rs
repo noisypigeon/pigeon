@@ -102,6 +102,16 @@ async fn judge(
     let mut changes: BTreeMap<u32, Option<Change>> = BTreeMap::new();
     let mut refusals = Vec::new();
     for u in &push.updates {
+        if u.scratch().is_some() {
+            let judged = match super::tickets::holder(env, s, ticket).await? {
+                Ok(label) => gitdoor::judge_scratch(u, &label),
+                Err(why) => Err(why),
+            };
+            if let Err(why) = judged {
+                refusals.push((u.name.clone(), why));
+            }
+            continue;
+        }
         let change = match u.change() {
             Some((n, _)) => {
                 if let Entry::Vacant(e) = changes.entry(n) {

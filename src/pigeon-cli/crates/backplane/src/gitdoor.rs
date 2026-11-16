@@ -48,6 +48,12 @@ impl RefUpdate {
         self.name.strip_prefix("refs/heads/")?;
         changes::branch(&self.name)
     }
+
+    /// The session ID its ref names, if it is `refs/heads/scratch/<session_id>`.
+    #[must_use]
+    pub fn scratch(&self) -> Option<&str> {
+        crate::core::bench::scratch_owner(&self.name)
+    }
 }
 
 /// A push's request: its ref updates and the client's capabilities.
@@ -169,6 +175,21 @@ pub fn judge(update: &RefUpdate, change: Option<&Change>) -> Result<(), String> 
         State::Merged | State::Closed => Err(format!("change {number} is {}", change.state.name())),
         _ => Ok(()),
     }
+}
+
+/// Whether the session `label` may push or delete the scratch ref `update` names.
+///
+/// # Errors
+///
+/// Why not, for git's `ng` line.
+pub fn judge_scratch(update: &RefUpdate, label: &str) -> Result<(), String> {
+    let Some(owner) = update.scratch() else {
+        return Err("not a scratch ref".into());
+    };
+    if crate::core::bench::session_id(label) != Some(owner) {
+        return Err(format!("{} is another session's scratch ref", update.name));
+    }
+    Ok(())
 }
 
 fn pkt(out: &mut Vec<u8>, data: &[u8]) {

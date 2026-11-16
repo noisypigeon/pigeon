@@ -315,6 +315,21 @@ pub async fn allows(
     Ok(require(&key(env)?, &tickets, labels, ticket, now()))
 }
 
+/// The label of `ticket` when it is live.
+///
+/// # Errors
+///
+/// When a binding fails.
+pub async fn holder(
+    env: &Env,
+    s: &Settings,
+    ticket: Option<&str>,
+) -> Result<std::result::Result<String, String>> {
+    let (_, v) = to_instance(env, s, "/tickets/list", &json!({})).await?;
+    let tickets: Tickets = serde_json::from_value(v).unwrap_or_default();
+    Ok(crate::tickets::holder(&key(env)?, &tickets, ticket, now()))
+}
+
 /// The guard on an agent's changing `request`: the sessions it names, by argument or by its
 /// change, must be acted on with their ticket.
 ///
