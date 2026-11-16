@@ -44,7 +44,7 @@ depends = ["fmt-check", "lint", "features", "test"]
 # policy.check runs pigeon-sentinel, built beside pigeon; see
 # .claude/decisions/2026-11-10-development-factory-crates-functional-core.md §1.
 [tasks.sentinel-build]
-run = "cargo build -q --locked -p pigeon-sentinel"
+run = "cargo build -q --locked --bin pigeon-sentinel"
 
 [tasks.sentinel]
 depends = ["sentinel-build"]

@@ -85,7 +85,7 @@ pub const TASKS: &[Task] = &[
         old: Some("sentinel-build"),
         about: "Build pigeon-sentinel, which policy.check runs",
         depends: &[],
-        run: &["cargo build -q --locked -p pigeon-sentinel"],
+        run: &["cargo build -q --locked --bin pigeon-sentinel"],
     },
     Task {
         name: "policy",
