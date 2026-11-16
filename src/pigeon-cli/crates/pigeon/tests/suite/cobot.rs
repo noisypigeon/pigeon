@@ -7,7 +7,7 @@ use tempfile::TempDir;
 
 fn cobot() -> Command {
     let mut cmd = Command::cargo_bin("pigeon").expect("binary");
-    cmd.arg("cobot").env_remove("COBOT_STATE_PASSPHRASE");
+    cmd.arg("cobot").env_remove("PIGEON_STATE_PASSPHRASE");
     cmd
 }
 
@@ -77,7 +77,7 @@ fn plan_refuses_without_a_passphrase() {
         .assert()
         .code(2)
         .stderr(predicate::str::contains(
-            "COBOT_STATE_PASSPHRASE must be set",
+            "PIGEON_STATE_PASSPHRASE must be set",
         ));
 }
 
@@ -149,7 +149,7 @@ fn plan_names_each_tofu_step_on_stderr() {
     let passphrase = "progress-passphrase-0123456789";
     let output = cobot()
         .current_dir(repo.path())
-        .env("COBOT_STATE_PASSPHRASE", passphrase)
+        .env("PIGEON_STATE_PASSPHRASE", passphrase)
         .args(["plan", "--state", "./state"])
         .output()
         .expect("run");
@@ -234,7 +234,7 @@ fn images_push_counts_a_main_fetched_into_fetch_head() {
             .args(["workers", "images", "push", "--root"])
             .arg(root.path())
             .env_remove("CLOUDFLARE_API_TOKEN")
-            .env_remove("COBOT_CREDENTIALS")
+            .env_remove("PIGEON_CREDENTIALS")
             .assert()
             .failure()
     };

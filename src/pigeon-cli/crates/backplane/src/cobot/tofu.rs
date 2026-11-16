@@ -425,13 +425,13 @@ mod tests {
     fn tofu_never_sees_a_passphrase_under_either_name() {
         let s = scrubbed();
         for k in [
-            "COBOT_STATE_PASSPHRASE",
             "PIGEON_STATE_PASSPHRASE",
-            "COBOT_CREDENTIALS",
+            "PIGEON_STATE_PASSPHRASE",
             "PIGEON_CREDENTIALS",
-            "COBOT_SECRETS_PASSPHRASE",
+            "PIGEON_CREDENTIALS",
             "PIGEON_SECRETS_PASSPHRASE",
-            "COBOT_WORKLOAD_SECRETS_PASSPHRASE",
+            "PIGEON_SECRETS_PASSPHRASE",
+            "PIGEON_WORKLOAD_SECRETS_PASSPHRASE",
             "PIGEON_WORKLOAD_SECRETS_PASSPHRASE",
         ] {
             assert!(s.iter().any(|v| v == k), "{k}");

@@ -1201,7 +1201,7 @@ fn secrets_under_the_wrong_passphrase_say_so_without_the_value() {
         .to_string();
     assert!(
         err.starts_with(&format!(
-            "{APEX}/secrets.config.yaml: `pm_verification` cannot be decrypted with COBOT_WORKLOAD_SECRETS_PASSPHRASE; it decrypts with COBOT_SECRETS_PASSPHRASE"
+            "{APEX}/secrets.config.yaml: `pm_verification` cannot be decrypted with PIGEON_WORKLOAD_SECRETS_PASSPHRASE; it decrypts with PIGEON_SECRETS_PASSPHRASE"
         )) && !err.contains("value-of-"),
         "{err}"
     );

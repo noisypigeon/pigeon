@@ -13,10 +13,10 @@ pub const TOKEN_VAR: &str = "BACKPLANE_TOKEN";
 /// The variables cobot reads an `r2://` state's access from; equal to `state.rs`'s and
 /// `engines.rs`'s, which a test checks.
 pub const STATE_VARS: [&str; 4] = [
-    "COBOT_STATE_R2_ENDPOINT",
-    "COBOT_STATE_R2_ACCESS_KEY_ID",
-    "COBOT_STATE_R2_SECRET_ACCESS_KEY",
-    "COBOT_STATE_PASSPHRASE",
+    "PIGEON_STATE_R2_ENDPOINT",
+    "PIGEON_STATE_R2_ACCESS_KEY_ID",
+    "PIGEON_STATE_R2_SECRET_ACCESS_KEY",
+    "PIGEON_STATE_PASSPHRASE",
 ];
 
 /// What a run's Container needs to read and write its `r2://` state.
@@ -486,10 +486,10 @@ mod tests {
             launch.env(),
             [
                 ("BACKPLANE_TOKEN", TOKEN),
-                ("COBOT_STATE_R2_ENDPOINT", "https://r2.example"),
-                ("COBOT_STATE_R2_ACCESS_KEY_ID", "key-id"),
-                ("COBOT_STATE_R2_SECRET_ACCESS_KEY", "secret"),
-                ("COBOT_STATE_PASSPHRASE", "passphrase"),
+                ("PIGEON_STATE_R2_ENDPOINT", "https://r2.example"),
+                ("PIGEON_STATE_R2_ACCESS_KEY_ID", "key-id"),
+                ("PIGEON_STATE_R2_SECRET_ACCESS_KEY", "secret"),
+                ("PIGEON_STATE_PASSPHRASE", "passphrase"),
             ]
         );
     }

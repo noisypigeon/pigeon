@@ -43,3 +43,22 @@ The `account` module fails unless the token sees exactly one account.
 Every plan shows `update module.d1.cloudflare_d1_database.this (file_size,
 num_tables, version)`: provider 5.28.0 marks those computed attributes unknown on
 each plan. Applying it changes nothing.
+
+## The environment's names
+
+The names `pigeon` reads its state, secrets, tools and TLS from, without values; set only those a command needs.
+
+```sh
+export PIGEON_STATE_PASSPHRASE=
+export PIGEON_SECRETS_PASSPHRASE=
+export PIGEON_WORKLOAD_SECRETS_PASSPHRASE=
+export PIGEON_STATE_R2_ENDPOINT=
+export PIGEON_STATE_R2_ACCESS_KEY_ID=
+export PIGEON_STATE_R2_SECRET_ACCESS_KEY=
+export PIGEON_CREDENTIALS=
+export PIGEON_DOCKER=
+export PIGEON_WRANGLER=
+export AGENT_TLS_CERT=
+export AGENT_TLS_KEY=
+export AGENT_TLS_CLIENT_CA=
+```

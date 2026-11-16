@@ -26,9 +26,9 @@ pub const RENDER_DIR: &str = ".pigeon/workers";
 pub const PLANS_DIR: &str = "workers-plans";
 
 /// The wrangler and docker binaries, overridable for tests.
-pub const WRANGLER_VAR: &str = "COBOT_WRANGLER";
+pub const WRANGLER_VAR: &str = "PIGEON_WRANGLER";
 /// See [`WRANGLER_VAR`].
-pub const DOCKER_VAR: &str = "COBOT_DOCKER";
+pub const DOCKER_VAR: &str = "PIGEON_DOCKER";
 
 /// The only platform Cloudflare Containers run; every image is built for it, whatever the
 /// machine deploying.

@@ -91,8 +91,8 @@ pub struct ServeArgs {
     #[arg(long)]
     pub state: String,
 
-    /// Allow a non-loopback address; requires mutual TLS from `BACKPLANE_TLS_CERT`,
-    /// `BACKPLANE_TLS_KEY` and `BACKPLANE_TLS_CLIENT_CA` (PEM), or --signed
+    /// Allow a non-loopback address; requires mutual TLS from `AGENT_TLS_CERT`,
+    /// `AGENT_TLS_KEY` and `AGENT_TLS_CLIENT_CA` (PEM), or --signed
     #[arg(long)]
     pub network: bool,
 

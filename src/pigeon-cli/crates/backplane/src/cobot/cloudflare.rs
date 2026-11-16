@@ -12,7 +12,7 @@ pub const TOKEN_VAR: &str = "CLOUDFLARE_API_TOKEN";
 /// The Cloudflare API's base URL.
 pub const API: &str = "https://api.cloudflare.com/client/v4";
 
-/// The run's token: `COBOT_CREDENTIALS`' `cloudflare.api_token`, else [`TOKEN_VAR`].
+/// The run's token: `PIGEON_CREDENTIALS`' `cloudflare.api_token`, else [`TOKEN_VAR`].
 #[must_use]
 pub fn token(credentials: Option<&str>, env: Option<String>) -> Option<String> {
     credentials

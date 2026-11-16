@@ -12,11 +12,11 @@ use crate::cobot::Error;
 pub use crate::core::infra::secrets::{FILE, is_encrypted};
 
 /// The environment variable holding the infra secrets passphrase.
-pub const PASSPHRASE_VAR: &str = "COBOT_SECRETS_PASSPHRASE";
+pub const PASSPHRASE_VAR: &str = "PIGEON_SECRETS_PASSPHRASE";
 
 /// The environment variable holding the workload secrets passphrase; see
 /// `.claude/decisions/2026-11-02-runtime-workloads-zone-apex.md` §10.
-pub const WORKLOAD_PASSPHRASE_VAR: &str = "COBOT_WORKLOAD_SECRETS_PASSPHRASE";
+pub const WORKLOAD_PASSPHRASE_VAR: &str = "PIGEON_WORKLOAD_SECRETS_PASSPHRASE";
 
 /// The tag written; both of [`crate::names::ENC_PREFIXES`] are read.
 const PREFIX: &str = crate::names::ENC_PREFIXES[0];
@@ -313,7 +313,7 @@ mod tests {
             .expect_err("wrong")
             .to_string();
         assert!(
-            err.starts_with("workloads/x.com/apex/secrets.config.yaml: `token` cannot be decrypted with COBOT_WORKLOAD_SECRETS_PASSPHRASE; it decrypts with COBOT_SECRETS_PASSPHRASE")
+            err.starts_with("workloads/x.com/apex/secrets.config.yaml: `token` cannot be decrypted with PIGEON_WORKLOAD_SECRETS_PASSPHRASE; it decrypts with PIGEON_SECRETS_PASSPHRASE")
                 && !err.contains("s3cret"),
             "{err}"
         );

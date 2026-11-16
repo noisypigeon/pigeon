@@ -61,7 +61,7 @@ fn fixture() -> TempDir {
 }
 
 fn var(k: &str) -> Option<String> {
-    (k == "COBOT_STATE_PASSPHRASE").then(|| PASSPHRASE.into())
+    (k == "PIGEON_STATE_PASSPHRASE").then(|| PASSPHRASE.into())
 }
 
 fn request(operation: &str, args: &Value) -> Request {
@@ -673,7 +673,7 @@ fn only_loopback_binds_without_network_and_network_needs_tls_or_signing() {
     );
     let err = Server::bind(instance(), "0.0.0.0:0", "/state", TOKEN, true, None, false);
     assert!(
-        matches!(&err, Err(Error::Invalid(p)) if p[0].contains("BACKPLANE_TLS_CERT") && p[0].contains("--signed")),
+        matches!(&err, Err(Error::Invalid(p)) if p[0].contains("AGENT_TLS_CERT") && p[0].contains("--signed")),
         "{:?}",
         err.as_ref().err()
     );
@@ -719,14 +719,14 @@ fn tls_material_is_all_or_nothing_and_must_parse() {
     };
     assert!(matches!(Tls::from_vars(vars(&[])), Ok(None)));
     assert!(matches!(
-        Tls::from_vars(vars(&[("BACKPLANE_TLS_CERT", "x")])),
+        Tls::from_vars(vars(&[("AGENT_TLS_CERT", "x")])),
         Err(Error::Invalid(_))
     ));
     assert!(matches!(
         Tls::from_vars(vars(&[
-            ("BACKPLANE_TLS_CERT", "a"),
-            ("BACKPLANE_TLS_KEY", "b"),
-            ("BACKPLANE_TLS_CLIENT_CA", "c"),
+            ("AGENT_TLS_CERT", "a"),
+            ("AGENT_TLS_KEY", "b"),
+            ("AGENT_TLS_CLIENT_CA", "c"),
         ])),
         Ok(Some(_))
     ));
@@ -746,7 +746,7 @@ fn tls_material_is_all_or_nothing_and_must_parse() {
     );
     match err {
         Err(Error::Invalid(p)) => {
-            assert!(p[0].starts_with("BACKPLANE_TLS_KEY"), "{p:?}");
+            assert!(p[0].starts_with("AGENT_TLS_KEY"), "{p:?}");
             assert!(!p[0].contains("not a key"), "the key never appears: {p:?}");
         }
         other => panic!("expected Invalid, got {:?}", other.err()),

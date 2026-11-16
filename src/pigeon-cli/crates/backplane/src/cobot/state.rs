@@ -11,11 +11,11 @@ use crate::cobot::s3::{self, Bucket, Credentials, Precondition};
 /// The scheme naming an R2 store.
 pub const SCHEME: &str = "r2://";
 /// The R2 endpoint, `https://<account>.<jurisdiction>.r2.cloudflarestorage.com`.
-pub const ENDPOINT_VAR: &str = "COBOT_STATE_R2_ENDPOINT";
+pub const ENDPOINT_VAR: &str = "PIGEON_STATE_R2_ENDPOINT";
 /// The R2 access key id.
-pub const ACCESS_KEY_VAR: &str = "COBOT_STATE_R2_ACCESS_KEY_ID";
+pub const ACCESS_KEY_VAR: &str = "PIGEON_STATE_R2_ACCESS_KEY_ID";
 /// The R2 secret access key.
-pub const SECRET_KEY_VAR: &str = "COBOT_STATE_R2_SECRET_ACCESS_KEY";
+pub const SECRET_KEY_VAR: &str = "PIGEON_STATE_R2_SECRET_ACCESS_KEY";
 
 /// The objects' content type; state is encrypted JSON.
 const CONTENT_TYPE: &str = "application/octet-stream";

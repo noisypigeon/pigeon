@@ -21,10 +21,10 @@ pub use crate::core::infra::engines::*;
 pub const WORK_DIR: &str = crate::names::WORK_DIRS[0];
 
 /// The environment variable holding the state passphrase.
-pub const PASSPHRASE_VAR: &str = "COBOT_STATE_PASSPHRASE";
+pub const PASSPHRASE_VAR: &str = "PIGEON_STATE_PASSPHRASE";
 
 /// The runner-supplied credentials, as JSON `{ name: { field: value } }`.
-pub const CREDENTIALS_VAR: &str = "COBOT_CREDENTIALS";
+pub const CREDENTIALS_VAR: &str = "PIGEON_CREDENTIALS";
 
 /// Why a command could not run.
 #[derive(Debug)]

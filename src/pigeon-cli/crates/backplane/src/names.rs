@@ -4,10 +4,9 @@
 use serde_json::Value;
 
 /// Old and new environment-variable prefixes; the first that matches renames.
-const PREFIXES: [(&str, &str); 3] = [
+const PREFIXES: [(&str, &str); 2] = [
     ("PIGEON_SENTINEL", "PIGEON_EVICTION"),
-    ("COBOT_", "PIGEON_"),
-    ("BACKPLANE_", "AGENT_"),
+    ("BACKPLANE_TOKEN", "AGENT_TOKEN"),
 ];
 
 /// The new name of the variable `old`, or `None` when it keeps its name.
@@ -112,25 +111,21 @@ mod tests {
     #[test]
     fn each_old_prefix_has_its_new_name() {
         for (old, new) in [
-            ("COBOT_STATE_PASSPHRASE", "PIGEON_STATE_PASSPHRASE"),
-            ("COBOT_SECRETS_PASSPHRASE", "PIGEON_SECRETS_PASSPHRASE"),
-            (
-                "COBOT_WORKLOAD_SECRETS_PASSPHRASE",
-                "PIGEON_WORKLOAD_SECRETS_PASSPHRASE",
-            ),
-            ("COBOT_STATE_R2_ENDPOINT", "PIGEON_STATE_R2_ENDPOINT"),
-            ("COBOT_CREDENTIALS", "PIGEON_CREDENTIALS"),
-            ("COBOT_DOCKER", "PIGEON_DOCKER"),
-            ("COBOT_WRANGLER", "PIGEON_WRANGLER"),
             ("BACKPLANE_TOKEN", "AGENT_TOKEN"),
-            ("BACKPLANE_TLS_CLIENT_CA", "AGENT_TLS_CLIENT_CA"),
             ("PIGEON_SENTINEL", "PIGEON_EVICTION"),
             ("PIGEON_SENTINEL_URL", "PIGEON_EVICTION_URL"),
             ("PIGEON_SENTINEL_SHA256", "PIGEON_EVICTION_SHA256"),
         ] {
             assert_eq!(renamed(old).as_deref(), Some(new), "{old}");
         }
-        assert_eq!(renamed("CLOUDFLARE_API_TOKEN"), None);
+        for kept in [
+            "CLOUDFLARE_API_TOKEN",
+            "COBOT_STATE_PASSPHRASE",
+            "BACKPLANE_TLS_CERT",
+            "PIGEON_STATE_PASSPHRASE",
+        ] {
+            assert_eq!(renamed(kept), None, "{kept}");
+        }
         assert_eq!(both("BACKPLANE_TOKEN"), ["AGENT_TOKEN", "BACKPLANE_TOKEN"]);
     }
 
@@ -142,14 +137,11 @@ mod tests {
 
     #[test]
     fn the_old_name_still_reads_with_a_warning() {
-        let (v, w) = read_with(
-            "COBOT_STATE_PASSPHRASE",
-            get(&[("COBOT_STATE_PASSPHRASE", "old")]),
-        );
+        let (v, w) = read_with("BACKPLANE_TOKEN", get(&[("BACKPLANE_TOKEN", "old")]));
         assert_eq!(v.as_deref(), Some("old"));
         assert_eq!(
             w.as_deref(),
-            Some("warning: COBOT_STATE_PASSPHRASE is deprecated; set PIGEON_STATE_PASSPHRASE")
+            Some("warning: BACKPLANE_TOKEN is deprecated; set AGENT_TOKEN")
         );
     }
 
@@ -164,7 +156,7 @@ mod tests {
 
     #[test]
     fn neither_name_reads_none_and_an_unrenamed_one_reads_itself() {
-        assert_eq!(read_with("COBOT_DOCKER", get(&[])), (None, None));
+        assert_eq!(read_with("BACKPLANE_TOKEN", get(&[])), (None, None));
         let g = get(&[("CLOUDFLARE_API_TOKEN", "t")]);
         assert_eq!(
             read_with("CLOUDFLARE_API_TOKEN", g),
@@ -222,19 +214,23 @@ mod readers {
     }
 
     #[test]
-    fn r2_state_reads_pigeon_or_cobot_variables() {
+    fn r2_state_reads_only_pigeon_variables() {
         use crate::cobot::state::Store;
-        for prefix in ["PIGEON_", "COBOT_"] {
+        for (prefix, reads) in [("PIGEON_", true), ("COBOT_", false)] {
             let vars = r2(prefix);
             let pairs: Vec<(&str, &str)> =
                 vars.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect();
             let store = Store::parse("r2://bucket/units", get(&pairs));
-            assert!(matches!(store, Ok(Store::R2 { .. })), "{prefix}: {store:?}");
+            assert_eq!(
+                matches!(store, Ok(Store::R2 { .. })),
+                reads,
+                "{prefix}: {store:?}"
+            );
         }
     }
 
     #[test]
-    fn tls_reads_agent_variables() {
+    fn tls_reads_only_agent_variables() {
         let only_new = crate::serve::Tls::from_vars(get(&[("AGENT_TLS_CERT", "pem")]));
         assert!(
             only_new.is_err(),
@@ -242,8 +238,8 @@ mod readers {
         );
         let only_old = crate::serve::Tls::from_vars(get(&[("BACKPLANE_TLS_CERT", "pem")]));
         assert!(
-            only_old.is_err(),
-            "BACKPLANE_TLS_CERT alone must be refused as partial"
+            matches!(only_old, Ok(None)),
+            "BACKPLANE_TLS_CERT is no longer read"
         );
         assert!(matches!(crate::serve::Tls::from_vars(get(&[])), Ok(None)));
     }
@@ -260,13 +256,13 @@ mod readers {
     }
 
     #[test]
-    fn tools_read_pigeon_or_cobot_variables() {
+    fn tools_read_only_pigeon_variables() {
         let t = crate::cobot::workers::Tools::from(get(&[
             ("PIGEON_WRANGLER", "/new/wrangler"),
             ("COBOT_DOCKER", "/old/docker"),
         ]));
         assert_eq!(t.wrangler, Path::new("/new/wrangler"));
-        assert_eq!(t.docker, Path::new("/old/docker"));
+        assert_ne!(t.docker, Path::new("/old/docker"));
     }
 
     #[test]

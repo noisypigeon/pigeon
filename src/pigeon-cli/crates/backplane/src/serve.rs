@@ -39,13 +39,13 @@ pub const DEADLINE: Duration = Duration::from_secs(60);
 pub const TOKEN_VAR: &str = "BACKPLANE_TOKEN";
 
 /// The environment variable holding the server's certificate chain, as PEM.
-pub const TLS_CERT_VAR: &str = "BACKPLANE_TLS_CERT";
+pub const TLS_CERT_VAR: &str = "AGENT_TLS_CERT";
 
 /// The environment variable holding the server's private key, as PEM.
-pub const TLS_KEY_VAR: &str = "BACKPLANE_TLS_KEY";
+pub const TLS_KEY_VAR: &str = "AGENT_TLS_KEY";
 
 /// The environment variable holding the CA that issues client certificates, as PEM.
-pub const TLS_CLIENT_CA_VAR: &str = "BACKPLANE_TLS_CLIENT_CA";
+pub const TLS_CLIENT_CA_VAR: &str = "AGENT_TLS_CLIENT_CA";
 
 pub use crate::cobot::link::{
     NONCE_HEADER, SIGNATURE_HEADER, SKEW, TIMESTAMP_HEADER, sign_request, sign_response,
