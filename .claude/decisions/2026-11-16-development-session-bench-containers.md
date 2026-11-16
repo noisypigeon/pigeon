@@ -700,3 +700,38 @@ step uses that directory: the lockfile hash and `cargo fetch`, the disk
 guard's `cargo clean`, a plain argv, and scope with each of its checks.
 `scope --root` points back to the root from it. My earlier 06:33Z run failed
 first on a fetch of the scratch ref cut off mid-pack. Its retry hit this.
+
+### 2026-11-16: Step 9, the demo of record: three sessions at once, every check on benches
+
+At 08:31Z, on `main` at `9ad26b3`, three sessions ran a change's checks at
+once. Each had one uncommitted line, which the bench took through the scratch
+ref. That build includes !715, !741, !745 and !753.
+
+| Session | Command | Benches | Wall time | Checks | Its own disk |
+|---|---|---|---|---|---|
+| Helper H | `bench run -- pigeon dev ci-scoped` | 1 | 112 s (98 s on the bench) | 4: a CLI-only edit | `/` +220 KB, `/workspace` 73 MB both times |
+| Helper I | `bench run -- pigeon dev ci-scoped` | 1 | 353 s (341 s) | 11: about 1,430 tests and `policy.check` | `/` +328 KB, `/workspace` 70 MB both times |
+| Planner | `bench ci` | 3 | 248 s | the same 11, in lanes | `/` −21 MB, `/workspace` unchanged |
+
+- **All three passed, at the same time.** The planner's lanes split as
+  follows:
+  - bench 0 took fmt, eight clippy checks and `policy.check`, 113 s in all;
+  - bench 1 took the tests, 224 s;
+  - bench 2 took the wasm clippy, 98 s.
+  The same 11 checks took 341 s on one bench, so the fan-out saves about a
+  third. The test lane alone is the floor.
+- **A session's disk stays flat.** Each run moved its session's `/` by under
+  1 MB, which is logs and the snapshot's objects. No target directory was
+  built. The planner's `/workspace` held 2.8 GB from before the run, a local
+  cargo build used to check !745 and !753 while benches could not build
+  `main`. The run itself added nothing.
+- **What it took**, on top of the first run's two sandbox defects:
+  - a stale git lock after a cancel (!741);
+  - the workspace's move to the root, which stopped the lockfile-driven
+    `cargo fetch` (!745) and left `bench ci`'s scope pointing outside the
+    checkout (!753).
+  Each was a defect in the bench, not in the code under check.
+- **Two things to watch.** One 06:33Z run had its scratch-ref fetch cut off
+  mid-pack (`early EOF`). That hasn't recurred; a retry on the server's fetch
+  is the remedy if it does. Helpers created without the repository could not
+  run, so a helper session takes the repository as its source.
