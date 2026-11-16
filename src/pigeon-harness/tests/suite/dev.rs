@@ -136,7 +136,7 @@ fn an_old_task_name_runs_its_task_after_one_line_on_stderr() {
     );
     assert_eq!(
         String::from_utf8_lossy(&o.stdout),
-        "instance: cargo run -q --locked -p pigeon -- instance --root .\n"
+        "instance: cargo run -q --locked -p pigeon-harness -- instance --root .\n"
     );
 }
 

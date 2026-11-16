@@ -6,8 +6,10 @@ members = ["src/common", "src/pigeon-core", "src/pigeon-harness", "src/pigeon-ag
 # What the checks need to know of this layout; see
 # .claude/decisions/2026-11-16-development-src-crates-neutral-names.md's 2026-11-16 amendments.
 [workspace.metadata.pigeon]
-policy-tests = ["pigeon-eviction", "pigeon", "pigeon-backplane"]
-worker = { package = "pigeon-backplane", name = "clippy backplane worker (wasm)", only = ["src/pigeon-agent/src/worker/"] }
+cli = "pigeon-harness"
+policy-tests = ["pigeon-eviction", "pigeon-harness", "pigeon-agent"]
+worker = { package = "pigeon-agent", name = "clippy agent worker (wasm)", only = ["src/pigeon-agent/src/worker/"] }
+infra-tests = { package = "pigeon-agent", test = "suite", modules = ["cobot_catalog::", "cobot_manifest::", "cobot_apex::", "cobot_git::", "cobot_credentials::"] }
 
 [workspace.package]
 version = "0.1.0"
@@ -21,7 +23,7 @@ publish = false
 common = { path = "src/common", package = "pigeon-common" }
 pigeon-core = { path = "src/pigeon-core" }
 eviction = { path = "src/pigeon-eviction", package = "pigeon-eviction" }
-backplane = { path = "src/pigeon-agent", package = "pigeon-backplane", default-features = false }
+backplane = { path = "src/pigeon-agent", package = "pigeon-agent", default-features = false }
 age = { version = "0.12.1", default-features = false }
 aes-gcm = { version = "0.10.3", default-features = false, features = ["aes", "alloc"] }
 assert_cmd = "2.2.2"

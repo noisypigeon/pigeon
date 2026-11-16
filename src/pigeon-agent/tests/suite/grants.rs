@@ -150,7 +150,11 @@ fn the_break_glass_is_offered_only_on_an_open_head_with_a_code_check_not_passed(
     };
     let mut c = change(State::Bounded, Some(HEAD));
     c.jobs = vec![
-        job("policy.check", "cargo run -p pigeon", JobStatus::Queued),
+        job(
+            "policy.check",
+            "cargo run -p pigeon-harness",
+            JobStatus::Queued,
+        ),
         job("fmt", "cargo fmt --all", JobStatus::Passed),
     ];
     assert!(

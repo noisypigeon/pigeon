@@ -11,7 +11,7 @@ ARG FEATURES
 WORKDIR /src
 COPY --from=config . /src/.config/
 COPY . .
-RUN cargo build --release --locked -p pigeon --no-default-features --features "$FEATURES"
+RUN cargo build --release --locked -p pigeon-harness --no-default-features --features "$FEATURES"
 
 FROM gcr.io/distroless/cc-debian12:nonroot@sha256:9dac0a79194e45a7da0158a9c6da57b217585af0786db3845d1f0ec1a0dd182f AS runtime
 COPY --from=build /src/target/release/pigeon /usr/local/bin/pigeon
@@ -111,8 +111,8 @@ RUN export CARGO_BUILD_JOBS="$WARM_JOBS" \
  && cargo fetch --locked \
  && cargo build --workspace --all-targets --locked \
  && cargo clippy --workspace --all-targets --locked \
- && cargo build --release --locked -p pigeon --no-default-features --features backplane \
- && cargo build --release --locked -p pigeon-backplane --lib --no-default-features --features worker --target wasm32-unknown-unknown \
+ && cargo build --release --locked -p pigeon-harness --no-default-features --features backplane \
+ && cargo build --release --locked -p pigeon-agent --lib --no-default-features --features worker --target wasm32-unknown-unknown \
  && cargo clean $members \
  && cargo clean --release $members \
  && cargo clean --release --target wasm32-unknown-unknown $members \

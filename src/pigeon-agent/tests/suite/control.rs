@@ -1012,7 +1012,11 @@ fn the_break_glass_moves_a_heads_unpassed_code_checks_to_the_checker() {
         job("fmt", "cargo fmt --all", JobStatus::Passed),
         job("test", "cargo test --workspace", JobStatus::Running),
         job("clippy", "cargo clippy --all-targets", JobStatus::Queued),
-        job("policy.check", "cargo run -p pigeon", JobStatus::Running),
+        job(
+            "policy.check",
+            "cargo run -p pigeon-harness",
+            JobStatus::Running,
+        ),
         job(control::MIRROR, "", JobStatus::Passed),
     ];
     let mut github = Actions::default();

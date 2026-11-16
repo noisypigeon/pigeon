@@ -1841,22 +1841,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220"
 
 [[package]]
-name = "pigeon"
-version = "0.1.0"
-dependencies = [
- "assert_cmd",
- "clap",
- "pigeon-backplane",
- "predicates",
- "serde",
- "serde_json",
- "signal-hook",
- "tempfile",
- "ureq",
-]
-
-[[package]]
-name = "pigeon-backplane"
+name = "pigeon-agent"
 version = "0.1.36"
 dependencies = [
  "aes-gcm",
@@ -1924,10 +1909,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "pigeon-harness"
+version = "0.1.0"
+dependencies = [
+ "assert_cmd",
+ "clap",
+ "pigeon-agent",
+ "predicates",
+ "serde",
+ "serde_json",
+ "signal-hook",
+ "tempfile",
+ "ureq",
+]
+
+[[package]]
 name = "pigeon-ios"
 version = "0.1.0"
 dependencies = [
- "pigeon-backplane",
+ "pigeon-agent",
  "serde-saphyr",
  "serde_json",
 ]

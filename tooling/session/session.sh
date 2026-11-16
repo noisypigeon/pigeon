@@ -87,7 +87,7 @@ case ${1:-} in
     ;;
 esac
 if command -v cargo >/dev/null 2>&1 && [ -f "$root/Cargo.toml" ]; then
-  exec cargo run -q --release --locked --manifest-path "$root/Cargo.toml" -p pigeon -- session "$@"
+  exec cargo run -q --release --locked --manifest-path "$root/Cargo.toml" -p pigeon-harness -- session "$@"
 fi
 echo "pigeon: no pigeon binary, and no cargo to build one; see CLAUDE.md" >&2
 exit 1

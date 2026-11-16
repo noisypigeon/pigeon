@@ -1,5 +1,5 @@
 [package]
-name = "pigeon"
+name = "pigeon-harness"
 description = "The pigeon command-line tool."
 version.workspace = true
 edition.workspace = true
@@ -33,6 +33,15 @@ serde = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
 signal-hook = { workspace = true, optional = true }
 ureq = { workspace = true, optional = true }
+
+# The library and binary keep the name `pigeon`; the package is pigeon-harness (src-crates ADR step 7c).
+[lib]
+name = "pigeon"
+path = "src/lib.rs"
+
+[[bin]]
+name = "pigeon"
+path = "src/main.rs"
 
 [[test]]
 name = "suite"

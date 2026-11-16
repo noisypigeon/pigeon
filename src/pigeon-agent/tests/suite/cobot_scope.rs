@@ -67,7 +67,7 @@ fn the_catalog_runs_infra_checks_and_no_rust_build() {
         got,
         [
             "infra.validate",
-            "test pigeon-backplane: suite cobot_catalog cobot_manifest cobot_apex cobot_git cobot_credentials",
+            "test pigeon-agent: suite cobot_catalog cobot_manifest cobot_apex cobot_git cobot_credentials",
             "policy.check"
         ]
     );
@@ -77,27 +77,27 @@ fn the_catalog_runs_infra_checks_and_no_rust_build() {
 fn backplanes_cobot_runs_backplane_its_dependants_and_the_worker() {
     let got = names(&["src/pigeon-agent/src/cobot/git.rs"]);
     assert!(
-        got.contains(&"clippy pigeon pigeon-backplane pigeon-ios".to_string()),
+        got.contains(&"clippy pigeon-agent pigeon-harness pigeon-ios".to_string()),
         "{got:?}"
     );
     assert!(
-        got.contains(&"test pigeon pigeon-backplane pigeon-ios".to_string()),
+        got.contains(&"test pigeon-agent pigeon-harness pigeon-ios".to_string()),
         "{got:?}"
     );
     assert!(
-        got.contains(&"clippy pigeon --features cobot".to_string()),
+        got.contains(&"clippy pigeon-harness --features cobot".to_string()),
         "{got:?}"
     );
     assert!(
-        got.contains(&"clippy pigeon --features backplane".to_string()),
+        got.contains(&"clippy pigeon-harness --features backplane".to_string()),
         "{got:?}"
     );
     assert!(
-        !got.contains(&"clippy pigeon --features sentinel".to_string()),
+        !got.contains(&"clippy pigeon-harness --features sentinel".to_string()),
         "{got:?}"
     );
     assert!(
-        got.contains(&"clippy backplane worker (wasm)".to_string()),
+        got.contains(&"clippy agent worker (wasm)".to_string()),
         "{got:?}"
     );
     assert!(
@@ -128,13 +128,13 @@ fn sentinel_runs_only_its_own_checks_as_nothing_links_it() {
 #[test]
 fn a_pigeon_command_runs_the_features_that_build_it() {
     let got = names(&["src/pigeon-harness/src/commands/cobot.rs"]);
-    assert!(got.contains(&"test pigeon".to_string()), "{got:?}");
+    assert!(got.contains(&"test pigeon-harness".to_string()), "{got:?}");
     let features: Vec<&String> = got.iter().filter(|n| n.contains("--features")).collect();
     assert_eq!(
         features,
         [
-            "clippy pigeon --features backplane",
-            "clippy pigeon --features cobot"
+            "clippy pigeon-harness --features backplane",
+            "clippy pigeon-harness --features cobot"
         ],
         "backplane's feature builds `pigeon cobot` too: {got:?}"
     );
@@ -144,7 +144,11 @@ fn a_pigeon_command_runs_the_features_that_build_it() {
 fn pigeons_sentinel_command_runs_its_feature_apart_from_the_release_units() {
     let got = names(&["src/pigeon-harness/src/commands/sentinel.rs"]);
     let features: Vec<&String> = got.iter().filter(|n| n.contains("--features")).collect();
-    assert_eq!(features, ["clippy pigeon --features sentinel"], "{got:?}");
+    assert_eq!(
+        features,
+        ["clippy pigeon-harness --features sentinel"],
+        "{got:?}"
+    );
 }
 
 #[test]
@@ -153,11 +157,11 @@ fn a_workspace_setting_runs_everything() {
     for want in [
         "fmt",
         "clippy",
-        "clippy pigeon (no features)",
-        "clippy pigeon --features sentinel",
-        "clippy pigeon --features cobot",
-        "clippy pigeon --features backplane",
-        "clippy backplane worker (wasm)",
+        "clippy pigeon-harness (no features)",
+        "clippy pigeon-harness --features sentinel",
+        "clippy pigeon-harness --features cobot",
+        "clippy pigeon-harness --features backplane",
+        "clippy agent worker (wasm)",
         "test",
         "backplane instance",
         "policy.check",
@@ -285,7 +289,7 @@ fn the_full_set_is_what_a_workspace_wide_change_runs() {
         .into_iter()
         .map(|j| j.name)
         .collect();
-    for want in ["fmt", "clippy", "test", "clippy backplane worker (wasm)"] {
+    for want in ["fmt", "clippy", "test", "clippy agent worker (wasm)"] {
         assert!(full.contains(&want.to_string()), "{want}: {full:?}");
     }
     let wide = names(&["Cargo.lock"]);
@@ -322,19 +326,14 @@ fn map() -> backplane::cobot::scope::TestMap {
         };
     let mut binaries = vec![
         bin(
-            "pigeon-backplane",
+            "pigeon-agent",
             "lib",
             "backplane",
             &["src/cobot/git.rs", "src/cobot/scope.rs"],
         ),
+        bin("pigeon-agent", "test", "cobot_git", &["src/cobot/git.rs"]),
         bin(
-            "pigeon-backplane",
-            "test",
-            "cobot_git",
-            &["src/cobot/git.rs"],
-        ),
-        bin(
-            "pigeon-backplane",
+            "pigeon-agent",
             "test",
             "cobot_scope",
             &["src/cobot/scope.rs", "src/cobot/release.rs"],
@@ -368,19 +367,19 @@ fn the_test_map_runs_the_binaries_that_ran_a_changed_file() {
     assert_eq!(
         tests_of(&got),
         [
-            "test pigeon-backplane: lib",
-            "test pigeon-backplane: suite cobot_git"
+            "test pigeon-agent: lib",
+            "test pigeon-agent: suite cobot_git"
         ],
         "{got:?}"
     );
     assert!(
-        got.contains(&"clippy pigeon pigeon-backplane pigeon-ios".to_string()),
+        got.contains(&"clippy pigeon-agent pigeon-harness pigeon-ios".to_string()),
         "clippy still covers the dependants: {got:?}"
     );
     let got = with_map(&["src/pigeon-agent/tests/cobot_scope.rs"]);
     assert_eq!(
         tests_of(&got),
-        ["test pigeon-backplane: suite cobot_scope"],
+        ["test pigeon-agent: suite cobot_scope"],
         "its own binary, now its suite module"
     );
     let jobs = backplane::cobot::scope::jobs_with(
@@ -391,7 +390,7 @@ fn the_test_map_runs_the_binaries_that_ran_a_changed_file() {
     .expect("scopes");
     let test = jobs
         .iter()
-        .find(|j| j.name.starts_with("test pigeon-backplane:"))
+        .find(|j| j.name.starts_with("test pigeon-agent:"))
         .expect("a test");
     assert_eq!(
         test.argv,
@@ -399,7 +398,7 @@ fn the_test_map_runs_the_binaries_that_ran_a_changed_file() {
             "cargo",
             "test",
             "-p",
-            "pigeon-backplane",
+            "pigeon-agent",
             "--test",
             "suite",
             "--locked",
@@ -411,7 +410,7 @@ fn the_test_map_runs_the_binaries_that_ran_a_changed_file() {
 
 #[test]
 fn the_test_map_falls_back_to_crates_when_it_cannot_say() {
-    let by_crate = ["test pigeon pigeon-backplane pigeon-ios"];
+    let by_crate = ["test pigeon-agent pigeon-harness pigeon-ios"];
     for (files, why) in [
         (
             &["src/pigeon-agent/src/cobot/new.rs"][..],
@@ -441,7 +440,7 @@ fn a_mapped_test_check_does_not_stand_in_for_a_crates_whole_suite() {
         "catalog/cloudflare/kinds/git-repo/schema.json",
     ]);
     assert!(
-        got.contains(&"test pigeon-backplane: suite cobot_catalog cobot_manifest cobot_apex cobot_git cobot_credentials".to_string()),
+        got.contains(&"test pigeon-agent: suite cobot_catalog cobot_manifest cobot_apex cobot_git cobot_credentials".to_string()),
         "{got:?}"
     );
 }
@@ -463,21 +462,21 @@ fn no_check_name_holds_a_comma_which_a_github_cache_key_refuses() {
 fn a_wasm_only_path_runs_fmt_and_the_wasm_clippy_alone() {
     // !476: only `worker/passkeys.rs`, which no native build compiles.
     let worker = "src/pigeon-agent/src/worker/passkeys.rs";
-    let wasm_only = ["fmt", "clippy backplane worker (wasm)", "policy.check"];
+    let wasm_only = ["fmt", "clippy agent worker (wasm)", "policy.check"];
     assert_eq!(names(&[worker]), wasm_only, "no map");
     assert_eq!(with_map(&[worker]), wasm_only, "with a map");
     let got = with_map(&[worker, "src/pigeon-agent/src/cobot/git.rs"]);
     assert_eq!(
         tests_of(&got),
         [
-            "test pigeon-backplane: lib",
-            "test pigeon-backplane: suite cobot_git"
+            "test pigeon-agent: lib",
+            "test pigeon-agent: suite cobot_git"
         ],
         "the native file's tests, chosen by the map: {got:?}"
     );
     assert_eq!(
         got.iter()
-            .filter(|n| *n == "clippy backplane worker (wasm)")
+            .filter(|n| *n == "clippy agent worker (wasm)")
             .count(),
         1,
         "{got:?}"
@@ -492,11 +491,7 @@ fn a_unit_test_module_the_map_doesnt_know_runs_its_lib() {
         "src/pigeon-agent/src/core/tests/x.rs",
     ] {
         let got = with_map(&[f]);
-        assert_eq!(
-            tests_of(&got),
-            ["test pigeon-backplane: lib"],
-            "{f}: {got:?}"
-        );
+        assert_eq!(tests_of(&got), ["test pigeon-agent: lib"], "{f}: {got:?}");
     }
 }
 
@@ -512,28 +507,28 @@ fn suite_map() -> backplane::cobot::scope::TestMap {
     };
     let mut binaries = vec![
         unit(
-            "pigeon-backplane",
+            "pigeon-agent",
             "lib",
             "backplane",
             "",
             &["src/cobot/git.rs"],
         ),
         unit(
-            "pigeon-backplane",
+            "pigeon-agent",
             "test",
             "suite",
             "cobot_git::",
             &["src/cobot/git.rs", "tests/suite/cobot_git.rs"],
         ),
         unit(
-            "pigeon-backplane",
+            "pigeon-agent",
             "test",
             "suite",
             "cobot_scope::",
             &["src/cobot/scope.rs"],
         ),
         unit(
-            "pigeon-backplane",
+            "pigeon-agent",
             "test",
             "suite",
             "merges::",
@@ -569,7 +564,7 @@ fn a_map_by_module_runs_only_the_suite_modules_a_change_reaches() {
     let got = with_suite_map(&["src/pigeon-agent/src/cobot/scope.rs"]);
     assert_eq!(
         got.iter().map(|j| j.name.as_str()).collect::<Vec<_>>(),
-        ["test pigeon-backplane: suite cobot_scope"],
+        ["test pigeon-agent: suite cobot_scope"],
         "{got:?}"
     );
     assert_eq!(
@@ -578,7 +573,7 @@ fn a_map_by_module_runs_only_the_suite_modules_a_change_reaches() {
             "cargo",
             "test",
             "-p",
-            "pigeon-backplane",
+            "pigeon-agent",
             "--test",
             "suite",
             "--locked",
@@ -590,29 +585,29 @@ fn a_map_by_module_runs_only_the_suite_modules_a_change_reaches() {
         (
             &["src/pigeon-agent/src/cobot/git.rs"][..],
             &[
-                "test pigeon-backplane: lib",
-                "test pigeon-backplane: suite cobot_git",
+                "test pigeon-agent: lib",
+                "test pigeon-agent: suite cobot_git",
             ][..],
             "a whole lib and a module are two checks",
         ),
         (
             &["src/pigeon-agent/tests/suite/merges.rs"][..],
-            &["test pigeon-backplane: suite merges"][..],
+            &["test pigeon-agent: suite merges"][..],
             "a module file picks its module",
         ),
         (
             &["src/pigeon-agent/tests/suite/merges/replays.rs"][..],
-            &["test pigeon-backplane: suite merges"][..],
+            &["test pigeon-agent: suite merges"][..],
             "a module directory's file picks its module",
         ),
         (
             &["src/pigeon-agent/tests/suite/harness/http.rs"][..],
-            &["test pigeon-backplane: suite cobot_git cobot_scope merges"][..],
+            &["test pigeon-agent: suite cobot_git cobot_scope merges"][..],
             "the harness picks every module",
         ),
         (
             &["src/pigeon-agent/tests/suite/main.rs"][..],
-            &["test pigeon-backplane: suite cobot_git cobot_scope merges"][..],
+            &["test pigeon-agent: suite cobot_git cobot_scope merges"][..],
             "main.rs picks every module",
         ),
     ] {
@@ -635,7 +630,7 @@ fn a_map_by_module_runs_only_the_suite_modules_a_change_reaches() {
         "a module the map doesn't know falls back to crates"
     );
     assert!(
-        crates.iter().any(|n| n.contains("pigeon-backplane")),
+        crates.iter().any(|n| n.contains("pigeon-agent")),
         "{crates:?}"
     );
 }

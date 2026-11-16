@@ -10,7 +10,7 @@ fn step(files: &[&str], content: Option<&str>) -> Step {
         act: "Add `Class::covers` after `Class::role`.".into(),
         files: files.iter().map(|f| (*f).to_string()).collect(),
         content: content.map(str::to_string),
-        done_when: "`cargo test -p pigeon-backplane --test sessions` passes".into(),
+        done_when: "`cargo test -p pigeon-agent --test sessions` passes".into(),
     }
 }
 

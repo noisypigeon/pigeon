@@ -46,16 +46,16 @@ fn only_code_checks_run_on_github() {
         "bash ../pigeon-ios/check.sh",
         "bash ../pigeon-ios/archive.sh 1",
         "bash ../pigeon-ios/archive.sh 42",
-        "cargo clippy -p pigeon-backplane --all-targets --locked -- -D warnings",
-        "cargo test -p pigeon-backplane --locked",
+        "cargo clippy -p pigeon-agent --all-targets --locked -- -D warnings",
+        "cargo test -p pigeon-agent --locked",
         "cargo build --release",
         "cargo check -p sentinel",
     ] {
         assert!(on_github(&argv(code)), "{code}");
     }
     for platform in [
-        "cargo run -q --locked -p pigeon -- run policy.check --root ../..",
-        "cargo run -q --locked -p pigeon -- run infra.validate --root ../..",
+        "cargo run -q --locked -p pigeon-harness -- run policy.check --root ../..",
+        "cargo run -q --locked -p pigeon-harness -- run infra.validate --root ../..",
         "sh ../../spikes/1/run.sh",
         "bash ../../tooling/ci/other.sh",
         "bash ../pigeon-ios/other.sh",

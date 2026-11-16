@@ -20,7 +20,7 @@ if ! command -v rustup >/dev/null; then
 fi
 export PATH="$HOME/.cargo/bin:$PATH"
 rustup toolchain install "$rust" --profile minimal
-cargo +"$rust" build --release --locked -p pigeon --no-default-features --features signing \
+cargo +"$rust" build --release --locked -p pigeon-harness --no-default-features --features signing \
   --manifest-path Cargo.toml
 pigeon="$PWD/target/release/pigeon"
 

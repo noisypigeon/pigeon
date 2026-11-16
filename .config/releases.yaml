@@ -33,7 +33,7 @@ units:
       - Dockerfile
       - .dockerignore
     exclude: [tests/, benches/, '*.md']
-    cargo: { workspace: ., package: pigeon }
+    cargo: { workspace: ., package: pigeon-harness }
   infra-cloudflare-zone:
     manifest: catalog/cloudflare/modules/zone/module.yaml
     paths: [catalog/cloudflare/modules/zone/]

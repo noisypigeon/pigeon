@@ -24,7 +24,7 @@ repository, a commit, a PR or a log.
 From the root of a `main` checkout:
 
 ```sh
-alias pigeon='cargo run -q --locked --manifest-path Cargo.toml -p pigeon --'
+alias pigeon='cargo run -q --locked --manifest-path Cargo.toml -p pigeon-harness --'
 export CLOUDFLARE_API_TOKEN=…            # the bootstrap token
 export PIGEON_STATE_PASSPHRASE=…          # this unit's passphrase, not the instance's
 pigeon infra plan infra/pigeon --root . --state ../pigeon-platform-state

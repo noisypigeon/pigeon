@@ -19,7 +19,7 @@ pub struct Task {
     pub run: &'static [&'static str],
 }
 
-const POLICY: &str = "cargo run -q --locked -p pigeon -- run policy.check --root .";
+const POLICY: &str = "cargo run -q --locked -p pigeon-harness -- run policy.check --root .";
 
 /// Every task.
 pub const TASKS: &[Task] = &[
@@ -64,13 +64,13 @@ pub const TASKS: &[Task] = &[
         about: "clippy on pigeon with each command group's feature alone, and the Worker for wasm",
         depends: &[],
         run: &[
-            "cargo clippy -p pigeon --all-targets --locked --no-default-features -- -D warnings",
-            "cargo clippy -p pigeon --all-targets --locked --no-default-features --features eviction -- -D warnings",
-            "cargo clippy -p pigeon --all-targets --locked --no-default-features --features infra -- -D warnings",
-            "cargo clippy -p pigeon --all-targets --locked --no-default-features --features agent -- -D warnings",
-            "cargo clippy -p pigeon --all-targets --locked --no-default-features --features signing -- -D warnings",
-            "cargo clippy -p pigeon --all-targets --locked --no-default-features --features session -- -D warnings",
-            "cargo clippy -p pigeon-backplane --lib --locked --no-default-features --features worker --target wasm32-unknown-unknown -- -D warnings",
+            "cargo clippy -p pigeon-harness --all-targets --locked --no-default-features -- -D warnings",
+            "cargo clippy -p pigeon-harness --all-targets --locked --no-default-features --features eviction -- -D warnings",
+            "cargo clippy -p pigeon-harness --all-targets --locked --no-default-features --features infra -- -D warnings",
+            "cargo clippy -p pigeon-harness --all-targets --locked --no-default-features --features agent -- -D warnings",
+            "cargo clippy -p pigeon-harness --all-targets --locked --no-default-features --features signing -- -D warnings",
+            "cargo clippy -p pigeon-harness --all-targets --locked --no-default-features --features session -- -D warnings",
+            "cargo clippy -p pigeon-agent --lib --locked --no-default-features --features worker --target wasm32-unknown-unknown -- -D warnings",
         ],
     },
     Task {
@@ -100,7 +100,7 @@ pub const TASKS: &[Task] = &[
         about: "policy.check with the pull-request policy, from PR_TITLE, PR_BODY, PR_NUMBER and PR_FILES",
         depends: &["policy-build"],
         run: &[concat!(
-            "cargo run -q --locked -p pigeon -- run policy.check --root .",
+            "cargo run -q --locked -p pigeon-harness -- run policy.check --root .",
             r#" --text "title=$PR_TITLE" --text "body=$PR_BODY" --text "number=$PR_NUMBER" --text "files=$PR_FILES""#
         )],
     },
@@ -113,7 +113,7 @@ pub const TASKS: &[Task] = &[
 branch="$(git rev-parse --abbrev-ref HEAD)"
 first="$(git rev-list --reverse "$base"..HEAD | head -n 1)"
 number="$(printf '%s' "$branch" | sed -n 's#^change/\([0-9]*\)-.*#\1#p')"
-cargo run -q --locked -p pigeon -- run policy.check --root . \
+cargo run -q --locked -p pigeon-harness -- run policy.check --root . \
   --text "branch=$branch" \
   --text "number=${number:-0}" \
   --text "title=$(git log -1 --format=%s "$first")" \
@@ -127,7 +127,7 @@ cargo run -q --locked -p pigeon -- run policy.check --root . \
         old: Some("backplane"),
         about: "Validate the instance manifest",
         depends: &[],
-        run: &["cargo run -q --locked -p pigeon -- instance --root ."],
+        run: &["cargo run -q --locked -p pigeon-harness -- instance --root ."],
     },
     Task {
         name: "ci",
@@ -142,7 +142,7 @@ cargo run -q --locked -p pigeon -- run policy.check --root . \
         about: "Only the checks this branch's paths need, against CHANGE_BASE (default origin/main)",
         depends: &[],
         run: &[
-            r#"cargo run -q --locked -p pigeon -- dev scope --root . --base "${CHANGE_BASE:-origin/main}" --run"#,
+            r#"cargo run -q --locked -p pigeon-harness -- dev scope --root . --base "${CHANGE_BASE:-origin/main}" --run"#,
         ],
     },
 ];
