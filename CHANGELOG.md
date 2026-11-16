@@ -7,6 +7,7 @@
 - backplane v0.1.31
 - backplane v0.1.32
 - backplane v0.1.33
+- backplane v0.1.34
 - infra-agnostic-random-string v0.1.3
 - infra-agnostic-schema v0.1.3
 - infra-agnostic-schema v0.1.4
@@ -156,6 +157,7 @@
 - docs(adr): review !768 against !766 (!775) ([aba0930](https://github.com/noisypigeon/pigeon/commit/aba0930fad54539ea66cc51333a98e483beb8429))
 - chore(secrets): the four stored ciphertexts carry the ENC[pigeon:v1:] tag (!769) ([741c355](https://github.com/noisypigeon/pigeon/commit/741c355c46be13d5f4d4ca8143cbcf4a02e8e109))
 - refactor: src/pigeon-core is the pigeon-core crate: backplane's functional core, its pure modules and the wire form, built alone for native and wasm (!770) ([c446ce8](https://github.com/noisypigeon/pigeon/commit/c446ce8a38176dec4d6e73bae59a291576e283d9)) · backplane
+- refactor: the pigeon binary's crate moves to src/pigeon-harness (!772) ([0633627](https://github.com/noisypigeon/pigeon/commit/06336271f79bed3ecadbe44c81fdbfdc2bc497be)) · backplane
 
 ## 2026-11-15
 
