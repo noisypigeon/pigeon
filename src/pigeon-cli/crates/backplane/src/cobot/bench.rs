@@ -17,7 +17,6 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 use crate::core::bench::{self, allow::Command, deal::Check};
-use crate::core::deploy::scope::WORKSPACE;
 
 /// The uid a command runs as inside the namespace (spike amendment).
 pub const UID: &str = "1000";
@@ -316,17 +315,26 @@ fn visit(
 /// # Errors
 ///
 /// When the answer doesn't parse, or names no such check.
-pub fn check_step(scope_json: &str, name: &str) -> Result<Step, String> {
+pub fn check_step(scope_json: &str, name: &str, dir: &str) -> Result<Step, String> {
     let checks: Vec<Check> = serde_json::from_str(scope_json)
         .map_err(|e| format!("bench: scope's answer doesn't parse: {e}"))?;
     checks
         .into_iter()
         .find(|c| c.name == name)
         .map(|c| Step {
-            dir: WORKSPACE.into(),
+            dir: dir.into(),
             argv: c.argv,
         })
         .ok_or_else(|| format!("bench: no check `{name}` in this change's scope"))
+}
+
+/// The checkout's root, relative to its workspace directory `ws`.
+fn root_from(ws: &str) -> String {
+    if ws.is_empty() {
+        ".".into()
+    } else {
+        vec![".."; ws.split('/').count()].join("/")
+    }
 }
 
 /// The longest prefix of `bytes` that is whole UTF-8.
@@ -424,6 +432,11 @@ impl Bench {
         self.work.join("pigeon")
     }
 
+    /// The checkout's Rust workspace, from its root: empty once the workspace is the root.
+    fn workspace(&self) -> String {
+        crate::cobot::scope::workspace_dir(&self.checkout())
+    }
+
     fn log_path(&self, run: &str) -> PathBuf {
         self.work.join("runs").join(format!("{run}.log"))
     }
@@ -433,7 +446,7 @@ impl Bench {
             .iter()
             .find(|(k, _)| k == "CARGO_TARGET_DIR")
             .map_or_else(
-                || self.checkout().join(WORKSPACE).join("target"),
+                || self.checkout().join(self.workspace()).join("target"),
                 |(_, v)| PathBuf::from(v),
             )
     }
@@ -780,7 +793,8 @@ impl Bench {
         )?;
         git(&["clean", "-qffdx"], Mode::Command, &[])?;
         self.inner().sha = Some(spec.sha.clone());
-        let lock = std::fs::read(self.checkout().join(WORKSPACE).join("Cargo.lock")).ok();
+        let ws = self.workspace();
+        let lock = std::fs::read(self.checkout().join(&ws).join("Cargo.lock")).ok();
         let hash = lock.map(|bytes| {
             let mut h = DefaultHasher::new();
             bytes.hash(&mut h);
@@ -788,7 +802,7 @@ impl Bench {
         });
         if hash.is_some() && hash != self.inner().lock {
             let step = Step {
-                dir: WORKSPACE.into(),
+                dir: ws,
                 argv: ["cargo", "fetch", "--locked"].map(String::from).to_vec(),
             };
             match self.step(&step, Mode::Fetch, &[], log, cancel, deadline) {
@@ -806,11 +820,12 @@ impl Bench {
         cancel: &AtomicBool,
         deadline: Instant,
     ) -> Result<(), String> {
-        if !self.checkout().join(WORKSPACE).join("Cargo.toml").exists() {
+        let ws = self.workspace();
+        if !self.checkout().join(&ws).join("Cargo.toml").exists() {
             return Ok(());
         }
         let metadata = Step {
-            dir: WORKSPACE.into(),
+            dir: ws.clone(),
             argv: [
                 "cargo",
                 "metadata",
@@ -839,10 +854,7 @@ impl Bench {
             argv.push("-p".into());
             argv.push(n);
         }
-        let step = Step {
-            dir: WORKSPACE.into(),
-            argv,
-        };
+        let step = Step { dir: ws, argv };
         match self.step(&step, Mode::Command, &[], log, cancel, deadline) {
             Ended::Exited(s) if s.success() => Ok(()),
             _ => Err("bench: `cargo clean` failed".into()),
@@ -861,7 +873,7 @@ impl Bench {
             Command::Argv { argv } => {
                 bench::allow::allow(argv).map_err(|r| r.to_string())?;
                 Ok(vec![Step {
-                    dir: WORKSPACE.into(),
+                    dir: self.workspace(),
                     argv: argv.clone(),
                 }])
             }
@@ -875,8 +887,10 @@ impl Bench {
             }
             Command::Check { name } => {
                 let _ = (&*log).write_all(b"bench: reading this change's checks from scope\n");
+                let ws = self.workspace();
+                let root = root_from(&ws);
                 let scope = Step {
-                    dir: WORKSPACE.into(),
+                    dir: ws.clone(),
                     argv: [
                         "cargo",
                         "run",
@@ -888,7 +902,7 @@ impl Bench {
                         "cobot",
                         "scope",
                         "--root",
-                        "../..",
+                        root.as_str(),
                         "--base",
                         "artifacts/main",
                         "--json",
@@ -897,7 +911,7 @@ impl Bench {
                     .to_vec(),
                 };
                 let text = self.capture(&scope, cancel, deadline)?;
-                check_step(&text, name).map(|s| vec![s])
+                check_step(&text, name, &ws).map(|s| vec![s])
             }
         }
     }
@@ -1161,6 +1175,7 @@ pub fn route(bench: &Arc<Bench>, route: &str, body: &[u8]) -> (u16, Value) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::core::deploy::scope::WORKSPACE;
     use std::path::Path;
 
     const MISE: &str = r#"
@@ -1306,13 +1321,19 @@ run = "sleep 30"
     }
 
     #[test]
+    fn scope_finds_the_root_from_either_workspace_layout() {
+        assert_eq!(root_from(""), ".");
+        assert_eq!(root_from(WORKSPACE), "../..");
+    }
+
+    #[test]
     fn a_check_is_found_by_name_in_scope() {
         let json = r#"[{"name":"fmt","argv":["cargo","fmt","--check"]},{"name":"test pigeon: suite","argv":["sh","-c","cargo test"]}]"#;
-        let step = check_step(json, "test pigeon: suite").expect("found");
+        let step = check_step(json, "test pigeon: suite", WORKSPACE).expect("found");
         assert_eq!(step.dir, WORKSPACE);
         assert_eq!(step.argv, s(&["sh", "-c", "cargo test"]));
         assert_eq!(
-            check_step(json, "wasm").unwrap_err(),
+            check_step(json, "wasm", WORKSPACE).unwrap_err(),
             "bench: no check `wasm` in this change's scope"
         );
     }

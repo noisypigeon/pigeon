@@ -685,3 +685,18 @@ restructure step 7, now that `pigeon dev` is on `main` (!696):
 - **The Container argv** (`cobot/worker.rs`, `jobs.rs`, `serve.rs`) is the
   restructure's step 10d, as agreed with its helper. This change touches only
   `cobot/bench.rs` and `core/bench/allow.rs`.
+
+### 2026-11-16: A bench finds the workspace in either layout
+
+The demo's 06:33Z rerun failed in all three sessions before any check ran.
+Offline cargo couldn't find `include_dir`, a dependency `main` had gained after
+the image's warm-up. §3.2's `cargo fetch --locked` on a changed `Cargo.lock`
+never ran, because the bench read `src/pigeon-cli/Cargo.lock`, which !695
+moved to the root.
+
+The bench now asks `cobot::scope::workspace_dir` where the workspace is: the
+root when its `Cargo.toml` has `[workspace]`, else `src/pigeon-cli`. Every
+step uses that directory: the lockfile hash and `cargo fetch`, the disk
+guard's `cargo clean`, a plain argv, and scope with each of its checks.
+`scope --root` points back to the root from it. My earlier 06:33Z run failed
+first on a fetch of the scratch ref cut off mid-pack. Its retry hit this.
