@@ -532,6 +532,91 @@ killed after {} minutes",
     (ok, scrub(&log, secret))
 }
 
+/// Runs `argv` in `dir` as [`exec`] does, appending each output line, cut of `secrets`, to
+/// `live_path` as it comes, so a running job's log can be read before it ends.
+#[must_use]
+pub fn exec_live(
+    dir: &Path,
+    argv: &[String],
+    timeout: Duration,
+    secrets: &[&str],
+    live_path: &Path,
+) -> (bool, String) {
+    use std::io::{BufRead, BufReader, Write as _};
+    use std::sync::{Arc, Mutex};
+    let Some((program, rest)) = argv.split_first() else {
+        return (false, "an empty command".into());
+    };
+    let cut = |line: &str| secrets.iter().fold(line.to_string(), |l, s| scrub(&l, s));
+    let file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(live_path)
+        .ok()
+        .map(|f| Arc::new(Mutex::new(f)));
+    let child = Command::new(program)
+        .args(rest)
+        .current_dir(dir)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn();
+    let mut child = match child {
+        Ok(c) => c,
+        Err(e) => return (false, format!("{program} did not start: {e}")),
+    };
+    let pipe = |r: Option<Box<dyn std::io::Read + Send>>| {
+        let file = file.clone();
+        let owned: Vec<String> = secrets.iter().map(ToString::to_string).collect();
+        std::thread::spawn(move || {
+            let mut s = String::new();
+            let Some(r) = r else { return s };
+            for line in BufReader::new(r).lines().map_while(Result::ok) {
+                let line = owned.iter().fold(line, |l, x| scrub(&l, x));
+                if let Some(f) = &file
+                    && let Ok(mut f) = f.lock()
+                {
+                    let _ = writeln!(f, "{line}");
+                }
+                s.push_str(&line);
+                s.push('\n');
+            }
+            s
+        })
+    };
+    let out = child
+        .stdout
+        .take()
+        .map(|o| Box::new(o) as Box<dyn std::io::Read + Send>);
+    let err = child
+        .stderr
+        .take()
+        .map(|e| Box::new(e) as Box<dyn std::io::Read + Send>);
+    let readers = [pipe(out), pipe(err)];
+    let started = Instant::now();
+    let ok = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => break status.success(),
+            Ok(None) if started.elapsed() < timeout => {
+                std::thread::sleep(Duration::from_millis(200));
+            }
+            Ok(None) | Err(_) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                break false;
+            }
+        }
+    };
+    let mut log = String::new();
+    for r in readers {
+        log.push_str(&r.join().unwrap_or_default());
+    }
+    if !ok && started.elapsed() >= timeout {
+        let _ = writeln!(log, "\nkilled after {} minutes", timeout.as_secs() / 60);
+    }
+    (ok, cut(&log))
+}
+
 /// `(name, email)` of a git identity written `Name <email>`, when it is one.
 #[must_use]
 pub fn identity(s: &str) -> Option<(String, String)> {

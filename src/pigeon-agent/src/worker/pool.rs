@@ -220,13 +220,22 @@ impl Pool {
         let mut left = jobs.clone();
         for (task, f) in &jobs {
             let answer = pool_dispatch::report(&self.env, &f.job).await?;
-            let (first, lost) = pd::gone(f.gone, answer.is_none(), now());
+            let is_gone = matches!(answer, pool_dispatch::Answer::Gone);
+            let (first, lost) = pd::gone(f.gone, is_gone, now());
             let report = match answer {
-                Some(Some(r)) => Some(r),
-                _ if !lost && now() < f.lost_at => {
-                    if first != f.gone {
-                        let mut g = f.clone();
-                        g.gone = first;
+                pool_dispatch::Answer::Ended(r) => Some(*r),
+                running if !lost && now() < f.lost_at => {
+                    let mut g = f.clone();
+                    g.gone = first;
+                    // The log so far; see the pool ADR's 2026-11-17 log entry.
+                    if let pool_dispatch::Answer::Running(log) = running {
+                        g.seen = Some(now());
+                        if !log.is_empty() {
+                            let end = crate::control::last(&log, pool_dispatch::LIVE_TAIL);
+                            g.tail = Some(end.to_string());
+                        }
+                    }
+                    if &g != f {
                         left.insert(task.clone(), g);
                         storage.put("jobs", &left).await?;
                     }
@@ -690,7 +699,9 @@ impl Pool {
         };
         let l = ledger::roll(&self.ledger(&pool).await?, &pool, now());
         let state = ledger::state(&l, &pool, now());
-        Response::from_json(&json!({ "state": state, "ledger": l }))
+        let jobs: BTreeMap<String, Followed> =
+            self.state.storage().get("jobs").await?.unwrap_or_default();
+        Response::from_json(&json!({ "state": state, "ledger": l, "jobs": jobs }))
     }
 
     /// Stores the object's pool name from `body["pool"]`, when it has none and the pool exists.

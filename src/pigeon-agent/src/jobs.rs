@@ -1136,6 +1136,14 @@ pub fn submit(board: &Arc<Board>, body: &[u8]) -> (u16, Value) {
 pub fn status(board: &Board, id: &str) -> (u16, Value) {
     board.get(id).map_or_else(
         || (404, json!({ "error": "no such job" })),
-        |r| (200, json!(r)),
+        |mut r| {
+            // A running pool job's log so far; see the pool ADR's 2026-11-17 log entry.
+            if r.outcome == Outcome::Running
+                && let Ok(so_far) = std::fs::read_to_string(crate::pool_job::live_log(id))
+            {
+                r.log = tail(&so_far).to_string();
+            }
+            (200, json!(r))
+        },
     )
 }

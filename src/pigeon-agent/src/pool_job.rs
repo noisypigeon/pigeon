@@ -123,6 +123,12 @@ fn checkout(spec: &JobSpec, dir: &Path) -> Result<(), String> {
     }
 }
 
+/// Where pool job `id` writes its log as it runs, cut of its secrets.
+#[must_use]
+pub fn live_log(id: &str) -> std::path::PathBuf {
+    std::env::temp_dir().join(format!("{id}.live.log"))
+}
+
 /// Runs the pool job `spec` in `dir`.
 #[must_use]
 pub fn run(spec: &JobSpec, dir: &Path) -> Report {
@@ -142,7 +148,13 @@ pub fn run(spec: &JobSpec, dir: &Path) -> Report {
     let argv = pj::sandboxed(&pj::claude_env(&job, &home), &pj::claude_argv(&job, &mcp));
     let limit = Duration::from_secs(u64::from(job.minutes) * 60);
     let started = Instant::now();
-    let (_, log) = ci::exec(dir, &argv, limit, &spec.token);
+    let live = live_log(&spec.id);
+    let secrets = [
+        spec.token.as_str(),
+        job.token.as_str(),
+        job.access_secret.as_str(),
+    ];
+    let (_, log) = ci::exec_live(dir, &argv, limit, &secrets, &live);
     let timed_out = started.elapsed() >= limit;
     let mut log = log
         .replace(&job.token, "…")
@@ -195,6 +207,7 @@ pub fn run(spec: &JobSpec, dir: &Path) -> Report {
         }
     }
     let _ = std::fs::remove_dir_all(&work);
+    let _ = std::fs::remove_file(&live);
     let top = if outcome == pj::Outcome::Done {
         Outcome::Passed
     } else {

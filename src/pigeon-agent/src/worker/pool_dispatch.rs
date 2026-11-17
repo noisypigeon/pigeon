@@ -39,7 +39,16 @@ pub struct Followed {
     /// When the `Checker` first answered 404 in a row, if it has.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub gone: Option<u64>,
+    /// When the `Checker` last answered that the job runs.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub seen: Option<u64>,
+    /// The end of the job's log as of `seen`, cut of its secrets by the runner.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tail: Option<String>,
 }
+
+/// How much of a running job's log the `Pool` object keeps, in bytes.
+pub const LIVE_TAIL: usize = 2048;
 
 /// The ledger pool `name`'s object keeps, if it has one yet.
 async fn ledger_of(env: &Env, name: &str) -> Option<Ledger> {
@@ -255,6 +264,8 @@ async fn open(
         label: label.to_string(),
         lost_at: pd::lost_at(opened, &budget),
         gone: None,
+        seen: None,
+        tail: None,
     };
     let body = json!({ "task": task_id, "followed": followed });
     super::pool::to_pool(env, pool, "/task/job", &body).await?;
@@ -375,9 +386,18 @@ const ESCALATED_LOG: usize = 2048;
 /// The Worker secret holding the pool's Access service token's secret.
 pub const ACCESS_SECRET_VAR: &str = "POOL_ACCESS_SECRET";
 
-/// The job's report: `Some(None)` while it runs, `Some(Some(report))` once it ended, and none
-/// when `Checker` no longer knows it.
-pub(super) async fn report(env: &Env, job: &str) -> Result<Option<Option<Report>>> {
+/// What the `Checker` answers about a pool job.
+pub(super) enum Answer {
+    /// It no longer knows the job: its Container is gone.
+    Gone,
+    /// The job runs, with its log so far.
+    Running(String),
+    /// The job ended, with its report.
+    Ended(Box<Report>),
+}
+
+/// The `Checker`'s answer about job `job`.
+pub(super) async fn report(env: &Env, job: &str) -> Result<Answer> {
     let req = json_request(
         &format!("https://checker/status/{job}"),
         Method::Get,
@@ -390,12 +410,14 @@ pub(super) async fn report(env: &Env, job: &str) -> Result<Option<Option<Report>
     match r.status_code() {
         200 => {
             let report: Report = r.json().await?;
-            Ok(Some(
-                (report.outcome != control::Outcome::Running).then_some(report),
-            ))
+            Ok(if report.outcome == control::Outcome::Running {
+                Answer::Running(report.log)
+            } else {
+                Answer::Ended(Box::new(report))
+            })
         }
-        404 => Ok(None),
-        _ => Ok(Some(None)),
+        404 => Ok(Answer::Gone),
+        _ => Ok(Answer::Running(String::new())),
     }
 }
 
