@@ -120,7 +120,7 @@ fn judge(w: &Window, change: &crate::change::Change, operation: &str, _now: u64)
         })
     {
         return Decision::Ask(format!(
-            "change {} touches a gate path, or a guarded or sentinel one without a gate set, which \
+            "change {} touches a gate path, or a guarded or eviction one without a gate set, which \
              Auto never covers",
             change.number
         ));

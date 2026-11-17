@@ -275,14 +275,14 @@ fn case_713_a_sentinel_head_under_a_mandate_needs_the_owner_in_its_stage() {
     let mut c = change(
         &["tooling/**"],
         &format!("Per {ADR}."),
-        Some((Tier::Code, "sentinel: src/pigeon-eviction/Cargo.toml")),
+        Some((Tier::Code, "eviction: src/pigeon-eviction/Cargo.toml")),
     );
     c.state = ChangeState::Checked;
     let m = all.get(1).expect("one");
     let d = decide(m, &c, "change.approve", 10);
     assert!(matches!(d, Decision::Ask(_)), "{d:?}");
     let window =
-        Decision::Ask("touches a guarded or sentinel path, which Auto never covers".into());
+        Decision::Ask("touches a guarded or eviction path, which Auto never covers".into());
     let (covered, uncovered) = stage::coverage(Some((1, d)), Some((11, window)));
     assert_eq!(covered, None, "no mandate covers a sentinel rule");
     let why = uncovered.expect("says why");

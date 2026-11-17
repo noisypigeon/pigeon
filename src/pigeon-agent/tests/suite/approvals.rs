@@ -2,7 +2,7 @@
 //! `.claude/decisions/2026-11-08-security-tiered-approvals-task-mandates.md`.
 
 use agent::core::approval::tiers::{
-    AUTO_COVERS, Facts, Rules, Tier, Tiers, classify, matches, mixed_with_sentinel,
+    AUTO_COVERS, Facts, Rules, Tier, Tiers, classify, matches, mixed_with_eviction,
 };
 
 fn rules() -> Rules {
@@ -88,7 +88,7 @@ fn what_deploys_needs_the_code() {
     );
     assert_eq!(worker.merge.tier, Tier::Code);
     assert_eq!(worker.merge.rule, "deploys");
-    assert_eq!(worker.authorize.tier, Tier::Owner);
+    assert_eq!(worker.authorize.tier, Tier::Code, "the merge decides");
     assert!(
         worker.authorize.rule.starts_with("secrets"),
         "a scope over backplane's crate reaches its secret handling: {}",
@@ -252,7 +252,9 @@ fn secrets_and_destruction_need_the_owner_each_time() {
     let t = tiers_of(&["infra/x/**"], &["infra/x/secrets.config.yaml"], PLAIN);
     assert_eq!(t.merge.tier, Tier::Owner, "{t:?}");
     let t = tiers_of(&[".mcp.json"], &[".mcp.json"], PLAIN);
-    assert_eq!(t.authorize.tier, Tier::Owner, "{t:?}");
+    assert_eq!(t.authorize.tier, Tier::Code, "{t:?}");
+    assert!(t.authorize.rule.ends_with("(the merge decides)"), "{t:?}");
+    assert_eq!(t.merge.tier, Tier::Owner, "{t:?}");
     let rules = tiers_of(
         &[".config/approvals.yaml"],
         &[".config/approvals.yaml"],
@@ -346,7 +348,7 @@ fn one_proof_covers_a_changes_later_stages_up_to_the_code_tier() {
 /// This repository's rules, with sentinel's paths named.
 fn with_sentinel() -> Rules {
     let mut r = rules();
-    r.sentinel = paths(&[
+    r.eviction = paths(&[
         "src/pigeon-eviction/**",
         ".config/policies/**",
         ".config/approvals.yaml",
@@ -365,10 +367,10 @@ fn a_sentinel_change_needs_the_code_and_says_why() {
         PLAIN,
     );
     assert_eq!(tiers.authorize.tier, Tier::Code);
-    assert!(tiers.authorize.rule.starts_with("sentinel"), "{tiers:?}");
+    assert!(tiers.authorize.rule.starts_with("eviction"), "{tiers:?}");
     assert_eq!(tiers.merge.tier, Tier::Code);
     let mark = if r.gate.is_some() { AUTO_COVERS } else { "" };
-    assert_eq!(tiers.merge.rule, format!("sentinel: {file}{mark}"));
+    assert_eq!(tiers.merge.rule, format!("eviction: {file}{mark}"));
     let gate = "src/pigeon-core/src/approval/tiers.rs";
     let gated = classify(&r, &paths(&[gate]), &paths(&[gate]), PLAIN);
     assert_eq!(
@@ -397,15 +399,15 @@ fn a_sentinel_change_holds_nothing_but_sentinel_and_its_adr() {
         "src/pigeon-eviction/tests/cli.rs",
         ".claude/decisions/2026-11-10-x.md",
     ]);
-    assert_eq!(mixed_with_sentinel(&r, &alone), None);
+    assert_eq!(mixed_with_eviction(&r, &alone), None);
     let mixed = paths(&[
         ".config/policies/change.yaml",
         "src/pigeon-agent/src/jobs.rs",
     ]);
-    let why = mixed_with_sentinel(&r, &mixed).expect("refused");
+    let why = mixed_with_eviction(&r, &mixed).expect("refused");
     assert!(why.contains("src/pigeon-agent/src/jobs.rs"), "{why}");
     assert_eq!(
-        mixed_with_sentinel(&r, &paths(&["src/pigeon-agent/src/jobs.rs"])),
+        mixed_with_eviction(&r, &paths(&["src/pigeon-agent/src/jobs.rs"])),
         None,
         "no sentinel path, nothing to keep apart"
     );
@@ -415,23 +417,23 @@ fn a_sentinel_change_holds_nothing_but_sentinel_and_its_adr() {
         "Cargo.lock",
     ]);
     let mut bare = r.clone();
-    bare.sentinel_bookkeeping.clear();
-    let why = mixed_with_sentinel(&bare, &moved).expect("no bookkeeping listed");
+    bare.eviction_bookkeeping.clear();
+    let why = mixed_with_eviction(&bare, &moved).expect("no bookkeeping listed");
     assert!(why.contains("Cargo.toml"), "{why}");
     let mut kept = r.clone();
-    kept.sentinel_bookkeeping = paths(&["Cargo.toml", "Cargo.lock"]);
+    kept.eviction_bookkeeping = paths(&["Cargo.toml", "Cargo.lock"]);
     assert_eq!(
-        mixed_with_sentinel(&kept, &moved),
+        mixed_with_eviction(&kept, &moved),
         None,
         "a sentinel change may carry the workspace's bookkeeping"
     );
     assert!(
-        mixed_with_sentinel(&kept, &mixed).is_some(),
+        mixed_with_eviction(&kept, &mixed).is_some(),
         "but nothing else"
     );
     assert_eq!(
-        mixed_with_sentinel(&rules(), &mixed).is_some(),
-        !rules().sentinel.is_empty(),
+        mixed_with_eviction(&rules(), &mixed).is_some(),
+        !rules().eviction.is_empty(),
         "without a sentinel list, nothing is kept apart"
     );
 }

@@ -679,7 +679,7 @@ fn bound(spec: &JobSpec, dir: &Path, sentinel: &Path) -> Report {
     violations.extend(
         rules
             .as_ref()
-            .and_then(|r| crate::core::approval::tiers::mixed_with_sentinel(r, &files)),
+            .and_then(|r| crate::core::approval::tiers::mixed_with_eviction(r, &files)),
     );
     for v in &violations {
         let _ = writeln!(log, "violation: {v}");

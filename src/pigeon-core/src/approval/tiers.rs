@@ -63,29 +63,30 @@ pub struct Rules {
     /// Files whose `secrets:` list a change may lengthen, which needs the owner.
     #[serde(default)]
     pub secret_lists: Vec<String>,
-    /// Sentinel's paths: the judge and its rules. A change touching them is its own grant: code,
+    /// The eviction judge's paths: it and its rules. A change touching them is its own grant: code,
     /// never a mandate, and nothing else in it; see
     /// `.claude/decisions/2026-11-10-development-factory-crates-functional-core.md` §2.
-    #[serde(default, alias = "eviction")]
-    pub sentinel: Vec<String>,
-    /// Workspace bookkeeping a sentinel change may also carry, as its crate moves or is renamed;
+    #[serde(default)]
+    pub eviction: Vec<String>,
+    /// Workspace bookkeeping an eviction change may also carry, as its crate moves or is renamed;
     /// see `.claude/decisions/2026-11-10-development-factory-crates-functional-core.md`'s
     /// 2026-11-16 amendment.
-    #[serde(default, alias = "eviction_bookkeeping")]
-    pub sentinel_bookkeeping: Vec<String>,
+    #[serde(default)]
+    pub eviction_bookkeeping: Vec<String>,
     /// The guarded paths Auto never covers: the code that sets the owner tier and proves the owner.
-    /// While set, Auto covers every other guarded and sentinel path; unset, it covers none. See the
+    /// While set, Auto covers every other guarded and eviction path; unset, it covers none. See the
     /// standing Auto ADR's 2026-11-16 amendment.
     #[serde(default)]
     pub gate: Option<Vec<String>>,
 }
 
-/// The suffix of a guarded or sentinel merge rule that Auto covers, because `gate:` is set and
+/// The suffix of a guarded or eviction merge rule that Auto covers, because `gate:` is set and
 /// the head touches no gate path.
 pub const AUTO_COVERS: &str = " (Auto covers it)";
 
-/// Whether `rule` is the judge's, under its old `sentinel` prefix or its new `eviction` one; see
-/// `.claude/decisions/2026-11-16-development-src-crates-neutral-names.md` step 12.
+/// Whether `rule` is the judge's: `eviction`, or `sentinel` on a head classified before step 12
+/// of `.claude/decisions/2026-11-16-development-src-crates-neutral-names.md`, whose stored tiers
+/// Auto must still refuse.
 #[must_use]
 pub fn is_judge_rule(rule: &str) -> bool {
     rule.starts_with("sentinel") || rule.starts_with("eviction")
@@ -158,12 +159,12 @@ pub fn classify(rules: &Rules, scope: &[String], files: &[String], facts: Facts)
     let secret_scope = scope
         .iter()
         .find(|s| rules.secrets.iter().any(|g| overlaps(s, g)));
-    let sentinel_file = files
+    let eviction_file = files
         .iter()
-        .find(|f| rules.sentinel.iter().any(|g| matches(g, f)));
-    let sentinel_scope = scope
+        .find(|f| rules.eviction.iter().any(|g| matches(g, f)));
+    let eviction_scope = scope
         .iter()
-        .find(|s| rules.sentinel.iter().any(|g| overlaps(s, g)));
+        .find(|s| rules.eviction.iter().any(|g| overlaps(s, g)));
     let guarded_file = files
         .iter()
         .find(|f| rules.guarded.iter().any(|g| matches(g, f)));
@@ -177,9 +178,9 @@ pub fn classify(rules: &Rules, scope: &[String], files: &[String], facts: Facts)
     let adr_only =
         !files.is_empty() && facts.appends_only && files.iter().all(|f| f.starts_with(decisions));
     let authorize = if let Some(s) = secret_scope {
-        tiered(Tier::Owner, format!("secrets: {s}"))
-    } else if let Some(s) = sentinel_scope {
-        tiered(Tier::Code, format!("sentinel: {s}"))
+        tiered(Tier::Code, format!("secrets: {s} (the merge decides)"))
+    } else if let Some(s) = eviction_scope {
+        tiered(Tier::Code, format!("eviction: {s}"))
     } else if let Some(s) = guarded_scope {
         tiered(Tier::Code, format!("guarded: {s}"))
     } else if spike(scope, &|g, s| g == s || matches(g, literal(s))) {
@@ -211,8 +212,8 @@ pub fn classify(rules: &Rules, scope: &[String], files: &[String], facts: Facts)
         tiered(Tier::Owner, "adds a secret")
     } else if let Some(f) = gate_file {
         tiered(Tier::Code, format!("guarded: {f}"))
-    } else if let Some(f) = sentinel_file {
-        tiered(Tier::Code, covered(format!("sentinel: {f}")))
+    } else if let Some(f) = eviction_file {
+        tiered(Tier::Code, covered(format!("eviction: {f}")))
     } else if let Some(f) = guarded_file {
         tiered(Tier::Code, covered(format!("guarded: {f}")))
     } else if spike(files, &|g, f| matches(g, f)) {
@@ -240,22 +241,22 @@ pub fn classify(rules: &Rules, scope: &[String], files: &[String], facts: Facts)
     }
 }
 
-/// Why a head touching sentinel's paths is refused: it also touches `file`, which is neither a
-/// sentinel path, under the decisions directory, nor sentinel bookkeeping; none when it touches
-/// no sentinel path, or only those.
+/// Why a head touching the eviction judge's paths is refused: it also touches `file`, which is
+/// neither an eviction path, under the decisions directory, nor eviction bookkeeping; none when it
+/// touches no eviction path, or only those.
 #[must_use]
-pub fn mixed_with_sentinel(rules: &Rules, files: &[String]) -> Option<String> {
-    let sentinel = |f: &str| rules.sentinel.iter().any(|g| matches(g, f));
-    if !files.iter().any(|f| sentinel(f)) {
+pub fn mixed_with_eviction(rules: &Rules, files: &[String]) -> Option<String> {
+    let eviction = |f: &str| rules.eviction.iter().any(|g| matches(g, f));
+    if !files.iter().any(|f| eviction(f)) {
         return None;
     }
-    let bookkeeping = |f: &str| rules.sentinel_bookkeeping.iter().any(|g| matches(g, f));
+    let bookkeeping = |f: &str| rules.eviction_bookkeeping.iter().any(|g| matches(g, f));
     let decisions = rules.decisions.as_deref().unwrap_or("\u{0}");
     let other = files
         .iter()
-        .find(|f| !sentinel(f) && !f.starts_with(decisions) && !bookkeeping(f))?;
+        .find(|f| !eviction(f) && !f.starts_with(decisions) && !bookkeeping(f))?;
     Some(format!(
-        "a sentinel change touches only sentinel's paths, its ADR and the workspace's bookkeeping, \
+        "an eviction change touches only the judge's paths, its ADR and the workspace's bookkeeping, \
          as its own grant; this one \
          also touches {other}; see \
          .claude/decisions/2026-11-10-development-factory-crates-functional-core.md §2"

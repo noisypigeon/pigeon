@@ -413,7 +413,7 @@ pub fn decide(m: &Mandate, change: &crate::change::Change, operation: &str, now:
 
 /// Whether `m` approves `operation` on `change` at `now`, held or not.
 /// - It must be usable, cited by the change's plan, and cover the change's scope.
-/// - Approving and merging also need the head classified, never by a guarded or sentinel path,
+/// - Approving and merging also need the head classified, never by a guarded or eviction path,
 ///   and at most confirm, or code only because it deploys and the mandate may deploy.
 fn judge(m: &Mandate, change: &crate::change::Change, operation: &str, now: u64) -> Decision {
     use crate::approval::tiers::Tier;
@@ -450,7 +450,7 @@ fn judge(m: &Mandate, change: &crate::change::Change, operation: &str, now: u64)
     let merge = &tiers.merge;
     if merge.rule.starts_with("guarded") || crate::approval::tiers::is_judge_rule(&merge.rule) {
         return Decision::Ask(format!(
-            "change {} touches a guarded or sentinel path ({}), which always needs the code",
+            "change {} touches a guarded or eviction path ({}), which always needs the code",
             change.number, merge.rule
         ));
     }

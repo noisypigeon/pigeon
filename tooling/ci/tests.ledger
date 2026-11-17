@@ -843,7 +843,7 @@ pigeon-core lib pigeon_core approval::tests::a_pin_is_the_owners_each_time_and_o
 pigeon-core lib pigeon_core approval::tests::a_redeemed_grant_is_spent_even_when_refused
 pigeon-core lib pigeon_core approval::tests::a_registration_uses_its_challenge_up_even_when_refused
 pigeon-core lib pigeon_core approval::tests::closing_a_landed_head_is_code_and_an_auto_window_approves_it_but_not_another_pushed_close
-pigeon-core lib pigeon_core approval::tests::the_judges_rules_read_under_eviction_too
+pigeon-core lib pigeon_core approval::tests::the_judges_rules_read_only_under_eviction
 pigeon-core lib pigeon_core approval::tests::windows::a_failed_deploy_holds_merges_but_a_fix_and_a_passed_deploy_resumes_it
 pigeon-core lib pigeon_core approval::tests::windows::a_hold_pauses_auto_after_three_failed_deploys_or_six_hours
 pigeon-core lib pigeon_core approval::tests::windows::auto_is_standing_and_one_runs_at_a_time

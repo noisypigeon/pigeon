@@ -441,20 +441,19 @@ fn a_move_to_the_front_is_the_owners_each_time_and_offered_only_on_an_open_chang
 }
 
 #[test]
-fn the_judges_rules_read_under_eviction_too() {
+fn the_judges_rules_read_only_under_eviction() {
     use super::tiers::{Rules, is_judge_rule};
-    let old: Rules = serde_saphyr::from_str(
-        "guarded: []\nsentinel: [a/**]\nsentinel_bookkeeping: [Cargo.toml]\n",
-    )
-    .expect("old");
     let new: Rules = serde_saphyr::from_str(
         "guarded: []\neviction: [a/**]\neviction_bookkeeping: [Cargo.toml]\n",
     )
     .expect("new");
-    assert_eq!(new.sentinel, ["a/**"]);
-    assert_eq!(new.sentinel_bookkeeping, ["Cargo.toml"]);
-    assert_eq!(old.sentinel, new.sentinel);
-    assert_eq!(old.sentinel_bookkeeping, new.sentinel_bookkeeping);
+    assert_eq!(new.eviction, ["a/**"]);
+    assert_eq!(new.eviction_bookkeeping, ["Cargo.toml"]);
+    assert!(
+        serde_saphyr::from_str::<Rules>("guarded: []\nsentinel: [a/**]\n").is_err(),
+        "the old key is refused"
+    );
+    // A head classified before step 12 keeps its stored `sentinel:` label, which still counts.
     assert!(is_judge_rule("sentinel: a/b.rs"));
     assert!(is_judge_rule("eviction: a/b.rs"));
     assert!(!is_judge_rule("guarded: a/b.rs"));
@@ -465,7 +464,7 @@ fn with_a_gate_auto_covers_guarded_and_sentinel_paths_but_not_the_gate_or_secret
     use super::mandates::Decision;
     use super::tiers::{AUTO_COVERS, Facts, Rules, Tier, classify};
     use super::windows::Windows;
-    let yaml = "guarded: [.mcp.json, core/approval/**]\nsentinel: [.config/policies/**]\n\
+    let yaml = "guarded: [.mcp.json, core/approval/**]\neviction: [.config/policies/**]\n\
                 secrets: [secrets.config.yaml]\n";
     let ungated: Rules = serde_saphyr::from_str(yaml).expect("ungated");
     let gated: Rules =
