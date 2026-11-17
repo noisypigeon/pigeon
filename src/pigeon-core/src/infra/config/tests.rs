@@ -91,7 +91,7 @@ fn a_secrets_file_is_judged_by_what_the_shell_read() {
 }
 
 #[test]
-fn an_x_pigeon_schema_renders_as_its_x_cobot_twin_does() {
+fn an_x_pigeon_schema_renders_as_the_reference_unit_does() {
     let disk = Disk {
         modules: BTreeMap::from([("zone".to_string(), module(true, "version: 1.0.0\n"))]),
         ..Disk::default()

@@ -12,7 +12,7 @@ fn repo_root() -> PathBuf {
 /// The judge's crate: its directory and package, wherever the restructure has put it; see
 /// `.claude/decisions/2026-11-16-development-src-crates-neutral-names.md` step 5.
 fn judge() -> (String, String) {
-    let dir = ["src/pigeon-eviction", "src/pigeon-cli/crates/sentinel"]
+    let dir = ["src/pigeon-eviction"]
         .into_iter()
         .find(|d| repo_root().join(d).join("Cargo.toml").is_file())
         .expect("the judge's crate");
@@ -55,7 +55,7 @@ fn docs_only_runs_the_policies_only() {
         .filter(|n| *n == "test this repository's policies")
         .count(),
         1,
-        "once, beside sentinel's own tests"
+        "once, beside the judge's own tests"
     );
     assert_eq!(names(&[]), ["policy.check"]);
 }
@@ -74,8 +74,8 @@ fn the_catalog_runs_infra_checks_and_no_rust_build() {
 }
 
 #[test]
-fn backplanes_cobot_runs_backplane_its_dependants_and_the_worker() {
-    let got = names(&["src/pigeon-agent/src/cobot/git.rs"]);
+fn the_agents_engines_run_the_agent_its_dependants_and_the_worker() {
+    let got = names(&["src/pigeon-agent/src/git/mod.rs"]);
     assert!(
         got.contains(&"clippy pigeon-agent pigeon-harness pigeon-ios".to_string()),
         "{got:?}"
@@ -102,14 +102,14 @@ fn backplanes_cobot_runs_backplane_its_dependants_and_the_worker() {
     );
     assert!(
         !got.iter()
-            .any(|n| n.contains("sentinel ") || n == "infra.validate"),
+            .any(|n| n.contains("pigeon-eviction") || n == "infra.validate"),
         "{got:?}"
     );
     assert_eq!(got.last().map(String::as_str), Some("policy.check"));
 }
 
 #[test]
-fn sentinel_runs_only_its_own_checks_as_nothing_links_it() {
+fn eviction_runs_only_its_own_checks_as_nothing_links_it() {
     let (dir, package) = judge();
     let got = names(&[&format!("{dir}/src/rules.rs")]);
     assert_eq!(
@@ -120,7 +120,7 @@ fn sentinel_runs_only_its_own_checks_as_nothing_links_it() {
             format!("test {package}"),
             "policy.check".to_string()
         ],
-        "pigeon and backplane run the judge, so they don't rebuild for it; see \
+        "pigeon and the agent run the judge, so they don't rebuild for it; see \
          .claude/decisions/2026-11-10-development-factory-crates-functional-core.md §1"
     );
 }
@@ -141,7 +141,7 @@ fn a_pigeon_command_runs_the_features_that_build_it() {
 }
 
 #[test]
-fn pigeons_sentinel_command_runs_its_feature_apart_from_the_release_units() {
+fn pigeons_eviction_command_runs_its_feature_apart_from_the_release_units() {
     let got = names(&["src/pigeon-harness/src/commands/eviction.rs"]);
     let features: Vec<&String> = got.iter().filter(|n| n.contains("--features")).collect();
     assert_eq!(
@@ -238,7 +238,7 @@ fn workers_deploy_when_their_spec_crates_or_migrations_change() {
     let control = vec!["pigeon-control".to_string()];
     for hit in [
         "src/pigeon-agent/src/mcp.rs",
-        "src/pigeon-agent/src/cobot/workers.rs",
+        "src/pigeon-agent/src/workers/mod.rs",
         "src/pigeon-agent/migrations/0003_x.sql",
         "infra/pigeon/workers/control/worker.yaml",
         "Dockerfile",
@@ -308,12 +308,12 @@ fn the_test_map_runs_when_its_script_changes() {
     assert_eq!(
         agent::checks::scope::test_map().argv,
         ["bash", "../../tooling/ci/test-map.sh"],
-        "as backplane's actions::on_github knows it"
+        "as the agent's actions::on_github knows it"
     );
     assert!(!names(&["Cargo.lock"]).contains(&"test map".to_string()));
 }
 
-const BACKPLANE: &str = "src/pigeon-agent/";
+const AGENT: &str = "src/pigeon-agent/";
 
 fn map() -> agent::checks::scope::TestMap {
     let bin =
@@ -322,21 +322,21 @@ fn map() -> agent::checks::scope::TestMap {
             kind: kind.into(),
             name: name.into(),
             filter: String::new(),
-            files: files.iter().map(|f| format!("{BACKPLANE}{f}")).collect(),
+            files: files.iter().map(|f| format!("{AGENT}{f}")).collect(),
         };
     let mut binaries = vec![
         bin(
             "pigeon-agent",
             "lib",
-            "backplane",
-            &["src/cobot/git.rs", "src/cobot/scope.rs"],
+            "agent",
+            &["src/git/mod.rs", "src/checks/scope.rs"],
         ),
-        bin("pigeon-agent", "test", "git", &["src/cobot/git.rs"]),
+        bin("pigeon-agent", "test", "git", &["src/git/mod.rs"]),
         bin(
             "pigeon-agent",
             "test",
             "checks_scope",
-            &["src/cobot/scope.rs", "src/cobot/release.rs"],
+            &["src/checks/scope.rs", "src/release/mod.rs"],
         ),
     ];
     for n in 0..2 {
@@ -363,7 +363,7 @@ fn tests_of(names: &[String]) -> Vec<&String> {
 
 #[test]
 fn the_test_map_runs_the_binaries_that_ran_a_changed_file() {
-    let got = with_map(&["src/pigeon-agent/src/cobot/git.rs"]);
+    let got = with_map(&["src/pigeon-agent/src/git/mod.rs"]);
     assert_eq!(
         tests_of(&got),
         ["test pigeon-agent: lib", "test pigeon-agent: suite git"],
@@ -381,7 +381,7 @@ fn the_test_map_runs_the_binaries_that_ran_a_changed_file() {
     );
     let jobs = agent::checks::scope::jobs_with(
         &repo_root(),
-        &["src/pigeon-agent/src/cobot/release.rs".to_string()],
+        &["src/pigeon-agent/src/release/mod.rs".to_string()],
         Some(&map()),
     )
     .expect("scopes");
@@ -410,15 +410,15 @@ fn the_test_map_falls_back_to_crates_when_it_cannot_say() {
     let by_crate = ["test pigeon-agent pigeon-harness pigeon-ios"];
     for (files, why) in [
         (
-            &["src/pigeon-agent/src/cobot/new.rs"][..],
+            &["src/pigeon-agent/src/infra/new.rs"][..],
             "a file it doesn't know",
         ),
         (&["src/pigeon-agent/Cargo.toml"][..], "a manifest"),
         (&["src/pigeon-agent/tests/state/x.json"][..], "a fixture"),
         (
             &[
-                "src/pigeon-agent/src/cobot/git.rs",
-                "src/pigeon-agent/src/cobot/scope.rs",
+                "src/pigeon-agent/src/git/mod.rs",
+                "src/pigeon-agent/src/checks/scope.rs",
             ][..],
             "more than half of the binaries",
         ),
@@ -426,14 +426,14 @@ fn the_test_map_falls_back_to_crates_when_it_cannot_say() {
         let got = with_map(files);
         assert_eq!(tests_of(&got), by_crate, "{why}: {got:?}");
     }
-    let got = names(&["src/pigeon-agent/src/cobot/git.rs"]);
+    let got = names(&["src/pigeon-agent/src/git/mod.rs"]);
     assert_eq!(tests_of(&got), by_crate, "no map");
 }
 
 #[test]
 fn a_mapped_test_check_does_not_stand_in_for_a_crates_whole_suite() {
     let got = with_map(&[
-        "src/pigeon-agent/src/cobot/git.rs",
+        "src/pigeon-agent/src/git/mod.rs",
         "catalog/cloudflare/kinds/git-repo/schema.json",
     ]);
     assert!(
@@ -445,7 +445,7 @@ fn a_mapped_test_check_does_not_stand_in_for_a_crates_whole_suite() {
 #[test]
 fn no_check_name_holds_a_comma_which_a_github_cache_key_refuses() {
     for files in [
-        &["src/pigeon-agent/src/cobot/git.rs"][..],
+        &["src/pigeon-agent/src/git/mod.rs"][..],
         &["Cargo.lock"][..],
         &["catalog/cloudflare/kinds/git-repo/schema.json"][..],
     ] {
@@ -462,7 +462,7 @@ fn a_wasm_only_path_runs_fmt_and_the_wasm_clippy_alone() {
     let wasm_only = ["fmt", "clippy agent worker (wasm)", "policy.check"];
     assert_eq!(names(&[worker]), wasm_only, "no map");
     assert_eq!(with_map(&[worker]), wasm_only, "with a map");
-    let got = with_map(&[worker, "src/pigeon-agent/src/cobot/git.rs"]);
+    let got = with_map(&[worker, "src/pigeon-agent/src/git/mod.rs"]);
     assert_eq!(
         tests_of(&got),
         ["test pigeon-agent: lib", "test pigeon-agent: suite git"],
@@ -496,30 +496,24 @@ fn suite_map() -> agent::checks::scope::TestMap {
             kind: kind.into(),
             name: name.into(),
             filter: filter.into(),
-            files: files.iter().map(|f| format!("{BACKPLANE}{f}")).collect(),
+            files: files.iter().map(|f| format!("{AGENT}{f}")).collect(),
         }
     };
     let mut binaries = vec![
-        unit(
-            "pigeon-agent",
-            "lib",
-            "backplane",
-            "",
-            &["src/cobot/git.rs"],
-        ),
+        unit("pigeon-agent", "lib", "agent", "", &["src/git/mod.rs"]),
         unit(
             "pigeon-agent",
             "test",
             "suite",
             "git::",
-            &["src/cobot/git.rs", "tests/suite/git.rs"],
+            &["src/git/mod.rs", "tests/suite/git.rs"],
         ),
         unit(
             "pigeon-agent",
             "test",
             "suite",
             "checks_scope::",
-            &["src/cobot/scope.rs"],
+            &["src/checks/scope.rs"],
         ),
         unit(
             "pigeon-agent",
@@ -555,7 +549,7 @@ fn with_suite_map(files: &[&str]) -> Vec<Job> {
 
 #[test]
 fn a_map_by_module_runs_only_the_suite_modules_a_change_reaches() {
-    let got = with_suite_map(&["src/pigeon-agent/src/cobot/scope.rs"]);
+    let got = with_suite_map(&["src/pigeon-agent/src/checks/scope.rs"]);
     assert_eq!(
         got.iter().map(|j| j.name.as_str()).collect::<Vec<_>>(),
         ["test pigeon-agent: suite checks_scope"],
@@ -577,7 +571,7 @@ fn a_map_by_module_runs_only_the_suite_modules_a_change_reaches() {
     );
     for (files, want, why) in [
         (
-            &["src/pigeon-agent/src/cobot/git.rs"][..],
+            &["src/pigeon-agent/src/git/mod.rs"][..],
             &["test pigeon-agent: lib", "test pigeon-agent: suite git"][..],
             "a whole lib and a module are two checks",
         ),

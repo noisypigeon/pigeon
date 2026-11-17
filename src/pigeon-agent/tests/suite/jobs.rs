@@ -12,9 +12,9 @@ use tempfile::TempDir;
 
 use crate::harness as common;
 
-/// Runs `spec` with the built `pigeon-sentinel` as the bound job's judge.
+/// Runs `spec` with the built `pigeon-eviction` as the bound job's judge.
 fn run_job(spec: &JobSpec, dir: &Path) -> agent::control::Report {
-    jobs::run_judged(spec, dir, common::sentinel())
+    jobs::run_judged(spec, dir, common::judge())
 }
 
 fn git(dir: &Path, args: &[&str]) -> String {
@@ -605,7 +605,7 @@ fn a_bounded_change_head_reaches_its_branch_on_the_mirror_and_leaves_it_once_don
     );
 }
 
-fn sentinel_spec() -> JobSpec {
+fn judge_spec() -> JobSpec {
     serde_json::from_value(serde_json::json!({
         "id": "7-x", "remote": "file:///r", "token": "t", "base": "main",
         "branch": "change/7-x", "sha": "a", "number": 7, "title": "fix: x",
@@ -614,17 +614,17 @@ fn sentinel_spec() -> JobSpec {
     .expect("a spec")
 }
 
-/// A stand-in `pigeon-sentinel` in `dir` running `body`.
+/// A stand-in `pigeon-eviction` in `dir` running `body`.
 fn stand_in(dir: &Path, body: &str) -> PathBuf {
     use std::os::unix::fs::PermissionsExt as _;
-    let p = dir.join("pigeon-sentinel");
+    let p = dir.join("pigeon-eviction");
     std::fs::write(&p, format!("#!/bin/sh\n{body}\n")).expect("write");
     std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o755)).expect("chmod");
     p
 }
 
 #[test]
-fn the_sentinel_binary_is_asked_with_the_change_as_its_pull_request() {
+fn the_judge_binary_is_asked_with_the_change_as_its_pull_request() {
     let tmp = TempDir::new().expect("tempdir");
     let bin = stand_in(
         tmp.path(),
@@ -632,7 +632,7 @@ fn the_sentinel_binary_is_asked_with_the_change_as_its_pull_request() {
     );
     let got = jobs::judge_with(
         &bin,
-        &sentinel_spec(),
+        &judge_spec(),
         Path::new("/head"),
         &["a/1".into()],
         Path::new("/main-policies"),
@@ -645,23 +645,17 @@ fn the_sentinel_binary_is_asked_with_the_change_as_its_pull_request() {
 }
 
 #[test]
-fn a_sentinel_binary_that_cant_judge_is_an_error_not_a_pass() {
+fn a_judge_binary_that_cant_judge_is_an_error_not_a_pass() {
     let tmp = TempDir::new().expect("tempdir");
     let bad = stand_in(tmp.path(), "echo 'p.yaml: bad' >&2; exit 2");
-    let why = jobs::judge_with(
-        &bad,
-        &sentinel_spec(),
-        Path::new("/h"),
-        &[],
-        Path::new("/p"),
-    )
-    .expect_err("refused");
+    let why = jobs::judge_with(&bad, &judge_spec(), Path::new("/h"), &[], Path::new("/p"))
+        .expect_err("refused");
     assert!(why.contains("p.yaml: bad"), "{why}");
     let garbled = stand_in(tmp.path(), "echo not-json; exit 0");
     assert!(
         jobs::judge_with(
             &garbled,
-            &sentinel_spec(),
+            &judge_spec(),
             Path::new("/h"),
             &[],
             Path::new("/p")
@@ -684,7 +678,7 @@ fn eviction_job(tmp: &Path, candidates: &serde_json::Value) -> JobSpec {
 }
 
 #[test]
-fn the_eviction_job_asks_mains_sentinel_about_each_candidate() {
+fn the_eviction_job_asks_mains_judge_about_each_candidate() {
     let tmp = TempDir::new().expect("tempdir");
     let candidates = serde_json::json!([
         { "number": 79, "fields": { "number": "79", "state": "pushed" } },

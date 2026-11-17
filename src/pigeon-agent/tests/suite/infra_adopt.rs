@@ -154,7 +154,7 @@ fn a_name_held_twice_stops_the_plan() {
 }
 
 #[test]
-fn modules_cobot_cant_find_and_computed_names_are_left_alone() {
+fn modules_infra_cant_find_and_computed_names_are_left_alone() {
     let r = json!({ "module": {
         "zone": { "source": "/p/catalog/cloudflare/modules/zone", "name": "pigeon.dev" },
         "d1": { "source": "/p/catalog/cloudflare/modules/d1-database", "name": "${var.name}" }

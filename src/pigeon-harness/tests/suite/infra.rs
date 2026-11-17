@@ -82,7 +82,7 @@ fn plan_refuses_without_a_passphrase() {
 }
 
 #[test]
-fn cobot_reports_its_own_version() {
+fn infra_reports_its_own_version() {
     pigeon()
         .args(["infra", "--version"])
         .assert()

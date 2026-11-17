@@ -91,7 +91,7 @@ fn what_deploys_needs_the_code() {
     assert_eq!(worker.authorize.tier, Tier::Code, "the merge decides");
     assert!(
         worker.authorize.rule.starts_with("secrets"),
-        "a scope over backplane's crate reaches its secret handling: {}",
+        "a scope over the agent's crate reaches its secret handling: {}",
         worker.authorize.rule
     );
 }
@@ -428,8 +428,8 @@ fn the_owners_approval_of_a_head_covers_its_merge_at_the_owner_tier() {
     );
 }
 
-/// This repository's rules, with sentinel's paths named.
-fn with_sentinel() -> Rules {
+/// This repository's rules, with the judge's paths named.
+fn with_eviction() -> Rules {
     let mut r = rules();
     r.eviction = paths(&[
         "src/pigeon-eviction/**",
@@ -440,8 +440,8 @@ fn with_sentinel() -> Rules {
 }
 
 #[test]
-fn a_sentinel_change_needs_the_code_and_says_why() {
-    let r = with_sentinel();
+fn an_eviction_change_needs_the_code_and_says_why() {
+    let r = with_eviction();
     let file = "src/pigeon-eviction/src/rules.rs";
     let tiers = classify(
         &r,
@@ -475,8 +475,8 @@ fn a_sentinel_change_needs_the_code_and_says_why() {
 }
 
 #[test]
-fn a_sentinel_change_holds_nothing_but_sentinel_and_its_adr() {
-    let r = with_sentinel();
+fn an_eviction_change_holds_nothing_but_the_judges_paths_and_its_adr() {
+    let r = with_eviction();
     let alone = paths(&[
         "src/pigeon-eviction/src/rules.rs",
         "src/pigeon-eviction/tests/cli.rs",
@@ -492,7 +492,7 @@ fn a_sentinel_change_holds_nothing_but_sentinel_and_its_adr() {
     assert_eq!(
         mixed_with_eviction(&r, &paths(&["src/pigeon-agent/src/jobs.rs"])),
         None,
-        "no sentinel path, nothing to keep apart"
+        "no eviction path, nothing to keep apart"
     );
     let moved = paths(&[
         "src/pigeon-eviction/src/rules.rs",
@@ -508,7 +508,7 @@ fn a_sentinel_change_holds_nothing_but_sentinel_and_its_adr() {
     assert_eq!(
         mixed_with_eviction(&kept, &moved),
         None,
-        "a sentinel change may carry the workspace's bookkeeping"
+        "an eviction change may carry the workspace's bookkeeping"
     );
     assert!(
         mixed_with_eviction(&kept, &mixed).is_some(),
@@ -517,7 +517,7 @@ fn a_sentinel_change_holds_nothing_but_sentinel_and_its_adr() {
     assert_eq!(
         mixed_with_eviction(&rules(), &mixed).is_some(),
         !rules().eviction.is_empty(),
-        "without a sentinel list, nothing is kept apart"
+        "without an eviction list, nothing is kept apart"
     );
 }
 

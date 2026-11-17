@@ -19,7 +19,7 @@ type Case<'a> = (&'a str, Option<&'a [String]>, bool, Option<&'a str>, bool);
 #[test]
 fn a_deploy_is_whole_unless_only_shared_code_changed_since_a_serving_version() {
     let own = vec!["infra/pigeon/workers/control/worker.yaml".to_string()];
-    let shared = vec!["src/pigeon-cli/crates/backplane/src/lib.rs".to_string()];
+    let shared = vec!["src/pigeon-agent/src/lib.rs".to_string()];
     let dir = "infra/pigeon/workers/control";
     let table: Vec<Case<'_>> = vec![
         ("no version serves", Some(&shared), false, None, true),

@@ -1344,7 +1344,7 @@ run = "sleep 30"
     #[test]
     fn cargo_runs_in_the_workspace_and_pigeon_and_git_at_the_root() {
         assert_eq!(argv_dir(&s(&["cargo", "test"]), WORKSPACE), WORKSPACE);
-        assert_eq!(argv_dir(&s(&["pigeon", "cobot", "scope"]), WORKSPACE), "");
+        assert_eq!(argv_dir(&s(&["pigeon", "dev", "scope"]), WORKSPACE), "");
         assert_eq!(argv_dir(&s(&["git", "status"]), WORKSPACE), "");
     }
 

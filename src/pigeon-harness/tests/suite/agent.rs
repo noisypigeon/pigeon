@@ -16,12 +16,12 @@ fn repo_root() -> PathBuf {
 
 fn pigeon() -> Command {
     let mut cmd = Command::cargo_bin("pigeon").expect("binary");
-    cmd.env("PIGEON_EVICTION", common::sentinel());
+    cmd.env("PIGEON_EVICTION", common::judge());
     cmd
 }
 
 #[test]
-fn version_is_backplanes() {
+fn version_is_the_agents() {
     pigeon()
         .args(["agent", "--version"])
         .assert()

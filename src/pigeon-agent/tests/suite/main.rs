@@ -1,4 +1,4 @@
-//! pigeon-backplane's integration tests, one module per mechanism; see
+//! pigeon-agent's integration tests, one module per mechanism; see
 //! `.claude/decisions/2026-11-16-development-one-test-binary-per-crate.md`.
 
 #[macro_use]

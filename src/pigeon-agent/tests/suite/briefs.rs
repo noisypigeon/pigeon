@@ -31,7 +31,7 @@ fn draft(model: Class) -> Draft {
         stop_if: vec!["a test outside tests/sessions.rs fails".into()],
         budget: None,
         commit: Commit {
-            title: "feat(backplane): Class::covers".into(),
+            title: "feat(agent): Class::covers".into(),
             plan: "Adds Class::covers, per the brief.".into(),
         },
     }
@@ -337,7 +337,7 @@ mod executor {
     fn an_executors_change_carries_the_briefs_commit_and_revision() {
         let b = brief(Class::Haiku);
         let (title, plan) = commit(&b);
-        assert_eq!(title, "feat(backplane): Class::covers");
+        assert_eq!(title, "feat(agent): Class::covers");
         assert!(plan.contains("Carries out brief b4 r1 (haiku)"), "{plan}");
     }
 }

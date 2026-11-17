@@ -160,8 +160,8 @@ fn a_job_spec_carries_the_approved_scope_and_never_shows_its_token() {
     assert!(!format!("{s:?}").contains("git.example"));
     assert!(control::spec(&pushed(), "fmt", "r", "t").is_err());
     assert_eq!(
-        control::job_id(3, A, "clippy pigeon --features cobot"),
-        "3-0123456789ab-clippy-pigeon---features-cobot"
+        control::job_id(3, A, "clippy pigeon --features infra"),
+        "3-0123456789ab-clippy-pigeon---features-infra"
     );
 }
 
@@ -715,7 +715,7 @@ fn checks_and_deploys_run_on_checker_and_git_jobs_on_runner() {
     );
     assert_eq!(control::class_of("fmt"), Class::Checker);
     assert_eq!(
-        control::class_of("clippy backplane worker (wasm)"),
+        control::class_of("clippy agent worker (wasm)"),
         Class::Checker
     );
     assert_eq!(Class::Checker.binding(), "CHECKER");

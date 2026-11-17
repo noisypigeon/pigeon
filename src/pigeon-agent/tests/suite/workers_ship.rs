@@ -11,7 +11,7 @@ use tempfile::TempDir;
 
 const SPEC: &str = r#"description: The platform's control plane.
 name: pigeon-control
-entry: { crate: crates/backplane, features: [worker] }
+entry: { crate: crates/agent, features: [worker] }
 compatibility_date: "2026-10-01"
 durable_objects:
   classes: [Runner]
@@ -19,7 +19,7 @@ durable_objects:
 containers:
   - { class: Runner, image: { dockerfile: Dockerfile, target: ci }, instance_type: standard-1, max_instances: 4 }
 bindings:
-  d1: { DB: { name: pigeon, id: $output.infra/pigeon.database_id, migrations: crates/backplane/migrations } }
+  d1: { DB: { name: pigeon, id: $output.infra/pigeon.database_id, migrations: crates/agent/migrations } }
   r2: { LOGS: "$output.infra/pigeon.bucket_names[pigeon-ci]" }
   vars: { PUBLIC_HOST: control.example.workers.dev }
   version_metadata: CF_VERSION_METADATA
@@ -31,13 +31,10 @@ const IMAGE: &str = "registry.cloudflare.com/0123456789abcdef/pigeon-control-run
 fn fixture() -> (TempDir, workers::Found) {
     let root = TempDir::new().expect("tempdir");
     let p = root.path();
-    for d in [
-        "infra/pigeon/workers/control",
-        "crates/backplane/migrations",
-    ] {
+    for d in ["infra/pigeon/workers/control", "crates/agent/migrations"] {
         fs::create_dir_all(p.join(d)).expect("mkdir");
     }
-    fs::write(p.join("crates/backplane/Cargo.toml"), "[package]\n").expect("write");
+    fs::write(p.join("crates/agent/Cargo.toml"), "[package]\n").expect("write");
     fs::write(p.join("Dockerfile"), "FROM scratch AS ci\n").expect("write");
     fs::write(p.join("infra/pigeon/workers/control/worker.yaml"), SPEC).expect("write");
     let found = workers::discover(p)

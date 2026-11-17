@@ -50,7 +50,7 @@ fn a_change_fits_when_each_glob_lies_inside_the_mandates() {
         !m.covers(&globs(&["src/pigeon-cli/crates/**"])),
         "wider than the mandate"
     );
-    assert!(!m.covers(&globs(&["src/pigeon-cli/crates/cobot/**"])));
+    assert!(!m.covers(&globs(&["src/pigeon-harness/**"])));
     assert!(!m.covers(&globs(&["**"])));
     assert!(!m.covers(&[]));
 }
@@ -188,20 +188,14 @@ fn a_mandate_never_approves_a_guarded_head_nor_one_it_may_not_deploy() {
         decision(&mut all, &guarded, "change.merge"),
         Decision::Ask(_)
     ));
-    let sentinel = change(
+    let judge = change(
         &["tooling/**"],
         &plan,
-        Some((
-            Tier::Code,
-            "sentinel: src/pigeon-cli/crates/sentinel/src/rules.rs",
-        )),
+        Some((Tier::Code, "eviction: src/pigeon-eviction/src/rules.rs")),
     );
     assert!(
-        matches!(
-            decision(&mut all, &sentinel, "change.merge"),
-            Decision::Ask(_)
-        ),
-        "a sentinel change is never a mandate's"
+        matches!(decision(&mut all, &judge, "change.merge"), Decision::Ask(_)),
+        "an eviction change is never a mandate's"
     );
     let deploys = change(&["tooling/**"], &plan, Some((Tier::Code, "deploys")));
     assert!(matches!(
@@ -266,11 +260,11 @@ fn a_mandate_never_moves_checks_to_cloudflare() {
 }
 
 #[test]
-fn case_713_a_sentinel_head_under_a_mandate_needs_the_owner_in_its_stage() {
+fn case_713_an_eviction_head_under_a_mandate_needs_the_owner_in_its_stage() {
     use agent::core::approval::mandates::decide;
     use agent::core::change::State as ChangeState;
     use agent::core::change::stage::{self, Context, Needs};
-    // !713: tier `code (sentinel: …)`, naming mandate 3, and no window covers it.
+    // !713: tier `code` on a judge rule, naming mandate 3, and no window covers it.
     let all = active(5, false);
     let mut c = change(
         &["tooling/**"],
@@ -284,7 +278,7 @@ fn case_713_a_sentinel_head_under_a_mandate_needs_the_owner_in_its_stage() {
     let window =
         Decision::Ask("touches a guarded or eviction path, which Auto never covers".into());
     let (covered, uncovered) = stage::coverage(Some((1, d)), Some((11, window)));
-    assert_eq!(covered, None, "no mandate covers a sentinel rule");
+    assert_eq!(covered, None, "no mandate covers an eviction rule");
     let why = uncovered.expect("says why");
     assert!(why.starts_with("mandate:1 doesn't cover it: "), "{why}");
     let cx = Context {

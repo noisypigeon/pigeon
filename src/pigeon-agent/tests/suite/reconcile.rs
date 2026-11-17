@@ -224,6 +224,6 @@ fn a_generated_change_is_known_by_its_slug_and_is_never_reviewed() {
     use agent::reconcile::generated as is_generated;
     assert!(is_generated("review-191-360"));
     assert!(is_generated("reconcile-363"));
-    assert!(!is_generated("remove-gantry"));
+    assert!(!is_generated("remove-widget"));
     assert!(!is_generated("reviewer-tools"));
 }

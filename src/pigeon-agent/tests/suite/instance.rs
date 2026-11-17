@@ -7,7 +7,7 @@ use agent::{Effect, Error, Instance, Request, Response, catalog, run_with};
 
 use crate::harness as common;
 
-/// Runs `request` with the built `pigeon-sentinel` as the judge.
+/// Runs `request` with the built `pigeon-eviction` as the judge.
 fn run(instance: &Instance, request: &Request) -> Result<Response, Error> {
     run_with(instance, request, common::var)
 }

@@ -52,7 +52,7 @@ mod tests {
     fn lanes() {
         assert_eq!(lane(&c("fmt")), 0);
         assert_eq!(lane(&c("clippy pigeon")), 0);
-        assert_eq!(lane(&c("test pigeon-backplane: lib")), 1);
+        assert_eq!(lane(&c("test pigeon-agent: lib")), 1);
         assert_eq!(lane(&c("wasm clippy")), 2);
         assert_eq!(lane(&c("policy.check")), 0);
     }

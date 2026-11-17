@@ -2,6 +2,6 @@
 //! `.claude/decisions/2026-11-16-development-one-test-binary-per-crate.md`.
 
 mod build;
-mod cobot_template;
+mod contract;
 mod look;
 mod manifest;

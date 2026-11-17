@@ -15,7 +15,7 @@ const DB: &str = "fedcba9876543210fedcba9876543210";
 
 const SPEC: &str = r#"description: The platform's control plane.
 name: pigeon-control
-entry: { crate: crates/backplane, features: [worker] }
+entry: { crate: crates/agent, features: [worker] }
 compatibility_date: "2026-10-01"
 routes: [ { custom_domain: pigeon.dev } ]
 crons: ["17 3 * * *"]
@@ -23,9 +23,9 @@ durable_objects:
   classes: [Instance, Runner]
   migrations: [ { tag: v1, new_sqlite_classes: [Instance, Runner] } ]
 containers:
-  - { class: Runner, image: { dockerfile: Dockerfile, target: backplane, args: { FEATURES: backplane } }, instance_type: standard-1, max_instances: 4 }
+  - { class: Runner, image: { dockerfile: Dockerfile, target: agent, args: { FEATURES: agent } }, instance_type: standard-1, max_instances: 4 }
 bindings:
-  d1: { DB: { name: pigeon, id: $output.infra/pigeon.database_id, migrations: crates/backplane/migrations } }
+  d1: { DB: { name: pigeon, id: $output.infra/pigeon.database_id, migrations: crates/agent/migrations } }
   r2: { STATE: "$output.infra/pigeon.bucket_names[0]" }
   queues: { producers: { EVENTS: ci-events }, consumers: [ { queue: ci-events, max_batch_size: 10 } ] }
   vars: { TEAM: pigeon }
@@ -35,14 +35,11 @@ secrets: [GRANT_KEY]
 fn fixture(spec: &str) -> TempDir {
     let root = TempDir::new().expect("tempdir");
     let p = root.path();
-    for d in [
-        "infra/pigeon/workers/control",
-        "crates/backplane/migrations",
-    ] {
+    for d in ["infra/pigeon/workers/control", "crates/agent/migrations"] {
         fs::create_dir_all(p.join(d)).expect("mkdir");
     }
-    fs::write(p.join("crates/backplane/Cargo.toml"), "[package]\n").expect("write");
-    fs::write(p.join("Dockerfile"), "FROM scratch AS backplane\n").expect("write");
+    fs::write(p.join("crates/agent/Cargo.toml"), "[package]\n").expect("write");
+    fs::write(p.join("Dockerfile"), "FROM scratch AS agent\n").expect("write");
     fs::write(p.join("infra/pigeon/workers/control/worker.yaml"), spec).expect("write");
     root
 }
@@ -153,7 +150,7 @@ fn render_is_stable_and_resolves_every_binding() {
         workers::text(&w),
         workers::text(&workers::render(&f, &outputs()).expect("again"))
     );
-    assert_eq!(w["main"], "../../../crates/backplane/build/worker/shim.mjs");
+    assert_eq!(w["main"], "../../../crates/agent/build/worker/shim.mjs");
     assert_eq!(
         w["build"]["command"],
         "worker-build --release --no-default-features --features worker"
@@ -161,7 +158,7 @@ fn render_is_stable_and_resolves_every_binding() {
     assert_eq!(w["d1_databases"][0]["database_id"], DB);
     assert_eq!(
         w["d1_databases"][0]["migrations_dir"],
-        "../../../crates/backplane/migrations"
+        "../../../crates/agent/migrations"
     );
     assert_eq!(w["r2_buckets"][0]["bucket_name"], "pigeon-state");
     assert_eq!(
@@ -298,7 +295,7 @@ fn deploy_migrates_builds_then_deploys_and_shows_no_id() {
     );
     assert!(
         calls[1]
-            .starts_with("docker build --platform linux/amd64 --target backplane --build-arg FEATURES=backplane -t pigeon-local/pigeon-control-runner:"),
+            .starts_with("docker build --platform linux/amd64 --target agent --build-arg FEATURES=agent -t pigeon-local/pigeon-control-runner:"),
         "{calls:?}"
     );
     assert!(
@@ -582,7 +579,7 @@ fn a_dropped_push_is_retried_and_succeeds() {
 fn an_image_is_built_once_and_pushed_under_each_class_that_uses_it() {
     let spec = SPEC.replace(
         "containers:\n",
-        "containers:\n  - { class: Checker, image: { dockerfile: Dockerfile, target: backplane, args: { FEATURES: backplane } }, instance_type: standard-4, max_instances: 4 }\n",
+        "containers:\n  - { class: Checker, image: { dockerfile: Dockerfile, target: agent, args: { FEATURES: agent } }, instance_type: standard-4, max_instances: 4 }\n",
     );
     let root = fixture(&spec);
     let f = found(root.path());
@@ -636,10 +633,10 @@ fn an_image_is_built_once_and_pushed_under_each_class_that_uses_it() {
     let log = fs::read_to_string(&log).expect("log");
     let builds: Vec<&str> = log.lines().filter(|l| l.contains(" build ")).collect();
     assert_eq!(builds.len(), 1, "one build for the shared image: {log}");
-    assert!(builds[0].contains("--opt target=backplane"), "{log}");
+    assert!(builds[0].contains("--opt target=agent"), "{log}");
     assert!(builds[0].contains("--opt platform=linux/amd64"), "{log}");
     assert!(
-        builds[0].contains("--opt build-arg:FEATURES=backplane"),
+        builds[0].contains("--opt build-arg:FEATURES=agent"),
         "{log}"
     );
     assert!(
@@ -667,7 +664,7 @@ fn an_image_is_built_once_and_pushed_under_each_class_that_uses_it() {
         "never in argv: {log}"
     );
     assert!(
-        said.contains("built and pushed Checker, Runner (backplane)"),
+        said.contains("built and pushed Checker, Runner (agent)"),
         "{said}"
     );
     assert!(
@@ -696,7 +693,7 @@ fn base64_and_checksums_are_exact() {
 
 const STACK_SPEC: &str = r#"description: The platform's control plane.
 name: $deployment.worker
-entry: { crate: crates/backplane, features: [worker] }
+entry: { crate: crates/agent, features: [worker] }
 compatibility_date: "2026-10-01"
 deployment: pigeon/platform
 bindings:

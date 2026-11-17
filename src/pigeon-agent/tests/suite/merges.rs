@@ -979,7 +979,7 @@ fn a_disjoint_same_patch_restack_carries_its_checks() {
 #[test]
 fn a_carried_head_re_runs_its_crate_clippy_and_not_a_feature_one() {
     let feature = Check {
-        name: "clippy pigeon --features cobot".into(),
+        name: "clippy pigeon --features infra".into(),
         argv: [
             "cargo",
             "clippy",
@@ -987,7 +987,7 @@ fn a_carried_head_re_runs_its_crate_clippy_and_not_a_feature_one() {
             "pigeon",
             "--no-default-features",
             "--features",
-            "cobot",
+            "infra",
         ]
         .map(String::from)
         .to_vec(),

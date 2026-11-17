@@ -19,7 +19,7 @@ fn value(rows: &[Row], kind: &str) -> f64 {
 #[test]
 fn github_counts_failed_and_cancelled_checks_but_not_the_control_planes_jobs() {
     let jobs = vec![
-        json!({ "name": "test pigeon pigeon-backplane", "status": "failed" }),
+        json!({ "name": "test pigeon pigeon-agent", "status": "failed" }),
         json!({ "name": "gate: test", "status": "failed" }),
         json!({ "name": "clippy", "status": "cancelled" }),
         json!({ "name": "bound", "status": "failed" }),

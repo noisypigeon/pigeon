@@ -24,7 +24,7 @@ fn planned() -> Change {
     let mut c = Change::propose(
         7,
         "change-model",
-        "feat(backplane): x",
+        "feat(agent): x",
         "the plan",
         vec!["src/**".into()],
         "agent",

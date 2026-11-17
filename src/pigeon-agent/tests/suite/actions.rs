@@ -47,7 +47,7 @@ fn only_code_checks_run_on_github() {
         "cargo clippy -p pigeon-agent --all-targets --locked -- -D warnings",
         "cargo test -p pigeon-agent --locked",
         "cargo build --release",
-        "cargo check -p sentinel",
+        "cargo check -p eviction",
     ] {
         assert!(on_github(&argv(code)), "{code}");
     }

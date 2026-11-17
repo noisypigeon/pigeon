@@ -643,7 +643,7 @@ fn a_mirror_that_moved_ahead_is_refused_until_synced() {
             release.to_str().expect("utf8"),
         ],
     );
-    let released = commit_to(&release, &github, "CHANGELOG.md", "cobot/v9.9.9");
+    let released = commit_to(&release, &github, "CHANGELOG.md", "infra/v9.9.9");
     let stage_m = stage(dir.path(), "m.git");
     let err = git::mirror_from(
         &url(&artifacts),
@@ -684,7 +684,7 @@ fn a_mirror_that_moved_ahead_is_refused_until_synced() {
     assert_eq!(
         run_git(
             &artifacts,
-            &["rev-parse", "refs/tags/cobot/v9.9.9^{commit}"]
+            &["rev-parse", "refs/tags/infra/v9.9.9^{commit}"]
         ),
         released
     );

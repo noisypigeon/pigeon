@@ -133,7 +133,7 @@ mod windows {
     }
 
     #[test]
-    fn auto_lets_the_code_tier_through_but_not_guarded_sentinel_or_owner() {
+    fn auto_lets_the_code_tier_through_but_not_guarded_eviction_or_owner() {
         let (w, _) = Windows::default().start("owner", NOW).expect("started");
         for (tier, rule, allowed) in [
             (Tier::Confirm, "rule", true),
@@ -460,7 +460,7 @@ fn the_judges_rules_read_only_under_eviction() {
 }
 
 #[test]
-fn with_a_gate_auto_covers_guarded_and_sentinel_paths_but_not_the_gate_or_secrets() {
+fn with_a_gate_auto_covers_guarded_and_eviction_paths_but_not_the_gate_or_secrets() {
     use super::mandates::Decision;
     use super::tiers::{AUTO_COVERS, Facts, Rules, Tier, classify};
     use super::windows::Windows;

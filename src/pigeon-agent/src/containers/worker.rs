@@ -647,7 +647,7 @@ mod tests {
 
     #[cfg(feature = "engines")]
     #[test]
-    fn the_state_variables_are_cobots() {
+    fn the_state_variables_are_the_infra_engines() {
         assert_eq!(
             super::STATE_VARS,
             [
