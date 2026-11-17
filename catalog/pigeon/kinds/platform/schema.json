@@ -186,12 +186,12 @@
             "description": "Its Service Auth policy's name."
           },
           "secret_version": {
-            "type": "integer",
+            "type": ["integer", "null"],
             "minimum": 1,
-            "description": "The live secret's version, as Cloudflare holds it; raising it rotates the secret."
+            "description": "The live secret's version, as Cloudflare holds it; raising it rotates the secret. Null for a token never rotated, so the secret is left as Cloudflare holds it."
           },
           "previous_secret_expires": {
-            "type": "string",
+            "type": ["string", "null"],
             "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$",
             "description": "When the secret before the live one stops being accepted, as Cloudflare holds it (RFC 3339, UTC)."
           }
