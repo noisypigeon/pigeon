@@ -43,6 +43,7 @@ mod platform;
 mod platforms;
 mod pool;
 mod pool_dispatch;
+mod pool_ops;
 mod provider;
 mod push;
 mod stages;
@@ -164,6 +165,7 @@ const SURFACES: &[&[Route]] = &[
     docs::ROUTES,
     devices::ROUTES,
     pool::ROUTES,
+    pool_ops::ROUTES,
 ];
 
 /// The change number of `request`'s `number` argument.
@@ -995,6 +997,13 @@ async fn dispatch(
             args,
         } => {
             let (status, v) = platforms::run(env, s, &op, &args).await?;
+            Ok((None, respond(operation, status, v)))
+        }
+        Routed::Pool {
+            operation: op,
+            args,
+        } => {
+            let (status, v) = pool_ops::run(env, s, who, &op, &args).await?;
             Ok((None, respond(operation, status, v)))
         }
     }

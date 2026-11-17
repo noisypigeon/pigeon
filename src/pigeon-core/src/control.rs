@@ -205,6 +205,14 @@ pub enum Routed {
         /// How long it lasts.
         hours: u32,
     },
+    /// A capacity pool operation, with its arguments; see
+    /// `.claude/decisions/2026-11-15-development-capacity-pools-hard-spend-cap.md` §8.
+    Pool {
+        /// The operation.
+        operation: String,
+        /// Its arguments.
+        args: Map<String, Value>,
+    },
     /// A mandate operation, with its arguments; see
     /// `.claude/decisions/2026-11-08-security-tiered-approvals-task-mandates.md` §3.
     Mandate {
@@ -428,6 +436,10 @@ pub fn route(request: &Request, by: &str, at: u64) -> Result<Routed, String> {
         "grant.list" | "grant.request" | "grant.rotate" | "grant.revoke" => grant(request),
         "approval.wait" => Err("`approval.wait` shows a card, so it is called over MCP".into()),
         "mandate.propose" | "mandate.status" | "mandate.end" => Ok(Routed::Mandate {
+            operation: request.operation.clone(),
+            args: a.clone(),
+        }),
+        "pool.status" | "pool.pause" | "pool.resume" => Ok(Routed::Pool {
             operation: request.operation.clone(),
             args: a.clone(),
         }),

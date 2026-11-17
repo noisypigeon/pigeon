@@ -97,6 +97,8 @@ pub(super) async fn live(env: &Env, s: &Settings) -> Result<Vec<Waiting>> {
                         .await?
                         .0
                         == 200
+                } else if w.path.starts_with(crate::core::pool::resume::PAGE) {
+                    super::pool_ops::live(env, &w.path, &token).await?
                 } else if w.path.starts_with("/mandate/") {
                     super::mandates::to_instance(env, s, "/mandates/peek", &body)
                         .await?

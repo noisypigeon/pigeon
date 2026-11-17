@@ -9,6 +9,7 @@ pub mod gateway;
 pub mod job;
 pub mod ledger;
 pub mod meter;
+pub mod resume;
 pub mod route;
 
 /// Money, in micro-dollars.

@@ -23,6 +23,7 @@ use crate::core::pool::config::{Budget, Pool as PoolConfig, config};
 use crate::core::pool::gateway::{Gateway, gateway};
 use crate::core::pool::ledger::{self, Ledger};
 use crate::core::pool::meter::{self, Seen, Sse, TaskInfo, Vet};
+use crate::core::pool::resume;
 use crate::core::provider::verdict::{self, ChangeState, Ticket};
 use crate::routes::Path;
 
@@ -53,6 +54,9 @@ const RUN_GRANT: &str = "aigateway";
 
 /// Seconds after which the Run token, living an hour, is minted anew.
 const RENEW: u64 = 50 * 60;
+
+/// The storage key of the pool's resume offers.
+const RESUME_KEY: &str = "resume-offers";
 
 /// Seconds the Run token lives.
 const TTL: u64 = 60 * 60;
@@ -162,7 +166,9 @@ impl DurableObject for Pool {
             "/task/job" => self.follow_job(&body).await,
             "/status" => self.status().await,
             "/pause" => self.pause(&body).await,
-            "/resume" => self.resume().await,
+            "/resume/offer" => self.resume_offer(&body).await,
+            "/resume/peek" => self.resume_peek(&body).await,
+            "/resume/grant" => self.resume_grant(&body).await,
             _ => Response::error("no such pool path", 404),
         }
     }
@@ -662,7 +668,21 @@ impl Pool {
         Response::from_json(&json!({ "state": state, "ledger": l }))
     }
 
+    /// Stores the object's pool name from `body["pool"]`, when it has none and the pool exists.
+    async fn name(&self, body: &Value) -> Result<()> {
+        let Some(name) = body["pool"].as_str() else {
+            return Ok(());
+        };
+        let storage = self.state.storage();
+        let known = config().is_ok_and(|c| c.pool(name).is_some());
+        if known && storage.get::<String>("name").await?.is_none() {
+            storage.put("name", name).await?;
+        }
+        Ok(())
+    }
+
     async fn pause(&self, body: &Value) -> Result<Response> {
+        self.name(body).await?;
         let Some((pool, _)) = self.pool().await? else {
             return Response::error("pool: no such pool", 404);
         };
@@ -672,12 +692,46 @@ impl Pool {
         Response::ok("paused")
     }
 
-    async fn resume(&self) -> Result<Response> {
+    /// Offers a resume for the owner's passkey; see `core::pool::resume`.
+    async fn resume_offer(&self, body: &Value) -> Result<Response> {
+        self.name(body).await?;
         let Some((pool, _)) = self.pool().await? else {
             return Response::error("pool: no such pool", 404);
         };
+        let (Some(token), Some(expires)) = (body["token"].as_str(), body["expires"].as_u64())
+        else {
+            return Response::error("an offer has a token and an expiry", 400);
+        };
+        let storage = self.state.storage();
+        let mut all: resume::Offers = storage.get(RESUME_KEY).await?.unwrap_or_default();
+        let offer = all.offer(&pool.name, token, now(), expires);
+        storage.put(RESUME_KEY, &all).await?;
+        Response::from_json(&offer)
+    }
+
+    async fn resume_peek(&self, body: &Value) -> Result<Response> {
+        let storage = self.state.storage();
+        let all: resume::Offers = storage.get(RESUME_KEY).await?.unwrap_or_default();
+        match all.peek(body["token"].as_str().unwrap_or_default(), now()) {
+            Ok(o) => Response::from_json(o),
+            Err(why) => Response::error(why, 403),
+        }
+    }
+
+    /// Spends the offer and resumes the pool; only the page calls it, after the passkey.
+    async fn resume_grant(&self, body: &Value) -> Result<Response> {
+        let Some((pool, _)) = self.pool().await? else {
+            return Response::error("pool: no such pool", 404);
+        };
+        let storage = self.state.storage();
+        let mut all: resume::Offers = storage.get(RESUME_KEY).await?.unwrap_or_default();
+        let taken = all.take(body["token"].as_str().unwrap_or_default(), now());
+        storage.put(RESUME_KEY, &all).await?;
+        if let Err(why) = taken {
+            return Response::error(why, 409);
+        }
         let n = ledger::resume(&self.ledger(&pool).await?);
-        self.state.storage().put("ledger", &n).await?;
+        storage.put("ledger", &n).await?;
         Response::ok("resumed")
     }
 }

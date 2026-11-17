@@ -742,6 +742,29 @@ job starts; the apply's page names that commit.</p>"
     });
 }
 
+/// The page resuming capacity pool offer `o`, posting `token` back to
+/// `/pool-resume/<pool>/<id>` with the passkey; see
+/// `.claude/decisions/2026-11-15-development-capacity-pools-hard-spend-cap.md` §8.
+#[must_use]
+pub fn pool_resume_page(o: &crate::pool::resume::Offer, token: &str) -> String {
+    let title = format!("Resume the {} pool", o.pool);
+    let what = "The pool admits new tasks again, within its caps. Check why it paused before resuming it: pool_status shows the reason.";
+    let b = format!(
+        "<h1>{}</h1><p>{}</p><form method=\"post\" action=\"{}{}/{}\">\
+<input type=\"hidden\" name=\"grant\" value=\"{}\">{}{CODE_FIELD}\
+<button type=\"submit\">Approve</button></form>\
+<p><small><a href=\"/approvals\">Everything waiting</a></small></p>",
+        escape(&title),
+        escape(what),
+        crate::pool::resume::PAGE,
+        escape(&o.pool),
+        o.id,
+        escape(token),
+        passkey_button(&crate::approval::passkeys::grant_purpose(token))
+    );
+    shell(&title, &b)
+}
+
 /// The page granting the next step of platform run `run`, posting `token` back to
 /// `/platform/<id>`: for its plan, the owner's code and one-time account token; for its apply,
 /// the plan's changes, the code, and a refusal. A plan's page lists `needs`, the unit's capabilities

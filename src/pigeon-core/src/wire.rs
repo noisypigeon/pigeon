@@ -192,9 +192,10 @@ const GRANT: [&str; 7] = [
     "change.front",
 ];
 
-const PAGE: [&str; 6] = [
+const PAGE: [&str; 7] = [
     "mandate.propose",
     "ci.window",
+    "pool.resume",
     "grant.request",
     "grant.rotate",
     "grant.revoke",
@@ -259,6 +260,7 @@ impl Operation {
             || self.name.starts_with("owner.")
             || self.name.starts_with("provider.")
             || self.name.starts_with("bench.")
+            || self.name.starts_with("pool.")
     }
 
     /// Who answers its request for approval.
@@ -473,6 +475,34 @@ const CATALOG: &[Operation] = &[
         summary: "Ask the owner to run every change's code checks on Cloudflare's Checker instead of GitHub Actions for `hours` (1 to 24; 0 closes the window early); answers with the page's link, granted with a passkey",
         args: &[
             arg("hours", true, Kind::Text),
+            arg("ticket", false, Kind::String),
+        ],
+    },
+    Operation {
+        name: "pool.status",
+        engine: Engine::Agent,
+        effect: Effect::Read,
+        summary: "Each capacity pool's state and ledger: its windows' spend, reservations, running tasks and whether it is paused (args: pool?, one pool's name)",
+        args: &[arg("pool", false, Kind::String)],
+    },
+    Operation {
+        name: "pool.pause",
+        engine: Engine::Agent,
+        effect: Effect::Plan,
+        summary: "Pause capacity pool `pool`, saying `why`: it admits no new task until the owner resumes it; open to anyone, since it only takes power away",
+        args: &[
+            arg("pool", true, Kind::String),
+            arg("why", true, Kind::Text),
+            arg("ticket", false, Kind::String),
+        ],
+    },
+    Operation {
+        name: "pool.resume",
+        engine: Engine::Agent,
+        effect: Effect::Plan,
+        summary: "Ask the owner to resume paused capacity pool `pool`; answers with the page's link, granted with a passkey",
+        args: &[
+            arg("pool", true, Kind::String),
             arg("ticket", false, Kind::String),
         ],
     },
