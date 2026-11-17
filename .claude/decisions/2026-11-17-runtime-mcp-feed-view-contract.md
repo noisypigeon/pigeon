@@ -449,3 +449,46 @@ Per
 
 Step 5a (!1059) added `src/pigeon-core/src/present/`; `Governs` gains
 `src/**/present/**`, as the presenting amendment said it would.
+
+### 2026-11-17: Step 8's shape: an event names its subject, and the log links a closing event to the item it closes
+
+§3.2's `resolves` needs each closing event to name the event it closes.
+No producer keeps the `{id}` that `/events/add` answers, so callers can't
+name it. The log links them instead, by a subject both ends share.
+
+- **`Event` gains `subject` and `resolves`,** both optional and left out
+  when unset. A producer passes a subject; it never passes `resolves`.
+- **The log decides.** `core::events` holds two tables:
+  - kinds that open a subject: `owner.asked`, `grant.requested`,
+    `approval.pending`, `pool.paused`, `auto.paused`, `auto.held`,
+    `task.made`, `mandate.proposed`;
+  - kinds that close it: `owner.answered`, `owner.withdrawn`,
+    `grant.granted`, `grant.failed`, `grant.rotated`, `grant.revoked`,
+    `pool.resumed`, `auto.resumed`, `auto.ended`, `task.done`,
+    `mandate.granted`, `mandate.ended`, `ci.window`.
+
+  A closing event's `resolves` is the newest earlier event with the same
+  subject, of an opening kind, that nothing resolves yet. An opening event
+  never resolves another, so a doubled `approval.pending` stays one open
+  item. `feed::item` copies `resolves`.
+- **Subjects:** `owner:<item id>`, `grant:<offer id>`, `platform:<run id>`,
+  `pool:<name>`, `ci:<offer id>`, `task:<id>`, `mandate:<id>`,
+  `window:<id>`. A change's items keep closing by their change, as
+  `feed::open` does now.
+- **Gaps filled:**
+  - `tasks::add` keeps the task id it is answered, and `task.done`
+    appends a `task.done` event;
+  - `mandate.propose`, the mandate's grant and `mandate.end` append
+    `mandate.proposed`, `mandate.granted` and `mandate.ended`;
+  - the hourly digest appends a `digest` event, `owner` true, when it
+    holds anything; its push stays a count (§5).
+- **What has no pair stays as it is:** deploys (keyed by SHA only) and
+  `session.ended` close nothing.
+- **Step 8 is three changes:**
+  - 8a, a brief: the core (`Event.subject` and `resolves`, the tables, the
+    link, `feed::item`), with tests;
+  - 8b, a brief: `/events/add` reads `subject` and sets `resolves`, and the
+    producers outside the gate pass subjects (owner items, platform runs,
+    the pool, the CI window, tasks, mandates, the digest);
+  - 8c, the planner's: `worker/minting.rs` passes `grant:<offer id>`. It is
+    a gate path, so the owner approves it.
