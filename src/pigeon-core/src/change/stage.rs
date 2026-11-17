@@ -407,6 +407,7 @@ mod tests {
             number,
             by: "owner".into(),
             at: 1,
+            docs: false,
         }
     }
 

@@ -25,6 +25,7 @@ fn entry(number: u32) -> Entry {
         number,
         by: "a".to_string(),
         at: 0,
+        docs: false,
     }
 }
 

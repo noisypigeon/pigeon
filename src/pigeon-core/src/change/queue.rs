@@ -6,7 +6,7 @@ use std::collections::{BTreeMap, VecDeque};
 
 use serde::{Deserialize, Serialize};
 
-use super::types::{Change, GATE, JobStatus, MERGE, RESTACK, State};
+use super::types::{BOUND, Change, GATE, JobStatus, MERGE, MIRROR, RESTACK, State};
 
 /// How long a merge may run before the queue moves past it, in seconds.
 pub const STUCK: u64 = 60 * 60;
@@ -24,6 +24,20 @@ pub const HOLD: u64 = 20 * 60;
 
 /// Seconds a release target waits for an idle queue before it takes the next turn anyway.
 pub const RELEASE_WAIT: u64 = 30 * 60;
+
+/// The one check a docs-only change runs.
+const POLICY_CHECK: &str = "policy.check";
+
+/// Whether change `c` is docs-only: its bound scope selects no code check, only `policy.check`;
+/// see the merge-path ADR's 2026-11-17 amendment, §9.
+#[must_use]
+pub fn docs_only(c: &Change) -> bool {
+    let plumbing = |n: &str| [BOUND, MIRROR, RESTACK, MERGE].contains(&n);
+    c.jobs.iter().any(|j| j.name == POLICY_CHECK)
+        && c.jobs
+            .iter()
+            .all(|j| j.name == POLICY_CHECK || plumbing(&j.name))
+}
 
 /// Whether change `c` still has a merge on its way: a merge job, a restack or a gate check
 /// queued or running, or a merge parked.
@@ -73,6 +87,9 @@ pub struct Entry {
     pub by: String,
     /// When it was asked for, or when its merge started.
     pub at: u64,
+    /// Whether the change is docs-only, as [`docs_only`] found it when asked.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub docs: bool,
 }
 
 /// Where a merge asked for stands.
@@ -123,6 +140,10 @@ pub struct MergeQueue {
     /// When the release bot asked for the next turn while it was busy, in Unix seconds.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub release_asked: Option<u64>,
+    /// The docs-only changes still to merge in the docs-only turn running, in queue order; see
+    /// the merge-path ADR's 2026-11-17 amendment, §9.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub docs_turn: Vec<u32>,
     /// The Instance's yields, each change to the one it waits for: read in, never stored; see
     /// the yield ADR's 2026-11-13 amendment on the queue keeping a yielded change's place.
     #[serde(skip)]
@@ -180,6 +201,21 @@ pub fn enqueue(
     by: &str,
     now: u64,
 ) -> Result<(MergeQueue, Queued), String> {
+    enqueue_as(q, number, by, false, now)
+}
+
+/// As [`enqueue`], for a change that is docs-only when `docs`.
+///
+/// # Errors
+///
+/// As [`enqueue`].
+pub fn enqueue_as(
+    q: &MergeQueue,
+    number: u32,
+    by: &str,
+    docs: bool,
+    now: u64,
+) -> Result<(MergeQueue, Queued), String> {
     if q.merging.as_ref().is_some_and(|e| e.number == number) {
         return Err(format!("change {number} is already being merged"));
     }
@@ -193,6 +229,7 @@ pub fn enqueue(
         number,
         by: by.to_string(),
         at: now,
+        docs,
     };
     let mut next = q.clone();
     if let Some(&to) = q.yielded.get(&number) {
@@ -206,6 +243,7 @@ pub fn enqueue(
         k.reserved = false;
     }
     if next.merging.is_none() && !held {
+        next.docs_turn = docs_turn_of(&next, &entry);
         next.merging = Some(entry);
         return Ok((next, Queued::Start));
     }
@@ -227,8 +265,19 @@ pub fn ask(
     by: &str,
     now: u64,
 ) -> (MergeQueue, Option<Entry>, Result<Queued, String>) {
+    ask_as(q, number, by, false, now)
+}
+
+/// As [`ask`], for a change that is docs-only when `docs`.
+pub fn ask_as(
+    q: &MergeQueue,
+    number: u32,
+    by: &str,
+    docs: bool,
+    now: u64,
+) -> (MergeQueue, Option<Entry>, Result<Queued, String>) {
     let (q, resumed) = unstick(q, now);
-    match enqueue(&q, number, by, now) {
+    match enqueue_as(&q, number, by, docs, now) {
         Ok((next, queued)) => (next, resumed, Ok(queued)),
         Err(why) => (q, resumed, Err(why)),
     }
@@ -241,6 +290,7 @@ pub fn done(q: &MergeQueue, number: u32, now: u64) -> (MergeQueue, Option<Entry>
     let mut next = q.clone();
     next.waiting.retain(|e| e.number != number);
     next.kept.remove(&number);
+    next.docs_turn.retain(|n| *n != number);
     if next.merging.as_ref().is_some_and(|e| e.number == number) {
         next.merging = None;
     }
@@ -390,23 +440,167 @@ pub fn release_turn_done(q: &MergeQueue, now: u64) -> (MergeQueue, Option<Entry>
 }
 
 /// `q` with its oldest waiting merge that yields to none started when none runs and no kept
-/// change's turn is [`MergeQueue::protected`], and that merge; a yielded one keeps its place.
+/// change's turn is [`MergeQueue::protected`], and that merge; a yielded one keeps its place. A
+/// docs-only turn running starts its next docs-only change first; see the merge-path ADR's
+/// 2026-11-17 amendment, §9.
 #[must_use]
 pub fn advance(mut q: MergeQueue, now: u64) -> (MergeQueue, Option<Entry>) {
     if q.merging.is_some() || q.protected(now).is_some() || q.release_holds(now) {
         return (q, None);
     }
-    let Some(i) = q
+    let in_turn = q
         .waiting
         .iter()
-        .position(|e| !q.yielded.contains_key(&e.number))
-    else {
+        .position(|e| q.docs_turn.contains(&e.number) && !q.yielded.contains_key(&e.number));
+    let Some(i) = in_turn.or_else(|| {
+        q.waiting
+            .iter()
+            .position(|e| !q.yielded.contains_key(&e.number))
+    }) else {
+        q.docs_turn.clear();
         return (q, None);
     };
     let Some(mut e) = q.waiting.remove(i) else {
         return (q, None);
     };
+    if in_turn.is_some() {
+        q.docs_turn.retain(|n| *n != e.number);
+    } else {
+        q.docs_turn = docs_turn_of(&q, &e);
+    }
     e.at = now;
     q.merging = Some(e.clone());
     (q, Some(e))
+}
+
+/// The docs-only changes waiting in `q`, in queue order, that merge in the turn `e` takes: none
+/// unless `e` is docs-only; a yielded one keeps its place.
+fn docs_turn_of(q: &MergeQueue, e: &Entry) -> Vec<u32> {
+    if !e.docs {
+        return Vec::new();
+    }
+    q.waiting
+        .iter()
+        .filter(|w| w.docs && w.number != e.number && !q.yielded.contains_key(&w.number))
+        .map(|w| w.number)
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::types::Job;
+    use super::*;
+
+    /// A queue with code change 9 merging, then `waiting` asked in order, each docs-only or not.
+    fn queue(waiting: &[(u32, bool)]) -> MergeQueue {
+        let (mut q, _) =
+            enqueue_as(&MergeQueue::default(), 9, "window:1", false, 0).expect("starts");
+        for &(n, docs) in waiting {
+            q = enqueue_as(&q, n, "window:1", docs, 1).expect("queues").0;
+        }
+        q
+    }
+
+    /// The change `done(n)` starts, and the queue after it.
+    fn next(q: &MergeQueue, n: u32) -> (MergeQueue, Option<u32>) {
+        let (q, e) = done(q, n, 10);
+        (q, e.map(|e| e.number))
+    }
+
+    fn with_jobs(names: &[&str]) -> Change {
+        let mut c = Change::propose(7, "x", "docs: x", "p", vec!["**".into()], "agent");
+        c.jobs = names.iter().map(|n| Job::queued(n, Vec::new())).collect();
+        c
+    }
+
+    #[test]
+    fn a_docs_only_change_runs_policy_check_alone() {
+        assert!(docs_only(&with_jobs(&[BOUND, "policy.check"])));
+        assert!(docs_only(&with_jobs(&[
+            BOUND,
+            "policy.check",
+            MIRROR,
+            RESTACK,
+            MERGE
+        ])));
+        assert!(!docs_only(&with_jobs(&[BOUND, "fmt", "policy.check"])));
+        assert!(!docs_only(&with_jobs(&[
+            BOUND,
+            "sites.build",
+            "policy.check"
+        ])));
+        assert!(!docs_only(&with_jobs(&[
+            BOUND,
+            "policy.check",
+            "gate: test"
+        ])));
+        assert!(!docs_only(&with_jobs(&[BOUND])), "not yet bound");
+    }
+
+    #[test]
+    fn a_docs_turn_merges_every_waiting_docs_change_in_queue_order() {
+        let q = queue(&[(1, true), (2, false), (3, true), (4, true)]);
+        let (q, started) = next(&q, 9);
+        assert_eq!(started, Some(1));
+        assert_eq!(q.docs_turn, [3, 4]);
+        let (q, started) = next(&q, 1);
+        assert_eq!(started, Some(3), "it passes code change 2");
+        let (q, queued) = enqueue_as(&q, 5, "window:1", true, 11).expect("queues");
+        assert_eq!(queued, Queued::Behind(3));
+        let (q, started) = next(&q, 3);
+        assert_eq!(started, Some(4));
+        let (q, started) = next(&q, 4);
+        assert_eq!(
+            started,
+            Some(2),
+            "a docs change asked during the turn waits its place"
+        );
+        assert_eq!(q.docs_turn, Vec::<u32>::new());
+        let (_, started) = next(&q, 2);
+        assert_eq!(started, Some(5));
+    }
+
+    #[test]
+    fn a_failed_docs_change_drops_alone_and_the_turn_goes_on() {
+        let q = queue(&[(1, true), (2, false), (3, true), (4, true)]);
+        let (q, _) = next(&q, 9);
+        let (q, _) = done(&q, 3, 10);
+        assert_eq!(q.docs_turn, [4], "3 failed while it waited");
+        let (q, started) = next(&q, 1);
+        assert_eq!(started, Some(4));
+        let (_, started) = next(&q, 4);
+        assert_eq!(started, Some(2));
+    }
+
+    #[test]
+    fn a_yielded_docs_change_keeps_its_place_outside_the_turn() {
+        let mut q = queue(&[(1, true), (2, false), (3, true)]);
+        q.yielded.insert(3, 2);
+        let (q, started) = next(&q, 9);
+        assert_eq!(started, Some(1));
+        assert_eq!(q.docs_turn, Vec::<u32>::new());
+        let (q, started) = next(&q, 1);
+        assert_eq!(started, Some(2));
+        assert_eq!(q.waiting.front().map(|e| e.number), Some(3));
+    }
+
+    #[test]
+    fn a_code_turn_takes_no_docs_change_with_it() {
+        let q = queue(&[(2, false), (1, true), (3, false)]);
+        let (q, started) = next(&q, 9);
+        assert_eq!(started, Some(2));
+        assert_eq!(q.docs_turn, Vec::<u32>::new());
+        let (_, started) = next(&q, 2);
+        assert_eq!(started, Some(1));
+    }
+
+    #[test]
+    fn an_entry_stored_before_docs_reads_as_not_docs() {
+        let e: Entry = serde_json::from_str(r#"{"number":1,"by":"a","at":0}"#).expect("reads");
+        assert!(!e.docs);
+        let shown = serde_json::to_string(&e).expect("writes");
+        assert_eq!(shown, r#"{"number":1,"by":"a","at":0}"#);
+        let q: MergeQueue = serde_json::from_str("{}").expect("reads");
+        assert_eq!(q.docs_turn, Vec::<u32>::new());
+    }
 }
