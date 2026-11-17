@@ -514,5 +514,24 @@ and one `pub mod` line in `pool/mod.rs`:
 It is pure code, called by nothing yet. It touches none of !818's files and
 changes no merge, queue, gate or release behaviour. !818 changes nothing
 about the gateway's upstream, headers or signals.
+### 2026-11-16: Review of !827 against !820: they agree
+
+!820 merged decisions in two ADRs:
+- [`2026-11-09-security-approvals-once-passkeys.md`](2026-11-09-security-approvals-once-passkeys.md);
+- [`2026-11-16-development-merge-path-measured-faster.md`](2026-11-16-development-merge-path-measured-faster.md).
+
+Between them they govern:
+- the merge path: `worker/main_run.rs`, `worker/merges.rs`,
+  `worker/github.rs`, `cobot/ci.rs` and `release/**`;
+- approvals and passkeys: `approvals.rs`, `passkeys.rs` and
+  `worker/passkey*`.
+
+!827 is this ADR's step 4 (brief b61). It only adds the pure
+`src/pigeon-core/src/pool/aigateway.rs` and its `pub mod` line in
+`pool/mod.rs`. It touches none of !820's files. It adds no approval,
+passkey proof or merge behaviour: a model request is vetted by the pool
+route and `verdict::admit` (§11), never by an approval.
+
+!820 changes nothing about the gateway's upstream, headers or signals.
 
 Neither decision changes.
