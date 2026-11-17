@@ -49,4 +49,5 @@ pub mod signing;
 pub mod sites;
 pub mod tasks;
 pub mod tickets;
+pub mod view;
 pub mod wire;
