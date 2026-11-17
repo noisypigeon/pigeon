@@ -143,12 +143,24 @@ impl Tasks {
         {
             return t.id;
         }
-        let n = self.add("brief", 0, None, None, note, now);
-        if let Some(t) = self.list.iter_mut().find(|t| t.id == n) {
-            t.brief = Some(id.to_string());
-            t.model = Some(model);
-        }
-        n
+        // Not through `add`, which keeps one open task per kind and change: every brief's is 0.
+        self.list
+            .retain(|t| !t.done || now.saturating_sub(t.created) < KEPT);
+        self.last += 1;
+        self.list.push(Task {
+            id: self.last,
+            kind: "brief".to_string(),
+            change: 0,
+            parent: None,
+            session: None,
+            note: note.to_string(),
+            created: now,
+            claimed_by: None,
+            done: false,
+            brief: Some(id.to_string()),
+            model: Some(model),
+        });
+        self.last
     }
 
     /// The open tasks `session` may see at `now`, as an opus session.

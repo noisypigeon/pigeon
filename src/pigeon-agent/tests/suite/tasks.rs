@@ -169,6 +169,10 @@ fn a_brief_task_goes_to_its_own_class_first_and_never_to_a_lesser_one() {
         (task.kind.as_str(), task.brief.as_deref(), task.model),
         ("brief", Some("b3"), Some(Class::Sonnet))
     );
+    let other = t.add_brief("b4", Class::Haiku, "b4 (haiku): other", 101);
+    assert_ne!(other, id, "each open brief has its own task");
+    assert_eq!(t.list[1].brief.as_deref(), Some("b4"));
+    t.list.pop();
 
     let seen = |t: &Tasks, c: Class, at: u64| t.visible_as(Some("s"), c, at).len();
     assert_eq!(seen(&t, Class::Sonnet, 100), 1, "its own class at once");
