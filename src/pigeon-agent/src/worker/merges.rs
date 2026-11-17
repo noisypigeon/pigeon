@@ -9,7 +9,7 @@ use super::mandates::to_instance;
 use super::platform::{self, Settings, now};
 use super::to_change;
 use crate::control;
-use crate::core::change::queue::{self as merges, Entry, MergeQueue, Queued};
+use crate::core::change::queue::{self as merges, Back, Entry, MergeQueue, Queued};
 use crate::core::change::{Change, Event};
 use crate::reconcile::{PROPOSER, Proposal};
 use crate::sessions;
@@ -28,12 +28,14 @@ const TRIES: usize = 10;
 pub async fn ask(env: &Env, s: &Settings, number: u32, by: &str) -> Result<(u16, Value)> {
     hand_back_idle(env, s).await?;
     asked(env, s, number, by).await?;
-    let docs = docs_only(env, s, number).await?;
+    let own = record(env, s, number).await?;
+    let docs = own.as_ref().is_some_and(merges::docs_only);
+    let back = own.as_ref().map_or_else(Back::default, Back::of);
     let (status, v) = to_instance(
         env,
         s,
         "/merges/enqueue",
-        &json!({ "number": number, "by": by, "docs": docs }),
+        &json!({ "number": number, "by": by, "docs": docs, "back": back }),
     )
     .await?;
     // A turn the queue moved past starts, whatever it answers this ask.
@@ -42,6 +44,14 @@ pub async fn ask(env: &Env, s: &Settings, number: u32, by: &str) -> Result<(u16,
     }
     if status != 200 {
         return Ok((409, v["error"].clone()));
+    }
+    if let Some(why) = v["returned"].as_str() {
+        let why = format!("!{number} takes its place back in the merge queue: {why}");
+        let added =
+            super::events::append(env, s, "merge.returned", Some(number), None, &why, false);
+        if let Err(e) = added.await {
+            worker::console_error!("merge.returned: {e}");
+        }
     }
     if let Ok(Queued::Behind(place)) = serde_json::from_value::<Queued>(v["queued"].clone()) {
         let message = format!("change {number} merges after {place} other merge(s)");
@@ -59,15 +69,6 @@ pub async fn ask(env: &Env, s: &Settings, number: u32, by: &str) -> Result<(u16,
         return Ok((status, v));
     }
     Ok((status, json!({ "change": v })))
-}
-
-/// Whether change `number` is docs-only, by its own record; see the merge-path ADR's 2026-11-17
-/// amendment, §9.
-async fn docs_only(env: &Env, s: &Settings, number: u32) -> Result<bool> {
-    let (status, view) = to_change(env, &s.repo, number, Method::Get, "/status", None).await?;
-    Ok(status == 200
-        && serde_json::from_value::<Change>(view["change"].clone())
-            .is_ok_and(|c| merges::docs_only(&c)))
 }
 
 /// Starts the next merge whose yield ended, if none runs; see the yield ADR's 2026-11-13
@@ -314,12 +315,14 @@ pub async fn ended(env: &Env, c: &Change, merged: Option<&str>) -> Result<()> {
             }
         }
     }
-    let path = if merges::keeps_place(c) {
-        "/merges/yielded"
+    let (path, body) = if merges::keeps_place(c) {
+        ("/merges/yielded", json!({ "number": c.number }))
+    } else if merged.is_some() {
+        ("/merges/done", json!({ "number": c.number }))
     } else {
-        "/merges/done"
+        ("/merges/left", left(c))
     };
-    let (_, v) = to_instance(env, &s, path, &json!({ "number": c.number })).await?;
+    let (_, v) = to_instance(env, &s, path, &body).await?;
     start(env, &s, serde_json::from_value(v["next"].clone()).ok()).await
 }
 
@@ -437,6 +440,20 @@ async fn merge(env: &Env, s: &Settings, number: u32, by: &str) -> Result<(u16, V
     to_change(env, &s.repo, number, Method::Post, "/event", Some(&body)).await
 }
 
+/// Change `n`'s own record, when it answers.
+async fn record(env: &Env, s: &Settings, n: u32) -> Result<Option<Change>> {
+    let (status, view) = to_change(env, &s.repo, n, Method::Get, "/status", None).await?;
+    if status != 200 {
+        return Ok(None);
+    }
+    Ok(serde_json::from_value(view["change"].clone()).ok())
+}
+
+/// The `/merges/left` body for change `c`, which gave its place back without merging.
+fn left(c: &Change) -> Value {
+    json!({ "number": c.number, "failed": merges::failed_at(c) })
+}
+
 /// Starts `next`, and past each one that refuses, the one after it.
 async fn start(env: &Env, s: &Settings, mut next: Option<Entry>) -> Result<()> {
     for _ in 0..TRIES {
@@ -455,13 +472,16 @@ async fn start(env: &Env, s: &Settings, mut next: Option<Entry>) -> Result<()> {
         if let Err(err) = added.await {
             worker::console_error!("merge.skipped: {err}");
         }
-        let (_, v) = to_instance(env, s, "/merges/done", &json!({ "number": e.number })).await?;
+        let body = record(env, s, e.number)
+            .await?
+            .map_or_else(|| json!({ "number": e.number }), |c| left(&c));
+        let (_, v) = to_instance(env, s, "/merges/left", &body).await?;
         next = serde_json::from_value(v["next"].clone()).ok();
     }
     Ok(())
 }
 
-/// The `Instance` Durable Object's side: `/merges/enqueue`, `done`, `yielded`, `keep`, `release`, `front`, `resume`, `release-turn`, `release-turn-done` and `list`.
+/// The `Instance` Durable Object's side: `/merges/enqueue`, `done`, `left`, `yielded`, `keep`, `release`, `front`, `resume`, `release-turn`, `release-turn-done` and `list`.
 ///
 /// # Errors
 ///
@@ -478,9 +498,22 @@ pub async fn serve(state: &State, path: &str, body: &Value) -> Result<Response> 
         "/merges/enqueue" => {
             let by = body["by"].as_str().unwrap_or_default();
             let docs = body["docs"].as_bool().unwrap_or(false);
-            let (q, resumed, queued) = merges::ask_as(&q, number, by, docs, now());
+            let back: Back = serde_json::from_value(body["back"].clone()).unwrap_or_default();
+            let t = now();
+            // A docs-only change takes the docs turn; any other a kept place back (ADR §8, §9).
+            let (returned, (q, resumed, queued)) = if docs {
+                (None, merges::ask_as(&q, number, by, true, t))
+            } else {
+                let returned = q.returning.get(&number).and_then(|r| r.returns(&back, t));
+                (returned, merges::ask_back(&q, number, by, &back, t))
+            };
             match queued {
-                Ok(queued) => (q, json!({ "queued": queued, "resumed": resumed })),
+                Ok(queued) => {
+                    let returned = returned.filter(|_| matches!(queued, Queued::Behind(_)));
+                    let answer =
+                        json!({ "queued": queued, "resumed": resumed, "returned": returned });
+                    (q, answer)
+                }
                 Err(why) => {
                     storage.put(MERGES, &q).await?;
                     let refused = json!({ "error": why, "resumed": resumed });
@@ -490,6 +523,11 @@ pub async fn serve(state: &State, path: &str, body: &Value) -> Result<Response> 
         }
         "/merges/done" => {
             let (q, next) = merges::done(&q, number, now());
+            (q, json!({ "next": next }))
+        }
+        "/merges/left" => {
+            let failed = body["failed"].as_u64().and_then(|p| u32::try_from(p).ok());
+            let (q, next) = merges::left(&q, number, failed, now());
             (q, json!({ "next": next }))
         }
         "/merges/front" => match merges::front(&q, number) {
