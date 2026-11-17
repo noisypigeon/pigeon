@@ -107,6 +107,11 @@ pub struct Route {
     /// A job, by operation name; its environment only, revoked when it ends.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub job: Option<String>,
+    /// A Durable Object class, by name: minted by the object at run time, held in its memory
+    /// only; see `.claude/decisions/2026-11-16-security-ai-gateway-claude-api.md`, the Run token
+    /// amendment.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub object: Option<String>,
     /// The secret's name, for a Worker or a store.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub key: Option<String>,
@@ -135,6 +140,11 @@ fn slug(name: &str) -> bool {
             .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
 }
 
+fn class(name: &str) -> bool {
+    name.bytes().next().is_some_and(|b| b.is_ascii_uppercase())
+        && name.bytes().all(|b| b.is_ascii_alphanumeric())
+}
+
 fn key(name: &str) -> bool {
     name.bytes().next().is_some_and(|b| b.is_ascii_uppercase())
         && name
@@ -161,23 +171,44 @@ pub fn check(ledger: &Ledger, known: &BTreeSet<String>) -> Vec<String> {
             ));
         }
         let r = &g.route;
-        let places = [r.worker.is_some(), r.store.is_some(), r.job.is_some()]
-            .into_iter()
-            .filter(|p| *p)
-            .count();
+        let places = [
+            r.worker.is_some(),
+            r.store.is_some(),
+            r.job.is_some(),
+            r.object.is_some(),
+        ]
+        .into_iter()
+        .filter(|p| *p)
+        .count();
         if places != 1 {
             say(format!(
-                "routes to {places} places; it takes exactly one of worker, store or job"
+                "routes to {places} places; it takes exactly one of worker, store, job or object"
             ));
         }
-        match (&r.job, &r.key) {
-            (Some(_), Some(_)) => say("names a key for a job, whose environment has none".into()),
-            (None, None) => say("routes to a Worker or store with no key".into()),
-            (None, Some(k)) if !key(k) => say(format!("key `{k}` is not [A-Z][A-Z0-9_]*")),
+        match (&r.job, &r.object, &r.key) {
+            (Some(_), _, Some(_)) => {
+                say("names a key for a job, whose environment has none".into());
+            }
+            (_, Some(_), Some(_)) => say("names a key for an object, which keeps none".into()),
+            (None, None, None) => say("routes to a Worker or store with no key".into()),
+            (None, None, Some(k)) if !key(k) => say(format!("key `{k}` is not [A-Z][A-Z0-9_]*")),
             _ => {}
         }
         if r.job.is_some() && g.mint.is_none() {
             say("routes to a job, which takes only a minted token".into());
+        }
+        if let Some(o) = &r.object {
+            if !class(o) {
+                say(format!(
+                    "object `{o}` is not a class name, [A-Z][A-Za-z0-9]*"
+                ));
+            }
+            if g.mint.is_none() {
+                say("routes to an object, which takes only a minted token".into());
+            }
+            if g.mint.as_ref().is_some_and(|m| m.rotate.is_some()) {
+                say("routes to an object, which mints its own; it takes no rotate".into());
+            }
         }
         if let Some(d) = &g.derive
             && d.from.trim().is_empty()
@@ -367,6 +398,45 @@ mod tests {
             ..Route::default()
         };
         assert_eq!(one("infra-run", job), Vec::<String>::new());
+    }
+
+    fn object(g: Grant, class: &str) -> Grant {
+        Grant {
+            route: Route {
+                object: Some(class.into()),
+                ..Route::default()
+            },
+            ..g
+        }
+    }
+
+    #[test]
+    fn a_minted_token_routes_to_an_object() {
+        let g = object(mint(&["r2.write"], "1h", None), "Pool");
+        assert_eq!(one("aigateway", g), Vec::<String>::new());
+    }
+
+    #[test]
+    fn an_object_route_is_refused_a_key_a_rotate_a_bad_class_or_a_second_place() {
+        let has = |p: &[String], s: &str| p.iter().any(|p| p.contains(s));
+        let mut keyed = object(mint(&["r2.write"], "1h", None), "Pool");
+        keyed.route.key = Some("X".into());
+        assert!(has(&one("x", keyed), "a key for an object"));
+        let rotated = object(mint(&["r2.write"], "1h", Some("50m")), "Pool");
+        assert!(has(&one("x", rotated), "takes no rotate"));
+        let lower = object(mint(&["r2.write"], "1h", None), "pool");
+        assert!(has(&one("x", lower), "not a class name"));
+        let mut two = object(mint(&["r2.write"], "1h", None), "Pool");
+        two.route.job = Some("infra.apply".into());
+        assert!(has(&one("x", two), "routes to 2 places"));
+        let generated = Grant {
+            mint: None,
+            generate: Some(Generate {
+                kind: KeyKind::Random32,
+            }),
+            ..object(mint(&[], "1h", None), "Pool")
+        };
+        assert!(has(&one("x", generated), "only a minted token"));
     }
 
     #[test]

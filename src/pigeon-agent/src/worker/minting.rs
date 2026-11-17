@@ -61,6 +61,16 @@ pub async fn run(env: &Env, s: &Settings, operation: &str, name: &str) -> Result
             "`{name}` is not in the deployed ledger; propose it in .config/grants.yaml first"
         )),
         Kind::Rotate | Kind::Revoke if !made => Some(format!("`{name}` was never granted")),
+        Kind::Request | Kind::Rotate
+            if resolved
+                .as_ref()
+                .and_then(|r| r.ledger.grants.get(name))
+                .is_some_and(|g| g.route.object.is_some()) =>
+        {
+            Some(format!(
+                "`{name}` is minted by its object at run time; the ledger's change was its approval"
+            ))
+        }
         _ => None,
     };
     if let Some(why) = refused {
@@ -356,6 +366,83 @@ async fn execute(
     }
 }
 
+/// Mints grant `name` for Durable Object class `class`, only when the deployed ledger routes it
+/// there: its value and expiry, which the caller holds in memory alone. The registry records the
+/// token's ID and expiry, never its value. The token it replaces is revoked only when
+/// `revoke_previous`, the caller holding none, as after a restart; a renewal's old token may be in
+/// flight and ends by its TTL; see
+/// `.claude/decisions/2026-11-16-security-ai-gateway-claude-api.md`, the Run token amendments.
+///
+/// # Errors
+///
+/// When a binding fails.
+pub(super) async fn for_object(
+    env: &Env,
+    s: &Settings,
+    name: &str,
+    class: &str,
+    revoke_previous: bool,
+) -> Result<std::result::Result<(String, u64), String>> {
+    let Some(resolved) = deployed(env, s).await? else {
+        return Ok(Err("no deploy has reported the grants ledger yet".into()));
+    };
+    let Some(grant) = resolved.ledger.grants.get(name) else {
+        return Ok(Err(format!("`{name}` is not in the deployed ledger")));
+    };
+    if grant.route.object.as_deref() != Some(class) {
+        return Ok(Err(format!("`{name}` is not routed to {class}")));
+    }
+    let granter = match granter(env).await {
+        Ok(g) => g,
+        Err(why) => return Ok(Err(why)),
+    };
+    let account = match platform::account(&granter).await {
+        Ok(a) => a,
+        Err(e) => return Ok(Err(format!("`granter` sees no single account: {e}"))),
+    };
+    let api = Api {
+        granter: &granter,
+        account: &account,
+    };
+    let old = registry(env, s)
+        .await?
+        .grants
+        .get(name)
+        .and_then(|r| r.token_id.clone());
+    let made = match make(&api, &resolved, name, grant).await? {
+        Ok(m) => m,
+        Err(why) => return Ok(Err(why)),
+    };
+    let (Some(id), Some(value), capabilities, Some(expires)) = made else {
+        return Ok(Err(format!("`{name}` minted no token")));
+    };
+    if let Err(why) = verify(&account, &value).await {
+        api.revoke(&id).await?;
+        return Ok(Err(format!("{why}; the new token was revoked")));
+    }
+    let record = Record {
+        token_id: Some(id.clone()),
+        route: grant.route.clone(),
+        capabilities,
+        made: now(),
+        expires: Some(expires),
+        by: format!("object:{class}"),
+    };
+    to_instance(
+        env,
+        s,
+        "/grant-registry/put",
+        &json!({ "name": name, "record": record }),
+    )
+    .await?;
+    if let Some(old) = old.filter(|o| revoke_previous && *o != id)
+        && let Err(e) = api.revoke(&old).await
+    {
+        worker::console_error!("grant `{name}`: the previous token stays: {e}");
+    }
+    Ok(Ok((value, expires)))
+}
+
 /// Revokes grant `name`'s token and removes its value, as `by`.
 async fn revoke(
     env: &Env,
@@ -395,6 +482,7 @@ fn route_said(r: &ledger::Route) -> String {
         (Some(w), _, _, Some(k)) => format!("put as {w}'s {k}"),
         (_, Some(st), _, Some(k)) => format!("put as {k} in store {st}"),
         (_, _, Some(j), _) => format!("for job {j}"),
+        _ if r.object.is_some() => format!("held by {}", r.object.as_deref().unwrap_or_default()),
         _ => "routed nowhere".into(),
     }
 }

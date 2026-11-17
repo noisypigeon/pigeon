@@ -3,6 +3,7 @@
 //! the AI Gateway; see `.claude/decisions/2026-11-15-development-capacity-pools-hard-spend-cap.md`
 //! §3, §4 and its 2026-11-17 amendment, and `.claude/decisions/2026-11-16-security-ai-gateway-claude-api.md`.
 
+use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, BTreeSet};
 
 use futures_util::StreamExt;
@@ -21,7 +22,7 @@ use crate::core::pool::config::{Budget, Pool as PoolConfig, config};
 use crate::core::pool::gateway::{Gateway, gateway};
 use crate::core::pool::ledger::{self, Ledger};
 use crate::core::pool::meter::{self, Seen, Sse, TaskInfo, Vet};
-use crate::core::provider::verdict::{ChangeState, Ticket};
+use crate::core::provider::verdict::{self, ChangeState, Ticket};
 use crate::routes::Path;
 
 /// The binding of the `Pool` namespace.
@@ -45,6 +46,15 @@ const GATEWAY_VAR: &str = "AI_GATEWAY";
 
 /// The internal header carrying the task the token named, from the route to the object.
 const TASK_HEADER: &str = "x-pigeon-pool-task";
+
+/// The grant the Run token is minted from, routed to this object.
+const RUN_GRANT: &str = "aigateway";
+
+/// Seconds after which the Run token, living an hour, is minted anew.
+const RENEW: u64 = 50 * 60;
+
+/// Seconds the Run token lives.
+const TTL: u64 = 60 * 60;
 
 /// How often the alarm sweeps while holds or tasks are open, in milliseconds.
 const SWEEP_MS: i64 = 60 * 1000;
@@ -122,11 +132,20 @@ async fn serve(mut req: Request, env: &Env, _s: &Settings, _who: &Identity) -> R
 pub struct Pool {
     state: State,
     env: Env,
+    /// The gateway's Run token and when it was minted; memory only.
+    token: RefCell<Option<(String, u64)>>,
+    /// Whether a mint is in flight, so only one runs at a time.
+    minting: Cell<bool>,
 }
 
 impl DurableObject for Pool {
     fn new(state: State, env: Env) -> Self {
-        Self { state, env }
+        Self {
+            state,
+            env,
+            token: RefCell::new(None),
+            minting: Cell::new(false),
+        }
     }
 
     async fn fetch(&self, mut req: Request) -> Result<Response> {
@@ -236,7 +255,7 @@ impl Pool {
     }
 
     /// The upstream URL and the gateway's Run token, or why there is none.
-    fn upstream(
+    async fn upstream(
         &self,
         path: aigateway::Path,
     ) -> std::result::Result<(String, String), &'static str> {
@@ -248,8 +267,45 @@ impl Pool {
             path,
         )
         .ok_or("pool: no gateway")?;
-        let token = gateway_token(&self.env).ok_or("pool: no gateway token")?;
+        let token = self.gateway_token().await.ok_or("pool: no gateway token")?;
         Ok((url, token))
+    }
+
+    /// The gateway's Run token: the one held, under [`RENEW`] old, else a new one from the
+    /// `aigateway` grant, minted one at a time; while a mint is in flight, the held token while
+    /// it lives, else none. A renewal never revokes the held token, which may be in flight and
+    /// ends by its own TTL; only a restart's first mint revokes the registry's previous one; see
+    /// the AI Gateway ADR's Run token amendments.
+    async fn gateway_token(&self) -> Option<String> {
+        let held = self.token.borrow().clone();
+        if let Some((t, at)) = &held
+            && now() < at + RENEW
+        {
+            return Some(t.clone());
+        }
+        if self.minting.get() {
+            return held.filter(|(_, at)| now() < at + TTL).map(|(t, _)| t);
+        }
+        let s = Settings::from(&self.env).ok()?;
+        self.minting.set(true);
+        let revoke_previous = held.is_none();
+        let minted =
+            super::minting::for_object(&self.env, &s, RUN_GRANT, "Pool", revoke_previous).await;
+        self.minting.set(false);
+        match minted {
+            Ok(Ok((value, _))) => {
+                *self.token.borrow_mut() = Some((value.clone(), now()));
+                Some(value)
+            }
+            Ok(Err(why)) => {
+                worker::console_error!("pool: no gateway token: {why}");
+                held.filter(|(_, at)| now() < at + TTL).map(|(t, _)| t)
+            }
+            Err(e) => {
+                worker::console_error!("pool: no gateway token: {e}");
+                held.filter(|(_, at)| now() < at + TTL).map(|(t, _)| t)
+            }
+        }
     }
 
     /// Vets, reserves and forwards one request, then settles it.
@@ -271,13 +327,28 @@ impl Pool {
                 change: ChangeState::Closed,
             },
         };
-        let (url, token) = match self.upstream(up) {
-            Ok(u) => u,
-            Err(why) => return refused(503, why),
-        };
-        let workspace = platform::secret(&self.env, WORKSPACE_VAR).ok();
         let label = info.as_ref().map(|i| i.label.clone()).unwrap_or_default();
         let caller = meter::caller(&label, standing.ticket, standing.holds);
+        // Nothing mints for a request vet will refuse: a disabled pool, an unknown task, or a
+        // ticket or change that fails the broker's check; vet refuses those below, unsent.
+        let admitted = pool.enabled
+            && info.as_ref().is_some_and(|i| {
+                verdict::admit(
+                    &caller,
+                    meter::CAPABILITY,
+                    Some((i.change, standing.change)),
+                )
+                .is_ok()
+            });
+        let (url, token) = if admitted {
+            match self.upstream(up).await {
+                Ok(u) => u,
+                Err(why) => return refused(503, why),
+            }
+        } else {
+            (String::new(), String::new())
+        };
+        let workspace = platform::secret(&self.env, WORKSPACE_VAR).ok();
         // From here to the put, no await but storage: the ledger is read, reserved and written as one.
         let storage = self.state.storage();
         let l = self.ledger(&pool).await?;
@@ -528,11 +599,6 @@ impl Pool {
         self.state.storage().put("ledger", &n).await?;
         Response::ok("resumed")
     }
-}
-
-/// The gateway's Run token; none until the pool ADR's step 3c mints one from `GRANTER`.
-fn gateway_token(_env: &Env) -> Option<String> {
-    None
 }
 
 /// Copies the upstream response's content type and Anthropic headers, never the gateway's own.
