@@ -248,3 +248,13 @@ merges on the owner's passkey.
   rule is `^[a-z0-9]+(-[a-z0-9]+)*(\.[a-z0-9]+(-[a-z0-9]+)*)+$`, so §1's
   `secrets_store.read`, `access_apps.write` and `access_tokens.write` are
   `secrets-store.read`, `access-apps.write` and `access-tokens.write`.
+
+### 2026-11-17: Review of !939 against !954: they agree
+
+- **!939** carries out step 6b-b of
+  [`2026-11-16-development-merge-path-measured-faster.md`](2026-11-16-development-merge-path-measured-faster.md):
+  a same-patch restack carries only the checks its job names.
+- **!954** moved the plan page's switch to step 2 here, and made
+  `capabilities` required where a `pigeon/*` kind expands a module.
+- **They agree.** !939 touches no `platforms.rs`, module or plan page.
+  !954 decides nothing about restacks or the merge gate.
