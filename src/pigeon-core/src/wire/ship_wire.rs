@@ -63,6 +63,8 @@ pub const TEST_MAP_FILE: &str = "tests.json";
 pub const TEST_MAP_URL_VAR: &str = "PIGEON_TEST_MAP_URL";
 /// The variable holding that map's SHA-256.
 pub const TEST_MAP_SHA256_VAR: &str = "PIGEON_TEST_MAP_SHA256";
+/// The variable holding the commit whose `test map` failed on `main`, while no later run passed.
+pub const TEST_MAP_RED_VAR: &str = "PIGEON_TEST_MAP_RED";
 
 /// The R2 key of `main`'s `pigeon-sentinel` built at `sha`.
 #[must_use]

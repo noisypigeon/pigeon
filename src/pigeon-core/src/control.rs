@@ -626,6 +626,21 @@ pub fn spec(change: &Change, job: &str, remote: &str, token: &str) -> Result<Job
         .iter()
         .find(|j| j.name == job)
         .ok_or_else(|| format!("no job `{job}`"))?;
+    let mut env = std::collections::BTreeMap::new();
+    if job == changes::RESTACK {
+        let kept: Vec<Check> = change
+            .passed_code()
+            .into_iter()
+            .map(|j| Check {
+                name: j.name,
+                argv: j.argv,
+            })
+            .collect();
+        env.insert(
+            KEPT.to_string(),
+            serde_json::to_string(&kept).unwrap_or_default(),
+        );
+    }
     Ok(JobSpec {
         id: job_id(change.number, &sha, job),
         remote: remote.to_string(),
@@ -641,7 +656,7 @@ pub fn spec(change: &Change, job: &str, remote: &str, token: &str) -> Result<Job
         argv: j.argv.clone(),
         approver: change.approval.as_ref().map(|a| a.by.clone()),
         since: None,
-        env: std::collections::BTreeMap::new(),
+        env,
     })
 }
 
@@ -1235,6 +1250,10 @@ pub const AFTER: &str = "AFTER";
 
 /// The restack job's env: the last head of the ended change the head was built on.
 pub const AFTER_HEAD: &str = "AFTER_HEAD";
+
+/// The restack job's env: the head's passed code checks and gate jobs, as a JSON array of
+/// `{name, argv}`, whose reach it reports.
+pub const KEPT: &str = "KEPT";
 
 /// The job that judges eviction candidates with `main`'s eviction policies; see
 /// `.claude/decisions/2026-11-10-development-change-slot-eviction-policy.md` §4-§5.

@@ -402,6 +402,9 @@ pub struct Change {
     /// clippy ones again. See `.claude/decisions/2026-11-15-development-code-checks-by-reach.md` §4.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub carried_checks: Vec<String>,
+    /// The head whose results `carried_checks` are; the head they carry to is `head`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub carried_from: Option<String>,
     /// The head whose patch a restack found already on `main`; closing it then loses nothing;
     /// see `.claude/decisions/2026-11-12-development-grants-applies-rescue-yield.md` §4 F3.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -733,6 +736,7 @@ impl Change {
             grant: None,
             kept: Vec::new(),
             carried_checks: Vec::new(),
+            carried_from: None,
             landed: None,
             evicted: None,
             yielded: None,

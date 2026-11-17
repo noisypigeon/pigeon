@@ -2,9 +2,11 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use super::scope::{Binary, Crates, InfraTests, Layout, TestMap, Unit, jobs_of};
+use super::scope::{Binary, Crates, InfraTests, Layout, TestMap, Unit, carried_of, jobs_of};
 use super::ship::{healthy, whole_deploy};
-use super::testmaps::{Map, TestMaps};
+use super::testmaps::{CHECK, Map, TestMaps};
+use crate::actions::Finished;
+use crate::change::Check;
 use crate::release::Config;
 
 const A: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -210,5 +212,162 @@ fn each_test_check_records_the_units_it_runs() {
             Unit::target("pigeon-agent", "test", "infra_remote", ""),
         ],
         "the infra job, as its own targets"
+    );
+}
+
+#[test]
+#[allow(clippy::too_many_lines)]
+fn a_restack_carries_the_checks_mains_files_dont_reach_and_its_head_still_runs() {
+    let config = reach_config();
+    let crates = reach_crates();
+    let map = reach_map();
+    let head = vec!["src/pigeon-agent/src/jobs.rs".to_string()];
+    let checks: Vec<Check> = jobs_of(&config, &crates, &head, Some(&map))
+        .into_iter()
+        .filter(|j| j.name != "policy.check")
+        .map(|j| Check {
+            name: j.name,
+            argv: j.argv,
+        })
+        .collect();
+    let mut kept = checks.clone();
+    kept.extend(checks.iter().map(|c| Check {
+        name: format!("gate: {}", c.name),
+        argv: c.argv.clone(),
+    }));
+    kept.push(Check {
+        name: "gate: test".into(),
+        argv: ["cargo", "test", "--workspace", "--locked"]
+            .map(String::from)
+            .to_vec(),
+    });
+    let set = |n: &[&str]| -> BTreeSet<String> { n.iter().map(|s| (*s).to_string()).collect() };
+    let all: BTreeSet<String> = kept.iter().map(|k| k.name.clone()).collect();
+    let rerun = |files: &[&str], map: Option<&TestMap>, kept: &[Check]| -> BTreeSet<String> {
+        let files: Vec<String> = files.iter().map(|f| (*f).to_string()).collect();
+        let carried = carried_of(&config, &crates, map, &files, &head, kept);
+        kept.iter()
+            .map(|k| k.name.clone())
+            .filter(|n| !carried.contains(n))
+            .collect()
+    };
+    let suite = set(&[
+        "test pigeon-agent: suite jobs",
+        "gate: test pigeon-agent: suite jobs",
+        "gate: test",
+    ]);
+    let tests = set(&[
+        "test pigeon-agent: lib",
+        "gate: test pigeon-agent: lib",
+        "test pigeon-agent: suite jobs",
+        "gate: test pigeon-agent: suite jobs",
+        "gate: test",
+    ]);
+    for (name, files, m, want) in [
+        (
+            "an ADR-only merge keeps every check",
+            &[".claude/decisions/2026-11-16-x.md"][..],
+            Some(&map),
+            BTreeSet::new(),
+        ),
+        (
+            "a Cargo.lock change re-runs them all",
+            &["Cargo.lock"][..],
+            Some(&map),
+            all.clone(),
+        ),
+        (
+            "a crate's manifest re-runs them all",
+            &["src/pigeon-core/Cargo.toml"][..],
+            Some(&map),
+            all.clone(),
+        ),
+        (
+            "tests/suite/main.rs reaches its whole suite",
+            &["src/pigeon-agent/tests/suite/main.rs"][..],
+            Some(&map),
+            suite.clone(),
+        ),
+        (
+            "an unknown file reaches its crate",
+            &["src/pigeon-agent/src/new.rs"][..],
+            Some(&map),
+            tests.clone(),
+        ),
+        (
+            "an unknown file reaches its crate's dependants",
+            &["src/pigeon-core/src/new.rs"][..],
+            Some(&map),
+            tests.clone(),
+        ),
+        (
+            "an unknown file under tests/suite/ reaches only its crate's suite",
+            &["src/pigeon-agent/tests/suite/brand_new.rs"][..],
+            Some(&map),
+            suite.clone(),
+        ),
+        (
+            "a mapped file reaches only the checks that run its units",
+            &["src/pigeon-core/src/change/restack.rs"][..],
+            Some(&map),
+            set(&["gate: test"]),
+        ),
+        (
+            "a non-Rust file scope maps to a check of the change re-runs them all",
+            &["src/pigeon-agent/tests/state/x.json"][..],
+            Some(&map),
+            all.clone(),
+        ),
+        (
+            "a non-Rust file scope maps to none of its checks reaches none",
+            &["infra/pigeon/unit.yaml"][..],
+            Some(&map),
+            BTreeSet::new(),
+        ),
+        (
+            "a failed test map on main stops all carrying",
+            &[".claude/decisions/2026-11-16-x.md"][..],
+            None,
+            all.clone(),
+        ),
+    ] {
+        assert_eq!(rerun(files, m, &kept), want, "{name}");
+    }
+    let stale = [
+        Check {
+            name: "test pigeon-agent: suite jobs".into(),
+            argv: ["cargo", "test", "-p", "pigeon-agent", "--locked"]
+                .map(String::from)
+                .to_vec(),
+        },
+        Check {
+            name: "spike gone".into(),
+            argv: vec!["sh".into(), "run.sh".into()],
+        },
+    ];
+    assert_eq!(
+        rerun(&[".claude/decisions/2026-11-16-x.md"], Some(&map), &stale),
+        set(&["test pigeon-agent: suite jobs", "spike gone"]),
+        "a check the restacked head no longer runs as it ran doesn't carry"
+    );
+}
+
+#[test]
+fn a_failed_test_map_makes_main_red_until_a_run_passes() {
+    let finished = |ok: bool| Finished {
+        name: CHECK.into(),
+        ok,
+        job: None,
+    };
+    let red = TestMaps::default()
+        .mirrored(A)
+        .finished(0, &finished(false));
+    assert_eq!(red.red.as_deref(), Some(A));
+    let next = red.mirrored(B);
+    assert_eq!(next.red.as_deref(), Some(A), "a queued run isn't a pass");
+    assert_eq!(
+        next.finished(0, &finished(true)).red,
+        None,
+        "a passed run clears it"
     );
 }

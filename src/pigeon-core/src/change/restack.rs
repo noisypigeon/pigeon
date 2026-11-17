@@ -164,6 +164,7 @@ impl Change {
                     self.gate_full = Some(format!("main changed its files at {}", r.onto));
                 }
                 let (mut c, effects) = self.pushed(to)?;
+                c.carried_from = (!kept.is_empty()).then(|| sha.to_string());
                 c.kept = kept;
                 Ok((c, effects))
             }
@@ -171,7 +172,8 @@ impl Change {
     }
 
     /// The head's passed code checks and gate jobs, which a disjoint, same-patch restack keeps.
-    fn passed_code(&self) -> Vec<Job> {
+    #[must_use]
+    pub(crate) fn passed_code(&self) -> Vec<Job> {
         self.jobs
             .iter()
             .filter(|j| {

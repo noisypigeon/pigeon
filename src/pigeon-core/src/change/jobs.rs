@@ -142,6 +142,9 @@ impl Change {
                 self.jobs.push(k);
             }
         }
+        if self.carried_checks.is_empty() {
+            self.carried_from = None;
+        }
         let (c, early) = self.early_gate();
         self = c;
         effects.extend(early);

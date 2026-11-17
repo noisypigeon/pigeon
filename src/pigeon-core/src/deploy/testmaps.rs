@@ -65,6 +65,10 @@ pub struct TestMaps {
     /// A failed map's commit, until a task is opened for it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub failed_sha: Option<String>,
+    /// The commit whose `test map` failed, until a later run passes; nothing carries across a
+    /// restack meanwhile. See the merge-path ADR's 2026-11-16 amendment (#20).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub red: Option<String>,
 }
 
 /// Whether `files` hold a Rust input, whose change can change what the tests run.
@@ -171,9 +175,11 @@ impl TestMaps {
         };
         if f.ok {
             next.copying = d.run.map(|run| (d.sha.clone(), run));
+            next.red = None;
         } else {
             next.failed = Some(format!("the test map of {} failed", d.sha));
             next.failed_sha = Some(d.sha.clone());
+            next.red = Some(d.sha.clone());
         }
         next
     }
@@ -219,6 +225,7 @@ impl TestMaps {
             "failed": self.failed,
             "deciding": self.deciding,
             "skipped": self.skipped,
+            "red": self.red,
         })
     }
 }
