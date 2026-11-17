@@ -174,6 +174,12 @@ pub enum Routed {
         /// Its arguments.
         args: serde_json::Map<String, Value>,
     },
+    /// `feed.read`, with its arguments; see
+    /// `.claude/decisions/2026-11-17-runtime-mcp-feed-view-contract.md` §3.
+    Feed {
+        /// Its arguments.
+        args: serde_json::Map<String, Value>,
+    },
     /// A brief operation, with its arguments; see
     /// `.claude/decisions/2026-11-13-development-model-tiered-agent-briefs.md` §3.
     Brief {
@@ -444,6 +450,7 @@ pub fn route(request: &Request, by: &str, at: u64) -> Result<Routed, String> {
             args: a.clone(),
         }),
         "events.wait" => Ok(Routed::Events { args: a.clone() }),
+        "feed.read" => Ok(Routed::Feed { args: a.clone() }),
         "digest.show" => Ok(Routed::Digest),
         "apple.check" => Ok(Routed::AppleCheck),
         "ios.release" => Ok(Routed::IosRelease),

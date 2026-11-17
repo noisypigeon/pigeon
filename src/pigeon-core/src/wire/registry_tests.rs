@@ -101,7 +101,7 @@ fn sites_publish_and_infra_apply_need_platform() {
 #[test]
 fn every_view_count_is_pinned() {
     let count = |v: View| catalog().iter().filter(|o| o.view == v).count();
-    assert_eq!(count(View::List), 10);
+    assert_eq!(count(View::List), 11);
     assert_eq!(count(View::Detail), 19);
     assert_eq!(count(View::Card), 44);
     assert_eq!(count(View::Form), 0);
@@ -133,6 +133,7 @@ fn the_views_are_as_decided() {
             "task.list",
             "task.wait",
             "events.wait",
+            "feed.read",
             "change.evictable",
             "provider.tools",
         ])

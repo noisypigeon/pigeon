@@ -6,7 +6,7 @@ pub const PREFIXES: &[&str] = &[];
 
 /// How many of this family's operations have no presenter yet; each brief that presents some lowers it.
 #[allow(dead_code)]
-pub const PENDING: usize = 28;
+pub const PENDING: usize = 29;
 
 /// The operations this family presents.
 pub const NAMES: &[&str] = &[];

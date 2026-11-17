@@ -977,6 +977,10 @@ async fn dispatch(
             let v = events::wait(env, s, &args, who.human).await?;
             Ok((None, respond(operation, 200, v)))
         }
+        Routed::Feed { args } => {
+            let v = events::feed(env, s, &args, who.human).await?;
+            Ok((None, respond(operation, 200, v)))
+        }
         Routed::Task {
             operation: op,
             args,

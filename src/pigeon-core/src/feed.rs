@@ -256,6 +256,26 @@ pub fn visible(i: &Item, r: &Reader) -> bool {
     }
 }
 
+/// Who reads: the owner, else the named session, else a member.
+#[must_use]
+pub fn reader(owner: bool, session: Option<&str>) -> Reader {
+    if owner {
+        return Reader::Owner;
+    }
+    match session.map(str::trim) {
+        Some(s) if !s.is_empty() => Reader::Session(session.unwrap_or_default().to_string()),
+        _ => Reader::Member,
+    }
+}
+
+/// The needs named by a non-blank `s`, else none.
+#[must_use]
+pub fn parse_needs(s: Option<&str>) -> Option<Needs> {
+    s.map(str::trim)
+        .filter(|s| !s.is_empty())
+        .and_then(Needs::parse)
+}
+
 /// The items still needing someone, in order: those with needs and no later item closing them.
 #[must_use]
 pub fn open(items: &[Item]) -> Vec<&Item> {

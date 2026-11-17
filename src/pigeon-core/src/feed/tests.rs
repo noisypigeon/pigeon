@@ -214,3 +214,21 @@ fn read_filters() {
     );
     assert_eq!(got.iter().map(|i| i.id).collect::<Vec<_>>(), [2]);
 }
+
+#[test]
+fn reader_is_owner_then_session_then_member() {
+    assert_eq!(reader(true, Some("a")), Reader::Owner);
+    assert_eq!(reader(false, Some("a")), Reader::Session("a".to_string()));
+    assert_eq!(reader(false, Some("  ")), Reader::Member);
+    assert_eq!(reader(false, None), Reader::Member);
+}
+
+#[test]
+fn needs_parse_from_text() {
+    assert_eq!(parse_needs(Some("owner")), Some(Needs::Owner));
+    assert_eq!(parse_needs(Some("agent")), Some(Needs::Agent));
+    assert_eq!(parse_needs(Some("none")), Some(Needs::None));
+    assert_eq!(parse_needs(Some(" ")), None);
+    assert_eq!(parse_needs(None), None);
+    assert_eq!(parse_needs(Some("x")), None);
+}

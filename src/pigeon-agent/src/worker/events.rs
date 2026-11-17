@@ -165,11 +165,78 @@ pub async fn wait(
     }
 }
 
+/// The feed's items after `after` that `args` asks for, waiting up to `seconds` (at most
+/// [`WAIT_MAX`]) for one: the last event's number and the items; see
+/// `.claude/decisions/2026-11-17-runtime-mcp-feed-view-contract.md` §3.
+///
+/// # Errors
+///
+/// When a binding fails.
+pub async fn feed(
+    env: &Env,
+    s: &Settings,
+    args: &Map<String, Value>,
+    owner: bool,
+) -> Result<Value> {
+    let text = |k: &str| match args.get(k) {
+        Some(Value::String(v)) => Some(v.clone()),
+        Some(Value::Number(v)) => Some(v.to_string()),
+        _ => None,
+    };
+    let seconds = text("seconds")
+        .and_then(|v| v.parse::<u64>().ok())
+        .unwrap_or(WAIT_MAX)
+        .min(WAIT_MAX);
+    let after = match text("after") {
+        Some(a) if a == "session" => json!("session"),
+        a => json!(a.and_then(|a| a.parse::<u64>().ok()).unwrap_or_default()),
+    };
+    let body = json!({
+        "after": after,
+        "session": text("session").filter(|v| !v.trim().is_empty()),
+        "needs": text("needs"),
+        "open": matches!(text("open").as_deref(), Some("1" | "true")),
+        "owner": owner,
+    });
+    let until = worker::Date::now().as_millis() + seconds * 1000;
+    loop {
+        let (_, v) = to_instance(env, s, "/feed/read", &body).await?;
+        if v["items"].as_array().is_some_and(|e| !e.is_empty()) {
+            return Ok(v);
+        }
+        match crate::events::look(worker::Date::now().as_millis(), until, LOOK_MS) {
+            Some(ms) => worker::Delay::from(Duration::from_millis(ms)).await,
+            None => return Ok(v),
+        }
+    }
+}
+
 /// The storage key of the sessions' cursors.
 const CURSORS: &str = "event-cursors";
 
-/// The `Instance` Durable Object's side: `/events/add`, `/events/nudge`, `/events/since` and
-/// `/events/cursor`.
+/// The number a read is after: with a session, its cursor polled and kept; without, the log's end or the number asked.
+async fn resolve(
+    storage: &worker::Storage,
+    session: Option<&str>,
+    asked: After,
+    last: u64,
+) -> Result<u64> {
+    match session {
+        Some(label) => {
+            let mut cursors: Cursors = storage.get(CURSORS).await?.unwrap_or_default();
+            let after = cursors.poll(label, asked, last, now());
+            storage.put(CURSORS, &cursors).await?;
+            Ok(after)
+        }
+        None => Ok(match asked {
+            After::Session => last,
+            After::At(n) => n,
+        }),
+    }
+}
+
+/// The `Instance` Durable Object's side: `/events/add`, `/events/nudge`, `/events/since`,
+/// `/events/cursor` and `/feed/read`.
 ///
 /// # Errors
 ///
@@ -220,18 +287,7 @@ pub async fn serve(state: &State, path: &str, body: &Value) -> Result<Response> 
                 Some("session") => After::Session,
                 _ => After::At(body["after"].as_u64().unwrap_or_default()),
             };
-            let after = match &session {
-                Some(label) => {
-                    let mut cursors: Cursors = storage.get(CURSORS).await?.unwrap_or_default();
-                    let after = cursors.poll(label, asked, log.last, now());
-                    storage.put(CURSORS, &cursors).await?;
-                    after
-                }
-                None => match asked {
-                    After::Session => log.last,
-                    After::At(n) => n,
-                },
-            };
+            let after = resolve(&storage, session.as_deref(), asked, log.last).await?;
             let filter = Filter {
                 after,
                 wake: body["wake"].as_bool() == Some(true),
@@ -245,6 +301,24 @@ pub async fn serve(state: &State, path: &str, body: &Value) -> Result<Response> 
                 owner: body["owner"].as_bool() == Some(true),
             };
             Response::from_json(&json!({ "last": log.last, "events": log.since(&filter) }))
+        }
+        "/feed/read" => {
+            let session = body["session"].as_str();
+            let asked = match body["after"].as_str() {
+                Some("session") => After::Session,
+                _ => After::At(body["after"].as_u64().unwrap_or_default()),
+            };
+            let after = resolve(&storage, session, asked, log.last).await?;
+            let reader = crate::core::feed::reader(body["owner"] == true, session);
+            let query = crate::core::feed::Query {
+                after,
+                needs: crate::core::feed::parse_needs(body["needs"].as_str()),
+                open: body["open"].as_bool() == Some(true),
+                limit: 0,
+            };
+            let all = log.list.iter().cloned().collect::<Vec<_>>();
+            let items = crate::core::feed::read(&all, &reader, &query);
+            Response::from_json(&json!({ "last": log.last, "items": items }))
         }
         "/events/cursor" => {
             let cursors: Cursors = storage.get(CURSORS).await?.unwrap_or_default();

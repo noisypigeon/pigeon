@@ -255,6 +255,7 @@ impl Operation {
             || self.name.starts_with("task.")
             || self.name.starts_with("brief.")
             || self.name.starts_with("events.")
+            || self.name.starts_with("feed.")
             || self.name.starts_with("digest.")
             || self.name.starts_with("session.")
             || self.name.starts_with("platform.")
@@ -848,6 +849,20 @@ const CATALOG: &[Operation] = &[
             arg("session", false, Kind::String),
             arg("change", false, Kind::Text),
             arg("wake", false, Kind::String),
+            arg("seconds", false, Kind::Text),
+        ],
+        view: View::List,
+    },
+    Operation {
+        name: "feed.read",
+        engine: Engine::Agent,
+        effect: Effect::Read,
+        summary: "The feed's items after `after` (an item number, or `session` to resume from the session's kept cursor), for `session` if named, only those needing `needs` (`owner` or `agent`) when named, only the open ones when `open` is `1`, waiting up to `seconds` (at most 25) for one; answers `last` and `items`; see .claude/decisions/2026-11-17-runtime-mcp-feed-view-contract.md §3",
+        args: &[
+            arg("after", false, Kind::Text),
+            arg("session", false, Kind::String),
+            arg("needs", false, Kind::String),
+            arg("open", false, Kind::Text),
             arg("seconds", false, Kind::Text),
         ],
         view: View::List,
