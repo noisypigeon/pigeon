@@ -532,3 +532,20 @@ Steps:
 2. A sentinel change adds the list to `.config/approvals.yaml`:
    `Cargo.toml`, `Cargo.lock`, `tooling/ci/tests.ledger`,
    `tooling/ci/tests.moves` and `.config/releases.yaml`.
+### 2026-11-17: pigeon-core links the judge's library for the broker's provider-call policies
+
+[`2026-11-16-security-provider-calls-mcp-broker.md`](2026-11-16-security-provider-calls-mcp-broker.md)'s
+step 5b judges each provider call in the Worker. A Checker round trip per
+call is too slow, so pigeon-core links the judge's library, `pigeon-eviction`,
+for its `provider-call` target alone.
+
+- **What §1 keeps.** The judge's binary still runs separately, and its own
+  release unit and grant are unchanged. Changes to the CLI don't pass
+  through to it. The Worker deploys from `main`, so it judges calls with
+  main's engine and main's `provider-call-*.yaml`.
+- **What changes.** "Nothing in the workspace links the judge" no longer
+  holds. A judge change now builds and tests pigeon-core and everything
+  that depends on it. The scope map finds this from the dependency graph,
+  so its tests say so.
+- **The limit.** Only `provider::policy` calls the library, through
+  `load_str` and `judge_call`. No other target is judged in the Worker.
