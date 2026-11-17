@@ -6,8 +6,8 @@ use crate::harness::step;
 use rusqlite::Connection;
 use step::Apply;
 
-const SCHEMA_V0: &str = include_str!("../../migrations/0001_schema_v0.sql");
-const CHANGES: &str = include_str!("../../migrations/0002_changes.sql");
+const SCHEMA_V0: &str = include_str!("../../../migrations/0001_schema_v0.sql");
+const CHANGES: &str = include_str!("../../../migrations/0002_changes.sql");
 
 fn applied() -> Connection {
     let db = Connection::open_in_memory().expect("sqlite");

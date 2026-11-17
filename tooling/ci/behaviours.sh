@@ -30,18 +30,18 @@ list() {
   LC_ALL=C sort "$work/all"
 }
 
-# Fails when a top-level module of a `suite` target is a suffix of another's: a libtest filter
-# `<module>::` would also select the other.
-suffixes() {
+# Fails when a top-level module's filter `<module>::` occurs in a test path outside that module:
+# libtest's filter is a substring, so it would select that test too.
+filters() {
   awk '$3 == "suite" { split($4, p, "::"); if (p[2] != "") print $1, p[1] }' "$1" |
     LC_ALL=C sort -u >"$work/modules"
   awk 'NR == FNR { m[NR] = $0; n = NR; next }
-    { for (i = 1; i <= n; i++) {
+    $3 == "suite" { for (i = 1; i <= n; i++) {
         split(m[i], a, " ")
-        if (a[1] == $1 && a[2] != $2 && length($2) > length(a[2]) &&
-            substr($2, length($2) - length(a[2]) + 1) == a[2]) {
-          print "behaviours: in " $1 "'"'"'s suite, " a[2] ":: also selects " $2 "::"; bad = 1 } } }
-    END { exit bad }' "$work/modules" "$work/modules"
+        f = a[2] "::"
+        if (a[1] == $1 && index($4, f) != 1 && index($4, f) > 0) {
+          print "behaviours: in " $1 "'"'"'s suite, " f " also selects " $4; bad = 1 } } }
+    END { exit bad }' "$work/modules" "$1"
 }
 
 case "${1:-}" in
@@ -52,7 +52,7 @@ case "${1:-}" in
     echo "behaviours: warning: $ledger is stale; run tooling/ci/behaviours.sh and commit it" >&2
     diff "$ledger" "$work/now" | head -n 20 >&2 || true
   fi
-  suffixes "$work/now"
+  filters "$work/now"
   # The ledger lived in src/pigeon-cli until the workspace moved to the root.
   if ! git show "$base:tooling/ci/tests.ledger" >"$work/base" 2>/dev/null \
     && ! git show "$base:src/pigeon-cli/tests.ledger" >"$work/base" 2>/dev/null; then

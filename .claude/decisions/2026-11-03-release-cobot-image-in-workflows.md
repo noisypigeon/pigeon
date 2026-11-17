@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: release
-* Governs: `**Dockerfile`, `**.dockerignore`, `src/**/tests/suite/workers_image_tools.rs`, `rust-toolchain.toml`
+* Governs: `**Dockerfile`, `**.dockerignore`, `src/**/tests/suite/**/workers_image_tools.rs`, `rust-toolchain.toml`
 
 ## Context
 
@@ -181,3 +181,10 @@ deletes `mise.toml`. The toolchain pin it held is now `/rust-toolchain.toml`
 (!728), and its task graph is now `pigeon dev`'s, in `src/**/dev.rs` (!696).
 This ADR's `Governs` line names whichever of the two took over the part it
 rules.
+
+### 2026-11-17: Its test globs follow the suite's mechanism directories
+
+Its `Governs` test globs take `src/**/tests/suite/**/<file>`, now that
+pigeon-agent's suite files sit in mechanism directories; see
+[`2026-11-16-development-one-test-binary-per-crate.md`](2026-11-16-development-one-test-binary-per-crate.md),
+its 2026-11-17 amendment.

@@ -272,7 +272,7 @@ fn change_scope_names_the_checks_and_needs_files() {
         names,
         [
             "infra.validate",
-            "test pigeon-agent: suite infra_catalog infra_manifest sites_apex git infra_credentials",
+            "test pigeon-agent: suite infra infra_remote",
             "policy.check"
         ]
     );

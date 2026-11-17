@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: security
-* Governs: `.config/approvals.yaml`, `src/**/approvals.rs`, `src/**/passkeys.rs`, `src/**/worker/passkey*`, `src/**/tests/suite/passkeys.rs`
+* Governs: `.config/approvals.yaml`, `src/**/approvals.rs`, `src/**/passkeys.rs`, `src/**/worker/passkey*`, `src/**/tests/suite/**/passkeys.rs`
 
 ## Context
 
@@ -353,3 +353,10 @@ owner approves it with a passkey:
 - the fix sits where `change.merge` meets the owner check (`by_grant` and
   the owner check named in the 2026-11-12 execution);
 - `approvals.yaml` doesn't change.
+
+### 2026-11-17: Its test globs follow the suite's mechanism directories
+
+Its `Governs` test globs take `src/**/tests/suite/**/<file>`, now that
+pigeon-agent's suite files sit in mechanism directories; see
+[`2026-11-16-development-one-test-binary-per-crate.md`](2026-11-16-development-one-test-binary-per-crate.md),
+its 2026-11-17 amendment.

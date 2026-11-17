@@ -117,7 +117,7 @@ fn the_bound_job_passes_a_change_inside_its_scope_and_names_its_checks() {
         names,
         [
             "infra.validate",
-            "test pigeon-agent: suite infra_catalog infra_manifest sites_apex git infra_credentials"
+            "test pigeon-agent: suite infra infra_remote"
         ],
         "policy.check is the bound job's own"
     );

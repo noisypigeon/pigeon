@@ -72,7 +72,7 @@ fn the_catalog_runs_infra_checks_and_no_rust_build() {
         got,
         [
             "infra.validate",
-            "test pigeon-agent: suite infra_catalog infra_manifest sites_apex git infra_credentials",
+            "test pigeon-agent: suite infra infra_remote",
             "policy.check"
         ]
     );
@@ -443,7 +443,7 @@ fn a_mapped_test_check_does_not_stand_in_for_a_crates_whole_suite() {
         "catalog/cloudflare/kinds/git-repo/schema.json",
     ]);
     assert!(
-        got.contains(&"test pigeon-agent: suite infra_catalog infra_manifest sites_apex git infra_credentials".to_string()),
+        got.contains(&"test pigeon-agent: suite infra infra_remote".to_string()),
         "{got:?}"
     );
 }

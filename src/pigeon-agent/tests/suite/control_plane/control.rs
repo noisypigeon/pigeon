@@ -259,9 +259,9 @@ fn events_round_trip_their_wire_form() {
 }
 
 const SCHEMA: [&str; 3] = [
-    include_str!("../../migrations/0001_schema_v0.sql"),
-    include_str!("../../migrations/0002_changes.sql"),
-    include_str!("../../migrations/0003_change_sessions.sql"),
+    include_str!("../../../migrations/0001_schema_v0.sql"),
+    include_str!("../../../migrations/0002_changes.sql"),
+    include_str!("../../../migrations/0003_change_sessions.sql"),
 ];
 
 fn db() -> rusqlite::Connection {

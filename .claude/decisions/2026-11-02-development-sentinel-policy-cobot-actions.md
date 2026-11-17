@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: development
-* Governs: `.config/policies/eviction-actions.yaml`, `src/**/definition.rs`, `src/**/markdown.rs`, `src/**/policy.rs`, `src/**/report.rs`, `src/**/rules.rs`, `src/**/target.rs`, `src/**/release/**`, `src/**/tests/suite/release.rs`, `src/**/tests/suite/release_scope.rs`, `src/pigeon-harness/src/commands/infra.rs`
+* Governs: `.config/policies/eviction-actions.yaml`, `src/**/definition.rs`, `src/**/markdown.rs`, `src/**/policy.rs`, `src/**/report.rs`, `src/**/rules.rs`, `src/**/target.rs`, `src/**/release/**`, `src/**/tests/suite/**/release.rs`, `src/**/tests/suite/**/release_scope.rs`, `src/pigeon-harness/src/commands/infra.rs`
 
 ## Context
 
@@ -147,3 +147,10 @@ new paths under `src/pigeon-harness/`.
 
 Step 12 of the src-crates ADR renames `.config/policies/sentinel-actions.yaml` to
 `eviction-actions.yaml`, matching `src/pigeon-eviction/src/` only.
+
+### 2026-11-17: Its test globs follow the suite's mechanism directories
+
+Its `Governs` test globs take `src/**/tests/suite/**/<file>`, now that
+pigeon-agent's suite files sit in mechanism directories; see
+[`2026-11-16-development-one-test-binary-per-crate.md`](2026-11-16-development-one-test-binary-per-crate.md),
+its 2026-11-17 amendment.
