@@ -856,3 +856,24 @@ glob under `src/pigeon-cli/` or `src/site-templates/` becomes `src/**/<tail>`
 (or `**<file>` for a workspace root file), which matches the file both before
 and after the restructure moves it. That ADR's step 12 tightens them to the
 new paths.
+
+### 2026-11-17: A merge's push refused for now is retried, and keeps the turn
+
+- **What went wrong.** !842's merge job passed every gate check, then failed
+  its push to `main` with `artifacts_git_receive_pack_busy`, a transient
+  refusal from the Artifacts remote. It gave its turn back, per the
+  2026-11-11 rule, and dropped to 18/23.
+- **A transient push refusal is retried** 4 times, after 2, 4, 8 and 16 s.
+  - The patterns are `receive_pack_busy`, HTTP 429, 502, 503 and 504, "RPC
+    failed", "unexpected disconnect", "Connection reset" and "early EOF".
+  - A settled refusal is never retried: `[rejected]`, fetch first,
+    non-fast-forward, or `STALE_BASE`.
+  - The delete of the change's branch after the merge retries the same way.
+- **Still refused after the retries, the change keeps its turn,** as a
+  `STALE_BASE` refusal does (2026-11-15). Its merge job is queued again under
+  its approval, with no restack and no gate, since `main` hasn't moved.
+- **This is an exception to the 2026-11-11 rule** that a merge job ending
+  without a merge gives the turn back. `STUCK` (60 minutes) still bounds a
+  remote that stays busy.
+
+**Execution:** the merge-path ADR's step 12.

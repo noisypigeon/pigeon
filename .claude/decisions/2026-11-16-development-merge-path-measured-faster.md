@@ -416,3 +416,15 @@ are briefed after steps 3 to 10.
 
 **Execution,** added: **10. Brief: docs-only changes share a turn** (§9),
 sonnet, core first.
+
+### 2026-11-17: A transient push refusal keeps the turn
+
+#### 12. A merge's push retries
+
+- Per the concurrent-sessions ADR's 2026-11-17 amendment, the merge job
+  retries a transient push refusal. A change still refused keeps its turn,
+  and its merge runs again with no restack and no gate.
+- **Measured:** !842 lost a passed gate run and its place to one
+  `receive_pack_busy`.
+
+**Execution,** added: **12. Brief: a merge's push retries** (§12), sonnet.
