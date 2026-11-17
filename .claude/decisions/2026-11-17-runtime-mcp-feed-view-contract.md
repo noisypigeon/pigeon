@@ -492,3 +492,29 @@ name it. The log links them instead, by a subject both ends share.
     the pool, the CI window, tasks, mandates, the digest);
   - 8c, the planner's: `worker/minting.rs` passes `grant:<offer id>`. It is
     a gate path, so the owner approves it.
+
+### 2026-11-17: Step 13's shape: items carry the stage and today's wake rule, so the follower's lines don't change
+
+Moving `pigeon session follow` onto `feed.read` as §3.3 has it would change
+what a session sees:
+
+- its line prints the event's stage (`authorized needs=agent`), which an
+  item doesn't carry;
+- `needs=agent` isn't `wake=agent`: `deploy.failed` wakes a session today
+  but needs the owner in the feed, and `session.ended` is the reverse.
+
+So the feed keeps both, and `needs` stays what it is for the clients:
+
+- **`Item` gains `stage`,** copied from the event (left out when unset), and
+  **`wakes`**, `events::wakes` of the event (left out when false).
+- **`Query` and `feed.read` gain `wake`:** `wake=agent` keeps the items
+  that wake their session, as `/v0/events?wake=agent` does today.
+- **Step 13 splits:**
+  - 13a, a brief: `Item.stage` and `Item.wakes`, `Query.wake`, and
+    `feed.read`'s `wake` argument, with tests;
+  - 13b, a brief: `pigeon session follow` calls `feed.read` through
+    `POST /v0/run` (`after=session`, `wake=agent`, the session's label and
+    hold) and prints each item exactly as it printed each event; the core's
+    `classify`, cut and backoff rules are unchanged.
+- `/v0/events` and `events.wait` become shims over the feed (7c) only after
+  13b has merged and every session runs it.
