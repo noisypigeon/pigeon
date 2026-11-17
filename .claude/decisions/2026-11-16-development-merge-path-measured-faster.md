@@ -4,7 +4,7 @@
 * Model: Claude, planner session
 * Author: Willow Graysen (@noisypigeon).
 * Category: development
-* Governs: `src/**/worker/main_run.rs`, `src/**/worker/merges.rs`, `src/**/worker/github.rs`, `src/pigeon-agent/src/*/ci.rs`, `src/**/release/**`
+* Governs: `src/**/worker/main_run.rs`, `src/**/worker/merges.rs`, `src/**/worker/github.rs`, `src/pigeon-agent/src/*/ci.rs`, `src/**/release/**`, `src/**/change/queue.rs`, `src/**/macos/job.rs`
 
 ## Context
 
@@ -262,3 +262,157 @@ still apply.
   change takes the owner's passkey whatever she decides. It still needs her
   answer first, and it lands after the restructure's k3, which next edits
   `tiers.rs`.
+
+### 2026-11-16: Step 2 lands, and two more steps: a waiting macOS gate yields the head, and a re-push keeps its place
+
+- **Step 2 landed as !821.** The release bot takes a merge turn
+  (`merges::release_turn`).
+  - Its first turn at the head restacked it onto !797's library rename.
+    The new test module still named the old library, so it failed clippy and
+    gave its turn back. A one-line fix followed.
+  - That re-push queued it last, so the owner moved it to the front a second
+    time.
+  - A brief that adds a test module now checks for an open rename of what it
+    imports.
+- **Measured tonight, after this ADR:**
+  - **!804's merge-gate `ios` held the head from about 21:40 until it yielded
+    by hand** (events 36527–36547).
+    - GitHub gave no runner, Bitrise was refused for an unset
+      `BITRISE_TOKEN`, and Buildkite for a token without `read_pipelines`.
+    - The job then retried Buildkite every ~20 s while holding the head.
+  - **A re-push sends a queued change to the back,** and loses the owner's
+    front. That happens even when the re-push is only a rebase onto a parent
+    that just merged, or a fix after a head failure. !803 was fronted 3 times
+    and !821 twice, a passkey tap each.
+
+#### 7. A merge-gate macOS check that waits gives up the head
+
+- **A gate check waiting for a machine yields the turn, as `change_yield`
+  does.** The change keeps its place, and takes the turn back when the check
+  has a machine.
+- **A credential refusal from every provider in the order makes the change
+  `needs: owner`,** naming the missing secret or scope. Per !829's step 3 in
+  [`2026-11-12-development-macos-builds-provider-failover.md`](2026-11-12-development-macos-builds-provider-failover.md),
+  a provider refused for a missing secret is skipped, not counted as tried.
+
+#### 8. A re-push keeps its place
+
+- **A re-push keeps the change's place in the queue, and a front the owner
+  gave it,** in either of two cases:
+  - its own lines are unchanged apart from the restack, by the 2026-11-13
+    `own_lines` rule of
+    [`2026-11-08-development-concurrent-agent-sessions.md`](2026-11-08-development-concurrent-agent-sessions.md):
+    a rebase onto `main`, or onto a parent that just merged;
+  - it is the first push after a head failure lost the change its turn.
+- **Any other re-push goes to the back,** as today.
+- **A remembered place is used once,** and lapses after `RETURN` (60
+  minutes: a fix, its checks and a re-approval can outlast `HOLD`). A second
+  failure after a fix queues its next fix at the back.
+- **This amends the concurrent-sessions ADR's 2026-11-16 rule** that a
+  failed change's later push merges from the tail. Its first push after the
+  failure keeps the place; a `ci_rerun` still queues at the tail.
+
+**Execution,** added to the steps:
+
+- **8. Brief: the macOS gate yields** (§7), sonnet.
+- **9. Brief: a re-push keeps its place** (§8), sonnet.
+
+Steps 3 to 5, 6b, 8 and 9 are briefed against `main` now. Those that edit
+`src/pigeon-agent/**` are built and tested on their branches but pushed only
+once the restructure's (e) and k3 have merged. A step whose files reach the
+gate list (`worker/change.rs` once !812's follow-up merges) is carried by a
+planner session, with the owner's passkey.
+
+#### Corrections to §2 and §3, found while briefing
+
+- **§2: the lock is regenerated, not edited.**
+  - A package rename moves its whole `[[package]]` block, since
+    `Cargo.lock` sorts by name, so setting version lines doesn't hold.
+  - When `Cargo.lock` is the only conflicted path, the restack takes the
+    change's lock and runs `cargo update --workspace --offline`, which
+    rewrites only workspace entries. `cargo generate-lockfile` re-resolves
+    registry packages, and `cargo metadata --offline` fails on uncached ones.
+  - It accepts the result only when every registry and git package equals a
+    three-way merge of the fork's, `main`'s and the change's locks. Anything
+    else stays a conflict.
+  - The pure check is `change::lockfile` in pigeon-core. `Governs` gains it
+    once it lands.
+- **§3: the overlap of `bound` and `mirror` is dropped.**
+  - Mirroring before `bound` would publish a head `bound` hasn't checked.
+    [`2026-11-15-development-code-checks-by-reach.md`](2026-11-15-development-code-checks-by-reach.md)
+    forbids that: a head `bound` refused never leaves Cloudflare.
+  - Its saving, about 25 s per attempt, doesn't justify loosening that gate.
+    `bound`, then `mirror`, then checks keep today's order.
+  - Only the polling remains: a change holding the merge turn finds and
+    polls its GitHub run every 10 s (`actions::POLL_TURN`).
+- **6b (#20): reach also decides a disjoint restack.**
+  - Today checks carry across a disjoint restack without a look at `main`'s
+    files. That can't re-run anything when `main` changed `Cargo.lock` and
+    the change didn't.
+  - So the reach rules above decide disjoint restacks too, which narrows the
+    concurrent-sessions ADR's "checks carry across a disjoint restack".
+  - A restack job too old to report reach keeps today's behaviour.
+- **6b (#20): "a failed test map stops carrying".** `TestMaps::red` is set by
+  a failed run on `main` and cleared by the next passed one. While it is set,
+  or with no map at all, every check is reached.
+
+### 2026-11-17: Docs-only changes take one turn together and skip `mirror`; GitHub load, trains and bench gates come back
+
+The owner decided three things, relayed by the status session:
+
+1. Docs-only changes skip CI and stop costing a full queue turn each.
+2. GitHub load comes down by running fewer and cheaper checks, not bigger
+   runners.
+3. Merge trains and bench gates are designed now, not deferred.
+
+- **Measured** (events to 37800, 43 merges, 16204 s of head time):
+  - Today 23 of 65 merges were docs-only.
+  - In the window, 11 docs-only merges held the head a median 127 s each
+    (restack ~21 s, `bound` ~21 s, `mirror` ~22 s, merge job ~60 s): 2020 s,
+    12% of head time.
+  - They already run no GitHub check, no merge gate and no re-check.
+
+#### 9. Docs-only changes share a turn
+
+- **A docs-only change** is one whose bound scope selects no code check,
+  only `policy.check`. Every change under `.claude/decisions/**` qualifies,
+  and so does a generated `review-<n>-<m>`.
+- **A head with no code checks skips `mirror`.** `main`'s own mirror after
+  the merge still runs.
+- **When a docs-only change takes the turn,** every other approved docs-only
+  change waiting in the queue merges in the same turn, in queue order.
+  - Each one is still restacked and `bound`-checked on its own.
+  - A failure drops that change alone.
+  - The turn ends when the last one has merged.
+- **`bound` stays.** It is the secrets scan on a public repository, the
+  scope check and the decisions policy (Governs globs, ADR format), at about
+  20 s. Dropping it isn't safe.
+- **Later:** a docs-only merge lands while a code change holds the turn.
+  That waits for step 6b, because the holder's merge job then needs reach to
+  skip re-gating over docs-only commits.
+- **Expected:** today's 11 docs turns become about 3, saving about 1500 s of
+  head time per window like this one.
+
+#### 10. GitHub load
+
+Briefed with the tests planner after step 6b:
+
+- **The merge gate runs what reach selects.** It stops adding a full
+  `cargo test --workspace` because `main` changed the change's files. Today
+  that `gate: test` ran 9 times, median 248 s.
+- **A clippy feature variant runs only when the change's files reach that
+  feature.**
+- **Fewer, cheaper jobs.** One test binary per crate, and several clippy
+  variants in one job, cut the ~30 s of setup per GitHub job (clippy itself
+  takes 8 to 14 s).
+- **The amendment after it records GitHub minutes and wall-clock,** before
+  and after.
+
+#### 11. Merge trains and bench gates
+
+No longer deferred (§6). Their design, safety argument and measured savings
+come in their own amendment, once benches have been measured since !810, and
+are briefed after steps 3 to 10.
+
+**Execution,** added: **10. Brief: docs-only changes share a turn** (§9),
+sonnet, core first.
