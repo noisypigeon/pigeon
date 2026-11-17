@@ -1,9 +1,12 @@
 //! pigeon's MCP server: its tools are the catalog's operations (control-plane ADR §10).
 
 use agent::Error;
+use agent::core::approval::grants::hex;
 use agent::mcp::{self, Action, PROTOCOL, PROTOCOL_URL, Session, code};
 use agent::wire::{Response, catalog};
+use hmac::{Hmac, Mac};
 use serde_json::{Value, json};
+use sha2::Sha256;
 
 fn reply(message: &Value) -> Value {
     match mcp::parse(message, "0.0.0") {
@@ -60,6 +63,7 @@ fn a_session_id_round_trips_under_its_key_and_nothing_else() {
     let s = Session {
         protocol: PROTOCOL_URL.into(),
         url_elicitation: true,
+        caller: mcp::caller_tag("agent@example.com"),
         ..Session::default()
     };
     let id = mcp::session_id(&s, key);
@@ -206,16 +210,18 @@ fn form_elicitation_is_an_empty_or_form_capability_in_either_version() {
 }
 
 #[test]
-fn a_v2_session_carries_both_capabilities_and_v1_still_parses() {
+fn a_v3_session_carries_both_capabilities_and_older_ids_still_parse() {
     let key = b"k";
     for (form, url) in [(true, true), (true, false), (false, true), (false, false)] {
         let s = Session {
             protocol: PROTOCOL_URL.into(),
             url_elicitation: url,
             form_elicitation: form,
+            door: "device".into(),
+            caller: mcp::caller_tag("a@example.com"),
         };
         let id = mcp::session_id(&s, key);
-        assert!(id.starts_with("v2."), "{id}");
+        assert!(id.starts_with("v3."), "{id}");
         assert_eq!(mcp::session(&id, key), Some(s));
     }
     let both = mcp::session_id(
@@ -223,10 +229,55 @@ fn a_v2_session_carries_both_capabilities_and_v1_still_parses() {
             protocol: PROTOCOL_URL.into(),
             url_elicitation: true,
             form_elicitation: false,
+            caller: mcp::caller_tag("a@example.com"),
+            ..Session::default()
         },
         key,
     );
     assert_eq!(mcp::session(&both.replacen(".u.", ".fu.", 1), key), None);
+    let v2 = v2_id(key, PROTOCOL_URL, "u");
+    assert_eq!(
+        mcp::session(&v2, key),
+        Some(Session {
+            protocol: PROTOCOL_URL.into(),
+            url_elicitation: true,
+            ..Session::default()
+        })
+    );
+}
+
+/// A v2 ID signed by hand: `v2.<protocol>.<caps>.<hex HMAC-SHA256>`.
+fn v2_id(key: &[u8], protocol: &str, caps: &str) -> String {
+    let payload = format!("v2.{protocol}.{caps}");
+    let mut m = <Hmac<Sha256> as Mac>::new_from_slice(key).expect("key");
+    m.update(payload.as_bytes());
+    format!("{payload}.{}", hex(&m.finalize().into_bytes()))
+}
+
+#[test]
+fn admits_only_the_door_and_caller_a_session_was_opened_for() {
+    let key = b"k";
+    let id = mcp::session_id(
+        &Session {
+            door: "device".into(),
+            caller: mcp::caller_tag("a@example.com"),
+            ..Session::default()
+        },
+        key,
+    );
+    assert!(mcp::admits(None, key, "access", "a@example.com"));
+    assert!(mcp::admits(Some(&id), key, "device", "a@example.com"));
+    assert!(!mcp::admits(Some(&id), key, "access", "a@example.com"));
+    assert!(!mcp::admits(Some(&id), key, "device", "b@example.com"));
+    let tampered = id.replacen(".device.", ".access.", 1);
+    assert!(!mcp::admits(
+        Some(&tampered),
+        key,
+        "access",
+        "a@example.com"
+    ));
+    let v2 = v2_id(key, PROTOCOL, "n");
+    assert!(mcp::admits(Some(&v2), key, "access", "b@example.com"));
 }
 
 #[test]

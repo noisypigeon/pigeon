@@ -5,7 +5,7 @@
 
 use hmac::{Hmac, Mac};
 use serde_json::{Value, json};
-use sha2::Sha256;
+use sha2::{Digest, Sha256};
 
 use crate::approval::grants::hex;
 use crate::wire::Error;
@@ -42,6 +42,10 @@ pub struct Session {
     pub url_elicitation: bool,
     /// Whether the client shows form-mode elicitations.
     pub form_elicitation: bool,
+    /// The door it was opened on: "access" or "device".
+    pub door: String,
+    /// The first 16 hex digits of the SHA-256 of its caller's subject; empty in an ID older than v3.
+    pub caller: String,
 }
 
 impl Default for Session {
@@ -50,6 +54,8 @@ impl Default for Session {
             protocol: PROTOCOL.into(),
             url_elicitation: false,
             form_elicitation: false,
+            door: "access".into(),
+            caller: String::new(),
         }
     }
 }
@@ -60,8 +66,16 @@ fn mac(key: &[u8], payload: &str) -> Hmac<Sha256> {
     m
 }
 
-/// `session`'s ID, signed with `key`: `v2.<protocol>.<caps>.<hex HMAC-SHA256>`, where `caps` holds
-/// `f` for form and `u` for URL elicitation, or is `n` for neither.
+/// The first 16 hex digits of the SHA-256 of `subject`: how a session ID names its caller.
+#[must_use]
+pub fn caller_tag(subject: &str) -> String {
+    let mut tag = hex(&Sha256::digest(subject.as_bytes()));
+    tag.truncate(16);
+    tag
+}
+
+/// `session`'s ID, signed with `key`: `v3.<protocol>.<caps>.<door>.<caller>.<hex HMAC-SHA256>`, where
+/// `caps` holds `f` for form and `u` for URL elicitation, or is `n` for neither.
 #[must_use]
 pub fn session_id(session: &Session, key: &[u8]) -> String {
     let mut caps = String::new();
@@ -74,12 +88,16 @@ pub fn session_id(session: &Session, key: &[u8]) -> String {
     if caps.is_empty() {
         caps.push('n');
     }
-    let payload = format!("v2.{}.{caps}", session.protocol);
+    let payload = format!(
+        "v3.{}.{caps}.{}.{}",
+        session.protocol, session.door, session.caller
+    );
     let tag = hex(&mac(key, &payload).finalize().into_bytes());
     format!("{payload}.{tag}")
 }
 
-/// The session `id` names, if `key` signed it; `v1` IDs carry URL elicitation only.
+/// The session `id` names, if `key` signed it; `v1` IDs carry URL elicitation only, and `v1` and
+/// `v2` IDs name no door or caller.
 #[must_use]
 pub fn session(id: &str, key: &[u8]) -> Option<Session> {
     let (payload, tag) = id.rsplit_once('.')?;
@@ -88,22 +106,48 @@ pub fn session(id: &str, key: &[u8]) -> Option<Session> {
         .map(|i| u8::from_str_radix(tag.get(i..i + 2)?, 16).ok())
         .collect::<Option<_>>()?;
     mac(key, payload).verify_slice(&tag).ok()?;
-    let mut parts = payload.split('.');
-    let (Some(version), Some(protocol), Some(caps), None) =
-        (parts.next(), parts.next(), parts.next(), parts.next())
-    else {
-        return None;
+    let parts: Vec<&str> = payload.split('.').collect();
+    match parts.as_slice() {
+        ["v1", protocol, caps] => Some(Session {
+            protocol: (*protocol).to_string(),
+            url_elicitation: *caps == "u",
+            ..Session::default()
+        }),
+        ["v2", protocol, caps] => Some(Session {
+            protocol: (*protocol).to_string(),
+            url_elicitation: caps.contains('u'),
+            form_elicitation: caps.contains('f'),
+            ..Session::default()
+        }),
+        ["v3", protocol, caps, door, caller]
+            if matches!(*door, "access" | "device")
+                && caller.len() == 16
+                && caller
+                    .bytes()
+                    .all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f')) =>
+        {
+            Some(Session {
+                protocol: (*protocol).to_string(),
+                url_elicitation: caps.contains('u'),
+                form_elicitation: caps.contains('f'),
+                door: (*door).to_string(),
+                caller: (*caller).to_string(),
+            })
+        }
+        _ => None,
+    }
+}
+
+/// Whether a request may use session ID `id`: none, an older ID, or one opened on this door by this caller.
+#[must_use]
+pub fn admits(id: Option<&str>, key: &[u8], door: &str, subject: &str) -> bool {
+    let Some(id) = id else {
+        return true;
     };
-    let (url, form) = match version {
-        "v1" => (caps == "u", false),
-        "v2" => (caps.contains('u'), caps.contains('f')),
-        _ => return None,
+    let Some(session) = session(id, key) else {
+        return false;
     };
-    Some(Session {
-        protocol: protocol.to_string(),
-        url_elicitation: url,
-        form_elicitation: form,
-    })
+    session.caller.is_empty() || (session.door == door && session.caller == caller_tag(subject))
 }
 
 /// The session a client's `initialize` params ask for: `2025-11-25` when offered, else
@@ -120,6 +164,7 @@ pub fn negotiate(params: &Value) -> Session {
             protocol: PROTOCOL_URL.into(),
             url_elicitation: elicitation["url"].is_object(),
             form_elicitation: form,
+            ..Session::default()
         }
     } else {
         Session {

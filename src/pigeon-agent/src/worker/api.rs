@@ -38,6 +38,7 @@ async fn serve_mcp(
     who: &Identity,
 ) -> Result<Response> {
     let key = platform::secret(env, "SESSION_KEY").ok();
+    let sid = req.headers().get(mcp::SESSION_HEADER)?;
     let message: Value = match req.json().await {
         Ok(v) => v,
         Err(_) => {
@@ -48,9 +49,19 @@ async fn serve_mcp(
             ));
         }
     };
-    match mcp::parse(&message, crate::VERSION) {
+    let action = mcp::parse(&message, crate::VERSION);
+    if let Some(k) = &key {
+        let admitted = matches!(action, Action::Initialize { .. })
+            || mcp::admits(sid.as_deref(), k.as_bytes(), "access", &who.subject);
+        if !admitted {
+            return Response::error("unknown MCP session; initialize again", 404);
+        }
+    }
+    match action {
         Action::Reply(v) => Response::from_json(&v),
-        Action::Initialize { reply, session } => {
+        Action::Initialize { reply, mut session } => {
+            session.door = "access".into();
+            session.caller = mcp::caller_tag(&who.subject);
             let mut r = Response::from_json(&reply)?;
             if let Some(k) = key {
                 r.headers_mut().set(
