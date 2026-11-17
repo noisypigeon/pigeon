@@ -747,3 +747,14 @@ a generated change closes, which !736 neither relies on nor changes.
   It changes which tests a change's checks run, not when a merge takes its
   turn or how a macOS job is placed.
 - Nothing any of the three ADRs decides changes.
+### 2026-11-17: Review of !842 against !849: they agree
+
+- !849 changed no code. It amends
+  [`2026-11-16-development-merge-path-measured-faster.md`](2026-11-16-development-merge-path-measured-faster.md)
+  with the merge path's next steps: a waiting macOS gate gives up the queue
+  head, and a re-push keeps its place.
+- !842 is this ADR's step 12 (e): the job images' `FEATURES`, the `agent`
+  release unit, `ship.rs`'s job build and the Dockerfile's comment. It touches
+  neither `change/queue.rs` nor `macos/job.rs`, which that ADR governs. The two
+  changes met only through the review rule's scope.
+- Nothing either ADR decides changes.
