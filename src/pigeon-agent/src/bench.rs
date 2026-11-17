@@ -310,6 +310,28 @@ fn visit(
     Ok(())
 }
 
+/// The argv a bench's `bench check` reads the change's checks with, from the workspace at `root`.
+fn scope_argv(root: &str) -> Vec<String> {
+    [
+        "cargo",
+        "run",
+        "-q",
+        "--locked",
+        "-p",
+        "pigeon-harness",
+        "--",
+        "dev",
+        "scope",
+        "--root",
+        root,
+        "--base",
+        "artifacts/main",
+        "--json",
+    ]
+    .map(String::from)
+    .to_vec()
+}
+
 /// The check named `name` among scope's `--json` answer.
 ///
 /// # Errors
@@ -901,24 +923,7 @@ impl Bench {
                 let root = root_from(&ws);
                 let scope = Step {
                     dir: ws.clone(),
-                    argv: [
-                        "cargo",
-                        "run",
-                        "-q",
-                        "--locked",
-                        "-p",
-                        "pigeon",
-                        "--",
-                        "cobot",
-                        "scope",
-                        "--root",
-                        root.as_str(),
-                        "--base",
-                        "artifacts/main",
-                        "--json",
-                    ]
-                    .map(String::from)
-                    .to_vec(),
+                    argv: scope_argv(&root),
                 };
                 let text = self.capture(&scope, cancel, deadline)?;
                 check_step(&text, name, &ws).map(|s| vec![s])
@@ -1568,5 +1573,13 @@ run = "sleep 30"
         assert_eq!(b.status(br#"{"run":"none"}"#).0, 404);
         assert_eq!(b.cancel(br#"{"run":"none"}"#).0, 404);
         assert_eq!(route(&b, "nope", b"{}").0, 404);
+    }
+
+    #[test]
+    fn a_check_reads_its_scope_with_the_harness_dev_scope() {
+        assert_eq!(
+            scope_argv("x").join(" "),
+            "cargo run -q --locked -p pigeon-harness -- dev scope --root x --base artifacts/main --json"
+        );
     }
 }

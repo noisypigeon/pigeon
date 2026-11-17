@@ -1,4 +1,5 @@
 pigeon-agent lib agent bench::tests::a_check_is_found_by_name_in_scope
+pigeon-agent lib agent bench::tests::a_check_reads_its_scope_with_the_harness_dev_scope
 pigeon-agent lib agent bench::tests::a_failing_task_reports_its_exit_code
 pigeon-agent lib agent bench::tests::a_page_ends_on_whole_utf8
 pigeon-agent lib agent bench::tests::a_run_syncs_the_scratch_ref_runs_its_task_and_pages_its_log
