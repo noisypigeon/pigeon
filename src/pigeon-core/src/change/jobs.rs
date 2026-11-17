@@ -108,6 +108,9 @@ impl Change {
             self.jobs[bound].status = JobStatus::Failed;
             self.violations = violations;
             self.state = State::Refused;
+            // A refused head can't merge: its parked merge, and so its turn, goes back; see the
+            // concurrent-sessions ADR's 2026-11-15 amendment.
+            self.merge_after = None;
             return Ok((self, Vec::new()));
         }
         self.jobs[bound].status = JobStatus::Passed;
@@ -285,6 +288,7 @@ impl Change {
         if name == BOUND {
             self.violations = vec![format!("the bound job's {what}")];
             self.state = State::Refused;
+            self.merge_after = None;
             return Ok((self, Vec::new()));
         }
         if name.starts_with(GATE) {

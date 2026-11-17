@@ -1318,6 +1318,89 @@ fn a_job_queued_with_no_attempt_for_five_minutes_restarts_and_its_time_with_it()
     );
 }
 
+/// `c`, approved, holding the merge turn as !839 does: behind `main`, its restack moved its
+/// head to `B` cleanly with its own lines changed, and its merge parked.
+fn restacked_holder() -> Change {
+    let changed = Event::Restacked {
+        sha: A.into(),
+        restack: Restacked {
+            relation: Relation::Clean,
+            to: Some(B.into()),
+            same_patch: false,
+            conflicts: Vec::new(),
+            onto: M.into(),
+            context: Vec::new(),
+            messages: String::new(),
+            landed: false,
+        },
+    };
+    let mut c = run(restacking(approved()), vec![changed]);
+    c.number = 839;
+    assert_eq!((c.state, c.head.as_deref()), (State::Pushed, Some(B)));
+    assert!(super::queue::holds_turn(&c));
+    c
+}
+
+/// The merge queue with !839 holding the turn and !840 waiting behind it.
+fn turn_held_by_839() -> super::queue::MergeQueue {
+    use super::queue::{MergeQueue, Queued, enqueue};
+    let (q, at) = enqueue(&MergeQueue::default(), 839, "owner", 0).expect("!839");
+    assert_eq!(at, Queued::Start);
+    let (q, at) = enqueue(&q, 840, "owner", 0).expect("!840");
+    assert_eq!(at, Queued::Behind(1));
+    q
+}
+
+/// `after`, saved over `before` as the Worker saves it, gives its turn back: the next merge.
+fn released(q: &super::queue::MergeQueue, before: &Change, after: &Change) -> Option<u32> {
+    assert!(!crate::control::keeps_turn(Some(before), after));
+    assert!(crate::control::leaves_merge_queue(Some(before), after));
+    super::queue::done(q, after.number, 200).1.map(|e| e.number)
+}
+
+#[test]
+fn replay_839_a_holder_refused_at_its_restacked_heads_bound_gives_its_turn_back() {
+    use super::stage::{Context, Needs, of};
+    let why = "decisions: `when` 2026-11-16 after 2026-11-17 is not ascending";
+    let q = turn_held_by_839();
+    let before = restacked_holder();
+    let refusal = Event::Bounded {
+        sha: B.into(),
+        violations: vec![why.into()],
+        checks: Vec::new(),
+        full: Vec::new(),
+        tiers: None,
+        gate: None,
+        patch: None,
+    };
+    let c = run(before.clone(), vec![refusal]);
+    assert_eq!(c.state, State::Refused);
+    assert_eq!(c.merge_after, None, "its parked merge goes back");
+    assert!(!super::queue::holds_turn(&c));
+    assert_eq!(crate::control::release_reason(&c), why);
+    assert_eq!(released(&q, &before, &c), Some(840), "!840 starts");
+    let s = of(&c, &Context::default());
+    assert_eq!((s.stage.as_str(), s.needs), ("refused", Needs::Agent));
+}
+
+#[test]
+fn a_holder_whose_restacked_heads_bound_job_never_starts_gives_its_turn_back() {
+    let q = turn_held_by_839();
+    let before = restacked_holder();
+    let failed = |_| Event::StartFailed {
+        job: BOUND.into(),
+        sha: B.into(),
+        why: "Artifacts: minting a write token: 503".into(),
+    };
+    let c = run(
+        before.clone(),
+        (0..MAX_START_FAILURES).map(failed).collect(),
+    );
+    assert_eq!(c.state, State::Refused);
+    assert_eq!(c.merge_after, None);
+    assert_eq!(released(&q, &before, &c), Some(840), "!840 starts");
+}
+
 /// !464's sequence with its merge asked by `asked` after the approval, if anyone: the change
 /// before the bound job reports `B`, the same patch, and after.
 fn carried_after(asked: Option<&str>) -> (Change, Change) {
