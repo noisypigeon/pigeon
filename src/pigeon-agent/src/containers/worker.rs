@@ -10,7 +10,7 @@ pub const PORT: u16 = 8080;
 /// The environment variable `serve` reads its signing key from.
 pub const TOKEN_VAR: &str = "AGENT_TOKEN";
 
-/// The variables cobot reads an `r2://` state's access from; equal to `state.rs`'s and
+/// The variables the infra engine reads an `r2://` state's access from; equal to `state.rs`'s and
 /// `engines.rs`'s, which a test checks.
 pub const STATE_VARS: [&str; 4] = [
     "PIGEON_STATE_R2_ENDPOINT",

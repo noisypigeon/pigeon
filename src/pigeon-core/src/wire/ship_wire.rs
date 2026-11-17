@@ -14,7 +14,7 @@ pub const ACCESS_SECRET_VAR: &str = "DEPLOYER_ACCESS_SECRET";
 /// The host the health check asks; a var, not a secret.
 pub const HOST_VAR: &str = "PUBLIC_HOST";
 
-/// The Worker var naming the stack it was bound to; see `crate::cobot::workers::bind`.
+/// The Worker var naming the stack it was bound to; see `agent::workers::bind`.
 pub const DEPLOYMENT_VAR: &str = "DEPLOYMENT";
 
 /// The Worker secrets only the deploy job receives.

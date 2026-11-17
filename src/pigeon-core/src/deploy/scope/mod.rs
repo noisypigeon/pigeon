@@ -83,20 +83,20 @@ impl Default for Layout {
                 "Cargo.toml",
             ]),
             worker: Some(Worker {
-                package: "pigeon-backplane".into(),
-                name: "clippy backplane worker (wasm)".into(),
-                only: strings(&["src/pigeon-cli/crates/backplane/src/worker/"]),
+                package: "pigeon-agent".into(),
+                name: "clippy agent worker (wasm)".into(),
+                only: strings(&["src/pigeon-cli/crates/agent/src/worker/"]),
             }),
-            policy_tests: strings(&["pigeon-sentinel", "pigeon", "pigeon-backplane"]),
+            policy_tests: strings(&["pigeon-eviction", "pigeon", "pigeon-agent"]),
             infra_tests: Some(InfraTests {
-                package: "pigeon-backplane".into(),
+                package: "pigeon-agent".into(),
                 test: "suite".into(),
                 modules: strings(&[
-                    "cobot_catalog::",
-                    "cobot_manifest::",
-                    "cobot_apex::",
-                    "cobot_git::",
-                    "cobot_credentials::",
+                    "infra_catalog::",
+                    "infra_manifest::",
+                    "sites_apex::",
+                    "git::",
+                    "infra_credentials::",
                 ]),
             }),
             run: strings(&["run"]),
@@ -380,7 +380,7 @@ fn everything(features: &BTreeSet<String>, crates: &Crates) -> Vec<Job> {
     let mut instance: Vec<&str> = crates.layout.instance.iter().map(String::as_str).collect();
     instance.extend(["--root", root.as_str()]);
     out.push(Job {
-        name: "backplane instance".into(),
+        name: "pigeon instance".into(),
         argv: crates.layout.pigeon(&instance),
         units: Vec::new(),
     });
@@ -920,8 +920,8 @@ mod tests {
     fn a_workspace_setting_builds_only_the_workers_the_tree_has() {
         let crates = Crates {
             by_dir: [(
-                "src/pigeon-cli/crates/backplane/".to_string(),
-                "pigeon-backplane".to_string(),
+                "src/pigeon-cli/crates/agent/".to_string(),
+                "pigeon-agent".to_string(),
             )]
             .into(),
             deps: BTreeMap::default(),
@@ -930,16 +930,16 @@ mod tests {
             bins: BTreeMap::default(),
             layout: Layout::default(),
         };
-        assert_eq!(crates.of(&["pigeon-backplane"]), ["pigeon-backplane"]);
+        assert_eq!(crates.of(&["pigeon-agent"]), ["pigeon-agent"]);
         let names: Vec<String> = everything(&BTreeSet::default(), &crates)
             .into_iter()
             .map(|j| j.name)
             .collect();
         assert!(
-            names.contains(&"clippy backplane worker (wasm)".to_string()),
+            names.contains(&"clippy agent worker (wasm)".to_string()),
             "{names:?}"
         );
-        assert!(!names.iter().any(|n| n.contains("cobot")), "{names:?}");
+        assert!(!names.iter().any(|n| n.contains("--features")), "{names:?}");
     }
 
     #[test]
@@ -948,9 +948,9 @@ mod tests {
         let dir = |p: &str| format!("src/pigeon-cli/crates/{p}/");
         let crates = Crates {
             by_dir: [
-                (dir("backplane"), "pigeon-backplane".to_string()),
+                (dir("agent"), "pigeon-agent".to_string()),
                 (dir("pigeon"), "pigeon".to_string()),
-                (dir("sentinel"), "pigeon-sentinel".to_string()),
+                (dir("eviction"), "pigeon-eviction".to_string()),
             ]
             .into(),
             deps: BTreeMap::default(),
@@ -966,19 +966,19 @@ mod tests {
             filter: String::new(),
             files: vec![file.into()],
         };
-        let a = "src/pigeon-cli/crates/backplane/src/a.rs";
+        let a = "src/pigeon-cli/crates/agent/src/a.rs";
         let b = "src/pigeon-cli/crates/pigeon/src/b.rs";
-        let c = "src/pigeon-cli/crates/sentinel/src/c.rs";
+        let c = "src/pigeon-cli/crates/eviction/src/c.rs";
         let map = TestMap {
             sha: "x".into(),
             binaries: vec![
-                bin("pigeon-backplane", "a", a),
+                bin("pigeon-agent", "a", a),
                 bin("pigeon", "b", b),
-                bin("pigeon-sentinel", "c", c),
-                bin("pigeon-backplane", "d", "elsewhere.rs"),
+                bin("pigeon-eviction", "c", c),
+                bin("pigeon-agent", "d", "elsewhere.rs"),
                 bin("pigeon", "e", "elsewhere.rs"),
-                bin("pigeon-sentinel", "f", "elsewhere.rs"),
-                bin("pigeon-backplane", "g", "elsewhere.rs"),
+                bin("pigeon-eviction", "f", "elsewhere.rs"),
+                bin("pigeon-agent", "g", "elsewhere.rs"),
             ],
         };
         let files = |f: &[&str]| f.iter().map(|s| (*s).to_string()).collect::<Vec<_>>();
@@ -998,7 +998,7 @@ mod tests {
             ),
             (
                 "wasm-only",
-                files(&["src/pigeon-cli/crates/backplane/src/worker/x.rs"]),
+                files(&["src/pigeon-cli/crates/agent/src/worker/x.rs"]),
                 Some(&map),
             ),
         ] {
@@ -1145,8 +1145,8 @@ mod tests {
                     "pigeon".to_string(),
                 ),
                 (
-                    "src/pigeon-cli/crates/sentinel/".to_string(),
-                    "pigeon-sentinel".to_string(),
+                    "src/pigeon-cli/crates/eviction/".to_string(),
+                    "pigeon-eviction".to_string(),
                 ),
             ]
             .into(),
@@ -1155,7 +1155,7 @@ mod tests {
             tests: [
                 ("pigeon".to_string(), BTreeSet::from(["suite".to_string()])),
                 (
-                    "pigeon-sentinel".to_string(),
+                    "pigeon-eviction".to_string(),
                     BTreeSet::from(["cli".to_string()]),
                 ),
             ]
@@ -1171,12 +1171,12 @@ mod tests {
             files: vec![file.into()],
         };
         let a = "src/pigeon-cli/crates/pigeon/src/a.rs";
-        let b = "src/pigeon-cli/crates/sentinel/src/b.rs";
+        let b = "src/pigeon-cli/crates/eviction/src/b.rs";
         let map = TestMap {
             sha: "x".into(),
             binaries: vec![
-                unit("pigeon", "backplane", a),
-                unit("pigeon-sentinel", "tree", b),
+                unit("pigeon", "agent", a),
+                unit("pigeon-eviction", "tree", b),
                 unit("pigeon", "e1", "elsewhere.rs"),
                 unit("pigeon", "e2", "elsewhere.rs"),
                 unit("pigeon", "e3", "elsewhere.rs"),
@@ -1185,7 +1185,7 @@ mod tests {
         let jobs = map.select(&crates, &[a]).expect("chosen");
         assert_eq!(
             jobs.iter().map(|j| j.argv.join(" ")).collect::<Vec<_>>(),
-            ["cargo test -p pigeon --test suite --locked -- backplane::"],
+            ["cargo test -p pigeon --test suite --locked -- agent::"],
             "{jobs:?}"
         );
         assert!(
@@ -1212,7 +1212,7 @@ mod tests {
         let unit = |package: &str, file: &str| Binary {
             package: package.into(),
             kind: "lib".into(),
-            name: "backplane".into(),
+            name: "agent".into(),
             filter: String::new(),
             files: vec![file.into()],
         };
@@ -1220,10 +1220,10 @@ mod tests {
         let map = TestMap {
             sha: "x".into(),
             binaries: vec![
-                unit("pigeon-backplane", a),
-                unit("pigeon-agent", "e1.rs"),
-                unit("pigeon-agent", "e2.rs"),
-                unit("pigeon-agent", "e3.rs"),
+                unit("pigeon-retired", a),
+                unit("pigeon-retired", "e1.rs"),
+                unit("pigeon-retired", "e2.rs"),
+                unit("pigeon-retired", "e3.rs"),
             ],
         };
         assert!(

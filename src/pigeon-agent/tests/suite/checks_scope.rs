@@ -163,7 +163,7 @@ fn a_workspace_setting_runs_everything() {
         "clippy pigeon-harness --features agent",
         "clippy agent worker (wasm)",
         "test",
-        "backplane instance",
+        "pigeon instance",
         "policy.check",
     ] {
         assert!(got.contains(&want.to_string()), "{want}: {got:?}");
