@@ -402,3 +402,45 @@ governs. It adds only `src/pigeon-core/src/provider/**` and one line in
   refuses the old link. `admit` and `verdict` read no grant.
 
 Neither ADR changes.
+
+### 2026-11-17: Step 5's shape: two operations in the control plane, secret credentials first, and policy.check in a step of its own
+
+The Worker's dispatch path decides how §2 and §4 land.
+
+- **The operations.**
+  - `provider.call` and `provider.tools` are control-plane operations:
+    - `provider.` joins `wire::Operation::control_plane`;
+    - `control::route` gains `Routed::Provider`;
+    - `dispatch` calls `worker/provider.rs`.
+  - `arguments` is JSON text, because `wire::Kind` holds no object.
+- **The caller's capabilities.** Until the one-MCP ADR's §8 authorizer
+  lands:
+  - every caller holds `read`;
+  - a person, or a caller with a live ticket, also holds `propose`;
+  - the platform's own calls (ChangeRun, MainRun) are `platform`.
+
+  A tool's `capability` names a member capability: `read`, `propose` or
+  `platform`.
+- **Change state** comes from the change record:
+  - `evicted` set → Evicted;
+  - otherwise `Merged` → Merged, `Closed` → Closed;
+  - anything else → Open.
+- **Tiers.**
+  - A write is covered when the named change is held and its plan is
+    approved.
+  - `apply` stays `pending` until the one-MCP ADR's `_meta` proofs land.
+- **Credentials.** Step 5 wires `secret:NAME` only, which covers Buildkite
+  and Bitrise. `github-installation`, `cloudflare-minted` and `asc-jwt`
+  answer "not wired yet" until their migration step in step 7.
+- **Drift.**
+  - `provider.tools` compares the live schemas with the pinned ones.
+  - `provider.call` passes no live schema, so it makes no second round trip
+    per call.
+- **`policy.check` gets a step of its own, 5b.** It runs the eviction
+  engine, built for wasm or run on the Checker, against §4's call document.
+  Until then the gate is the registry's pinned tools plus the verdict.
+- **Step 5 splits:**
+  - 5a: pure pigeon-core in `provider/call.rs`. It builds the caller, the
+    call, the request headers, the event summaries and the MCP exchange.
+  - 5b: `policy.check`.
+  - 5c: the Worker glue, the catalog entries and the dispatch arm.
