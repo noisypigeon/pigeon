@@ -5,7 +5,7 @@ use crate::harness::step;
 
 use agent::control;
 use agent::core::approval::tiers::{Tier, Tiered, Tiers};
-use agent::core::change::queue::{self as merges, MergeQueue, Queued};
+use agent::core::change::queue::{self as merges, Back, MergeQueue, Queued};
 use agent::core::change::stage::{self, Needs};
 use agent::core::change::{
     Change, Check, Effect, Event, GATE, MERGE, RESTACK, Relation, Restacked, State,
@@ -13,6 +13,8 @@ use agent::core::change::{
 use step::{Apply, Queue};
 const A: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const C: &str = "cccccccccccccccccccccccccccccccccccccccc";
+const E: &str = "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
+const F: &str = "ffffffffffffffffffffffffffffffffffffffff";
 const MAIN: &str = "dddddddddddddddddddddddddddddddddddddddd";
 const WINDOW: &str = "window:9";
 
@@ -509,4 +511,215 @@ fn the_same_patch_pushed_onto_the_holder_keeps_its_turn() {
     assert!(merges::holds_turn(&c));
     assert_eq!(saved(&mut q, &before, &c, 200), None);
     assert_eq!(place(&q, 674), Some((1, 2)));
+}
+
+/// Head `sha` of `c` bounded with patch `patch` and own lines `own`, one check `fmt`, a full set
+/// of `test`, and `fmt` passed.
+fn bound_own(c: &mut Change, sha: &str, patch: &str, own: &str) {
+    let fmt = Check {
+        name: "fmt".into(),
+        argv: vec![],
+    };
+    let test = Check {
+        name: "test".into(),
+        argv: vec!["cargo".into(), "test".into()],
+    };
+    c.apply(Event::Bounded {
+        sha: sha.into(),
+        violations: vec![],
+        checks: vec![fmt],
+        full: vec![test],
+        tiers: Some(tiers(Tier::Code)),
+        gate: None,
+        patch: Some(patch.into()),
+        own: Some(own.into()),
+    })
+    .expect("bounded");
+    for e in [
+        Event::Started {
+            job: "fmt".into(),
+            sha: sha.into(),
+        },
+        Event::Finished {
+            job: "fmt".into(),
+            sha: sha.into(),
+            ok: true,
+        },
+    ] {
+        c.apply(e).expect("fmt");
+    }
+}
+
+/// Head `sha` of `c`, checked with own lines `own`, approved by the window at `at`.
+fn approved_with_own(c: &mut Change, sha: &str, own: &str, at: u64) {
+    bound_own(c, sha, "p", own);
+    c.apply(Event::Approve {
+        by: WINDOW.into(),
+        sha: sha.into(),
+        at,
+    })
+    .expect("approved");
+}
+
+/// !821 (`c`) moved to the front from 18/18, its head failing its gate after the restack at its
+/// turn: the queue once it gave its turn back, 1001 merging and 1002 to 1016 waiting.
+fn fronted_then_failed(c: &mut Change) -> MergeQueue {
+    let mut q = MergeQueue::default();
+    assert_eq!(q.enqueue(1000, WINDOW, 0), Ok(Queued::Start));
+    for i in 1..=16 {
+        q.enqueue(1000 + i, WINDOW, 0).expect("ahead");
+    }
+    let (q, queued) = merges::enqueue_back(&q, 821, WINDOW, &Back::of(c), 0).expect("queued");
+    assert_eq!(queued, Queued::Behind(17));
+    let (mut q, left) = merges::front(&q, 821).expect("fronted");
+    assert_eq!(left, (18, 18));
+    assert_eq!(until_turn(&mut q, 821, 100), 1);
+    let gate = restacked_with_early_gate(c);
+    let before = c.clone();
+    c.apply(Event::Finished {
+        job: gate,
+        sha: C.into(),
+        ok: false,
+    })
+    .expect("clippy fails");
+    assert!(control::leaves_merge_queue(Some(&before), c));
+    assert_eq!(merges::failed_at(c), Some(1));
+    let (q, next) = merges::left(&q, 821, merges::failed_at(c), 200);
+    assert_eq!(next.map(|e| e.number), Some(1001), "the next starts");
+    assert_eq!(place(&q, 821), None);
+    q
+}
+
+#[test]
+fn replay_821_its_fix_after_a_failed_head_takes_the_front_back() {
+    // !821 was fronted (event 36968), failed clippy after its restack at the head and gave its
+    // turn back (37019); its one-line fix then queued it 18/18.
+    let mut c = approved(821);
+    let q = fronted_then_failed(&mut c);
+    c.apply(Event::Pushed { sha: E.into() }).expect("the fix");
+    approved_with_own(&mut c, E, "fixed", 800);
+    assert_eq!(c.pushes, 2);
+    let (q, queued) =
+        merges::enqueue_back(&q, 821, WINDOW, &Back::of(&c), 900).expect("asked again");
+    assert_eq!(queued, Queued::Behind(1), "first in line, not 17/17");
+    assert_eq!(place(&q, 821), Some((2, 17)));
+    assert!(q.returning.is_empty(), "a kept place is used once");
+    assert!(q.marks.get(&821).is_some_and(|m| m.returned && m.fronted));
+}
+
+#[test]
+fn a_kept_place_is_used_once_so_a_second_failure_queues_its_fix_at_the_back() {
+    let mut c = approved(821);
+    let q = fronted_then_failed(&mut c);
+    let why = q.returning.get(&821).and_then(|r| {
+        r.returns(
+            &Back {
+                own: None,
+                pushes: 2,
+            },
+            900,
+        )
+    });
+    assert_eq!(why, Some("it is the first push since its head failed"));
+    c.apply(Event::Pushed { sha: E.into() }).expect("the fix");
+    approved_with_own(&mut c, E, "fixed", 800);
+    let (mut q, queued) =
+        merges::enqueue_back(&q, 821, WINDOW, &Back::of(&c), 900).expect("asked again");
+    assert_eq!(queued, Queued::Behind(1), "back at the front");
+    assert_eq!(until_turn(&mut q, 821, 1000), 1);
+    // Its turn: the merge gate fails on the approved head.
+    let gate = format!("{GATE}test");
+    let started = c.apply(Event::Merge { by: WINDOW.into() }).expect("merge");
+    assert_eq!(started, [Effect::Start(gate.clone())]);
+    c.apply(Event::Started {
+        job: gate.clone(),
+        sha: E.into(),
+    })
+    .expect("gate");
+    let before = c.clone();
+    c.apply(Event::Finished {
+        job: gate,
+        sha: E.into(),
+        ok: false,
+    })
+    .expect("the gate fails");
+    assert!(control::leaves_merge_queue(Some(&before), &c));
+    assert_eq!(merges::failed_at(&c), Some(2));
+    let (q, next) = merges::left(&q, 821, merges::failed_at(&c), 1100);
+    assert_eq!(next.map(|e| e.number), Some(1002), "the next starts");
+    assert!(q.returning.is_empty(), "no second kept place");
+    c.apply(Event::Pushed { sha: F.into() })
+        .expect("a second fix");
+    approved_with_own(&mut c, F, "fixed again", 1200);
+    assert_eq!(c.pushes, 3);
+    let (_, queued) =
+        merges::enqueue_back(&q, 821, WINDOW, &Back::of(&c), 1300).expect("asked again");
+    assert_eq!(queued, Queued::Behind(15), "at the back");
+}
+
+#[test]
+fn a_rebase_pushed_onto_the_holder_with_its_own_lines_takes_the_turn_back_first() {
+    let mut q = MergeQueue::default();
+    assert_eq!(q.enqueue(1000, WINDOW, 0), Ok(Queued::Start));
+    let asked = Back {
+        own: Some("o1".into()),
+        pushes: 1,
+    };
+    let (mut q, _) = merges::enqueue_back(&q, 674, WINDOW, &asked, 0).expect("queued");
+    q.enqueue(2000, WINDOW, 0).expect("behind");
+    q.enqueue(2001, WINDOW, 0).expect("behind");
+    until_turn(&mut q, 674, 100);
+    let mut c = parked_holder(674);
+    c.apply(Event::Pushed { sha: C.into() })
+        .expect("a rebase onto main");
+    let before = c.clone();
+    bound_own(&mut c, C, "p2", "o1");
+    assert_eq!(c.merge_after, None, "its approval didn't carry");
+    assert!(control::leaves_merge_queue(Some(&before), &c));
+    assert_eq!(merges::failed_at(&c), None);
+    let (left, next) = merges::left(&q, 674, None, 200);
+    assert_eq!(next.map(|e| e.number), Some(2000), "the next starts");
+    c.apply(Event::Approve {
+        by: WINDOW.into(),
+        sha: C.into(),
+        at: 300,
+    })
+    .expect("approved again");
+    assert_eq!(c.own.as_deref(), Some("o1"));
+    let (q, queued) =
+        merges::enqueue_back(&left, 674, WINDOW, &Back::of(&c), 400).expect("asked again");
+    assert_eq!(queued, Queued::Behind(1), "first in line");
+    assert_eq!(place(&q, 674), Some((2, 3)));
+    let changed = Back {
+        own: Some("o2".into()),
+        pushes: 2,
+    };
+    let (_, queued) = merges::enqueue_back(&left, 674, WINDOW, &changed, 400).expect("asked again");
+    assert_eq!(
+        queued,
+        Queued::Behind(2),
+        "its own lines changed: at the back"
+    );
+}
+
+#[test]
+fn a_session_push_is_counted_and_its_own_lines_kept_but_a_restack_is_neither() {
+    let mut c = approved(10);
+    assert_eq!(c.pushes, 1);
+    c.apply(Event::Behind { main: MAIN.into() })
+        .expect("behind");
+    c.apply(Event::Merge { by: WINDOW.into() })
+        .expect("its turn");
+    c.apply(restacked(Relation::Clean, false))
+        .expect("restacked");
+    assert_eq!(
+        (c.head.as_deref(), c.pushes, c.own.as_deref()),
+        (Some(C), 1, None)
+    );
+    c.apply(Event::Pushed { sha: E.into() }).expect("pushed");
+    bound_own(&mut c, E, "p", "o");
+    assert_eq!((c.pushes, c.own.as_deref()), (2, Some("o")));
+    c.apply(Event::Pushed { sha: E.into() })
+        .expect("the same head again");
+    assert_eq!(c.pushes, 2);
 }
