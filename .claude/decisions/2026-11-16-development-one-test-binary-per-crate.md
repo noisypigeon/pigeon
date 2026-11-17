@@ -464,3 +464,56 @@ glob under `src/pigeon-cli/` or `src/site-templates/` becomes `src/**/<tail>`
 (or `**<file>` for a workspace root file), which matches the file both before
 and after the restructure moves it. That ADR's step 12 tightens them to the
 new paths.
+
+### 2026-11-17: Steps 6 to 8 under the restructure's names
+
+The restructure has merged: backplane's suite is `src/pigeon-agent/tests/suite/`,
+with 72 module files under new names. §2's table maps onto them as follows.
+- **Mechanisms.** One directory per mechanism, `<mechanism>/mod.rs` declaring
+  its files as submodules under their current names:
+  - `merge_queue`: merges, merge_kept, merge_front, merge_holder,
+    merge_gate_early, merge_release_turn, merge_released;
+  - `change_lifecycle`: changes, eviction, reconcile, gitdoor, and `sessions`
+    as `overlaps`;
+  - `control_plane`: control, migrations, mcp, routes, versions, access;
+  - `approvals`: approvals, approve, change_asks, asks_approval, grants,
+    ledger (the grants ledger), mandates, platforms, platform_job,
+    platform_shape;
+  - `owner_proofs`: passkeys, totp, enroll, push, devices;
+  - `sessions`: tickets, tasks, events, digest, briefs, session_launch;
+  - `checks`: actions, checks_scope, testmaps, ci_window, jobs, serve;
+  - `infra`: infra_units, infra_agnostic, infra_config, infra_credentials,
+    infra_catalog, infra_local, infra_manifest, sites_apex, infra_plans,
+    infra_plan_diff, infra_adopt, infra_providers_mirror;
+  - `infra_remote`: git, infra_state, sites, workers_cloudflare, gitcreds;
+  - `release`: release, release_scope, git_restack, workers_image_tools;
+  - `workers`: workers, workers_ship;
+  - `instance`: instance, architecture, decisions;
+  - `stored_state` stays one file.
+- **Filters.** A libtest filter is a substring, so `m::` must not occur in
+  any test path outside module `m`, at any depth. `behaviours.sh --check`
+  refuses that, not only a suffix. That is why `sessions` becomes `overlaps`.
+- **One change.** Step 6 is one change, not one per mechanism. Every
+  mechanism edits `main.rs`, the ledger and `tests.moves`, so the changes
+  would serialize anyway. The moves are renames with no edit except an
+  `include_str!` path. The same change:
+  - sets the infra job's modules to `infra::` and `infra_remote::`;
+  - points each moved file's `Governs` glob at `src/**/tests/suite/**/<file>.rs`.
+- **Coverage.** No test body changes, so each module covers what it did.
+  Two things show it held: the ledger's per-package count, and the next map
+  listing a unit for every mechanism.
+- **The mutation spot-check** runs after step 6. It applies three mutations
+  to `pigeon-core`, one each in the merge queue, the change state machine
+  and scope selection. Each must fail the suite before and after.
+- **Left out of step 5:**
+  - The nested sentinel build stays. CI caches it, so replacing it saves
+    little.
+  - The two migration loaders stay apart. Sharing them would loosen
+    control's strict parameter assertion.
+  - `PIGEON_REQUIRE_TOOLS` is in the harness. Setting it in `ci.yml` is a
+    later change, under the owner's proof.
+- **Step 7** is met: no integration test is outside a `suite/`, and
+  `tests/common/` is gone. What remains is the factory ADR's amendment.
+- **Step 8** is dropped. The CI image already sets
+  `CARGO_PROFILE_DEV_DEBUG=0` and `CARGO_PROFILE_TEST_DEBUG=0`, so
+  `line-tables-only` would change only local builds.
