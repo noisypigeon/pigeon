@@ -197,3 +197,19 @@ merges on the owner's passkey.
   ends revokes its token ID once.
 - No event, log or run view holds a token value; the job refuses a set
   wider than the minted one.
+
+## Amendments
+
+### 2026-11-17: Review of !948 against !909: they agree
+
+- !909 added this ADR, and changed no code. It amends
+  [`2026-11-08-runtime-blue-green-self-standup.md`](2026-11-08-runtime-blue-green-self-standup.md)
+  and
+  [`2026-11-12-development-grants-applies-rescue-yield.md`](2026-11-12-development-grants-applies-rescue-yield.md)
+  through it, over `platform/platforms.rs` and `worker/platforms.rs`.
+- !948 is part A3 of the step 12 sweep of
+  [`2026-11-16-development-src-crates-neutral-names.md`](2026-11-16-development-src-crates-neutral-names.md):
+  `x_pigeon`, the Worker outbound scan's engine directories, and comments
+  and messages. It touches neither `platforms.rs`. The two met only through
+  !948's scope `src/pigeon-core/src/**` and `src/pigeon-agent/src/**`.
+- Nothing any of the four ADRs decides changes.
