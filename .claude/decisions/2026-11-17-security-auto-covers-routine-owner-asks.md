@@ -206,3 +206,11 @@ renames the judge's own tests and comments, and the layout policy's
 description, to the neutral names. It touches none of this ADR's `Governs`
 paths and changes no tier, window, queue or check: what Auto covers, and what
 stays on the passkey, are as above. Nothing in this ADR changes.
+### 2026-11-17: review of !981 (the capacity pools ADR): no conflict
+
+!981 carries out `2026-11-15-development-capacity-pools-hard-spend-cap.md`,
+step 6a. It touches `brief/mod.rs`, `brief/tests.rs`, `pool/mod.rs`,
+`pool/dispatch.rs`, `pool/dispatch/tests.rs`, `app/tests.rs` and the agent's
+`tests/suite/briefs.rs`. None of these is a path this ADR governs. It changes
+no tier, window, queue order, bound fact, `approvals.yaml` entry or client
+permission. The two agree, and nothing here changes.
