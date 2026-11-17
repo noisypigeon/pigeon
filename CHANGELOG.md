@@ -9,6 +9,7 @@
 - agent v0.1.46
 - agent v0.1.47
 - agent v0.1.48
+- agent v0.1.49
 - infra-agnostic-random-string v0.1.4
 - infra-agnostic-schema v0.1.5
 - infra-backblaze-schema v0.1.4
@@ -182,6 +183,11 @@
 - feat(agent): pool.status, pool.pause, and pool.resume on the owner's passkey (!1021) ([8e4ebf1](https://github.com/noisypigeon/pigeon/commit/8e4ebf10693913a3292ae04b5fd13d2378e469eb)) · agent
 - docs(adr): the broker's hand-off: what merged, what comes next, and who carries guarded paths (!1031) ([f4d7dee](https://github.com/noisypigeon/pigeon/commit/f4d7deec4234790d7642f852bc7e37f28cfef3bb))
 - fix(core): each brief gets its own task, not the first open brief task (!1030) ([397d8d5](https://github.com/noisypigeon/pigeon/commit/397d8d5e892aee15eea9dd7e11fbb62606db49f3))
+- feat(backplane): a pool task's close routes waiting pool briefs again (!1032) ([d7c89b7](https://github.com/noisypigeon/pigeon/commit/d7c89b71f24283817106c1afc5f59090c9fa3144)) · agent
+- test(agent): the suite's files group into one module per mechanism (!1033) ([03dedb5](https://github.com/noisypigeon/pigeon/commit/03dedb5d14fb65a476d49e0d50476455081ab1fe))
+- docs(adr): every client on one MCP catalog, a four-view rendering contract, and one feed, pigeon://feed (!1034) ([b2c63ff](https://github.com/noisypigeon/pigeon/commit/b2c63ff8897822ef59ab94b183a3d11fc58cc455))
+- docs(adr): the owner keeps two MCP doors, and the mirror policy's list travels as eviction bookkeeping (!1035) ([531b56b](https://github.com/noisypigeon/pigeon/commit/531b56b841feaa5908a6dab81143c8a36d196928))
+- chore(config): the provider-call policy list is eviction bookkeeping (!1037) ([39b5221](https://github.com/noisypigeon/pigeon/commit/39b5221fac890a2d0e9d1478b40e574cfc65fe68))
 
 ## 2026-11-16
 
