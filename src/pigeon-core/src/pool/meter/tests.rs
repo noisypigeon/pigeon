@@ -470,3 +470,65 @@ fn sse_without_a_stop_is_incomplete() {
     );
     assert!(!s.usage.complete);
 }
+
+#[test]
+fn a_first_good_answer_records_only_whether_the_workspace_came_back() {
+    let u = Some(usage("claude-sonnet-5-5"));
+    let e = upstream_event(
+        &Messages,
+        "anthropic",
+        "b9.1",
+        &seen(200, Some(WS), "", u.clone()),
+        true,
+    )
+    .expect("first");
+    assert_eq!(
+        e,
+        serde_json::json!({"pool":"anthropic","task":"b9.1","status":200,"workspace_seen":true})
+    );
+    assert!(!e.to_string().contains(WS));
+    assert_eq!(
+        upstream_event(
+            &Messages,
+            "anthropic",
+            "b9.1",
+            &seen(200, Some(WS), "", u),
+            false
+        ),
+        None
+    );
+}
+
+#[test]
+fn a_gateway_refusal_records_its_signal_and_code() {
+    let nokey = r#"{"success":false,"error":[{"code":2044,"message":"no key"}]}"#;
+    let e =
+        upstream_event(&Messages, "p", "t", &seen(400, None, nokey, None), false).expect("event");
+    assert_eq!(e["signal"], "gateway-no-key");
+    assert_eq!(e["code"], 2044);
+    assert_eq!(e["workspace_seen"], false);
+    assert!(!e.to_string().contains("no key"));
+    let other = r#"{"errors":[{"code":10000,"message":"x"}]}"#;
+    let e =
+        upstream_event(&Messages, "p", "t", &seen(500, None, other, None), false).expect("event");
+    assert_eq!(e["signal"], "gateway(10000)");
+    assert_eq!(e["code"], 10000);
+}
+
+#[test]
+fn an_anthropic_error_records_both_signals_and_no_code() {
+    let body = r#"{"type":"error","error":{"type":"invalid_request_error","message":"Your credit balance is too low to access the Anthropic API."}}"#;
+    let e = upstream_event(&Messages, "p", "t", &seen(400, Some(WS), body, None), false)
+        .expect("event");
+    assert_eq!(e["signal"], "upstream");
+    assert_eq!(e["anthropic"], "exhausted");
+    assert_eq!(e.get("code"), None);
+    assert!(!e.to_string().contains("credit balance"));
+}
+
+#[test]
+fn an_unreachable_gateway_records_status_zero() {
+    let e = upstream_event(&Messages, "p", "t", &seen(0, None, "", None), false).expect("event");
+    assert_eq!(e["status"], 0);
+    assert_eq!(e["signal"], "gateway(0)");
+}

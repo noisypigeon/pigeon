@@ -491,8 +491,28 @@ impl Pool {
             body: text,
             usage,
         };
+        let task = l
+            .holds
+            .get(hold)
+            .map(|h| h.task.clone())
+            .unwrap_or_default();
+        let first = l.tasks.get(&task).is_some_and(|t| t.requests == 1);
+        let event = meter::upstream_event(gw, &pool.name, &task, &seen, first);
         let s = meter::settle(gw, &pool, &l, hold, &workspace, &seen, now());
         self.state.storage().put("ledger", &s.ledger).await?;
+        if let (Some(e), Ok(settings)) = (event, Settings::from(&self.env)) {
+            let said = format!("pool {} upstream: {e}", pool.name);
+            let _ = super::events::append(
+                &self.env,
+                &settings,
+                "pool.upstream",
+                None,
+                None,
+                &said,
+                false,
+            )
+            .await;
+        }
         for why in &s.trips {
             self.tripped(&pool.name, why).await;
         }

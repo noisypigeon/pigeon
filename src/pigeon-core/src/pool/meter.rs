@@ -360,5 +360,59 @@ impl Sse {
     }
 }
 
+/// The Cloudflare error code in a gateway answer's body, if any.
+fn cloudflare_code(body: &str) -> Option<i64> {
+    let v: serde_json::Value = serde_json::from_str(body).ok()?;
+    let list = v
+        .get("error")
+        .and_then(serde_json::Value::as_array)
+        .or_else(|| v.get("errors").and_then(serde_json::Value::as_array))?;
+    list.first()?.get("code")?.as_i64()
+}
+
+/// The `pool.upstream` event's fields for answer `seen` to `task`: every non-2xx answer, and a
+/// 2xx answer when it is the task's `first`; the status, whether the workspace header came
+/// back, the signals and any Cloudflare code, never a body, header value or token; see the
+/// capacity pools ADR's 2026-11-17 amendments.
+#[must_use]
+pub fn upstream_event(
+    gateway: &dyn Gateway,
+    pool: &str,
+    task: &str,
+    seen: &Seen<'_>,
+    first: bool,
+) -> Option<serde_json::Value> {
+    let ok = (200..300).contains(&seen.status);
+    if ok && !first {
+        return None;
+    }
+    let mut e = serde_json::json!({
+        "pool": pool,
+        "task": task,
+        "status": seen.status,
+        "workspace_seen": seen.account.is_some(),
+    });
+    if ok {
+        return Some(e);
+    }
+    let signal = match aigateway::classify(seen.status, seen.body) {
+        None => "ok".to_string(),
+        Some(aigateway::Signal::Upstream) => {
+            let s = gateway.classify(seen.status, seen.body);
+            e["anthropic"] = serde_json::to_value(s).unwrap_or_default();
+            "upstream".to_string()
+        }
+        Some(aigateway::Signal::GatewayLimited) => "gateway-limited".to_string(),
+        Some(aigateway::Signal::GatewayNoKey) => "gateway-no-key".to_string(),
+        Some(aigateway::Signal::GatewayUnauthorized) => "gateway-unauthorized".to_string(),
+        Some(aigateway::Signal::Gateway(c)) => format!("gateway({c})"),
+    };
+    e["signal"] = signal.into();
+    if let Some(c) = cloudflare_code(seen.body) {
+        e["code"] = c.into();
+    }
+    Some(e)
+}
+
 #[cfg(test)]
 mod tests;
