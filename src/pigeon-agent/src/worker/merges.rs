@@ -27,6 +27,7 @@ const TRIES: usize = 10;
 /// When a binding fails.
 pub async fn ask(env: &Env, s: &Settings, number: u32, by: &str) -> Result<(u16, Value)> {
     hand_back_idle(env, s).await?;
+    asked(env, s, number, by).await?;
     let docs = docs_only(env, s, number).await?;
     let (status, v) = to_instance(
         env,
@@ -129,17 +130,7 @@ pub async fn kept(env: &Env, change: &Change) -> Result<()> {
     if let Err(e) = added.await {
         worker::console_error!("merge.kept: {e}");
     }
-    let mut args = serde_json::Map::new();
-    args.insert("number".into(), json!(n));
-    let request = crate::wire::Request {
-        operation: "change.merge".into(),
-        args,
-    };
-    match Box::pin(super::ask(env, &s, n, &request)).await {
-        Ok(Ok(_)) => {}
-        Ok(Err(e)) => worker::console_warn!("merge of kept !{n}: {e}"),
-        Err(e) => worker::console_error!("merge of kept !{n}: {e}"),
-    }
+    ask_again(env, &s, n, "kept").await;
     let (_, released) = to_instance(env, &s, "/merges/release", &json!({ "number": n })).await?;
     start(
         env,
@@ -147,6 +138,57 @@ pub async fn kept(env: &Env, change: &Change) -> Result<()> {
         serde_json::from_value(released["next"].clone()).ok(),
     )
     .await
+}
+
+/// `after`, saved over `before`, had its approval carried with no merge on its way, after its
+/// merge was asked: `merge.reasked` is recorded and its merge asked again, as its session would;
+/// whether it was. See the merge-path ADR §4.
+pub async fn reask(
+    env: &Env,
+    s: &Settings,
+    before: Option<&Change>,
+    after: &Change,
+    q: &MergeQueue,
+) -> bool {
+    let Some(by) = merges::reask(before, after, q) else {
+        return false;
+    };
+    let n = after.number;
+    let why = format!(
+        "!{n}'s approval carried to its new head; its merge, asked by {by}, is asked again"
+    );
+    let session = after.session.clone();
+    let added = super::events::append(env, s, "merge.reasked", Some(n), session, &why, false);
+    if let Err(e) = added.await {
+        worker::console_error!("merge.reasked: {e}");
+    }
+    ask_again(env, s, n, "reasked").await;
+    true
+}
+
+/// Asks `change.merge` on change `n` as its session would; `what` names the case in the log.
+async fn ask_again(env: &Env, s: &Settings, n: u32, what: &str) {
+    let mut args = serde_json::Map::new();
+    args.insert("number".into(), json!(n));
+    let request = crate::wire::Request {
+        operation: "change.merge".into(),
+        args,
+    };
+    match Box::pin(super::ask(env, s, n, &request)).await {
+        Ok(Ok(_)) => {}
+        Ok(Err(e)) => worker::console_warn!("merge of {what} !{n}: {e}"),
+        Err(e) => worker::console_error!("merge of {what} !{n}: {e}"),
+    }
+}
+
+/// Records on change `number` that `by` asked for its merge; see the merge-path ADR §4.
+async fn asked(env: &Env, s: &Settings, number: u32, by: &str) -> Result<()> {
+    let body = serde_json::to_value(Event::MergeAsked { by: by.to_string() })?;
+    let (status, v) = to_change(env, &s.repo, number, Method::Post, "/event", Some(&body)).await?;
+    if status != 200 {
+        worker::console_warn!("merge asked on !{number}: {v}");
+    }
+    Ok(())
 }
 
 /// `change.front` on change `number`, by the owner `by`: moved to the front of the queue's

@@ -90,7 +90,7 @@ pub fn reask(before: Option<&Change>, after: &Change, q: &MergeQueue) -> Option<
     }
 }
 
-/// Whether `from` yielding to `to` closes a cycle in `yields`:`to` already waits on `from`,
+/// Whether `from` yielding to `to` closes a cycle in `yields`: `to` already waits on `from`,
 /// directly or through others, so neither would ever merge.
 #[must_use]
 pub fn closes_cycle(yields: &BTreeMap<u32, u32>, from: u32, to: u32) -> bool {

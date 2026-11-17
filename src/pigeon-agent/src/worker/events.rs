@@ -56,7 +56,12 @@ pub async fn changed(
     let Ok(s) = Settings::from(env) else {
         return;
     };
-    let q = super::stages::queue(env, &s).await;
+    let mut q = super::stages::queue(env, &s).await;
+    // A carried approval's merge is asked again before its stage is shown; see the merge-path
+    // ADR §4.
+    if super::merges::reask(env, &s, before, after, &q).await {
+        q = super::stages::queue(env, &s).await;
+    }
     let stage = super::stages::stage(env, &s, after, &q).await;
     for (kind, summary) in found {
         let body = json!({
