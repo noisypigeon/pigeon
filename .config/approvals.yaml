@@ -65,6 +65,11 @@ secrets:
   - catalog/cloudflare/capabilities.yaml
   - catalog/cloudflare/modules/api-token/**
   - catalog/cloudflare/modules/access-service-token/**
+  # What each role may do; see .claude/decisions/2026-11-14-security-instance-members-roles-invitations.md §2.
+  - .config/roles.yaml
+# Code that reads a secret but holds none: the owner's only when a diff line holds a marker. See
+# .claude/decisions/2026-11-17-security-auto-covers-routine-owner-asks.md §3.
+secret_code:
   # The Apple connection and the code that handles the signing identity; see
   # .claude/decisions/2026-11-11-release-ios-app-buildkite-testflight.md §7.
   - src/pigeon-agent/src/worker/platform.rs
@@ -74,10 +79,23 @@ secrets:
   - src/pigeon-core/src/signing.rs
   - src/pigeon-harness/src/commands/signing.rs
   - tooling/ci/buildkite/ios-sign.sh
-  # What each role may do; see .claude/decisions/2026-11-14-security-instance-members-roles-invitations.md §2.
-  - .config/roles.yaml
-  # The broker reads a provider credential per call; see the same ADR's §4.
+  # The broker reads a provider credential per call; see
+  # .claude/decisions/2026-11-16-security-provider-calls-mcp-broker.md §4.
   - src/pigeon-agent/src/worker/provider.rs
+secret_markers:
+  - secret
+  - token
+  - passphrase
+  - password
+  - private_key
+  - credential
+  - mint
+  - grant
+  - authorization
+  - bearer
+  - signing
+  - p12
+  - keychain
 # Files whose `secrets:` list a head may not lengthen without the owner.
 secret_lists:
   - "**/worker.yaml"
