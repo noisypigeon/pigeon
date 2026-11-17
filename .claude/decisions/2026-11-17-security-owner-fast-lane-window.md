@@ -347,3 +347,15 @@ its `Governs` gains `src/**/present/**`, the presenters step 5a added.
   govern.
 
 Neither ADR changes.
+
+## Amendments
+
+### 2026-11-17: Reviewed against !1064: they agree
+
+- !1064 adds `src/**/present/**` to the one-catalog ADR's `Governs`
+  ([`2026-11-17-runtime-mcp-feed-view-contract.md`](2026-11-17-runtime-mcp-feed-view-contract.md)),
+  where step 5a put each operation's presenter. It decides nothing new.
+- !1063 (step 2) touches only `approval/lanes.rs` and its tests, not
+  `present/`. Step 5 adds the lane operations' presenters to
+  `present/approval.rs`, beside the mandates', each building the view §8
+  declares, and adds them to `present::PRESENTED`.
