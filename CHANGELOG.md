@@ -1,5 +1,100 @@
 # Changelog
 
+## 2026-11-17
+
+### Released
+
+- agent v0.1.44
+- infra-cloudflare-ai-gateway v0.1.0
+- infra-cloudflare-schema v0.1.22
+- infra-digitalocean-project v0.1.3
+- infra-digitalocean-schema v0.1.4
+- pigeon-eviction v0.1.21
+- site-template-architecture v0.1.4
+- site-template-blog v1.0.5
+
+### Merged
+
+- chore(macos): take Bitrise out of the macOS order until it is set up (!836) ([eb523b4](https://github.com/noisypigeon/pigeon/commit/eb523b4656e749a76bcc5867557d003ed14cef7e))
+- feat(core): pigeon-core::pool::aigateway: the AI Gateway upstream URL, outbound headers and gateway signals (!827) ([2f2e5f5](https://github.com/noisypigeon/pigeon/commit/2f2e5f5783c0cef8a643545c1dada5a4c114e6bd))
+- docs(adr): review !812 against !818 (!832) ([eac5e21](https://github.com/noisypigeon/pigeon/commit/eac5e21ded109cc5fd77783a64ff2196d4a5ea7d))
+- docs(adr): review !797 against !818 (!830) ([9a4eed0](https://github.com/noisypigeon/pigeon/commit/9a4eed09370f1ca8ae6d90840a81fb569748febb))
+- docs(adr): review !827 against !818 (!834) ([3f7ec19](https://github.com/noisypigeon/pigeon/commit/3f7ec19626bde1f8934703c4fd5e9c2610cace22))
+- docs(adr): review !827 against !820 (!840) ([b9f952b](https://github.com/noisypigeon/pigeon/commit/b9f952bfe5a3c1ecfe1094f290dac93282327ca8))
+- docs(adr): the merge path's next steps: a waiting macOS gate gives up the queue head, and a re-push keeps its place (!849) ([a0c6567](https://github.com/noisypigeon/pigeon/commit/a0c6567cbaccd1c1981f918fd7b90f9641e68084))
+- chore: the job images build `pigeon` with `agent`, and the release unit `backplane` is `agent` (!842) ([3581ed8](https://github.com/noisypigeon/pigeon/commit/3581ed803a69fed25b651463c02eb03ea46765b4)) · agent, pigeon-eviction
+- units renamed · backplane → agent
+- fix(core): a brief's change is refused judge paths under either rule prefix (!863) ([ab34ff1](https://github.com/noisypigeon/pigeon/commit/ab34ff113e24064075b032327bb5575708cb93a2))
+- docs(adr): a merge's push to main retries a transient refusal and keeps the turn (!878) ([7dba704](https://github.com/noisypigeon/pigeon/commit/7dba70491ccf5c07c6eb2b2f19a228ef6c86c77f))
+- feat(core): the decision for a restack's Cargo.lock-only conflict (!867) ([c694abd](https://github.com/noisypigeon/pigeon/commit/c694abdaff4fac887d0c6236e0e3741807b99615))
+- refactor(approvals): the judge's rules are `eviction` only, and a `secrets:` scope authorizes at code with the merge deciding (!845) ([a271bbd](https://github.com/noisypigeon/pigeon/commit/a271bbdf3aa1fd0c407116f7e198213d93484503)) · agent
+- feat(core): the merge queue merges waiting docs-only changes in one turn (!882) ([955917f](https://github.com/noisypigeon/pigeon/commit/955917ff835dd7833a68d1f0b58ffd2e944706ad))
+- feat(core): record who asked a merge, and when a carried approval asks it again (!866) ([3fa38fc](https://github.com/noisypigeon/pigeon/commit/3fa38fc5063e8f6ef5d20c7079ca5c56f390e321))
+- feat(agent): docs-only changes share a merge turn and skip the mirror job (!887) ([8bb6f44](https://github.com/noisypigeon/pigeon/commit/8bb6f44171af7abe20097394a0958a37ede2b49d)) · agent
+- feat(agent): a restack regenerates a Cargo.lock that alone conflicts (!884) ([7598244](https://github.com/noisypigeon/pigeon/commit/759824490ed8c23f066def879918cc4cc8433505)) · agent
+- feat(eviction): an `order` without a direction bounds values by `from` only, so ADR amendments can run in merge order (!895) ([35272f6](https://github.com/noisypigeon/pigeon/commit/35272f65fa277ed076f3b855acb9a96bc2fb5c4d)) · pigeon-eviction
+- fix(approvals): an owner's proof-approval of a head covers its merge, so no second tap is asked (!890) ([0938237](https://github.com/noisypigeon/pigeon/commit/09382370717755f6e9d59d85f731136ffbe0c31b))
+- perf(core): GitHub results are polled every 10 s while a merge holds the turn (!879) ([91f329e](https://github.com/noisypigeon/pigeon/commit/91f329e2217e1601d7d46cf214fc07c734fbab61))
+- docs(adr): review !797 against !820 (!837) ([7c8fabb](https://github.com/noisypigeon/pigeon/commit/7c8fabb64edd66911cdb8fe19ace5d9673f80710))
+- feat(catalog): the ai-gateway module, and an optional ai_gateways list on the pigeon/platform kind (!843) ([fe843f6](https://github.com/noisypigeon/pigeon/commit/fe843f66865cb9b0a0a9256ec323de7779b83e2a)) · infra-cloudflare-ai-gateway, infra-cloudflare-schema
+- chore(approvals): the gate takes grant redemption, minting, the grants ledger and app devices (!846) ([b1cd07a](https://github.com/noisypigeon/pigeon/commit/b1cd07a0ce9dc066cc2e2656290f4f88a9b12d79))
+- docs(adr): capacity pools step 3 rebuilt on the restructured crates and the AI Gateway, in three changes (!850) ([82d4985](https://github.com/noisypigeon/pigeon/commit/82d49857c78fdd4aae5bac0a8ce6a098b63e48d5))
+- docs(adr): steps 6 to 8 of one test binary per crate under the restructure's names (!855) ([1f51834](https://github.com/noisypigeon/pigeon/commit/1f51834d043e3745b5fe2ca8689c3b04c2235f0e))
+- docs(adr): the AI Gateway is provider-neutral, `pigeon-models`, with Anthropic as its first provider (!856) ([06e6aa0](https://github.com/noisypigeon/pigeon/commit/06e6aa076a17cf64181526b29ac12b4f654ef41e))
+- feat(catalog): an `ai_gateway.run` capability, AI Gateway Run on the account, for the control Worker's gateway token (!848) ([293404e](https://github.com/noisypigeon/pigeon/commit/293404e6cce4ba143b346f2cf33a75c6bae3388c)) · infra-cloudflare-schema
+- fix(core): a test map naming a binary the workspace no longer has picks no tests (!847) ([6ca4428](https://github.com/noisypigeon/pigeon/commit/6ca442821c8c181b4f233f747be5b0471db753bc)) · agent
+- fix(core): a change refused while it holds the merge turn gives the turn back at once (!896) ([d6bad59](https://github.com/noisypigeon/pigeon/commit/d6bad59d1ff56e268fbacf86c9b1b51295bea875))
+- feat(core): a change keeps its own lines and push count, and the merge queue its kept places (!893) ([2f4691b](https://github.com/noisypigeon/pigeon/commit/2f4691bada29d10b49afa90645308275c207533b))
+- docs: ten ADRs' Governs globs name the agent's moved files by their new paths (!844) ([b051750](https://github.com/noisypigeon/pigeon/commit/b0517505edb6fa99be01f8358b9b047dcd05065c))
+- feat(core): each test check records the units it runs (!883) ([177d14a](https://github.com/noisypigeon/pigeon/commit/177d14a102038d4e3781ebb98ef10de26fadee5a))
+- feat(agent): the control plane asks again the merge of a carried approval (!894) ([d559e49](https://github.com/noisypigeon/pigeon/commit/d559e49359cc5c337843f23aa505b4262187fce8)) · agent
+- fix(agent): `bench check` reads its checks with `pigeon dev scope` from pigeon-harness (!858) ([2b7ca3e](https://github.com/noisypigeon/pigeon/commit/2b7ca3e019ff8d2471ab1ee6294b1d6b042380ba)) · agent
+- feat(core): core::pool's Gateway trait, and Claude Platform's Messages API as its first adapter (!857) ([56479d5](https://github.com/noisypigeon/pigeon/commit/56479d5a356ecff7b6f4b35c4b1ef5b13596e78f))
+- refactor(eviction): the judge's binary is `pigeon-eviction`, and it speaks as `eviction` (!860) ([acc474d](https://github.com/noisypigeon/pigeon/commit/acc474d19885b816503b72ba13e03888c24d0fad)) · pigeon-eviction
+- docs(adr): a platform run's account-token permissions come from the kind's modules, with Secrets Store Read and AI Gateway Edit (!904) ([bf525f2](https://github.com/noisypigeon/pigeon/commit/bf525f2450b82006d97cb6a81ba7c51636d5880f))
+- feat(core): which checks main's changed files reach, and which carry (!912) ([b1930bb](https://github.com/noisypigeon/pigeon/commit/b1930bb40849a3fa8257017e4b4e0f47db94786a))
+- fix(core): the platform plan page lists the token permissions its modules need, Secrets Store Read and AI Gateway Edit among them (!905) ([3e84547](https://github.com/noisypigeon/pigeon/commit/3e84547b2f87924cb6afab5e45bfe68e637d8ce7))
+- feat(agent): the bound job reports a digest of the head's own lines, and the change keeps it (!911) ([d6e0673](https://github.com/noisypigeon/pigeon/commit/d6e06735ea42a35e10fca1f5f86d87e6f6c11e00)) · agent
+- feat(core): a change that gives its merge queue place back takes it again once with a qualifying re-push (!908) ([8a3decb](https://github.com/noisypigeon/pigeon/commit/8a3decba2fdc19c94d4027479a46584dc8005dd5))
+- feat(core): wire::Operation answers asks, capability and doors (!854) ([7ee0435](https://github.com/noisypigeon/pigeon/commit/7ee0435f6596de4de948b7de16b45f2beb74f747))
+- docs(adr): capacity pools step 3, b67 for 3a and 3b split in three (!862) ([4aca087](https://github.com/noisypigeon/pigeon/commit/4aca0870dc1b0d2c53fc4e8d0c602cbf9c8064b6))
+- docs(adr): the provider broker's step 5 lands in two parts, with secret credentials first and policy.check in 5b (!864) ([ad13d89](https://github.com/noisypigeon/pigeon/commit/ad13d89c75f8f2a2e5113706168cc79ae8a7f5d5))
+- feat(core): .config/providers/mcp.yaml lists the provider calls exempt from MCP, and pigeon-core parses it (!853) ([7efd12d](https://github.com/noisypigeon/pigeon/commit/7efd12dd53e02bd2b0779499c1ee503256433919))
+- docs(adr): the gateway's Run token is minted through a ledger grant whose route is the Pool object's memory (!868) ([73e838a](https://github.com/noisypigeon/pigeon/commit/73e838af5f976477b50d61b8ddc091cc93bab5de))
+- feat(core): core::pool::meter, the metering route's pure decisions: task tokens, vetting, settling, and SSE usage (!861) ([6c1b70e](https://github.com/noisypigeon/pigeon/commit/6c1b70e928c598444cde08581ece8244243817ce))
+- docs(adr): review !847 against !849 (!872) ([9820b29](https://github.com/noisypigeon/pigeon/commit/9820b293ad6c3b64ec4d7fe3eb14d04206abd165))
+- fix(platform): a plan runs from main's head and records it, and its apply is pinned to that commit (!907) ([3dd4858](https://github.com/noisypigeon/pigeon/commit/3dd48588b4767e0cc37e4a15f135b295bf26bf2c)) · agent
+- docs(adr): review !842 against !849 (!871) ([4f4b8dd](https://github.com/noisypigeon/pigeon/commit/4f4b8dd55a5ce24c826c446d395b6c7f2a02f281))
+- docs(adr): review !851 against !849 (!874) ([3a1449d](https://github.com/noisypigeon/pigeon/commit/3a1449d4ac63351c591e0e7bbb686b745cb47a28))
+- docs(adr): review !853 against !849 (!875) ([14f512b](https://github.com/noisypigeon/pigeon/commit/14f512b31d68f675633af8f3ed844dad43c95688))
+- docs(adr): capacity pools step 4's spike held; step 5 runs claude and the checks in the sandbox (!877) ([18192b8](https://github.com/noisypigeon/pigeon/commit/18192b83de918d8e70a5d54812503973cf8e8d1c))
+- feat(core): provider::call builds a brokered call's arguments, caller, request headers, exchange and event summaries (!869) ([dabe3fe](https://github.com/noisypigeon/pigeon/commit/dabe3fe1e0180c0259dbae2b2f0937f30906f8be))
+- feat(core): reach's replays, main's red test map, and a restack's kept checks (!923) ([cb89fda](https://github.com/noisypigeon/pigeon/commit/cb89fdade8b3b80e296617a5994907b0d1914e53))
+- feat(agent): the merge queue gives a re-push its place back (!926) ([9c306be](https://github.com/noisypigeon/pigeon/commit/9c306bebb5c99e81ed860fa6106f7977c56f9cd7)) · agent
+- test(agent): replay !821 and a holder's rebase keeping their merge queue place (!922) ([1b82a69](https://github.com/noisypigeon/pigeon/commit/1b82a693b406f4205d4153812068450e51afb0ee))
+- refactor: the engines are agent, eviction and infra, and pigeon's messages say so (!886) ([9d1f6b9](https://github.com/noisypigeon/pigeon/commit/9d1f6b92f769255886051cedf943c40d9f18a657)) · agent
+- feat(core): an MCP session ID names its door and caller, and /mcp refuses one that doesn't match (!851) ([d233641](https://github.com/noisypigeon/pigeon/commit/d233641297b17e51b48da8ecba65e45f4a2e82ee)) · agent
+- docs(adr): review !881 against !850 (!902) ([18407a7](https://github.com/noisypigeon/pigeon/commit/18407a71fd2c761bed17a3b20bc5b63e7f9f0236))
+- docs(adr): review !812 against !820, dated in order (!891) ([63be816](https://github.com/noisypigeon/pigeon/commit/63be816fb025c48720c0a157143a04915cccca12))
+- chore(approvals): the provider registry and the broker's verdict are guarded, and the Worker's provider.rs is on the secrets list (!889) ([60579c9](https://github.com/noisypigeon/pigeon/commit/60579c908a9cd21e91536d7ec77fb3328571be67))
+- feat(agent): architecture::inventory lists the Worker's routes by client, and a test pins their count (!852) ([677b60e](https://github.com/noisypigeon/pigeon/commit/677b60e8ef63668522417cb1725f2aa2c8cf4b33)) · agent
+- docs(adr): the AI Gateway ADR governs its tofu module and the core gateway module (!903) ([b7ad6f7](https://github.com/noisypigeon/pigeon/commit/b7ad6f7ee659b19275aa389482d961a9982103cb))
+- docs(adr): review !851 against !850 (!899) ([f2bb223](https://github.com/noisypigeon/pigeon/commit/f2bb223aea355b0466d06563678007da7d6387d6))
+- feat(agent): a merge-gate macOS check that waits for a machine gives up the queue head, and a credential refusal skips its provider (!888) ([9391fe5](https://github.com/noisypigeon/pigeon/commit/9391fe54260f5c93f7417cb8e04241993146f297)) · agent
+- feat(agent): a change holding the merge turn polls GitHub every 10 s (!940) ([1fdae38](https://github.com/noisypigeon/pigeon/commit/1fdae38c7479c1bc10377565922aad26ce0a02c8)) · agent
+- fix(agent): the merge job retries a push refused for now, and keeps its turn (!881) ([3c3c9b0](https://github.com/noisypigeon/pigeon/commit/3c3c9b074d9caca571a074e0a46080b31e927552)) · agent
+- docs(adr): review !853 against !850 (!900) ([3ba91dd](https://github.com/noisypigeon/pigeon/commit/3ba91dde0b53dd9dc7942391068b9ea1cc75ca20))
+- docs(adr): review !860 against !850 (!901) ([99ad97c](https://github.com/noisypigeon/pigeon/commit/99ad97c1a38e1a64f319608c432cfe9b2e205382))
+- chore: the docs, schemas, Dockerfile stages and iOS comments name pigeon, the agent and eviction (!910) ([afc21f3](https://github.com/noisypigeon/pigeon/commit/afc21f3f3b32f2a6abd1712b4be26c0cf4ea4d0a)) · agent, infra-cloudflare-schema, infra-digitalocean-project, infra-digitalocean-schema, pigeon-eviction, site-template-architecture, site-template-blog
+- refactor(agent): the judge's module is `eviction`, and pigeon names the judge `pigeon-eviction` (!913) ([62de382](https://github.com/noisypigeon/pigeon/commit/62de382cb02c4840a3e00e4d787d91d6a888b37c)) · agent
+- docs(adr): a platform run's account token is minted by granter with the unit's exact capabilities, under the plan's passkey approval (!909) ([8d1f7d1](https://github.com/noisypigeon/pigeon/commit/8d1f7d11d5271fa0102d811e624a5ba1b3864efb))
+- docs(adr): review !886 against !862 (!918) ([35c980f](https://github.com/noisypigeon/pigeon/commit/35c980f9f625c38372deb6f20fdcbb7b4b06a193))
+- docs(adr): review !903 against !862 (!919) ([6f59cfc](https://github.com/noisypigeon/pigeon/commit/6f59cfc61bb0de1b254bf5e2205a2e2c0886f627))
+- docs(adr): review !881 against !862 (!917) ([8df9439](https://github.com/noisypigeon/pigeon/commit/8df9439e53099115e90869399734e44430044c92))
+- docs(adr): review !851 against !862 (!914) ([69e7b75](https://github.com/noisypigeon/pigeon/commit/69e7b75208995baf5acdbe6e2bdb59b2112a745e))
+- docs(adr): review !853 against !862 (!915) ([e3fd78b](https://github.com/noisypigeon/pigeon/commit/e3fd78b053c5472a1d435d6da8bd2926777eab24))
+- docs(adr): review !907 against !862 (!920) ([289c41c](https://github.com/noisypigeon/pigeon/commit/289c41cb4d0d6b8dd49024fca65eaee73cea60a0))
+
 ## 2026-11-16
 
 ### Released
