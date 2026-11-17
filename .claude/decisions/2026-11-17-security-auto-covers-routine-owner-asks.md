@@ -214,3 +214,34 @@ step 6a. It touches `brief/mod.rs`, `brief/tests.rs`, `pool/mod.rs`,
 `tests/suite/briefs.rs`. None of these is a path this ADR governs. It changes
 no tier, window, queue order, bound fact, `approvals.yaml` entry or client
 permission. The two agree, and nothing here changes.
+### 2026-11-17: Step 4 splits in two, and a capability rename is Auto's
+
+- **Step 3 is !991.** It replaces !987, whose scope left out the agent's
+  approvals suite (`tests/suite/approvals.rs`) that the new `Facts` fields
+  touch. !987 was closed before it pushed.
+- **Step 4 splits.** `approvals.yaml` is an eviction path, and a change
+  that touches one may also carry only its ADR and the workspace's
+  bookkeeping (`tiers::mixed_with_eviction`). So:
+  - **4a**, after !991 deploys: `approvals.yaml` alone.
+  - **4b**, !998: `.claude/settings.json` alone.
+- **The owner answered `owner_ask` #25: yes.** Auto may cover a
+  `catalog/cloudflare/capabilities.yaml` diff that only renames
+  capabilities. That holds when the base's and the head's capabilities pair
+  up one to one with the same `permissions` and `scope`, and no other line
+  changes.
+  - The bound job sets `Facts::renames_only` for that file. It parses both
+    sides with the catalog's schema and fails closed: a file that doesn't
+    parse, or any unpaired capability, counts as a change.
+  - `classify` skips the `secrets:` match for `capabilities.yaml` when
+    `renames_only` holds. The merge rule then reads
+    `guarded: catalog/cloudflare/capabilities.yaml (renames only)` with
+    `AUTO_COVERS`.
+  - Adding, removing or widening a capability stays `owner`.
+- **Step 5** (new), after step 3 merges: `feat(core)`, `Facts::renames_only`
+  and its check, with tests for:
+  - a pure rename (covered);
+  - a rename that also changes `permissions` (`owner`);
+  - an added capability (`owner`).
+  It touches the gate, so the owner approves it with a passkey.
+- **Left open:** the §1 invariant test, which pins that closing never
+  deletes an Artifacts branch, is not yet written. It rides with step 5.
