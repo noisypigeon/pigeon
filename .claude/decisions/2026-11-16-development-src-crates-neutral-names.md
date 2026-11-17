@@ -715,3 +715,19 @@ a generated change closes, which !736 neither relies on nor changes.
   ADR's glob to `src/pigeon-agent/src/*/ci.rs` first, and (d) narrows it
   afterwards, as !806 did for eight other ADRs.
 - Nothing either ADR decides changes.
+
+### 2026-11-17: Review of !797 against !820: they agree
+
+- !820 changed no code. It amends
+  [`2026-11-09-security-approvals-once-passkeys.md`](2026-11-09-security-approvals-once-passkeys.md)
+  (an owner approval covers its head's merge) and
+  [`2026-11-16-development-merge-path-measured-faster.md`](2026-11-16-development-merge-path-measured-faster.md)
+  (§5 decided; its execution steps 6a and 6b wait for this ADR's step 12).
+- !797 renames agent's library from `backplane` to `agent` (§1). Of the paths
+  those ADRs govern, it touches only `tests/suite/approvals.rs` and
+  `tests/suite/passkeys.rs` (through `src/**/approvals.rs` and
+  `src/**/passkeys.rs`), and there only renames `backplane::` paths to
+  `agent::`. Nothing those tests assert changes.
+- Steps 6a and 6b build on the module paths step 12 leaves:
+  `checks/ci.rs` after a7 (!803), whose `Governs` glob !835 widens first.
+- Nothing either ADR decides changes.
