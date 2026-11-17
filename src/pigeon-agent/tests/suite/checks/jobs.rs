@@ -940,3 +940,17 @@ fn a_release_push_refused_because_main_moved_lands_nothing() {
     assert_eq!(git(&bare, &["rev-parse", "refs/heads/main"]), main);
     assert_eq!(git(&bare, &["tag", "--list"]), "", "no tags");
 }
+
+#[test]
+fn a_short_pinned_sha_checks_out_as_its_full_commit() {
+    use agent::checks::ci;
+    let tmp = TempDir::new().expect("tempdir");
+    let (bare, _work, sha) = unreleased(tmp.path());
+    let url = format!("file://{}", bare.display());
+    let dir = tmp.path().join("job");
+    let got = ci::checkout_on(&dir, &url, "t", "main", Some(&sha[..12])).expect("checkout");
+    assert_eq!(got, sha);
+    assert_eq!(git(&dir, &["rev-parse", "HEAD"]), sha);
+    let other = tmp.path().join("other");
+    assert!(ci::checkout_on(&other, &url, "t", "main", Some("0123456789ab")).is_err());
+}

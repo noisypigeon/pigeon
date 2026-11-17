@@ -146,7 +146,19 @@ pub fn checkout_on(
         token,
         &["rev-parse", &format!("refs/remotes/origin/{branch}")],
     )?;
-    let sha = pinned.unwrap_or(&head).to_string();
+    let sha = match pinned {
+        Some(p) => git(
+            dir,
+            "",
+            "",
+            &["rev-parse", "--verify", "-q", &format!("{p}^{{commit}}")],
+        )
+        .map_err(|_| Error::Git {
+            args: format!("rev-parse {p}"),
+            message: format!("{p} is not on {branch}"),
+        })?,
+        None => head.clone(),
+    };
     if sha != head && git(dir, "", "", &["merge-base", "--is-ancestor", &sha, &head]).is_err() {
         return Err(Error::Git {
             args: format!("merge-base --is-ancestor {sha} {branch}"),
