@@ -226,3 +226,25 @@ merges on the owner's passkey.
   [`2026-11-12-development-grants-applies-rescue-yield.md`](2026-11-12-development-grants-applies-rescue-yield.md).
 - **They agree.** !939 touches no `platforms.rs`, no grant and no platform
   job. This ADR decides nothing about restacks or the merge gate.
+### 2026-11-17: The page's switch moves to step 2; `capabilities` is required where a `pigeon/*` kind expands a module
+
+- **The Worker can't compute a unit's set before step 2.** Unit configs
+  live in the instance, and the deploy only reports them from step 2 on.
+- **Step 1** adds §1's catalog entries and `capabilities` fields, their
+  parse, and §2's `capabilities(kind, config)` in core, with tests. It
+  leaves the plan page, `MODULE_PERMISSIONS` and `token_permissions()` as
+  they are. A test pins that every module the `pigeon/platform` kind
+  expands declares `capabilities`, each a catalog name.
+- **Step 2** also adds `Resolved.units`, each `pigeon/platform` unit's
+  capability names. The plan page lists `Resolved.units[run.unit]` with
+  each capability's permissions. `MODULE_PERMISSIONS` and
+  `token_permissions()` go then. With no deployed set for the unit, the
+  page falls back to the pasted token alone and names that cause.
+- **§1's "required on every `cloudflare/*` module"** becomes: required on
+  every module a `pigeon/*` kind expands, pinned by that test. Any module
+  may declare it, and `infra validate` refuses a declared value that isn't
+  a list of names.
+- **Capability names take dashes, not underscores.** The catalog's name
+  rule is `^[a-z0-9]+(-[a-z0-9]+)*(\.[a-z0-9]+(-[a-z0-9]+)*)+$`, so §1's
+  `secrets_store.read`, `access_apps.write` and `access_tokens.write` are
+  `secrets-store.read`, `access-apps.write` and `access-tokens.write`.
