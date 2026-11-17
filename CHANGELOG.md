@@ -12,6 +12,7 @@
 - agent v0.1.49
 - agent v0.1.50
 - agent v0.1.51
+- agent v0.1.52
 - infra-agnostic-random-string v0.1.4
 - infra-agnostic-schema v0.1.5
 - infra-backblaze-schema v0.1.4
@@ -200,6 +201,9 @@
 - feat(backplane): a running pool job's log can be watched in pool.status (!1048) ([4a56a9c](https://github.com/noisypigeon/pigeon/commit/4a56a9c263fe202b7777a3043f0baedda95cf823)) · agent
 - feat(core): the rendering contract's four views, validated and rendered as text (!1051) ([a0365dc](https://github.com/noisypigeon/pigeon/commit/a0365dca9859fc5ee3f7faa2a80d73a81625a91c))
 - feat(core): the feed: the event log read as typed items, with needs, readers and the open set (!1052) ([5b8a278](https://github.com/noisypigeon/pigeon/commit/5b8a2784f352ae76d6f2840b4c454d82a41a16dc))
+- docs(adr): a tool's view is presented beside its result, and Governs takes the view and feed files (!1057) ([6d61175](https://github.com/noisypigeon/pigeon/commit/6d611755c7a96b8b4d5bbe93176e445ce68dc8fa))
+- feat(core): every operation declares its view, in tools/list's _meta, and initialize names the contract (!1055) ([5874157](https://github.com/noisypigeon/pigeon/commit/58741576cad15d7222aeb744cddf1006580096f0))
+- feat(infra): platform/blue declares the pigeon-pool service token and policy, adopted by name (!1056) ([9262ae7](https://github.com/noisypigeon/pigeon/commit/9262ae74c4c2945e77405dcce5577fd984664579))
 
 ## 2026-11-16
 
