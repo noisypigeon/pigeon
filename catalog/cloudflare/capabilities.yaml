@@ -12,3 +12,9 @@ capabilities:
   observability.read: { permissions: [Workers Observability Read], scope: account }
   analytics.read: { permissions: [Account Analytics Read], scope: account }
   aigateway.run: { permissions: [AI Gateway Run], scope: account }
+  account.read: { permissions: [Account Settings Read], scope: account }
+  workers.read: { permissions: [Workers Scripts Read], scope: account }
+  secrets-store.read: { permissions: [Secrets Store Read], scope: account }
+  aigateway.write: { permissions: [AI Gateway Write], scope: account }
+  access-apps.write: { permissions: ["Access: Apps and Policies Write"], scope: account }
+  access-tokens.write: { permissions: ["Access: Service Tokens Write"], scope: account }
