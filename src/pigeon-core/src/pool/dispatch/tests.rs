@@ -312,3 +312,24 @@ fn only_open_unclaimed_brief_tasks_wait() {
     };
     assert_eq!(waiting(&t), vec![(3, "b3".into()), (5, "b5".into())]);
 }
+
+#[test]
+fn a_job_is_lost_after_two_404s_a_sweep_apart() {
+    assert_eq!(gone(None, true, NOW), (Some(NOW), false));
+    assert_eq!(gone(Some(NOW), true, NOW + SWEEP - 1), (Some(NOW), false));
+    assert_eq!(gone(Some(NOW), true, NOW + SWEEP), (Some(NOW), true));
+}
+
+#[test]
+fn any_answer_but_404_clears_the_first() {
+    assert_eq!(gone(Some(NOW), false, NOW + 10 * SWEEP), (None, false));
+    assert_eq!(gone(None, false, NOW), (None, false));
+}
+
+#[test]
+fn only_a_first_task_that_spent_nothing_runs_again() {
+    assert!(runs_again("pool:b7.1", 0));
+    assert!(!runs_again("pool:b7.1", 1));
+    assert!(!runs_again("pool:b7.2", 0));
+    assert!(!runs_again("pool:b7", 0));
+}

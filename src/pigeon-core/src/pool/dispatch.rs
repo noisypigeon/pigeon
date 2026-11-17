@@ -233,5 +233,31 @@ pub fn waiting(tasks: &crate::tasks::Tasks) -> Vec<(u32, String)> {
         .collect()
 }
 
+/// Seconds between the `Pool` object's sweeps, each asking after its jobs.
+pub const SWEEP: u64 = 60;
+
+/// A followed job's first 404 after a `Checker` answer at `now`, and whether the job is lost:
+/// a second 404 at least [`SWEEP`] after the first. Any answer but 404 clears it.
+#[must_use]
+pub fn gone(first: Option<u64>, answered_404: bool, now: u64) -> (Option<u64>, bool) {
+    if !answered_404 {
+        return (None, false);
+    }
+    match first {
+        None => (Some(now), false),
+        Some(at) => (Some(at), now >= at.saturating_add(SWEEP)),
+    }
+}
+
+/// Whether a lost task with `label` and `requests` runs again: only its first, and only when it
+/// spent nothing.
+#[must_use]
+pub fn runs_again(label: &str, requests: u64) -> bool {
+    let k = label
+        .rsplit_once('.')
+        .and_then(|(_, k)| k.parse::<u32>().ok());
+    requests == 0 && k == Some(1)
+}
+
 #[cfg(test)]
 mod tests;
