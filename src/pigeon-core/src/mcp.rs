@@ -331,21 +331,49 @@ pub fn parse(message: &Value, version: &str) -> Action {
     }
 }
 
+/// The tool error prefix of a presented view that does not match its operation's declared view.
+pub const MISMATCH: &str = "view.mismatch";
+
 /// The answer to a [`Action::Call`]: the operation's response as the tool's result, with
 /// violations and errors as a tool error the model can read.
 #[must_use]
 pub fn answer(id: &Value, outcome: Result<Response, Error>) -> Value {
     match outcome {
         Ok(r) => {
+            let view = if r.ok && crate::present::presented().contains(&r.operation.as_str()) {
+                catalog().iter().find(|o| o.name == r.operation).map(|o| {
+                    crate::present::checked(o.view, crate::present::view(&r.operation, &r))
+                })
+            } else {
+                None
+            };
             let text = serde_json::to_string_pretty(&r).unwrap_or_default();
-            result(
-                id,
-                &json!({
-                    "content": [{ "type": "text", "text": text }],
-                    "structuredContent": r,
-                    "isError": !r.ok,
-                }),
-            )
+            match view {
+                Some(Err(problems)) => result(
+                    id,
+                    &json!({
+                        "content": [{ "type": "text", "text": format!("{MISMATCH}: {}", problems.join("; ")) }],
+                        "isError": true,
+                    }),
+                ),
+                Some(Ok(Some(v))) => result(
+                    id,
+                    &json!({
+                        "content": [{ "type": "text", "text": text }],
+                        "structuredContent": r,
+                        "isError": !r.ok,
+                        "_meta": { "dev.pigeon/view": v },
+                    }),
+                ),
+                _ => result(
+                    id,
+                    &json!({
+                        "content": [{ "type": "text", "text": text }],
+                        "structuredContent": r,
+                        "isError": !r.ok,
+                    }),
+                ),
+            }
         }
         Err(e) => result(
             id,

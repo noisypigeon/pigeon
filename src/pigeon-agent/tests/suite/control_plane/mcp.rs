@@ -312,3 +312,21 @@ fn only_answers_to_this_servers_cards_are_handed_on() {
         Action::Accept
     ));
 }
+
+#[test]
+fn an_unpresented_tool_answers_without_a_view() {
+    let answer = mcp::answer(
+        &json!(1),
+        Ok(Response {
+            operation: "change.status".into(),
+            ok: true,
+            result: json!({ "state": "open" }),
+            violations: vec![],
+        }),
+    );
+    assert!(answer["result"].get("_meta").is_none());
+    assert_eq!(
+        answer["result"]["structuredContent"]["result"]["state"],
+        "open"
+    );
+}
