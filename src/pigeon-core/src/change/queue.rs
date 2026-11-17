@@ -175,6 +175,9 @@ pub struct Mark {
     /// The owner moved it to the front.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub fronted: bool,
+    /// It is in the owner's fast lane; see the fast-lane ADR's §4.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub lane: bool,
     /// Its head's own lines when its merge was asked, as [`Change::own`].
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub own: Option<String>,
@@ -356,6 +359,7 @@ pub fn enqueue_back(
     let mark = Mark {
         fronted,
         own: back.own.clone(),
+        lane: q.marks.get(&number).is_some_and(|m| m.lane),
         returned: q.marks.get(&number).is_some_and(|m| m.returned),
     };
     next.marks.insert(number, mark);
@@ -583,7 +587,7 @@ pub fn keep(q: &MergeQueue, number: u32, now: u64) -> MergeQueue {
 ///
 /// When it is merging, isn't queued, or yields to another; the queue is then unchanged.
 pub fn front(q: &MergeQueue, number: u32) -> Result<(MergeQueue, (usize, usize)), String> {
-    place(q, number, false)
+    place(q, number, Band::Owner)
 }
 
 /// A session moves its own waiting change `number` forward under Auto: as [`front`], but behind
@@ -594,14 +598,72 @@ pub fn front(q: &MergeQueue, number: u32) -> Result<(MergeQueue, (usize, usize))
 ///
 /// As [`front`].
 pub fn front_after(q: &MergeQueue, number: u32) -> Result<(MergeQueue, (usize, usize)), String> {
-    place(q, number, true)
+    place(q, number, Band::Session)
 }
 
-fn place(
-    q: &MergeQueue,
-    number: u32,
-    after_fronted: bool,
-) -> Result<(MergeQueue, (usize, usize)), String> {
+/// Moves waiting change `number`, in the owner's fast lane, behind kept changes and earlier lane
+/// changes, ahead of every front; see the fast-lane ADR's §4.
+///
+/// # Errors
+///
+/// As [`front`].
+pub fn lane_front(q: &MergeQueue, number: u32) -> Result<(MergeQueue, (usize, usize)), String> {
+    place(q, number, Band::Lane)
+}
+
+/// The owner gives the merge turn to waiting change `number`: the holder, whose merge job hasn't
+/// started, goes back to the head of the waiting line. The next queue, and the holder's entry.
+///
+/// # Errors
+///
+/// When nothing merges, the holder's merge job `started`, `number` holds the turn, yields, or
+/// isn't waiting; the queue is then unchanged.
+pub fn preempt(q: &MergeQueue, number: u32, started: bool) -> Result<(MergeQueue, Entry), String> {
+    let Some(holder) = q.merging.clone() else {
+        return Err("nothing holds the merge turn; front the change instead".into());
+    };
+    if holder.number == number {
+        return Err(format!("change {number} already holds the merge turn"));
+    }
+    if started {
+        return Err(format!(
+            "!{}'s merge has started; it can't be pre-empted",
+            holder.number
+        ));
+    }
+    if let Some(to) = q.yielded.get(&number) {
+        return Err(format!(
+            "change {number} yields to !{to}; its yield decides its place"
+        ));
+    }
+    let Some(i) = q.waiting.iter().position(|e| e.number == number) else {
+        return Err(format!(
+            "change {number} isn't in the merge queue; ask to merge it first"
+        ));
+    };
+    let mut next = q.clone();
+    let Some(entry) = next.waiting.remove(i) else {
+        return Err(format!("change {number} isn't in the merge queue"));
+    };
+    next.waiting.push_front(holder.clone());
+    next.docs_turn = docs_turn_of(&next, &entry);
+    next.merging = Some(entry);
+    next.marks.entry(number).or_default().fronted = true;
+    Ok((next, holder))
+}
+
+/// Who moves a change forward, which decides what it goes behind.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Band {
+    /// The owner: behind kept and lane changes.
+    Owner,
+    /// A session under Auto: behind kept, lane and fronted changes.
+    Session,
+    /// The fast lane: behind kept and earlier lane changes; see the fast-lane ADR's §4.
+    Lane,
+}
+
+fn place(q: &MergeQueue, number: u32, band: Band) -> Result<(MergeQueue, (usize, usize)), String> {
     if q.merging.as_ref().is_some_and(|e| e.number == number) {
         return Err(format!("change {number} is already being merged"));
     }
@@ -625,12 +687,19 @@ fn place(
         .waiting
         .iter()
         .take_while(|e| {
+            let mark = q.marks.get(&e.number);
             q.kept.contains_key(&e.number)
-                || (after_fronted && q.marks.get(&e.number).is_some_and(|m| m.fronted))
+                || mark.is_some_and(|m| m.lane)
+                || (band == Band::Session && mark.is_some_and(|m| m.fronted))
         })
         .count();
     next.waiting.insert(ahead, entry);
-    next.marks.entry(number).or_default().fronted = true;
+    let mark = next.marks.entry(number).or_default();
+    if band == Band::Lane {
+        mark.lane = true;
+    } else {
+        mark.fronted = true;
+    }
     Ok((next, left))
 }
 

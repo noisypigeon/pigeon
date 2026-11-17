@@ -18,3 +18,13 @@ pub fn rank(state: &str) -> u8 {
 pub fn yields(mine: (u32, &str), theirs: (u32, &str)) -> bool {
     (rank(theirs.1), std::cmp::Reverse(theirs.0)) > (rank(mine.1), std::cmp::Reverse(mine.0))
 }
+
+/// As [`yields`], with whether each change is in the owner's fast lane: a lane change goes
+/// before one outside it; see the fast-lane ADR's §4.
+#[must_use]
+pub fn yields_in_lane(mine: (u32, &str, bool), theirs: (u32, &str, bool)) -> bool {
+    if mine.2 != theirs.2 {
+        return theirs.2;
+    }
+    yields((mine.0, mine.1), (theirs.0, theirs.1))
+}

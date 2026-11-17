@@ -1787,3 +1787,76 @@ fn a_same_patch_restack_carries_only_the_checks_main_does_not_reach() {
         "and none of a clean one's"
     );
 }
+
+/// A queue with !1 merging and !2, !3 and !4 waiting, in that order.
+fn queue_of_four() -> super::queue::MergeQueue {
+    use super::queue::{MergeQueue, enqueue};
+    (1..=4).fold(MergeQueue::default(), |q, n| {
+        enqueue(&q, n, "owner", 0).expect("queued").0
+    })
+}
+
+fn waiting_numbers(q: &super::queue::MergeQueue) -> Vec<u32> {
+    q.waiting.iter().map(|e| e.number).collect()
+}
+
+#[test]
+fn a_lane_change_goes_ahead_of_fronts_and_behind_earlier_lane_changes() {
+    use super::queue::{front, front_after, lane_front};
+    let q = queue_of_four();
+    let (q, _) = front(&q, 3).expect("the owner's front");
+    assert_eq!(waiting_numbers(&q), [3, 2, 4]);
+    let (q, left) = lane_front(&q, 4).expect("the lane");
+    assert_eq!(left, (4, 4));
+    assert_eq!(waiting_numbers(&q), [4, 3, 2]);
+    let (q, _) = lane_front(&q, 2).expect("a second lane change");
+    assert_eq!(
+        waiting_numbers(&q),
+        [4, 2, 3],
+        "behind the earlier lane change"
+    );
+    let (q, _) = front(&q, 3).expect("the owner's front again");
+    assert_eq!(
+        waiting_numbers(&q),
+        [4, 2, 3],
+        "an owner's front stays behind the lane"
+    );
+    let (q, _) = front_after(&q, 3).expect("a session's front");
+    assert_eq!(waiting_numbers(&q), [4, 2, 3]);
+    assert_eq!(
+        q.merging.as_ref().map(|e| e.number),
+        Some(1),
+        "the merge running stays"
+    );
+}
+
+#[test]
+fn the_owner_preempts_a_holder_whose_squash_has_not_started() {
+    use super::queue::preempt;
+    let q = queue_of_four();
+    assert!(
+        preempt(&q, 3, true).is_err(),
+        "a started merge keeps its turn"
+    );
+    assert!(preempt(&q, 1, false).is_err(), "the holder itself");
+    assert!(preempt(&q, 9, false).is_err(), "not waiting");
+    let (q, back) = preempt(&q, 3, false).expect("pre-empted");
+    assert_eq!(back.number, 1);
+    assert_eq!(q.merging.as_ref().map(|e| e.number), Some(3));
+    assert_eq!(
+        waiting_numbers(&q),
+        [1, 2, 4],
+        "the holder goes back to place 1"
+    );
+}
+
+#[test]
+fn a_forecast_puts_a_lane_change_first() {
+    use super::forecast::{yields, yields_in_lane};
+    assert!(yields_in_lane((5, "approved", false), (9, "pushed", true)));
+    assert!(!yields_in_lane((9, "pushed", true), (5, "approved", false)));
+    assert_eq!(
+        yields_in_lane((9, "pushed", true), (5, "approved", true)),
+        yields((9, "pushed"), (5, "approved"))
+    );
+}
