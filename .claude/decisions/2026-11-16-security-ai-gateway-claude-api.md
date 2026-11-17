@@ -629,3 +629,15 @@ planner before it builds step 5's token minting (its step 3c).
   own Run-token check and `verdict::admit`, and !851 adds nothing to it.
 
 Neither ADR changes.
+### 2026-11-17: Review of !860 against !850: they agree
+
+- !850 changed no code. It plans capacity pools' step 3, per
+  [`2026-11-15-development-capacity-pools-hard-spend-cap.md`](2026-11-15-development-capacity-pools-hard-spend-cap.md)
+  and this ADR, over `jobs.rs`, `brief/mod.rs` and `insights/mod.rs`.
+- !860 is step 12 (b2b) of
+  [`2026-11-16-development-src-crates-neutral-names.md`](2026-11-16-development-src-crates-neutral-names.md):
+  the judge's binary is `pigeon-eviction`. It touches only
+  `src/pigeon-eviction/` (its manifest, `main.rs`, `report.rs` and its CLI
+  test), none of the files !850 plans for. The two met only through the
+  review rule's scope.
+- Nothing any of the three ADRs decides changes.
