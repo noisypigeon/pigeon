@@ -668,3 +668,31 @@ ADR's `pool/aigateway.rs`. !903 adds `src/**/pool/aigateway.rs` and
   agreed.
 
 Neither decision changes.
+
+### 2026-11-17: The Run token is minted single-flight, and an in-memory renewal doesn't revoke
+
+Reviewing !924 found a race in the Run-token amendment's "revokes the
+previous id":
+
+- **Two concurrent mints.** Two requests find no token, or a 50-minute-old
+  one, across the object's awaits. Both mint, and the second mint revokes
+  the first token.
+- **A request mid-flight at renewal.** A request takes the old token, then
+  waits on storage while another request mints and revokes it.
+
+Either way the gateway answers `401`. `classify` reads that as
+`GatewayUnauthorized`, which pauses the pool and files an owner item for
+nothing.
+
+- **Minting is single-flight in the `Pool` object.** One mint runs at a time.
+  A caller that finds one running waits for it, or answers `503`,
+  `pool: no gateway token`. It never starts a second mint.
+- **An in-memory renewal doesn't revoke.** At 50 minutes the object mints a
+  new token and keeps using it. The old token's one-hour TTL ends it at
+  most 10 minutes later.
+- **The registry's previous id is revoked only when the object holds no
+  token in memory.** That is a restart, and nothing of the old token is in
+  flight then.
+- **Unchanged:**
+  - the registry records each token's id and expiry, never its value;
+  - at most two Run tokens are ever live, each for at most an hour.
