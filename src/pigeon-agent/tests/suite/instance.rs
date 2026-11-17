@@ -162,6 +162,7 @@ fn catalog_names_are_unique_and_dotted() {
             ("bench.warm", Effect::Build),
             ("owner.ask", Effect::Build),
             ("owner.withdraw", Effect::Build),
+            ("provider.call", Effect::Build),
             ("session.start", Effect::Build),
             ("brief.create", Effect::Build),
             ("brief.amend", Effect::Build),
@@ -494,6 +495,18 @@ fn the_control_plane_runs_ios_releases_itself() {
 #[test]
 fn the_control_plane_runs_owner_items_itself() {
     for name in ["owner.ask", "owner.withdraw"] {
+        let op = catalog()
+            .iter()
+            .find(|o| o.name == name)
+            .expect("in the catalog");
+        assert!(op.control_plane(), "{name}");
+    }
+}
+
+// See `.claude/decisions/2026-11-16-security-provider-calls-mcp-broker.md`.
+#[test]
+fn provider_operations_are_the_control_planes() {
+    for name in ["provider.call", "provider.tools"] {
         let op = catalog()
             .iter()
             .find(|o| o.name == name)

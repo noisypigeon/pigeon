@@ -257,6 +257,7 @@ impl Operation {
             || self.name.starts_with("ios.")
             || self.name.starts_with("grant.")
             || self.name.starts_with("owner.")
+            || self.name.starts_with("provider.")
             || self.name.starts_with("bench.")
     }
 
@@ -713,6 +714,29 @@ const CATALOG: &[Operation] = &[
         args: &[
             arg("id", true, Kind::Text),
             arg("session", true, Kind::String),
+            arg("ticket", false, Kind::String),
+        ],
+    },
+    Operation {
+        name: "provider.call",
+        engine: Engine::Agent,
+        effect: Effect::Build,
+        summary: "Call tool `tool` of provider MCP server `server` (`.config/providers/mcp.yaml`) with `arguments`, JSON text of an object, for `change` if named; the broker checks the registry, your capability, ticket and change, and the tool's tier before it goes out, and records provider.called or provider.refused",
+        args: &[
+            arg("server", true, Kind::String),
+            arg("tool", true, Kind::String),
+            arg("arguments", false, Kind::Text),
+            arg("change", false, Kind::Text),
+            arg("ticket", false, Kind::String),
+        ],
+    },
+    Operation {
+        name: "provider.tools",
+        engine: Engine::Agent,
+        effect: Effect::Read,
+        summary: "Provider MCP server `server`'s live tools beside the registry's pins: each tool's name, live schema hash, pinned hash and whether it drifted",
+        args: &[
+            arg("server", true, Kind::String),
             arg("ticket", false, Kind::String),
         ],
     },
