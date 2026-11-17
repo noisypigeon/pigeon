@@ -425,3 +425,23 @@ Steps 3a (!1051) and 6 (!1052) added `src/pigeon-core/src/view.rs` and
 `src/pigeon-core/src/feed.rs`, each with tests in a folder of its name.
 `Governs` gains `src/**/view.rs`, `src/**/view/**`, `src/**/feed.rs` and
 `src/**/feed/**`; step 5a adds `src/**/present/**`.
+
+### 2026-11-17: The fast lane's items join the feed
+
+Per
+[`2026-11-17-security-owner-fast-lane-window.md`](2026-11-17-security-owner-fast-lane-window.md)
+§7 and §8, §3.2's closed set of types gains:
+
+| Type | Needs | Audience |
+|---|---|---|
+| `lane.open` | none | all |
+| `lane.ended` | none | all; it resolves its `lane.open` |
+| `lane.broken` | owner | all |
+
+- A lane's request is an `approval.pending` item with subject `{lane: id}`;
+  `lane.extended` and `lane.deferred` are `note`s, and `job.waived` is a
+  `note` for the change's readers.
+- `approval.list` lists the open `lane.open` items above the pending
+  approvals, each with an `End` action.
+- The lane's operations declare views as that ADR's §8 lists; the four
+  views and their value kinds are unchanged.
