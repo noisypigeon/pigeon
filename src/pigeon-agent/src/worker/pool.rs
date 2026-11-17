@@ -62,6 +62,12 @@ const RESUME_KEY: &str = "resume-offers";
 /// Seconds the Run token lives.
 const TTL: u64 = 60 * 60;
 
+/// How long a minted Run token counts as fresh, in seconds: a 401 then is resent once.
+const FRESH: u64 = 60;
+
+/// How long to wait before that resend, in seconds.
+const FRESH_WAIT: u64 = 30;
+
 /// How often the alarm sweeps while holds or tasks are open, in milliseconds.
 const SWEEP_MS: i64 = 60 * 1000;
 
@@ -525,18 +531,34 @@ impl Pool {
         gw: &'static dyn Gateway,
         pool: &str,
     ) -> Result<Response> {
-        let headers = Headers::new();
-        for (n, v) in outbound {
-            headers.set(n, v)?;
-        }
-        let mut init = RequestInit::new();
-        init.with_method(Method::Post)
-            .with_headers(headers)
-            .with_body(Some(worker::js_sys::Uint8Array::from(body).into()));
-        let sent = Request::new_with_init(url, &init)?;
-        let Ok(mut r) = Fetch::Request(sent).send().await else {
+        let attempt = || -> Result<Request> {
+            let headers = Headers::new();
+            for (n, v) in outbound {
+                headers.set(n, v)?;
+            }
+            let mut init = RequestInit::new();
+            init.with_method(Method::Post)
+                .with_headers(headers)
+                .with_body(Some(worker::js_sys::Uint8Array::from(body).into()));
+            Request::new_with_init(url, &init)
+        };
+        let Ok(mut r) = Fetch::Request(attempt()?).send().await else {
             return self.fail(&hold, "pool: gateway unavailable").await;
         };
+        // A Run token minted moments ago may not reach the gateway yet: one resend, later; see
+        // the pool ADR's 2026-11-17 entry on a fresh Run token.
+        let fresh = self
+            .token
+            .borrow()
+            .as_ref()
+            .is_some_and(|(_, at)| now() < at + FRESH);
+        if r.status_code() == 401 && fresh {
+            worker::Delay::from(std::time::Duration::from_secs(FRESH_WAIT)).await;
+            let Ok(again) = Fetch::Request(attempt()?).send().await else {
+                return self.fail(&hold, "pool: gateway unavailable").await;
+            };
+            r = again;
+        }
         let status = r.status_code();
         let account = gw
             .account_header()

@@ -368,7 +368,7 @@ fn no_stored_key_and_a_refused_token_pause() {
 
 #[test]
 fn the_gateway_rate_limit_passes_without_a_pause() {
-    let (l, hold) = reserved();
+    let (l, _hold) = reserved();
     let s = settle(
         &Messages,
         &pool(),
@@ -380,7 +380,7 @@ fn the_gateway_rate_limit_passes_without_a_pause() {
     );
     assert_eq!(s.trips, Vec::<String>::new());
     assert_eq!(s.ledger.paused, None);
-    assert_eq!(s.cost, hold);
+    assert_eq!(s.cost, 0, "the gateway's own refusal costs nothing");
 }
 
 #[test]
@@ -531,4 +531,37 @@ fn an_unreachable_gateway_records_status_zero() {
     let e = upstream_event(&Messages, "p", "t", &seen(0, None, "", None), false).expect("event");
     assert_eq!(e["status"], 0);
     assert_eq!(e["signal"], "gateway(0)");
+}
+
+#[test]
+fn a_token_the_gateway_refuses_costs_nothing_and_pauses() {
+    let (l, _hold) = reserved();
+    let body = r#"{"success":false,"result":[],"messages":[],"error":[{"code":2009,"message":"Unauthorized"}]}"#;
+    let s = settle(
+        &Messages,
+        &pool(),
+        &l,
+        "h1",
+        WS,
+        &seen(401, None, body, None),
+        NOW,
+    );
+    assert_eq!(s.cost, 0);
+    assert!(s.ledger.paused.is_some());
+}
+
+#[test]
+fn an_anthropic_error_is_still_charged_its_reservation() {
+    let (l, hold) = reserved();
+    let body = r#"{"type":"error","error":{"type":"overloaded_error","message":"x"}}"#;
+    let s = settle(
+        &Messages,
+        &pool(),
+        &l,
+        "h1",
+        WS,
+        &seen(529, None, body, None),
+        NOW,
+    );
+    assert_eq!(s.cost, hold);
 }

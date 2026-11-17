@@ -260,6 +260,9 @@ fn gateway_trip(s: aigateway::Signal) -> Option<String> {
     })
 }
 
+/// The model a request the gateway refused is recorded under.
+pub const REFUSED: &str = "refused";
+
 /// Charges hold `hold` for response `seen`, applying its signals: a response without a final
 /// usage is charged its reservation, and any other workspace trips.
 #[must_use]
@@ -299,7 +302,13 @@ pub fn settle(
         }
     }
     let final_usage = seen.usage.as_ref().filter(|u| u.complete);
+    // The gateway's own 4xx refusal never reached the provider: it costs nothing; see the pool ADR's
+    // 2026-11-17 entry on a fresh Run token.
+    let refused_by_gateway = (400..500).contains(&seen.status)
+        && aigateway::classify(seen.status, seen.body)
+            .is_some_and(|s| s != aigateway::Signal::Upstream);
     let (cost, fresh, model) = match final_usage {
+        _ if refused_by_gateway => (0, 0, REFUSED.to_string()),
         Some(u) => (
             gateway.cost(u, pool),
             gateway.fresh_tokens(u),

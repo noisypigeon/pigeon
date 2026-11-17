@@ -1058,3 +1058,21 @@ first a dropped policy, then a new secret, since the provider defaults
   declares it (!1056, !1060), so a platform plan must leave its secret
   alone before one is applied. That needs `client_secret_version` ignored for
   a token adopted unrotated, a later change.
+
+### 2026-11-17: A fresh Run token is given a moment, and a gateway refusal costs nothing
+
+Smoke tasks b112 and b113 each sent their first request about a second
+after the Pool minted its Run token: after a resume, and after a deploy
+restarted the Pool, whose token is in memory only. Each got the gateway's
+401 (code 2009, workspace not seen). The breaker paused the pool, and the
+ledger charged the refused request its reservation, about $0.03.
+
+- **A fresh token's 401 is resent once.** When the gateway answers 401 and
+  the held Run token is under 60 seconds old, the Pool waits 30 seconds and
+  resends the request once, with the same token. A second 401 settles and
+  pauses as §2 says. This is also the probe: a 401 that survives it isn't
+  propagation.
+- **The gateway's own 4xx costs nothing.** A 4xx that `aigateway::classify`
+  calls the gateway's (no key, unauthorized, rate limited) never reached
+  the provider. It settles at $0 under the model `refused`. A gateway 5xx,
+  and any Anthropic error, is charged its reservation as before.
