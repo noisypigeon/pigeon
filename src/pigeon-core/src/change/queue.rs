@@ -311,6 +311,69 @@ pub fn enqueue(
     enqueue_as(q, number, by, false, now)
 }
 
+/// [`enqueue`], for a merge that brings `back`: a change that gave its place back, and
+/// [`Returning::returns`] it, takes that place again, once, or the front behind any kept change
+/// when the owner had moved it there; see the merge-path ADR §8.
+///
+/// # Errors
+///
+/// When it is already merging or waiting; the queue is then unchanged.
+pub fn enqueue_back(
+    q: &MergeQueue,
+    number: u32,
+    by: &str,
+    back: &Back,
+    now: u64,
+) -> Result<(MergeQueue, Queued), String> {
+    let (mut next, queued) = enqueue(q, number, by, now)?;
+    let returning = q
+        .returning
+        .get(&number)
+        .filter(|r| r.returns(back, now).is_some())
+        .cloned();
+    next.returning
+        .retain(|_, r| now.saturating_sub(r.at) < RETURN);
+    let fronted = returning.as_ref().is_some_and(|r| r.fronted)
+        || q.marks.get(&number).is_some_and(|m| m.fronted);
+    let mark = Mark {
+        fronted,
+        own: back.own.clone(),
+        returned: q.marks.get(&number).is_some_and(|m| m.returned),
+    };
+    next.marks.insert(number, mark);
+    let Some(r) = returning else {
+        return Ok((next, queued));
+    };
+    if !matches!(queued, Queued::Behind(_)) || q.kept.contains_key(&number) {
+        return Ok((next, queued));
+    }
+    let Some(entry) = next
+        .waiting
+        .iter()
+        .position(|e| e.number == number)
+        .and_then(|i| next.waiting.remove(i))
+    else {
+        return Ok((next, queued));
+    };
+    let kept = next
+        .waiting
+        .iter()
+        .take_while(|e| next.kept.contains_key(&e.number))
+        .count();
+    let after = next
+        .waiting
+        .iter()
+        .rposition(|e| r.ahead.contains(&e.number))
+        .map_or(0, |i| i + 1);
+    let at = if r.fronted { kept } else { after.max(kept) };
+    next.waiting.insert(at, entry);
+    next.returning.remove(&number);
+    if let Some(m) = next.marks.get_mut(&number) {
+        m.returned = true;
+    }
+    Ok((next, Queued::Behind(at + 1)))
+}
+
 /// As [`enqueue`], for a change that is docs-only when `docs`.
 ///
 /// # Errors
@@ -375,6 +438,21 @@ pub fn ask(
     ask_as(q, number, by, false, now)
 }
 
+/// [`ask`], for a merge that brings `back`, as [`enqueue_back`].
+pub fn ask_back(
+    q: &MergeQueue,
+    number: u32,
+    by: &str,
+    back: &Back,
+    now: u64,
+) -> (MergeQueue, Option<Entry>, Result<Queued, String>) {
+    let (q, resumed) = unstick(q, now);
+    match enqueue_back(&q, number, by, back, now) {
+        Ok((next, queued)) => (next, resumed, Ok(queued)),
+        Err(why) => (q, resumed, Err(why)),
+    }
+}
+
 /// As [`ask`], for a change that is docs-only when `docs`.
 pub fn ask_as(
     q: &MergeQueue,
@@ -397,11 +475,47 @@ pub fn done(q: &MergeQueue, number: u32, now: u64) -> (MergeQueue, Option<Entry>
     let mut next = q.clone();
     next.waiting.retain(|e| e.number != number);
     next.kept.remove(&number);
+    next.marks.remove(&number);
     next.docs_turn.retain(|n| *n != number);
     if next.merging.as_ref().is_some_and(|e| e.number == number) {
         next.merging = None;
     }
     advance(next, now)
+}
+
+/// Change `number` gave its place back without merging, its head failed at `failed` pushes or
+/// not: the next queue, which keeps its place as [`Returning`], and the next merge to start, if
+/// any, unless it already took a kept place back; see the merge-path ADR
+/// §8.
+#[must_use]
+pub fn left(
+    q: &MergeQueue,
+    number: u32,
+    failed: Option<u32>,
+    now: u64,
+) -> (MergeQueue, Option<Entry>) {
+    let holding = q.merging.as_ref().is_some_and(|e| e.number == number);
+    let waiting = q.waiting.iter().position(|e| e.number == number);
+    let mut next = q.clone();
+    next.returning
+        .retain(|_, r| now.saturating_sub(r.at) < RETURN);
+    let mark = q.marks.get(&number).cloned().unwrap_or_default();
+    if (holding || waiting.is_some()) && !mark.returned {
+        let returning = Returning {
+            ahead: q
+                .waiting
+                .iter()
+                .take(waiting.unwrap_or(0))
+                .map(|e| e.number)
+                .collect(),
+            fronted: mark.fronted,
+            own: mark.own,
+            failed,
+            at: now,
+        };
+        next.returning.insert(number, returning);
+    }
+    done(&next, number, now)
 }
 
 /// Change `number` yielded while holding or waiting for the turn: the next queue, with it first in
@@ -476,6 +590,7 @@ pub fn front(q: &MergeQueue, number: u32) -> Result<(MergeQueue, (usize, usize))
         .take_while(|e| q.kept.contains_key(&e.number))
         .count();
     next.waiting.insert(ahead, entry);
+    next.marks.entry(number).or_default().fronted = true;
     Ok((next, left))
 }
 

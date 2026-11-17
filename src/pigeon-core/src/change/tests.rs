@@ -1559,3 +1559,82 @@ fn a_kept_place_returns_to_the_first_push_after_a_failure_or_to_the_same_own_lin
     assert_eq!(left.returns(&back("o2", 2), 200), None);
     assert_eq!(left.returns(&Back::default(), 200), None);
 }
+
+/// Asked by window:9 with own lines `own` at `pushes` pushes.
+fn asked(own: &str, pushes: u32) -> queue::Back {
+    queue::Back {
+        own: Some(own.into()),
+        pushes,
+    }
+}
+
+/// 1000 merging, 1001 to 1000 + `ahead` waiting, then `n` asked with own lines `o1` at 1 push.
+fn waiting_with(n: u32, ahead: u32) -> queue::MergeQueue {
+    let mut q = queue::MergeQueue::default();
+    for i in 0..=ahead {
+        q = queue::enqueue(&q, 1000 + i, "window:9", 0)
+            .expect("queued")
+            .0;
+    }
+    queue::enqueue_back(&q, n, "window:9", &asked("o1", 1), 0)
+        .expect("queued")
+        .0
+}
+
+fn line(q: &queue::MergeQueue) -> Vec<u32> {
+    q.waiting.iter().map(|e| e.number).collect()
+}
+
+#[test]
+fn a_change_that_left_returns_behind_those_that_were_ahead_only_with_its_own_lines() {
+    let q = waiting_with(9, 2);
+    let (q, _) = queue::enqueue(&q, 2000, "window:9", 0).expect("queued");
+    let (q, next) = queue::left(&q, 9, None, 100);
+    assert_eq!(next, None, "1000 still merges");
+    let (q, next) = queue::done(&q, 1000, 110);
+    assert_eq!(next.map(|e| e.number), Some(1001));
+    let (same, queued) =
+        queue::enqueue_back(&q, 9, "window:9", &asked("o1", 2), 200).expect("asked");
+    assert_eq!(queued, queue::Queued::Behind(2));
+    assert_eq!(line(&same), [1002, 9, 2000]);
+    let (_, queued) = queue::enqueue_back(&q, 9, "window:9", &asked("o2", 2), 200).expect("asked");
+    assert_eq!(queued, queue::Queued::Behind(3), "its own lines changed");
+}
+
+#[test]
+fn a_fronted_change_whose_head_failed_returns_to_the_front_once() {
+    use queue::Queued::Behind;
+    let ask = |q: &queue::MergeQueue, a: &queue::Back, at: u64| {
+        queue::enqueue_back(q, 821, "window:9", a, at)
+            .expect("asked")
+            .1
+    };
+    let q = waiting_with(821, 2);
+    let (q, _) = queue::front(&q, 821).expect("fronted");
+    let (q, next) = queue::done(&q, 1000, 10);
+    assert_eq!(next.map(|e| e.number), Some(821));
+    let (q, next) = queue::left(&q, 821, Some(1), 100);
+    assert_eq!(next.map(|e| e.number), Some(1001));
+    let (q, _) = queue::enqueue(&q, 2000, "window:9", 100).expect("queued");
+    assert_eq!(
+        ask(&q, &asked("o1", 1), 200),
+        Behind(3),
+        "a rerun is no push"
+    );
+    assert_eq!(ask(&q, &asked("x", 3), 200), Behind(3), "a second push");
+    assert_eq!(
+        ask(&q, &asked("x", 2), 100 + queue::RETURN),
+        Behind(3),
+        "lapsed"
+    );
+    let (q, queued) = queue::enqueue_back(&q, 821, "window:9", &asked("x", 2), 200).expect("asked");
+    assert_eq!(queued, Behind(1), "the first push after it failed");
+    assert!(q.returning.is_empty(), "used once");
+    // It fails again: its next fix queues at the back.
+    let (q, next) = queue::done(&q, 1001, 300);
+    assert_eq!(next.map(|e| e.number), Some(821));
+    let (q, next) = queue::left(&q, 821, Some(2), 400);
+    assert_eq!(next.map(|e| e.number), Some(1002));
+    assert!(q.returning.is_empty(), "no second kept place");
+    assert_eq!(ask(&q, &asked("y", 3), 500), Behind(2));
+}
