@@ -1,0 +1,28 @@
+description: "Clients render only the four views; the app declares screens only in its renderers and shell, and the web shell renders only in views.js; see .claude/decisions/2026-11-17-runtime-mcp-feed-view-contract.md §2.2. Today's screen files are listed until step 15 retires them."
+target: tree
+rules:
+  - find:
+      match: '^src/pigeon-ios/.*\.swift$'
+      forbid_content: 'struct\s+\w+\s*:\s*(some\s+)?View\b'
+      allow_under:
+        - src/pigeon-ios/PigeonCore/Contract/
+        - src/pigeon-ios/Pigeon/Shell/
+        - src/pigeon-ios/Pigeon/RootView.swift
+        - src/pigeon-ios/Pigeon/Sheets.swift
+        - src/pigeon-ios/Pigeon/LinkView.swift
+        - src/pigeon-ios/Pigeon/TrackerView.swift
+        - src/pigeon-ios/Pigeon/Theme.swift
+        - src/pigeon-ios/Pigeon/ProfileSheet.swift
+        - src/pigeon-ios/Pigeon/InsightsView.swift
+        - src/pigeon-ios/Pigeon/HomeView.swift
+        - src/pigeon-ios/Pigeon/Learner/LearnerAdminView.swift
+        - src/pigeon-ios/Pigeon/Learner/LearnerScanView.swift
+        - src/pigeon-ios/Pigeon/Learner/LearnerHomeViews.swift
+        - src/pigeon-ios/Pigeon/Learner/LearnerResultViews.swift
+        - src/pigeon-ios/Pigeon/Learner/LearnerSampleView.swift
+        - src/pigeon-ios/Pigeon/Learner/LearnerJoinView.swift
+  - find:
+      match: '^src/pigeon-agent/src/worker/shell/.*\.js$'
+      forbid_content: 'innerHTML|createElement|insertAdjacentHTML'
+      allow_under:
+        - src/pigeon-agent/src/worker/shell/views.js

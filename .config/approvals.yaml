@@ -23,6 +23,8 @@ guarded:
   # The provider registry and the broker's verdict; see .claude/decisions/2026-11-16-security-provider-calls-mcp-broker.md §3.
   - .config/providers/**
   - src/pigeon-core/src/provider/**
+  # The rendering contract; see .claude/decisions/2026-11-17-runtime-mcp-feed-view-contract.md §2.2.
+  - src/pigeon-core/src/view.rs
   # The pools' spend caps; see .claude/decisions/2026-11-15-development-capacity-pools-hard-spend-cap.md, 2026-11-17 amendments.
   - .config/pool.yaml
 # The gate: the guarded paths Auto never covers, the code that sets the owner tier and proves
