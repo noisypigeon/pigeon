@@ -258,3 +258,15 @@ merges on the owner's passkey.
   `capabilities` required where a `pigeon/*` kind expands a module.
 - **They agree.** !939 touches no `platforms.rs`, module or plan page.
   !954 decides nothing about restacks or the merge gate.
+
+### 2026-11-17: Review of !948 against !954: they agree
+
+- !954 decided, over `src/**/platform/platforms.rs` and
+  `src/**/worker/platforms.rs`, how a platform run's account-token
+  permissions come from the kind's modules. !948, part A3 of step 12 of
+  [`2026-11-16-development-src-crates-neutral-names.md`](2026-11-16-development-src-crates-neutral-names.md),
+  touches neither file: it renames core's `x_cobot` helper to `x_pigeon`,
+  narrows the Worker's outbound scan to the engine modules, and gives
+  comments, messages and test names the new names.
+- The two met only through !948's `src/pigeon-core/src/**` and
+  `src/pigeon-agent/src/**` scope. Nothing either ADR decides changes.
