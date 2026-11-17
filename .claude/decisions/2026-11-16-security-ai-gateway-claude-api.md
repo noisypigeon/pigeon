@@ -752,3 +752,15 @@ route (!865, !924):
 - **Dropped:** whether the `ai` binding is pre-authenticated. The minted Run
   token (§3 and its amendments) is the design.
 - **Order.** Step 3b (DLP) follows step 7.
+
+### 2026-11-17: Review of !910 against !903: they agree
+
+- !903 changed no code. It widens this ADR's `Governs` to its tofu module,
+  `catalog/cloudflare/modules/ai-gateway/**`, and `src/**/pool/aigateway.rs`.
+- !910 is part D of the step 12 sweep of
+  [`2026-11-16-development-src-crates-neutral-names.md`](2026-11-16-development-src-crates-neutral-names.md):
+  docs, schema descriptions, the Dockerfile's stage names and iOS comments.
+  Its catalog files are `catalog/cloudflare/schema.json`, the zone kind's
+  schema and the DigitalOcean project module's comment. None of them is a
+  path this ADR governs.
+- Nothing either ADR decides changes.
