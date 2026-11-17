@@ -121,6 +121,7 @@
 - feat(image): the ci image pins Claude Code 2.1.326 for the pool job (!969) ([2d48269](https://github.com/noisypigeon/pigeon/commit/2d48269e00318444130789c22c41e3c3d165e80f)) · agent, pigeon-eviction
 - docs(adr): capacity pools step 6, how a brief routes to a pool and how its task is dispatched and followed (!970) ([29fada5](https://github.com/noisypigeon/pigeon/commit/29fada51ad5f81e372f47f0ed5b637047d82184e))
 - fix(agent): the pool sandbox finds rustup's toolchain, and the model may add files at the checkout's root (!968) ([67df7c8](https://github.com/noisypigeon/pigeon/commit/67df7c88280fd22ab782054dd85106d252bec828)) · agent
+- docs(adr): review !948 against !954 (!974) ([18a9956](https://github.com/noisypigeon/pigeon/commit/18a9956967cd0544805ddd3a91d39b10c6d72773))
 
 ## 2026-11-16
 
