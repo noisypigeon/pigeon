@@ -79,6 +79,10 @@ units:
     manifest: catalog/cloudflare/modules/secrets-store/module.yaml
     paths: [catalog/cloudflare/modules/secrets-store/]
     exclude: ['*.md']
+  infra-cloudflare-ai-gateway:
+    manifest: catalog/cloudflare/modules/ai-gateway/module.yaml
+    paths: [catalog/cloudflare/modules/ai-gateway/]
+    exclude: ['*.md']
   infra-cloudflare-access-application:
     manifest: catalog/cloudflare/modules/access-application/module.yaml
     paths: [catalog/cloudflare/modules/access-application/]

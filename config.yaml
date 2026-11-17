@@ -38,6 +38,7 @@ units:
     buckets: [ { name: pigeon-state }, { name: pigeon-plans }, { name: pigeon-ci } ]
     queue: { name: pigeon-ci-events }
     access: { application: "pigeon-control - Cloudflare Workers", owners_policy: Cloudflare account members }
+    ai_gateways: [ { name: pigeon-models, rate_limit_per_minute: 120 } ]
     service_tokens:
       - { name: pigeon-agent, policy: agent, secret_version: 2, previous_secret_expires: "2026-11-06T02:37:43Z" }
       - { name: pigeon-deployer, policy: pigeon-deployer, secret_version: 1, previous_secret_expires: "2026-11-07T03:09:37Z" }

@@ -132,6 +132,33 @@
         }
       }
     },
+    "ai_gateways": {
+      "type": "array",
+      "maxItems": 1,
+      "uniqueItems": true,
+      "description": "The stack's AI Gateway for model providers' traffic, at most one; see .claude/decisions/2026-11-16-security-ai-gateway-claude-api.md.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "rate_limit_per_minute"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]{0,63}$",
+            "description": "The gateway's ID."
+          },
+          "rate_limit_per_minute": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000,
+            "description": "Requests per minute, sliding."
+          }
+        }
+      }
+    },
     "service_tokens": {
       "type": "array",
       "uniqueItems": true,
@@ -275,6 +302,17 @@
       }
     },
     "each": {
+      "gateways": {
+        "module": "cloudflare/ai-gateway",
+        "over": "ai_gateways",
+        "for_each": "$item.name",
+        "inputs": {
+          "account_id": "$module.account.id",
+          "name": "$item.name",
+          "store_id": "$module.secrets_store.id",
+          "rate_limit_per_minute": "$item.rate_limit_per_minute"
+        }
+      },
       "bucket_suffixes": {
         "module": "agnostic/random-string",
         "over": "buckets",
@@ -322,7 +360,8 @@
       "queue_name": "$module.queue.name",
       "access_aud": "$module.application.aud",
       "service_token_ids": "$module.service_tokens[*].client_id",
-      "secrets_store_id": "$module.secrets_store.id"
+      "secrets_store_id": "$module.secrets_store.id",
+      "ai_gateway_names": "$module.gateways[*].name"
     }
   },
   "if": {
