@@ -970,3 +970,50 @@ values and had no policy, and no `pool.*` operation existed.
   until Dec 5. The purchased balance is $0, so the provider's zero balance is
   the stop. If it stops below half the ledger's limit, §2's tripwire pauses
   the pool and files an owner item.
+
+### 2026-11-17: A pool task survives its Container's stop, and its job leaves a log
+
+Step 9's smoke test met two faults before any request was spent.
+
+- **b97: a short `base` failed the checkout.** `ci::checkout_on` compared a
+  12-digit pin with the full `HEAD` as text. !1039 resolves the pin first.
+- **b98: the job made no request.** A Worker deploy landed three minutes
+  in. Nothing showed why: the runner gathers its log only once `claude`
+  exits, and the pool keeps no log.
+
+The instance-separation ADR records that a Container stops on an
+inactivity timeout, a rollout or a host restart, and builds every run to
+survive a stop. Change jobs do: a `Checker` 404 is `Event::Lost`, and the
+job runs again. A pool job doesn't. `Pool::follow` waits on a 404 until the
+task's deadline plus 15 minutes, then fails the task with no re-run, and
+nothing tells the planner meanwhile.
+
+- **A 404 is lost at once.** `Followed` gains `gone`, the first time the
+  `Checker` answered 404. A second 404 at least one sweep later makes the
+  job lost then, not at `lost_at`. `lost_at` stays, for a job that answers
+  but never ends.
+- **A lost task that spent nothing runs again, once.** "Spent nothing"
+  means the ledger's task shows no request. Then, in order:
+  - the change, never pushed, is closed;
+  - the brief task's claim is released, through a new Instance path
+    `/tasks/release`;
+  - the task closes `lost`, and `pool.task.closed`'s re-route (!1032)
+    dispatches it as `pool:b<n>.<k+1>`.
+
+  A brief whose label already has `k` 2 or more isn't released. Neither is
+  a task with any request. Those escalate to the planner as today, naming
+  the loss.
+- **The job's log is kept.**
+  - Every report's log, already cut of the task token and the Access
+    secret, goes to `CI_LOGS` at `pool/<job>.log`, as a change job's does.
+  - A stopped or failed task's escalation carries the log's last 2 KiB, so
+    the planner sees the harness's own error. This ships first, alone.
+  - `pool.status` names that key, and each followed job's last `Checker`
+    answer and its time.
+  - A lost job has no log. Its `Checker` answers are what is seen.
+- **Briefs.** One `sonnet` brief for `core::pool::dispatch` (the
+  two-404 rule, the run-again rule and their tests). The worker change
+  (`pool.rs`, `pool_dispatch.rs`, `tasks.rs`) is by this planner.
+- **Step 9 runs again** without waiting for these: b99, the same draft with
+  a full `base`, started with no deploy queued. It proves the path; these
+  make it survive a stop.
