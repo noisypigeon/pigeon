@@ -25,6 +25,10 @@ pub const HOLD: u64 = 20 * 60;
 /// Seconds a release target waits for an idle queue before it takes the next turn anyway.
 pub const RELEASE_WAIT: u64 = 30 * 60;
 
+/// How long a change that gave its place back may take it again, in seconds; see the merge-path
+/// ADR §8.
+pub const RETURN: u64 = 60 * 60;
+
 /// The one check a docs-only change runs.
 const POLICY_CHECK: &str = "policy.check";
 
@@ -59,6 +63,12 @@ pub fn keeps_place(c: &Change) -> bool {
             c.state,
             State::Failed | State::Refused | State::Closed | State::Merged
         )
+}
+
+/// Change `c`'s session's pushes when its head failed; none when it didn't fail.
+#[must_use]
+pub fn failed_at(c: &Change) -> Option<u32> {
+    (c.state == State::Failed).then_some(c.pushes)
 }
 
 /// Who asked for `after`'s merge, when, saved over `before`, its approval was just carried to a
@@ -141,6 +151,78 @@ pub struct Kept {
     pub reserved: bool,
 }
 
+/// What the queue keeps of a waiting or merging change, to give its place back.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Mark {
+    /// The owner moved it to the front.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub fronted: bool,
+    /// Its head's own lines when its merge was asked, as [`Change::own`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub own: Option<String>,
+    /// It already took a kept place back; it is used once.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub returned: bool,
+}
+
+/// What a merge asked brings: its head's own lines and its session's pushes.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Back {
+    /// Its head's own lines, as [`Change::own`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub own: Option<String>,
+    /// Its session's pushes, as [`Change::pushes`].
+    #[serde(default)]
+    pub pushes: u32,
+}
+
+impl Back {
+    /// Change `c`'s.
+    #[must_use]
+    pub fn of(c: &Change) -> Self {
+        Self {
+            own: c.own.clone(),
+            pushes: c.pushes,
+        }
+    }
+}
+
+/// A change that gave its place back, and what lets a re-push take it again.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Returning {
+    /// The changes waiting ahead of it; none when it held the turn.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub ahead: Vec<u32>,
+    /// The owner had moved it to the front.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub fronted: bool,
+    /// Its head's own lines when its merge was asked.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub own: Option<String>,
+    /// When its head failed: its session's pushes then.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub failed: Option<u32>,
+    /// When it left.
+    pub at: u64,
+}
+
+impl Returning {
+    /// Why a merge asked with `back` at `now` takes the place back: the first push since its head
+    /// failed, or, when it didn't fail, the same own lines; none otherwise, or after [`RETURN`].
+    #[must_use]
+    pub fn returns(&self, back: &Back, now: u64) -> Option<&'static str> {
+        if now.saturating_sub(self.at) >= RETURN {
+            return None;
+        }
+        match self.failed {
+            Some(p) => (back.pushes == p.saturating_add(1))
+                .then_some("it is the first push since its head failed"),
+            None => (back.own.is_some() && back.own == self.own)
+                .then_some("its own lines are unchanged"),
+        }
+    }
+}
+
 /// One repository's merges: the one running and those waiting, oldest first.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MergeQueue {
@@ -163,6 +245,12 @@ pub struct MergeQueue {
     /// the merge-path ADR's 2026-11-17 amendment, §9.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub docs_turn: Vec<u32>,
+    /// Each waiting or merging change's [`Mark`].
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub marks: BTreeMap<u32, Mark>,
+    /// The changes that gave their place back, each as [`Returning`].
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub returning: BTreeMap<u32, Returning>,
     /// The Instance's yields, each change to the one it waits for: read in, never stored; see
     /// the yield ADR's 2026-11-13 amendment on the queue keeping a yielded change's place.
     #[serde(skip)]

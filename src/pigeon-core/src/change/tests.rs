@@ -1504,3 +1504,47 @@ fn a_merge_records_who_asked_for_it() {
     let (c, _) = step(&approved(), merge()).expect("merges");
     assert_eq!(c.merge_asked.as_deref(), Some("owner"));
 }
+
+#[test]
+fn a_session_push_is_counted_once_per_new_head() {
+    let pushes = vec![
+        Event::Pushed { sha: A.into() },
+        Event::Pushed { sha: B.into() },
+        Event::Pushed { sha: B.into() },
+    ];
+    let c = run(planned(), pushes);
+    assert_eq!((c.pushes, c.own.as_deref()), (2, None));
+}
+
+#[test]
+fn a_kept_place_returns_to_the_first_push_after_a_failure_or_to_the_same_own_lines() {
+    use queue::{Back, RETURN, Returning};
+    let back = |own: &str, pushes| Back {
+        own: Some(own.into()),
+        pushes,
+    };
+    let failed = Returning {
+        ahead: vec![],
+        fronted: true,
+        own: Some("o1".into()),
+        failed: Some(1),
+        at: 100,
+    };
+    let first = Some("it is the first push since its head failed");
+    assert_eq!(failed.returns(&back("x", 2), 200), first);
+    assert_eq!(
+        failed.returns(&back("o1", 1), 200),
+        None,
+        "a rerun is no push"
+    );
+    assert_eq!(failed.returns(&back("x", 3), 200), None, "a second push");
+    assert_eq!(failed.returns(&back("x", 2), 100 + RETURN), None, "lapsed");
+    let left = Returning {
+        failed: None,
+        ..failed
+    };
+    let same = Some("its own lines are unchanged");
+    assert_eq!(left.returns(&back("o1", 5), 200), same);
+    assert_eq!(left.returns(&back("o2", 2), 200), None);
+    assert_eq!(left.returns(&Back::default(), 200), None);
+}

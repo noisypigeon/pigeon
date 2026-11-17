@@ -166,6 +166,7 @@ impl Change {
         let (mut c, mut effects) = self.cancel_open();
         c.head = Some(sha);
         c.patch = None;
+        c.own = None;
         c.approval = None;
         c.conflict = None;
         c.violations.clear();
@@ -180,6 +181,7 @@ impl Change {
     /// the bound job finds the same patch.
     pub(super) fn push(mut self, sha: String) -> Step {
         if !self.on_head(&sha) {
+            self.pushes = self.pushes.saturating_add(1);
             self.carried = self.session_carry();
             self.tiers = None;
             self.behind = None;

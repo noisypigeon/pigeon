@@ -445,6 +445,12 @@ pub struct Change {
     /// `.claude/decisions/2026-11-16-development-merge-path-measured-faster.md` §4.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub merge_asked: Option<String>,
+    /// A digest of the head's own lines, as the bound job reported it; see the merge-path ADR §8.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub own: Option<String>,
+    /// The heads its session pushed; a restack's isn't one.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub pushes: u32,
 }
 
 /// Something that happened to a change.
@@ -735,6 +741,8 @@ impl Change {
             escalated: None,
             restacked_for: None,
             merge_asked: None,
+            own: None,
+            pushes: 0,
         }
     }
 
