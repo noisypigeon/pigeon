@@ -441,7 +441,8 @@ impl ChangeRun {
         if pending.iter().any(|p| later(p).is_none()) && !wait {
             storage.set_alarm(Duration::from_millis(0)).await?;
         } else if open || !pending.is_empty() {
-            let due = soonest.map_or(POLL, |s| POLL.min(Duration::from_secs(s)));
+            let poll = Duration::from_secs(control::alarm_secs(change, POLL.as_secs()));
+            let due = soonest.map_or(poll, |s| poll.min(Duration::from_secs(s)));
             storage.set_alarm(due).await?;
         }
         let found = before.as_ref().and_then(|b| b.landed.as_ref());
@@ -670,7 +671,8 @@ impl ChangeRun {
             .map(|j| j.name.clone())
             .collect();
         github.keep_open(&open);
-        let due = github.due(control::mirror_state(change), at);
+        let turn = crate::core::change::queue::holds_turn(change);
+        let due = github.due_on_turn(control::mirror_state(change), turn, at);
         if due.contains(&Due::Mirror) {
             let _ = Self::apply(
                 change,
