@@ -245,3 +245,20 @@ still apply.
 - **§4's re-ask** goes through `change.merge`, like a session's ask. When it
   needs the owner, it lists through !801's `Grants::page`, so it reuses the
   open link and mints none.
+### 2026-11-16: Review of !812 against this ADR: they agree
+
+- !812 adds `approvals.yaml`'s `gate:` under
+  [`2026-11-15-security-standing-auto-owner-flags.md`](2026-11-15-security-standing-auto-owner-flags.md):
+  Auto covers every guarded and eviction path outside the gate, and the gate
+  (the approval core, `approve.rs`, `access.rs`, the Worker's `elicit.rs`,
+  `mandates.rs` and passkey files, `approvals.yaml`, the secrets pins and
+  `.github/**`) keeps the owner's passkey.
+- This ADR governs `worker/main_run.rs`, `worker/merges.rs`,
+  `worker/github.rs`, `cobot/ci.rs` and `release/**`. None of them is guarded
+  or in the gate, so !812 changes no tier there. Its steps 1-4 stay as
+  written, and Auto covers them as before.
+- §5's first owner decision (one approval covers an owner-tier merge) would
+  change the approval core and `approvals.yaml`, both in the gate, so that
+  change takes the owner's passkey whatever she decides. It still needs her
+  answer first, and it lands after the restructure's k3, which next edits
+  `tiers.rs`.
