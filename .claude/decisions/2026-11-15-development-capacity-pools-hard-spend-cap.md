@@ -862,3 +862,83 @@ changed what step 3 builds. This amendment restates it.
   and `Report.pool`.
 - **They agree.** !907 leaves the `pool` job, its spec and its report
   unchanged. Pools decide nothing about which commit a platform job runs.
+
+### 2026-11-17: Step 6 as it is built: routing at `brief_create`, in-process dispatch, and the Pool object following its jobs
+
+§6 and §7 stand. This says how they meet the code that steps 3 to 5
+merged.
+
+- **The brief.** The draft gains:
+  - `runs_on`: `any` (the default), `session` or `pool`; the router's
+    `RunsOn`;
+  - optional `pool_usd` and `pool_minutes`, checked by
+    `Config::budget` against the class maxima.
+
+  `validate` refuses a `pool` brief of class opus or fable, and an
+  override over its maximum.
+- **Routing at `brief_create` (and when an amend reopens its task).**
+  - The Worker builds one `View` per pool, in `.config/pool.yaml`'s order:
+    - from the Pool object's `/status`, or a new ledger when the object
+      is unused;
+    - `admits` is a dry `admit_task` of the brief's budget.
+  - `executor_sessions` counts live haiku and sonnet tickets whose labels
+    don't start with `pool:`.
+  - `brief_create` answers `route`:
+    - `Session(why)` changes nothing;
+    - `Pool(name)` dispatches;
+    - `Wait(why)` leaves the brief's task open, and the brief is routed
+      again when a pool task closes (`pool.task.closed`).
+- **Dispatch, in-process, in a new `worker/pool_dispatch.rs`.** No MCP
+  round trip, and no gate file. In order:
+  1. A ticket for the label `pool:b<n>.<k>`, where `k` counts the brief's
+     pool tasks. It names the brief's class and brief, the planner as
+     `planner` and `parent`.
+  2. The brief's task is claimed as that label.
+  3. The change is proposed as the label, with the brief bound. Title, plan
+     and scope come from the brief, as `executor::check` gives them. It is
+     authorized by the window, as any executor's change is.
+  4. The task is opened in the Pool object (`/task/open`). Its budget is
+     `Config::budget` with the brief's overrides, and its model is the
+     class's from `tooling/session/models.json` on `main`.
+  5. The pool job is dispatched on `Checker`. Its spec holds:
+     - a write token, as the restack job's does;
+     - the change's branch, at the brief's `base`;
+     - `env`: the task token, signed to expire at the task's deadline;
+       `POOL_URL` (`https://<host>/v0/pool/<pool>`); `POOL_ACCESS_ID`
+       and `POOL_ACCESS_SECRET`; the model; the brief's latest revision;
+       its turns, dollars and minutes.
+
+  A failure part-way closes the task, ends the label and answers why. The
+  brief stays open for a session.
+- **The runner makes the branch.** A new change has no branch yet. When
+  `refs/heads/<branch>` doesn't exist, `pool_job.rs` checks out the
+  brief's `base` and pushes the branch from it.
+- **The Pool object follows its jobs.**
+  - It keeps each task's job id, change and label.
+  - Its alarm polls the job's status each minute, until a report, or until
+    the task's deadline plus 15 minutes, when the job counts as `failed`
+    (lost).
+  - The report's `pool` outcome:
+    - `done`: `change_pushed` with the pushed head, so the change's checks
+      run, and the planner reviews as for any executor (§8).
+    - `escalated`: `brief.escalate` as the label, with the model's
+      question.
+    - `stopped` or `failed`: `brief.escalate` naming the bound or the
+      failure. Any wip was pushed.
+  - Then the task is closed with that outcome, `pool.task.closed` is
+    appended, and the label's ticket ends. `ChangeRun` and
+    `worker/change.rs` are untouched.
+- **Secrets.** `POOL_ACCESS_SECRET` is declared in `worker.yaml` (the
+  owner said yes, through the status session).
+- **Owner tier** for the worker change, since the secret list grows.
+- **Briefs.**
+  - **6a, `sonnet`:** the pure parts in `core::pool::dispatch`:
+    - the label and its `k`;
+    - the job's env and spec;
+    - the task token's expiry;
+    - the Views;
+    - the outcome-to-action mapping;
+    - `runs_on` and the overrides on the draft, with `validate`.
+  - **6b, by this planner:** `worker/pool_dispatch.rs`, `brief_create`'s
+    routing, the Pool object's poller, `pool_job.rs`'s branch, and
+    `worker.yaml`.
