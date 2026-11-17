@@ -118,4 +118,6 @@ eviction_bookkeeping:
   - Cargo.lock
   - tooling/ci/tests.ledger
   - tooling/ci/tests.moves
+  # The provider-call policies' list; see the MCP broker ADR's 2026-11-17 amendment.
+  - src/pigeon-core/src/provider/policy.rs
   - .config/releases.yaml
