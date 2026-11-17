@@ -536,3 +536,56 @@ call is too slow, so the engine is linked into the Worker.
   - 5b-2, the planner: pigeon-core's policy list and `Step::Policy`, the
     Worker hook in `worker/provider.rs`, and the first policy. These are
     guarded or secrets paths; the owner approves `worker/provider.rs`.
+### 2026-11-17: Hand-off: where this ADR's execution and the one-MCP ADR's stand
+
+The planner session that ran both ADRs ends here, at the owner's request,
+with no change open. A fresh planner resumes from this list.
+
+- **Merged, this ADR:**
+  - steps 1 and 3 to 5: the ADR, `core::provider` (registry, verdict,
+    client) and `.config/providers/mcp.yaml` with no servers (!853);
+  - `approvals.yaml` guarding both (!889);
+  - 5a, `provider/call.rs` (!869);
+  - 5c, `provider.call` and `provider.tools` in the Worker (!966);
+  - 5b, the judge's `provider-call` target (!990), pigeon-core linking it
+    ([`2026-11-10-development-factory-crates-functional-core.md`](2026-11-10-development-factory-crates-functional-core.md)'s
+    2026-11-17 amendment, !1000), and the Worker's policy step (!1010).
+- **Merged, the one-MCP ADR's step 2 here:** the route inventory (!852) and
+  the session ID bound to its door and caller (!851).
+- **Next, in order:**
+  1. 5b's first policy, `.config/policies/provider-call-mirror.yaml`, once a
+     judge release reads `target: provider-call`. Until then `policy.check`
+     refuses the file. The text:
+
+     ```yaml
+     description: A GitHub write names only the mirror repository; see .claude/decisions/2026-11-16-security-provider-calls-mcp-broker.md §4.
+     target: provider-call
+     when:
+       - field: { name: server, equals: github }
+       - field: { name: effect, equals: write }
+     rules:
+       - field: { name: arguments, matches: '"repo":"noisypigeon/pigeon"' }
+     ```
+
+     The same change adds it to `provider::policy::POLICIES` and raises
+     `every_policy_is_valid`'s count by one.
+  2. Step 6: live `provider.tools` for Buildkite and Bitrise, then their
+     servers and pinned tools in the guarded `mcp.yaml`. Settle step 2's
+     unknowns there, and file the grants-ledger entry for per-call
+     Cloudflare tokens.
+  3. Steps 7 to 11, as written.
+  4. The one-MCP ADR's rest:
+     - the §8 authorizer in `run()`;
+     - the bound app proofs (`core/approval`, a gate path);
+     - `_meta` proofs;
+     - the `GET` stream and resources;
+     - the app operations and `/v0/app/mcp`;
+     - the web shell;
+     - the follower on `/mcp`.
+
+     Steps 6, 7 and 10 still need the owner's phone.
+- **Who carries what.** A brief's change can't touch a secrets path such as
+  `worker/provider.rs`, an eviction path such as `src/pigeon-eviction/**`,
+  or the provider paths. Brief only the code around them, and let the
+  planner carry those files. !934 and !989 were refused for this, and the
+  planner re-proposed their commits as !966 and !990.
