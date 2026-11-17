@@ -706,3 +706,36 @@ glob under `src/pigeon-cli/` or `src/site-templates/` becomes `src/**/<tail>`
 (or `**<file>` for a workspace root file), which matches the file both before
 and after the restructure moves it. That ADR's step 12 tightens them to the
 new paths.
+
+### 2026-11-17: The plan token's permissions come from the kind's modules
+
+Run 31 of `platform/blue` failed its plan with a `403` (code 10000) on
+`module.secrets_store.data.cloudflare_secrets_stores.this`.
+
+- **Why.** The plan page's list of account-token permissions is
+  hand-written. It went stale twice:
+  - when the platform began reading the Secrets Store (!461);
+  - when the kind gained the `ai-gateway` module (!843,
+    [`2026-11-16-security-ai-gateway-claude-api.md`](2026-11-16-security-ai-gateway-claude-api.md)).
+- **The list is now data.** `core::platform::platforms::MODULE_PERMISSIONS`
+  maps each catalog module the `pigeon/platform` kind expands to the
+  permission it needs (or none, for `agnostic/random-string`).
+  `token_permissions()` gives that list in table order, without duplicates.
+- **The page uses it.** `approve::platform_page` lists `token_permissions()`
+  where the text was.
+- **It cannot drift.** A suite test walks the kind's schema, every `module`
+  in `x-pigeon` and in its properties, and fails on a module the table
+  doesn't name. A new module therefore fails CI until its permission is
+  added.
+- **Today's list:**
+  - Account Settings Read;
+  - Workers Scripts Read;
+  - D1 Edit;
+  - Workers R2 Storage Edit;
+  - Queues Edit;
+  - Access: Apps and Policies Edit;
+  - Access: Service Tokens Edit;
+  - Secrets Store Read;
+  - AI Gateway Edit.
+- **Owner tier.** `approve.rs` is a gate file. Until that change merges,
+  the owner adds the last two permissions to the run's token by hand.
