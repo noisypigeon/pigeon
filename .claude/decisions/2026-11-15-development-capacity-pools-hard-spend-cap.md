@@ -1017,3 +1017,22 @@ nothing tells the planner meanwhile.
 - **Step 9 runs again** without waiting for these: b99, the same draft with
   a full `base`, started with no deploy queued. It proves the path; these
   make it survive a stop.
+
+### 2026-11-17: platform/blue declares the pool's Access token and policy
+
+§10.7's token and its Service Auth policy were made by hand, and
+platform/blue didn't declare them. A plan of it (run 36) would have dropped
+the `pigeon-pool` policy from pigeon-control's application, cutting the
+pool's Access, so it wasn't applied.
+
+- platform/blue's `service_tokens` gains `pigeon-pool`, with its policy of
+  the same name. The next plan adopts both by name, as the
+  blue-green ADR's step 4 amendment adopts any existing resource.
+- Before the owner applies it, that plan is checked:
+  - no policy leaves the application;
+  - the token is updated in place or not at all, never replaced, since the
+    Worker holds its secret;
+  - `previous_secret_expires` matches what Cloudflare holds, else it's set
+    from the plan first.
+- That apply also records platform/blue's outputs for deploys, so the
+  pool's `AI_GATEWAY_ACCOUNT` and `AI_GATEWAY` render.
