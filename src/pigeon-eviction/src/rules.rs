@@ -578,8 +578,8 @@ fn constraints(
             {
                 ctx.push(Some(*number), format!("`{}` {v} is before {f}", o.by));
             }
-            if let Some(p) = prev {
-                let (bad, word) = match o.direction {
+            if let (Some(p), Some(direction)) = (prev, o.direction) {
+                let (bad, word) = match direction {
                     Direction::Ascending if o.strict => (v.as_str() <= p, "strictly ascending"),
                     Direction::Ascending => (v.as_str() < p, "ascending"),
                     Direction::Descending if o.strict => (v.as_str() >= p, "strictly descending"),
@@ -913,6 +913,14 @@ mod tests {
         let rules = "  - headings: { level: 2, each: '^(?<v>\\d+)$', order: { by: v, direction: ascending, strict: true } }\n";
         assert_eq!(run(rules, "f", "## 1\n## 2\n"), Vec::<String>::new());
         assert_eq!(run(rules, "f", "## 1\n## 1\n").len(), 1);
+    }
+
+    #[test]
+    fn order_without_direction_only_bounds_by_from() {
+        let rules =
+            "  - headings: { level: 2, each: '^(?<v>\\d+)$', order: { by: v, from: '2' } }\n";
+        assert_eq!(run(rules, "f", "## 3\n## 2\n"), Vec::<String>::new());
+        assert_eq!(run(rules, "f", "## 3\n## 1\n"), ["`v` 1 is before 2"]);
     }
 
     #[test]

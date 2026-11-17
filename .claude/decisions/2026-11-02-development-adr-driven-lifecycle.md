@@ -290,3 +290,18 @@ each one.
   - a design question the ADR doesn't answer, which it raises as an amendment;
   - a failure it can't fix within the step.
 - **It reports as it goes:** each merge, and what the next step is.
+
+### 2026-11-17: Amendments run in merge order
+
+Sessions amend one ADR at once, and the merge queue appends their entries by
+git's union driver in the order they merge. An entry written on one UTC day
+can merge after one written the next, and §1 of the 2026-11-02 amendment then
+refused it, so a queued amendment needed a hand re-date at each midnight.
+
+- This supersedes that §1's "come in date order": entries run in the order
+  they merge. Each is still dated the day it is written, and no earlier than
+  the ADR's `Date`.
+- The `decisions` policy's `items` order keeps `from: '{date}'` and drops
+  `direction`; an `order` without `direction` bounds values by `from` only.
+  The judge learns that first, and the policy drops `direction` in a second
+  change, once the stored judge binary reads it.

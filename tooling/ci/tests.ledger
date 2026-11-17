@@ -1397,6 +1397,7 @@ pigeon-eviction lib eviction rules::tests::fields_matches_condition
 pigeon-eviction lib eviction rules::tests::fields_only_rejects_extra_fields
 pigeon-eviction lib eviction rules::tests::interpolates_captures_and_keeps_unknown_braces
 pigeon-eviction lib eviction rules::tests::items_ignore_fenced_headings
+pigeon-eviction lib eviction rules::tests::order_without_direction_only_bounds_by_from
 pigeon-eviction lib eviction rules::tests::strict_ascending_rejects_repeats
 pigeon-eviction test suite change::a_bad_branch_and_too_many_files_are_refused
 pigeon-eviction test suite change::a_change_inside_its_scope_passes

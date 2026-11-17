@@ -296,14 +296,15 @@ pub enum Elsewhere {
     Forbid,
 }
 
-/// Captured values run in one direction.
+/// Captured values run in one direction, or only start at `from`.
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Order {
     /// The capture compared.
     pub by: String,
-    /// The direction.
-    pub direction: Direction,
+    /// The direction; none bounds values by `from` only.
+    #[serde(default)]
+    pub direction: Option<Direction>,
     /// No two consecutive values are equal.
     #[serde(default)]
     pub strict: bool,
