@@ -12,11 +12,6 @@ autotests = false
 [lib]
 name = "eviction"
 
-[[bin]]
-# The stored build keeps its name until the restructure ADR's step 12.
-name = "pigeon-sentinel"
-path = "src/main.rs"
-
 [dependencies]
 regex.workspace = true
 serde.workspace = true

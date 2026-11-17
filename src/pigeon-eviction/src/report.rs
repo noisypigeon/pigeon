@@ -51,10 +51,10 @@ impl Report {
             String::new()
         };
         if self.passed() {
-            format!("sentinel: {} policies hold{skipped}", self.ran)
+            format!("eviction: {} policies hold{skipped}", self.ran)
         } else {
             format!(
-                "sentinel: {} violation(s) across {} policies{skipped}",
+                "eviction: {} violation(s) across {} policies{skipped}",
                 self.violations.len(),
                 self.ran
             )

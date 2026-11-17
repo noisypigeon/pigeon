@@ -1,4 +1,4 @@
-//! `pigeon-sentinel`: judges a tree against policies and reports; see
+//! `pigeon-eviction`: judges a tree against policies and reports; see
 //! `.claude/decisions/2026-11-10-development-factory-crates-functional-core.md` §1-§2.
 
 use std::env;
@@ -14,7 +14,7 @@ const VIOLATION: u8 = 1;
 /// A policy or an argument was invalid.
 const INVALID: u8 = 2;
 
-const USAGE: &str = "usage: pigeon-sentinel check [--root DIR] [--policies DIR] [--pull-request] [--json]\n       pigeon-sentinel describe [--root DIR] [--policies DIR]\n       pigeon-sentinel evict [--root DIR] [--policies DIR] --candidate JSON\n       pigeon-sentinel --version";
+const USAGE: &str = "usage: pigeon-eviction check [--root DIR] [--policies DIR] [--pull-request] [--json]\n       pigeon-eviction describe [--root DIR] [--policies DIR]\n       pigeon-eviction evict [--root DIR] [--policies DIR] --candidate JSON\n       pigeon-eviction --version";
 
 /// `check`'s arguments.
 #[derive(Debug, PartialEq, Eq)]
@@ -88,14 +88,14 @@ fn evict(check: &Check, candidate: &str) -> u8 {
     let policies = match eviction::load_dir(&dir) {
         Ok(p) => p,
         Err(e) => {
-            eprintln!("sentinel: {e}");
+            eprintln!("eviction: {e}");
             return INVALID;
         }
     };
     let fields: serde_json::Map<String, serde_json::Value> = match serde_json::from_str(candidate) {
         Ok(f) => f,
         Err(e) => {
-            eprintln!("sentinel: --candidate must be a JSON object: {e}");
+            eprintln!("eviction: --candidate must be a JSON object: {e}");
             return INVALID;
         }
     };
@@ -132,7 +132,7 @@ fn describe(check: &Check) -> u8 {
             SUCCESS
         }
         Err(e) => {
-            eprintln!("sentinel: {e}");
+            eprintln!("eviction: {e}");
             INVALID
         }
     }
@@ -146,7 +146,7 @@ fn run(check: &Check) -> u8 {
     let policies = match eviction::load_dir(&dir) {
         Ok(p) => p,
         Err(e) => {
-            eprintln!("sentinel: {e}");
+            eprintln!("eviction: {e}");
             return INVALID;
         }
     };
@@ -180,7 +180,7 @@ fn run(check: &Check) -> u8 {
             if report.passed() { SUCCESS } else { VIOLATION }
         }
         Err(e) => {
-            eprintln!("sentinel: {e}");
+            eprintln!("eviction: {e}");
             INVALID
         }
     }
@@ -190,7 +190,7 @@ fn main() -> ExitCode {
     let args: Vec<String> = env::args().skip(1).collect();
     ExitCode::from(match parse(&args) {
         Ok(Command::Version) => {
-            println!("pigeon-sentinel {}", eviction::VERSION);
+            println!("pigeon-eviction {}", eviction::VERSION);
             SUCCESS
         }
         Ok(Command::Check(check)) => run(&check),
@@ -278,7 +278,7 @@ mod tests {
     fn anything_else_is_refused_with_the_usage() {
         for bad in [&[][..], &["judge"], &["check", "--root"], &["check", "--x"]] {
             let why = parse(&args(bad)).expect_err("refused");
-            assert!(why.contains("usage: pigeon-sentinel"), "{why}");
+            assert!(why.contains("usage: pigeon-eviction"), "{why}");
         }
     }
 }

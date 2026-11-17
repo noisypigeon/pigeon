@@ -1,4 +1,4 @@
-//! `pigeon-sentinel` end to end; see
+//! `pigeon-eviction` end to end; see
 //! `.claude/decisions/2026-11-10-development-factory-crates-functional-core.md` §1.
 
 use std::fs;
@@ -9,8 +9,8 @@ use tempfile::TempDir;
 
 const POLICY: &str = "description: f starts with ok.\ntarget: { file: f.md }\nrules:\n  - line: { at: 1, matches: '^ok$' }\n";
 
-fn sentinel(args: &[&str], root: Option<&Path>) -> Output {
-    let mut cmd = Command::new(env!("CARGO_BIN_EXE_pigeon-sentinel"));
+fn judge(args: &[&str], root: Option<&Path>) -> Output {
+    let mut cmd = Command::new(env!("CARGO_BIN_EXE_pigeon-eviction"));
     cmd.args(args);
     if let Some(r) = root {
         cmd.arg("--root").arg(r);
@@ -44,18 +44,18 @@ fn stdout(o: &Output) -> String {
 
 #[test]
 fn it_names_its_version() {
-    let o = sentinel(&["--version"], None);
+    let o = judge(&["--version"], None);
     assert_eq!(o.status.code(), Some(0));
     assert_eq!(
         stdout(&o).trim(),
-        format!("pigeon-sentinel {}", eviction::VERSION)
+        format!("pigeon-eviction {}", eviction::VERSION)
     );
 }
 
 #[test]
 fn a_tree_that_holds_exits_0_and_reports_as_json() {
     let root = fixture(POLICY, Some("ok\n"));
-    let o = sentinel(&["check", "--json"], Some(root.path()));
+    let o = judge(&["check", "--json"], Some(root.path()));
     assert_eq!(o.status.code(), Some(0), "{}", stdout(&o));
     let v: serde_json::Value = serde_json::from_str(&stdout(&o)).expect("json");
     assert_eq!(v["ran"], 1);
@@ -65,14 +65,14 @@ fn a_tree_that_holds_exits_0_and_reports_as_json() {
 #[test]
 fn a_violation_exits_1_and_names_it() {
     let root = fixture(POLICY, Some("no\n"));
-    let o = sentinel(&["check"], Some(root.path()));
+    let o = judge(&["check"], Some(root.path()));
     assert_eq!(o.status.code(), Some(1));
     assert!(
         stdout(&o).contains("f.md:1: p: line does not match `^ok$`"),
         "{}",
         stdout(&o)
     );
-    let o = sentinel(&["check", "--json"], Some(root.path()));
+    let o = judge(&["check", "--json"], Some(root.path()));
     let v: serde_json::Value = serde_json::from_str(&stdout(&o)).expect("json");
     assert_eq!(v["violations"].as_array().map(Vec::len), Some(1));
 }
@@ -83,10 +83,10 @@ fn an_invalid_policy_or_argument_exits_2() {
         "description: x\ntarget: { file: f.md }\nrules:\n  - nope: {}\n",
         None,
     );
-    let o = sentinel(&["check"], Some(root.path()));
+    let o = judge(&["check"], Some(root.path()));
     assert_eq!(o.status.code(), Some(2));
     assert!(String::from_utf8_lossy(&o.stderr).contains("p.yaml"));
-    assert_eq!(sentinel(&["judge"], None).status.code(), Some(2));
+    assert_eq!(judge(&["judge"], None).status.code(), Some(2));
 }
 
 #[test]
@@ -95,7 +95,7 @@ fn a_policy_directory_can_be_named_apart_from_the_root() {
     let tree = TempDir::new().expect("tempdir");
     fs::write(tree.path().join("f.md"), "ok\n").expect("write");
     let dir = policies.path().join(".config/policies");
-    let o = sentinel(
+    let o = judge(
         &["check", "--policies", dir.to_str().expect("utf-8")],
         Some(tree.path()),
     );
@@ -128,7 +128,7 @@ fn describe_lists_each_policy_and_its_target() {
         )
         .expect("write");
     }
-    let o = sentinel(&["describe"], Some(root.path()));
+    let o = judge(&["describe"], Some(root.path()));
     assert_eq!(
         o.status.code(),
         Some(0),
@@ -180,7 +180,7 @@ fn describe_refuses_an_invalid_policy() {
         None,
     );
     assert_eq!(
-        sentinel(&["describe"], Some(root.path())).status.code(),
+        judge(&["describe"], Some(root.path())).status.code(),
         Some(2)
     );
 }
