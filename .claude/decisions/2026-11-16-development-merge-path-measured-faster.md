@@ -416,3 +416,17 @@ are briefed after steps 3 to 10.
 
 **Execution,** added: **10. Brief: docs-only changes share a turn** (§9),
 sonnet, core first.
+
+### 2026-11-17: Review of !851 against this ADR: they agree
+
+!851 carries out step 3 (session check) of
+[`2026-11-15-runtime-one-mcp-entry-point.md`](2026-11-15-runtime-one-mcp-entry-point.md).
+
+- **What it touches.** v3 MCP session IDs name their door and caller, and
+  `/mcp` refuses a mismatched ID. It changes `mcp.rs`, `worker/api.rs` and
+  their tests.
+- **What it leaves alone.** It touches neither `change/queue.rs` nor
+  `macos/job.rs`, and changes no merge turn, queue place, yield or macOS
+  gate.
+
+Neither ADR changes.
