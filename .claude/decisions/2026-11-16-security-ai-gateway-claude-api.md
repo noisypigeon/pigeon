@@ -614,3 +614,18 @@ planner before it builds step 5's token minting (its step 3c).
     `insights/mod.rs`.
   - Neither decides anything about the other's subject: a job's git calls on
     one side, model traffic and metering on the other.
+### 2026-11-17: Review of !851 against this ADR and the capacity pools' step 3 (!850): they agree
+
+!851 is step 3 (session check) of
+[`2026-11-15-runtime-one-mcp-entry-point.md`](2026-11-15-runtime-one-mcp-entry-point.md).
+
+- **What it touches.** v3 MCP session IDs name their door and caller, and
+  `/mcp` refuses a mismatched ID. It changes only `mcp.rs`, `worker/api.rs`
+  and their tests.
+- **What it leaves alone.** It touches none of the files that
+  [`2026-11-15-development-capacity-pools-hard-spend-cap.md`](2026-11-15-development-capacity-pools-hard-spend-cap.md)'s
+  !850 governs: `jobs.rs`, `brief/mod.rs`, `insights/mod.rs`, `pool/**`.
+- **The pool route.** It is a Worker route, not an MCP session. It keeps its
+  own Run-token check and `verdict::admit`, and !851 adds nothing to it.
+
+Neither ADR changes.
