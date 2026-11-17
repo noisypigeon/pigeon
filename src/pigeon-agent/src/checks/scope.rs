@@ -110,6 +110,7 @@ fn crates(root: &Path) -> Result<Crates, Error> {
     let mut deps = BTreeMap::new();
     let mut features = BTreeMap::new();
     let mut tests = BTreeMap::new();
+    let mut bins = BTreeMap::new();
     let table = workspace.get("workspace");
     let found = member_dirs(
         &ws,
@@ -137,6 +138,7 @@ fn crates(root: &Path) -> Result<Crates, Error> {
         }
         by_dir.insert(layout.in_workspace(&format!("{member}/")), name.to_string());
         tests.insert(name.to_string(), test_targets(&ws.join(&member), &m));
+        bins.insert(name.to_string(), bin_targets(&ws.join(&member), &m, name));
         deps.insert(name.to_string(), mine);
     }
     Ok(Crates {
@@ -144,6 +146,7 @@ fn crates(root: &Path) -> Result<Crates, Error> {
         deps,
         features,
         tests,
+        bins,
         layout,
     })
 }
@@ -435,6 +438,39 @@ pub fn workers(root: &Path, files: Option<&[String]>) -> Result<Vec<String>, Err
 
 /// The integration test targets of the crate at `dir` with manifest `m`: its `[[test]]` names,
 /// and, unless `autotests = false`, each `tests/<x>.rs` and `tests/<x>/main.rs`.
+/// A package's binary targets: its `[[bin]]` names, else its own name for `src/main.rs`, and
+/// `src/bin/*.rs`.
+fn bin_targets(dir: &Path, m: &toml::Value, package: &str) -> BTreeSet<String> {
+    let listed: Vec<&toml::Value> = m
+        .get("bin")
+        .and_then(toml::Value::as_array)
+        .into_iter()
+        .flatten()
+        .collect();
+    let mut out: BTreeSet<String> = listed
+        .iter()
+        .filter_map(|t| t.get("name")?.as_str().map(str::to_string))
+        .collect();
+    let main_listed = listed
+        .iter()
+        .any(|t| t.get("path").and_then(toml::Value::as_str) == Some("src/main.rs"));
+    if m["package"].get("autobins").and_then(toml::Value::as_bool) != Some(false) {
+        if !main_listed && dir.join("src/main.rs").is_file() {
+            out.insert(package.to_string());
+        }
+        for e in fs::read_dir(dir.join("src/bin"))
+            .into_iter()
+            .flatten()
+            .flatten()
+        {
+            if let Some(s) = e.file_name().to_string_lossy().strip_suffix(".rs") {
+                out.insert(s.to_string());
+            }
+        }
+    }
+    out
+}
+
 fn test_targets(dir: &Path, m: &toml::Value) -> BTreeSet<String> {
     let mut out: BTreeSet<String> = m
         .get("test")
@@ -516,5 +552,37 @@ mod tests {
         assert_eq!(c.layout.cli, "pigeon-harness");
         assert_eq!(c.layout.run, ["run"]);
         assert_eq!(c.layout.root(), ".");
+    }
+
+    #[test]
+    fn each_package_s_binaries_are_its_listed_main_and_bin_targets() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let root = dir.path();
+        write(
+            root,
+            "Cargo.toml",
+            "[workspace]\nmembers = [\"src/*\"]\n\n[workspace.dependencies]\n",
+        );
+        write(
+            root,
+            "src/judge/Cargo.toml",
+            "[package]\nname = \"judge\"\n\n[[bin]]\nname = \"judge-cli\"\npath = \"src/main.rs\"\n",
+        );
+        write(root, "src/judge/src/main.rs", "");
+        write(root, "src/tool/Cargo.toml", "[package]\nname = \"tool\"\n");
+        write(root, "src/tool/src/main.rs", "");
+        write(root, "src/tool/src/bin/extra.rs", "");
+        write(
+            root,
+            "src/lib-only/Cargo.toml",
+            "[package]\nname = \"lib-only\"\n",
+        );
+        let c = crates(root).expect("crates");
+        assert_eq!(c.bins["judge"], ["judge-cli".to_string()].into());
+        assert_eq!(
+            c.bins["tool"],
+            ["extra".to_string(), "tool".to_string()].into()
+        );
+        assert!(c.bins["lib-only"].is_empty());
     }
 }

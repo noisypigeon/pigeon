@@ -115,12 +115,20 @@ impl TestMap {
     }
 }
 
-/// `b` as the workspace now runs it: none when its package is gone, as after a rename; a whole
+/// `b` as the workspace now runs it: none when its package or binary is gone, as after a rename; a whole
 /// test target that is gone runs as the module of its name in its package's `suite`, and none
 /// when there is no suite; see
 /// `.claude/decisions/2026-11-16-development-one-test-binary-per-crate.md` §3.
 fn current(crates: &Crates, b: &Binary) -> Option<Binary> {
     if !crates.by_dir.values().any(|p| *p == b.package) {
+        return None;
+    }
+    if b.kind == "bin"
+        && crates
+            .bins
+            .get(&b.package)
+            .is_some_and(|bins| !bins.contains(&b.name))
+    {
         return None;
     }
     let Some(targets) = crates.tests.get(&b.package) else {

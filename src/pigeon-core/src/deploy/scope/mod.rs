@@ -245,6 +245,8 @@ pub struct Crates {
     /// Each package's integration test targets, where known; a map unit naming one that is gone
     /// runs as its `suite` module instead.
     pub tests: BTreeMap<String, BTreeSet<String>>,
+    /// Each package's binary targets, where known; a map unit naming one that is gone picks none.
+    pub bins: BTreeMap<String, BTreeSet<String>>,
     /// Where the workspace and its special crates are.
     pub layout: Layout,
 }
@@ -757,6 +759,7 @@ mod tests {
             deps: BTreeMap::default(),
             features: BTreeMap::default(),
             tests: BTreeMap::default(),
+            bins: BTreeMap::default(),
             layout: Layout::default(),
         };
         assert_eq!(crates.of(&["pigeon-backplane"]), ["pigeon-backplane"]);
@@ -785,6 +788,7 @@ mod tests {
             deps: BTreeMap::default(),
             features: BTreeMap::default(),
             tests: BTreeMap::default(),
+            bins: BTreeMap::default(),
             layout: Layout::default(),
         };
         let bin = |package: &str, name: &str, file: &str| Binary {
@@ -875,6 +879,7 @@ mod tests {
             .into(),
             features: [("infra".to_string(), ["pigeon-agent".to_string()].into())].into(),
             tests: BTreeMap::default(),
+            bins: BTreeMap::default(),
             layout,
         }
     }
@@ -987,6 +992,7 @@ mod tests {
                 ),
             ]
             .into(),
+            bins: BTreeMap::default(),
             layout: Layout::default(),
         };
         let unit = |package: &str, name: &str, file: &str| Binary {
@@ -1032,6 +1038,7 @@ mod tests {
                 BTreeSet::from(["suite".to_string()]),
             )]
             .into(),
+            bins: BTreeMap::default(),
             layout: Layout::default(),
         };
         let unit = |package: &str, file: &str| Binary {
@@ -1054,6 +1061,48 @@ mod tests {
         assert!(
             map.select(&crates, &[a]).is_none(),
             "a unit of a package the workspace no longer has can't say"
+        );
+    }
+
+    #[test]
+    fn a_mapped_binary_that_was_renamed_leaves_it_to_the_crate() {
+        use super::{Binary, TestMap};
+        let crates = Crates {
+            by_dir: [("src/judge/".to_string(), "judge".to_string())].into(),
+            bins: [(
+                "judge".to_string(),
+                BTreeSet::from(["judge-new".to_string()]),
+            )]
+            .into(),
+            ..Crates::default()
+        };
+        let unit = |kind: &str, name: &str, file: &str| Binary {
+            package: "judge".into(),
+            kind: kind.into(),
+            name: name.into(),
+            filter: String::new(),
+            files: vec![file.into()],
+        };
+        let a = "src/judge/src/main.rs";
+        let b = "src/judge/src/rules.rs";
+        let map = TestMap {
+            sha: "x".into(),
+            binaries: vec![
+                unit("bin", "judge-old", a),
+                unit("lib", "judge", b),
+                unit("lib", "judge", "e1.rs"),
+                unit("lib", "judge", "e2.rs"),
+                unit("lib", "judge", "e3.rs"),
+            ],
+        };
+        assert!(
+            map.select(&crates, &[a]).is_none(),
+            "a binary the package no longer builds can't say"
+        );
+        let jobs = map.select(&crates, &[b]).expect("chosen");
+        assert_eq!(
+            jobs.iter().map(|j| j.argv.join(" ")).collect::<Vec<_>>(),
+            ["cargo test -p judge --lib --locked"]
         );
     }
 }

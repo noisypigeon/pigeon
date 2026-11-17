@@ -14,6 +14,7 @@ pigeon-agent lib agent bench::tests::the_sandbox_cuts_the_network_except_to_fetc
 pigeon-agent lib agent bench::tests::the_sentinel_build_is_kept_out_of_tmp_and_handed_to_commands
 pigeon-agent lib agent bench::tests::without_mise_toml_a_task_runs_the_commits_own_pigeon_dev_from_its_root
 pigeon-agent lib agent checks::scope::tests::a_workspace_at_the_root_is_read_from_its_members_and_metadata
+pigeon-agent lib agent checks::scope::tests::each_package_s_binaries_are_its_listed_main_and_bin_targets
 pigeon-agent lib agent containers::worker::tests::a_build_path_names_one_full_commit_and_nothing_else
 pigeon-agent lib agent containers::worker::tests::a_build_path_names_pigeon_or_pigeon_sentinel_and_nothing_else
 pigeon-agent lib agent containers::worker::tests::a_job_starts_through_pigeon_start_only_when_a_build_is_named
@@ -1018,6 +1019,7 @@ pigeon-core lib pigeon_core connect::tests::within_ceiling_lists_the_excess_sort
 pigeon-core lib pigeon_core deploy::scope::tests::a_deploy_builds_and_waits_for_an_image_in_either_layout
 pigeon-core lib pigeon_core deploy::scope::tests::a_gate_is_full_only_for_a_workspace_setting_or_mapped_tests_across_packages
 pigeon-core lib pigeon_core deploy::scope::tests::a_layout_at_the_root_runs_its_checks_from_the_root
+pigeon-core lib pigeon_core deploy::scope::tests::a_mapped_binary_that_was_renamed_leaves_it_to_the_crate
 pigeon-core lib pigeon_core deploy::scope::tests::a_mapped_package_that_was_renamed_leaves_it_to_the_crate
 pigeon-core lib pigeon_core deploy::scope::tests::a_mapped_target_that_is_gone_runs_as_its_suite_module
 pigeon-core lib pigeon_core deploy::scope::tests::a_workspace_setting_builds_only_the_workers_the_tree_has
