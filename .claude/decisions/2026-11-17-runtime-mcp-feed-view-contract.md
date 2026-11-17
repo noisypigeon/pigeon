@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: runtime
-* Governs: `src/**/mcp.rs`, `src/**/wire.rs`, `src/**/events.rs`, `src/**/worker/events.rs`, `src/**/push.rs`, `src/**/worker/push.rs`, `src/**/worker/apns.rs`, `src/**/worker/api.rs`, `src/**/worker/devices.rs`, `src/**/tasks.rs`
+* Governs: `src/**/mcp.rs`, `src/**/wire.rs`, `src/**/events.rs`, `src/**/worker/events.rs`, `src/**/push.rs`, `src/**/worker/push.rs`, `src/**/worker/apns.rs`, `src/**/worker/api.rs`, `src/**/worker/devices.rs`, `src/**/tasks.rs`, `src/**/view.rs`, `src/**/view/**`, `src/**/feed.rs`, `src/**/feed/**`
 
 ## Context
 
@@ -388,3 +388,40 @@ that verifies every credential itself:
 The owner also answered owner ask #27: `POST /v0/pool/` stays outside MCP,
 protocol-bound as `/git/…` is, because the harness speaks the Messages API
 to its model there. §7's list is final.
+
+### 2026-11-17: A view is presented beside the result, so no caller breaks mid-migration
+
+Agents, the follower and `session.sh` read today's results: `tools/call`'s
+`content` text and `structuredContent` are the operation's `Response`, and
+`/v0/run` answers it raw. Replacing them with views would break those
+callers between merges. So §2.2's step 2 lands additively:
+
+- **`present`.** Each operation gets a pure presenter in pigeon-core,
+  `fn(&Response) -> Value`, building its declared view from its result. It
+  sits in `src/pigeon-core/src/present/` (one file per family:
+  `change.rs`, `approval.rs`, `rest.rs`), behind
+  `present::view(op, &Response) -> Option<Value>`.
+- **Where the view goes.** `tools/call`'s result gains
+  `_meta["dev.pigeon/view"]`, the presented view. `content` and
+  `structuredContent` stay the `Response` until step 13 moves the harness
+  to `view::text`. `/v0/run` and in-process callers keep the raw result
+  until step 17 removes them.
+- **The check, per operation.** `present::PRESENTED` lists the operations
+  with a presenter. `mcp::answer` validates each listed operation's view
+  against its declared one; a mismatch is the error `view.mismatch`, never
+  sent. A suite test fails while `PRESENTED` differs from the catalog, with
+  the missing names, and pins how many are missing, so each family's brief
+  lowers it and none raises it.
+- **Step 5 is four briefs:** 5a, `present`'s frame, `PRESENTED` empty, the
+  check and the pinned test; then 5b (changes, briefs, sessions, tasks),
+  5c (approvals, grants, mandates, platform, pool, deploys) and 5d (the
+  rest), in parallel.
+- **Clients read `_meta["dev.pigeon/view"]`** (steps 14 and 15); the
+  harness reads `view::text` from step 13.
+
+### 2026-11-17: Governs takes the files steps 3a and 6 added
+
+Steps 3a (!1051) and 6 (!1052) added `src/pigeon-core/src/view.rs` and
+`src/pigeon-core/src/feed.rs`, each with tests in a folder of its name.
+`Governs` gains `src/**/view.rs`, `src/**/view/**`, `src/**/feed.rs` and
+`src/**/feed/**`; step 5a adds `src/**/present/**`.
