@@ -441,6 +441,10 @@ pub struct Change {
     /// 2026-11-15 amendment.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub restacked_for: Option<String>,
+    /// Who asked for its merge under its current approval; a carried approval asks it again. See
+    /// `.claude/decisions/2026-11-16-development-merge-path-measured-faster.md` §4.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub merge_asked: Option<String>,
 }
 
 /// Something that happened to a change.
@@ -566,6 +570,11 @@ pub enum Event {
     },
     /// A person asked for the approved head to be merged after the full test run.
     MergeFull {
+        /// Who.
+        by: String,
+    },
+    /// Someone asked for its merge through the merge queue; see the merge-path ADR §4.
+    MergeAsked {
         /// Who.
         by: String,
     },
@@ -725,6 +734,7 @@ impl Change {
             accepted: None,
             escalated: None,
             restacked_for: None,
+            merge_asked: None,
         }
     }
 

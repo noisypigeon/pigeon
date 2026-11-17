@@ -96,10 +96,18 @@ impl Change {
                 Ok((self, Vec::new()))
             }
             Event::Approve { by, sha, at } => self.approve(by, sha, at),
-            Event::Merge { by } => self.merge(&by),
+            Event::Merge { by } => {
+                self.merge_asked = Some(by.clone());
+                self.merge(&by)
+            }
             Event::MergeFull { by } => {
                 self.full_asked = Some(by.clone());
+                self.merge_asked = Some(by.clone());
                 self.merge(&by)
+            }
+            Event::MergeAsked { by } => {
+                self.merge_asked = Some(by);
+                Ok((self, Vec::new()))
             }
             Event::Merged { sha, commit } => self.merged(&sha, commit),
             Event::MergeFailed { sha, reason } => {
@@ -264,6 +272,8 @@ impl Change {
         self.restacked_for = None;
         // Approved by hand while a carry was pending: the carry is moot, and a parked merge starts.
         self.carried = None;
+        // A new approval's merge is asked anew; see the merge-path ADR §4.
+        self.merge_asked.clone_from(&self.merge_after);
         match self.merge_after.take() {
             Some(by) => self.start_merge(&by),
             None => Ok((self, Vec::new())),

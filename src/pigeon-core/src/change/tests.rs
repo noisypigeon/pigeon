@@ -1317,3 +1317,107 @@ fn a_job_queued_with_no_attempt_for_five_minutes_restarts_and_its_time_with_it()
             .is_empty()
     );
 }
+
+/// !464's sequence with its merge asked by `asked` after the approval, if anyone: the change
+/// before the bound job reports `B`, the same patch, and after.
+fn carried_after(asked: Option<&str>) -> (Change, Change) {
+    use crate::approval::tiers::Tier;
+    let mut events = vec![
+        Event::Pushed { sha: A.into() },
+        bounded_at(A, Tier::Code, Some("p464")),
+        Event::Approve {
+            by: "owner".into(),
+            sha: A.into(),
+            at: 2,
+        },
+    ];
+    events.extend(asked.map(|by| Event::MergeAsked { by: by.into() }));
+    events.push(Event::Pushed { sha: B.into() });
+    let before = run(planned(), events);
+    let after = run(
+        before.clone(),
+        vec![bounded_at(B, Tier::Code, Some("p464"))],
+    );
+    (before, after)
+}
+
+#[test]
+fn a_carried_approval_asks_again_the_merge_that_was_asked() {
+    let (before, after) = carried_after(Some("window:3"));
+    assert_eq!(after.state, State::Approved);
+    assert_eq!(after.merge_after, None, "nothing parked it");
+    assert_eq!(
+        crate::change::queue::reask(
+            Some(&before),
+            &after,
+            &crate::change::queue::MergeQueue::default()
+        )
+        .as_deref(),
+        Some("window:3")
+    );
+}
+
+#[test]
+fn a_carried_approval_with_no_merge_asked_asks_nothing() {
+    let (before, after) = carried_after(None);
+    assert_eq!(after.state, State::Approved);
+    assert_eq!(
+        crate::change::queue::reask(
+            Some(&before),
+            &after,
+            &crate::change::queue::MergeQueue::default()
+        ),
+        None
+    );
+}
+
+#[test]
+fn a_carried_approval_already_in_the_queue_is_not_asked_again() {
+    let (before, after) = carried_after(Some("window:3"));
+    let empty = crate::change::queue::MergeQueue::default();
+    let (merging, _) = crate::change::queue::enqueue(&empty, 1, "window:3", 3).expect("starts");
+    assert_eq!(
+        crate::change::queue::reask(Some(&before), &after, &merging),
+        None
+    );
+    let (other, _) = crate::change::queue::enqueue(&empty, 9, "owner", 3).expect("9 starts");
+    let (waiting, _) = crate::change::queue::enqueue(&other, 1, "window:3", 4).expect("1 waits");
+    assert_eq!(
+        crate::change::queue::reask(Some(&before), &after, &waiting),
+        None
+    );
+}
+
+#[test]
+fn an_approval_by_hand_is_not_asked_again_and_clears_the_ask() {
+    let asked = run(
+        checked(),
+        vec![Event::MergeAsked {
+            by: "window:3".into(),
+        }],
+    );
+    assert_eq!(asked.merge_asked.as_deref(), Some("window:3"));
+    let approved = run(
+        asked.clone(),
+        vec![Event::Approve {
+            by: "owner".into(),
+            sha: A.into(),
+            at: 2,
+        }],
+    );
+    assert_eq!(approved.merge_asked, None);
+    assert_eq!(
+        crate::change::queue::reask(
+            Some(&asked),
+            &approved,
+            &crate::change::queue::MergeQueue::default()
+        ),
+        None
+    );
+}
+
+#[test]
+fn a_merge_records_who_asked_for_it() {
+    let (c, _) = step(&approved(), merge()).expect("merges");
+    assert_eq!(c.merge_asked.as_deref(), Some("owner"));
+}

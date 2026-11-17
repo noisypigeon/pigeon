@@ -61,7 +61,26 @@ pub fn keeps_place(c: &Change) -> bool {
         )
 }
 
-/// Whether `from` yielding to `to` closes a cycle in `yields`: `to` already waits on `from`,
+/// Who asked for `after`'s merge, when, saved over `before`, its approval was just carried to a
+/// new head with no merge on its way or queued: the control plane asks it again; see
+/// `.claude/decisions/2026-11-16-development-merge-path-measured-faster.md` §4.
+#[must_use]
+pub fn reask(before: Option<&Change>, after: &Change, q: &MergeQueue) -> Option<String> {
+    let b = before.filter(|b| b.state != State::Approved)?;
+    let (c, a) = (b.carried.as_ref()?, after.approval.as_ref()?);
+    let carried = after.state == State::Approved && a.by == c.by && a.at == c.at;
+    let free = !holds_turn(after)
+        && super::stage::place(q, after.number).is_none()
+        && after.yielded.is_none()
+        && after.conflict.is_none();
+    if carried && free {
+        after.merge_asked.clone()
+    } else {
+        None
+    }
+}
+
+/// Whether `from` yielding to `to` closes a cycle in `yields`:`to` already waits on `from`,
 /// directly or through others, so neither would ever merge.
 #[must_use]
 pub fn closes_cycle(yields: &BTreeMap<u32, u32>, from: u32, to: u32) -> bool {
