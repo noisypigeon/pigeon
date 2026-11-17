@@ -1500,7 +1500,7 @@ async fn smoke(env: &Env, s: &Settings, who: &Identity) -> Result<Response> {
     )
 }
 
-/// `GET /builds/<sha>/<file>`: `main`'s `pigeon` or `pigeon-sentinel` built at that commit, or
+/// `GET /builds/<sha>/<file>`: `main`'s `pigeon` or the judge built at that commit, or
 /// its test map, from R2.
 async fn build(env: &Env, path: &str) -> Result<Response> {
     let Some((sha, binary)) = crate::wire::ship_wire::build_path(path) else {

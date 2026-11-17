@@ -2665,3 +2665,4 @@ pigeon-agent test suite cobot_workers::render_is_stable_and_resolves_every_bindi
 pigeon-agent test suite cobot_workers::scrubbing_hides_ids_and_secrets	pigeon-agent test suite workers::scrubbing_hides_ids_and_secrets
 pigeon-agent test suite cobot_workers::this_repositorys_specs_validate	pigeon-agent test suite workers::this_repositorys_specs_validate
 pigeon-core lib pigeon_core approval::tests::the_judges_rules_read_under_eviction_too	pigeon-core lib pigeon_core approval::tests::the_judges_rules_read_only_under_eviction
+pigeon-agent lib agent sentinel::tests::the_judge_is_found_under_either_name_the_new_first	pigeon-agent lib agent eviction::tests::the_judge_is_found_under_either_name_the_new_first

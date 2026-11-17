@@ -50,12 +50,12 @@ pub fn describe(instance: &Instance) -> Result<(Graph, Vec<String>), Error> {
     describe_with(instance, &|k| std::env::var(k).ok())
 }
 
-/// [`describe`], finding `pigeon-sentinel` through `var`; a missing binary is a problem, and the
+/// [`describe`], finding `pigeon-eviction` through `var`; a missing binary is a problem, and the
 /// graph is drawn without policies.
 ///
 /// # Errors
 ///
-/// [`Error::Engine`] if `pigeon-sentinel` refuses the policies.
+/// [`Error::Engine`] if `pigeon-eviction` refuses the policies.
 pub fn describe_with(
     instance: &Instance,
     var: &dyn Fn(&str) -> Option<String>,
@@ -277,14 +277,14 @@ fn policies(
     if !any {
         return Ok(());
     }
-    let binary = crate::sentinel::locate(var);
-    let policies = match crate::sentinel::describe(&binary, &dir) {
+    let binary = crate::eviction::locate(var);
+    let policies = match crate::eviction::describe(&binary, &dir) {
         Ok(p) => p,
-        Err(crate::sentinel::Failure::Missing(why)) => {
+        Err(crate::eviction::Failure::Missing(why)) => {
             problems.push(format!("{}: {why}", Engine::Eviction.name()));
             return Ok(());
         }
-        Err(crate::sentinel::Failure::Refused(why)) => {
+        Err(crate::eviction::Failure::Refused(why)) => {
             return Err(Error::Engine {
                 engine: Engine::Eviction,
                 message: why,

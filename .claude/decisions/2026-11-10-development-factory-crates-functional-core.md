@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: development
-* Governs: `src/**/definition.rs`, `src/**/markdown.rs`, `src/**/policy.rs`, `src/**/report.rs`, `src/**/rules.rs`, `src/**/target.rs`, `src/**/sentinel.rs`, `src/**/testmaps.rs`, `src/**/scope.rs`, `tooling/ci/test-map.sh`, `.config/policies/layout.yaml`, `.config/policies/decisions.yaml`
+* Governs: `src/**/definition.rs`, `src/**/markdown.rs`, `src/**/policy.rs`, `src/**/report.rs`, `src/**/rules.rs`, `src/**/target.rs`, `src/pigeon-agent/src/eviction.rs`, `src/**/testmaps.rs`, `src/**/scope.rs`, `tooling/ci/test-map.sh`, `.config/policies/layout.yaml`, `.config/policies/decisions.yaml`
 
 ## Context
 

@@ -1,4 +1,4 @@
-//! `pigeon eviction`: runs the `pigeon-sentinel` binary; see
+//! `pigeon eviction`: runs the `pigeon-eviction` binary; see
 //! `.claude/decisions/2026-11-10-development-factory-crates-functional-core.md` §1.
 
 use std::env;
@@ -8,10 +8,8 @@ use std::process::Command;
 use super::INVALID;
 use crate::cli::{CheckArgs, EvictionCommand};
 
-/// The binary's name, and its new one, found first; see
-/// `.claude/decisions/2026-11-16-development-src-crates-neutral-names.md` §3.
-const BINARY: &str = "pigeon-sentinel";
-const BINARIES: [&str; 2] = ["pigeon-eviction", BINARY];
+/// The judge's binary.
+const BINARY: &str = "pigeon-eviction";
 
 /// Runs a `pigeon eviction` command and returns its exit code.
 #[must_use]
@@ -21,8 +19,8 @@ pub fn run(command: EvictionCommand) -> i32 {
     }
 }
 
-/// `PIGEON_EVICTION`, else either of [`BINARIES`] beside this executable, in its parent directory
-/// or on `PATH`, else [`BINARY`].
+/// `PIGEON_EVICTION`, else [`BINARY`] beside this executable, in its parent directory or on
+/// `PATH`, else its bare name.
 fn locate() -> PathBuf {
     let set = |k: &str| env::var_os(k).filter(|p| !p.is_empty());
     if let Some(p) = set("PIGEON_EVICTION") {
@@ -37,11 +35,12 @@ fn locate() -> PathBuf {
         .chain(env::split_paths(&env::var_os("PATH").unwrap_or_default()))
         .collect();
     dirs.iter()
-        .find_map(|d| BINARIES.iter().map(|b| d.join(b)).find(|c| c.is_file()))
+        .map(|d| d.join(BINARY))
+        .find(|c| c.is_file())
         .unwrap_or_else(|| PathBuf::from(BINARY))
 }
 
-/// `pigeon-sentinel check`'s arguments for `args`.
+/// `pigeon-eviction check`'s arguments for `args`.
 fn argv(args: &CheckArgs) -> Vec<String> {
     let mut out = vec![
         "check".to_string(),

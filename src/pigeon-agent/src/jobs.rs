@@ -142,13 +142,13 @@ pub(crate) fn report(spec: &JobSpec, outcome: Outcome, log: &str) -> Report {
 }
 
 /// Runs `spec` in `dir`: checks out its head, then the bound job or its command; the bound job
-/// judges with the `pigeon-sentinel` [`crate::sentinel::locate`] finds.
+/// judges with the `pigeon-eviction` [`crate::eviction::locate`] finds.
 #[must_use]
 pub fn run(spec: &JobSpec, dir: &Path) -> Report {
     run_judged(
         spec,
         dir,
-        &crate::sentinel::locate(&|k| std::env::var(k).ok()),
+        &crate::eviction::locate(&|k| std::env::var(k).ok()),
     )
 }
 
@@ -545,10 +545,10 @@ fn publish_sites(
         operation: "sites.publish".into(),
         args,
     };
-    // The architecture data names the policies, through the Container's pigeon-sentinel.
+    // The architecture data names the policies, through the Container's pigeon-eviction.
     let var = |k: &str| {
         spec.env.get(k).cloned().or_else(|| {
-            (k == crate::sentinel::VAR)
+            (k == crate::eviction::VAR)
                 .then(|| std::env::var(k).ok())
                 .flatten()
         })
@@ -894,7 +894,7 @@ fn adds_secret(dir: &Path, base: &str, path: &str) -> bool {
 }
 
 /// The head's violations of the base's policies, judged by `sentinel`, `main`'s
-/// `pigeon-sentinel`; a judge that can't answer is a violation, never a pass; see
+/// `pigeon-eviction`; a judge that can't answer is a violation, never a pass; see
 /// `.claude/decisions/2026-11-10-development-factory-crates-functional-core.md` §2.
 fn policy(
     spec: &JobSpec,
@@ -913,7 +913,7 @@ fn policy(
     }
 }
 
-/// The violations `binary`, a `pigeon-sentinel`, finds in the head at `dir` against `policies`,
+/// The violations `binary`, a `pigeon-eviction`, finds in the head at `dir` against `policies`,
 /// with the change as its pull request.
 ///
 /// # Errors
@@ -934,7 +934,7 @@ pub fn judge_with(
         ("PR_BRANCH", spec.branch.clone()),
         ("PR_SCOPE", spec.scope.join("\n")),
     ];
-    crate::sentinel::check(binary, dir, policies, Some(&pr))
+    crate::eviction::check(binary, dir, policies, Some(&pr))
         .map(|r| r.violations)
         .map_err(|e| e.to_string())
 }
@@ -963,7 +963,7 @@ fn eviction(spec: &JobSpec, dir: &Path, sentinel: &Path) -> Report {
     let mut verdicts = Vec::new();
     for c in &candidates {
         let number = c["number"].clone();
-        match crate::sentinel::evict(sentinel, dir, &policies, &c["fields"]) {
+        match crate::eviction::evict(sentinel, dir, &policies, &c["fields"]) {
             Ok(v) => {
                 let _ = writeln!(log, "!{number}: {}", v["granted"]);
                 verdicts.push(serde_json::json!({

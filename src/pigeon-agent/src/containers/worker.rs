@@ -121,7 +121,7 @@ pub struct JobsBuild {
     pub sha256: String,
     /// The Access service token that may read it: client ID and secret.
     pub access: (String, String),
-    /// The `pigeon-sentinel` built beside it: its URL and SHA-256; none for a build without one.
+    /// The judge built beside it: its URL and SHA-256; none for a build without one.
     pub sentinel: Option<(String, String)>,
     /// `main`'s newest test map: its URL and SHA-256; none before the first.
     pub test_map: Option<(String, String)>,

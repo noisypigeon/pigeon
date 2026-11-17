@@ -21,6 +21,8 @@ pub mod containers;
 #[cfg(feature = "engines")]
 pub mod engine;
 #[cfg(feature = "engines")]
+pub mod eviction;
+#[cfg(feature = "engines")]
 pub mod git;
 #[cfg(feature = "engines")]
 pub mod infra;
@@ -33,8 +35,6 @@ pub mod names;
 pub mod platform_job;
 #[cfg(feature = "engines")]
 pub mod release;
-#[cfg(feature = "engines")]
-pub mod sentinel;
 #[cfg(feature = "engines")]
 pub mod serve;
 #[cfg(feature = "engines")]

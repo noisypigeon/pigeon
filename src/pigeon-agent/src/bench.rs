@@ -422,7 +422,7 @@ fn clear_locks(git_dir: &std::path::Path) {
 fn keep_sentinel(from: &str, work: &std::path::Path) -> Option<String> {
     use std::os::unix::fs::PermissionsExt as _;
     let dir = work.join("bin");
-    let to = dir.join(crate::sentinel::BINARY);
+    let to = dir.join(crate::eviction::BINARY);
     let kept = std::fs::create_dir_all(&dir)
         .and_then(|()| std::fs::copy(from, &to))
         .and_then(|_| std::fs::set_permissions(&to, std::fs::Permissions::from_mode(0o755)));
@@ -443,8 +443,8 @@ impl Bench {
             .iter()
             .filter_map(|k| var(k).map(|v| ((*k).to_string(), v)))
             .collect();
-        if let Some(p) = var(crate::sentinel::VAR).and_then(|from| keep_sentinel(&from, &work)) {
-            env.push((crate::sentinel::VAR.into(), p));
+        if let Some(p) = var(crate::eviction::VAR).and_then(|from| keep_sentinel(&from, &work)) {
+            env.push((crate::eviction::VAR.into(), p));
         }
         Self {
             work,
@@ -1253,20 +1253,20 @@ run = "sleep 30"
         let from = from.to_string_lossy().into_owned();
         let work = dir.path().join("work");
         let b = Bench::new(work.clone(), Sandbox::Plain, |k| {
-            (k == crate::sentinel::VAR).then(|| from.clone())
+            (k == crate::eviction::VAR).then(|| from.clone())
         });
-        let kept = work.join("bin").join(crate::sentinel::BINARY);
+        let kept = work.join("bin").join(crate::eviction::BINARY);
         assert!(kept.is_file());
         let want = (
-            crate::sentinel::VAR.to_string(),
+            crate::eviction::VAR.to_string(),
             kept.to_string_lossy().into_owned(),
         );
         assert!(b.command_env(&[], Mode::Command).contains(&want));
         let missing = Bench::new(dir.path().join("w2"), Sandbox::Plain, |k| {
-            (k == crate::sentinel::VAR).then(|| "/no/such/sentinel".to_string())
+            (k == crate::eviction::VAR).then(|| "/no/such/sentinel".to_string())
         });
         let env = missing.command_env(&[], Mode::Command);
-        assert!(!env.iter().any(|(k, _)| k == crate::sentinel::VAR));
+        assert!(!env.iter().any(|(k, _)| k == crate::eviction::VAR));
     }
 
     #[test]

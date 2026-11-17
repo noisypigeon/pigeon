@@ -16,14 +16,14 @@ pub struct EngineInfo {
 }
 
 /// Every engine backplane composes; sentinel's version is its binary's, found as
-/// [`crate::sentinel::locate`] finds it.
+/// [`crate::eviction::locate`] finds it.
 #[must_use]
 pub fn engines() -> Vec<EngineInfo> {
-    let sentinel = crate::sentinel::locate(&|k| std::env::var(k).ok());
+    let sentinel = crate::eviction::locate(&|k| std::env::var(k).ok());
     vec![
         EngineInfo {
             engine: Engine::Eviction,
-            version: crate::sentinel::version(&sentinel).unwrap_or_else(|| "not installed".into()),
+            version: crate::eviction::version(&sentinel).unwrap_or_else(|| "not installed".into()),
             role: "policy",
         },
         EngineInfo {

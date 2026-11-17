@@ -1,4 +1,4 @@
-//! The judge, `pigeon-sentinel`, run as its own binary; see
+//! The judge, `pigeon-eviction`, run as its own binary; see
 //! `.claude/decisions/2026-11-10-development-factory-crates-functional-core.md` §1-§2.
 
 use std::path::{Path, PathBuf};
@@ -9,7 +9,7 @@ use serde_json::Value;
 pub const VAR: &str = "PIGEON_EVICTION";
 
 /// The binary's name.
-pub const BINARY: &str = crate::wire::ship_wire::SENTINEL_BINARY;
+pub const BINARY: &str = crate::wire::ship_wire::JUDGE_BINARIES[0];
 
 /// Where the judge is: `var`'s [`VAR`], else either of
 /// [`crate::wire::ship_wire::JUDGE_BINARIES`] beside the running executable, in its parent
@@ -160,7 +160,7 @@ pub fn describe(binary: &Path, policies: &Path) -> Result<Vec<Described>, Failur
 }
 
 /// Each eviction policy's verdict on `candidate`, a JSON object of its fields, and the one that
-/// grants its eviction: `pigeon-sentinel evict`'s `{granted, results}`.
+/// grants its eviction: `pigeon-eviction evict`'s `{granted, results}`.
 ///
 /// # Errors
 ///
@@ -183,15 +183,15 @@ pub fn evict(
     run(binary, &args, &[])
 }
 
-/// The binary's version, as `pigeon-sentinel --version` prints it; none when it doesn't run.
+/// The binary's version, the last word `--version` prints; none when it doesn't run.
 #[must_use]
 pub fn version(binary: &Path) -> Option<String> {
     let ran = crate::checks::ci::run_program(binary, &["--version".to_string()], &[]).ok()?;
     (ran.code == Some(0)).then(|| {
         ran.stdout
-            .trim()
-            .trim_start_matches(BINARY)
-            .trim()
+            .split_whitespace()
+            .last()
+            .unwrap_or_default()
             .to_string()
     })
 }
@@ -206,11 +206,17 @@ mod tests {
         let b = tempfile::tempdir().expect("tempdir");
         let dirs = [a.path().to_path_buf(), b.path().to_path_buf()];
         assert_eq!(find(&dirs), None);
-        std::fs::write(b.path().join("pigeon-sentinel"), "").expect("old");
-        assert_eq!(find(&dirs), Some(b.path().join("pigeon-sentinel")));
+        std::fs::write(b.path().join(crate::wire::ship_wire::SENTINEL_BINARY), "").expect("old");
+        assert_eq!(
+            find(&dirs),
+            Some(b.path().join(crate::wire::ship_wire::SENTINEL_BINARY))
+        );
         std::fs::write(b.path().join("pigeon-eviction"), "").expect("new");
         assert_eq!(find(&dirs), Some(b.path().join("pigeon-eviction")));
-        std::fs::write(a.path().join("pigeon-sentinel"), "").expect("nearer");
-        assert_eq!(find(&dirs), Some(a.path().join("pigeon-sentinel")));
+        std::fs::write(a.path().join(crate::wire::ship_wire::SENTINEL_BINARY), "").expect("nearer");
+        assert_eq!(
+            find(&dirs),
+            Some(a.path().join(crate::wire::ship_wire::SENTINEL_BINARY))
+        );
     }
 }

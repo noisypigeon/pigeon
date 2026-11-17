@@ -133,7 +133,7 @@ fn scrub(v: &mut Value, zones: &[String], roots: &[String]) {
     }
 }
 
-/// The pull request `args` describe, as `pigeon-sentinel`'s `PR_*` variables, if they name any
+/// The pull request `args` describe, as `pigeon-eviction`'s `PR_*` variables, if they name any
 /// of its fields but the scope.
 fn pull_request(args: &Map<String, Value>) -> Option<Vec<(&'static str, String)>> {
     let field = |k: &str| match args.get(k)? {
@@ -167,10 +167,10 @@ fn policy_check(
     let Some(dir) = instance.policies_dir() else {
         return Ok((json!({ "ran": 0, "skipped": 0 }), Vec::new()));
     };
-    let binary = crate::sentinel::locate(var);
+    let binary = crate::eviction::locate(var);
     let pr = pull_request(args);
     let report =
-        crate::sentinel::check(&binary, &instance.root, &dir, pr.as_deref()).map_err(|e| {
+        crate::eviction::check(&binary, &instance.root, &dir, pr.as_deref()).map_err(|e| {
             Error::Engine {
                 engine: Engine::Eviction,
                 message: e.to_string(),

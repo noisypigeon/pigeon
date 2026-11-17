@@ -23,6 +23,7 @@ pigeon-agent lib agent containers::worker::tests::a_launch_never_prints_a_secret
 pigeon-agent lib agent containers::worker::tests::a_run_launches_serve_signed_for_its_instance_and_state
 pigeon-agent lib agent containers::worker::tests::only_a_signed_answer_is_read
 pigeon-agent lib agent containers::worker::tests::the_state_variables_are_cobots
+pigeon-agent lib agent eviction::tests::the_judge_is_found_under_either_name_the_new_first
 pigeon-agent lib agent git::artifacts::tests::a_remote_never_shows_its_account_id
 pigeon-agent lib agent git::artifacts::tests::a_token_is_found_where_the_api_puts_it_and_never_shown
 pigeon-agent lib agent infra::s3::tests::dates_and_listings_parse
@@ -43,7 +44,6 @@ pigeon-agent lib agent infra::tofu::tests::redaction_hides_the_passphrase
 pigeon-agent lib agent infra::tofu::tests::tofu_never_sees_a_passphrase_under_either_name
 pigeon-agent lib agent names::tests::the_work_directory_is_git_ignored
 pigeon-agent lib agent platform_job::tests::values_group_by_resource_and_keep_outputs
-pigeon-agent lib agent sentinel::tests::the_judge_is_found_under_either_name_the_new_first
 pigeon-agent lib agent ship::tests::the_judge_is_built_under_the_name_the_tree_declares
 pigeon-agent lib agent sites::tests::a_copy_refuses_a_symlink_anywhere_in_the_tree
 pigeon-agent lib agent sites::tests::a_named_template_has_its_own_project_theme_and_tag
