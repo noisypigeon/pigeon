@@ -11,6 +11,7 @@
 - agent v0.1.48
 - agent v0.1.49
 - agent v0.1.50
+- agent v0.1.51
 - infra-agnostic-random-string v0.1.4
 - infra-agnostic-schema v0.1.5
 - infra-backblaze-schema v0.1.4
@@ -194,6 +195,11 @@
 - docs(adr): a pool task survives its Container's stop, and its job leaves a log (!1042) ([3139df5](https://github.com/noisypigeon/pigeon/commit/3139df5bb20f63c5b831da64a163b19a43e90ae3))
 - feat(backplane): a pool job's log is kept, and its escalation shows the log's end (!1043) ([a964410](https://github.com/noisypigeon/pigeon/commit/a96441036793b566b2504ba35fb78c65f912bafc)) · agent
 - feat(backplane): the pure rules for a lost pool job (!1044) ([bab62a8](https://github.com/noisypigeon/pigeon/commit/bab62a8932bf2205747ede95000cb88a6b4e6c73))
+- feat(backplane): a pool job lost to its Container's stop is seen at once and runs again once (!1045) ([ce55a5e](https://github.com/noisypigeon/pigeon/commit/ce55a5e942463e2523c3964f56e43fbf19a2799a)) · agent
+- fix(workers): a var holding an `$output` reference is rendered resolved (!1049) ([5aa48c8](https://github.com/noisypigeon/pigeon/commit/5aa48c83ae2c5792bd701f2805b1760e98cb0303)) · agent
+- feat(backplane): a running pool job's log can be watched in pool.status (!1048) ([4a56a9c](https://github.com/noisypigeon/pigeon/commit/4a56a9c263fe202b7777a3043f0baedda95cf823)) · agent
+- feat(core): the rendering contract's four views, validated and rendered as text (!1051) ([a0365dc](https://github.com/noisypigeon/pigeon/commit/a0365dca9859fc5ee3f7faa2a80d73a81625a91c))
+- feat(core): the feed: the event log read as typed items, with needs, readers and the open set (!1052) ([5b8a278](https://github.com/noisypigeon/pigeon/commit/5b8a2784f352ae76d6f2840b4c454d82a41a16dc))
 
 ## 2026-11-16
 
