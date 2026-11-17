@@ -81,6 +81,9 @@ FROM docker.io/library/rust:1.99.1-slim-bookworm@sha256:24707e70a4f1e23d9a7b2520
 ARG NODE_VERSION=24.22.0
 ARG NODE_SHA256=cc2f601cee82d9a5a233302fe307abc600727035fd7d2c3a3571755989e95008
 ARG WRANGLER_VERSION=4.151.3
+# The pool job's harness; its version is raised by a change, never at run time
+# (.claude/decisions/2026-11-15-development-capacity-pools-hard-spend-cap.md §7).
+ARG CLAUDE_CODE_VERSION=2.1.326
 ARG WORKER_BUILD_VERSION=0.8.7
 RUN apt-get update \
  && apt-get install -y --no-install-recommends ca-certificates curl git libssl-dev pkg-config xz-utils \
@@ -92,13 +95,14 @@ RUN apt-get update \
  && tar -xJf /tmp/node.tar.xz -C /usr/local --strip-components=1 --exclude='*.md' --exclude=LICENSE \
  && rm /tmp/node.tar.xz \
  && npm install -g "wrangler@${WRANGLER_VERSION}" \
+ && npm install -g "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}" \
  && cargo install --locked --root /usr/local "worker-build@${WORKER_BUILD_VERSION}"
 COPY --from=tools /out/ /usr/local/bin/
 COPY --from=build /src/target/release/pigeon /usr/local/bin/pigeon
 # No debug info: a job needs pass or fail, not a debugger, and debug info makes linking the
 # test binaries need far more memory and the cache far more space.
 ENV CARGO_HOME=/cache/cargo CARGO_TARGET_DIR=/cache/target HOME=/tmp \
-    CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0
+    CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0 DISABLE_AUTOUPDATER=1
 # How many crates the warm-up compiles at once; lower it if a builder runs out of memory.
 ARG WARM_JOBS=2
 COPY pigeon-start /usr/local/bin/pigeon-start
