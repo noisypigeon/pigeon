@@ -330,3 +330,20 @@ Gate files go to this planner and the owner's passkey. The rest are briefs.
   `lane.broken`, and proposes the revert.
 - A failed deploy ends the lane.
 - Every waived job is in `change_status`, the feed and the digest.
+
+### 2026-11-17: Review of !1064 against !1062: they agree
+
+!1064 amends
+[`2026-11-17-runtime-mcp-feed-view-contract.md`](2026-11-17-runtime-mcp-feed-view-contract.md):
+its `Governs` gains `src/**/present/**`, the presenters step 5a added.
+
+- **What it touches.** That ADR's header and one amendment; no code, and
+  none of this ADR's paths. `src/**/feed.rs` stays governed by both.
+- **The feed.** This ADR's `lane.open`, `lane.ended` and `lane.broken`
+  join that ADR's §3.2 types, as its amendment here says; !1064 changes
+  none of them.
+- **The views.** The lane's operations declare views within the four, and
+  their presenters will sit in `src/**/present/**`, which both ADRs then
+  govern.
+
+Neither ADR changes.
