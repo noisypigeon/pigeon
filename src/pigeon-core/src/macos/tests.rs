@@ -11,13 +11,17 @@ use super::{
 const Q: u64 = 1_794_480_000;
 const TEN: u64 = 600;
 
+/// The failover order with every provider, Bitrise included.
+const THREE: &str = "order: [github, bitrise, buildkite]\nstart_within_minutes: 10\ngithub_monthly_minutes: null\nbitrise_monthly_minutes: 450\nbuildkite_monthly_minutes: 150\n";
+
+fn three() -> super::Config {
+    parse(THREE).expect("parses")
+}
+
 #[test]
-fn the_built_in_config_is_githubs_then_bitrises_then_buildkites() {
+fn the_built_in_config_is_githubs_then_buildkites() {
     let c = config().expect("parses");
-    assert_eq!(
-        c.order,
-        [Provider::Github, Provider::Bitrise, Provider::Buildkite]
-    );
+    assert_eq!(c.order, [Provider::Github, Provider::Buildkite]);
     assert_eq!(c.start_within, TEN);
     assert_eq!(c.cap(Provider::Github), None);
     assert_eq!(c.cap(Provider::Bitrise), Some(450));
@@ -237,7 +241,7 @@ fn health(p: Provider, h: ProviderHealth) -> Health {
 
 #[test]
 fn next_follows_the_order_and_skips_tried_capped_and_down_providers() {
-    let c = config().expect("parses");
+    let c = three();
     let none = Health::new();
     let unused = Usage::new();
     assert_eq!(

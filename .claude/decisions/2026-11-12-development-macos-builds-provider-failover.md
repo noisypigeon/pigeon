@@ -301,3 +301,19 @@ glob under `src/pigeon-cli/` or `src/site-templates/` becomes `src/**/<tail>`
 (or `**<file>` for a workspace root file), which matches the file both before
 and after the restructure moves it. That ADR's step 12 tightens them to the
 new paths.
+
+### 2026-11-16: Bitrise leaves the order until it is set up
+
+`BITRISE_TOKEN` and the Bitrise app are not set up, so each placement spent a
+round on Bitrise's refusal (`the secret BITRISE_TOKEN is not set`) and a
+15-minute wait, which held the merge queue behind an `ios` check.
+
+1. `.config/macos.yaml`'s order is `[github, buildkite]`. Bitrise's code, its
+   `bitrise_monthly_minutes` cap, its Worker secret declarations and this ADR
+   stay.
+2. To re-enable it, once `BITRISE_TOKEN` and `BITRISE_APP_SLUG` are set,
+   put `bitrise` back in the order, after `github`.
+3. Proposed, not built: a provider refused for a missing secret is skipped
+   rather than counted as tried, and the owner is asked for the secret. It
+   waits on the "credential refusals → `needs: owner`" follow-up its planners
+   are settling.

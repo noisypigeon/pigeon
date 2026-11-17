@@ -4,17 +4,20 @@ use serde_json::json;
 
 use super::{
     GIVE_UP, Health, Job, Kind, Outcome, Placed, Provider, ProviderHealth, Settled, Usage,
-    WAIT_RETRY, config, dispatch_failed, dispatched, ended_as, health_event, moved_away, observed,
-    place, record, settle, usage_of,
+    WAIT_RETRY, dispatch_failed, dispatched, ended_as, health_event, moved_away, observed, place,
+    record, settle, usage_of,
 };
 
 const T: u64 = 1_794_480_000;
 const SHA: &str = "0123456789abcdef0123456789abcdef01234567";
 
+/// The failover order with every provider, Bitrise included.
+const THREE: &str = "order: [github, bitrise, buildkite]\nstart_within_minutes: 10\ngithub_monthly_minutes: null\nbitrise_monthly_minutes: 450\nbuildkite_monthly_minutes: 150\n";
+
 fn placed(job: &Job, now: u64) -> (Job, Placed) {
     place(
         job,
-        &config().expect("parses"),
+        &super::parse(THREE).expect("parses"),
         &Health::new(),
         &Usage::new(),
         now,
@@ -211,7 +214,7 @@ fn a_forced_provider_runs_alone_and_fails_rather_than_moves() {
 
 #[test]
 fn the_digest_names_moves_downs_and_providers_near_their_cap() {
-    let cfg = config().expect("parses");
+    let cfg = super::parse(THREE).expect("parses");
     let events = vec![
         (
             "ci.moved".to_string(),
