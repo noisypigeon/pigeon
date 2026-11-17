@@ -764,3 +764,14 @@ route (!865, !924):
   schema and the DigitalOcean project module's comment. None of them is a
   path this ADR governs.
 - Nothing either ADR decides changes.
+
+### 2026-11-17: Review of !881 against !903: they agree
+
+- **!881** carries out step 12 of
+  [`2026-11-16-development-merge-path-measured-faster.md`](2026-11-16-development-merge-path-measured-faster.md):
+  a merge job's push or fetch that Artifacts refused for now is retried, and
+  the merge keeps its turn.
+- **!903** widened this ADR's `Governs` to the gateway's tofu module and
+  `pool/aigateway.rs`. It decided nothing new.
+- **They agree.** !881 touches neither path, and a merge job's git calls
+  never pass through the gateway.
