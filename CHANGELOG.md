@@ -5,6 +5,7 @@
 ### Released
 
 - agent v0.1.44
+- agent v0.1.45
 - infra-cloudflare-ai-gateway v0.1.0
 - infra-cloudflare-schema v0.1.22
 - infra-digitalocean-project v0.1.3
@@ -94,6 +95,25 @@
 - docs(adr): review !851 against !862 (!914) ([69e7b75](https://github.com/noisypigeon/pigeon/commit/69e7b75208995baf5acdbe6e2bdb59b2112a745e))
 - docs(adr): review !853 against !862 (!915) ([e3fd78b](https://github.com/noisypigeon/pigeon/commit/e3fd78b053c5472a1d435d6da8bd2926777eab24))
 - docs(adr): review !907 against !862 (!920) ([289c41c](https://github.com/noisypigeon/pigeon/commit/289c41cb4d0d6b8dd49024fca65eaee73cea60a0))
+- docs(adr): the Run token is minted single-flight and isn't revoked on an in-memory renewal (!925) ([809342e](https://github.com/noisypigeon/pigeon/commit/809342e553503a250e836d1f9c661d5d7b2da7a5))
+- feat(agent): the Pool object and the metering route POST /v0/pool/<pool>/v1/messages, through the AI Gateway only (!865) ([9ad6890](https://github.com/noisypigeon/pigeon/commit/9ad6890a481d64d1717b078ef42b094902dfe894)) · agent
+- feat(agent): the pool's AI Gateway Run token, minted from GRANTER into the Pool object's memory (!924) ([942fd1e](https://github.com/noisypigeon/pigeon/commit/942fd1e7b1db901b4d67dedf74fb3587f2a7d581)) · agent
+- docs(adr): review !886 against !877 (!931) ([f8132fa](https://github.com/noisypigeon/pigeon/commit/f8132fa72c81e5c4127980b03790d65f7b1e4cdc))
+- docs(adr): review !903 against !877 (!932) ([ca03703](https://github.com/noisypigeon/pigeon/commit/ca03703458604d02a5972cb3a3d38ad5ff6136bd))
+- docs(adr): review !881 against !877 (!930) ([a72ff7a](https://github.com/noisypigeon/pigeon/commit/a72ff7a5ebb4268524b7d6cec41f1a664f591ac9))
+- docs(adr): the gateway spike's probes run in step 7 through the pool route, not from a session (!935) ([997bcb8](https://github.com/noisypigeon/pigeon/commit/997bcb8b92beba845e5751e7c856dc960a4b13b3))
+- feat(agent): the pool route records each non-2xx gateway answer, and a task's first answer, as a `pool.upstream` event (!937) ([56c5823](https://github.com/noisypigeon/pigeon/commit/56c5823aecf00a4f5f24f7fb0b1b3a2947066730)) · agent
+- feat(core): core::pool::job, the pool job's pure parts: env, prompt, sandboxed commands, stdio tools and outcome (!880) ([05a1d64](https://github.com/noisypigeon/pigeon/commit/05a1d640ac1b887fcecea70ebda054e4336549c5))
+- feat(agent): the pool job runs claude and the brief's checks in a user-namespace sandbox, then commits, pushes and reports (!892) ([d1e41d6](https://github.com/noisypigeon/pigeon/commit/d1e41d681203546c5b92d23b7a731664ac6539b9)) · agent
+- docs(adr): review !910 against !903 (!945) ([8f2d356](https://github.com/noisypigeon/pigeon/commit/8f2d3569738bc1f28f05b4a51ddb3361b041c553))
+- docs(adr): review !881 against !903 (!943) ([69c721f](https://github.com/noisypigeon/pigeon/commit/69c721fadb95e29f1657b6384a588d225865bc11))
+- fix(policy): ADR amendments are checked in merge order, none dated before the ADR (!947) ([1cce721](https://github.com/noisypigeon/pigeon/commit/1cce7210c27629b03b058ec84b5fcb8fc0d0980a))
+- docs(adr): review !948 against !909 (!953) ([ec73eb0](https://github.com/noisypigeon/pigeon/commit/ec73eb0340e05709b0fd58a0d10ada06f09bd80a))
+- docs(adr): review !939 against !909 (!952) ([bcebb0b](https://github.com/noisypigeon/pigeon/commit/bcebb0b9e77c412fe00a2d4ad21c960df7ec08fd))
+- docs(adr): the minted platform token's page switch lands with the deployed per-unit set, and capabilities are required where a pigeon kind expands a module (!954) ([1f32fa1](https://github.com/noisypigeon/pigeon/commit/1f32fa1624fdd8460bbd3d8476c10bea1a68a386))
+- build(harness): the `backplane` feature goes, now the job images build with `agent` (!957) ([f3fa3a2](https://github.com/noisypigeon/pigeon/commit/f3fa3a232e9b69eb1b84a5759b0e2a6c5ef55447)) · agent
+- feat(core): a same-patch restack carries only the checks its job names (!939) ([6fff54b](https://github.com/noisypigeon/pigeon/commit/6fff54be5ee010a9a4bfb4c1fd0b585a9ce46a23)) · agent
+- docs(adr): review !939 against !954 (!963) ([9649ae1](https://github.com/noisypigeon/pigeon/commit/9649ae1ac4d612f1a11d13d8724261d45e0c8068))
 
 ## 2026-11-16
 
