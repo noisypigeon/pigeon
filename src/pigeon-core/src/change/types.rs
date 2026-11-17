@@ -3,7 +3,7 @@
 
 use serde::{Deserialize, Serialize};
 
-/// The job that bounds a push: sentinel's change policy and `change.scope`, on the pushed tree.
+/// the job that bounds a push: the judge's change policy and `change.scope`, on the pushed tree.
 pub const BOUND: &str = "bound";
 
 /// The job that merges an approved head onto `main`, with a write token.

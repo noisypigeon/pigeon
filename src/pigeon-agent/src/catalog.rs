@@ -237,7 +237,7 @@ fn sites_publish(
         architecture["deployed"] = json!(sha);
     }
     let data = std::collections::BTreeMap::from([("architecture".to_string(), architecture)]);
-    let published = crate::infra::publish(&ctx, &wanted, 5, &data).map_err(|e| cobot_failed(&e))?;
+    let published = crate::infra::publish(&ctx, &wanted, 5, &data).map_err(|e| infra_failed(&e))?;
     let violations = published
         .iter()
         .flat_map(|p| {
@@ -279,7 +279,7 @@ fn sites_build(
     args: &Map<String, Value>,
     var: &impl Fn(&str) -> Option<String>,
 ) -> Result<Value, Error> {
-    let cobot = |e: crate::infra::Error| Error::Engine {
+    let infra_error = |e: crate::infra::Error| Error::Engine {
         engine: Engine::Infra,
         message: e.to_string(),
     };
@@ -293,15 +293,15 @@ fn sites_build(
                 .collect()
         })
         .unwrap_or_default();
-    let sites =
-        crate::sites::find_in(&instance.root, instance.platform_root(), &wanted).map_err(cobot)?;
+    let sites = crate::sites::find_in(&instance.root, instance.platform_root(), &wanted)
+        .map_err(infra_error)?;
     if sites.is_empty() {
         return Ok(json!({ "sites": [] }));
     }
     let (architecture, _) = architecture_describe(instance, var)?;
     let data = std::collections::BTreeMap::from([("architecture".to_string(), architecture)]);
     let built = crate::sites::build_in(&instance.root, instance.platform_root(), &sites, &data)
-        .map_err(cobot)?;
+        .map_err(infra_error)?;
     Ok(json!({
         "sites": built
             .iter()
@@ -341,7 +341,7 @@ fn text<'a>(args: &'a Map<String, Value>, name: &str) -> Result<&'a str, Error> 
         .ok_or_else(|| Error::Invalid(vec![format!("argument `{name}` must be a string")]))
 }
 
-fn cobot_failed(e: &crate::infra::Error) -> Error {
+fn infra_failed(e: &crate::infra::Error) -> Error {
     Error::Engine {
         engine: Engine::Infra,
         message: e.to_string(),
@@ -359,7 +359,7 @@ fn session(
             s.ctx.platform.clone_from(&instance.platform);
             s
         })
-        .map_err(|e| cobot_failed(&e))
+        .map_err(|e| infra_failed(&e))
 }
 
 fn changes(changes: &[crate::infra::Change]) -> Value {
@@ -389,10 +389,10 @@ fn infra_plan(
     let mut s = session(instance, args, var)?;
     let selected =
         crate::infra::select_in(&s.ctx.root, s.ctx.platform_root(), &s.ctx.providers, &units)
-            .map_err(|e| cobot_failed(&e))?;
+            .map_err(|e| infra_failed(&e))?;
     let (stored, _) = crate::infra::plan_stored(&s.ctx, &selected, crate::infra::session::now())
-        .map_err(|e| cobot_failed(&e))?;
-    s.push().map_err(|e| cobot_failed(&e))?;
+        .map_err(|e| infra_failed(&e))?;
+    s.push().map_err(|e| infra_failed(&e))?;
     Ok(json!({
         "plan": stored.id,
         "expires": stored.expires,
@@ -413,8 +413,8 @@ fn infra_apply(
     let plan = text(args, "plan")?;
     let mut s = session(instance, args, var)?;
     let applied = s.apply_stored(plan, crate::infra::session::now());
-    s.push().map_err(|e| cobot_failed(&e))?;
-    let applied = applied.map_err(|e| cobot_failed(&e))?;
+    s.push().map_err(|e| infra_failed(&e))?;
+    let applied = applied.map_err(|e| infra_failed(&e))?;
     Ok(json!({
         "plan": plan,
         "units": applied.iter().map(|u| json!({

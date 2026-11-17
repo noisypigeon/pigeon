@@ -95,7 +95,7 @@ impl fmt::Display for Error {
             Self::UnknownUnit(u) => write!(f, "no unit at `{u}`"),
             Self::Passphrase => write!(
                 f,
-                "{PASSPHRASE_VAR} must be set, at least 16 characters; cobot never writes plaintext state"
+                "{PASSPHRASE_VAR} must be set, at least 16 characters; pigeon never writes plaintext state"
             ),
             Self::SecretsPassphrase => write!(
                 f,
@@ -1154,7 +1154,7 @@ pub fn apply_stored_with(
 }
 
 /// Writes `<providers>/providers.lock.hcl` for every allowlisted provider,
-/// on every platform cobot runs on; returns its path.
+/// on every platform pigeon runs on; returns its path.
 ///
 /// # Errors
 ///

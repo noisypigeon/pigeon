@@ -1,5 +1,5 @@
 //! A run's context, with its state pulled from wherever `--state` names; shared by the CLI and
-//! backplane so neither assembles one itself.
+//! the agent so neither assembles one itself.
 
 use std::path::{Path, PathBuf};
 

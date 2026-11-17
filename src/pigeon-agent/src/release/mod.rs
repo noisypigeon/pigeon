@@ -93,7 +93,7 @@ fn dependency_tree(
 ) -> Result<(BTreeSet<String>, Vec<String>), Error> {
     let workspace = workspace_at(root, rev, cargo)?;
     let dir = std::env::temp_dir().join(format!(
-        "cobot-tree-{}-{}",
+        "pigeon-tree-{}-{}",
         std::process::id(),
         SCRATCH.fetch_add(1, Ordering::Relaxed)
     ));

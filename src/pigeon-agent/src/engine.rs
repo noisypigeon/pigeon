@@ -1,4 +1,4 @@
-//! The engines backplane composes.
+//! The engines the agent composes.
 
 use serde::Serialize;
 
@@ -9,21 +9,21 @@ use crate::wire::Engine;
 pub struct EngineInfo {
     /// The engine.
     pub engine: Engine,
-    /// Its version: its crate's, or for sentinel the binary's, `not installed` when absent.
+    /// Its version: its crate's, or for the judge its binary's, `not installed` when absent.
     pub version: String,
     /// `policy`, `action` or `planned`.
     pub role: &'static str,
 }
 
-/// Every engine backplane composes; sentinel's version is its binary's, found as
+/// Every engine the agent composes; the judge's version is its binary's, found as
 /// [`crate::eviction::locate`] finds it.
 #[must_use]
 pub fn engines() -> Vec<EngineInfo> {
-    let sentinel = crate::eviction::locate(&|k| std::env::var(k).ok());
+    let judge = crate::eviction::locate(&|k| std::env::var(k).ok());
     vec![
         EngineInfo {
             engine: Engine::Eviction,
-            version: crate::eviction::version(&sentinel).unwrap_or_else(|| "not installed".into()),
+            version: crate::eviction::version(&judge).unwrap_or_else(|| "not installed".into()),
             role: "policy",
         },
         EngineInfo {

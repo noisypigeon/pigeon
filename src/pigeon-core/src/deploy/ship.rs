@@ -87,7 +87,7 @@ pub fn deployment(versions: &[(&str, u8)], immediate: bool) -> Value {
 /// Each unit's outputs, by name.
 pub type Outputs = BTreeMap<String, Map<String, Value>>;
 
-/// The images a deploy references: each container's, keyed as `cobot::workers::image_key`, and the
+/// The images a deploy references: each container's, keyed as `workers::image_key`, and the
 /// commit they were built from.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]

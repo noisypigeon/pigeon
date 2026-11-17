@@ -6,7 +6,7 @@ use serde_json::Value;
 
 use super::{
     BLOCK, CONFIG, CREDENTIAL, ConfigUnit, Disk, Expr, SCHEMA, SEMVER, allowed, blocks,
-    declared_credentials, declared_secrets, exprs_in, parse, walk_strings, x_cobot,
+    declared_credentials, declared_secrets, exprs_in, parse, walk_strings, x_pigeon,
 };
 use crate::infra::apex;
 use crate::infra::providers::Allowlist;
@@ -45,7 +45,7 @@ pub(crate) fn check_credentials(
     problems: &mut Vec<(String, String)>,
 ) {
     let mut add = |m: String| problems.push((SCHEMA.into(), m));
-    let x = x_cobot(&unit.schema);
+    let x = x_pigeon(&unit.schema);
     if let Some(c) = x.get("credentials") {
         let Some(entries) = c.as_object() else {
             add("`x-pigeon.credentials` must map names to requests".into());
@@ -130,7 +130,7 @@ pub(crate) fn target_ok(t: &Value) -> bool {
 /// The provider of each credential a unit requests, by name.
 #[must_use]
 pub fn credential_providers(unit: &ConfigUnit) -> BTreeMap<String, String> {
-    x_cobot(&unit.schema)["credentials"]
+    x_pigeon(&unit.schema)["credentials"]
         .as_object()
         .into_iter()
         .flatten()
@@ -144,7 +144,7 @@ pub(crate) fn credential_refs(unit: &ConfigUnit) -> Vec<(String, String, String)
         .into_iter()
         .flat_map(|b| b.inputs.into_values())
         .collect();
-    std::iter::once(&x_cobot(&unit.schema)["providers"])
+    std::iter::once(&x_pigeon(&unit.schema)["providers"])
         .chain(&inputs)
         .flat_map(exprs_in)
         .filter_map(|text| match parse(text) {
@@ -171,7 +171,7 @@ pub fn credential_fields(unit: &ConfigUnit) -> BTreeMap<String, BTreeSet<String>
 }
 
 pub(crate) fn check_apex(unit: &ConfigUnit, problems: &mut Vec<(String, String)>) {
-    let x = x_cobot(&unit.schema);
+    let x = x_pigeon(&unit.schema);
     let (kind, expanders) = allowed(unit.site.as_ref());
     let handoff = x.get("handoff");
     if handoff.is_some_and(|h| h != kind) {
@@ -214,7 +214,7 @@ pub(crate) fn check_apex(unit: &ConfigUnit, problems: &mut Vec<(String, String)>
 
 pub(crate) fn check_top(unit: &ConfigUnit, problems: &mut Vec<(String, String)>) {
     let mut add = |file: &str, m: String| problems.push((file.to_string(), m));
-    let x = x_cobot(&unit.schema);
+    let x = x_pigeon(&unit.schema);
     if !x["version"].as_str().is_some_and(|v| SEMVER.is_match(v)) {
         add(SCHEMA, "`x-pigeon.version` must be X.Y.Z".into());
     }

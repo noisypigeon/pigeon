@@ -77,7 +77,7 @@ impl Change {
                     if self.carried.is_none() && self.restacked_for.is_none() {
                         self.merge_after = None;
                     }
-                    // A brief's change never reaches guarded, secret or sentinel paths; see
+                    // A brief's change never reaches guarded, secret or eviction paths; see
                     // `.claude/decisions/2026-11-13-development-model-tiered-agent-briefs.md` §2.
                     if self.brief.is_some()
                         && let Some(t) = &self.tiers

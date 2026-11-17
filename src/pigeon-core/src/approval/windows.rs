@@ -1,5 +1,5 @@
 //! Auto: a standing window that lets every change at the code tier or lower through, the
-//! gate (or, with no gate set, every guarded and sentinel path) cut out, started and paused with
+//! gate (or, with no gate set, every guarded and eviction path) cut out, started and paused with
 //! a passkey; see
 //! `.claude/decisions/2026-11-15-security-standing-auto-owner-flags.md`.
 

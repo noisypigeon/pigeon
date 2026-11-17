@@ -11,8 +11,8 @@ pigeon-agent lib agent bench::tests::mise_tasks_outside_the_list_loops_and_escap
 pigeon-agent lib agent bench::tests::mise_tasks_run_their_depends_first_and_once
 pigeon-agent lib agent bench::tests::one_run_at_a_time_and_a_cancel_stops_it
 pigeon-agent lib agent bench::tests::scope_finds_the_root_from_either_workspace_layout
+pigeon-agent lib agent bench::tests::the_judge_build_is_kept_out_of_tmp_and_handed_to_commands
 pigeon-agent lib agent bench::tests::the_sandbox_cuts_the_network_except_to_fetch
-pigeon-agent lib agent bench::tests::the_sentinel_build_is_kept_out_of_tmp_and_handed_to_commands
 pigeon-agent lib agent bench::tests::without_mise_toml_a_task_runs_the_commits_own_pigeon_dev_from_its_root
 pigeon-agent lib agent checks::scope::tests::a_workspace_at_the_root_is_read_from_its_members_and_metadata
 pigeon-agent lib agent checks::scope::tests::each_package_s_binaries_are_its_listed_main_and_bin_targets

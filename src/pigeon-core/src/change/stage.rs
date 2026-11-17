@@ -635,13 +635,13 @@ mod tests {
             "a held approval is still the mandate's"
         );
         assert_eq!(
-            coverage(Some((3, ask("sentinel"))), Some((9, Decision::Allow))),
+            coverage(Some((3, ask("eviction"))), Some((9, Decision::Allow))),
             (Some("window:9".into()), None),
             "the window after a mandate that asks, as `ask` runs them"
         );
         assert_eq!(
-            coverage(Some((3, ask("sentinel"))), Some((9, ask("guarded")))),
-            (None, Some("mandate:3 doesn't cover it: sentinel".into()))
+            coverage(Some((3, ask("eviction"))), Some((9, ask("guarded")))),
+            (None, Some("mandate:3 doesn't cover it: eviction".into()))
         );
         assert_eq!(
             coverage(None, Some((9, ask("guarded")))),

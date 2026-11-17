@@ -71,7 +71,7 @@ pub fn probes<'a>(
         list.push(Probe::Ok(format!("{base}/{page}")));
         list.push(Probe::Ok(format!("{base}/{page}/")));
     }
-    list.push(Probe::Missing(format!("{base}/cobot-missing-{stamp}/")));
+    list.push(Probe::Missing(format!("{base}/pigeon-missing-{stamp}/")));
     let www = format!("www.{zone}");
     if hosts.iter().any(|h| h == zone) && hosts.contains(&www) {
         list.push(Probe::Redirect {

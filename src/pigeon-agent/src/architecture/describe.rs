@@ -45,7 +45,7 @@ fn owner(units: &[String], path: &Path) -> String {
 ///
 /// # Errors
 ///
-/// [`Error::Engine`] if sentinel cannot load the policies.
+/// [`Error::Engine`] if the judge cannot load the policies.
 pub fn describe(instance: &Instance) -> Result<(Graph, Vec<String>), Error> {
     describe_with(instance, &|k| std::env::var(k).ok())
 }

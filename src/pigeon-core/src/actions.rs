@@ -29,10 +29,10 @@ const BACKOFF: [u64; 3] = [60, 300, 1800];
 /// The cargo subcommands that are code checks.
 const CODE: [&str; 5] = ["fmt", "clippy", "test", "build", "check"];
 
-/// The test map's script, as `crate::cobot::scope::test_map` runs it from the workspace.
+/// The test map's script, as `crate::checks::scope::test_map` runs it from the workspace.
 pub const TEST_MAP: &str = "../../tooling/ci/test-map.sh";
 
-/// The `ios` check's script, as `crate::cobot::scope` runs it; it needs macOS, which only GitHub
+/// The `ios` check's script, as `crate::checks::scope` runs it; it needs macOS, which only GitHub
 /// gives; see `.claude/decisions/2026-11-11-release-ios-app-buildkite-testflight.md`.
 pub const IOS_CHECK: &str = "../pigeon-ios/check.sh";
 

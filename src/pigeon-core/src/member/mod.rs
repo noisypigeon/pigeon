@@ -94,7 +94,7 @@ impl Roles {
         self.roles.get(role.name()).map_or(&[], Vec::as_slice)
     }
 
-    /// `.config/roles.yaml`'s text, in the one shape its sentinel policy allows: a comment,
+    /// `.config/roles.yaml`'s text, in the one shape its eviction policy allows: a comment,
     /// `roles:`, then `  <role>: [<cap>, ...]` lines.
     ///
     /// # Errors

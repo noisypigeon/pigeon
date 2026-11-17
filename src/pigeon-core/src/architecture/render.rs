@@ -52,7 +52,7 @@ pub fn text(result: &Value) -> String {
     }
     out.push('\n');
     if net.is_null() {
-        out.push_str("(no network: this instance has no backplane Worker)\n");
+        out.push_str("(no network: this instance has no control Worker)\n");
         return out;
     }
     clients_text(&mut out, net);

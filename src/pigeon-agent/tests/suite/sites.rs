@@ -189,7 +189,7 @@ fn a_sync_puts_what_changed_writes_index_copies_and_deletes_stale_keys() {
     let err = agent::sites::expected(public.path())
         .expect_err("reserved")
         .to_string();
-    assert!(err.contains("is cobot's own key"), "{err}");
+    assert!(err.contains("is pigeon's own key"), "{err}");
 
     let wrong = Bucket {
         creds: Credentials {

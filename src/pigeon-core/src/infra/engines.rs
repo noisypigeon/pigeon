@@ -257,7 +257,7 @@ pub fn plan_diff(shown: &str) -> Vec<AttrChange> {
 /// A Markdown summary of `plans`: addresses, actions and changed attribute names only.
 #[must_use]
 pub fn summary(plans: &[UnitPlan]) -> String {
-    let mut out = String::from("<!-- cobot-plan -->\n## cobot plan\n");
+    let mut out = String::from("<!-- pigeon-plan -->\n## infra plan\n");
     for p in plans {
         let _ = write!(out, "\n### `{}`\n\n", p.unit);
         if let Some(note) = &p.note {

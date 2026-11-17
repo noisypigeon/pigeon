@@ -34,7 +34,7 @@ pub const TYPES: &str = ".cobot/types.json";
 pub fn expected_of(files: BTreeMap<String, Vec<u8>>) -> Result<BTreeMap<String, Upload>, String> {
     if files.contains_key(TYPES) {
         return Err(format!(
-            "`{TYPES}` is cobot's own key in the bucket; a site cannot publish it"
+            "`{TYPES}` is pigeon's own key in the bucket; a site cannot publish it"
         ));
     }
     let mut out: BTreeMap<String, Upload> = files

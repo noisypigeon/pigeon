@@ -1,4 +1,4 @@
-//! An open change as an eviction candidate: the fields sentinel's `eviction` target judges; see
+//! An open change as an eviction candidate: the fields the judge's `eviction` target judges; see
 //! `.claude/decisions/2026-11-10-development-change-slot-eviction-policy.md` §4.
 
 use std::collections::BTreeMap;

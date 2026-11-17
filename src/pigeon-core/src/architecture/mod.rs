@@ -22,7 +22,7 @@ pub enum Lane {
     Control,
     /// D1, R2, secrets and stores.
     Data,
-    /// Backplane's operations.
+    /// The agent's operations.
     Operations,
     /// Containers and engines.
     Run,

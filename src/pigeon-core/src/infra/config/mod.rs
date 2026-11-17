@@ -119,7 +119,7 @@ fn split_module(module: &str) -> (Option<&str>, &str) {
     }
 }
 
-fn x_cobot(schema: &Value) -> &Value {
+fn x_pigeon(schema: &Value) -> &Value {
     crate::names::ext(schema)
 }
 
@@ -142,22 +142,22 @@ fn blocks(schema: &Value) -> Vec<Block> {
     };
     if let Some(props) = schema["properties"].as_object() {
         for (name, prop) in props {
-            if let Some(x) = Some(x_cobot(prop)).filter(|x| !x.is_null()) {
+            if let Some(x) = Some(x_pigeon(prop)).filter(|x| !x.is_null()) {
                 push(name, x, true, false);
             }
         }
     }
-    if let Some(singles) = x_cobot(schema)["singletons"].as_object() {
+    if let Some(singles) = x_pigeon(schema)["singletons"].as_object() {
         for (name, x) in singles {
             push(name, x, false, false);
         }
     }
-    if let Some(each) = x_cobot(schema)["each"].as_object() {
+    if let Some(each) = x_pigeon(schema)["each"].as_object() {
         for (name, x) in each {
             push(name, x, true, false);
         }
     }
-    if let Some(derived) = x_cobot(schema)["derived"].as_object() {
+    if let Some(derived) = x_pigeon(schema)["derived"].as_object() {
         for (name, x) in derived {
             push(name, x, false, true);
         }
@@ -168,7 +168,7 @@ fn blocks(schema: &Value) -> Vec<Block> {
 /// The secret keys a unit declares: its schema's list, or what its config references.
 #[must_use]
 pub fn declared_secrets(unit: &ConfigUnit) -> BTreeSet<String> {
-    if x_cobot(&unit.schema)["secrets"] == "referenced" {
+    if x_pigeon(&unit.schema)["secrets"] == "referenced" {
         return apex::referenced_secrets(&unit.config);
     }
     secret_keys(&unit.schema)
@@ -178,7 +178,7 @@ pub fn declared_secrets(unit: &ConfigUnit) -> BTreeSet<String> {
 /// `.claude/decisions/2026-11-04-development-platform-instance-separation.md`.
 #[must_use]
 pub fn declared_credentials(unit: &ConfigUnit) -> BTreeSet<String> {
-    x_cobot(&unit.schema)["credentials"]
+    x_pigeon(&unit.schema)["credentials"]
         .as_object()
         .map(|o| o.keys().cloned().collect())
         .unwrap_or_default()
@@ -187,13 +187,13 @@ pub fn declared_credentials(unit: &ConfigUnit) -> BTreeSet<String> {
 /// Whether the unit takes a handoff.
 #[must_use]
 pub fn has_handoff(unit: &ConfigUnit) -> bool {
-    x_cobot(&unit.schema).get("handoff").is_some()
+    x_pigeon(&unit.schema).get("handoff").is_some()
 }
 
 /// The secret keys the schema lists.
 #[must_use]
 pub fn secret_keys(schema: &Value) -> BTreeSet<String> {
-    x_cobot(schema)["secrets"]
+    x_pigeon(schema)["secrets"]
         .as_array()
         .into_iter()
         .flatten()
@@ -227,9 +227,9 @@ pub fn from_kind(config: Value, schema: Value, home: &Path, site: Option<Site>) 
 /// An apex's or a workload's schema: `home`'s `$defs.<kind>`, composed by its `x-pigeon.<kind>`.
 #[must_use]
 pub fn composed_schema(root: &Value, kind: &str) -> Value {
-    let mut x = x_cobot(root)[kind].clone();
+    let mut x = x_pigeon(root)[kind].clone();
     if let Some(o) = x.as_object_mut() {
-        o.insert("version".into(), x_cobot(root)["version"].clone());
+        o.insert("version".into(), x_pigeon(root)["version"].clone());
     }
     json!({
         "$schema": root["$schema"],

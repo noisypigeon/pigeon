@@ -7,7 +7,7 @@ use serde_json::Value;
 use super::super::render::{item_keys, lookup, rotation};
 use super::super::{
     BLOCK, Block, CONFIG, ConfigUnit, Disk, Expr, MODULE_VERSION, Map, ModuleInfo, SCHEMA, blocks,
-    declared_secrets, exprs_in, has_handoff, module_named_well, parse, x_cobot,
+    declared_secrets, exprs_in, has_handoff, module_named_well, parse, x_pigeon,
 };
 use crate::infra::providers::Allowlist;
 
@@ -68,14 +68,14 @@ pub(crate) fn check_module(
 
 /// Checks `x-pigeon.each`: blocks over another array property's items.
 pub(crate) fn check_each(schema: &Value, add: &mut impl FnMut(&str, String)) {
-    let Some(each) = x_cobot(schema).get("each") else {
+    let Some(each) = x_pigeon(schema).get("each") else {
         return;
     };
     let Some(each) = each.as_object() else {
         add(SCHEMA, "`each` must be a map".into());
         return;
     };
-    let x = x_cobot(schema);
+    let x = x_pigeon(schema);
     let taken = |name: &str| {
         schema["properties"].get(name).is_some()
             || x["singletons"].get(name).is_some()
@@ -112,7 +112,7 @@ pub(crate) fn check_blocks(
 ) {
     let mut add = |file: &str, m: String| problems.push((file.to_string(), m));
     check_each(&unit.schema, &mut add);
-    let x = x_cobot(&unit.schema);
+    let x = x_pigeon(&unit.schema);
     let declared = declared_secrets(unit);
     let handoff = has_handoff(unit);
     let all = blocks(&unit.schema);
@@ -205,7 +205,7 @@ pub(crate) fn check_blocks(
 
 /// Checks `x-pigeon.outputs`: each a `$module` expression.
 pub(crate) fn check_outputs(unit: &ConfigUnit, disk: &Disk, problems: &mut Vec<(String, String)>) {
-    let Some(outputs) = x_cobot(&unit.schema).get("outputs") else {
+    let Some(outputs) = x_pigeon(&unit.schema).get("outputs") else {
         return;
     };
     let Some(map) = outputs.as_object() else {

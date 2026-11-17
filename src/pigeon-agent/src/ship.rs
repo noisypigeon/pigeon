@@ -292,8 +292,8 @@ pub fn build(
     let (binary, took) = compile(&BUILD, "pigeon", log)?;
     let sha256 = crate::infra::s3::sha256_hex(&binary);
     let judge = judge_binary(&workspace);
-    let (sentinel, sentinel_took) = compile(&judge_build(judge), judge, log)?;
-    let sentinel_sha256 = crate::infra::s3::sha256_hex(&sentinel);
+    let (judge_path, judge_took) = compile(&judge_build(judge), judge, log)?;
+    let judge_sha256 = crate::infra::s3::sha256_hex(&judge_path);
     let api = crate::workers::cloudflare::Api::new(None, token.clone());
     let account = api.account()?;
     let creds = crate::infra::s3::Credentials {
@@ -317,9 +317,9 @@ pub fn build(
         ),
         (
             crate::wire::ship_wire::sentinel_key(&spec.sha),
-            &sentinel,
-            sentinel_took,
-            &sentinel_sha256,
+            &judge_path,
+            judge_took,
+            &judge_sha256,
         ),
     ] {
         store
@@ -338,7 +338,7 @@ pub fn build(
     Ok(Some(Build {
         sha: spec.sha.clone(),
         sha256,
-        sentinel_sha256: Some(sentinel_sha256),
+        sentinel_sha256: Some(judge_sha256),
     }))
 }
 

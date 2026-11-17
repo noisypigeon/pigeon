@@ -123,7 +123,7 @@ fn probes_check_the_root_a_page_a_missing_page_and_the_www_redirect() {
             Probe::Html("https://example.com/".into()),
             Probe::Ok("https://example.com/blog".into()),
             Probe::Ok("https://example.com/blog/".into()),
-            Probe::Missing("https://example.com/cobot-missing-7/".into()),
+            Probe::Missing("https://example.com/pigeon-missing-7/".into()),
             Probe::Redirect {
                 from: "https://www.example.com/".into(),
                 to: "https://example.com/".into(),

@@ -6,7 +6,7 @@ use serde_json::{Value, json};
 
 use crate::workers::cloudflare::Api;
 
-/// A resource kind cobot can find by name.
+/// A resource kind infra can find by name.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Kind {
     /// A D1 database.

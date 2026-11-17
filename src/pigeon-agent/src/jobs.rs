@@ -2,7 +2,7 @@
 //! checks out its head, runs it in the background, and reports; see
 //! `.claude/decisions/2026-11-05-development-changes-through-pigeon-mcp.md` §3, §4.
 //!
-//! The bound job is sentinel's change policy and `change.scope` on the checked-out tree, with
+//! The bound job is the judge's change policy and `change.scope` on the checked-out tree, with
 //! the change's approved scope; every other job is a command `change.scope` named.
 
 use std::collections::HashMap;
@@ -154,9 +154,9 @@ pub fn run(spec: &JobSpec, dir: &Path) -> Report {
     )
 }
 
-/// [`run`], the bound job judging with `sentinel`.
+/// [`run`], the bound job judging with `judge`.
 #[must_use]
-pub fn run_judged(spec: &JobSpec, dir: &Path, sentinel: &Path) -> Report {
+pub fn run_judged(spec: &JobSpec, dir: &Path, judge: &Path) -> Report {
     // A merge whose report was lost may already be on the base; finding it there is the merge.
     if spec.job == MERGE
         && let Ok(Some(commit)) =
@@ -207,10 +207,10 @@ pub fn run_judged(spec: &JobSpec, dir: &Path, sentinel: &Path) -> Report {
         return r;
     }
     if spec.job == BOUND {
-        return bound(spec, dir, sentinel);
+        return bound(spec, dir, judge);
     }
     if spec.job == crate::control::EVICTION {
-        return eviction(spec, dir, sentinel);
+        return eviction(spec, dir, judge);
     }
     if spec.job == MERGE {
         return merge(spec, dir);
@@ -711,7 +711,7 @@ fn carried(
 
 /// The bound job: the change and pull-request policies, with the change's approved scope and
 /// its plan as the body, then the checks its paths need.
-fn bound(spec: &JobSpec, dir: &Path, sentinel: &Path) -> Report {
+fn bound(spec: &JobSpec, dir: &Path, judge: &Path) -> Report {
     let (since, built) = built_on(spec, dir);
     let files = match crate::checks::ci::changed(dir, since, &spec.sha) {
         Ok(f) => f,
@@ -745,7 +745,7 @@ fn bound(spec: &JobSpec, dir: &Path, sentinel: &Path) -> Report {
             t.close.rule
         );
     }
-    let mut violations = match policy(spec, dir, &files, sentinel, &mut log) {
+    let mut violations = match policy(spec, dir, &files, judge, &mut log) {
         Ok(v) => v,
         Err(e) => vec![e],
     };
@@ -938,22 +938,22 @@ fn adds_secret(dir: &Path, base: &str, path: &str) -> bool {
     crate::core::approval::tiers::lengthens(&before, &head)
 }
 
-/// The head's violations of the base's policies, judged by `sentinel`, `main`'s
+/// The head's violations of the base's policies, judged by `judge`, `main`'s
 /// `pigeon-eviction`; a judge that can't answer is a violation, never a pass; see
 /// `.claude/decisions/2026-11-10-development-factory-crates-functional-core.md` §2.
 fn policy(
     spec: &JobSpec,
     dir: &Path,
     files: &[String],
-    sentinel: &Path,
+    judge: &Path,
     log: &mut String,
 ) -> Result<Vec<String>, String> {
     let sum = std::env::var(crate::wire::ship_wire::JUDGE_SHA256_VAR)
         .ok()
         .unwrap_or_default();
-    let _ = writeln!(log, "eviction: {} (sha256 {sum})", sentinel.display());
+    let _ = writeln!(log, "eviction: {} (sha256 {sum})", judge.display());
     match base_policies(spec, dir)? {
-        Some(p) => judge_with(sentinel, spec, dir, files, &p),
+        Some(p) => judge_with(judge, spec, dir, files, &p),
         None => Ok(Vec::new()),
     }
 }
@@ -984,10 +984,10 @@ pub fn judge_with(
         .map_err(|e| e.to_string())
 }
 
-/// The eviction job: each candidate in [`crate::control::CANDIDATES`] judged by `sentinel`
+/// The eviction job: each candidate in [`crate::control::CANDIDATES`] judged by `judge`
 /// against `main`'s policies; a judge that can't answer fails the job, so nothing is granted;
 /// see `.claude/decisions/2026-11-10-development-change-slot-eviction-policy.md` §4-§5.
-fn eviction(spec: &JobSpec, dir: &Path, sentinel: &Path) -> Report {
+fn eviction(spec: &JobSpec, dir: &Path, judge: &Path) -> Report {
     let failed = |why: String| Report {
         violations: vec![why.clone()],
         ..report(spec, Outcome::Failed, &why)
@@ -1008,7 +1008,7 @@ fn eviction(spec: &JobSpec, dir: &Path, sentinel: &Path) -> Report {
     let mut verdicts = Vec::new();
     for c in &candidates {
         let number = c["number"].clone();
-        match crate::eviction::evict(sentinel, dir, &policies, &c["fields"]) {
+        match crate::eviction::evict(judge, dir, &policies, &c["fields"]) {
             Ok(v) => {
                 let _ = writeln!(log, "!{number}: {}", v["granted"]);
                 verdicts.push(serde_json::json!({

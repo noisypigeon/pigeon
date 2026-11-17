@@ -1,4 +1,4 @@
-//! The command groups that take their arguments from the old `cobot` and `backplane` ones.
+//! The `infra`, `release` and `agent` command groups: their subcommands and arguments.
 
 #[cfg(feature = "agent")]
 use clap::Args;

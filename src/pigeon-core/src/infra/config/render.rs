@@ -6,7 +6,7 @@ use serde_json::{Map, Value, json};
 
 use super::{
     Block, ConfigUnit, Disk, Expr, ZONE_ALIAS, blocks, declared_credentials, declared_secrets,
-    has_handoff, parse, x_cobot,
+    has_handoff, parse, x_pigeon,
 };
 use crate::infra::apex;
 use crate::infra::generations::{self, Day, Generation};
@@ -170,7 +170,7 @@ pub fn existing(state_json: &str, rotating: &[String]) -> Existing {
 
 /// Adds the unit's sensitive variables and root outputs to `root`.
 pub(crate) fn extras(unit: &ConfigUnit, root: &mut Value) {
-    let x = x_cobot(&unit.schema);
+    let x = x_pigeon(&unit.schema);
     let config = &unit.config;
     let mut variables = Map::new();
     if !declared_secrets(unit).is_empty() {
@@ -219,7 +219,7 @@ pub(crate) fn providers(
     allow: &Allowlist,
 ) -> (Map<String, Value>, Map<String, Value>, Vec<String>) {
     let config = &unit.config;
-    let x = x_cobot(&unit.schema);
+    let x = x_pigeon(&unit.schema);
     let mut required = Map::new();
     let mut provider = Map::new();
     let mut per_zone: Vec<String> = Vec::new();

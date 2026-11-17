@@ -353,8 +353,8 @@ pub fn hosts_in(text: &str) -> Vec<String> {
     out
 }
 
-/// Every Rust file under [`SOURCES`] the Worker's code may call out from: all but cobot's,
-/// which runs in Containers, and this module's.
+/// Every Rust file under [`SOURCES`] the Worker's code may call out from: all but the engines',
+/// which run in Containers, and this module's.
 #[must_use]
 pub fn outbound_files(platform: &Path) -> Vec<std::path::PathBuf> {
     fn walk(dir: &Path, out: &mut Vec<std::path::PathBuf>) {
@@ -368,7 +368,20 @@ pub fn outbound_files(platform: &Path) -> Vec<std::path::PathBuf> {
         for p in entries {
             let name = p.file_name().map(|n| n.to_string_lossy().into_owned());
             if p.is_dir() {
-                if !matches!(name.as_deref(), Some("cobot" | "architecture" | "tests")) {
+                if !matches!(
+                    name.as_deref(),
+                    Some(
+                        "infra"
+                            | "workers"
+                            | "sites"
+                            | "git"
+                            | "release"
+                            | "checks"
+                            | "containers"
+                            | "architecture"
+                            | "tests"
+                    )
+                ) {
                     walk(&p, out);
                 }
             } else if p.extension().is_some_and(|x| x == "rs")
@@ -600,14 +613,13 @@ pub fn evidenced(platform: &Path, row: &Row) -> bool {
     })
 }
 
-/// Whether `krate` is the agent's crate, at its path before or after step 7b of
-/// `.claude/decisions/2026-11-16-development-src-crates-neutral-names.md`.
+/// Whether `krate` is the agent's crate.
 fn is_agent(krate: &str) -> bool {
-    krate.ends_with("pigeon-agent") || krate.ends_with("crates/backplane")
+    krate.ends_with("pigeon-agent")
 }
 
 /// The network of the instance at `root`, served by the platform at `platform`; none when the
-/// platform has no backplane Worker.
+/// platform has no control Worker.
 #[must_use]
 pub fn network(root: &Path, platform: &Path) -> Option<Network> {
     let found = crate::workers::discover(platform)
