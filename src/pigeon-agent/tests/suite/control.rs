@@ -1511,3 +1511,16 @@ fn a_deploy_during_a_release_waits_from_its_end() {
     r.finished(true, "ok", 40);
     assert_eq!(r.waited(100), 60);
 }
+
+#[test]
+fn a_change_holding_the_merge_turn_wakes_every_10_seconds() {
+    let mut c = Change::propose(14, "x", "feat(x): y", "p", vec!["a/**".into()], "agent");
+    assert_eq!(control::alarm_secs(&c, 20), 20);
+    c.merge_after = Some("window:1".into());
+    assert_eq!(control::alarm_secs(&c, 20), agent::actions::POLL_TURN);
+    assert_eq!(
+        control::alarm_secs(&c, 5),
+        5,
+        "never later than its own poll"
+    );
+}

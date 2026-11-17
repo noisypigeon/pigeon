@@ -1443,6 +1443,18 @@ pub fn mirror_state(change: &Change) -> crate::actions::Mirror {
     }
 }
 
+/// Seconds between `change`'s alarms while work is open: `idle`, or at most
+/// [`crate::actions::POLL_TURN`] while it holds the merge turn; see
+/// `.claude/decisions/2026-11-16-development-merge-path-measured-faster.md` §3.
+#[must_use]
+pub fn alarm_secs(change: &Change, idle: u64) -> u64 {
+    if changes::queue::holds_turn(change) {
+        idle.min(crate::actions::POLL_TURN)
+    } else {
+        idle
+    }
+}
+
 /// `change`'s checks as `bound` recorded them, for a dispatch's `checks` input.
 #[must_use]
 pub fn checks_of(change: &Change) -> Vec<Check> {

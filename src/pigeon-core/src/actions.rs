@@ -16,6 +16,10 @@ pub const REF: &str = "main";
 /// How often a run is polled, in seconds.
 pub const POLL: u64 = 30;
 
+/// How often a run is polled while its change holds the merge turn, in seconds; see
+/// `.claude/decisions/2026-11-16-development-merge-path-measured-faster.md` §3.
+pub const POLL_TURN: u64 = 10;
+
 /// How long a dispatched run may take to appear before it is dispatched again, in seconds.
 pub const FIND_WITHIN: u64 = 600;
 
@@ -234,9 +238,21 @@ impl Actions {
 
     /// What is due at `now`, with the head's `mirror` job where it is.
     pub fn due(&mut self, mirror: Mirror, now: u64) -> Vec<Due> {
+        self.due_on_turn(mirror, false, now)
+    }
+
+    /// What is due at `now`, as [`Actions::due`]; while the change holds the merge turn (`turn`),
+    /// a run is found and polled every [`POLL_TURN`] seconds.
+    pub fn due_on_turn(&mut self, mirror: Mirror, turn: bool, now: u64) -> Vec<Due> {
         let mut out = Vec::new();
         for (i, d) in self.dispatches.iter_mut().enumerate() {
-            if !d.due(now) {
+            // A failure's backoff holds on the turn too.
+            let lead = if turn && d.dispatched_at.is_some() && d.failures == 0 {
+                POLL - POLL_TURN
+            } else {
+                0
+            };
+            if !d.due(now + lead) {
                 continue;
             }
             if d.dispatched_at.is_some() {

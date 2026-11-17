@@ -312,3 +312,24 @@ fn a_moved_check_is_dropped_and_the_heads_others_go_on() {
     only.drop_check(A, "ios");
     assert_eq!(only.due(Mirror::Passed, 10), [], "nothing left to dispatch");
 }
+
+#[test]
+fn a_run_on_the_merge_turn_is_found_and_polled_every_10_seconds() {
+    use agent::actions::POLL_TURN;
+    let mut a = dispatched();
+    assert_eq!(a.due_on_turn(Mirror::Passed, true, 100 + POLL_TURN - 1), []);
+    assert_eq!(
+        a.due_on_turn(Mirror::Passed, true, 100 + POLL_TURN),
+        [Due::Find(0)]
+    );
+    a.found(0, &runs(&format!("!7 {A} (7-0123456789ab-1)")), 110);
+    assert_eq!(a.due(Mirror::Passed, 120), [], "off the turn, every POLL");
+    assert_eq!(a.due_on_turn(Mirror::Passed, true, 120), [Due::Poll(0)]);
+    a.failed(0, "503", 120);
+    assert_eq!(
+        a.due_on_turn(Mirror::Passed, true, 179),
+        [],
+        "a failure backs off on the turn too"
+    );
+    assert_eq!(a.due_on_turn(Mirror::Passed, true, 180), [Due::Poll(0)]);
+}
