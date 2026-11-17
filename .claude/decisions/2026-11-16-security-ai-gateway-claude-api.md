@@ -498,3 +498,40 @@ Reading the platform kind for step 3's brief corrected §10.
   - Until 3b merges, DLP is off. §9's flag-only design stands for it.
 - **`Governs` gains `catalog/cloudflare/modules/ai-gateway/**`** when step 3
   merges, by this planner.
+
+### 2026-11-16: The Run token is a ledger grant routed to the Pool object's memory
+
+This amendment says how §3's token is minted. It was agreed with the pool-route
+planner before it builds step 5's token minting (its step 3c).
+
+- **What exists.** The grants ledger
+  ([`2026-11-12-development-grants-applies-rescue-yield.md`](2026-11-12-development-grants-applies-rescue-yield.md))
+  routes a minted value in one of two ways:
+  - to a Worker secret or a Secrets Store (`worker`+`key`), re-minted by the
+    hourly cron;
+  - to a job's environment (`job`), revoked when the job ends.
+
+  Neither keeps a value only in a Durable Object's memory, which is what §3
+  needs.
+- **A third route kind, `object: <class>`.**
+  - `.config/grants.yaml` gains:
+
+    ```
+    aigateway: { mint: { capabilities: [aigateway.run], ttl: 1h }, route: { object: Pool } }
+    ```
+
+  - `core::ledger` and `core::minting` accept the route.
+  - `worker/minting.rs` gains a minting call. It mints with `GRANTER` only for
+    a grant the deployed ledger declares with an `object` matching the
+    calling class.
+  - It records the token's id and expiry in the registry, never its value,
+    and revokes the previous id.
+- **The Pool object mints when its token is missing or 50 minutes old.** The
+  value is held in memory and used only for `cf-aig-authorization`. A
+  restart loses it, and the next request mints a new one.
+- **Refused: the cron path with a Worker secret** (`route: { worker:
+  pigeon-control, key: AI_GATEWAY_TOKEN }`). It needs no ledger code, but it
+  adds a Worker secret and keeps the token outside memory, against §3.
+- **Owner tier.** `ledger.rs`, `minting.rs` and `grants.yaml` are gate files,
+  so the change carrying them needs the owner's passkey. The capability is
+  `aigateway.run` (!848). The owner's yes on item #22 covers minting it.
