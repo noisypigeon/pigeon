@@ -778,3 +778,16 @@ a generated change closes, which !736 neither relies on nor changes.
   `jobs.rs`, and there only renames a log line's prefix, `sentinel:` to
   `eviction:`. It touches neither `brief/mod.rs` nor `insights/mod.rs`.
 - Nothing either ADR decides changes.
+
+### 2026-11-17: Review of !948 against !970: they agree
+
+- !970 amended
+  [`2026-11-15-development-capacity-pools-hard-spend-cap.md`](2026-11-15-development-capacity-pools-hard-spend-cap.md)
+  over `src/**/jobs.rs`, `src/**/brief/mod.rs`, `src/**/insights/mod.rs`
+  and `src/pigeon-core/src/pool/**`: how a brief routes to a pool and how
+  its task is dispatched and followed.
+- !948, part A3 of step 12, touches only `src/pigeon-agent/src/jobs.rs` of
+  those. There it renames the bound and eviction jobs' `sentinel` parameter
+  to `judge` and rewords two doc comments. It changes no behaviour, and
+  nothing about pools, briefs or insights.
+- Nothing either ADR decides changes.
