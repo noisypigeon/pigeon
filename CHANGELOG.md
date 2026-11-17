@@ -7,11 +7,13 @@
 - agent v0.1.44
 - agent v0.1.45
 - agent v0.1.46
+- agent v0.1.47
 - infra-cloudflare-ai-gateway v0.1.0
 - infra-cloudflare-schema v0.1.22
 - infra-digitalocean-project v0.1.3
 - infra-digitalocean-schema v0.1.4
 - pigeon-eviction v0.1.21
+- pigeon-eviction v0.1.22
 - site-template-architecture v0.1.4
 - site-template-blog v1.0.5
 
@@ -116,6 +118,9 @@
 - feat(core): a same-patch restack carries only the checks its job names (!939) ([6fff54b](https://github.com/noisypigeon/pigeon/commit/6fff54be5ee010a9a4bfb4c1fd0b585a9ce46a23)) · agent
 - docs(adr): review !939 against !954 (!963) ([9649ae1](https://github.com/noisypigeon/pigeon/commit/9649ae1ac4d612f1a11d13d8724261d45e0c8068))
 - feat(agent): the restack job reports which checks carry (!967) ([e67121a](https://github.com/noisypigeon/pigeon/commit/e67121ad67128e91bc10e8172a5f15412832c191)) · agent
+- feat(image): the ci image pins Claude Code 2.1.326 for the pool job (!969) ([2d48269](https://github.com/noisypigeon/pigeon/commit/2d48269e00318444130789c22c41e3c3d165e80f)) · agent, pigeon-eviction
+- docs(adr): capacity pools step 6, how a brief routes to a pool and how its task is dispatched and followed (!970) ([29fada5](https://github.com/noisypigeon/pigeon/commit/29fada51ad5f81e372f47f0ed5b637047d82184e))
+- fix(agent): the pool sandbox finds rustup's toolchain, and the model may add files at the checkout's root (!968) ([67df7c8](https://github.com/noisypigeon/pigeon/commit/67df7c88280fd22ab782054dd85106d252bec828)) · agent
 
 ## 2026-11-16
 
