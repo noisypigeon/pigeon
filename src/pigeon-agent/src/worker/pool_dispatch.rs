@@ -365,6 +365,9 @@ async fn spec(
     }))
 }
 
+/// How much of a job's log an escalation carries, in bytes.
+const ESCALATED_LOG: usize = 2048;
+
 /// The Worker secret holding the pool's Access service token's secret.
 pub const ACCESS_SECRET_VAR: &str = "POOL_ACCESS_SECRET";
 
@@ -405,6 +408,19 @@ pub(super) async fn act(
     report: Option<&Report>,
 ) -> Result<String> {
     let (action, outcome) = pd::action(report.and_then(|r| r.pool.as_ref()));
+    // The log, cut of the task's secrets by the runner; see the pool ADR's 2026-11-17 log entry.
+    let log = report.map_or("", |r| control::tail(&r.log));
+    if !log.is_empty() {
+        let key = format!("pool/{}.log", followed.job);
+        if let Err(e) = env
+            .bucket("CI_LOGS")?
+            .put(key, log.to_string())
+            .execute()
+            .await
+        {
+            worker::console_error!("pool: {}'s log wasn't kept: {e}", followed.job);
+        }
+    }
     match action {
         Action::Pushed { head } => {
             let body = serde_json::to_value(Event::Pushed { sha: head })?;
@@ -419,6 +435,15 @@ pub(super) async fn act(
             .await;
         }
         Action::Escalate { question, tried } => {
+            let tried = if log.is_empty() {
+                tried
+            } else {
+                format!(
+                    "{tried}\nlog (pool/{}.log), its end:\n{}",
+                    followed.job,
+                    control::last(log, ESCALATED_LOG)
+                )
+            };
             let a = args(&[
                 ("session", json!(followed.label)),
                 ("change", json!(followed.change)),
