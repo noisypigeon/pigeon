@@ -582,3 +582,118 @@ fn a_head_rebased_with_the_same_patch_has_the_same_patch_id_and_another_patch_do
     let other = git(w, &["rev-parse", "HEAD"]);
     assert_ne!(head_patch(w, "main", &other), Some(one));
 }
+
+/// Writes a workspace of crates `a` and `b` at `version`, `b` depending on `a` when `dep`, and
+/// locks it offline.
+fn crates(dir: &Path, version: &str, dep: bool) {
+    write(
+        dir,
+        "Cargo.toml",
+        "[workspace]\nresolver = \"2\"\nmembers = [\"a\", \"b\"]\n",
+    );
+    for name in ["a", "b"] {
+        std::fs::create_dir_all(dir.join(name).join("src")).expect("dir");
+        let deps = if name == "b" && dep {
+            "\n[dependencies]\na = { path = \"../a\" }\n"
+        } else {
+            ""
+        };
+        write(
+            dir,
+            &format!("{name}/Cargo.toml"),
+            &format!(
+                "[package]\nname = \"{name}\"\nversion = \"{version}\"\nedition = \"2021\"\npublish = false\n\n[lib]\npath = \"src/lib.rs\"\n{deps}"
+            ),
+        );
+        write(dir, &format!("{name}/src/lib.rs"), "");
+    }
+    let out = Command::new("cargo")
+        .args(["generate-lockfile", "--offline"])
+        .current_dir(dir)
+        .output()
+        .expect("cargo");
+    assert!(
+        out.status.success(),
+        "cargo: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+}
+
+/// `main` gains the workspace at 0.1.0; a branch makes `b` depend on `a`, then `main` bumps both
+/// to 0.1.1, as the release bot does, so `Cargo.lock` conflicts. `extra` (path, the branch's
+/// text, `main`'s text) is written on both sides. The branch's head.
+fn lock_conflict(work: &Path, url: &str, extra: Option<(&str, &str, &str)>) -> String {
+    crates(work, "0.1.0", false);
+    git(work, &["add", "."]);
+    git(work, &["commit", "-qm", "workspace"]);
+    git(work, &["push", "-q", url, "HEAD:refs/heads/main"]);
+    git(work, &["checkout", "-q", "-B", "change/1-x", "main"]);
+    crates(work, "0.1.0", true);
+    if let Some((p, mine, _)) = extra {
+        write(work, p, mine);
+    }
+    git(work, &["add", "."]);
+    git(
+        work,
+        &["commit", "-qm", "feat: x\n\nChange-Scope: b/Cargo.toml"],
+    );
+    let head = git(work, &["rev-parse", "HEAD"]);
+    git(work, &["push", "-q", url, "HEAD:refs/heads/change/1-x"]);
+    git(work, &["checkout", "-q", "main"]);
+    crates(work, "0.1.1", false);
+    if let Some((p, _, theirs)) = extra {
+        write(work, p, theirs);
+    }
+    git(work, &["add", "."]);
+    git(
+        work,
+        &["commit", "-qm", "chore(release): a v0.1.1, b v0.1.1"],
+    );
+    git(work, &["push", "-q", url, "HEAD:refs/heads/main"]);
+    head
+}
+
+#[test]
+fn a_lockfile_conflict_over_a_release_bump_restacks_clean_with_the_lockfile_regenerated() {
+    let (_t, url, work) = remote();
+    let head = lock_conflict(&work, &url, None);
+    let (j, r) = run(&url, &head);
+    assert_eq!(r.relation, Relation::Clean, "{:?}", r.conflicts);
+    assert_eq!(r.conflicts, Vec::<String>::new());
+    let to = r.to.expect("pushed");
+    let lock = git(j.path(), &["show", &format!("{to}:Cargo.lock")]);
+    assert!(lock.contains("name = \"a\"\nversion = \"0.1.1\""), "{lock}");
+    assert!(
+        lock.contains("name = \"b\"\nversion = \"0.1.1\"\ndependencies = [\n \"a\",\n]"),
+        "{lock}"
+    );
+    let b = git(j.path(), &["show", &format!("{to}:b/Cargo.toml")]);
+    assert!(
+        b.contains("version = \"0.1.1\"") && b.contains("a = { path = \"../a\" }"),
+        "{b}"
+    );
+}
+
+#[test]
+fn a_lockfile_conflict_beside_another_stays_a_conflict() {
+    let (_t, url, work) = remote();
+    let extra = (
+        "a.txt",
+        "ONE\ntwo\nthree\nfour\nfive\nsix\n",
+        "UNO\ntwo\nthree\nfour\nfive\nsix\n",
+    );
+    let head = lock_conflict(&work, &url, Some(extra));
+    let (_j, r) = run(&url, &head);
+    assert_eq!(r.relation, Relation::Conflicting);
+    assert!(
+        r.conflicts.contains(&"Cargo.lock".to_string()),
+        "{:?}",
+        r.conflicts
+    );
+    assert!(
+        r.conflicts.contains(&"a.txt".to_string()),
+        "{:?}",
+        r.conflicts
+    );
+    assert_eq!(r.to, None);
+}
