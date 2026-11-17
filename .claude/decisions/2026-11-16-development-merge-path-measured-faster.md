@@ -474,3 +474,16 @@ Neither ADR changes.
   - !881 touches no `jobs.rs`, `brief/mod.rs` or `insights/mod.rs`.
   - Neither decides anything about the other's subject: a merge job's git
     calls on one side, pool tasks and their spend on the other.
+### 2026-11-17: Review of !881 against !877: they agree
+
+- **!881** carries out §12 and step 12: a merge job's push or fetch that
+  Artifacts refused for now is retried, and the merge keeps its turn.
+- **!877** amended
+  [`2026-11-15-development-capacity-pools-hard-spend-cap.md`](2026-11-15-development-capacity-pools-hard-spend-cap.md)
+  for step 5: the `pool` job runs `claude` and the brief's checks in a
+  sandbox, and `.git` stays the runner's, so only the runner commits and
+  pushes.
+- **They agree.**
+  - !881 touches no `jobs.rs`, `brief/mod.rs` or `insights/mod.rs`.
+  - A retried push is still the runner's push, from outside the sandbox. It
+    sends nothing the model wrote that the runner didn't commit.
