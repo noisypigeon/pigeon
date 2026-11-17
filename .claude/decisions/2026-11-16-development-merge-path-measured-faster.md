@@ -429,3 +429,16 @@ sonnet, core first.
   `receive_pack_busy`.
 
 **Execution,** added: **12. Brief: a merge's push retries** (§12), sonnet.
+### 2026-11-17: Review of !851 against this ADR: they agree
+
+!851 carries out step 3 (session check) of
+[`2026-11-15-runtime-one-mcp-entry-point.md`](2026-11-15-runtime-one-mcp-entry-point.md).
+
+- **What it touches.** v3 MCP session IDs name their door and caller, and
+  `/mcp` refuses a mismatched ID. It changes `mcp.rs`, `worker/api.rs` and
+  their tests.
+- **What it leaves alone.** It touches neither `change/queue.rs` nor
+  `macos/job.rs`, and changes no merge turn, queue place, yield or macOS
+  gate.
+
+Neither ADR changes.
