@@ -42,6 +42,7 @@ fn bounded(sha: &str) -> Event {
         tiers: Some(tiers()),
         gate: None,
         patch: None,
+        own: None,
     }
 }
 

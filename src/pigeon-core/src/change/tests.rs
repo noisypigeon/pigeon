@@ -40,6 +40,7 @@ fn bounded(full: Vec<Check>) -> Event {
         tiers: None,
         gate: None,
         patch: None,
+        own: None,
     }
 }
 
@@ -153,6 +154,7 @@ fn table() -> Vec<Row> {
                 tiers: None,
                 gate: None,
                 patch: None,
+                own: None,
             },
             Some((State::Refused, Vec::new())),
         ),
@@ -170,6 +172,7 @@ fn table() -> Vec<Row> {
                 tiers: None,
                 gate: None,
                 patch: None,
+                own: None,
             },
             Some((State::Bounded, vec![start("fmt")])),
         ),
@@ -310,6 +313,7 @@ fn a_refusal_leaves_the_change_as_it_was() {
         tiers: None,
         gate: None,
         patch: None,
+        own: None,
     };
     assert!(step(&before, event).is_err(), "no bound job");
     assert_eq!((before.full.len(), before.tiers), (0, tiers_before));
@@ -336,6 +340,7 @@ fn gated(gate: Option<crate::deploy::gate::Gate>) -> (Change, Vec<Effect>) {
         tiers: None,
         gate,
         patch: None,
+        own: None,
     };
     let c = run(
         pushed(),
@@ -404,6 +409,7 @@ fn a_clean_restack_makes_the_gate_full_and_a_session_push_clears_it() {
         tiers: None,
         gate: Some(Gate::Scoped),
         patch: None,
+        own: None,
     };
     let (c, _) = step(&c, rebound).expect("bounded");
     assert!(
@@ -427,6 +433,7 @@ fn a_full_run_asked_for_at_merge_holds_whatever_the_gate() {
             tiers: None,
             gate: Some(Gate::Scoped),
             patch: None,
+            own: None,
         }],
     );
     c = run(
@@ -790,6 +797,7 @@ fn bounded_with(tiers: crate::approval::tiers::Tiers) -> Event {
         tiers: Some(tiers),
         gate: None,
         patch: None,
+        own: None,
     }
 }
 
@@ -987,6 +995,7 @@ fn a_dropped_merge_is_kept_when_a_window_approves_the_restacked_head_again() {
                 tiers: None,
                 gate: None,
                 patch: None,
+                own: None,
             }],
         )
     };
@@ -1167,6 +1176,7 @@ fn bounded_at(sha: &str, merge: crate::approval::tiers::Tier, patch: Option<&str
         tiers: Some(tiers),
         gate: None,
         patch: patch.map(str::to_string),
+        own: None,
     }
 }
 
@@ -1372,6 +1382,7 @@ fn replay_839_a_holder_refused_at_its_restacked_heads_bound_gives_its_turn_back(
         tiers: None,
         gate: None,
         patch: None,
+        own: None,
     };
     let c = run(before.clone(), vec![refusal]);
     assert_eq!(c.state, State::Refused);

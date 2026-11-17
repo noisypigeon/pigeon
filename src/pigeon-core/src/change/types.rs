@@ -506,6 +506,9 @@ pub enum Event {
         /// The head's patch-id against its merge-base with `main`.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         patch: Option<String>,
+        /// A digest of the head's own lines against its merge-base with `main`.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        own: Option<String>,
     },
     /// A check finished.
     Finished {

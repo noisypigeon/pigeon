@@ -5,7 +5,8 @@ use std::path::Path;
 use std::process::Command;
 
 use agent::checks::ci::{
-    Relation, built_on_head, changed, checkout, fetch_branch, forecast, head_patch, restack,
+    Relation, built_on_head, changed, checkout, fetch_branch, forecast, head_patch, own_digest,
+    restack,
 };
 
 fn git(dir: &Path, args: &[&str]) -> String {
@@ -581,6 +582,33 @@ fn a_head_rebased_with_the_same_patch_has_the_same_patch_id_and_another_patch_do
     git(w, &["commit", "-qam", "more"]);
     let other = git(w, &["rev-parse", "HEAD"]);
     assert_ne!(head_patch(w, "main", &other), Some(one));
+}
+
+#[test]
+fn a_head_rebased_under_a_neighbours_line_keeps_its_own_lines_digest() {
+    let tmp = tempfile::tempdir().expect("tmp");
+    let w = tmp.path();
+    git(w, &["init", "-q"]);
+    write(w, "a.txt", "one\ntwo\nthree\nfour\n");
+    git(w, &["add", "."]);
+    git(w, &["commit", "-qm", "base"]);
+    git(w, &["checkout", "-qb", "change"]);
+    write(w, "a.txt", "one\nmine\ntwo\nthree\nfour\n");
+    git(w, &["commit", "-qam", "mine"]);
+    let first = git(w, &["rev-parse", "HEAD"]);
+    let own = own_digest(w, "main", &first).expect("digest");
+    git(w, &["checkout", "-q", "main"]);
+    write(w, "a.txt", "one\ntwo\nthree\nFOUR\n");
+    git(w, &["commit", "-qam", "theirs"]);
+    git(w, &["checkout", "-q", "change"]);
+    git(w, &["rebase", "-q", "main"]);
+    let rebased = git(w, &["rev-parse", "HEAD"]);
+    assert_ne!(first, rebased);
+    assert_eq!(own_digest(w, "main", &rebased), Some(own.clone()));
+    write(w, "a.txt", "one\nmine, changed\ntwo\nthree\nFOUR\n");
+    git(w, &["commit", "-qam", "more"]);
+    let other = git(w, &["rev-parse", "HEAD"]);
+    assert_ne!(own_digest(w, "main", &other), Some(own));
 }
 
 /// Writes a workspace of crates `a` and `b` at `version`, `b` depending on `a` when `dep`, and

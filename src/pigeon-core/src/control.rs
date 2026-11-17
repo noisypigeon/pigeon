@@ -688,6 +688,9 @@ pub struct Report {
     /// For the bound job: the head's patch-id against its merge-base with `main`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub patch: Option<String>,
+    /// For the bound job: a digest of the head's own lines against its merge-base with `main`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub own: Option<String>,
     /// For the merge job: the commit `main` now holds.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub merged: Option<String>,
@@ -746,6 +749,7 @@ impl Report {
             full: Vec::new(),
             gate: None,
             patch: None,
+            own: None,
             merged: None,
             published: Vec::new(),
             ios: false,
@@ -832,6 +836,7 @@ pub fn event_of(job: &str, sha: &str, report: &Report) -> Option<Event> {
             tiers: report.tiers.clone(),
             gate: report.gate.clone(),
             patch: report.patch.clone(),
+            own: report.own.clone(),
         });
     }
     Some(Event::Finished {
@@ -1482,6 +1487,7 @@ pub fn with_mirror(event: Event) -> Event {
             tiers,
             gate,
             patch,
+            own,
         } => {
             let code = checks.iter().any(|c| crate::actions::on_github(&c.argv));
             if violations.is_empty() && code && !checks.iter().any(|c| c.name == MIRROR) {
@@ -1498,6 +1504,7 @@ pub fn with_mirror(event: Event) -> Event {
                 tiers,
                 gate,
                 patch,
+                own,
             }
         }
         other => other,

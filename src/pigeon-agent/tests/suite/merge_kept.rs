@@ -48,6 +48,7 @@ fn check(c: &mut Change, sha: &str, merge: Tier) {
             tiers: Some(tiers(merge)),
             gate: None,
             patch: None,
+            own: None,
         })
         .expect("bounded");
     if !started.contains(&Effect::Start("fmt".into())) {
@@ -418,6 +419,7 @@ fn a_failed_check_after_the_restack_loses_the_turn() {
         tiers: Some(tiers(Tier::Code)),
         gate: None,
         patch: None,
+        own: None,
     })
     .expect("bounded");
     c.apply(Event::Started {

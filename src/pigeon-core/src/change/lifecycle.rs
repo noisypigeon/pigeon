@@ -64,12 +64,14 @@ impl Change {
                 tiers,
                 gate,
                 patch,
+                own,
             } => {
                 if self.on_head(&sha) {
                     self.tiers = tiers;
                     self.full = full;
                     self.gate = gate;
                     self = self.carry_patch(&sha, patch.as_ref());
+                    self.own = own;
                     // A session's head that carries no approval can't merge on this turn; see the
                     // concurrent-sessions ADR's 2026-11-16 amendment on a holder's push.
                     if self.carried.is_none() && self.restacked_for.is_none() {

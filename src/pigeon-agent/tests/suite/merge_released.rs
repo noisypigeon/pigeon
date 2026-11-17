@@ -47,6 +47,7 @@ fn check(c: &mut Change, sha: &str, merge: Tier) {
             tiers: Some(tiers(merge)),
             gate: None,
             patch: None,
+            own: None,
         })
         .expect("bounded");
     if !started.contains(&Effect::Start("fmt".into())) {
@@ -227,6 +228,7 @@ fn restacked_with_early_gate(c: &mut Change) -> String {
             tiers: Some(tiers(Tier::Code)),
             gate: None,
             patch: None,
+            own: None,
         })
         .expect("bounded");
     let gate = format!("{GATE}test");
@@ -365,6 +367,7 @@ fn a_failed_check_after_the_restack_gives_the_turn_back() {
         tiers: Some(tiers(Tier::Code)),
         gate: None,
         patch: None,
+        own: None,
     })
     .expect("bounded");
     c.apply(Event::Started {
@@ -434,6 +437,7 @@ fn bound_with_patch(c: &mut Change, sha: &str, patch: &str) {
         tiers: Some(tiers(Tier::Code)),
         gate: None,
         patch: Some(patch.into()),
+        own: None,
     })
     .expect("bounded");
 }

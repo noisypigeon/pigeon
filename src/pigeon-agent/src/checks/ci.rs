@@ -779,6 +779,17 @@ pub fn own_lines(dir: &Path, from: &str, to: &str) -> Result<Option<Vec<String>>
     Ok(Some(out))
 }
 
+/// A digest of `sha`'s [`own_lines`] against its merge-base with `base`; none for a binary file,
+/// or when git can't say. See the merge-path ADR §8.
+#[must_use]
+pub fn own_digest(dir: &Path, base: &str, sha: &str) -> Option<String> {
+    use sha2::Digest as _;
+    let fork = git(dir, "", "", &["merge-base", base, sha]).ok()?;
+    let lines = own_lines(dir, fork.trim(), sha).ok().flatten()?;
+    let digest = sha2::Sha256::digest(lines.join("\n").as_bytes());
+    Some(crate::core::approval::grants::hex(&digest))
+}
+
 /// `sha`'s patch-id against its merge-base with `base`, or none when git can't say.
 #[must_use]
 pub fn head_patch(dir: &Path, base: &str, sha: &str) -> Option<String> {
