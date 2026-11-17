@@ -811,3 +811,16 @@ retried inside the Worker is not.
    `worker/devices.rs` passes the attempt.
 2. `PigeonCore`: `DeviceRefusal` classifies a `401`'s text, with tests. `API`
    retries once on `.retry`, and `Store` unlinks only on `.unlinked`.
+
+### 2026-11-17: The app renders the four views from MCP tools
+
+Per [`2026-11-17-runtime-mcp-feed-view-contract.md`](2026-11-17-runtime-mcp-feed-view-contract.md) §2, §3 and §4:
+
+- The three tabs are root tools: `tracker.show`, `approval.list`,
+  `insights.show`. Every other screen is a list, card, detail or form
+  the server returns; the rail is a `progress` value, the panels
+  `series`.
+- `/v0/app/*` is called through `/v0/app/mcp`, then goes; `/v0/app/events`
+  becomes the feed.
+- Approvals sign natively against `proof.challenge` and `proof.submit`.
+- APNs carries a count; the app reads the feed.

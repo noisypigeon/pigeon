@@ -786,3 +786,13 @@ glob under `src/pigeon-cli/` or `src/site-templates/` becomes `src/**/<tail>`
 (or `**<file>` for a workspace root file), which matches the file both before
 and after the restructure moves it. That ADR's step 12 tightens them to the
 new paths.
+
+### 2026-11-17: The follower reads the feed
+
+Per [`2026-11-17-runtime-mcp-feed-view-contract.md`](2026-11-17-runtime-mcp-feed-view-contract.md) §3:
+
+- `pigeon session follow` subscribes to `pigeon://feed` over `/mcp`
+  and prints one line per item; `wake=agent` is `needs=agent`.
+- Cursors stay the control plane's, per session label.
+- Each change's stage is a `change.stage` item carrying `needs` and
+  `next`, as `change.status` answers them.

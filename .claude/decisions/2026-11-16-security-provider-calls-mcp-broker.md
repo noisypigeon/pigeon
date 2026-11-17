@@ -589,3 +589,16 @@ with no change open. A fresh planner resumes from this list.
   or the provider paths. Brief only the code around them, and let the
   planner carry those files. !934 and !989 were refused for this, and the
   planner re-proposed their commits as !966 and !990.
+
+### 2026-11-17: Its open steps are carried by the one-catalog planner
+
+The planner of [`2026-11-17-runtime-mcp-feed-view-contract.md`](2026-11-17-runtime-mcp-feed-view-contract.md) takes the 2026-11-17 hand-off's list:
+
+- the mirror policy is that ADR's step 2;
+- step 6 and steps 7 to 11 are its step 16, after the feed lands, so
+  `provider.called` and `provider.refused` are feed items (`note` and
+  `provider.refused`);
+- step 8's containers on `/mcp` share that ADR's step 12: one service
+  token per job account, listing `build.*` and `provider.call`.
+- `provider.call` and `provider.tools` declare views: `card` and
+  `list`.

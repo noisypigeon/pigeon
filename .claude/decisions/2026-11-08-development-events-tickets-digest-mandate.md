@@ -542,3 +542,14 @@ glob under `src/pigeon-cli/` or `src/site-templates/` becomes `src/**/<tail>`
 (or `**<file>` for a workspace root file), which matches the file both before
 and after the restructure moves it. That ADR's step 12 tightens them to the
 new paths.
+
+### 2026-11-17: The event log becomes the feed's store, and the channels become its views
+
+Per [`2026-11-17-runtime-mcp-feed-view-contract.md`](2026-11-17-runtime-mcp-feed-view-contract.md) §3 and §5:
+
+- §1's log stores feed items: each kind maps to one typed item with
+  `needs` and an audience; ids continue.
+- §2's long poll is `feed.read` and the `pigeon://feed` resource;
+  `/v0/events` becomes a shim, then goes.
+- §3's pushes carry only a count of open items that need the owner.
+- §4's digest is a `digest` item; its push is that wake.

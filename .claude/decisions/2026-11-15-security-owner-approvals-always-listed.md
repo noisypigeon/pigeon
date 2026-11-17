@@ -376,3 +376,9 @@ new paths.
   - each operation has its own.
 - **Execution:** one `fix(backplane)` change. `core/approval/**` is guarded,
   so it merges with the owner's passkey.
+
+### 2026-11-17: An inbox entry is an open feed item
+
+Per [`2026-11-17-runtime-mcp-feed-view-contract.md`](2026-11-17-runtime-mcp-feed-view-contract.md) §3.3, the inbox is the open `approval.pending` items
+(`approval.list`). §1's invariant holds: one open item per change at
+`needs: owner`, per head. Its push is a count (that ADR's §5).

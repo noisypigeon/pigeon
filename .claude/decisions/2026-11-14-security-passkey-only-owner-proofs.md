@@ -390,3 +390,17 @@ Its `Governs` test globs take `src/**/tests/suite/**/<file>`, now that
 pigeon-agent's suite files sit in mechanism directories; see
 [`2026-11-16-development-one-test-binary-per-crate.md`](2026-11-16-development-one-test-binary-per-crate.md),
 its 2026-11-17 amendment.
+### 2026-11-17: The ceremony moves into the client; the proof function stays one
+
+[`2026-11-17-runtime-mcp-feed-view-contract.md`](2026-11-17-runtime-mcp-feed-view-contract.md) §4 replaces §2's page link:
+
+- `proof.challenge {grant}` answers what is approved, from the grant,
+  and the bound `pigeon-proof-v1` challenge; `proof.submit` carries the
+  assertion to the one proof function, renamed `proof::verify`.
+- The app signs natively, the web client with `navigator.credentials`
+  from the RP's own origin, so the origin check stands.
+- Both tools are listed only for a person's session. A session still gets
+  `pending`, now as an `approval.pending` feed item.
+- The pages become client views; their old paths serve the web client's
+  shell, so links already sent work.
+- §1's "one function" and the challenge's binding are unchanged.

@@ -307,3 +307,19 @@ of them.
   apply to it. The route keeps its own Run-token check and `verdict::admit`.
 
 Neither ADR changes.
+
+### 2026-11-17: Every client on one catalog, with views and a feed; §3, §4, §5 and §7 are re-planned there
+
+[`2026-11-17-runtime-mcp-feed-view-contract.md`](2026-11-17-runtime-mcp-feed-view-contract.md) carries the owner's approved design for this ADR's goal, and its
+planner carries this ADR's open steps.
+
+- **§2 stands:** one handler, the two doors, the session ID bound to door
+  and caller.
+- **§3's `_meta` proof goes.** The proof is signed in the client and sent
+  with `proof.submit`, listed only for a person's session (that ADR's §4).
+- **§4's `GET` stream** carries `notifications/resources/updated` for
+  `pigeon://feed`. `events.wait` becomes `feed.read`.
+- **§5's list** is that ADR's §7: `/builds/…` and `/v0/apple/release`
+  become `build.*` and `release.apple` tools.
+- **§7's steps 2 to 11** are that ADR's steps 3 to 17. Every operation
+  added by them declares a view.
