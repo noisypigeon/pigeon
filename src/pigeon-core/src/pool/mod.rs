@@ -1,6 +1,7 @@
 //! Capacity pools: their config, ledger and routing, pure; see
 //! `.claude/decisions/2026-11-15-development-capacity-pools-hard-spend-cap.md`.
 
+pub mod aigateway;
 pub mod config;
 pub mod ledger;
 pub mod route;
