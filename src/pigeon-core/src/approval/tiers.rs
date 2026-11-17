@@ -163,13 +163,22 @@ pub struct Facts {
     pub secret_material: bool,
     /// Every gate file it touches differs from the base only in comments.
     pub comments_only: bool,
+    /// [`CAPABILITIES`] only renames capabilities: each pairs with one of the same `permissions`
+    /// and `scope`, and nothing else changes.
+    pub renames_only: bool,
 }
+
+/// The catalog of minted capabilities; see
+/// `.claude/decisions/2026-11-17-security-auto-covers-routine-owner-asks.md`'s 2026-11-17 amendment.
+pub const CAPABILITIES: &str = "catalog/cloudflare/capabilities.yaml";
 
 /// The tiers of a change with `scope` whose head touches `files`.
 #[must_use]
+#[expect(clippy::too_many_lines, reason = "one arm per rule")]
 pub fn classify(rules: &Rules, scope: &[String], files: &[String], facts: Facts) -> Tiers {
     let secret_file = files
         .iter()
+        .filter(|f| !(facts.renames_only && f.as_str() == CAPABILITIES))
         .find(|f| rules.secrets.iter().any(|g| matches(g, f)));
     let secret_globs = [rules.secrets.as_slice(), &rules.secret_code].concat();
     let secret_scope = scope
@@ -239,6 +248,11 @@ pub fn classify(rules: &Rules, scope: &[String], files: &[String], facts: Facts)
         }
     } else if let Some(f) = secret_code_file {
         tiered(Tier::Code, covered(format!("guarded: {f}")))
+    } else if facts.renames_only && files.iter().any(|f| f == CAPABILITIES) {
+        tiered(
+            Tier::Code,
+            covered(format!("guarded: {CAPABILITIES} (renames only)")),
+        )
     } else if let Some(f) = eviction_file {
         tiered(Tier::Code, covered(format!("eviction: {f}")))
     } else if let Some(f) = guarded_file {

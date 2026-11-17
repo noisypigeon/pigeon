@@ -340,6 +340,44 @@ pub fn comments_only(dir: &Path, base: &str, sha: &str, path: &str) -> bool {
     uncommented(path, &old).is_some_and(|o| Some(o) == uncommented(path, &new))
 }
 
+/// Whether `path` on `sha` only renames the fetched `base`'s capabilities; see
+/// `.claude/decisions/2026-11-17-security-auto-covers-routine-owner-asks.md`'s amendment.
+#[must_use]
+pub fn renames_only(dir: &Path, base: &str, sha: &str, path: &str) -> bool {
+    let show = |rev: &str| git(dir, "", "", &["show", &format!("{rev}:{path}")]).ok();
+    let (Some(old), Some(new)) = (show(&format!("refs/remotes/origin/{base}")), show(sha)) else {
+        return false;
+    };
+    same_capabilities(&old, &new)
+}
+
+/// Whether two capability catalogs differ only in their capabilities' names: every other key
+/// equal, and the capabilities' bodies equal as multisets; false when either doesn't parse.
+#[must_use]
+pub fn same_capabilities(old: &str, new: &str) -> bool {
+    use serde_json::{Map, Value};
+    let parse = |t: &str| serde_saphyr::from_str::<Value>(t).ok();
+    let (Some(mut old), Some(mut new)) = (parse(old), parse(new)) else {
+        return false;
+    };
+    let caps = |v: &mut Value| -> Option<Map<String, Value>> {
+        v.as_object_mut()?
+            .remove("capabilities")?
+            .as_object()
+            .cloned()
+    };
+    let (Some(a), Some(b)) = (caps(&mut old), caps(&mut new)) else {
+        return false;
+    };
+    let sorted = |m: &Map<String, Value>| {
+        let mut v: Vec<String> = m.values().map(ToString::to_string).collect();
+        v.sort();
+        v
+    };
+    let kept = a.iter().all(|(k, v)| b.get(k).is_none_or(|w| w == v));
+    kept && sorted(&a) == sorted(&b) && old == new
+}
+
 /// `text` without its comments, as tokens: Rust through proc-macro2's lexer, doc attributes
 /// dropped, and YAML without `#` comments; none for any other file, or text that doesn't lex.
 #[must_use]

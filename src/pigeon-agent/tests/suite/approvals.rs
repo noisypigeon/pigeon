@@ -25,6 +25,7 @@ const PLAIN: Facts = Facts {
     adds_secret: false,
     secret_material: false,
     comments_only: false,
+    renames_only: false,
 };
 
 #[test]
@@ -88,6 +89,7 @@ fn what_deploys_needs_the_code() {
             adds_secret: false,
             secret_material: false,
             comments_only: false,
+            renames_only: false,
         },
     );
     assert_eq!(worker.merge.tier, Tier::Code);
@@ -112,6 +114,7 @@ fn an_amendment_merges_automatically() {
             adds_secret: false,
             secret_material: false,
             comments_only: false,
+            renames_only: false,
         },
     );
     assert_eq!(tiers.merge.tier, Tier::Auto);
@@ -134,6 +137,7 @@ fn the_rules_and_every_policy_always_need_the_code() {
                 adds_secret: false,
                 secret_material: false,
                 comments_only: false,
+                renames_only: false,
             },
         );
         assert!(tiers.authorize.tier >= Tier::Code, "{file}");
@@ -154,6 +158,7 @@ fn the_approval_core_needs_the_code_as_the_files_it_moved_from_did() {
                 adds_secret: false,
                 secret_material: false,
                 comments_only: false,
+                renames_only: false,
             },
         );
         assert!(tiers.authorize.tier >= Tier::Code, "{file}");
@@ -205,6 +210,7 @@ fn an_operation_needs_the_tier_its_head_was_given_and_code_without_one() {
             adds_secret: false,
             secret_material: false,
             comments_only: false,
+            renames_only: false,
         },
     ));
     assert_eq!(
@@ -282,6 +288,7 @@ fn secrets_and_destruction_need_the_owner_each_time() {
             adds_secret: true,
             secret_material: false,
             comments_only: false,
+            renames_only: false,
         },
     );
     assert_eq!(
@@ -612,4 +619,38 @@ fn only_comments_and_doc_comments_leave_the_tokens_alone() {
     assert_ne!(yaml("k: 'v # b'\n"), yaml("k: 'v'\n"), "quoted");
     assert_eq!(yaml("k: |\n  # x\n"), None, "a block scalar");
     assert_eq!(uncommented("a.js", "x"), None);
+}
+
+#[test]
+fn a_capability_rename_alone_is_covered_and_anything_more_is_the_owners() {
+    // The owner's answer to owner_ask #25; see the 2026-11-17 Auto ADR's amendment.
+    use agent::checks::ci::same_capabilities;
+    use agent::core::approval::tiers::CAPABILITIES;
+    let base =
+        "description: d\ncapabilities:\n  a.write: { permissions: [A Write], scope: zone }\n";
+    let renamed =
+        "description: d\ncapabilities:\n  a.edit: { permissions: [A Write], scope: zone }\n";
+    let widened = "description: d\ncapabilities:\n  a.edit: { permissions: [A Write, B Write], scope: zone }\n";
+    let added = format!("{base}  b.write: {{ permissions: [B Write], scope: zone }}\n");
+    assert!(same_capabilities(base, renamed));
+    assert!(!same_capabilities(base, widened), "a widened permission");
+    assert!(!same_capabilities(base, &added), "an added capability");
+    let two = format!("{base}  b.write: {{ permissions: [B Write], scope: account }}\n");
+    let swapped = two
+        .replace("a.write", "x")
+        .replace("b.write", "a.write")
+        .replace("  x:", "  b.write:");
+    assert!(
+        !same_capabilities(&two, &swapped),
+        "a swap changes what a name mints"
+    );
+    assert!(!same_capabilities(base, "capabilities: ["), "unparsed");
+    let caps = paths(&[CAPABILITIES]);
+    let merge = |facts| classify(&rules(), &caps, &caps, facts).merge;
+    assert_eq!(merge(PLAIN).tier, Tier::Owner);
+    let renamed = merge(Facts {
+        renames_only: true,
+        ..PLAIN
+    });
+    assert!(renamed.rule.ends_with(AUTO_COVERS), "{renamed:?}");
 }

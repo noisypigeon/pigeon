@@ -909,9 +909,13 @@ fn tiers(
         && gated
             .iter()
             .all(|f| crate::checks::ci::comments_only(dir, &spec.base, &spec.sha, f));
+    let caps = crate::core::approval::tiers::CAPABILITIES;
+    let renames_only = files.iter().any(|f| f == caps)
+        && crate::checks::ci::renames_only(dir, &spec.base, &spec.sha, caps);
     let facts = crate::core::approval::tiers::Facts {
         secret_material,
         comments_only,
+        renames_only,
         deploys_worker: crate::checks::scope::workers(dir, Some(files))
             .map_or(true, |w| !w.is_empty()),
         appends_only,
