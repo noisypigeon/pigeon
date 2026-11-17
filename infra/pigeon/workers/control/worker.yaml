@@ -76,7 +76,7 @@ bindings:
     # The AI Gateway capacity pools forward to, from the deployment's outputs; see
     # .claude/decisions/2026-11-15-development-capacity-pools-hard-spend-cap.md, 2026-11-17 amendments.
     AI_GATEWAY_ACCOUNT: $deployment.account_id
-    AI_GATEWAY: "$deployment.ai_gateway_names[0]"
+    AI_GATEWAY: "$deployment.ai_gateways[0].name"
   # `granter`, the owner's token-minting token, from the account's one Secrets Store; see
   # .claude/decisions/2026-11-12-development-grants-applies-rescue-yield.md §1.
   secrets_store:

@@ -603,7 +603,7 @@ fn route_said(r: &ledger::Route) -> String {
 }
 
 /// `granter`, from the Secrets Store binding.
-async fn granter(env: &Env) -> std::result::Result<String, String> {
+pub(super) async fn granter(env: &Env) -> std::result::Result<String, String> {
     let store = env
         .secret_store(GRANTER)
         .map_err(|_| format!("the Worker has no `{GRANTER}` binding yet"))?;

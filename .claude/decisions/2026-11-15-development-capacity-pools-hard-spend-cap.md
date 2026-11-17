@@ -1036,3 +1036,25 @@ pool's Access, so it wasn't applied.
     from the plan first.
 - That apply also records platform/blue's outputs for deploys, so the
   pool's `AI_GATEWAY_ACCOUNT` and `AI_GATEWAY` render.
+
+### 2026-11-17: The pool's gateway comes from platform/blue's settings and granter's account
+
+The gateway URL needs `AI_GATEWAY_ACCOUNT` and `AI_GATEWAY`. Both were bound
+to platform/blue's outputs, which reach a deploy only from a platform apply
+or `DEPLOY_OUTPUTS`. Neither held them, so both vars rendered as literal
+references and every pool request was refused, `pool: no gateway`.
+
+A platform apply would record them. But runs 36, 37 and 38 each planned a
+change to the owner's hand-made `pigeon-pool` Access token or its policy:
+first a dropped policy, then a new secret, since the provider defaults
+`client_secret_version` to 1. None was applied.
+
+- **`AI_GATEWAY` is a setting:** `$deployment.ai_gateways[0].name`, bound
+  with no outputs.
+- **The account is `granter`'s.** When `AI_GATEWAY_ACCOUNT` isn't an
+  account ID, the Pool uses `granter`'s one account, which its Run token is
+  minted on, and keeps it in memory as it keeps the token.
+- **The token stays the owner's,** as §10.7 made it. platform/blue still
+  declares it (!1056, !1060), so a platform plan must leave its secret
+  alone before one is applied. That needs `client_secret_version` ignored for
+  a token adopted unrotated, a later change.

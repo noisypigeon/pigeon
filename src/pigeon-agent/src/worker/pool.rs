@@ -142,6 +142,8 @@ pub struct Pool {
     token: RefCell<Option<(String, u64)>>,
     /// Whether a mint is in flight, so only one runs at a time.
     minting: Cell<bool>,
+    /// `granter`'s account, when `AI_GATEWAY_ACCOUNT` names none; memory only.
+    account: RefCell<Option<String>>,
 }
 
 impl DurableObject for Pool {
@@ -151,6 +153,7 @@ impl DurableObject for Pool {
             env,
             token: RefCell::new(None),
             minting: Cell::new(false),
+            account: RefCell::new(None),
         }
     }
 
@@ -361,15 +364,37 @@ impl Pool {
         path: aigateway::Path,
     ) -> std::result::Result<(String, String), &'static str> {
         let var = |n: &str| self.env.var(n).map(|v| v.to_string()).unwrap_or_default();
-        let url = aigateway::url(
-            GATEWAY_BASE,
-            &var(GATEWAY_ACCOUNT_VAR),
-            &var(GATEWAY_VAR),
-            path,
-        )
-        .ok_or("pool: no gateway")?;
+        let account = self.gateway_account(var(GATEWAY_ACCOUNT_VAR)).await;
+        let url = aigateway::url(GATEWAY_BASE, &account, &var(GATEWAY_VAR), path)
+            .ok_or("pool: no gateway")?;
         let token = self.gateway_token().await.ok_or("pool: no gateway token")?;
         Ok((url, token))
+    }
+
+    /// The gateway's account: `AI_GATEWAY_ACCOUNT` when it is an account ID, else `granter`'s one
+    /// account, which the Run token is minted on; see the pool ADR's 2026-11-17 entry on the
+    /// gateway's settings.
+    async fn gateway_account(&self, from_var: String) -> String {
+        if from_var.len() == 32 && from_var.bytes().all(|b| b.is_ascii_hexdigit()) {
+            return from_var;
+        }
+        if let Some(a) = self.account.borrow().clone() {
+            return a;
+        }
+        let found = match super::minting::granter(&self.env).await {
+            Ok(g) => platform::account(&g).await.map_err(|e| e.to_string()),
+            Err(why) => Err(why),
+        };
+        match found {
+            Ok(a) => {
+                *self.account.borrow_mut() = Some(a.clone());
+                a
+            }
+            Err(why) => {
+                worker::console_error!("pool: no gateway account: {why}");
+                from_var
+            }
+        }
     }
 
     /// The gateway's Run token: the one held, under [`RENEW`] old, else a new one from the
