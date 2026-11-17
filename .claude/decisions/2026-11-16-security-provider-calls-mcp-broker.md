@@ -498,3 +498,41 @@ Its `ai-gateway-messages` exemption keeps model traffic on the pool's
 route, outside `provider.call`, as the pool ADR has it.
 
 Neither ADR changes.
+### 2026-11-17: Step 5b's shape: a `provider-call` target in the policy engine, linked into the Worker
+
+§4 step 4 runs `policy.check` on each forwarded call. The Worker doesn't
+link the policy engine today; the Checker runs it. A Checker round trip per
+call is too slow, so the engine is linked into the Worker.
+
+- **The target.** `pigeon-eviction` gains `target: provider-call`, judged
+  like `eviction`, against a flat document of text fields:
+  - `server`, `tool`, `effect` (`read`, `write` or `apply`);
+  - `caller`, the caller's account;
+  - `change`, the named change's number, or empty;
+  - `arguments`, the arguments as compact JSON with sorted keys.
+
+  Only `field` rules apply. A field the document lacks is a violation, so
+  missing data never passes.
+- **Scoping.** A `provider-call` policy may carry `when:`, `field` rules on
+  the same fields. It applies only when every `when` rule holds. Every
+  applying policy must pass; the first failing one refuses the call.
+- **Loading.** The engine loads a policy from text, for wasm. The policies
+  are `.config/policies/provider-call-*.yaml`, built into pigeon-core by an
+  explicit list. A test fails when the list and the directory differ. A
+  policy change ships with the Worker's next deploy, so the Worker judges
+  with main's policies, as the factory-crates ADR's judge does.
+- **The verdict.** `verdict::Step` gains `Policy`. It runs after Tier and
+  before the credential, as §4 orders it. A refusal is a
+  `provider.refused` with step `policy` and the policy's name.
+- **Repository checks skip it.** `policy.check` on the tree ignores
+  `provider-call` policies, as it ignores `eviction` ones.
+- **The first policy.** `provider-call-mirror.yaml`: a GitHub write names
+  only the mirror repository. The others (Cloudflare accounts and zones,
+  Buildkite pipelines) land with their servers in step 6, when their tools'
+  argument names are pinned.
+- **Who writes what.**
+  - 5b-1, a brief: the engine's target, `when`, loading from text and the
+    judge, with tests.
+  - 5b-2, the planner: pigeon-core's policy list and `Step::Policy`, the
+    Worker hook in `worker/provider.rs`, and the first policy. These are
+    guarded or secrets paths; the owner approves `worker/provider.rs`.
