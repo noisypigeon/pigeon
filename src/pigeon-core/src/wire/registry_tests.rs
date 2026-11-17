@@ -3,6 +3,7 @@
 use super::{Asks, Door, Effect, GRANT, PAGE, catalog};
 use crate::approval::grants;
 use crate::member::{CAPABILITIES, SERVICE_CEILING};
+use crate::view::View;
 
 #[test]
 fn every_grant_and_page_name_is_in_the_catalog() {
@@ -94,5 +95,84 @@ fn sites_publish_and_infra_apply_need_platform() {
             o.name,
             o.capability()
         );
+    }
+}
+
+#[test]
+fn every_view_count_is_pinned() {
+    let count = |v: View| catalog().iter().filter(|o| o.view == v).count();
+    assert_eq!(count(View::List), 10);
+    assert_eq!(count(View::Detail), 19);
+    assert_eq!(count(View::Card), 44);
+    assert_eq!(count(View::Form), 0);
+}
+
+#[test]
+fn the_views_are_as_decided() {
+    let named = |v: View| {
+        let mut got: Vec<&str> = catalog()
+            .iter()
+            .filter(|o| o.view == v)
+            .map(|o| o.name)
+            .collect();
+        got.sort_unstable();
+        got
+    };
+    let sorted = |mut w: Vec<&'static str>| {
+        w.sort_unstable();
+        w
+    };
+    assert_eq!(
+        named(View::List),
+        sorted(vec![
+            "change.list",
+            "grant.list",
+            "git.tokens",
+            "bench.list",
+            "brief.list",
+            "task.list",
+            "task.wait",
+            "events.wait",
+            "change.evictable",
+            "provider.tools",
+        ])
+    );
+    assert_eq!(
+        named(View::Detail),
+        sorted(vec![
+            "instance.show",
+            "architecture.describe",
+            "policy.check",
+            "infra.validate",
+            "change.scope",
+            "change.status",
+            "deploy.status",
+            "ios.status",
+            "apple.check",
+            "digest.show",
+            "session.status",
+            "bench.status",
+            "bench.logs",
+            "brief.show",
+            "mandate.status",
+            "platform.status",
+            "pool.status",
+            "platform.plan",
+            "infra.plan",
+        ])
+    );
+}
+
+#[test]
+fn writes_are_cards_or_details() {
+    for o in catalog() {
+        if o.effect != Effect::Read {
+            assert!(
+                matches!(o.view, View::Card | View::Detail),
+                "{} is a write with view {:?}",
+                o.name,
+                o.view
+            );
+        }
     }
 }

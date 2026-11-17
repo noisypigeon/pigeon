@@ -33,6 +33,7 @@ fn initialize_names_the_protocol_and_the_tools_capability() {
     assert_eq!(session, Session::default());
     assert!(r["result"]["capabilities"]["tools"].is_object());
     assert_eq!(r["result"]["serverInfo"]["name"], "pigeon");
+    assert_eq!(r["result"]["_meta"]["dev.pigeon/contract"], 1);
 }
 
 #[test]
@@ -105,16 +106,23 @@ fn every_operation_is_a_tool_with_its_schema() {
     assert!(approve["inputSchema"]["properties"]["sha"].is_object());
     assert_eq!(approve["inputSchema"]["additionalProperties"], false);
     assert_eq!(approve["annotations"]["destructiveHint"], true);
+    assert_eq!(approve["_meta"]["dev.pigeon/view"], "card");
     let status = tools
         .iter()
         .find(|t| t["name"] == "change_status")
         .expect("status");
     assert_eq!(status["annotations"]["readOnlyHint"], true);
+    assert_eq!(status["_meta"]["dev.pigeon/view"], "detail");
     for t in tools {
         let name = t["name"].as_str().expect("name");
         assert!(
             name.bytes().all(|b| b.is_ascii_lowercase() || b == b'_'),
             "{name}"
+        );
+        let view = t["_meta"]["dev.pigeon/view"].as_str().expect("view");
+        assert!(
+            agent::core::view::View::parse(view).is_some(),
+            "{name}: {view}"
         );
     }
 }

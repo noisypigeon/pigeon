@@ -240,6 +240,7 @@ pub fn tools() -> Value {
                     "readOnlyHint": o.effect == crate::wire::Effect::Read,
                     "destructiveHint": o.effect == crate::wire::Effect::Apply,
                 },
+                "_meta": { "dev.pigeon/view": o.view.name() },
             })
         })
         .collect();
@@ -284,6 +285,7 @@ pub fn parse(message: &Value, version: &str) -> Action {
                         "capabilities": { "tools": { "listChanged": false } },
                         "serverInfo": { "name": "pigeon", "version": version },
                         "instructions": "pigeon's control plane. Propose a change, push its branch, read its status; the owner approves on the approval page this server links to, with a passkey.",
+                        "_meta": { "dev.pigeon/contract": crate::view::CONTRACT },
                     }),
                 ),
                 session,

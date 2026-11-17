@@ -7,6 +7,8 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 
+use crate::view::View;
+
 pub mod artifacts_wire;
 pub mod link;
 pub mod ship_wire;
@@ -215,6 +217,8 @@ pub struct Operation {
     pub summary: &'static str,
     /// The arguments it takes.
     pub args: &'static [Arg],
+    /// The view its result names; see .claude/decisions/2026-11-17-runtime-mcp-feed-view-contract.md §2.
+    pub view: crate::view::View,
 }
 
 impl Operation {
@@ -312,6 +316,7 @@ const CATALOG: &[Operation] = &[
         effect: Effect::Read,
         summary: "Show the instance manifest",
         args: &[],
+        view: View::Detail,
     },
     Operation {
         name: "architecture.describe",
@@ -319,6 +324,7 @@ const CATALOG: &[Operation] = &[
         effect: Effect::Read,
         summary: "Describe the instance's architecture: its graph, layout and network, each part with the code it was derived from, as of the deployed SHA (args: format?, json, text or svg)",
         args: &[arg("format", false, Kind::Text)],
+        view: View::Detail,
     },
     Operation {
         name: "policy.check",
@@ -326,6 +332,7 @@ const CATALOG: &[Operation] = &[
         effect: Effect::Read,
         summary: "Check the instance against its policies (args: title?, body?, number?, files?, which add the pull-request policy; branch? and scope? add the change policy)",
         args: PR_FIELDS,
+        view: View::Detail,
     },
     Operation {
         name: "infra.validate",
@@ -333,6 +340,7 @@ const CATALOG: &[Operation] = &[
         effect: Effect::Read,
         summary: "Validate every infrastructure and workload unit",
         args: &[],
+        view: View::Detail,
     },
     Operation {
         name: "change.scope",
@@ -340,6 +348,7 @@ const CATALOG: &[Operation] = &[
         effect: Effect::Read,
         summary: "The checks a change needs, from the paths it touches, in the order to run them (args: files, one path per line)",
         args: &[arg("files", true, Kind::Text)],
+        view: View::Detail,
     },
     Operation {
         name: "change.propose",
@@ -361,6 +370,7 @@ const CATALOG: &[Operation] = &[
             arg("asks", false, Kind::Text),
             arg("brief", false, Kind::String),
         ],
+        view: View::Card,
     },
     Operation {
         name: "change.pin",
@@ -372,6 +382,7 @@ const CATALOG: &[Operation] = &[
             arg("off", false, Kind::Text),
             arg("ticket", false, Kind::String),
         ],
+        view: View::Card,
     },
     Operation {
         name: "change.front",
@@ -379,6 +390,7 @@ const CATALOG: &[Operation] = &[
         effect: Effect::Apply,
         summary: "The owner's: move a queued change to the front of the merge queue, behind the merge running; it skips no check",
         args: &[NUMBER, arg("ticket", false, Kind::String)],
+        view: View::Card,
     },
     Operation {
         name: "change.authorize",
@@ -386,6 +398,7 @@ const CATALOG: &[Operation] = &[
         effect: Effect::Apply,
         summary: "The owner's or a reviewer's approval of a proposed change's plan, so its branch may be pushed; never by its proposer. Under the owner's Auto window or mandate the control plane authorizes it at proposal, so a session doesn't call this",
         args: &[NUMBER, arg("ticket", false, Kind::String)],
+        view: View::Card,
     },
     Operation {
         name: "change.pushed",
@@ -397,6 +410,7 @@ const CATALOG: &[Operation] = &[
             arg("sha", true, Kind::String),
             arg("ticket", false, Kind::String),
         ],
+        view: View::Card,
     },
     Operation {
         name: "change.status",
@@ -404,6 +418,7 @@ const CATALOG: &[Operation] = &[
         effect: Effect::Read,
         summary: "A change's state, head, approvals, violations, each job's result, and its stage: `stage`, who `needs` to act, `waits_on`, `next` and `since`",
         args: &[NUMBER],
+        view: View::Detail,
     },
     Operation {
         name: "change.list",
@@ -411,6 +426,7 @@ const CATALOG: &[Operation] = &[
         effect: Effect::Read,
         summary: "Every change, newest first, each with its stage and its session's model class (`model`) (args: state?)",
         args: &[arg("state", false, Kind::String)],
+        view: View::List,
     },
     Operation {
         name: "change.evictable",
@@ -418,6 +434,7 @@ const CATALOG: &[Operation] = &[
         effect: Effect::Read,
         summary: "Each open change as an eviction candidate: the fields an eviction policy judges (no change is evicted yet)",
         args: &[],
+        view: View::List,
     },
     Operation {
         name: "change.approve",
@@ -430,6 +447,7 @@ const CATALOG: &[Operation] = &[
             arg("hold", false, Kind::Text),
             arg("ticket", false, Kind::String),
         ],
+        view: View::Card,
     },
     Operation {
         name: "change.merge",
@@ -441,6 +459,7 @@ const CATALOG: &[Operation] = &[
             arg("ticket", false, Kind::String),
             arg("full", false, Kind::Text),
         ],
+        view: View::Card,
     },
     Operation {
         name: "change.close",
@@ -448,6 +467,7 @@ const CATALOG: &[Operation] = &[
         effect: Effect::Apply,
         summary: "Close a change unmerged, stopping its jobs. Under Auto, a session may close its own unapproved change, as when it is superseded or refused. A session never closes a generated change (`reconcile-…`, `review-…`): `task_done` on its task closes it, and the control plane retires it once its reason is gone",
         args: &[NUMBER, arg("ticket", false, Kind::String)],
+        view: View::Card,
     },
     Operation {
         name: "ci.rerun",
@@ -460,6 +480,7 @@ const CATALOG: &[Operation] = &[
             arg("on", false, Kind::String),
             arg("ticket", false, Kind::String),
         ],
+        view: View::Card,
     },
     Operation {
         name: "ci.cloudflare",
@@ -467,6 +488,7 @@ const CATALOG: &[Operation] = &[
         effect: Effect::Apply,
         summary: "The owner's break-glass: run a change head's code checks that haven't passed on Cloudflare's Checker instead of GitHub Actions",
         args: &[NUMBER, arg("ticket", false, Kind::String)],
+        view: View::Card,
     },
     Operation {
         name: "ci.window",
@@ -477,6 +499,7 @@ const CATALOG: &[Operation] = &[
             arg("hours", true, Kind::Text),
             arg("ticket", false, Kind::String),
         ],
+        view: View::Card,
     },
     Operation {
         name: "pool.status",
@@ -484,6 +507,7 @@ const CATALOG: &[Operation] = &[
         effect: Effect::Read,
         summary: "Each capacity pool's state and ledger: its windows' spend, reservations, running tasks and whether it is paused (args: pool?, one pool's name)",
         args: &[arg("pool", false, Kind::String)],
+        view: View::Detail,
     },
     Operation {
         name: "pool.pause",
@@ -495,6 +519,7 @@ const CATALOG: &[Operation] = &[
             arg("why", true, Kind::Text),
             arg("ticket", false, Kind::String),
         ],
+        view: View::Card,
     },
     Operation {
         name: "pool.resume",
@@ -505,6 +530,7 @@ const CATALOG: &[Operation] = &[
             arg("pool", true, Kind::String),
             arg("ticket", false, Kind::String),
         ],
+        view: View::Card,
     },
     Operation {
         name: "grant.list",
@@ -512,6 +538,7 @@ const CATALOG: &[Operation] = &[
         effect: Effect::Read,
         summary: "The grants: the deployed ledger, and each grant's route, token ID, capabilities and expiry, never a value",
         args: &[],
+        view: View::List,
     },
     Operation {
         name: "grant.request",
@@ -522,6 +549,7 @@ const CATALOG: &[Operation] = &[
             arg("name", true, Kind::String),
             arg("ticket", false, Kind::String),
         ],
+        view: View::Card,
     },
     Operation {
         name: "grant.rotate",
@@ -532,6 +560,7 @@ const CATALOG: &[Operation] = &[
             arg("name", true, Kind::String),
             arg("ticket", false, Kind::String),
         ],
+        view: View::Card,
     },
     Operation {
         name: "grant.revoke",
@@ -542,6 +571,7 @@ const CATALOG: &[Operation] = &[
             arg("name", true, Kind::String),
             arg("ticket", false, Kind::String),
         ],
+        view: View::Card,
     },
     Operation {
         name: "git.tokens",
@@ -549,6 +579,7 @@ const CATALOG: &[Operation] = &[
         effect: Effect::Read,
         summary: "The repository's git tokens: each one's ID, scope, state and expiry, never its value",
         args: &[],
+        view: View::List,
     },
     Operation {
         name: "sites.build",
@@ -556,6 +587,7 @@ const CATALOG: &[Operation] = &[
         effect: Effect::Build,
         summary: "Build static sites into the work directory with the instance's architecture as data; publishes nothing (args: sites?)",
         args: &[arg("sites", false, Kind::Strings)],
+        view: View::Card,
     },
     Operation {
         name: "sites.publish",
@@ -566,6 +598,7 @@ const CATALOG: &[Operation] = &[
             arg("sites", false, Kind::Strings),
             arg("deployed", false, Kind::Text),
         ],
+        view: View::Card,
     },
     Operation {
         name: "deploy.status",
@@ -573,6 +606,7 @@ const CATALOG: &[Operation] = &[
         effect: Effect::Read,
         summary: "What main's pipeline last published: the SHA deployed, the one in progress, and recent deploys with their logs",
         args: &[],
+        view: View::Detail,
     },
     Operation {
         name: "mandate.propose",
@@ -587,6 +621,7 @@ const CATALOG: &[Operation] = &[
             arg("budget", false, Kind::Text),
             arg("hours", false, Kind::Text),
         ],
+        view: View::Card,
     },
     Operation {
         name: "ios.release",
@@ -594,6 +629,7 @@ const CATALOG: &[Operation] = &[
         effect: Effect::Build,
         summary: "Release main's commit on GitHub to TestFlight as the next iOS build: archived on GitHub, signed on Buildkite, processed by App Store Connect; one at a time",
         args: &[],
+        view: View::Card,
     },
     Operation {
         name: "ios.status",
@@ -601,6 +637,7 @@ const CATALOG: &[Operation] = &[
         effect: Effect::Read,
         summary: "The iOS release in flight, its stage and links, and the newest releases with their states",
         args: &[],
+        view: View::Detail,
     },
     Operation {
         name: "apple.check",
@@ -608,6 +645,7 @@ const CATALOG: &[Operation] = &[
         effect: Effect::Read,
         summary: "Whether the Apple connection works: its secrets are set, App Store Connect accepts its tokens, the app exists, and its App Store profile is active, with its expiry; it never shows a secret",
         args: &[],
+        view: View::Detail,
     },
     Operation {
         name: "digest.show",
@@ -615,6 +653,7 @@ const CATALOG: &[Operation] = &[
         effect: Effect::Read,
         summary: "The owner's digest now: approvals waiting, tasks unclaimed two hours, paused mandates, failed deploys and changes merged without the owner; `needs_owner` says whether it would be pushed",
         args: &[],
+        view: View::Detail,
     },
     Operation {
         name: "session.status",
@@ -622,6 +661,7 @@ const CATALOG: &[Operation] = &[
         effect: Effect::Read,
         summary: "Session `session`'s class (`model`, `role`, and an executor's `planner` and `brief`), its open changes, oldest first, each with its stage (`stage`, `needs`, `waits_on`, `next`, `since`), its tasks, and its event cursor: `after`, `polled` and whether it is `listening` (polled within two minutes)",
         args: &[arg("session", true, Kind::String)],
+        view: View::Detail,
     },
     Operation {
         name: "session.end",
@@ -629,6 +669,7 @@ const CATALOG: &[Operation] = &[
         effect: Effect::Build,
         summary: "End session `label`'s ticket, so the label works as before; open to anyone, since it only takes power away. Answers what each change it holds has left, whether the end is `clean` (nothing held but hand-offs), and its `archiver`, which a clean end wakes with `session.archivable`",
         args: &[arg("label", true, Kind::String)],
+        view: View::Card,
     },
     Operation {
         name: "session.archived",
@@ -642,6 +683,7 @@ const CATALOG: &[Operation] = &[
             arg("why", true, Kind::String),
             arg("ticket", false, Kind::String),
         ],
+        view: View::Card,
     },
     Operation {
         name: "bench.run",
@@ -655,6 +697,7 @@ const CATALOG: &[Operation] = &[
             arg("bench", false, Kind::Text),
             arg("timeout", false, Kind::Text),
         ],
+        view: View::Card,
     },
     Operation {
         name: "bench.status",
@@ -668,6 +711,7 @@ const CATALOG: &[Operation] = &[
             arg("offset", false, Kind::Text),
             arg("wait", false, Kind::Text),
         ],
+        view: View::Detail,
     },
     Operation {
         name: "bench.logs",
@@ -681,6 +725,7 @@ const CATALOG: &[Operation] = &[
             arg("offset", false, Kind::Text),
             arg("wait", false, Kind::Text),
         ],
+        view: View::Detail,
     },
     Operation {
         name: "bench.cancel",
@@ -692,6 +737,7 @@ const CATALOG: &[Operation] = &[
             arg("run", true, Kind::String),
             arg("bench", false, Kind::Text),
         ],
+        view: View::Card,
     },
     Operation {
         name: "bench.reset",
@@ -703,6 +749,7 @@ const CATALOG: &[Operation] = &[
             arg("bench", false, Kind::Text),
             arg("hard", false, Kind::Text),
         ],
+        view: View::Card,
     },
     Operation {
         name: "bench.list",
@@ -710,6 +757,7 @@ const CATALOG: &[Operation] = &[
         effect: Effect::Read,
         summary: "Your benches: each one's name, whether it runs a command, and when it was last used; and your place if you wait for a first bench",
         args: &[arg("ticket", true, Kind::String)],
+        view: View::List,
     },
     Operation {
         name: "bench.warm",
@@ -720,6 +768,7 @@ const CATALOG: &[Operation] = &[
             arg("ticket", true, Kind::String),
             arg("bench", false, Kind::Text),
         ],
+        view: View::Card,
     },
     Operation {
         name: "owner.ask",
@@ -735,6 +784,7 @@ const CATALOG: &[Operation] = &[
             arg("options", false, Kind::Text),
             arg("ticket", false, Kind::String),
         ],
+        view: View::Card,
     },
     Operation {
         name: "owner.withdraw",
@@ -746,6 +796,7 @@ const CATALOG: &[Operation] = &[
             arg("session", true, Kind::String),
             arg("ticket", false, Kind::String),
         ],
+        view: View::Card,
     },
     Operation {
         name: "provider.call",
@@ -759,6 +810,7 @@ const CATALOG: &[Operation] = &[
             arg("change", false, Kind::Text),
             arg("ticket", false, Kind::String),
         ],
+        view: View::Card,
     },
     Operation {
         name: "provider.tools",
@@ -769,6 +821,7 @@ const CATALOG: &[Operation] = &[
             arg("server", true, Kind::String),
             arg("ticket", false, Kind::String),
         ],
+        view: View::List,
     },
     Operation {
         name: "session.start",
@@ -783,6 +836,7 @@ const CATALOG: &[Operation] = &[
             arg("brief", false, Kind::String),
             arg("parent", false, Kind::String),
         ],
+        view: View::Card,
     },
     Operation {
         name: "events.wait",
@@ -796,6 +850,7 @@ const CATALOG: &[Operation] = &[
             arg("wake", false, Kind::String),
             arg("seconds", false, Kind::Text),
         ],
+        view: View::List,
     },
     Operation {
         name: "brief.create",
@@ -807,6 +862,7 @@ const CATALOG: &[Operation] = &[
             arg("draft", true, Kind::Text),
             arg("ticket", false, Kind::String),
         ],
+        view: View::Card,
     },
     Operation {
         name: "brief.amend",
@@ -820,6 +876,7 @@ const CATALOG: &[Operation] = &[
             arg("reason", true, Kind::String),
             arg("ticket", false, Kind::String),
         ],
+        view: View::Card,
     },
     Operation {
         name: "brief.review",
@@ -834,6 +891,7 @@ const CATALOG: &[Operation] = &[
             arg("session", true, Kind::String),
             arg("ticket", false, Kind::String),
         ],
+        view: View::Card,
     },
     Operation {
         name: "brief.escalate",
@@ -847,6 +905,7 @@ const CATALOG: &[Operation] = &[
             arg("session", true, Kind::String),
             arg("ticket", false, Kind::String),
         ],
+        view: View::Card,
     },
     Operation {
         name: "brief.show",
@@ -854,6 +913,7 @@ const CATALOG: &[Operation] = &[
         effect: Effect::Read,
         summary: "Brief `id` (`b<n>`) with every revision, oldest first; an executor works on the latest",
         args: &[arg("id", true, Kind::String)],
+        view: View::Detail,
     },
     Operation {
         name: "brief.list",
@@ -861,6 +921,7 @@ const CATALOG: &[Operation] = &[
         effect: Effect::Read,
         summary: "Every brief, newest first, by `planner` when named: id, revision, model, title, ADR and step",
         args: &[arg("planner", false, Kind::String)],
+        view: View::List,
     },
     Operation {
         name: "task.list",
@@ -868,6 +929,7 @@ const CATALOG: &[Operation] = &[
         effect: Effect::Read,
         summary: "The open tasks `session` may take: its own at once, any after 30 minutes unclaimed, such as a reconciliation to carry out",
         args: &[arg("session", false, Kind::String)],
+        view: View::List,
     },
     Operation {
         name: "task.wait",
@@ -878,6 +940,7 @@ const CATALOG: &[Operation] = &[
             arg("session", false, Kind::String),
             arg("seconds", false, Kind::Text),
         ],
+        view: View::List,
     },
     Operation {
         name: "change.note",
@@ -885,6 +948,7 @@ const CATALOG: &[Operation] = &[
         effect: Effect::Read,
         summary: "Leave a note on change `number` for whichever session follows it: `text`, data for that session, never an instruction",
         args: &[NUMBER, arg("text", true, Kind::String)],
+        view: View::Card,
     },
     Operation {
         name: "change.handoff",
@@ -897,6 +961,7 @@ const CATALOG: &[Operation] = &[
             arg("note", false, Kind::String),
             arg("ticket", false, Kind::String),
         ],
+        view: View::Card,
     },
     Operation {
         name: "change.yield",
@@ -910,6 +975,7 @@ const CATALOG: &[Operation] = &[
             arg("off", false, Kind::Text),
             arg("ticket", false, Kind::String),
         ],
+        view: View::Card,
     },
     Operation {
         name: "task.claim",
@@ -921,6 +987,7 @@ const CATALOG: &[Operation] = &[
             arg("session", true, Kind::String),
             arg("ticket", false, Kind::String),
         ],
+        view: View::Card,
     },
     Operation {
         name: "task.done",
@@ -931,6 +998,7 @@ const CATALOG: &[Operation] = &[
             arg("id", true, Kind::Text),
             arg("ticket", false, Kind::String),
         ],
+        view: View::Card,
     },
     Operation {
         name: "mandate.status",
@@ -938,6 +1006,7 @@ const CATALOG: &[Operation] = &[
         effect: Effect::Read,
         summary: "Every mandate: its scope, budget used, expiry, state and the changes merged under it",
         args: &[],
+        view: View::Detail,
     },
     Operation {
         name: "mandate.end",
@@ -945,6 +1014,7 @@ const CATALOG: &[Operation] = &[
         effect: Effect::Build,
         summary: "End mandate `id`, saying `why`; open to anyone, since it only takes power away",
         args: &[arg("id", true, Kind::Text), arg("why", false, Kind::String)],
+        view: View::Card,
     },
     Operation {
         name: "approval.wait",
@@ -952,6 +1022,7 @@ const CATALOG: &[Operation] = &[
         effect: Effect::Build,
         summary: "The link to the owner's approval page for a pending approval of `operation` (change.authorize, change.approve, change.merge or change.close) on change `number`, listed on /approvals and pushed; it answers at once, and the stage moves when the owner approves",
         args: &[NUMBER, arg("operation", true, Kind::String)],
+        view: View::Card,
     },
     Operation {
         name: "deploy.retry",
@@ -959,6 +1030,7 @@ const CATALOG: &[Operation] = &[
         effect: Effect::Build,
         summary: "Deploy main's newest push again: after a failed deploy, as when its image was missing, or after a passed one, everything, as when new images must roll out",
         args: &[],
+        view: View::Card,
     },
     Operation {
         name: "platform.plan",
@@ -969,6 +1041,7 @@ const CATALOG: &[Operation] = &[
             arg("unit", true, Kind::String),
             arg("ticket", false, Kind::String),
         ],
+        view: View::Detail,
     },
     Operation {
         name: "platform.apply",
@@ -979,6 +1052,7 @@ const CATALOG: &[Operation] = &[
             arg("run", true, Kind::Text),
             arg("ticket", false, Kind::String),
         ],
+        view: View::Card,
     },
     Operation {
         name: "platform.status",
@@ -986,6 +1060,7 @@ const CATALOG: &[Operation] = &[
         effect: Effect::Read,
         summary: "The platform runs, newest first, with nothing secret",
         args: &[],
+        view: View::Detail,
     },
     Operation {
         name: "infra.plan",
@@ -996,6 +1071,7 @@ const CATALOG: &[Operation] = &[
             arg("state", true, Kind::String),
             arg("units", false, Kind::Strings),
         ],
+        view: View::Detail,
     },
     Operation {
         name: "infra.apply",
@@ -1006,6 +1082,7 @@ const CATALOG: &[Operation] = &[
             arg("state", true, Kind::String),
             arg("plan", true, Kind::String),
         ],
+        view: View::Card,
     },
 ];
 
