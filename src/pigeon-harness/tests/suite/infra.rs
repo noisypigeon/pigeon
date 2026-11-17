@@ -156,15 +156,15 @@ fn plan_names_each_tofu_step_on_stderr() {
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(output.status.success(), "{stderr}");
     for line in [
-        "cobot: infra/bootstrap: tofu init…",
-        "cobot: infra/bootstrap: tofu plan…",
+        "infra: infra/bootstrap: tofu init…",
+        "infra: infra/bootstrap: tofu plan…",
     ] {
         assert!(stderr.contains(line), "missing {line:?} in {stderr}");
     }
     assert!(stderr.contains("took"), "{stderr}");
     assert!(!stderr.contains(passphrase), "{stderr}");
     assert!(
-        !String::from_utf8_lossy(&output.stdout).contains("cobot: infra/bootstrap: tofu"),
+        !String::from_utf8_lossy(&output.stdout).contains("infra: infra/bootstrap: tofu"),
         "progress stays off stdout"
     );
 }

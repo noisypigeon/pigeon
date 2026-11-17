@@ -27,7 +27,7 @@ pub fn run(command: WorkersCommand) -> Result<(), agent::infra::Error> {
             if !problems.is_empty() {
                 return Err(agent::infra::Error::Invalid(problems));
             }
-            println!("cobot: {} Worker spec(s) valid", found.len());
+            println!("infra: {} Worker spec(s) valid", found.len());
             Ok(())
         }
         WorkersCommand::Permissions(at) => {
@@ -44,7 +44,7 @@ pub fn run(command: WorkersCommand) -> Result<(), agent::infra::Error> {
         WorkersCommand::Render(s) => {
             for (f, rendered) in rendered(&s)?.1 {
                 let dir = workers::write(&s.at.root, &f, &rendered, "render")?;
-                println!("cobot: wrote {}", dir.join("wrangler.jsonc").display());
+                println!("infra: wrote {}", dir.join("wrangler.jsonc").display());
             }
             Ok(())
         }
@@ -79,7 +79,7 @@ pub fn run(command: WorkersCommand) -> Result<(), agent::infra::Error> {
                 });
             }
             workers::put_secret(&f, &p.key, value, &tools()?, &p.worker.root)?;
-            println!("cobot: set {} on {}", p.key, f.spec.name);
+            println!("infra: set {} on {}", p.key, f.spec.name);
             Ok(())
         }
         WorkersCommand::Outputs(s) => {
@@ -88,7 +88,7 @@ pub fn run(command: WorkersCommand) -> Result<(), agent::infra::Error> {
             let snapshot = agent::workers::ship::snapshot(&specs, &outputs);
             println!("{}", serde_json::to_string(&snapshot).unwrap_or_default());
             eprintln!(
-                "cobot: {} unit(s) of outputs; pipe this to `pigeon workers secrets put --root . <worker> {}`",
+                "infra: {} unit(s) of outputs; pipe this to `pigeon workers secrets put --root . <worker> {}`",
                 snapshot.len(),
                 agent::workers::ship::OUTPUTS_VAR
             );
@@ -98,7 +98,7 @@ pub fn run(command: WorkersCommand) -> Result<(), agent::infra::Error> {
         WorkersCommand::Teardown(o) => {
             let f = one(&o.root, &o.name, o.deployment.as_deref())?;
             for d in workers::teardown(&f, &tools()?, &o.root)? {
-                println!("cobot: {d}");
+                println!("infra: {d}");
             }
             Ok(())
         }
@@ -137,7 +137,7 @@ fn account_tools() -> Result<(Tools, agent::workers::cloudflare::Api, String), a
         message,
     })?;
     eprintln!(
-        "cobot: account …{}",
+        "infra: account …{}",
         &account[account.len().saturating_sub(4)..]
     );
     let mut t = Tools::from(|k| env::var(k).ok());
@@ -244,7 +244,7 @@ fn images_push(p: &ImagesPush) -> Result<(), agent::infra::Error> {
         .any(|r| git(root, &["merge-base", "--is-ancestor", "HEAD", r]).is_some());
     if !on_main {
         eprintln!(
-            "cobot: warning: {} is on no fetched main; a deploy can't diff from a commit outside main's history, so push from main after `pigeon git fetch <repo> main`",
+            "infra: warning: {} is on no fetched main; a deploy can't diff from a commit outside main's history, so push from main after `pigeon git fetch <repo> main`",
             &source[..12]
         );
     }
@@ -258,13 +258,13 @@ fn images_push(p: &ImagesPush) -> Result<(), agent::infra::Error> {
         let pushed =
             workers::push_images(root, &f, &tag, &account, &api, p.expiration_minutes, &tools)?;
         for (k, v) in pushed {
-            eprintln!("cobot: pushed {k}");
+            eprintln!("infra: pushed {k}");
             images.images.insert(k, v);
         }
     }
     println!("{}", serde_json::to_string(&images).unwrap_or_default());
     eprintln!(
-        "cobot: pipe this to `pigeon workers secrets put --root . <worker> {}`",
+        "infra: pipe this to `pigeon workers secrets put --root . <worker> {}`",
         agent::workers::ship::IMAGES_VAR
     );
     Ok(())
@@ -280,10 +280,10 @@ fn plan(s: &WorkersState) -> Result<(), agent::infra::Error> {
     session.push()?;
     for (f, v) in &all {
         workers::write(&s.at.root, f, v, &stored.id)?;
-        println!("cobot: {} planned", f.spec.name);
+        println!("infra: {} planned", f.spec.name);
     }
     println!(
-        "cobot: stored Worker plan {}; deploy it with --plan {} within 24 hours",
+        "infra: stored Worker plan {}; deploy it with --plan {} within 24 hours",
         stored.id, stored.id
     );
     Ok(())
@@ -310,12 +310,12 @@ fn deploy(s: &WorkersState, id: &str) -> Result<(), agent::infra::Error> {
         }
         let dir = workers::write(&s.at.root, f, v, id)?;
         for step in workers::deploy(&s.at.root, f, &dir, id, &tools)? {
-            println!("cobot: {step}");
+            println!("infra: {step}");
         }
         let missing = workers::missing_secrets(f, &tools, &dir)?;
         if !missing.is_empty() {
             println!(
-                "cobot: {} still needs secret(s) {}; set each with `pigeon workers secrets put {} KEY`",
+                "infra: {} still needs secret(s) {}; set each with `pigeon workers secrets put {} KEY`",
                 f.spec.name,
                 missing.join(", "),
                 f.spec.name

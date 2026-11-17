@@ -169,7 +169,7 @@ fn run(unit: &str, work: &Path, env: &Env, args: &[&str]) -> Result<Output, Erro
 /// Runs one `tofu` step, naming it and its duration on stderr as it goes.
 fn step(unit: &str, work: &Path, env: &Env, args: &[&str], ok: &[i32]) -> Result<Output, Error> {
     let started = std::time::Instant::now();
-    eprintln!("cobot: {unit}: tofu {}…", args[0]);
+    eprintln!("infra: {unit}: tofu {}…", args[0]);
     let mut output = run(unit, work, env, args)?;
     if matches!(args[0], "init" | "plan") {
         for wait in RETRY_WAITS {
@@ -180,7 +180,7 @@ fn step(unit: &str, work: &Path, env: &Env, args: &[&str], ok: &[i32]) -> Result
                 break;
             }
             eprintln!(
-                "cobot: {unit}: tofu {} failed on the network; again in {}s",
+                "infra: {unit}: tofu {} failed on the network; again in {}s",
                 args[0],
                 wait.as_secs()
             );
@@ -189,7 +189,7 @@ fn step(unit: &str, work: &Path, env: &Env, args: &[&str], ok: &[i32]) -> Result
         }
     }
     eprintln!(
-        "cobot: {unit}: tofu {} took {:.1}s",
+        "infra: {unit}: tofu {} took {:.1}s",
         args[0],
         started.elapsed().as_secs_f64()
     );

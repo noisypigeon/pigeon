@@ -299,7 +299,7 @@ pub fn run(root: &Path, jobs: &[Job]) -> Result<Vec<String>, Error> {
         let Some((program, args)) = j.argv.split_first() else {
             continue;
         };
-        eprintln!("cobot: scope: {}", j.name);
+        eprintln!("infra: scope: {}", j.name);
         let status = std::process::Command::new(program)
             .args(args)
             .current_dir(workspace(root))

@@ -23,14 +23,14 @@ pub fn run(command: InfraOp) -> i32 {
     let result = match command {
         InfraOp::Validate(args) => {
             { agent::infra::validate_in(args.instance_root(), &args.root, &args.providers_dir()) }
-                .map(|units| println!("cobot: {} unit(s) valid", units.len()))
+                .map(|units| println!("infra: {} unit(s) valid", units.len()))
         }
         InfraOp::Render(args) => render(&args),
         InfraOp::Plan(args) => plan(&args),
         InfraOp::Apply(args) => apply(&args),
         InfraOp::Show(args) => show(&args),
         InfraOp::Lock(args) => agent::infra::lock(&args.root, &args.providers_dir())
-            .map(|path| println!("cobot: wrote {}", path.display())),
+            .map(|path| println!("infra: wrote {}", path.display())),
         InfraOp::Capabilities(args) => capabilities(&args.root),
         InfraOp::Secrets(SecretsCommand::Set(args)) => secrets_set(&args),
         InfraOp::Secrets(SecretsCommand::Check(args)) => secrets_check(&args),
@@ -45,11 +45,11 @@ pub fn run(command: InfraOp) -> i32 {
     match result {
         Ok(()) => SUCCESS,
         Err(e @ agent::infra::Error::Invalid(_)) => {
-            eprintln!("cobot: {e}");
+            eprintln!("infra: {e}");
             VIOLATION
         }
         Err(e) => {
-            eprintln!("cobot: {e}");
+            eprintln!("infra: {e}");
             INVALID
         }
     }
@@ -126,7 +126,7 @@ fn sites_build(args: &SitesBuild) -> Result<(), agent::infra::Error> {
             .map(|(f, _)| f.as_str())
             .collect();
         println!(
-            "cobot: built {} with {} [{}] into {}",
+            "infra: built {} with {} [{}] into {}",
             b.site.unit,
             b.site.tag(),
             on.join(", "),
@@ -134,7 +134,7 @@ fn sites_build(args: &SitesBuild) -> Result<(), agent::infra::Error> {
         );
     }
     if sites.is_empty() {
-        println!("cobot: no static sites");
+        println!("infra: no static sites");
     }
     Ok(())
 }
@@ -146,7 +146,7 @@ fn sites_publish(args: &SitesPublish) -> Result<(), agent::infra::Error> {
     let mut failed = Vec::new();
     for p in &published {
         println!(
-            "cobot: published {}: {} put, {} unchanged, {} deleted",
+            "infra: published {}: {} put, {} unchanged, {} deleted",
             p.unit,
             p.synced.put.len(),
             p.synced.unchanged,
@@ -166,7 +166,7 @@ fn sites_publish(args: &SitesPublish) -> Result<(), agent::infra::Error> {
         }
     }
     if published.is_empty() {
-        println!("cobot: no static sites");
+        println!("infra: no static sites");
     }
     if failed.is_empty() {
         Ok(())
@@ -223,7 +223,7 @@ fn git(command: GitCommand) -> Result<(), agent::infra::Error> {
             message,
         })?;
     eprintln!(
-        "cobot: account {}, namespace {}",
+        "infra: account {}, namespace {}",
         client.account_hint(),
         instance.namespace
     );
@@ -231,7 +231,7 @@ fn git(command: GitCommand) -> Result<(), agent::infra::Error> {
         GitCommand::Apply(_) => {
             for a in agent::git::apply(&client, &instance)? {
                 println!(
-                    "cobot: {} {:?}: {}",
+                    "infra: {} {:?}: {}",
                     a.name,
                     a.outcome,
                     agent::git::artifacts::shown_remote(&a.remote)
@@ -248,7 +248,7 @@ fn git(command: GitCommand) -> Result<(), agent::infra::Error> {
                 };
                 let mirror = s.mirror.as_ref().map_or("no mirror".to_string(), short);
                 println!(
-                    "cobot: {} {} artifacts {} mirror {mirror}",
+                    "infra: {} {} artifacts {} mirror {mirror}",
                     s.name,
                     agent::git::artifacts::shown_remote(&s.remote),
                     short(&s.head)
@@ -337,7 +337,7 @@ fn scope(args: &ScopeArgs) -> i32 {
     let jobs = match jobs {
         Ok(jobs) => jobs,
         Err(e) => {
-            eprintln!("cobot: {e}");
+            eprintln!("infra: {e}");
             return INVALID;
         }
     };
@@ -356,15 +356,15 @@ fn scope(args: &ScopeArgs) -> i32 {
     }
     match agent::checks::scope::run(&args.root, &jobs) {
         Ok(failed) if failed.is_empty() => {
-            println!("cobot: scope: {} check(s) passed", jobs.len());
+            println!("infra: scope: {} check(s) passed", jobs.len());
             SUCCESS
         }
         Ok(failed) => {
-            eprintln!("cobot: scope: failed: {}", failed.join(", "));
+            eprintln!("infra: scope: failed: {}", failed.join(", "));
             VIOLATION
         }
         Err(e) => {
-            eprintln!("cobot: {e}");
+            eprintln!("infra: {e}");
             INVALID
         }
     }
@@ -405,13 +405,13 @@ fn git_mirror(
                 |(a, b)| format!("{}..{}", &a[..12.min(a.len())], &b[..12.min(b.len())]),
             );
             println!(
-                "cobot: synced {} from {to}: main {moved}, {} tag(s) added",
+                "infra: synced {} from {to}: main {moved}, {} tag(s) added",
                 done.name, done.tags
             );
         } else {
             let done = agent::git::mirror(client, instance, &d.name, to, root)?;
             println!(
-                "cobot: mirrored {} to {}: {} ref(s)",
+                "infra: mirrored {} to {}: {} ref(s)",
                 done.name,
                 done.to,
                 done.refs.len()
@@ -439,7 +439,7 @@ fn plan(args: &InfraPlan) -> Result<(), agent::infra::Error> {
         let (stored, plans) = agent::infra::plan_stored(ctx, &units, now())?;
         session.push()?;
         println!(
-            "cobot: stored plan {} for {} unit(s); apply it with --plan {} within 24 hours",
+            "infra: stored plan {} for {} unit(s); apply it with --plan {} within 24 hours",
             stored.id,
             stored.units.len(),
             stored.id
@@ -491,7 +491,7 @@ fn apply(args: &InfraApply) -> Result<(), agent::infra::Error> {
         .and_then(|units| agent::infra::apply(ctx, &units))
     };
     if let Some(written) = session.push()? {
-        println!("cobot: wrote {written} state object(s) to R2");
+        println!("infra: wrote {written} state object(s) to R2");
     }
     let plans = applied?;
     print!("{}", agent::infra::summary(&plans));
@@ -505,7 +505,7 @@ fn apply(args: &InfraApply) -> Result<(), agent::infra::Error> {
     } else {
         applied.join(", ")
     };
-    println!("cobot: applied {applied}");
+    println!("infra: applied {applied}");
     Ok(())
 }
 
@@ -535,7 +535,7 @@ fn secrets_set(args: &SecretsKey) -> Result<(), agent::infra::Error> {
     let value = value.trim_end_matches(['\n', '\r']);
     let path = secrets_path(&args.at);
     agent::infra::secrets::set(&path, &args.key, value, &pass)?;
-    println!("cobot: set `{}` in {}", args.key, path.display());
+    println!("infra: set `{}` in {}", args.key, path.display());
     Ok(())
 }
 
@@ -559,11 +559,11 @@ fn print_json<T: serde::Serialize>(result: Result<T, agent::infra::Error>) -> i3
             SUCCESS
         }
         Ok(Err(e)) => {
-            eprintln!("cobot: {e}");
+            eprintln!("infra: {e}");
             INVALID
         }
         Err(e) => {
-            eprintln!("cobot: {e}");
+            eprintln!("infra: {e}");
             INVALID
         }
     }

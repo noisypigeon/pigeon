@@ -49,7 +49,7 @@ fn this_repository_is_described_the_same_way_twice() {
     );
     let nodes = ids(&first, "nodes");
     for want in [
-        "engine:cobot",
+        "engine:infra",
         "operation:architecture.describe",
         "policy:change",
         "repository",

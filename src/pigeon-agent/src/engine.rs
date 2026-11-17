@@ -22,12 +22,12 @@ pub fn engines() -> Vec<EngineInfo> {
     let sentinel = crate::sentinel::locate(&|k| std::env::var(k).ok());
     vec![
         EngineInfo {
-            engine: Engine::Sentinel,
+            engine: Engine::Eviction,
             version: crate::sentinel::version(&sentinel).unwrap_or_else(|| "not installed".into()),
             role: "policy",
         },
         EngineInfo {
-            engine: Engine::Cobot,
+            engine: Engine::Infra,
             version: crate::VERSION.into(),
             role: "action",
         },

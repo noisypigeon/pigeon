@@ -78,10 +78,10 @@ pub fn describe_with(
 /// Every engine, and each operation it runs.
 fn engines_and_operations(g: &mut Graph) {
     g.nodes.push(node(
-        "engine:backplane",
+        "engine:agent",
         "engine",
         Lane::Run,
-        "backplane",
+        "agent",
         "agent::engines()",
     ));
     for e in engines() {
@@ -125,7 +125,7 @@ fn units(instance: &Instance, g: &mut Graph, problems: &mut Vec<String>) -> Vec<
         Err(crate::infra::Error::Invalid(found)) => {
             problems.extend(found.iter().map(|p| format!("{}: {}", p.path, p.message)));
         }
-        Err(e) => problems.push(format!("{}: {e}", Engine::Cobot.name())),
+        Err(e) => problems.push(format!("{}: {e}", Engine::Infra.name())),
     }
     let (units, _) = crate::infra::unit::discover_in(root, instance.platform_root());
     let paths: Vec<String> = units.iter().map(|u| u.path.clone()).collect();
@@ -238,7 +238,7 @@ fn sites(root: &Path, platform: &Path, g: &mut Graph, problems: &mut Vec<String>
             }
         }
         Err(crate::infra::Error::Invalid(_)) => {}
-        Err(e) => problems.push(format!("{}: {e}", Engine::Cobot.name())),
+        Err(e) => problems.push(format!("{}: {e}", Engine::Infra.name())),
     }
 }
 
@@ -255,7 +255,7 @@ fn policies(
     };
     let policies_dir = rel.display().to_string();
     let unreadable = |e: std::io::Error| Error::Engine {
-        engine: Engine::Sentinel,
+        engine: Engine::Eviction,
         message: format!("{policies_dir}: {e}"),
     };
     let entries = match std::fs::read_dir(&dir) {
@@ -281,12 +281,12 @@ fn policies(
     let policies = match crate::sentinel::describe(&binary, &dir) {
         Ok(p) => p,
         Err(crate::sentinel::Failure::Missing(why)) => {
-            problems.push(format!("{}: {why}", Engine::Sentinel.name()));
+            problems.push(format!("{}: {why}", Engine::Eviction.name()));
             return Ok(());
         }
         Err(crate::sentinel::Failure::Refused(why)) => {
             return Err(Error::Engine {
-                engine: Engine::Sentinel,
+                engine: Engine::Eviction,
                 message: why,
             });
         }

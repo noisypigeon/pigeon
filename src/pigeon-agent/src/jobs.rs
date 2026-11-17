@@ -906,7 +906,7 @@ fn policy(
     let sum = std::env::var(crate::wire::ship_wire::JUDGE_SHA256_VAR)
         .ok()
         .unwrap_or_default();
-    let _ = writeln!(log, "sentinel: {} (sha256 {sum})", sentinel.display());
+    let _ = writeln!(log, "eviction: {} (sha256 {sum})", sentinel.display());
     match base_policies(spec, dir)? {
         Some(p) => judge_with(sentinel, spec, dir, files, &p),
         None => Ok(Vec::new()),

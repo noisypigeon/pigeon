@@ -62,7 +62,7 @@ fn check(args: &CheckArgs) -> i32 {
     match Command::new(&binary).args(argv(args)).status() {
         Ok(status) => status.code().unwrap_or(INVALID),
         Err(e) => {
-            eprintln!("sentinel: {} didn't run: {e}", binary.display());
+            eprintln!("eviction: {} didn't run: {e}", binary.display());
             INVALID
         }
     }

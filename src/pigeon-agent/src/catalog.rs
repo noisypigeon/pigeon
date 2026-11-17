@@ -172,7 +172,7 @@ fn policy_check(
     let report =
         crate::sentinel::check(&binary, &instance.root, &dir, pr.as_deref()).map_err(|e| {
             Error::Engine {
-                engine: Engine::Sentinel,
+                engine: Engine::Eviction,
                 message: e.to_string(),
             }
         })?;
@@ -194,7 +194,7 @@ fn change_scope(instance: &Instance, args: &Map<String, Value>) -> Result<Value,
         .collect();
     let jobs = crate::checks::scope::jobs(instance.platform_root(), &files).map_err(|e| {
         Error::Engine {
-            engine: Engine::Cobot,
+            engine: Engine::Infra,
             message: e.to_string(),
         }
     })?;
@@ -280,7 +280,7 @@ fn sites_build(
     var: &impl Fn(&str) -> Option<String>,
 ) -> Result<Value, Error> {
     let cobot = |e: crate::infra::Error| Error::Engine {
-        engine: Engine::Cobot,
+        engine: Engine::Infra,
         message: e.to_string(),
     };
     let wanted: Vec<String> = args
@@ -329,7 +329,7 @@ fn infra_validate(instance: &Instance) -> Result<(Value, Vec<String>), Error> {
                 .collect(),
         )),
         Err(e) => Err(Error::Engine {
-            engine: Engine::Cobot,
+            engine: Engine::Infra,
             message: e.to_string(),
         }),
     }
@@ -343,7 +343,7 @@ fn text<'a>(args: &'a Map<String, Value>, name: &str) -> Result<&'a str, Error> 
 
 fn cobot_failed(e: &crate::infra::Error) -> Error {
     Error::Engine {
-        engine: Engine::Cobot,
+        engine: Engine::Infra,
         message: e.to_string(),
     }
 }

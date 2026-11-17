@@ -50,7 +50,7 @@ fn engines_and_operations_list() {
         .arg("ops")
         .assert()
         .code(0)
-        .stdout(predicate::str::contains("policy.check (sentinel, read)"));
+        .stdout(predicate::str::contains("policy.check (eviction, read)"));
 }
 
 #[test]

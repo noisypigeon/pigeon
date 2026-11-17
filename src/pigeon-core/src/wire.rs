@@ -54,12 +54,12 @@ impl std::error::Error for Error {}
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Engine {
-    /// Backplane itself.
-    Backplane,
+    /// The agent itself.
+    Agent,
     /// Policy and its enforcement.
-    Sentinel,
+    Eviction,
     /// Actions: infrastructure, releases.
-    Cobot,
+    Infra,
 }
 
 impl Engine {
@@ -67,9 +67,9 @@ impl Engine {
     #[must_use]
     pub fn name(self) -> &'static str {
         match self {
-            Self::Backplane => "backplane",
-            Self::Sentinel => "sentinel",
-            Self::Cobot => "cobot",
+            Self::Agent => "agent",
+            Self::Eviction => "eviction",
+            Self::Infra => "infra",
         }
     }
 }
@@ -305,42 +305,42 @@ const NUMBER: Arg = arg("number", true, Kind::Text);
 const CATALOG: &[Operation] = &[
     Operation {
         name: "instance.show",
-        engine: Engine::Backplane,
+        engine: Engine::Agent,
         effect: Effect::Read,
         summary: "Show the instance manifest",
         args: &[],
     },
     Operation {
         name: "architecture.describe",
-        engine: Engine::Backplane,
+        engine: Engine::Agent,
         effect: Effect::Read,
         summary: "Describe the instance's architecture: its graph, layout and network, each part with the code it was derived from, as of the deployed SHA (args: format?, json, text or svg)",
         args: &[arg("format", false, Kind::Text)],
     },
     Operation {
         name: "policy.check",
-        engine: Engine::Sentinel,
+        engine: Engine::Eviction,
         effect: Effect::Read,
         summary: "Check the instance against its policies (args: title?, body?, number?, files?, which add the pull-request policy; branch? and scope? add the change policy)",
         args: PR_FIELDS,
     },
     Operation {
         name: "infra.validate",
-        engine: Engine::Cobot,
+        engine: Engine::Infra,
         effect: Effect::Read,
         summary: "Validate every infrastructure and workload unit",
         args: &[],
     },
     Operation {
         name: "change.scope",
-        engine: Engine::Cobot,
+        engine: Engine::Infra,
         effect: Effect::Read,
         summary: "The checks a change needs, from the paths it touches, in the order to run them (args: files, one path per line)",
         args: &[arg("files", true, Kind::Text)],
     },
     Operation {
         name: "change.propose",
-        engine: Engine::Backplane,
+        engine: Engine::Agent,
         effect: Effect::Plan,
         summary: "Propose a change: its slug, Conventional Commit title, plan and scope (globs, one per line), and optionally the `mandate` it is carried out under, the `session` proposing it, for a design change the globs its ADR `affects`, `full` true to run the whole test suite in its merge gate, `resumes` an evicted change's number to finish it, `after` an open change's number to build on its branch (the new change waits for it, and restacks onto main when it merges), and `asks`, JSON `[{key, label, help?, chars?: hex|lower|alnum|token, min?, max?}]`, values the owner types at the plan's approval, public by design; `brief` (`b<n>`) for a change carrying out a brief, whose title, plan and scope then come from it and which an executor (haiku or sonnet) must name; title, plan and scope are required otherwise; returns its number, its branch, change/<number>-<slug>, and the open changes it `overlaps`",
         args: &[
@@ -361,7 +361,7 @@ const CATALOG: &[Operation] = &[
     },
     Operation {
         name: "change.pin",
-        engine: Engine::Backplane,
+        engine: Engine::Agent,
         effect: Effect::Apply,
         summary: "The owner's: pin an open change against eviction, or with `off` true unpin it",
         args: &[
@@ -372,21 +372,21 @@ const CATALOG: &[Operation] = &[
     },
     Operation {
         name: "change.front",
-        engine: Engine::Backplane,
+        engine: Engine::Agent,
         effect: Effect::Apply,
         summary: "The owner's: move a queued change to the front of the merge queue, behind the merge running; it skips no check",
         args: &[NUMBER, arg("ticket", false, Kind::String)],
     },
     Operation {
         name: "change.authorize",
-        engine: Engine::Backplane,
+        engine: Engine::Agent,
         effect: Effect::Apply,
         summary: "The owner's or a reviewer's approval of a proposed change's plan, so its branch may be pushed; never by its proposer. Under the owner's Auto window or mandate the control plane authorizes it at proposal, so a session doesn't call this",
         args: &[NUMBER, arg("ticket", false, Kind::String)],
     },
     Operation {
         name: "change.pushed",
-        engine: Engine::Backplane,
+        engine: Engine::Agent,
         effect: Effect::Build,
         summary: "Report a push of a change's branch, naming its head, when the push event may be missed; the bound job refuses a SHA that isn't the branch's head",
         args: &[
@@ -397,28 +397,28 @@ const CATALOG: &[Operation] = &[
     },
     Operation {
         name: "change.status",
-        engine: Engine::Backplane,
+        engine: Engine::Agent,
         effect: Effect::Read,
         summary: "A change's state, head, approvals, violations, each job's result, and its stage: `stage`, who `needs` to act, `waits_on`, `next` and `since`",
         args: &[NUMBER],
     },
     Operation {
         name: "change.list",
-        engine: Engine::Backplane,
+        engine: Engine::Agent,
         effect: Effect::Read,
         summary: "Every change, newest first, each with its stage and its session's model class (`model`) (args: state?)",
         args: &[arg("state", false, Kind::String)],
     },
     Operation {
         name: "change.evictable",
-        engine: Engine::Backplane,
+        engine: Engine::Agent,
         effect: Effect::Read,
         summary: "Each open change as an eviction candidate: the fields an eviction policy judges (no change is evicted yet)",
         args: &[],
     },
     Operation {
         name: "change.approve",
-        engine: Engine::Backplane,
+        engine: Engine::Agent,
         effect: Effect::Apply,
         summary: "The owner's or a reviewer's approval of a checked change's head, which queues its merge (sha?: the head; a person's call without it approves the current head; hold?: true approves without queuing the merge); never by its proposer. A session never calls it on its own change: it asks to merge (`change_merge`), and the owner's window, mandate or policy approves in the control plane",
         args: &[
@@ -430,7 +430,7 @@ const CATALOG: &[Operation] = &[
     },
     Operation {
         name: "change.merge",
-        engine: Engine::Backplane,
+        engine: Engine::Agent,
         effect: Effect::Apply,
         summary: "Ask to merge your change: an approved head is squashed onto main as `<title> (!<number>)` and its branch deleted; a checked head is first approved by the owner's window, mandate or policy that covers it, else waits, listed, for the owner, whose approval queues the merge (args: full?, true to run the whole test suite in its merge gate)",
         args: &[
@@ -441,14 +441,14 @@ const CATALOG: &[Operation] = &[
     },
     Operation {
         name: "change.close",
-        engine: Engine::Backplane,
+        engine: Engine::Agent,
         effect: Effect::Apply,
         summary: "Close a change unmerged, stopping its jobs. A session never closes a generated change (`reconcile-…`, `review-…`): `task_done` on its task closes it, and the control plane retires it once its reason is gone",
         args: &[NUMBER, arg("ticket", false, Kind::String)],
     },
     Operation {
         name: "ci.rerun",
-        engine: Engine::Backplane,
+        engine: Engine::Agent,
         effect: Effect::Build,
         summary: "Run one of a finished head's jobs again, and those its failure cancelled; `on: cloudflare` asks the owner to run the head's code checks on Cloudflare instead of GitHub",
         args: &[
@@ -460,14 +460,14 @@ const CATALOG: &[Operation] = &[
     },
     Operation {
         name: "ci.cloudflare",
-        engine: Engine::Backplane,
+        engine: Engine::Agent,
         effect: Effect::Apply,
         summary: "The owner's break-glass: run a change head's code checks that haven't passed on Cloudflare's Checker instead of GitHub Actions",
         args: &[NUMBER, arg("ticket", false, Kind::String)],
     },
     Operation {
         name: "ci.window",
-        engine: Engine::Backplane,
+        engine: Engine::Agent,
         effect: Effect::Plan,
         summary: "Ask the owner to run every change's code checks on Cloudflare's Checker instead of GitHub Actions for `hours` (1 to 24; 0 closes the window early); answers with the page's link, granted with a passkey",
         args: &[
@@ -477,14 +477,14 @@ const CATALOG: &[Operation] = &[
     },
     Operation {
         name: "grant.list",
-        engine: Engine::Backplane,
+        engine: Engine::Agent,
         effect: Effect::Read,
         summary: "The grants: the deployed ledger, and each grant's route, token ID, capabilities and expiry, never a value",
         args: &[],
     },
     Operation {
         name: "grant.request",
-        engine: Engine::Backplane,
+        engine: Engine::Agent,
         effect: Effect::Plan,
         summary: "Ask the owner to mint or generate grant `name` from the deployed ledger and put it at its route; answers with the page's link, where a passkey runs it",
         args: &[
@@ -494,7 +494,7 @@ const CATALOG: &[Operation] = &[
     },
     Operation {
         name: "grant.rotate",
-        engine: Engine::Backplane,
+        engine: Engine::Agent,
         effect: Effect::Plan,
         summary: "Ask the owner to make grant `name` anew, put and verify it, then revoke the old; answers with the page's link",
         args: &[
@@ -504,7 +504,7 @@ const CATALOG: &[Operation] = &[
     },
     Operation {
         name: "grant.revoke",
-        engine: Engine::Backplane,
+        engine: Engine::Agent,
         effect: Effect::Plan,
         summary: "Ask the owner to revoke grant `name` and remove its value; answers with the page's link",
         args: &[
@@ -514,21 +514,21 @@ const CATALOG: &[Operation] = &[
     },
     Operation {
         name: "git.tokens",
-        engine: Engine::Backplane,
+        engine: Engine::Agent,
         effect: Effect::Read,
         summary: "The repository's git tokens: each one's ID, scope, state and expiry, never its value",
         args: &[],
     },
     Operation {
         name: "sites.build",
-        engine: Engine::Cobot,
+        engine: Engine::Infra,
         effect: Effect::Build,
         summary: "Build static sites into the work directory with the instance's architecture as data; publishes nothing (args: sites?)",
         args: &[arg("sites", false, Kind::Strings)],
     },
     Operation {
         name: "sites.publish",
-        engine: Engine::Cobot,
+        engine: Engine::Infra,
         effect: Effect::Apply,
         summary: "Build the named sites, or every site, with the architecture as data, sync each to its bucket and check it live, with the run's CLOUDFLARE_API_TOKEN (args: sites?, deployed?, the SHA the deploy runs for)",
         args: &[
@@ -538,14 +538,14 @@ const CATALOG: &[Operation] = &[
     },
     Operation {
         name: "deploy.status",
-        engine: Engine::Backplane,
+        engine: Engine::Agent,
         effect: Effect::Read,
         summary: "What main's pipeline last published: the SHA deployed, the one in progress, and recent deploys with their logs",
         args: &[],
     },
     Operation {
         name: "mandate.propose",
-        engine: Engine::Backplane,
+        engine: Engine::Agent,
         effect: Effect::Plan,
         summary: "Propose a mandate: a task the owner grants once with a passkey, so changes inside it go through without asking; `adr` (the ADR it executes), `summary`, `scope` (globs, one per line), `may_deploy`, `budget` (merges, 1 to 10, default 5) and `hours` (1 to 72, default 24); answers with the page's link",
         args: &[
@@ -559,49 +559,49 @@ const CATALOG: &[Operation] = &[
     },
     Operation {
         name: "ios.release",
-        engine: Engine::Backplane,
+        engine: Engine::Agent,
         effect: Effect::Build,
         summary: "Release main's commit on GitHub to TestFlight as the next iOS build: archived on GitHub, signed on Buildkite, processed by App Store Connect; one at a time",
         args: &[],
     },
     Operation {
         name: "ios.status",
-        engine: Engine::Backplane,
+        engine: Engine::Agent,
         effect: Effect::Read,
         summary: "The iOS release in flight, its stage and links, and the newest releases with their states",
         args: &[],
     },
     Operation {
         name: "apple.check",
-        engine: Engine::Backplane,
+        engine: Engine::Agent,
         effect: Effect::Read,
         summary: "Whether the Apple connection works: its secrets are set, App Store Connect accepts its tokens, the app exists, and its App Store profile is active, with its expiry; it never shows a secret",
         args: &[],
     },
     Operation {
         name: "digest.show",
-        engine: Engine::Backplane,
+        engine: Engine::Agent,
         effect: Effect::Read,
         summary: "The owner's digest now: approvals waiting, tasks unclaimed two hours, paused mandates, failed deploys and changes merged without the owner; `needs_owner` says whether it would be pushed",
         args: &[],
     },
     Operation {
         name: "session.status",
-        engine: Engine::Backplane,
+        engine: Engine::Agent,
         effect: Effect::Read,
         summary: "Session `session`'s class (`model`, `role`, and an executor's `planner` and `brief`), its open changes, oldest first, each with its stage (`stage`, `needs`, `waits_on`, `next`, `since`), its tasks, and its event cursor: `after`, `polled` and whether it is `listening` (polled within two minutes)",
         args: &[arg("session", true, Kind::String)],
     },
     Operation {
         name: "session.end",
-        engine: Engine::Backplane,
+        engine: Engine::Agent,
         effect: Effect::Build,
         summary: "End session `label`'s ticket, so the label works as before; open to anyone, since it only takes power away. Answers what each change it holds has left, whether the end is `clean` (nothing held but hand-offs), and its `archiver`, which a clean end wakes with `session.archivable`",
         args: &[arg("label", true, Kind::String)],
     },
     Operation {
         name: "session.archived",
-        engine: Engine::Backplane,
+        engine: Engine::Agent,
         effect: Effect::Build,
         summary: "As archiver `session`, report on ended session `label`, after `session.archivable`: `outcome` `archived` or `skipped`, and `why`; accepted only from its archiver, with its `ticket`, after a clean end, and once",
         args: &[
@@ -614,7 +614,7 @@ const CATALOG: &[Operation] = &[
     },
     Operation {
         name: "bench.run",
-        engine: Engine::Backplane,
+        engine: Engine::Agent,
         effect: Effect::Build,
         summary: "Run `argv` on your bench `bench` (0 to 2, default 0) at `sha`, the commit `pigeon session bench push` put on your scratch ref: an allowed `pigeon dev <task>`, `cargo fmt|check|clippy|build|test|tree|metadata …`, `bench check <name>`, `pigeon infra validate|render …`, `pigeon dev scope …`, `pigeon decisions …`, or `git diff|log|status …`; answers its `run`; one run per bench at a time; `timeout` in minutes, 1 to 90",
         args: &[
@@ -627,7 +627,7 @@ const CATALOG: &[Operation] = &[
     },
     Operation {
         name: "bench.status",
-        engine: Engine::Backplane,
+        engine: Engine::Agent,
         effect: Effect::Read,
         summary: "Run `run`'s state, exit code, seconds and disk on your bench `bench`, with its log from `offset` (up to 64 KB, and `next`), waiting up to `wait` seconds (at most 25) for new output",
         args: &[
@@ -640,7 +640,7 @@ const CATALOG: &[Operation] = &[
     },
     Operation {
         name: "bench.logs",
-        engine: Engine::Backplane,
+        engine: Engine::Agent,
         effect: Effect::Read,
         summary: "As bench.status: run `run`'s log from `offset` on your bench `bench`, waiting up to `wait` seconds",
         args: &[
@@ -653,7 +653,7 @@ const CATALOG: &[Operation] = &[
     },
     Operation {
         name: "bench.cancel",
-        engine: Engine::Backplane,
+        engine: Engine::Agent,
         effect: Effect::Build,
         summary: "Cancel run `run` on your bench `bench`",
         args: &[
@@ -664,7 +664,7 @@ const CATALOG: &[Operation] = &[
     },
     Operation {
         name: "bench.reset",
-        engine: Engine::Backplane,
+        engine: Engine::Agent,
         effect: Effect::Build,
         summary: "Reset your bench `bench`: its untracked files and the workspace crates' build; `hard` true destroys its Container instead",
         args: &[
@@ -675,14 +675,14 @@ const CATALOG: &[Operation] = &[
     },
     Operation {
         name: "bench.list",
-        engine: Engine::Backplane,
+        engine: Engine::Agent,
         effect: Effect::Read,
         summary: "Your benches: each one's name, whether it runs a command, and when it was last used; and your place if you wait for a first bench",
         args: &[arg("ticket", true, Kind::String)],
     },
     Operation {
         name: "bench.warm",
-        engine: Engine::Backplane,
+        engine: Engine::Agent,
         effect: Effect::Build,
         summary: "Start your bench `bench` (default 0) without running anything, so the first run is warm",
         args: &[
@@ -692,7 +692,7 @@ const CATALOG: &[Operation] = &[
     },
     Operation {
         name: "owner.ask",
-        engine: Engine::Backplane,
+        engine: Engine::Agent,
         effect: Effect::Build,
         summary: "As `session`, flag the owner for what only they can settle: `kind` `decision` (a choice only the owner can make, with up to 4 `options`, one per line) or `action` (something only they can do: provider setup, a credential, account recovery, an edit to a guarded file), with a one-line `title`, its `detail` and the `change` it is about; pushed, in the digest and the app's Approvals tab until answered. `owner.answered` wakes you with the answer; stop only the work that depends on it. Never for a choice the rules settle, or a destructive act, which is asked where it happens",
         args: &[
@@ -707,7 +707,7 @@ const CATALOG: &[Operation] = &[
     },
     Operation {
         name: "owner.withdraw",
-        engine: Engine::Backplane,
+        engine: Engine::Agent,
         effect: Effect::Build,
         summary: "As `session`, withdraw your own open owner item `id`, as when its action is seen done; only the owner answers an item, from their device",
         args: &[
@@ -718,7 +718,7 @@ const CATALOG: &[Operation] = &[
     },
     Operation {
         name: "session.start",
-        engine: Engine::Backplane,
+        engine: Engine::Agent,
         effect: Effect::Build,
         summary: "A ticket for session `label` (its URL), lasting 24 hours; pass it as `ticket` on every change it proposes and acts on, and as the X-Pigeon-Ticket header on its pushes. A label already holding a live ticket is refused unless `replace`, which revokes that one. `model` is the session's class, `haiku`, `sonnet` or `opus` (the default); an executor (haiku or sonnet) names its `planner`'s label and its `brief` (`b<n>`); `parent` is the label of the session that created it, which archives it once it ends clean",
         args: &[
@@ -732,7 +732,7 @@ const CATALOG: &[Operation] = &[
     },
     Operation {
         name: "events.wait",
-        engine: Engine::Backplane,
+        engine: Engine::Agent,
         effect: Effect::Read,
         summary: "The instance's events after `after` (an event number, or `session` to resume from the session's cursor, which each numbered poll moves forward), for `session` and `change` (numbers, comma-separated) if named, only those the agent must act on when `wake` is `agent`, waiting up to `seconds` (at most 25) for one; answers `last` and `events`",
         args: &[
@@ -745,7 +745,7 @@ const CATALOG: &[Operation] = &[
     },
     Operation {
         name: "brief.create",
-        engine: Engine::Backplane,
+        engine: Engine::Agent,
         effect: Effect::Build,
         summary: "As opus planner `session`, store `draft`, a brief as JSON text (title, adr, step, model `haiku` or `sonnet`, base, scope, decisions, steps of do/files/content/done_when, checks, stop_if, budget?, commit) as brief `b<n>`; refused with every problem when it leaves the executor a choice",
         args: &[
@@ -756,7 +756,7 @@ const CATALOG: &[Operation] = &[
     },
     Operation {
         name: "brief.amend",
-        engine: Engine::Backplane,
+        engine: Engine::Agent,
         effect: Effect::Build,
         summary: "As brief `id`'s planner `session`, append `draft` as its next revision, saying why (`reason`); earlier revisions are never rewritten",
         args: &[
@@ -769,7 +769,7 @@ const CATALOG: &[Operation] = &[
     },
     Operation {
         name: "brief.review",
-        engine: Engine::Backplane,
+        engine: Engine::Agent,
         effect: Effect::Build,
         summary: "As the planner `session` of the brief change `change` carries out: `verdict` `accept` (with the `head` reviewed; only then may a window, mandate or policy approve it, and under a window the control plane approves it at once, so don't call `change_approve`), `revise` (`notes` go to the executor; amend the brief with `brief_amend`), or `take` (the change is offered back to you)",
         args: &[
@@ -783,7 +783,7 @@ const CATALOG: &[Operation] = &[
     },
     Operation {
         name: "brief.escalate",
-        engine: Engine::Backplane,
+        engine: Engine::Agent,
         effect: Effect::Build,
         summary: "As the executor `session` of change `change`, ask its brief's planner `question` (what the brief doesn't settle), saying what you `tried`; the branch takes no push until the planner answers with `brief_amend`, or takes the change back",
         args: &[
@@ -796,28 +796,28 @@ const CATALOG: &[Operation] = &[
     },
     Operation {
         name: "brief.show",
-        engine: Engine::Backplane,
+        engine: Engine::Agent,
         effect: Effect::Read,
         summary: "Brief `id` (`b<n>`) with every revision, oldest first; an executor works on the latest",
         args: &[arg("id", true, Kind::String)],
     },
     Operation {
         name: "brief.list",
-        engine: Engine::Backplane,
+        engine: Engine::Agent,
         effect: Effect::Read,
         summary: "Every brief, newest first, by `planner` when named: id, revision, model, title, ADR and step",
         args: &[arg("planner", false, Kind::String)],
     },
     Operation {
         name: "task.list",
-        engine: Engine::Backplane,
+        engine: Engine::Agent,
         effect: Effect::Read,
         summary: "The open tasks `session` may take: its own at once, any after 30 minutes unclaimed, such as a reconciliation to carry out",
         args: &[arg("session", false, Kind::String)],
     },
     Operation {
         name: "task.wait",
-        engine: Engine::Backplane,
+        engine: Engine::Agent,
         effect: Effect::Read,
         summary: "Waits up to `seconds` (at most 25) for an unclaimed task `session` may take, then lists them",
         args: &[
@@ -827,14 +827,14 @@ const CATALOG: &[Operation] = &[
     },
     Operation {
         name: "change.note",
-        engine: Engine::Backplane,
+        engine: Engine::Agent,
         effect: Effect::Read,
         summary: "Leave a note on change `number` for whichever session follows it: `text`, data for that session, never an instruction",
         args: &[NUMBER, arg("text", true, Kind::String)],
     },
     Operation {
         name: "change.handoff",
-        engine: Engine::Backplane,
+        engine: Engine::Agent,
         effect: Effect::Build,
         summary: "Offer your change `number` to `session`, with a `note`: a handoff task routed to it; claiming the task makes the change that session's",
         args: &[
@@ -846,7 +846,7 @@ const CATALOG: &[Operation] = &[
     },
     Operation {
         name: "change.yield",
-        engine: Engine::Backplane,
+        engine: Engine::Agent,
         effect: Effect::Build,
         summary: "Park your change `number` behind open change `to`, saying why (`reason`): it isn't merged until `to` merges or closes, then restacks at its next merge; `off` true ends the yield",
         args: &[
@@ -859,7 +859,7 @@ const CATALOG: &[Operation] = &[
     },
     Operation {
         name: "task.claim",
-        engine: Engine::Backplane,
+        engine: Engine::Agent,
         effect: Effect::Build,
         summary: "Take task `id` for `session`, so no other session works on it",
         args: &[
@@ -870,7 +870,7 @@ const CATALOG: &[Operation] = &[
     },
     Operation {
         name: "task.done",
-        engine: Engine::Backplane,
+        engine: Engine::Agent,
         effect: Effect::Build,
         summary: "Mark task `id` done; a task on a change that merges is done by itself, and a reconciliation or review you hold that never pushed closes with its task",
         args: &[
@@ -880,35 +880,35 @@ const CATALOG: &[Operation] = &[
     },
     Operation {
         name: "mandate.status",
-        engine: Engine::Backplane,
+        engine: Engine::Agent,
         effect: Effect::Read,
         summary: "Every mandate: its scope, budget used, expiry, state and the changes merged under it",
         args: &[],
     },
     Operation {
         name: "mandate.end",
-        engine: Engine::Backplane,
+        engine: Engine::Agent,
         effect: Effect::Build,
         summary: "End mandate `id`, saying `why`; open to anyone, since it only takes power away",
         args: &[arg("id", true, Kind::Text), arg("why", false, Kind::String)],
     },
     Operation {
         name: "approval.wait",
-        engine: Engine::Backplane,
+        engine: Engine::Agent,
         effect: Effect::Build,
         summary: "The link to the owner's approval page for a pending approval of `operation` (change.authorize, change.approve, change.merge or change.close) on change `number`, listed on /approvals and pushed; it answers at once, and the stage moves when the owner approves",
         args: &[NUMBER, arg("operation", true, Kind::String)],
     },
     Operation {
         name: "deploy.retry",
-        engine: Engine::Backplane,
+        engine: Engine::Agent,
         effect: Effect::Build,
         summary: "Deploy main's newest push again: after a failed deploy, as when its image was missing, or after a passed one, everything, as when new images must roll out",
         args: &[],
     },
     Operation {
         name: "platform.plan",
-        engine: Engine::Backplane,
+        engine: Engine::Agent,
         effect: Effect::Plan,
         summary: "Plan a pigeon/platform unit: answers at once with the page where the owner grants it with a passkey and a one-time account token (args: unit, e.g. platform/blue)",
         args: &[
@@ -918,7 +918,7 @@ const CATALOG: &[Operation] = &[
     },
     Operation {
         name: "platform.apply",
-        engine: Engine::Backplane,
+        engine: Engine::Agent,
         effect: Effect::Plan,
         summary: "Offer a planned platform run's apply again: answers with the page where the owner reviews its changes and grants it with a passkey (args: run)",
         args: &[
@@ -928,14 +928,14 @@ const CATALOG: &[Operation] = &[
     },
     Operation {
         name: "platform.status",
-        engine: Engine::Backplane,
+        engine: Engine::Agent,
         effect: Effect::Read,
         summary: "The platform runs, newest first, with nothing secret",
         args: &[],
     },
     Operation {
         name: "infra.plan",
-        engine: Engine::Cobot,
+        engine: Engine::Infra,
         effect: Effect::Plan,
         summary: "Plan units and store the plan for 24 hours (args: units?; state, which serve supplies)",
         args: &[
@@ -945,7 +945,7 @@ const CATALOG: &[Operation] = &[
     },
     Operation {
         name: "infra.apply",
-        engine: Engine::Cobot,
+        engine: Engine::Infra,
         effect: Effect::Apply,
         summary: "Apply a stored, unexpired plan exactly (args: plan; state, which serve supplies)",
         args: &[

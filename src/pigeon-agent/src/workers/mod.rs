@@ -1668,7 +1668,7 @@ pub fn push_images_waiting(
                             return Err(e);
                         };
                         eprintln!(
-                            "cobot: the push of {} failed; retrying in {}s: {e}",
+                            "infra: the push of {} failed; retrying in {}s: {e}",
                             local(&c.class),
                             wait.as_secs()
                         );

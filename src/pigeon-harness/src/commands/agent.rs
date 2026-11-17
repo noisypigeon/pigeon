@@ -55,7 +55,7 @@ fn totp_secret() -> i32 {
     use std::io::Read;
     let mut bytes = [0u8; 20];
     if let Err(e) = std::fs::File::open("/dev/urandom").and_then(|mut f| f.read_exact(&mut bytes)) {
-        eprintln!("backplane: no randomness: {e}");
+        eprintln!("agent: no randomness: {e}");
         return INVALID;
     }
     let secret = agent::core::approval::totp::base32_encode(&bytes);
@@ -75,11 +75,11 @@ fn enroll_secret() -> i32 {
     use agent::core::approval::enroll;
     let mut bytes = [0u8; 32];
     if let Err(e) = std::fs::File::open("/dev/urandom").and_then(|mut f| f.read_exact(&mut bytes)) {
-        eprintln!("backplane: no randomness: {e}");
+        eprintln!("agent: no randomness: {e}");
         return INVALID;
     }
     let Ok(now) = SystemTime::now().duration_since(UNIX_EPOCH) else {
-        eprintln!("backplane: the clock is before 1970");
+        eprintln!("agent: the clock is before 1970");
         return INVALID;
     };
     let token = enroll::token(&bytes);
@@ -99,7 +99,7 @@ fn vapid_key() -> i32 {
         if let Err(e) =
             std::fs::File::open("/dev/urandom").and_then(|mut f| f.read_exact(&mut bytes))
         {
-            eprintln!("backplane: no randomness: {e}");
+            eprintln!("agent: no randomness: {e}");
             return INVALID;
         }
         let secret = agent::push::b64url(&bytes);
@@ -109,7 +109,7 @@ fn vapid_key() -> i32 {
             return SUCCESS;
         }
     }
-    eprintln!("backplane: no valid key after 8 tries");
+    eprintln!("agent: no valid key after 8 tries");
     INVALID
 }
 
@@ -132,21 +132,21 @@ fn serve(args: &ServeArgs) -> i32 {
     let server = match bound {
         Ok(s) => s,
         Err(e) => {
-            eprintln!("backplane: {e}");
+            eprintln!("agent: {e}");
             return INVALID;
         }
     };
     if let Some(addr) = server.local_addr() {
-        eprintln!("backplane: serving on {addr}");
+        eprintln!("agent: serving on {addr}");
     }
     for signal in [signal_hook::consts::SIGTERM, signal_hook::consts::SIGINT] {
         if let Err(e) = signal_hook::flag::register(signal, server.stopper()) {
-            eprintln!("backplane: cannot handle signal {signal}: {e}");
+            eprintln!("agent: cannot handle signal {signal}: {e}");
             return INVALID;
         }
     }
     server.serve(|k| std::env::var(k).ok());
-    eprintln!("backplane: stopped after finishing its requests");
+    eprintln!("agent: stopped after finishing its requests");
     SUCCESS
 }
 
@@ -159,7 +159,7 @@ fn jobs(args: &JobsArgs) -> i32 {
         Ok(s) if args.bench => {
             // The sandbox mounts its own /tmp, which would hide a checkout there.
             let Some(work) = args.work.clone().filter(|w| !w.starts_with("/tmp")) else {
-                eprintln!("backplane: --bench needs --work outside /tmp");
+                eprintln!("agent: --bench needs --work outside /tmp");
                 return INVALID;
             };
             let work = work.join("bench");
@@ -171,16 +171,16 @@ fn jobs(args: &JobsArgs) -> i32 {
         }
         Ok(s) => s,
         Err(e) => {
-            eprintln!("backplane: {e}");
+            eprintln!("agent: {e}");
             return INVALID;
         }
     };
     if let Some(addr) = server.local_addr() {
-        eprintln!("backplane: taking jobs on {addr}");
+        eprintln!("agent: taking jobs on {addr}");
     }
     for signal in [signal_hook::consts::SIGTERM, signal_hook::consts::SIGINT] {
         if let Err(e) = signal_hook::flag::register(signal, server.stopper()) {
-            eprintln!("backplane: cannot handle signal {signal}: {e}");
+            eprintln!("agent: cannot handle signal {signal}: {e}");
             return INVALID;
         }
     }
@@ -214,7 +214,7 @@ fn operation(name: &str, raw: &[String], text: &[String], args: &RootArgs) -> i3
     }) {
         Ok(p) => p,
         Err(e) => {
-            eprintln!("backplane: {e}");
+            eprintln!("agent: {e}");
             return INVALID;
         }
     };
@@ -232,7 +232,7 @@ fn operation(name: &str, raw: &[String], text: &[String], args: &RootArgs) -> i3
             if response.ok { SUCCESS } else { VIOLATION }
         }
         Err(e) => {
-            eprintln!("backplane: {e}");
+            eprintln!("agent: {e}");
             INVALID
         }
     }
@@ -243,10 +243,7 @@ fn print_text(response: &Response) {
         println!("{v}");
     }
     let state = if response.ok { "ok" } else { "violations" };
-    println!(
-        "backplane: {} {state}: {}",
-        response.operation, response.result
-    );
+    println!("agent: {} {state}: {}", response.operation, response.result);
 }
 
 /// `pigeon decisions`: the ADRs governing each path.
@@ -255,7 +252,7 @@ fn decisions(args: &DecisionsArgs) -> i32 {
     let entries = match std::fs::read_dir(&dir) {
         Ok(e) => e,
         Err(e) => {
-            eprintln!("backplane: {}: {e}", dir.display());
+            eprintln!("agent: {}: {e}", dir.display());
             return INVALID;
         }
     };
@@ -271,7 +268,7 @@ fn decisions(args: &DecisionsArgs) -> i32 {
         match std::fs::read_to_string(entry.path()) {
             Ok(text) => all.push(agent::decisions::parse(&name, &text)),
             Err(e) => {
-                eprintln!("backplane: {name}: {e}");
+                eprintln!("agent: {name}: {e}");
                 return INVALID;
             }
         }
@@ -302,7 +299,7 @@ fn decisions(args: &DecisionsArgs) -> i32 {
 fn print_json<T: serde::Serialize + ?Sized>(value: &T) {
     match serde_json::to_string_pretty(value) {
         Ok(s) => println!("{s}"),
-        Err(e) => eprintln!("backplane: {e}"),
+        Err(e) => eprintln!("agent: {e}"),
     }
 }
 
