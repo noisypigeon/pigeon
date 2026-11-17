@@ -206,17 +206,17 @@ mod tests {
         let b = tempfile::tempdir().expect("tempdir");
         let dirs = [a.path().to_path_buf(), b.path().to_path_buf()];
         assert_eq!(find(&dirs), None);
-        std::fs::write(b.path().join(crate::wire::ship_wire::SENTINEL_BINARY), "").expect("old");
+        std::fs::write(b.path().join(crate::wire::ship_wire::STORED_JUDGE), "").expect("old");
         assert_eq!(
             find(&dirs),
-            Some(b.path().join(crate::wire::ship_wire::SENTINEL_BINARY))
+            Some(b.path().join(crate::wire::ship_wire::STORED_JUDGE))
         );
         std::fs::write(b.path().join("pigeon-eviction"), "").expect("new");
         assert_eq!(find(&dirs), Some(b.path().join("pigeon-eviction")));
-        std::fs::write(a.path().join(crate::wire::ship_wire::SENTINEL_BINARY), "").expect("nearer");
+        std::fs::write(a.path().join(crate::wire::ship_wire::STORED_JUDGE), "").expect("nearer");
         assert_eq!(
             find(&dirs),
-            Some(a.path().join(crate::wire::ship_wire::SENTINEL_BINARY))
+            Some(a.path().join(crate::wire::ship_wire::STORED_JUDGE))
         );
     }
 }

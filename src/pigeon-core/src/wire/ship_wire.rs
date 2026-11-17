@@ -38,19 +38,20 @@ pub fn build_key(sha: &str) -> String {
     format!("builds/{sha}/pigeon")
 }
 
-/// The binaries a build stores, by name: `pigeon`, and `pigeon-sentinel`, which the bound job
-/// judges with; see `.claude/decisions/2026-11-10-development-factory-crates-functional-core.md`
+/// The binaries a build stores, by name: `pigeon`, and the judge, which the bound job judges
+/// with; see `.claude/decisions/2026-11-10-development-factory-crates-functional-core.md`
 /// §2.
-pub const BUILD_BINARIES: [&str; 2] = ["pigeon", SENTINEL_BINARY];
+pub const BUILD_BINARIES: [&str; 2] = ["pigeon", STORED_JUDGE];
 
-/// The sentinel binary's name.
-pub const SENTINEL_BINARY: &str = "pigeon-sentinel";
+/// The name a build stores the judge under, whichever name it was built as: a stored name, kept
+/// by step 12 of `.claude/decisions/2026-11-16-development-src-crates-neutral-names.md`.
+pub const STORED_JUDGE: &str = "pigeon-sentinel";
 
-/// The judge's binary names, the new first; a build stores either under [`sentinel_key`]. See
+/// The judge's binary names, the new first; a build stores either under [`judge_key`]. See
 /// `.claude/decisions/2026-11-16-development-src-crates-neutral-names.md` §3.
-pub const JUDGE_BINARIES: [&str; 2] = ["pigeon-eviction", SENTINEL_BINARY];
+pub const JUDGE_BINARIES: [&str; 2] = ["pigeon-eviction", STORED_JUDGE];
 
-/// The variable naming the `pigeon-sentinel` build a job Container downloads.
+/// The variable naming the judge's build a job Container downloads.
 pub const JUDGE_URL_VAR: &str = "PIGEON_EVICTION_URL";
 /// The variable holding that build's SHA-256.
 pub const JUDGE_SHA256_VAR: &str = "PIGEON_EVICTION_SHA256";
@@ -66,10 +67,10 @@ pub const TEST_MAP_SHA256_VAR: &str = "PIGEON_TEST_MAP_SHA256";
 /// The variable holding the commit whose `test map` failed on `main`, while no later run passed.
 pub const TEST_MAP_RED_VAR: &str = "PIGEON_TEST_MAP_RED";
 
-/// The R2 key of `main`'s `pigeon-sentinel` built at `sha`.
+/// The R2 key of the judge built from `main` at `sha`.
 #[must_use]
-pub fn sentinel_key(sha: &str) -> String {
-    format!("builds/{sha}/{SENTINEL_BINARY}")
+pub fn judge_key(sha: &str) -> String {
+    format!("builds/{sha}/{STORED_JUDGE}")
 }
 
 /// The commit and file of a `/builds/<sha>/<file>` path: a full, lowercase SHA-1 and one of

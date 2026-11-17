@@ -2667,3 +2667,4 @@ pigeon-agent test suite cobot_workers::this_repositorys_specs_validate	pigeon-ag
 pigeon-core lib pigeon_core approval::tests::the_judges_rules_read_under_eviction_too	pigeon-core lib pigeon_core approval::tests::the_judges_rules_read_only_under_eviction
 pigeon-agent lib agent sentinel::tests::the_judge_is_found_under_either_name_the_new_first	pigeon-agent lib agent eviction::tests::the_judge_is_found_under_either_name_the_new_first
 pigeon-agent lib agent bench::tests::the_sentinel_build_is_kept_out_of_tmp_and_handed_to_commands	pigeon-agent lib agent bench::tests::the_judge_build_is_kept_out_of_tmp_and_handed_to_commands
+pigeon-agent lib agent containers::worker::tests::a_build_path_names_pigeon_or_pigeon_sentinel_and_nothing_else	pigeon-agent lib agent containers::worker::tests::a_build_path_names_pigeon_or_the_judge_and_nothing_else

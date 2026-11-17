@@ -1521,8 +1521,8 @@ async fn build(env: &Env, path: &str) -> Result<Response> {
     let Some((sha, binary)) = crate::wire::ship_wire::build_path(path) else {
         return Response::error("not found", 404);
     };
-    let key = if binary == crate::wire::ship_wire::SENTINEL_BINARY {
-        crate::wire::ship_wire::sentinel_key(sha)
+    let key = if binary == crate::wire::ship_wire::STORED_JUDGE {
+        crate::wire::ship_wire::judge_key(sha)
     } else if binary == crate::wire::ship_wire::TEST_MAP_FILE {
         crate::core::deploy::testmaps::key(sha)
     } else {
@@ -1558,12 +1558,12 @@ pub(super) async fn latest_build(env: &Env) -> Option<crate::containers::worker:
         .ok()?;
     let v: Value = r.json().await.ok()?;
     let b: control::Build = serde_json::from_value(v["pipeline"]["latest_build"].clone()).ok()?;
-    let sentinel = b.sentinel_sha256.map(|sum| {
+    let judge = b.judge_sha256.map(|sum| {
         (
             format!(
                 "https://{host}/builds/{}/{}",
                 b.sha,
-                crate::wire::ship_wire::SENTINEL_BINARY
+                crate::wire::ship_wire::STORED_JUDGE
             ),
             sum,
         )
@@ -1581,7 +1581,7 @@ pub(super) async fn latest_build(env: &Env) -> Option<crate::containers::worker:
         url: format!("https://{host}/builds/{}/pigeon", b.sha),
         sha256: b.sha256,
         access,
-        sentinel,
+        judge,
         test_map,
         test_map_red,
     })

@@ -230,7 +230,7 @@ pub fn judge_binary(ws: &Path) -> &'static str {
     crate::wire::ship_wire::JUDGE_BINARIES
         .into_iter()
         .find(|b| bins.contains(*b))
-        .unwrap_or(crate::wire::ship_wire::SENTINEL_BINARY)
+        .unwrap_or(crate::wire::ship_wire::STORED_JUDGE)
 }
 
 /// Builds `pigeon` from the checkout at `dir` when the workspace changed among `files`, and
@@ -316,7 +316,7 @@ pub fn build(
             &sha256,
         ),
         (
-            crate::wire::ship_wire::sentinel_key(&spec.sha),
+            crate::wire::ship_wire::judge_key(&spec.sha),
             &judge_path,
             judge_took,
             &judge_sha256,
@@ -338,7 +338,7 @@ pub fn build(
     Ok(Some(Build {
         sha: spec.sha.clone(),
         sha256,
-        sentinel_sha256: Some(judge_sha256),
+        judge_sha256: Some(judge_sha256),
     }))
 }
 
@@ -446,14 +446,17 @@ mod tests {
 
     #[test]
     fn the_judge_is_built_under_the_name_the_tree_declares() {
-        let old = "[package]\nname = \"pigeon-eviction\"\n\n[[bin]]\nname = \"pigeon-sentinel\"\npath = \"src/main.rs\"\n";
+        let stored = crate::wire::ship_wire::STORED_JUDGE;
+        let old = format!(
+            "[package]\nname = \"pigeon-eviction\"\n\n[[bin]]\nname = \"{stored}\"\npath = \"src/main.rs\"\n"
+        );
         let new = "[package]\nname = \"pigeon-eviction\"\n\n[[bin]]\nname = \"pigeon-eviction\"\npath = \"src/main.rs\"\n";
         let other = "[package]\nname = \"pigeon\"\n";
         let t = tree(&[
-            ("pigeon-eviction", old, true),
+            ("pigeon-eviction", old.as_str(), true),
             ("pigeon-harness", other, true),
         ]);
-        assert_eq!(judge_binary(t.path()), "pigeon-sentinel");
+        assert_eq!(judge_binary(t.path()), stored);
         let t = tree(&[
             ("pigeon-eviction", new, true),
             ("pigeon-harness", other, true),
@@ -463,7 +466,7 @@ mod tests {
         let t = tree(&[("pigeon-eviction", implicit, true)]);
         assert_eq!(judge_binary(t.path()), "pigeon-eviction");
         let t = tree(&[("pigeon-harness", other, true)]);
-        assert_eq!(judge_binary(t.path()), "pigeon-sentinel");
+        assert_eq!(judge_binary(t.path()), stored);
         assert_eq!(
             judge_build("pigeon-eviction"),
             [

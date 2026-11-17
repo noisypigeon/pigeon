@@ -17,7 +17,7 @@ pigeon-agent lib agent bench::tests::without_mise_toml_a_task_runs_the_commits_o
 pigeon-agent lib agent checks::scope::tests::a_workspace_at_the_root_is_read_from_its_members_and_metadata
 pigeon-agent lib agent checks::scope::tests::each_package_s_binaries_are_its_listed_main_and_bin_targets
 pigeon-agent lib agent containers::worker::tests::a_build_path_names_one_full_commit_and_nothing_else
-pigeon-agent lib agent containers::worker::tests::a_build_path_names_pigeon_or_pigeon_sentinel_and_nothing_else
+pigeon-agent lib agent containers::worker::tests::a_build_path_names_pigeon_or_the_judge_and_nothing_else
 pigeon-agent lib agent containers::worker::tests::a_job_starts_through_pigeon_start_only_when_a_build_is_named
 pigeon-agent lib agent containers::worker::tests::a_launch_never_prints_a_secret
 pigeon-agent lib agent containers::worker::tests::a_run_launches_serve_signed_for_its_instance_and_state

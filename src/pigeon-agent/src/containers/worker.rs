@@ -122,7 +122,7 @@ pub struct JobsBuild {
     /// The Access service token that may read it: client ID and secret.
     pub access: (String, String),
     /// The judge built beside it: its URL and SHA-256; none for a build without one.
-    pub sentinel: Option<(String, String)>,
+    pub judge: Option<(String, String)>,
     /// `main`'s newest test map: its URL and SHA-256; none before the first.
     pub test_map: Option<(String, String)>,
     /// The commit whose `test map` failed on `main`, while no later run passed.
@@ -134,7 +134,7 @@ impl std::fmt::Debug for JobsBuild {
         f.debug_struct("JobsBuild")
             .field("url", &self.url)
             .field("sha256", &self.sha256)
-            .field("sentinel", &self.sentinel)
+            .field("judge", &self.judge)
             .field("test_map", &self.test_map)
             .field("test_map_red", &self.test_map_red)
             .finish_non_exhaustive()
@@ -188,7 +188,7 @@ impl JobsLaunch {
             env.push((BUILD_SHA256_VAR, b.sha256.as_str()));
             env.push((BUILD_ACCESS_ID_VAR, b.access.0.as_str()));
             env.push((BUILD_ACCESS_SECRET_VAR, b.access.1.as_str()));
-            if let Some((url, sha256)) = &b.sentinel {
+            if let Some((url, sha256)) = &b.judge {
                 env.push((JUDGE_URL_VAR, url.as_str()));
                 env.push((JUDGE_SHA256_VAR, sha256.as_str()));
             }
@@ -513,7 +513,7 @@ mod tests {
             url: "https://control.example/builds/x/pigeon".into(),
             sha256: sha256.clone(),
             access: ("builds-id".into(), "builds-secret".into()),
-            sentinel: None,
+            judge: None,
             test_map: None,
             test_map_red: None,
         });
@@ -542,21 +542,19 @@ mod tests {
                 ("PIGEON_BUILD_ACCESS_SECRET", "builds-secret"),
             ]
         );
-        let sentinel = "cd".repeat(32);
+        let judge = "cd".repeat(32);
+        let url = format!(
+            "https://control.example/builds/x/{}",
+            crate::wire::ship_wire::STORED_JUDGE
+        );
         if let Some(b) = jobs.build.as_mut() {
-            b.sentinel = Some((
-                "https://control.example/builds/x/pigeon-sentinel".into(),
-                sentinel.clone(),
-            ));
+            b.judge = Some((url.clone(), judge.clone()));
         }
         assert_eq!(
             jobs.env()[5..],
             [
-                (
-                    "PIGEON_EVICTION_URL",
-                    "https://control.example/builds/x/pigeon-sentinel"
-                ),
-                ("PIGEON_EVICTION_SHA256", sentinel.as_str()),
+                ("PIGEON_EVICTION_URL", url.as_str()),
+                ("PIGEON_EVICTION_SHA256", judge.as_str()),
             ]
         );
         let map = "ef".repeat(32);
@@ -584,11 +582,12 @@ mod tests {
     }
 
     #[test]
-    fn a_build_path_names_pigeon_or_pigeon_sentinel_and_nothing_else() {
+    fn a_build_path_names_pigeon_or_the_judge_and_nothing_else() {
         let sha = "0123456789abcdef0123456789abcdef01234567";
+        let judge = crate::wire::ship_wire::STORED_JUDGE;
         assert_eq!(
-            crate::wire::ship_wire::build_path(&format!("/builds/{sha}/pigeon-sentinel")),
-            Some((sha, "pigeon-sentinel"))
+            crate::wire::ship_wire::build_path(&format!("/builds/{sha}/{judge}")),
+            Some((sha, judge))
         );
         assert_eq!(
             crate::wire::ship_wire::build_path(&format!("/builds/{sha}/pigeon")),
@@ -599,16 +598,16 @@ mod tests {
             Some((sha, "tests.json"))
         );
         assert_eq!(
-            crate::wire::ship_wire::build_path_sha(&format!("/builds/{sha}/pigeon-sentinel")),
+            crate::wire::ship_wire::build_path_sha(&format!("/builds/{sha}/{judge}")),
             None
         );
         assert_eq!(
-            crate::wire::ship_wire::sentinel_key(sha),
-            format!("builds/{sha}/pigeon-sentinel")
+            crate::wire::ship_wire::judge_key(sha),
+            format!("builds/{sha}/{judge}")
         );
         for bad in [
             format!("/builds/{sha}/pigeon-other"),
-            format!("/builds/{sha}/pigeon-sentinel/x"),
+            format!("/builds/{sha}/{judge}/x"),
             format!("/builds/{sha}/"),
         ] {
             assert_eq!(crate::wire::ship_wire::build_path(&bad), None, "{bad}");

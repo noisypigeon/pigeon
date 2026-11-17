@@ -805,10 +805,16 @@ pub struct Build {
     pub sha: String,
     /// The binary's SHA-256, hex.
     pub sha256: String,
-    /// `pigeon-sentinel`'s SHA-256, built beside it at `builds/<sha>/pigeon-sentinel`; see
-    /// `.claude/decisions/2026-11-10-development-factory-crates-functional-core.md` §2.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub sentinel_sha256: Option<String>,
+    /// The judge's SHA-256, built beside it at [`crate::wire::ship_wire::judge_key`]; see
+    /// `.claude/decisions/2026-11-10-development-factory-crates-functional-core.md` §2. Its wire
+    /// key is a stored name, kept by step 12 of
+    /// `.claude/decisions/2026-11-16-development-src-crates-neutral-names.md`.
+    #[serde(
+        rename = "sentinel_sha256",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub judge_sha256: Option<String>,
 }
 
 /// The event a finished report is, for `job` on head `sha`; none while it runs.

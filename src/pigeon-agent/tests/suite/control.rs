@@ -508,7 +508,7 @@ fn the_newest_build_a_deploy_stored_is_what_jobs_run() {
     let build = |sha: &str| agent::control::Build {
         sha: sha.into(),
         sha256: "ab".repeat(32),
-        sentinel_sha256: None,
+        judge_sha256: None,
     };
     let mut p = Pipeline::default();
     p.pushed(A);
