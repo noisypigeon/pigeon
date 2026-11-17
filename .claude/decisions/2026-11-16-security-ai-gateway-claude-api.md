@@ -641,3 +641,30 @@ Neither ADR changes.
   test), none of the files !850 plans for. The two met only through the
   review rule's scope.
 - Nothing any of the three ADRs decides changes.
+### 2026-11-17: Review of !903 against !862: they agree
+
+!862 amended
+[`2026-11-15-development-capacity-pools-hard-spend-cap.md`](2026-11-15-development-capacity-pools-hard-spend-cap.md).
+Its `Governs` gained `src/pigeon-core/src/pool/**`, which includes this
+ADR's `pool/aigateway.rs`. !903 adds `src/**/pool/aigateway.rs` and
+`catalog/cloudflare/modules/ai-gateway/**` to this ADR's `Governs`.
+
+- **Both ADRs govern `aigateway.rs`, and they agree on it.** !862's step-3
+  amendment cites this ADR for each point:
+  - the upstream (§1, through `core::pool::aigateway`, never
+    `api.anthropic.com`);
+  - the BYOK key (first amendment);
+  - the one-hour Run token in the `Pool` object's memory (§3, and the
+    ledger-route amendment);
+  - the vetting order (§11);
+  - the signals and fail-closed behaviour (§6).
+- **Who decides what.** This ADR decides the gateway's URL, headers,
+  metadata and signals. The capacity-pools ADR decides how the pool meters,
+  admits and charges around them. A change to `aigateway.rs` reads both.
+- **One wording.** !862 refuses `503` before any reservation, with
+  `pool: no gateway` or `pool: no gateway token`, and charges a fetch error
+  or gateway `5xx` after reserving. That is within this ADR's §6 (fail
+  closed, never a fallback), as the pool-route planner and this planner
+  agreed.
+
+Neither decision changes.
