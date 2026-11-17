@@ -74,7 +74,7 @@ RUN mkdir /recipe \
 
 # A change's jobs run here (lifecycle ADR §4): the toolchain rust-toolchain.toml pins, git, backplane's
 # tools, and the workspace's dependencies already compiled, so a job builds only the crates
-# it touches. Build with `--build-arg FEATURES=backplane`.
+# it touches. Build with `--build-arg FEATURES=agent`.
 FROM docker.io/library/rust:1.99.1-slim-bookworm@sha256:24707e70a4f1e23d9a7b25202ec43126d28a52294b96aad5c670df1fd1f1d400 AS ci
 # Node, wrangler and worker-build deploy Workers from the pipeline; pinned here alone
 # (.claude/decisions/2026-11-07-development-control-plane-deploys-itself.md §2).

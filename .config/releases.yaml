@@ -14,10 +14,11 @@ units:
       - .dockerignore
     exclude: [tests/, benches/, '*.md']
     cargo: { workspace: ., package: pigeon-eviction }
-  backplane:
+  agent:
+    previous: backplane
     manifest: src/pigeon-agent/Cargo.toml
     features: agent
-    image: ghcr.io/noisypigeon/pigeon-backplane
+    image: ghcr.io/noisypigeon/pigeon-agent
     paths:
       - src/pigeon-agent/
       - src/pigeon-harness/src/commands/agent.rs

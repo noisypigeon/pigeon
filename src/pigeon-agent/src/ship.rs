@@ -162,7 +162,7 @@ pub const BUILD: [&str; 9] = [
     "pigeon",
     "--no-default-features",
     "--features",
-    "backplane",
+    "agent",
 ];
 
 /// The command that builds the judge the bound job judges with, by its binary's name `bin`, so it
