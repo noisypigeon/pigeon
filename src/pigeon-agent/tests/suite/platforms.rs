@@ -1,8 +1,22 @@
 //! Platform runs: offers, grants, the sealed token's lifetime; see
 //! `.claude/decisions/2026-11-08-runtime-blue-green-self-standup.md`, step 4's amendment.
 
-use agent::core::platform::platforms::{Kept, LIFETIME, Runs, Stage, finish_event, merged_outputs};
-use serde_json::json;
+use agent::core::platform::platforms::{
+    Kept, LIFETIME, Planned, Runs, Stage, finish_event, merged_outputs,
+};
+use serde_json::{Value, json};
+
+const OFFERED: &str = "1111111111111111111111111111111111111111";
+const HEAD: &str = "2222222222222222222222222222222222222222";
+
+/// A plan job's report of `plan` at `sha`.
+fn at(plan: &str, sha: &str, changes: Vec<Value>) -> Planned {
+    Planned {
+        plan: plan.into(),
+        sha: sha.into(),
+        changes,
+    }
+}
 
 #[test]
 fn a_run_is_planned_then_applied_each_on_its_own_grant() {
@@ -18,7 +32,7 @@ fn a_run_is_planned_then_applied_each_on_its_own_grant() {
     assert!(stepped!(runs.grant_plan(1, "g1", "SEALED", "x", 102)).is_err());
     let r = stepped!(runs.planned(
         1,
-        Ok(("p1".into(), vec![json!({"address": "a"})])),
+        Ok(at("p1", HEAD, vec![json!({"address": "a"})])),
         "g2",
         200,
     ))
@@ -42,7 +56,7 @@ fn a_failed_or_refused_run_erases_its_token() {
     assert_eq!((r.stage, r.sealed.clone()), (Stage::Failed, None));
     stepped!(runs.propose("platform/blue", "g3", 3)).expect("a new run once the last finished");
     stepped!(runs.grant_plan(2, "g3", "SEALED", "o", 4)).expect("grants");
-    stepped!(runs.planned(2, Ok(("p".into(), Vec::new())), "g4", 5)).expect("planned");
+    stepped!(runs.planned(2, Ok(at("p", HEAD, Vec::new())), "g4", 5)).expect("planned");
     let r = stepped!(runs.refuse(2, "o")).expect("refuses");
     assert_eq!((r.stage, r.sealed), (Stage::Failed, None));
 }
@@ -61,7 +75,7 @@ fn a_waiting_run_expires_with_its_token_but_a_running_job_is_left_alone() {
     let mut runs = Runs::default();
     stepped!(runs.propose("platform/blue", "g1", 0)).expect("proposes");
     stepped!(runs.grant_plan(1, "g1", "SEALED", "o", 1)).expect("grants");
-    stepped!(runs.planned(1, Ok(("p".into(), Vec::new())), "g2", 2)).expect("planned");
+    stepped!(runs.planned(1, Ok(at("p", HEAD, Vec::new())), "g2", 2)).expect("planned");
     stepped!(runs.propose("platform/green", "g3", 0)).expect("proposes");
     stepped!(runs.grant_plan(2, "g3", "SEALED", "o", 1)).expect("grants");
     assert_eq!(kept!(runs.expire(LIFETIME - 1)), Vec::<u32>::new());
@@ -89,7 +103,7 @@ fn a_finished_run_says_what_happened() {
     stepped!(runs.propose("platform/blue", "g1", 0)).expect("proposes");
     assert_eq!(finish_event(runs.get(1).expect("run")), None);
     stepped!(runs.grant_plan(1, "g1", "SEALED", "o", 1)).expect("grants");
-    let r = stepped!(runs.planned(1, Ok(("p".into(), vec![json!({}), json!({})])), "g2", 2))
+    let r = stepped!(runs.planned(1, Ok(at("p", HEAD, vec![json!({}), json!({})])), "g2", 2))
         .expect("planned");
     let (kind, said) = finish_event(&r).expect("an event");
     assert_eq!(kind, "platform.planned");
@@ -126,4 +140,38 @@ fn kept_outputs_replace_their_unit_in_the_secret() {
     let alone: serde_json::Value =
         serde_json::from_str(&merged_outputs(None, &kept).expect("merged")).expect("JSON");
     assert_eq!(alone["platform/blue"]["database_id"], "d");
+}
+
+// Platform runs 18 to 30 failed when `main` moved between the offer and the job; see the
+// blue-green ADR's 2026-11-17 amendment.
+#[test]
+fn a_plan_records_the_head_it_planned_and_the_apply_is_pinned_to_it() {
+    let mut runs = Runs::default();
+    stepped!(runs.propose("platform/blue", "g1", 0)).expect("proposes");
+    let r = stepped!(runs.grant_plan(1, "g1", "SEALED", "o", 1)).expect("grants");
+    assert_eq!(r.job_sha(Some(OFFERED)).as_deref(), Ok(OFFERED));
+    assert!(r.job_sha(None).is_err(), "no deploy, no Runner to plan on");
+    // `main` moved to HEAD before the job ran: the job planned HEAD and says so.
+    let r = stepped!(runs.planned(1, Ok(at("p1", HEAD, Vec::new())), "g2", 2)).expect("planned");
+    assert_eq!((r.stage, r.sha.as_deref()), (Stage::Planned, Some(HEAD)));
+    assert_eq!(r.shown().sha.as_deref(), Some(HEAD), "status shows it");
+    let r = stepped!(runs.grant_apply(1, "g2", "o", 3)).expect("grants");
+    assert_eq!(
+        r.job_sha(Some(OFFERED)).as_deref(),
+        Ok(HEAD),
+        "the apply checks out what was planned, not what is deployed"
+    );
+}
+
+#[test]
+fn a_plan_naming_no_commit_fails_and_an_apply_without_one_never_starts() {
+    let mut runs = Runs::default();
+    stepped!(runs.propose("platform/blue", "g1", 0)).expect("proposes");
+    stepped!(runs.grant_plan(1, "g1", "SEALED", "o", 1)).expect("grants");
+    let r = stepped!(runs.planned(1, Ok(at("p1", "", Vec::new())), "g2", 2)).expect("records");
+    assert_eq!((r.stage, r.sealed.clone()), (Stage::Failed, None));
+    let mut legacy = r;
+    legacy.stage = Stage::Applying;
+    legacy.plan = Some("p1".into());
+    assert!(legacy.job_sha(Some(OFFERED)).is_err());
 }

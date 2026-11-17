@@ -724,15 +724,18 @@ pub fn platform_page(run: &crate::platform::platforms::Run, token: &str) -> Stri
             b,
             "<p>The engine plans this stack with an account token you make in the dashboard, \
 with only: {}. It is sealed for this run alone \
-and erased after the apply, a refusal or 24 hours; revoke it in the dashboard afterwards.</p>",
+and erased after the apply, a refusal or 24 hours; revoke it in the dashboard afterwards. \
+It plans <code>main</code>'s head when the job starts; the apply's page names that commit.</p>",
             escape(&crate::platform::platforms::token_permissions().join(", "))
         );
     } else {
         let _ = write!(
             b,
-            "<p>Plan <code>{}</code>, {} change(s). Existing resources are imported; nothing is \
-destroyed (a plan that destroys is refused before it reaches you).</p><pre>",
+            "<p>Plan <code>{}</code> of commit <code>{}</code>, which the apply checks out, {} \
+change(s). Existing resources are imported; nothing is destroyed (a plan that destroys is \
+refused before it reaches you).</p><pre>",
             escape(run.plan.as_deref().unwrap_or_default()),
+            escape(run.sha.as_deref().unwrap_or_default()),
             run.changes.len()
         );
         for c in &run.changes {

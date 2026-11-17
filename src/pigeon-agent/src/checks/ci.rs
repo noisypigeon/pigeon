@@ -90,6 +90,60 @@ pub fn checkout(
     Ok(())
 }
 
+/// Fetches `branch` from `remote` into a new repository at `dir`, and checks out `pinned`,
+/// which must be on the branch, or else the branch's head as fetched: the commit checked out.
+///
+/// # Errors
+///
+/// [`Error::Git`] when git fails, or `pinned` isn't on the branch.
+pub fn checkout_on(
+    dir: &Path,
+    remote: &str,
+    token: &str,
+    branch: &str,
+    pinned: Option<&str>,
+) -> Result<String, Error> {
+    std::fs::create_dir_all(dir).map_err(|e| Error::Io {
+        path: dir.to_path_buf(),
+        message: e.to_string(),
+    })?;
+    git(dir, remote, token, &["init", "-q"])?;
+    let spec = format!("+refs/heads/{branch}:refs/remotes/origin/{branch}");
+    git(
+        dir,
+        remote,
+        token,
+        &["fetch", "-q", "--no-tags", remote, &spec],
+    )?;
+    let head = git(
+        dir,
+        remote,
+        token,
+        &["rev-parse", &format!("refs/remotes/origin/{branch}")],
+    )?;
+    let sha = pinned.unwrap_or(&head).to_string();
+    if sha != head && git(dir, "", "", &["merge-base", "--is-ancestor", &sha, &head]).is_err() {
+        return Err(Error::Git {
+            args: format!("merge-base --is-ancestor {sha} {branch}"),
+            message: format!("{sha} is not on {branch}"),
+        });
+    }
+    git(
+        dir,
+        remote,
+        token,
+        &["-c", "advice.detachedHead=false", "checkout", "-q", &sha],
+    )?;
+    let out = git(dir, "", "", &["rev-parse", "HEAD"])?;
+    if out != sha {
+        return Err(Error::Git {
+            args: "rev-parse HEAD".into(),
+            message: format!("checked out {out}, not {sha}"),
+        });
+    }
+    Ok(sha)
+}
+
 /// `branch`'s head on `remote` now, by `git ls-remote`, run in `dir`.
 ///
 /// # Errors

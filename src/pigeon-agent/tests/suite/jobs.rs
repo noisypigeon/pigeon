@@ -437,6 +437,58 @@ fn a_platform_apply_checks_out_where_its_plan_did() {
     );
 }
 
+// Platform runs 18 to 30 failed when `main` moved between the offer and the job; see the
+// blue-green ADR's 2026-11-17 amendment.
+#[test]
+fn a_platform_plan_takes_mains_head_as_it_starts_and_an_apply_its_planned_commit() {
+    let tmp = TempDir::new().expect("tmp");
+    let (bare, moved) = remote(tmp.path(), &["docs/moved.md"]);
+    let offered = git(&bare, &["rev-parse", "main"]);
+    git(
+        &tmp.path().join("work"),
+        &["push", "-q", "origin", "change/1-x:main"],
+    );
+    let platform = |id: &str, sha: &str, argv: &[&str]| {
+        let mut s = spec(&bare, sha, agent::control::PLATFORM, &[], argv);
+        s.id = id.into();
+        s.branch = "main".into();
+        s
+    };
+    let dir = tmp.path().join("job");
+    let plan = platform("platform-1-plan", &offered, &["plan", "platform/blue"]);
+    let r = run_job(&plan, &dir);
+    assert!(
+        r.violations.iter().all(|v| !v.contains("push again")),
+        "{r:?}"
+    );
+    assert_eq!(git(&dir, &["rev-parse", "HEAD"]), moved, "main's head now");
+    assert!(
+        r.violations.iter().any(|v| v.contains("account token")),
+        "it got past the checkout: {r:?}"
+    );
+    let apply = platform(
+        "platform-1-apply",
+        &offered,
+        &["apply", "platform/blue", "p1"],
+    );
+    run_job(&apply, &dir);
+    assert_eq!(
+        git(&dir, &["rev-parse", "HEAD"]),
+        offered,
+        "the apply is pinned, though main moved on"
+    );
+    let stray = platform(
+        "platform-1-apply",
+        "3333333333333333333333333333333333333333",
+        &["apply", "platform/blue", "p1"],
+    );
+    let r = run_job(&stray, &dir);
+    assert!(
+        r.violations.iter().any(|v| v.contains("is not on main")),
+        "{r:?}"
+    );
+}
+
 #[test]
 fn a_mirror_job_moves_main_and_tags_and_never_shows_its_token() {
     let tmp = TempDir::new().expect("tempdir");

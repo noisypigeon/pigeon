@@ -739,3 +739,26 @@ Run 31 of `platform/blue` failed its plan with a `403` (code 10000) on
   - AI Gateway Edit.
 - **Owner tier.** `approve.rs` is a gate file. Until that change merges,
   the owner adds the last two permissions to the run's token by hand.
+
+### 2026-11-17: A plan runs from `main`'s head; its apply is pinned to that commit
+
+Runs 18 to 33 failed with "main's head is X, not Y". Each job had to find
+`main` at the deployed commit, so a merge between the offer, the plan and the
+apply moved it. With a busy merge queue, nearly every run hit this. Run 33's
+apply, which the owner had approved, was one of them.
+
+- **A plan job checks out `main`'s head as it starts,** and reports that
+  commit. The run records it, and a plan naming no commit fails.
+  - The plan's grant was never bound to a commit: it covers `main` when the
+    job runs.
+- **An apply job checks out the recorded commit,** whatever `main` is by
+  then.
+  - The commit must be `main`'s head or an ancestor of it, so it was merged
+    and reviewed. The job then checks that `HEAD` is that commit.
+  - It still applies the stored plan by its ID. OpenTofu still refuses a
+    saved plan whose state has moved.
+  - A run that recorded no commit, such as one planned before this, is
+    planned again.
+- **The apply's page names the commit** beside the plan's ID, so the owner
+  grants the plan and the commit it was made from.
+- **Stand-up jobs keep the deployed commit.**

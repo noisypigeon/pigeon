@@ -102,7 +102,7 @@ pub struct Run {
     /// The plan's or the apply's changes.
     #[serde(default)]
     pub changes: Vec<Value>,
-    /// The commit its jobs ran from.
+    /// The commit its plan job planned, which its apply job checks out.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sha: Option<String>,
     /// Why it failed.
@@ -146,6 +146,27 @@ impl Run {
         }
     }
 
+    /// The commit its running job's spec names: for a plan, `main`'s `deployed` one, though the
+    /// job plans `main`'s head as it starts; for an apply, the commit its plan recorded. See the
+    /// blue-green ADR's 2026-11-17 amendment.
+    ///
+    /// # Errors
+    ///
+    /// When there is no job, `main` has no deploy, or an apply's plan recorded no commit.
+    pub fn job_sha(&self, deployed: Option<&str>) -> Result<String, String> {
+        match self.stage {
+            Stage::Planning => deployed
+                .map(str::to_string)
+                .ok_or_else(|| "main has no deploy yet to run the job from".into()),
+            Stage::Applying => self
+                .sha
+                .clone()
+                .filter(|s| crate::change::is_sha(s))
+                .ok_or_else(|| "the run's plan recorded no commit; plan it again".into()),
+            _ => Err("the run has no job to start".into()),
+        }
+    }
+
     /// The same run with nothing secret: no sealed token, no offer hash.
     #[must_use]
     pub fn shown(&self) -> Self {
@@ -166,6 +187,17 @@ pub struct Runs {
     /// The runs, oldest first.
     #[serde(default)]
     pub list: Vec<Run>,
+}
+
+/// What a plan job reports.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Planned {
+    /// The stored plan's ID.
+    pub plan: String,
+    /// The commit it planned.
+    pub sha: String,
+    /// Its changes.
+    pub changes: Vec<Value>,
 }
 
 /// The hex SHA-256 of a grant token, as a run keeps it.
@@ -283,8 +315,8 @@ impl Runs {
         Ok((next, run))
     }
 
-    /// Records run `id`'s plan job: planned, offering the apply under `token`, or failed. The
-    /// next runs, and the run.
+    /// Records run `id`'s plan job: planned at its commit, offering the apply under `token`, or
+    /// failed, as is a plan naming no commit. The next runs, and the run.
     ///
     /// # Errors
     ///
@@ -292,7 +324,7 @@ impl Runs {
     pub fn planned(
         &self,
         id: u32,
-        result: Result<(String, Vec<Value>), String>,
+        result: Result<Planned, String>,
         token: &str,
         now: u64,
     ) -> Result<(Self, Run), String> {
@@ -302,10 +334,18 @@ impl Runs {
         }
         let mut next = self.clone();
         let run = &mut next.list[i];
+        let result = result.and_then(|p| {
+            if crate::change::is_sha(&p.sha) {
+                Ok(p)
+            } else {
+                Err("the plan job named no commit it planned".into())
+            }
+        });
         match result {
-            Ok((plan, changes)) => {
+            Ok(Planned { plan, sha, changes }) => {
                 run.stage = Stage::Planned;
                 run.plan = Some(plan);
+                run.sha = Some(sha);
                 run.changes = changes;
                 run.offer = Some(hash(token));
                 run.offer_expires = (run.created + LIFETIME).min(now + LIFETIME);

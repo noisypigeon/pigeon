@@ -176,6 +176,9 @@ pub fn run_judged(spec: &JobSpec, dir: &Path, sentinel: &Path) -> Report {
         return release(spec, dir);
     }
     let _ = std::fs::remove_dir_all(dir);
+    if spec.job == crate::control::PLATFORM && !crate::standup_job::asks(&spec.argv) {
+        return platform(spec, dir);
+    }
     if let Err(e) = crate::checks::ci::checkout(
         dir,
         &spec.remote,
@@ -232,6 +235,29 @@ pub fn run_judged(spec: &JobSpec, dir: &Path, sentinel: &Path) -> Report {
         if ok { Outcome::Passed } else { Outcome::Failed },
         &log,
     )
+}
+
+/// A platform job: a plan checks out `main`'s head as it starts, an apply the commit its plan
+/// recorded, which must be on `main`; its result names the commit. See
+/// `.claude/decisions/2026-11-08-runtime-blue-green-self-standup.md`'s 2026-11-17 amendment.
+fn platform(spec: &JobSpec, dir: &Path) -> Report {
+    let pinned = match crate::platform_job::Task::parse(&spec.argv) {
+        Ok(crate::platform_job::Task::Apply { .. }) => Some(spec.sha.as_str()),
+        _ => None,
+    };
+    match crate::checks::ci::checkout_on(dir, &spec.remote, &spec.token, &spec.branch, pinned) {
+        Ok(sha) => {
+            let mut r = crate::platform_job::run(spec, dir);
+            if let Some(p) = r.platform.as_mut().and_then(Value::as_object_mut) {
+                p.insert("sha".into(), json!(sha));
+            }
+            r
+        }
+        Err(e) => Report {
+            violations: vec![e.to_string()],
+            ..report(spec, Outcome::Failed, &e.to_string())
+        },
+    }
 }
 
 /// The unscratch job: deletes a session's scratch ref when it ends; see

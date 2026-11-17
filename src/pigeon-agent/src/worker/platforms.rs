@@ -17,7 +17,7 @@ use super::platform::{self, Settings, job_stub, json_request, now, secret};
 use crate::access::Identity;
 use crate::approve::{self, Waiting};
 use crate::control::{self, JobSpec, Outcome, Report};
-use crate::core::platform::platforms::{Kept, Run, Runs, Stage};
+use crate::core::platform::platforms::{Kept, Planned, Run, Runs, Stage};
 
 const RUNS: &str = "platform-runs";
 
@@ -502,7 +502,7 @@ fn keep<T>(
 /// Records `run`'s finished job from `r`: the run, the operation to offer next and its token,
 /// when there is one.
 fn finished(runs: &mut Runs, run: &Run, r: &Report) -> Result<Option<(Run, &'static str, String)>> {
-    let result = |v: &Value| -> std::result::Result<(String, Vec<Value>), String> {
+    let result = |v: &Value| -> std::result::Result<Planned, String> {
         if r.outcome != Outcome::Passed {
             return Err(r
                 .violations
@@ -510,8 +510,12 @@ fn finished(runs: &mut Runs, run: &Run, r: &Report) -> Result<Option<(Run, &'sta
                 .cloned()
                 .unwrap_or_else(|| "the job failed".into()));
         }
-        let changes = v["changes"].as_array().cloned().unwrap_or_default();
-        Ok((v["plan"].as_str().unwrap_or_default().to_string(), changes))
+        let text = |k: &str| v[k].as_str().unwrap_or_default().to_string();
+        Ok(Planned {
+            plan: text("plan"),
+            sha: text("sha"),
+            changes: v["changes"].as_array().cloned().unwrap_or_default(),
+        })
     };
     let v = r.platform.clone().unwrap_or(Value::Null);
     if let Some(kept) = runs.list.iter_mut().find(|x| x.id == run.id) {
@@ -523,7 +527,7 @@ fn finished(runs: &mut Runs, run: &Run, r: &Report) -> Result<Option<(Run, &'sta
         let next = keep(runs, step).map_err(worker::Error::RustError)?;
         return Ok((next.stage == Stage::Planned).then_some((next, "platform.apply", token)));
     }
-    let step = runs.applied(run.id, result(&v).map(|(_, c)| c));
+    let step = runs.applied(run.id, result(&v).map(|p| p.changes));
     keep(runs, step).map_err(worker::Error::RustError)?;
     Ok(None)
 }
@@ -550,10 +554,11 @@ async fn poll(env: &Env, id: &str) -> std::result::Result<Option<Report>, ()> {
     }
 }
 
-/// Starts `run`'s job on a Runner from `sha`, with the owner's token unsealed for it alone.
-async fn start(env: &Env, run: &Run, sha: Option<&str>) -> std::result::Result<(), String> {
+/// Starts `run`'s job on a Runner, with the owner's token unsealed for it alone: a plan of
+/// `main`'s head, an apply of the commit its plan recorded.
+async fn start(env: &Env, run: &Run, deployed: Option<&str>) -> std::result::Result<(), String> {
     let job = run.job_id().ok_or("the run has no job to start")?;
-    let sha = sha.ok_or("main has no deploy yet to run the job from")?;
+    let sha = run.job_sha(deployed)?;
     let sealed = run.sealed.as_deref().ok_or("the run's token is gone")?;
     let key = super::checker::signing_key(env).map_err(|e| e.to_string())?;
     let token = platform::unseal(&key, sealed)
@@ -577,7 +582,7 @@ async fn start(env: &Env, run: &Run, sha: Option<&str>) -> std::result::Result<(
         token: git,
         base: "main".into(),
         branch: "main".into(),
-        sha: sha.to_string(),
+        sha,
         number: 0,
         title: format!("platform run {}", run.id),
         plan: String::new(),
