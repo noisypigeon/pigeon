@@ -293,3 +293,17 @@ That overstates the gap:
 What §2 still lacks is the binding: the ID names neither the door nor the
 caller, so a mismatch isn't refused. Step 3's session check adds that
 binding, as written.
+
+### 2026-11-17: Review of !851 against the capacity pools' !862: they agree
+
+[`2026-11-15-development-capacity-pools-hard-spend-cap.md`](2026-11-15-development-capacity-pools-hard-spend-cap.md)'s !862 governs `jobs.rs`, `brief/mod.rs` and
+`insights/mod.rs`. !851, this ADR's step 3 (session check), touches none
+of them.
+
+- **What !851 touches.** v3 MCP session IDs name their door and caller, and
+  `/mcp` refuses a mismatched ID. It changes only `mcp.rs`,
+  `worker/api.rs` and their tests.
+- **The pool's route.** It is not an MCP door, so the session check doesn't
+  apply to it. The route keeps its own Run-token check and `verdict::admit`.
+
+Neither ADR changes.
