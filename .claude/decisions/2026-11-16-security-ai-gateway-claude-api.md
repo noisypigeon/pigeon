@@ -718,3 +718,37 @@ on two points:
   !877 doesn't touch it.
 
 Neither decision changes.
+
+### 2026-11-17: The spike's probes run in step 7, through the pool route
+
+`platform/blue`'s run 34 created `pigeon-models`.
+
+**Why step 2 moves.** Step 2's spike needs three things:
+- a Run token;
+- the account ID;
+- a route to `gateway.ai.cloudflare.com`.
+
+An agent session has none of them, by §3's design: the token never leaves
+the `Pool` object, and a session's network refuses the host. So the spike
+isn't run from a session.
+
+**Its probes move into step 7's live run,** made through the deployed pool
+route (!865, !924):
+
+- **Recording.** The route records each non-2xx gateway answer as an event:
+  its status and its `classify` signal, with no body and no secret.
+  `classify`'s placeholder fixtures (b61) are replaced from those by
+  amendment.
+- **The checks:**
+  - a `401` (`GatewayUnauthorized`), from one request sent while the pool's
+    token is withheld;
+  - `2044` (`GatewayNoKey`), from one request before the owner adds the
+    key (owner item #24);
+  - whether `anthropic-workspace-id` passes through, from the first
+    `count_tokens` call after the key. The pool ADR's workspace pin trips if
+    it doesn't, so this check fails closed;
+  - a rate-limit `429` (`GatewayLimited`), recorded only if one occurs
+    naturally. None is forced.
+- **Dropped:** whether the `ai` binding is pre-authenticated. The minted Run
+  token (§3 and its amendments) is the design.
+- **Order.** Step 3b (DLP) follows step 7.
