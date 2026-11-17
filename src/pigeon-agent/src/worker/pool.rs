@@ -20,6 +20,7 @@ use super::pool_dispatch::{self, Followed};
 use crate::access::Identity;
 use crate::core::pool::aigateway;
 use crate::core::pool::config::{Budget, Pool as PoolConfig, config};
+use crate::core::pool::dispatch as pd;
 use crate::core::pool::gateway::{Gateway, gateway};
 use crate::core::pool::ledger::{self, Ledger};
 use crate::core::pool::meter::{self, Seen, Sse, TaskInfo, Vet};
@@ -218,13 +219,32 @@ impl Pool {
         let s = Settings::from(&self.env)?;
         let mut left = jobs.clone();
         for (task, f) in &jobs {
-            let report = match pool_dispatch::report(&self.env, &f.job).await? {
+            let answer = pool_dispatch::report(&self.env, &f.job).await?;
+            let (first, lost) = pd::gone(f.gone, answer.is_none(), now());
+            let report = match answer {
                 Some(Some(r)) => Some(r),
-                _ if now() < f.lost_at => continue,
+                _ if !lost && now() < f.lost_at => {
+                    if first != f.gone {
+                        let mut g = f.clone();
+                        g.gone = first;
+                        left.insert(task.clone(), g);
+                        storage.put("jobs", &left).await?;
+                    }
+                    continue;
+                }
                 _ => None,
             };
-            let outcome = pool_dispatch::act(&self.env, &s, f, report.as_ref()).await?;
             let l = self.ledger(pool).await?;
+            let requests = l.tasks.get(task).map_or(1, |t| u64::from(t.requests));
+            let brief = self.tasks().await?.get(task).map(|i| i.brief.clone());
+            // A lost task that spent nothing runs again once; see the pool ADR's 2026-11-17 entry.
+            let outcome = match brief {
+                Some(b) if report.is_none() && pd::runs_again(&f.label, requests) => {
+                    pool_dispatch::again(&self.env, &s, f, &b).await?;
+                    "lost".to_string()
+                }
+                _ => pool_dispatch::act(&self.env, &s, f, report.as_ref()).await?,
+            };
             if let Ok(n) = ledger::close_task(&l, task, &outcome, now()) {
                 storage.put("ledger", &n).await?;
             }

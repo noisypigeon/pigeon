@@ -288,6 +288,10 @@ pub async fn serve(state: &State, path: &str, body: &Value) -> Result<Response> 
             let briefs = crate::core::pool::dispatch::waiting(&all);
             return Response::from_json(&json!({ "briefs": briefs }));
         }
+        "/tasks/release" => match body["brief"].as_str() {
+            Some(b) => Ok(json!({ "released": all.release_brief(b) })),
+            None => Err("a release names its `brief`".into()),
+        },
         "/tasks/claim" => match n("id") {
             Some(id) => all
                 .claim_as(id, session.unwrap_or_default(), class, now())

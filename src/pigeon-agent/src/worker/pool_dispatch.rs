@@ -36,6 +36,9 @@ pub struct Followed {
     pub label: String,
     /// When the job counts as lost.
     pub lost_at: u64,
+    /// When the `Checker` first answered 404 in a row, if it has.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gone: Option<u64>,
 }
 
 /// The ledger pool `name`'s object keeps, if it has one yet.
@@ -251,6 +254,7 @@ async fn open(
         change: number,
         label: label.to_string(),
         lost_at: pd::lost_at(opened, &budget),
+        gone: None,
     };
     let body = json!({ "task": task_id, "followed": followed });
     super::pool::to_pool(env, pool, "/task/job", &body).await?;
@@ -393,6 +397,32 @@ pub(super) async fn report(env: &Env, job: &str) -> Result<Option<Option<Report>
         404 => Ok(None),
         _ => Ok(Some(None)),
     }
+}
+
+/// Readies lost task `followed` of brief `brief` to run again: its never-pushed change closes,
+/// the brief's task is released and the label ends; see the pool ADR's 2026-11-17 entry on a
+/// Container's stop.
+///
+/// # Errors
+///
+/// When a binding fails.
+pub(super) async fn again(env: &Env, s: &Settings, followed: &Followed, brief: &str) -> Result<()> {
+    let close = serde_json::to_value(Event::Close)?;
+    let (status, v) = super::to_change(
+        env,
+        &s.repo,
+        followed.change,
+        Method::Post,
+        "/event",
+        Some(&close),
+    )
+    .await?;
+    if status != 200 {
+        worker::console_error!("pool: !{} didn't close: {v}", followed.change);
+    }
+    to_instance(env, s, "/tasks/release", &json!({ "brief": brief })).await?;
+    end_label(env, s, &followed.label).await;
+    Ok(())
 }
 
 /// What a finished or lost job does: its change hears the push, or the planner hears an

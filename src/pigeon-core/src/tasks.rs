@@ -230,6 +230,16 @@ impl Tasks {
         Ok(t.clone())
     }
 
+    /// Clears the claim on brief `brief`'s open task, as when its pool job was lost: its id.
+    pub fn release_brief(&mut self, brief: &str) -> Option<u32> {
+        let t = self
+            .list
+            .iter_mut()
+            .find(|t| !t.done && t.kind == "brief" && t.brief.as_deref() == Some(brief))?;
+        t.claimed_by = None;
+        Some(t.id)
+    }
+
     /// Marks task `id` done.
     ///
     /// # Errors
@@ -751,4 +761,20 @@ pub fn stops(events: &[crate::events::Event]) -> Option<String> {
     Some(format!(
         "stops since last digest: owner {asked}{by}; agent nudged {nudged}; escalated {escalated}"
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_released_brief_task_is_unclaimed_and_open() {
+        let mut t = Tasks::default();
+        let id = t.add_brief("b9", Class::Haiku, "b9", 100);
+        t.claim_as(id, "pool:b9.1", Class::Haiku, 100).unwrap();
+        assert_eq!(t.release_brief("b9"), Some(id));
+        assert_eq!(t.list[0].claimed_by, None);
+        assert!(!t.list[0].done);
+        assert_eq!(t.release_brief("b8"), None, "no such brief");
+    }
 }
