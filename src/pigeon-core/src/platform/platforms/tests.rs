@@ -80,3 +80,47 @@ fn a_manifest_declares_a_list_or_nothing() {
     );
     assert!(module_capabilities("version: 0.1.0\ncapabilities: oops\n").is_err());
 }
+
+// See `.claude/decisions/2026-11-17-security-platform-run-minted-token.md` §4–§6.
+#[test]
+fn a_minted_run_records_its_token_and_is_revoked_once_it_ends() {
+    use super::{Credential, Minted, Runs, Stage, finish_event};
+    let runs = Runs::default();
+    let (runs, _) = runs.propose("platform/blue", "g1", 0).expect("proposes");
+    let (runs, _) = runs.grant_plan(1, "g1", "SEALED", "o", 1).expect("grants");
+    let minted = Minted {
+        token_id: "t1".into(),
+        capabilities: vec!["d1.write".into()],
+        expires: 86_401,
+        revoked: false,
+    };
+    let (runs, run) = runs
+        .credit(1, Credential::Minted, Some(minted))
+        .expect("credits");
+    assert_eq!(run.credential, Some(Credential::Minted));
+    assert!(
+        runs.to_revoke().is_empty(),
+        "a planning run keeps its token"
+    );
+    let (runs, run) = runs.planned(1, Err("boom".into()), "t2", 2).expect("fails");
+    assert_eq!(run.stage, Stage::Failed);
+    assert_eq!(runs.to_revoke(), vec![(1, "t1".to_string())]);
+    let runs = runs.revoked(1);
+    assert!(runs.to_revoke().is_empty(), "revoked once");
+    assert!(runs.credit(1, Credential::Pasted, None).is_err());
+    let shown = serde_json::to_string(&runs.get(1).expect("run").shown()).expect("json");
+    assert!(shown.contains("\"token_id\":\"t1\"") && !shown.contains("SEALED"));
+    let (runs, _) = Runs::default()
+        .propose("platform/blue", "g", 0)
+        .expect("proposes");
+    let (runs, _) = runs.grant_plan(1, "g", "S", "o", 1).expect("grants");
+    let (runs, _) = runs.credit(1, Credential::Pasted, None).expect("credits");
+    let planned = super::Planned {
+        plan: "p".into(),
+        sha: "2222222222222222222222222222222222222222".into(),
+        changes: vec![],
+    };
+    let (_, run) = runs.planned(1, Ok(planned), "t", 2).expect("plans");
+    let (_, said) = finish_event(&run).expect("an event");
+    assert!(said.contains("with a pasted token"), "{said}");
+}

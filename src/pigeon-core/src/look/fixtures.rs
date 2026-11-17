@@ -132,11 +132,11 @@ fn fixture_pages() -> Vec<(&'static str, String)> {
         ("ci-window", approve::ci_window_page(&window, "tok")),
         (
             "platform-plan",
-            approve::platform_page(&offered, "tok", &Ok(platform_needs())),
+            approve::platform_page(&offered, "tok", &Ok(platform_needs()), true),
         ),
         (
             "platform-apply",
-            approve::platform_page(&planned, "tok", &Ok(platform_needs())),
+            approve::platform_page(&planned, "tok", &Ok(platform_needs()), true),
         ),
         ("link", approve::link_page("Willow's iPhone", "BASE64KEY", "ab:cd:ef:01")),
         ("devices", approve::devices_page(&devices, Some("Unlinked."))),

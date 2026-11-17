@@ -111,6 +111,48 @@ pub struct Run {
     /// When it was proposed.
     #[serde(default)]
     pub created: u64,
+    /// How its account token was made, once its plan is granted.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub credential: Option<Credential>,
+    /// The token minted for it, never its value; see
+    /// `.claude/decisions/2026-11-17-security-platform-run-minted-token.md` §4–§5.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub minted: Option<Minted>,
+}
+
+/// How a run's account token was made; see
+/// `.claude/decisions/2026-11-17-security-platform-run-minted-token.md` §6.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Credential {
+    /// By `granter`, on the plan's passkey proof.
+    Minted,
+    /// Pasted by the owner: break-glass.
+    Pasted,
+}
+
+/// A token minted for a run: its ID, capabilities and expiry, and whether it was revoked.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Minted {
+    /// Its ID at Cloudflare.
+    pub token_id: String,
+    /// The capabilities it carries.
+    pub capabilities: Vec<String>,
+    /// When it expires, in Unix seconds.
+    pub expires: u64,
+    /// Whether it was revoked once the run ended.
+    #[serde(default)]
+    pub revoked: bool,
+}
+
+/// The ledger grant a run's token is minted from.
+pub const PLATFORM_RUN: &str = "platform-run";
+
+/// A digest of capability names `names`, in order, which a minting proof binds; see
+/// `.claude/decisions/2026-11-17-security-platform-run-minted-token.md` §4.
+#[must_use]
+pub fn mint_digest(names: &[String]) -> String {
+    hash(&names.join("\n"))
 }
 
 impl Run {
@@ -446,6 +488,59 @@ impl Runs {
     pub fn running(&self) -> Vec<&Run> {
         self.list.iter().filter(|r| r.task().is_some()).collect()
     }
+
+    /// Records how run `id`'s token was made, and the token minted for it: the next runs, and the
+    /// run; see `.claude/decisions/2026-11-17-security-platform-run-minted-token.md` §4 and §6.
+    ///
+    /// # Errors
+    ///
+    /// When there is no such run, or it isn't planning; the runs are then unchanged.
+    pub fn credit(
+        &self,
+        id: u32,
+        credential: Credential,
+        minted: Option<Minted>,
+    ) -> Result<(Self, Run), String> {
+        let i = self.index(id)?;
+        if self.list[i].stage != Stage::Planning {
+            return Err(format!("platform run {id} isn't planning"));
+        }
+        let mut next = self.clone();
+        let run = &mut next.list[i];
+        run.credential = Some(credential);
+        run.minted = minted;
+        let run = run.clone();
+        Ok((next, run))
+    }
+
+    /// Each finished run whose minted token isn't revoked yet: its number and the token's ID; see
+    /// `.claude/decisions/2026-11-17-security-platform-run-minted-token.md` §5.
+    #[must_use]
+    pub fn to_revoke(&self) -> Vec<(u32, String)> {
+        self.list
+            .iter()
+            .filter(|r| r.stage.finished())
+            .filter_map(|r| {
+                let m = r.minted.as_ref().filter(|m| !m.revoked)?;
+                Some((r.id, m.token_id.clone()))
+            })
+            .collect()
+    }
+
+    /// The runs with run `id`'s minted token marked revoked.
+    #[must_use]
+    pub fn revoked(&self, id: u32) -> Self {
+        let mut next = self.clone();
+        if let Some(m) = next
+            .list
+            .iter_mut()
+            .find(|r| r.id == id)
+            .and_then(|r| r.minted.as_mut())
+        {
+            m.revoked = true;
+        }
+        next
+    }
 }
 
 /// Each platform unit's newest outputs, as its last apply read them from state; see the step 4c
@@ -461,8 +556,12 @@ pub fn finish_event(run: &Run) -> Option<(&'static str, String)> {
         Stage::Planned => Some((
             "platform.planned",
             format!(
-                "{head} planned: {} change(s), waiting to be applied",
-                run.changes.len()
+                "{head} planned: {} change(s) with {} token, waiting to be applied",
+                run.changes.len(),
+                match run.credential {
+                    Some(Credential::Minted) => "a minted",
+                    _ => "a pasted",
+                }
             ),
         )),
         Stage::Applied => Some((

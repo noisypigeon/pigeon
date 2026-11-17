@@ -259,6 +259,18 @@ pub fn grant_purpose(token: &str) -> String {
     format!("grant:{}", super::grants::key(token))
 }
 
+/// The purpose a platform plan's proof is minted for when it also mints the run's token: grant
+/// `token` bound to `capabilities`, so a proof made for another set is refused; see
+/// `.claude/decisions/2026-11-17-security-platform-run-minted-token.md` §4.
+#[must_use]
+pub fn mint_purpose(token: &str, capabilities: &[String]) -> String {
+    format!(
+        "{}:mint:{}",
+        grant_purpose(token),
+        crate::platform::platforms::mint_digest(capabilities)
+    )
+}
+
 /// What adding a passkey is proven for, by an existing one.
 pub const ADD: &str = "passkey:add";
 

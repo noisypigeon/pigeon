@@ -17,7 +17,9 @@ use super::platform::{self, Settings, job_stub, json_request, now, secret};
 use crate::access::Identity;
 use crate::approve::{self, Waiting};
 use crate::control::{self, JobSpec, Outcome, Report};
-use crate::core::platform::platforms::{Kept, Planned, Run, Runs, Stage};
+use crate::core::platform::platforms::{
+    Credential, Kept, Minted, PLATFORM_RUN, Planned, Run, Runs, Stage,
+};
 
 const RUNS: &str = "platform-runs";
 
@@ -178,6 +180,34 @@ async fn verified(token: &str) -> std::result::Result<(), String> {
     }
 }
 
+/// What a plan's page offers for `run`: its unit's deployed capabilities, or why there are none,
+/// and whether one proof mints its token; see
+/// `.claude/decisions/2026-11-17-security-platform-run-minted-token.md` §4 and §6.
+async fn terms(
+    env: &Env,
+    s: &Settings,
+    run: &Run,
+) -> (
+    std::result::Result<Vec<crate::core::minting::Wanted>, String>,
+    bool,
+) {
+    match super::minting::deployed(env, s).await {
+        Ok(Some(r)) => {
+            let mint =
+                super::minting::granter_bound(env) && r.ledger.grants.contains_key(PLATFORM_RUN);
+            (r.unit(&run.unit), mint)
+        }
+        Ok(None) => (
+            Err("no deploy has reported the grants ledger yet".into()),
+            false,
+        ),
+        Err(e) => (
+            Err(format!("the deployed ledger can't be read: {e}")),
+            false,
+        ),
+    }
+}
+
 /// Serves `/platform/<id>` for `who`: the page of its pending grant, and the POST that grants or
 /// refuses it.
 ///
@@ -209,14 +239,10 @@ pub async fn page_serve(
             let (status, v) = to_main(env, s, "peek", &json!({ "id": id, "token": token })).await?;
             match serde_json::from_value::<Run>(v.clone()) {
                 Ok(run) if status == 200 => {
-                    let needs = match super::minting::deployed(env, s).await {
-                        Ok(Some(r)) => r.unit(&run.unit),
-                        Ok(None) => Err("no deploy has reported the grants ledger yet".into()),
-                        Err(e) => Err(format!("the deployed ledger can't be read: {e}")),
-                    };
+                    let (needs, mint) = terms(env, s, &run).await;
                     page::html_with(
                         200,
-                        &approve::platform_page(&run, &token, &needs),
+                        &approve::platform_page(&run, &token, &needs, mint),
                         approve::PROOF_CSP,
                     )
                 }
@@ -242,6 +268,71 @@ pub async fn page_serve(
     }
 }
 
+/// The sealed token for `run`'s plan, posted as `form`: pasted (break-glass) or, with `mint`,
+/// minted by `granter`; or the page refusing it; see
+/// `.claude/decisions/2026-11-17-security-platform-run-minted-token.md` §4 and §6.
+async fn plan_token(
+    env: &Env,
+    s: &Settings,
+    run: &Run,
+    form: &str,
+    mint: bool,
+) -> Result<std::result::Result<(String, Credential, Option<Minted>), Response>> {
+    let mut minted = None;
+    let pasted = approve::field(form, "account_token")
+        .map(|t| t.trim().to_string())
+        .filter(|t| !t.is_empty());
+    let key = super::checker::signing_key(env)?;
+    let (sealed, credential) = match pasted {
+        Some(account) => {
+            if let Err(why) = verified(&account).await {
+                return Ok(Err(page::refused(403, &why)?));
+            }
+            (platform::seal(&key, &account).await?, Credential::Pasted)
+        }
+        None if mint => match super::minting::for_run(env, s, &run.unit).await? {
+            Ok(t) => {
+                let sealed = match platform::seal(&key, &t.value).await {
+                    Ok(sealed) => sealed,
+                    Err(e) => {
+                        let _ = super::minting::revoke_token(env, &t.id).await;
+                        return Err(e);
+                    }
+                };
+                minted = Some(Minted {
+                    token_id: t.id,
+                    capabilities: t.capabilities,
+                    expires: t.expires,
+                    revoked: false,
+                });
+                (sealed, Credential::Minted)
+            }
+            Err(why) => {
+                let said = format!(
+                    "platform run {} of {}: its token wasn't minted: {why}",
+                    run.id, run.unit
+                );
+                let _ =
+                    super::events::append(env, s, "grant.failed", None, None, &said, false).await;
+                let _ = super::tasks::add(env, s, "grant-failed", 0, None, None, &said).await;
+                return Ok(Err(page::refused(
+                    502,
+                    &format!(
+                        "{why}. Nothing was sealed: plan again, or paste a token (break-glass)."
+                    ),
+                )?));
+            }
+        },
+        None => {
+            return Ok(Err(page::refused(
+                400,
+                "this run can't mint its token; paste an account token",
+            )?));
+        }
+    };
+    Ok(Ok((sealed, credential, minted)))
+}
+
 async fn decide(
     env: &Env,
     s: &Settings,
@@ -265,23 +356,39 @@ async fn decide(
         let _ = super::events::append(env, s, "platform.failed", None, None, &said, false).await;
         return page::html(200, &approve::outcome("Refused", &said));
     }
-    let purpose = crate::core::approval::passkeys::grant_purpose(token);
+    let offered = run.stage == Stage::Offered;
+    let (needs, mint) = if offered {
+        terms(env, s, &run).await
+    } else {
+        (Err(String::new()), false)
+    };
+    let names: Option<Vec<String>> = match &needs {
+        Ok(wanted) if mint => Some(wanted.iter().map(|w| w.name.clone()).collect()),
+        _ => None,
+    };
+    let purpose = match &names {
+        Some(n) => crate::core::approval::passkeys::mint_purpose(token, n),
+        None => crate::core::approval::passkeys::grant_purpose(token),
+    };
     let shown = format!("/platform/{id}?grant={token}");
     let proved = super::passkeys::on_page(env, s, form, &purpose, host, &shown).await?;
     if let Err(why) = proved {
         return page::refused(403, &why);
     }
-    let (path, body) = if run.stage == Stage::Offered {
-        let account = approve::field(form, "account_token").unwrap_or_default();
-        let account = account.trim();
-        if let Err(why) = verified(account).await {
-            return page::refused(403, &why);
-        }
-        let key = super::checker::signing_key(env)?;
-        let sealed = platform::seal(&key, account).await?;
+    let mut minted: Option<Minted> = None;
+    let (path, body) = if offered {
+        let (sealed, credential, made) =
+            match plan_token(env, s, &run, form, names.is_some()).await? {
+                Ok(t) => t,
+                Err(refused) => return Ok(refused),
+            };
+        minted = made;
         (
             "grant-plan",
-            json!({ "id": id, "token": token, "sealed": sealed, "by": by, "now": now() }),
+            json!({
+                "id": id, "token": token, "sealed": sealed, "by": by, "now": now(),
+                "credential": credential, "minted": minted,
+            }),
         )
     } else {
         (
@@ -291,19 +398,36 @@ async fn decide(
     };
     let (status, v) = to_main(env, s, path, &body).await?;
     match serde_json::from_value::<Run>(v.clone()) {
-        Ok(r) if status == 200 => page::html(
-            200,
-            &approve::outcome(
-                &format!("Platform run {} granted", r.id),
-                &format!(
-                    "{} {}: the job runs now. Recorded as {}.",
-                    r.task().unwrap_or("next step"),
-                    r.unit,
-                    who.subject
+        Ok(r) if status == 200 => {
+            if let Some(m) = &minted {
+                let said = format!(
+                    "`{PLATFORM_RUN}` granted by {by} for platform run {id} of {}: token {}, {}",
+                    run.unit,
+                    m.token_id,
+                    m.capabilities.join(", ")
+                );
+                let _ =
+                    super::events::append(env, s, "grant.granted", None, None, &said, false).await;
+            }
+            page::html(
+                200,
+                &approve::outcome(
+                    &format!("Platform run {} granted", r.id),
+                    &format!(
+                        "{} {}: the job runs now. Recorded as {}.",
+                        r.task().unwrap_or("next step"),
+                        r.unit,
+                        who.subject
+                    ),
                 ),
-            ),
-        ),
-        _ => page::refused(409, v.as_str().unwrap_or("the run was not granted")),
+            )
+        }
+        _ => {
+            if let Some(m) = &minted {
+                let _ = super::minting::revoke_token(env, &m.token_id).await;
+            }
+            page::refused(409, v.as_str().unwrap_or("the run was not granted"))
+        }
     }
 }
 
@@ -364,7 +488,13 @@ pub async fn serve(state: &State, path: &str, body: &Value) -> Result<Response> 
             runs.peek(id, &s("token"), at, t).map(Run::shown)
         }
         "grant-plan" => {
-            let step = runs.grant_plan(id, &s("token"), &s("sealed"), &s("by"), t);
+            let credential: Credential =
+                serde_json::from_value(body["credential"].clone()).unwrap_or(Credential::Pasted);
+            let minted: Option<Minted> =
+                serde_json::from_value(body["minted"].clone()).unwrap_or_default();
+            let step = runs
+                .grant_plan(id, &s("token"), &s("sealed"), &s("by"), t)
+                .and_then(|(next, _)| next.credit(id, credential, minted));
             keep(&mut runs, step)
         }
         "grant-apply" => {
@@ -387,6 +517,9 @@ pub async fn serve(state: &State, path: &str, body: &Value) -> Result<Response> 
         _ => return Response::error("not found", 404),
     };
     store(state, &runs).await?;
+    if !runs.to_revoke().is_empty() {
+        arm(state).await?;
+    }
     match answer {
         Ok(run) => {
             if run.task().is_some() {
@@ -404,7 +537,8 @@ pub async fn serve(state: &State, path: &str, body: &Value) -> Result<Response> 
 ///
 /// When storage fails.
 pub async fn running(state: &State) -> Result<bool> {
-    Ok(!load(state).await?.running().is_empty())
+    let runs = load(state).await?;
+    Ok(!runs.running().is_empty() || !runs.to_revoke().is_empty())
 }
 
 /// One poll of `MainRun`'s platform jobs: each one not yet started is started, each finished is
@@ -485,6 +619,9 @@ pub async fn tick(state: &State, env: &Env, sha: Option<&str>) -> Result<()> {
             let _ =
                 super::events::append(env, &s, "platform.expired", None, None, &said, false).await;
         }
+        if revoke_ended(env, &s, &mut runs).await {
+            store(state, &runs).await?;
+        }
     }
     if !runs.running().is_empty() {
         let storage = state.storage();
@@ -493,6 +630,39 @@ pub async fn tick(state: &State, env: &Env, sha: Option<&str>) -> Result<()> {
         }
     }
     Ok(())
+}
+
+/// Revokes each ended run's minted token once, through `granter`, and posts how it went: whether
+/// `runs` changed. A failed revocation is the owner's to finish, and the token's expiry ends it
+/// anyway; see `.claude/decisions/2026-11-17-security-platform-run-minted-token.md` §5.
+async fn revoke_ended(env: &Env, s: &Settings, runs: &mut Runs) -> bool {
+    let ending = runs.to_revoke();
+    for (id, token) in &ending {
+        let (kind, said) = match super::minting::revoke_token(env, token).await {
+            Ok(Ok(())) => (
+                "grant.revoked",
+                format!("platform run {id}'s token {token} revoked"),
+            ),
+            Ok(Err(why)) => (
+                "grant.failed",
+                format!(
+                    "platform run {id}'s token {token} wasn't revoked: {why}; it expires within 24 hours"
+                ),
+            ),
+            Err(e) => (
+                "grant.failed",
+                format!(
+                    "platform run {id}'s token {token} wasn't revoked: {e}; it expires within 24 hours"
+                ),
+            ),
+        };
+        *runs = runs.revoked(*id);
+        let _ = super::events::append(env, s, kind, None, None, &said, false).await;
+        if kind == "grant.failed" {
+            let _ = super::tasks::add(env, s, "grant-failed", 0, None, None, &said).await;
+        }
+    }
+    !ending.is_empty()
 }
 
 /// Keeps the runs a transition answered in `runs`, and gives its run, or why it was refused.

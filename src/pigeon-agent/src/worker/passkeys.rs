@@ -526,7 +526,11 @@ pub async fn page_serve(
             if let Some(shown) = shown
                 && let Some((fixed, bound)) = bound_for(env, s, shown).await?
             {
-                if fixed.is_some_and(|f| f != purpose) {
+                // A platform plan's proof may also bind the token it mints; `decide` checks
+                // that digest against the set it mints, per the minted-token ADR §4.
+                if fixed
+                    .is_some_and(|f| f != purpose && !purpose.starts_with(&format!("{f}:mint:")))
+                {
                     return refused(400, "this page isn't that grant's");
                 }
                 asked["bound"] = json!(bound);

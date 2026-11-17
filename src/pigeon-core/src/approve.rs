@@ -699,21 +699,75 @@ pub fn ci_window_page(o: &crate::ci_window::Offer, token: &str) -> String {
     shell(&title, &b)
 }
 
+/// A platform plan's page section: the unit's permissions from `needs`, or why there are none,
+/// and how the token is made and ended, `minting` or pasted.
+fn plan_needs(b: &mut String, needs: &Result<Vec<crate::minting::Wanted>, String>, minting: bool) {
+    match needs {
+        Ok(wanted) => {
+            b.push_str(if minting {
+                "<p>One passkey proof mints this run's account token through \
+<code>granter</code>, with only these permissions:</p><ul>"
+            } else {
+                "<p>The engine plans this stack with an account token you make in the \
+dashboard, with only these permissions:</p><ul>"
+            });
+            for w in wanted {
+                let _ = write!(
+                    b,
+                    "<li><code>{}</code>: {} ({})</li>",
+                    escape(&w.name),
+                    escape(&w.permissions.join(", ")),
+                    escape(&w.scope)
+                );
+            }
+            b.push_str("</ul>");
+        }
+        Err(why) => {
+            let _ = write!(
+                b,
+                "<p>The deployed grants ledger lists no permissions for this unit: {}. \
+Make its account token in the dashboard with what its stack needs.</p>",
+                escape(why)
+            );
+        }
+    }
+    b.push_str(if minting {
+        "<p>It is verified and sealed for this run alone, revoked when the run is applied, \
+fails, is refused or expires, and expires in 24 hours whatever happens. It plans \
+<code>main</code>'s head when the job starts; the apply's page names that commit.</p>"
+    } else {
+        "<p>The token is sealed for this run alone and erased after the apply, a refusal \
+or 24 hours; revoke it in the dashboard afterwards. It plans <code>main</code>'s head when the \
+job starts; the apply's page names that commit.</p>"
+    });
+}
+
 /// The page granting the next step of platform run `run`, posting `token` back to
 /// `/platform/<id>`: for its plan, the owner's code and one-time account token; for its apply,
 /// the plan's changes, the code, and a refusal. A plan's page lists `needs`, the unit's capabilities
 /// as `main`'s deploy reported them, or why there are none; see
 /// `.claude/decisions/2026-11-08-runtime-blue-green-self-standup.md`, step 4's amendment, and
 /// `.claude/decisions/2026-11-17-security-platform-run-minted-token.md`, its 2026-11-17 amendment.
+/// With `mint` and a set, one passkey proof, bound to that set, mints the token, and pasting one
+/// is break-glass (§4, §6).
 #[must_use]
 pub fn platform_page(
     run: &crate::platform::platforms::Run,
     token: &str,
     needs: &Result<Vec<crate::minting::Wanted>, String>,
+    mint: bool,
 ) -> String {
     use crate::platform::platforms::Stage;
     let mut b = String::new();
     let planning = run.stage == Stage::Offered;
+    let minting = planning && mint && needs.is_ok();
+    let purpose = match needs {
+        Ok(wanted) if minting => {
+            let names: Vec<String> = wanted.iter().map(|w| w.name.clone()).collect();
+            crate::approval::passkeys::mint_purpose(token, &names)
+        }
+        _ => crate::approval::passkeys::grant_purpose(token),
+    };
     let title = if planning {
         format!("Plan {}", run.unit)
     } else {
@@ -726,37 +780,7 @@ pub fn platform_page(
         run.id
     );
     if planning {
-        match needs {
-            Ok(wanted) => {
-                b.push_str(
-                    "<p>The engine plans this stack with an account token you make in the \
-dashboard, with only these permissions:</p><ul>",
-                );
-                for w in wanted {
-                    let _ = write!(
-                        b,
-                        "<li><code>{}</code>: {} ({})</li>",
-                        escape(&w.name),
-                        escape(&w.permissions.join(", ")),
-                        escape(&w.scope)
-                    );
-                }
-                b.push_str("</ul>");
-            }
-            Err(why) => {
-                let _ = write!(
-                    b,
-                    "<p>The deployed grants ledger lists no permissions for this unit: {}. \
-Make its account token in the dashboard with what its stack needs.</p>",
-                    escape(why)
-                );
-            }
-        }
-        b.push_str(
-            "<p>The token is sealed for this run alone and erased after the apply, a refusal \
-or 24 hours; revoke it in the dashboard afterwards. It plans <code>main</code>'s head when the \
-job starts; the apply's page names that commit.</p>",
-        );
+        plan_needs(&mut b, needs, minting);
     } else {
         let _ = write!(
             b,
@@ -783,9 +807,16 @@ refused before it reaches you).</p><pre>",
 <input type=\"hidden\" name=\"grant\" value=\"{}\">{}{CODE_FIELD}",
         run.id,
         escape(token),
-        passkey_button(&crate::approval::passkeys::grant_purpose(token))
+        passkey_button(&purpose)
     );
-    if planning {
+    if minting {
+        b.push_str(
+            "<details><summary>Break-glass: paste a token instead</summary><p><label>Account \
+token<br><input name=\"account_token\" type=\"password\" autocomplete=\"off\" minlength=\"20\">\
+</label></p></details>\
+<button type=\"submit\" name=\"decision\" value=\"grant\">Mint and plan</button></form>",
+        );
+    } else if planning {
         b.push_str(
             "<p><label>Account token<br><input name=\"account_token\" type=\"password\" \
 autocomplete=\"off\" minlength=\"20\" required></label></p>\

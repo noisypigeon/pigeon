@@ -80,12 +80,12 @@
 == platform-plan
 <form method="post" action="/platform/5">
 <input type="hidden" name="grant" value="tok">
-<button type="button" data-passkey="prove" data-purpose="grant:1a7674eb4ee78df7e1ac439a93c3fa8e3c945784d4dec9fd8e3011738b2f1d62" hidden>
+<button type="button" data-passkey="prove" data-purpose="grant:1a7674eb4ee78df7e1ac439a93c3fa8e3c945784d4dec9fd8e3011738b2f1d62:mint:93e9ddc2bdf7bf8018425bf63367ff3072f4c8dbfc600f4f53d1a1d3050b6a20" hidden>
 <script src="/passkey.js" defer>
 <label>
 <input name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required>
 <label>
-<input name="account_token" type="password" autocomplete="off" minlength="20" required>
+<input name="account_token" type="password" autocomplete="off" minlength="20">
 <button type="submit" name="decision" value="grant">
 <a href="/approvals">
 == platform-apply

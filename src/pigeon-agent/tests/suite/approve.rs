@@ -238,7 +238,7 @@ fn a_platform_plan_page_asks_for_the_token_and_an_apply_page_shows_the_changes()
     let mut runs = Runs::default();
     let run = stepped!(runs.propose("platform/blue", "tok", 0)).expect("proposes");
     let why = Err("no deploy has reported the grants ledger yet".to_string());
-    let page = agent::approve::platform_page(&run, "tok<", &why);
+    let page = agent::approve::platform_page(&run, "tok<", &why, false);
     assert!(
         page.contains("name=\"account_token\" type=\"password\""),
         "{page}"
@@ -262,7 +262,7 @@ fn a_platform_plan_page_asks_for_the_token_and_an_apply_page_shows_the_changes()
     };
     let run = stepped!(runs.planned(1, Ok(planned), "t2", 2)).expect("planned");
     assert_eq!(run.stage, Stage::Planned);
-    let page = agent::approve::platform_page(&run, "t2", &why);
+    let page = agent::approve::platform_page(&run, "t2", &why, false);
     assert!(page.contains("update module.d1.&lt;x&gt;"), "{page}");
     assert!(
         page.contains("of commit <code>2222222222222222222222222222222222222222</code>"),
@@ -290,7 +290,7 @@ fn every_module_the_platform_kind_expands_has_its_token_permission() {
     let mut runs = Runs::default();
     let run = stepped!(runs.propose("platform/blue", "tok", 0)).expect("proposes");
     assert_eq!(run.stage, Stage::Offered);
-    let page = agent::approve::platform_page(&run, "tok", &needs);
+    let page = agent::approve::platform_page(&run, "tok", &needs, false);
     for w in &wanted {
         assert!(
             page.contains(&format!("<code>{}</code>", w.name)),
@@ -394,4 +394,52 @@ fn the_enrolment_page_takes_a_token_and_no_code() {
     assert!(html.contains("name=\"replace\""));
     assert!(html.contains("data-passkey=\"register\""));
     assert!(!html.contains("name=\"code\""));
+}
+
+// See `.claude/decisions/2026-11-17-security-platform-run-minted-token.md` §4 and §6.
+#[test]
+fn a_minting_plan_page_binds_its_proof_to_the_set_and_keeps_pasting_as_break_glass() {
+    use agent::core::approval::passkeys::{grant_purpose, mint_purpose};
+    use agent::core::minting::Wanted;
+    use agent::core::platform::platforms::Runs;
+    let want = |n: &str, p: &str| Wanted {
+        name: n.into(),
+        permissions: vec![p.into()],
+        scope: "account".into(),
+    };
+    let set = vec![
+        want("d1.write", "D1 Write"),
+        want("r2.write", "Workers R2 Storage Write"),
+    ];
+    let names: Vec<String> = set.iter().map(|w| w.name.clone()).collect();
+    let mut runs = Runs::default();
+    let run = stepped!(runs.propose("platform/blue", "tok", 0)).expect("proposes");
+    let page = agent::approve::platform_page(&run, "tok", &Ok(set.clone()), true);
+    let bound = mint_purpose("tok", &names);
+    assert!(
+        page.contains(&format!("data-purpose=\"{bound}\"")),
+        "{page}"
+    );
+    assert!(!page.contains(&format!("data-purpose=\"{}\"", grant_purpose("tok"))));
+    assert!(
+        page.contains("Mint and plan") && page.contains("D1 Write"),
+        "{page}"
+    );
+    assert!(
+        page.contains("Break-glass: paste a token instead"),
+        "{page}"
+    );
+    assert!(
+        !page.contains("minlength=\"20\" required"),
+        "pasting is optional: {page}"
+    );
+    let fewer = vec!["d1.write".to_string()];
+    assert_ne!(
+        mint_purpose("tok", &fewer),
+        bound,
+        "another set is another proof"
+    );
+    let pasted = agent::approve::platform_page(&run, "tok", &Ok(set), false);
+    assert!(pasted.contains(&format!("data-purpose=\"{}\"", grant_purpose("tok"))));
+    assert!(pasted.contains("minlength=\"20\" required") && !pasted.contains("Mint and plan"));
 }

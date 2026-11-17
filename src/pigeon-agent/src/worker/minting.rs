@@ -443,6 +443,121 @@ pub(super) async fn for_object(
     Ok(Ok((value, expires)))
 }
 
+/// A token minted for a platform run: its ID, its value (held by the caller alone, never kept),
+/// its capabilities and its expiry.
+pub(super) struct RunToken {
+    pub(super) id: String,
+    pub(super) value: String,
+    pub(super) capabilities: Vec<String>,
+    pub(super) expires: u64,
+}
+
+/// Whether the Worker can mint at all: `GRANTER` is bound.
+pub(super) fn granter_bound(env: &Env) -> bool {
+    env.secret_store(GRANTER).is_ok()
+}
+
+/// Mints the deployed ledger's `platform-run` grant for a run of `unit`, with exactly the unit's
+/// deployed capabilities, then verifies it; a token that doesn't verify is revoked. The caller
+/// seals the value; nothing here keeps it; see
+/// `.claude/decisions/2026-11-17-security-platform-run-minted-token.md` §4.
+///
+/// # Errors
+///
+/// When a binding fails.
+pub(super) async fn for_run(
+    env: &Env,
+    s: &Settings,
+    unit: &str,
+) -> Result<std::result::Result<RunToken, String>> {
+    use crate::core::platform::platforms::PLATFORM_RUN;
+    let Some(resolved) = deployed(env, s).await? else {
+        return Ok(Err("no deploy has reported the grants ledger yet".into()));
+    };
+    let Some(m) = resolved
+        .ledger
+        .grants
+        .get(PLATFORM_RUN)
+        .filter(|g| g.route.job.as_deref() == Some(ledger::PLATFORM_JOB))
+        .and_then(|g| g.mint.as_ref())
+    else {
+        return Ok(Err(format!(
+            "the deployed ledger has no `{PLATFORM_RUN}` grant for `{}`",
+            ledger::PLATFORM_JOB
+        )));
+    };
+    let wanted = match resolved.unit(unit) {
+        Ok(w) => w,
+        Err(why) => return Ok(Err(why)),
+    };
+    let Some(ttl) = ledger::seconds(&m.ttl) else {
+        return Ok(Err(format!("`{PLATFORM_RUN}`'s ttl doesn't read")));
+    };
+    let granter = match granter(env).await {
+        Ok(g) => g,
+        Err(why) => return Ok(Err(why)),
+    };
+    let account = match platform::account(&granter).await {
+        Ok(a) => a,
+        Err(e) => return Ok(Err(format!("`granter` sees no single account: {e}"))),
+    };
+    let api = Api {
+        granter: &granter,
+        account: &account,
+    };
+    let groups = api.groups().await?;
+    let t = now();
+    let body = match minting::token_body(
+        &format!("pigeon {PLATFORM_RUN} {unit}"),
+        &account,
+        &wanted,
+        &[],
+        &BTreeMap::new(),
+        &groups,
+        &iso(t),
+        &iso(t + ttl),
+    ) {
+        Ok(b) => b,
+        Err(p) => return Ok(Err(p.join("; "))),
+    };
+    let (id, value) = match api.mint(&body).await {
+        Ok(made) => made,
+        Err(e) => return Ok(Err(format!("Cloudflare refused the mint: {e}"))),
+    };
+    if let Err(why) = verify(&account, &value).await {
+        api.revoke(&id).await?;
+        return Ok(Err(format!("{why}; the new token was revoked")));
+    }
+    Ok(Ok(RunToken {
+        id,
+        value,
+        capabilities: wanted.into_iter().map(|w| w.name).collect(),
+        expires: t + ttl,
+    }))
+}
+
+/// Revokes token `id` through `granter`; see
+/// `.claude/decisions/2026-11-17-security-platform-run-minted-token.md` §5.
+///
+/// # Errors
+///
+/// When a binding fails.
+pub(super) async fn revoke_token(env: &Env, id: &str) -> Result<std::result::Result<(), String>> {
+    let granter = match granter(env).await {
+        Ok(g) => g,
+        Err(why) => return Ok(Err(why)),
+    };
+    let account = match platform::account(&granter).await {
+        Ok(a) => a,
+        Err(e) => return Ok(Err(format!("`granter` sees no single account: {e}"))),
+    };
+    let api = Api {
+        granter: &granter,
+        account: &account,
+    };
+    Ok(api.revoke(id).await.map_err(|e| e.to_string()))
+}
+
 /// Revokes grant `name`'s token and removes its value, as `by`.
 async fn revoke(
     env: &Env,
