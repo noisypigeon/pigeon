@@ -3,6 +3,8 @@
 //! one-time account token, sealed for the run only; see
 //! `.claude/decisions/2026-11-08-runtime-blue-green-self-standup.md`, step 4's amendment.
 
+use std::collections::{BTreeMap, BTreeSet};
+
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest as _, Sha256};
@@ -46,6 +48,36 @@ pub fn token_permissions() -> Vec<&'static str> {
         }
     }
     out
+}
+
+/// The capability every platform run's token holds: the state bucket, and the S3 keys derived
+/// from the token.
+pub const STATE_CAPABILITY: &str = "r2.write";
+
+/// A platform unit's capability names, sorted and once each: those every module `schema`
+/// expands for `config` declares, read from `manifests` (each `module.yaml`'s text, by
+/// `<catalog>/<name>`), plus [`STATE_CAPABILITY`]; see
+/// `.claude/decisions/2026-11-17-security-platform-run-minted-token.md` §2.
+///
+/// # Errors
+///
+/// When an expanded module's manifest is missing, unparsable, or declares no `capabilities`.
+pub fn capabilities(
+    schema: &Value,
+    config: &Value,
+    manifests: &BTreeMap<String, String>,
+) -> Result<Vec<String>, String> {
+    let mut out = BTreeSet::from([STATE_CAPABILITY.to_string()]);
+    for module in crate::infra::config::expanded_modules(schema, config) {
+        let text = manifests
+            .get(&module)
+            .ok_or_else(|| format!("module `{module}`'s manifest wasn't read"))?;
+        let declared = crate::infra::config::module_capabilities(text)
+            .map_err(|e| format!("module `{module}`: {e}"))?
+            .ok_or_else(|| format!("module `{module}` declares no `capabilities`"))?;
+        out.extend(declared);
+    }
+    Ok(out.into_iter().collect())
 }
 
 /// Where a run is.
@@ -508,3 +540,6 @@ fn fail(run: &mut Run, why: String) {
     run.offer = None;
     run.sealed = None;
 }
+
+#[cfg(test)]
+mod tests;

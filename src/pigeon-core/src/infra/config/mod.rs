@@ -212,6 +212,45 @@ pub fn rotating_blocks(schema: &Value) -> Vec<String> {
         .collect()
 }
 
+/// A module manifest's `capabilities`, as [`module_capabilities`] reads it.
+#[derive(serde::Deserialize)]
+struct DeclaredCapabilities {
+    #[serde(default)]
+    capabilities: Option<Vec<String>>,
+}
+
+/// The modules `schema`'s blocks expand for `config`: every singleton's and derived block's,
+/// and each keyed block's whose list in `config` is non-empty; see
+/// `.claude/decisions/2026-11-17-security-platform-run-minted-token.md` §2.
+#[must_use]
+pub fn expanded_modules(schema: &Value, config: &Value) -> BTreeSet<String> {
+    blocks(schema)
+        .into_iter()
+        .filter(|b| {
+            b.derived.is_some()
+                || b.for_each.is_none()
+                || match &config[&b.over] {
+                    Value::Array(a) => !a.is_empty(),
+                    Value::Object(o) => !o.is_empty(),
+                    _ => false,
+                }
+        })
+        .map(|b| b.module)
+        .collect()
+}
+
+/// The catalog capabilities module manifest `text` declares, or none when it has no
+/// `capabilities`; see `.claude/decisions/2026-11-17-security-platform-run-minted-token.md` §1.
+///
+/// # Errors
+///
+/// When `text` isn't YAML, or its `capabilities` isn't a list of strings.
+pub fn module_capabilities(text: &str) -> Result<Option<Vec<String>>, String> {
+    serde_saphyr::from_str::<DeclaredCapabilities>(text)
+        .map(|m| m.capabilities)
+        .map_err(|e| format!("`capabilities` must be a list of capability names: {e}"))
+}
+
 /// A manifest unit: its settings, validated by its kind's `schema`, its modules from `home`.
 #[must_use]
 pub fn from_kind(config: Value, schema: Value, home: &Path, site: Option<Site>) -> ConfigUnit {

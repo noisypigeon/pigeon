@@ -370,3 +370,67 @@ fn a_local_schema_wins_over_its_catalog_copy() {
         );
     }
 }
+
+// See `.claude/decisions/2026-11-17-security-platform-run-minted-token.md` §1–§2.
+#[test]
+fn every_module_the_platform_kind_expands_declares_catalog_capabilities() {
+    use agent::core::infra::config::module_capabilities;
+    use agent::core::platform::platforms::capabilities;
+    fn modules(v: &Value, out: &mut Vec<String>) {
+        match v {
+            Value::Object(o) => {
+                if let Some(m) = o.get("module").and_then(Value::as_str) {
+                    out.push(m.to_string());
+                }
+                o.values().for_each(|v| modules(v, out));
+            }
+            Value::Array(a) => a.iter().for_each(|v| modules(v, out)),
+            _ => {}
+        }
+    }
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let read = |rel: &str| fs::read_to_string(root.join(rel)).expect(rel);
+    let schema: Value =
+        serde_json::from_str(&read("catalog/pigeon/kinds/platform/schema.json")).expect("JSON");
+    let catalog: Value =
+        serde_saphyr::from_str(&read("catalog/cloudflare/capabilities.yaml")).expect("YAML");
+    let mut found = Vec::new();
+    modules(&schema, &mut found);
+    found.sort();
+    found.dedup();
+    let mut manifests = std::collections::BTreeMap::new();
+    for m in &found {
+        let (cat, name) = m.split_once('/').expect("<catalog>/<name>");
+        let text = read(&format!("catalog/{cat}/modules/{name}/module.yaml"));
+        let declared = module_capabilities(&text)
+            .expect("parses")
+            .unwrap_or_else(|| panic!("`{m}` declares no `capabilities`"));
+        for c in &declared {
+            assert!(
+                catalog["capabilities"].get(c).is_some(),
+                "`{m}` declares `{c}`, which catalog/cloudflare/capabilities.yaml lacks"
+            );
+        }
+        manifests.insert(m.clone(), text);
+    }
+    let config: Value = serde_saphyr::from_str(&read("config.yaml")).expect("YAML");
+    let blue = &config["units"]["platform/blue"];
+    assert_eq!(
+        capabilities(&schema, blue, &manifests).expect("resolves"),
+        [
+            "access-apps.write",
+            "access-tokens.write",
+            "account.read",
+            "aigateway.write",
+            "d1.write",
+            "queues.write",
+            "r2.write",
+            "secrets-store.read",
+            "workers.read",
+        ]
+    );
+    let mut bare = blue.clone();
+    bare["ai_gateways"] = json!([]);
+    let set = capabilities(&schema, &bare, &manifests).expect("resolves");
+    assert!(!set.iter().any(|c| c == "aigateway.write"), "{set:?}");
+}

@@ -50,6 +50,11 @@ pub(crate) fn check_module(
             "needs `version: X.Y.Z`".into(),
         );
     }
+    if !m.manifest.trim().is_empty()
+        && let Err(why) = crate::infra::config::module_capabilities(&m.manifest)
+    {
+        add(&format!("{}/module.yaml", m.display), why);
+    }
     let provider_resources = m
         .info
         .resources
