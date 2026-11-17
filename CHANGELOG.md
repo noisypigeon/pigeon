@@ -10,6 +10,7 @@
 - agent v0.1.47
 - agent v0.1.48
 - agent v0.1.49
+- agent v0.1.50
 - infra-agnostic-random-string v0.1.4
 - infra-agnostic-schema v0.1.5
 - infra-backblaze-schema v0.1.4
@@ -188,6 +189,11 @@
 - docs(adr): every client on one MCP catalog, a four-view rendering contract, and one feed, pigeon://feed (!1034) ([b2c63ff](https://github.com/noisypigeon/pigeon/commit/b2c63ff8897822ef59ab94b183a3d11fc58cc455))
 - docs(adr): the owner keeps two MCP doors, and the mirror policy's list travels as eviction bookkeeping (!1035) ([531b56b](https://github.com/noisypigeon/pigeon/commit/531b56b841feaa5908a6dab81143c8a36d196928))
 - chore(config): the provider-call policy list is eviction bookkeeping (!1037) ([39b5221](https://github.com/noisypigeon/pigeon/commit/39b5221fac890a2d0e9d1478b40e574cfc65fe68))
+- chore(policies): a GitHub write through the broker names only the mirror repository (!1040) ([bcdceda](https://github.com/noisypigeon/pigeon/commit/bcdcedabe2cd668463eaab48f1d59aaba3636c1b))
+- fix(agent): a job pinned to a short SHA checks it out (!1039) ([80fbd99](https://github.com/noisypigeon/pigeon/commit/80fbd9973c0eee18a89f079b717337f36c3c9f57)) · agent
+- docs(adr): a pool task survives its Container's stop, and its job leaves a log (!1042) ([3139df5](https://github.com/noisypigeon/pigeon/commit/3139df5bb20f63c5b831da64a163b19a43e90ae3))
+- feat(backplane): a pool job's log is kept, and its escalation shows the log's end (!1043) ([a964410](https://github.com/noisypigeon/pigeon/commit/a96441036793b566b2504ba35fb78c65f912bafc)) · agent
+- feat(backplane): the pure rules for a lost pool job (!1044) ([bab62a8](https://github.com/noisypigeon/pigeon/commit/bab62a8932bf2205747ede95000cb88a6b4e6c73))
 
 ## 2026-11-16
 
