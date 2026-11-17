@@ -767,3 +767,14 @@ a generated change closes, which !736 neither relies on nor changes.
   `jobs.rs`, and there only renames a log line's prefix, `sentinel:` to
   `eviction:`. It touches neither `brief/mod.rs` nor `insights/mod.rs`.
 - Nothing either ADR decides changes.
+
+### 2026-11-17: Review of !886 against !877: they agree
+
+- !877 changed no code. It amends
+  [`2026-11-15-development-capacity-pools-hard-spend-cap.md`](2026-11-15-development-capacity-pools-hard-spend-cap.md):
+  step 4's spike held, and step 5 runs `claude` and the checks in the
+  sandbox.
+- !886 (the sweep's A1) touches one of the paths that ADR governs,
+  `jobs.rs`, and there only renames a log line's prefix, `sentinel:` to
+  `eviction:`. It touches neither `brief/mod.rs` nor `insights/mod.rs`.
+- Nothing either ADR decides changes.
