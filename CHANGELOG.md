@@ -6,6 +6,7 @@
 
 - agent v0.1.44
 - agent v0.1.45
+- agent v0.1.46
 - infra-cloudflare-ai-gateway v0.1.0
 - infra-cloudflare-schema v0.1.22
 - infra-digitalocean-project v0.1.3
@@ -114,6 +115,7 @@
 - build(harness): the `backplane` feature goes, now the job images build with `agent` (!957) ([f3fa3a2](https://github.com/noisypigeon/pigeon/commit/f3fa3a232e9b69eb1b84a5759b0e2a6c5ef55447)) · agent
 - feat(core): a same-patch restack carries only the checks its job names (!939) ([6fff54b](https://github.com/noisypigeon/pigeon/commit/6fff54be5ee010a9a4bfb4c1fd0b585a9ce46a23)) · agent
 - docs(adr): review !939 against !954 (!963) ([9649ae1](https://github.com/noisypigeon/pigeon/commit/9649ae1ac4d612f1a11d13d8724261d45e0c8068))
+- feat(agent): the restack job reports which checks carry (!967) ([e67121a](https://github.com/noisypigeon/pigeon/commit/e67121ad67128e91bc10e8172a5f15412832c191)) · agent
 
 ## 2026-11-16
 
