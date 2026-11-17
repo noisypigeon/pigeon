@@ -1,4 +1,4 @@
-//! pigeon-sentinel's integration tests, one module per mechanism; see
+//! pigeon-eviction's integration tests, one module per mechanism; see
 //! `.claude/decisions/2026-11-16-development-one-test-binary-per-crate.md`.
 
 mod change;

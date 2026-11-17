@@ -1,4 +1,4 @@
-description: The repository root holds only the agreed areas, and src/ only projects; backplane's core does no I/O, reads no clock and takes no `&mut self`, per 2026-11-10-development-factory-crates-functional-core.md §3.
+description: The repository root holds only the agreed areas, and src/ only projects; pigeon-core does no I/O, reads no clock and takes no `&mut self`, per 2026-11-10-development-factory-crates-functional-core.md §3.
 target: tree
 rules:
   - entries:

@@ -233,7 +233,7 @@ fn pull_request() {
     }
     for files in [
         Some("CHANGELOG.md"),
-        Some("src/a.rs\nsrc/pigeon-cli/crates/gantry/CHANGELOG.md"),
+        Some("src/a.rs\nsrc/pigeon-cli/crates/retired/CHANGELOG.md"),
         None,
     ] {
         fails(&pr_files("ci: x", &cite, Some("7"), files));
@@ -387,7 +387,7 @@ fn layout_with(path: &str, content: &str) -> Vec<String> {
 }
 
 #[test]
-fn layout_keeps_backplane_core_pure() {
+fn layout_keeps_the_core_pure() {
     let core = "src/pigeon-core/src/change/lifecycle.rs";
     let approval = "src/pigeon-core/src/approval/grants.rs";
     let deploy = "src/pigeon-core/src/deploy/ship.rs";
@@ -599,14 +599,14 @@ fn mirror_allows_only_a_dispatched_read_only_pinned_ci_yml() {
 
 #[test]
 fn migrations_only_expand() {
-    let dir = "src/pigeon-cli/crates/backplane/migrations";
+    let dir = "src/pigeon-agent/migrations";
     let ok = [
         (
-            "src/pigeon-cli/crates/backplane/migrations/0001_schema.sql",
+            "src/pigeon-agent/migrations/0001_schema.sql",
             "CREATE TABLE runs (id TEXT PRIMARY KEY);\n",
         ),
         (
-            "src/pigeon-cli/crates/backplane/migrations/0002_more.sql",
+            "src/pigeon-agent/migrations/0002_more.sql",
             "ALTER TABLE runs ADD COLUMN at INTEGER;\n",
         ),
     ];
@@ -687,7 +687,7 @@ fn roles_holds_three_explicit_capability_lists_only() {
 }
 
 #[test]
-fn sentinel_actions_keeps_sentinel_read_only() {
+fn eviction_actions_keeps_the_judge_read_only() {
     let ok = [
         ("src/pigeon-eviction/src/lib.rs", "use std::fs;\n"),
         ("src/pigeon-eviction/tests/t.rs", "fs::write(p, c);\n"),

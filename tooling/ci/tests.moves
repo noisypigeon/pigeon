@@ -2698,3 +2698,5 @@ pigeon-eviction bin pigeon-sentinel tests::anything_else_is_refused_with_the_usa
 pigeon-eviction bin pigeon-sentinel tests::check_takes_its_flags_and_defaults_to_the_current_directory	pigeon-eviction bin pigeon-eviction tests::check_takes_its_flags_and_defaults_to_the_current_directory
 pigeon-eviction bin pigeon-sentinel tests::evict_takes_a_candidate_and_needs_one	pigeon-eviction bin pigeon-eviction tests::evict_takes_a_candidate_and_needs_one
 pigeon-agent lib agent containers::worker::tests::the_state_variables_are_cobots	pigeon-agent lib agent containers::worker::tests::the_state_variables_are_the_infra_engines
+pigeon-eviction test suite policies::layout_keeps_backplane_core_pure	pigeon-eviction test suite policies::layout_keeps_the_core_pure
+pigeon-eviction test suite policies::sentinel_actions_keeps_sentinel_read_only	pigeon-eviction test suite policies::eviction_actions_keeps_the_judge_read_only

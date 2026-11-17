@@ -229,7 +229,7 @@ pub fn invoke(
 
 /// Each policy's name and what it targets, as JSON: `[{name, target: {kind, paths}}]`, `kind`
 /// one of `pull-request`, `change`, `tree`, `file`, `files` and `dir`; for readers that don't
-/// link this library, such as backplane's `architecture.describe`.
+/// link this library, such as the agent's `architecture.describe`.
 #[must_use]
 pub fn describe(policies: &[LoadedPolicy]) -> serde_json::Value {
     use policy::{NamedTarget, Target};

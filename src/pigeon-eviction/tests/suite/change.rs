@@ -48,9 +48,9 @@ fn check(pr: Option<&PullRequest>) -> (usize, Vec<String>) {
 #[test]
 fn a_change_inside_its_scope_passes() {
     let pr = change(
-        Some("change/3-sentinel-change-target"),
-        "src/pigeon-cli/crates/sentinel/src/lib.rs\n.claude/decisions/a.md\nCLAUDE.md",
-        "src/pigeon-cli/crates/sentinel/**\n.claude/decisions/\nCLAUDE.md",
+        Some("change/3-eviction-change-target"),
+        "src/pigeon-eviction/src/lib.rs\n.claude/decisions/a.md\nCLAUDE.md",
+        "src/pigeon-eviction/**\n.claude/decisions/\nCLAUDE.md",
     );
     let (skipped, got) = check(Some(&pr));
     assert_eq!(skipped, 0);
@@ -61,8 +61,8 @@ fn a_change_inside_its_scope_passes() {
 fn a_path_outside_the_scope_is_named() {
     let pr = change(
         Some("change/3-x"),
-        "src/pigeon-cli/crates/cobot/src/git.rs\n.config/policies/layout.yaml",
-        "src/pigeon-cli/crates/cobot/**",
+        "src/pigeon-agent/src/git/mod.rs\n.config/policies/layout.yaml",
+        "src/pigeon-agent/**",
     );
     let got = check(Some(&pr)).1;
     assert!(

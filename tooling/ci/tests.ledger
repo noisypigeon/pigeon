@@ -1432,7 +1432,8 @@ pigeon-eviction test suite policies::decisions_metadata
 pigeon-eviction test suite policies::decisions_sections
 pigeon-eviction test suite policies::decisions_valid
 pigeon-eviction test suite policies::every_policy_is_valid
-pigeon-eviction test suite policies::layout_keeps_backplane_core_pure
+pigeon-eviction test suite policies::eviction_actions_keeps_the_judge_read_only
+pigeon-eviction test suite policies::layout_keeps_the_core_pure
 pigeon-eviction test suite policies::layout_rules
 pigeon-eviction test suite policies::macos_holds_the_order_start_time_and_caps_only
 pigeon-eviction test suite policies::migrations_only_expand
@@ -1443,7 +1444,6 @@ pigeon-eviction test suite policies::pull_request
 pigeon-eviction test suite policies::pull_request_skipped_without_one
 pigeon-eviction test suite policies::release_changelog_rules
 pigeon-eviction test suite policies::roles_holds_three_explicit_capability_lists_only
-pigeon-eviction test suite policies::sentinel_actions_keeps_sentinel_read_only
 pigeon-eviction test suite policies::terraform_rules
 pigeon-eviction test suite tree::find_tests::allows_only_under_prefixes_and_skips_ignored
 pigeon-eviction test suite tree::find_tests::excepted_content_is_removed_before_the_forbidden_pattern_is_tested
