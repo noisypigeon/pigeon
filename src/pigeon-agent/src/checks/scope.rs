@@ -23,27 +23,6 @@ fn read_toml(path: &Path) -> Result<toml::Value, Error> {
         .map_err(|e: toml::de::Error| io(e.to_string()))
 }
 
-/// The Rust workspace's directory, from `root`: the root itself when its `Cargo.toml` has
-/// `[workspace]`, else [`WORKSPACE`]; empty for the root.
-#[must_use]
-pub fn workspace_dir(root: &Path) -> String {
-    let at_root = fs::read_to_string(root.join("Cargo.toml"))
-        .ok()
-        .and_then(|t| t.parse::<toml::Value>().ok())
-        .is_some_and(|m| m.get("workspace").is_some());
-    if at_root {
-        String::new()
-    } else {
-        WORKSPACE.into()
-    }
-}
-
-/// The Rust workspace's directory under `root`, where every check runs.
-#[must_use]
-pub fn workspace(root: &Path) -> std::path::PathBuf {
-    root.join(workspace_dir(root))
-}
-
 /// The crate directories, from the workspace, that `members` names, without `exclude`'s: an
 /// entry ending `/*` names each directory under it holding a `Cargo.toml`.
 fn member_dirs(ws: &Path, members: &[&str], exclude: &[&str]) -> Vec<String> {
@@ -77,22 +56,26 @@ fn strs(v: Option<&toml::Value>) -> Vec<&str> {
 }
 
 fn crates(root: &Path) -> Result<Crates, Error> {
-    let dir = workspace_dir(root);
-    let ws = root.join(&dir);
-    let workspace = read_toml(&ws.join("Cargo.toml"))?;
-    let mut layout: Layout = workspace
+    let ws = root;
+    let manifest = ws.join("Cargo.toml");
+    let workspace = read_toml(&manifest)?;
+    let missing = |what: &str| Error::Io {
+        path: manifest.clone(),
+        message: format!("{what} is missing; the checks read their layout from it"),
+    };
+    let table = workspace
         .get("workspace")
-        .and_then(|w| w.get("metadata"))
+        .ok_or_else(|| missing("[workspace]"))?
+        .get("metadata")
         .and_then(|m| m.get("pigeon"))
-        .cloned()
-        .map(toml::Value::try_into)
-        .transpose()
+        .ok_or_else(|| missing("[workspace.metadata.pigeon]"))?;
+    let layout: Layout = table
+        .clone()
+        .try_into()
         .map_err(|e: toml::de::Error| Error::Io {
-            path: ws.join("Cargo.toml"),
+            path: manifest.clone(),
             message: format!("[workspace.metadata.pigeon]: {e}"),
-        })?
-        .unwrap_or_default();
-    layout.workspace.clone_from(&dir);
+        })?;
     let members: BTreeMap<String, String> = workspace["workspace"]["dependencies"]
         .as_table()
         .into_iter()
@@ -113,7 +96,7 @@ fn crates(root: &Path) -> Result<Crates, Error> {
     let mut bins = BTreeMap::new();
     let table = workspace.get("workspace");
     let found = member_dirs(
-        &ws,
+        ws,
         &strs(table.and_then(|w| w.get("members"))),
         &strs(table.and_then(|w| w.get("exclude"))),
     );
@@ -320,7 +303,7 @@ pub fn run(root: &Path, jobs: &[Job]) -> Result<Vec<String>, Error> {
         eprintln!("infra: scope: {}", j.name);
         let status = std::process::Command::new(program)
             .args(args)
-            .current_dir(workspace(root))
+            .current_dir(root)
             .status()
             .map_err(|e| Error::Tool {
                 command: program.clone(),
@@ -519,7 +502,7 @@ fn test_targets(dir: &Path, m: &toml::Value) -> BTreeSet<String> {
 mod tests {
     use std::fs;
 
-    use super::{crates, workspace_dir};
+    use super::crates;
 
     fn write(root: &std::path::Path, path: &str, text: &str) {
         let p = root.join(path);
@@ -531,7 +514,13 @@ mod tests {
     fn a_workspace_at_the_root_is_read_from_its_members_and_metadata() {
         let dir = tempfile::tempdir().expect("tempdir");
         let root = dir.path();
-        assert_eq!(workspace_dir(root), "src/pigeon-cli");
+        assert!(crates(root).is_err(), "no manifest");
+        write(root, "Cargo.toml", "[workspace]\nmembers = [\"src/*\"]\n");
+        let e = crates(root).expect_err("no layout table").to_string();
+        assert!(e.contains("[workspace.metadata.pigeon] is missing"), "{e}");
+        write(root, "Cargo.toml", "[package]\nname = \"one\"\n");
+        let e = crates(root).expect_err("no workspace").to_string();
+        assert!(e.contains("[workspace] is missing"), "{e}");
         write(
             root,
             "Cargo.toml",
@@ -556,7 +545,6 @@ mod tests {
             "[package]\nname = \"pigeon-ios\"\n",
         );
         write(root, "src/notes/README.md", "");
-        assert_eq!(workspace_dir(root), "");
         let c = crates(root).expect("crates");
         assert_eq!(
             c.by_dir.keys().collect::<Vec<_>>(),
@@ -579,7 +567,7 @@ mod tests {
         write(
             root,
             "Cargo.toml",
-            "[workspace]\nmembers = [\"src/*\"]\n\n[workspace.dependencies]\n",
+            "[workspace]\nmembers = [\"src/*\"]\n\n[workspace.dependencies]\n\n[workspace.metadata.pigeon]\ncli = \"tool\"\n",
         );
         write(
             root,

@@ -1020,11 +1020,11 @@ pigeon-core lib pigeon_core connect::tests::within_ceiling_lists_the_excess_sort
 pigeon-core lib pigeon_core deploy::scope::tests::a_deploy_builds_and_waits_for_an_image_in_either_layout
 pigeon-core lib pigeon_core deploy::scope::tests::a_gate_is_full_only_for_a_workspace_setting_or_mapped_tests_across_packages
 pigeon-core lib pigeon_core deploy::scope::tests::a_layout_at_the_root_runs_its_checks_from_the_root
+pigeon-core lib pigeon_core deploy::scope::tests::a_layout_needs_its_cli_and_names_no_crate_by_default
 pigeon-core lib pigeon_core deploy::scope::tests::a_mapped_binary_that_was_renamed_leaves_it_to_the_crate
 pigeon-core lib pigeon_core deploy::scope::tests::a_mapped_package_that_was_renamed_leaves_it_to_the_crate
 pigeon-core lib pigeon_core deploy::scope::tests::a_mapped_target_that_is_gone_runs_as_its_suite_module
 pigeon-core lib pigeon_core deploy::scope::tests::a_workspace_setting_builds_only_the_workers_the_tree_has
-pigeon-core lib pigeon_core deploy::scope::tests::the_default_layout_is_src_pigeon_clis
 pigeon-core lib pigeon_core deploy::tests::a_deploy_is_whole_unless_only_shared_code_changed_since_a_serving_version
 pigeon-core lib pigeon_core deploy::tests::a_health_answer_counts_only_for_its_version
 pigeon-core lib pigeon_core deploy::tests::the_test_map_transitions_answer_the_next_maps_and_leave_the_old_ones

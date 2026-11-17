@@ -14,14 +14,11 @@ use super::gate::{Gate, MAX_PACKAGES};
 
 pub use map::{Binary, TestMap, Unit};
 
-/// The Rust workspace, from the root, where its manifest has no `[workspace]` at the root.
-pub const WORKSPACE: &str = "src/pigeon-cli";
-
-/// The workspace's layout, from its manifest's `[workspace.metadata.pigeon]`; the defaults are
-/// `src/pigeon-cli`'s. See the 2026-11-16 amendments to
-/// `.claude/decisions/2026-11-16-development-src-crates-neutral-names.md`.
+/// The workspace's layout, from the root manifest's `[workspace.metadata.pigeon]`, which is
+/// required; see the 2026-11-17 amendment to
+/// `.claude/decisions/2026-11-15-development-code-checks-by-reach.md`.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
-#[serde(default, rename_all = "kebab-case")]
+#[serde(rename_all = "kebab-case")]
 pub struct Layout {
     /// The workspace's directory, from the root; empty for the root. Set by the shell.
     #[serde(skip)]
@@ -29,16 +26,22 @@ pub struct Layout {
     /// The package of the `pigeon` binary.
     pub cli: String,
     /// The CLI's files, from its crate's directory, that every feature builds.
+    #[serde(default = "cli_shared")]
     pub cli_shared: Vec<String>,
     /// The package whose `worker` build compiles to wasm.
+    #[serde(default)]
     pub worker: Option<Worker>,
     /// The packages whose tests read this repository's own policies.
+    #[serde(default)]
     pub policy_tests: Vec<String>,
     /// The suite modules a change to the infrastructure runs.
+    #[serde(default)]
     pub infra_tests: Option<InfraTests>,
     /// `pigeon`'s arguments, before an operation's name, that run it.
+    #[serde(default = "run")]
     pub run: Vec<String>,
     /// `pigeon`'s arguments that validate the instance.
+    #[serde(default = "instance")]
     pub instance: Vec<String>,
 }
 
@@ -70,42 +73,40 @@ fn strings(s: &[&str]) -> Vec<String> {
     s.iter().map(|s| (*s).to_string()).collect()
 }
 
-impl Default for Layout {
-    fn default() -> Self {
-        Self {
-            workspace: WORKSPACE.into(),
-            cli: "pigeon".into(),
-            cli_shared: strings(&[
-                "src/main.rs",
-                "src/lib.rs",
-                "src/cli/mod.rs",
-                "src/commands/mod.rs",
-                "Cargo.toml",
-            ]),
-            worker: Some(Worker {
-                package: "pigeon-agent".into(),
-                name: "clippy agent worker (wasm)".into(),
-                only: strings(&["src/pigeon-cli/crates/agent/src/worker/"]),
-            }),
-            policy_tests: strings(&["pigeon-eviction", "pigeon", "pigeon-agent"]),
-            infra_tests: Some(InfraTests {
-                package: "pigeon-agent".into(),
-                test: "suite".into(),
-                modules: strings(&[
-                    "infra_catalog::",
-                    "infra_manifest::",
-                    "sites_apex::",
-                    "git::",
-                    "infra_credentials::",
-                ]),
-            }),
-            run: strings(&["run"]),
-            instance: strings(&["instance"]),
-        }
-    }
+fn cli_shared() -> Vec<String> {
+    strings(&[
+        "src/main.rs",
+        "src/lib.rs",
+        "src/cli/mod.rs",
+        "src/commands/mod.rs",
+        "Cargo.toml",
+    ])
+}
+
+fn run() -> Vec<String> {
+    strings(&["run"])
+}
+
+fn instance() -> Vec<String> {
+    strings(&["instance"])
 }
 
 impl Layout {
+    /// A layout at the root whose CLI is `cli`, with no worker, policy tests or infra tests.
+    #[must_use]
+    pub fn new(cli: &str) -> Self {
+        Self {
+            workspace: String::new(),
+            cli: cli.into(),
+            cli_shared: cli_shared(),
+            worker: None,
+            policy_tests: Vec::new(),
+            infra_tests: None,
+            run: run(),
+            instance: instance(),
+        }
+    }
+
     /// `path`, from the root, as seen from the workspace.
     #[must_use]
     pub fn from_workspace(&self, path: &str) -> String {
@@ -181,15 +182,6 @@ impl Layout {
 /// The release configuration, from the root.
 pub const RELEASES: &str = ".config/releases.yaml";
 
-/// Paths whose change runs every check, in the default layout; see [`Layout::everything`].
-pub const EVERYTHING: [&str; 5] = [
-    "src/pigeon-cli/Cargo.toml",
-    "src/pigeon-cli/Cargo.lock",
-    "src/pigeon-cli/.cargo/",
-    "mise.toml",
-    RELEASES,
-];
-
 /// Paths whose change validates the instance's infrastructure.
 const INFRA: [&str; 6] = [
     "catalog/",
@@ -238,7 +230,7 @@ fn job(name: impl Into<String>, argv: &[&str]) -> Job {
 
 /// The workspace's crates, as the shell reads them from its manifests: each crate directory's package, and each package's workspace
 /// dependencies.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Crates {
     /// Each crate directory's package.
     pub by_dir: BTreeMap<String, String>,
@@ -919,16 +911,19 @@ mod tests {
     #[test]
     fn a_workspace_setting_builds_only_the_workers_the_tree_has() {
         let crates = Crates {
-            by_dir: [(
-                "src/pigeon-cli/crates/agent/".to_string(),
-                "pigeon-agent".to_string(),
-            )]
-            .into(),
+            by_dir: [("src/pigeon-agent/".to_string(), "pigeon-agent".to_string())].into(),
             deps: BTreeMap::default(),
             features: BTreeMap::default(),
             tests: BTreeMap::default(),
             bins: BTreeMap::default(),
-            layout: Layout::default(),
+            layout: Layout {
+                worker: Some(super::Worker {
+                    package: "pigeon-agent".into(),
+                    name: "clippy agent worker (wasm)".into(),
+                    only: vec!["src/pigeon-agent/src/worker/".into()],
+                }),
+                ..Layout::new("pigeon")
+            },
         };
         assert_eq!(crates.of(&["pigeon-agent"]), ["pigeon-agent"]);
         let names: Vec<String> = everything(&BTreeSet::default(), &crates)
@@ -957,7 +952,7 @@ mod tests {
             features: BTreeMap::default(),
             tests: BTreeMap::default(),
             bins: BTreeMap::default(),
-            layout: Layout::default(),
+            layout: Layout::new("pigeon"),
         };
         let bin = |package: &str, name: &str, file: &str| Binary {
             package: package.into(),
@@ -1025,7 +1020,7 @@ mod tests {
             infra_tests: None,
             run: vec!["run".into()],
             instance: vec!["instance".into()],
-            ..Layout::default()
+            ..Layout::new("pigeon-harness")
         };
         Crates {
             by_dir: [
@@ -1053,12 +1048,32 @@ mod tests {
     }
 
     #[test]
-    fn the_default_layout_is_src_pigeon_clis() {
-        let l = Layout::default();
-        assert_eq!(l.root(), "../..");
-        assert_eq!(l.from_workspace("tooling/x.sh"), "../../tooling/x.sh");
-        assert_eq!(l.in_workspace("Cargo.toml"), "src/pigeon-cli/Cargo.toml");
-        assert_eq!(l.everything(), super::EVERYTHING.map(String::from).to_vec());
+    fn a_layout_needs_its_cli_and_names_no_crate_by_default() {
+        assert!(
+            toml::from_str::<Layout>("run = [\"run\"]\n").is_err(),
+            "no cli"
+        );
+        let read: Layout = toml::from_str("cli = \"x\"\n").expect("parses");
+        assert_eq!(read, Layout::new("x"));
+        assert_eq!((read.worker, read.infra_tests), (None, None));
+        assert_eq!(read.policy_tests, Vec::<String>::new());
+        let nested = Layout {
+            workspace: "ws/a".into(),
+            ..Layout::new("x")
+        };
+        assert_eq!(nested.root(), "../..");
+        assert_eq!(nested.from_workspace("tooling/x.sh"), "../../tooling/x.sh");
+        assert_eq!(nested.in_workspace("Cargo.toml"), "ws/a/Cargo.toml");
+        assert_eq!(
+            nested.everything(),
+            [
+                "ws/a/Cargo.toml",
+                "ws/a/Cargo.lock",
+                "ws/a/.cargo/",
+                "mise.toml",
+                super::RELEASES,
+            ]
+        );
     }
 
     #[test]
@@ -1161,7 +1176,7 @@ mod tests {
             ]
             .into(),
             bins: BTreeMap::default(),
-            layout: Layout::default(),
+            layout: Layout::new("pigeon"),
         };
         let unit = |package: &str, name: &str, file: &str| Binary {
             package: package.into(),
@@ -1207,7 +1222,7 @@ mod tests {
             )]
             .into(),
             bins: BTreeMap::default(),
-            layout: Layout::default(),
+            layout: Layout::new("pigeon"),
         };
         let unit = |package: &str, file: &str| Binary {
             package: package.into(),
@@ -1242,7 +1257,10 @@ mod tests {
                 BTreeSet::from(["judge-new".to_string()]),
             )]
             .into(),
-            ..Crates::default()
+            deps: BTreeMap::default(),
+            features: BTreeMap::default(),
+            tests: BTreeMap::default(),
+            layout: Layout::new("pigeon"),
         };
         let unit = |kind: &str, name: &str, file: &str| Binary {
             package: "judge".into(),

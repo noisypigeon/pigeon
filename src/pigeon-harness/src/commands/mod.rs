@@ -97,9 +97,6 @@ fn dev(args: DevArgs) -> i32 {
         eprintln!("dev: no workspace Cargo.toml above {}", here.display());
         return INVALID;
     };
-    // A repository root whose workspace is still under src/pigeon-cli; see step 4a.
-    #[cfg(feature = "infra")]
-    let root = ::agent::checks::scope::workspace(&root);
     crate::dev::run(&root, &task, args.dry_run)
 }
 

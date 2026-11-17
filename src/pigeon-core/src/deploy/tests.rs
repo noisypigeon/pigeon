@@ -96,7 +96,7 @@ fn reach_crates() -> Crates {
             worker: None,
             policy_tests: Vec::new(),
             infra_tests: None,
-            ..Layout::default()
+            ..Layout::new("pigeon")
         },
     }
 }

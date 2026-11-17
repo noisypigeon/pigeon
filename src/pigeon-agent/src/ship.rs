@@ -272,14 +272,13 @@ pub fn build(
     let reference = reference
         .ok_or_else(|| format!("no Worker binds {BUILDS_BINDING}, where builds are stored"))?;
     let bucket = workers::resolve(&reference, &outputs)?;
-    let workspace = crate::checks::scope::workspace(dir);
     let target = std::env::var_os("CARGO_TARGET_DIR")
-        .map_or_else(|| workspace.join("target"), std::path::PathBuf::from);
+        .map_or_else(|| dir.join("target"), std::path::PathBuf::from);
     let compile = |argv: &[&str], name: &str, log: &mut String| {
         let argv: Vec<String> = argv.iter().map(|s| (*s).to_string()).collect();
         let started = std::time::Instant::now();
         let (ok, out) =
-            crate::checks::ci::exec(&workspace, &argv, crate::checks::ci::TIMEOUT, &spec.token);
+            crate::checks::ci::exec(dir, &argv, crate::checks::ci::TIMEOUT, &spec.token);
         let took = started.elapsed().as_secs();
         if !ok {
             let _ = writeln!(log, "{}", crate::control::tail(&out));
@@ -291,7 +290,7 @@ pub fn build(
     };
     let (binary, took) = compile(&BUILD, "pigeon", log)?;
     let sha256 = crate::infra::s3::sha256_hex(&binary);
-    let judge = judge_binary(&workspace);
+    let judge = judge_binary(dir);
     let (judge_path, judge_took) = compile(&judge_build(judge), judge, log)?;
     let judge_sha256 = crate::infra::s3::sha256_hex(&judge_path);
     let api = crate::workers::cloudflare::Api::new(None, token.clone());

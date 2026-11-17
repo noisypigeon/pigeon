@@ -228,13 +228,8 @@ pub fn run_judged(spec: &JobSpec, dir: &Path, judge: &Path) -> Report {
     if let Err(e) = crate::checks::ci::fetch_tags(dir, &spec.remote, &spec.token) {
         return report(spec, Outcome::Failed, &e.to_string());
     }
-    let workspace = crate::checks::scope::workspace(dir);
-    let (ok, log) = crate::checks::ci::exec(
-        &workspace,
-        &spec.argv,
-        crate::checks::ci::TIMEOUT,
-        &spec.token,
-    );
+    let (ok, log) =
+        crate::checks::ci::exec(dir, &spec.argv, crate::checks::ci::TIMEOUT, &spec.token);
     report(
         spec,
         if ok { Outcome::Passed } else { Outcome::Failed },
@@ -312,7 +307,7 @@ fn release(spec: &JobSpec, dir: &Path) -> Report {
         return report(spec, Outcome::Passed, "nothing to release");
     }
     let (ok, log) = crate::checks::ci::exec(
-        &crate::checks::scope::workspace(dir),
+        dir,
         &[
             "cargo".into(),
             "update".into(),

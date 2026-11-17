@@ -464,11 +464,6 @@ impl Bench {
         self.work.join("pigeon")
     }
 
-    /// The checkout's Rust workspace, from its root: empty once the workspace is the root.
-    fn workspace(&self) -> String {
-        crate::checks::scope::workspace_dir(&self.checkout())
-    }
-
     fn log_path(&self, run: &str) -> PathBuf {
         self.work.join("runs").join(format!("{run}.log"))
     }
@@ -477,10 +472,7 @@ impl Bench {
         self.env
             .iter()
             .find(|(k, _)| k == "CARGO_TARGET_DIR")
-            .map_or_else(
-                || self.checkout().join(self.workspace()).join("target"),
-                |(_, v)| PathBuf::from(v),
-            )
+            .map_or_else(|| self.checkout().join("target"), |(_, v)| PathBuf::from(v))
     }
 
     fn cargo_home(&self) -> Option<PathBuf> {
@@ -825,8 +817,8 @@ impl Bench {
         )?;
         git(&["clean", "-qffdx"], Mode::Command, &[])?;
         self.inner().sha = Some(spec.sha.clone());
-        let ws = self.workspace();
-        let lock = std::fs::read(self.checkout().join(&ws).join("Cargo.lock")).ok();
+        let ws = String::new();
+        let lock = std::fs::read(self.checkout().join("Cargo.lock")).ok();
         let hash = lock.map(|bytes| {
             let mut h = DefaultHasher::new();
             bytes.hash(&mut h);
@@ -852,8 +844,8 @@ impl Bench {
         cancel: &AtomicBool,
         deadline: Instant,
     ) -> Result<(), String> {
-        let ws = self.workspace();
-        if !self.checkout().join(&ws).join("Cargo.toml").exists() {
+        let ws = String::new();
+        if !self.checkout().join("Cargo.toml").exists() {
             return Ok(());
         }
         let metadata = Step {
@@ -905,7 +897,7 @@ impl Bench {
             Command::Argv { argv } => {
                 bench::allow::allow(argv).map_err(|r| r.to_string())?;
                 Ok(vec![Step {
-                    dir: argv_dir(argv, &self.workspace()),
+                    dir: argv_dir(argv, ""),
                     argv: argv.clone(),
                 }])
             }
@@ -919,7 +911,7 @@ impl Bench {
             }
             Command::Check { name } => {
                 let _ = (&*log).write_all(b"bench: reading this change's checks from scope\n");
-                let ws = self.workspace();
+                let ws = String::new();
                 let root = root_from(&ws);
                 let scope = Step {
                     dir: ws.clone(),
@@ -1190,7 +1182,8 @@ pub fn route(bench: &Arc<Bench>, route: &str, body: &[u8]) -> (u16, Value) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::deploy::scope::WORKSPACE;
+    /// A workspace below the root, for the helpers that take one.
+    const WORKSPACE: &str = "ws/a";
     use std::path::Path;
 
     const MISE: &str = r#"
@@ -1200,7 +1193,7 @@ run = "echo formatted"
 [tasks.lint]
 depends = ["fmt"]
 run = ["echo linted", "echo twice"]
-dir = "src/pigeon-cli"
+dir = "ws/a"
 
 [tasks.test]
 depends = ["fmt", "lint"]
@@ -1280,8 +1273,8 @@ run = "sleep 30"
             runs,
             vec![
                 ("", "echo formatted"),
-                ("src/pigeon-cli", "echo linted"),
-                ("src/pigeon-cli", "echo twice"),
+                ("ws/a", "echo linted"),
+                ("ws/a", "echo twice"),
                 ("", "echo testing; exit 3"),
             ]
         );
