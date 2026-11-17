@@ -21,6 +21,7 @@ pub mod control;
 pub mod decisions;
 pub mod deploy;
 pub mod events;
+pub mod feed;
 pub mod gitcreds;
 pub mod gitdoor;
 pub mod infra;
