@@ -1,6 +1,7 @@
 //! Briefs; see `.claude/decisions/2026-11-13-development-model-tiered-agent-briefs.md` §3.
 
 use agent::core::brief::{Brief, Budget, Commit, Draft, Step, open_choice, validate};
+use agent::core::pool::route::RunsOn;
 use agent::sessions::Class;
 
 const PLANNER: &str = "https://claude.ai/code/planner";
@@ -30,6 +31,9 @@ fn draft(model: Class) -> Draft {
         checks: vec!["CHANGE_BASE=artifacts/main mise run ci-scoped".into()],
         stop_if: vec!["a test outside tests/sessions.rs fails".into()],
         budget: None,
+        runs_on: RunsOn::Any,
+        pool_usd: None,
+        pool_minutes: None,
         commit: Commit {
             title: "feat(agent): Class::covers".into(),
             plan: "Adds Class::covers, per the brief.".into(),

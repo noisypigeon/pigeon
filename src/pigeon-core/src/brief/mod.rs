@@ -3,6 +3,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::pool::route::RunsOn;
 use crate::sessions::Class;
 
 pub mod executor;
@@ -109,8 +110,22 @@ pub struct Draft {
     /// Its budget; the class's default when left out.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub budget: Option<Budget>,
+    /// Where it runs: a session, a pool, or wherever the router picks.
+    #[serde(default, skip_serializing_if = "is_any")]
+    pub runs_on: RunsOn,
+    /// Its pool task's dollar budget, in place of the class default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pool_usd: Option<String>,
+    /// Its pool task's minutes, in place of the class default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pool_minutes: Option<u32>,
     /// The commit its change carries.
     pub commit: Commit,
+}
+
+#[allow(clippy::trivially_copy_pass_by_ref)] // serde passes a reference
+fn is_any(r: &RunsOn) -> bool {
+    *r == RunsOn::Any
 }
 
 impl Draft {
@@ -279,6 +294,7 @@ pub fn validate(draft: &Draft) -> Vec<String> {
     if serde_json::to_vec(draft).map_or(0, |v| v.len()) > MAX_BYTES {
         out.push(format!("a brief is at most {MAX_BYTES} bytes"));
     }
+    pool(draft, &mut out);
     out
 }
 
@@ -383,3 +399,32 @@ fn is_conventional(title: &str) -> bool {
     });
     TYPES.contains(&kind) && scope_ok && !rest.trim().is_empty()
 }
+
+fn pool(draft: &Draft, out: &mut Vec<String>) {
+    let usd = draft.pool_usd.as_deref().map(crate::pool::micros);
+    if let Some(u) = usd
+        && u.is_none_or(|m| m == 0)
+    {
+        out.push("`pool_usd` is not a dollar amount".into());
+    }
+    if draft.pool_minutes == Some(0) {
+        out.push("`pool_minutes` is zero".into());
+    }
+    let pooled =
+        draft.runs_on == RunsOn::Pool || draft.pool_usd.is_some() || draft.pool_minutes.is_some();
+    let class_ok = matches!(draft.model, Class::Haiku | Class::Sonnet);
+    if pooled && !class_ok {
+        out.push("only a haiku or sonnet brief runs on a pool".into());
+    }
+    let overridden = draft.pool_usd.is_some() || draft.pool_minutes.is_some();
+    if class_ok
+        && overridden
+        && let Ok(c) = crate::pool::config::config()
+        && let Err(e) = c.budget(draft.model, usd.flatten(), draft.pool_minutes)
+    {
+        out.push(e);
+    }
+}
+
+#[cfg(test)]
+mod tests;

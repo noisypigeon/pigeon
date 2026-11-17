@@ -436,6 +436,7 @@ mod tracker {
     use crate::brief::report::Tally;
     use crate::brief::{Brief, Commit, Draft, Revision};
     use crate::change::stage::{Needs, Stage};
+    use crate::pool::route::RunsOn;
     use crate::sessions::{Class, Declared};
 
     const NOW: u64 = 1_800_000_000;
@@ -488,6 +489,9 @@ mod tracker {
             checks: vec![],
             stop_if: vec![],
             budget: None,
+            runs_on: RunsOn::Any,
+            pool_usd: None,
+            pool_minutes: None,
             commit: Commit::default(),
         };
         Brief {
