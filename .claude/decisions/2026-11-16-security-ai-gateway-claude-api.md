@@ -535,3 +535,31 @@ route and `verdict::admit` (§11), never by an approval.
 !820 changes nothing about the gateway's upstream, headers or signals.
 
 Neither decision changes.
+
+### 2026-11-16: The gateway is provider-neutral, `pigeon-models`, with Anthropic as its first provider
+
+The owner asked that the gateway be named generally, since models from
+other providers may join it later.
+
+- **The name.** The gateway is `pigeon-models`. It is no longer the
+  deployment's name with `-claude` appended (§2). `platform/blue`'s
+  `ai_gateways` entry carries it (!843, brief b62 revision 5).
+- **What was already neutral stays as it is:**
+  - the module `catalog/cloudflare/modules/ai-gateway`;
+  - the kind's `ai_gateways` property and its `ai_gateway_names` output;
+  - the `aigateway.run` capability (!848);
+  - the `cf-aig-metadata` keys (`pool`, `task`, `change`, `brief`,
+    `class`), which name no provider.
+- **Anthropic is the first provider, not the only one.**
+  - Its key is the gateway's stored key under provider `anthropic`, alias
+    `default`, per the first amendment.
+  - A later provider adds:
+    - its own stored key in the same gateway;
+    - its own `Path` values in `core::pool::aigateway`;
+    - its own adapter behind the capacity-pools ADR's `Gateway` trait.
+
+  The gateway, its token, its metadata and its logging rules are shared.
+- **This ADR's title and filename keep "Claude API".** They record the
+  decision as made. A merged ADR's text is never rewritten.
+- **Owner item #23 is reissued** with the new name, and its dashboard path
+  becomes **AI Gateway > pigeon-models > Provider Keys**.
