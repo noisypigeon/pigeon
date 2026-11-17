@@ -4,7 +4,10 @@ use crate::provider::registry::Effect;
 use crate::provider::verdict::Call;
 
 /// The provider-call policies, by name; a test keeps this list and the directory equal.
-pub const POLICIES: &[(&str, &str)] = &[];
+pub const POLICIES: &[(&str, &str)] = &[(
+    "provider-call-mirror",
+    include_str!("../../../../.config/policies/provider-call-mirror.yaml"),
+)];
 
 /// The call document §4 step 4 judges: server, tool, effect, caller, change and arguments.
 #[must_use]
@@ -54,18 +57,6 @@ mod tests {
 
     use super::*;
 
-    const MIRROR: &[(&str, &str)] = &[(
-        "provider-call-mirror",
-        r#"description: A GitHub write names only the mirror repository.
-target: provider-call
-when:
-  - field: { name: server, equals: github }
-  - field: { name: effect, equals: write }
-rules:
-  - field: { name: arguments, matches: '"repo":"noisypigeon/pigeon"' }
-"#,
-    )];
-
     fn call(server: &str, arguments: serde_json::Value) -> Call {
         Call {
             server: server.into(),
@@ -107,15 +98,13 @@ rules:
             Effect::Write,
             "a",
         );
-        assert_eq!(judge_with(MIRROR, &ok), Ok(None));
+        assert_eq!(judge(&ok), Ok(None));
         let other = document(
             &call("github", json!({"repo": "someone/else"})),
             Effect::Write,
             "a",
         );
-        let (policy, why) = judge_with(MIRROR, &other)
-            .expect("parses")
-            .expect("refused");
+        let (policy, why) = judge(&other).expect("parses").expect("refused");
         assert_eq!(policy, "provider-call-mirror");
         assert!(!why.contains("someone/else"), "{why}");
     }
@@ -127,13 +116,13 @@ rules:
             Effect::Read,
             "a",
         );
-        assert_eq!(judge_with(MIRROR, &read), Ok(None));
+        assert_eq!(judge(&read), Ok(None));
         let other = document(
             &call("buildkite", json!({"repo": "someone/else"})),
             Effect::Write,
             "a",
         );
-        assert_eq!(judge_with(MIRROR, &other), Ok(None));
+        assert_eq!(judge(&other), Ok(None));
     }
 
     #[test]

@@ -1,0 +1,7 @@
+description: A GitHub write names only the mirror repository; see .claude/decisions/2026-11-16-security-provider-calls-mcp-broker.md §4.
+target: provider-call
+when:
+  - field: { name: server, equals: github }
+  - field: { name: effect, equals: write }
+rules:
+  - field: { name: arguments, matches: '"repo":"noisypigeon/pigeon"' }
