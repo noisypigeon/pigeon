@@ -15,7 +15,7 @@ pub use describe::{describe, describe_with};
 #[cfg(feature = "engines")]
 pub use network::{
     Kind, LINKS, Network, ROUTE_KEYS, Row, SERVICES, STANDALONE, Service, evidenced, hosts_in,
-    internal, literals, network, outbound_files,
+    internal, inventory, literals, network, outbound_files,
 };
 #[cfg(feature = "engines")]
 pub use place::{Diagram, place};

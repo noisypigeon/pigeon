@@ -1026,6 +1026,14 @@ fn clients(routes: &[(String, Vec<String>)]) -> Vec<Client> {
     .collect()
 }
 
+/// The Worker's routes, by client: the diagram's Clients row; see .claude/decisions/2026-11-15-runtime-one-mcp-entry-point.md §7.
+#[must_use]
+pub fn inventory(platform: &Path) -> Vec<Client> {
+    let mut r = routes(platform);
+    r.extend(own_routes(platform));
+    clients(&r)
+}
+
 /// The jobs `class_of` sends to `Runner`, by their constants' names.
 fn runner_jobs(platform: &Path) -> Vec<String> {
     let Some(text) = read(platform, "control.rs") else {
