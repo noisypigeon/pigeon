@@ -768,3 +768,28 @@ changed what step 3 builds. This amendment restates it.
 - **Verification** adds: a gateway `5xx` and a fetch error are refused and
   charged; no request reaches any host but the gateway's; a caller's
   `x-api-key` and `cf-aig-*` headers never reach it.
+
+### 2026-11-17: Step 3a is b67, and 3b is three changes
+
+- **3a is b67, not b41 revision 2.** Only a brief's planner amends it, and
+  b41's planner's session is archived. b67 carries the same accepted code
+  as !857.
+- **3b splits in three, in order:**
+  - **3b1, `feat(core)`:** `core::pool::meter`, the route's pure decisions:
+    task tokens, the vetting, settling a response, SSE usage and
+    `change_state` (!861).
+  - **3b2, `feat(agent)`, owner tier:** `worker/pool.rs` (the `Pool` object,
+    `v5`, and the route), `narrow_token`, `worker.yaml`'s class and three
+    secrets, and the architecture's `AI Gateway` service row. It is held for
+    the restructure's (e) and k3.
+  - **3b3:** `pool.status`, `pool.pause` and `pool.resume`, and
+    `.config/pool.yaml` guarded with the Ultra values and its policy.
+- **Nothing sent, nothing charged.** The previous amendment charged a
+  request refused for want of a gateway. A request is refused `503` before
+  any reservation when the gateway's account or name is unset
+  (`pool: no gateway`) or there is no Run token (`pool: no gateway token`).
+  A fetch error or a gateway `5xx` after the reservation is still charged,
+  answers `502`, and pauses the pool.
+- **3c also adds the vars** `AI_GATEWAY_ACCOUNT` (`$deployment.account_id`)
+  and `AI_GATEWAY` (the platform's `ai_gateway_names`), once !843 has
+  merged.
