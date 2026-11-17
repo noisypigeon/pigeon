@@ -286,3 +286,19 @@ merges on the owner's passkey.
   `platform_job.rs`, which !983 moves to `secret_code:`, still go to the
   owner whenever they touch a token or a mint. Nothing either ADR decides
   changes.
+
+### 2026-11-17: Step 4: the first minted run planned and applied `platform/blue`, and its token was revoked
+
+- **The code landed in four changes:**
+  - !986 computes each unit's capability set in core, with its catalog and module lines in !956 and !978.
+  - !1008 adds the `platform-run` grant, puts the per-unit sets in the deployed ledger, and has the plan page list them.
+  - !1012 has one passkey proof mint, verify and seal the token, revokes it when the run ends, and keeps pasting as break-glass.
+  - !1013 has the plan job refuse a set wider than its minted token.
+- **Platform run 35 of `platform/blue`** was the first minted run.
+  - One passkey proof minted its token through `granter` with the unit's nine capabilities: `access-apps.write`, `access-tokens.write`, `account.read`, `aigateway.write`, `d1.write`, `queues.write`, `r2.write`, `secrets-store.read` and `workers.read`.
+  - It planned and applied one change, and recorded `credential: minted`.
+  - Its token was revoked through `granter` when the run ended.
+- **§9 is answered.** `granter` mints the Access, Secrets Store and AI Gateway groups on an account-owned token. Nothing about `granter` changes, and no `owner_ask` was needed.
+- **How execution differed from §10:**
+  - Step 1 took four changes. The catalog file and the access-service-token module are on the secrets tier, which the planner changes itself (!956). A brief takes at most 12 paths, so the modules' lines and core's set were split (!978, !986).
+  - Step 2 landed as one planner change (!1008). `.config/grants.yaml` is guarded, and a brief's change never touches it.
