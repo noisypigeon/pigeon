@@ -602,3 +602,21 @@ The planner of [`2026-11-17-runtime-mcp-feed-view-contract.md`](2026-11-17-runti
   token per job account, listing `build.*` and `provider.call`.
 - `provider.call` and `provider.tools` declare views: `card` and
   `list`.
+
+### 2026-11-17: The mirror policy needs its list as eviction bookkeeping
+
+The hand-off's first step adds `provider-call-mirror.yaml` and its entry in
+`provider::policy::POLICIES` in one change. The control plane refuses that
+change: `.config/policies/**` is an eviction path, and an eviction change
+touches only the judge's paths, its ADR and bookkeeping
+(`approval::tiers::mixed_with_eviction`). Split, either half leaves `main`
+red, because `the_list_is_the_directory` compares the list with the
+directory.
+
+- **First, `.config/approvals.yaml`** adds
+  `src/pigeon-core/src/provider/policy.rs` to `eviction_bookkeeping`. That
+  file is the list that links the judge's provider-call policies into the
+  Worker, so it travels with them. It is an eviction and gate path, so the
+  owner approves it.
+- **Then, the mirror policy** lands as written, with its `POLICIES` entry,
+  as one eviction change.

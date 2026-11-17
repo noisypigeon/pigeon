@@ -369,3 +369,22 @@ step that adds a file amends `Governs` with its glob.
     as its hand-off lists them. (planner and briefs)
 17. **Routes go** as §8 counts them idle, one change per group. (briefs)
 18. **This ADR is amended with the outcome.** (planner)
+
+## Amendments
+
+### 2026-11-17: The owner's answer: two doors, one handler
+
+The owner chose to keep the one-MCP ADR's §2 doors over a single `/mcp`
+that verifies every credential itself:
+
+- `/mcp` stays behind Access, so Access remains the outer gate for agents,
+  jobs and the owner's browser;
+- `/v0/app/mcp` stays device-signed, with Access bypassed, for the app and
+  standalones, and takes Buildkite's OIDC token for `release.apple` (§6);
+- both serve one handler and one catalog.
+
+§1 and §6 stand as written.
+
+The owner also answered owner ask #27: `POST /v0/pool/` stays outside MCP,
+protocol-bound as `/git/…` is, because the harness speaks the Messages API
+to its model there. §7's list is final.
