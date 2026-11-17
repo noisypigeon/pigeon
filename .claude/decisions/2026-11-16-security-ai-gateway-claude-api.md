@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: security
-* Governs: `.config/pool.yaml`, `infra/pigeon/config.yaml`
+* Governs: `.config/pool.yaml`, `infra/pigeon/config.yaml`, `catalog/cloudflare/modules/ai-gateway/**`, `src/**/pool/aigateway.rs`
 
 ## Context
 
