@@ -308,12 +308,17 @@ fn find(ctx: &mut Ctx, root: &Path, r: &FindRule) {
             }
         };
         let content = String::from_utf8_lossy(&bytes);
+        let kept = |l: &str| match &r.except_content {
+            Some(e) => e.0.replace_all(l, "").into_owned(),
+            None => l.to_string(),
+        };
         if let Some((i, line)) = content
             .lines()
+            .map(kept)
             .enumerate()
             .find(|(_, l)| forbidden.0.is_match(l))
         {
-            let found = forbidden.0.find(line).map_or("", |m| m.as_str());
+            let found = forbidden.0.find(&line).map_or("", |m| m.as_str());
             ctx.push_at(
                 path,
                 Some(i + 1),

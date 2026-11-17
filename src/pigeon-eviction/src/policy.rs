@@ -129,6 +129,9 @@ pub struct FindRule {
     pub allow_under: Vec<String>,
     /// If set, a disallowed match fails only when its content matches.
     pub forbid_content: Option<Pattern>,
+    /// Text removed from each line before [`Self::forbid_content`] is tested: names a policy lets
+    /// stand, such as a file name or a stored key.
+    pub except_content: Option<Pattern>,
     /// Paths (files or directories) never walked.
     #[serde(default)]
     pub ignore: Vec<Pattern>,

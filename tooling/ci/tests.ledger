@@ -1446,6 +1446,7 @@ pigeon-eviction test suite policies::roles_holds_three_explicit_capability_lists
 pigeon-eviction test suite policies::sentinel_actions_keeps_sentinel_read_only
 pigeon-eviction test suite policies::terraform_rules
 pigeon-eviction test suite tree::find_tests::allows_only_under_prefixes_and_skips_ignored
+pigeon-eviction test suite tree::find_tests::excepted_content_is_removed_before_the_forbidden_pattern_is_tested
 pigeon-eviction test suite tree::find_tests::find_needs_the_tree_target
 pigeon-eviction test suite tree::find_tests::forbid_content_fails_only_on_matching_lines
 pigeon-eviction test suite tree::find_tests::missing_root_and_unreadable_content_are_violations

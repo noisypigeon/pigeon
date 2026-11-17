@@ -96,6 +96,41 @@ mod find_tests {
     }
 
     #[test]
+    fn excepted_content_is_removed_before_the_forbidden_pattern_is_tested() {
+        let root = tree(&[
+            ("a.md", "see 2026-01-01-old-name.md\n"),
+            ("b.md", "the old-name\n"),
+            ("c.md", "keep STORED_OLD here, and old-name too\n"),
+        ]);
+        let rule = "{ match: '\\.md$', forbid_content: 'old-name', \
+                    except_content: '[0-9]{4}-[0-9]{2}-[0-9]{2}-[a-z-]+\\.md|STORED_OLD' }";
+        assert_eq!(
+            run_find(rule, &root),
+            [
+                "b.md:1: t: mentions `old-name`, which is not allowed here",
+                "c.md:1: t: mentions `old-name`, which is not allowed here",
+            ]
+        );
+        let only_stored = tree(&[("d.md", "keep STORED_OLD here\n")]);
+        let rule = "{ match: '\\.md$', forbid_content: 'STORED', except_content: 'STORED_OLD' }";
+        assert_eq!(run_find(rule, &only_stored), Vec::<String>::new());
+        let embedded = tree(&[
+            ("e.md", "the pigeon-old-name-state\n"),
+            ("f.md", "the pigeon-old-name-state and old-name\n"),
+            ("g.md", "the pigeon-old-name-states\n"),
+        ]);
+        let rule = "{ match: '\\.md$', forbid_content: 'old-name', \
+                    except_content: '\\bpigeon-old-name-state\\b' }";
+        assert_eq!(
+            run_find(rule, &embedded),
+            [
+                "f.md:1: t: mentions `old-name`, which is not allowed here",
+                "g.md:1: t: mentions `old-name`, which is not allowed here",
+            ]
+        );
+    }
+
+    #[test]
     fn allows_only_under_prefixes_and_skips_ignored() {
         let root = tree(&[
             ("infra/a/main.tf", ""),
