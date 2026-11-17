@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: development
-* Governs: `.config/policies/eviction-actions.yaml`, `src/**/definition.rs`, `src/**/markdown.rs`, `src/**/policy.rs`, `src/**/report.rs`, `src/**/rules.rs`, `src/**/target.rs`, `src/**/release/**`, `src/**/tests/suite/*release.rs`, `src/**/tests/suite/*release_scope.rs`, `src/pigeon-harness/src/commands/infra.rs`
+* Governs: `.config/policies/eviction-actions.yaml`, `src/**/definition.rs`, `src/**/markdown.rs`, `src/**/policy.rs`, `src/**/report.rs`, `src/**/rules.rs`, `src/**/target.rs`, `src/**/release/**`, `src/**/tests/suite/release.rs`, `src/**/tests/suite/release_scope.rs`, `src/pigeon-harness/src/commands/infra.rs`
 
 ## Context
 

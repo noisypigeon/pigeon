@@ -5,6 +5,7 @@
 * Author: Willow Graysen (@noisypigeon).
 * Category: development
 * Governs: `src/**/worker/main_run.rs`, `src/**/worker/merges.rs`, `src/**/worker/github.rs`, `src/pigeon-agent/src/*/ci.rs`, `src/**/release/**`, `src/**/change/queue.rs`, `src/**/macos/job.rs`
+* Governs: `src/**/worker/main_run.rs`, `src/**/worker/merges.rs`, `src/**/worker/github.rs`, `src/**/checks/ci.rs`, `src/**/release/**`
 
 ## Context
 

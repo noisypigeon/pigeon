@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: runtime
-* Governs: `catalog/cloudflare/presets/**`, `catalog/cloudflare/kinds/zone/schema.json`, `src/**/apex.rs`, `src/**/tests/suite/*_apex.rs`
+* Governs: `catalog/cloudflare/presets/**`, `catalog/cloudflare/kinds/zone/schema.json`, `src/**/apex.rs`, `src/**/tests/suite/sites_apex.rs`
 
 ## Context
 

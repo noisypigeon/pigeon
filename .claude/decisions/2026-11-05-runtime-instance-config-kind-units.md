@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: runtime
-* Governs: `config.yaml`, `catalog/*/kinds/**`, `src/**/manifest.rs`, `src/**/unit.rs`, `src/**/moves.rs`, `src/**/tests/suite/*_manifest.rs`
+* Governs: `config.yaml`, `catalog/*/kinds/**`, `src/**/manifest.rs`, `src/**/unit.rs`, `src/**/moves.rs`, `src/**/tests/suite/infra_manifest.rs`
 
 ## Context
 
