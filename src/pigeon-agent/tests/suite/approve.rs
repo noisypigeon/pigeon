@@ -237,7 +237,8 @@ fn a_platform_plan_page_asks_for_the_token_and_an_apply_page_shows_the_changes()
     use agent::core::platform::platforms::{Planned, Runs, Stage};
     let mut runs = Runs::default();
     let run = stepped!(runs.propose("platform/blue", "tok", 0)).expect("proposes");
-    let page = agent::approve::platform_page(&run, "tok<");
+    let why = Err("no deploy has reported the grants ledger yet".to_string());
+    let page = agent::approve::platform_page(&run, "tok<", &why);
     assert!(
         page.contains("name=\"account_token\" type=\"password\""),
         "{page}"
@@ -248,10 +249,10 @@ fn a_platform_plan_page_asks_for_the_token_and_an_apply_page_shows_the_changes()
     assert_eq!(page.matches(ours).count(), 1, "{page}");
     assert!(!page.replace(ours, "").contains("<script"), "{page}");
     assert!(page.contains("data-passkey=\"prove\" data-purpose=\"grant:"));
-    for p in agent::core::platform::platforms::token_permissions() {
-        assert!(page.contains(&p.replace('&', "&amp;")), "{p}: {page}");
-    }
-    assert!(page.contains("Secrets Store Read") && page.contains("AI Gateway Edit"));
+    assert!(
+        page.contains("lists no permissions for this unit: no deploy has reported"),
+        "{page}"
+    );
     stepped!(runs.grant_plan(1, "tok", "SEALED", "o", 1)).expect("grants");
     let change = serde_json::json!({ "action": "update", "address": "module.d1.<x>" });
     let planned = Planned {
@@ -261,7 +262,7 @@ fn a_platform_plan_page_asks_for_the_token_and_an_apply_page_shows_the_changes()
     };
     let run = stepped!(runs.planned(1, Ok(planned), "t2", 2)).expect("planned");
     assert_eq!(run.stage, Stage::Planned);
-    let page = agent::approve::platform_page(&run, "t2");
+    let page = agent::approve::platform_page(&run, "t2", &why);
     assert!(page.contains("update module.d1.&lt;x&gt;"), "{page}");
     assert!(
         page.contains("of commit <code>2222222222222222222222222222222222222222</code>"),
@@ -272,37 +273,33 @@ fn a_platform_plan_page_asks_for_the_token_and_an_apply_page_shows_the_changes()
     assert!(!page.contains("SEALED"));
 }
 
-// See `.claude/decisions/2026-11-08-runtime-blue-green-self-standup.md`, its 2026-11-17 amendment.
+// See `.claude/decisions/2026-11-17-security-platform-run-minted-token.md`, its 2026-11-17 amendment.
 #[test]
 fn every_module_the_platform_kind_expands_has_its_token_permission() {
-    fn modules(v: &serde_json::Value, out: &mut Vec<String>) {
-        match v {
-            serde_json::Value::Object(o) => {
-                if let Some(m) = o.get("module").and_then(serde_json::Value::as_str) {
-                    out.push(m.to_string());
-                }
-                o.values().for_each(|v| modules(v, out));
-            }
-            serde_json::Value::Array(a) => a.iter().for_each(|v| modules(v, out)),
-            _ => {}
-        }
-    }
-    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../catalog/pigeon/kinds/platform/schema.json");
-    let text = std::fs::read_to_string(&path).expect("the platform kind's schema");
-    let schema: serde_json::Value = serde_json::from_str(&text).expect("JSON");
-    let mut found = Vec::new();
-    modules(&schema, &mut found);
+    use agent::core::platform::platforms::{Runs, Stage};
+    let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let r = agent::infra::catalog::ledger_resolved(&root, &root, "abc")
+        .expect("resolves")
+        .expect("a ledger");
+    let needs = r.unit("platform/blue");
+    let wanted = needs.clone().expect("platform/blue's set");
     assert!(
-        found.iter().any(|m| m == "cloudflare/ai-gateway"),
-        "{found:?}"
+        wanted.iter().any(|w| w.name == "aigateway.write"),
+        "{wanted:?}"
     );
-    let known = agent::core::platform::platforms::MODULE_PERMISSIONS;
-    for m in &found {
+    let mut runs = Runs::default();
+    let run = stepped!(runs.propose("platform/blue", "tok", 0)).expect("proposes");
+    assert_eq!(run.stage, Stage::Offered);
+    let page = agent::approve::platform_page(&run, "tok", &needs);
+    for w in &wanted {
         assert!(
-            known.iter().any(|(k, _)| k == m),
-            "`{m}` is in the platform kind but not in MODULE_PERMISSIONS"
+            page.contains(&format!("<code>{}</code>", w.name)),
+            "{}: {page}",
+            w.name
         );
+        for p in &w.permissions {
+            assert!(page.contains(&p.replace('&', "&amp;")), "{p}: {page}");
+        }
     }
 }
 

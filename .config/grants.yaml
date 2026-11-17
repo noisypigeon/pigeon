@@ -9,3 +9,8 @@ grants:
   aigateway:
     mint: { capabilities: [aigateway.run], ttl: 1h }
     route: { object: Pool }
+  # A platform run's account token: its unit's capabilities, minted on the plan's passkey proof
+  # and sealed for the run; see .claude/decisions/2026-11-17-security-platform-run-minted-token.md §3.
+  platform-run:
+    mint: { capabilities: from-unit, ttl: 24h }
+    route: { job: platform.plan }

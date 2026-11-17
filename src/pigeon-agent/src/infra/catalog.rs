@@ -263,5 +263,50 @@ pub fn ledger_resolved(
         return Ok(None);
     };
     let (catalogs, _) = capabilities_in(root, platform);
-    Ok(Some(crate::core::ledger::resolved(ledger, catalogs, sha)))
+    let units = platform_units(root, platform)?;
+    Ok(Some(crate::core::ledger::resolved(
+        ledger, catalogs, sha, units,
+    )))
+}
+
+/// The kind whose units a `from-unit` mint serves.
+const PLATFORM_KIND: &str = "pigeon/platform";
+
+/// Each `pigeon/platform` unit's capability names under the instance at `root`, by unit; see
+/// `.claude/decisions/2026-11-17-security-platform-run-minted-token.md` §2–§3.
+///
+/// # Errors
+///
+/// Each unit whose set can't be computed, and why.
+pub fn platform_units(
+    root: &Path,
+    platform: &Path,
+) -> Result<BTreeMap<String, Vec<String>>, Vec<String>> {
+    let (units, _) = crate::infra::unit::discover_in(root, platform);
+    let mut out = BTreeMap::new();
+    let mut problems = Vec::new();
+    for u in units
+        .iter()
+        .filter(|u| u.kind.as_deref() == Some(PLATFORM_KIND))
+    {
+        let Some(c) = &u.config else {
+            continue;
+        };
+        let manifests = crate::infra::config::disk(c, None)
+            .modules
+            .into_iter()
+            .map(|(name, m)| (name, m.manifest))
+            .collect();
+        match crate::core::platform::platforms::capabilities(&c.schema, &c.config, &manifests) {
+            Ok(set) => {
+                out.insert(u.path.clone(), set);
+            }
+            Err(why) => problems.push(format!("{}: {why}", u.path)),
+        }
+    }
+    if problems.is_empty() {
+        Ok(out)
+    } else {
+        Err(problems)
+    }
 }

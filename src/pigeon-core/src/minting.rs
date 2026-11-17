@@ -155,12 +155,44 @@ pub struct Resolved {
     pub sha: String,
     /// The ledger.
     pub ledger: Ledger,
-    /// Each capability the ledger names, by catalog name.
+    /// Each capability the ledger or a unit names, by catalog name.
     #[serde(default)]
     pub capabilities: BTreeMap<String, Declared>,
+    /// Each `pigeon/platform` unit's capability names, by unit, for a `from-unit` mint; see
+    /// `.claude/decisions/2026-11-17-security-platform-run-minted-token.md` §3.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub units: BTreeMap<String, Vec<String>>,
 }
 
 impl Resolved {
+    /// What a run of unit `unit` mints: each of its capabilities, with its permissions and scope.
+    ///
+    /// # Errors
+    ///
+    /// A unit the deploy reported no set for, or a capability no catalog declares.
+    pub fn unit(&self, unit: &str) -> Result<Vec<Wanted>, String> {
+        let names = self.units.get(unit).ok_or_else(|| {
+            format!(
+                "the deploy at {} reported no capabilities for `{unit}`",
+                self.sha
+            )
+        })?;
+        names
+            .iter()
+            .map(|c| {
+                let d = self
+                    .capabilities
+                    .get(c)
+                    .ok_or_else(|| format!("`{unit}`'s capability `{c}` is in no catalog"))?;
+                Ok(Wanted {
+                    name: c.clone(),
+                    permissions: d.permissions.clone(),
+                    scope: d.scope.clone(),
+                })
+            })
+            .collect()
+    }
+
     /// What grant `name` mints.
     ///
     /// # Errors
@@ -572,7 +604,25 @@ mod tests {
                 },
             )]
             .into(),
+            units: [
+                ("platform/blue".to_string(), vec!["r2.write".to_string()]),
+                ("platform/odd".to_string(), vec!["nope".to_string()]),
+            ]
+            .into(),
         };
+        assert_eq!(
+            r.unit("platform/blue"),
+            Ok(vec![wanted(
+                "r2.write",
+                "Workers R2 Storage Write",
+                "account"
+            )])
+        );
+        assert!(r.unit("platform/odd").is_err_and(|e| e.contains("`nope`")));
+        assert!(
+            r.unit("platform/green")
+                .is_err_and(|e| e.contains("reported no capabilities"))
+        );
         assert_eq!(
             r.wanted("ok"),
             Ok(vec![wanted(

@@ -43,3 +43,38 @@ fn the_repositorys_ledger_resolves_at_a_commit() {
         let _ = r.wanted(g);
     }
 }
+
+// See `.claude/decisions/2026-11-17-security-platform-run-minted-token.md` §3.
+#[test]
+fn the_deployed_ledger_carries_each_platform_units_capabilities() {
+    let root = repo_root();
+    let r = resolve(&root, &root, "abc")
+        .expect("resolves")
+        .expect("a ledger");
+    let wanted = r.unit("platform/blue").expect("platform/blue's set");
+    let names: Vec<&str> = wanted.iter().map(|w| w.name.as_str()).collect();
+    assert_eq!(
+        names,
+        [
+            "access-apps.write",
+            "access-tokens.write",
+            "account.read",
+            "aigateway.write",
+            "d1.write",
+            "queues.write",
+            "r2.write",
+            "secrets-store.read",
+            "workers.read",
+        ]
+    );
+    assert!(
+        wanted
+            .iter()
+            .all(|w| !w.permissions.is_empty() && w.scope == "account"),
+        "{wanted:?}"
+    );
+    assert!(
+        r.wanted("platform-run")
+            .is_err_and(|e| e.contains("unit run"))
+    );
+}

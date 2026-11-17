@@ -12,6 +12,10 @@ pub const LEDGER: &str = ".config/grants.yaml";
 /// The capabilities a `from-unit` mint takes from its unit's `config.yaml`.
 pub const FROM_UNIT: &str = "from-unit";
 
+/// The job a platform run's token is routed to; see
+/// `.claude/decisions/2026-11-17-security-platform-run-minted-token.md` §3.
+pub const PLATFORM_JOB: &str = "platform.plan";
+
 /// The ledger: each grant by name.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -247,8 +251,31 @@ pub fn check(ledger: &Ledger, known: &BTreeSet<String>) -> Vec<String> {
             }
             Capabilities::Unit(_) => {}
         }
+        if r.job.as_deref() == Some(PLATFORM_JOB) {
+            platform_run(m, ttl, &mut say);
+        }
     }
     problems
+}
+
+/// A platform run's mint: its unit's capabilities, for one run; see
+/// `.claude/decisions/2026-11-17-security-platform-run-minted-token.md` §3.
+fn platform_run(m: &Mint, ttl: Option<u64>, say: &mut impl FnMut(String)) {
+    if m.capabilities != Capabilities::Unit(FROM_UNIT.into()) {
+        say(format!(
+            "routes to `{PLATFORM_JOB}`, which takes `{FROM_UNIT}`"
+        ));
+    }
+    if ttl != Some(crate::platform::platforms::LIFETIME) {
+        say(format!(
+            "routes to `{PLATFORM_JOB}`, whose token lives one run: ttl 24h"
+        ));
+    }
+    if m.rotate.is_some() {
+        say(format!(
+            "routes to `{PLATFORM_JOB}`, whose token lives one run; it takes no rotate"
+        ));
+    }
 }
 
 /// Whether `grant`, last minted at `last`, is past its rotation age at `now`.
@@ -289,12 +316,15 @@ pub fn parse(
     }
 }
 
-/// `ledger` with each capability it names resolved from `catalogs`, as deployed at `sha`.
+/// `ledger` with each capability it or one of `units` (each `pigeon/platform` unit's capability
+/// names, by unit) names resolved from `catalogs`, as deployed at `sha`; see
+/// `.claude/decisions/2026-11-17-security-platform-run-minted-token.md` §3.
 #[must_use]
 pub fn resolved(
     ledger: Ledger,
     catalogs: Vec<super::infra::capabilities::Catalog>,
     sha: &str,
+    units: BTreeMap<String, Vec<String>>,
 ) -> super::minting::Resolved {
     let named: BTreeSet<&String> = ledger
         .grants
@@ -304,6 +334,7 @@ pub fn resolved(
             _ => None,
         })
         .flatten()
+        .chain(units.values().flatten())
         .collect();
     let capabilities = catalogs
         .into_iter()
@@ -321,6 +352,7 @@ pub fn resolved(
         sha: sha.to_string(),
         ledger,
         capabilities,
+        units,
     }
 }
 
@@ -398,6 +430,40 @@ mod tests {
             ..Route::default()
         };
         assert_eq!(one("infra-run", job), Vec::<String>::new());
+    }
+
+    // See `.claude/decisions/2026-11-17-security-platform-run-minted-token.md` §3.
+    #[test]
+    fn a_platform_run_takes_its_units_capabilities_for_one_run() {
+        let run = |caps: Capabilities, ttl: &str, rotate: Option<&str>| {
+            let mut g = mint(&["r2.write"], ttl, rotate);
+            g.mint.as_mut().expect("mint").capabilities = caps;
+            g.route = Route {
+                job: Some(PLATFORM_JOB.into()),
+                ..Route::default()
+            };
+            g
+        };
+        let unit = || Capabilities::Unit(FROM_UNIT.into());
+        assert_eq!(
+            one("platform-run", run(unit(), "24h", None)),
+            Vec::<String>::new()
+        );
+        let named = one(
+            "platform-run",
+            run(Capabilities::Named(vec!["r2.write".into()]), "24h", None),
+        );
+        assert!(
+            named.iter().any(|p| p.contains("takes `from-unit`")),
+            "{named:?}"
+        );
+        let long = one("platform-run", run(unit(), "30d", None));
+        assert!(long.iter().any(|p| p.contains("ttl 24h")), "{long:?}");
+        let rotating = one("platform-run", run(unit(), "24h", Some("1h")));
+        assert!(
+            rotating.iter().any(|p| p.contains("takes no rotate")),
+            "{rotating:?}"
+        );
     }
 
     fn object(g: Grant, class: &str) -> Grant {

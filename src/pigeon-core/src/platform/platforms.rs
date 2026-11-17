@@ -12,44 +12,6 @@ use sha2::{Digest as _, Sha256};
 /// How long a sealed token, an offer or a stored plan lasts, in seconds.
 pub const LIFETIME: u64 = 24 * 60 * 60;
 
-/// Each catalog module the `pigeon/platform` kind expands, with the account-token permission a
-/// platform run needs for it, or none; see
-/// `.claude/decisions/2026-11-08-runtime-blue-green-self-standup.md`, its 2026-11-17 amendment.
-pub const MODULE_PERMISSIONS: [(&str, Option<&str>); 11] = [
-    ("cloudflare/account", Some("Account Settings Read")),
-    ("cloudflare/worker", Some("Workers Scripts Read")),
-    ("cloudflare/d1-database", Some("D1 Edit")),
-    ("cloudflare/r2-bucket", Some("Workers R2 Storage Edit")),
-    ("cloudflare/queue", Some("Queues Edit")),
-    (
-        "cloudflare/access-application",
-        Some("Access: Apps and Policies Edit"),
-    ),
-    (
-        "cloudflare/access-policy",
-        Some("Access: Apps and Policies Edit"),
-    ),
-    (
-        "cloudflare/access-service-token",
-        Some("Access: Service Tokens Edit"),
-    ),
-    ("cloudflare/secrets-store", Some("Secrets Store Read")),
-    ("cloudflare/ai-gateway", Some("AI Gateway Edit")),
-    ("agnostic/random-string", None),
-];
-
-/// The permissions a platform run's account token needs, in [`MODULE_PERMISSIONS`]' order, once each.
-#[must_use]
-pub fn token_permissions() -> Vec<&'static str> {
-    let mut out: Vec<&'static str> = Vec::new();
-    for p in MODULE_PERMISSIONS.iter().filter_map(|(_, p)| *p) {
-        if !out.contains(&p) {
-            out.push(p);
-        }
-    }
-    out
-}
-
 /// The capability every platform run's token holds: the state bucket, and the S3 keys derived
 /// from the token.
 pub const STATE_CAPABILITY: &str = "r2.write";

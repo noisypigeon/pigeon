@@ -130,8 +130,14 @@ fn fixture_pages() -> Vec<(&'static str, String)> {
         ("mandate", approve::mandate_page(&mandate, "tok")),
         ("grant", approve::grant_page(&offer, None, "tok")),
         ("ci-window", approve::ci_window_page(&window, "tok")),
-        ("platform-plan", approve::platform_page(&offered, "tok")),
-        ("platform-apply", approve::platform_page(&planned, "tok")),
+        (
+            "platform-plan",
+            approve::platform_page(&offered, "tok", &Ok(platform_needs())),
+        ),
+        (
+            "platform-apply",
+            approve::platform_page(&planned, "tok", &Ok(platform_needs())),
+        ),
         ("link", approve::link_page("Willow's iPhone", "BASE64KEY", "ab:cd:ef:01")),
         ("devices", approve::devices_page(&devices, Some("Unlinked."))),
         ("passkeys", approve::passkeys_page(&keys, None, false, &cutover)),
@@ -170,4 +176,13 @@ fn skeletons() -> String {
         let _ = write!(out, "== {name}\n{}", skeleton(html));
         out
     })
+}
+
+/// A platform unit's capabilities, as the plan page lists them.
+fn platform_needs() -> Vec<crate::minting::Wanted> {
+    vec![crate::minting::Wanted {
+        name: "d1.write".into(),
+        permissions: vec!["D1 Write".into()],
+        scope: "account".into(),
+    }]
 }

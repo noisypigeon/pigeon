@@ -116,7 +116,7 @@ fn verb(kind: Kind) -> &'static str {
 }
 
 /// The ledger the last passed deploy reported, if any.
-async fn deployed(env: &Env, s: &Settings) -> Result<Option<Resolved>> {
+pub(super) async fn deployed(env: &Env, s: &Settings) -> Result<Option<Resolved>> {
     let req = json_request("https://main/ledger", Method::Get, None, None)?;
     let mut r = platform::call(env, &super::main_stub(env, &s.repo)?, req).await?;
     if r.status_code() != 200 {

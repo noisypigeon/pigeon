@@ -208,11 +208,18 @@ pub async fn page_serve(
             };
             let (status, v) = to_main(env, s, "peek", &json!({ "id": id, "token": token })).await?;
             match serde_json::from_value::<Run>(v.clone()) {
-                Ok(run) if status == 200 => page::html_with(
-                    200,
-                    &approve::platform_page(&run, &token),
-                    approve::PROOF_CSP,
-                ),
+                Ok(run) if status == 200 => {
+                    let needs = match super::minting::deployed(env, s).await {
+                        Ok(Some(r)) => r.unit(&run.unit),
+                        Ok(None) => Err("no deploy has reported the grants ledger yet".into()),
+                        Err(e) => Err(format!("the deployed ledger can't be read: {e}")),
+                    };
+                    page::html_with(
+                        200,
+                        &approve::platform_page(&run, &token, &needs),
+                        approve::PROOF_CSP,
+                    )
+                }
                 _ => page::refused(403, v.as_str().unwrap_or("this link is not valid")),
             }
         }
