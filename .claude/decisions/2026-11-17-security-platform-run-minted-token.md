@@ -270,3 +270,19 @@ merges on the owner's passkey.
   comments, messages and test names the new names.
 - The two met only through !948's `src/pigeon-core/src/**` and
   `src/pigeon-agent/src/**` scope. Nothing either ADR decides changes.
+
+### 2026-11-17: Review of !986 against !983: they agree
+
+- **!983** wrote
+  [`2026-11-17-security-auto-covers-routine-owner-asks.md`](2026-11-17-security-auto-covers-routine-owner-asks.md).
+  Auto there covers a session's own closes and fronts, secrets code whose
+  diff holds no secret material, and comment-only gate edits.
+- **!986** carries out the second half of this ADR's step 1: core's
+  per-unit capability set and its `infra validate` check. It touches none
+  of !983's files.
+- **They agree.** !983 keeps credential grants on the passkey: minting,
+  `grants.yaml`, `capabilities.yaml` and `platform.apply`. That is §8's
+  tier for a run that mints. Under it, step 3's edits to
+  `platform_job.rs`, which !983 moves to `secret_code:`, still go to the
+  owner whenever they touch a token or a mint. Nothing either ADR decides
+  changes.
