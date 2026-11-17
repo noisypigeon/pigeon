@@ -851,3 +851,14 @@ changed what step 3 builds. This amendment restates it.
     `git status` and `git diff` work inside.
   - Files are created with `umask 000`, so the runner can read and commit
     them.
+### 2026-11-17: Review of !907 against this ADR: they agree
+
+- **!907** amends
+  [`2026-11-08-runtime-blue-green-self-standup.md`](2026-11-08-runtime-blue-green-self-standup.md):
+  a platform plan job checks out `main`'s head and reports it, and its apply
+  checks out that recorded commit. In `jobs.rs` it changes only the platform
+  plan and apply jobs.
+- **This ADR** decides the `pool` job in `jobs.rs` (§7): its spec, its `env`
+  and `Report.pool`.
+- **They agree.** !907 leaves the `pool` job, its spec and its report
+  unchanged. Pools decide nothing about which commit a platform job runs.
