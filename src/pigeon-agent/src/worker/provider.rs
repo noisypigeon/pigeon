@@ -11,8 +11,9 @@ use crate::access::Identity;
 use crate::control;
 use crate::core::provider::call::{self, Args};
 use crate::core::provider::client::{self, ClientError};
-use crate::core::provider::registry::{self, Credential, Server};
-use crate::core::provider::verdict::{Caller, ChangeState, Decision, Grants, Step, verdict};
+use crate::core::provider::policy;
+use crate::core::provider::registry::{self, Credential, Effect, Server};
+use crate::core::provider::verdict::{Call, Caller, ChangeState, Decision, Grants, Step, verdict};
 
 const NOT_WIRED: &str = "credential kind or server not wired yet; see the broker ADR's step 7";
 
@@ -73,6 +74,28 @@ async fn open(server: &Server, token: &str) -> std::result::Result<Option<String
     let session = init.session;
     post(server, token, session.as_deref(), &client::initialized()).await?;
     Ok(session)
+}
+
+/// Records `provider.refused` with `summary`, and answers `status` with `reason`.
+async fn refuse(
+    env: &Env,
+    s: &Settings,
+    change: Option<u32>,
+    label: Option<String>,
+    summary: &str,
+    status: u16,
+    reason: impl Into<String>,
+) -> Result<(u16, Value)> {
+    events::append(env, s, "provider.refused", change, label, summary, false).await?;
+    Ok(violations(status, reason))
+}
+
+/// Why a provider-call policy refuses the call, naming the policy, or none.
+fn policy_refusal(sent: &Call, effect: Effect, caller: &str) -> Option<String> {
+    match policy::judge(&policy::document(sent, effect, caller)) {
+        Ok(found) => found.map(|(name, why)| format!("{name}: {why}")),
+        Err((name, why)) => Some(format!("{name} doesn't parse: {why}")),
+    }
 }
 
 fn secret_name(server: &Server) -> Option<String> {
@@ -160,17 +183,8 @@ async fn provider_call(
     );
     let (effect, credential) = match decision {
         Decision::Refused { step, reason } => {
-            events::append(
-                env,
-                s,
-                "provider.refused",
-                change,
-                label,
-                &call::refused(&sent, step, &reason),
-                false,
-            )
-            .await?;
-            return Ok(violations(403, reason));
+            let summary = call::refused(&sent, step, &reason);
+            return refuse(env, s, change, label, &summary, 403, reason).await;
         }
         Decision::Pending { reason } => return Ok((200, json!({ "pending": reason }))),
         Decision::Forward {
@@ -178,20 +192,17 @@ async fn provider_call(
         } => (effect, credential),
     };
 
+    // The policies.
+    if let Some(reason) = policy_refusal(&sent, effect, &who.subject) {
+        let summary = call::refused(&sent, Step::Policy, &reason);
+        return refuse(env, s, change, label, &summary, 403, reason).await;
+    }
+
     // The credential.
     let server = &registry.servers[&asked.server];
     let (Credential::Secret(name), Some(_)) = (&credential, secret_name(server)) else {
-        events::append(
-            env,
-            s,
-            "provider.refused",
-            change,
-            label,
-            &call::refused(&sent, Step::Registry, NOT_WIRED),
-            false,
-        )
-        .await?;
-        return Ok(violations(501, NOT_WIRED));
+        let summary = call::refused(&sent, Step::Registry, NOT_WIRED);
+        return refuse(env, s, change, label, &summary, 501, NOT_WIRED).await;
     };
     let token = platform::secret(env, name)?;
 

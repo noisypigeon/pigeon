@@ -46,16 +46,21 @@ fn docs_only_runs_the_policies_only() {
         ["test this repository's policies", "policy.check"],
         "the tests that read this repository's policies run too"
     );
-    assert_eq!(
-        names(&[
-            ".config/policies/layout.yaml",
-            &format!("{}/src/rules.rs", judge().0)
-        ])
-        .iter()
-        .filter(|n| *n == "test this repository's policies")
-        .count(),
-        1,
-        "once, beside the judge's own tests"
+    let both = names(&[
+        ".config/policies/layout.yaml",
+        &format!("{}/src/rules.rs", judge().0),
+    ]);
+    assert!(
+        both.iter()
+            .filter(|n| *n == "test this repository's policies")
+            .count()
+            <= 1,
+        "at most once: {both:?}"
+    );
+    assert!(
+        both.iter().any(|n| n == "test this repository's policies"
+            || (n.starts_with("test ") && n.contains(&judge().1) && n.contains("pigeon-agent"))),
+        "the policies' tests run, alone or within the judge's and the agent's: {both:?}"
     );
     assert_eq!(names(&[]), ["policy.check"]);
 }
@@ -108,21 +113,22 @@ fn the_agents_engines_run_the_agent_its_dependants_and_the_worker() {
     assert_eq!(got.last().map(String::as_str), Some("policy.check"));
 }
 
+// See `.claude/decisions/2026-11-10-development-factory-crates-functional-core.md`'s 2026-11-17
+// amendment: pigeon-core links the judge's library for provider-call policies.
 #[test]
-fn eviction_runs_only_its_own_checks_as_nothing_links_it() {
+fn eviction_runs_the_core_and_its_dependants_as_the_core_links_it() {
     let (dir, package) = judge();
     let got = names(&[&format!("{dir}/src/rules.rs")]);
-    assert_eq!(
-        got,
-        [
-            "fmt".to_string(),
-            format!("clippy {package}"),
-            format!("test {package}"),
-            "policy.check".to_string()
-        ],
-        "pigeon and the agent run the judge, so they don't rebuild for it; see \
-         .claude/decisions/2026-11-10-development-factory-crates-functional-core.md §1"
+    assert!(
+        got.iter()
+            .any(|n| n.starts_with("test ") && n.contains(&package) && n.contains("pigeon-core")),
+        "{got:?}"
     );
+    assert!(
+        got.contains(&"clippy agent worker (wasm)".to_string()),
+        "{got:?}"
+    );
+    assert_eq!(got.last().map(String::as_str), Some("policy.check"));
 }
 
 #[test]

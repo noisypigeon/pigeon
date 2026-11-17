@@ -2,5 +2,6 @@
 
 pub mod call;
 pub mod client;
+pub mod policy;
 pub mod registry;
 pub mod verdict;

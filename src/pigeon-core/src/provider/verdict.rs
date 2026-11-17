@@ -86,6 +86,8 @@ pub enum Step {
     Arguments,
     /// The tier's approval is missing.
     Tier,
+    /// A provider-call policy refuses it.
+    Policy,
 }
 
 impl Step {
@@ -100,6 +102,7 @@ impl Step {
             Self::Change => "change",
             Self::Arguments => "arguments",
             Self::Tier => "tier",
+            Self::Policy => "policy",
         }
     }
 }
