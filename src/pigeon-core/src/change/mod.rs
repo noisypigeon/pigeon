@@ -8,6 +8,7 @@ pub mod forecast;
 mod gate;
 mod jobs;
 mod lifecycle;
+pub mod lockfile;
 pub mod queue;
 mod restack;
 pub mod stage;
