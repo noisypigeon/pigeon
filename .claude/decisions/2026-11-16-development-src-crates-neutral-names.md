@@ -731,3 +731,19 @@ a generated change closes, which !736 neither relies on nor changes.
 - Steps 6a and 6b build on the module paths step 12 leaves:
   `checks/ci.rs` after a7 (!803), whose `Governs` glob !835 widens first.
 - Nothing either ADR decides changes.
+### 2026-11-17: Review of !847 against !849: they agree
+
+- !849 amended
+  [`2026-11-16-development-merge-path-measured-faster.md`](2026-11-16-development-merge-path-measured-faster.md)
+  over `src/**/change/queue.rs` and `src/**/macos/job.rs`. !847 touches
+  neither: it changes core's `deploy/scope/{map,mod}.rs` and agent's
+  `checks/scope.rs`.
+- !847 is the step-12 follow-up to !792 under
+  [`2026-11-16-development-one-test-binary-per-crate.md`](2026-11-16-development-one-test-binary-per-crate.md)
+  §3 and
+  [`2026-11-15-development-code-checks-by-reach.md`](2026-11-15-development-code-checks-by-reach.md):
+  a test-map unit naming a binary its package no longer builds picks no
+  tests, so a change checked across b2b's binary rename runs tests by crate.
+  It changes which tests a change's checks run, not when a merge takes its
+  turn or how a macOS job is placed.
+- Nothing any of the three ADRs decides changes.
