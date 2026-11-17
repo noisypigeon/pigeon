@@ -550,6 +550,134 @@ fn workspace_tests(crates: &Crates) -> Job {
     }
 }
 
+/// The merge gate set of a head whose checks are `checks`, as the bound job's `full_set` builds
+/// it: its code checks run on GitHub, and the whole suite.
+fn gate_set(crates: &Crates, checks: &[Job]) -> Vec<Job> {
+    let mut full: Vec<Job> = checks
+        .iter()
+        .filter(|c| crate::actions::on_github(&c.argv))
+        .cloned()
+        .collect();
+    let suite = workspace_tests(crates);
+    if !full.is_empty() && !full.iter().any(|c| c.argv == suite.argv) {
+        full.push(suite);
+    }
+    full
+}
+
+/// File names whose change on `main` reaches every check, wherever they are; see the merge-path
+/// ADR's 2026-11-16 amendment (#20).
+const REACH_ALL: [&str; 4] = [
+    "Cargo.toml",
+    "Cargo.lock",
+    "rust-toolchain.toml",
+    "build.rs",
+];
+
+/// What `main`'s changed `files` reach of a head whose checks are `checks`: none means every
+/// check. A `.rs` file in a crate reaches tests by the map; any other file reaches every check
+/// when its own selection names one of `checks` but `policy.check`. See
+/// `.claude/decisions/2026-11-16-development-merge-path-measured-faster.md`'s 2026-11-16
+/// amendment (#20).
+fn reach_of(
+    config: &Config,
+    crates: &Crates,
+    map: Option<&TestMap>,
+    files: &[String],
+    checks: &[Job],
+) -> Option<map::Reached> {
+    let map = map?;
+    let own: BTreeSet<&str> = checks.iter().map(|c| c.name.as_str()).collect();
+    let mut rust = Vec::new();
+    for f in files.iter().map(|f| f.trim()).filter(|f| !f.is_empty()) {
+        let name = f.rsplit('/').next().unwrap_or(f);
+        if REACH_ALL.contains(&name) {
+            return None;
+        }
+        let in_crate = crates.by_dir.keys().any(|d| f.starts_with(d.as_str()));
+        if in_crate
+            && std::path::Path::new(f)
+                .extension()
+                .is_some_and(|e| e == "rs")
+        {
+            rust.push(f);
+            continue;
+        }
+        let picked = jobs_of(config, crates, &[f.to_string()], Some(map));
+        if picked
+            .iter()
+            .any(|j| j.name != "policy.check" && own.contains(j.name.as_str()))
+        {
+            return None;
+        }
+    }
+    Some(map.reach(crates, &rust))
+}
+
+/// Whether `reach` reaches `job`: every job when it is none; else a `cargo test` job that runs a
+/// unit it reaches, or records no units.
+fn reaches(reach: Option<&map::Reached>, job: &Job) -> bool {
+    let Some(r) = reach else {
+        return true;
+    };
+    let test = job.argv.first().is_some_and(|a| a == "cargo")
+        && job.argv.get(1).is_some_and(|a| a == "test");
+    test && (job.units.is_empty() || r.hits(&job.units))
+}
+
+/// The checks among `checks` that `main`'s changed `files` reach, by name; with no `map`, every
+/// one.
+#[must_use]
+pub fn reached_of(
+    config: &Config,
+    crates: &Crates,
+    map: Option<&TestMap>,
+    files: &[String],
+    checks: &[Job],
+) -> BTreeSet<String> {
+    let reach = reach_of(config, crates, map, files, checks);
+    checks
+        .iter()
+        .filter(|c| reaches(reach.as_ref(), c))
+        .map(|c| c.name.clone())
+        .collect()
+}
+
+/// The names among `kept`, a head's passed checks and gate jobs, that carry to its restacked
+/// head touching `head`: those the restacked head's own checks or gate set hold with the same
+/// name and argv, and that `main`'s changed `files` don't reach. See
+/// `.claude/decisions/2026-11-16-development-merge-path-measured-faster.md`'s 2026-11-16
+/// amendment (#20).
+#[must_use]
+pub fn carried_of(
+    config: &Config,
+    crates: &Crates,
+    map: Option<&TestMap>,
+    files: &[String],
+    head: &[String],
+    kept: &[crate::change::Check],
+) -> BTreeSet<String> {
+    let checks: Vec<Job> = jobs_of(config, crates, head, map)
+        .into_iter()
+        .filter(|j| j.name != "policy.check")
+        .collect();
+    let full = gate_set(crates, &checks);
+    let mut all = checks.clone();
+    all.extend(full.iter().cloned());
+    let reach = reach_of(config, crates, map, files, &all);
+    kept.iter()
+        .filter(|k| {
+            let (name, pool) = match k.name.strip_prefix(crate::change::GATE) {
+                Some(n) => (n, &full),
+                None => (k.name.as_str(), &checks),
+            };
+            pool.iter()
+                .any(|j| j.name == name && j.argv == k.argv && !reaches(reach.as_ref(), j))
+        })
+        .map(|k| k.name.clone())
+        .collect()
+}
+
 /// `pigeon`'s features, from the release units and its manifest.
 fn all_features(config: &Config, crates: &Crates) -> BTreeSet<String> {
     config

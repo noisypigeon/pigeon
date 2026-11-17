@@ -49,35 +49,10 @@ impl TestMap {
     /// targets share one check, and its suite's modules another.
     pub(super) fn select(&self, crates: &Crates, files: &[&str]) -> Option<Vec<Job>> {
         let mut picked: BTreeSet<&Binary> = BTreeSet::new();
-        for f in files.iter().filter(|f| !crates.layout.wasm_only(f)) {
-            let Some((dir, package)) = crates
-                .by_dir
-                .iter()
-                .find(|(d, _)| f.starts_with(d.as_str()))
-            else {
-                continue;
-            };
-            let rel = &f[dir.len()..];
-            if Path::new(rel).extension().is_none_or(|e| e != "rs") {
-                return None;
+        for f in files {
+            if let Some((_, units)) = self.picks(crates, f) {
+                picked.extend(units?);
             }
-            let own = Own::of(rel);
-            let mut reached: Vec<&Binary> = self
-                .binaries
-                .iter()
-                .filter(|b| own.picks(package, b) || b.files.iter().any(|x| x == f))
-                .collect();
-            if reached.is_empty() && unit_tests(rel) {
-                reached = self
-                    .binaries
-                    .iter()
-                    .filter(|b| b.package == *package && b.kind == "lib")
-                    .collect();
-            }
-            if reached.is_empty() {
-                return None;
-            }
-            picked.extend(reached);
         }
         if picked.len() * 2 > self.binaries.len() {
             return None;
@@ -112,6 +87,70 @@ impl TestMap {
             }
         }
         Some(jobs)
+    }
+
+    /// The units one changed file picks, as [`TestMap::select`] resolves it, with its package:
+    /// none for a file outside every crate or one only the wasm build compiles; no units when
+    /// the map can't say, for a non-`.rs` file or one no unit ran.
+    fn picks<'m, 'c>(
+        &'m self,
+        crates: &'c Crates,
+        f: &str,
+    ) -> Option<(&'c str, Option<Vec<&'m Binary>>)> {
+        if crates.layout.wasm_only(f) {
+            return None;
+        }
+        let (dir, package) = crates
+            .by_dir
+            .iter()
+            .find(|(d, _)| f.starts_with(d.as_str()))?;
+        let rel = &f[dir.len()..];
+        if Path::new(rel).extension().is_none_or(|e| e != "rs") {
+            return Some((package, None));
+        }
+        let own = Own::of(rel);
+        let mut reached: Vec<&Binary> = self
+            .binaries
+            .iter()
+            .filter(|b| own.picks(package, b) || b.files.iter().any(|x| x == f))
+            .collect();
+        if reached.is_empty() && unit_tests(rel) {
+            reached = self
+                .binaries
+                .iter()
+                .filter(|b| b.package == *package && b.kind == "lib")
+                .collect();
+        }
+        Some((package, (!reached.is_empty()).then_some(reached)))
+    }
+
+    /// What the `.rs` files `files` reach, each resolved as [`TestMap::select`] resolves it; a
+    /// file the map can't say for reaches what the crate fallback runs, its crate and their
+    /// dependants, or only its crate's suite when it is under `tests/suite/`. See the merge-path
+    /// ADR's 2026-11-16 amendment (#20).
+    pub(super) fn reach(&self, crates: &Crates, files: &[&str]) -> Reached {
+        let mut r = Reached::default();
+        for f in files {
+            let Some((package, picked)) = self.picks(crates, f) else {
+                continue;
+            };
+            let units: Option<Vec<Binary>> =
+                picked.and_then(|p| p.into_iter().map(|b| current(crates, b)).collect());
+            match units {
+                Some(units) => r.units.extend(units),
+                None if crates
+                    .by_dir
+                    .iter()
+                    .any(|(d, p)| p == package && f[d.len()..].starts_with("tests/suite/")) =>
+                {
+                    r.suites.insert(package.to_string());
+                }
+                None => r
+                    .packages
+                    .extend(crates.with_dependants(&BTreeSet::from([package.to_string()]))),
+            }
+        }
+        r
     }
 }
 
@@ -150,6 +189,36 @@ impl Unit {
             name: name.into(),
             filter: filter.into(),
         }
+    }
+
+    /// Whether it runs map unit `b`.
+    fn runs(&self, b: &Binary) -> bool {
+        self.package == b.package
+            && (self.kind.is_empty()
+                || (self.kind == b.kind
+                    && self.name == b.name
+                    && (self.filter.is_empty() || b.filter.is_empty() || self.filter == b.filter)))
+    }
+}
+
+/// What `main`'s changed `.rs` files reach of the tests: map units, packages reached whole, and
+/// packages whose suite is reached whole.
+#[derive(Debug, Default)]
+pub(super) struct Reached {
+    units: Vec<Binary>,
+    packages: BTreeSet<String>,
+    suites: BTreeSet<String>,
+}
+
+impl Reached {
+    /// Whether a check running `units` runs any of it.
+    pub(super) fn hits(&self, units: &[Unit]) -> bool {
+        units.iter().any(|u| {
+            self.units.iter().any(|b| u.runs(b))
+                || self.packages.contains(&u.package)
+                || (self.suites.contains(&u.package)
+                    && (u.kind.is_empty() || (u.kind == "test" && u.name == SUITE)))
+        })
     }
 }
 
