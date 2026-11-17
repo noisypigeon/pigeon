@@ -444,3 +444,16 @@ The Worker's dispatch path decides how §2 and §4 land.
     call, the request headers, the event summaries and the MCP exchange.
   - 5b: `policy.check`.
   - 5c: the Worker glue, the catalog entries and the dispatch arm.
+### 2026-11-17: Review of !853 against the merge-path ADR (!849): they agree
+
+[`2026-11-16-development-merge-path-measured-faster.md`](2026-11-16-development-merge-path-measured-faster.md)
+(!849) governs `change/queue.rs` and `macos/job.rs`. !853 is this ADR's
+step 4 (registry file).
+
+- **What it touches.** It adds `.config/providers/mcp.yaml` and a test that
+  parses it, and touches neither of those files.
+- **Exempt rows.** The file's Buildkite and App Store Connect upload rows
+  list direct calls as exempt. They change no merge turn, queue place or
+  macOS gate.
+
+Neither ADR changes.
