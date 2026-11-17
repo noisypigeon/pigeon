@@ -720,11 +720,12 @@ pub fn platform_page(run: &crate::platform::platforms::Run, token: &str) -> Stri
         run.id
     );
     if planning {
-        b.push_str(
+        let _ = write!(
+            b,
             "<p>The engine plans this stack with an account token you make in the dashboard, \
-with only: Account Settings Read, Workers Scripts Read, D1 Edit, Workers R2 Storage Edit, Queues Edit, \
-Access: Apps and Policies Edit, Access: Service Tokens Edit. It is sealed for this run alone \
+with only: {}. It is sealed for this run alone \
 and erased after the apply, a refusal or 24 hours; revoke it in the dashboard afterwards.</p>",
+            escape(&crate::platform::platforms::token_permissions().join(", "))
         );
     } else {
         let _ = write!(
