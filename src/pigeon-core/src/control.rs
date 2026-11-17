@@ -1084,10 +1084,20 @@ pub fn leaves_merge_queue(before: Option<&Change>, after: &Change) -> bool {
     dropped || closed
 }
 
+/// Whether `after`, saved over `before`, takes back the merge turn it gave while its `ios` check
+/// waited for a macOS machine; see the merge-path ADR §7.
+#[must_use]
+pub fn takes_turn_back(before: Option<&Change>, after: &Change) -> bool {
+    before.is_some_and(changes::queue::yielded_for_machine) && after.yielded.is_none()
+}
+
 /// Why `change` gave its merge turn back without merging, for the `merge.released` event.
 #[must_use]
 pub fn release_reason(change: &Change) -> String {
     if let Some(y) = &change.yielded {
+        if changes::queue::yielded_for_machine(change) {
+            return format!("{}; it keeps its place", y.reason);
+        }
         return format!("it yields to !{}", y.to);
     }
     if let Some(v) = change.violations.first() {

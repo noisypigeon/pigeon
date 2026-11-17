@@ -723,3 +723,78 @@ fn a_session_push_is_counted_and_its_own_lines_kept_but_a_restack_is_neither() {
         .expect("the same head again");
     assert_eq!(c.pushes, 2);
 }
+
+/// Change `n` takes its turn while behind, and its clean restack keeps the patch, so its approval
+/// carries and its merge parks on its new head's checks.
+fn parked_on_restack(n: u32, same_patch: bool) -> Change {
+    let mut c = approved(n);
+    c.apply(Event::Behind { main: MAIN.into() })
+        .expect("behind");
+    c.apply(Event::Merge { by: WINDOW.into() })
+        .expect("its turn");
+    c.apply(restacked(Relation::Clean, same_patch))
+        .expect("restacked");
+    assert!(c.merge_after.is_some(), "its merge is parked");
+    c
+}
+
+#[test]
+fn replay_804_a_holder_whose_ios_check_waits_for_a_machine_yields_and_takes_its_turn_back() {
+    let mut q = queue(804, 0, 1);
+    until_turn(&mut q, 804, 100);
+    let c = parked_on_restack(804, true);
+    assert!(merges::machine_yieldable(&c));
+    let before = c.clone();
+    let c = c
+        .yield_to(
+            merges::MACHINE,
+            "pigeon",
+            "its `ios` check waits for a macOS machine",
+            150,
+        )
+        .expect("yields");
+    assert!(merges::yielded_for_machine(&c));
+    assert!(!merges::machine_yieldable(&c));
+    assert!(control::leaves_merge_queue(Some(&before), &c));
+    assert!(merges::keeps_place(&c));
+    assert_eq!(
+        control::release_reason(&c),
+        "its `ios` check waits for a macOS machine; it keeps its place"
+    );
+    q.yielded.insert(804, merges::MACHINE);
+    let (mut q, next) = merges::yielded_back(&q, 804, 160);
+    assert_eq!(next.map(|e| e.number), Some(2000), "the next starts");
+    assert_eq!(place(&q, 804), Some((2, 2)), "first in line");
+    let yielded = c.clone();
+    let mut c = c.unyield();
+    assert!(control::takes_turn_back(Some(&yielded), &c));
+    assert!(!control::takes_turn_back(Some(&c), &c));
+    q.yielded.clear();
+    assert_eq!(
+        q.done(2000, 300).map(|e| e.number),
+        Some(804),
+        "it takes the turn back in its place"
+    );
+    c.apply(Event::Merge { by: WINDOW.into() })
+        .expect("its turn again");
+    assert!(
+        c.merge_after.is_some(),
+        "its merge parks on its checks again"
+    );
+}
+
+#[test]
+fn a_holder_whose_approval_does_not_carry_keeps_its_turn_while_its_ios_check_waits() {
+    let c = parked_on_restack(804, false);
+    assert!(
+        !merges::machine_yieldable(&c),
+        "taking the turn back could not park its merge"
+    );
+}
+
+#[test]
+fn a_change_yielded_to_another_is_not_taken_back_for_a_machine() {
+    let c = approved(9).yield_to(673, "agent", "r", 1).expect("yields");
+    assert!(!merges::yielded_for_machine(&c));
+    assert!(!control::takes_turn_back(Some(&c), &c.clone().unyield()));
+}

@@ -43,6 +43,10 @@ pub fn docs_only(c: &Change) -> bool {
             .all(|j| j.name == POLICY_CHECK || plumbing(&j.name))
 }
 
+/// The change a yield names while its change's `ios` check waits for a macOS machine; no change
+/// has this number. See the merge-path ADR §7.
+pub const MACHINE: u32 = 0;
+
 /// Whether change `c` still has a merge on its way: a merge job, a restack or a gate check
 /// queued or running, or a merge parked.
 #[must_use]
@@ -88,6 +92,20 @@ pub fn reask(before: Option<&Change>, after: &Change, q: &MergeQueue) -> Option<
     } else {
         None
     }
+}
+
+/// Whether holder `c` may give its turn back while its `ios` check waits for a macOS machine: its
+/// merge is parked, it yields to none, and its approval carries, so its merge parks again when it
+/// takes the turn back. See the merge-path ADR §7.
+#[must_use]
+pub fn machine_yieldable(c: &Change) -> bool {
+    c.merge_after.is_some() && c.yielded.is_none() && c.carried.is_some()
+}
+
+/// Whether `c` gave its turn back while its `ios` check waits for a macOS machine.
+#[must_use]
+pub fn yielded_for_machine(c: &Change) -> bool {
+    c.yielded.as_ref().is_some_and(|y| y.to == MACHINE)
 }
 
 /// Whether `from` yielding to `to` closes a cycle in `yields`: `to` already waits on `from`,

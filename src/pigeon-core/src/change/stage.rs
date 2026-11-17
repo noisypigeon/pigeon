@@ -284,6 +284,13 @@ pub fn of(c: &Change, cx: &Context) -> Stage {
             };
             at("conflicted", Needs::Agent, next)
         }
+        _ if let Some(what) = &c.credentials => at(
+            "credential",
+            Needs::Owner,
+            format!(
+                "the owner sets what the macOS providers refused its `ios` check for ({what}), then `ci_rerun` it"
+            ),
+        ),
         _ if open(c, RESTACK) => at("restacking", Needs::Platform, "the restack reports"),
         _ if open(c, MERGE) || place == Some(Place::Merging) => {
             at("merging", Needs::Platform, merging_next(c))
@@ -335,6 +342,11 @@ pub fn of(c: &Change, cx: &Context) -> Stage {
 /// merge on.
 fn approved(c: &Change, place: Option<Place>, held: Option<&str>) -> Stage {
     match place {
+        Some(Place::Waiting { turn, of, .. }) if super::queue::yielded_for_machine(c) => at(
+            format!("queued {turn}/{of}"),
+            Needs::Provider,
+            "its `ios` check gets a macOS machine; it keeps its place",
+        ),
         Some(Place::Waiting { turn, of, .. }) if let Some(y) = &c.yielded => Stage {
             stage: format!("queued {turn}/{of}"),
             needs: Needs::Change,
@@ -380,7 +392,7 @@ fn approved(c: &Change, place: Option<Place>, held: Option<&str>) -> Stage {
 #[cfg(test)]
 mod tests {
     use super::super::queue::Entry;
-    use super::super::types::{Approval, Conflicted};
+    use super::super::types::{Approval, Conflicted, Yielded};
     use super::*;
 
     fn change(state: State) -> Change {
@@ -708,5 +720,37 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn a_change_yielded_for_a_machine_waits_on_its_provider() {
+        let mut c = change(State::Approved);
+        c.yielded = Some(Yielded {
+            to: super::super::queue::MACHINE,
+            by: "pigeon".into(),
+            reason: "r".into(),
+            at: 1,
+        });
+        let s = of(
+            &c,
+            &with(Some(Place::Waiting {
+                turn: 1,
+                of: 2,
+                holder: Some(5),
+            })),
+        );
+        assert_eq!(
+            (s.stage.as_str(), s.needs, s.waits_on),
+            ("queued 1/2", Needs::Provider, None)
+        );
+    }
+
+    #[test]
+    fn a_check_every_provider_refused_for_a_credential_needs_the_owner() {
+        let mut c = change(State::Bounded);
+        c.credentials = Some("bitrise: the secret `BITRISE_TOKEN`".into());
+        let s = of(&c, &with(None));
+        assert_eq!((s.stage.as_str(), s.needs), ("credential", Needs::Owner));
+        assert!(s.next.contains("the secret `BITRISE_TOKEN`"), "{}", s.next);
     }
 }

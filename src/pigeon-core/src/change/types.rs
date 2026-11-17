@@ -454,6 +454,10 @@ pub struct Change {
     /// The heads its session pushed; a restack's isn't one.
     #[serde(default, skip_serializing_if = "is_zero")]
     pub pushes: u32,
+    /// What the owner must give for its `ios` check to run: every macOS provider in the order
+    /// refused it for a credential. See the merge-path ADR §7.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub credentials: Option<String>,
 }
 
 /// Something that happened to a change.
@@ -750,6 +754,7 @@ impl Change {
             merge_asked: None,
             own: None,
             pushes: 0,
+            credentials: None,
         }
     }
 

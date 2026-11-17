@@ -17,7 +17,7 @@ async fn call(
     path: &str,
     body: Option<&Value>,
 ) -> Result<Value, String> {
-    let token = secret(env, TOKEN).map_err(|e| e.to_string())?;
+    let token = secret(env, TOKEN).map_err(|_| format!("the secret `{TOKEN}` is not set"))?;
     let req = json_request(&format!("{API}{path}"), method, body, Some(&token))
         .map_err(|e| e.to_string())?;
     let mut r = Fetch::Request(req)
@@ -176,7 +176,7 @@ pub async fn artifact(env: &Env, number: u64, job: &str, name: &str) -> Result<V
         .find(|a| a["filename"] == name)
         .and_then(|a| a["download_url"].as_str())
         .ok_or_else(|| format!("the job has no artifact `{name}`"))?;
-    let token = secret(env, TOKEN).map_err(|e| e.to_string())?;
+    let token = secret(env, TOKEN).map_err(|_| format!("the secret `{TOKEN}` is not set"))?;
     let headers = worker::Headers::new();
     headers
         .set("authorization", &format!("Bearer {token}"))

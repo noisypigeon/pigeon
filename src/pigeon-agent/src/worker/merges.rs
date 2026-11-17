@@ -82,6 +82,30 @@ pub async fn resume(env: &Env, s: &Settings) -> Result<()> {
     start(env, s, serde_json::from_value(v["next"].clone()).ok()).await
 }
 
+/// Keeps change `number`'s yield of its turn while its `ios` check waits for a macOS machine:
+/// whether the `Instance` took it; see the merge-path ADR §7.
+///
+/// # Errors
+///
+/// When a binding fails.
+pub async fn machine_yield(env: &Env, s: &Settings, number: u32) -> Result<bool> {
+    let body = json!({ "from": number, "to": merges::MACHINE });
+    let (status, _) = to_instance(env, s, "/yields/set", &body).await?;
+    Ok(status == 200)
+}
+
+/// Ends change `number`'s yield for a macOS machine in the `Instance`; the save that unyields the
+/// change starts the next merge.
+///
+/// # Errors
+///
+/// When a binding fails.
+pub async fn machine_back(env: &Env, s: &Settings, number: u32) -> Result<()> {
+    to_instance(env, s, "/yields/clear", &json!({ "from": number }))
+        .await
+        .map(|_| ())
+}
+
 /// The release bot asks for the merge turn, its target having waited `waited` seconds: whether
 /// it holds it; see the merge-path ADR §1.
 ///

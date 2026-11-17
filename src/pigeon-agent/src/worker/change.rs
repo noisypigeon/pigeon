@@ -451,6 +451,13 @@ impl ChangeRun {
         if keeps && let Err(e) = super::merges::kept(&self.env, change).await {
             worker::console_error!("kept turn of !{}: {e}", change.number);
         }
+        // A turn given for a macOS machine is taken back once saved; see the merge-path ADR §7.
+        if control::takes_turn_back(before.as_ref(), change) {
+            let s = Settings::from(&self.env)?;
+            if let Err(e) = super::merges::resume(&self.env, &s).await {
+                worker::console_error!("turn back to !{}: {e}", change.number);
+            }
+        }
         Ok(())
     }
 

@@ -6,8 +6,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 use super::{
-    Config, GIVE_UP, Health, Kind, Next, Outcome, Provider, Usage, Verdict, WAIT_RETRY, minutes,
-    next, refused, verdict,
+    Config, GIVE_UP, Health, Kind, Next, Outcome, Provider, Usage, Verdict, WAIT_RETRY, credential,
+    minutes, next, refused, verdict,
 };
 use crate::control::Statement;
 
@@ -202,6 +202,23 @@ impl Job {
     pub fn provider(&self) -> Option<Provider> {
         self.attempts.last().map(|a| a.provider)
     }
+
+    /// Each provider whose newest attempt it refused for a credential, with what it names; such a
+    /// provider is skipped, not tried again. See the 2026-11-16 amendment to
+    /// `.claude/decisions/2026-11-12-development-macos-builds-provider-failover.md`, step 3.
+    #[must_use]
+    pub fn refused_credentials(&self) -> Vec<(Provider, String)> {
+        Provider::ALL
+            .into_iter()
+            .filter_map(|p| {
+                let a = self.attempts.iter().rev().find(|a| a.provider == p)?;
+                if a.outcome != Outcome::Refused {
+                    return None;
+                }
+                credential(p, a.why.as_deref()?).map(|what| (p, what))
+            })
+            .collect()
+    }
 }
 
 fn with_current(job: &Job, f: impl FnOnce(&mut Attempt)) -> Job {
@@ -224,13 +241,13 @@ pub fn dispatched(job: &Job, id: &str, url: Option<&str>) -> Job {
 }
 
 /// `job` once its current attempt's dispatch failed at `now`; the [`super::DISPATCH_TRIES`]th
-/// in a row is `refused`.
+/// in a row is `refused`, and a refusal for a credential at once.
 #[must_use]
 pub fn dispatch_failed(job: &Job, why: &str, now: u64) -> Job {
     with_current(job, |a| {
         a.failures += 1;
         a.why = Some(why.into());
-        if refused(a.failures) {
+        if refused(a.failures) || credential(a.provider, why).is_some() {
             a.outcome = Outcome::Refused;
             a.finished_at = Some(now);
         }
@@ -335,7 +352,22 @@ pub fn place(job: &Job, cfg: &Config, health: &Health, usage: &Usage, now: u64) 
             probe: false,
         },
         Some(_) => return (j, Placed::Nothing),
-        None => next(cfg, health, usage, &j.tried(), now),
+        None => {
+            let skipped = j.refused_credentials();
+            let mut tried = j.tried();
+            tried.extend(skipped.iter().map(|(p, _)| *p));
+            match next(cfg, health, usage, &tried, now) {
+                Next::Wait { why } => Next::Wait {
+                    why: skipped.iter().fold(why, |w, (p, what)| {
+                        w.replace(
+                            &format!("{}: tried", p.name()),
+                            &format!("{}: needs {what}", p.name()),
+                        )
+                    }),
+                },
+                run @ Next::Run { .. } => run,
+            }
+        }
     };
     match chosen {
         Next::Run { provider, probe } => {
@@ -369,6 +401,67 @@ pub fn place(job: &Job, cfg: &Config, health: &Health, usage: &Usage, now: u64) 
             j.next_at = Some(now + WAIT_RETRY);
             (j, Placed::Wait { why })
         }
+    }
+}
+
+/// What the owner must give before `job` runs anywhere: each provider's missing secret or scope,
+/// when every provider in `cfg`'s order refused it for a credential; see the merge-path
+/// ADR §7.
+#[must_use]
+pub fn owner_needs(job: &Job, cfg: &Config) -> Option<String> {
+    if job.result.is_some() {
+        return None;
+    }
+    let skipped = job.refused_credentials();
+    let named = cfg
+        .order
+        .iter()
+        .map(|p| {
+            skipped
+                .iter()
+                .find(|(q, _)| q == p)
+                .map(|(_, what)| format!("{}: {what}", p.name()))
+        })
+        .collect::<Option<Vec<_>>>()?;
+    Some(named.join("; "))
+}
+
+/// Whether `job` waits for a macOS machine: none runs it, and it has moved off a provider or
+/// waits for one; see the merge-path ADR §7.
+#[must_use]
+pub fn waits_for_machine(job: &Job) -> bool {
+    let running = job.current().is_some_and(|a| a.outcome == Outcome::Running);
+    let moved = job.attempts.iter().any(|a| {
+        matches!(
+            a.outcome,
+            Outcome::Unassigned | Outcome::Refused | Outcome::Lost
+        )
+    });
+    job.result.is_none() && !running && (moved || job.waiting.is_some())
+}
+
+/// What a change does with its merge turn as its `ios` check stands.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Turn {
+    /// Nothing changes.
+    Hold,
+    /// It gives the turn back, keeping its place.
+    Yield,
+    /// It takes the turn back in its place.
+    TakeBack,
+}
+
+/// What a change does with its turn as `job` stands: `yieldable` when it holds the turn and may
+/// give it back, `yielded` when it gave it for a machine; see the merge-path ADR §7.
+#[must_use]
+pub fn turn(job: Option<&Job>, yieldable: bool, yielded: bool) -> Turn {
+    let waits = job.is_some_and(waits_for_machine);
+    if yielded && !waits {
+        Turn::TakeBack
+    } else if yieldable && !yielded && waits {
+        Turn::Yield
+    } else {
+        Turn::Hold
     }
 }
 

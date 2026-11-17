@@ -9,8 +9,10 @@ use super::super::platform::{self, Settings, now};
 use super::{ChangeRun, MACOS, Pending};
 use crate::actions::{self, Actions};
 use crate::control::{self, Outcome as JobOutcome, Report};
+use crate::core::change::queue as merges;
 use crate::core::change::{Change, Event, JobStatus};
-use crate::core::macos::{self, Job, Kind, Outcome, Placed, Provider, Settled};
+use crate::core::macos::{self, Job, Kind, Outcome, Placed, Provider, Settled, Turn};
+use crate::reconcile::PROPOSER;
 
 /// The `ios` check's name, as `checks::scope` names it.
 pub const IOS: &str = "ios";
@@ -134,7 +136,7 @@ impl ChangeRun {
         next: &mut Vec<Pending>,
     ) -> Result<()> {
         let Some(before): Option<Job> = self.load(MACOS).await? else {
-            return Ok(());
+            return self.machine_turn(change, None).await;
         };
         let running = change
             .jobs
@@ -151,7 +153,7 @@ impl ChangeRun {
             }
             // Deleted: storage refuses `put` of `None`, which becomes `undefined`.
             self.state.storage().delete(MACOS).await?;
-            return Ok(());
+            return self.machine_turn(change, None).await;
         }
         let Ok(cfg) = macos::config() else {
             return Ok(());
@@ -198,7 +200,82 @@ impl ChangeRun {
         {
             worker::console_warn!("macos_jobs: {e}");
         }
+        self.machine_turn(change, Some(&job)).await?;
         self.state.storage().put(MACOS, &Some(job)).await
+    }
+
+    /// Gives the head's merge turn back while its `ios` check waits for a macOS machine, takes it
+    /// back once the check has one or ends, and names what the owner must give when every
+    /// provider refused it for a credential; see the merge-path ADR §7.
+    async fn machine_turn(&self, change: &mut Change, job: Option<&Job>) -> Result<()> {
+        let needs = job.and_then(|j| {
+            macos::config()
+                .ok()
+                .and_then(|cfg| macos::owner_needs(j, &cfg))
+        });
+        let turn = macos::turn(
+            job,
+            merges::machine_yieldable(change),
+            merges::yielded_for_machine(change),
+        );
+        if needs == change.credentials && turn == Turn::Hold {
+            return Ok(());
+        }
+        let s = Settings::from(&self.env)?;
+        let n = change.number;
+        let session = change.session.clone();
+        if needs != change.credentials {
+            if let Some(what) = &needs {
+                let said = format!(
+                    "!{n} ios: every macOS provider refused it for a credential; the owner sets {what}"
+                );
+                let _ = super::super::events::append(
+                    &self.env,
+                    &s,
+                    "ci.credential",
+                    Some(n),
+                    session.clone(),
+                    &said,
+                    false,
+                )
+                .await;
+            }
+            change.credentials = needs;
+        }
+        match turn {
+            Turn::Hold => {}
+            Turn::Yield => {
+                let waiting = job
+                    .and_then(|j| j.waiting.as_deref())
+                    .map_or_else(String::new, |w| format!(": {w}"));
+                let reason = format!("its `ios` check waits for a macOS machine{waiting}");
+                if let Ok(c) = change
+                    .clone()
+                    .yield_to(merges::MACHINE, PROPOSER, &reason, now())
+                    && super::super::merges::machine_yield(&self.env, &s, n).await?
+                {
+                    *change = c;
+                }
+            }
+            Turn::TakeBack => {
+                super::super::merges::machine_back(&self.env, &s, n).await?;
+                *change = change.clone().unyield();
+                let said = format!(
+                    "!{n} takes its merge turn back in its place: its `ios` check no longer waits for a macOS machine"
+                );
+                let _ = super::super::events::append(
+                    &self.env,
+                    &s,
+                    "merge.resumed",
+                    Some(n),
+                    session,
+                    &said,
+                    false,
+                )
+                .await;
+            }
+        }
+        Ok(())
     }
 
     /// Acts on what became of the head's macOS attempt.

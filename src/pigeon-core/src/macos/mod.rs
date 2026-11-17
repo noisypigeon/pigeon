@@ -66,6 +66,16 @@ impl Provider {
     pub fn parse(name: &str) -> Option<Self> {
         Self::ALL.into_iter().find(|p| p.name() == name)
     }
+
+    /// The Worker secret holding its API credential.
+    #[must_use]
+    pub fn token(self) -> &'static str {
+        match self {
+            Self::Github => "GITHUB_APP_KEY",
+            Self::Bitrise => "BITRISE_TOKEN",
+            Self::Buildkite => "BUILDKITE_TOKEN",
+        }
+    }
 }
 
 /// What a macOS job is.
@@ -323,6 +333,28 @@ pub fn buildkite(job: &Value, queued_at: u64, now: u64, start_within: u64) -> Ou
 #[must_use]
 pub fn refused(failures: u32) -> bool {
     failures >= DISPATCH_TRIES
+}
+
+/// What `p`'s refusal `why` names as missing: a secret that isn't set, or a scope or token it
+/// refused; none when the refusal isn't for a credential. See the merge-path ADR §7.
+#[must_use]
+pub fn credential(p: Provider, why: &str) -> Option<String> {
+    if why.contains("is not set") || why.contains("is empty") {
+        let name = why.split_once("secret `")?.1.split('`').next()?;
+        return Some(format!("the secret `{name}`"));
+    }
+    let denied = why.contains("answered 401")
+        || (why.contains("answered 403") && !why.to_ascii_lowercase().contains("rate limit"));
+    if !denied {
+        return None;
+    }
+    let scope = why
+        .split(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
+        .find(|w| w.starts_with("read_") || w.starts_with("write_"));
+    Some(match scope {
+        Some(s) => format!("the scope `{s}` on `{}`", p.token()),
+        None => format!("a valid `{}`", p.token()),
+    })
 }
 
 /// What to do about an attempt.
@@ -616,13 +648,15 @@ pub fn same_config(held: &str, ours: &str) -> bool {
     config_digest(held) == config_digest(ours)
 }
 
-/// The digest's macOS lines: each `ci.moved` and `macos.provider` event's summary, then each
-/// provider past 80% of its cap.
+/// The digest's macOS lines: each `ci.moved`, `ci.credential` and `macos.provider` event's
+/// summary, then each provider past 80% of its cap.
 #[must_use]
 pub fn digest_lines(events: &[(String, String)], cfg: &Config, usage: &Usage) -> Vec<String> {
     let mut out: Vec<String> = events
         .iter()
-        .filter(|(kind, _)| kind == "ci.moved" || kind == "macos.provider")
+        .filter(|(kind, _)| {
+            ["ci.moved", "ci.credential", "macos.provider"].contains(&kind.as_str())
+        })
         .map(|(_, summary)| summary.clone())
         .collect();
     for p in Provider::ALL {
