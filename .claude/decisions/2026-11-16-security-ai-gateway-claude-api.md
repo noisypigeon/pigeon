@@ -696,3 +696,25 @@ nothing.
 - **Unchanged:**
   - the registry records each token's id and expiry, never its value;
   - at most two Run tokens are ever live, each for at most an hour.
+
+### 2026-11-17: Review of !903 against !877: they agree
+
+!877 amended
+[`2026-11-15-development-capacity-pools-hard-spend-cap.md`](2026-11-15-development-capacity-pools-hard-spend-cap.md)
+on two points:
+- its step 4's spike is held;
+- its step 5 runs `claude` and the brief's checks inside the job's
+  sandbox, under the image pin and the names it sets.
+
+!903 adds `catalog/cloudflare/modules/ai-gateway/**` and
+`src/**/pool/aigateway.rs` to this ADR's `Governs`. It changes no text.
+
+- **No shared decision.** !877 decides nothing about the gateway's URL,
+  headers, metadata, signals, key or token. The pool job's `claude -p`
+  still reaches only the pool's metering route (this ADR's M2), never the
+  gateway or Anthropic.
+- **One overlap, and it agrees.** `src/pigeon-core/src/pool/**` holds
+  `aigateway.rs`, which both ADRs govern, as the review against !862 says.
+  !877 doesn't touch it.
+
+Neither decision changes.
