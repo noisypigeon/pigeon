@@ -600,3 +600,17 @@ planner before it builds step 5's token minting (its step 3c).
 - **Owner tier.** `ledger.rs`, `minting.rs` and `grants.yaml` are gate files,
   so the change carrying them needs the owner's passkey. The capability is
   `aigateway.run` (!848). The owner's yes on item #22 covers minting it.
+### 2026-11-17: Review of !881 against !850: they agree
+
+- **!881** carries out the merge-path ADR's step 12
+  ([`2026-11-16-development-merge-path-measured-faster.md`](2026-11-16-development-merge-path-measured-faster.md)):
+  the merge job retries a push or fetch that Artifacts refused for now, and
+  keeps its turn.
+- **!850** rebuilt step 3 of
+  [`2026-11-15-development-capacity-pools-hard-spend-cap.md`](2026-11-15-development-capacity-pools-hard-spend-cap.md)
+  on the restructured crates and this gateway.
+- **They agree.**
+  - Their files don't meet: !881 touches no `jobs.rs`, `brief/mod.rs` or
+    `insights/mod.rs`.
+  - Neither decides anything about the other's subject: a job's git calls on
+    one side, model traffic and metering on the other.
