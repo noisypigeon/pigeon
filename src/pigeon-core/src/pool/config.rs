@@ -492,9 +492,10 @@ mod tests {
     fn committed_config_parses() {
         let c = config().unwrap();
         let p = c.pool("anthropic").unwrap();
-        assert!(!p.enabled);
-        assert_eq!(p.credit, 100_000_000);
-        assert_eq!(p.month_limit, 50_000_000);
+        assert!(p.enabled);
+        assert_eq!(p.cycle_day, Some(18));
+        assert_eq!(p.credit, 200_000_000);
+        assert_eq!(p.month_limit, 100_000_000);
         assert_eq!(p.prices["claude-sonnet-5-5"].output, 10_000_000);
         assert_eq!(p.long["claude-haiku-5-5"].over, 100_000);
         assert_eq!(c.prefer, Prefer::Subscription);
@@ -523,12 +524,12 @@ mod tests {
         bad_prefer: |c| c.replace("prefer: subscription", "prefer: both") => "`prefer`";
         bad_slots: |c| c.replace("subscription_slots: 3", "subscription_slots: 0") => "`subscription_slots`";
         bad_drain: |c| c.replace("drain_days: 7", "drain_days: 32") => "`drain_days`";
-        bad_enabled: |c| c.replace("anthropic.enabled: false", "anthropic.enabled: no") => "`anthropic.enabled`";
+        bad_enabled: |c| c.replace("anthropic.enabled: true", "anthropic.enabled: no") => "`anthropic.enabled`";
         bad_gateway: |c| c.replace("anthropic-messages", "other") => "`anthropic.gateway`";
         bad_harness: |c| c.replace("claude-code", "other") => "`anthropic.harness`";
-        bad_credit: |c| c.replace("credit_usd: 100", "credit_usd: 0") => "`anthropic.credit_usd`";
+        bad_credit: |c| c.replace("credit_usd: 200", "credit_usd: 0") => "`anthropic.credit_usd`";
         bad_concurrency: |c| c.replace("concurrency: 2", "concurrency: 9") => "`anthropic.concurrency`";
-        bad_cycle_day: |c| c.replace("cycle_day: null", "cycle_day: 32") => "`anthropic.cycle_day`";
+        bad_cycle_day: |c| c.replace("cycle_day: 18", "cycle_day: 32") => "`anthropic.cycle_day`";
         bad_price_list: |c| c.replace("[2, 2.5, 4, 0.1, 10]", "[2, 2.5, 4, 0.1]") => "`anthropic.price.claude-sonnet-5-5`";
         bad_long_list: |c| c.replace("[100000, 0.5,", "[0, 0.5,") => "`anthropic.long.claude-haiku-5-5`";
         bad_budget_list: |c| c.replace("[0.75, 3000000, 120, 30]", "[0.75, 3000000, 120]") => "`budget.haiku`";
@@ -546,19 +547,15 @@ mod tests {
         pool_not_in_order: |c| format!("{c}other.enabled: true\n") => "`other` is not in `order`";
         pool_without_price: |c| c.lines().filter(|l| !l.contains(".price.")).collect::<Vec<_>>().join("\n") => "no `price`";
         long_without_price: |c| format!("{c}anthropic.long.claude-opus-9: [1, 1, 1, 1, 1, 1]\n") => "`anthropic.long.claude-opus-9`";
-        month_limit_above_credit: |c| c.replace("month_limit_usd: 50", "month_limit_usd: 150") => "`anthropic.month_limit_usd`";
-        enabled_without_cycle_day: |c| c.replace("enabled: false", "enabled: true") => "`anthropic.cycle_day`";
+        month_limit_above_credit: |c| c.replace("month_limit_usd: 100", "month_limit_usd: 250") => "`anthropic.month_limit_usd`";
+        enabled_without_cycle_day: |c| c.replace("cycle_day: 18", "cycle_day: null") => "`anthropic.cycle_day`";
         budget_dollars_over_max: |c| c.replace("[0.75, 3000000, 120, 30]", "[3, 3000000, 120, 30]") => "`budget.haiku`";
         budget_minutes_over_max: |c| c.replace("[0.75, 3000000, 120, 30]", "[0.75, 3000000, 120, 46]") => "`budget.haiku`";
     }
 
     #[test]
     fn enabled_with_cycle_day_parses() {
-        let c = with(|c| {
-            c.replace("enabled: false", "enabled: true")
-                .replace("cycle_day: null", "cycle_day: 5")
-        })
-        .unwrap();
+        let c = with(|c| c.replace("cycle_day: 18", "cycle_day: 5")).unwrap();
         assert_eq!(c.pools["anthropic"].cycle_day, Some(5));
     }
 

@@ -942,3 +942,31 @@ merged.
   - **6b, by this planner:** `worker/pool_dispatch.rs`, `brief_create`'s
     routing, the Pool object's poller, `pool_job.rs`'s branch, and
     `worker.yaml`.
+
+### 2026-11-17: Step 3b3 lands in three changes, and step 9 turns the pool on at $200
+
+3b3 never merged. On main, `.config/pool.yaml` wasn't guarded, held Max's
+values and had no policy, and no `pool.*` operation existed.
+
+- **3b3a's eviction half, `chore(policies)`, owner tier:**
+  - `.config/pool.yaml` joins `guarded:` and `gate:`. Auto covers a guarded
+    path outside the gate (the standing Auto ADR's 2026-11-16 amendments), so
+    the gate keeps the passkey on every change to the caps, `enabled`
+    included.
+  - `.config/policies/pool.yaml` pins `credit_usd` at most 200,
+    `month_limit_usd` at most 100, `enabled` a boolean, `cycle_day` null or a
+    day, and `concurrency` 1 to 4.
+  - `.config/policies/**` and `approvals.yaml` are eviction paths, so they
+    travel alone, after the eviction test that counts the policy files.
+- **3b3b, `feat(agent)`, owner tier:** `pool.status`; `pool.pause`, open to
+  anyone; and `pool.resume`, offered by the pool's object and granted on its
+  page with the owner's passkey, as `ci.window` is.
+- **Step 9, with 3b3a's values, after the gate:**
+  - `credit_usd: 200` and `month_limit_usd: 100`;
+  - `cycle_day: 18`: the Ultra credit expires on the 18th at 00:00 UTC;
+  - `enabled: true`.
+- **The first cycle starts below $200, by the owner's choice** (owner ask
+  #26). The Ultra credit holds $145.65 until Dec 18, and the Max credit $99.99
+  until Dec 5. The purchased balance is $0, so the provider's zero balance is
+  the stop. If it stops below half the ledger's limit, §2's tripwire pauses
+  the pool and files an owner item.

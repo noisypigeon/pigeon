@@ -6,12 +6,12 @@ order: [anthropic]
 prefer: subscription
 subscription_slots: 3
 drain_days: 7
-anthropic.enabled: false
+anthropic.enabled: true
 anthropic.gateway: anthropic-messages
 anthropic.harness: claude-code
-anthropic.credit_usd: 100
-anthropic.month_limit_usd: 50
-anthropic.cycle_day: null
+anthropic.credit_usd: 200
+anthropic.month_limit_usd: 100
+anthropic.cycle_day: 18
 anthropic.concurrency: 2
 anthropic.price.claude-sonnet-5-5: [2, 2.5, 4, 0.1, 10]
 anthropic.price.claude-haiku-5-5: [0.1, 0.125, 0.2, 0.01, 0.5]
