@@ -49,17 +49,17 @@
       "mcp__pigeon__infra_plan",
       "mcp__pigeon__grant_list",
       "mcp__pigeon__git_tokens",
-      "mcp__pigeon__apple_check"
+      "mcp__pigeon__apple_check",
+      "mcp__pigeon__change_close",
+      "mcp__pigeon__deploy_retry"
     ],
     "ask": [
-      "mcp__pigeon__change_close",
       "mcp__pigeon__change_pin",
       "mcp__pigeon__grant_revoke",
       "mcp__pigeon__grant_rotate",
       "mcp__pigeon__ci_cloudflare",
       "mcp__pigeon__platform_apply",
       "mcp__pigeon__infra_apply",
-      "mcp__pigeon__deploy_retry",
       "mcp__pigeon__sites_publish",
       "mcp__pigeon__ios_release"
     ]
