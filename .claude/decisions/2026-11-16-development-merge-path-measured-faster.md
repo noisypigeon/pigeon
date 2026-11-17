@@ -462,3 +462,15 @@ Neither ADR changes.
   gate's set. That code is neither guarded nor in the gate, so Auto covers it
   as before.
 - Neither changes what the other decides.
+
+### 2026-11-17: Review of !881 against !862: they agree
+
+- **!881** carries out §12 and step 12: the merge job retries a push or fetch
+  that Artifacts refused for now, and keeps its turn.
+- **!862** set step 3 of
+  [`2026-11-15-development-capacity-pools-hard-spend-cap.md`](2026-11-15-development-capacity-pools-hard-spend-cap.md):
+  the `pool` job's spec and `Report.pool`.
+- **They agree.**
+  - !881 touches no `jobs.rs`, `brief/mod.rs` or `insights/mod.rs`.
+  - Neither decides anything about the other's subject: a merge job's git
+    calls on one side, pool tasks and their spend on the other.
