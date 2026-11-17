@@ -793,3 +793,61 @@ changed what step 3 builds. This amendment restates it.
 - **3c also adds the vars** `AI_GATEWAY_ACCOUNT` (`$deployment.account_id`)
   and `AI_GATEWAY` (the platform's `ai_gateway_names`), once !843 has
   merged.
+
+### 2026-11-17: Step 4's spike held; step 5's names, image pin and sandbox
+
+- **The spike held** (!870, run as the check `spike pool-harness` on
+  `Checker`, then closed).
+  - Claude Code 2.1.326, installed into a private prefix, ran under
+    `unshare --user`, mapped to the job user's subordinate range (uid 1000
+    inside, 101000 outside), with a cleared environment.
+  - It could read neither the runner's `/proc/<pid>/environ` nor pid 1's,
+    the server's, which holds the job token. No process showed a secret
+    planted in the runner's environment.
+  - `claude -p` reached a local stub through `ANTHROPIC_BASE_URL` and got
+    its reply.
+  - Bookworm's util-linux 2.38 takes `--map-users=<outer>,<inner>,<count>`.
+    Later versions take `<inner>:<outer>:<count>`.
+- **What `claude -p` 2.1.326 sends:**
+  - `POST /v1/messages?beta=true`;
+  - `x-api-key`, `anthropic-version`, a long `anthropic-beta` list, and the
+    custom headers;
+  - the body keys `model`, `messages`, `system`, `tools`, `metadata`,
+    `max_tokens`, `thinking`, `context_management`, `output_config` and
+    `stream`;
+  - custom tools only, and `max_tokens` 32,000 under
+    `CLAUDE_CODE_MAX_OUTPUT_TOKENS=32000`.
+
+  §4's admission passes it as written. The route drops the query string;
+  the betas travel in `anthropic-beta`, which is forwarded.
+- **Step 5, as it is built:**
+  - The runner is the `pool` job in `jobs::run_judged`, in `pool_job.rs`; the
+    one new command is `pigeon agent pool-tools`. No retired words, per the
+    restructure.
+  - The runner starts `claude` as
+    `unshare --user --map-users=100000,0,65536 --map-groups=100000,0,65536 --setuid=1000 --setgid=1000 env -i …`,
+    with §7's environment and flags.
+  - The `ci` image pins `@anthropic-ai/claude-code@2.1.326`, with
+    `DISABLE_AUTOUPDATER=1`. That is a Dockerfile change at the deploying
+    tier, by this planner.
+  - `pool-tools` is a line-delimited JSON-RPC server on stdio. It speaks
+    MCP's `initialize`, `tools/list` and `tools/call` with its own two tools
+    and reaches no network.
+  - `Report.pool` is a typed `Pooled`, beside `Restacked`.
+  - `POOL_ACCESS_SECRET` is declared in step 5's change, on the owner's
+    go-ahead, since only the job's spec needs it.
+- **The checks run in the sandbox too.** §7.4 has the runner run the
+  brief's `checks`. They run code the model wrote, such as `build.rs`, tests
+  and Cargo config, so as the runner they would reach its environment. They
+  run as `claude` does: under the same `unshare`, with a cleared environment
+  holding only `HOME`, `PATH` and a private `CARGO_HOME`. The runner only
+  reads their exit codes.
+- **The model can't touch `.git`.**
+  - The checkout is made writable by the inner uid (`chmod -R a+rwX`),
+    except `.git`, which stays the runner's (`go-w`).
+  - So no hook, config or object the model writes reaches the runner's
+    commit and push.
+  - The inner `HOME` holds a `.gitconfig` with `safe.directory = *`, so
+    `git status` and `git diff` work inside.
+  - Files are created with `umask 000`, so the runner can read and commit
+    them.
