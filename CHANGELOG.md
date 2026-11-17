@@ -8,12 +8,30 @@
 - agent v0.1.45
 - agent v0.1.46
 - agent v0.1.47
+- agent v0.1.48
+- infra-agnostic-random-string v0.1.4
+- infra-agnostic-schema v0.1.5
+- infra-backblaze-schema v0.1.4
+- infra-cloudflare-access-application v0.1.1
+- infra-cloudflare-access-policy v0.1.1
+- infra-cloudflare-access-service-token v0.1.1
+- infra-cloudflare-account v0.1.4
 - infra-cloudflare-ai-gateway v0.1.0
+- infra-cloudflare-ai-gateway v0.1.1
+- infra-cloudflare-d1-database v0.1.5
+- infra-cloudflare-queue v0.1.1
+- infra-cloudflare-r2-bucket v0.1.5
 - infra-cloudflare-schema v0.1.22
+- infra-cloudflare-schema v0.1.23
+- infra-cloudflare-secrets-store v0.1.1
+- infra-cloudflare-worker v0.1.1
 - infra-digitalocean-project v0.1.3
 - infra-digitalocean-schema v0.1.4
+- infra-digitalocean-schema v0.1.5
+- infra-pigeon-schema v0.1.8
 - pigeon-eviction v0.1.21
 - pigeon-eviction v0.1.22
+- pigeon-eviction v0.1.23
 - site-template-architecture v0.1.4
 - site-template-blog v1.0.5
 
@@ -123,6 +141,47 @@
 - fix(agent): the pool sandbox finds rustup's toolchain, and the model may add files at the checkout's root (!968) ([67df7c8](https://github.com/noisypigeon/pigeon/commit/67df7c88280fd22ab782054dd85106d252bec828)) · agent
 - docs(adr): review !948 against !954 (!974) ([18a9956](https://github.com/noisypigeon/pigeon/commit/18a9956967cd0544805ddd3a91d39b10c6d72773))
 - docs(adr): review !948 against !970 (!976) ([a59816a](https://github.com/noisypigeon/pigeon/commit/a59816a9585776f25bebd1b6f5b6e66b228585ab))
+- refactor: `x_pigeon`, the engines' scan dirs, and the code's comments and messages take the new names (!948) ([be193ed](https://github.com/noisypigeon/pigeon/commit/be193edf737bbadbd6d05d303a40bbfc40889e60)) · agent
+- refactor: the judge's stored build name is one constant, `STORED_JUDGE`, and the build's field is `judge` (!949) ([4c26a62](https://github.com/noisypigeon/pigeon/commit/4c26a6259d56d89fac8567e923bb98e21eb869f9)) · agent
+- feat(catalog): six account capabilities for a minted platform-run token, and access-service-token declares its own (!956) ([55b135e](https://github.com/noisypigeon/pigeon/commit/55b135e308a9f23ffd8f5612eb3ddb523595b4da)) · infra-cloudflare-access-service-token, infra-cloudflare-schema
+- feat(agent): provider.call and provider.tools broker MCP calls to providers through the verdict (!966) ([049ab14](https://github.com/noisypigeon/pigeon/commit/049ab142bc82bccc82f7353faa8e8a95dcd08e94)) · agent
+- feat(eviction): a find rule's except_content is removed from each line before forbid_content is tested (!979) ([4252e99](https://github.com/noisypigeon/pigeon/commit/4252e99ae17c3c4447318022499e0fc2f39ce62f)) · pigeon-eviction
+- test: the tests' names, helpers and fixtures take the new names (!977) ([7cce1c6](https://github.com/noisypigeon/pigeon/commit/7cce1c679f65668dca319b383053b912017f6448)) · agent
+- refactor(core): scope's default layout names the agent, eviction and infra packages, and its instance check is `pigeon instance` (!980) ([13d6550](https://github.com/noisypigeon/pigeon/commit/13d655017a95e0d430e1f14e1233b199e849536d)) · agent
+- feat(catalog): each platform module declares its catalog capabilities (!978) ([9506a22](https://github.com/noisypigeon/pigeon/commit/9506a22b4c5e5a0692a099cdb19692ee398b1fef)) · infra-agnostic-random-string, infra-agnostic-schema, infra-backblaze-schema, infra-cloudflare-access-application, infra-cloudflare-access-policy, infra-cloudflare-account, infra-cloudflare-ai-gateway, infra-cloudflare-d1-database, infra-cloudflare-queue, infra-cloudflare-r2-bucket, infra-cloudflare-schema, infra-cloudflare-secrets-store, infra-cloudflare-worker, infra-digitalocean-schema, infra-pigeon-schema
+- docs(adr): Auto covers a session's own closes and fronts, secrets code without secret material, and comment-only gate edits (!983) ([b1d9c0d](https://github.com/noisypigeon/pigeon/commit/b1d9c0dfb042b5dc8d70d6ae299ba391165f24b7))
+- feat(core): core::pool::dispatch and a brief's runs_on: the pure parts of routing and dispatching a pool task (!981) ([01bbf17](https://github.com/noisypigeon/pigeon/commit/01bbf17cf48483a4fd797a5d21754b58a58ec2fa))
+- feat(core): Auto covers a session's own close of an unapproved change and its own front, rate-limited (!984) ([2133559](https://github.com/noisypigeon/pigeon/commit/213355900dbf9d2f8b0ee6c8c8dcdfb2dafe17be)) · agent
+- docs(adr): the broker's step 5b: a provider-call target in the policy engine, linked into the Worker (!988) ([ac8c1a2](https://github.com/noisypigeon/pigeon/commit/ac8c1a2228972406fa6a2b5de3acad3de28a4afe))
+- docs(adr): review !982 against !983 (!994) ([0a15c00](https://github.com/noisypigeon/pigeon/commit/0a15c000f68a1abe25b957964f31528689e693bd))
+- docs(adr): review !986 against !983 (!995) ([688cac8](https://github.com/noisypigeon/pigeon/commit/688cac8f0399cf4a8970ee62b44f9c1a2102dcc3))
+- chore(config): change_close and deploy_retry leave the client's ask list (!998) ([8a48761](https://github.com/noisypigeon/pigeon/commit/8a48761bf1a499370762332908adfadaa0dfb9a3))
+- docs(adr): review !981 against !983 (!993) ([39c3d69](https://github.com/noisypigeon/pigeon/commit/39c3d693c4a49b74dc72e2c94c903ca029df1b9a))
+- docs(adr): the Auto ADR's step 4 splits, and a capability rename is Auto's (!999) ([5dd613d](https://github.com/noisypigeon/pigeon/commit/5dd613d626796ba6b429479f704b48d093ec176b))
+- refactor(eviction): the judge's tests, comments and the layout policy's description take the new names (!982) ([4418914](https://github.com/noisypigeon/pigeon/commit/441891410fb1e3c4e06a2ac45e10a9af55dbe380)) · pigeon-eviction
+- docs(adr): pigeon-core links the judge's library for the broker's provider-call policies (!1000) ([e3e114d](https://github.com/noisypigeon/pigeon/commit/e3e114d078acc2ee2af404c8fcd239dd4c6219ae))
+- feat(core): a platform unit's capability set, from its modules' manifests (!986) ([9b73638](https://github.com/noisypigeon/pigeon/commit/9b73638561f4c8d6c2a45699987e4c1ba35f50e8))
+- chore(policies): names.yaml forbids the old names, but for the stored names and history (!1004) ([f32c6c7](https://github.com/noisypigeon/pigeon/commit/f32c6c732c312b3d45ae9ca94c51495cf703913e))
+- docs(adr): step 12 is done: the old names are gone, and what stayed and why (!1002) ([43bc104](https://github.com/noisypigeon/pigeon/commit/43bc104360399d4fd69da3b0679be30650e74d5d))
+- feat(core): secrets code is the owner's only with secret material, and a comment-only gate diff is Auto's (!991) ([1f3f1b3](https://github.com/noisypigeon/pigeon/commit/1f3f1b350ddb0954242169ba86ca6d89a8d0c68a)) · agent
+- feat(grants): the platform-run grant, each platform unit's capabilities in the deployed ledger, and the plan page lists them (!1008) ([436f351](https://github.com/noisypigeon/pigeon/commit/436f3517ce53e7e493344e65fa8b2ff5d673672b)) · agent
+- feat(eviction): a provider-call target judges a broker's call document, with when scoping and loading from text (!990) ([068e0d2](https://github.com/noisypigeon/pigeon/commit/068e0d2aed4105687571a16124afc927b4dccdb5)) · pigeon-eviction
+- feat(agent): the control plane dispatches a pool brief as a job and follows it to a push or escalation (!985) ([8e4cbb9](https://github.com/noisypigeon/pigeon/commit/8e4cbb999558e64e221e03d476eea6d97b649b92)) · agent
+- feat(agent): one passkey proof on a platform plan's page mints its unit's token through granter, sealed for the run and revoked when it ends (!1012) ([666a841](https://github.com/noisypigeon/pigeon/commit/666a841b02b3871983bea4eb143a81a3f7d34cd8)) · agent
+- test(agent): a close deletes a change's branch only from the GitHub mirror (!1014) ([886506c](https://github.com/noisypigeon/pigeon/commit/886506c7a76d2931e6e75b08198e9b3ed4418919))
+- feat(agent): a platform plan job refuses a capability set wider than its minted token (!1013) ([91eaa7a](https://github.com/noisypigeon/pigeon/commit/91eaa7a72cdca4cbd043c446acc7c5f1219e729b)) · agent
+- docs(adr): the checks' layout is read from the root manifest only (!1015) ([4aa988e](https://github.com/noisypigeon/pigeon/commit/4aa988e6f91996ed3edf9d34e061ecb8f5b77179))
+- chore(config): secrets code that holds no secret moves to secret_code, with its markers (!1003) ([0bbdddd](https://github.com/noisypigeon/pigeon/commit/0bbdddd243562ab6fcde77cf55d0ecf46e1cf883))
+- feat(core): a capabilities.yaml diff that only renames capabilities is Auto's (!1009) ([2262637](https://github.com/noisypigeon/pigeon/commit/2262637e5e77fdd3963a643674178d9ae8924c3e)) · agent
+- feat(agent): provider.call runs the provider-call policies before a credential is minted (!1010) ([280df52](https://github.com/noisypigeon/pigeon/commit/280df52ac2f5700ab3ed56b7ee7a5e7ed70f9f07)) · agent
+- refactor: the checks read their layout from the root manifest only, with no src/pigeon-cli fallback (!1018) ([f55f1d8](https://github.com/noisypigeon/pigeon/commit/f55f1d85b7f62d77fb3675645e03f0f440274581)) · agent
+- test(eviction): every_policy_is_valid counts the policy files instead of pinning 21 (!1019) ([9c63a54](https://github.com/noisypigeon/pigeon/commit/9c63a5408fbb8aede8b56e9307fc7fba56f8768e))
+- chore(policies): the pools' spend caps are gated and pinned by a policy (!1022) ([5ccad86](https://github.com/noisypigeon/pigeon/commit/5ccad869fe392399c37a83d56e661a593235eb99))
+- feat(backplane): turn the capacity pool on at $200 a cycle, from the 18th (!1023) ([9e2d138](https://github.com/noisypigeon/pigeon/commit/9e2d138aaa38c4a966938053158fddc345bcdd01))
+- docs(adr): the first minted platform run planned and applied platform/blue, and its token was revoked (!1029) ([8cbacdd](https://github.com/noisypigeon/pigeon/commit/8cbacddc7ceaff81057bfc243b32422b2db1c412))
+- feat(agent): pool.status, pool.pause, and pool.resume on the owner's passkey (!1021) ([8e4ebf1](https://github.com/noisypigeon/pigeon/commit/8e4ebf10693913a3292ae04b5fd13d2378e469eb)) · agent
+- docs(adr): the broker's hand-off: what merged, what comes next, and who carries guarded paths (!1031) ([f4d7dee](https://github.com/noisypigeon/pigeon/commit/f4d7deec4234790d7642f852bc7e37f28cfef3bb))
+- fix(core): each brief gets its own task, not the first open brief task (!1030) ([397d8d5](https://github.com/noisypigeon/pigeon/commit/397d8d5e892aee15eea9dd7e11fbb62606db49f3))
 
 ## 2026-11-16
 
