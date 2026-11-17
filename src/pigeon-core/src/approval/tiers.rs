@@ -286,8 +286,8 @@ pub fn by_policy(change: &crate::change::Change, operation: &str) -> Option<Stri
 }
 
 /// Who approves `operation` on `change` through its change grant at `now`: authorizing,
-/// approving or merging at no more than the code tier, while the grant lasts and, to merge,
-/// unless the owner kept the merge; see
+/// approving or merging at no more than the code tier, or merging at any tier the head its
+/// prover approved, while the grant lasts and, to merge, unless the owner kept the merge; see
 /// `.claude/decisions/2026-11-09-security-approvals-once-passkeys.md` §3.
 #[must_use]
 pub fn by_grant(change: &crate::change::Change, operation: &str, now: u64) -> Option<String> {
@@ -297,8 +297,23 @@ pub fn by_grant(change: &crate::change::Change, operation: &str, now: u64) -> Op
         "change.authorize" | "change.approve" | "change.merge"
     );
     let kept = g.review && operation == "change.merge";
-    (stage && !kept && now < g.expires && tier_of(change, operation) <= Tier::Code)
-        .then(|| g.by.clone())
+    let tier =
+        tier_of(change, operation) <= Tier::Code || approved_by_proof(change, operation, now);
+    (stage && !kept && now < g.expires && tier).then(|| g.by.clone())
+}
+
+/// Whether `operation` merges the head the grant's prover approved, under 24 hours ago; see the
+/// 2026-11-12 and 2026-11-16 amendments to `.claude/decisions/2026-11-09-security-approvals-once-passkeys.md`.
+fn approved_by_proof(change: &crate::change::Change, operation: &str, now: u64) -> bool {
+    let (Some(a), Some(g)) = (&change.approval, &change.grant) else {
+        return false;
+    };
+    operation == "change.merge"
+        && change.state == crate::change::State::Approved
+        && a.sha.is_some()
+        && a.sha == change.head
+        && a.by == g.by
+        && now < a.at.saturating_add(crate::approval::grants::PAGE_TTL)
 }
 
 /// The tier `operation` on `change` needs now, from its head's tiers.

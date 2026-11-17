@@ -345,6 +345,89 @@ fn one_proof_covers_a_changes_later_stages_up_to_the_code_tier() {
     );
 }
 
+#[test]
+fn the_owners_approval_of_a_head_covers_its_merge_at_the_owner_tier() {
+    // !800, 2026-11-16: approved by proof at 1794860506, `change.merge` asked again at
+    // 1794860519; see the approvals ADR's 2026-11-16 amendment.
+    use crate::harness::step::{Apply, Queue};
+    use agent::core::approval::grants::PAGE_TTL;
+    use agent::core::approval::tiers::by_grant;
+    use agent::core::change::queue::{MergeQueue, Queued};
+    use agent::core::change::{Change, ChangeGrant, Event, State};
+    const OWNER: &str = "acct_owner";
+    const HEAD: &str = "8000000000000000000000000000000000000800";
+    let (approved, merged) = (1_794_860_506, 1_794_860_519);
+    let mut c = Change::propose(800, "x", "feat: x", "plan", vec!["**".into()], "agent");
+    c.state = State::Checked;
+    c.head = Some(HEAD.into());
+    c.tiers = Some(tiers_of(
+        &[".config/**"],
+        &[".config/approvals.yaml"],
+        PLAIN,
+    ));
+    assert_eq!(c.tiers.as_ref().map(|t| t.merge.tier), Some(Tier::Owner));
+    c.grant = Some(ChangeGrant {
+        by: OWNER.into(),
+        expires: approved + PAGE_TTL,
+        review: false,
+    });
+    assert_eq!(
+        by_grant(&c, "change.approve", approved),
+        None,
+        "approving the owner tier takes its own proof"
+    );
+    assert_eq!(
+        by_grant(&c, "change.merge", approved),
+        None,
+        "not approved yet"
+    );
+    c.apply(Event::Approve {
+        by: OWNER.into(),
+        sha: HEAD.into(),
+        at: approved,
+    })
+    .expect("approved");
+    let mut q = MergeQueue::default();
+    q.enqueue(799, "owner", approved - 60)
+        .expect("another merges");
+    assert_eq!(q.ask(800, OWNER, approved).1, Ok(Queued::Behind(1)));
+
+    assert_eq!(
+        by_grant(&c, "change.merge", merged).as_deref(),
+        Some(OWNER),
+        "the session's merge files no ask"
+    );
+    let place = q.ask(800, &format!("grant:{OWNER}"), merged).1;
+    assert_eq!(
+        place,
+        Err("change 800 already waits behind 1 merge(s)".into()),
+        "it answers the queue's place"
+    );
+
+    let mut held = c.clone();
+    held.grant.as_mut().expect("grant").review = true;
+    assert_eq!(
+        by_grant(&held, "change.merge", merged),
+        None,
+        "a hold holds"
+    );
+    assert_eq!(
+        by_grant(&c, "change.merge", approved + PAGE_TTL),
+        None,
+        "a day-old approval asks again"
+    );
+    let mut moved = c.clone();
+    moved.head = Some("8010000000000000000000000000000000000801".into());
+    assert_eq!(by_grant(&moved, "change.merge", merged), None, "a new head");
+    let mut other = c.clone();
+    other.approval.as_mut().expect("approval").by = "window:1".into();
+    assert_eq!(
+        by_grant(&other, "change.merge", merged),
+        None,
+        "only the prover's own approval"
+    );
+}
+
 /// This repository's rules, with sentinel's paths named.
 fn with_sentinel() -> Rules {
     let mut r = rules();
