@@ -631,15 +631,18 @@ fn restack(spec: &JobSpec, dir: &Path) -> Report {
                 crate::checks::ci::Relation::Clean => Relation::Clean,
                 crate::checks::ci::Relation::Conflicting => Relation::Conflicting,
             };
+            let mut log = format!(
+                "{} onto {}: {relation:?}{}\n",
+                spec.sha,
+                r.onto,
+                r.to.as_deref()
+                    .map(|t| format!(" as {t}"))
+                    .unwrap_or_default()
+            );
+            let carries = (r.to.is_some() && r.same_patch)
+                .then(|| carried(spec, dir, &r.main_files, &r.head_files, &mut log));
             Report {
-                log: format!(
-                    "{} onto {}: {relation:?}{}\n",
-                    spec.sha,
-                    r.onto,
-                    r.to.as_deref()
-                        .map(|t| format!(" as {t}"))
-                        .unwrap_or_default()
-                ),
+                log,
                 restack: Some(Restacked {
                     relation,
                     to: r.to,
@@ -658,7 +661,7 @@ fn restack(spec: &JobSpec, dir: &Path) -> Report {
                         .collect(),
                     messages: r.messages,
                     landed: r.landed,
-                    carries: None,
+                    carries,
                 }),
                 ..report(spec, Outcome::Passed, "")
             }
@@ -667,6 +670,42 @@ fn restack(spec: &JobSpec, dir: &Path) -> Report {
             violations: vec![e.to_string()],
             ..report(spec, Outcome::Failed, &e.to_string())
         },
+    }
+}
+
+/// The head's passed checks and gate jobs, from [`crate::control::KEPT`], that carry to the
+/// restacked head touching `head`, checked out in `dir`, over `main`'s changed `files`; none
+/// while `main`'s test map is red. See the merge-path ADR's 2026-11-16 amendment (#20).
+fn carried(
+    spec: &JobSpec,
+    dir: &Path,
+    files: &[String],
+    head: &[String],
+    log: &mut String,
+) -> Vec<String> {
+    let kept: Vec<Check> = spec
+        .env
+        .get(crate::control::KEPT)
+        .and_then(|k| serde_json::from_str(k).ok())
+        .unwrap_or_default();
+    let map = match std::env::var(crate::wire::ship_wire::TEST_MAP_RED_VAR) {
+        Ok(sha) if !sha.is_empty() => {
+            let _ = writeln!(log, "test map: main's failed at {sha}; nothing carries");
+            None
+        }
+        _ => test_map(log),
+    };
+    match crate::checks::scope::carried(dir, files, head, &kept, map.as_ref()) {
+        Ok(carried) => {
+            for name in &carried {
+                let _ = writeln!(log, "carries: {name}");
+            }
+            carried.into_iter().collect()
+        }
+        Err(e) => {
+            let _ = writeln!(log, "reach: {e}; nothing carries");
+            Vec::new()
+        }
     }
 }
 

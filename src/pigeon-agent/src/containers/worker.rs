@@ -102,7 +102,7 @@ pub const BUILD_URL_VAR: &str = "PIGEON_BUILD_URL";
 /// The variable holding that build's SHA-256.
 pub const BUILD_SHA256_VAR: &str = "PIGEON_BUILD_SHA256";
 pub use crate::wire::ship_wire::{
-    JUDGE_SHA256_VAR, JUDGE_URL_VAR, TEST_MAP_SHA256_VAR, TEST_MAP_URL_VAR,
+    JUDGE_SHA256_VAR, JUDGE_URL_VAR, TEST_MAP_RED_VAR, TEST_MAP_SHA256_VAR, TEST_MAP_URL_VAR,
 };
 /// The variable holding the builds token's client ID.
 pub const BUILD_ACCESS_ID_VAR: &str = "PIGEON_BUILD_ACCESS_ID";
@@ -125,6 +125,8 @@ pub struct JobsBuild {
     pub sentinel: Option<(String, String)>,
     /// `main`'s newest test map: its URL and SHA-256; none before the first.
     pub test_map: Option<(String, String)>,
+    /// The commit whose `test map` failed on `main`, while no later run passed.
+    pub test_map_red: Option<String>,
 }
 
 impl std::fmt::Debug for JobsBuild {
@@ -134,6 +136,7 @@ impl std::fmt::Debug for JobsBuild {
             .field("sha256", &self.sha256)
             .field("sentinel", &self.sentinel)
             .field("test_map", &self.test_map)
+            .field("test_map_red", &self.test_map_red)
             .finish_non_exhaustive()
     }
 }
@@ -192,6 +195,9 @@ impl JobsLaunch {
             if let Some((url, sha256)) = &b.test_map {
                 env.push((TEST_MAP_URL_VAR, url.as_str()));
                 env.push((TEST_MAP_SHA256_VAR, sha256.as_str()));
+            }
+            if let Some(sha) = &b.test_map_red {
+                env.push((TEST_MAP_RED_VAR, sha.as_str()));
             }
         }
         env
@@ -509,6 +515,7 @@ mod tests {
             access: ("builds-id".into(), "builds-secret".into()),
             sentinel: None,
             test_map: None,
+            test_map_red: None,
         });
         assert!(!format!("{jobs:?}").contains("builds-secret"));
         assert!(!format!("{:?}", jobs.build.as_ref().expect("a build")).contains("builds-secret"));
@@ -569,6 +576,11 @@ mod tests {
                 ("PIGEON_TEST_MAP_SHA256", map.as_str()),
             ]
         );
+        let red = "ab".repeat(20);
+        if let Some(b) = jobs.build.as_mut() {
+            b.test_map_red = Some(red.clone());
+        }
+        assert_eq!(jobs.env()[9..], [("PIGEON_TEST_MAP_RED", red.as_str())]);
     }
 
     #[test]

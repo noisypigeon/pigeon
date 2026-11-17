@@ -1576,12 +1576,14 @@ pub(super) async fn latest_build(env: &Env) -> Option<crate::containers::worker:
         let file = crate::wire::ship_wire::TEST_MAP_FILE;
         (format!("https://{host}/builds/{}/{file}", m.sha), m.sha256)
     });
+    let test_map_red = v["test_map"]["red"].as_str().map(str::to_string);
     Some(crate::containers::worker::JobsBuild {
         url: format!("https://{host}/builds/{}/pigeon", b.sha),
         sha256: b.sha256,
         access,
         sentinel,
         test_map,
+        test_map_red,
     })
 }
 

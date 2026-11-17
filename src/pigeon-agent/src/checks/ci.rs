@@ -777,6 +777,13 @@ pub struct Restack {
     /// The head adds nothing to the base: its patch already landed, so nothing was pushed.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub landed: bool,
+    /// The paths the base changed since the head's fork; empty when current.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub main_files: Vec<String>,
+    /// The paths the new head changes on the base, checked out in the work tree; empty when none
+    /// was pushed.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub head_files: Vec<String>,
 }
 
 /// One conflicting path's changes on both sides, each diff cut to [`CONTEXT_MAX`] bytes.
@@ -1172,12 +1179,15 @@ pub fn restack(
         context: Vec::new(),
         messages: String::new(),
         landed: false,
+        main_files: Vec::new(),
+        head_files: Vec::new(),
     };
     if fork == onto {
         return Ok(r);
     }
     let mine = changed_since(dir, &fork, sha)?;
     let theirs = changed_since(dir, &fork, &onto)?;
+    r.main_files.clone_from(&theirs);
     let detached = ["-c", "advice.detachedHead=false", "checkout", "-q", &onto];
     git(dir, "", "", &detached)?;
     // Built on another change: its own commits start past that change's last head, which is
@@ -1231,6 +1241,13 @@ pub fn restack(
     let mine = own_lines(dir, from, sha)?;
     r.same_patch = patch_id(dir, from, sha)? == patch_id(dir, &onto, &new)?
         || (mine.is_some() && mine == own_lines(dir, &onto, &new)?);
+    r.head_files = changed_since(dir, &onto, &new)?;
+    git(
+        dir,
+        "",
+        "",
+        &["-c", "advice.detachedHead=false", "checkout", "-q", &new],
+    )?;
     let lease = format!("--force-with-lease=refs/heads/{branch}:{sha}");
     let refspec = format!("{new}:refs/heads/{branch}");
     git(

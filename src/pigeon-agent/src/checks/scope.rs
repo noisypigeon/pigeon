@@ -209,6 +209,24 @@ pub fn jobs_with(root: &Path, files: &[String], map: Option<&TestMap>) -> Result
     Ok(jobs_of(&config, &crates(root)?, files, map))
 }
 
+/// The names among `kept` that carry to the restacked head touching `head`, judged on its
+/// workspace in `root` with `main`'s test map `map` over `main`'s changed `files`; see
+/// [`carried_of`].
+///
+/// # Errors
+///
+/// [`Error::Io`] when the workspace's manifests or the release configuration can't be read.
+pub fn carried(
+    root: &Path,
+    files: &[String],
+    head: &[String],
+    kept: &[crate::core::change::Check],
+    map: Option<&TestMap>,
+) -> Result<BTreeSet<String>, Error> {
+    let config = Config::load(&root.join(RELEASES))?;
+    Ok(carried_of(&config, &crates(root)?, map, files, head, kept))
+}
+
 /// How much of the full set the merge gate of a change touching `files` runs, from the
 /// workspace's manifests and `main`'s test map `map`; see [`gate_of`].
 ///
