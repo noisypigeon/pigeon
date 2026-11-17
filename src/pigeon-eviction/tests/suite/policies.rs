@@ -302,7 +302,14 @@ fn changelog_rules() {
 #[test]
 fn every_policy_is_valid() {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../.config/policies");
-    assert_eq!(eviction::load_dir(&dir).expect("loads").len(), 22);
+    let files = fs::read_dir(&dir)
+        .expect("reads")
+        .filter(|e| {
+            e.as_ref()
+                .is_ok_and(|e| e.path().extension().is_some_and(|x| x == "yaml"))
+        })
+        .count();
+    assert_eq!(eviction::load_dir(&dir).expect("loads").len(), files);
 }
 
 fn layout_root(skip: &[&str], extra: &[&str]) -> TempDir {
