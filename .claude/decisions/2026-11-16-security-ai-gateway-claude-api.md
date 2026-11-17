@@ -498,3 +498,21 @@ Reading the platform kind for step 3's brief corrected §10.
   - Until 3b merges, DLP is off. §9's flag-only design stands for it.
 - **`Governs` gains `catalog/cloudflare/modules/ai-gateway/**`** when step 3
   merges, by this planner.
+### 2026-11-16: Review of !827 against !818: they agree
+
+!818 merged
+[`2026-11-16-development-merge-path-measured-faster.md`](2026-11-16-development-merge-path-measured-faster.md).
+It governs the merge path: `worker/main_run.rs`, `worker/merges.rs`,
+`worker/github.rs`, `cobot/ci.rs` and `release/**`.
+
+!827 is this ADR's step 4 (brief b61). It adds `src/pigeon-core/src/pool/aigateway.rs`
+and one `pub mod` line in `pool/mod.rs`:
+- the gateway's URL;
+- its outbound headers;
+- its error signals.
+
+It is pure code, called by nothing yet. It touches none of !818's files and
+changes no merge, queue, gate or release behaviour. !818 changes nothing
+about the gateway's upstream, headers or signals.
+
+Neither decision changes.
