@@ -79,3 +79,20 @@ fn a_plan_that_destroys_anything_is_refused() {
     let why = destroys(&gone).unwrap_or_default();
     assert!(why.contains("pigeon-ci"), "{why}");
 }
+
+// See `.claude/decisions/2026-11-17-security-platform-run-minted-token.md` §7.
+#[test]
+fn a_plan_refuses_a_set_wider_than_its_minted_token() {
+    use agent::platform_job::within_minted;
+    let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let all = "access-apps.write,access-tokens.write,account.read,aigateway.write,d1.write,\
+queues.write,r2.write,secrets-store.read,workers.read";
+    assert_eq!(within_minted(&root, "platform/blue", all), Ok(()));
+    let short = all.replace("aigateway.write,", "");
+    let why = within_minted(&root, "platform/blue", &short).expect_err("wider");
+    assert!(
+        why.contains("needs aigateway.write") && why.contains("deploy `main`, then plan again"),
+        "{why}"
+    );
+    assert!(within_minted(&root, "platform/none", all).is_err());
+}

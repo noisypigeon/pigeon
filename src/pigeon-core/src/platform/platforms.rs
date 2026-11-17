@@ -148,6 +148,20 @@ pub struct Minted {
 /// The ledger grant a run's token is minted from.
 pub const PLATFORM_RUN: &str = "platform-run";
 
+/// The job variable naming a minted token's capabilities, comma-separated; none for a pasted one.
+pub const MINTED_VAR: &str = "PIGEON_MINTED_CAPABILITIES";
+
+/// The capabilities `needed` names that `minted` lacks, in order: what a plan job refuses to
+/// plan with; see `.claude/decisions/2026-11-17-security-platform-run-minted-token.md` §7.
+#[must_use]
+pub fn wider(needed: &[String], minted: &[String]) -> Vec<String> {
+    needed
+        .iter()
+        .filter(|c| !minted.contains(c))
+        .cloned()
+        .collect()
+}
+
 /// A digest of capability names `names`, in order, which a minting proof binds; see
 /// `.claude/decisions/2026-11-17-security-platform-run-minted-token.md` §4.
 #[must_use]

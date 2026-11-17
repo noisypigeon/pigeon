@@ -16,6 +16,8 @@ pub use crate::control::PLATFORM;
 
 pub use crate::control::PLATFORM_STATE_KEY_VAR as STATE_KEY_VAR;
 
+use crate::core::platform::platforms::MINTED_VAR as MINTED;
+
 /// The state bucket's name, before its random suffix.
 pub const STATE_BUCKET: &str = "pigeon-platform-state";
 
@@ -196,7 +198,7 @@ pub fn run(spec: &JobSpec, dir: &Path) -> Report {
         crate::standup_job::parse(&spec.argv)
             .and_then(|instance| crate::standup_job::standup(&spec.env, dir, &instance, &mut log))
     } else {
-        work(spec, dir, &mut log)
+        minted_ok(spec, dir).and_then(|()| work(spec, dir, &mut log))
     };
     match done {
         Ok(result) => Report {
@@ -207,6 +209,40 @@ pub fn run(spec: &JobSpec, dir: &Path) -> Report {
             violations: vec![scrub(&why)],
             ..crate::jobs::report(spec, Outcome::Failed, &scrub(&log))
         },
+    }
+}
+
+/// Whether `unit`'s capability set at the checkout `dir` is within `minted`, a minted token's
+/// comma-separated capabilities; a plan job refuses a wider set before `OpenTofu` runs; see
+/// `.claude/decisions/2026-11-17-security-platform-run-minted-token.md` §7.
+///
+/// # Errors
+///
+/// When the set can't be computed, or names a capability the token lacks.
+pub fn within_minted(dir: &Path, unit: &str, minted: &str) -> Result<(), String> {
+    let units = crate::infra::catalog::platform_units(dir, dir).map_err(|p| p.join("; "))?;
+    let needed = units
+        .get(unit)
+        .ok_or_else(|| format!("`{unit}` is no `pigeon/platform` unit at this commit"))?;
+    let minted: Vec<String> = minted.split(',').map(str::to_string).collect();
+    let missing = crate::core::platform::platforms::wider(needed, &minted);
+    if missing.is_empty() {
+        Ok(())
+    } else {
+        Err(format!(
+            "`{unit}` needs {}, which its minted token lacks: deploy `main`, then plan again",
+            missing.join(", ")
+        ))
+    }
+}
+
+/// Whether a plan job with a minted token may plan: its unit's set at `dir` is within the token's.
+fn minted_ok(spec: &JobSpec, dir: &Path) -> Result<(), String> {
+    match (Task::parse(&spec.argv)?, spec.env.get(MINTED)) {
+        (Task::Plan { unit }, Some(minted)) if !minted.is_empty() => {
+            within_minted(dir, &unit, minted)
+        }
+        _ => Ok(()),
     }
 }
 

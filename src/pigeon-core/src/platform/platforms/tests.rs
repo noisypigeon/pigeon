@@ -124,3 +124,17 @@ fn a_minted_run_records_its_token_and_is_revoked_once_it_ends() {
     let (_, said) = finish_event(&run).expect("an event");
     assert!(said.contains("with a pasted token"), "{said}");
 }
+
+// See `.claude/decisions/2026-11-17-security-platform-run-minted-token.md` §7.
+#[test]
+fn a_set_is_wider_by_what_the_minted_token_lacks() {
+    let s = |v: &[&str]| v.iter().map(|c| (*c).to_string()).collect::<Vec<_>>();
+    assert_eq!(
+        super::wider(&s(&["a.read"]), &s(&["a.read", "b.write"])),
+        Vec::<String>::new()
+    );
+    assert_eq!(
+        super::wider(&s(&["a.read", "c.write"]), &s(&["a.read"])),
+        s(&["c.write"])
+    );
+}

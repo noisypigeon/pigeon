@@ -746,13 +746,20 @@ async fn start(env: &Env, run: &Run, deployed: Option<&str>) -> std::result::Res
     let (remote, git) = platform::credentials(env, false, crate::wire::artifacts_wire::TOKEN_TTL)
         .await
         .map_err(|e| e.to_string())?;
-    let env_vars = BTreeMap::from([
+    let mut env_vars = BTreeMap::from([
         ("CLOUDFLARE_API_TOKEN".to_string(), token),
         (
             crate::control::PLATFORM_STATE_KEY_VAR.to_string(),
             state_key,
         ),
     ]);
+    // A minted token's set, which the plan job checks against its own (minted-token ADR §7).
+    if let Some(m) = &run.minted {
+        env_vars.insert(
+            crate::core::platform::platforms::MINTED_VAR.to_string(),
+            m.capabilities.join(","),
+        );
+    }
     let spec = JobSpec {
         id: job.clone(),
         remote,
