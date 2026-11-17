@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: development
-* Governs: `src/**/jobs.rs`, `src/**/brief/mod.rs`, `src/**/insights/mod.rs`, `tooling/session/models.json`
+* Governs: `src/**/jobs.rs`, `src/**/brief/mod.rs`, `src/**/insights/mod.rs`, `tooling/session/models.json`, `src/pigeon-core/src/pool/**`
 
 ## Context
 
@@ -698,3 +698,73 @@ glob under `src/pigeon-cli/` or `src/site-templates/` becomes `src/**/<tail>`
 (or `**<file>` for a workspace root file), which matches the file both before
 and after the restructure moves it. That ADR's step 12 tightens them to the
 new paths.
+
+### 2026-11-17: Step 3 is rebuilt on the restructured crates and the AI Gateway, in three changes
+
+b41's change, !622, was approved and then closed unmerged when the src/
+restructure moved `core/pool/`, and step 3 was never started. The
+[AI Gateway ADR](2026-11-16-security-ai-gateway-claude-api.md) and the
+[broker ADR](2026-11-16-security-provider-calls-mcp-broker.md) have since
+changed what step 3 builds. This amendment restates it.
+
+- **What is replaced.**
+  - **The upstream.** §4's route forwards to the AI Gateway, never to
+    `api.anthropic.com`, through `core::pool::aigateway` (the AI Gateway ADR
+    §1, §5 to §7). The host is the `const` base in `worker/pool.rs`.
+  - **The key.** The owner chose BYOK (the AI Gateway ADR's first
+    amendment). `POOL_ANTHROPIC_KEY` is never declared or put; §4's "the
+    Worker puts the pool's key" and §10.8's first line are void. The Worker
+    sends no provider key, and drops the caller's `x-api-key`, which is the
+    task token.
+  - **The Worker's credential** is a one-hour AI Gateway Run token the `Pool`
+    object mints from `GRANTER` (the AI Gateway ADR §3), held in memory only.
+  - **The migration tag** is `v5`: `v4` went to `Bench`.
+  - **Paths.** `core/pool/` is `src/pigeon-core/src/pool/`; the Worker's
+    files are under `src/pigeon-agent/src/worker/`. `Governs` gains
+    `src/pigeon-core/src/pool/**` now, and `worker/pool.rs` when 3b adds it.
+- **The vetting order** is the AI Gateway ADR §11: the task token; then
+  `core::provider::verdict::admit` (b59) with the capability `pool.messages`,
+  the task label's ticket and the task's change; then `anthropic-messages`
+  admission and the reservation. The `Caller` is built from the label's
+  ticket (`Live`, `Missing`, `Lapsed`, `Revoked`) and the changes it holds;
+  `platform` is false. A refusal at the ticket or change step closes the
+  task `stopped (evicted)` and answers `403`.
+- **It fails closed.** No gateway output, no Run token, a fetch error or a
+  `5xx` from the gateway answers `502`, `pool: gateway unavailable`, and
+  charges the reservation. There is no other upstream.
+- **Signals.** A non-2xx response is classified by `aigateway::classify`
+  first. `Upstream` is Anthropic's own error and goes to
+  `anthropic::Messages::classify` (§4's signals). `GatewayNoKey`,
+  `GatewayUnauthorized` and any other gateway code pause the pool and file
+  an owner item; `GatewayLimited` passes the `429` through.
+- **Step 3 splits in three, in order:**
+  - **3a, `feat(core)`: the adapter.** b41, amended to revision 2:
+    `src/pigeon-core/src/pool/gateway.rs` and `anthropic.rs`, as !622
+    accepted them, on current `main`, after !827 (`aigateway.rs`). A
+    `sonnet` brief.
+  - **3b, `feat(agent)`, owner tier, by this planner:**
+    - `worker/pool.rs`: the `Pool` object (`v5`), its ledger in storage, the
+      alarm's sweep, the route `POST /v0/pool/<pool>/v1/messages` and
+      `…/count_tokens`, the SSE tee, the workspace pin, and the vetting
+      above;
+    - `narrow_token` for `POOL_ACCESS_ID`;
+    - `pool.status`, `pool.pause` and `pool.resume` (owner tier);
+    - `worker.yaml`: the `Pool` class and three secrets,
+      `POOL_ANTHROPIC_WORKSPACE`, `POOL_ACCESS_ID` and `POOL_ACCESS_SECRET`;
+    - `.config/pool.yaml` gains the Ultra values (the first amendment) and
+      joins `guarded`, with its policy `.config/policies/pool.yaml`.
+
+    The Run token is asked through one function, `gateway_token`, which
+    answers none until 3c, so every request is refused
+    `pool: no gateway token`. With `enabled: false` it spends nothing
+    either way. It touches `src/pigeon-agent/**`, so it is pushed only once
+    the restructure's (e) and k3 have merged.
+  - **3c, `feat(agent)`, the gate:** minting the Run token in
+    `worker/minting.rs`, and its row in `.config/grants.yaml`. Both are gate
+    files, so the owner's passkey approves it; it waits for owner decision
+    #22 (the Run grant for `GRANTER`).
+- **The AI Gateway ADR's step 5** is then 3b and 3c. Its planner keeps the
+  live wiring and the spike's fixtures.
+- **Verification** adds: a gateway `5xx` and a fetch error are refused and
+  charged; no request reaches any host but the gateway's; a caller's
+  `x-api-key` and `cf-aig-*` headers never reach it.
