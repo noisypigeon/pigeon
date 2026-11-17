@@ -16,6 +16,7 @@ use worker::{
 use super::Route;
 use super::mandates::to_instance;
 use super::platform::{self, Settings, json_request, now};
+use super::pool_dispatch::{self, Followed};
 use crate::access::Identity;
 use crate::core::pool::aigateway;
 use crate::core::pool::config::{Budget, Pool as PoolConfig, config};
@@ -158,6 +159,7 @@ impl DurableObject for Pool {
             "/settle" => self.settle(&body).await,
             "/task/open" => self.open_task(&body).await,
             "/task/close" => self.close_task(&body).await,
+            "/task/job" => self.follow_job(&body).await,
             "/status" => self.status().await,
             "/pause" => self.pause(&body).await,
             "/resume" => self.resume().await,
@@ -174,8 +176,67 @@ impl DurableObject for Pool {
         if n != l {
             self.state.storage().put("ledger", &n).await?;
         }
+        if let Err(e) = self.follow(&pool).await {
+            worker::console_error!("pool {}: following jobs: {e}", pool.name);
+        }
+        let n = self.ledger(&pool).await?;
         self.arm(&n).await?;
         Response::ok("swept")
+    }
+}
+
+impl Pool {
+    /// Records the job a task's dispatch started, for the alarm to follow.
+    async fn follow_job(&self, body: &Value) -> Result<Response> {
+        let (Some(task), Ok(f)) = (
+            body["task"].as_str(),
+            serde_json::from_value::<Followed>(body["followed"].clone()),
+        ) else {
+            return Response::error("a job is followed with its task and job", 400);
+        };
+        let storage = self.state.storage();
+        let mut jobs: BTreeMap<String, Followed> = storage.get("jobs").await?.unwrap_or_default();
+        jobs.insert(task.to_string(), f);
+        storage.put("jobs", &jobs).await?;
+        storage.set_alarm(SWEEP_MS).await?;
+        Response::ok("followed")
+    }
+
+    /// Asks after each followed job; a finished or lost one acts, closes its task and is dropped.
+    async fn follow(&self, pool: &PoolConfig) -> Result<()> {
+        let storage = self.state.storage();
+        let jobs: BTreeMap<String, Followed> = storage.get("jobs").await?.unwrap_or_default();
+        if jobs.is_empty() {
+            return Ok(());
+        }
+        let s = Settings::from(&self.env)?;
+        let mut left = jobs.clone();
+        for (task, f) in &jobs {
+            let report = match pool_dispatch::report(&self.env, &f.job).await? {
+                Some(Some(r)) => Some(r),
+                _ if now() < f.lost_at => continue,
+                _ => None,
+            };
+            let outcome = pool_dispatch::act(&self.env, &s, f, report.as_ref()).await?;
+            let l = self.ledger(pool).await?;
+            if let Ok(n) = ledger::close_task(&l, task, &outcome, now()) {
+                storage.put("ledger", &n).await?;
+            }
+            left.remove(task);
+            storage.put("jobs", &left).await?;
+            let said = format!("pool {} task {task} ({}): {outcome}", pool.name, f.label);
+            let _ = super::events::append(
+                &self.env,
+                &s,
+                "pool.task.closed",
+                Some(f.change),
+                Some(f.label.clone()),
+                &said,
+                false,
+            )
+            .await;
+        }
+        Ok(())
     }
 }
 
@@ -638,7 +699,12 @@ fn copy_response_headers(from: &Response, to: &mut Response) -> Result<()> {
 }
 
 /// Sends `path` to pool `name`'s object.
-async fn to_pool(env: &Env, name: &str, path: &str, body: &Value) -> Result<(u16, Value)> {
+pub(super) async fn to_pool(
+    env: &Env,
+    name: &str,
+    path: &str,
+    body: &Value,
+) -> Result<(u16, Value)> {
     let req = json_request(
         &format!("https://pool{path}"),
         Method::Post,

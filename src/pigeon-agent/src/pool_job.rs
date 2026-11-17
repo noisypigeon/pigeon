@@ -93,6 +93,36 @@ fn walk(dir: &Path, root: bool, in_git: bool) -> std::io::Result<()> {
     Ok(())
 }
 
+/// Checks out the change's branch at `spec.sha`; a new change has none yet, so the branch is
+/// made from `spec.base` at `spec.sha`, the brief's base, and `land` pushes it; see the capacity
+/// pools ADR's 2026-11-17 step 6 amendment.
+fn checkout(spec: &JobSpec, dir: &Path) -> Result<(), String> {
+    let on_branch = ci::checkout(
+        dir,
+        &spec.remote,
+        &spec.token,
+        &spec.base,
+        &spec.branch,
+        &spec.sha,
+    );
+    if on_branch.is_ok() {
+        return Ok(());
+    }
+    let _ = std::fs::remove_dir_all(dir);
+    ci::checkout_on(dir, &spec.remote, &spec.token, &spec.base, Some(&spec.sha))
+        .map_err(|e| e.to_string())?;
+    let made = Command::new("git")
+        .args(["checkout", "-q", "-b", &spec.branch])
+        .current_dir(dir)
+        .status()
+        .map_err(|e| e.to_string())?;
+    if made.success() {
+        Ok(())
+    } else {
+        Err(format!("the branch {} couldn't be made", spec.branch))
+    }
+}
+
 /// Runs the pool job `spec` in `dir`.
 #[must_use]
 pub fn run(spec: &JobSpec, dir: &Path) -> Report {
@@ -100,15 +130,8 @@ pub fn run(spec: &JobSpec, dir: &Path) -> Report {
         Ok(j) => j,
         Err(why) => return failed(spec, &why),
     };
-    if let Err(e) = ci::checkout(
-        dir,
-        &spec.remote,
-        &spec.token,
-        &spec.base,
-        &spec.branch,
-        &spec.sha,
-    ) {
-        return failed(spec, &e.to_string());
+    if let Err(e) = checkout(spec, dir) {
+        return failed(spec, &e);
     }
     let work = std::env::temp_dir().join(format!("pool-{}", spec.id));
     if let Err(e) = setup(&work, &job).and_then(|()| open(dir)) {

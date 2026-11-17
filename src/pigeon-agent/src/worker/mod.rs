@@ -42,6 +42,7 @@ mod passkeys;
 mod platform;
 mod platforms;
 mod pool;
+mod pool_dispatch;
 mod provider;
 mod push;
 mod stages;

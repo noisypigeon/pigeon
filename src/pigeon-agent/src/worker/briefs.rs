@@ -90,12 +90,26 @@ pub async fn run(
             let body = json!({
                 "planner": label, "draft": d, "id": text(args, "id"), "reason": text(args, "reason"),
             });
-            let (status, v) = to_instance(env, s, path, &body).await?;
+            let (status, mut v) = to_instance(env, s, path, &body).await?;
             if status == 200 && operation == "brief.create" {
-                let id = v["id"].as_str().unwrap_or_default();
+                let id = v["id"].as_str().unwrap_or_default().to_string();
                 let note = format!("{id} ({}): {}", d.model.name(), d.title);
                 let task = json!({ "brief": id, "model": d.model, "note": note });
-                to_instance(env, s, "/tasks/add-brief", &task).await?;
+                let (_, added) = to_instance(env, s, "/tasks/add-brief", &task).await?;
+                // Where it runs; see the capacity pools ADR's 2026-11-17 step 6 amendment.
+                let route = super::pool_dispatch::route(env, s, &d).await?;
+                v["route"] = serde_json::to_value(&route)?;
+                if let (crate::core::pool::route::Route::Pool(pool), Some(task)) =
+                    (&route, added["id"].as_u64())
+                {
+                    v["dispatch"] =
+                        match super::pool_dispatch::dispatch(env, s, &id, &d, task, &label, pool)
+                            .await?
+                        {
+                            Ok(d) => d,
+                            Err(why) => json!({ "refused": why }),
+                        };
+                }
             }
             if status == 200 {
                 let said = format!(
@@ -204,7 +218,15 @@ async fn review(env: &Env, s: &Settings, args: &Map<String, Value>) -> Result<(u
 /// `brief.escalate`: the executor of change `change` asks its brief's planner `question`, having
 /// `tried`; its branch takes no push until the planner answers; see
 /// `.claude/decisions/2026-11-13-development-model-tiered-agent-briefs.md` §6.
-async fn escalate(env: &Env, s: &Settings, args: &Map<String, Value>) -> Result<(u16, Value)> {
+///
+/// # Errors
+///
+/// When a binding fails.
+pub(super) async fn escalate(
+    env: &Env,
+    s: &Settings,
+    args: &Map<String, Value>,
+) -> Result<(u16, Value)> {
     let Some(label) = text(args, "session") else {
         return Ok((400, json!("`session` is the executor's label")));
     };
