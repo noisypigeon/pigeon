@@ -1,0 +1,20 @@
+description: The capacity pools' caps stay within the included credit and its workspace limit, per 2026-11-15-development-capacity-pools-hard-spend-cap.md §2 and its Ultra amendment.
+target:
+  files: [.config/pool.yaml]
+rules:
+  - line: { at: 1, matches: '^# ' }
+  - fields:
+      after: 4
+      pattern: '^(?<key>[a-z_.0-9-]+): (?<value>.+)$'
+      expect:
+        - { key: order, matches: '^\[anthropic\]$' }
+        - { key: prefer, matches: '^(subscription|pool)$' }
+        - { key: subscription_slots, matches: '^[0-9]+$' }
+        - { key: drain_days, matches: '^[0-9]+$' }
+        - { key: anthropic.enabled, matches: '^(true|false)$' }
+        - { key: anthropic.gateway, matches: '^anthropic-messages$' }
+        - { key: anthropic.harness, matches: '^claude-code$' }
+        - { key: anthropic.credit_usd, matches: '^([1-9][0-9]?|1[0-9]{2}|200)$' }
+        - { key: anthropic.month_limit_usd, matches: '^([1-9][0-9]?|100)$' }
+        - { key: anthropic.cycle_day, matches: '^(null|[1-9]|[12][0-9]|3[01])$' }
+        - { key: anthropic.concurrency, matches: '^[1-4]$' }
