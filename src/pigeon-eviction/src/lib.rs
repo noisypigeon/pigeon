@@ -120,6 +120,47 @@ pub fn evict(policies: &[LoadedPolicy], candidate: &Candidate) -> (Vec<Verdict>,
     (verdicts, granted)
 }
 
+/// A provider call's document: server, tool, effect, caller, change and arguments, as text; see
+/// `.claude/decisions/2026-11-16-security-provider-calls-mcp-broker.md` §4.
+pub type Call = BTreeMap<String, String>;
+
+/// Each provider-call policy that applies to `call`, in name order, with its violations; the call
+/// passes when none has any.
+#[must_use]
+pub fn judge_call(policies: &[LoadedPolicy], call: &Call) -> Vec<Verdict> {
+    let mut verdicts: Vec<Verdict> = policies
+        .iter()
+        .filter(|p| {
+            matches!(
+                p.policy.target,
+                policy::Target::Named(policy::NamedTarget::ProviderCall)
+            )
+        })
+        .filter_map(|p| {
+            let mut out = Vec::new();
+            rules::run_call(p, call, &mut out).then(|| Verdict {
+                policy: p.name.clone(),
+                violations: out.iter().map(|v| v.message.clone()).collect(),
+            })
+        })
+        .collect();
+    verdicts.sort_by(|a, b| a.policy.cmp(&b.policy));
+    verdicts
+}
+
+/// Loads and validates one policy from text, named `name`, for callers without a filesystem such
+/// as the Worker.
+///
+/// # Errors
+///
+/// A message naming what is invalid.
+pub fn load_str(name: &str, text: &str) -> Result<LoadedPolicy, String> {
+    Ok(LoadedPolicy {
+        name: name.to_string(),
+        policy: Policy::parse(text)?,
+    })
+}
+
 /// Loads and validates one policy file.
 ///
 /// # Errors
@@ -228,8 +269,8 @@ pub fn invoke(
 }
 
 /// Each policy's name and what it targets, as JSON: `[{name, target: {kind, paths}}]`, `kind`
-/// one of `pull-request`, `change`, `tree`, `file`, `files` and `dir`; for readers that don't
-/// link this library, such as the agent's `architecture.describe`.
+/// one of `pull-request`, `change`, `tree`, `eviction`, `provider-call`, `file`, `files` and
+/// `dir`; for readers that don't link this library, such as the agent's `architecture.describe`.
 #[must_use]
 pub fn describe(policies: &[LoadedPolicy]) -> serde_json::Value {
     use policy::{NamedTarget, Target};
@@ -243,6 +284,7 @@ pub fn describe(policies: &[LoadedPolicy]) -> serde_json::Value {
                     Target::Named(NamedTarget::Change) => ("change", Vec::new()),
                     Target::Named(NamedTarget::Tree) => ("tree", Vec::new()),
                     Target::Named(NamedTarget::Eviction) => ("eviction", Vec::new()),
+                    Target::Named(NamedTarget::ProviderCall) => ("provider-call", Vec::new()),
                     Target::File(f) => ("file", vec![shown(&f.file)]),
                     Target::Files(f) => ("files", f.files.iter().map(|p| shown(p)).collect()),
                     Target::Dir(d) => ("dir", vec![shown(&d.dir)]),

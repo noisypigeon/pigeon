@@ -31,8 +31,8 @@ pub fn run(
             };
             rules::run_pull_request(loaded, pr, root, false, &mut report.violations);
         }
-        // Judged one candidate at a time, by `evict`.
-        Target::Named(NamedTarget::Eviction) => return Ok(false),
+        // Judged one at a time, by `evict` and `judge_call`.
+        Target::Named(NamedTarget::Eviction | NamedTarget::ProviderCall) => return Ok(false),
         Target::Named(NamedTarget::Change) => {
             let Some(pr) = pull_request.filter(|pr| pr.branch.is_some()) else {
                 return Ok(false);

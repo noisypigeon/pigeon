@@ -15,6 +15,9 @@ pub struct Policy {
     pub target: Target,
     /// The rules, in order.
     pub rules: Vec<Rule>,
+    /// For provider-call: field rules that must all hold for the policy to apply.
+    #[serde(default)]
+    pub when: Vec<Rule>,
 }
 
 /// What a policy's rules run against.
@@ -45,6 +48,9 @@ pub enum NamedTarget {
     /// A change the control plane may evict, by its record's fields; see
     /// `.claude/decisions/2026-11-10-development-change-slot-eviction-policy.md` §4.
     Eviction,
+    /// A provider call the broker judges, by its call document's fields; see
+    /// `.claude/decisions/2026-11-16-security-provider-calls-mcp-broker.md` §4.
+    ProviderCall,
 }
 
 /// One file.
@@ -414,9 +420,35 @@ pub enum PrField {
     ApprovalOpen,
     /// Whether it waits in the merge queue.
     Queued,
+    /// A provider call's server.
+    Server,
+    /// A provider call's tool.
+    Tool,
+    /// A provider call's effect.
+    Effect,
+    /// A provider call's caller.
+    Caller,
+    /// A provider call's arguments.
+    Arguments,
+    /// A provider call's change.
+    Change,
 }
 
 impl PrField {
+    /// Whether only the provider-call target has this field.
+    #[must_use]
+    pub fn call_only(self) -> bool {
+        matches!(
+            self,
+            Self::Server
+                | Self::Tool
+                | Self::Effect
+                | Self::Caller
+                | Self::Arguments
+                | Self::Change
+        )
+    }
+
     /// Whether only the `eviction` target has this field.
     #[must_use]
     pub fn eviction_only(self) -> bool {
@@ -461,6 +493,26 @@ fn eviction_field(r: &FieldRule) -> Result<(), &'static str> {
     Ok(())
 }
 
+/// Whether `r` fits the `provider-call` target: one of the call document's fields, with `equals`,
+/// or `matches` and/or `not`.
+fn call_field(r: &FieldRule) -> Result<(), &'static str> {
+    if !r.name.call_only() {
+        return Err("provider-call has only the call document's fields");
+    }
+    let kinds =
+        usize::from(r.matches.is_some() || r.not.is_some()) + usize::from(r.equals.is_some());
+    if kinds != 1
+        || r.references.is_some()
+        || r.within.is_some()
+        || r.max_lines.is_some()
+        || r.at_least.is_some()
+        || r.at_most.is_some()
+    {
+        return Err("`field` on `provider-call` takes `equals`, or `matches` and/or `not`");
+    }
+    Ok(())
+}
+
 impl Policy {
     /// Parses and validates a policy.
     ///
@@ -471,6 +523,22 @@ impl Policy {
         let policy: Self = serde_saphyr::from_str(yaml).map_err(|e| e.to_string())?;
         policy.validate()?;
         Ok(policy)
+    }
+
+    /// A `provider-call` policy's `rules` and `when` take only call-document `field` rules.
+    fn validate_call(&self) -> Result<(), String> {
+        for (label, rules) in [("rule", &self.rules), ("when rule", &self.when)] {
+            for (i, rule) in rules.iter().enumerate() {
+                let verdict = match rule {
+                    Rule::Field(r) => call_field(r),
+                    _ => Err("only `field` applies to `provider-call`"),
+                };
+                if let Err(m) = verdict {
+                    return Err(format!("{label} {}: {m}", i + 1));
+                }
+            }
+        }
+        Ok(())
     }
 
     pub(crate) fn validate(&self) -> Result<(), String> {
@@ -484,9 +552,16 @@ impl Policy {
         let change = matches!(self.target, Target::Named(NamedTarget::Change));
         let tree = matches!(self.target, Target::Named(NamedTarget::Tree));
         let eviction = matches!(self.target, Target::Named(NamedTarget::Eviction));
+        let call = matches!(self.target, Target::Named(NamedTarget::ProviderCall));
+        if call {
+            self.validate_call()?;
+        } else if !self.when.is_empty() {
+            return Err("when needs the provider-call target".into());
+        }
         for (i, rule) in self.rules.iter().enumerate() {
             let at = |m: &str| Err(format!("rule {}: {m}", i + 1));
             match rule {
+                _ if call => {}
                 Rule::Field(r) if eviction => {
                     if let Err(m) = eviction_field(r) {
                         return at(m);
@@ -512,6 +587,9 @@ impl Policy {
                         return at(
                             "`field` takes one of `references`, `within`, `max_lines`, `at_least`/`at_most`, `equals`, or `matches` and/or `not`",
                         );
+                    }
+                    if r.name.call_only() || r.within.is_some_and(PrField::call_only) {
+                        return at("the call document's fields need the `provider-call` target");
                     }
                     if r.name.eviction_only() || r.within.is_some_and(PrField::eviction_only) {
                         return at("the candidate's fields need the `eviction` target");

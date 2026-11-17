@@ -180,6 +180,51 @@ pub fn run_eviction(
     }
 }
 
+/// Runs a `provider-call` policy against `call`: its `when` rules first, and if any fails (a missing
+/// field counts) the policy does not apply, so `out` is untouched and this returns `false`; else its
+/// `rules` run as an eviction's do, a missing field being a violation, and this returns `true`.
+pub fn run_call(
+    loaded: &LoadedPolicy,
+    call: &BTreeMap<String, String>,
+    out: &mut Vec<Violation>,
+) -> bool {
+    let vars: Vars = call.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+    let mut scratch = Vec::new();
+    let mut gate = Ctx {
+        policy: &loaded.name,
+        path: "provider-call".into(),
+        vars: vars.clone(),
+        out: &mut scratch,
+    };
+    for rule in &loaded.policy.when {
+        call_rule(&mut gate, rule);
+    }
+    if !scratch.is_empty() {
+        return false;
+    }
+    let mut ctx = Ctx {
+        policy: &loaded.name,
+        path: "provider-call".into(),
+        vars,
+        out,
+    };
+    for rule in &loaded.policy.rules {
+        call_rule(&mut ctx, rule);
+    }
+    true
+}
+
+fn call_rule(ctx: &mut Ctx, rule: &Rule) {
+    if let Rule::Field(r) = rule {
+        let name = field_name(r.name);
+        if ctx.vars.contains_key(name) {
+            field(ctx, Path::new("."), r);
+        } else {
+            ctx.push(None, format!("`{name}` is not set"));
+        }
+    }
+}
+
 /// Runs a `tree` policy's `entries` rules.
 pub fn run_tree(loaded: &LoadedPolicy, root: &Path, out: &mut Vec<Violation>) {
     let mut ctx = Ctx {
@@ -653,6 +698,12 @@ fn field_name(f: PrField) -> &'static str {
         PrField::Pinned => "pinned",
         PrField::ApprovalOpen => "approval_open",
         PrField::Queued => "queued",
+        PrField::Server => "server",
+        PrField::Tool => "tool",
+        PrField::Effect => "effect",
+        PrField::Caller => "caller",
+        PrField::Arguments => "arguments",
+        PrField::Change => "change",
     }
 }
 
@@ -714,7 +765,7 @@ fn field(ctx: &mut Ctx, root: &Path, r: &FieldRule) {
     if let Some(m) = &r.matches
         && !m.0.is_match(&value)
     {
-        let shown = if matches!(r.name, PrField::Body | PrField::Files) {
+        let shown = if matches!(r.name, PrField::Body | PrField::Files | PrField::Arguments) {
             String::new()
         } else {
             format!(" `{value}`")
@@ -724,14 +775,16 @@ fn field(ctx: &mut Ctx, root: &Path, r: &FieldRule) {
     if let Some(n) = &r.not
         && let Some(found) = n.0.find(&value)
     {
-        ctx.push(
-            None,
+        let message = if matches!(r.name, PrField::Arguments) {
+            format!("`{name}` holds a value `{}` forbids", n.0)
+        } else {
             format!(
                 "`{name}` holds `{}`, which `{}` forbids",
                 found.as_str(),
                 n.0
-            ),
-        );
+            )
+        };
+        ctx.push(None, message);
     }
     bounds(ctx, name, &value, r);
     if let Some(max) = r.max_lines {
