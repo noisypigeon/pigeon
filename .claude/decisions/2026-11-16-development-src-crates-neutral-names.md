@@ -791,3 +791,83 @@ a generated change closes, which !736 neither relies on nor changes.
   to `judge` and rewords two doc comments. It changes no behaviour, and
   nothing about pools, briefs or insights.
 - Nothing either ADR decides changes.
+
+### 2026-11-17: Step 12 done: the outcome
+
+The restructure is complete. The workspace is at the root, with members
+`src/{common, pigeon-core, pigeon-harness, pigeon-agent, pigeon-eviction,
+pigeon-ios, pigeon-site-templates}`. The packages are `pigeon-harness` (the
+`pigeon` binary), `pigeon-agent` (library `agent`) and `pigeon-eviction`
+(binary `pigeon-eviction`). The CLI, modules, docs and config no longer use
+`cobot`, `gantry`, `backplane` or `sentinel`, and
+`.config/policies/names.yaml` keeps it that way.
+
+**Step 12's changes:**
+
+- **The CLI's old spellings go:** !784, then !785 for the bench.
+- **Policies and approvals name only the new layout:** !788, then !787.
+- **The judge's keys are `eviction`:** !789, !800, !863, then !845.
+- **The token and judge environment take their new names:** !795, with !810's fix.
+- **The judge is built by its package:** !796.
+- **The agent's library is `agent`:** !797.
+- **The cobot module split:** !803.
+- **`bench ci` and `bench check` use the new spellings:** !809 and !858.
+- **The Worker features and the release unit are `agent`:** !842, then !957,
+  which drops the harness feature.
+- **The `Governs` globs:** !806 and !835 widen them, then !844 narrows them.
+- **The judge's binary is `pigeon-eviction`:** !860, after !847 fixed the
+  test map.
+- **The sweep:** !886, !913, !910, !948, !949, !977 and !980.
+- **The judge learns `except_content`:** !979.
+- **The policies' descriptions:** !982.
+- **`names.yaml`:** !1004.
+
+**Kept stored names.** These keep their old spelling. Each is read in one
+place, and `names.yaml` lists it as an exception:
+
+- `BACKPLANE_TOKEN`: the Worker secret, read only by `worker/checker.rs`'s
+  `signing_key` (owner decision #8). Code and Containers name it
+  `AGENT_TOKEN`.
+- The state repository `noisypigeon/pigeon-cobot-state`, until a later ADR
+  retires it.
+- The build store's key `builds/<sha>/pigeon-sentinel` and its route,
+  behind one constant (`STORED_JUDGE`), and the stored build record's
+  `sentinel_sha256` field.
+- `.cobot/types.json`, tofu's `cobot` key provider, and `infra/state.rs`'s
+  tombstone `cobot:removed`, which are written into stored state.
+- A stored `sentinel:` tier label: `approval::tiers::is_judge_rule` still
+  counts one, so an open change classified before !845 isn't treated as
+  plain code. This read goes once no open change holds such a label.
+- Tests that assert an old spelling is refused, the stored-state test
+  fixtures, ADR file names, `releases.yaml`'s `previous:` and `retired:`
+  history, and the owner's blog posts.
+
+**What went wrong, and what changed because of it:**
+
+- **The release bot's version bumps raced guarded merges** in `Cargo.lock`.
+  !782 lost twice. This led to the merge-speed ADR
+  (`2026-11-16-development-merge-path-measured-faster.md`), its release
+  turn, and !884's lockfile regeneration on restack.
+- **A package or binary rename left the test map naming the old target**
+  until the next map. Fixed by !792 for packages and !847 for binaries.
+- **!795's env rename made the bench read the Worker secret by the
+  Container's name.** Benches were down from 20:25 to 21:00Z; !810 fixed
+  it, and an architecture test now pins the one accessor.
+- **Old command spellings survived in argv strings** that only fail at run
+  time. !809 fixed `bench ci` and !858 fixed `bench check`; each now builds
+  its argv in one function, under a unit test.
+- **Executor briefs refused judge paths only by the `sentinel:` prefix.**
+  !863 made the refusal use `is_judge_rule` before !845 relabelled the
+  rules.
+
+**Follow-ups, outside this ADR:**
+
+- Retire the state repository's name.
+- Drop the stored `sentinel:` label read.
+- Drop the build key's old name, once a deploy can write both keys.
+- Make a missing root `[workspace.metadata.pigeon]` an error in the
+  checks' scope, instead of falling back to the old `src/pigeon-cli` layout.
+  The release bot keeps its fallback for pre-move revisions, which
+  `--replay` needs.
+- Report a provider that refuses for a missing credential as `needs: owner`
+  (the merge-speed ADR).
