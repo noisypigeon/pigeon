@@ -21,7 +21,7 @@ containers:
 bindings:
   d1: { DB: { name: pigeon, id: $output.infra/pigeon.database_id, migrations: crates/agent/migrations } }
   r2: { LOGS: "$output.infra/pigeon.bucket_names[pigeon-ci]" }
-  vars: { PUBLIC_HOST: control.example.workers.dev }
+  vars: { PUBLIC_HOST: control.example.workers.dev, STATE_BUCKET: "$output.infra/pigeon.bucket_names[pigeon-state]" }
   version_metadata: CF_VERSION_METADATA
 "#;
 
@@ -232,4 +232,33 @@ fn a_deployment_names_its_versions_and_how_objects_update() {
     let back = ship::deployment(&[("blue", 100)], true);
     assert_eq!(back["code_update_strategy"], json!({ "mode": "immediate" }));
     assert!(ship::HEALTH_WAIT.as_secs() > u64::from(ship::CODE_UPDATE_DELAY));
+}
+
+#[test]
+fn a_var_holding_an_output_reference_renders_as_its_value() {
+    let (_root, found) = fixture();
+    let images = BTreeMap::from([("pigeon-control/Runner".to_string(), IMAGE.to_string())]);
+    let v = workers::render_with(&found, &outputs(), Some(&images)).expect("renders");
+    assert_eq!(v["vars"]["STATE_BUCKET"], json!("pigeon-state-x2"));
+    assert_eq!(
+        v["vars"]["PUBLIC_HOST"],
+        json!("control.example.workers.dev")
+    );
+    let snap = ship::snapshot(&[found.spec], &outputs());
+    assert!(snap["infra/pigeon"].contains_key("bucket_names"));
+}
+
+#[test]
+fn a_var_whose_output_is_missing_renders_as_written() {
+    let (_root, found) = fixture();
+    let images = BTreeMap::from([("pigeon-control/Runner".to_string(), IMAGE.to_string())]);
+    let mut outs = outputs();
+    outs.get_mut("infra/pigeon")
+        .expect("unit")
+        .insert("bucket_names".into(), json!(["pigeon-ci-x1"]));
+    let v = workers::render_with(&found, &outs, Some(&images)).expect("still renders");
+    assert_eq!(
+        v["vars"]["STATE_BUCKET"],
+        json!("$output.infra/pigeon.bucket_names[pigeon-state]")
+    );
 }

@@ -822,6 +822,7 @@ pub fn references(spec: &Spec) -> Vec<String> {
         .map(|d| d.id.clone())
         .chain(b.r2.values().cloned())
         .chain(b.secrets_store.values().map(|x| x.store.clone()))
+        .chain(b.vars.values().filter(|v| reference(v).is_some()).cloned())
         .collect()
 }
 
@@ -989,6 +990,19 @@ pub fn render_with(
     };
     let mut out = render_script(spec, images);
     render_bindings(&spec.bindings, &mut out, &mut get);
+    // A var holding an `$output` reference renders as its value where the output exists, and as
+    // written where it doesn't, so a missing output never stops a deploy.
+    if let Some(vars) = out["vars"].as_object_mut() {
+        for v in vars.values_mut() {
+            if let Some(Ok(x)) = v
+                .as_str()
+                .filter(|s| reference(s).is_some())
+                .map(|s| resolve(s, outputs))
+            {
+                *v = json!(x);
+            }
+        }
+    }
     if let Some(z) = spec.routes.iter().find_map(|r| r.subdomains_of.as_ref()) {
         out["vars"][SUBDOMAINS_VAR] = json!(z);
     }
