@@ -213,3 +213,16 @@ merges on the owner's passkey.
   and messages. It touches neither `platforms.rs`. The two met only through
   !948's scope `src/pigeon-core/src/**` and `src/pigeon-agent/src/**`.
 - Nothing any of the four ADRs decides changes.
+### 2026-11-17: Review of !939 against !909: they agree
+
+- **!939** carries out step 6b-b of
+  [`2026-11-16-development-merge-path-measured-faster.md`](2026-11-16-development-merge-path-measured-faster.md):
+  a same-patch restack carries only the checks its job names. In `jobs.rs`
+  it adds one field, `carries: None`, to the restack job's report.
+- **!909** wrote this ADR. In `jobs.rs` it decides only the platform plan
+  job (§7), and it relies on
+  [`2026-11-08-runtime-blue-green-self-standup.md`](2026-11-08-runtime-blue-green-self-standup.md)
+  and
+  [`2026-11-12-development-grants-applies-rescue-yield.md`](2026-11-12-development-grants-applies-rescue-yield.md).
+- **They agree.** !939 touches no `platforms.rs`, no grant and no platform
+  job. This ADR decides nothing about restacks or the merge gate.
