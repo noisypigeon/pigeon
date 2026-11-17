@@ -8,7 +8,7 @@ use std::path::Path;
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
-use crate::core::change::{STALE_BASE, lockfile};
+use crate::core::change::{STALE_BASE, TRANSIENT_PUSH, lockfile, push};
 use crate::git::command;
 use crate::infra::Error;
 
@@ -23,7 +23,32 @@ fn scrub(text: &str, token: &str) -> String {
     }
 }
 
+/// Runs git in `dir`; a fetch refused for now is retried after each of `push::BACKOFF`.
 fn git(dir: &Path, remote: &str, token: &str, args: &[&str]) -> Result<String, Error> {
+    if args.first() != Some(&"fetch") {
+        return git_once(dir, remote, token, args);
+    }
+    let mut waits = push::BACKOFF.iter();
+    loop {
+        match git_once(dir, remote, token, args) {
+            Err(Error::Git { message, .. }) if push::transient(&message) => match waits.next() {
+                Some(&s) => std::thread::sleep(Duration::from_secs(s)),
+                None => {
+                    return Err(Error::Git {
+                        args: "fetch".into(),
+                        message: format!(
+                            "{TRANSIENT_PUSH} {} times: {message}",
+                            push::BACKOFF.len() + 1
+                        ),
+                    });
+                }
+            },
+            other => return other,
+        }
+    }
+}
+
+fn git_once(dir: &Path, remote: &str, token: &str, args: &[&str]) -> Result<String, Error> {
     let out = command(remote, token)
         .arg("-C")
         .arg(dir)
@@ -448,19 +473,33 @@ pub fn squash_onto(
         });
     }
     let new = String::from_utf8_lossy(&commit.stdout).trim().to_string();
-    git(
-        dir,
-        remote,
-        token,
-        &["push", "-q", remote, &format!("{new}:refs/heads/{base}")],
-    )?;
-    git(
-        dir,
-        remote,
-        token,
-        &["push", "-q", remote, &format!(":refs/heads/{branch}")],
-    )?;
+    push_retrying(dir, remote, token, &format!("{new}:refs/heads/{base}"))?;
+    push_retrying(dir, remote, token, &format!(":refs/heads/{branch}"))?;
     Ok(new)
+}
+
+/// Pushes `refspec` to `remote`, again after each of [`push::BACKOFF`]'s waits while git's
+/// refusal is transient; the last such refusal names [`TRANSIENT_PUSH`].
+fn push_retrying(dir: &Path, remote: &str, token: &str, refspec: &str) -> Result<(), Error> {
+    let mut waits = push::BACKOFF.iter();
+    loop {
+        match git(dir, remote, token, &["push", "-q", remote, refspec]) {
+            Ok(_) => return Ok(()),
+            Err(Error::Git { message, .. }) if push::transient(&message) => match waits.next() {
+                Some(&s) => std::thread::sleep(Duration::from_secs(s)),
+                None => {
+                    return Err(Error::Git {
+                        args: "push".into(),
+                        message: format!(
+                            "{refspec} {TRANSIENT_PUSH} {} times: {message}",
+                            push::BACKOFF.len() + 1
+                        ),
+                    });
+                }
+            },
+            Err(e) => return Err(e),
+        }
+    }
 }
 
 /// Deletes `refname` from `remote` from a new repository at `dir`; a ref already gone is no

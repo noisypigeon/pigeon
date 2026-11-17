@@ -1638,3 +1638,49 @@ fn a_fronted_change_whose_head_failed_returns_to_the_front_once() {
     assert!(q.returning.is_empty(), "no second kept place");
     assert_eq!(ask(&q, &asked("y", 3), 500), Behind(2));
 }
+
+#[test]
+fn a_busy_or_dropped_push_is_transient() {
+    for e in [
+        "remote: artifacts_git_receive_pack_busy\nerror: failed to push some refs",
+        "error: RPC failed; HTTP 502 curl 22 The requested URL returned error: 502",
+        "fatal: unable to access 'https://x/': The requested URL returned error: 503",
+        "error: RPC failed; HTTP 429",
+        "error: RPC failed; HTTP 504",
+        "send-pack: unexpected disconnect while reading sideband packet",
+        "fatal: unable to access 'https://x/': Recv failure: Connection reset by peer",
+        "fatal: early EOF",
+        " ! [remote rejected] main -> main (artifacts_git_receive_pack_busy)",
+    ] {
+        assert!(push::transient(e), "{e}");
+    }
+}
+
+#[test]
+fn a_push_refused_for_good_is_not_transient() {
+    for e in [
+        " ! [rejected]        main -> main (fetch first)",
+        " ! [rejected]        main -> main (non-fast-forward)",
+        "error: RPC failed; HTTP 502\n ! [rejected] main -> main (fetch first)",
+        "main has moved past change/9-x's base; rebase onto main and push",
+        "remote: Permission to x denied\nfatal: HTTP 403",
+        "",
+    ] {
+        assert!(!push::transient(e), "{e}");
+    }
+}
+
+#[test]
+fn a_merge_push_refused_for_now_merges_again_without_a_restack() {
+    let (c, _) = step(&approved(), merge()).expect("merges");
+    let refused = Event::MergeFailed {
+        sha: A.into(),
+        reason: format!("git push: x:refs/heads/main {TRANSIENT_PUSH} 5 times: busy"),
+    };
+    let (c, effects) = step(&c, refused).expect("the refusal applies");
+    assert_eq!(effects, vec![Effect::Start(MERGE.into())]);
+    assert_eq!(status(&c, MERGE), Some(JobStatus::Queued));
+    assert_eq!(status(&c, RESTACK), None);
+    assert_eq!((c.state, c.carried.is_none()), (State::Approved, true));
+    assert!(queue::holds_turn(&c));
+}

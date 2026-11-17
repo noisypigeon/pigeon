@@ -25,6 +25,10 @@ pub const MIRROR: &str = "mirror";
 /// concurrent-sessions ADR's 2026-11-15 amendment.
 pub const STALE_BASE: &str = "has moved past";
 
+/// What the merge job's refusal says when its push was refused for now on every try; see the
+/// concurrent-sessions ADR's 2026-11-11 and 2026-11-15 amendments.
+pub const TRANSIENT_PUSH: &str = "was refused for now";
+
 /// Where a change is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]

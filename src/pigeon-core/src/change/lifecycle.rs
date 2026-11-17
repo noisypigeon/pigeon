@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 
 use super::types::{
     Approval, BOUND, Change, Effect, Event, Job, JobStatus, MERGE, RESTACK, Refusal, STALE_BASE,
-    State, is_sha, refuse,
+    State, TRANSIENT_PUSH, is_sha, refuse,
 };
 
 /// A transition's answer: the next change and what the shell must do, or why it was refused.
@@ -112,20 +112,7 @@ impl Change {
                 Ok((self, Vec::new()))
             }
             Event::Merged { sha, commit } => self.merged(&sha, commit),
-            Event::MergeFailed { sha, reason } => {
-                if !self.on_head(&sha) || self.state != State::Approved {
-                    return Ok((self, Vec::new()));
-                }
-                self = self.set_status(MERGE, JobStatus::Failed);
-                // Behind, or refused because `main` moved past its base, it restacks and merges
-                // again under its approval; see the concurrent-sessions ADR's 2026-11-15 amendment.
-                let stale = self.behind.is_some() || reason.contains(STALE_BASE);
-                self.violations = vec![reason];
-                match self.approval.as_ref().map(|a| a.by.clone()) {
-                    Some(by) if stale => Ok(self.restack_for_merge(&by)),
-                    _ => Ok((self, Vec::new())),
-                }
-            }
+            Event::MergeFailed { sha, reason } => Ok(self.merge_failed(&sha, reason)),
             Event::Close => {
                 if self.state == State::Merged {
                     return refuse(format!("{} is merged", self.branch()));
@@ -327,6 +314,25 @@ impl Change {
         let (mut c, effects) = self.cancel_open();
         c.state = State::Merged;
         Ok((c, effects))
+    }
+
+    /// A merge job that failed on head `sha` for `reason`.
+    fn merge_failed(mut self, sha: &str, reason: String) -> (Change, Vec<Effect>) {
+        if !self.on_head(sha) || self.state != State::Approved {
+            return (self, Vec::new());
+        }
+        self = self.set_status(MERGE, JobStatus::Failed);
+        // Behind, or refused because `main` moved past its base, it restacks and merges
+        // again under its approval; see the concurrent-sessions ADR's 2026-11-15 amendment.
+        let stale = self.behind.is_some() || reason.contains(STALE_BASE);
+        let transient = reason.contains(TRANSIENT_PUSH);
+        self.violations = vec![reason];
+        match self.approval.as_ref().map(|a| a.by.clone()) {
+            Some(by) if stale => self.restack_for_merge(&by),
+            // A push refused for now merges again, with no restack: `main` hasn't moved.
+            Some(by) if transient => self.start_merge_or_drop(&by),
+            _ => (self, Vec::new()),
+        }
     }
 
     /// It, with every open job cancelled, and the effect that stops them.

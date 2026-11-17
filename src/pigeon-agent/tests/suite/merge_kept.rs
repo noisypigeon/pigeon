@@ -8,6 +8,7 @@ use agent::core::approval::tiers::{Tier, Tiered, Tiers};
 use agent::core::change::queue::{HOLD, MergeQueue, PROTECT, Queued};
 use agent::core::change::{
     Change, Check, Effect, Event, GATE, MERGE, RESTACK, Relation, Restacked, STALE_BASE, State,
+    TRANSIENT_PUSH,
 };
 use step::{Apply, Queue};
 
@@ -396,6 +397,44 @@ fn a_merge_refused_for_another_reason_gives_its_turn_back() {
     };
     c.apply(refused.clone()).expect("refused");
     assert_eq!(control::merge_ended(&refused, &c), Some(None));
+}
+
+#[test]
+fn a_merge_push_refused_for_now_merges_again_and_keeps_its_turn() {
+    // !842's merge job: its push to main met `artifacts_git_receive_pack_busy` on every try.
+    let mut c = approved(842);
+    gated(&mut c, A);
+    c.apply(Event::Started {
+        job: MERGE.into(),
+        sha: A.into(),
+    })
+    .expect("merge started");
+    let refused = Event::MergeFailed {
+        sha: A.into(),
+        reason: format!(
+            "git push: {C}:refs/heads/main {TRANSIENT_PUSH} 5 times: remote: artifacts_git_receive_pack_busy"
+        ),
+    };
+    let effects = c.apply(refused.clone()).expect("refused");
+    assert_eq!(
+        effects,
+        [Effect::Start(MERGE.into())],
+        "no gate, no restack"
+    );
+    assert!(agent::core::change::queue::holds_turn(&c));
+    assert_eq!(control::merge_ended(&refused, &c), None, "the turn is kept");
+    c.apply(Event::Started {
+        job: MERGE.into(),
+        sha: A.into(),
+    })
+    .expect("merge started again");
+    let merged = Event::Merged {
+        sha: A.into(),
+        commit: Some(MAIN.into()),
+    };
+    c.apply(merged.clone()).expect("merged");
+    assert_eq!(c.state, State::Merged);
+    assert_eq!(control::merge_ended(&merged, &c), Some(Some(MAIN.into())));
 }
 
 #[test]

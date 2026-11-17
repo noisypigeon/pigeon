@@ -1006,8 +1006,8 @@ pub fn next_number(instance: &str, repo: &str, floor: u32) -> Statement {
 pub fn merge_ended(event: &Event, change: &Change) -> Option<Option<String>> {
     match event {
         Event::Merged { commit, .. } => Some(commit.clone()),
-        // A refusal that restacks to merge again keeps the turn.
-        Event::MergeFailed { .. } if change.merge_after.is_some() => None,
+        // A refusal that restacks or merges again keeps the turn.
+        Event::MergeFailed { .. } if changes::queue::holds_turn(change) => None,
         Event::MergeFailed { .. } => Some(None),
         Event::Lost { job, .. } | Event::StartFailed { job, .. }
             if job == MERGE
