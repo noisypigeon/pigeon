@@ -1,0 +1,43 @@
+# Provider MCP servers and the direct calls exempt from them; see .claude/decisions/2026-11-16-security-provider-calls-mcp-broker.md.
+servers: {}
+exempt:
+  - id: git
+    what: git smart HTTP to the GitHub mirror and Artifacts
+    why: a protocol moving bytes, with a token minted per job
+    evidence: [src/pigeon-agent/src/worker/gitdoor.rs]
+  - id: credential-plane
+    what: Cloudflare token mint, verify and revoke, and Worker secret puts
+    why: the broker credentials its own calls with these
+    evidence: [src/pigeon-agent/src/worker/minting.rs, src/pigeon-agent/src/worker/platform.rs]
+  - id: engines
+    what: tofu and wrangler, for Cloudflare, DigitalOcean, Scaleway and Backblaze
+    why: the deploy path CLAUDE.md requires, with minted tokens
+    evidence: [catalog/cloudflare/capabilities.yaml, catalog/digitalocean/capabilities.yaml, catalog/scaleway/capabilities.yaml, catalog/backblaze/capabilities.yaml]
+  - id: r2-s3
+    what: R2 over S3 for state, sites and the provider mirror
+    why: a storage protocol moving bytes
+    evidence: [src/pigeon-core/src/sites/publish.rs]
+  - id: registry-push
+    what: Container image pushes to registry.cloudflare.com
+    why: a registry protocol moving bytes
+    evidence: [src/pigeon-agent/src/workers]
+  - id: build-upload
+    what: App Store Connect Build Uploads parts from the Buildkite agent
+    why: an upload protocol moving bytes, with a JWT from the Worker's grant
+    evidence: [tooling/ci/buildkite/ios-sign.sh]
+  - id: push-delivery
+    what: APNs and Web Push
+    why: delivery protocols with no MCP form
+    evidence: [src/pigeon-agent/src/worker/apns.rs, src/pigeon-agent/src/worker/push.rs]
+  - id: verifiers
+    what: the Access and Buildkite agent JWKS
+    why: public keys fetched to verify, carrying no authority
+    evidence: [src/pigeon-agent/src/worker/apple.rs]
+  - id: build-inputs
+    what: pinned tarballs, npm, rustup and crates downloads
+    why: digest-pinned inputs to a build
+    evidence: [Dockerfile, .github/workflows/ci.yml]
+  - id: ai-gateway-messages
+    what: POST /v1/messages through the capacity pool's route to the AI Gateway
+    why: inference traffic, metered by the pool ledger
+    evidence: [src/pigeon-core/src/pool]

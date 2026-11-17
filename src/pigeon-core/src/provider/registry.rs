@@ -5,6 +5,9 @@ use std::collections::BTreeMap;
 use regex::Regex;
 use serde::Deserialize;
 
+/// The committed `.config/providers/mcp.yaml`.
+pub const CONFIG: &str = include_str!("../../../../.config/providers/mcp.yaml");
+
 /// The registry: every server, and what is exempt from the broker.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -235,6 +238,35 @@ mod tests {
     use super::*;
 
     const A: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+
+    #[test]
+    fn the_committed_registry_parses() {
+        let r = parse(CONFIG).expect("committed registry");
+        assert!(r.servers.is_empty());
+        assert_eq!(r.exempt.len(), 10);
+    }
+
+    #[test]
+    fn every_exemption_names_code_evidence() {
+        let r = parse(CONFIG).expect("committed registry");
+        let roots = [
+            "src/",
+            "tooling/",
+            "infra/",
+            "catalog/",
+            "Dockerfile",
+            ".github/",
+        ];
+        for e in &r.exempt {
+            for path in &e.evidence {
+                assert!(
+                    roots.iter().any(|root| path.starts_with(root)),
+                    "{}: {path}",
+                    e.id
+                );
+            }
+        }
+    }
 
     #[test]
     fn a_registry_parses() {
