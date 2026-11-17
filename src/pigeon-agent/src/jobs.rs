@@ -895,7 +895,23 @@ fn tiers(
                 .any(|g| crate::core::approval::tiers::matches(g, f))
         })
         .any(|f| adds_secret(dir, &spec.base, f));
+    let on = |globs: &[String], f: &str| {
+        globs
+            .iter()
+            .any(|g| crate::core::approval::tiers::matches(g, f))
+    };
+    let secret_material = files.iter().filter(|f| on(&rules.secret_code, f)).any(|f| {
+        crate::checks::ci::secret_material(dir, &spec.base, &spec.sha, f, &rules.secret_markers)
+    });
+    let gate = rules.gate.clone().unwrap_or_default();
+    let gated: Vec<&String> = files.iter().filter(|f| on(&gate, f)).collect();
+    let comments_only = !gated.is_empty()
+        && gated
+            .iter()
+            .all(|f| crate::checks::ci::comments_only(dir, &spec.base, &spec.sha, f));
     let facts = crate::core::approval::tiers::Facts {
+        secret_material,
+        comments_only,
         deploys_worker: crate::checks::scope::workers(dir, Some(files))
             .map_or(true, |w| !w.is_empty()),
         appends_only,

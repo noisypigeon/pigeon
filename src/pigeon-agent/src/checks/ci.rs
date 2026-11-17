@@ -312,6 +312,111 @@ pub fn appends_only(dir: &Path, base: &str, sha: &str, path: &str) -> bool {
             .is_ok_and(|n| n.split_whitespace().nth(1) == Some("0"))
 }
 
+/// Whether `sha` deletes `path` from the fetched `base`, or adds or removes a line of it holding
+/// one of `markers`, case-insensitively; true when git can't tell.
+#[must_use]
+pub fn secret_material(dir: &Path, base: &str, sha: &str, path: &str, markers: &[String]) -> bool {
+    let range = format!("refs/remotes/origin/{base}...{sha}");
+    let Ok(diff) = git(dir, "", "", &["diff", "--unified=0", &range, "--", path]) else {
+        return true;
+    };
+    diff.contains("\ndeleted file mode")
+        || diff.lines().any(|l| {
+            let changed = (l.starts_with('+') && !l.starts_with("+++"))
+                || (l.starts_with('-') && !l.starts_with("---"));
+            let l = l.to_lowercase();
+            changed && markers.iter().any(|m| l.contains(&m.to_lowercase()))
+        })
+}
+
+/// Whether `path` on `sha` differs from the fetched `base` only in comments; see
+/// `.claude/decisions/2026-11-17-security-auto-covers-routine-owner-asks.md` §4.
+#[must_use]
+pub fn comments_only(dir: &Path, base: &str, sha: &str, path: &str) -> bool {
+    let show = |rev: &str| git(dir, "", "", &["show", &format!("{rev}:{path}")]).ok();
+    let (Some(old), Some(new)) = (show(&format!("refs/remotes/origin/{base}")), show(sha)) else {
+        return false;
+    };
+    uncommented(path, &old).is_some_and(|o| Some(o) == uncommented(path, &new))
+}
+
+/// `text` without its comments, as tokens: Rust through proc-macro2's lexer, doc attributes
+/// dropped, and YAML without `#` comments; none for any other file, or text that doesn't lex.
+#[must_use]
+pub fn uncommented(path: &str, text: &str) -> Option<Vec<String>> {
+    if Path::new(path).extension().is_some_and(|e| e == "rs") {
+        let stream: proc_macro2::TokenStream = text.parse().ok()?;
+        let mut out = Vec::new();
+        rust_tokens(stream, &mut out);
+        return Some(out);
+    }
+    if !Path::new(path)
+        .extension()
+        .is_some_and(|e| e == "yaml" || e == "yml")
+    {
+        return None;
+    }
+    let mut out = Vec::new();
+    for line in text.lines() {
+        let t = line.trim_end();
+        if t.ends_with('|') || t.ends_with('>') || t.ends_with("|-") || t.ends_with(">-") {
+            return None;
+        }
+        if t.trim_start().starts_with('#') {
+            continue;
+        }
+        let (mut quote, mut cut) = (None, t.len());
+        for (i, c) in t.char_indices() {
+            match (quote, c) {
+                (None, '\'' | '"') => quote = Some(c),
+                (Some(q), _) if c == q => quote = None,
+                (None, '#') if i == 0 || t[..i].ends_with(' ') => {
+                    cut = i;
+                    break;
+                }
+                _ => {}
+            }
+        }
+        out.push(t[..cut].trim_end().to_string());
+    }
+    Some(out)
+}
+
+fn rust_tokens(stream: proc_macro2::TokenStream, out: &mut Vec<String>) {
+    use proc_macro2::TokenTree;
+    let mut it = stream.into_iter().peekable();
+    while let Some(t) = it.next() {
+        if let TokenTree::Punct(p) = &t
+            && p.as_char() == '#'
+        {
+            let bang = matches!(it.peek(), Some(TokenTree::Punct(b)) if b.as_char() == '!');
+            let mut ahead = it.clone();
+            if bang {
+                ahead.next();
+            }
+            if let Some(TokenTree::Group(g)) = ahead.peek()
+                && g.delimiter() == proc_macro2::Delimiter::Bracket
+                && g.stream()
+                    .into_iter()
+                    .next()
+                    .is_some_and(|f| f.to_string() == "doc")
+            {
+                ahead.next();
+                it = ahead;
+                continue;
+            }
+        }
+        match t {
+            TokenTree::Group(g) => {
+                out.push(format!("{:?}(", g.delimiter()));
+                rust_tokens(g.stream(), out);
+                out.push(")".into());
+            }
+            other => out.push(other.to_string()),
+        }
+    }
+}
+
 /// Runs `argv` in `dir` for at most `timeout`: whether it passed, and its output, stdout then
 /// stderr, with `secret` cut out.
 #[must_use]

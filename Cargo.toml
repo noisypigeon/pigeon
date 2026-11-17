@@ -37,6 +37,7 @@ p256 = { version = "0.13.2", default-features = false, features = ["ecdsa", "ari
 include_dir = "0.7.4"
 httparse = "1.10.1"
 predicates = "3.1.4"
+proc-macro2 = { version = "1.0.107", default-features = false }
 rcgen = { version = "0.14.10", default-features = false, features = ["crypto", "ring", "pem"] }
 regex = "1.13.1"
 rusqlite = { version = "0.37.0", features = ["bundled"] }

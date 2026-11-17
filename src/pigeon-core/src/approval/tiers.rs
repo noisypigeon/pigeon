@@ -78,6 +78,13 @@ pub struct Rules {
     /// standing Auto ADR's 2026-11-16 amendment.
     #[serde(default)]
     pub gate: Option<Vec<String>>,
+    /// Files that read a secret but hold none: the owner's only when a diff line holds a marker;
+    /// see `.claude/decisions/2026-11-17-security-auto-covers-routine-owner-asks.md` §3.
+    #[serde(default)]
+    pub secret_code: Vec<String>,
+    /// The case-insensitive substrings that make a `secret_code` diff line secret material.
+    #[serde(default)]
+    pub secret_markers: Vec<String>,
 }
 
 /// The suffix of a guarded or eviction merge rule that Auto covers, because `gate:` is set and
@@ -141,6 +148,10 @@ fn tiered(tier: Tier, rule: impl Into<String>) -> Tiered {
 
 /// What a head's files are, beyond their paths.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "independent facts of one head"
+)]
 pub struct Facts {
     /// Its merge deploys a Worker (`checks::scope::workers`).
     pub deploys_worker: bool,
@@ -148,6 +159,10 @@ pub struct Facts {
     pub appends_only: bool,
     /// A `secret_lists` file names a secret the base's doesn't.
     pub adds_secret: bool,
+    /// A `secret_code` file's diff adds or removes a line holding a marker, or deletes it.
+    pub secret_material: bool,
+    /// Every gate file it touches differs from the base only in comments.
+    pub comments_only: bool,
 }
 
 /// The tiers of a change with `scope` whose head touches `files`.
@@ -156,9 +171,10 @@ pub fn classify(rules: &Rules, scope: &[String], files: &[String], facts: Facts)
     let secret_file = files
         .iter()
         .find(|f| rules.secrets.iter().any(|g| matches(g, f)));
+    let secret_globs = [rules.secrets.as_slice(), &rules.secret_code].concat();
     let secret_scope = scope
         .iter()
-        .find(|s| rules.secrets.iter().any(|g| overlaps(s, g)));
+        .find(|s| secret_globs.iter().any(|g| overlaps(s, g)));
     let eviction_file = files
         .iter()
         .find(|f| rules.eviction.iter().any(|g| matches(g, f)));
@@ -195,6 +211,9 @@ pub fn classify(rules: &Rules, scope: &[String], files: &[String], facts: Facts)
     } else {
         tiered(Tier::Confirm, "routine")
     };
+    let secret_code_file = files
+        .iter()
+        .find(|f| rules.secret_code.iter().any(|g| matches(g, f)));
     let gate_file = rules
         .gate
         .as_ref()
@@ -208,10 +227,18 @@ pub fn classify(rules: &Rules, scope: &[String], files: &[String], facts: Facts)
     };
     let merge = if let Some(f) = secret_file {
         tiered(Tier::Owner, format!("secrets: {f}"))
+    } else if let (Some(f), true) = (secret_code_file, facts.secret_material) {
+        tiered(Tier::Owner, format!("secrets: {f}"))
     } else if facts.adds_secret {
         tiered(Tier::Owner, "adds a secret")
     } else if let Some(f) = gate_file {
-        tiered(Tier::Code, format!("guarded: {f}"))
+        if facts.comments_only {
+            tiered(Tier::Code, covered(format!("guarded: {f} (comments only)")))
+        } else {
+            tiered(Tier::Code, format!("guarded: {f}"))
+        }
+    } else if let Some(f) = secret_code_file {
+        tiered(Tier::Code, covered(format!("guarded: {f}")))
     } else if let Some(f) = eviction_file {
         tiered(Tier::Code, covered(format!("eviction: {f}")))
     } else if let Some(f) = guarded_file {

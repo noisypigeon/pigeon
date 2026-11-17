@@ -1854,6 +1854,7 @@ dependencies = [
  "p256",
  "pigeon-common",
  "pigeon-core",
+ "proc-macro2",
  "rcgen",
  "regex",
  "rusqlite",

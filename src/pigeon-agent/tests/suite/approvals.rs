@@ -23,6 +23,8 @@ const PLAIN: Facts = Facts {
     deploys_worker: false,
     appends_only: false,
     adds_secret: false,
+    secret_material: false,
+    comments_only: false,
 };
 
 #[test]
@@ -84,6 +86,8 @@ fn what_deploys_needs_the_code() {
             deploys_worker: true,
             appends_only: false,
             adds_secret: false,
+            secret_material: false,
+            comments_only: false,
         },
     );
     assert_eq!(worker.merge.tier, Tier::Code);
@@ -106,6 +110,8 @@ fn an_amendment_merges_automatically() {
             deploys_worker: false,
             appends_only: true,
             adds_secret: false,
+            secret_material: false,
+            comments_only: false,
         },
     );
     assert_eq!(tiers.merge.tier, Tier::Auto);
@@ -126,6 +132,8 @@ fn the_rules_and_every_policy_always_need_the_code() {
                 deploys_worker: false,
                 appends_only: true,
                 adds_secret: false,
+                secret_material: false,
+                comments_only: false,
             },
         );
         assert!(tiers.authorize.tier >= Tier::Code, "{file}");
@@ -144,6 +152,8 @@ fn the_approval_core_needs_the_code_as_the_files_it_moved_from_did() {
                 deploys_worker: false,
                 appends_only: false,
                 adds_secret: false,
+                secret_material: false,
+                comments_only: false,
             },
         );
         assert!(tiers.authorize.tier >= Tier::Code, "{file}");
@@ -193,6 +203,8 @@ fn an_operation_needs_the_tier_its_head_was_given_and_code_without_one() {
             deploys_worker: false,
             appends_only: true,
             adds_secret: false,
+            secret_material: false,
+            comments_only: false,
         },
     ));
     assert_eq!(
@@ -268,6 +280,8 @@ fn secrets_and_destruction_need_the_owner_each_time() {
             deploys_worker: true,
             appends_only: false,
             adds_secret: true,
+            secret_material: false,
+            comments_only: false,
         },
     );
     assert_eq!(
@@ -540,4 +554,62 @@ fn the_break_glass_is_the_owners_alone() {
         "the change's one proof doesn't cover it"
     );
     assert_eq!(by_policy(&c, BREAK_GLASS), None);
+}
+
+#[test]
+fn secret_code_is_the_owners_only_with_secret_material_and_a_comment_only_gate_diff_is_covered() {
+    // !966 and !948; see the 2026-11-17 Auto ADR §3 and §4.
+    let mut r = rules();
+    r.secrets
+        .retain(|g| g != "src/pigeon-agent/src/worker/provider.rs");
+    r.secret_code = vec!["src/pigeon-agent/src/worker/provider.rs".into()];
+    let broker = paths(&["src/pigeon-agent/src/worker/provider.rs"]);
+    let tiers = |files: &[String], facts| classify(&r, &paths(&["src/**"]), files, facts).merge;
+    let plain = tiers(&broker, PLAIN);
+    assert!(plain.rule.ends_with(AUTO_COVERS), "{plain:?}");
+    let marked = tiers(
+        &broker,
+        Facts {
+            secret_material: true,
+            ..PLAIN
+        },
+    );
+    assert_eq!(marked.tier, Tier::Owner, "{marked:?}");
+    let gate = paths(&["src/pigeon-core/src/approval/tiers.rs"]);
+    let code = tiers(&gate, PLAIN);
+    assert!(!code.rule.ends_with(AUTO_COVERS), "{code:?}");
+    let comments = tiers(
+        &gate,
+        Facts {
+            comments_only: true,
+            ..PLAIN
+        },
+    );
+    assert!(comments.rule.ends_with(AUTO_COVERS), "{comments:?}");
+}
+
+#[test]
+fn only_comments_and_doc_comments_leave_the_tokens_alone() {
+    use agent::checks::ci::uncommented;
+    let rs = |t: &str| uncommented("a.rs", t);
+    let base = rs("/// One.\nfn f() -> u8 { 1 } // x").expect("lexes");
+    assert_eq!(
+        rs("/// Two.\n//! Mod.\nfn f() -> u8 { /* y */ 1 }"),
+        Some(base.clone())
+    );
+    assert_ne!(
+        rs("/// One.\nfn f() -> u8 { 2 }"),
+        Some(base.clone()),
+        "a token"
+    );
+    assert_ne!(
+        rs("fn f() -> u8 { \"// 1\" }"),
+        Some(base),
+        "a string isn't a comment"
+    );
+    let yaml = |t: &str| uncommented("a.yaml", t);
+    assert_eq!(yaml("# a\nk: v # b\n"), yaml("k: v\n"));
+    assert_ne!(yaml("k: 'v # b'\n"), yaml("k: 'v'\n"), "quoted");
+    assert_eq!(yaml("k: |\n  # x\n"), None, "a block scalar");
+    assert_eq!(uncommented("a.js", "x"), None);
 }
