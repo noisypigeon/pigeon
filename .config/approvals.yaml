@@ -35,6 +35,14 @@ gate:
   - src/pigeon-agent/src/worker/mandates.rs
   - src/pigeon-agent/src/worker/passkeys.rs
   - src/pigeon-agent/src/worker/passkey.js
+  # The credential plane: grant redemption, minting, the grants ledger and app devices.
+  - .config/grants.yaml
+  - src/pigeon-core/src/minting.rs
+  - src/pigeon-core/src/ledger.rs
+  - src/pigeon-core/src/app/devices.rs
+  - src/pigeon-agent/src/worker/change.rs
+  - src/pigeon-agent/src/worker/minting.rs
+  - src/pigeon-agent/src/worker/devices.rs
 # The code without a mandate that may deploy; every Worker's inputs count too.
 deploying:
   - infra/**
