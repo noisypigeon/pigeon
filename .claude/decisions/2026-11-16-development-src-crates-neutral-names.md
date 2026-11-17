@@ -757,4 +757,13 @@ a generated change closes, which !736 neither relies on nor changes.
   release unit, `ship.rs`'s job build and the Dockerfile's comment. It touches
   neither `change/queue.rs` nor `macos/job.rs`, which that ADR governs. The two
   changes met only through the review rule's scope.
+
+### 2026-11-17: Review of !886 against !862: they agree
+
+- !862 changed no code. It amends
+  [`2026-11-15-development-capacity-pools-hard-spend-cap.md`](2026-11-15-development-capacity-pools-hard-spend-cap.md)
+  with step 3's brief (b67), split in three changes.
+- !886 (the sweep's A1) touches one of the paths that ADR governs,
+  `jobs.rs`, and there only renames a log line's prefix, `sentinel:` to
+  `eviction:`. It touches neither `brief/mod.rs` nor `insights/mod.rs`.
 - Nothing either ADR decides changes.
