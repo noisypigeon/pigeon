@@ -457,3 +457,18 @@ step 4 (registry file).
   macOS gate.
 
 Neither ADR changes.
+### 2026-11-17: What .config/approvals.yaml guards for the broker
+
+§3 makes the registry guarded. `.config/approvals.yaml` gains three paths:
+
+- **`guarded`:**
+  - `.config/providers/**`, the registry: which servers and tools may be
+    called, and with what credential kind;
+  - `src/pigeon-core/src/provider/**`, the verdict and the registry parser
+    that decide what leaves.
+
+  Neither joins `gate`, so an Auto window may cover them, as it does other
+  guarded paths.
+- **`secrets`:** `src/pigeon-agent/src/worker/provider.rs`, which reads a
+  provider credential per call (§4, step 5c). Every change to it is the
+  owner's, as for `worker/platform.rs` and `worker/apple.rs`.
