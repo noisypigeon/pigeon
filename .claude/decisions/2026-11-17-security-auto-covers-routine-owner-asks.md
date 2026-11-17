@@ -195,3 +195,14 @@ carries them out itself, because executors don't touch guarded paths.
    `secret_markers:` and moves the files listed in §3, after step 3 deploys,
    and `.claude/settings.json` gets §5's edit.
 5. `owner_ask`: may a capability rename leave `secrets:`?
+
+## Amendments
+
+### 2026-11-17: Reviewed against the neutral-names ADR (!982); they agree
+
+!982, step 12 of
+[`2026-11-16-development-src-crates-neutral-names.md`](2026-11-16-development-src-crates-neutral-names.md),
+renames the judge's own tests and comments, and the layout policy's
+description, to the neutral names. It touches none of this ADR's `Governs`
+paths and changes no tier, window, queue or check: what Auto covers, and what
+stays on the passkey, are as above. Nothing in this ADR changes.
