@@ -488,5 +488,13 @@ Neither ADR changes.
   AI Gateway planner names.
 - **What it leaves alone.** !853 touches none of `jobs.rs`, `brief/mod.rs`,
   `insights/mod.rs` or `pool/**`.
+### 2026-11-17: Review of !853 against the capacity pools' !862: they agree
+
+[`2026-11-15-development-capacity-pools-hard-spend-cap.md`](2026-11-15-development-capacity-pools-hard-spend-cap.md)'s !862 governs `jobs.rs`, `brief/mod.rs` and
+`insights/mod.rs`. !853, this ADR's step 4 (registry file), adds only
+`.config/providers/mcp.yaml` and a parse test, and touches none of them.
+
+Its `ai-gateway-messages` exemption keeps model traffic on the pool's
+route, outside `provider.call`, as the pool ADR has it.
 
 Neither ADR changes.
