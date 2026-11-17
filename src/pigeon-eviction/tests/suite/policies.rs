@@ -302,7 +302,7 @@ fn changelog_rules() {
 #[test]
 fn every_policy_is_valid() {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../.config/policies");
-    assert_eq!(eviction::load_dir(&dir).expect("loads").len(), 21);
+    assert_eq!(eviction::load_dir(&dir).expect("loads").len(), 22);
 }
 
 fn layout_root(skip: &[&str], extra: &[&str]) -> TempDir {
@@ -749,6 +749,45 @@ fn no_python_fails_python_files_shebangs_and_invocations() {
         ("src/a.rs", spawn.as_str()),
     ] {
         let v = violations("no-python", tree_root(&[(path, content)]).path(), None);
+        assert!(v.iter().any(|m| m.contains(path)), "{path}: {v:#?}");
+    }
+}
+
+#[test]
+fn names_forbids_the_old_names_but_the_stored_ones_and_history() {
+    // Spelled apart, so this file doesn't name them; see names.yaml.
+    let infra = concat!("co", "bot");
+    let agent = concat!("back", "plane");
+    let judge = concat!("senti", "nel");
+    let token = format!("{}_TOKEN", agent.to_uppercase());
+    let adr = format!("2026-01-01-x-{judge}.md");
+    let stored = format!("let k = \"{token}\";\n");
+    let cited = format!("see {adr}\n");
+    let state = format!("noisypigeon/pigeon-{infra}-state\n");
+    let previous = format!("units:\n  - name: x\n    previous: {judge}\n");
+    let history = format!("- {agent} v0.1.0\n");
+    let ok = [
+        ("src/a.rs", stored.as_str()),
+        ("docs/a.md", cited.as_str()),
+        ("tooling/a.sh", state.as_str()),
+        (".config/releases.yaml", previous.as_str()),
+        ("CHANGELOG.md", history.as_str()),
+        (".claude/decisions/a.md", history.as_str()),
+    ];
+    passes(&violations("names", tree_root(&ok).path(), None));
+    let word = format!("// {infra}\n");
+    let beside = format!("let k = \"{token}\"; // {agent}\n");
+    let run_on = format!("noisypigeon/pigeon-{infra}-states\n");
+    let unit = format!("units:\n  - name: {infra}\n");
+    let dir = format!("tooling/{judge}/a.sh");
+    for (path, content) in [
+        ("src/a.rs", word.as_str()),
+        ("src/a.rs", beside.as_str()),
+        ("tooling/a.sh", run_on.as_str()),
+        (".config/releases.yaml", unit.as_str()),
+        (dir.as_str(), ""),
+    ] {
+        let v = violations("names", tree_root(&[(path, content)]).path(), None);
         assert!(v.iter().any(|m| m.contains(path)), "{path}: {v:#?}");
     }
 }

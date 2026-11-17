@@ -1439,6 +1439,7 @@ pigeon-eviction test suite policies::macos_holds_the_order_start_time_and_caps_o
 pigeon-eviction test suite policies::migrations_only_expand
 pigeon-eviction test suite policies::mirror_allows_only_a_dispatched_read_only_pinned_ci_yml
 pigeon-eviction test suite policies::mirror_forbids_github_workflows
+pigeon-eviction test suite policies::names_forbids_the_old_names_but_the_stored_ones_and_history
 pigeon-eviction test suite policies::no_python_fails_python_files_shebangs_and_invocations
 pigeon-eviction test suite policies::pull_request
 pigeon-eviction test suite policies::pull_request_skipped_without_one

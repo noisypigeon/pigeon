@@ -1,0 +1,57 @@
+description: "The old names (cobot, backplane, sentinel, gantry) are gone from paths and text, but for the stored names and history the exceptions list, per 2026-11-16-development-src-crates-neutral-names.md, step 12."
+target: tree
+rules:
+  - find:
+      match: '(?i)cobot|backplane|sentinel|gantry'
+      allow_under:
+        # ADRs keep their history; neutral-names ADR step 12.
+        - .claude/decisions/
+      ignore: ['^\.git$', '(^|/)target$', '(^|/)\.pigeon$', '(^|/)node_modules$']
+  - find:
+      match: '.'
+      allow_under:
+        # History: ADRs, the changelog and the ledger's moves; neutral-names ADR §7.
+        - .claude/decisions/
+        - CHANGELOG.md
+        - tooling/ci/tests.moves
+        # This policy names what it forbids.
+        - .config/policies/names.yaml
+        # Ruled line by line below.
+        - .config/releases.yaml
+        - src/pigeon-agent/src/infra/tofu.rs
+        - src/pigeon-core/src/approval/tiers.rs
+        # Stored state the tests replay; neutral-names ADR §5.
+        - src/pigeon-agent/tests/state/
+        # The owner's 2015 post, where "Sentinels" is a personality type.
+        - workloads/noisypigeon.com/blog/site/posts/2015-02-27-how-i-get-work-as-a-high-school-dropout.md
+        # Tests that an old spelling is refused; neutral-names ADR §3, §5.
+        - src/pigeon-harness/tests/suite/aliases.rs
+        - src/pigeon-harness/tests/suite/cli.rs
+        - src/pigeon-harness/tests/suite/dev.rs
+        - src/pigeon-agent/src/infra/secrets.rs
+        - src/pigeon-core/src/names.rs
+        - src/pigeon-core/src/bench/allow.rs
+        - src/pigeon-core/src/release/tests.rs
+        # Tests that a stored `sentinel:` label still counts as the judge's; neutral-names ADR §5.
+        - src/pigeon-core/src/approval/tests.rs
+        - src/pigeon-agent/tests/suite/briefs.rs
+      forbid_content: '(?i)cobot|backplane|sentinel|gantry'
+      # ADR file names, and §5's stored names: the Worker secret, the state repository, the
+      # judge's stored build name and wire key, the sites' types file and the state tombstone.
+      except_content: '\b[0-9]{4}-[0-9]{2}-[0-9]{2}-[a-z0-9-]+\.md\b|\bBACKPLANE_TOKEN\b|\bnoisypigeon/pigeon-cobot-state\b|STORED_JUDGE: &str = "pigeon-sentinel";|\bsentinel_sha256\b|\.cobot/types\.json\b|\bcobot:removed\b'
+      ignore: ['^\.git$', '(^|/)target$', '(^|/)\.pigeon$', '(^|/)node_modules$']
+  - find:
+      # A unit's `previous:` name and the retired crates' changelogs; neutral-names ADR §7.
+      match: '^\.config/releases\.yaml$'
+      forbid_content: '(?i)cobot|backplane|sentinel|gantry'
+      except_content: '^ +previous: (sentinel|backplane)$|^ +- src/pigeon-cli/crates/(backplane|cobot|gantry|sentinel)/CHANGELOG\.md$|\b[0-9]{4}-[0-9]{2}-[0-9]{2}-[a-z0-9-]+\.md\b'
+  - find:
+      # tofu's stored `cobot` key provider, which encrypted state already names; neutral-names ADR §5.
+      match: '^src/pigeon-agent/src/infra/tofu\.rs$'
+      forbid_content: '(?i)cobot|backplane|sentinel|gantry'
+      except_content: '\\"(pbkdf2|aes_gcm)\\" \\"cobot\\"|(key_provider\.pbkdf2|method\.aes_gcm)\.cobot\b|\b[0-9]{4}-[0-9]{2}-[0-9]{2}-[a-z0-9-]+\.md\b'
+  - find:
+      # is_judge_rule reads a stored `sentinel:` label; neutral-names ADR §5.
+      match: '^src/pigeon-core/src/approval/tiers\.rs$'
+      forbid_content: '(?i)cobot|backplane|sentinel|gantry'
+      except_content: 'rule\.starts_with\("sentinel"\)|`sentinel` on a head classified before step 12|\b[0-9]{4}-[0-9]{2}-[0-9]{2}-[a-z0-9-]+\.md\b'
