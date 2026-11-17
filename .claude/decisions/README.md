@@ -53,6 +53,7 @@ What changed, and the steps to execute it.
 - The only H2s are the title, `## Context`, `## Implementation plan.` and an
   optional `## Amendments`, in that order. Use `###` inside them.
 - Leave out `## Amendments` until the first amendment. Each entry is
-  `### YYYY-MM-DD: <summary>`, in date order, no earlier than `Date`.
+  `### YYYY-MM-DD: <summary>`, dated the day it is written, no earlier than
+  `Date`, in the order the entries merge.
 - A merged ADR's text is never rewritten. Amend it by appending an entry, or
   supersede it with a new ADR that cites it by filename.

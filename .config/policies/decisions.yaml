@@ -29,4 +29,5 @@ rules:
       heading: 3
       matches: '^(?<when>[0-9]{4}-[0-9]{2}-[0-9]{2}): \S'
       min: 1
-      order: { by: when, direction: ascending, from: '{date}' }
+      # Merge order, none before Date; see 2026-11-02-development-adr-driven-lifecycle.md's 2026-11-17 amendment.
+      order: { by: when, from: '{date}' }

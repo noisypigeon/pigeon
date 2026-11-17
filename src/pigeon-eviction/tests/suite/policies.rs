@@ -124,8 +124,8 @@ fn decisions_amendments() {
     let amend = "\n## Amendments\n\n### 2026-01-02: First\n\n#### Detail\n\nText.\n\n### 2026-02-01: Second\n";
     passes(&decisions(GOOD_NAME, &format!("{g}{amend}")));
     for tail in [
-        "\n## Amendments\n\n### 2026-02-01: Later\n\n### 2026-01-05: Earlier\n",
         "\n## Amendments\n\n### 2026-01-01: Too early\n",
+        "\n## Amendments\n\n### 2026-02-01: Later\n\n### 2026-01-01: Too early\n",
         "\n## Amendments\n\n### Second thoughts\n",
         "\n## Amendments\n\n### 2026-01-03:\n",
         "\n## Amendments\n\nNothing.\n",
@@ -140,6 +140,17 @@ fn decisions_amendments() {
             "## Amendments\n\n### 2026-01-03: Early\n\n## Implementation plan.",
         ),
     ));
+}
+
+#[test]
+fn decisions_amendments_land_in_merge_order() {
+    // A review dated before midnight UTC, merged after an entry dated the next day.
+    let merged = "\n## Amendments\n\n### 2026-11-17: Merged first\n\nText.\n";
+    let review = "\n### 2026-11-16: Review !839 against !831\n\nText.\n";
+    let g = adr("2026-11-08", "development", "A sample decision");
+    let name = "2026-11-08-development-a-sample-decision.md";
+    passes(&decisions(name, &format!("{g}{merged}")));
+    passes(&decisions(name, &format!("{g}{merged}{review}")));
 }
 
 #[test]
