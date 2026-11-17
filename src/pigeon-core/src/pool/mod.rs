@@ -5,6 +5,7 @@ pub mod aigateway;
 pub mod anthropic;
 pub mod config;
 pub mod gateway;
+pub mod job;
 pub mod ledger;
 pub mod meter;
 pub mod route;
