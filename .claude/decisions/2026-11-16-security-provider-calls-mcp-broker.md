@@ -472,3 +472,21 @@ Neither ADR changes.
 - **`secrets`:** `src/pigeon-agent/src/worker/provider.rs`, which reads a
   provider credential per call (§4, step 5c). Every change to it is the
   owner's, as for `worker/platform.rs` and `worker/apple.rs`.
+### 2026-11-17: Review of !853 against the capacity pools' step 3 and the AI Gateway ADR (!850): they agree
+
+[`2026-11-15-development-capacity-pools-hard-spend-cap.md`](2026-11-15-development-capacity-pools-hard-spend-cap.md)'s
+!850 rebuilds the pool's step 3 on
+[`2026-11-16-security-ai-gateway-claude-api.md`](2026-11-16-security-ai-gateway-claude-api.md).
+!853 is this ADR's step 4: the registry file.
+
+- **The exemption matches.** !853's `ai-gateway-messages` exemption names
+  `src/pigeon-core/src/pool` as its evidence. That is the same code !850
+  adds to the pool ADR's `Governs`. Both say model traffic stays on the
+  pool's route, outside `provider.call`.
+- **The check matches.** !850's route calls `verdict::admit` (b59) before
+  admission, which is the shared check this ADR's 2026-11-16 answer to the
+  AI Gateway planner names.
+- **What it leaves alone.** !853 touches none of `jobs.rs`, `brief/mod.rs`,
+  `insights/mod.rs` or `pool/**`.
+
+Neither ADR changes.
