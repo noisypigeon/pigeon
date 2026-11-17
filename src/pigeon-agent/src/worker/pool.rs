@@ -242,6 +242,11 @@ impl Pool {
             )
             .await;
         }
+        if left.len() < jobs.len()
+            && let Err(e) = pool_dispatch::reroute(&self.env, &s).await
+        {
+            worker::console_error!("pool {}: routing waiting briefs: {e}", pool.name);
+        }
         Ok(())
     }
 }

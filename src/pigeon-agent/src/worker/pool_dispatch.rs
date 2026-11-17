@@ -142,6 +142,52 @@ pub(super) async fn dispatch(
     }
 }
 
+/// Routes each waiting `runs_on: pool` brief again, oldest first, dispatching under its planner,
+/// until one still waits; see the capacity pools ADR's 2026-11-17 step 6 amendment.
+///
+/// # Errors
+///
+/// When a binding fails.
+pub(super) async fn reroute(env: &Env, s: &Settings) -> Result<()> {
+    let (_, v) = to_instance(env, s, "/tasks/waiting-briefs", &json!({})).await?;
+    let waiting: Vec<(u32, String)> =
+        serde_json::from_value(v["briefs"].clone()).unwrap_or_default();
+    for (task, brief) in waiting {
+        let (_, shown) = to_instance(env, s, "/briefs/show", &json!({ "id": brief })).await?;
+        let draft = shown["revisions"]
+            .as_array()
+            .and_then(|r| r.last())
+            .and_then(|r| serde_json::from_value::<Draft>(r["draft"].clone()).ok());
+        let (Some(draft), Some(planner)) = (draft, shown["planner"].as_str()) else {
+            continue;
+        };
+        if draft.runs_on != route::RunsOn::Pool {
+            continue;
+        }
+        let said = match route(env, s, &draft).await? {
+            Route::Pool(pool) => {
+                match dispatch(env, s, &brief, &draft, u64::from(task), planner, &pool).await? {
+                    Ok(d) => format!("{brief} dispatched to pool {pool}: {d}"),
+                    Err(why) => format!("{brief} wasn't dispatched: {why}"),
+                }
+            }
+            Route::Wait(_) => break,
+            Route::Session(why) => format!("{brief} goes to a session: {why}"),
+        };
+        super::events::append(
+            env,
+            s,
+            "brief.routed",
+            None,
+            Some(planner.to_string()),
+            &said,
+            false,
+        )
+        .await?;
+    }
+    Ok(())
+}
+
 /// The steps after the label's ticket: claim, proposal, the task opened, the job started.
 #[allow(clippy::too_many_arguments)]
 async fn open(

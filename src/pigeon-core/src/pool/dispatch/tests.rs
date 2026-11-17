@@ -280,3 +280,35 @@ fn a_lost_job_escalates() {
         (esc("the pool task's job was lost", ""), "failed".into())
     );
 }
+
+#[test]
+fn only_open_unclaimed_brief_tasks_wait() {
+    let task = |id: u32, kind: &str, brief: Option<&str>| crate::tasks::Task {
+        id,
+        kind: kind.into(),
+        change: 0,
+        parent: None,
+        session: None,
+        note: String::new(),
+        created: NOW,
+        claimed_by: None,
+        done: false,
+        brief: brief.map(Into::into),
+        model: Some(Class::Haiku),
+    };
+    let mut claimed = task(1, "brief", Some("b1"));
+    claimed.claimed_by = Some("s".into());
+    let mut done = task(2, "brief", Some("b2"));
+    done.done = true;
+    let t = crate::tasks::Tasks {
+        last: 5,
+        list: vec![
+            claimed,
+            done,
+            task(3, "brief", Some("b3")),
+            task(4, "review", None),
+            task(5, "brief", Some("b5")),
+        ],
+    };
+    assert_eq!(waiting(&t), vec![(3, "b3".into()), (5, "b5".into())]);
+}

@@ -222,5 +222,16 @@ pub fn action(p: Option<&super::job::Pooled>) -> (Action, String) {
     }
 }
 
+/// The brief tasks a pool may still take, oldest first: open and unclaimed, as `(task, brief)`.
+#[must_use]
+pub fn waiting(tasks: &crate::tasks::Tasks) -> Vec<(u32, String)> {
+    tasks
+        .list
+        .iter()
+        .filter(|t| !t.done && t.kind == "brief" && t.claimed_by.is_none())
+        .filter_map(|t| t.brief.clone().map(|b| (t.id, b)))
+        .collect()
+}
+
 #[cfg(test)]
 mod tests;
