@@ -365,6 +365,7 @@ fn a_briefs_change_is_refused_only_the_planners_tiers() {
     for rule in [
         "guarded: .mcp.json",
         "secrets: a/secrets.config.yaml",
+        "eviction: s.rs",
         "sentinel: s.rs",
         "adds a secret",
     ] {
