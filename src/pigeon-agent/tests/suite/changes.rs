@@ -623,3 +623,30 @@ fn a_failed_mirror_job_runs_again_while_the_change_is_open() {
     let fmt = c.jobs.iter().find(|j| j.name == "fmt").expect("fmt");
     assert_eq!(fmt.status, JobStatus::Queued);
 }
+
+#[test]
+fn a_close_deletes_a_change_branch_only_from_the_github_mirror() {
+    // A close keeps the Artifacts branch, so `resumes` can finish it; see the 2026-11-17 Auto ADR §1.
+    let (mut c, _) = mirrored(A, &["fmt"]);
+    pass(&mut c, MIRROR, A);
+    let open = c.clone();
+    let effects = c.apply(Event::Close).expect("closes");
+    assert!(
+        effects.iter().all(|e| matches!(e, Effect::Cancel(_))),
+        "a close only cancels: {effects:?}"
+    );
+    assert!(control::unmirror_due(Some(&open), &c));
+    let github = "https://github.com/o/r.git";
+    let spec = control::unmirror_spec(&c, github, "t");
+    assert_eq!(spec.job, control::UNMIRROR);
+    assert_eq!(
+        spec.env[control::MIRROR_TO],
+        github,
+        "the unmirror job deletes from its MIRROR_TO"
+    );
+    let refname = format!("refs/heads/{}", c.branch());
+    assert!(
+        agent::core::bench::scratch_owner(&refname).is_none(),
+        "the unscratch job refuses a change branch"
+    );
+}
