@@ -57,6 +57,7 @@ pub fn dispatch(command: Commands) -> i32 {
         Commands::Agent(c) => agent::run(match c {
             crate::cli::AgentCommand::Serve(a) => crate::cli::AgentOp::Serve(a),
             crate::cli::AgentCommand::Listen(a) => crate::cli::AgentOp::Jobs(a.into_jobs()),
+            crate::cli::AgentCommand::PoolTools(a) => crate::cli::AgentOp::PoolTools(a),
         }),
         #[cfg(feature = "agent")]
         Commands::Keys(c) => agent::run(match c {

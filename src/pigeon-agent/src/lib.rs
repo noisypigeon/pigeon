@@ -33,6 +33,9 @@ pub mod jobs;
 pub mod names;
 #[cfg(feature = "engines")]
 pub mod platform_job;
+/// The pool job: a brief carried out by `claude -p` in a sandbox.
+#[cfg(feature = "engines")]
+pub mod pool_job;
 #[cfg(feature = "engines")]
 pub mod release;
 #[cfg(feature = "engines")]

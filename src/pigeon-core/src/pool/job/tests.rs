@@ -353,30 +353,37 @@ fn stream_turns_too_big() {
 
 #[test]
 fn stream_stop() {
-    let out = "{\"type\":\"assistant\",\"text\":\"pool: task b9.1 spent its dollars\\\"}\n";
-    assert_eq!(
-        stream(out).stop,
-        Some(s("pool: task b9.1 spent its dollars"))
-    );
+    let out = "{\"type\":\"result\",\"is_error\":true,\"num_turns\":3,\"result\":\"API Error: 403 {\\\"type\\\":\\\"error\\\",\\\"error\\\":{\\\"message\\\":\\\"pool: task b9.1 spent its dollars\\\"}}\"}";
+    let st = stream(out);
+    assert_eq!(st.stop, Some(s("pool: task b9.1 spent its dollars")));
+    assert_eq!(st.turns, 3);
 }
 
 #[test]
 fn stream_stop_to_newline_and_end() {
-    assert_eq!(stream("x pool: a b\nrest").stop, Some(s("pool: a b")));
-    assert_eq!(stream("pool: tail").stop, Some(s("pool: tail")));
+    let nl = "{\"type\":\"result\",\"result\":\"x pool: a b\\nrest\"}";
+    assert_eq!(stream(nl).stop, Some(s("pool: a b")));
+    let end = "{\"type\":\"result\",\"result\":\"pool: tail\"}";
+    assert_eq!(stream(end).stop, Some(s("pool: tail")));
+}
+
+#[test]
+fn stream_stop_ignores_other_lines() {
+    let out = "{\"type\":\"user\",\"content\":\"pool: disabled\"}\n{\"type\":\"result\",\"num_turns\":1,\"result\":\"done\"}\n";
+    assert_eq!(stream(out).stop, None);
+    assert_eq!(stream("pool: out of minutes\"").stop, None);
+}
+
+#[test]
+fn stream_result_without_pool_text() {
+    let out = "{\"type\":\"result\",\"is_error\":true,\"result\":\"API Error: 500\"}";
+    assert_eq!(stream(out).stop, None);
 }
 
 #[test]
 fn stream_no_result_line() {
     let st = stream("garbage\n{\"type\":\"system\"}\n");
     assert_eq!(st, Stream::default());
-}
-
-#[test]
-fn stream_stop_without_result() {
-    let st = stream("pool: out of minutes\"");
-    assert_eq!(st.stop, Some(s("pool: out of minutes")));
-    assert_eq!(st.turns, 0);
 }
 
 #[test]

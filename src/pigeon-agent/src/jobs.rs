@@ -85,6 +85,7 @@ impl Board {
             forecast: Vec::new(),
             built_on: None,
             ledger: None,
+            pool: None,
         };
         self.set(running.clone());
         let board = Arc::clone(self);
@@ -138,6 +139,7 @@ pub(crate) fn report(spec: &JobSpec, outcome: Outcome, log: &str) -> Report {
         forecast: Vec::new(),
         built_on: None,
         ledger: None,
+        pool: None,
     }
 }
 
@@ -174,6 +176,9 @@ pub fn run_judged(spec: &JobSpec, dir: &Path, sentinel: &Path) -> Report {
     }
     if spec.job == crate::control::RELEASE {
         return release(spec, dir);
+    }
+    if spec.job == crate::control::POOL {
+        return crate::pool_job::run(spec, dir);
     }
     let _ = std::fs::remove_dir_all(dir);
     if spec.job == crate::control::PLATFORM && !crate::standup_job::asks(&spec.argv) {

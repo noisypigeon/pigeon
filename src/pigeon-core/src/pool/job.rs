@@ -99,7 +99,7 @@ pub struct Stream {
 }
 
 /// A pool job's result.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Pooled {
     /// How it ended.
     pub outcome: Outcome,
@@ -319,11 +319,13 @@ pub fn stream(stdout: &str) -> Stream {
             .filter(|c| c.is_number())
             .map(ToString::to_string);
         s.error = r.get("is_error") == Some(&Value::Bool(true));
-    }
-    if let Some(at) = stdout.find("pool: ") {
-        let rest = &stdout[at..];
-        let end = rest.find(['"', '\\', '\n']).unwrap_or(rest.len());
-        s.stop = Some(rest[..end].to_string());
+        if let Some(text) = r.get("result").and_then(Value::as_str)
+            && let Some(at) = text.find("pool: ")
+        {
+            let rest = &text[at..];
+            let end = rest.find(['"', '\\', '\n']).unwrap_or(rest.len());
+            s.stop = Some(rest[..end].to_string());
+        }
     }
     s
 }

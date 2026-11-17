@@ -42,6 +42,7 @@ pub fn run(command: AgentOp) -> i32 {
         AgentOp::Decisions(args) => decisions(&args),
         AgentOp::Serve(args) => serve(&args),
         AgentOp::Jobs(args) => jobs(&args),
+        AgentOp::PoolTools(a) => ::agent::pool_job::tools(&a.brief, &a.escalation),
         AgentOp::TotpSecret => totp_secret(),
         AgentOp::EnrollSecret => enroll_secret(),
         AgentOp::VapidKey => vapid_key(),

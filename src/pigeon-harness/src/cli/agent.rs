@@ -4,6 +4,9 @@ use std::path::PathBuf;
 
 use clap::{Args, Subcommand};
 
+#[cfg(feature = "agent")]
+use super::PoolToolsArgs;
+
 /// `pigeon agent` commands.
 #[derive(Subcommand, Debug)]
 pub enum AgentOp {
@@ -30,6 +33,9 @@ pub enum AgentOp {
     /// Container; needs `AGENT_TOKEN`
     #[cfg(feature = "agent")]
     Jobs(JobsArgs),
+    /// Serve a pool job's tools as MCP on stdio
+    #[cfg(feature = "agent")]
+    PoolTools(PoolToolsArgs),
     /// Print a new authenticator secret for approvals in the card: base32 on stdout, for
     /// `pigeon workers secrets put … APPROVER_TOTP`, and its `otpauth://` URI on stderr,
     /// for the authenticator app

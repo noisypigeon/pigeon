@@ -4,6 +4,8 @@
 use clap::Args;
 #[cfg(any(feature = "infra", feature = "agent"))]
 use clap::Subcommand;
+#[cfg(feature = "agent")]
+use std::path::PathBuf;
 
 #[cfg(feature = "infra")]
 use super::{
@@ -66,6 +68,21 @@ pub enum AgentCommand {
     /// Take a change's jobs over signed HTTP (POST /v0/jobs, GET /v0/jobs/<id>), in a job
     /// Container; needs `AGENT_TOKEN`
     Listen(ListenArgs),
+    /// Serve a pool job's two tools, `brief_show` and `pool_escalate`, as MCP on stdio; `claude`
+    /// starts it inside the pool job's sandbox
+    PoolTools(PoolToolsArgs),
+}
+
+/// `pigeon agent pool-tools` arguments.
+#[cfg(feature = "agent")]
+#[derive(Args, Debug)]
+pub struct PoolToolsArgs {
+    /// The brief, as JSON
+    #[arg(long)]
+    pub brief: PathBuf,
+    /// Where an escalation is written
+    #[arg(long)]
+    pub escalation: PathBuf,
 }
 
 /// `pigeon agent listen` arguments: `pigeon agent listen`'s, with the address also positional.

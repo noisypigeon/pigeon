@@ -749,6 +749,9 @@ pub struct Report {
     /// `.claude/decisions/2026-11-12-development-grants-applies-rescue-yield.md` §1.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ledger: Option<crate::minting::Resolved>,
+    /// For the pool job: what it did.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pool: Option<crate::pool::job::Pooled>,
 }
 
 impl Report {
@@ -778,6 +781,7 @@ impl Report {
             forecast: Vec::new(),
             built_on: None,
             ledger: None,
+            pool: None,
         }
     }
 }
@@ -1343,6 +1347,9 @@ pub const UNMIRROR: &str = "unmirror";
 /// The job deleting a session's scratch ref when it ends; see
 /// `.claude/decisions/2026-11-16-development-session-bench-containers.md` §4.
 pub const UNSCRATCH: &str = "unscratch";
+
+/// The pool job: a brief carried out on a capacity pool; see .claude/decisions/2026-11-15-development-capacity-pools-hard-spend-cap.md §7.
+pub const POOL: &str = "pool";
 
 /// The owner's break-glass: a change head's code checks on Cloudflare's `Checker`, which
 /// `ci_rerun … on: cloudflare` asks for; see

@@ -191,6 +191,7 @@ fn reports_become_events() {
         forecast: vec![],
         built_on: None,
         ledger: None,
+        pool: None,
         patch: None,
         own: None,
     };
@@ -430,6 +431,7 @@ fn deploy_report(outcome: Outcome) -> Report {
         forecast: vec![],
         built_on: None,
         ledger: None,
+        pool: None,
         patch: None,
         own: None,
     }
