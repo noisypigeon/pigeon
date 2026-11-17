@@ -122,6 +122,7 @@
 - docs(adr): capacity pools step 6, how a brief routes to a pool and how its task is dispatched and followed (!970) ([29fada5](https://github.com/noisypigeon/pigeon/commit/29fada51ad5f81e372f47f0ed5b637047d82184e))
 - fix(agent): the pool sandbox finds rustup's toolchain, and the model may add files at the checkout's root (!968) ([67df7c8](https://github.com/noisypigeon/pigeon/commit/67df7c88280fd22ab782054dd85106d252bec828)) · agent
 - docs(adr): review !948 against !954 (!974) ([18a9956](https://github.com/noisypigeon/pigeon/commit/18a9956967cd0544805ddd3a91d39b10c6d72773))
+- docs(adr): review !948 against !970 (!976) ([a59816a](https://github.com/noisypigeon/pigeon/commit/a59816a9585776f25bebd1b6f5b6e66b228585ab))
 
 ## 2026-11-16
 
