@@ -41,6 +41,7 @@ mod owner_items;
 mod passkeys;
 mod platform;
 mod platforms;
+mod pool;
 mod push;
 mod stages;
 mod standalone;
@@ -58,6 +59,7 @@ pub use change::ChangeRun;
 pub use checker::{Checker, Runner};
 pub use main_run::MainRun;
 use platform::{Settings, json_request, now};
+pub use pool::Pool;
 
 use crate::access::{self, Identity};
 use crate::control::{self, Routed};
@@ -124,7 +126,7 @@ async fn fetch(req: Request, env: Env, _ctx: worker::Context) -> Result<Response
         "/healthz/smoke" => return smoke(&env, &settings, &who).await,
         _ => {}
     }
-    if let Some(refused) = narrow_token(&env, &who) {
+    if let Some(refused) = narrow_token(&env, &who, &req.path()) {
         return refused;
     }
     let (method, path) = (req.method(), req.path());
@@ -159,6 +161,7 @@ const SURFACES: &[&[Route]] = &[
     minting::ROUTES,
     docs::ROUTES,
     devices::ROUTES,
+    pool::ROUTES,
 ];
 
 /// The change number of `request`'s `number` argument.
@@ -1405,9 +1408,21 @@ async fn last_log(env: &Env, status: &Value) -> Result<Option<String>> {
     }
 }
 
-/// The refusal for a token that reaches only `/healthz` and `/builds/`, past those.
-fn narrow_token(env: &Env, who: &Identity) -> Option<Result<Response>> {
+/// The refusal for a token that reaches only `/healthz` and `/builds/`, past those; the pool's
+/// token reaches `/v0/pool/` alone, and no one else does.
+fn narrow_token(env: &Env, who: &Identity, path: &str) -> Option<Result<Response>> {
     let is = |var: &str| platform::secret(env, var).is_ok_and(|id| id == who.subject);
+    let pool_path = path.starts_with(pool::PREFIX);
+    if is(pool::ACCESS_ID_VAR) {
+        return (!pool_path)
+            .then(|| Response::error("the pool's token reaches /v0/pool/ only", 403));
+    }
+    if pool_path {
+        return Some(Response::error(
+            "/v0/pool/ is for the pool's token only",
+            403,
+        ));
+    }
     if is(crate::wire::ship_wire::ACCESS_ID_VAR) {
         return Some(Response::error(
             "the deployer's token reads /healthz and /healthz/smoke only",

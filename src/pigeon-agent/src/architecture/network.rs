@@ -308,6 +308,13 @@ pub const SERVICES: &[Service] = &[
         drawn: false,
     },
     Service {
+        id: "AI Gateway",
+        hosts: &["gateway.ai.cloudflare.com"],
+        label: "capacity pools' model requests, to model providers via pigeon-models",
+        evidence: &[],
+        drawn: false,
+    },
+    Service {
         id: "GitHub",
         hosts: &["api.github.com", "github.com"],
         label: "Actions and the mirror",

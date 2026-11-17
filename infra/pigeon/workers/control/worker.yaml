@@ -17,7 +17,7 @@ routes:
   # .claude/decisions/2026-11-15-runtime-standalone-hostnames-platform-zone.md §1.
   - subdomains_of: $deployment.instance_zone
 durable_objects:
-  classes: [Instance, ChangeRun, Checker, Runner, MainRun, Bench]
+  classes: [Instance, ChangeRun, Checker, Runner, MainRun, Bench, Pool]
   migrations:
     - { tag: v1, new_sqlite_classes: [Instance, ChangeRun, Checker] }
     - { tag: v2, new_sqlite_classes: [MainRun] }
@@ -25,6 +25,9 @@ durable_objects:
     # A session's own build-and-test Containers; see
     # .claude/decisions/2026-11-16-development-session-bench-containers.md.
     - { tag: v4, new_sqlite_classes: [Bench] }
+    # One per capacity pool, its ledger; see
+    # .claude/decisions/2026-11-15-development-capacity-pools-hard-spend-cap.md, 2026-11-17 amendment.
+    - { tag: v5, new_sqlite_classes: [Pool] }
 # Checks run on Checker, the bound job, merges and deploys on Runner; see
 # .claude/decisions/2026-11-06-development-control-plane-approvals-images-state.md §4.
 containers:
@@ -100,6 +103,9 @@ bindings:
 # .claude/decisions/2026-11-12-development-macos-builds-provider-failover.md §4.
 # OBSERVABILITY_TOKEN: Account Analytics Read, put by the `observability` grant, never by hand; see
 # .claude/decisions/2026-11-12-runtime-ios-app-approvals-insights.md, 2026-11-15 amendment.
-secrets: [BACKPLANE_TOKEN, ARTIFACTS_TOKEN, ACCESS_TEAM, ACCESS_AUD, DEPLOY_TOKEN, SESSION_KEY, APPROVER_TOTP, APPROVER, PASSKEY_ENROLL, WORKERS_DEPLOY_TOKEN, DEPLOY_OUTPUTS, DEPLOY_IMAGES, DEPLOYER_ACCESS_ID, DEPLOYER_ACCESS_SECRET, BUILDS_ACCESS_ID, BUILDS_ACCESS_SECRET, PUSH_VAPID_KEY, PLATFORM_STATE_KEY, GITHUB_APP_ID, GITHUB_APP_KEY, APPLE_ASC_KEY, APPLE_ASC_KEY_ID, APPLE_ASC_ISSUER, APPLE_TEAM_ID, APPLE_DIST_P12, APPLE_DIST_P12_PASSWORD, BUILDKITE_TOKEN, APNS_KEY, APNS_KEY_ID, BITRISE_TOKEN, BITRISE_APP_SLUG, OBSERVABILITY_TOKEN]
+# POOL_ANTHROPIC_WORKSPACE: the pool workspace every response must name; POOL_ACCESS_ID: the
+# client ID of the Access service token that alone reaches /v0/pool/; no Anthropic key, see
+# .claude/decisions/2026-11-15-development-capacity-pools-hard-spend-cap.md, 2026-11-17 amendment.
+secrets: [BACKPLANE_TOKEN, ARTIFACTS_TOKEN, ACCESS_TEAM, ACCESS_AUD, DEPLOY_TOKEN, SESSION_KEY, APPROVER_TOTP, APPROVER, PASSKEY_ENROLL, WORKERS_DEPLOY_TOKEN, DEPLOY_OUTPUTS, DEPLOY_IMAGES, DEPLOYER_ACCESS_ID, DEPLOYER_ACCESS_SECRET, BUILDS_ACCESS_ID, BUILDS_ACCESS_SECRET, PUSH_VAPID_KEY, PLATFORM_STATE_KEY, GITHUB_APP_ID, GITHUB_APP_KEY, APPLE_ASC_KEY, APPLE_ASC_KEY_ID, APPLE_ASC_ISSUER, APPLE_TEAM_ID, APPLE_DIST_P12, APPLE_DIST_P12_PASSWORD, BUILDKITE_TOKEN, APNS_KEY, APNS_KEY_ID, BITRISE_TOKEN, BITRISE_APP_SLUG, OBSERVABILITY_TOKEN, POOL_ANTHROPIC_WORKSPACE, POOL_ACCESS_ID]
 # The owner's hourly digest.
 crons: ["17 * * * *"]
