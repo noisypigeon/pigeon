@@ -59,8 +59,10 @@ fn setup(work: &Path, job: &pj::Job) -> std::io::Result<()> {
     write(&work.join("mcp.json"), &mcp, 0o644)
 }
 
-/// Opens the checkout to the sandbox's uid; `.git` stays the runner's.
+/// Opens the checkout to the sandbox's uid; `.git` stays the runner's. The root is sticky, so the
+/// sandbox may add files there but not rename or remove `.git`.
 fn open(dir: &Path) -> std::io::Result<()> {
+    std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o1777))?;
     walk(dir, true, false)
 }
 

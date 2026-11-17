@@ -188,9 +188,11 @@ fn claude_env_pairs_in_order() {
             "CLAUDE_CODE_MAX_OUTPUT_TOKENS",
             "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC",
             "DISABLE_AUTOUPDATER",
+            "RUSTUP_HOME",
         ]
     );
-    assert_eq!(e.len(), 10);
+    assert_eq!(e.len(), 11);
+    assert_eq!(e[10].1, RUSTUP_HOME);
 }
 
 #[test]
@@ -240,13 +242,14 @@ fn claude_argv_ends_with_mcp() {
 }
 
 #[test]
-fn check_env_has_three() {
+fn check_env_has_four() {
     assert_eq!(
         check_env("/h", "/c"),
         vec![
             (s("HOME"), s("/h")),
             (s("PATH"), s(SANDBOX_PATH)),
             (s("CARGO_HOME"), s("/c")),
+            (s("RUSTUP_HOME"), s(RUSTUP_HOME)),
         ]
     );
 }

@@ -33,6 +33,8 @@ pub const MAX_OUTPUT: &str = "32000";
 pub const DISALLOWED: &str = "WebSearch,WebFetch,Task";
 /// The sandbox's `PATH`.
 pub const SANDBOX_PATH: &str = "/usr/local/cargo/bin:/usr/local/bin:/usr/bin:/bin";
+/// Where the image keeps rustup.s toolchains, which a cleared environment would not find.
+pub const RUSTUP_HOME: &str = "/usr/local/rustup";
 /// The answer to `pool_escalate`.
 pub const ESCALATED: &str =
     "Recorded. Stop now: the runner ends the task and hands your question to the planner.";
@@ -223,6 +225,7 @@ pub fn claude_env(job: &Job, home: &str) -> Vec<(String, String)> {
         pair("CLAUDE_CODE_MAX_OUTPUT_TOKENS", MAX_OUTPUT),
         pair("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "1"),
         pair("DISABLE_AUTOUPDATER", "1"),
+        pair("RUSTUP_HOME", RUSTUP_HOME),
     ]
 }
 
@@ -260,6 +263,7 @@ pub fn check_env(home: &str, cargo_home: &str) -> Vec<(String, String)> {
         ("HOME".to_string(), home.to_string()),
         ("PATH".to_string(), SANDBOX_PATH.to_string()),
         ("CARGO_HOME".to_string(), cargo_home.to_string()),
+        ("RUSTUP_HOME".to_string(), RUSTUP_HOME.to_string()),
     ]
 }
 
