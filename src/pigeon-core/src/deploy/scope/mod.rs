@@ -12,7 +12,7 @@ mod map;
 
 use super::gate::{Gate, MAX_PACKAGES};
 
-pub use map::{Binary, TestMap};
+pub use map::{Binary, TestMap, Unit};
 
 /// The Rust workspace, from the root, where its manifest has no `[workspace]` at the root.
 pub const WORKSPACE: &str = "src/pigeon-cli";
@@ -223,12 +223,16 @@ pub struct Job {
     pub name: String,
     /// The command, run in the workspace.
     pub argv: Vec<String>,
+    /// For a `cargo test` check: the tests it runs.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub units: Vec<Unit>,
 }
 
 fn job(name: impl Into<String>, argv: &[&str]) -> Job {
     Job {
         name: name.into(),
         argv: argv.iter().map(|s| (*s).to_string()).collect(),
+        units: Vec::new(),
     }
 }
 
@@ -371,13 +375,14 @@ fn everything(features: &BTreeSet<String>, crates: &Crates) -> Vec<Job> {
     ));
     out.extend(features.iter().map(|f| feature_clippy(cli, f)));
     out.extend(crates.worker().map(worker_job));
-    out.push(job("test", &["cargo", "test", "--workspace", "--locked"]));
+    out.push(workspace_tests(crates));
     let root = crates.layout.root();
     let mut instance: Vec<&str> = crates.layout.instance.iter().map(String::as_str).collect();
     instance.extend(["--root", root.as_str()]);
     out.push(Job {
         name: "backplane instance".into(),
         argv: crates.layout.pigeon(&instance),
+        units: Vec::new(),
     });
     out
 }
@@ -499,9 +504,13 @@ fn rust_jobs(crates: &Crates, config: &Config, files: &[&str], map: Option<&Test
                 .filter(|w| wasm || affected.contains(&w.package))
                 .map(worker_job),
         );
-        match map.and_then(|m| m.select(crates, files)) {
-            Some(picked) => out.extend(picked),
-            None => out.push(with_p("test", &["--locked"])),
+        if let Some(picked) = map.and_then(|m| m.select(crates, files)) {
+            out.extend(picked);
+        } else {
+            out.push(Job {
+                units: packages.iter().map(|p| Unit::whole(p)).collect(),
+                ..with_p("test", &["--locked"])
+            });
         }
     }
     out
@@ -530,6 +539,14 @@ pub fn gate_of(crates: &Crates, files: &[String], map: Option<&TestMap>) -> Gate
             Gate::Full(format!("its tests span {} packages", picked.len()))
         }
         _ => Gate::Scoped,
+    }
+}
+
+/// `cargo test --workspace`, the whole suite, running every package.
+fn workspace_tests(crates: &Crates) -> Job {
+    Job {
+        units: crates.by_dir.values().map(|p| Unit::whole(p)).collect(),
+        ..job("test", &["cargo", "test", "--workspace", "--locked"])
     }
 }
 
@@ -596,6 +613,7 @@ pub fn jobs_of(
         out.push(Job {
             name: "infra.validate".into(),
             argv: layout.operation("infra.validate"),
+            units: Vec::new(),
         });
         if let Some(t) = &layout.infra_tests
             && !ran_tests_of(&out, &t.package)
@@ -606,18 +624,33 @@ pub fn jobs_of(
                 !known.contains(&t.test) && modules.iter().all(|m| known.contains(*m))
             });
             let mut argv = vec!["cargo", "test", "-p", t.package.as_str()];
-            let name = if own_targets {
+            let (name, units) = if own_targets {
                 argv.push("--locked");
                 for m in &modules {
                     argv.extend(["--test", m]);
                 }
-                format!("test {}: {}", t.package, modules.join(" "))
+                (
+                    format!("test {}: {}", t.package, modules.join(" ")),
+                    modules
+                        .iter()
+                        .map(|m| Unit::target(&t.package, "test", m, ""))
+                        .collect(),
+                )
             } else {
                 argv.extend(["--test", t.test.as_str(), "--locked", "--"]);
                 argv.extend(t.modules.iter().map(String::as_str));
-                format!("test {}: {} {}", t.package, t.test, modules.join(" "))
+                (
+                    format!("test {}: {} {}", t.package, t.test, modules.join(" ")),
+                    t.modules
+                        .iter()
+                        .map(|m| Unit::target(&t.package, "test", &t.test, m))
+                        .collect(),
+                )
             };
-            out.push(job(name, &argv));
+            out.push(Job {
+                units,
+                ..job(name, &argv)
+            });
         }
     }
     let policy_tests: Vec<&str> = crates.of(&layout
@@ -634,12 +667,16 @@ pub fn jobs_of(
             argv.extend(["-p", p]);
         }
         argv.push("--locked");
-        out.push(job("test this repository's policies", &argv));
+        out.push(Job {
+            units: policy_tests.iter().map(|p| Unit::whole(p)).collect(),
+            ..job("test this repository's policies", &argv)
+        });
     }
     if files.iter().any(|f| under(f, &SITES)) {
         out.push(Job {
             name: "sites.build".into(),
             argv: layout.operation("sites.build"),
+            units: Vec::new(),
         });
     }
     if files.iter().any(|f| under(f, &IOS)) {
@@ -652,6 +689,7 @@ pub fn jobs_of(
     out.push(Job {
         name: "policy.check".into(),
         argv: layout.operation("policy.check"),
+        units: Vec::new(),
     });
     out
 }
@@ -666,6 +704,7 @@ pub fn test_map() -> Job {
     Job {
         name: "test map".into(),
         argv: vec!["bash".into(), format!("../../{TEST_MAP}")],
+        units: Vec::new(),
     }
 }
 
@@ -693,6 +732,7 @@ fn spikes(layout: &Layout, files: &[&str]) -> Vec<Job> {
                 "sh".into(),
                 layout.from_workspace(&format!("{SPIKES}{n}/run.sh")),
             ],
+            units: Vec::new(),
         })
         .collect()
 }

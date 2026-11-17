@@ -115,6 +115,44 @@ impl TestMap {
     }
 }
 
+/// One part of the tests a check runs: a package's whole tests when `kind` is empty, else one
+/// target, or one module of it when `filter` is set; filters are opaque.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+pub struct Unit {
+    /// Its package.
+    pub package: String,
+    /// `lib`, `bin` or `test`; empty for the whole package.
+    pub kind: String,
+    /// Its target's name.
+    pub name: String,
+    /// `""` for the whole target, else the libtest filter of one module.
+    pub filter: String,
+}
+
+impl Unit {
+    /// `package`'s whole tests.
+    #[must_use]
+    pub fn whole(package: &str) -> Self {
+        Self {
+            package: package.into(),
+            kind: String::new(),
+            name: String::new(),
+            filter: String::new(),
+        }
+    }
+
+    /// Target `name` of `package`, of `kind`, or its module `filter`.
+    #[must_use]
+    pub fn target(package: &str, kind: &str, name: &str, filter: &str) -> Self {
+        Self {
+            package: package.into(),
+            kind: kind.into(),
+            name: name.into(),
+            filter: filter.into(),
+        }
+    }
+}
+
 /// `b` as the workspace now runs it: none when its package or binary is gone, as after a rename; a whole
 /// test target that is gone runs as the module of its name in its package's `suite`, and none
 /// when there is no suite; see
@@ -205,6 +243,10 @@ fn whole_job(package: &str, bins: &BTreeSet<&Binary>) -> Job {
     Job {
         name: format!("test {package}: {}", names.join(" ")),
         argv,
+        units: bins
+            .iter()
+            .map(|b| Unit::target(&b.package, &b.kind, &b.name, ""))
+            .collect(),
     }
 }
 
@@ -225,6 +267,10 @@ fn suite_job(package: &str, filters: &BTreeSet<&str>) -> Job {
     Job {
         name: format!("test {package}: {SUITE} {}", names.join(" ")),
         argv,
+        units: filters
+            .iter()
+            .map(|f| Unit::target(package, "test", SUITE, f))
+            .collect(),
     }
 }
 
