@@ -93,9 +93,11 @@ impl Change {
         if self.after.as_ref().is_some_and(|a| a.head.is_some()) {
             self.after = None;
         }
-        // Checks carry only when disjoint; an approval also across a clean restack of the same
-        // patch, its head checked in full again.
-        let carries = r.relation == Relation::Disjoint && r.same_patch;
+        // A same-patch restack carries the checks `main`'s files don't reach; see the merge-path
+        // ADR's 2026-11-16 amendment (#20).
+        let disjoint = r.relation == Relation::Disjoint && r.same_patch;
+        let carries =
+            disjoint || (r.relation == Relation::Clean && r.same_patch && r.carries.is_some());
         let approval_carries =
             matches!(r.relation, Relation::Disjoint | Relation::Clean) && r.same_patch;
         if r.landed {
@@ -154,12 +156,15 @@ impl Change {
                 }
                 self.tiers = None;
                 self.behind = None;
-                let kept = if carries {
+                let kept: Vec<Job> = if carries {
                     self.passed_code()
+                        .into_iter()
+                        .filter(|j| r.carries.as_ref().is_none_or(|u| u.contains(&j.name)))
+                        .collect()
                 } else {
                     Vec::new()
                 };
-                if !carries {
+                if !disjoint {
                     self.gate = None;
                     self.gate_full = Some(format!("main changed its files at {}", r.onto));
                 }
@@ -171,7 +176,8 @@ impl Change {
         }
     }
 
-    /// The head's passed code checks and gate jobs, which a disjoint, same-patch restack keeps.
+    /// The head's passed code checks and gate jobs, which a same-patch restack keeps where
+    /// `main`'s files don't reach them.
     #[must_use]
     pub(crate) fn passed_code(&self) -> Vec<Job> {
         self.jobs

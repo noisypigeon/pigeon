@@ -214,6 +214,7 @@ fn restacked(relation: Relation, to: Option<&str>, same_patch: bool) -> Event {
             context: vec![],
             messages: String::new(),
             landed: false,
+            carries: None,
         },
     }
 }

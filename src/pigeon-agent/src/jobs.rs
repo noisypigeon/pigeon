@@ -658,6 +658,7 @@ fn restack(spec: &JobSpec, dir: &Path) -> Report {
                         .collect(),
                     messages: r.messages,
                     landed: r.landed,
+                    carries: None,
                 }),
                 ..report(spec, Outcome::Passed, "")
             }

@@ -106,6 +106,7 @@ fn restacked(relation: Relation, same_patch: bool) -> Event {
             context: vec![],
             messages: String::new(),
             landed: false,
+            carries: None,
         },
     }
 }
@@ -312,6 +313,7 @@ fn replay_481_is_protected_after_missing_its_turn_twice() {
             context: vec![],
             messages: String::new(),
             landed: false,
+            carries: None,
         },
     })
     .expect("restacked");
@@ -380,6 +382,7 @@ fn replay_543_a_merge_refused_on_a_stale_base_restacks_and_keeps_its_turn() {
             context: vec![],
             messages: String::new(),
             landed: false,
+            carries: None,
         },
     })
     .expect("restacked");

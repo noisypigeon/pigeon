@@ -92,6 +92,7 @@ fn at_turn(same_patch: bool) -> Change {
             context: vec![],
             messages: String::new(),
             landed: false,
+            carries: None,
         },
     })
     .expect("restacked");

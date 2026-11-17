@@ -75,6 +75,7 @@ fn current() -> Event {
             context: Vec::new(),
             messages: String::new(),
             landed: false,
+            carries: None,
         },
     }
 }
@@ -393,6 +394,7 @@ fn a_clean_restack_makes_the_gate_full_and_a_session_push_clears_it() {
             context: Vec::new(),
             messages: String::new(),
             landed: false,
+            carries: None,
         },
     };
     let (c, _) = step(&c, clean).expect("the restack applies");
@@ -575,6 +577,7 @@ fn a_restack_that_finds_the_patch_on_main_records_it_and_releases_the_merge() {
             context: Vec::new(),
             messages: String::new(),
             landed: true,
+            carries: None,
         },
     };
     let (c, effects) = step(&c, landed).expect("the report applies");
@@ -662,6 +665,7 @@ fn an_approval_carries_across_a_clean_restack_of_the_same_patch_only() {
             context: Vec::new(),
             messages: String::new(),
             landed: false,
+            carries: None,
         },
     };
     let mut c = approved();
@@ -739,6 +743,7 @@ fn a_change_built_on_another_counts_from_its_branch_until_it_ends_then_stands_on
             context: Vec::new(),
             messages: String::new(),
             landed: false,
+            carries: None,
         },
     };
     let (c, _) = step(&restacking(c), restacked).expect("restacked");
@@ -921,6 +926,7 @@ fn an_acceptance_follows_its_head_across_a_same_patch_restack_only() {
             context: Vec::new(),
             messages: String::new(),
             landed: false,
+            carries: None,
         },
     };
     let mut c = approved();
@@ -982,6 +988,7 @@ fn a_dropped_merge_is_kept_when_a_window_approves_the_restacked_head_again() {
             context: Vec::new(),
             messages: String::new(),
             landed: false,
+            carries: None,
         },
     };
     let checked_b = |c: Change| {
@@ -1342,6 +1349,7 @@ fn restacked_holder() -> Change {
             context: Vec::new(),
             messages: String::new(),
             landed: false,
+            carries: None,
         },
     };
     let mut c = run(restacking(approved()), vec![changed]);
@@ -1683,4 +1691,99 @@ fn a_merge_push_refused_for_now_merges_again_without_a_restack() {
     assert_eq!(status(&c, RESTACK), None);
     assert_eq!((c.state, c.carried.is_none()), (State::Approved, true));
     assert!(queue::holds_turn(&c));
+}
+
+#[test]
+fn a_same_patch_restack_carries_only_the_checks_main_does_not_reach() {
+    let check = |name: &str| Check {
+        name: name.into(),
+        argv: vec!["cargo".into(), "test".into(), name.into()],
+    };
+    let checks = vec![check("fmt"), check("unit")];
+    let bound = |sha: &str| Event::Bounded {
+        sha: sha.into(),
+        violations: Vec::new(),
+        checks: checks.clone(),
+        full: Vec::new(),
+        tiers: None,
+        gate: None,
+        patch: None,
+        own: None,
+    };
+    let mut events = vec![bound(A)];
+    for name in ["fmt", "unit"] {
+        events.push(Event::Started {
+            job: name.into(),
+            sha: A.into(),
+        });
+        events.push(Event::Finished {
+            job: name.into(),
+            sha: A.into(),
+            ok: true,
+        });
+    }
+    events.push(Event::Approve {
+        by: "owner".into(),
+        sha: A.into(),
+        at: 2,
+    });
+    let base = restacking(run(pushed(), events));
+    let after = |relation: Relation, carries: Option<&[&str]>| {
+        let restacked = Event::Restacked {
+            sha: A.into(),
+            restack: Restacked {
+                relation,
+                to: Some(B.into()),
+                same_patch: true,
+                conflicts: Vec::new(),
+                onto: M.into(),
+                context: Vec::new(),
+                messages: String::new(),
+                landed: false,
+                carries: carries.map(|u| u.iter().map(|n| (*n).to_string()).collect()),
+            },
+        };
+        let (c, _) = step(&base, restacked).expect("restacked");
+        step(&c, bound(B)).expect("bounded")
+    };
+    let start = |names: &[&str]| -> Vec<Effect> {
+        names.iter().map(|n| Effect::Start((*n).into())).collect()
+    };
+    let (c, effects) = after(Relation::Clean, Some(&["fmt", "unit"]));
+    assert_eq!(effects, start(&[]), "an ADR-only merge keeps every check");
+    assert_eq!(c.state, State::Checked);
+    assert_eq!(c.carried_checks, ["fmt", "unit"]);
+    assert_eq!(
+        (c.carried_from.as_deref(), c.head.as_deref()),
+        (Some(A), Some(B)),
+        "recorded with both heads"
+    );
+    assert!(
+        c.gate_why()
+            .is_some_and(|w| w.contains("main changed its files")),
+        "a clean restack still gates in full"
+    );
+    let (c, effects) = after(Relation::Clean, Some(&[]));
+    assert_eq!(
+        effects,
+        start(&["fmt", "unit"]),
+        "a Cargo.lock change re-runs them all"
+    );
+    assert_eq!(c.carried_checks, Vec::<String>::new());
+    assert_eq!(c.carried_from, None);
+    let (c, effects) = after(Relation::Disjoint, Some(&["fmt"]));
+    assert_eq!(effects, start(&["unit"]), "a reached check runs again");
+    assert_eq!(c.carried_checks, ["fmt"]);
+    let (c, _) = after(Relation::Disjoint, None);
+    assert_eq!(
+        c.carried_checks,
+        ["fmt", "unit"],
+        "a job that didn't judge reach carries a disjoint restack's checks, as before"
+    );
+    let (_, effects) = after(Relation::Clean, None);
+    assert_eq!(
+        effects,
+        start(&["fmt", "unit"]),
+        "and none of a clean one's"
+    );
 }

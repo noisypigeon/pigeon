@@ -207,6 +207,10 @@ pub struct Restacked {
     /// The head adds nothing to `main`: its patch already landed.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub landed: bool,
+    /// For a pushed head of the same patch: its passed checks and gate jobs that carry, by name;
+    /// none from a job before the merge-path ADR's 2026-11-16 amendment (#20).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub carries: Option<Vec<String>>,
 }
 
 /// One conflicting path's changes on both sides.
