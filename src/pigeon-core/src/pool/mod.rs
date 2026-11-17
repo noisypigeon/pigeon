@@ -2,7 +2,9 @@
 //! `.claude/decisions/2026-11-15-development-capacity-pools-hard-spend-cap.md`.
 
 pub mod aigateway;
+pub mod anthropic;
 pub mod config;
+pub mod gateway;
 pub mod ledger;
 pub mod route;
 
