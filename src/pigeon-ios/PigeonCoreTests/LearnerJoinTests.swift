@@ -1,4 +1,4 @@
-// Joining a learner's standalone: the link, the match code backplane computes too, and the
+// Joining a learner's standalone: the link, the match code the agent computes too, and the
 // passkey's key read from a registration's attestation object.
 
 import Foundation
@@ -66,7 +66,7 @@ private func attestation(x: [UInt8], y: [UInt8], credential: [UInt8]) -> Data {
         }
     }
 
-    @Test func aLabelHasBackplanesShape() {
+    @Test func aLabelHasTheAgentsShape() {
         for good in ["example", "ex-ample2", String(repeating: "a", count: 32)] {
             #expect(isLabel(good), "\(good)")
         }
@@ -85,7 +85,7 @@ private func attestation(x: [UInt8], y: [UInt8], credential: [UInt8]) -> Data {
         #expect(try JSONDecoder().decode(InstanceEntry.self, from: Data(old.utf8)).host == nil)
     }
 
-    @Test func theMatchCodeIsBackplanes() {
+    @Test func theMatchCodeIsTheAgents() {
         let point = Data([4] + (1...64).map { UInt8($0) })
         #expect(matchCode(token: "t0k3n", publicKey: point) == "696816")
     }

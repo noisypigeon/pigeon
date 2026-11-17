@@ -33,7 +33,7 @@ public struct JoinLink: Equatable, Sendable, Identifiable {
 /// .claude/decisions/2026-11-15-runtime-standalone-hostnames-platform-zone.md §2.
 public let standaloneZone = "pigeon.dev"
 
-/// Whether `label` has a standalone label's shape, as backplane's `check_label` reads it: 3 to
+/// Whether `label` has a standalone label's shape, as the agent's `check_label` reads it: 3 to
 /// 32 of `a-z`, `0-9` and `-`, a leading letter, no trailing `-` and no `--`. Reserved and
 /// taken labels are the platform's to refuse.
 public func isLabel(_ label: String) -> Bool {
@@ -55,7 +55,7 @@ public func standaloneLabel(host: String) -> String? {
 public func joinMessage(token: String) -> String { "pigeon-join-v1\n\(token)" }
 
 /// The six digits the invitee and an administrator compare: SHA-256 of the token, a zero byte
-/// and the passkey's point, its first four bytes modulo a million. As backplane's `match_code`.
+/// and the passkey's point, its first four bytes modulo a million. As the agent's `match_code`.
 public func matchCode(token: String, publicKey: Data) -> String {
     var data = Data(token.utf8)
     data.append(0)

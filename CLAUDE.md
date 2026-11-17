@@ -213,7 +213,7 @@ Where each check runs:
   it; otherwise the owner is asked as usual.
   Each push to `main` runs `MainRun`'s pipeline: one deploy at a time, of the
   newest push, publishing the instance's sites whose inputs changed since the
-  last deploy (`cobot::scope::deploys`, `sites.publish`); `deploy_status`
+  last deploy (`pigeon_core::deploy::scope::deploys`, `sites.publish`); `deploy_status`
   shows it. A plan
   cites its ADR, because the bound job checks the pull-request policy with
   the plan as the body.

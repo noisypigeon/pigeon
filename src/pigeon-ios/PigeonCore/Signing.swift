@@ -1,4 +1,4 @@
-// The device signature the control plane checks on every /v0/app call; it mirrors backplane's
+// The device signature the control plane checks on every /v0/app call; it mirrors the agent's
 // core::app::devices. See .claude/decisions/2026-11-12-runtime-ios-app-approvals-insights.md §2.
 
 import CryptoKit

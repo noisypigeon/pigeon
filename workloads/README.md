@@ -6,7 +6,7 @@ One directory per Cloudflare zone, holding its workloads. Each zone's apex
 [`2026-11-02-runtime-workloads-zone-apex.md`](../.claude/decisions/2026-11-02-runtime-workloads-zone-apex.md).
 
 A workload with only a `config.yaml` enables a feature `infra/cloudflare/`
-defines, such as `static_site`: cobot builds and publishes it. See
+defines, such as `static_site`: pigeon builds and publishes it. See
 [`2026-11-03-runtime-cloudflare-static-sites-r2.md`](../.claude/decisions/2026-11-03-runtime-cloudflare-static-sites-r2.md).
 
 A static site's settings live in its `config.yaml`, as `static_site.site`,

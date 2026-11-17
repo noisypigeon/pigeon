@@ -1,4 +1,4 @@
-# The account's one cobot project; see .claude/decisions/2026-11-03-runtime-digitalocean-provisioner-unit.md.
+# The account's one pigeon project; see .claude/decisions/2026-11-03-runtime-digitalocean-provisioner-unit.md.
 terraform {
   required_providers {
     digitalocean = {

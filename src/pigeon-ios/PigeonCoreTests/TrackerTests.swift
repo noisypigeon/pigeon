@@ -280,8 +280,8 @@ import PigeonCore
     }
 
     @Test func aTitleSplitsIntoItsTagAndSubject() {
-        #expect(scopeAndSubject("feat(backplane): owner_ask flags").tag == "backplane")
-        #expect(scopeAndSubject("feat(backplane): owner_ask flags").subject == "owner_ask flags")
+        #expect(scopeAndSubject("feat(agent): owner_ask flags").tag == "agent")
+        #expect(scopeAndSubject("feat(agent): owner_ask flags").subject == "owner_ask flags")
         #expect(scopeAndSubject("fix!: breaks").tag == "fix")
         #expect(scopeAndSubject("ci(ios)!: x").tag == "ios")
         #expect(scopeAndSubject("Plain title: with colon").tag == nil)

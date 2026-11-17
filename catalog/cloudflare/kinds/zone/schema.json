@@ -10,7 +10,7 @@
   ],
   "properties": {
     "zone": {
-      "description": "The unit's name; set by cobot.",
+      "description": "The unit's name; set by pigeon.",
       "type": "string",
       "pattern": "^[a-z0-9-]+(\\.[a-z0-9-]+)+$"
     },

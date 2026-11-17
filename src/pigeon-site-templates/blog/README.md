@@ -10,7 +10,7 @@ and is tagged `site-template-blog/vX.Y.Z`; releases before the move are
 tagged `static-site-template/vX.Y.Z`.
 
 A workload's `config.yaml` selects a released version and its features, as
-`static_site.template: { name: blog, version, features }`. When cobot builds the site, it
+`static_site.template: { name: blog, version, features }`. When pigeon builds the site, it
 puts that tag's tree at `themes/site-template-blog` and writes
 `[extra.features]`. Features left unset are off. [`template.yaml`](template.yaml)
 holds the version, the features and their defaults.
@@ -23,7 +23,7 @@ From 1.0.1, a site's settings live in its workload's `config.yaml`, as
 
 - [`schema.json`](schema.json) is the contract: each setting, its
   description and default, and its `x-site` targets, the files and keys
-  cobot writes it to.
+  pigeon writes it to.
 - [`scaffold/`](scaffold) holds those files' fixed parts: `config.toml`,
   `static/manifest.json`, and the `posts` and `pages` sections.
 - `templates/robots.txt` renders `robots.txt` from `base_url`, and
@@ -45,4 +45,4 @@ post's date prefix equals the date of its `date`, and it sets no `slug`.
 The posts feed is `/posts/posts_feed.xml`, which the scaffold generates and
 `feed` links to.
 
-cobot builds only such sites; `static_site.site` is required.
+pigeon builds only such sites; `static_site.site` is required.

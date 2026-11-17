@@ -1,4 +1,4 @@
-description: Providers cobot may load, each pinned to an exact version.
+description: Providers pigeon may load, each pinned to an exact version.
 providers:
   backblaze/b2: 0.14.0
   cloudflare/cloudflare: 5.28.0

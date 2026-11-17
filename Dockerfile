@@ -17,7 +17,7 @@ FROM gcr.io/distroless/cc-debian12:nonroot@sha256:9dac0a79194e45a7da0158a9c6da57
 COPY --from=build /src/target/release/pigeon /usr/local/bin/pigeon
 ENTRYPOINT ["/usr/local/bin/pigeon"]
 
-FROM runtime AS sentinel
+FROM runtime AS eviction
 
 # tofu and zola, checksum-pinned; versions equal ci.yml's.
 FROM docker.io/library/debian:bookworm-20261005-slim@sha256:7c7b2c966bc9ee8cedfeef67e0e279108992c77681fa595db4a9d65c06ccc587 AS tools
@@ -36,7 +36,7 @@ RUN curl -fsSLo tofu.tar.gz "https://github.com/opentofu/opentofu/releases/downl
  && tar -xzf tofu.tar.gz -C /out tofu \
  && tar -xzf zola.tar.gz -C /out zola
 
-FROM docker.io/library/debian:bookworm-20261005-slim@sha256:7c7b2c966bc9ee8cedfeef67e0e279108992c77681fa595db4a9d65c06ccc587 AS backplane
+FROM docker.io/library/debian:bookworm-20261005-slim@sha256:7c7b2c966bc9ee8cedfeef67e0e279108992c77681fa595db4a9d65c06ccc587 AS agent
 ARG TOFU_VERSION=1.13.1
 ARG ZOLA_VERSION=0.23.6
 RUN apt-get update \
@@ -72,7 +72,7 @@ RUN mkdir /recipe \
       done; \
     done
 
-# A change's jobs run here (lifecycle ADR §4): the toolchain rust-toolchain.toml pins, git, backplane's
+# A change's jobs run here (lifecycle ADR §4): the toolchain rust-toolchain.toml pins, git, the agent's
 # tools, and the workspace's dependencies already compiled, so a job builds only the crates
 # it touches. Build with `--build-arg FEATURES=agent`.
 FROM docker.io/library/rust:1.99.1-slim-bookworm@sha256:24707e70a4f1e23d9a7b25202ec43126d28a52294b96aad5c670df1fd1f1d400 AS ci
