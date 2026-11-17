@@ -298,10 +298,12 @@ pub async fn window_approves(
     change: &Change,
     operation: &str,
 ) -> Result<Option<u32>> {
-    Ok(match window_verdict(env, s, change, operation).await? {
-        Verdict::Allow(id) => Some(id),
-        _ => None,
-    })
+    Ok(
+        match window_verdict(env, s, change, operation, None).await? {
+            Verdict::Allow(id) => Some(id),
+            _ => None,
+        },
+    )
 }
 
 /// What the Auto window says of `operation` on `change`.
@@ -314,12 +316,13 @@ pub async fn window_verdict(
     s: &Settings,
     change: &Change,
     operation: &str,
+    session: Option<&str>,
 ) -> Result<Verdict> {
     let (status, v) = to_instance(
         env,
         s,
         "/windows/decide",
-        &json!({ "change": change, "operation": operation }),
+        &json!({ "change": change, "operation": operation, "session": session }),
     )
     .await?;
     let moved: Vec<windows::Moved> = serde_json::from_value(v["moved"].clone()).unwrap_or_default();
@@ -382,7 +385,7 @@ pub async fn serve_windows(state: &State, path: &str, body: Value) -> Result<Res
             let held = all
                 .current()
                 .and_then(|w| held_merge(windows::decide(w, &change, "change.merge", t)));
-            match all.decide(&change, &s("operation"), t) {
+            match all.decide_as(&change, &s("operation"), body["session"].as_str(), t) {
                 (next, Some((id, d))) => {
                     let moved = windows::moved(&raw, &next);
                     let v = json!({ "id": id, "decision": d, "held": held, "moved": moved });

@@ -302,6 +302,21 @@ pub fn by_grant(change: &crate::change::Change, operation: &str, now: u64) -> Op
     (stage && !kept && now < g.expires && tier).then(|| g.by.clone())
 }
 
+/// Whether `session`, the label on the call's verified ticket, proposed `change` and may close it
+/// under Auto: it is unapproved and unmerged, and its Artifacts branch survives the close; see
+/// `.claude/decisions/2026-11-17-security-auto-covers-routine-owner-asks.md` §1.
+#[must_use]
+pub fn own_close(change: &crate::change::Change, session: Option<&str>) -> bool {
+    use crate::change::State;
+    session.is_some()
+        && change.session.as_deref() == session
+        && change.approval.is_none()
+        && !matches!(
+            change.state,
+            State::Approved | State::Merged | State::Closed
+        )
+}
+
 /// Whether `operation` merges the head the grant's prover approved, under 24 hours ago; see the
 /// 2026-11-12 and 2026-11-16 amendments to `.claude/decisions/2026-11-09-security-approvals-once-passkeys.md`.
 fn approved_by_proof(change: &crate::change::Change, operation: &str, now: u64) -> bool {

@@ -444,7 +444,7 @@ const CATALOG: &[Operation] = &[
         name: "change.close",
         engine: Engine::Agent,
         effect: Effect::Apply,
-        summary: "Close a change unmerged, stopping its jobs. A session never closes a generated change (`reconcile-…`, `review-…`): `task_done` on its task closes it, and the control plane retires it once its reason is gone",
+        summary: "Close a change unmerged, stopping its jobs. Under Auto, a session may close its own unapproved change, as when it is superseded or refused. A session never closes a generated change (`reconcile-…`, `review-…`): `task_done` on its task closes it, and the control plane retires it once its reason is gone",
         args: &[NUMBER, arg("ticket", false, Kind::String)],
     },
     Operation {

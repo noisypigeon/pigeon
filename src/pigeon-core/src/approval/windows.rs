@@ -14,6 +14,11 @@ pub const RATE: usize = 150;
 pub const QUIET: u64 = 3_600;
 /// The rate breaker's span, in seconds.
 pub const SPAN: u64 = 6 * 3_600;
+/// The fronts a window allows sessions in [`FRONT_SPAN`]; see
+/// `.claude/decisions/2026-11-17-security-auto-covers-routine-owner-asks.md` §2.
+pub const FRONT_RATE: usize = 4;
+/// The span [`FRONT_RATE`] counts over, in seconds.
+pub const FRONT_SPAN: u64 = 3_600;
 /// The passkey purpose for starting a window.
 pub const START: &str = "window:start";
 /// The passkey purpose for ending one early.
@@ -54,6 +59,9 @@ pub struct Window {
     /// When the rate breaker held it, while that hold is the one it has.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub quiet: Option<u64>,
+    /// When each session front in the last [`FRONT_SPAN`] was allowed.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub fronts: Vec<u64>,
 }
 
 impl Window {
@@ -66,6 +74,15 @@ impl Window {
     /// Whether it is running: active, held or paused.
     fn running(&self) -> bool {
         matches!(self.state, State::Active | State::Held | State::Paused)
+    }
+
+    /// The session fronts allowed in the [`FRONT_SPAN`] before `now`.
+    #[must_use]
+    pub fn front_rate(&self, now: u64) -> usize {
+        self.fronts
+            .iter()
+            .filter(|t| now.saturating_sub(**t) < FRONT_SPAN)
+            .count()
     }
 
     /// The merges counted in the [`SPAN`] before `now`.
@@ -88,26 +105,50 @@ pub struct Windows {
     pub next: u32,
 }
 
-/// Whether `w` lets `operation` on `change` through at `now`: authorizing, approving, merging
-/// and closing at the code tier or lower. The owner tier and break-glass still ask, and a hold
-/// defers what it would allow.
+/// [`decide_as`] with no caller.
 #[must_use]
 pub fn decide(w: &Window, change: &crate::change::Change, operation: &str, now: u64) -> Decision {
-    match judge(w, change, operation, now) {
+    decide_as(w, change, operation, None, now)
+}
+
+/// Whether `w` lets `operation` on `change` through at `now`: authorizing, approving, merging
+/// and closing at the code tier or lower, and `session`'s own close and front. The owner tier and
+/// break-glass still ask, and a hold defers what it would allow.
+#[must_use]
+pub fn decide_as(
+    w: &Window,
+    change: &crate::change::Change,
+    operation: &str,
+    session: Option<&str>,
+    now: u64,
+) -> Decision {
+    match judge(w, change, operation, session, now) {
         Decision::Allow => waits(w, change, operation).map_or(Decision::Allow, Decision::Hold),
         d => d,
     }
 }
 
-fn judge(w: &Window, change: &crate::change::Change, operation: &str, _now: u64) -> Decision {
+fn judge(
+    w: &Window,
+    change: &crate::change::Change,
+    operation: &str,
+    session: Option<&str>,
+    now: u64,
+) -> Decision {
     if !w.usable() {
         return Decision::Ask(format!("Auto window {} has ended or paused", w.id));
     }
     if !matches!(
         operation,
-        "change.authorize" | "change.approve" | "change.merge" | "change.close"
+        "change.authorize" | "change.approve" | "change.merge" | "change.close" | "change.front"
     ) {
         return Decision::Ask(format!("`{operation}` isn't something Auto approves"));
+    }
+    if operation == "change.close" && crate::approval::tiers::own_close(change, session) {
+        return Decision::Allow;
+    }
+    if operation == "change.front" {
+        return front(w, change, session, now);
     }
     if matches!(operation, "change.approve" | "change.merge") && change.tiers.is_none() {
         return Decision::Ask(format!("change {}'s head has no tiers yet", change.number));
@@ -134,6 +175,26 @@ fn judge(w: &Window, change: &crate::change::Change, operation: &str, _now: u64)
     }
 }
 
+/// A front of `change` by `session`: its own, while `w` is active and under [`FRONT_RATE`].
+fn front(w: &Window, change: &crate::change::Change, session: Option<&str>, now: u64) -> Decision {
+    if session.is_none() || change.session.as_deref() != session {
+        return Decision::Ask(format!(
+            "only the session that proposed change {} fronts it under Auto",
+            change.number
+        ));
+    }
+    if w.state != State::Active {
+        return Decision::Ask(format!("Auto window {} is held", w.id));
+    }
+    if w.front_rate(now) >= FRONT_RATE {
+        return Decision::Ask(format!(
+            "Auto window {} allowed {FRONT_RATE} fronts in the last hour",
+            w.id
+        ));
+    }
+    Decision::Allow
+}
+
 impl Windows {
     /// The window that is active, held or paused, if any.
     #[must_use]
@@ -148,6 +209,7 @@ impl Windows {
         let mut next = self.clone();
         for w in &mut next.list {
             w.recent.retain(|t| now.saturating_sub(*t) < SPAN);
+            w.fronts.retain(|t| now.saturating_sub(*t) < FRONT_SPAN);
             let spent = w.hold.as_ref().and_then(|h| h.spent(now));
             if let (State::Held, Some(why)) = (w.state, spent) {
                 (w.state, w.why, w.hold, w.quiet) = (State::Paused, Some(why), None, None);
@@ -205,6 +267,7 @@ impl Windows {
             hold: None,
             recent: Vec::new(),
             quiet: None,
+            fronts: Vec::new(),
         };
         next.list.push(w.clone());
         Ok((next, w))
@@ -281,13 +344,26 @@ impl Windows {
         (next, Some(w))
     }
 
-    /// Decides `operation` on `change` under the active or held window, recording a merge: the next
-    /// windows, and the window and decision, or none when no window is active.
+    /// [`Windows::decide_as`] with no caller.
     #[must_use]
     pub fn decide(
         &self,
         change: &crate::change::Change,
         operation: &str,
+        now: u64,
+    ) -> (Self, Option<(u32, Decision)>) {
+        self.decide_as(change, operation, None, now)
+    }
+
+    /// Decides `operation` on `change` for `session` under the active or held window, recording a
+    /// merge or a front: the next windows, and the window and decision, or none when no window is
+    /// active.
+    #[must_use]
+    pub fn decide_as(
+        &self,
+        change: &crate::change::Change,
+        operation: &str,
+        session: Option<&str>,
         now: u64,
     ) -> (Self, Option<(u32, Decision)>) {
         let mut next = self.settle(now);
@@ -298,7 +374,10 @@ impl Windows {
         else {
             return (next, None);
         };
-        let d = decide(w, change, operation, now);
+        let d = decide_as(w, change, operation, session, now);
+        if operation == "change.front" && d == Decision::Allow {
+            w.fronts.push(now);
+        }
         if merges(w, change, operation, &d) {
             w.used += 1;
             w.merged.push(change.number);

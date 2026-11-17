@@ -224,8 +224,11 @@ async fn asked(env: &Env, s: &Settings, number: u32, by: &str) -> Result<()> {
 ///
 /// When a binding fails.
 pub async fn front(env: &Env, s: &Settings, number: u32, by: &str) -> Result<(u16, Value)> {
-    let (status, answer) =
-        to_instance(env, s, "/merges/front", &json!({ "number": number })).await?;
+    let (status, answer) = {
+        let session = by.starts_with("window:");
+        let body = json!({ "number": number, "session": session });
+        to_instance(env, s, "/merges/front", &body).await?
+    };
     if status != 200 {
         return Ok((409, answer["error"].clone()));
     }
@@ -554,7 +557,11 @@ pub async fn serve(state: &State, path: &str, body: &Value) -> Result<Response> 
             let (q, next) = merges::left(&q, number, failed, now());
             (q, json!({ "next": next }))
         }
-        "/merges/front" => match merges::front(&q, number) {
+        "/merges/front" => match if body["session"].as_bool() == Some(true) {
+            merges::front_after(&q, number)
+        } else {
+            merges::front(&q, number)
+        } {
             Ok((q, left)) => (q, json!({ "left": left })),
             Err(why) => {
                 let refused = json!({ "error": why });

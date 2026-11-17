@@ -400,7 +400,10 @@ pub(super) async fn under_window(
     let Ok(change) = serde_json::from_value::<Change>(v["change"].clone()) else {
         return Ok(None);
     };
-    let verdict = mandates::window_verdict(env, s, &change, &request.operation).await?;
+    let ticket = request.args.get("ticket").and_then(Value::as_str);
+    let caller = tickets::holder(env, s, ticket).await?.ok();
+    let verdict =
+        mandates::window_verdict(env, s, &change, &request.operation, caller.as_deref()).await?;
     Ok(under(env, s, number, request, "window", verdict).await)
 }
 

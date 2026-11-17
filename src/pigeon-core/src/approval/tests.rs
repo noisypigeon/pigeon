@@ -377,6 +377,7 @@ fn closing_a_landed_head_is_code_and_an_auto_window_approves_it_but_not_another_
         hold: None,
         recent: Vec::new(),
         quiet: None,
+        fronts: Vec::new(),
     };
     let pushed = checked();
     let mut landed = checked();
@@ -499,5 +500,85 @@ fn with_a_gate_auto_covers_guarded_and_eviction_paths_but_not_the_gate_or_secret
     assert_eq!(
         t.merge.rule, "guarded: core/approval/x.rs",
         "a gate file wins"
+    );
+}
+
+#[test]
+fn a_session_closes_its_own_unapproved_change_under_auto_and_nobody_elses() {
+    // !955, !961: a session's own superseded change; see the 2026-11-17 Auto ADR §1.
+    use super::mandates::Decision;
+    use super::windows::{Window, decide_as};
+    let me = "https://claude.ai/code/session_a";
+    let window: Window = serde_json::from_value(serde_json::json!({
+        "id": 1, "hours": 0, "started": 0, "expires": 0, "state": "active", "by": "owner"
+    }))
+    .expect("window");
+    let mut own = checked();
+    own.session = Some(me.into());
+    let mut approved = own.clone();
+    approved.state = ChangeState::Approved;
+    let table: Vec<(&str, &Change, Option<&str>, bool)> = vec![
+        ("its own pushed change", &own, Some(me), true),
+        (
+            "another session's",
+            &own,
+            Some("https://claude.ai/code/session_b"),
+            false,
+        ),
+        ("no ticket", &own, None, false),
+        ("an approved change", &approved, Some(me), false),
+    ];
+    for (name, c, caller, allowed) in table {
+        let d = decide_as(&window, c, "change.close", caller, 10);
+        assert_eq!(d == Decision::Allow, allowed, "{name}: {d:?}");
+    }
+}
+
+#[test]
+fn a_session_fronts_its_own_change_under_auto_up_to_the_rate_and_behind_earlier_fronts() {
+    // !881, !888 and others overnight; see the 2026-11-17 Auto ADR §2.
+    use super::mandates::Decision;
+    use super::windows::{FRONT_RATE, Windows};
+    use crate::change::queue::{self, Entry, MergeQueue};
+    let me = "https://claude.ai/code/session_a";
+    let all: Windows = serde_json::from_value(serde_json::json!({ "next": 1, "list": [{
+        "id": 1, "hours": 0, "started": 0, "expires": 0, "state": "active", "by": "owner"
+    }]}))
+    .expect("windows");
+    let mut own = checked();
+    own.session = Some(me.into());
+    let (_, other) = all.decide_as(&own, "change.front", Some("https://claude.ai/code/x"), 10);
+    assert_ne!(other.map(|(_, d)| d), Some(Decision::Allow), "another's");
+    let mut all = all;
+    for i in 0..FRONT_RATE {
+        let (next, d) = all.decide_as(&own, "change.front", Some(me), 10 + i as u64);
+        assert_eq!(d.map(|(_, d)| d), Some(Decision::Allow), "front {i}");
+        all = next;
+    }
+    let (_, over) = all.decide_as(&own, "change.front", Some(me), 20);
+    assert_ne!(over.map(|(_, d)| d), Some(Decision::Allow), "past the rate");
+    let (_, later) = all.decide_as(&own, "change.front", Some(me), 20 + 3_600);
+    assert_eq!(later.map(|(_, d)| d), Some(Decision::Allow), "an hour on");
+
+    let mut q = MergeQueue::default();
+    for n in [1, 2, 3] {
+        q.waiting.push_back(
+            serde_json::from_value::<Entry>(serde_json::json!({ "number": n, "by": "a", "at": 0 }))
+                .expect("entry"),
+        );
+    }
+    let (q, _) = queue::front_after(&q, 2).expect("first");
+    let (q, _) = queue::front_after(&q, 3).expect("second");
+    let order: Vec<u32> = q.waiting.iter().map(|e| e.number).collect();
+    assert_eq!(
+        order,
+        vec![2, 3, 1],
+        "a later front stays behind an earlier one"
+    );
+    let (q, _) = queue::front(&q, 1).expect("the owner's");
+    assert_eq!(
+        q.waiting.front().map(|e| e.number),
+        Some(1),
+        "the owner's goes first"
     );
 }

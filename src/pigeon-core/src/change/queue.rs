@@ -583,6 +583,25 @@ pub fn keep(q: &MergeQueue, number: u32, now: u64) -> MergeQueue {
 ///
 /// When it is merging, isn't queued, or yields to another; the queue is then unchanged.
 pub fn front(q: &MergeQueue, number: u32) -> Result<(MergeQueue, (usize, usize)), String> {
+    place(q, number, false)
+}
+
+/// A session moves its own waiting change `number` forward under Auto: as [`front`], but behind
+/// every change already fronted; see
+/// `.claude/decisions/2026-11-17-security-auto-covers-routine-owner-asks.md` §2.
+///
+/// # Errors
+///
+/// As [`front`].
+pub fn front_after(q: &MergeQueue, number: u32) -> Result<(MergeQueue, (usize, usize)), String> {
+    place(q, number, true)
+}
+
+fn place(
+    q: &MergeQueue,
+    number: u32,
+    after_fronted: bool,
+) -> Result<(MergeQueue, (usize, usize)), String> {
     if q.merging.as_ref().is_some_and(|e| e.number == number) {
         return Err(format!("change {number} is already being merged"));
     }
@@ -605,7 +624,10 @@ pub fn front(q: &MergeQueue, number: u32) -> Result<(MergeQueue, (usize, usize))
     let ahead = next
         .waiting
         .iter()
-        .take_while(|e| q.kept.contains_key(&e.number))
+        .take_while(|e| {
+            q.kept.contains_key(&e.number)
+                || (after_fronted && q.marks.get(&e.number).is_some_and(|m| m.fronted))
+        })
         .count();
     next.waiting.insert(ahead, entry);
     next.marks.entry(number).or_default().fronted = true;
