@@ -1,2 +1,3 @@
 version: 0.1.0
 description: One Worker, looked up by name.
+capabilities: [workers.read]

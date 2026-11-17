@@ -1,2 +1,3 @@
 version: 0.1.4
 description: One R2 bucket.
+capabilities: [r2.write]

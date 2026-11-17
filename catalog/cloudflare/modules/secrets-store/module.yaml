@@ -1,2 +1,3 @@
 version: 0.1.0
 description: The account's one Secrets Store, read.
+capabilities: [secrets-store.read]
