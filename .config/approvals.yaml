@@ -20,6 +20,9 @@ guarded:
   - src/pigeon-core/src/approval/**
   # Each role's capabilities; see .claude/decisions/2026-11-14-security-instance-members-roles-invitations.md §2.
   - .config/roles.yaml
+  # The provider registry and the broker's verdict; see .claude/decisions/2026-11-16-security-provider-calls-mcp-broker.md §3.
+  - .config/providers/**
+  - src/pigeon-core/src/provider/**
 # The gate: the guarded paths Auto never covers, the code that sets the owner tier and proves
 # the owner; Auto covers every other guarded and eviction path. See
 # .claude/decisions/2026-11-15-security-standing-auto-owner-flags.md's 2026-11-16 amendments.
@@ -65,6 +68,8 @@ secrets:
   - tooling/ci/buildkite/ios-sign.sh
   # What each role may do; see .claude/decisions/2026-11-14-security-instance-members-roles-invitations.md §2.
   - .config/roles.yaml
+  # The broker reads a provider credential per call; see the same ADR's §4.
+  - src/pigeon-agent/src/worker/provider.rs
 # Files whose `secrets:` list a head may not lengthen without the owner.
 secret_lists:
   - "**/worker.yaml"
