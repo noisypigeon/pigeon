@@ -151,6 +151,13 @@ pub enum Routed {
         /// Its arguments.
         args: serde_json::Map<String, Value>,
     },
+    /// `provider.call` or `provider.tools`, with its arguments.
+    Provider {
+        /// The operation.
+        operation: String,
+        /// Its arguments.
+        args: serde_json::Map<String, Value>,
+    },
     /// `session.end`, with its arguments.
     SessionEnd {
         /// Its arguments.
@@ -438,6 +445,10 @@ pub fn route(request: &Request, by: &str, at: u64) -> Result<Routed, String> {
             args: a.clone(),
         }),
         "owner.ask" | "owner.withdraw" => Ok(Routed::Owner {
+            operation: request.operation.clone(),
+            args: a.clone(),
+        }),
+        "provider.call" | "provider.tools" => Ok(Routed::Provider {
             operation: request.operation.clone(),
             args: a.clone(),
         }),

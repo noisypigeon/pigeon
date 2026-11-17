@@ -41,6 +41,7 @@ mod owner_items;
 mod passkeys;
 mod platform;
 mod platforms;
+mod provider;
 mod push;
 mod stages;
 mod standalone;
@@ -931,6 +932,13 @@ async fn dispatch(
         } => Ok(answered(
             operation,
             owner_items::run(env, s, &op, &args).await?,
+        )),
+        Routed::Provider {
+            operation: op,
+            args,
+        } => Ok(answered(
+            &op,
+            provider::run(env, s, who, &op, &Value::Object(args)).await?,
         )),
         Routed::SessionStart { args } => {
             Ok(answered(operation, tickets::start(env, s, &args).await?))
