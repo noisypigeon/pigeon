@@ -295,3 +295,27 @@ glob under `src/pigeon-cli/` or `src/site-templates/` becomes `src/**/<tail>`
 (or `**<file>` for a workspace root file), which matches the file both before
 and after the restructure moves it. That ADR's step 12 tightens them to the
 new paths.
+
+### 2026-11-17: The layout is read from the root manifest only
+
+Per the closing amendment of
+[`2026-11-16-development-src-crates-neutral-names.md`](2026-11-16-development-src-crates-neutral-names.md),
+the checks' scope no longer falls back to the old `src/pigeon-cli` layout.
+
+- **The table is required.** `checks::scope` reads the layout from the root
+  `Cargo.toml`'s `[workspace.metadata.pigeon]`. A root manifest without
+  `[workspace]`, or without that table, is an error naming the file and the
+  table, never a guess at `src/pigeon-cli`. `WORKSPACE` goes.
+- **`Layout` has no `Default`.** `cli` is required. `worker` and
+  `infra-tests` are optional, and `policy-tests` defaults to none.
+  `cli-shared`, `run` and `instance` keep their defaults (`src/main.rs`,
+  `src/lib.rs`, `src/cli/mod.rs`, `src/commands/mod.rs`, `Cargo.toml`;
+  `run`; `instance`), which name no crate or directory. `Layout::new(cli)`
+  builds one at the root with those defaults; tests build theirs from it.
+- **The release bot keeps its fallback.** `release::workspace_at` still finds
+  a pre-move revision's workspace, since `--replay` of pre-move tags needs it.
+
+**Execution:** this amendment, then one `refactor` change built on it. It
+covers `deploy/scope` and `deploy/tests.rs`, and `checks/scope.rs`, whose
+`workspace_dir` and `workspace` go with `WORKSPACE` and `EVERYTHING`. The
+jobs, the ship, the bench and `pigeon dev` then run at the checkout's root.
