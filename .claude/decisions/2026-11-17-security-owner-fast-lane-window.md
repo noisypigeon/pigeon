@@ -359,3 +359,29 @@ Neither ADR changes.
   `present/`. Step 5 adds the lane operations' presenters to
   `present/approval.rs`, beside the mandates', each building the view §8
   declares, and adds them to `present::PRESENTED`.
+
+### 2026-11-17: Reviewed against !1074: they agree, and the lane's events name subjects
+
+!1074 amends
+[`2026-11-17-runtime-mcp-feed-view-contract.md`](2026-11-17-runtime-mcp-feed-view-contract.md):
+each event may name a `subject`, and the log sets `resolves` on a closing
+event from two tables of opening and closing kinds. The two ADRs agree;
+§7's events take subjects so their items close:
+
+| Event | Subject | Opens or closes |
+| --- | --- | --- |
+| `lane.requested` (the `approval.pending` item) | `lane-request:<request id>` | opens |
+| `lane.granted`, `lane.refused` | `lane-request:<request id>` | close it |
+| `lane.open` | `lane:<id>` | opens |
+| `lane.ended` | `lane:<id>` | closes it |
+| `lane.broken` | `lane-broken:<id>` | opens |
+| `lane.repaired`, when the hold lifts (§5) | `lane-broken:<id>` | closes it |
+
+- An extension is a new request: it opens and closes its own
+  `lane-request:` subject, and `lane.extended` is a `note`. `job.waived`
+  and `lane.deferred` are `note`s and name no subject.
+- `lane.granted`, `lane.refused` and `lane.repaired` are new kinds beside
+  §7's. The kinds join 8a's two tables if 8a hasn't merged when step 5 is
+  briefed; otherwise step 7 adds them, with a test that each lane item
+  closes.
+- Nothing in !1063 (step 2) changes: it holds no events.
