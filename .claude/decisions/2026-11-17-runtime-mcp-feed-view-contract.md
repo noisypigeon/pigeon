@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: runtime
-* Governs: `src/**/mcp.rs`, `src/**/wire.rs`, `src/**/events.rs`, `src/**/worker/events.rs`, `src/**/push.rs`, `src/**/worker/push.rs`, `src/**/worker/apns.rs`, `src/**/worker/api.rs`, `src/**/worker/devices.rs`, `src/**/tasks.rs`, `src/**/view.rs`, `src/**/view/**`, `src/**/feed.rs`, `src/**/feed/**`
+* Governs: `src/**/mcp.rs`, `src/**/wire.rs`, `src/**/events.rs`, `src/**/worker/events.rs`, `src/**/push.rs`, `src/**/worker/push.rs`, `src/**/worker/apns.rs`, `src/**/worker/api.rs`, `src/**/worker/devices.rs`, `src/**/tasks.rs`, `src/**/view.rs`, `src/**/view/**`, `src/**/feed.rs`, `src/**/feed/**`, `src/**/present/**`
 
 ## Context
 
@@ -445,3 +445,7 @@ Per
   approvals, each with an `End` action.
 - The lane's operations declare views as that ADR's §8 lists; the four
   views and their value kinds are unchanged.
+### 2026-11-17: Governs takes step 5a's present/
+
+Step 5a (!1059) added `src/pigeon-core/src/present/`; `Governs` gains
+`src/**/present/**`, as the presenting amendment said it would.
