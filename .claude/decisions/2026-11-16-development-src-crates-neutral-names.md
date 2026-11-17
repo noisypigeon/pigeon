@@ -703,4 +703,15 @@ a generated change closes, which !736 neither relies on nor changes.
 - Its one shared file is `tests/suite/grants.rs`, where `backplane::` paths
   become `agent::`. The tests !801 added there follow that rename when
   !797 restacks, and nothing they assert changes.
+### 2026-11-16: Review of !797 against !818: they agree
+
+- !797 renames agent's library from `backplane` to `agent` (§1). It touches
+  none of the paths
+  [`2026-11-16-development-merge-path-measured-faster.md`](2026-11-16-development-merge-path-measured-faster.md)
+  governs: `worker/main_run.rs`, `worker/merges.rs`, `worker/github.rs`,
+  `cobot/ci.rs` and `release/**`. The two changes met only through !797's
+  scope `src/**`, and !818 changed no code.
+- a7 (!803) moves `cobot/ci.rs` to `checks/ci.rs` (§2). !835 widens that
+  ADR's glob to `src/pigeon-agent/src/*/ci.rs` first, and (d) narrows it
+  afterwards, as !806 did for eight other ADRs.
 - Nothing either ADR decides changes.
