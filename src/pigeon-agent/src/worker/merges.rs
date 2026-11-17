@@ -27,11 +27,12 @@ const TRIES: usize = 10;
 /// When a binding fails.
 pub async fn ask(env: &Env, s: &Settings, number: u32, by: &str) -> Result<(u16, Value)> {
     hand_back_idle(env, s).await?;
+    let docs = docs_only(env, s, number).await?;
     let (status, v) = to_instance(
         env,
         s,
         "/merges/enqueue",
-        &json!({ "number": number, "by": by }),
+        &json!({ "number": number, "by": by, "docs": docs }),
     )
     .await?;
     // A turn the queue moved past starts, whatever it answers this ask.
@@ -57,6 +58,15 @@ pub async fn ask(env: &Env, s: &Settings, number: u32, by: &str) -> Result<(u16,
         return Ok((status, v));
     }
     Ok((status, json!({ "change": v })))
+}
+
+/// Whether change `number` is docs-only, by its own record; see the merge-path ADR's 2026-11-17
+/// amendment, §9.
+async fn docs_only(env: &Env, s: &Settings, number: u32) -> Result<bool> {
+    let (status, view) = to_change(env, &s.repo, number, Method::Get, "/status", None).await?;
+    Ok(status == 200
+        && serde_json::from_value::<Change>(view["change"].clone())
+            .is_ok_and(|c| merges::docs_only(&c)))
 }
 
 /// Starts the next merge whose yield ended, if none runs; see the yield ADR's 2026-11-13
@@ -425,7 +435,8 @@ pub async fn serve(state: &State, path: &str, body: &Value) -> Result<Response> 
     let (q, answer) = match path {
         "/merges/enqueue" => {
             let by = body["by"].as_str().unwrap_or_default();
-            let (q, resumed, queued) = merges::ask(&q, number, by, now());
+            let docs = body["docs"].as_bool().unwrap_or(false);
+            let (q, resumed, queued) = merges::ask_as(&q, number, by, docs, now());
             match queued {
                 Ok(queued) => (q, json!({ "queued": queued, "resumed": resumed })),
                 Err(why) => {

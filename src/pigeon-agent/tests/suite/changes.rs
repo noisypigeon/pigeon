@@ -499,8 +499,12 @@ fn the_mirror_job_never_gates_a_change() {
     }
     assert_eq!(c.state, State::Checked, "nor does a failed one");
 
-    let (mut c, effects) = mirrored(B, &[]);
-    assert_eq!(effects, [Effect::Start(MIRROR.into())]);
+    let (mut c, effects) = mirrored(B, &["fmt"]);
+    assert_eq!(
+        effects,
+        [Effect::Start("fmt".into()), Effect::Start(MIRROR.into())]
+    );
+    pass(&mut c, "fmt", B);
     assert_eq!(c.state, State::Checked);
     c.apply(Event::Approve {
         by: "owner".into(),
@@ -544,8 +548,19 @@ fn a_refused_head_never_queues_the_mirror_job() {
 }
 
 #[test]
+fn a_head_with_no_code_check_never_queues_the_mirror_job() {
+    let (c, effects) = mirrored(A, &["policy.check"]);
+    assert_eq!(effects, [Effect::Start("policy.check".into())]);
+    assert!(c.jobs.iter().all(|j| j.name != MIRROR));
+    let (c, effects) = mirrored(B, &[]);
+    assert_eq!(effects, []);
+    assert_eq!(c.state, State::Checked);
+    assert!(c.jobs.iter().all(|j| j.name != MIRROR));
+}
+
+#[test]
 fn a_mirrored_change_is_unmirrored_once_merged_or_closed() {
-    let (mut c, _) = mirrored(A, &[]);
+    let (mut c, _) = mirrored(A, &["fmt"]);
     pass(&mut c, MIRROR, A);
     let open = c.clone();
     c.apply(Event::Close).expect("closes");
@@ -554,7 +569,8 @@ fn a_mirrored_change_is_unmirrored_once_merged_or_closed() {
     c.apply(Event::Close).expect("closes again");
     assert!(!control::unmirror_due(Some(&closed), &c), "only once");
 
-    let (mut c, _) = mirrored(B, &[]);
+    let (mut c, _) = mirrored(B, &["fmt"]);
+    pass(&mut c, "fmt", B);
     pass(&mut c, MIRROR, B);
     c.apply(Event::Approve {
         by: "owner".into(),

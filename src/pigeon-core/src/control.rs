@@ -1457,7 +1457,8 @@ pub fn checks_of(change: &Change) -> Vec<Check> {
 }
 
 /// `event` with the [`MIRROR`] job among a passing bound job's checks, for a Worker that
-/// mirrors; a refused head gains nothing, so it never leaves Cloudflare.
+/// mirrors; a refused head gains nothing, so it never leaves Cloudflare, nor does a head with no
+/// code check; see the merge-path ADR's 2026-11-17 amendment, §9.
 #[must_use]
 pub fn with_mirror(event: Event) -> Event {
     match event {
@@ -1470,7 +1471,8 @@ pub fn with_mirror(event: Event) -> Event {
             gate,
             patch,
         } => {
-            if violations.is_empty() && !checks.iter().any(|c| c.name == MIRROR) {
+            let code = checks.iter().any(|c| crate::actions::on_github(&c.argv));
+            if violations.is_empty() && code && !checks.iter().any(|c| c.name == MIRROR) {
                 checks.push(Check {
                     name: MIRROR.into(),
                     argv: Vec::new(),
