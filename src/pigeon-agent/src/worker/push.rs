@@ -10,8 +10,7 @@ use super::approve as page;
 use super::mandates::to_instance;
 use super::platform::{self, Settings, now};
 use crate::access::Identity;
-use crate::approve as pages;
-use crate::push::{Devices, Latest, PAGE_SCRIPT, SERVICE_WORKER, Vapid};
+use crate::push::{Devices, Latest, SERVICE_WORKER, Vapid};
 use crate::tasks::{Digest, DigestInput, Tasks, digest};
 
 /// The Worker secret holding the VAPID private key.
@@ -423,84 +422,28 @@ fn script(body: &str) -> Result<Response> {
     Ok(r)
 }
 
-/// Serves the pages a device subscribes from, to the owner only.
-///
-/// # Errors
-///
-/// When a binding fails.
-pub async fn page_serve(
-    mut req: Request,
-    env: &Env,
-    s: &Settings,
-    who: &Identity,
-) -> Result<Response> {
+/// Serves the shell's service worker, to the owner only.
+fn service_worker(who: &Identity) -> Result<Response> {
     if !who.human {
         return page::refused(403, "only a person signed in to Access subscribes a device");
     }
-    match (req.method(), req.path().as_str()) {
-        (Method::Get, "/sw.js") => script(SERVICE_WORKER),
-        (Method::Get, "/approvals/manifest.json") => {
-            let mut r = Response::ok(pages::MANIFEST)?;
-            r.headers_mut()
-                .set("content-type", "application/manifest+json")?;
-            Ok(r)
-        }
-        (Method::Get, "/approvals/push.js") => script(PAGE_SCRIPT),
-        (Method::Get, "/approvals/vapid") => match platform::secret(env, VAPID_VAR)
-            .ok()
-            .and_then(|k| Vapid::from_secret(&k).ok())
-        {
-            Some(v) => Response::ok(v.public_key()),
-            None => Response::error("push isn't set up: no PUSH_VAPID_KEY", 503),
-        },
-        (Method::Get, "/approvals/latest.json") => {
-            let (_, v) = to_instance(env, s, "/push/latest", &json!({})).await?;
-            Response::from_json(&v)
-        }
-        (Method::Post, "/approvals/push") => {
-            let url = req.url()?;
-            let host = url.host_str().unwrap_or_default().to_string();
-            let origin = req.headers().get("origin")?;
-            let site = req.headers().get("sec-fetch-site")?;
-            if !pages::same_origin(origin.as_deref(), site.as_deref(), &host) {
-                return Response::error("subscribed only from its own page", 403);
-            }
-            let body: Value = req.json().await?;
-            let by = super::account::approver(env, s).await?;
-            let add = json!({ "endpoint": body["endpoint"], "by": by });
-            let (status, v) = to_instance(env, s, "/push/add", &add).await?;
-            Ok(Response::from_json(&v)?.with_status(status))
-        }
-        (method, path) => Response::error(format!("{method:?} {path} isn't served here"), 404),
-    }
+    script(SERVICE_WORKER)
 }
 
 /// The routes this surface serves.
-pub(super) const ROUTES: &[super::Route] = &[
-    super::Route::any(crate::routes::Path::Exact("/sw.js"), serve_route),
-    super::Route::any(
-        crate::routes::Path::Exact("/approvals/push.js"),
-        serve_route,
-    ),
-    super::Route::any(crate::routes::Path::Exact("/approvals/vapid"), serve_route),
-    super::Route::any(crate::routes::Path::Exact("/approvals/push"), serve_route),
-    super::Route::any(
-        crate::routes::Path::Exact("/approvals/latest.json"),
-        serve_route,
-    ),
-    super::Route::any(
-        crate::routes::Path::Exact("/approvals/manifest.json"),
-        serve_route,
-    ),
-];
+pub(super) const ROUTES: &[super::Route] = &[super::Route::only(
+    Method::Get,
+    crate::routes::Path::Exact("/sw.js"),
+    serve_route,
+)];
 
 fn serve_route<'a>(
-    req: Request,
-    env: &'a Env,
-    s: &'a Settings,
+    _req: Request,
+    _env: &'a Env,
+    _s: &'a Settings,
     who: &'a Identity,
 ) -> futures_util::future::LocalBoxFuture<'a, Result<Response>> {
-    Box::pin(page_serve(req, env, s, who))
+    Box::pin(std::future::ready(service_worker(who)))
 }
 
 /// The digest's line for an Auto window the rate breaker holds or that is paused, which a
