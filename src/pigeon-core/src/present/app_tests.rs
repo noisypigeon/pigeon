@@ -128,6 +128,16 @@ fn saves_link_back_to_the_profile() {
 }
 
 #[test]
+fn the_proved_actions_present_saves() {
+    for (op, title) in [
+        ("device.unlink", "Device unlinked"),
+        ("passkey.remove", "Passkey removed"),
+    ] {
+        assert_eq!(present(op, json!({}))["title"], title);
+    }
+}
+
+#[test]
 fn every_name_is_presented() {
     for op in NAMES {
         present(op, json!({}));

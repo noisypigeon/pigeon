@@ -188,6 +188,7 @@ pub(super) async fn serve_message(
 
 /// A device-door operation, run as `device`; see
 /// `.claude/decisions/2026-11-17-runtime-mcp-feed-view-contract.md`, its R8 amendment.
+#[expect(clippy::too_many_lines, reason = "one arm per device operation")]
 async fn device_op(
     env: &Env,
     s: &Settings,
@@ -269,6 +270,28 @@ async fn device_op(
             .await?
         }
         "avatar.remove" => route(Method::Delete, "/v0/app/profile/avatar", Value::Null).await?,
+        "device.unlink" | "passkey.remove" => {
+            let proof = json!({"passkey": {
+                "id": arg("credential"),
+                "client": arg("client_data"),
+                "authenticator": arg("authenticator_data"),
+                "signature": arg("signature"),
+            }});
+            let prefix = if op == "device.unlink" {
+                "/v0/app/devices/"
+            } else {
+                "/v0/app/passkeys/"
+            };
+            super::account::route(
+                env,
+                s,
+                device,
+                &Method::Delete,
+                &format!("{prefix}{}", arg("id")),
+                &proof,
+            )
+            .await?
+        }
         other => {
             return Ok(reply(
                 false,

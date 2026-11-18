@@ -220,7 +220,7 @@ pub enum Door {
 }
 
 /// The operations that act as the device `/v0/app/mcp` verified, listed and run only on that door; see .claude/decisions/2026-11-17-runtime-mcp-feed-view-contract.md, its R8 amendment.
-pub const DEVICE_OPS: [&str; 11] = [
+pub const DEVICE_OPS: [&str; 13] = [
     "device.show",
     "device.push",
     "instances.list",
@@ -232,6 +232,8 @@ pub const DEVICE_OPS: [&str; 11] = [
     "avatar.edit",
     "avatar.put",
     "avatar.remove",
+    "device.unlink",
+    "passkey.remove",
 ];
 
 const GRANT: [&str; 7] = [
@@ -880,6 +882,34 @@ const CATALOG: &[Operation] = &[
         effect: Effect::Build,
         summary: "Remove the profile's photo; on the app's door only; see .claude/decisions/2026-11-17-runtime-mcp-feed-view-contract.md, its R8 amendment",
         args: &[],
+        view: View::Card,
+    },
+    Operation {
+        name: "device.unlink",
+        engine: Engine::Agent,
+        effect: Effect::Build,
+        summary: "Unlink linked device `id`, proved by the owner's passkey for that device; on the app's door only; see .claude/decisions/2026-11-17-runtime-mcp-feed-view-contract.md, its R10b amendment",
+        args: &[
+            arg("id", true, Kind::String),
+            arg("credential", true, Kind::String),
+            arg("client_data", true, Kind::String),
+            arg("authenticator_data", true, Kind::String),
+            arg("signature", true, Kind::String),
+        ],
+        view: View::Card,
+    },
+    Operation {
+        name: "passkey.remove",
+        engine: Engine::Agent,
+        effect: Effect::Build,
+        summary: "Remove passkey `id`, proved by the owner's passkey; never the last one; on the app's door only; see .claude/decisions/2026-11-17-runtime-mcp-feed-view-contract.md, its R10b amendment",
+        args: &[
+            arg("id", true, Kind::String),
+            arg("credential", true, Kind::String),
+            arg("client_data", true, Kind::String),
+            arg("authenticator_data", true, Kind::String),
+            arg("signature", true, Kind::String),
+        ],
         view: View::Card,
     },
     Operation {
