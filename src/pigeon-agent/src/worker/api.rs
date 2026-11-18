@@ -96,6 +96,10 @@ async fn serve_mcp(
             let outcome = run(env, settings, who, &request).await;
             Response::from_json(&mcp::answer(&id, outcome))
         }
+        Action::Read { id, uri, request } => {
+            let outcome = run(env, settings, who, &request).await;
+            Response::from_json(&mcp::contents(&id, &uri, outcome))
+        }
     }
 }
 

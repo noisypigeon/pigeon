@@ -31,7 +31,12 @@ pub mod code {
     pub const METHOD_NOT_FOUND: i64 = -32601;
     /// Bad parameters, or an unknown tool.
     pub const INVALID_PARAMS: i64 = -32602;
+    /// A resource URI this server doesn't serve.
+    pub const RESOURCE_NOT_FOUND: i64 = -32002;
 }
+
+/// The feed's resource; see .claude/decisions/2026-11-17-runtime-mcp-feed-view-contract.md §3.
+pub const FEED_URI: &str = "pigeon://feed";
 
 /// What a client declared at `initialize`, carried in its session ID.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -203,6 +208,15 @@ pub enum Action {
         /// The operation.
         request: Request,
     },
+    /// Read this resource by running `request`, then [`contents`] with its outcome.
+    Read {
+        /// The request's ID.
+        id: Value,
+        /// The resource's URI.
+        uri: String,
+        /// The operation.
+        request: Request,
+    },
 }
 
 /// An operation's tool name: dots become underscores, which every MCP client accepts.
@@ -247,6 +261,52 @@ pub fn tools() -> Value {
     json!({ "tools": tools })
 }
 
+/// Every resource.
+#[must_use]
+pub fn resources() -> Value {
+    json!({ "resources": [{
+        "uri": FEED_URI,
+        "name": "feed",
+        "title": "pigeon's feed",
+        "description": "Items for the reader, newest last: read with ?after=<n|session>&needs=<owner|agent>&open=1&session=<label>",
+        "mimeType": "application/json",
+    }] })
+}
+
+/// What a `resources/read` with these `params` asks.
+fn read(id: Value, params: &Value) -> Action {
+    let Some(uri) = params.get("uri").and_then(Value::as_str) else {
+        return Action::Reply(error(&id, code::INVALID_PARAMS, "`uri` must be a string"));
+    };
+    let query = match uri.strip_prefix(FEED_URI) {
+        Some("") => Some(""),
+        Some(rest) => rest.strip_prefix('?'),
+        None => None,
+    };
+    let Some(query) = query else {
+        return Action::Reply(error(
+            &id,
+            code::RESOURCE_NOT_FOUND,
+            &format!("no resource `{uri}`"),
+        ));
+    };
+    let mut args = serde_json::Map::new();
+    for k in ["after", "session", "needs", "open"] {
+        if let Some(v) = crate::approve::field(query, k).filter(|v| !v.trim().is_empty()) {
+            args.insert(k.into(), Value::String(v));
+        }
+    }
+    args.insert("seconds".into(), Value::String("0".into()));
+    Action::Read {
+        id,
+        uri: uri.to_string(),
+        request: Request {
+            operation: "feed.read".into(),
+            args,
+        },
+    }
+}
+
 /// What `message`, one JSON-RPC message, asks.
 #[must_use]
 pub fn parse(message: &Value, version: &str) -> Action {
@@ -282,7 +342,10 @@ pub fn parse(message: &Value, version: &str) -> Action {
                     &id,
                     &json!({
                         "protocolVersion": session.protocol,
-                        "capabilities": { "tools": { "listChanged": false } },
+                        "capabilities": {
+                            "tools": { "listChanged": false },
+                            "resources": { "subscribe": false, "listChanged": false },
+                        },
                         "serverInfo": { "name": "pigeon", "version": version },
                         "instructions": "pigeon's control plane. Propose a change, push its branch, read its status; the owner approves on the approval page this server links to, with a passkey.",
                         "_meta": { "dev.pigeon/contract": crate::view::CONTRACT },
@@ -293,6 +356,8 @@ pub fn parse(message: &Value, version: &str) -> Action {
         }
         "ping" => Action::Reply(result(&id, &json!({}))),
         "tools/list" => Action::Reply(result(&id, &tools())),
+        "resources/list" => Action::Reply(result(&id, &resources())),
+        "resources/read" => read(id, &params),
         "tools/call" => {
             let Some(name) = params.get("name").and_then(Value::as_str) else {
                 return Action::Reply(error(&id, code::INVALID_PARAMS, "`name` is required"));
@@ -382,6 +447,23 @@ pub fn answer(id: &Value, outcome: Result<Response, Error>) -> Value {
                 "isError": true,
             }),
         ),
+    }
+}
+
+/// The answer to a [`Action::Read`]: the operation's result as the resource's JSON text, or a JSON-RPC error.
+#[must_use]
+pub fn contents(id: &Value, uri: &str, outcome: Result<Response, Error>) -> Value {
+    match outcome {
+        Ok(r) if r.ok => result(
+            id,
+            &json!({ "contents": [{
+                "uri": uri,
+                "mimeType": "application/json",
+                "text": serde_json::to_string(&r.result).unwrap_or_default(),
+            }] }),
+        ),
+        Ok(r) => error(id, code::INVALID_PARAMS, &r.violations.join("; ")),
+        Err(e) => error(id, code::INVALID_PARAMS, &e.to_string()),
     }
 }
 

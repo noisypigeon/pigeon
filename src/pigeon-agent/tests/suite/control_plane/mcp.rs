@@ -176,7 +176,7 @@ fn bad_messages_get_json_rpc_errors_and_notifications_none() {
         Some(code::INVALID_REQUEST)
     );
     assert_eq!(
-        code_of(json!({ "jsonrpc": "2.0", "id": 1, "method": "resources/list" })),
+        code_of(json!({ "jsonrpc": "2.0", "id": 1, "method": "prompts/list" })),
         Some(code::METHOD_NOT_FOUND)
     );
     assert_eq!(
@@ -201,6 +201,86 @@ fn bad_messages_get_json_rpc_errors_and_notifications_none() {
         reply(&json!({ "jsonrpc": "2.0", "id": 2, "method": "ping" }))["result"],
         json!({})
     );
+}
+
+#[test]
+fn initialize_names_the_resources_capability() {
+    let (r, _) = initialize(&json!({}));
+    assert_eq!(r["result"]["capabilities"]["resources"]["subscribe"], false);
+}
+
+#[test]
+fn resources_list_names_the_feed() {
+    let r = reply(&json!({ "jsonrpc": "2.0", "id": 1, "method": "resources/list" }));
+    let list = r["result"]["resources"].as_array().expect("resources");
+    assert_eq!(list.len(), 1);
+    assert_eq!(list[0]["uri"], "pigeon://feed");
+}
+
+fn read_feed(uri: &str) -> Action {
+    mcp::parse(
+        &json!({ "jsonrpc": "2.0", "id": 4, "method": "resources/read", "params": { "uri": uri } }),
+        "0",
+    )
+}
+
+#[test]
+fn reading_the_feed_runs_feed_read() {
+    let Action::Read { id, uri, request } = read_feed("pigeon://feed?after=5&needs=agent&open=1")
+    else {
+        panic!("not a read");
+    };
+    assert_eq!(id, 4);
+    assert_eq!(uri, "pigeon://feed?after=5&needs=agent&open=1");
+    assert_eq!(request.operation, "feed.read");
+    assert_eq!(request.args["after"], "5");
+    assert_eq!(request.args["needs"], "agent");
+    assert_eq!(request.args["open"], "1");
+    assert_eq!(request.args["seconds"], "0");
+    assert!(!request.args.contains_key("session"));
+    let Action::Read { request, .. } = read_feed("pigeon://feed") else {
+        panic!("not a read");
+    };
+    assert_eq!(request.args.len(), 1);
+    assert_eq!(request.args["seconds"], "0");
+}
+
+#[test]
+fn an_unknown_resource_is_not_found() {
+    let Action::Reply(v) = read_feed("pigeon://nope") else {
+        panic!("not a reply");
+    };
+    assert_eq!(v["error"]["code"], code::RESOURCE_NOT_FOUND);
+}
+
+#[test]
+fn contents_wrap_a_result_or_answer_an_error() {
+    let id = json!(4);
+    let ok = mcp::contents(
+        &id,
+        "pigeon://feed",
+        Ok(Response {
+            operation: "feed.read".into(),
+            ok: true,
+            result: json!({ "items": [] }),
+            violations: vec![],
+        }),
+    );
+    let item = &ok["result"]["contents"][0];
+    assert_eq!(item["uri"], "pigeon://feed");
+    assert_eq!(item["mimeType"], "application/json");
+    assert_eq!(item["text"], json!({ "items": [] }).to_string());
+    let bad = mcp::contents(
+        &id,
+        "pigeon://feed",
+        Ok(Response {
+            operation: "feed.read".into(),
+            ok: false,
+            result: json!({}),
+            violations: vec!["a".into(), "b".into()],
+        }),
+    );
+    assert_eq!(bad["error"]["message"], "a; b");
 }
 
 #[test]
