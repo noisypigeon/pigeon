@@ -1099,3 +1099,19 @@ A `lifecycle` can't differ per item, and a module holds one resource, so:
   secret, version or expiry, removes no Access policy and replaces nothing.
   Until the owner has checked that plan, platform/blue isn't applied, and no
   token is rotated.
+
+### 2026-11-18: The pool's token is read, never managed
+
+Run 40 imported `pigeon-pool` into the adopted module, and the provider
+still planned `client_secret_version` null→1 and a new `client_secret`:
+`ignore_changes` doesn't stop the provider's own default. The owner chose
+to take the token out of OpenTofu.
+
+- **`access-service-token-adopted` becomes data-only** (0.2.0): it reads
+  the token by name, with a postcondition that the account holds exactly
+  one, and outputs its `id` and `client_id`. OpenTofu holds no token, so
+  no plan can write it.
+- `infra/adopt.rs` imports nothing into it. The adopted policy still
+  includes the token by the ID it reads.
+- **Done when** a platform/blue plan shows no change to the token at all.
+  The rule stands: no platform/blue apply until the owner has checked it.

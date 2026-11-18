@@ -1,7 +1,7 @@
 output "id" {
-  value = cloudflare_zero_trust_access_service_token.this.id
+  value = local.token.id
 }
 
 output "client_id" {
-  value = cloudflare_zero_trust_access_service_token.this.client_id
+  value = local.token.client_id
 }

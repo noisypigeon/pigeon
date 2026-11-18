@@ -112,12 +112,13 @@ fn each_declared_name_the_account_holds_is_imported_and_the_rest_created() {
             .as_deref(),
         Some("accounts/acct/t1")
     );
-    // An adopted token, by name, into its own module.
-    assert_eq!(
-        to(&got, "module.adopted_service_tokens[\"pigeon-pool\"].cloudflare_zero_trust_access_service_token.this")
-            .as_deref(),
-        Some("accounts/acct/t2")
-    );
+    // An adopted token is only read, so nothing is imported for it.
+    assert!(got.iter().all(|i| {
+        !i["to"]
+            .as_str()
+            .unwrap_or_default()
+            .starts_with("module.adopted_service_tokens")
+    }));
     // Not held, so created: the plans bucket and the builds token.
     assert!(got.iter().all(|i| {
         !i["to"]
@@ -150,7 +151,7 @@ fn each_declared_name_the_account_holds_is_imported_and_the_rest_created() {
         Some("acct/p4"),
         "a name from the item's own field"
     );
-    assert_eq!(got.len(), 11, "{got:#?}");
+    assert_eq!(got.len(), 10, "{got:#?}");
 }
 
 #[test]
@@ -170,5 +171,69 @@ fn modules_infra_cant_find_and_computed_names_are_left_alone() {
     assert_eq!(
         adopt::imports(&r, "acct", &Fake).expect("imports"),
         Vec::<Value>::new()
+    );
+}
+
+/// This repository's `platform/blue`, rendered as a plan would render it.
+fn platform_blue() -> Value {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let units = agent::infra::select_in(
+        &root,
+        &root,
+        &root.join(".config"),
+        &["platform/blue".to_string()],
+    )
+    .expect("platform/blue is valid");
+    agent::infra::render_json(
+        &units[0],
+        std::path::Path::new("/state"),
+        &agent::infra::providers::Allowlist::default(),
+        agent::infra::generations::day("2026-11-18").expect("day"),
+        &agent::infra::config::Existing::new(),
+    )
+}
+
+/// An account holding only the pool's token.
+struct Held;
+
+impl Lookup for Held {
+    fn list(&self, kind: Kind, _jurisdiction: &str) -> Result<Vec<Found>, String> {
+        Ok(match kind {
+            Kind::ServiceToken => vec![found("pigeon-pool", "t9")],
+            _ => Vec::new(),
+        })
+    }
+}
+
+// The pool's hand-made token is read, never managed, so no plan can rotate its secret; see
+// .claude/decisions/2026-11-15-development-capacity-pools-hard-spend-cap.md, its 2026-11-18
+// amendments.
+#[test]
+fn an_adopted_token_is_only_read_and_never_imported() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let tf = std::fs::read_to_string(
+        root.join("catalog/cloudflare/modules/access-service-token-adopted/main.tf"),
+    )
+    .expect("module");
+    assert!(!tf.contains("resource \""), "the module only reads");
+
+    let json = platform_blue();
+    let m = &json["module"];
+    assert!(
+        m["adopted_service_tokens"]["for_each"]
+            .get("pigeon-pool")
+            .is_some()
+    );
+    assert!(m["service_tokens"]["for_each"].get("pigeon-pool").is_none());
+    assert!(
+        m["adopted_token_policies"]["service_token_id"]
+            .as_str()
+            .expect("an input")
+            .contains("module.adopted_service_tokens[")
+    );
+    let got = adopt::imports(&json, "acct", &Held).expect("imports");
+    assert!(
+        got.iter().all(|i| i["id"] != "accounts/acct/t9"),
+        "{got:#?}"
     );
 }

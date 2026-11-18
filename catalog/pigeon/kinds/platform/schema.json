@@ -211,7 +211,7 @@
     "adopted_service_tokens": {
       "type": "array",
       "uniqueItems": true,
-      "description": "Service tokens adopted unrotated, each with its own Service Auth policy: the secret stays as Cloudflare holds it. See .claude/decisions/2026-11-15-development-capacity-pools-hard-spend-cap.md, 2026-11-18 amendment.",
+      "description": "Service tokens the account already holds, each read by name and never written, with its own Service Auth policy, so no plan rotates its secret. See .claude/decisions/2026-11-15-development-capacity-pools-hard-spend-cap.md, 2026-11-18 amendment.",
       "items": {
         "type": "object",
         "additionalProperties": false,

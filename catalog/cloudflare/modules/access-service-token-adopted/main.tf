@@ -1,5 +1,6 @@
-# One Access service token adopted unrotated: its secret left as Cloudflare holds it; see
-# .claude/decisions/2026-11-15-development-capacity-pools-hard-spend-cap.md, 2026-11-18 amendment.
+# One Access service token the account already holds, read by name and never written, so no
+# plan can rotate its secret; see
+# .claude/decisions/2026-11-15-development-capacity-pools-hard-spend-cap.md, its 2026-11-18 amendments.
 terraform {
   required_providers {
     cloudflare = {
@@ -9,12 +10,18 @@ terraform {
   }
 }
 
-resource "cloudflare_zero_trust_access_service_token" "this" {
+data "cloudflare_zero_trust_access_service_tokens" "this" {
   account_id = var.account_id
   name       = var.name
-  duration   = var.duration
 
   lifecycle {
-    ignore_changes = [client_secret_version, previous_client_secret_expires_at]
+    postcondition {
+      condition     = length([for t in self.result : t if t.name == var.name]) == 1
+      error_message = "The account must hold exactly one service token of this name."
+    }
   }
+}
+
+locals {
+  token = one([for t in data.cloudflare_zero_trust_access_service_tokens.this.result : t if t.name == var.name])
 }
