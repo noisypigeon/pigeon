@@ -1269,6 +1269,17 @@ impl DurableObject for ChangeRun {
     }
 
     async fn alarm(&self) -> Result<Response> {
+        // The standby only reads; see the blue-green ADR §A.3.
+        if !super::lease::acting(&self.env).await {
+            return Response::ok("standby");
+        }
+        self.run_alarm().await
+    }
+}
+
+impl ChangeRun {
+    /// The alarm's work, for the color that holds the lease.
+    async fn run_alarm(&self) -> Result<Response> {
         let Some(mut change) = self.state.storage().get::<Change>(CHANGE).await? else {
             return Response::ok("no change");
         };
@@ -1373,9 +1384,7 @@ impl DurableObject for ChangeRun {
         self.alarm_done(&change, restack_failed, ended).await;
         Response::ok("ok")
     }
-}
 
-impl ChangeRun {
     /// After an alarm saved `change`: a failed restack's task, and the merge queue told when its
     /// merge ended.
     #[allow(
