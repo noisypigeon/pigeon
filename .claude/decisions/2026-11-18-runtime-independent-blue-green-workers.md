@@ -371,3 +371,46 @@ So:
   The engine change is under `eviction`, and the policy files are guarded
   (`secrets*` is gate). So every 3c change waits for the owner's passkey,
   and nothing else waits on it.
+
+### 2026-11-18: Step 9a's front: its own crate, service bindings, its own check, and only hosts Access covers
+
+A.4 and A.5 step 4 name `pigeon-front` but not its shape. A Worker spec has
+no service binding yet, and a deploy checks only `PUBLIC_HOST`. So:
+
+- **Its own crate, `src/pigeon-front`**, depending on `worker`, `serde` and
+  `serde_json` only. As a feature of `pigeon-agent` it would redeploy on every
+  agent or core change, and A.4 says it changes rarely. It reads the lease
+  with its own one-line query, not `pigeon-core`'s.
+- **Service bindings in the spec:** `bindings.services` maps a binding name
+  to a Worker's name, rendered as wrangler's `services`. The front binds one
+  per color, named by the color upper-cased with `-` as `_`
+  (`PIGEON_CONTROL`, later `PIGEON_GREEN`, `PIGEON_BLUE`).
+- **Forwarding:** each request goes, unchanged, to the binding of the
+  lease's `color`, whatever its `state`; promotion moves `color` at
+  `epoch + 1`. The row is cached per isolate for at most 5 s. A missing row,
+  or a color with no binding, answers 503: the front never guesses.
+- **Its own check:** a front deploy is whole (it has no objects to drain),
+  then checked with `GET /healthz` on its first custom domain, which reaches
+  the primary through it. It never takes the version-override smoke, which
+  names a Worker on `PUBLIC_HOST`.
+- **Its hosts are the platform's:** the front forwards a request unchanged,
+  so the primary sees the front's host. Today a `*.pigeon.dev` host that
+  isn't `PASSKEY_RP_ID` or `PUBLIC_HOST` is a standalone's, proxied or a bare
+  404, and `/builds/` answers before any identity check, trusting Access at
+  the edge. So a host the front serves must be one of `platform/blue`'s
+  `domains`: the Access application covers exactly those (its `hostnames` are
+  `$config.domains`), and the primary takes each of them as its own host, not
+  a standalone's. Its routes still claim only `domains[0]` and `domains[1]`.
+- **First host:** `front-test.pigeon.dev`, appended to `domains` and served by
+  the front as a `custom_domain`, which takes precedence over the primary's
+  `*.pigeon.dev/*` route. Adding it changes the Access application, a plan the
+  owner applies, and it lands before the front serves the host.
+  `platform.pigeon.dev` and `*.pigeon.dev/*` move to the front in A.5 step 4's
+  second half.
+- The wasm clippy check's one `[workspace.metadata.pigeon].worker` becomes a
+  list, so the front is linted for `wasm32` too.
+
+Changes, in order: 9a.1 service bindings in the spec, and the primary taking
+every one of `domains` as its own host; 9a.2 `front-test.pigeon.dev` in
+`domains`, whose Access plan the owner applies; 9a.3, once it is applied, the
+crate and its spec on the test host, with its check.
