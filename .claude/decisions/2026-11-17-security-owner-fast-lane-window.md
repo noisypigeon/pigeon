@@ -398,3 +398,20 @@ event from two tables of opening and closing kinds. The two ADRs agree;
   `lanes_tests.rs` beside it. `Lanes::waive` records a waiver only for a
   head `covers` admits and a job `waivable` allows, and `Lanes::settle`
   ends a lane past its end. Its `Governs` gains both files.
+### 2026-11-17: Reviewed against !1081: they agree, and which lane events wake a session
+
+!1081 amends
+[`2026-11-17-runtime-mcp-feed-view-contract.md`](2026-11-17-runtime-mcp-feed-view-contract.md):
+a feed item carries its event's `stage` and `wakes` (`events::wakes`), and
+`feed.read` takes `wake`. The two agree; for the lane's events:
+
+- **`lane.broken` wakes** the sessions the lane names, as `deploy.failed`
+  wakes a session today, beside its `needs: owner` item. Its revert also
+  reaches the lane's session as a task (§5), which wakes it as any task
+  does.
+- **`lane.open`, `lane.ended`, `lane.extended`, `lane.deferred` and
+  `job.waived` don't wake.** A session learns that its change is covered from
+  the change's own stage.
+- Lane events carry no `stage`: they aren't a change's events.
+- Step 7 adds `lane.broken` to `events::wakes`, with a test.
+- Nothing in !1063 (step 2) changes: it holds no events.
