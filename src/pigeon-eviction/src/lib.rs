@@ -304,6 +304,79 @@ pub fn describe(policies: &[LoadedPolicy]) -> serde_json::Value {
     )
 }
 
+/// Runs `loaded`'s examples, each in its own directory under `scratch`, its files made with
+/// `write`, as the judge itself writes nothing: every pass example
+/// that gives a violation, and every fail example that gives none; see
+/// `.claude/decisions/2026-11-18-runtime-independent-blue-green-workers.md` §C.1.
+///
+/// # Errors
+///
+/// [`Error::Io`] if an example's file can't be written, or a targeted directory can't be listed.
+pub fn examples(
+    loaded: &LoadedPolicy,
+    scratch: &Path,
+    write: &dyn Fn(&Path, &str) -> std::io::Result<()>,
+) -> Result<Vec<String>, Error> {
+    let Some(examples) = &loaded.policy.examples else {
+        return Ok(Vec::new());
+    };
+    let pr = matches!(
+        loaded.policy.target,
+        policy::Target::Named(policy::NamedTarget::PullRequest | policy::NamedTarget::Change)
+    );
+    let mut problems = Vec::new();
+    let cases = examples
+        .pass
+        .iter()
+        .map(|e| (true, e))
+        .chain(examples.fail.iter().map(|e| (false, e)));
+    for (i, (pass, example)) in cases.enumerate() {
+        let root = scratch.join(format!("example-{i}"));
+        for (path, text) in &example.files {
+            let file = root.join(path);
+            let io = |source| Error::Io {
+                path: file.clone(),
+                source,
+            };
+            write(&file, text).map_err(io)?;
+        }
+        fs::create_dir_all(&root).map_err(|source| Error::Io {
+            path: root.clone(),
+            source,
+        })?;
+        let field = |k: &str| example.fields.get(k).cloned();
+        let request = pr.then(|| PullRequest {
+            title: field("title"),
+            body: field("body"),
+            number: field("number"),
+            files: field("files"),
+            branch: field("branch"),
+            scope: field("scope"),
+            added_tests: field("added_tests"),
+            enumerations: field("enumerations"),
+            test_reason: field("test_reason"),
+        });
+        let report = check(std::slice::from_ref(loaded), &root, request.as_ref())?;
+        let kind = if pass { "pass" } else { "fail" };
+        if pass && !report.violations.is_empty() {
+            let found: Vec<String> = report.violations.iter().map(ToString::to_string).collect();
+            problems.push(format!(
+                "{}: {kind} example {} gives {}",
+                loaded.name,
+                i + 1,
+                found.join("; ")
+            ));
+        } else if !pass && report.violations.is_empty() {
+            problems.push(format!(
+                "{}: {kind} example {} gives no violation",
+                loaded.name,
+                i + 1
+            ));
+        }
+    }
+    Ok(problems)
+}
+
 /// Runs `policies` against `root`. Pull-request policies run only when
 /// `pull_request` is given.
 ///

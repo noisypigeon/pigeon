@@ -798,3 +798,18 @@ fn names_forbids_the_old_names_but_the_stored_ones_and_history() {
         assert!(v.iter().any(|m| m.contains(path)), "{path}: {v:#?}");
     }
 }
+
+#[test]
+fn every_policy_runs_its_examples() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../.config/policies");
+    let write = |path: &Path, text: &str| {
+        fs::create_dir_all(path.parent().expect("parent"))?;
+        fs::write(path, text)
+    };
+    let mut problems = Vec::new();
+    for p in &eviction::load_dir(&dir).expect("policies load") {
+        let scratch = TempDir::new().expect("tempdir");
+        problems.extend(eviction::examples(p, scratch.path(), &write).expect("examples run"));
+    }
+    assert!(problems.is_empty(), "{problems:#?}");
+}

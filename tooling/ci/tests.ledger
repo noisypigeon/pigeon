@@ -1746,6 +1746,7 @@ pigeon-eviction test suite policies::decisions_metadata
 pigeon-eviction test suite policies::decisions_sections
 pigeon-eviction test suite policies::decisions_valid
 pigeon-eviction test suite policies::every_policy_is_valid
+pigeon-eviction test suite policies::every_policy_runs_its_examples
 pigeon-eviction test suite policies::eviction_actions_keeps_the_judge_read_only
 pigeon-eviction test suite policies::layout_keeps_the_core_pure
 pigeon-eviction test suite policies::layout_rules

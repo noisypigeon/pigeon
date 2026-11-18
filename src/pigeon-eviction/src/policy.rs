@@ -18,7 +18,48 @@ pub struct Policy {
     /// For provider-call and change: field rules that must all hold for the policy to apply.
     #[serde(default)]
     pub when: Vec<Rule>,
+    /// Inputs the policy must pass and fail, which [`crate::examples`] runs; see
+    /// `.claude/decisions/2026-11-18-runtime-independent-blue-green-workers.md` §C.1.
+    #[serde(default)]
+    pub examples: Option<Examples>,
 }
+
+/// A policy's own examples.
+#[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Examples {
+    /// Inputs that give no violation.
+    #[serde(default)]
+    pub pass: Vec<Example>,
+    /// Inputs that give at least one.
+    #[serde(default)]
+    pub fail: Vec<Example>,
+}
+
+/// One input: files under a scratch root, and a pull request's or change's fields.
+#[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Example {
+    /// Each file's path, relative to the root, and its text.
+    #[serde(default)]
+    pub files: std::collections::BTreeMap<String, String>,
+    /// For `pull-request` and `change`: each field by name.
+    #[serde(default)]
+    pub fields: std::collections::BTreeMap<String, String>,
+}
+
+/// The fields an example may name.
+pub const EXAMPLE_FIELDS: [&str; 9] = [
+    "title",
+    "body",
+    "number",
+    "files",
+    "branch",
+    "scope",
+    "added_tests",
+    "enumerations",
+    "test_reason",
+];
 
 /// What a policy's rules run against.
 #[derive(Debug, Deserialize)]
@@ -585,10 +626,37 @@ impl Policy {
         Ok(())
     }
 
+    fn validate_examples(&self) -> Result<(), String> {
+        let Some(examples) = &self.examples else {
+            return Ok(());
+        };
+        if matches!(
+            self.target,
+            Target::Named(NamedTarget::Eviction | NamedTarget::ProviderCall)
+        ) {
+            return Err(
+                "examples need a file, files, dir, tree, pull-request or change target".into(),
+            );
+        }
+        for example in examples.pass.iter().chain(&examples.fail) {
+            if let Some(k) = example
+                .fields
+                .keys()
+                .find(|k| !EXAMPLE_FIELDS.contains(&k.as_str()))
+            {
+                return Err(format!(
+                    "example field `{k}` is not a pull request's or change's field"
+                ));
+            }
+        }
+        Ok(())
+    }
+
     pub(crate) fn validate(&self) -> Result<(), String> {
         if self.description.trim().is_empty() || self.description.contains('\n') {
             return Err("description must be one non-empty line".into());
         }
+        self.validate_examples()?;
         let pr = matches!(
             self.target,
             Target::Named(NamedTarget::PullRequest | NamedTarget::Change)
