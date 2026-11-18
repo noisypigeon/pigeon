@@ -3394,3 +3394,5 @@ pigeon-eviction test suite policies::eviction_actions_keeps_the_judge_read_only	
 pigeon-eviction test suite policies::pull_request	-
 pigeon-eviction test suite policies::changelog_rules	-
 pigeon-eviction test suite policies::release_changelog_rules	-
+pigeon-eviction test suite policies::layout_rules	-
+pigeon-eviction test suite policies::layout_keeps_the_core_pure	-

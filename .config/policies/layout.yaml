@@ -21,3 +21,33 @@ rules:
   - find:
       match: '^src/pigeon-core/src/(change|approval|deploy|platform|infra|sites|release)/'
       forbid_content: 'std::fs|std::process|std::net|ureq|worker::|SystemTime::now|Instant::now|&mut self\b'
+examples:
+  pass:
+    - files: { CHANGELOG.md: "", CLAUDE.md: "", .gitignore: "", src/pigeon-core/Cargo.toml: "", tooling/README.md: "", catalog/README.md: "", infra/README.md: "", workloads/README.md: "" }
+    - files: { CHANGELOG.md: "", CLAUDE.md: "", .gitignore: "", src/pigeon-core/Cargo.toml: "", tooling/README.md: "", catalog/README.md: "", infra/README.md: "", workloads/README.md: "", tooling/garden/x: "", infra/notes.md: "", src/second-project/Cargo.toml: "", workloads/noisypigeon.com/x: "", catalog/cloudflare/x: "" }
+    - files: { CHANGELOG.md: "", CLAUDE.md: "", .gitignore: "", src/pigeon-core/Cargo.toml: "", tooling/README.md: "", catalog/README.md: "", infra/README.md: "", workloads/README.md: "", src/pigeon-core/src/change/lifecycle.rs: "pub fn step(c: &Change) -> Change {\n    c.clone()\n}\n" }
+    - files: { CHANGELOG.md: "", CLAUDE.md: "", .gitignore: "", src/pigeon-core/Cargo.toml: "", tooling/README.md: "", catalog/README.md: "", infra/README.md: "", workloads/README.md: "", src/pigeon-core/src/change/lifecycle.rs: "fn pushed(mut self) -> Self {\n    self\n}\n" }
+    - files: { CHANGELOG.md: "", CLAUDE.md: "", .gitignore: "", src/pigeon-core/Cargo.toml: "", tooling/README.md: "", catalog/README.md: "", infra/README.md: "", workloads/README.md: "", src/pigeon-agent/src/worker/change.rs: "fn apply(&mut self) { std::fs::read(p); }" }
+  fail:
+    - files: { CHANGELOG.md: "", CLAUDE.md: "", .gitignore: "", src/pigeon-core/Cargo.toml: "", tooling/README.md: "", catalog/README.md: "", infra/README.md: "", workloads/README.md: "", stray/x: "" }
+    - files: { CHANGELOG.md: "", CLAUDE.md: "", .gitignore: "", src/pigeon-core/Cargo.toml: "", tooling/README.md: "", catalog/README.md: "", infra/README.md: "", workloads/README.md: "", stray.txt: "" }
+    - files: { CHANGELOG.md: "", CLAUDE.md: "", .gitignore: "", src/pigeon-core/Cargo.toml: "", tooling/README.md: "", catalog/README.md: "", infra/README.md: "" }
+    - files: { CHANGELOG.md: "", CLAUDE.md: "", .gitignore: "", src/pigeon-core/Cargo.toml: "", tooling/README.md: "", catalog/README.md: "", infra/README.md: "", workloads/README.md: "", src/README.md: "" }
+    - files: { CHANGELOG.md: "", CLAUDE.md: "", .gitignore: "", src/pigeon-core/Cargo.toml: "", tooling/README.md: "", catalog/README.md: "", infra/README.md: "", workloads/README.md: "", src/Bad_Name/x: "" }
+    - files: { CHANGELOG.md: "", CLAUDE.md: "", .gitignore: "", src/pigeon-core/Cargo.toml: "", tooling/README.md: "", catalog/README.md: "", workloads/README.md: "" }
+    - files: { CHANGELOG.md: "", CLAUDE.md: "", .gitignore: "", tooling/README.md: "", catalog/README.md: "", infra/README.md: "", workloads/README.md: "" }
+    - files: { CHANGELOG.md: "", CLAUDE.md: "", .gitignore: "", src/pigeon-core/Cargo.toml: "", tooling/README.md: "", catalog/README.md: "", infra/README.md: "", workloads/README.md: "", workloads/notes.md: "" }
+    - files: { CHANGELOG.md: "", CLAUDE.md: "", .gitignore: "", src/pigeon-core/Cargo.toml: "", tooling/README.md: "", catalog/README.md: "", infra/README.md: "", workloads/README.md: "", workloads/Not_A_Zone/x: "" }
+    - files: { CHANGELOG.md: "", CLAUDE.md: "", .gitignore: "", src/pigeon-core/Cargo.toml: "", tooling/README.md: "", catalog/README.md: "", infra/README.md: "", workloads/README.md: "", workloads/cloudflare/x: "" }
+    - files: { CHANGELOG.md: "", CLAUDE.md: "", .gitignore: "", src/pigeon-core/Cargo.toml: "", tooling/README.md: "", infra/README.md: "", workloads/README.md: "" }
+    - files: { CHANGELOG.md: "", CLAUDE.md: "", .gitignore: "", src/pigeon-core/Cargo.toml: "", tooling/README.md: "", catalog/README.md: "", infra/README.md: "", workloads/README.md: "", catalog/notes.md: "" }
+    - files: { CHANGELOG.md: "", CLAUDE.md: "", .gitignore: "", src/pigeon-core/Cargo.toml: "", tooling/README.md: "", catalog/README.md: "", infra/README.md: "", workloads/README.md: "", catalog/Not_A_Provider/x: "" }
+    - files: { CHANGELOG.md: "", CLAUDE.md: "", .gitignore: "", src/pigeon-core/Cargo.toml: "", tooling/README.md: "", catalog/README.md: "", infra/README.md: "", workloads/README.md: "", src/pigeon-core/src/change/lifecycle.rs: "use std::fs;" }
+    - files: { CHANGELOG.md: "", CLAUDE.md: "", .gitignore: "", src/pigeon-core/Cargo.toml: "", tooling/README.md: "", catalog/README.md: "", infra/README.md: "", workloads/README.md: "", src/pigeon-core/src/approval/grants.rs: "let out = std::process::Command::new(\"git\");" }
+    - files: { CHANGELOG.md: "", CLAUDE.md: "", .gitignore: "", src/pigeon-core/Cargo.toml: "", tooling/README.md: "", catalog/README.md: "", infra/README.md: "", workloads/README.md: "", src/pigeon-core/src/deploy/ship.rs: "use std::net::TcpStream;" }
+    - files: { CHANGELOG.md: "", CLAUDE.md: "", .gitignore: "", src/pigeon-core/Cargo.toml: "", tooling/README.md: "", catalog/README.md: "", infra/README.md: "", workloads/README.md: "", src/pigeon-core/src/platform/runs.rs: "let r = ureq::get(url);" }
+    - files: { CHANGELOG.md: "", CLAUDE.md: "", .gitignore: "", src/pigeon-core/Cargo.toml: "", tooling/README.md: "", catalog/README.md: "", infra/README.md: "", workloads/README.md: "", src/pigeon-core/src/infra/plans.rs: "worker::console_log!(\"x\");" }
+    - files: { CHANGELOG.md: "", CLAUDE.md: "", .gitignore: "", src/pigeon-core/Cargo.toml: "", tooling/README.md: "", catalog/README.md: "", infra/README.md: "", workloads/README.md: "", src/pigeon-core/src/sites/publish.rs: "let at = SystemTime::now();" }
+    - files: { CHANGELOG.md: "", CLAUDE.md: "", .gitignore: "", src/pigeon-core/Cargo.toml: "", tooling/README.md: "", catalog/README.md: "", infra/README.md: "", workloads/README.md: "", src/pigeon-core/src/release/lines.rs: "let at = Instant::now();" }
+    - files: { CHANGELOG.md: "", CLAUDE.md: "", .gitignore: "", src/pigeon-core/Cargo.toml: "", tooling/README.md: "", catalog/README.md: "", infra/README.md: "", workloads/README.md: "", src/pigeon-core/src/change/lifecycle.rs: "fn pushed(&mut self) {}" }
+    - files: { CHANGELOG.md: "", CLAUDE.md: "", .gitignore: "", src/pigeon-core/Cargo.toml: "", tooling/README.md: "", catalog/README.md: "", infra/README.md: "", workloads/README.md: "", src/pigeon-core/src/approval/grants.rs: "let j = &mut self.jobs;" }
