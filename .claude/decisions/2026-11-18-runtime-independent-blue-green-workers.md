@@ -283,3 +283,19 @@ step 1. Parts B and C don't wait on A.
 10. **`feat(deploy)`: deploy to the standby, verify, promote, watch, flip
     back** (A.4).
 11. **Cutover**, A.5.6 to A.5.9, each by an owner-applied plan.
+
+## Amendments
+
+### 2026-11-18: !1110 agrees with this ADR
+
+!1110 carries out
+[`2026-11-15-development-capacity-pools-hard-spend-cap.md`](2026-11-15-development-capacity-pools-hard-spend-cap.md)'s
+2026-11-18 amendment, and is step 1 here (A.5.1). The two agree:
+
+- `pigeon-pool` moves to the `pigeon/platform` kind's new
+  `adopted_service_tokens`, in its own module that leaves the secret as
+  Cloudflare holds it. No token is created or rotated, as A.1 requires of
+  Access and its tokens.
+- That list stays on `platform/blue`, the unit A.5.5 keeps for the shared
+  resources; the `pigeon/color` kind declares no service token.
+- Nothing else here changes.
