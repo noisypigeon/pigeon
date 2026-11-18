@@ -557,3 +557,47 @@ permission.
   §8 and §5 here keep Access as the outer gate, and admit no Standard
   user to the platform instance until step 5 lands. Neither changes the
   other.
+
+### 2026-11-18: The owner's answers to §9 and to the feature inventory
+
+The owner answered every question this ADR filed, on !1155.
+
+| # | Question | Answer | What changes |
+|---|---|---|---|
+| 37 | Is ICBC the learner app? | Yes; the capability is `icbc` | nothing |
+| 38 | Where is June a member? | June's own learner standalone only | nothing: §6 stands |
+| 39 | Subdomain | A user publishes their own static site at `<label>.pigeon.dev` | `subdomain`'s scope is one DNS label |
+| 40 | Domain | A user attaches a domain they own to a site or instance they hold | `domain`'s scope is one domain |
+| 41 | Blog | A user's own blog, from the blog static-site template, deployed to a subdomain or to a domain's apex | `blog`'s scope is one blog site |
+| 43 | Standard's clients | The iOS app only, through TestFlight | nothing: §6 stands, and `/app` answers a Standard user 403 |
+| 44 | A grant's default lifetime | No expiry; the Administrator revokes by hand | §4 changes, below |
+| 45 | Sites, standalone instances, providers, the pool | Sites and standalone instances become capabilities; providers and the pool stay base | the first amendment's §2 table changes, below |
+
+**§4, expiry.** `member.grant` sets no expiry unless it names one. The
+digest lists every active grant with its age, and names any grant
+expiring within 14 days. `GRANT_TTL` is not added.
+
+**The vocabulary** becomes six capabilities: `subdomain`, `domain`,
+`blog`, `icbc`, `sites` and `instances`.
+
+- **`sites`:** a user holds a static site of their own: they create,
+  build and publish its content. It is served where a `subdomain` or
+  `domain` grant puts it.
+- **`instances`:** a user stands up and holds a standalone instance
+  (`instance.standup`, the private listing).
+- **How they combine:**
+  - `subdomain` alone covers one static site at its label, as answer 39
+    says.
+  - `domain` attaches to a site or instance the user holds.
+  - `blog` is a site from the blog template, so it is served under a
+    `subdomain` or `domain` grant the user also holds.
+  - Each feature's ADR (§7 step 12) writes its tools' `scope_arg` and
+    checks the pair.
+- **Base, unchanged:** provider connections and the pool, for the
+  Administrator and agents only. A capability never covers a spend on the
+  pool.
+- **`GRANTABLE` stays `icbc`** until each feature's ADR adds its tools.
+  Until then a grant of the other five would mean nothing.
+
+**The step-3 brief** follows: `CAPABILITIES` holds the six, and a grant's
+`expires` is `None` unless named.
