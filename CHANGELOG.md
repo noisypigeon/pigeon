@@ -15,6 +15,7 @@
 - agent v0.1.61
 - agent v0.1.62
 - agent v0.1.63
+- agent v0.1.64
 - infra-cloudflare-access-application v0.1.3
 - infra-cloudflare-access-application v0.1.4
 - infra-cloudflare-schema v0.1.24
@@ -145,6 +146,22 @@
 - feat(core): service users narrowed by tool lists, seeded, and bound to hashed Access credentials by the Administrator (!1239) ([8f884aa](https://github.com/noisypigeon/pigeon/commit/8f884aa6eefdb3d84517cfa79d1bf88e7e928eda))
 - fix(front): pigeon-front's spec waits for a build that reads `forwards` (!1240) ([e8a331a](https://github.com/noisypigeon/pigeon/commit/e8a331afea714be1068b17c557d47513c25860ed))
 - feat(policy): roles.yaml's second level is `standard: []` only; `user` and `learner` are gone (!1241) ([a0fceea](https://github.com/noisypigeon/pigeon/commit/a0fceead4be022b65f0af0378b7c5ea22b50be02))
+- feat(front): pigeon-front's spec returns, now that main's stored build reads `forwards` (!1243) ([3fe393e](https://github.com/noisypigeon/pigeon/commit/3fe393efe53f2215acfe9b3374c9ecd11cd52b49))
+- docs(adr): step R3's shape: member::check beside access::authorize, in shadow, with the users ADR's step 5 (!1245) ([e1a26e5](https://github.com/noisypigeon/pigeon/commit/e1a26e5b0a4d2a793e508765775f11c55ed34909))
+- feat(core): every operation says what it requires: requires() in place of capability(), Administrator-only answers, own-credential device tools (!1238) ([32b51ce](https://github.com/noisypigeon/pigeon/commit/32b51ce545e1c19a4e21382e71e5af181a5a01a1))
+- feat(core): secret-bearing state is journaled sealed under journal-seal (!1236) ([4d2d168](https://github.com/noisypigeon/pigeon/commit/4d2d168a4eb98ec8b067e69fde858ee8aa0d5cb5)) · agent
+- revert(front): pigeon-front's spec waits for a stored build that deploys a new Worker (!1248) ([be0ba4d](https://github.com/noisypigeon/pigeon/commit/be0ba4d69e77f3b475ba4a7c353a38cb92601f2f))
+- fix(deploy): a Worker never deployed before has no deployments, not a 404 error (!1246) ([d3c6b1e](https://github.com/noisypigeon/pigeon/commit/d3c6b1eebbae0b3ebbee2b1bdf9c53549a029d15)) · agent
+- feat(gate): member::check runs in shadow beside access::authorize, and a device acts as owner only for the Administrator (!1249) ([3b7563d](https://github.com/noisypigeon/pigeon/commit/3b7563dc10408ebfd765defe7f4a67c08cf8eccd)) · agent
+- fix(ios): the proof sheet submits Auto's proof by its purpose, not an empty page (!1244) ([87ec9e6](https://github.com/noisypigeon/pigeon/commit/87ec9e607f8bd61f6b31478b3b2831704dffc258))
+- docs(adr): progress on the users ADR, step 9b narrowed, and June's onboarding deferred (!1247) ([1702976](https://github.com/noisypigeon/pigeon/commit/17029768df08e8cf327fa1d3d937954155c7b686))
+- feat(front): pigeon-front's spec returns, now that main's stored build deploys a new Worker (!1250) ([075a83d](https://github.com/noisypigeon/pigeon/commit/075a83d3e02c34b87b7ecf7df5d05ed2a71c1e60))
+- fix(core): R3's shadow checks the account a call names, not always the caller's own (!1251) ([230b655](https://github.com/noisypigeon/pigeon/commit/230b6558b28072f6e758c81879796023506f4b3e))
+- feat(gate): service.bind and service.unbind: the Administrator binds an Access service token to a service account by its hash, with a passkey (!1252) ([66679b5](https://github.com/noisypigeon/pigeon/commit/66679b5eab4bbe4b41ab716e55b084ce6b35def0)) · agent
+- docs(adr): a deploy ships Workers on the build before its own, so a new spec field or Worker lands in two steps (!1253) ([0f3ad31](https://github.com/noisypigeon/pigeon/commit/0f3ad316fc90cb45ff63828060a3784fee0784a3))
+- docs(adr): group E and R3's switch to deciding move to the users ADR; 9b lands (!1254) ([dfee80e](https://github.com/noisypigeon/pigeon/commit/dfee80eccb186a65034049c986930c9b67aae300))
+- feat(images): pigeon-start fetches builds through build.read on /mcp, with the builds token, from the same PIGEON_BUILD_URL (!1256) ([63e4ec3](https://github.com/noisypigeon/pigeon/commit/63e4ec33b0f1cec0f077e16db87b478a94a7860c))
+- docs(adr): step 9b's hosts: the front takes the platform host and the zone, each color keeps its own host (!1255) ([099b9ab](https://github.com/noisypigeon/pigeon/commit/099b9ab09202bd59301c589a34371ba6dc1c9fa1))
 
 ## 2026-11-17
 
