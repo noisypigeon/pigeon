@@ -47,6 +47,7 @@ mod pool_dispatch;
 mod pool_ops;
 mod provider;
 mod push;
+mod shell;
 mod stages;
 mod standalone;
 mod tasks;
@@ -168,6 +169,7 @@ const SURFACES: &[&[Route]] = &[
     devices::ROUTES,
     pool::ROUTES,
     pool_ops::ROUTES,
+    shell::ROUTES,
 ];
 
 /// `form` posted to the page at `page` (its path and query) on `host`, as its own form, through

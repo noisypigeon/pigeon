@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>pigeon</title>
+<style>
+  :root { color-scheme: light dark; --bg: #fff; --fg: #1a1a1f; --muted: #6b6b76; --line: #e3e3e8; --accent: #4a3fd1; --owner: #b4471f; --bad: #b42318; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #14121a; --fg: #ececf1; --muted: #9a98a6; --line: #2c2a35; --accent: #9b93ff; --owner: #f08a5d; --bad: #f97066; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.45 system-ui, -apple-system, sans-serif; }
+  header { position: sticky; top: 0; background: var(--bg); border-bottom: 1px solid var(--line); padding: 10px 16px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  header strong { margin-right: 10px; }
+  nav button, .actions button { border: 1px solid var(--line); background: transparent; color: var(--fg); border-radius: 8px; padding: 6px 12px; font: inherit; cursor: pointer; }
+  nav button[aria-current="page"] { border-color: var(--accent); color: var(--accent); }
+  main { max-width: 760px; margin: 0 auto; padding: 16px; }
+  h1 { font-size: 20px; margin: 4px 0 12px; }
+  h2 { font-size: 15px; margin: 18px 0 6px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  ul.rows { list-style: none; margin: 0; padding: 0; }
+  ul.rows li { border-bottom: 1px solid var(--line); padding: 10px 2px; cursor: pointer; display: flex; justify-content: space-between; gap: 12px; }
+  ul.rows li[data-static] { cursor: default; }
+  .sub, .muted { color: var(--muted); font-size: 13px; }
+  .badge { font-size: 12px; border: 1px solid var(--line); border-radius: 999px; padding: 1px 8px; white-space: nowrap; align-self: center; }
+  .badge.owner { border-color: var(--owner); color: var(--owner); }
+  dl { display: grid; grid-template-columns: minmax(90px, 30%) 1fr; gap: 6px 14px; margin: 0; }
+  dt { color: var(--muted); }
+  dd { margin: 0; overflow-wrap: anywhere; }
+  code { font: 13px ui-monospace, SFMono-Regular, Menlo, monospace; }
+  pre { white-space: pre-wrap; font: 13px ui-monospace, SFMono-Regular, Menlo, monospace; margin: 8px 0; }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 16px; }
+  .actions button.primary { background: var(--accent); border-color: var(--accent); color: var(--bg); }
+  .actions button.destructive { border-color: var(--bad); color: var(--bad); }
+  .error { color: var(--bad); }
+  progress { width: 140px; vertical-align: middle; }
+  input, select { font: inherit; padding: 6px; border: 1px solid var(--line); border-radius: 6px; background: transparent; color: var(--fg); width: 100%; }
+  label { display: block; margin: 10px 0 4px; color: var(--muted); }
+</style>
+<script src="/app/mcp.js" defer></script>
+<script src="/app/views.js" defer></script>
+<script src="/app/app.js" defer></script>
+</head>
+<body>
+<header><strong>pigeon</strong><nav id="roots"></nav></header>
+<main id="view" aria-live="polite"><p class="muted">Loading…</p></main>
+</body>
+</html>
