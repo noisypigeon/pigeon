@@ -324,8 +324,12 @@ pub fn proof_tools() -> Vec<Value> {
     });
     let purpose = json!({
         "type": "string",
-        "enum": ["auto", "auto-end"],
-        "description": "Instead of `page`: start (`auto`) or end (`auto-end`) the Auto window",
+        "enum": ["auto", "auto-end", "unlink", "passkey-remove"],
+        "description": "Instead of `page`: start (`auto`) or end (`auto-end`) the Auto window, or unlink a device (`unlink`) or remove a passkey (`passkey-remove`) named by `target`",
+    });
+    let target = json!({
+        "type": "string",
+        "description": "With `purpose` `unlink` or `passkey-remove`: the device or passkey id",
     });
     let text = json!({ "type": "string" });
     vec![
@@ -335,7 +339,7 @@ pub fn proof_tools() -> Vec<Value> {
             "description": "What the grant at `page` approves, from the grant itself, or what `purpose` does, and the WebAuthn request options for the owner's passkey; see .claude/decisions/2026-11-17-runtime-mcp-feed-view-contract.md §4",
             "inputSchema": {
                 "type": "object",
-                "properties": { "page": page, "purpose": purpose },
+                "properties": { "page": page, "purpose": purpose, "target": target },
                 "additionalProperties": false,
             },
             "annotations": { "readOnlyHint": true, "destructiveHint": false },
@@ -651,7 +655,10 @@ mod proof_tests {
         for t in &tools[..2] {
             let props = &t["inputSchema"]["properties"];
             assert!(props["page"].is_object() && props["purpose"].is_object());
-            assert_eq!(props["purpose"]["enum"], json!(["auto", "auto-end"]));
+            assert_eq!(
+                props["purpose"]["enum"],
+                json!(["auto", "auto-end", "unlink", "passkey-remove"])
+            );
         }
         assert!(tools[0]["inputSchema"]["required"].is_null());
         let submit = &tools[1]["inputSchema"]["required"];

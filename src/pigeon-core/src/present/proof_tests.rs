@@ -86,3 +86,21 @@ fn nothing_without_asked() {
     assert!(challenge(&r).is_none());
     assert!(form(&r).is_none());
 }
+
+#[test]
+fn an_account_purpose_submits_its_own_tool() {
+    let r = json!({
+        "operation": "device.unlink", "target": "d1", "challenge": "c", "rp": "r",
+        "asked": {
+            "title": "Unlink this device", "body": "d1 stops proving the owner's account.",
+            "verb": "Unlink", "fields": [], "inputs": [], "refuse": false, "change": null,
+            "submit": { "label": "Unlink", "tool": "device.unlink", "arguments": { "id": "d1" },
+                        "style": "destructive", "proof": true },
+        },
+    });
+    let v = challenge(&r).expect("a card");
+    crate::present::checked(crate::view::View::Card, Some(v.clone())).expect("valid");
+    assert_eq!(v["actions"][0]["tool"], "device.unlink");
+    assert_eq!(v["actions"][0]["arguments"]["id"], "d1");
+    assert_eq!(v["actions"][0]["proof"], true);
+}

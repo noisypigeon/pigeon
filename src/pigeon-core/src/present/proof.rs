@@ -38,7 +38,10 @@ pub fn challenge(r: &Value) -> Option<Value> {
         fields.push(field("head", sha(head)));
     }
     let has_inputs = asked["inputs"].as_array().is_some_and(|i| !i.is_empty());
-    let mut actions = vec![if has_inputs {
+    let submit = asked.get("submit").filter(|a| a.is_object()).cloned();
+    let mut actions = vec![if let Some(submit) = submit {
+        submit
+    } else if has_inputs {
         action(
             str_of(asked, "verb"),
             "proof.form",

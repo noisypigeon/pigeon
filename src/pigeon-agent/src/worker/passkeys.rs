@@ -551,9 +551,30 @@ pub async fn proof_challenge(
     args: &Value,
     host: &str,
 ) -> Result<std::result::Result<Value, String>> {
+    if let Some((purpose, asked)) = account_purpose(args) {
+        let v = to_instance(
+            env,
+            s,
+            "/passkeys/challenge",
+            &json!({ "purpose": purpose }),
+        )
+        .await?;
+        return Ok(Ok(json!({
+            "purpose": purpose,
+            "operation": asked["submit"]["tool"],
+            "target": args["target"],
+            "challenge": v["challenge"],
+            "ids": v["ids"],
+            "user": v["user"],
+            "rp": super::app::relying_party(env),
+            "asked": asked,
+        })));
+    }
     if let Some(p) = args["purpose"].as_str() {
         let Some((purpose, operation)) = auto_purpose(p) else {
-            return Ok(Err("`purpose` is auto or auto-end".into()));
+            return Ok(Err(
+                "`purpose` is auto, auto-end, unlink or passkey-remove".into()
+            ));
         };
         let v = to_instance(
             env,
@@ -695,6 +716,44 @@ const TOOL_ARGS: [&str; 7] = [
     "authenticator_data",
     "signature",
 ];
+
+/// `proof.challenge`'s account purposes: `unlink` and `passkey-remove` with a `target` id, as
+/// the passkey purpose `/v0/app/devices/<id>` and `/v0/app/passkeys/<id>` prove, and the card
+/// whose `submit` redeems it as the device operation; see
+/// `.claude/decisions/2026-11-17-runtime-mcp-feed-view-contract.md`, its R8 amendment.
+fn account_purpose(args: &Value) -> Option<(String, Value)> {
+    use crate::core::account;
+    let target = args["target"].as_str().filter(|t| !t.is_empty())?;
+    let (purpose, title, verb, tool) = match args["purpose"].as_str()? {
+        "unlink" => (
+            account::unlink_purpose(target),
+            "Unlink this device",
+            "Unlink",
+            "device.unlink",
+        ),
+        "passkey-remove" => (
+            account::passkey_remove_purpose(target),
+            "Remove this passkey",
+            "Remove",
+            "passkey.remove",
+        ),
+        _ => return None,
+    };
+    let asked = json!({
+        "title": title,
+        "body": format!("{target} stops proving the owner's account."),
+        "verb": verb,
+        "fields": [],
+        "inputs": [],
+        "refuse": false,
+        "change": null,
+        "submit": {
+            "label": verb, "tool": tool, "arguments": { "id": target },
+            "style": "destructive", "proof": true,
+        },
+    });
+    Some((purpose, asked))
+}
 
 /// A proof tool's `purpose`: the Auto window's proof purpose and the operation it stands for.
 fn auto_purpose(p: &str) -> Option<(&'static str, &'static str)> {
