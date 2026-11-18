@@ -544,3 +544,53 @@ instance with its own colors needs its own database, never the platform's.
 Standalones' hosts reach their instance through the platform's front and
 primary, so a platform flip briefly delays their proxying (the front's 5 s
 cache) without changing where they go.
+
+### 2026-11-18: Step 10's pieces: replay parity, the inventory diff, the standby target, and part B's resolved inputs
+
+A.4 step 3 names the standby's verifications but not their shapes. Each
+piece below is built and tested apart, with nothing calling it until the
+standby deploy does. Promotion, the drain, the 10-minute watch, the flip
+back and `lease.flip` stay the planner's work.
+
+- **Replay parity (E1).**
+  - `journal::replay(entries)` folds a `*/state` object's journal entries,
+    oldest first, into each key's latest value, where a `null` body removes
+    the key. Event-log objects aren't compared.
+  - A sealed body is unsealed with the colour's own `journal-seal` key
+    before it is digested. No value leaves the Worker; only digests do.
+  - `journal::digest(value)` is the digest `journal.digests` already keeps
+    per key: SHA-256 hex of the value's JSON text.
+  - A colour's `GET /healthz/parity` answers, per object it holds (the
+    `Instance`, `MainRun` and each open `ChangeRun`), two maps of key to
+    digest: `replayed`, from the journal, and `held`, from the object's
+    `journal.digests`.
+  - Parity holds when the standby's `replayed` equals the primary's `held`,
+    object by object. A difference names its object and key, never a value.
+- **The inventory diff (E2).**
+  - `architecture::diff(primary, standby)` returns the parts and links each
+    `Graph` has that the other lacks, by stable id.
+  - `architecture::expected(diff, added, removed)` holds a diff against what
+    the change's scope adds and removes. Anything else fails the deploy and
+    names the part.
+- **The standby target (E3).**
+  - A Worker spec gains an optional `color`, which ships unused first, per
+    this ADR's two-step amendment.
+  - `deploy::standby::target(lease, colors)` picks the colour the lease
+    doesn't name. Without a lease row, or with a single colour, it picks
+    none, and today's deploy is unchanged.
+  - When a target is picked, `ship.rs` deploys only that colour's Worker,
+    then runs its `/healthz`, its smoke on its own host, parity and the
+    inventory diff, in that order. It stops at the first failure and leaves
+    the lease alone.
+- **Part B's resolved inputs (E4).**
+  - A Worker's crate inputs come from `cargo metadata`'s resolved closure for
+    `wasm32-unknown-unknown` with its entry's features, not the declared
+    dependencies.
+  - `Cargo.lock` counts only where a package in that closure changed its
+    resolved version or source.
+  - Both are computed by the deploy job, which has the checkout. The scope
+    test pins one hit and one miss for each.
+
+**Multi-instance.** Parity and the inventory diff compare two colours of one
+instance's deployment, reading only that instance's journal and graph.
+Nothing here reads another instance.
