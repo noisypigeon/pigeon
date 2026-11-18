@@ -380,25 +380,19 @@ mod approvals {
 }
 
 mod push {
-    use crate::app::push::{gone, link, payload, token_input, token_ok};
-    use crate::approval::grants::key;
+    use crate::app::push::{gone, payload, said, token_input, token_ok};
     use crate::push::b64url_decode;
 
     #[test]
-    fn a_notification_links_to_its_card_or_home_and_holds_no_token() {
-        let p = payload(
-            "Approval waiting",
-            "!295",
-            "/approve/295?grant=secret-token",
-        );
+    fn a_notification_is_a_count_and_nothing_else() {
         assert_eq!(
-            p["link"],
-            format!("pigeon://approval/{}", key("secret-token"))
+            payload(3),
+            serde_json::json!({
+                "aps": { "alert": { "title": "pigeon", "body": "3 need you" }, "badge": 3, "sound": "default" }
+            })
         );
-        assert!(!p.to_string().contains("secret-token"));
-        assert_eq!(p["aps"]["alert"]["title"], "Approval waiting");
-        assert_eq!(link("/approvals"), "pigeon://home");
-        assert_eq!(link("/platform/19?grant=x"), "pigeon://home");
+        assert_eq!(said(1), "1 needs you");
+        assert!(payload(1).get("link").is_none());
     }
 
     #[test]

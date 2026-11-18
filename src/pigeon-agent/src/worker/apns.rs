@@ -44,13 +44,13 @@ async fn token(env: &Env, s: &Settings) -> Result<Option<String>> {
     Ok(Some(t))
 }
 
-/// Sends `title` and `body`, linked to `path`, to every linked device with a token; drops a
-/// token APNs says is gone. Nothing happens without the key.
+/// Sends the count of open owner items to every linked device with a token; drops a token
+/// APNs says is gone. Nothing happens without the key.
 ///
 /// # Errors
 ///
 /// When a binding fails.
-pub async fn notify(env: &Env, s: &Settings, title: &str, body: &str, path: &str) -> Result<()> {
+pub async fn notify(env: &Env, s: &Settings, count: usize) -> Result<()> {
     let v = super::elicit::inbox(env, s, "/devices/list", &json!({})).await?;
     let devices: Vec<Device> = serde_json::from_value(v["devices"].clone()).unwrap_or_default();
     let targets: Vec<(String, String)> = devices
@@ -63,7 +63,7 @@ pub async fn notify(env: &Env, s: &Settings, title: &str, body: &str, path: &str
     let Some(bearer) = token(env, s).await? else {
         return Ok(());
     };
-    let payload = push::payload(title, body, path).to_string();
+    let payload = push::payload(count).to_string();
     for (id, device_token) in targets {
         let headers = Headers::new();
         headers.set("authorization", &format!("bearer {bearer}"))?;

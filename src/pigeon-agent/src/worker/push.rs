@@ -21,18 +21,41 @@ const DEVICES: &str = "push-devices";
 const LATEST: &str = "push-latest";
 const CURSOR: &str = "digest-cursor";
 
-/// Pushes `title` and `body`, opening `path` on a tap, to every subscribed device; does
-/// nothing without `PUSH_VAPID_KEY`, and logs rather than fails.
-pub async fn notify(env: &Env, s: &Settings, title: &str, body: &str, path: &str) {
-    if let Err(e) = send(env, s, title, body, path).await {
+/// Wakes every subscribed device with how many open feed items need the owner: nothing at 0 or
+/// for the same count within a minute; see
+/// `.claude/decisions/2026-11-17-runtime-mcp-feed-view-contract.md` §5. Logs rather than fails.
+pub async fn notify(env: &Env, s: &Settings, _title: &str, _body: &str, _path: &str) {
+    let count = open_count(env, s).await;
+    if count == 0 {
+        return;
+    }
+    let said = crate::core::app::push::said(count);
+    if let Ok((_, v)) = to_instance(env, s, "/push/latest", &json!({})).await
+        && let Ok(l) = serde_json::from_value::<Latest>(v)
+        && l.body == said
+        && now().saturating_sub(l.at) < 60
+    {
+        return;
+    }
+    if let Err(e) = send(env, s, &said).await {
         worker::console_error!("push: {e}");
     }
-    if let Err(e) = super::apns::notify(env, s, title, body, path).await {
+    if let Err(e) = super::apns::notify(env, s, count).await {
         worker::console_error!("apns: {e}");
     }
 }
 
-async fn send(env: &Env, s: &Settings, title: &str, body: &str, path: &str) -> Result<()> {
+/// The open feed items that need the owner; 0 on any failure.
+async fn open_count(env: &Env, s: &Settings) -> usize {
+    let body = json!({ "after": 0, "owner": true, "needs": "owner", "open": true });
+    to_instance(env, s, "/feed/read", &body)
+        .await
+        .ok()
+        .and_then(|(_, v)| v["items"].as_array().map(Vec::len))
+        .unwrap_or(0)
+}
+
+async fn send(env: &Env, s: &Settings, body: &str) -> Result<()> {
     let Ok(secret) = platform::secret(env, VAPID_VAR) else {
         return Ok(());
     };
@@ -42,9 +65,9 @@ async fn send(env: &Env, s: &Settings, title: &str, body: &str, path: &str) -> R
         .map(|v| v.to_string())
         .unwrap_or_default();
     let latest = Latest {
-        title: title.to_string(),
+        title: "pigeon".to_string(),
         body: body.to_string(),
-        url: path.to_string(),
+        url: "/approvals".to_string(),
         at: now(),
     };
     to_instance(env, s, "/push/latest/put", &json!(latest)).await?;

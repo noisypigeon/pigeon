@@ -3,7 +3,6 @@
 
 use serde_json::{Value, json};
 
-use crate::approval::grants;
 use crate::push::b64url;
 
 /// APNs' production host, which `TestFlight` and App Store builds use.
@@ -25,24 +24,26 @@ pub fn token_input(kid: &str, team: &str, now: u64) -> String {
     )
 }
 
-/// The app's link for a notification about `path`: an approval page opens its card, anything
-/// else opens Home.
+/// How many open items need the owner, in words: `1 needs you`, else `<count> need you`.
 #[must_use]
-pub fn link(path: &str) -> String {
-    path.strip_prefix("/approve/")
-        .and_then(|p| p.split_once("?grant="))
-        .map_or_else(
-            || "pigeon://home".to_string(),
-            |(_, token)| format!("pigeon://approval/{}", grants::key(token)),
-        )
+pub fn said(count: usize) -> String {
+    if count == 1 {
+        "1 needs you".to_string()
+    } else {
+        format!("{count} need you")
+    }
 }
 
-/// The alert: `title`, `body` and the link for `path`; nothing secret.
+/// The alert: a title, `count` in words and as the badge, and nothing else; see
+/// `.claude/decisions/2026-11-17-runtime-mcp-feed-view-contract.md` §5.
 #[must_use]
-pub fn payload(title: &str, body: &str, path: &str) -> Value {
+pub fn payload(count: usize) -> Value {
     json!({
-        "aps": { "alert": { "title": title, "body": body }, "sound": "default" },
-        "link": link(path),
+        "aps": {
+            "alert": { "title": "pigeon", "body": said(count) },
+            "badge": count,
+            "sound": "default",
+        },
     })
 }
 
