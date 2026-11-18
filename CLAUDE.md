@@ -182,8 +182,8 @@ Where each check runs:
   the `Instance`, `ChangeRun` and `MainRun` objects name the Worker's
   version, and an older object resets itself, per
   [`2026-11-08-development-concurrent-agent-sessions.md`](.claude/decisions/2026-11-08-development-concurrent-agent-sessions.md).
-- Sessions follow events instead of polling: `GET /v0/events` (and the MCP
-  tool `events_wait`) long-polls the instance's event log, for a session or
+- Sessions follow events instead of polling: the MCP tools `feed_read` and
+  `events_wait` long-poll the instance's event log, for a session or
   changes; `after=session` resumes from the session's cursor, which the
   control plane keeps, and `wake=agent` answers only what the agent must act
   on. Arm `Monitor` (30 minutes, re-armed on expiry) with
