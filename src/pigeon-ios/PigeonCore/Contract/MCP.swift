@@ -50,7 +50,7 @@ public struct MCPOutcome: Equatable, Sendable {
         self.pendingPath = pendingPath
     }
 
-    static let pages = ["/approve/", "/mandate/", "/lane/", "/grants/", "/ci-window/", "/platform/"]
+    static let pages = ["/approve/", "/mandate/", "/lane/", "/grants/", "/ci-window/", "/platform/", "/pool-resume/"]
 
     /// Reads a JSON-RPC response body.
     public static func decode(_ data: Data) throws -> MCPOutcome {
@@ -96,6 +96,8 @@ public struct MCPOutcome: Equatable, Sendable {
 
     static func pathAndQuery(_ link: String) -> String? {
         guard let u = URLComponents(string: link) else { return nil }
+        // An /app#/<page> link opens the page the fragment names.
+        if let f = u.fragment, f.hasPrefix("/") { return f.removingPercentEncoding ?? f }
         return u.path + (u.query.map { "?\($0)" } ?? "")
     }
 }

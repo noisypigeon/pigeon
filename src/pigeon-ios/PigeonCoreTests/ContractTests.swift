@@ -116,6 +116,18 @@ final class ContractTests: XCTestCase {
         XCTAssertEqual(o.pendingPath, "/approve/7?x=1")
     }
 
+    func testAppFragmentLink() throws {
+        XCTAssertEqual(
+            MCPOutcome.pathAndQuery("https://h/app#/approve/7?grant=t"), "/approve/7?grant=t")
+        let v = try view(
+            """
+            {"view":"form","title":"F","fields":[{"key":"k","label":"K","input":"image"}],
+            "submit":{"label":"Send","tool":"x.y"}}
+            """)
+        guard case .form(_, let fields, _) = v else { return XCTFail("not a form") }
+        XCTAssertEqual(fields[0].input, .image)
+    }
+
     func testOutcomePendingFromText() throws {
         let o = try outcome(
             """

@@ -81,6 +81,7 @@ public enum ActionStyle: String, Codable, Equatable, Sendable {
 
 public enum InputKind: String, Codable, Equatable, Sendable {
     case text, choice, toggle, number, secret
+    case image
 }
 
 public enum ProgressMark: String, Codable, Equatable, Sendable {

@@ -5,6 +5,7 @@ import PigeonCore
 import SwiftUI
 
 enum ShellRoot: String, CaseIterable, Identifiable {
+    case approvals = "Approvals"
     case feed = "Feed"
     case home = "Home"
     case tracker = "Tracker"
@@ -14,6 +15,7 @@ enum ShellRoot: String, CaseIterable, Identifiable {
 
     var action: Action {
         switch self {
+        case .approvals: return Action(label: rawValue, tool: "approval.list")
         case .feed:
             return Action(
                 label: rawValue, tool: "feed.read",
@@ -36,9 +38,9 @@ struct Screen: Hashable {
 }
 
 struct ShellView: View {
-    @State private var root: ShellRoot = .feed
+    @State private var root: ShellRoot = .approvals
     @State private var client: MCPClient?
-    @State private var current = Screen(action: ShellRoot.feed.action)
+    @State private var current = Screen(action: ShellRoot.approvals.action)
     @State private var loading = false
     @State private var path: [Screen] = []
     @State private var proofPage: ProofPage?

@@ -10,6 +10,8 @@ struct ProofSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var auth = Auth()
     @State private var challenge: MCPOutcome?
+    @State private var held: JSONValue?
+    @State private var stage: MCPOutcome?
     @State private var result: MCPOutcome?
     @State private var error: String?
     @State private var busy = false
@@ -23,6 +25,8 @@ struct ProofSheet: View {
                     } else {
                         Text(result.error ?? "Done.").padding()
                     }
+                } else if let view = stage?.view, shows(view) {
+                    ViewModelView(model: view, act: { a in Task { await act(a) } })
                 } else if let data = challenge?.data {
                     List {
                         SwiftUI.Section("Approves") {
@@ -60,7 +64,58 @@ struct ProofSheet: View {
     private func load() async {
         do {
             let o = try await client.call("proof_challenge", ["page": .string(page)])
-            if let e = o.error { error = e } else { challenge = o }
+            if let e = o.error { error = e } else { challenge = o; held = o.data; stage = o }
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+
+    /// Whether the view on show carries a proof action or a tool beyond approval.list.
+    private func shows(_ view: ViewModel) -> Bool {
+        actions(of: view).contains { $0.proof || $0.tool != "approval.list" }
+    }
+
+    private func actions(of view: ViewModel) -> [Action] {
+        switch view {
+        case .card(_, _, _, let actions): return actions
+        case .form(_, _, let submit): return [submit]
+        case .detail(_, _, let actions): return actions
+        case .list(_, let items, _): return items.compactMap(\.open)
+        }
+    }
+
+    /// Runs an action; a proof action is signed with the latest challenge.
+    private func act(_ a: Action) async {
+        if a.tool == "approval.list" { dismiss(); return }
+        busy = true
+        defer { busy = false }
+        do {
+            var args = a.arguments
+            if a.proof {
+                guard let data = held, let text = data["challenge"]?.string,
+                    let rp = data["rp"]?.string
+                else {
+                    error = "The challenge couldn't be read."
+                    return
+                }
+                let ids = data["ids"]?.array?.compactMap(\.string) ?? []
+                let options: [String: JSONValue] = [
+                    "challenge": .string(text), "ids": .array(ids.map(JSONValue.string)),
+                    "rp": .string(rp),
+                ]
+                let bytes = try JSONEncoder().encode(JSONValue.object(options))
+                let answer = try await auth.prove(JSONDecoder().decode(PasskeyChallenge.self, from: bytes))
+                args["credential"] = .string(answer.id)
+                args["client_data"] = .string(answer.client)
+                args["authenticator_data"] = .string(answer.authenticator)
+                args["signature"] = .string(answer.signature)
+            }
+            let o = try await client.call(a.tool, args)
+            if let data = o.data, data["challenge"]?.string != nil, data["rp"]?.string != nil {
+                held = data
+            }
+            stage = o
+            if a.proof { result = o }
         } catch {
             self.error = error.localizedDescription
         }

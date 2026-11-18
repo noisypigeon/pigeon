@@ -2,6 +2,7 @@
 // .claude/decisions/2026-11-17-runtime-mcp-feed-view-contract.md §1.
 
 import PigeonCore
+import PhotosUI
 import SwiftUI
 
 struct ValueText: View {
@@ -164,6 +165,8 @@ struct FormRenderer: View {
     let act: (Action) -> Void
     @State private var text: [String: String] = [:]
     @State private var flags: [String: Bool] = [:]
+    @State private var images: [String: String] = [:]
+    @State private var picks: [String: PhotosPickerItem] = [:]
 
     var body: some View {
         Form {
@@ -197,7 +200,40 @@ struct FormRenderer: View {
                 Text("–").tag("")
                 ForEach(input.options ?? [], id: \.self) { Text($0).tag($0) }
             }
+        case .image:
+            PhotosPicker(
+                selection: Binding(
+                    get: { picks[input.key] }, set: { picks[input.key] = $0 }),
+                matching: .images
+            ) {
+                Label(
+                    images[input.key] == nil ? input.label : "Photo chosen", systemImage: "photo")
+            }
+            .onChange(of: picks[input.key]) { _, item in
+                Task { images[input.key] = await Self.jpeg(item) }
+            }
         }
+    }
+
+    /// A JPEG of at most 512 KiB, base64, longer side at most 1024 points; see the contract ADR #36.
+    private static func jpeg(_ item: PhotosPickerItem?) async -> String? {
+        guard let item, let data = try? await item.loadTransferable(type: Data.self),
+            let image = UIImage(data: data)
+        else { return nil }
+        let longer = max(image.size.width, image.size.height)
+        let scale = min(1, 1024 / longer)
+        let size = CGSize(width: image.size.width * scale, height: image.size.height * scale)
+        let scaled = UIGraphicsImageRenderer(size: size).image { _ in
+            image.draw(in: CGRect(origin: .zero, size: size))
+        }
+        var quality = 0.85
+        while quality >= 0.35 {
+            if let out = scaled.jpegData(compressionQuality: quality), out.count <= 524_288 {
+                return out.base64EncodedString()
+            }
+            quality -= 0.1
+        }
+        return nil
     }
 
     private func collected() -> Action {
@@ -205,6 +241,8 @@ struct FormRenderer: View {
         for input in fields {
             switch input.input {
             case .toggle: args[input.key] = .bool(flags[input.key] ?? false)
+            case .image:
+                if let b = images[input.key] { args[input.key] = .string(b) }
             case .number:
                 let t = text[input.key] ?? ""
                 args[input.key] = Double(t).map(JSONValue.number) ?? .string(t)
