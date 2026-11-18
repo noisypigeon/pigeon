@@ -20,6 +20,7 @@ final class Store: ObservableObject {
     private let auth = Auth()
     private var device: DeviceKey?
     private static let linkedKey = "linked"
+    private var client: MCPClient?
 
     init() {
         linked = UserDefaults.standard.bool(forKey: Self.linkedKey)
@@ -28,6 +29,26 @@ final class Store: ObservableObject {
     private func api() throws -> API {
         if device == nil { device = try DeviceKey.load() }
         return API(device: device!)
+    }
+
+    /// The device door's MCP session; see the feed-view ADR's R10b amendment.
+    private func mcp() throws -> MCPClient {
+        if let client { return client }
+        let c = MCPClient(api: try api())
+        client = c
+        return c
+    }
+
+    /// Calls `name` on the device door and decodes its `result` as `T`.
+    private func tool<T: Decodable>(
+        _ name: String, _ args: [String: JSONValue] = [:], as type: T.Type
+    ) async throws -> T {
+        let o = try await mcp().call(name, args)
+        if let e = o.error { throw APIError(status: 400, message: e) }
+        guard let result = o.data?["result"] else {
+            throw APIError(status: 0, message: "The answer had no result.")
+        }
+        return try JSONDecoder.pigeon.decode(T.self, from: JSONEncoder().encode(result))
     }
 
     /// Links this iPhone: the owner proves it on the link page, then the code is redeemed.
@@ -47,7 +68,7 @@ final class Store: ObservableObject {
     func refresh() async {
         guard linked else { return }
         do {
-            home = try await api().call("GET", "/v0/app/home", as: Home.self)
+            home = try await tool("home.show", as: Home.self)
             error = nil
         } catch let e as APIError where e.unlinks {
             unlink(because: e)
@@ -60,7 +81,7 @@ final class Store: ObservableObject {
     func loadTracker() async {
         guard linked else { return }
         do {
-            tracker = try await api().call("GET", "/v0/app/tracker", as: Tracker.self)
+            tracker = try await tool("tracker.show", as: Tracker.self)
         } catch let e as APIError where e.unlinks {
             unlink(because: e)
         } catch {
@@ -72,7 +93,7 @@ final class Store: ObservableObject {
     func loadOps(range: Int) async {
         guard linked else { return }
         do {
-            ops = try await api().call("GET", "/v0/app/ops?range=\(range)", as: Ops.self)
+            ops = try await tool("ops.show", ["range": .string(String(range))], as: Ops.self)
         } catch let e as APIError where e.unlinks {
             unlink(because: e)
         } catch {
@@ -80,21 +101,23 @@ final class Store: ObservableObject {
         }
     }
 
-    /// Follows the event log until cancelled, reloading the tracker and Home on each batch.
+    /// Follows the feed until cancelled, reloading the tracker and Home on each batch.
     func follow() async {
         await loadTracker()
         var after = 9007199254740991
         do {
-            after = try await api().call(
-                "GET", "/v0/app/events?after=9007199254740991&seconds=0", as: AppEvents.self
+            after = try await tool(
+                "feed.read", ["after": .string("9007199254740991"), "seconds": .string("0")],
+                as: FeedPage.self
             ).last
         } catch {}
         var reloaded = Date.distantPast
         while !Task.isCancelled && linked {
             do {
-                let batch = try await api().call(
-                    "GET", "/v0/app/events?after=\(after)&seconds=25", as: AppEvents.self)
-                if batch.events.isEmpty {
+                let batch = try await tool(
+                    "feed.read", ["after": .string(String(after)), "seconds": .string("25")],
+                    as: FeedPage.self)
+                if batch.items.isEmpty {
                     if batch.last < after { after = batch.last }
                 } else {
                     after = batch.last
@@ -117,14 +140,16 @@ final class Store: ObservableObject {
 
     /// One source's chart over `range` days.
     func stacks(metric: String, source: String, range: Int) async -> Stacks? {
-        try? await api().call(
-            "GET", "/v0/app/insights?metric=\(metric)&source=\(source)&range=\(range)",
+        try? await tool(
+            "insights.show",
+            ["metric": .string(metric), "source": .string(source), "range": .string(String(range))],
             as: Stacks.self)
     }
 
-    /// One change's sheet; nil when it can't be read, as from a control plane without the route.
+    /// One change's sheet; nil when `change.status` can't be read.
     func changeDetail(_ number: Int) async -> ChangeDetail? {
-        try? await api().call("GET", "/v0/app/changes/\(number)", as: ChangeDetail.self)
+        try? await tool(
+            "change.status", ["number": .string(String(number))], as: ChangeDetail.self)
     }
 
     /// One approval's card.
@@ -191,7 +216,9 @@ final class Store: ObservableObject {
     /// Answers owner item `id`; an answer grants nothing, so it takes no passkey.
     func answer(item id: Int, with answer: String) async -> Bool {
         await run {
-            try await self.api().send("POST", "/v0/app/items/\(id)", body: ["answer": answer])
+            _ = try await self.tool(
+                "owner.answer", ["id": .string(String(id)), "answer": .string(answer)],
+                as: JSONValue.self)
             await self.refresh()
         }
     }
@@ -312,6 +339,7 @@ final class Store: ObservableObject {
         home = nil
         tracker = nil
         ops = nil
+        client = nil
         me = nil
         avatar = nil
         error = "This iPhone needs linking again: \(e.localizedDescription)"
@@ -332,4 +360,10 @@ final class Store: ObservableObject {
             return false
         }
     }
+}
+
+/// `feed.read`'s answer, as `follow` reads it.
+private struct FeedPage: Decodable {
+    let last: Int
+    let items: [JSONValue]
 }
