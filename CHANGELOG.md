@@ -99,6 +99,9 @@
 - test(core): the change and approval families declare their results, and their per-operation fixtures retire (!1193) ([57d55ec](https://github.com/noisypigeon/pigeon/commit/57d55eca6d69ac2b6387b5b22df26d79dc8d91fd))
 - feat(deploy): /healthz names the deployed commit, and the architecture site reads it at view time (!1195) ([c65680d](https://github.com/noisypigeon/pigeon/commit/c65680daafd405413fd70a353d081f211528921e)) · agent, site-template-architecture
 - feat(ios): profile, photo, push and instances go through the device door's tools (!1196) ([2cc6882](https://github.com/noisypigeon/pigeon/commit/2cc6882d2478d790c7a547d5b293340b05e79fe3))
+- test(eviction): the changelog policy carries its own examples (!1197) ([f712545](https://github.com/noisypigeon/pigeon/commit/f712545a002f2342d04e5e3b163a025ff6bbd504))
+- test(eviction): the layout policy carries its own examples (!1198) ([5bc546d](https://github.com/noisypigeon/pigeon/commit/5bc546db1b4f8d4382db033cd3dc24acb9674c53))
+- feat(ios): approvals and Auto go through the proof sheet (!1199) ([1453490](https://github.com/noisypigeon/pigeon/commit/145349056f53337ec54e225ef9f84da77e5c8872))
 
 ## 2026-11-17
 
