@@ -340,6 +340,8 @@ impl Operation {
             || self.name.starts_with("provider.")
             || self.name.starts_with("bench.")
             || self.name.starts_with("pool.")
+            || self.name.starts_with("approval.")
+            || self.name.starts_with("push.")
     }
 
     /// Who answers its request for approval.

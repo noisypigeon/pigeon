@@ -134,3 +134,20 @@ fn writes_are_cards_or_details() {
         }
     }
 }
+
+#[test]
+fn every_operation_the_control_plane_routes_runs_there() {
+    for o in catalog() {
+        let request = super::Request {
+            operation: o.name.to_string(),
+            args: serde_json::Map::new(),
+        };
+        if crate::control::route(&request, "test", 0).is_ok() {
+            assert!(
+                o.control_plane(),
+                "{} is routed by the control plane but not marked as running there",
+                o.name
+            );
+        }
+    }
+}
