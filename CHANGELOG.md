@@ -14,6 +14,7 @@
 - agent v0.1.60
 - agent v0.1.61
 - agent v0.1.62
+- agent v0.1.63
 - infra-cloudflare-access-application v0.1.3
 - infra-cloudflare-access-application v0.1.4
 - infra-cloudflare-schema v0.1.24
@@ -123,6 +124,27 @@
 - docs(adr): review !1162 against !1213 (!1215) ([46f63ce](https://github.com/noisypigeon/pigeon/commit/46f63ce04a9edb5490be2549f918eb61a8705905))
 - feat(deploy): a Worker spec binds other Workers, and the primary can take the front's host as its own (!1216) ([2e68027](https://github.com/noisypigeon/pigeon/commit/2e68027e2f604a04b113f82822befca34d307bb8)) · agent
 - feat(infra): front-test.pigeon.dev joins the platform's domains, so Access covers it before pigeon-front serves it (!1217) ([c650616](https://github.com/noisypigeon/pigeon/commit/c650616424529f6a4cf0e6cf0cda562b8e7a4c6f))
+- feat(agent): proof.challenge mints the passkey for unlinking a device or removing a passkey, and names the tool that redeems it (!1158) ([fcf655c](https://github.com/noisypigeon/pigeon/commit/fcf655c052b5f2db007213b2bf9fcee8a403dbd5)) · agent
+- feat(policy): the member core is guarded and gated, and roles.yaml's standard level holds no approval permission (!1162) ([57fcceb](https://github.com/noisypigeon/pigeon/commit/57fcceba4c557e433f1c7dc258ef3fff917ed629))
+- feat(core): ChangeRun's alarm stands down on the standby, so no job starts there (!1189) ([9a79d42](https://github.com/noisypigeon/pigeon/commit/9a79d42a6a4686eb2d48d97a8fe4772e95689b41)) · agent
+- feat(agent): proof.challenge mints the passkey for standing up an instance (!1208) ([dfe5408](https://github.com/noisypigeon/pigeon/commit/dfe5408561fcadecfc84de4db1252d8f859b0b52)) · agent
+- docs(adr): the owner's answers: no expiry by default, and sites and instances become capabilities (!1218) ([a169a66](https://github.com/noisypigeon/pigeon/commit/a169a664706459ea14f81e729c5884b0c1fec519))
+- docs(adr): secret-bearing state is journaled sealed, a grant request's token hashed, and the APNs token never (!1219) ([e8a0972](https://github.com/noisypigeon/pigeon/commit/e8a0972c7f998ab8cda17f635d8d5c6d24b85eeb))
+- feat(agent)!: the app's old /v0/app/* routes answer 426, "Update the app" (!1224) ([0d81ae8](https://github.com/noisypigeon/pigeon/commit/0d81ae83f47396ab31e9a5e7309685f4990dd59a)) · agent
+- fix(agent): the owner is pointed at /app, not the old /approvals (!1227) ([272bba9](https://github.com/noisypigeon/pigeon/commit/272bba976e9564cf099d5f6292268467675b8f50)) · agent
+- fix(core): a grant request keeps only its page token's hash (!1229) ([1b2be51](https://github.com/noisypigeon/pigeon/commit/1b2be51ad4d510e8acf712c4ff09da11de390e61))
+- docs(adr): review !1226 against !1219 (!1231) ([cb153b1](https://github.com/noisypigeon/pigeon/commit/cb153b107cfe512d5397752aa724d0e638f966db))
+- docs(adr): review !1223 against !1219 (!1230) ([4a594e3](https://github.com/noisypigeon/pigeon/commit/4a594e3acd68ccb9b9eee3eb3212cb410a446032))
+- feat(front): the pigeon-front crate forwards to the lease's color, linted for wasm, not yet deployed (!1221) ([63ef161](https://github.com/noisypigeon/pigeon/commit/63ef161f4d64bfb60571d78eb77e21a30c8ea75d))
+- feat(ios): the unthemed Feed tab goes; Now and Insights are the app's tabs (!1223) ([460b943](https://github.com/noisypigeon/pigeon/commit/460b94302893a51320ed01935eb425830d0ae638))
+- feat(core): each ChangeRun's state is journaled in shadow (!1232) ([7fccc09](https://github.com/noisypigeon/pigeon/commit/7fccc0940d621ed23e1ef296bdc75585d60aae12)) · agent
+- feat(core): levels and capability grants: Standard, one Administrator, permissions apart from capabilities, and the learner's icbc (!1233) ([36fe882](https://github.com/noisypigeon/pigeon/commit/36fe882c5e163db169d84fcdf53d8041f4ae7245)) · agent
+- docs(adr): the feed-view contract's outcome: one catalog serves the shell and the app, and the old routes are gone but group E (!1235) ([f83cd78](https://github.com/noisypigeon/pigeon/commit/f83cd78abfca4b23bcfbcdd5423101e895c910aa))
+- feat(front): pigeon-front serves front-test.pigeon.dev, checked through its host, and the primary takes that host as its own (!1234) ([1640b09](https://github.com/noisypigeon/pigeon/commit/1640b0990035715eb3c18345442078ebc3354e35)) · agent
+- docs(adr): step 9's shape: tool lists, hashed credentials bound by the Administrator, and R3 carries step 5 (!1237) ([b6fd587](https://github.com/noisypigeon/pigeon/commit/b6fd58767de4715ef1409e7480040686d687ce6f))
+- feat(core): service users narrowed by tool lists, seeded, and bound to hashed Access credentials by the Administrator (!1239) ([8f884aa](https://github.com/noisypigeon/pigeon/commit/8f884aa6eefdb3d84517cfa79d1bf88e7e928eda))
+- fix(front): pigeon-front's spec waits for a build that reads `forwards` (!1240) ([e8a331a](https://github.com/noisypigeon/pigeon/commit/e8a331afea714be1068b17c557d47513c25860ed))
+- feat(policy): roles.yaml's second level is `standard: []` only; `user` and `learner` are gone (!1241) ([a0fceea](https://github.com/noisypigeon/pigeon/commit/a0fceead4be022b65f0af0378b7c5ea22b50be02))
 
 ## 2026-11-17
 
