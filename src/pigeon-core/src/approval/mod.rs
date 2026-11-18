@@ -3,6 +3,7 @@
 
 pub mod enroll;
 pub mod grants;
+pub mod lanes;
 pub mod listed;
 pub mod mandates;
 pub mod passkeys;

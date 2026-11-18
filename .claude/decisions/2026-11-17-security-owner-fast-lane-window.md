@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: security
-* Governs: `src/**/change/jobs.rs`, `src/**/change/gate.rs`, `src/**/change/queue.rs`, `src/**/change/forecast.rs`, `src/**/worker/main_run.rs`, `src/**/feed.rs`, `.config/approvals.yaml`
+* Governs: `src/**/approval/lanes.rs`, `src/**/approval/lanes_tests.rs`, `src/**/change/jobs.rs`, `src/**/change/gate.rs`, `src/**/change/queue.rs`, `src/**/change/forecast.rs`, `src/**/worker/main_run.rs`, `src/**/feed.rs`, `.config/approvals.yaml`
 
 ## Context
 
@@ -385,3 +385,16 @@ event from two tables of opening and closing kinds. The two ADRs agree;
   briefed; otherwise step 7 adds them, with a test that each lane item
   closes.
 - Nothing in !1063 (step 2) changes: it holds no events.
+
+### 2026-11-17: The owner's answers, and step 2 lands
+
+- **The owner chose as proposed** (owner_ask #29 and #30):
+  - a deferred run that fails holds `main`, ends the lane, and proposes a
+    generated revert (§5); the deploy doesn't wait for the deferred run;
+  - only the owner pre-empts a merge turn, with a passkey (§4);
+  - 30 minutes by default, 120 at most per grant, one lane open at a time
+    (§1).
+- **Step 2:** `src/pigeon-core/src/approval/lanes.rs`, with its tests in
+  `lanes_tests.rs` beside it. `Lanes::waive` records a waiver only for a
+  head `covers` admits and a job `waivable` allows, and `Lanes::settle`
+  ends a lane past its end. Its `Governs` gains both files.
