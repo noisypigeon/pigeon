@@ -210,7 +210,7 @@ fn provider_pending_is_a_card() {
 
 #[test]
 fn odd_shapes_still_validate() {
-    assert_eq!(NAMES.len(), 35);
+    assert_eq!(NAMES.len(), 36);
     for op in NAMES {
         for result in [json!("x"), json!({})] {
             let v = shown(op, result);
@@ -254,4 +254,14 @@ fn the_apps_reads_are_presented() {
     for op in ["home.show", "tracker.show", "ops.show", "insights.show"] {
         shown(op, json!("x"));
     }
+}
+
+#[test]
+fn an_owner_answer_is_the_items_card() {
+    let item = json!({ "item": {
+        "id": 28, "kind": "decision", "title": "two doors or one", "session": "s",
+        "answer": "A", "change": 1035
+    } });
+    let answered = shown("owner.answer", item.clone());
+    assert_eq!(answered, shown("owner.ask", item));
 }

@@ -983,6 +983,30 @@ async fn dispatch(
         Routed::Owner {
             operation: op,
             args,
+        } if op == "owner.answer" => {
+            // Only the owner answers an item: a person, signed in or on a linked device.
+            if !who.human {
+                let why = json!("only the owner answers an item, signed in or on their device");
+                return Ok((None, respond(operation, 403, why)));
+            }
+            let id = match args.get("id") {
+                Some(Value::String(v)) => v.clone(),
+                Some(v) => v.to_string(),
+                None => String::new(),
+            };
+            let body = json!({ "answer": args.get("answer").cloned().unwrap_or(Value::Null) });
+            let mut r = owner_items::answer(env, s, &id, &body).await?;
+            let status = r.status_code();
+            let v = if status == 200 {
+                r.json::<Value>().await?
+            } else {
+                json!(r.text().await?)
+            };
+            Ok((None, respond(operation, status, v)))
+        }
+        Routed::Owner {
+            operation: op,
+            args,
         } => Ok(answered(
             operation,
             owner_items::run(env, s, &op, &args).await?,

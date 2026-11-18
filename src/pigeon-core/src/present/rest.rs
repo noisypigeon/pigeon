@@ -43,6 +43,7 @@ pub const NAMES: &[&str] = &[
     "bench.warm",
     "owner.ask",
     "owner.withdraw",
+    "owner.answer",
     "provider.call",
     "infra.apply",
     "build.list",
@@ -513,7 +514,7 @@ fn cards(op: &str, v: &Value) -> Value {
         "bench.cancel" => card(&format!("Cancelling {}", s(v, "run")), None, vec![], vec![]),
         "bench.reset" => card("Bench reset", None, scalars(v), vec![]),
         "bench.warm" => card("Bench", None, scalars(v), vec![]),
-        "owner.ask" | "owner.withdraw" => owner_card(&v["item"]),
+        "owner.ask" | "owner.withdraw" | "owner.answer" => owner_card(&v["item"]),
         "build.read" => build_read_card(v),
         "provider.call" => {
             if let Some(p) = v["pending"].as_str() {

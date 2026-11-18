@@ -498,7 +498,7 @@ pub fn route(request: &Request, by: &str, at: u64) -> Result<Routed, String> {
             operation: request.operation.clone(),
             args: a.clone(),
         }),
-        "owner.ask" | "owner.withdraw" => Ok(Routed::Owner {
+        "owner.ask" | "owner.withdraw" | "owner.answer" => Ok(Routed::Owner {
             operation: request.operation.clone(),
             args: a.clone(),
         }),

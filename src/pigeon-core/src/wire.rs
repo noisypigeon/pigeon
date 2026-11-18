@@ -899,6 +899,17 @@ const CATALOG: &[Operation] = &[
         view: View::Card,
     },
     Operation {
+        name: "owner.answer",
+        engine: Engine::Agent,
+        effect: Effect::Build,
+        summary: "The owner answers their open item `id` with `answer`: one of a decision's options, or `done` for an action; a person's only (signed in, or on a linked device), never a service token or an agent; see .claude/decisions/2026-11-17-runtime-mcp-feed-view-contract.md step 11",
+        args: &[
+            arg("id", true, Kind::Text),
+            arg("answer", true, Kind::String),
+        ],
+        view: View::Card,
+    },
+    Operation {
         name: "provider.call",
         engine: Engine::Agent,
         effect: Effect::Build,

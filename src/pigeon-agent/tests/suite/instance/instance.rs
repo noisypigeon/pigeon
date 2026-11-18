@@ -166,6 +166,7 @@ fn catalog_names_are_unique_and_dotted() {
             ("bench.warm", Effect::Build),
             ("owner.ask", Effect::Build),
             ("owner.withdraw", Effect::Build),
+            ("owner.answer", Effect::Build),
             ("provider.call", Effect::Build),
             ("session.start", Effect::Build),
             ("brief.create", Effect::Build),
@@ -498,7 +499,7 @@ fn the_control_plane_runs_ios_releases_itself() {
 // See `.claude/decisions/2026-11-15-security-standing-auto-owner-flags.md` §4.
 #[test]
 fn the_control_plane_runs_owner_items_itself() {
-    for name in ["owner.ask", "owner.withdraw"] {
+    for name in ["owner.ask", "owner.withdraw", "owner.answer"] {
         let op = catalog()
             .iter()
             .find(|o| o.name == name)
