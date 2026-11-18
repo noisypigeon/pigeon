@@ -65,6 +65,9 @@ bindings:
     # Passkeys' relying party, the platform's hostname; see
     # .claude/decisions/2026-11-10-runtime-platform-hostname-dashboard-observability.md §2.
     PASSKEY_RP_ID: $deployment.domains[0]
+    # pigeon-front's test host, under Access, which the primary takes as its own; see
+    # .claude/decisions/2026-11-18-runtime-independent-blue-green-workers.md, its step 9a amendment.
+    FRONT_HOST: $deployment.domains[2]
     # Codes are refused once the cutover's proofs are on record; see
     # .claude/decisions/2026-11-14-security-passkey-only-owner-proofs.md §4.
     PROOFS: passkey

@@ -118,7 +118,8 @@ fn wait_for(
 
 /// Deploys `found` from the checkout at `root`: renders it with `outputs` and `images`, applies
 /// its migrations, and deploys it whole when [`whole_deploy`] names a reason (`whole`), else as
-/// version blue-green; then waits for the new version's health, and on a failed check rolls back
+/// version blue-green; a forwarder (`Spec::forwards`) always deploys whole and is checked
+/// through its host; then waits for the new version's health, and on a failed check rolls back
 /// to the version that served before.
 ///
 /// # Errors
@@ -149,15 +150,20 @@ pub fn ship(
     let from = serving(&deployments(target, &name)?);
     let mut steps = Vec::new();
     workers::migrate(found, &dir, tools)?;
-    let to = match (whole(from.as_deref()), from.as_deref()) {
-        (None, Some(blue)) => {
+    let forwards = found.spec.forwards.clone();
+    let to = match (forwards.is_some(), whole(from.as_deref()), from.as_deref()) {
+        (false, None, Some(blue)) => {
             steps.push("version blue-green".to_string());
             blue_green(&name, blue, &dir, tools, target, &mut steps)?
         }
-        (why, _) => {
+        (_, why, _) => {
             steps.push(format!(
                 "a whole deploy: {}",
-                why.unwrap_or_else(|| "no version serves yet".into())
+                if forwards.is_some() {
+                    "a forwarder, with no objects to drain".to_string()
+                } else {
+                    why.unwrap_or_else(|| "no version serves yet".into())
+                }
             ));
             workers::wrangler_deploy(found, &dir, tools)?;
             let to = serving(&deployments(target, &name)?)
@@ -169,8 +175,20 @@ pub fn ship(
             to
         }
     };
-    let last = match wait_for(target, &name, "/healthz", None, HEALTH_WAIT, |v| {
-        healthy(v, &to)
+    let host_target;
+    let checked = match forwards.as_deref() {
+        Some(host) => {
+            host_target = Target { host, ..*target };
+            &host_target
+        }
+        None => target,
+    };
+    let last = match wait_for(checked, &name, "/healthz", None, HEALTH_WAIT, |v| {
+        if forwards.is_some() {
+            v["ok"] == true
+        } else {
+            healthy(v, &to)
+        }
     }) {
         Ok(()) => {
             steps.push(format!("{to} is healthy"));

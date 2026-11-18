@@ -63,6 +63,9 @@ pub struct Spec {
     /// Custom domains it serves.
     #[serde(default)]
     pub routes: Vec<Route>,
+    /// A forwarder's host: it deploys whole and is checked by `GET https://<host>/healthz` answering `ok`, which the Worker it forwards to answers; see .claude/decisions/2026-11-18-runtime-independent-blue-green-workers.md, its 9a amendment.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub forwards: Option<String>,
     /// Cron Triggers.
     #[serde(default)]
     pub crons: Vec<String>,
