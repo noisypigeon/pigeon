@@ -220,7 +220,7 @@ pub enum Door {
 }
 
 /// The operations that act as the device `/v0/app/mcp` verified, listed and run only on that door; see .claude/decisions/2026-11-17-runtime-mcp-feed-view-contract.md, its R8 amendment.
-pub const DEVICE_OPS: [&str; 13] = [
+pub const DEVICE_OPS: [&str; 14] = [
     "device.show",
     "device.push",
     "instances.list",
@@ -234,6 +234,7 @@ pub const DEVICE_OPS: [&str; 13] = [
     "avatar.remove",
     "device.unlink",
     "passkey.remove",
+    "instances.standup",
 ];
 
 const GRANT: [&str; 7] = [
@@ -905,6 +906,22 @@ const CATALOG: &[Operation] = &[
         summary: "Remove passkey `id`, proved by the owner's passkey; never the last one; on the app's door only; see .claude/decisions/2026-11-17-runtime-mcp-feed-view-contract.md, its R10b amendment",
         args: &[
             arg("id", true, Kind::String),
+            arg("credential", true, Kind::String),
+            arg("client_data", true, Kind::String),
+            arg("authenticator_data", true, Kind::String),
+            arg("signature", true, Kind::String),
+        ],
+        view: View::Card,
+    },
+    Operation {
+        name: "instances.standup",
+        engine: Engine::Agent,
+        effect: Effect::Build,
+        summary: "Stand up a personal instance named `name` in the account `token` reaches, proved by the owner's passkey for that token; the token is sent once and never kept; on the app's door only; see .claude/decisions/2026-11-17-runtime-mcp-feed-view-contract.md, its R8c amendment",
+        args: &[
+            arg("name", true, Kind::String),
+            arg("label", true, Kind::String),
+            arg("token", true, Kind::String),
             arg("credential", true, Kind::String),
             arg("client_data", true, Kind::String),
             arg("authenticator_data", true, Kind::String),

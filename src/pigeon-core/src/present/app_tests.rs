@@ -143,3 +143,11 @@ fn every_name_is_presented() {
         present(op, json!({}));
     }
 }
+
+#[test]
+fn standup_presents_a_card() {
+    assert_eq!(
+        present("instances.standup", json!({}))["title"],
+        "Standing up"
+    );
+}

@@ -26,6 +26,7 @@ pub const NAMES: &[&str] = &[
     "avatar.remove",
     "device.unlink",
     "passkey.remove",
+    "instances.standup",
 ];
 
 /// The view of operation `op`'s result, when this family presents it.
@@ -80,6 +81,18 @@ pub fn view(op: &str, r: &crate::wire::Response) -> Option<Value> {
         "avatar.remove" => saved("Photo removed"),
         "device.unlink" => saved("Device unlinked"),
         "passkey.remove" => saved("Passkey removed"),
+        "instances.standup" => card(
+            "Standing up",
+            Some("The instance appears in the list when it's ready."),
+            vec![],
+            vec![action(
+                "Instances",
+                "instances.list",
+                json!({}),
+                "plain",
+                false,
+            )],
+        ),
         _ => return None,
     };
     Some(out)

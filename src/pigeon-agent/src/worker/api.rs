@@ -270,6 +270,20 @@ async fn device_op(
             .await?
         }
         "avatar.remove" => route(Method::Delete, "/v0/app/profile/avatar", Value::Null).await?,
+        "instances.standup" => {
+            let body = json!({
+                "name": arg("name"),
+                "label": arg("label"),
+                "token": arg("token"),
+                "passkey": {
+                    "id": arg("credential"),
+                    "client": arg("client_data"),
+                    "authenticator": arg("authenticator_data"),
+                    "signature": arg("signature"),
+                },
+            });
+            super::instances::standup(env, s, device, &body).await?
+        }
         "device.unlink" | "passkey.remove" => {
             let proof = json!({"passkey": {
                 "id": arg("credential"),

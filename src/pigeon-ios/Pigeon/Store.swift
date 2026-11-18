@@ -181,10 +181,28 @@ final class Store: ObservableObject {
         await run {
             let token = token.trimmingCharacters(in: .whitespacesAndNewlines)
             let sha = hex(SHA256.hash(data: Data(token.utf8)))
-            let answer = try await self.proof(["op": "instance:standup", "id": sha])
-            try await self.api().send(
-                "POST", "/v0/app/instances/standup",
-                body: ["name": name, "label": label, "token": token, "passkey": answer.json])
+            let o = try await self.mcp().call(
+                "proof_challenge", ["purpose": .string("instance-standup"), "target": .string(sha)])
+            if let e = o.error { throw APIError(status: 400, message: e) }
+            guard let data = o.data, let text = data["challenge"]?.string,
+                let rp = data["rp"]?.string
+            else { throw APIError(status: 0, message: "The challenge couldn't be read.") }
+            let ids = data["ids"]?.array?.compactMap(\.string) ?? []
+            let options: [String: JSONValue] = [
+                "challenge": .string(text), "ids": .array(ids.map(JSONValue.string)),
+                "rp": .string(rp),
+            ]
+            let answer = try await self.auth.prove(
+                JSONDecoder().decode(
+                    PasskeyChallenge.self, from: JSONEncoder().encode(JSONValue.object(options))))
+            _ = try await self.tool(
+                "instances.standup",
+                [
+                    "name": .string(name), "label": .string(label), "token": .string(token),
+                    "credential": .string(answer.id), "client_data": .string(answer.client),
+                    "authenticator_data": .string(answer.authenticator),
+                    "signature": .string(answer.signature),
+                ], as: JSONValue.self)
             await self.loadInstances()
         }
     }
@@ -274,12 +292,6 @@ final class Store: ObservableObject {
     func registerPush(_ token: Data) async {
         guard linked else { return }
         _ = try? await tool("device.push", ["token": .string(hex(token))], as: JSONValue.self)
-    }
-
-    private func proof(_ body: [String: Any]) async throws -> PasskeyAnswer {
-        let challenge = try await api().call(
-            "POST", "/v0/app/challenge", body: body, as: PasskeyChallenge.self)
-        return try await auth.prove(challenge)
     }
 
     private func unlink(because e: APIError) {
