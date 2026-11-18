@@ -106,6 +106,8 @@ cargo run -q --locked -p pigeon-harness -- run policy.check --root . \
   --text "title=$(git log -1 --format=%s "$first")" \
   --text "body=$(git log -1 --format=%b "$first")" \
   --text "scope=$(git log -1 --format='%(trailers:key=Change-Scope,valueonly)' "$first")" \
+  --text "test_reason=$(git log -1 --format='%(trailers:key=Test-Reason,valueonly)' "$first")" \
+  --text "diff=$(git diff --unified=0 "$base"...HEAD -- '*.rs')" \
   --text "files=$(git diff --name-only "$base"...HEAD)"
 "#],
     },

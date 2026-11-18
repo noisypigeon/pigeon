@@ -313,6 +313,8 @@ const PR_FIELDS: &[Arg] = &[
     arg("files", false, Kind::Text),
     arg("branch", false, Kind::Text),
     arg("scope", false, Kind::Text),
+    arg("test_reason", false, Kind::Text),
+    arg("diff", false, Kind::Text),
 ];
 
 const NUMBER: Arg = arg("number", true, Kind::Text);
@@ -338,7 +340,7 @@ const CATALOG: &[Operation] = &[
         name: "policy.check",
         engine: Engine::Eviction,
         effect: Effect::Read,
-        summary: "Check the instance against its policies (args: title?, body?, number?, files?, which add the pull-request policy; branch? and scope? add the change policy)",
+        summary: "Check the instance against its policies (args: title?, body?, number?, files?, which add the pull-request policy; branch?, scope?, test_reason? and diff? add the change policy)",
         args: PR_FIELDS,
         view: View::Detail,
     },

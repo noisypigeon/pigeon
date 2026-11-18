@@ -147,15 +147,24 @@ fn pull_request(args: &Map<String, Value>) -> Option<Vec<(&'static str, String)>
         ("PR_FILES", "files"),
         ("PR_BRANCH", "branch"),
         ("PR_SCOPE", "scope"),
+        ("PR_TEST_REASON", "test_reason"),
     ];
     let named = fields
         .iter()
-        .any(|(_, k)| *k != "scope" && field(k).is_some());
+        .any(|(_, k)| *k != "scope" && *k != "test_reason" && field(k).is_some());
     named.then(|| {
-        fields
+        let mut out: Vec<(&'static str, String)> = fields
             .iter()
             .filter_map(|(var, k)| Some((*var, field(k)?)))
-            .collect()
+            .collect();
+        // The tests guard's counts, from the change's Rust diff; see
+        // .claude/decisions/2026-11-18-runtime-independent-blue-green-workers.md §C.2.
+        if let Some(diff) = args.get("diff").and_then(Value::as_str) {
+            let counts = crate::core::testguard::count(diff);
+            out.push(("PR_ADDED_TESTS", counts.added_tests.to_string()));
+            out.push(("PR_ENUMERATIONS", counts.enumerations.to_string()));
+        }
+        out
     })
 }
 
