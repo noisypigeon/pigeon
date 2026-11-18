@@ -117,6 +117,7 @@
 - feat(deploy): pigeon and the judge build apart, each kept at the commit it was built at (!1206) ([98a562d](https://github.com/noisypigeon/pigeon/commit/98a562da035fc11e3466c3b2bf03347d45656198)) · agent
 - feat(core): MainRun's state is journaled in shadow, as the Instance's is (!1211) ([517d50f](https://github.com/noisypigeon/pigeon/commit/517d50f4ad53fa391f041cbfb8c8e61f7ab8690a)) · agent
 - docs: CLAUDE.md names the MCP tools sessions follow events with (!1212) ([276cc20](https://github.com/noisypigeon/pigeon/commit/276cc209f58a103fb37144be71bddaf33823a6bb))
+- docs(adr): step 9a's front: its own crate, service bindings, its own check, and only hosts Access covers (!1213) ([4673499](https://github.com/noisypigeon/pigeon/commit/46734999b286cfe48850acd860becdcdf33f58bc))
 
 ## 2026-11-17
 
