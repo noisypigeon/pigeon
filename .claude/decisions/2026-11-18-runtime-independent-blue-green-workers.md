@@ -342,3 +342,32 @@ is journaled like the event log.
   that has committed answers on either color, including a request
   `pigeon-front`'s 5 s lease cache still routes to the old one. Step 10's
   replay parity checks it.
+
+### 2026-11-18: 3b declares each operation's result first; 3c's policies carry their own examples
+
+Two facts §C.1 relied on were wrong when 3b and 3c were briefed:
+
+- **No operation declares its result.** `Operation` has `args` and `view`,
+  and `Response.result` is untyped. So a sample can't be generated yet.
+- **`policies.rs` isn't one test per policy.** Its 23 tests cover 13 of the
+  27 policies. `Policy` refuses unknown fields, so a policy can't carry
+  examples yet.
+
+So:
+
+- **3b, the presenters.** `Operation` gains `result`, the twin of `args`: the
+  top-level fields of the operation's result, each with a `Kind`. MCP
+  advertises it as the tool's `outputSchema`. One test generates a sample
+  from it and runs it through `checked()` for every presented name. Each
+  family moves in its own change, rest, then change, then approval: its
+  operations declare `result`, and its per-operation fixture tests retire as
+  `-` lines in `tests.moves`. The money, non-https link and never-shown
+  ticket fixtures stay. `odd_shapes_still_validate` stays.
+- **3c, the policies.** `Policy` gains `examples: {pass, fail}`, each a
+  list of inputs for the policy's target. One test runs every policy's
+  examples, and `every_policy_is_valid` requires each policy to carry at
+  least one of each. Policies gain examples in batches, and a policy's
+  tests in `policies.rs` retire as `-` lines once its examples cover them.
+  The engine change is under `eviction`, and the policy files are guarded
+  (`secrets*` is gate). So every 3c change waits for the owner's passkey,
+  and nothing else waits on it.
