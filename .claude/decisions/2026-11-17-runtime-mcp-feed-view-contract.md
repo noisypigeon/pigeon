@@ -787,3 +787,42 @@ Execution: R8c-1 (planner, gate): the `instance-standup` purpose in
 `proof.challenge`. R8c-2 (brief): `instances.standup` on the device door and
 the app's stand-up sheet through it. Then group C, once the owner's phone runs
 the build.
+### 2026-11-18: Outcome: one catalog serves the shell and the app, and the old routes are gone but group E
+
+R0 to R18 ran on 2026-11-17 and 18, under the owner's answers to remove each
+group once its replacement was live and verified, and to move every link to
+`/app#`.
+
+- **The shell.** `/app` renders the four views from `/mcp`, with the look's
+  tokens: the owner pages are `proof.challenge`'s cards and `proof.form`'s
+  forms, signed in place (R4, R5, R7), Approvals is its first root (R6), and
+  its Notify button subscribes through `push.key` and `push.subscribe` (R9b).
+  Every link the control plane mints is `/app#/<page>?grant=…`.
+- **The app.** It keeps its screens. `Store` calls the device door's tools in
+  place of each `/v0/app/*` route (R10b), and approvals, Auto, unlinking,
+  removing a passkey and standing up an instance go through the proof sheet
+  (R10b, R8c). Its Feed tab, the shell's views in the app, went once the owner
+  tested the build; Now and Insights are its tabs.
+- **The device door.** Fourteen operations name it and run as the signing
+  device (R8): `device.show`, `device.push`, `instances.list`,
+  `instances.standup`, `members.list`, `profile.*`, `avatar.*`,
+  `device.unlink` and `passkey.remove`. `/mcp` refuses them and doesn't list
+  them.
+- **Removed.** Group A, the owner pages (!1147); group B, the Web Push pages'
+  routes (!1210); group C, every platform `/v0/app/*` route but `/v0/app/mcp`
+  and `/v0/app/session`, which answer 426, "Update the app" (!1224); group D,
+  `/v0/run`, `/v0/operations` and `/v0/events` (!1176), once every running
+  follower read `/mcp` (!1159, !1173, !1175). `/approvals` is gone with no
+  redirect, as the owner decided.
+- **Kept.** `POST /v0/app/session` joins §7 (R8c). The tool `events.wait`
+  stays: it is MCP, not REST, and sessions call it. The standalone's `join.*`,
+  `learner.*` and `members.*` routes are its own surface.
+- **Names and fixes found on the way.** R8's `whoami` is `device.show`.
+  `approval.` and `push.` joined `control_plane()` (!1182), with a registry
+  test that every operation the control plane routes runs there.
+- **Not done here.** Group E (`/builds/`, `/v0/apple/release` and its
+  archive) waits on R12, the job containers' own service tokens.
+  `session.sh` already bootstraps through `build.read` (!1173). R1's idle
+  counter wasn't needed: the owner's answers replaced it. R3, the authorizer
+  in `run()`, moved to the users ADR's planner, who supplies `requires()` and
+  `member::check`.
