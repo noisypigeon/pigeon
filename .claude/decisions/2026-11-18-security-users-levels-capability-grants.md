@@ -535,3 +535,25 @@ The two agree, and neither changes the other:
   `requires()` gives it that, and R3 enforces it when it wires
   `member::check`. Until then it is listed on `/mcp` for whoever Access
   lets through, as `approval.wait`'s links are today.
+
+### 2026-11-18: Reviewed !1162 against !1213: they agree
+
+[`2026-11-18-runtime-independent-blue-green-workers.md`](2026-11-18-runtime-independent-blue-green-workers.md)'s
+amendment for step 9a (!1213) shapes `pigeon-front`: its own crate, a
+service binding per color, its own `/healthz` check, and only hosts that
+Access covers. !1162 is §7 step 2: `src/pigeon-core/src/member/**` joins
+`guarded` and `gate`, and the roles policy holds `standard` to no
+permission.
+
+- **No file in common.** !1162 changes `.config/approvals.yaml`,
+  `.config/policies/roles.yaml` and the judge's roles test. !1213 governs
+  the Worker specs, the deploy and the front's crate.
+- **The front makes no authorization decision.** It forwards each request
+  unchanged to the lease's color, which runs §5's check. This is what the
+  first amendment's §3 already assumes. The front reads no `Members`, so
+  "a check reads after replay" holds through it.
+- **Access stays the outer gate for pages.** !1213 has the one Access
+  application cover exactly `platform/blue`'s `domains`. The members ADR
+  §8 and §5 here keep Access as the outer gate, and admit no Standard
+  user to the platform instance until step 5 lands. Neither changes the
+  other.
