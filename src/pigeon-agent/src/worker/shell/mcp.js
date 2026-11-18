@@ -59,13 +59,13 @@
     const d = outcome && outcome.data;
     let link = d && d.result && d.result.pending && d.result.pending.link;
     if (!link && outcome && outcome.text) {
-      const m = outcome.text.match(/https:\/\/[^\s"]+\/(approve|mandate|lane|grants|ci-window|platform)\/[^\s"]+/);
+      const m = outcome.text.match(/https:\/\/[^\s"]+\/(?:app#)?\/?(approve|mandate|lane|grants|ci-window|platform|pool-resume)\/[^\s"]+/);
       link = m && m[0];
     }
     if (!link) return null;
     try {
       const u = new URL(link);
-      return u.pathname + u.search;
+      return u.hash ? decodeURIComponent(u.hash.slice(1)) : u.pathname + u.search;
     } catch (_) {
       return null;
     }
