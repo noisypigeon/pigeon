@@ -5,6 +5,7 @@
 ### Released
 
 - agent v0.1.53
+- agent v0.1.54
 
 ### Merged
 
@@ -13,6 +14,9 @@
 - chore(approvals): the fast lane's Worker joins the gate (!1090) ([febd758](https://github.com/noisypigeon/pigeon/commit/febd758b18993305485ac408e6902de8b167c523))
 - feat(core): events name their subject, and the log links a closing event to the one it closes (!1078) ([905a55e](https://github.com/noisypigeon/pigeon/commit/905a55e22886e9dbf46610e7a72f2513ed4b7605))
 - docs(adr): review !1063 against !1081 (!1082) ([3d84210](https://github.com/noisypigeon/pigeon/commit/3d842109dd2900a918559a9f5e804cf7bd3e46c3))
+- feat(backplane): the owner's fast lane: lanes, waivers, queue priority, feed items and deferred checks (!1092) ([5eb9001](https://github.com/noisypigeon/pigeon/commit/5eb9001e83889fc8fe52e9f3c75eb4093fec7b95)) · agent
+- feat(agent): pushes carry only how many open items need the owner (!1086) ([3a2d56d](https://github.com/noisypigeon/pigeon/commit/3a2d56d0e658352a1a5468dbf97eeedc915f7e32)) · agent
+- feat(agent): pigeon://feed is an MCP resource: listed, and read through feed.read (!1087) ([3639500](https://github.com/noisypigeon/pigeon/commit/36395007c09260f162f9682b0f04b0a59e76307c)) · agent
 
 ## 2026-11-17
 
