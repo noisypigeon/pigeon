@@ -424,3 +424,97 @@ and no operation requires them.
   Suspending a membership ends everything that member holds.
 - If no Administrator passkey can prove, the passkey-only ADR's
   break-glass enrolment is the way back, unchanged.
+
+## Amendments
+
+### 2026-11-18: Agents are Service users, the platform's features are split into base and capabilities, and checks read after replay
+
+The owner's request arrived in full after this ADR was proposed. It adds two
+things. The blue-green planner adds a third.
+
+#### 1. Agents are Service users
+
+Every autonomous agent is a Service user: a planner or executor session, a
+pool runner, a job container. §3's table gains the session classes, and a
+ticket is how a session acts as one:
+
+| Service user | Who acts as it | Tools, within `read` and `propose` |
+|---|---|---|
+| `agent-planner` | an `opus` session, by its ticket | the agent's tools, briefs (`brief.create`, `brief.amend`, `brief.review`), `owner.ask` and `owner.withdraw`, ADR changes |
+| `agent-executor` | a `haiku` or `sonnet` session, by its ticket | the agent's tools less briefs' writes and `owner.*`; only the change and task its brief names |
+| `pool` | a pool runner | the pool's tools, and the change its task names |
+| `jobs` | a job container | `build.list`, `build.read`, its own job's results |
+| `ci` | Buildkite and GitHub Actions | `release.apple`, `release.apple.archive`, check results |
+
+- **One credential, two users, for now.** `pigeon-agent`'s token proves the
+  caller is an agent. `session_start`'s `model` picks which Service user
+  the ticket acts as. A ticket for one class never acts as the other.
+  A credential per agent session stays the members ADR §6's later work.
+- **The executor rules become the check.** CLAUDE.md's "an executor never
+  writes or amends an ADR, and never calls an owner operation" is
+  enforced by the `agent-executor` tool list and by `run()`, not only by
+  the brief.
+- **Never above Service.** No Service user, ticket or tool list holds an
+  approval permission, proves, or receives a capability grant (§2, §4).
+- §7 step 9 seeds these five in place of `agent`, `pool`, `jobs` and `ci`.
+
+#### 2. The base level and the features behind capabilities
+
+The owner asked to restructure the platform's non-base features as
+capabilities. Subdomain, Domain, ICBC and Blog are the ones that came to
+mind, so the list below is longer.
+
+- **Base** is what the platform needs to build, run and govern itself, and
+  what every user needs for their own identity. A level decides it, and
+  no grant is needed.
+- **A capability** is a feature that delivers something to a user beyond
+  that. The Administrator holds every capability; anyone else holds only
+  what is granted.
+
+| Area | Operations | Class | Who |
+|---|---|---|---|
+| Identity | `account.show`, `member.join`, `member.leave`, own `passkey.*`, `device.*`, `push.subscribe`, own feed items | base | every member (`Own`) |
+| Changes and agents | `change.*`, `brief.*`, `task.*`, `session.*`, `bench.*`, `ci.*`, `policy.check`, `git.tokens`, `build.*`, the merge queue | base | Administrator, Service |
+| Governance | approvals, `owner.*`, mandates, windows, lanes, `grant.*`, minting | base | Administrator (answers); Service (asks) |
+| Running the platform | `platform.*`, `infra.*`, `deploy.*`, `instance.show`, the architecture, insights, tracker, ops, digest, the docs site | base | Administrator; Service reads |
+| The platform's own app release | `ios.release`, `ios.status`, `apple.check`, `release.apple*` | base | Administrator; `ci` |
+| Members | `member.*`, `service.*` | base | Administrator |
+| ICBC | `learner.*` | capability `icbc` | granted |
+| Subdomain | a hostname `<label>.pigeon.dev` (the standalone-hostnames ADR) | capability `subdomain` | granted, §9 answer 3 |
+| Domain | a zone or a custom domain (the zone-vendor and zoned-standalone ADRs) | capability `domain` | granted, §9 answer 4 |
+| Blog | posts on a blog site (`workloads/noisypigeon.com/blog`) | capability `blog` | granted, §9 answer 5 |
+| Sites | `sites.build`, `sites.publish` for a site other than the platform's own | proposed capability `sites` | unclear (below) |
+| Standalone instances | `instance.standup`, the private listing | proposed capability `instances` | unclear |
+| Provider connections | `provider.call`, `provider.tools`, connecting a provider account | proposed capability `providers` | unclear |
+| The capacity pool | `pool.*`, running a task on the pool, the AI Gateway | proposed capability `pool` | unclear |
+
+- **Unclear rows are one owner question.** Sites, standalone instances,
+  provider connections and the pool each serve the platform's own work
+  today *and* could serve a user. The owner decides, row by row, whether
+  each is base or a capability. Until then each stays base, as today, and
+  nothing moves.
+- **Moving a feature behind a capability** takes one change per feature:
+  - its name joins `CAPABILITIES`;
+  - its operations declare `Requires::Capability` with their scope
+    argument;
+  - its scope's check joins `core/member`;
+  - it joins `GRANTABLE` once a grant of it means something.
+
+  The platform's own use is unaffected, since the Administrator holds
+  every capability, and a Service user calls only base operations.
+- **A capability operation stays off every Service user's tool list.** An
+  agent building the blog's code works through changes (base); it never
+  publishes a post as a user.
+- §7 gains step 12: one change per feature the owner moves, after step 4.
+
+#### 3. A check reads after replay
+
+From the blue-green planner, for
+[`2026-11-18-runtime-independent-blue-green-workers.md`](2026-11-18-runtime-independent-blue-green-workers.md)
+§A.3: **a capability check reads `Members` after replay, never from a
+value cached across calls.** A grant or a revocation is an `Instance`
+write, so it is an act: it is fenced by the lease's epoch and journaled.
+The standby answers only after replaying to the journal's head. So a
+revocation holds on both colors from the request after its append,
+including through `pigeon-front`'s 5-second lease cache. Step 10 of that
+ADR checks replay parity for both colors.
