@@ -771,6 +771,22 @@ const CATALOG: &[Operation] = &[
         view: View::List,
     },
     Operation {
+        name: "push.key",
+        engine: Engine::Agent,
+        effect: Effect::Read,
+        summary: "The Web Push public key a browser subscribes with; see .claude/decisions/2026-11-17-runtime-mcp-feed-view-contract.md, its 2026-11-18 amendment §6",
+        args: &[],
+        view: View::Card,
+    },
+    Operation {
+        name: "push.subscribe",
+        engine: Engine::Agent,
+        effect: Effect::Build,
+        summary: "Notify this browser: record its Web Push endpoint for the owner's count-only pushes; a person's call only; see the ADR's 2026-11-18 amendment §6",
+        args: &[arg("endpoint", true, Kind::String)],
+        view: View::Card,
+    },
+    Operation {
         name: "mandate.propose",
         engine: Engine::Agent,
         effect: Effect::Plan,

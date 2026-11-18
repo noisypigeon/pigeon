@@ -52,6 +52,8 @@ pub const NAMES: &[&str] = &[
     "tracker.show",
     "ops.show",
     "insights.show",
+    "push.key",
+    "push.subscribe",
 ];
 
 /// Whether `op` is presented as a list, a detail or (otherwise) a card.
@@ -514,6 +516,13 @@ fn cards(op: &str, v: &Value) -> Value {
         "bench.cancel" => card(&format!("Cancelling {}", s(v, "run")), None, vec![], vec![]),
         "bench.reset" => card("Bench reset", None, scalars(v), vec![]),
         "bench.warm" => card("Bench", None, scalars(v), vec![]),
+        "push.key" => card(
+            "Notifications",
+            None,
+            vec![field("key", code(&s(v, "key")))],
+            vec![],
+        ),
+        "push.subscribe" => card("This browser is notified", None, vec![], vec![]),
         "owner.ask" | "owner.withdraw" | "owner.answer" => owner_card(&v["item"]),
         "build.read" => build_read_card(v),
         "provider.call" => {

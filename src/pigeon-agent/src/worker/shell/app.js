@@ -146,4 +146,31 @@
   V.roots(nav, Object.keys(ROOTS), current, go);
   if (/^\/(approve|mandate|lane|grants|ci-window|platform|pool-resume)\/[^?]+\?grant=/.test(linked)) prove(linked);
   else go(current);
+
+  // The Notify button: subscribes this device to Web Push; see the ADR's 2026-11-18 amendment §6.
+  const notify = document.getElementById("notify");
+  if (notify && "serviceWorker" in navigator && "PushManager" in window) {
+    notify.hidden = false;
+    notify.addEventListener("click", async () => {
+      notify.disabled = true;
+      try {
+        const reg = await navigator.serviceWorker.register("/sw.js", { scope: "/" });
+        await navigator.serviceWorker.ready;
+        if ((await Notification.requestPermission()) !== "granted") {
+          notify.textContent = "Notifications are blocked";
+          return;
+        }
+        const k = await call("push.key", {});
+        const key = k && k.data && k.data.result && k.data.result.key;
+        if (!key) throw new Error((k && k.error) || "no key");
+        const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: bytes(key) });
+        const o = await call("push.subscribe", { endpoint: sub.endpoint });
+        if (o.error) throw new Error(o.error);
+        notify.textContent = "This device is notified";
+      } catch (e) {
+        notify.textContent = "Not saved: " + e.message;
+        notify.disabled = false;
+      }
+    });
+  }
 })();

@@ -140,6 +140,11 @@ pub(super) async fn serve_message(
         Action::Answer { id, result } => elicit::answer(env, &id, &result).await,
         Action::Call { id, request } => {
             let request = control::retarget(&request);
+            if request.operation == "push.subscribe" && !door.person {
+                let why = "`push.subscribe` is a person's, signed in".to_string();
+                let refused = Err(crate::Error::Invalid(vec![why]));
+                return Response::from_json(&mcp::answer(&id, refused));
+            }
             if request.operation == "approval.wait" {
                 return wait(env, &id, &request).await;
             }

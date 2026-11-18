@@ -131,16 +131,27 @@ pub struct Latest {
     pub at: u64,
 }
 
-/// The service worker, served at `/sw.js` with scope `/`: on a push it fetches
-/// `/approvals/latest.json` and shows it; a tap opens its page.
+/// The service worker, served at `/sw.js` with scope `/`: on a push it reads the feed's open owner
+/// items over `/mcp` (the ADR's 2026-11-18 amendment §5) and shows their count; a tap opens `/app`.
 pub const SERVICE_WORKER: &str = r#"self.addEventListener("push", (event) => {
   event.waitUntil((async () => {
-    let n = { title: "pigeon", body: "Something needs you.", url: "/app" };
+    let body = "Something needs you.";
     try {
-      const r = await fetch("/approvals/latest.json", { credentials: "same-origin", cache: "no-store" });
-      if (r.ok) { n = await r.json(); }
+      const post = (payload, extra) => fetch("/mcp", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: Object.assign({ "content-type": "application/json" }, extra),
+        body: JSON.stringify(payload),
+      });
+      const init = await post({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "pigeon-sw", version: "1" } } });
+      const sid = init.headers.get("mcp-session-id");
+      const r = await post({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "feed_read", arguments: { needs: "owner", open: "1" } } }, sid ? { "mcp-session-id": sid } : {});
+      if (r.ok) {
+        const n = (await r.json()).result._meta["dev.pigeon/view"].items.length;
+        body = n === 1 ? "1 needs you" : n + " need you";
+      }
     } catch (e) {}
-    await self.registration.showNotification(n.title, { body: n.body, data: { url: n.url }, tag: "pigeon" });
+    await self.registration.showNotification("pigeon", { body, data: { url: "/app" }, tag: "pigeon" });
   })());
 });
 self.addEventListener("notificationclick", (event) => {

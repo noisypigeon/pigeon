@@ -1680,6 +1680,22 @@ async fn app_read(
                 Err(why) => (400, json!(why)),
             }
         }
+        "push.key" => match platform::secret(env, push::VAPID_VAR)
+            .ok()
+            .and_then(|k| crate::core::push::Vapid::from_secret(&k).ok())
+        {
+            Some(v) => (200, json!({ "key": v.public_key() })),
+            None => (503, json!("push isn't set up: no PUSH_VAPID_KEY")),
+        },
+        "push.subscribe" => {
+            let endpoint = text("endpoint");
+            if endpoint.is_empty() {
+                return Ok((400, json!("`endpoint` is required")));
+            }
+            let by = account::approver(env, s).await?;
+            let add = json!({ "endpoint": endpoint, "by": by });
+            mandates::to_instance(env, s, "/push/add", &add).await?
+        }
         _ => (404, json!(format!("no app read `{op}`"))),
     })
 }

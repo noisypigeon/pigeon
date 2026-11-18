@@ -264,3 +264,11 @@ fn an_owner_answer_is_the_items_card() {
     let answered = shown("owner.answer", item.clone());
     assert_eq!(answered, shown("owner.ask", item));
 }
+
+#[test]
+fn the_web_push_tools_are_presented() {
+    let v = shown("push.key", json!({ "key": "BPk" }));
+    assert_eq!(title(&v), "Notifications");
+    let v = shown("push.subscribe", json!({}));
+    assert_eq!(title(&v), "This browser is notified");
+}
