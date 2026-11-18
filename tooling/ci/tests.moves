@@ -3403,3 +3403,4 @@ pigeon-eviction test suite policies::decisions_sections	-
 pigeon-eviction test suite policies::decisions_amendments	-
 pigeon-eviction test suite policies::decisions_amendments_land_in_merge_order	-
 pigeon-eviction test suite policies::decisions_directory	-
+pigeon-agent test suite checks::jobs::every_deploy_publishes_the_architecture_site	pigeon-agent test suite checks::jobs::a_deploy_publishes_the_architecture_site_only_when_what_it_draws_changes

@@ -254,6 +254,7 @@ pigeon-agent test suite checks::ci_window::granting_an_offer_opens_replaces_or_c
 pigeon-agent test suite checks::ci_window::hours_are_zero_to_twenty_four
 pigeon-agent test suite checks::jobs::a_bounded_change_head_reaches_its_branch_on_the_mirror_and_leaves_it_once_done
 pigeon-agent test suite checks::jobs::a_check_runs_in_the_workspace_and_its_token_is_cut_from_the_log
+pigeon-agent test suite checks::jobs::a_deploy_publishes_the_architecture_site_only_when_what_it_draws_changes
 pigeon-agent test suite checks::jobs::a_judge_binary_that_cant_judge_is_an_error_not_a_pass
 pigeon-agent test suite checks::jobs::a_merge_whose_report_was_lost_is_found_on_main_when_run_again
 pigeon-agent test suite checks::jobs::a_merge_with_no_author_is_pigeons_and_a_malformed_author_is_refused
@@ -265,7 +266,6 @@ pigeon-agent test suite checks::jobs::a_release_of_a_deploy_main_has_moved_past_
 pigeon-agent test suite checks::jobs::a_release_push_refused_because_main_moved_lands_nothing
 pigeon-agent test suite checks::jobs::a_release_with_no_unit_is_a_changelog_commit
 pigeon-agent test suite checks::jobs::an_eviction_job_whose_judge_cant_answer_fails_and_grants_nothing
-pigeon-agent test suite checks::jobs::every_deploy_publishes_the_architecture_site
 pigeon-agent test suite checks::jobs::the_board_runs_a_job_once_and_reports_it
 pigeon-agent test suite checks::jobs::the_bound_job_judges_with_mains_policies_not_the_changes_own
 pigeon-agent test suite checks::jobs::the_bound_job_passes_a_change_inside_its_scope_and_names_its_checks

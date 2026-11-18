@@ -324,11 +324,24 @@ fn relative(root: &Path, p: &Path) -> String {
         .unwrap_or_default()
 }
 
+/// The paths `architecture.describe` reads beyond a site's own inputs: units, catalog, policies, macOS config, and the two crates whose sources it scans; see .claude/decisions/2026-11-18-runtime-independent-blue-green-workers.md §B.
+const ARCHITECTURE_INPUTS: &[&str] = &[
+    "config.yaml",
+    "infra/",
+    "catalog/",
+    ".config/policies/",
+    ".config/instance.yaml",
+    ".config/macos.yaml",
+    "src/pigeon-agent/src/",
+    "src/pigeon-core/src/",
+    "src/pigeon-eviction/src/",
+];
+
 /// The instance's manifest sites a change to `main` touching `files` must publish, by unit; `files` of `None`
 /// means every site, as on a first deploy. A site's inputs are its unit (the instance's
 /// `config.yaml` for a manifest unit, else its directory), its content, and its template's
-/// directory when it pins `tree`; a site on the `architecture` template publishes on every
-/// deploy.
+/// directory when it pins `tree`; a site on the `architecture` template also has
+/// [`ARCHITECTURE_INPUTS`] and the workloads' unit files.
 ///
 /// # Errors
 ///
@@ -356,10 +369,14 @@ pub fn deploys(root: &Path, files: Option<&[String]>) -> Result<Vec<String>, Err
             if s.version == crate::sites::TREE {
                 inputs.push(format!("{}/", s.project()));
             }
-            // Its footer names the deployed SHA, so it publishes on every deploy; see
-            // .claude/decisions/2026-11-15-runtime-architecture-coverage-agents-deploys.md §3.
             if s.template == "architecture" {
-                return true;
+                inputs.extend(ARCHITECTURE_INPUTS.iter().map(|i| (*i).to_string()));
+                if files.iter().any(|f| {
+                    f.starts_with("workloads/")
+                        && (f.ends_with("/config.yaml") || f.ends_with("/unit.yaml"))
+                }) {
+                    return true;
+                }
             }
             files.iter().any(|f| {
                 inputs.iter().any(|i| {

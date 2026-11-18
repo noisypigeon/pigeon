@@ -221,15 +221,29 @@ fn deploys_name_the_sites_a_change_to_main_publishes() {
     for changed in [
         &["catalog/cloudflare/capabilities.yaml"][..],
         &["config.yaml"],
-        &["workloads/noisypigeon.com/blog/site/posts/x.md"],
-        &["src/pigeon-site-templates/blog/templates/index.html"],
         &["src/pigeon-agent/src/worker/mod.rs", "CLAUDE.md"],
+        &["workloads/noisypigeon.com/blog/config.yaml"],
+        &[".config/policies/layout.yaml"],
+        &["src/pigeon-site-templates/architecture/templates/index.html"],
     ] {
         let got = agent::checks::scope::deploys(&root, Some(&files(changed))).expect("finds");
         assert_eq!(
             got,
             ["sites/docs"],
-            "the architecture site names the deployed SHA, so every deploy publishes it: {changed:?}"
+            "a change to what architecture.describe reads publishes it: {changed:?}"
+        );
+    }
+    for changed in [
+        &["workloads/noisypigeon.com/blog/site/posts/x.md"][..],
+        &["src/pigeon-site-templates/blog/templates/index.html"],
+        &["CLAUDE.md"],
+        &["src/pigeon-harness/src/main.rs"],
+        &[".claude/decisions/README.md"],
+    ] {
+        let got = agent::checks::scope::deploys(&root, Some(&files(changed))).expect("finds");
+        assert!(
+            got.is_empty(),
+            "nothing architecture.describe reads changed: {changed:?}"
         );
     }
 }
@@ -704,7 +718,10 @@ fn a_deploy_plan_names_each_unit_its_paths_deploy() {
     );
 
     let cli = plan_of(&["src/pigeon-harness/src/main.rs"]);
-    assert!(cli.contains(&"site:sites/docs".to_string()), "{cli:?}");
+    assert!(
+        !cli.contains(&"site:sites/docs".to_string()),
+        "the harness isn't what the architecture site draws: {cli:?}"
+    );
     assert!(cli.contains(&"build".to_string()), "{cli:?}");
     assert!(!cli.iter().any(|u| u.starts_with("worker:")), "{cli:?}");
 
@@ -712,6 +729,9 @@ fn a_deploy_plan_names_each_unit_its_paths_deploy() {
     assert!(plan_of(&["src/pigeon-ios/App/x.swift"]).contains(&"ios".to_string()));
 
     let adr = plan_of(&[".claude/decisions/x.md"]);
-    assert!(adr.contains(&"site:sites/docs".to_string()), "{adr:?}");
+    assert!(
+        !adr.contains(&"site:sites/docs".to_string()),
+        "an ADR isn't what the architecture site draws: {adr:?}"
+    );
     assert!(!adr.iter().any(|u| u.starts_with("worker:")), "{adr:?}");
 }
