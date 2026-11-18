@@ -213,6 +213,33 @@ pub fn changed(dir: &Path, base: &str, sha: &str) -> Result<Vec<String>, Error> 
         .collect())
 }
 
+/// The Rust lines `sha` changes since `base`, for the tests guard.
+///
+/// # Errors
+///
+/// When git fails.
+pub fn rust_diff(dir: &Path, base: &str, sha: &str) -> Result<String, Error> {
+    let range = format!("refs/remotes/origin/{base}...{sha}");
+    git(dir, "", "", &["diff", "--unified=0", &range, "--", "*.rs"])
+}
+
+/// Trailer `key`'s value on the change's first commit, empty when it has none.
+///
+/// # Errors
+///
+/// When git fails.
+pub fn first_trailer(dir: &Path, base: &str, sha: &str, key: &str) -> Result<String, Error> {
+    let range = format!("refs/remotes/origin/{base}..{sha}");
+    let commits = git(dir, "", "", &["rev-list", "--reverse", &range])?;
+    let Some(first) = commits.lines().next().filter(|l| !l.trim().is_empty()) else {
+        return Ok(String::new());
+    };
+    let format = format!("--format=%(trailers:key={key},valueonly)");
+    Ok(git(dir, "", "", &["log", "-1", &format, first.trim()])?
+        .trim()
+        .to_string())
+}
+
 /// Fetches `branch` into the checkout as `refs/remotes/origin/<branch>`, for [`changed`].
 ///
 /// # Errors

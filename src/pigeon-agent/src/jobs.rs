@@ -986,6 +986,11 @@ pub fn judge_with(
     files: &[String],
     policies: &Path,
 ) -> Result<Vec<String>, String> {
+    let counts = crate::checks::ci::rust_diff(dir, &spec.base, &spec.sha)
+        .map(|d| crate::core::testguard::count(&d))
+        .unwrap_or_default();
+    let reason = crate::checks::ci::first_trailer(dir, &spec.base, &spec.sha, "Test-Reason")
+        .unwrap_or_default();
     let pr = [
         ("PR_TITLE", spec.title.clone()),
         ("PR_BODY", spec.plan.clone()),
@@ -993,6 +998,9 @@ pub fn judge_with(
         ("PR_FILES", files.join("\n")),
         ("PR_BRANCH", spec.branch.clone()),
         ("PR_SCOPE", spec.scope.join("\n")),
+        ("PR_ADDED_TESTS", counts.added_tests.to_string()),
+        ("PR_ENUMERATIONS", counts.enumerations.to_string()),
+        ("PR_TEST_REASON", reason),
     ];
     crate::eviction::check(binary, dir, policies, Some(&pr))
         .map(|r| r.violations)
