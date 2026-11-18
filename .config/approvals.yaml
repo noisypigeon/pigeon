@@ -13,6 +13,8 @@ guarded:
   - src/pigeon-core/src/access.rs
   - src/pigeon-agent/src/worker/approve.rs
   - src/pigeon-agent/src/worker/mandates.rs
+  # The fast lane's waivers; see .claude/decisions/2026-11-17-security-owner-fast-lane-window.md §9.
+  - src/pigeon-agent/src/worker/lanes.rs
   - src/pigeon-agent/src/worker/elicit.rs
   - src/pigeon-agent/src/worker/passkeys.rs
   - src/pigeon-agent/src/worker/passkey.js
@@ -40,6 +42,7 @@ gate:
   - src/pigeon-agent/src/worker/approve.rs
   - src/pigeon-agent/src/worker/elicit.rs
   - src/pigeon-agent/src/worker/mandates.rs
+  - src/pigeon-agent/src/worker/lanes.rs
   - src/pigeon-agent/src/worker/passkeys.rs
   - src/pigeon-agent/src/worker/passkey.js
   # The credential plane: grant redemption, minting, the grants ledger and app devices.
