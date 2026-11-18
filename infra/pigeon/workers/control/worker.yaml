@@ -13,7 +13,7 @@ workers_dev: false
 routes:
   - custom_domain: $deployment.domains[0]
   - custom_domain: $deployment.domains[1]
-  # The stack's next own host, under Access since run 43; see
+  # The stack's own host, under Access since run 43; see
   # .claude/decisions/2026-11-18-runtime-independent-blue-green-workers.md, its step 9b amendment.
   - custom_domain: $deployment.domains[3]
   # Standalones' hosts under the zone; see
@@ -63,16 +63,18 @@ bindings:
     REPO: pigeon
     # change/1 to change/11 were pushed by hand, before the control plane numbered changes.
     CHANGE_FLOOR: $deployment.change_floor
-    # Where the deploy job asks /healthz: the stack's own hostname.
-    PUBLIC_HOST: $deployment.domains[1]
+    # Where the deploy job asks /healthz: the stack's own hostname (the step 9b amendment of
+    # .claude/decisions/2026-11-18-runtime-independent-blue-green-workers.md).
+    PUBLIC_HOST: $deployment.domains[3]
     # Passkeys' relying party, the platform's hostname; see
     # .claude/decisions/2026-11-10-runtime-platform-hostname-dashboard-observability.md §2.
     PASSKEY_RP_ID: $deployment.domains[0]
     # pigeon-front's test host, under Access, which the primary takes as its own; see
     # .claude/decisions/2026-11-18-runtime-independent-blue-green-workers.md, its step 9a amendment.
     FRONT_HOST: $deployment.domains[2]
-    # The stack's other own host, which the primary takes as its own (the step 9b amendment).
-    STACK_ALIAS: $deployment.domains[3]
+    # The stack's previous host, still the primary's own until no link or client names it (the
+    # step 9b amendment).
+    STACK_ALIAS: $deployment.domains[1]
     # Codes are refused once the cutover's proofs are on record; see
     # .claude/decisions/2026-11-14-security-passkey-only-owner-proofs.md §4.
     PROOFS: passkey
