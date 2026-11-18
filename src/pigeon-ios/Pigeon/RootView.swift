@@ -5,7 +5,7 @@ import PigeonCore
 import SwiftUI
 
 enum AppTab: Hashable {
-    case feed, now, insights
+    case now, insights
 }
 
 /// The instance chip and the avatar button.
@@ -62,9 +62,6 @@ struct RootView: View {
 
     var body: some View {
         TabView(selection: $tab) {
-            ShellView()
-                .tabItem { Label("Feed", systemImage: "tray") }
-                .tag(AppTab.feed)
             NowView(sheet: $sheet)
                 .tabItem { Label("Now", systemImage: "point.3.connected.trianglepath.dotted") }
                 .badge(needsMe(home: store.home, tracker: store.tracker).count)
