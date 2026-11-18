@@ -2,7 +2,7 @@
 //! `.claude/decisions/2026-11-05-development-changes-through-pigeon-mcp.md`.
 
 use futures_util::future::LocalBoxFuture;
-use serde_json::Value;
+use serde_json::{Map, Value, json};
 use worker::{Env, Method, Request, Response, Result};
 
 use super::platform::{self, Settings};
@@ -13,6 +13,7 @@ use crate::core::app::devices::Device;
 use crate::core::approval::grants;
 use crate::mcp::{self, Action};
 use crate::routes::Path;
+use crate::wire::{self, Response as WireResponse};
 
 /// The routes this surface serves.
 pub(super) const ROUTES: &[Route] = &[Route::only(Method::Post, Path::Exact("/mcp"), mcp_route)];
@@ -67,7 +68,6 @@ pub(super) struct Door<'a> {
     /// The host the message was sent to.
     pub host: &'a str,
     /// The device whose signature `/v0/app/mcp` verified; `None` on `/mcp`.
-    #[allow(dead_code, reason = "the app's tools read it (R8a)")]
     pub device: Option<&'a Device>,
 }
 
@@ -113,6 +113,12 @@ pub(super) async fn serve_message(
     match action {
         Action::Reply(v) => {
             let listing = message.get("method").and_then(Value::as_str) == Some("tools/list");
+            let kind = if door.device.is_some() {
+                wire::Door::Device
+            } else {
+                wire::Door::Access
+            };
+            let v = if listing { mcp::for_door(v, kind) } else { v };
             if listing && door.person {
                 return Response::from_json(&mcp::with_proof_tools(v));
             }
@@ -134,6 +140,16 @@ pub(super) async fn serve_message(
         Action::Answer { id, result } => elicit::answer(env, &id, &result).await,
         Action::Call { id, request } => {
             let request = control::retarget(&request);
+            if wire::DEVICE_OPS.contains(&request.operation.as_str()) {
+                let outcome = match door.device {
+                    None => Err(crate::Error::Invalid(vec![format!(
+                        "`{}` runs only on the app's door, /v0/app/mcp",
+                        request.operation
+                    )])),
+                    Some(device) => Ok(device_op(env, settings, device, &request).await?),
+                };
+                return Response::from_json(&mcp::answer(&id, outcome));
+            }
             if request.operation == "push.subscribe" && !door.person {
                 let why = "`push.subscribe` is a person's, signed in".to_string();
                 let refused = Err(crate::Error::Invalid(vec![why]));
@@ -167,5 +183,107 @@ pub(super) async fn serve_message(
             let outcome = run(env, settings, who, &request).await;
             Response::from_json(&mcp::contents(&id, &uri, outcome))
         }
+    }
+}
+
+/// A device-door operation, run as `device`; see
+/// `.claude/decisions/2026-11-17-runtime-mcp-feed-view-contract.md`, its R8 amendment.
+async fn device_op(
+    env: &Env,
+    s: &Settings,
+    device: &Device,
+    request: &wire::Request,
+) -> Result<WireResponse> {
+    let arg = |k: &str| {
+        request
+            .args
+            .get(k)
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string()
+    };
+    let op = request.operation.as_str();
+    let reply = |ok: bool, result: Value, violations: Vec<String>| WireResponse {
+        operation: op.into(),
+        ok,
+        result,
+        violations,
+    };
+    let route = |method: Method, path: &'static str, body: Value| async move {
+        super::account::route(env, s, device, &method, path, &body).await
+    };
+    let response = match op {
+        "device.show" => {
+            return Ok(reply(
+                true,
+                json!({"device": device.id, "name": device.name}),
+                vec![],
+            ));
+        }
+        "avatar.edit" => return Ok(reply(true, json!({}), vec![])),
+        "device.push" => {
+            if !crate::core::app::push::token_ok(&arg("token")) {
+                return Ok(reply(
+                    false,
+                    Value::Null,
+                    vec!["not an APNs device token".into()],
+                ));
+            }
+            let body = json!({"id": device.id, "token": arg("token")});
+            super::mandates::to_instance(env, s, "/devices/push", &body).await?;
+            return Ok(reply(true, json!({"status": "ok"}), vec![]));
+        }
+        "instances.list" => super::instances::list(env, s, device).await?,
+        "members.list" => super::members::route(env, s, device).await?,
+        "profile.show" | "profile.edit" => {
+            route(Method::Get, "/v0/app/profile", Value::Null).await?
+        }
+        "profile.update" => {
+            let mut body = Map::new();
+            for k in ["name", "appearance"] {
+                if let Some(v) = request.args.get(k) {
+                    body.insert(k.into(), v.clone());
+                }
+            }
+            route(Method::Patch, "/v0/app/profile", Value::Object(body)).await?
+        }
+        "avatar.show" => {
+            let v = super::elicit::inbox(
+                env,
+                s,
+                "/accounts/avatar/get",
+                &json!({"device": device.id}),
+            )
+            .await?;
+            return Ok(match v["error"].as_str() {
+                Some(why) => reply(false, Value::Null, vec![why.into()]),
+                None => reply(true, v, vec![]),
+            });
+        }
+        "avatar.put" => {
+            route(
+                Method::Put,
+                "/v0/app/profile/avatar",
+                json!({"jpeg": arg("jpeg")}),
+            )
+            .await?
+        }
+        "avatar.remove" => route(Method::Delete, "/v0/app/profile/avatar", Value::Null).await?,
+        other => {
+            return Ok(reply(
+                false,
+                Value::Null,
+                vec![format!("`{other}` has no device handler")],
+            ));
+        }
+    };
+    let mut response = response;
+    let status = response.status_code();
+    let text = response.text().await?;
+    if (200..300).contains(&status) {
+        let body = serde_json::from_str(&text).unwrap_or_else(|_| json!({}));
+        Ok(reply(true, body, vec![]))
+    } else {
+        Ok(reply(false, Value::Null, vec![text]))
     }
 }
