@@ -182,7 +182,7 @@ final class Store: ObservableObject {
     func loadInstances() async {
         guard linked else { return }
         do {
-            instances = try await api().call("GET", "/v0/app/instances", as: InstanceList.self).instances
+            instances = try await tool("instances.list", as: InstanceList.self).instances
         } catch let e as APIError where e.unlinks {
             unlink(because: e)
         } catch {
@@ -227,24 +227,24 @@ final class Store: ObservableObject {
     func loadProfile() async {
         guard linked else { return }
         do {
-            let api = try api()
-            let me = try await api.call("GET", "/v0/app/profile", as: Me.self)
+            let me = try await tool("profile.show", as: Me.self)
             let defaults = UserDefaults.standard
             var appearance = me.profile.appearance
             if !defaults.bool(forKey: "appearanceMigrated") {
                 let local = defaults.string(forKey: "appearance").flatMap(Appearance.init(rawValue:))
                 let r = Appearance.resolve(local: local, remote: me.profile.appearance)
                 if let upload = r.upload {
-                    try await api.send("PATCH", "/v0/app/profile", body: ["appearance": upload.rawValue])
+                    _ = try await tool(
+                        "profile.update", ["appearance": .string(upload.rawValue)], as: ProfileAnswer.self)
                 }
                 defaults.set(true, forKey: "appearanceMigrated")
                 appearance = r.use
             }
             defaults.set(appearance.rawValue, forKey: "appearance")
-            self.me = try await api.call("GET", "/v0/app/profile", as: Me.self)
+            self.me = try await tool("profile.show", as: Me.self)
             do {
-                avatar = try await api.send("GET", "/v0/app/profile/avatar")
-            } catch let e as APIError where e.status == 404 {
+                avatar = fromBase64url(try await tool("avatar.show", as: AvatarAnswer.self).jpeg)
+            } catch let e as APIError where e.message.contains("no avatar") {
                 avatar = nil
             }
             error = nil
@@ -257,18 +257,17 @@ final class Store: ObservableObject {
 
     /// Renames the profile.
     func rename(_ name: String) async -> Bool {
-        await patch(["name": name])
+        await patch(["name": .string(name)])
     }
 
     /// Sets the profile's appearance.
     func setAppearance(_ a: Appearance) async -> Bool {
-        await patch(["appearance": a.rawValue])
+        await patch(["appearance": .string(a.rawValue)])
     }
 
-    private func patch(_ body: [String: Any]) async -> Bool {
+    private func patch(_ args: [String: JSONValue]) async -> Bool {
         await run {
-            let answer = try await self.api().call(
-                "PATCH", "/v0/app/profile", body: body, as: ProfileAnswer.self)
+            let answer = try await self.tool("profile.update", args, as: ProfileAnswer.self)
             if let me = self.me {
                 self.me = Me(
                     account: me.account, profile: answer.profile, passkeys: me.passkeys,
@@ -281,8 +280,8 @@ final class Store: ObservableObject {
     /// Sets the avatar from JPEG bytes.
     func setAvatar(jpeg: Data) async -> Bool {
         await run {
-            try await self.api().send(
-                "PUT", "/v0/app/profile/avatar", body: ["jpeg": base64url(jpeg)])
+            _ = try await self.tool(
+                "avatar.put", ["jpeg": .string(base64url(jpeg))], as: JSONValue.self)
             await self.loadProfile()
         }
     }
@@ -290,7 +289,7 @@ final class Store: ObservableObject {
     /// Removes the avatar.
     func removeAvatar() async -> Bool {
         await run {
-            try await self.api().send("DELETE", "/v0/app/profile/avatar")
+            _ = try await self.tool("avatar.remove", as: JSONValue.self)
             await self.loadProfile()
         }
     }
@@ -324,7 +323,7 @@ final class Store: ObservableObject {
     /// Hands the control plane this device's APNs token.
     func registerPush(_ token: Data) async {
         guard linked else { return }
-        _ = try? await api().send("PUT", "/v0/app/device/push", body: ["token": hex(token)])
+        _ = try? await tool("device.push", ["token": .string(hex(token))], as: JSONValue.self)
     }
 
     private func proof(_ body: [String: Any]) async throws -> PasskeyAnswer {
@@ -366,4 +365,9 @@ final class Store: ObservableObject {
 private struct FeedPage: Decodable {
     let last: Int
     let items: [JSONValue]
+}
+
+/// `avatar.show`'s answer: the photo, base64url.
+private struct AvatarAnswer: Decodable {
+    let jpeg: String
 }
