@@ -1,9 +1,10 @@
 //! The approval family of presenters; see .claude/decisions/2026-11-17-runtime-mcp-feed-view-contract.md.
 
 use super::{
-    card, code, count, detail, field, link, list, progress, row, scalars, section, sha, text, time,
+    action, card, code, count, detail, field, link, list, progress, row, scalars, section, sha,
+    text, time,
 };
-use serde_json::Value;
+use serde_json::{Value, json};
 
 /// The operation-name prefixes of this family; empty for the rest.
 #[allow(dead_code)]
@@ -24,6 +25,7 @@ pub const PENDING: usize = 0;
 /// The operations this family presents.
 pub const NAMES: &[&str] = &[
     "grant.list",
+    "approval.list",
     "mandate.status",
     "platform.status",
     "pool.status",
@@ -60,7 +62,7 @@ pub fn view(op: &str, r: &crate::wire::Response) -> Option<Value> {
 /// Whether `op` is presented as a list, a detail or (otherwise) a card.
 fn shape(op: &str) -> &'static str {
     match op {
-        "grant.list" | "lane.status" => "list",
+        "grant.list" | "lane.status" | "approval.list" => "list",
         "mandate.status" | "platform.status" | "pool.status" | "platform.plan"
         | "deploy.status" => "detail",
         _ => "card",
@@ -78,6 +80,7 @@ fn build(op: &str, v: &Value) -> Value {
         "grant.list" => grant_list(v),
         "mandate.status" => mandate_status(v),
         "lane.status" => lane_status(v),
+        "approval.list" => approvals(v),
         "lane.request" => card(
             &format!("Fast lane #{} asked", s(&v["lane"], "id")),
             opt_str(&v["lane"], "reason"),
@@ -271,6 +274,54 @@ fn lane_status(v: &Value) -> Value {
         })
         .unwrap_or_default();
     list("Fast lanes", rows, None)
+}
+
+/// The open fast lanes, then each approval, grant and offer waiting, newest first.
+fn approvals(v: &Value) -> Value {
+    let mut rows: Vec<Value> = v["lanes"]
+        .as_array()
+        .map(|a| {
+            a.iter()
+                .map(|l| {
+                    let id = s(l, "id");
+                    let reason = s(l, "reason");
+                    row(
+                        &format!("lane-{id}"),
+                        &format!("Fast lane #{id} open"),
+                        Some(&reason),
+                        Some("open"),
+                        None,
+                        Some(action("Lanes", "lane.status", json!({}), "plain", false)),
+                    )
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    let mut waiting: Vec<&Value> = v["waiting"]
+        .as_array()
+        .map(|a| a.iter().collect())
+        .unwrap_or_default();
+    waiting.sort_by_key(|w| std::cmp::Reverse(unum(w, "expires")));
+    for w in waiting {
+        let path = s(w, "path");
+        let title = s(w, "title");
+        let operation = s(w, "operation");
+        rows.push(row(
+            &path,
+            &title,
+            Some(&operation),
+            None,
+            Some("owner"),
+            Some(action(
+                "Open",
+                "proof.challenge",
+                json!({ "page": path }),
+                "primary",
+                false,
+            )),
+        ));
+    }
+    list("Approvals", rows, None)
 }
 
 fn mandate_status(v: &Value) -> Value {

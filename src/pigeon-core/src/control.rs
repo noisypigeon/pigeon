@@ -461,10 +461,12 @@ pub fn route(request: &Request, by: &str, at: u64) -> Result<Routed, String> {
             operation: request.operation.clone(),
             args: a.clone(),
         }),
-        "home.show" | "tracker.show" | "ops.show" | "insights.show" => Ok(Routed::App {
-            operation: request.operation.clone(),
-            args: a.clone(),
-        }),
+        "home.show" | "tracker.show" | "ops.show" | "insights.show" | "approval.list" => {
+            Ok(Routed::App {
+                operation: request.operation.clone(),
+                args: a.clone(),
+            })
+        }
         "platform.plan" | "platform.apply" | "platform.status" => Ok(Routed::Platform {
             operation: request.operation.clone(),
             args: a.clone(),

@@ -1666,6 +1666,7 @@ async fn app_read(
             (200, home)
         }
         "tracker.show" => (200, app::tracker(env, s).await?),
+        "approval.list" => (200, app::approvals(env, s).await?),
         "ops.show" => {
             let range = range();
             if !crate::core::insights::ops::RANGES.contains(&range) {

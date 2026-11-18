@@ -7,12 +7,13 @@
   const nav = document.getElementById("roots");
 
   const ROOTS = {
+    Approvals: ["approval.list", {}],
     Feed: ["feed.read", { needs: "owner", open: "1" }],
     Home: ["home.show", {}],
     Tracker: ["tracker.show", {}],
     Changes: ["change.list", {}],
   };
-  let current = "Feed";
+  let current = "Approvals";
 
   const b64 = (buf) =>
     btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");

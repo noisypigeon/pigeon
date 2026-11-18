@@ -43,7 +43,12 @@ fn a_card_with_inputs_opens_the_form() {
     let tools: Vec<_> = a.iter().map(|x| x["tool"].as_str().unwrap()).collect();
     assert_eq!(
         tools,
-        ["proof.form", "proof.submit", "change.status", "feed.read"]
+        [
+            "proof.form",
+            "proof.submit",
+            "change.status",
+            "approval.list"
+        ]
     );
     assert_eq!(a[0]["label"], "Approve");
     assert_eq!(a[1]["label"], "Refuse");

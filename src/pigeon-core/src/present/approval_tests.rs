@@ -228,3 +228,26 @@ fn fast_lanes_present_as_a_list_and_cards() {
     );
     assert_eq!(v["title"], "Fast lane #3 ended");
 }
+
+#[test]
+fn approvals_lists_lanes_then_waiting() {
+    let v = present(
+        "approval.list",
+        json!({
+            "lanes": [{ "id": 3, "reason": "r" }],
+            "waiting": [
+                { "path": "/a", "title": "A", "operation": "x", "expires": 5 },
+                { "path": "/b", "title": "B", "operation": "y", "expires": 9 }
+            ]
+        }),
+    );
+    assert_eq!(v["title"], "Approvals");
+    let items = v["items"].as_array().unwrap();
+    assert_eq!(items.len(), 3);
+    assert_eq!(items[0]["title"], "Fast lane #3 open");
+    assert_eq!(items[0]["badge"], "open");
+    assert_eq!(items[1]["title"], "B");
+    assert_eq!(items[1]["needs"], "owner");
+    assert_eq!(items[1]["open"]["tool"], "proof.challenge");
+    assert_eq!(items[1]["open"]["arguments"]["page"], "/b");
+}

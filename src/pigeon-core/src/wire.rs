@@ -711,6 +711,14 @@ const CATALOG: &[Operation] = &[
         view: View::Detail,
     },
     Operation {
+        name: "approval.list",
+        engine: Engine::Agent,
+        effect: Effect::Read,
+        summary: "What waits for the owner: the open fast lanes, then every approval, grant and offer waiting, newest first, each opening its proof; see .claude/decisions/2026-11-17-runtime-mcp-feed-view-contract.md, its 2026-11-18 amendment §4",
+        args: &[],
+        view: View::List,
+    },
+    Operation {
         name: "mandate.propose",
         engine: Engine::Agent,
         effect: Effect::Plan,

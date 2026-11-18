@@ -30,6 +30,21 @@ pub async fn list(env: &Env, s: &Settings) -> Result<Value> {
     Ok(approvals::list(&live(env, s).await?))
 }
 
+/// `approval.list`: the open fast lanes and every approval waiting; see the ADR's 2026-11-18 amendment §4.
+///
+/// # Errors
+///
+/// When a binding fails.
+pub async fn approvals(env: &Env, s: &Settings) -> Result<Value> {
+    let waiting = live(env, s).await?;
+    let (_, lanes) = super::mandates::to_instance(env, s, "/lanes/list", &json!({})).await?;
+    let open: Vec<Value> = lanes["lanes"]
+        .as_array()
+        .map(|a| a.iter().filter(|l| l["state"] == "open").cloned().collect())
+        .unwrap_or_default();
+    Ok(json!({ "lanes": open, "waiting": waiting }))
+}
+
 /// `GET /v0/app/approvals/<id>`.
 ///
 /// # Errors

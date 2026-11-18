@@ -69,8 +69,8 @@ pub fn challenge(r: &Value) -> Option<Value> {
     }
     actions.push(action(
         "Back to approvals",
-        "feed.read",
-        json!({ "needs": "owner", "open": "1" }),
+        "approval.list",
+        json!({}),
         "plain",
         false,
     ));
