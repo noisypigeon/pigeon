@@ -30,7 +30,9 @@ units:
     kind: pigeon/platform
     worker: pigeon-control
     hostname: pigeon-control.pigeon-dev.workers.dev
-    domains: [platform.pigeon.dev, blue.platform.pigeon.dev]
+    # The third is pigeon-front's test host, under Access before the front serves it; see
+    # .claude/decisions/2026-11-18-runtime-independent-blue-green-workers.md, its step 9a amendment.
+    domains: [platform.pigeon.dev, blue.platform.pigeon.dev, front-test.pigeon.dev]
     instance_zone: pigeon.dev
     instance: pigeon
     change_floor: 12
