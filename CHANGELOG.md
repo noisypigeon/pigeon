@@ -11,6 +11,7 @@
 - agent v0.1.57
 - agent v0.1.58
 - agent v0.1.59
+- agent v0.1.60
 - infra-cloudflare-access-application v0.1.3
 - infra-cloudflare-access-application v0.1.4
 - infra-cloudflare-schema v0.1.24
@@ -110,6 +111,9 @@
 - feat(deploy): the architecture site publishes only when what it describes changes (!1203) ([0d327f5](https://github.com/noisypigeon/pigeon/commit/0d327f57af8d305e8a5d4af629c55bb7ebba4cd1)) · agent
 - feat(ios): Unlink and Remove passkey go through the proof sheet (!1204) ([cbc3e7c](https://github.com/noisypigeon/pigeon/commit/cbc3e7c8f84a30919ff7a5846aa24b8e6572232f))
 - docs(adr): R8c's shape: the link code's redeem stays a bootstrap, and standing up an instance is a device tool (!1207) ([ad36d3f](https://github.com/noisypigeon/pigeon/commit/ad36d3f581a2ff596569ed88cb7071617f37f583))
+- feat(agent): instances.standup on the device door, and the app's stand-up through it (!1209) ([91b85ee](https://github.com/noisypigeon/pigeon/commit/91b85eedb0e673cc88327dcf2a5537989f941418)) · agent
+- feat(agent)!: the Worker no longer serves the old Web Push pages' routes (!1210) ([091cfa1](https://github.com/noisypigeon/pigeon/commit/091cfa1a6df9fa4817fe13b2f53c69d429918895)) · agent
+- feat(deploy): pigeon and the judge build apart, each kept at the commit it was built at (!1206) ([98a562d](https://github.com/noisypigeon/pigeon/commit/98a562da035fc11e3466c3b2bf03347d45656198)) · agent
 
 ## 2026-11-17
 
