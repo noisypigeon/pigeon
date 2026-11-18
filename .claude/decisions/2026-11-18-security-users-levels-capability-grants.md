@@ -622,3 +622,76 @@ token. !1226 is §7 step 3: levels, capability grants and the learner's
   storage on each call and writes it back only when `migrate` adds a
   grant. Both are ordinary `Instance` writes, journaled whether or not
   `journal-seal` exists.
+
+### 2026-11-18: Step 9's shape: tool lists, hashed credentials bound by the Administrator, and R3 carries step 5
+
+Steps 3 (!1233) and 4 (b174) put `Requires` and `requires()` in place.
+The routes→MCP planner wires `member::check` into `run()` as the feed-view
+ADR's R3. It also carries this ADR's step 5, turning each `who.human` check
+into an Administrator check, since both are the same gate code. R3 runs in
+shadow until this step seeds the Service users, or every agent call would
+be `NotMember`.
+
+#### 1. What narrows a Service user
+
+`Membership` gains two lists, both empty by default. Each entry is an
+operation name, or `<area>.*` for every operation in an area.
+
+- **`tools`:** when not empty, a call passes only if it matches an entry.
+- **`denied`:** a call matching an entry is refused, whatever `tools`
+  says.
+
+Both only narrow, below the scopes and the ceiling. `Request` gains
+`operation`, the name being called, so `check` can apply them. They are
+checked after the permission and before the ticket.
+
+#### 2. The five Service users, seeded
+
+`Members::seed_services(now)` adds each one that is missing, with
+`admitted_by: seed`:
+
+| Service user | Scopes | `tools` | `denied` |
+|---|---|---|---|
+| `agent-planner` | `read`, `propose` | (all within scopes) | none |
+| `agent-executor` | `read`, `propose` | (all within scopes) | `brief.create`, `brief.amend`, `brief.review`, `owner.*`, `mandate.*`, `lane.*`, `grant.*` |
+| `pool` | `read`, `propose` | (all within scopes) | as `agent-executor`, since a pool runner does an executor's work |
+| `jobs` | `read` | `build.*` | none |
+| `ci` | `read`, `propose` | `build.*`, `release.*`, `ci.*` | none |
+
+- A **ticket picks the agent's user.** An `opus` ticket acts as
+  `agent-planner`, a `haiku` or `sonnet` ticket as `agent-executor`. A
+  call with no ticket acts as `agent-executor`, the narrower of the two.
+- **The lists are tuned in shadow.** R3 logs each call the new check would
+  refuse, as `member.shadow`, naming the operation and the Service user,
+  never a client ID. Before R3 decides, each refusal is either expected
+  or fixed in these lists, in an amendment here.
+
+#### 3. Credentials, bound by the Administrator
+
+- `Members` gains `credentials`, each with:
+  - the Service user (or `agent`, which stands for both agent users);
+  - the kind, `access`;
+  - the client ID's SHA-256, never the ID itself;
+  - who bound it, when, and whether it is revoked.
+
+  Neither the repository nor the journal holds a client ID.
+- **`service.bind {account, client_id}`** binds an Access service token to
+  a Service user. It is a page operation at `owner` tier: the
+  Administrator proves with a passkey, and no agent or window binds a
+  credential. `service.unbind` revokes one, signed by the Administrator's
+  device.
+- `Members::service_for(client_id)` hashes the presented ID and answers
+  the Service user bound to it. An unbound token is no member, and is
+  refused once R3 decides.
+
+#### 4. Execution, replacing step 9
+
+- **9a (planner, gate):** in `core/member`: `tools`, `denied`,
+  `Request.operation`, `seed_services`, `credentials`, `service_for`, and
+  the ticket's class to user, with tests.
+- **9b (planner, gate):** the Worker seeds the Service users on load;
+  `service.bind` and `service.unbind` as page operations.
+- **Owner action:** Willow binds each of the four Access service tokens
+  with a passkey, as `owner_ask` items once 9b is deployed.
+- **R3 decides** only after 9b, the bindings, and a shadow day with every
+  refusal explained.
