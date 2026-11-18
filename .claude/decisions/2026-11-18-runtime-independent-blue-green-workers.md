@@ -299,3 +299,27 @@ step 1. Parts B and C don't wait on A.
 - That list stays on `platform/blue`, the unit A.5.5 keeps for the shared
   resources; the `pigeon/color` kind declares no service token.
 - Nothing else here changes.
+
+### 2026-11-18: A retired test is a `-` line in tests.moves; batch 1 runs in three parts
+
+`behaviours.sh --check` accepts only renames: a test gone from the ledger
+without a `tests.moves` line fails it, and so does a package that runs
+fewer tests. The owner's decision #35 retires batch 1 (C.1), so:
+
+- **A retired test is `<old path::name>\t-`** in `tests.moves`. `--check`
+  counts it as accounted for and leaves it out of the package's count. Only
+  a test this ADR's C.1, or a later batch the owner approves, names is
+  retired this way; the planner checks each `-` line in review.
+- **Batch 1 runs in three parts:**
+  - **3a, first:** the pinned counts and name lists in `registry_tests.rs`,
+    `instance.rs`, `architecture.rs`, `provider/registry.rs` and the
+    presenters' `NAMES.len()`. The routes-to-MCP planner's new catalog
+    operations wait on it.
+  - **3b:** the per-operation presenter fixtures, replaced by
+    schema-generated samples.
+  - **3c:** the per-policy tests, replaced by examples in each policy.
+- **The route inventory's pin goes in 3a; its shim invariant waits** until
+  the routes-to-MCP removals reach their end list
+  ([`2026-11-15-runtime-one-mcp-entry-point.md`](2026-11-15-runtime-one-mcp-entry-point.md)
+  §7). Until then `every_route_binding_and_outbound_host_is_in_the_network`
+  keeps coverage.
