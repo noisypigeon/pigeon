@@ -8,7 +8,8 @@ use super::approve::{html_with, refused};
 use super::platform::Settings;
 use crate::access::Identity;
 
-const INDEX: &str = include_str!("shell/index.html");
+const BODY: &str = include_str!("shell/index.html");
+const CSS: &str = include_str!("shell/shell.css");
 
 /// The shell's scripts: each path and its source.
 const SCRIPTS: [(&str, &str); 3] = [
@@ -52,7 +53,14 @@ fn serve(path: &str, who: &Identity) -> Result<Response> {
         return refused(403, "the web client is a person's");
     }
     if path == "/app" {
-        return html_with(200, INDEX, crate::approve::PROOF_CSP);
+        let head = format!(
+            "<style>{CSS}</style><script src=\"/app/mcp.js\" defer></script><script src=\"/app/views.js\" defer></script><script src=\"/app/app.js\" defer></script>"
+        );
+        return html_with(
+            200,
+            &crate::core::look::page("pigeon", &head, BODY),
+            crate::approve::PROOF_CSP,
+        );
     }
     let Some((_, source)) = SCRIPTS.iter().find(|(p, _)| *p == path) else {
         return refused(404, "not found");

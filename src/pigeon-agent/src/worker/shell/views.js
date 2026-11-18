@@ -10,7 +10,7 @@
       else if (k.startsWith("on")) n.addEventListener(k.slice(2), v);
       else n.setAttribute(k, v === true ? "" : String(v));
     }
-    for (const k of kids.flat()) {
+    for (const k of kids.flat(Infinity)) {
       if (k === null || k === undefined || k === false) continue;
       n.append(k instanceof Node ? k : document.createTextNode(String(k)));
     }
@@ -58,7 +58,7 @@
       ? el(
           "div",
           { class: "actions" },
-          list.map((a) => el("button", { class: a.style || "plain", onclick: () => act(a) }, a.label + (a.proof ? " 🔑" : ""))),
+          list.map((a) => el("button", { class: a.style === "primary" ? null : a.style || "plain", onclick: () => act(a) }, a.label + (a.proof ? " 🔑" : ""))),
         )
       : null;
 
@@ -74,15 +74,15 @@
             v.items.map((r) =>
               el(
                 "li",
-                { "data-static": !r.open, onclick: r.open ? () => h.act(r.open) : null },
-                el("div", {}, el("div", {}, r.title), r.subtitle ? el("div", { class: "sub" }, r.subtitle) : null),
+                { "data-open": !!r.open, onclick: r.open ? () => h.act(r.open) : null },
+                el("div", {}, el("strong", {}, r.title), r.subtitle ? el("small", {}, r.subtitle) : null),
                 r.badge || r.needs === "owner"
                   ? el("span", { class: r.needs === "owner" ? "badge owner" : "badge" }, r.badge || "needs you")
                   : null,
               ),
             ),
           )
-        : el("p", { class: "muted" }, "Nothing here."),
+        : el("p", {}, "Nothing here."),
     );
 
   const card = (v, h) =>
@@ -124,7 +124,7 @@
       }
       h.act(Object.assign({}, v.submit, { arguments: args }));
     };
-    return el("form", { onsubmit: submit }, el("h1", {}, v.title), inputs, el("div", { class: "actions" }, el("button", { class: "primary", type: "submit" }, v.submit.label)));
+    return el("form", { onsubmit: submit }, el("h1", {}, v.title), inputs, el("div", { class: "actions" }, el("button", { type: "submit" }, v.submit.label)));
   };
 
   // Renders view `v` into `into`; `h.act(action)` runs an action's tool.
@@ -133,7 +133,7 @@
     into.replaceChildren(by ? by(v, h) : el("p", { class: "error" }, "This answer has no view."));
   };
 
-  const message = (into, text, error) => into.replaceChildren(el("p", { class: error ? "error" : "muted" }, text));
+  const message = (into, text, error) => into.replaceChildren(el("p", { class: error ? "error" : null }, text));
 
   // The root tabs; `current` is marked.
   const roots = (into, names, current, go) =>
@@ -154,7 +154,7 @@
         el(
           "div",
           { class: "actions" },
-          el("button", { class: "primary", onclick: sign }, "Approve 🔑"),
+          el("button", { onclick: sign }, "Approve 🔑"),
           el("button", { class: "plain", onclick: cancel }, "Cancel"),
         ),
       ),

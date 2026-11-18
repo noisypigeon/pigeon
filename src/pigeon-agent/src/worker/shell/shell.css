@@ -1,0 +1,17 @@
+/* The shell's own rules, over the look tokens only; see .claude/decisions/2026-11-17-runtime-mcp-feed-view-contract.md, 2026-11-18 amendment §3. */
+nav#roots { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 var(--space-gap); }
+nav#roots button { width: auto; min-height: 40px; margin: 0; padding: 8px 16px; font: 600 15px/1.2 var(--font-sans); color: var(--ink); background: var(--chip); border-radius: var(--radius-pill); box-shadow: none; }
+nav#roots button[aria-current=page] { color: var(--on-accent); background: var(--accent); }
+button.plain, button.destructive { min-height: 44px; padding: 11px 18px; font: 600 15px/1.2 var(--font-sans); color: var(--ink); background: var(--chip); border-radius: var(--radius-pill); box-shadow: none; }
+button.plain:active, button.destructive:active { transform: none; }
+button.destructive { color: var(--accent); }
+li[data-open] { cursor: pointer; }
+li { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+.badge { font: var(--type-eyebrow); color: var(--ink2); background: var(--chip); border-radius: var(--radius-pill); padding: 2px 10px; white-space: nowrap; }
+.badge.owner { color: var(--on-accent); background: var(--accent); }
+.actions { margin-top: var(--space-gap); }
+p.error { color: var(--accent); }
+progress { width: 140px; vertical-align: middle; accent-color: var(--accent); }
+select { display: block; width: 100%; margin-top: 6px; padding: 12px 14px; font: var(--type-body); color: var(--ink); background: var(--card); border: 2px solid var(--line); border-radius: var(--radius-pill); }
+select:focus { border-color: var(--accent); outline: none; }
+li small { display: block; margin-top: 2px; }
