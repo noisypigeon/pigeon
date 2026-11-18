@@ -260,6 +260,10 @@ impl Operation {
             || self.name.starts_with("events.")
             || self.name.starts_with("feed.")
             || self.name.starts_with("digest.")
+            || self.name.starts_with("home.")
+            || self.name.starts_with("tracker.")
+            || self.name.starts_with("ops.")
+            || self.name.starts_with("insights.")
             || self.name.starts_with("session.")
             || self.name.starts_with("platform.")
             || self.name.starts_with("apple.")
@@ -667,6 +671,42 @@ const CATALOG: &[Operation] = &[
             arg("offset", false, Kind::Text),
         ],
         view: View::Card,
+    },
+    Operation {
+        name: "home.show",
+        engine: Engine::Agent,
+        effect: Effect::Read,
+        summary: "The app's home: today's cost and error tiles, the approvals waiting, Auto's state and the owner's open items; see .claude/decisions/2026-11-17-runtime-mcp-feed-view-contract.md step 11",
+        args: &[],
+        view: View::Detail,
+    },
+    Operation {
+        name: "tracker.show",
+        engine: Engine::Agent,
+        effect: Effect::Read,
+        summary: "The tracker: open changes by stage and session, and those merged lately; see the ADR step 11",
+        args: &[],
+        view: View::Detail,
+    },
+    Operation {
+        name: "ops.show",
+        engine: Engine::Agent,
+        effect: Effect::Read,
+        summary: "Operations over `range` days (1, 7 or 30; 1 by default): merges, checks, deploys and their times; see the ADR step 11",
+        args: &[arg("range", false, Kind::Text)],
+        view: View::Detail,
+    },
+    Operation {
+        name: "insights.show",
+        engine: Engine::Agent,
+        effect: Effect::Read,
+        summary: "One source's stacks of `metric` (`cost` or `errors`) by kind over `range` days (1 by default); `source` is cloudflare, github, bitrise or buildkite; see the ADR step 11",
+        args: &[
+            arg("metric", true, Kind::String),
+            arg("source", true, Kind::String),
+            arg("range", false, Kind::Text),
+        ],
+        view: View::Detail,
     },
     Operation {
         name: "mandate.propose",

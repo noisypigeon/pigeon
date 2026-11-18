@@ -73,6 +73,14 @@ pub enum Routed {
         /// Its arguments.
         args: serde_json::Map<String, Value>,
     },
+    /// One of the app's reads, with its arguments; see
+    /// `.claude/decisions/2026-11-17-runtime-mcp-feed-view-contract.md` step 11.
+    App {
+        /// The operation.
+        operation: String,
+        /// Its arguments.
+        args: serde_json::Map<String, Value>,
+    },
     /// Deploy `main`'s newest push again after it failed.
     DeployRetry,
     /// The repository's git tokens, without their values.
@@ -450,6 +458,10 @@ pub fn route(request: &Request, by: &str, at: u64) -> Result<Routed, String> {
         "deploy.status" => Ok(Routed::DeployStatus),
         "deploy.retry" => Ok(Routed::DeployRetry),
         "build.list" | "build.read" => Ok(Routed::Build {
+            operation: request.operation.clone(),
+            args: a.clone(),
+        }),
+        "home.show" | "tracker.show" | "ops.show" | "insights.show" => Ok(Routed::App {
             operation: request.operation.clone(),
             args: a.clone(),
         }),

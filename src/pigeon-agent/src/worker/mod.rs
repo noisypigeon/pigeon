@@ -867,6 +867,13 @@ async fn dispatch(
             let (status, v) = build_tool(env, &op, &args).await?;
             Ok((None, respond(operation, status, v)))
         }
+        Routed::App {
+            operation: op,
+            args,
+        } => {
+            let (status, v) = app_read(env, s, &op, &args).await?;
+            Ok((None, respond(operation, status, v)))
+        }
         Routed::DeployStatus => deploy_status(env, s, operation).await,
         Routed::GitTokens => {
             let api = platform::secret(env, "ARTIFACTS_TOKEN")?;
@@ -1596,6 +1603,46 @@ fn build_file_key(sha: &str, name: &str) -> String {
 
 /// The most of a build file one `build.read` answers with.
 const BUILD_READ_MAX: u64 = 4 * 1024 * 1024;
+
+/// The app's reads as tools, each running what its `/v0/app` route runs; see
+/// `.claude/decisions/2026-11-17-runtime-mcp-feed-view-contract.md` step 11.
+async fn app_read(
+    env: &Env,
+    s: &Settings,
+    op: &str,
+    args: &serde_json::Map<String, Value>,
+) -> Result<(u16, Value)> {
+    let text = |k: &str| match args.get(k) {
+        Some(Value::String(v)) => v.clone(),
+        Some(Value::Number(n)) => n.to_string(),
+        _ => String::new(),
+    };
+    let range = || text("range").parse::<u64>().unwrap_or(1);
+    Ok(match op {
+        "home.show" => {
+            let mut home = insights::home(env).await?;
+            home["approvals"] = app::list(env, s).await?;
+            home["auto"] = app::auto_state(env, s).await?;
+            home["items"] = owner_items::open(env, s).await?;
+            (200, home)
+        }
+        "tracker.show" => (200, app::tracker(env, s).await?),
+        "ops.show" => {
+            let range = range();
+            if !crate::core::insights::ops::RANGES.contains(&range) {
+                return Ok((400, json!("range is 1, 7 or 30")));
+            }
+            (200, insights::ops(env, s, range).await?)
+        }
+        "insights.show" => {
+            match insights::detail(env, &text("metric"), &text("source"), range()).await? {
+                Ok(v) => (200, v),
+                Err(why) => (400, json!(why)),
+            }
+        }
+        _ => (404, json!(format!("no app read `{op}`"))),
+    })
+}
 
 /// `build.list` and `build.read`: a commit's stored build files, from the keys `build` serves;
 /// see `.claude/decisions/2026-11-17-runtime-mcp-feed-view-contract.md` §6.

@@ -210,7 +210,7 @@ fn provider_pending_is_a_card() {
 
 #[test]
 fn odd_shapes_still_validate() {
-    assert_eq!(NAMES.len(), 31);
+    assert_eq!(NAMES.len(), 35);
     for op in NAMES {
         for result in [json!("x"), json!({})] {
             let v = shown(op, result);
@@ -235,4 +235,23 @@ fn build_tools_are_presented() {
     );
     assert_eq!(title(&v), "pigeon from 0");
     assert!(!v.to_string().contains("SECRETDATA"));
+}
+
+#[test]
+fn the_apps_reads_are_presented() {
+    let home = json!({
+        "insights": { "cost": null, "errors": null },
+        "approvals": [], "auto": { "on": true, "until": 5 }, "items": [],
+    });
+    assert_eq!(title(&shown("home.show", home)), "Home");
+    let tracker = json!({ "changes": [{ "number": 1 }], "merged": [], "at": 3 });
+    assert_eq!(title(&shown("tracker.show", tracker)), "Tracker");
+    assert_eq!(
+        title(&shown("ops.show", json!({ "range": 7 }))),
+        "Operations"
+    );
+    assert_eq!(title(&shown("insights.show", json!({}))), "Insights");
+    for op in ["home.show", "tracker.show", "ops.show", "insights.show"] {
+        shown(op, json!("x"));
+    }
 }

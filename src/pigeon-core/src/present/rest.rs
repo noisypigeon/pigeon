@@ -47,6 +47,10 @@ pub const NAMES: &[&str] = &[
     "infra.apply",
     "build.list",
     "build.read",
+    "home.show",
+    "tracker.show",
+    "ops.show",
+    "insights.show",
 ];
 
 /// Whether `op` is presented as a list, a detail or (otherwise) a card.
@@ -63,7 +67,11 @@ fn shape(op: &str) -> &'static str {
         | "digest.show"
         | "bench.status"
         | "bench.logs"
-        | "infra.plan" => "detail",
+        | "infra.plan"
+        | "home.show"
+        | "tracker.show"
+        | "ops.show"
+        | "insights.show" => "detail",
         _ => "card",
     }
 }
@@ -341,6 +349,7 @@ fn details(op: &str, v: &Value) -> Value {
             )
         }
         "bench.status" | "bench.logs" => bench_detail(v),
+        "home.show" | "tracker.show" | "ops.show" | "insights.show" => parts(op, v),
         _ => {
             let mut sections = vec![section(
                 None,
@@ -627,3 +636,33 @@ fn owner_card(i: &Value) -> Value {
 #[cfg(test)]
 #[path = "rest_tests.rs"]
 mod tests;
+
+/// The app's reads: the result's scalars, then a section per object part and a count per list.
+fn parts(op: &str, v: &Value) -> Value {
+    let title = match op {
+        "home.show" => "Home",
+        "tracker.show" => "Tracker",
+        "ops.show" => "Operations",
+        _ => "Insights",
+    };
+    let mut top = scalars(v);
+    let mut sections = Vec::new();
+    if let Value::Object(o) = v {
+        for (k, part) in o {
+            match part {
+                Value::Array(a) => {
+                    top.push(field(k, count(i64::try_from(a.len()).unwrap_or(i64::MAX))));
+                }
+                Value::Object(_) => {
+                    let f = scalars(part);
+                    if !f.is_empty() {
+                        sections.push(section(Some(k), f, None));
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    sections.insert(0, section(None, top, None));
+    detail(title, sections, vec![])
+}

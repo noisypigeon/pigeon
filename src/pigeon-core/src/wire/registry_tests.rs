@@ -102,7 +102,7 @@ fn sites_publish_and_infra_apply_need_platform() {
 fn every_view_count_is_pinned() {
     let count = |v: View| catalog().iter().filter(|o| o.view == v).count();
     assert_eq!(count(View::List), 13);
-    assert_eq!(count(View::Detail), 19);
+    assert_eq!(count(View::Detail), 23);
     assert_eq!(count(View::Card), 47);
     assert_eq!(count(View::Form), 0);
 }
@@ -162,6 +162,10 @@ fn the_views_are_as_decided() {
             "pool.status",
             "platform.plan",
             "infra.plan",
+            "home.show",
+            "tracker.show",
+            "ops.show",
+            "insights.show",
         ])
     );
 }
