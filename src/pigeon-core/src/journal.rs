@@ -116,6 +116,21 @@ pub fn changed(
     out
 }
 
+/// The last sequence number `object` holds in D1, 0 for none.
+#[must_use]
+pub fn last_seq(object: &str) -> crate::control::Statement {
+    crate::control::Statement {
+        sql: "SELECT COALESCE(MAX(seq), 0) AS seq FROM journal WHERE object = ?1",
+        params: vec![json!(object)],
+    }
+}
+
+/// The Instance's state object.
+#[must_use]
+pub fn state_object(instance: &str) -> String {
+    format!("instance:{instance}/state")
+}
+
 /// A snapshot entry for the Instance's `key`, at `seq` of its state object.
 #[must_use]
 pub fn snapshot_entry(
@@ -125,12 +140,18 @@ pub fn snapshot_entry(
     key: &str,
     value: &serde_json::Value,
 ) -> crate::control::Statement {
-    entry(
-        &format!("instance:{instance}/state"),
-        seq,
-        SHADOW_EPOCH,
-        at,
-        key,
-        value,
-    )
+    snapshot_entry_at(instance, seq, SHADOW_EPOCH, at, key, value)
+}
+
+/// A snapshot entry at `epoch`.
+#[must_use]
+pub fn snapshot_entry_at(
+    instance: &str,
+    seq: u64,
+    epoch: u64,
+    at: u64,
+    key: &str,
+    value: &serde_json::Value,
+) -> crate::control::Statement {
+    entry(&state_object(instance), seq, epoch, at, key, value)
 }

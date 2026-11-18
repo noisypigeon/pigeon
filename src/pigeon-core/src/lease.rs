@@ -44,3 +44,9 @@ pub fn fence(epoch: u64) -> crate::control::Statement {
         params: vec![json!(epoch)],
     }
 }
+
+/// Whether `color` acts under `lease`: it holds it, or no lease could be read; fail open until step 9 of .claude/decisions/2026-11-18-runtime-independent-blue-green-workers.md.
+#[must_use]
+pub fn acting(lease: Option<&Lease>, color: &str) -> bool {
+    lease.is_none_or(|l| l.color == color)
+}

@@ -31,6 +31,7 @@ mod insights;
 mod instances;
 mod lanes;
 mod learner;
+mod lease;
 mod listed;
 mod macos;
 mod main_run;
@@ -1873,6 +1874,10 @@ pub(super) fn main_stub(env: &Env, repo: &str) -> Result<worker::Stub> {
 /// `.claude/decisions/2026-11-08-development-events-tickets-digest-mandate.md` §4.
 #[event(scheduled)]
 async fn scheduled(_event: worker::ScheduledEvent, env: Env, _ctx: worker::ScheduleContext) {
+    // The standby only reads; see the blue-green ADR §A.3.
+    if !lease::acting(&env).await {
+        return;
+    }
     // The mirror's hourly reconcile; see
     // .claude/decisions/2026-11-08-development-github-mirror-on-merge.md §1.
     if github::mirror(&env).is_some()
@@ -2389,6 +2394,11 @@ impl DurableObject for Instance {
 async fn journal_state(state: &State, env: &Env) {
     use crate::core::journal;
     use std::collections::BTreeMap;
+    let held = lease::current(env).await;
+    if !crate::core::lease::acting(held.as_ref(), &lease::color(env)) {
+        return;
+    }
+    let epoch = held.as_ref().map_or(journal::SHADOW_EPOCH, |l| l.epoch);
     let storage = state.storage();
     let mut now: BTreeMap<String, Value> = BTreeMap::new();
     for key in journal::INSTANCE_KEYS {
@@ -2409,12 +2419,6 @@ async fn journal_state(state: &State, env: &Env) {
         .ok()
         .flatten()
         .unwrap_or_default();
-    let seq: u64 = storage
-        .get(journal::SEQ)
-        .await
-        .ok()
-        .flatten()
-        .unwrap_or_default();
     let changes = journal::changed(&previous, &now);
     if changes.is_empty() {
         return;
@@ -2426,16 +2430,32 @@ async fn journal_state(state: &State, env: &Env) {
             return;
         }
     };
+    let mut last: u64 = match platform::d1_rows(
+        env,
+        &journal::last_seq(&journal::state_object(&settings.instance)),
+    )
+    .await
+    {
+        Ok(rows) => rows
+            .first()
+            .and_then(|r| r.get("seq"))
+            .and_then(Value::as_u64)
+            .unwrap_or_default(),
+        Err(e) => {
+            worker::console_warn!("journal: {e}");
+            return;
+        }
+    };
     let at = platform::now();
     let mut digests = previous;
-    let mut last = seq;
     let mut statements = Vec::new();
     for (key, digest) in changes {
         last += 1;
         let value = now.get(&key).unwrap_or(&Value::Null);
-        statements.push(journal::snapshot_entry(
+        statements.push(journal::snapshot_entry_at(
             &settings.instance,
             last,
+            epoch,
             at,
             &key,
             value,
@@ -2446,17 +2466,11 @@ async fn journal_state(state: &State, env: &Env) {
             digests.insert(key, digest);
         }
     }
-    let stored = match platform::d1(env, &statements).await {
-        Ok(()) => {
-            async {
-                storage.put(journal::DIGESTS, &digests).await?;
-                storage.put(journal::SEQ, &last).await
-            }
-            .await
-        }
-        Err(e) => Err(e),
+    let stored = async {
+        lease::append(env, held.as_ref(), statements).await?;
+        storage.put(journal::DIGESTS, &digests).await
     };
-    if let Err(e) = stored {
+    if let Err(e) = stored.await {
         worker::console_warn!("journal: {e}");
     }
 }

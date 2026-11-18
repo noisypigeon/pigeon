@@ -264,14 +264,17 @@ async fn shadow(env: &Env, e: Option<&crate::events::Event>) {
     let Some(e) = e else {
         return;
     };
+    let held = super::lease::current(env).await;
+    if !crate::core::lease::acting(held.as_ref(), &super::lease::color(env)) {
+        return;
+    }
+    let epoch = held
+        .as_ref()
+        .map_or(crate::core::journal::SHADOW_EPOCH, |l| l.epoch);
     let appended = match Settings::from(env) {
         Ok(s) => {
-            let entry = crate::core::journal::event_entry(
-                &s.instance,
-                e,
-                crate::core::journal::SHADOW_EPOCH,
-            );
-            super::platform::d1(env, &[entry]).await
+            let entry = crate::core::journal::event_entry(&s.instance, e, epoch);
+            super::lease::append(env, held.as_ref(), vec![entry]).await
         }
         Err(err) => Err(err),
     };

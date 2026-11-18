@@ -402,3 +402,43 @@ fn a_stale_epoch_fails_its_batch() {
         .expect("lease row");
     assert_eq!(lease::from_row(&row), Some(first));
 }
+
+#[test]
+fn the_lease_says_who_acts_and_where_the_journal_stands() {
+    use agent::core::{journal, lease};
+    let db = migrated();
+    let first = lease::Lease {
+        color: "pigeon-control".into(),
+        epoch: 1,
+        state: "serving".into(),
+    };
+    assert!(lease::acting(Some(&first), "pigeon-control"));
+    assert!(!lease::acting(Some(&first), "pigeon-blue"));
+    assert!(lease::acting(None, "pigeon-blue"));
+    let params = |s: &agent::control::Statement| -> Vec<rusqlite::types::Value> {
+        s.params
+            .iter()
+            .map(|v| match v {
+                serde_json::Value::Number(n) => {
+                    rusqlite::types::Value::Integer(n.as_i64().expect("integer"))
+                }
+                serde_json::Value::String(t) => rusqlite::types::Value::Text(t.clone()),
+                other => rusqlite::types::Value::Text(other.to_string()),
+            })
+            .collect()
+    };
+    let last = |db: &Connection| -> i64 {
+        let s = journal::last_seq(&journal::state_object("noisypigeon"));
+        db.query_row(s.sql, rusqlite::params_from_iter(params(&s)), |r| r.get(0))
+            .expect("last seq")
+    };
+    assert_eq!(last(&db), 0);
+    let e = journal::snapshot_entry_at("noisypigeon", 4, 1, 100, "members", &serde_json::json!({}));
+    db.execute(e.sql, rusqlite::params_from_iter(params(&e)))
+        .expect("entry");
+    assert_eq!(last(&db), 4);
+    let epoch: i64 = db
+        .query_row("SELECT epoch FROM journal WHERE seq = 4", [], |r| r.get(0))
+        .expect("epoch");
+    assert_eq!(epoch, 1);
+}

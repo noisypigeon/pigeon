@@ -1155,6 +1155,116 @@ impl MainRun {
     }
 }
 
+impl MainRun {
+    /// The alarm's work, for the color that holds the lease.
+    async fn run_alarm(&self) -> Result<Response> {
+        let mut p = self.pipeline().await?;
+        // Platform jobs share the alarm, and never hold up a deploy; see
+        // .claude/decisions/2026-11-08-runtime-blue-green-self-standup.md, step 4's amendment.
+        if let Err(e) = super::platforms::tick(&self.state, &self.env, p.deployed.as_deref()).await
+        {
+            worker::console_error!("platform runs: {e}");
+        }
+        let starting: Option<String> = self.state.storage().get(STARTING).await?;
+        let mut next: Option<String> = None;
+        let mut wait = false;
+        if let Some(sha) = starting
+            .as_deref()
+            .filter(|s| p.deployed.as_deref() == Some(*s))
+        {
+            // A stale slot never redeploys what's deployed; `deploy_retry` clears `deployed`.
+            worker::console_warn!("{sha} is already deployed; its deploy is dropped");
+            next = p.start();
+        } else if let Some(sha) = starting {
+            let secret = secret(&self.env, crate::wire::ship_wire::IMAGES_VAR)
+                .ok()
+                .and_then(|v| serde_json::from_str(&v).ok());
+            let images = p.images_for_deploy(secret);
+            match self.start(&p, &sha, images.as_ref()).await {
+                Ok(()) => {}
+                Err(why) if control::no_capacity(&why) => {
+                    worker::console_log!("the deploy of {sha} waits for a free Container");
+                    next = Some(sha);
+                    wait = true;
+                }
+                Err(why) => {
+                    worker::console_warn!("the deploy of {sha} did not start: {why}");
+                    next = p.lost(now());
+                }
+            }
+        } else if let Some((sha, _)) = p.running.clone() {
+            match self.poll(&sha).await? {
+                Ok(Some(report)) => {
+                    p.finished(&report, now());
+                    if report.outcome == Outcome::Passed
+                        && let Some(l) = &report.ledger
+                    {
+                        self.state.storage().put(LEDGER, l).await?;
+                    }
+                    deploy_event(&self.env, &sha, &report).await;
+                    if report.outcome == Outcome::Passed {
+                        self.release_target(&sha).await?;
+                        self.ios_deployed(&sha, report.ios).await?;
+                    }
+                    // A failed deploy holds Auto, and a passed one resumes it; see the iOS
+                    // approvals ADR's 2026-11-15 amendment. A superseded one does neither; see
+                    // the deploys ADR's 2026-11-16 amendment.
+                    let auto = match platform::Settings::from(&self.env) {
+                        _ if report.outcome == Outcome::Superseded => Ok(()),
+                        Ok(s) if report.outcome == Outcome::Passed => {
+                            super::mandates::resume_all(&self.env, &s, &sha).await
+                        }
+                        Ok(s) => {
+                            let why = control::failure(&report);
+                            super::mandates::hold_all(&self.env, &s, &sha, &why).await
+                        }
+                        Err(e) => Err(e),
+                    };
+                    if let Err(e) = auto {
+                        worker::console_error!("auto: {e}");
+                    }
+                    next = p.start();
+                }
+                Ok(None) => {}
+                Err(()) => next = p.lost(now()),
+            }
+        } else {
+            next = p.start();
+        }
+        self.save_after(&p, next.as_deref(), wait).await?;
+        if let Err(e) = self.mirror_step().await {
+            worker::console_error!("mirror: {e}");
+        }
+        if let Err(e) = self.test_map_step().await {
+            worker::console_error!("test map: {e}");
+        }
+        if let Err(e) = self.ios_step().await {
+            worker::console_error!("ios release: {e}");
+        }
+        let releasing = self.release_step().await.unwrap_or_else(|e| {
+            worker::console_error!("release: {e}");
+            true
+        });
+        let evicting = match self.eviction_step().await {
+            Ok(running) => running,
+            Err(e) => {
+                worker::console_error!("eviction: {e}");
+                true
+            }
+        };
+        let storage = self.state.storage();
+        if super::platforms::running(&self.state).await? || evicting || releasing {
+            // The earliest alarm wins: the mirror's may be an hour away.
+            let poll_at = i64::try_from((now() + super::platforms::POLL.as_secs()) * 1000)
+                .unwrap_or(i64::MAX);
+            if storage.get_alarm().await?.is_none_or(|t| t > poll_at) {
+                storage.set_alarm(super::platforms::POLL).await?;
+            }
+        }
+        Response::ok("ok")
+    }
+}
+
 impl DurableObject for MainRun {
     fn new(state: State, env: Env) -> Self {
         Self { state, env }
@@ -1261,110 +1371,11 @@ impl DurableObject for MainRun {
     }
 
     async fn alarm(&self) -> Result<Response> {
-        let mut p = self.pipeline().await?;
-        // Platform jobs share the alarm, and never hold up a deploy; see
-        // .claude/decisions/2026-11-08-runtime-blue-green-self-standup.md, step 4's amendment.
-        if let Err(e) = super::platforms::tick(&self.state, &self.env, p.deployed.as_deref()).await
-        {
-            worker::console_error!("platform runs: {e}");
+        // The standby only reads; see the blue-green ADR §A.3.
+        if !super::lease::acting(&self.env).await {
+            return Response::ok("standby");
         }
-        let starting: Option<String> = self.state.storage().get(STARTING).await?;
-        let mut next: Option<String> = None;
-        let mut wait = false;
-        if let Some(sha) = starting
-            .as_deref()
-            .filter(|s| p.deployed.as_deref() == Some(*s))
-        {
-            // A stale slot never redeploys what's deployed; `deploy_retry` clears `deployed`.
-            worker::console_warn!("{sha} is already deployed; its deploy is dropped");
-            next = p.start();
-        } else if let Some(sha) = starting {
-            let secret = secret(&self.env, crate::wire::ship_wire::IMAGES_VAR)
-                .ok()
-                .and_then(|v| serde_json::from_str(&v).ok());
-            let images = p.images_for_deploy(secret);
-            match self.start(&p, &sha, images.as_ref()).await {
-                Ok(()) => {}
-                Err(why) if control::no_capacity(&why) => {
-                    worker::console_log!("the deploy of {sha} waits for a free Container");
-                    next = Some(sha);
-                    wait = true;
-                }
-                Err(why) => {
-                    worker::console_warn!("the deploy of {sha} did not start: {why}");
-                    next = p.lost(now());
-                }
-            }
-        } else if let Some((sha, _)) = p.running.clone() {
-            match self.poll(&sha).await? {
-                Ok(Some(report)) => {
-                    p.finished(&report, now());
-                    if report.outcome == Outcome::Passed
-                        && let Some(l) = &report.ledger
-                    {
-                        self.state.storage().put(LEDGER, l).await?;
-                    }
-                    deploy_event(&self.env, &sha, &report).await;
-                    if report.outcome == Outcome::Passed {
-                        self.release_target(&sha).await?;
-                        self.ios_deployed(&sha, report.ios).await?;
-                    }
-                    // A failed deploy holds Auto, and a passed one resumes it; see the iOS
-                    // approvals ADR's 2026-11-15 amendment. A superseded one does neither; see
-                    // the deploys ADR's 2026-11-16 amendment.
-                    let auto = match platform::Settings::from(&self.env) {
-                        _ if report.outcome == Outcome::Superseded => Ok(()),
-                        Ok(s) if report.outcome == Outcome::Passed => {
-                            super::mandates::resume_all(&self.env, &s, &sha).await
-                        }
-                        Ok(s) => {
-                            let why = control::failure(&report);
-                            super::mandates::hold_all(&self.env, &s, &sha, &why).await
-                        }
-                        Err(e) => Err(e),
-                    };
-                    if let Err(e) = auto {
-                        worker::console_error!("auto: {e}");
-                    }
-                    next = p.start();
-                }
-                Ok(None) => {}
-                Err(()) => next = p.lost(now()),
-            }
-        } else {
-            next = p.start();
-        }
-        self.save_after(&p, next.as_deref(), wait).await?;
-        if let Err(e) = self.mirror_step().await {
-            worker::console_error!("mirror: {e}");
-        }
-        if let Err(e) = self.test_map_step().await {
-            worker::console_error!("test map: {e}");
-        }
-        if let Err(e) = self.ios_step().await {
-            worker::console_error!("ios release: {e}");
-        }
-        let releasing = self.release_step().await.unwrap_or_else(|e| {
-            worker::console_error!("release: {e}");
-            true
-        });
-        let evicting = match self.eviction_step().await {
-            Ok(running) => running,
-            Err(e) => {
-                worker::console_error!("eviction: {e}");
-                true
-            }
-        };
-        let storage = self.state.storage();
-        if super::platforms::running(&self.state).await? || evicting || releasing {
-            // The earliest alarm wins: the mirror's may be an hour away.
-            let poll_at = i64::try_from((now() + super::platforms::POLL.as_secs()) * 1000)
-                .unwrap_or(i64::MAX);
-            if storage.get_alarm().await?.is_none_or(|t| t > poll_at) {
-                storage.set_alarm(super::platforms::POLL).await?;
-            }
-        }
-        Response::ok("ok")
+        self.run_alarm().await
     }
 }
 
