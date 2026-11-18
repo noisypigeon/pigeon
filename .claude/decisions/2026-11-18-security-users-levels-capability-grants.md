@@ -768,3 +768,33 @@ subject fix (!1251), and 9b, `service.bind` and `service.unbind` (!1252).
   - the recommendation is to keep them outside MCP, on §7's list.
 - **E3:** `/builds/` is removed once every job image fetches through
   `build.read` and one job of each kind has run on it.
+
+### 2026-11-18: R3's first shadow differences, and `approval.list` stays the Administrator's
+
+- **The agent token is bound.** Willow approved `service.bind` offer 1;
+  event 57722 (`service.bound`) binds the token R3 logged as `abd3f453…`
+  to `agent`, and its calls since shadow as an `agent-*` Service user,
+  not as an unbound hash.
+- **`approval.list` stays Administrator-only (Willow, owner decision).**
+  The first bound call, a status session's `approval.list`, shadows as
+  "today allows, check refuses". That difference is intended: once R3
+  decides, a session lists no pending approvals, and there is no
+  read-only view of them for sessions. Approval links reach Willow
+  through her own client and through the links a planner's
+  `approval_wait` or `owner_ask` returns, which it passes on.
+  `ADMINISTRATOR_OPS` keeps `approval.list`.
+- **To check before the switch:** a status session shadowed as
+  `agent-executor`, though
+  [`2026-11-13-development-model-tiered-agent-briefs.md`](2026-11-13-development-model-tiered-agent-briefs.md)
+  makes `opus` the default. The change that decides first finds how
+  the ticket's model reaches `agent_user`, and fixes it if a planner
+  can resolve as an executor.
+- **The pool, jobs and ci tokens haven't shown up.** Their calls reach
+  the Worker's own doors (the `Checker`, `/builds/`, the pool), not
+  `run()`, so the shadow never sees them. Each is offered for binding
+  when its first call through `/mcp` (E1's `build.read` for `jobs`)
+  logs its hash; R3's "four tokens bound" condition counts those that
+  call `/mcp`, and a token that never does needs no binding.
+- **`f8cf3dd1…`** only reads (`deploy.status`, `change.status`,
+  `change.list`); it is offered once its calls say which Service user
+  it is.
