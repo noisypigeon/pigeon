@@ -728,3 +728,43 @@ checked after the permission and before the ticket.
 ADR's execution and the blue-green ADR's are both complete, and the
 multi-instance preparation is done. Nothing for June has been started:
 no invitation, enrolment or TestFlight access.
+
+### 2026-11-18: Group E and R3's switch to deciding move here; 9b lands
+
+The feed-view ADR's planner has ended. Two of its steps depend on this
+ADR's Service users, so they move here:
+[`2026-11-17-runtime-mcp-feed-view-contract.md`](2026-11-17-runtime-mcp-feed-view-contract.md)'s
+group E and the end of its R3.
+
+**Landed:** step 4 (!1238, brief b174), R3 in shadow (!1249) with its
+subject fix (!1251), and 9b, `service.bind` and `service.unbind` (!1252).
+
+#### R3 decides when
+
+- Willow has bound the four Access service tokens with `service.bind`. An
+  agent asks for each by the hash R3's shadow log shows, and the
+  operations each hash called say which Service user it is.
+- A shadow day has passed, with every logged difference explained in an
+  amendment here.
+- Shadow leaves `needs_proof`, `proof` and `proposer` unset, so proof and
+  separation stay with today's gates. The change that decides fills them
+  from the grant and the change being acted on.
+
+#### Group E
+
+- **E1, builds.** Job containers fetch builds through `build.read` on
+  `/mcp`, with the builds service token, which is bound to `jobs`.
+  - The Worker's contract with the image doesn't change:
+    `pigeon-start` still receives `PIGEON_BUILD_URL`,
+    `https://<host>/builds/<sha>/<name>`. It parses the host, commit and
+    name from it, and reads the file in pieces, as `session.sh`'s
+    bootstrap does.
+  - Old and new images both work during the switch.
+  - This amends
+    [`2026-11-07-development-job-images-on-cloudflare.md`](2026-11-07-development-job-images-on-cloudflare.md)
+    §3's fetch, not its checks: the SHA-256 still decides.
+- **E2, the Apple release,** waits on owner item #47:
+  - `/v0/apple/release` and its archive hand Buildkite the signing grant;
+  - the recommendation is to keep them outside MCP, on §7's list.
+- **E3:** `/builds/` is removed once every job image fetches through
+  `build.read` and one job of each kind has run on it.
