@@ -45,12 +45,15 @@ pub const NAMES: &[&str] = &[
     "owner.withdraw",
     "provider.call",
     "infra.apply",
+    "build.list",
+    "build.read",
 ];
 
 /// Whether `op` is presented as a list, a detail or (otherwise) a card.
 fn shape(op: &str) -> &'static str {
     match op {
-        "git.tokens" | "bench.list" | "events.wait" | "provider.tools" | "feed.read" => "list",
+        "git.tokens" | "bench.list" | "events.wait" | "provider.tools" | "feed.read"
+        | "build.list" => "list",
         "instance.show"
         | "architecture.describe"
         | "policy.check"
@@ -218,6 +221,7 @@ fn lists(op: &str, v: &Value) -> Value {
                 .collect();
             list("Events", rows, None)
         }
+        "build.list" => build_list(v),
         "provider.tools" => {
             let rows = arr(v, "tools")
                 .iter()
@@ -257,6 +261,30 @@ fn lists(op: &str, v: &Value) -> Value {
             list("Feed", rows, None)
         }
     }
+}
+
+/// `build.list`: a commit's stored build files, each with its size.
+fn build_list(v: &Value) -> Value {
+    let rows = arr(v, "files")
+        .iter()
+        .map(|f| {
+            let name = s(f, "name");
+            row(
+                &name,
+                &name,
+                Some(&format!("{} bytes", u(f, "size"))),
+                None,
+                None,
+                None,
+            )
+        })
+        .collect();
+    let sha = s(v, "sha");
+    list(
+        &format!("Build {}", sha.get(..12).unwrap_or(&sha)),
+        rows,
+        None,
+    )
 }
 
 fn details(op: &str, v: &Value) -> Value {
@@ -477,6 +505,7 @@ fn cards(op: &str, v: &Value) -> Value {
         "bench.reset" => card("Bench reset", None, scalars(v), vec![]),
         "bench.warm" => card("Bench", None, scalars(v), vec![]),
         "owner.ask" | "owner.withdraw" => owner_card(&v["item"]),
+        "build.read" => build_read_card(v),
         "provider.call" => {
             if let Some(p) = v["pending"].as_str() {
                 card("Pending", Some(p), vec![], vec![])
@@ -504,6 +533,23 @@ fn cards(op: &str, v: &Value) -> Value {
             card(&format!("Applied {}", s(v, "plan")), None, f, vec![])
         }
     }
+}
+
+/// `build.read`: the piece's place in its file, never its data.
+fn build_read_card(v: &Value) -> Value {
+    let mut f = vec![
+        field("length", count(n(v, "length"))),
+        field("size", count(n(v, "size"))),
+    ];
+    if v["next"].is_number() {
+        f.push(field("next", count(n(v, "next"))));
+    }
+    card(
+        &format!("{} from {}", s(v, "name"), u(v, "offset")),
+        None,
+        f,
+        vec![],
+    )
 }
 
 fn ci_card(op: &str, v: &Value) -> Value {

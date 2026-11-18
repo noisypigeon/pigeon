@@ -251,6 +251,7 @@ impl Operation {
         self.name.starts_with("change.")
             || self.name.starts_with("ci.")
             || self.name.starts_with("deploy.")
+            || self.name.starts_with("build.")
             || self.name.starts_with("git.")
             || self.name.starts_with("mandate.")
             || self.name.starts_with("lane.")
@@ -646,6 +647,26 @@ const CATALOG: &[Operation] = &[
         summary: "What main's pipeline last published: the SHA deployed, the one in progress, and recent deploys with their logs",
         args: &[],
         view: View::Detail,
+    },
+    Operation {
+        name: "build.list",
+        engine: Engine::Agent,
+        effect: Effect::Read,
+        summary: "The files stored for commit `sha`'s build (pigeon, the judge, the test map), each with its size; see .claude/decisions/2026-11-17-runtime-mcp-feed-view-contract.md §6",
+        args: &[arg("sha", true, Kind::String)],
+        view: View::List,
+    },
+    Operation {
+        name: "build.read",
+        engine: Engine::Agent,
+        effect: Effect::Read,
+        summary: "Up to 4 MiB of build file `name` of commit `sha` from byte `offset` (0 by default), base64, with the whole file's `size` and the `next` offset, null at its end; check the whole file against deploy.status's sha256; see the ADR §6",
+        args: &[
+            arg("sha", true, Kind::String),
+            arg("name", true, Kind::String),
+            arg("offset", false, Kind::Text),
+        ],
+        view: View::Card,
     },
     Operation {
         name: "mandate.propose",

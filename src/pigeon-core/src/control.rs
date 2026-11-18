@@ -66,6 +66,13 @@ pub enum Routed {
     },
     /// What `main`'s pipeline last published.
     DeployStatus,
+    /// A build tool, with its arguments; see the ADR §6.
+    Build {
+        /// The operation.
+        operation: String,
+        /// Its arguments.
+        args: serde_json::Map<String, Value>,
+    },
     /// Deploy `main`'s newest push again after it failed.
     DeployRetry,
     /// The repository's git tokens, without their values.
@@ -442,6 +449,10 @@ pub fn route(request: &Request, by: &str, at: u64) -> Result<Routed, String> {
         "change.status" => Ok(Routed::Status { number: number(a)? }),
         "deploy.status" => Ok(Routed::DeployStatus),
         "deploy.retry" => Ok(Routed::DeployRetry),
+        "build.list" | "build.read" => Ok(Routed::Build {
+            operation: request.operation.clone(),
+            args: a.clone(),
+        }),
         "platform.plan" | "platform.apply" | "platform.status" => Ok(Routed::Platform {
             operation: request.operation.clone(),
             args: a.clone(),

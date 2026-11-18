@@ -210,11 +210,29 @@ fn provider_pending_is_a_card() {
 
 #[test]
 fn odd_shapes_still_validate() {
-    assert_eq!(NAMES.len(), 29);
+    assert_eq!(NAMES.len(), 31);
     for op in NAMES {
         for result in [json!("x"), json!({})] {
             let v = shown(op, result);
             assert!(!title(&v).trim().is_empty(), "{op}");
         }
     }
+}
+
+#[test]
+fn build_tools_are_presented() {
+    let sha = "0123456789abcdef0123456789abcdef01234567";
+    let v = shown(
+        "build.list",
+        json!({"sha": sha, "files": [{"name": "pigeon", "size": 10}]}),
+    );
+    assert_eq!(title(&v), "Build 0123456789ab");
+    assert_eq!(v["items"][0]["subtitle"], "10 bytes");
+    let v = shown(
+        "build.read",
+        json!({"sha": sha, "name": "pigeon", "offset": 0, "length": 3, "size": 9,
+               "next": 3, "data": "SECRETDATA"}),
+    );
+    assert_eq!(title(&v), "pigeon from 0");
+    assert!(!v.to_string().contains("SECRETDATA"));
 }

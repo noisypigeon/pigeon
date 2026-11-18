@@ -833,6 +833,13 @@ async fn dispatch(
             let v: Value = r.json().await?;
             Ok((None, respond(operation, r.status_code(), v)))
         }
+        Routed::Build {
+            operation: op,
+            args,
+        } => {
+            let (status, v) = build_tool(env, &op, &args).await?;
+            Ok((None, respond(operation, status, v)))
+        }
         Routed::DeployStatus => deploy_status(env, s, operation).await,
         Routed::GitTokens => {
             let api = platform::secret(env, "ARTIFACTS_TOKEN")?;
@@ -1549,19 +1556,119 @@ async fn smoke(env: &Env, s: &Settings, who: &Identity) -> Result<Response> {
     )
 }
 
+/// The R2 key of build file `name` at `sha`, as `GET /builds/` chooses it.
+fn build_file_key(sha: &str, name: &str) -> String {
+    if name == crate::wire::ship_wire::STORED_JUDGE {
+        crate::wire::ship_wire::judge_key(sha)
+    } else if name == crate::wire::ship_wire::TEST_MAP_FILE {
+        crate::core::deploy::testmaps::key(sha)
+    } else {
+        crate::wire::ship_wire::build_key(sha)
+    }
+}
+
+/// The most of a build file one `build.read` answers with.
+const BUILD_READ_MAX: u64 = 4 * 1024 * 1024;
+
+/// `build.list` and `build.read`: a commit's stored build files, from the keys `build` serves;
+/// see `.claude/decisions/2026-11-17-runtime-mcp-feed-view-contract.md` §6.
+async fn build_tool(
+    env: &Env,
+    op: &str,
+    args: &serde_json::Map<String, Value>,
+) -> Result<(u16, Value)> {
+    let text = |k: &str| args.get(k).and_then(Value::as_str).unwrap_or_default();
+    let sha = text("sha");
+    // `build.list` ignores `name`; any stored file name passes the path check.
+    let name = if op == "build.list" {
+        crate::wire::ship_wire::TEST_MAP_FILE
+    } else {
+        text("name")
+    };
+    if crate::wire::ship_wire::build_path(&format!("/builds/{sha}/{name}")).is_none() {
+        let names = crate::wire::ship_wire::BUILD_BINARIES
+            .iter()
+            .chain([&crate::wire::ship_wire::TEST_MAP_FILE])
+            .copied()
+            .collect::<Vec<_>>()
+            .join(", ");
+        return Ok((
+            400,
+            json!(format!(
+                "`sha` must be a full commit and `name` one of {names}"
+            )),
+        ));
+    }
+    let bucket = env.bucket("CI_LOGS")?;
+    if op == "build.list" {
+        let mut files = Vec::new();
+        for file in crate::wire::ship_wire::BUILD_BINARIES
+            .iter()
+            .chain([&crate::wire::ship_wire::TEST_MAP_FILE])
+        {
+            if let Some(object) = bucket.head(build_file_key(sha, file)).await? {
+                files.push(json!({ "name": file, "size": object.size() }));
+            }
+        }
+        return Ok((200, json!({ "sha": sha, "files": files })));
+    }
+    let offset = match args.get("offset") {
+        None | Some(Value::Null) => 0,
+        Some(v) => match v
+            .as_u64()
+            .or_else(|| v.as_str().and_then(|t| t.parse::<u64>().ok()))
+        {
+            Some(n) => n,
+            None => return Ok((400, json!("`offset` must be a number"))),
+        },
+    };
+    let key = build_file_key(sha, name);
+    let Some(head) = bucket.head(key.clone()).await? else {
+        return Ok((404, json!("no such build file")));
+    };
+    let size = head.size();
+    if offset > size {
+        return Ok((416, json!("`offset` is past the end")));
+    }
+    let length = BUILD_READ_MAX.min(size - offset);
+    let bytes = if length == 0 {
+        Vec::new()
+    } else {
+        let Some(object) = bucket
+            .get(key)
+            .range(worker::Range::OffsetWithLength { offset, length })
+            .execute()
+            .await?
+        else {
+            return Ok((404, json!("no such build file")));
+        };
+        match object.body() {
+            Some(body) => body.bytes().await?,
+            None => return Ok((404, json!("no such build file"))),
+        }
+    };
+    let next = (offset + length < size).then_some(offset + length);
+    Ok((
+        200,
+        json!({
+            "sha": sha,
+            "name": name,
+            "offset": offset,
+            "length": length,
+            "size": size,
+            "next": next,
+            "data": common::base64::b64(&bytes),
+        }),
+    ))
+}
+
 /// `GET /builds/<sha>/<file>`: `main`'s `pigeon` or the judge built at that commit, or
 /// its test map, from R2.
 async fn build(env: &Env, path: &str) -> Result<Response> {
     let Some((sha, binary)) = crate::wire::ship_wire::build_path(path) else {
         return Response::error("not found", 404);
     };
-    let key = if binary == crate::wire::ship_wire::STORED_JUDGE {
-        crate::wire::ship_wire::judge_key(sha)
-    } else if binary == crate::wire::ship_wire::TEST_MAP_FILE {
-        crate::core::deploy::testmaps::key(sha)
-    } else {
-        crate::wire::ship_wire::build_key(sha)
-    };
+    let key = build_file_key(sha, binary);
     let Some(object) = env.bucket("CI_LOGS")?.get(key).execute().await? else {
         return Response::error("no build of that commit", 404);
     };
