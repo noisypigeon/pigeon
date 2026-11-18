@@ -50,7 +50,7 @@ public struct MCPOutcome: Equatable, Sendable {
         self.pendingPath = pendingPath
     }
 
-    static let pages = ["/approve/", "/mandate/", "/lane/", "/grants/", "/ci-window/", "/platform/", "/pool-resume/"]
+    static let pages = ["/approve/", "/mandate/", "/lane/", "/grants/", "/ci-window/", "/platform/", "/pool-resume/", "/service-bind/"]
 
     /// Reads a JSON-RPC response body.
     public static func decode(_ data: Data) throws -> MCPOutcome {

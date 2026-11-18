@@ -144,7 +144,7 @@
   // A link (`/app#/approve/12?grant=…`) opens its proof.
   const linked = decodeURIComponent(location.hash.slice(1));
   V.roots(nav, Object.keys(ROOTS), current, go);
-  if (/^\/(approve|mandate|lane|grants|ci-window|platform|pool-resume)\/[^?]+\?grant=/.test(linked)) prove(linked);
+  if (/^\/(approve|mandate|lane|grants|ci-window|platform|pool-resume|service-bind)\/[^?]+\?grant=/.test(linked)) prove(linked);
   else go(current);
 
   // The Notify button: subscribes this device to Web Push; see the ADR's 2026-11-18 amendment §6.
