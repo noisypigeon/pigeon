@@ -9,6 +9,7 @@ use super::platform::{self, Settings};
 use super::{Route, elicit, events, offer, run, wait};
 use crate::access::Identity;
 use crate::control;
+use crate::core::app::devices::Device;
 use crate::core::approval::grants;
 use crate::mcp::{self, Action};
 use crate::routes::Path;
@@ -53,6 +54,7 @@ async fn serve_mcp(
         name: "access",
         person: who.human,
         host: &host,
+        device: None,
     };
     serve_message(env, settings, who, &door, sid.as_deref(), &message).await
 }
@@ -70,6 +72,9 @@ pub(super) struct Door<'a> {
     pub person: bool,
     /// The host the message was sent to.
     pub host: &'a str,
+    /// The device whose signature `/v0/app/mcp` verified; `None` on `/mcp`.
+    #[allow(dead_code, reason = "the app's tools read it (R8a)")]
+    pub device: Option<&'a Device>,
 }
 
 /// One MCP message, from either door, for `who`.

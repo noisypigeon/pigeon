@@ -437,6 +437,7 @@ async fn app_mcp(
         name: super::api::DEVICE,
         person: true,
         host: &host,
+        device: Some(device),
     };
     super::api::serve_message(env, s, &who, &door, sid.as_deref(), body).await
 }
