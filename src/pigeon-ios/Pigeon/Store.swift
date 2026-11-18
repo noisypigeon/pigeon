@@ -270,32 +270,6 @@ final class Store: ObservableObject {
         }
     }
 
-    /// Unlinks device `id` with a passkey; unlinking this iPhone signs it out.
-    func unlinkDevice(_ id: String) async -> Bool {
-        let current = me?.devices.first { $0.id == id }?.current ?? false
-        let done = await run {
-            let answer = try await self.proof(["op": "unlink", "id": id])
-            try await self.api().send(
-                "DELETE", "/v0/app/devices/\(id)", body: ["passkey": answer.json])
-            if !current { await self.loadProfile() }
-        }
-        // After `run`, which clears `error`, so the sign-out's reason stays shown.
-        if done && current {
-            unlink(because: APIError(status: 0, message: "This iPhone was unlinked."))
-        }
-        return done
-    }
-
-    /// Removes passkey `id` with a passkey.
-    func removePasskey(_ id: String) async -> Bool {
-        await run {
-            let answer = try await self.proof(["op": "passkey:remove", "id": id])
-            try await self.api().send(
-                "DELETE", "/v0/app/passkeys/\(id)", body: ["passkey": answer.json])
-            await self.loadProfile()
-        }
-    }
-
     /// Hands the control plane this device's APNs token.
     func registerPush(_ token: Data) async {
         guard linked else { return }

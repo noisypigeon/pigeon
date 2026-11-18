@@ -8,6 +8,7 @@ struct ProofSheet: View {
     let client: MCPClient
     let page: String
     var purpose: String? = nil
+    var target: String? = nil
     @Environment(\.dismiss) private var dismiss
     @State private var auth = Auth()
     @State private var challenge: MCPOutcome?
@@ -65,7 +66,12 @@ struct ProofSheet: View {
     private func load() async {
         do {
             let o = try await client.call(
-                "proof_challenge", purpose.map { ["purpose": .string($0)] } ?? ["page": .string(page)])
+                "proof_challenge",
+                purpose.map { p in
+                    var a: [String: JSONValue] = ["purpose": .string(p)]
+                    if let target { a["target"] = .string(target) }
+                    return a
+                } ?? ["page": .string(page)])
             if let e = o.error { error = e } else { challenge = o; held = o.data; stage = o }
         } catch {
             self.error = error.localizedDescription

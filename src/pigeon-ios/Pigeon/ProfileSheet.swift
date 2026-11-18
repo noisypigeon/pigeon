@@ -9,6 +9,7 @@ struct ProfileSheet: View {
     @EnvironmentObject private var store: Store
     @State private var name = ""
     @State private var picked: PhotosPickerItem?
+    @State private var proving: Proving?
 
     private var appearance: Appearance { store.me?.profile.appearance ?? .system }
 
@@ -41,6 +42,11 @@ struct ProfileSheet: View {
             }
         }
         .presentationDetents([.large])
+        .sheet(item: $proving, onDismiss: { Task { await store.loadProfile() } }) { p in
+            if let client = try? store.mcp() {
+                ProofSheet(client: client, page: "", purpose: p.purpose, target: p.target)
+            }
+        }
         .onAppear { name = store.me?.profile.name ?? "" }
         .onChange(of: store.me?.profile.name) { _, new in name = new ?? name }
         .onChange(of: picked) { _, item in
@@ -106,7 +112,7 @@ struct ProfileSheet: View {
                         .font(.footnote).foregroundStyle(Theme.muted)
                 }
                 Spacer()
-                Button("Remove") { Task { _ = await store.removePasskey(row.id) } }
+                Button("Remove") { proving = Proving(purpose: "passkey-remove", target: row.id) }
                     .disabled(!canRemovePasskey(count: rows.count))
             }
             .padding(12)
@@ -125,7 +131,7 @@ struct ProfileSheet: View {
                     Text("Last seen \(date(row.seen))").font(.footnote).foregroundStyle(Theme.muted)
                 }
                 Spacer()
-                Button("Unlink") { Task { _ = await store.unlinkDevice(row.id) } }
+                Button("Unlink") { proving = Proving(purpose: "unlink", target: row.id) }
             }
             .padding(12)
             .block()

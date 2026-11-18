@@ -145,10 +145,11 @@ struct AutoOff: View {
     }
 }
 
-/// A proof the Auto banner asks for: `proof.challenge`'s purpose.
+/// A proof a view asks for: `proof.challenge`'s purpose, and its target when it names one.
 struct Proving: Identifiable {
     let purpose: String
-    var id: String { purpose }
+    var target: String? = nil
+    var id: String { purpose + ":" + (target ?? "") }
 }
 
 /// An owner item: a decision with its options and free text, or an action to mark done.
