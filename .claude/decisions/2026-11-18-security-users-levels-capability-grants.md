@@ -798,3 +798,43 @@ subject fix (!1251), and 9b, `service.bind` and `service.unbind` (!1252).
 - **`f8cf3dd1…`** only reads (`deploy.status`, `change.status`,
   `change.list`); it is offered once its calls say which Service user
   it is.
+
+### 2026-11-18: The rest in parallel, and the door tokens need no binding
+
+Willow asked for the remaining work to run in parallel while R3's shadow
+day runs (owner, about 23:42 UTC). June's onboarding stays deferred.
+
+#### The door tokens
+
+- The pool, deployer and builds tokens are already known by the Worker's
+  own secrets: `narrow_token` matches each one's client ID and keeps it on
+  its own door (`/v0/pool/`, `/healthz`, `/builds/`).
+- None of them reaches `run()`, so `member::check` never sees them, and
+  each is already narrower than any Service user's tool list. They need no
+  binding.
+- R3's "four tokens bound" condition is therefore: **every token that calls
+  `/mcp` is bound.** Today that is `agent` (bound, event 57722) and
+  `f8cf3dd1…`, which only reads and is bound or explained before deciding.
+- The builds token becomes `jobs` only when `build.read` is its fetch (E1).
+  That needs an Access policy letting it reach `/mcp`, granted by Willow
+  through a platform plan. Until then `pigeon-start` falls back to
+  `/builds/` (!1264).
+
+#### Steps
+
+| Step | Who | What | After |
+|---|---|---|---|
+| A1 | planner (gate) | `member.grant` and `member.revoke` as owner-tier page operations on `/member-grant/<n>`, the `service.bind` pattern: an offer `{id, account, capability, scope, expires, revoke}`, redeemed with the Administrator's passkey through `Members::grant` or `revoke_grant`. Only `GRANTABLE` capabilities; never a permission, never to a Service user | this amendment |
+| B1 | brief | `members.list` carries each member's grants; the admit card shows them | A1's shape, written into the brief |
+| B2 | brief | the web shell's Members view: grants, and grant and revoke offers for the Administrator; a Standard user's roots come from its `tools/list` | B1's shape |
+| B3 | brief | the same on iOS | B1's shape |
+| A3 | planner (gate) | `jobs` and `ci` tool lists gain `build.list` and `build.read`; the Apple release tools wait on owner item #47 | this amendment |
+| A4 | planner (gate) | R3 deciding behind the Worker variable `MEMBER_CHECK` (`shadow`, the default, or `decide`): with `decide`, `member::check`'s refusal refuses. `needs_proof`, `proof` and `proposer` are filled; the ticket's model reaches `agent_user` | this amendment |
+| A5 | planner | `MEMBER_CHECK=decide`, its own change | the shadow day, every difference explained here |
+| 11 | planner | the outcome amendment; Subdomain, Domain, Blog, Sites and Instances to their own ADRs | A5 |
+
+- §8's catalog invariants already hold in `wire/registry_tests.rs`, so they
+  need no new step.
+- Willow's acts are batched: the passkey approvals for A1, A3 and A4; a
+  binding or explanation for `f8cf3dd1…`; the Access policy for E1; owner
+  item #47; and A5.
