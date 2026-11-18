@@ -2,8 +2,8 @@
 
 use super::{
     Answer, BACKOFF_MAX, Cursor, EXIT_REFUSED, Effect, Event, Follow, GIVE_UP, HOLD, HOLD_MIN,
-    Outcome, Reply, Status, backoff, brief, classify, event_line, feed_request, path, statusline,
-    step, stop,
+    Outcome, Reply, Status, backoff, brief, classify, event_line, feed_request, statusline, step,
+    stop,
 };
 
 fn reply(status: u16, content_type: &str, cloudflare: bool, body: &str) -> Outcome {
@@ -89,18 +89,6 @@ fn lines_match_session_py() {
     assert_eq!(
         event_line(&event(DEPLOY)),
         "12540 deploy.failed: deploy of abc failed"
-    );
-}
-
-#[test]
-fn the_path_quotes_the_label_and_names_the_hold() {
-    assert_eq!(
-        path("https://claude.ai/code/session_1", Cursor::Session, 20),
-        "/v0/events?session=https%3A%2F%2Fclaude.ai%2Fcode%2Fsession_1&after=session&wake=agent&seconds=20"
-    );
-    assert_eq!(
-        path("a b", Cursor::At(42), 10),
-        "/v0/events?session=a%20b&after=42&wake=agent&seconds=10"
     );
 }
 

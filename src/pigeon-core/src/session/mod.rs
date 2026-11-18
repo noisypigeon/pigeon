@@ -54,7 +54,7 @@ pub struct Event {
     pub stage: Option<Stage>,
 }
 
-/// `GET /v0/events`'s answer, or `feed.read`'s `result`, whose `items` carry the same fields.
+/// `feed.read`'s answer, whose `items` are the session's events.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct Answer {
     /// The log's last event.
@@ -115,14 +115,14 @@ fn snippet(body: &str) -> String {
         .collect()
 }
 
-/// A 200's body as an answer: `/v0/events`'s, or `POST /v0/run`'s `result` for `feed.read`.
+/// A 200's body as an answer: `feed.read`'s structured content, or its `result`.
 fn answer(body: &str) -> Option<Answer> {
     let v: serde_json::Value = serde_json::from_str(body).ok()?;
     let inner = v.get("result").filter(|r| r.is_object()).unwrap_or(&v);
     serde_json::from_value(inner.clone()).ok()
 }
 
-/// The `feed.read` call a poll makes through `POST /v0/run`: the session's items after
+/// The `feed.read` call a poll makes through `/mcp`: the session's items after
 /// `cursor` that wake it, held up to `hold` seconds; see
 /// `.claude/decisions/2026-11-17-runtime-mcp-feed-view-contract.md`, its amendment on step 13.
 #[must_use]
@@ -164,33 +164,6 @@ pub enum Cursor {
     Session,
     /// After this event.
     At(u64),
-}
-
-/// Percent-encodes `v` for a query.
-#[must_use]
-pub fn quote(v: &str) -> String {
-    v.bytes()
-        .map(|b| {
-            if b.is_ascii_alphanumeric() || b"-._~".contains(&b) {
-                char::from(b).to_string()
-            } else {
-                format!("%{b:02X}")
-            }
-        })
-        .collect()
-}
-
-/// The poll's path and query.
-#[must_use]
-pub fn path(label: &str, cursor: Cursor, hold: u64) -> String {
-    let after = match cursor {
-        Cursor::Session => "session".to_string(),
-        Cursor::At(n) => n.to_string(),
-    };
-    format!(
-        "/v0/events?session={}&after={after}&wake=agent&seconds={hold}",
-        quote(label)
-    )
 }
 
 /// The line an event prints.
