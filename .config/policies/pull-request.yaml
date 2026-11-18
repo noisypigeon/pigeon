@@ -15,3 +15,106 @@ rules:
   - field:
       name: files
       not: '(?m)(^|/)CHANGELOG\.md$'
+examples:
+  pass:
+    - files: { .claude/decisions/2026-01-02-development-a-sample-decision.md: "x\n" }
+      fields:
+        title: "ci: enforce the lifecycle"
+        body: "## Decision\n\n.claude/decisions/2026-01-02-development-a-sample-decision.md"
+        number: "7"
+        files: "src/x.rs\nREADME.md"
+    - files: { .claude/decisions/2026-01-02-development-a-sample-decision.md: "x\n" }
+      fields:
+        title: "feat(cli)!: break things"
+        body: ".claude/decisions/2026-01-02-development-a-sample-decision.md"
+        number: "7"
+        files: "src/x.rs\nREADME.md"
+    - files: { .claude/decisions/2026-01-02-development-a-sample-decision.md: "x\n" }
+      fields:
+        title: "ci: x"
+        body: ".claude/decisions/2026-01-02-development-a-sample-decision.md"
+        number: "7"
+        files: "docs/CHANGELOG.md.bak\nsrc/a.rs"
+  fail:
+    - files: { .claude/decisions/2026-01-02-development-a-sample-decision.md: "x\n" }
+      fields:
+        title: "Enforce the lifecycle"
+        body: ".claude/decisions/2026-01-02-development-a-sample-decision.md"
+        number: "7"
+        files: "src/x.rs\nREADME.md"
+    - files: { .claude/decisions/2026-01-02-development-a-sample-decision.md: "x\n" }
+      fields:
+        title: "feature: x"
+        body: ".claude/decisions/2026-01-02-development-a-sample-decision.md"
+        number: "7"
+        files: "src/x.rs\nREADME.md"
+    - files: { .claude/decisions/2026-01-02-development-a-sample-decision.md: "x\n" }
+      fields:
+        title: "ci: "
+        body: ".claude/decisions/2026-01-02-development-a-sample-decision.md"
+        number: "7"
+        files: "src/x.rs\nREADME.md"
+    - files: { .claude/decisions/2026-01-02-development-a-sample-decision.md: "x\n" }
+      fields:
+        title: "ci: x"
+        body: "No decision here."
+        number: "7"
+        files: "src/x.rs\nREADME.md"
+    - files: { .claude/decisions/2026-01-02-development-a-sample-decision.md: "x\n" }
+      fields:
+        title: "ci: x"
+        body: ".claude/decisions/README.md"
+        number: "7"
+        files: "src/x.rs\nREADME.md"
+    - files: { .claude/decisions/2026-01-02-development-a-sample-decision.md: "x\n" }
+      fields:
+        title: "ci: x"
+        body: ".claude/decisions/2026-01-02-development-does-not-exist.md"
+        number: "7"
+        files: "src/x.rs\nREADME.md"
+    - files: { .claude/decisions/2026-01-02-development-a-sample-decision.md: "x\n" }
+      fields:
+        title: "ci: x"
+        body: ".claude/decisions/2026-01-02-development-a-sample-decision.md and .claude/decisions/2026-01-02-other-not-here-at-all.md"
+        number: "7"
+        files: "src/x.rs\nREADME.md"
+    - files: { .claude/decisions/2026-01-02-development-a-sample-decision.md: "x\n" }
+      fields:
+        title: "ci: x"
+        body: ".claude/decisions/2026-01-02-development-a-sample-decision.md"
+        number: ""
+        files: "src/x.rs\nREADME.md"
+    - files: { .claude/decisions/2026-01-02-development-a-sample-decision.md: "x\n" }
+      fields:
+        title: "ci: x"
+        body: ".claude/decisions/2026-01-02-development-a-sample-decision.md"
+        files: "src/x.rs\nREADME.md"
+    - files: { .claude/decisions/2026-01-02-development-a-sample-decision.md: "x\n" }
+      fields:
+        title: "ci: x"
+        body: ".claude/decisions/2026-01-02-development-a-sample-decision.md"
+        number: "7; true"
+        files: "src/x.rs\nREADME.md"
+    - files: { .claude/decisions/2026-01-02-development-a-sample-decision.md: "x\n" }
+      fields:
+        title: 'ci: x"; exit 0; "'
+        body: '$(exit 0) `true`'
+        number: "7"
+        files: "src/x.rs\nREADME.md"
+    - files: { .claude/decisions/2026-01-02-development-a-sample-decision.md: "x\n" }
+      fields:
+        title: "ci: x"
+        body: ".claude/decisions/2026-01-02-development-a-sample-decision.md"
+        number: "7"
+        files: "CHANGELOG.md"
+    - files: { .claude/decisions/2026-01-02-development-a-sample-decision.md: "x\n" }
+      fields:
+        title: "ci: x"
+        body: ".claude/decisions/2026-01-02-development-a-sample-decision.md"
+        number: "7"
+        files: "src/a.rs\nsrc/pigeon-cli/crates/retired/CHANGELOG.md"
+    - files: { .claude/decisions/2026-01-02-development-a-sample-decision.md: "x\n" }
+      fields:
+        title: "ci: x"
+        body: ".claude/decisions/2026-01-02-development-a-sample-decision.md"
+        number: "7"

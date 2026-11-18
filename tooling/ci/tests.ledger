@@ -1751,7 +1751,6 @@ pigeon-eviction test suite policies::layout_keeps_the_core_pure
 pigeon-eviction test suite policies::layout_rules
 pigeon-eviction test suite policies::mirror_allows_only_a_dispatched_read_only_pinned_ci_yml
 pigeon-eviction test suite policies::names_forbids_the_old_names_but_the_stored_ones_and_history
-pigeon-eviction test suite policies::pull_request
 pigeon-eviction test suite policies::pull_request_skipped_without_one
 pigeon-eviction test suite policies::release_changelog_rules
 pigeon-eviction test suite policies::roles_holds_three_explicit_capability_lists_only

@@ -183,69 +183,6 @@ fn pr_root() -> TempDir {
     root
 }
 
-fn pr(title: &str, body: &str, number: Option<&str>) -> Vec<String> {
-    pr_files(title, body, number, Some("src/x.rs\nREADME.md"))
-}
-
-fn pr_files(title: &str, body: &str, number: Option<&str>, files: Option<&str>) -> Vec<String> {
-    let root = pr_root();
-    let pr = PullRequest {
-        title: Some(title.into()),
-        body: Some(body.into()),
-        number: number.map(Into::into),
-        files: files.map(Into::into),
-        ..PullRequest::default()
-    };
-    violations("pull-request", root.path(), Some(&pr))
-}
-
-#[test]
-fn pull_request() {
-    let cite = format!(".claude/decisions/{GOOD_NAME}");
-    passes(&pr(
-        "ci: enforce the lifecycle",
-        &format!("## Decision\n\n{cite}"),
-        Some("7"),
-    ));
-    passes(&pr("feat(cli)!: break things", &cite, Some("7")));
-    for (title, body, number) in [
-        ("Enforce the lifecycle", cite.clone(), Some("7")),
-        ("feature: x", cite.clone(), Some("7")),
-        ("ci: ", cite.clone(), Some("7")),
-        ("ci: x", "No decision here.".into(), Some("7")),
-        ("ci: x", ".claude/decisions/README.md".into(), Some("7")),
-        (
-            "ci: x",
-            ".claude/decisions/2026-01-02-development-does-not-exist.md".into(),
-            Some("7"),
-        ),
-        (
-            "ci: x",
-            format!("{cite} and .claude/decisions/2026-01-02-other-not-here-at-all.md"),
-            Some("7"),
-        ),
-        ("ci: x", cite.clone(), Some("")),
-        ("ci: x", cite.clone(), None),
-        ("ci: x", cite.clone(), Some("7; true")),
-        ("ci: x\"; exit 0; \"", "$(exit 0) `true`".into(), Some("7")),
-    ] {
-        fails(&pr(title, &body, number));
-    }
-    for files in [
-        Some("CHANGELOG.md"),
-        Some("src/a.rs\nsrc/pigeon-cli/crates/retired/CHANGELOG.md"),
-        None,
-    ] {
-        fails(&pr_files("ci: x", &cite, Some("7"), files));
-    }
-    passes(&pr_files(
-        "ci: x",
-        &cite,
-        Some("7"),
-        Some("docs/CHANGELOG.md.bak\nsrc/a.rs"),
-    ));
-}
-
 #[test]
 fn pull_request_skipped_without_one() {
     let report = eviction::check(&[policy("pull-request")], pr_root().path(), None).expect("runs");
