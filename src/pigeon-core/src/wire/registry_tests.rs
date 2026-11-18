@@ -2,7 +2,7 @@
 
 use super::{Asks, Door, Effect, GRANT, PAGE, catalog};
 use crate::approval::grants;
-use crate::member::{CAPABILITIES, SERVICE_CEILING};
+use crate::member::{PERMISSIONS, SERVICE_CEILING};
 use crate::view::View;
 
 #[test]
@@ -41,7 +41,7 @@ fn no_operation_is_both_grant_and_page() {
 fn every_capability_is_a_member_capability() {
     for o in catalog() {
         assert!(
-            CAPABILITIES.contains(&o.capability()),
+            PERMISSIONS.contains(&o.capability()),
             "{} needs {}",
             o.name,
             o.capability()

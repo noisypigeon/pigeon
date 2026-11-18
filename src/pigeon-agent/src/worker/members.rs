@@ -54,7 +54,7 @@ pub async fn serve(state: &State, path: &str, body: Value) -> Result<Response> {
         "/members/view" => Response::from_json(&members.view(&caller.account)),
         "/members/invite" => {
             let (token, email) = (s(&body, "token"), s(&body, "email"));
-            match members.invite(&token, &email, Role::User, &caller.account, t) {
+            match members.invite(&token, &email, Role::Standard, &caller.account, t) {
                 Ok((members, inv)) => {
                     storage.put(member::STORE, &members).await?;
                     Response::from_json(&json!({ "id": inv.id, "expires": inv.expires }))

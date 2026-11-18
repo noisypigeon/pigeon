@@ -21,7 +21,7 @@ fn point(k: &SigningKey) -> Vec<u8> {
 
 fn invited() -> Members {
     let m = Members::default().seed(OWNER, 1);
-    m.invite(TOKEN, "learner@example.com", Role::User, OWNER, 1)
+    m.invite(TOKEN, "learner@example.com", Role::Standard, OWNER, 1)
         .unwrap()
         .0
 }
@@ -89,7 +89,7 @@ fn admitting_links_the_device_as_a_user() {
     let (j, m, a, inv, _) = joined();
     let (j, m, d) = j.admit(m, Devices::default(), &inv.id, OWNER, 4).unwrap();
     let me = m.active(&a.accounts[0].id).unwrap();
-    assert_eq!((me.role, me.status), (Role::User, Status::Active));
+    assert_eq!((me.role, me.status), (Role::Standard, Status::Active));
     assert_eq!(d.devices[0].account, a.accounts[0].id);
     assert_eq!(d.devices[0].linked, 4);
     assert_eq!(j.waiting, []);

@@ -14,8 +14,8 @@ pub mod handover;
 pub mod join;
 pub mod listing;
 
-/// Every capability an operation may require.
-pub const CAPABILITIES: [&str; 9] = [
+/// Every level permission an operation may require.
+pub const PERMISSIONS: [&str; 8] = [
     "read",
     "propose",
     "approve",
@@ -24,10 +24,21 @@ pub const CAPABILITIES: [&str; 9] = [
     "mandates",
     "platform",
     "members",
-    "learner",
 ];
 
-/// The capabilities a service account may hold.
+/// The capabilities the Administrator grants per member.
+pub const CAPABILITIES: [&str; 6] = ["subdomain", "domain", "blog", "icbc", "sites", "instances"];
+
+/// The capabilities that can be granted yet; each other one waits for its feature's ADR.
+pub const GRANTABLE: [&str; 1] = ["icbc"];
+
+/// The permissions a standard member may hold.
+pub const STANDARD_CEILING: [&str; 0] = [];
+
+/// The `granted_by` of a grant the learner migration made.
+pub const MIGRATION: &str = "migration";
+
+/// The permissions a service account may hold.
 pub const SERVICE_CEILING: [&str; 2] = ["read", "propose"];
 
 /// How long an invitation stays open, in seconds.
@@ -39,6 +50,8 @@ pub const MAX_OPEN_INVITES: usize = 10;
 /// The `admitted_by` of the seeded administrator.
 pub const SEED: &str = "seed";
 
+const ONE_ADMINISTRATOR: &str = "an instance's administrator is seeded, never invited or promoted";
+
 /// The `Instance` storage key the members are kept under.
 pub const STORE: &str = "members";
 
@@ -48,8 +61,9 @@ pub const STORE: &str = "members";
 pub enum Role {
     /// Holds every capability.
     Administrator,
-    /// Holds what `roles.yaml` grants.
-    User,
+    /// A person holding only what the Administrator grants.
+    #[serde(alias = "user")]
+    Standard,
     /// A machine account, held to the service ceiling.
     Service,
 }
@@ -60,7 +74,7 @@ impl Role {
     pub const fn name(self) -> &'static str {
         match self {
             Self::Administrator => "administrator",
-            Self::User => "user",
+            Self::Standard => "standard",
             Self::Service => "service",
         }
     }
@@ -72,7 +86,7 @@ impl Role {
     pub fn parse(s: &str) -> Result<Role, String> {
         match s {
             "administrator" => Ok(Self::Administrator),
-            "user" => Ok(Self::User),
+            "standard" | "user" => Ok(Self::Standard),
             "service" => Ok(Self::Service),
             _ => Err(format!("unknown role `{s}`")),
         }
@@ -90,7 +104,7 @@ pub struct Roles {
 impl Roles {
     /// The role's capabilities, empty when absent.
     #[must_use]
-    pub fn capabilities(&self, role: Role) -> &[String] {
+    pub fn permissions(&self, role: Role) -> &[String] {
         self.roles.get(role.name()).map_or(&[], Vec::as_slice)
     }
 
@@ -135,13 +149,13 @@ pub fn check_roles(r: &Roles) -> Vec<String> {
             out.push(format!("`{key}` is not a role"));
         }
     }
-    for role in [Role::Administrator, Role::User, Role::Service] {
+    for role in [Role::Administrator, Role::Standard, Role::Service] {
         let Some(caps) = r.roles.get(role.name()) else {
             out.push(format!("role `{}` is missing", role.name()));
             continue;
         };
         for (i, c) in caps.iter().enumerate() {
-            if !CAPABILITIES.contains(&c.as_str()) {
+            if !PERMISSIONS.contains(&c.as_str()) {
                 out.push(format!("`{}` lists unknown capability `{c}`", role.name()));
             }
             if caps[..i].contains(c) {
@@ -149,9 +163,16 @@ pub fn check_roles(r: &Roles) -> Vec<String> {
             }
         }
         if role == Role::Administrator {
-            for c in CAPABILITIES {
+            for c in PERMISSIONS {
                 if !caps.iter().any(|x| x == c) {
                     out.push(format!("`administrator` must hold `{c}`"));
+                }
+            }
+        }
+        if role == Role::Standard {
+            for c in caps {
+                if !STANDARD_CEILING.contains(&c.as_str()) {
+                    out.push(format!("`standard` may not hold `{c}`"));
                 }
             }
         }
@@ -194,6 +215,34 @@ pub enum InviteStatus {
     Expired,
 }
 
+/// A capability the Administrator granted a standard member.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Grant {
+    /// The capability, one of [`CAPABILITIES`].
+    pub capability: String,
+    /// What it is limited to, when it takes a scope.
+    #[serde(default)]
+    pub scope: Option<String>,
+    /// Who granted it.
+    pub granted_by: String,
+    /// When, in Unix seconds.
+    pub at: u64,
+    /// When it lapses; never when absent.
+    #[serde(default)]
+    pub expires: Option<u64>,
+    /// When it was revoked.
+    #[serde(default)]
+    pub revoked: Option<u64>,
+}
+
+impl Grant {
+    /// Whether it is in force at `now`.
+    #[must_use]
+    pub fn active(&self, now: u64) -> bool {
+        self.revoked.is_none() && self.expires.is_none_or(|e| now < e)
+    }
+}
+
 /// An account's membership of the instance.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Membership {
@@ -206,6 +255,9 @@ pub struct Membership {
     /// A service account's scopes.
     #[serde(default)]
     pub scopes: Vec<String>,
+    /// A standard member's capability grants, revoked and expired ones included.
+    #[serde(default)]
+    pub grants: Vec<Grant>,
     /// Who admitted it, or the last to change its role.
     pub admitted_by: String,
     /// When, in Unix seconds.
@@ -364,6 +416,7 @@ impl Members {
                 role: Role::Administrator,
                 status: Status::Active,
                 scopes: Vec::new(),
+                grants: Vec::new(),
                 admitted_by: SEED.to_owned(),
                 at: now,
                 ended: None,
@@ -392,6 +445,9 @@ impl Members {
         self.admin(inviter)?;
         if role == Role::Service {
             return Err("a service account is created, not invited".to_owned());
+        }
+        if role == Role::Administrator {
+            return Err(ONE_ADMINISTRATOR.to_owned());
         }
         let email = email.trim().to_lowercase();
         let mut parts = email.split('@');
@@ -458,6 +514,9 @@ impl Members {
     pub fn admit(mut self, id: &str, by: &str, now: u64) -> Result<(Self, Membership), String> {
         self.admin(by)?;
         let inv = self.invitation_mut(id)?;
+        if inv.role == Role::Administrator {
+            return Err(ONE_ADMINISTRATOR.to_owned());
+        }
         if inv.status != InviteStatus::Enrolled {
             return Err("not enrolled".to_owned());
         }
@@ -474,6 +533,7 @@ impl Members {
             role: inv.role,
             status: Status::Active,
             scopes: Vec::new(),
+            grants: Vec::new(),
             admitted_by: by.to_owned(),
             at: now,
             ended: None,
@@ -524,6 +584,9 @@ impl Members {
         if by == account {
             return Err("no one changes their own role".to_owned());
         }
+        if role == Role::Administrator {
+            return Err(ONE_ADMINISTRATOR.to_owned());
+        }
         let m = self
             .memberships
             .iter_mut()
@@ -544,6 +607,11 @@ impl Members {
             if m.account == account && m.status == Status::Active {
                 m.status = Status::Ended;
                 m.ended = Some(now);
+                for g in &mut m.grants {
+                    if g.active(now) {
+                        g.revoked = Some(now);
+                    }
+                }
             }
         }
         for i in &mut self.invitations {
@@ -610,6 +678,7 @@ impl Members {
             role: Role::Service,
             status: Status::Active,
             scopes: scopes.to_vec(),
+            grants: Vec::new(),
             admitted_by: by.to_owned(),
             at: now,
             ended: None,
@@ -617,6 +686,151 @@ impl Members {
         self.memberships.push(m.clone());
         Ok((self, m))
     }
+
+    /// An administrator grants a standard member a capability, replacing any active grant of the
+    /// same capability and scope.
+    ///
+    /// # Errors
+    /// `by` is no administrator, the capability is unknown or not grantable yet, the member is no
+    /// standard member, `icbc` is given a scope, or the expiry is not in the future.
+    pub fn grant(
+        mut self,
+        account: &str,
+        capability: &str,
+        scope: Option<&str>,
+        expires: Option<u64>,
+        by: &str,
+        now: u64,
+    ) -> Result<(Self, Grant), String> {
+        self.admin(by)?;
+        if !CAPABILITIES.contains(&capability) {
+            return Err(format!("`{capability}` is not a capability"));
+        }
+        if !GRANTABLE.contains(&capability) {
+            return Err(format!("`{capability}` can't be granted yet"));
+        }
+        if !self
+            .active(account)
+            .is_some_and(|m| m.role == Role::Standard)
+        {
+            return Err("only a standard member is granted a capability".to_owned());
+        }
+        if capability == "icbc" && scope.is_some() {
+            return Err("`icbc` takes no scope".to_owned());
+        }
+        if expires.is_some_and(|t| t <= now) {
+            return Err("a grant must expire in the future".to_owned());
+        }
+        let grant = Grant {
+            capability: capability.to_owned(),
+            scope: scope.map(str::to_owned),
+            granted_by: by.to_owned(),
+            at: now,
+            expires,
+            revoked: None,
+        };
+        if let Some(m) = self
+            .memberships
+            .iter_mut()
+            .find(|m| m.account == account && m.status == Status::Active)
+        {
+            for g in &mut m.grants {
+                if g.active(now) && g.capability == capability && g.scope.as_deref() == scope {
+                    g.revoked = Some(now);
+                }
+            }
+            m.grants.push(grant.clone());
+        }
+        Ok((self, grant))
+    }
+
+    /// An administrator revokes every active grant of a capability from a member.
+    ///
+    /// # Errors
+    /// `by` is no administrator, the account is no member, or it holds no such grant.
+    pub fn revoke_grant(
+        mut self,
+        account: &str,
+        capability: &str,
+        by: &str,
+        now: u64,
+    ) -> Result<Self, String> {
+        self.admin(by)?;
+        let m = self
+            .memberships
+            .iter_mut()
+            .find(|m| m.account == account && m.status == Status::Active)
+            .ok_or_else(|| "not a member".to_owned())?;
+        let mut any = false;
+        for g in &mut m.grants {
+            if g.capability == capability && g.active(now) {
+                g.revoked = Some(now);
+                any = true;
+            }
+        }
+        if any {
+            Ok(self)
+        } else {
+            Err("no such grant".to_owned())
+        }
+    }
+
+    /// Whether `account` holds `capability` (for `scope`, when given) at `now`.
+    #[must_use]
+    pub fn holds(&self, account: &str, capability: &str, scope: Option<&str>, now: u64) -> bool {
+        match self.active(account) {
+            Some(m) if m.role == Role::Administrator => true,
+            Some(m) if m.role == Role::Standard => m.grants.iter().any(|g| {
+                g.capability == capability
+                    && g.active(now)
+                    && scope.is_none_or(|s| g.scope.as_deref() == Some(s))
+            }),
+            _ => false,
+        }
+    }
+
+    /// On a learner instance, gives each standard member with no `icbc` record the grant; true
+    /// when any was added.
+    #[must_use]
+    pub fn migrate(mut self, learner: bool, now: u64) -> (Self, bool) {
+        if !learner {
+            return (self, false);
+        }
+        let mut added = false;
+        for m in &mut self.memberships {
+            if m.status == Status::Active
+                && m.role == Role::Standard
+                && !m.grants.iter().any(|g| g.capability == "icbc")
+            {
+                m.grants.push(Grant {
+                    capability: "icbc".to_owned(),
+                    scope: None,
+                    granted_by: MIGRATION.to_owned(),
+                    at: now,
+                    expires: None,
+                    revoked: None,
+                });
+                added = true;
+            }
+        }
+        (self, added)
+    }
+}
+
+/// What an operation requires of the caller.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Requires {
+    /// A level permission, by name in [`PERMISSIONS`].
+    Permission(&'static str),
+    /// A granted capability, and the argument naming its scope.
+    Capability {
+        /// The capability's name.
+        name: &'static str,
+        /// The argument naming the scope.
+        scope_arg: Option<&'static str>,
+    },
+    /// The caller's own credentials or membership.
+    Own,
 }
 
 /// What an operation asks of the check.
@@ -624,8 +838,12 @@ impl Members {
 pub struct Request<'a> {
     /// The calling account.
     pub account: &'a str,
-    /// The capability the operation needs.
-    pub capability: &'a str,
+    /// What the operation needs.
+    pub requires: Requires,
+    /// The scope argument's value.
+    pub scope: Option<&'a str>,
+    /// The time, in Unix seconds.
+    pub now: u64,
     /// Whether it needs a passkey proof.
     pub needs_proof: bool,
     /// The account that proved with a passkey.
@@ -641,7 +859,7 @@ pub struct Request<'a> {
 pub enum Refusal {
     /// No active membership.
     NotMember,
-    /// The role lacks the capability.
+    /// The level or its grants lack what is required.
     Capability,
     /// No passkey proof from the same account.
     Proof,
@@ -653,7 +871,7 @@ impl fmt::Display for Refusal {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(match self {
             Self::NotMember => "not a member of this instance",
-            Self::Capability => "this role does not hold the capability",
+            Self::Capability => "this level or its grants do not allow it",
             Self::Proof => "this needs a passkey proof from the same account",
             Self::Separation => "not on one's own change or membership",
         })
@@ -670,13 +888,17 @@ pub fn check<'a>(
     r: &Request<'_>,
 ) -> Result<&'a Membership, Refusal> {
     let m = members.active(r.account).ok_or(Refusal::NotMember)?;
-    if !roles.capabilities(m.role).iter().any(|c| c == r.capability) {
-        return Err(Refusal::Capability);
-    }
     let service = m.role == Role::Service;
-    if service
-        && (!m.scopes.iter().any(|s| s == r.capability) || !SERVICE_CEILING.contains(&r.capability))
-    {
+    let allowed = match r.requires {
+        Requires::Permission(p) => {
+            roles.permissions(m.role).iter().any(|c| c == p)
+                && (m.role != Role::Standard || STANDARD_CEILING.contains(&p))
+                && (!service || (m.scopes.iter().any(|s| s == p) && SERVICE_CEILING.contains(&p)))
+        }
+        Requires::Capability { name, .. } => members.holds(r.account, name, r.scope, r.now),
+        Requires::Own => r.subject == Some(r.account),
+    };
+    if !allowed {
         return Err(Refusal::Capability);
     }
     if r.needs_proof && (service || r.proof != Some(r.account)) {
@@ -685,7 +907,7 @@ pub fn check<'a>(
     if r.proposer == Some(r.account) {
         return Err(Refusal::Separation);
     }
-    if r.capability == "members" && r.subject == Some(r.account) {
+    if r.requires == Requires::Permission("members") && r.subject == Some(r.account) {
         return Err(Refusal::Separation);
     }
     Ok(m)

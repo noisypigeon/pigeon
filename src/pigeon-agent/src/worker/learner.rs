@@ -1,5 +1,5 @@
 //! The learner's routes on a standalone: progress, forms, attempts and sync, each an `Instance`
-//! operation that checks the caller's `learner` capability and keeps every object sealed in the
+//! operation that checks the caller's `icbc` capability and keeps every object sealed in the
 //! `LEARNER` bucket; see `.claude/decisions/2026-11-15-runtime-learner-practice-standalone-app.md`
 //! §5 and its 2026-11-15 amendment.
 
@@ -70,20 +70,19 @@ fn features(env: &Env) -> bool {
         .is_ok_and(|v| v.to_string().split(',').any(|f| f.trim() == "learner"))
 }
 
-async fn allowed(state: &State, body: &Value) -> Result<bool> {
+async fn allowed(env: &Env, state: &State, body: &Value) -> Result<bool> {
     let storage = state.storage();
     let devices: Devices = storage.get(DEVICES).await?.unwrap_or_default();
     let members: Members = storage.get(member::STORE).await?.unwrap_or_default();
+    let (members, added) = members.migrate(features(env), super::platform::now());
+    if added {
+        storage.put(member::STORE, &members).await?;
+    }
     let id = body["device"].as_str().unwrap_or_default();
     let Some(d) = devices.devices.iter().find(|d| d.id == id) else {
         return Ok(false);
     };
-    let Ok(roles) = super::standalone::roles() else {
-        return Ok(false);
-    };
-    Ok(members
-        .active(&d.account)
-        .is_some_and(|m| roles.capabilities(m.role).iter().any(|c| c == "learner")))
+    Ok(members.holds(&d.account, "icbc", None, super::platform::now()))
 }
 
 fn key(env: &Env) -> Result<[u8; 32]> {
@@ -175,7 +174,7 @@ pub async fn serve(state: &State, env: &Env, path: &str, body: Value) -> Result<
     if !features(env) {
         return fail("this instance has no learner feature", 404);
     }
-    if !allowed(state, &body).await? {
+    if !allowed(env, state, &body).await? {
         return fail("this account may not practise here", 403);
     }
     let key = key(env)?;
