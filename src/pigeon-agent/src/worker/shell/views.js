@@ -99,12 +99,36 @@
       actions(v.actions, h.act),
     );
 
+  // A picked photo as base64 JPEG (no `data:` prefix) of at most 512 KiB, its longer side at most 1024 px.
+  const jpeg = (file) =>
+    new Promise((resolve, reject) => {
+      createImageBitmap(file).then((bmp) => {
+        const k = Math.min(1, 1024 / Math.max(bmp.width, bmp.height));
+        const c = document.createElement("canvas");
+        c.width = Math.max(1, Math.round(bmp.width * k));
+        c.height = Math.max(1, Math.round(bmp.height * k));
+        c.getContext("2d").drawImage(bmp, 0, 0, c.width, c.height);
+        const attempt = (q) =>
+          c.toBlob((blob) => {
+            if (blob && blob.size <= 524288) {
+              const r = new FileReader();
+              r.onload = () => resolve(String(r.result).split(",")[1]);
+              r.onerror = () => reject(new Error("The photo could not be read."));
+              r.readAsDataURL(blob);
+            } else if (q > 0.35) attempt(Math.round((q - 0.1) * 100) / 100);
+            else reject(new Error("The photo is too large."));
+          }, "image/jpeg", q);
+        attempt(0.85);
+      }, reject);
+    });
+
   const form = (v, h) => {
     const inputs = (v.fields || []).map((f) => {
       const id = `f-${f.key}`;
       let input;
       if (f.input === "choice") input = el("select", { id, name: f.key }, (f.options || []).map((o) => el("option", { value: o }, o)));
       else if (f.input === "toggle") input = el("input", { id, name: f.key, type: "checkbox" });
+      else if (f.input === "image") input = el("input", { id, name: f.key, type: "file", accept: "image/*", required: !!f.required });
       else
         input = el("input", {
           id,
@@ -114,13 +138,15 @@
         });
       return el("div", {}, el("label", { for: id }, f.label), input, f.help ? el("div", { class: "sub" }, f.help) : null);
     });
-    const submit = (e) => {
+    const submit = async (e) => {
       e.preventDefault();
       const args = Object.assign({}, v.submit.arguments || {});
       for (const f of v.fields || []) {
         const n = e.target.elements[f.key];
         if (!n) continue;
-        args[f.key] = f.input === "toggle" ? n.checked : n.value;
+        if (f.input === "image") {
+          if (n.files[0]) args[f.key] = await jpeg(n.files[0]);
+        } else args[f.key] = f.input === "toggle" ? n.checked : n.value;
       }
       h.act(Object.assign({}, v.submit, { arguments: args }));
     };
