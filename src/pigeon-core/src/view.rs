@@ -91,6 +91,8 @@ contract_enum! {
         Number => "number",
         /// A value kept out of the transcript.
         Secret => "secret",
+        /// A picked photo, sent as base64 JPEG of at most 512 KiB; the owner's #36.
+        Image => "image",
     }
 }
 

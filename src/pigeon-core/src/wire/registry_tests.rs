@@ -99,11 +99,17 @@ fn sites_publish_and_infra_apply_need_platform() {
 }
 
 #[test]
-fn no_operation_is_a_form() {
-    assert!(
-        catalog().iter().all(|o| o.view != View::Form),
-        "no operation is a Form yet; see the feed-view ADR"
-    );
+fn forms_are_reads() {
+    for o in catalog() {
+        if o.view == View::Form {
+            assert_eq!(
+                o.effect,
+                Effect::Read,
+                "{} answers a form, so it only reads; see the feed-view ADR's #36 amendment",
+                o.name
+            );
+        }
+    }
 }
 
 #[test]

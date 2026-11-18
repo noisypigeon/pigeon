@@ -690,3 +690,22 @@ Execution: R8a-1 (brief): the operations, `doors()`, the listing filter and
 the presenters. R8a-2 (brief): the dispatch. R8c (planner): `device.redeem`.
 R10 moves the app onto them; then group C goes, but `/v0/app/mcp` and, until
 R8c, `/v0/app/session` stay.
+### 2026-11-18: The owner's answer #36: form-answering reads and an `image` input
+
+The owner chose (owner item #36) to move the app's profile sheet (name,
+appearance, avatar) fully onto views. Contract 1 gains two additions:
+
+- **Forms from reads.** A Read operation may answer a `form` view whose
+  submit is the write it edits, such as `profile.edit` for
+  `profile.update`. Writes still answer a card or a detail. The registry
+  test `no_operation_is_a_form` becomes `forms_are_reads`.
+- **An `image` input.** A picked photo, sent as base64 JPEG of at most
+  512 KiB, for `avatar.put`. The web client renders it as a file picker
+  that accepts images (R9), the app as a photo picker (R10).
+- **The version stays 1.** Older app builds reject an input kind they
+  don't know, but only the new profile operations answer one, and only
+  builds that know `image` call them.
+- `/v0/app/profile` and `/v0/app/profile/avatar` go with group C. The
+  profile operations join R8's device-door set: `profile.show`,
+  `profile.edit`, `profile.update`, `avatar.show`, `avatar.put`,
+  `avatar.remove`.
