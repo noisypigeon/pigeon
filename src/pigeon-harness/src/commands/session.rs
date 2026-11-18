@@ -88,8 +88,13 @@ fn follow() -> i32 {
 }
 
 fn poll(agent: &ureq::Agent, me: &str, s: &Follow) -> Outcome {
-    let url = format!("https://{}{}", host(), core::path(me, s.cursor, s.hold));
-    match agent.get(&url).call() {
+    let url = format!("https://{}/v0/run", host());
+    let body = core::feed_request(me, s.cursor, s.hold).to_string();
+    let sent = agent
+        .post(&url)
+        .header("content-type", "application/json")
+        .send(body);
+    match sent {
         Err(e) => Outcome::Unreachable(e.to_string()),
         Ok(mut r) => {
             let status = r.status().as_u16();

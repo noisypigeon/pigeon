@@ -54,12 +54,13 @@ pub struct Event {
     pub stage: Option<Stage>,
 }
 
-/// `GET /v0/events`'s answer.
+/// `GET /v0/events`'s answer, or `feed.read`'s `result`, whose `items` carry the same fields.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct Answer {
     /// The log's last event.
     pub last: u64,
     /// The events the poll asked for.
+    #[serde(alias = "items")]
     pub events: Vec<Event>,
 }
 
@@ -114,13 +115,35 @@ fn snippet(body: &str) -> String {
         .collect()
 }
 
+/// A 200's body as an answer: `/v0/events`'s, or `POST /v0/run`'s `result` for `feed.read`.
+fn answer(body: &str) -> Option<Answer> {
+    let v: serde_json::Value = serde_json::from_str(body).ok()?;
+    let inner = v.get("result").filter(|r| r.is_object()).unwrap_or(&v);
+    serde_json::from_value(inner.clone()).ok()
+}
+
+/// The `feed.read` call a poll makes through `POST /v0/run`: the session's items after
+/// `cursor` that wake it, held up to `hold` seconds; see
+/// `.claude/decisions/2026-11-17-runtime-mcp-feed-view-contract.md`, its amendment on step 13.
+#[must_use]
+pub fn feed_request(label: &str, cursor: Cursor, hold: u64) -> serde_json::Value {
+    let after = match cursor {
+        Cursor::Session => "session".to_string(),
+        Cursor::At(n) => n.to_string(),
+    };
+    serde_json::json!({
+        "operation": "feed.read",
+        "args": { "session": label, "after": after, "wake": "agent", "seconds": hold.to_string() },
+    })
+}
+
 /// Classifies a reply.
 #[must_use]
 pub fn classify(r: &Reply<'_>) -> Outcome {
     let detail = || format!("{} {}", r.status, snippet(r.body));
     match r.status {
-        200 => serde_json::from_str::<Answer>(r.body).map_or_else(
-            |_| Outcome::Unreachable(format!("200 that isn't an answer: {}", snippet(r.body))),
+        200 => answer(r.body).map_or_else(
+            || Outcome::Unreachable(format!("200 that isn't an answer: {}", snippet(r.body))),
             Outcome::Answer,
         ),
         502 if !r.cloudflare

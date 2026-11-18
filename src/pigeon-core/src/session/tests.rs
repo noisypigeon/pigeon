@@ -2,7 +2,8 @@
 
 use super::{
     Answer, BACKOFF_MAX, Cursor, EXIT_REFUSED, Effect, Event, Follow, GIVE_UP, HOLD, HOLD_MIN,
-    Outcome, Reply, Status, backoff, brief, classify, event_line, path, statusline, step, stop,
+    Outcome, Reply, Status, backoff, brief, classify, event_line, feed_request, path, statusline,
+    step, stop,
 };
 
 fn reply(status: u16, content_type: &str, cloudflare: bool, body: &str) -> Outcome {
@@ -283,4 +284,29 @@ fn stop_reminds_only_when_a_change_needs_the_agent_and_nothing_listens() {
     let listening = STATUS.replace(r#""listening":false"#, r#""listening":true"#);
     assert_eq!(stop(&status(&listening)), None);
     assert_eq!(stop(&status(r#"{"changes":[]}"#)), None);
+}
+
+#[test]
+fn a_poll_is_feed_read_for_the_session_waking_it() {
+    let r = feed_request("https://claude.ai/code/session_1", Cursor::Session, 20);
+    assert_eq!(r["operation"], "feed.read");
+    assert_eq!(r["args"]["session"], "https://claude.ai/code/session_1");
+    assert_eq!(r["args"]["after"], "session");
+    assert_eq!(r["args"]["wake"], "agent");
+    assert_eq!(r["args"]["seconds"], "20");
+    assert_eq!(feed_request("a", Cursor::At(42), 5)["args"]["after"], "42");
+}
+
+#[test]
+fn feed_reads_items_answer_as_events_do() {
+    let body = format!(
+        r#"{{"operation":"feed.read","ok":true,"result":{{"last":12540,"items":[{PLANNED},{DEPLOY}]}},"violations":[]}}"#
+    );
+    assert_eq!(
+        reply(200, "application/json", true, &body),
+        answer(12540, &[PLANNED, DEPLOY])
+    );
+    let quiet =
+        r#"{"operation":"feed.read","ok":true,"result":{"last":7,"items":[]},"violations":[]}"#;
+    assert_eq!(reply(200, "application/json", true, quiet), answer(7, &[]));
 }
