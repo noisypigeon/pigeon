@@ -16,6 +16,7 @@ pub const PREFIXES: &[&str] = &[
     "platform.",
     "pool.",
     "deploy.",
+    "service.",
 ];
 
 /// How many of this family's operations have no presenter yet; each brief that presents some lowers it.
@@ -43,6 +44,8 @@ pub const NAMES: &[&str] = &[
     "platform.apply",
     "pool.pause",
     "pool.resume",
+    "service.bind",
+    "service.unbind",
     "deploy.retry",
 ];
 
@@ -138,6 +141,7 @@ fn build(op: &str, v: &Value) -> Value {
             vec![],
         ),
         "pool.pause" => card("Pool paused", None, scalars(v), vec![]),
+        "service.bind" | "service.unbind" => service_bind(v),
         "pool.resume" => card(
             "Resume offered",
             opt_str(&v["offer"], "pool"),
@@ -179,6 +183,30 @@ fn s(v: &Value, k: &str) -> String {
 }
 
 /// `v[k]` when a string.
+/// `service.bind` and `service.unbind`'s offer, as a card.
+fn service_bind(v: &Value) -> Value {
+    card(
+        if v["offer"]["unbind"].as_bool() == Some(true) {
+            "Revocation offered"
+        } else {
+            "Binding offered"
+        },
+        opt_str(&v["offer"], "account"),
+        [
+            vec![
+                field(
+                    "client hash",
+                    text(opt_str(&v["offer"], "client_hash").unwrap_or_default()),
+                ),
+                field("expires", time(unum(&v["offer"], "expires"))),
+            ],
+            pending_link(&v["pending"]).into_iter().collect(),
+        ]
+        .concat(),
+        vec![],
+    )
+}
+
 fn opt_str<'a>(v: &'a Value, k: &str) -> Option<&'a str> {
     v[k].as_str()
 }

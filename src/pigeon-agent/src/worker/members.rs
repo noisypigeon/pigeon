@@ -38,6 +38,9 @@ pub async fn serve(state: &State, path: &str, body: Value) -> Result<Response> {
     if path == "/members/shadow" {
         return shadow(state, &body).await;
     }
+    if path.starts_with("/members/bind/") {
+        return binding(state, path, &body).await;
+    }
     let storage = state.storage();
     let accounts: Accounts = storage.get(account::STORE).await?.unwrap_or_default();
     let devices: Devices = storage.get(DEVICES).await?.unwrap_or_default();
@@ -313,4 +316,71 @@ async fn shadow(state: &State, body: &Value) -> Result<Response> {
     }
     storage.put(SHADOWED, &seen).await?;
     Response::from_json(&json!({ "shadow": diff }))
+}
+
+/// Where the `Instance` keeps `service.bind`'s offers.
+const BIND_OFFERS: &str = "members.bind";
+
+fn refused(why: &str, code: u16) -> Result<Response> {
+    Ok(Response::from_json(&json!(why))?.with_status(code))
+}
+
+/// `/members/bind/offer`, `/peek` and `/grant`: `service.bind`'s offers, and the binding the
+/// Administrator's passkey grants; see
+/// `.claude/decisions/2026-11-18-security-users-levels-capability-grants.md`, its step 9
+/// amendments.
+async fn binding(state: &State, path: &str, body: &Value) -> Result<Response> {
+    let storage = state.storage();
+    let mut offers: member::bind::Offers = storage.get(BIND_OFFERS).await?.unwrap_or_default();
+    let t = now();
+    let token = s(body, "token");
+    match path {
+        "/members/bind/offer" => {
+            let expires = body["expires"].as_u64().unwrap_or(t);
+            match offers.offer(
+                &s(body, "account"),
+                &s(body, "client_hash"),
+                &token,
+                t,
+                expires,
+            ) {
+                Ok(o) => {
+                    storage.put(BIND_OFFERS, &offers).await?;
+                    Response::from_json(&o)
+                }
+                Err(why) => refused(&why, 400),
+            }
+        }
+        "/members/bind/peek" => match offers.peek(&token, t) {
+            Ok(o) => Response::from_json(o),
+            Err(why) => refused(&why, 403),
+        },
+        "/members/bind/grant" => {
+            let offer = match offers.take(&token, t) {
+                Ok(o) => o,
+                Err(why) => return refused(&why, 403),
+            };
+            storage.put(BIND_OFFERS, &offers).await?;
+            let members: Members = storage.get(member::STORE).await?.unwrap_or_default();
+            let members = members.seed_services(t);
+            let Some(by) = member::shadow::administrator(&members).map(str::to_string) else {
+                return refused("no administrator", 409);
+            };
+            let done = if offer.unbind {
+                members.unbind_hash(&offer.client_hash, &by, t)
+            } else {
+                members
+                    .bind_hash(&offer.account, &offer.client_hash, &by, t)
+                    .map(|(m, _)| m)
+            };
+            match done {
+                Ok(members) => {
+                    storage.put(member::STORE, &members).await?;
+                    Response::from_json(&offer)
+                }
+                Err(why) => refused(&why, 409),
+            }
+        }
+        _ => refused("not found", 404),
+    }
 }

@@ -27,11 +27,12 @@ const ADDING: &str = "passkey-adding";
 
 /// The grant pages whose grant the `Instance` keeps: each path prefix, its peek, and the
 /// operation its proof is bound to.
-const INSTANCE_PAGES: [(&str, &str, &str); 4] = [
+const INSTANCE_PAGES: [(&str, &str, &str); 5] = [
     ("/mandate/", "/mandates/peek", "mandate.grant"),
     ("/lane/", "/lanes/peek", "lane.grant"),
     ("/grants/", "/grant-requests/peek", "grant.request"),
     ("/ci-window/", "/ci-window/peek", "ci.window"),
+    ("/service-bind/", "/members/bind/peek", "service.bind"),
 ];
 
 /// Where the `Instance` keeps what it has seen proven with a passkey.
@@ -440,6 +441,9 @@ async fn asked_for(env: &Env, s: &Settings, page: &str) -> Result<Option<Value>>
             "/mandate/" => serde_json::from_value(v).ok().map(|m| asked::mandate(&m)),
             "/lane/" => serde_json::from_value(v).ok().map(|l| asked::lane(&l)),
             "/ci-window/" => serde_json::from_value(v).ok().map(|o| asked::ci_window(&o)),
+            "/service-bind/" => serde_json::from_value(v)
+                .ok()
+                .map(|o| asked::service_bind(&o)),
             "/grants/" => {
                 let Ok(o) = serde_json::from_value::<crate::core::minting::Offer>(v) else {
                     return Ok(None);

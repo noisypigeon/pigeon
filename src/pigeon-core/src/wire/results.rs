@@ -104,6 +104,7 @@ fn approval(name: &str) -> Option<&'static [Arg]> {
         "lane.end" => Some(LANE_ENDED),
         "platform.apply" => Some(PLATFORM_APPLY),
         "pool.resume" => Some(POOL_RESUME),
+        "service.bind" | "service.unbind" => Some(SERVICE_BIND),
         "deploy.retry" => Some(DEPLOY_RETRY),
         _ => None,
     }
@@ -616,6 +617,16 @@ const RESUME_OFFER: &[Arg] = &[
 ];
 const POOL_RESUME: &[Arg] = &[
     arg("offer", false, Kind::Object(RESUME_OFFER)),
+    arg("pending", false, Kind::Object(LINK_ONLY)),
+];
+const BIND_OFFER: &[Arg] = &[
+    arg("account", false, Kind::String),
+    arg("client_hash", false, Kind::String),
+    arg("unbind", false, Kind::Bool),
+    arg("expires", false, Kind::Number),
+];
+const SERVICE_BIND: &[Arg] = &[
+    arg("offer", false, Kind::Object(BIND_OFFER)),
     arg("pending", false, Kind::Object(LINK_ONLY)),
 ];
 const RETRY_PIPELINE: &[Arg] = &[arg("target", false, Kind::String)];

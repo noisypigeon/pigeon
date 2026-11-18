@@ -745,6 +745,34 @@ job starts; the apply's page names that commit.</p>"
     });
 }
 
+/// `/service-bind/<id>`: the Administrator binds, or revokes, a service token by its client ID's
+/// hash, with a passkey; see
+/// `.claude/decisions/2026-11-18-security-users-levels-capability-grants.md`, its step 9
+/// amendments.
+#[must_use]
+pub fn service_bind_page(o: &crate::member::bind::Offer, token: &str) -> String {
+    let title = o.title();
+    let what = if o.unbind {
+        "The service token stops naming any service account at once."
+    } else {
+        "Calls with this service token act as this service account, held to its scopes, tools and denials. Only the client ID's hash is kept."
+    };
+    let b = format!(
+        "<h1>{}</h1><p>{}</p><p><small>{}</small></p><form method=\"post\" action=\"{}{}\">\
+<input type=\"hidden\" name=\"grant\" value=\"{}\">{}{CODE_FIELD}\
+<button type=\"submit\">Approve</button></form>\
+<p><small><a href=\"/approvals\">Everything waiting</a></small></p>",
+        escape(&title),
+        escape(what),
+        escape(&o.client_hash),
+        crate::member::bind::PAGE,
+        o.id,
+        escape(token),
+        passkey_button(&crate::approval::passkeys::grant_purpose(token))
+    );
+    shell(&title, &b)
+}
+
 /// The page resuming capacity pool offer `o`, posting `token` back to
 /// `/pool-resume/<pool>/<id>` with the passkey; see
 /// `.claude/decisions/2026-11-15-development-capacity-pools-hard-spend-cap.md` §8.

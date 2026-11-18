@@ -48,6 +48,7 @@ mod pool_dispatch;
 mod pool_ops;
 mod provider;
 mod push;
+mod services;
 mod shell;
 mod stages;
 mod standalone;
@@ -177,6 +178,7 @@ const PAGES: &[&[Route]] = &[
     ci_window::PAGES,
     minting::PAGES,
     pool_ops::PAGES,
+    services::PAGES,
 ];
 
 /// The owner's link to the grant page `path` (its path and query): the web client at `/app`,
@@ -1171,6 +1173,13 @@ async fn dispatch(
             args,
         } => {
             let (status, v) = pool_ops::run(env, s, who, &op, &args).await?;
+            Ok((None, respond(operation, status, v)))
+        }
+        Routed::Service {
+            operation: op,
+            args,
+        } => {
+            let (status, v) = services::run(env, s, &op, &args).await?;
             Ok((None, respond(operation, status, v)))
         }
     }

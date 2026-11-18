@@ -234,6 +234,25 @@ pub fn ci_window(o: &crate::ci_window::Offer) -> Value {
     page(&title, &what, "Approve", &[], &[], false, None)
 }
 
+/// What `/service-bind/<id>` shows: the Administrator binds, or revokes, a service token by its
+/// client ID's hash.
+#[must_use]
+pub fn service_bind(o: &crate::member::bind::Offer) -> Value {
+    page(
+        &o.title(),
+        if o.unbind {
+            "The service token stops naming any service account at once: its calls are no one's, and refused once the member check decides."
+        } else {
+            "Calls with this service token act as this service account, held to its scopes, tools and denials. Only the Administrator binds a token, and only its client ID's hash is kept."
+        },
+        "Approve",
+        &[],
+        &[],
+        false,
+        None,
+    )
+}
+
 /// The page resuming capacity pool offer `o`.
 #[must_use]
 pub fn pool_resume(o: &crate::pool::resume::Offer) -> Value {

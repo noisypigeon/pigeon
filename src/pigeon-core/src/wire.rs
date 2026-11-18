@@ -251,7 +251,7 @@ const GRANT: [&str; 7] = [
     "change.front",
 ];
 
-const PAGE: [&str; 8] = [
+const PAGE: [&str; 10] = [
     "mandate.propose",
     "lane.request",
     "ci.window",
@@ -260,6 +260,8 @@ const PAGE: [&str; 8] = [
     "grant.rotate",
     "grant.revoke",
     "platform.apply",
+    "service.bind",
+    "service.unbind",
 ];
 
 /// One operation a surface may request.
@@ -347,6 +349,7 @@ impl Operation {
             || self.name.starts_with("provider.")
             || self.name.starts_with("bench.")
             || self.name.starts_with("pool.")
+            || self.name.starts_with("service.")
             || self.name.starts_with("approval.")
             || self.name.starts_with("push.")
     }
@@ -676,6 +679,29 @@ const CATALOG: &[Operation] = &[
         summary: "Ask the owner to resume paused capacity pool `pool`; answers with the page's link, granted with a passkey",
         args: &[
             arg("pool", true, Kind::String),
+            arg("ticket", false, Kind::String),
+        ],
+        view: View::Card,
+    },
+    Operation {
+        name: "service.bind",
+        engine: Engine::Agent,
+        effect: Effect::Plan,
+        summary: "Ask the Administrator to bind the Access service token whose client ID hashes to `client_hash` (as `member.shadow` logs an unbound token) to service account `account` (`agent`, `pool`, `jobs` or `ci`); answers with the page's link, granted with a passkey",
+        args: &[
+            arg("account", true, Kind::String),
+            arg("client_hash", true, Kind::String),
+            arg("ticket", false, Kind::String),
+        ],
+        view: View::Card,
+    },
+    Operation {
+        name: "service.unbind",
+        engine: Engine::Agent,
+        effect: Effect::Plan,
+        summary: "Ask the Administrator to revoke the binding of the Access service token whose client ID hashes to `client_hash`; answers with the page's link, granted with a passkey",
+        args: &[
+            arg("client_hash", true, Kind::String),
             arg("ticket", false, Kind::String),
         ],
         view: View::Card,

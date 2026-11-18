@@ -10,6 +10,7 @@ use sha2::{Digest as _, Sha256};
 #[cfg(test)]
 mod tests;
 
+pub mod bind;
 pub mod handover;
 pub mod join;
 pub mod listing;
@@ -1037,18 +1038,36 @@ impl Members {
     /// replacing any active binding of the same ID.
     ///
     /// # Errors
-    /// `by` is no administrator, the client ID is empty, or the account is neither [`AGENT`] nor
-    /// an active service account.
+    /// As [`Self::bind_hash`], or the client ID is empty.
     pub fn bind(
-        mut self,
+        self,
         account: &str,
         client_id: &str,
         by: &str,
         now: u64,
     ) -> Result<(Self, Credential), String> {
-        self.admin(by)?;
         if client_id.trim().is_empty() {
             return Err("no client ID".to_owned());
+        }
+        self.bind_hash(account, &token_id(client_id), by, now)
+    }
+
+    /// The administrator binds the client ID whose SHA-256 is `client_hash` to a service
+    /// account, or to [`AGENT`], replacing any active binding of the same hash.
+    ///
+    /// # Errors
+    /// `by` is no administrator, `client_hash` is no SHA-256, or the account is neither
+    /// [`AGENT`] nor an active service account.
+    pub fn bind_hash(
+        mut self,
+        account: &str,
+        client_hash: &str,
+        by: &str,
+        now: u64,
+    ) -> Result<(Self, Credential), String> {
+        self.admin(by)?;
+        if !bind::is_hash(client_hash) {
+            return Err("not a client ID's SHA-256".to_owned());
         }
         if account != AGENT
             && !self
@@ -1057,7 +1076,6 @@ impl Members {
         {
             return Err("only a service account is bound a credential".to_owned());
         }
-        let client_hash = token_id(client_id);
         for c in &mut self.credentials {
             if c.client_hash == client_hash && c.revoked.is_none() {
                 c.revoked = Some(now);
@@ -1066,7 +1084,7 @@ impl Members {
         let c = Credential {
             account: account.to_owned(),
             kind: "access".to_owned(),
-            client_hash,
+            client_hash: client_hash.to_owned(),
             bound_by: by.to_owned(),
             at: now,
             revoked: None,
@@ -1078,10 +1096,17 @@ impl Members {
     /// The administrator revokes the binding of an Access client ID.
     ///
     /// # Errors
-    /// `by` is no administrator, or the ID has no active binding.
-    pub fn unbind(mut self, client_id: &str, by: &str, now: u64) -> Result<Self, String> {
+    /// As [`Self::unbind_hash`].
+    pub fn unbind(self, client_id: &str, by: &str, now: u64) -> Result<Self, String> {
+        self.unbind_hash(&token_id(client_id), by, now)
+    }
+
+    /// The administrator revokes the binding of the client ID whose SHA-256 is `client_hash`.
+    ///
+    /// # Errors
+    /// `by` is no administrator, or the hash has no active binding.
+    pub fn unbind_hash(mut self, client_hash: &str, by: &str, now: u64) -> Result<Self, String> {
         self.admin(by)?;
-        let client_hash = token_id(client_id);
         let mut any = false;
         for c in &mut self.credentials {
             if c.client_hash == client_hash && c.revoked.is_none() {
