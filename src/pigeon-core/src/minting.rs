@@ -255,7 +255,7 @@ pub struct Offer {
     /// For a grant the ledger doesn't declare: its spec, shown on the page.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub spec: Option<Grant>,
-    /// The page's token.
+    /// The page token's SHA-256 hex, [`crate::approval::grants::key`]; never the token.
     pub token: String,
     /// When it was asked, in Unix seconds.
     pub at: u64,
@@ -292,7 +292,7 @@ impl Requests {
             name: name.to_string(),
             kind,
             spec,
-            token: token.to_string(),
+            token: crate::approval::grants::key(token),
             at: now,
             expires,
         };
@@ -308,7 +308,7 @@ impl Requests {
     pub fn peek(&self, token: &str, now: u64) -> Result<&Offer, String> {
         self.waiting
             .iter()
-            .find(|o| !token.is_empty() && o.token == token)
+            .find(|o| !token.is_empty() && o.token == crate::approval::grants::key(token))
             .filter(|o| o.expires > now)
             .ok_or_else(|| "this grant link is not valid, or has expired".into())
     }
@@ -518,6 +518,15 @@ mod tests {
         let mut r = Requests::default();
         let o = r.offer("vapid", Kind::Request, None, "tok", 10, 100);
         assert_eq!(o.id, 1);
+        assert_eq!(
+            o.token,
+            crate::approval::grants::key("tok"),
+            "only the token's hash is kept"
+        );
+        assert!(
+            r.peek(&o.token, 50).is_err(),
+            "the stored hash redeems nothing"
+        );
         assert!(r.peek("tok", 99).is_ok());
         assert!(r.peek("tok", 100).is_err(), "expired");
         assert!(r.peek("other", 50).is_err());
