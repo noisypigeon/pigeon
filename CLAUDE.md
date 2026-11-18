@@ -99,11 +99,12 @@ Per
      brief's decisions, or widens the scope;
   4. runs the brief's `checks` before every push;
   5. never writes or amends an ADR, and never calls an owner operation;
-  6. ends its session (`session_end`) when its change merges or the planner
-     takes the brief back.
+  6. when its change merges or the planner takes the brief back, writes its
+     last message and stops: the control plane ends its session, and it never
+     calls `session_end`.
 - **Archiving**, per
   [`2026-11-15-development-archive-cleanly-ended-sessions.md`](.claude/decisions/2026-11-15-development-archive-cleanly-ended-sessions.md):
-  a clean `session_end` (nothing held but hand-offs) wakes its archiver, its
+  a clean end (nothing held but hand-offs) wakes its archiver, its
   `parent` or planner, with `session.archivable`. The archiver calls
   `get_session` and `archive_session` only on its own child
   (`parent_session_id`), never an `ios` or `desktop_app` origin, and not while

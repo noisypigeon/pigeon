@@ -106,19 +106,34 @@ pub async fn end(
     else {
         return Ok((400, json!("`label` names the session")));
     };
+    let (ended, holds, clean, archiver) = finish(env, s, &label, None, "").await?;
+    Ok((
+        200,
+        json!({ "label": label, "ended": ended, "holds": holds, "clean": clean, "archiver": archiver }),
+    ))
+}
+
+/// Ends `label`'s live ticket, judging its end clean by what it holds but `done`, a change just
+/// merged; appends `session.ended`, its summary closed by `why`, and on a clean end
+/// `session.archivable` to its archiver: whether it ended, what it holds, whether clean, and
+/// its archiver.
+async fn finish(
+    env: &Env,
+    s: &Settings,
+    label: &str,
+    done: Option<u32>,
+    why: &str,
+) -> Result<(Value, Vec<Value>, bool, Value)> {
     let (_, v) = to_instance(env, s, "/tickets/end", &json!({ "label": label })).await?;
-    let holds = held(env, s, &label).await?;
+    let holds = held(env, s, label).await?;
     let mut clean = false;
     let mut archiver = Value::Null;
     if v["ended"] == true {
-        let numbers: Vec<u32> = holds
-            .iter()
-            .filter_map(|h| h["number"].as_u64().and_then(|n| u32::try_from(n).ok()))
-            .collect();
+        let numbers = numbers(&holds, done);
         let (_, t) = to_instance(env, s, "/tasks/list", &json!({})).await?;
         let tasks: Vec<crate::tasks::Task> =
             serde_json::from_value(t["tasks"].clone()).unwrap_or_default();
-        clean = crate::tickets::clean(&label, &numbers, &tasks);
+        clean = crate::tickets::clean(label, &numbers, &tasks);
         let (_, e) = to_instance(
             env,
             s,
@@ -128,25 +143,25 @@ pub async fn end(
         .await?;
         archiver = e["archiver"].clone();
         let how = if clean { "clean" } else { "with work left" };
-        let said = format!("session {label}'s ticket ended, {how}");
+        let said = format!("session {label}'s ticket ended, {how}{why}");
         super::events::append(
             env,
             s,
             "session.ended",
             None,
-            Some(label.clone()),
+            Some(label.to_string()),
             &said,
             false,
         )
         .await?;
         // Its benches stop and its scratch ref goes; see the bench ADR §4.
-        if let Err(e) = super::bench::end_session(env, s, &label).await {
+        if let Err(e) = super::bench::end_session(env, s, label).await {
             worker::console_error!("bench end: {e}");
         }
         if let (true, Some(by)) = (clean, archiver.as_str()) {
             let said = format!(
                 "session {label} ended clean; archive {} (`session_archived` after)",
-                crate::sessions::session_id(&label)
+                crate::sessions::session_id(label)
             );
             super::events::append(
                 env,
@@ -160,10 +175,51 @@ pub async fn end(
             .await?;
         }
     }
-    Ok((
-        200,
-        json!({ "label": label, "ended": v["ended"], "holds": holds, "clean": clean, "archiver": archiver }),
-    ))
+    Ok((v["ended"].clone(), holds, clean, archiver))
+}
+
+/// The numbers of the changes in `holds`, but `done`.
+fn numbers(holds: &[Value], done: Option<u32>) -> Vec<u32> {
+    holds
+        .iter()
+        .filter_map(|h| h["number"].as_u64().and_then(|n| u32::try_from(n).ok()))
+        .filter(|n| Some(*n) != done)
+        .collect()
+}
+
+/// Ends executor `label`'s session as brief `brief`'s work is done: its change `n` merged
+/// (`merged`) or was taken back; only a live executor's ticket for `brief`, and only when the end
+/// is clean, so a session holding other work keeps it; see
+/// `.claude/decisions/2026-11-15-development-archive-cleanly-ended-sessions.md`'s 2026-11-18
+/// amendment.
+///
+/// # Errors
+///
+/// When a binding fails.
+pub async fn brief_done(
+    env: &Env,
+    s: &Settings,
+    label: &str,
+    brief: &str,
+    n: u32,
+    merged: bool,
+) -> Result<()> {
+    let (_, t) = to_instance(env, s, "/tickets/list", &json!({})).await?;
+    let tickets: Tickets = serde_json::from_value(t).unwrap_or_default();
+    if !tickets.brief_done(label, brief, now()) {
+        return Ok(());
+    }
+    let done = merged.then_some(n);
+    let holds = held(env, s, label).await?;
+    let (_, t) = to_instance(env, s, "/tasks/list", &json!({})).await?;
+    let tasks: Vec<crate::tasks::Task> =
+        serde_json::from_value(t["tasks"].clone()).unwrap_or_default();
+    if !crate::tickets::clean(label, &numbers(&holds, done), &tasks) {
+        return Ok(());
+    }
+    let how = if merged { "merged" } else { "taken back" };
+    let why = format!(" by the control plane: {brief}'s !{n} {how}");
+    finish(env, s, label, done, &why).await.map(|_| ())
 }
 
 /// Ends each live ticket whose session is silent past [`crate::tickets::IDLE`] holding no open

@@ -352,6 +352,15 @@ impl Tickets {
         self.0.get(label).filter(|i| i.expires > now).cloned()
     }
 
+    /// Whether the control plane ends `label`'s ticket as brief `brief`'s work is done: it is
+    /// live, an executor's, and declared `brief`; see the archive ADR's 2026-11-18 amendment.
+    #[must_use]
+    pub fn brief_done(&self, label: &str, brief: &str, now: u64) -> bool {
+        self.live(label, now).is_some_and(|i| {
+            i.declared.model.role() == "executor" && i.declared.brief.as_deref() == Some(brief)
+        })
+    }
+
     /// How long `label` has had no live ticket at `now`: since its last one lapsed, while that is
     /// remembered; none while it is live, or when it isn't known.
     #[must_use]
@@ -438,4 +447,27 @@ pub fn holder(
         ));
     }
     Ok(label)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Tickets;
+    use crate::sessions::declare;
+
+    const A: &str = "https://claude.ai/code/session_a";
+    const P: &str = "https://claude.ai/code/session_planner";
+
+    #[test]
+    fn only_a_live_executor_s_ticket_for_the_brief_is_ended_as_its_brief_is_done() {
+        let mut t = Tickets::default();
+        let sonnet = declare(Some("sonnet"), Some(P), Some("b3")).expect("ok");
+        t.start_as(A, false, 0, sonnet).expect("issues");
+        assert!(t.brief_done(A, "b3", 1));
+        assert!(!t.brief_done(A, "b4", 1), "another brief");
+        assert!(!t.brief_done(P, "b3", 1), "never started");
+        t.start(P, false, 0).expect("issues");
+        assert!(!t.brief_done(P, "b3", 1), "a planner");
+        assert!(t.end(A, 2));
+        assert!(!t.brief_done(A, "b3", 3), "already ended");
+    }
 }

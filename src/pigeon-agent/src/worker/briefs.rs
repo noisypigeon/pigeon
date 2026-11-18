@@ -189,6 +189,12 @@ async fn review(env: &Env, s: &Settings, args: &Map<String, Value>) -> Result<(u
             let note = format!("!{n} is taken back by {id}'s planner: {notes}");
             super::tasks::add(env, s, "handoff", n, None, Some(label.clone()), &note).await?;
             reopen(env, s, n, &label, &note).await?;
+            // Its executor's session ends; see the archive ADR's 2026-11-18 amendment.
+            if let Some(executor) = executor.as_deref()
+                && let Err(e) = super::tickets::brief_done(env, s, executor, &id, n, false).await
+            {
+                worker::console_error!("end of !{n}'s executor: {e}");
+            }
             note
         }
         _ => return Ok((400, json!("`verdict` is accept, revise or take"))),

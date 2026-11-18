@@ -259,3 +259,51 @@ glob under `src/pigeon-cli/` or `src/site-templates/` becomes `src/**/<tail>`
 (or `**<file>` for a workspace root file), which matches the file both before
 and after the restructure moves it. That ADR's step 12 tightens them to the
 new paths.
+
+### 2026-11-18: The control plane ends an executor's session when its brief's change merges or is taken back
+
+- **What broke.** On the night of 17–18 Nov, Claude Code's auto-mode classifier
+  refused `mcp__pigeon__session_end` to the executors on b117, b118, b119 and
+  b121, as "Destructive or Unwanted Actions" (`automode-blocked`). None of them
+  ended clean, so their planners' `session_archived` refused "hasn't ended
+  clean". b122 went idle without calling it.
+  - The tool name matched `.claude/settings.json`'s allow rule. But in sessions
+    seeded by `create_session` (auto mode), every `mcp__pigeon__*` call was
+    decided by the classifier, allowed ones included (`change_status`,
+    `session_start`). This is the briefs ADR's 2026-11-14 finding: seeded
+    sessions don't apply `permissions.allow`.
+  - `create_session`'s `extra_allowed_tools` can't help. It drops a tool its
+    caller doesn't already hold pre-approved, and a planner's call that passed
+    one was refused as "Undermining Oversight". Granting a tool is the owner's.
+- **The owner chose** (owner ask 31, option 1): the control plane ends the
+  session itself, so no permission changes.
+- **When.** `worker/tickets.rs::brief_done` ends an executor's ticket as
+  `session.end` would, through the same `finish`:
+  - when a change carrying a brief merges (`worker/merges.rs::ended`), for the
+    change's session;
+  - when its planner takes the brief back (`brief_review` `take`,
+    `worker/briefs.rs`), after the hand-off task is added.
+- **Only then.** It ends a ticket only when all of these hold:
+  - the ticket is live, an executor's, and declared that brief
+    (`Tickets::brief_done`, pure and tested);
+  - the end is clean by §2, not counting the merged change, so an executor
+    holding other work keeps its ticket.
+
+  Each end appends `session.ended` ("… by the control plane: b<n>'s !<n>
+  merged"), stops its benches, and wakes the archiver with
+  `session.archivable`. §3 is unchanged: the archiver waits while the session
+  is still working, which is when it writes its last message.
+- **The executor** (`session/launch.rs`'s prompt, `CLAUDE.md`) no longer calls
+  `session_end`. It writes its last message and stops. A call it makes anyway
+  ends nothing a second time.
+- **Planners still call `session_end`.** The control plane can't tell when a
+  planner's ADR is done. A silent planner that holds nothing lapses after
+  `IDLE`, as the 2026-11-16 amendment says.
+- **Paths.** `worker/merges.rs`, `worker/briefs.rs` and `session/launch.rs`
+  each gain one call or line. This amendment decides nothing else there, so
+  `Governs` doesn't change.
+- **Execution.**
+  1. This amendment and the code, with tests. (planner)
+  2. Verify live: the next executor whose change merges after the deploy ends
+     clean with no call of its own, and its planner archives it. Recorded here.
+     (planner)

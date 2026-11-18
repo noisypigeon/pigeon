@@ -71,6 +71,8 @@ fn the_prompt_checks_the_checkout_and_tools_before_anything() {
     assert!(prompt.contains(&format!("`planner` \"{PLANNER}\"")));
     assert!(prompt.contains("arm `Monitor` with `sh tooling/session/session.sh follow`"));
     assert!(!prompt.contains("python"));
+    assert!(prompt.contains("the control plane ends your session"));
+    assert!(prompt.contains("Don't call `session_end`"));
     for hole in [
         "{model}",
         "{brief}",

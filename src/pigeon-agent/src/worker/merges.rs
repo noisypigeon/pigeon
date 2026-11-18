@@ -286,6 +286,12 @@ pub async fn ended(env: &Env, c: &Change, merged: Option<&str>) -> Result<()> {
     let s = Settings::from(env)?;
     if merged.is_some() {
         super::tasks::close_for(env, &s, c.number).await?;
+        // Its executor's session ends; see the archive ADR's 2026-11-18 amendment.
+        if let (Some(brief), Some(label)) = (&c.brief, &c.session)
+            && let Err(e) = super::tickets::brief_done(env, &s, label, brief, c.number, true).await
+        {
+            worker::console_error!("end of !{}'s executor: {e}", c.number);
+        }
     }
     if let Some(main) = merged {
         let rows = platform::d1_rows(env, &control::open(&s.instance, &s.repo)).await?;
