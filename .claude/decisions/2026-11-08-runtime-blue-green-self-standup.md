@@ -762,3 +762,19 @@ apply, which the owner had approved, was one of them.
 - **The apply's page names the commit** beside the plan's ID, so the owner
   grants the plan and the commit it was made from.
 - **Stand-up jobs keep the deployed commit.**
+
+### 2026-11-18: An Access application lists its hostnames before its Worker
+
+platform/blue plans 36 to 39 each showed an update to pigeon-control's
+Access application that only reordered `destinations`. Cloudflare holds the
+two hostnames, then the Worker; the module rendered the Worker first. The
+reorder also left `domain` and `self_hosted_domains` unknown.
+
+- `access-application` concatenates each hostname first, then the Worker's
+  destinations (module 0.1.3). Only the platform kind's application has a
+  Worker, so no other application changes.
+- **A plan waits for its commit's build.** Run 39 was granted at 03:48 UTC
+  and ran main's newest stored `pigeon`, built from the commit before
+  !1110, so the adopted token wasn't imported. Until a plan job checks
+  that the stored build is the commit it's pinned to, a session asks for a
+  plan only after `deploy_status` shows that commit's build stored.

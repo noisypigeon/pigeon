@@ -10,10 +10,10 @@ terraform {
 
 locals {
   policies = concat(var.policy_ids, values(merge(var.policy_id_map, var.adopted_policy_id_map)))
-  # The Worker's own URLs, then each hostname it serves.
+  # Each hostname it serves, then the Worker's own URLs, the order Cloudflare holds them in.
   destinations = concat(
-    var.worker_id == null ? [] : [for t in var.worker_types : { type = t, worker_id = var.worker_id, uri = null }],
     [for h in var.hostnames : { type = "public", worker_id = null, uri = h }],
+    var.worker_id == null ? [] : [for t in var.worker_types : { type = t, worker_id = var.worker_id, uri = null }],
   )
 }
 
