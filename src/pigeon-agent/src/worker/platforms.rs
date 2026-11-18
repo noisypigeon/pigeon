@@ -193,7 +193,7 @@ async fn verified(token: &str) -> std::result::Result<(), String> {
 /// What a plan's page offers for `run`: its unit's deployed capabilities, or why there are none,
 /// and whether one proof mints its token; see
 /// `.claude/decisions/2026-11-17-security-platform-run-minted-token.md` §4 and §6.
-async fn terms(
+pub(super) async fn terms(
     env: &Env,
     s: &Settings,
     run: &Run,

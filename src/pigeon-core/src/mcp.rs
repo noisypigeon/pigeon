@@ -340,7 +340,7 @@ pub fn proof_tools() -> Vec<Value> {
         json!({
             "name": PROOF_TOOLS[1],
             "title": "proof.submit",
-            "description": "The owner's passkey assertion for the grant at `page`, with the page's other `fields` (as `operation`), or for `purpose`; the grant is redeemed and its operation run, or the Auto window started or ended; any other string argument is one of the page's fields; see .claude/decisions/2026-11-17-runtime-mcp-feed-view-contract.md §4",
+            "description": "The owner's passkey assertion for the grant at `page`, with the page's other `fields` (as `operation`), or for `purpose`; the grant is redeemed and its operation run, or the Auto window started or ended; any other string or boolean argument is one of the page's fields; see .claude/decisions/2026-11-17-runtime-mcp-feed-view-contract.md §4",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -353,7 +353,7 @@ pub fn proof_tools() -> Vec<Value> {
                     "signature": text,
                 },
                 "required": ["credential", "client_data", "authenticator_data", "signature"],
-                "additionalProperties": { "type": "string" },
+                "additionalProperties": { "type": ["string", "boolean"] },
             },
             "annotations": { "readOnlyHint": false, "destructiveHint": false },
             "_meta": { "dev.pigeon/view": "card" },

@@ -15,6 +15,8 @@ use crate::approve as page;
 use crate::core::approval::enroll::Enrolments;
 use crate::core::approval::passkeys::{self, Bound, Keyring, Proofs};
 use crate::core::approval::totp::Guard;
+use crate::core::platform::platforms::{Run, Stage};
+use crate::core::pool::resume;
 use crate::push::{b64url, b64url_decode};
 
 /// Where the `Instance` keeps the keyring.
@@ -389,7 +391,92 @@ async fn bound_for(env: &Env, s: &Settings, path: &str) -> Result<Option<(Option
         };
         let asked = json!({ "id": n, "token": token });
         let (status, v) = super::platforms::to_main(env, s, "peek", &asked).await?;
-        return Ok(shown("platform.run", id, &v).filter(|_| status == 200));
+        let mut found = shown("platform.run", id, &v).filter(|_| status == 200);
+        // A plan that mints its token is proven for the mint's purpose, as its page asks.
+        if let (Some((purpose, _)), Ok(run)) = (found.as_mut(), serde_json::from_value::<Run>(v))
+            && run.stage == Stage::Offered
+            && let (Ok(wanted), true) = super::platforms::terms(env, s, &run).await
+        {
+            let names: Vec<String> = wanted.iter().map(|w| w.name.clone()).collect();
+            *purpose = Some(passkeys::mint_purpose(&token, &names));
+        }
+        return Ok(found);
+    }
+    if let Some((name, id)) = resume::parse(path) {
+        let peek = json!({ "token": token });
+        let (status, v) = super::pool::to_pool(env, name, "/resume/peek", &peek).await?;
+        return Ok(shown(resume::OPERATION, &id.to_string(), &v).filter(|_| status == 200));
+    }
+    Ok(None)
+}
+
+/// What the page at `page` shows, as `present::asked` builds it from the page's own peek; `None`
+/// for a page it doesn't know or a grant no longer open; see
+/// `.claude/decisions/2026-11-17-runtime-mcp-feed-view-contract.md`, its 2026-11-18 amendment §2.
+async fn asked_for(env: &Env, s: &Settings, page: &str) -> Result<Option<Value>> {
+    use crate::core::present::asked;
+    let (path, query) = page.split_once('?').unwrap_or((page, ""));
+    let token = page::field(query, "grant").unwrap_or_default();
+    let peek = json!({ "token": token });
+    if let Some(n) = path
+        .strip_prefix("/approve/")
+        .and_then(|n| n.parse::<u32>().ok())
+    {
+        let (_, v) = super::to_change(env, &s.repo, n, Method::Post, "/peek", Some(&peek)).await?;
+        let change = serde_json::from_value::<crate::core::change::Change>(v["change"].clone());
+        let grant =
+            serde_json::from_value::<crate::core::approval::grants::Grant>(v["grant"].clone());
+        return Ok(match (change, grant) {
+            (Ok(c), Ok(g)) => Some(asked::change(&c, &g)),
+            _ => None,
+        });
+    }
+    for (prefix, route, _) in INSTANCE_PAGES {
+        if !path.starts_with(prefix) {
+            continue;
+        }
+        let v = to_instance(env, s, route, &peek).await?;
+        return Ok(match prefix {
+            "/mandate/" => serde_json::from_value(v).ok().map(|m| asked::mandate(&m)),
+            "/lane/" => serde_json::from_value(v).ok().map(|l| asked::lane(&l)),
+            "/ci-window/" => serde_json::from_value(v).ok().map(|o| asked::ci_window(&o)),
+            "/grants/" => {
+                let Ok(o) = serde_json::from_value::<crate::core::minting::Offer>(v) else {
+                    return Ok(None);
+                };
+                let entry = super::minting::deployed(env, s)
+                    .await?
+                    .and_then(|r| r.ledger.grants.get(&o.name).cloned())
+                    .or_else(|| o.spec.clone());
+                Some(asked::grant(&o, entry.as_ref()))
+            }
+            _ => None,
+        });
+    }
+    if let Some(id) = path
+        .strip_prefix("/platform/")
+        .and_then(|n| n.parse::<u32>().ok())
+    {
+        let (status, v) =
+            super::platforms::to_main(env, s, "peek", &json!({ "id": id, "token": token })).await?;
+        let Ok(run) = serde_json::from_value::<Run>(v) else {
+            return Ok(None);
+        };
+        if status != 200 {
+            return Ok(None);
+        }
+        let (needs, mint) = if run.stage == Stage::Offered {
+            super::platforms::terms(env, s, &run).await
+        } else {
+            (Err(String::new()), false)
+        };
+        return Ok(Some(asked::platform(&run, &needs, mint)));
+    }
+    if let Some((name, _)) = resume::parse(path) {
+        let (_, v) = super::pool::to_pool(env, name, "/resume/peek", &peek).await?;
+        return Ok(serde_json::from_value(v)
+            .ok()
+            .map(|o| asked::pool_resume(&o)));
     }
     Ok(None)
 }
@@ -491,7 +578,7 @@ pub async fn proof_challenge(
     };
     let asked = json!({ "purpose": purpose, "bound": &bound });
     let v = to_instance(env, s, "/passkeys/challenge", &asked).await?;
-    Ok(Ok(json!({
+    let mut answer = json!({
         "page": page,
         "operation": bound.operation,
         "target": bound.target,
@@ -501,7 +588,11 @@ pub async fn proof_challenge(
         "ids": v["ids"],
         "user": v["user"],
         "rp": rp_for(env, host),
-    })))
+    });
+    if let Some(shown) = asked_for(env, s, page).await? {
+        answer["asked"] = shown;
+    }
+    Ok(Ok(answer))
 }
 
 /// `proof.submit`: the passkey assertion in `args`, with the page's other `fields`, posted to the
@@ -552,12 +643,23 @@ pub async fn proof_submit(
         return Ok(Err("that page holds no open grant".into()));
     }
     let mut pairs = vec![("grant".to_string(), token)];
-    if let Some(fields) = args["fields"].as_object() {
-        for (k, v) in fields {
-            let ours = k == "grant" || k == "code" || k.starts_with("pk_");
-            if let (false, Some(v)) = (ours, v.as_str()) {
-                pairs.push((k.clone(), v.to_string()));
-            }
+    // The page's fields: `fields`, and any other top-level argument (a view's action or form);
+    // a true toggle posts "1", a false one nothing.
+    let top = args
+        .as_object()
+        .into_iter()
+        .flatten()
+        .filter(|(k, _)| !TOOL_ARGS.contains(&k.as_str()));
+    let nested = args["fields"].as_object().into_iter().flatten();
+    for (k, v) in nested.chain(top) {
+        let ours = k == "grant" || k == "code" || k.starts_with("pk_");
+        let value = match v {
+            Value::String(t) => Some(t.clone()),
+            Value::Bool(true) => Some("1".to_string()),
+            _ => None,
+        };
+        if let (false, Some(value)) = (ours, value) {
+            pairs.push((k.clone(), value));
         }
     }
     for (k, from) in [
@@ -582,6 +684,17 @@ pub async fn proof_submit(
         Err(format!("refused ({status}): {said}"))
     })
 }
+
+/// `proof.submit`'s own arguments; every other top-level argument is one of the page's fields.
+const TOOL_ARGS: [&str; 7] = [
+    "page",
+    "purpose",
+    "fields",
+    "credential",
+    "client_data",
+    "authenticator_data",
+    "signature",
+];
 
 /// A proof tool's `purpose`: the Auto window's proof purpose and the operation it stands for.
 fn auto_purpose(p: &str) -> Option<(&'static str, &'static str)> {
