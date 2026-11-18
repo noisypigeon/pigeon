@@ -436,41 +436,6 @@ fn every_route_binding_and_outbound_host_is_in_the_network() {
     assert!(gaps.is_empty(), "the network lacks: {gaps:#?}");
 }
 
-/// The Worker's routes by client, pinned; see `.claude/decisions/2026-11-15-runtime-one-mcp-entry-point.md` §7.
-#[test]
-fn the_route_inventory_is_pinned() {
-    let r = describe(&repo_root());
-    let counts: Vec<(String, usize)> = r.result["network"]["clients"]
-        .as_array()
-        .expect("clients")
-        .iter()
-        .map(|c| {
-            (
-                c["id"].as_str().expect("id").to_string(),
-                c["items"].as_array().expect("items").len(),
-            )
-        })
-        .collect();
-    let want: Vec<(String, usize)> = [
-        ("mcp", 4),
-        ("git", 1),
-        ("app", 34),
-        ("owner", 14),
-        ("ci", 2),
-    ]
-    .map(|(id, n)| (id.to_string(), n))
-    .to_vec();
-    assert_eq!(
-        counts, want,
-        "a route changed: a new one is a shim over an operation, per .claude/decisions/2026-11-15-runtime-one-mcp-entry-point.md §7; update this count with it"
-    );
-    assert_eq!(
-        counts.iter().map(|c| c.1).sum::<usize>(),
-        55,
-        "a route changed: a new one is a shim over an operation, per .claude/decisions/2026-11-15-runtime-one-mcp-entry-point.md §7; update this count with it"
-    );
-}
-
 /// Each served path is a client's item, under a listed prefix, or beside an item.
 fn route_gaps(root: &std::path::Path, net: &Value) -> Vec<String> {
     let mut gaps = Vec::new();

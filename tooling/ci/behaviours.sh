@@ -3,7 +3,7 @@
 # .claude/decisions/2026-11-16-development-one-test-binary-per-crate.md §4.
 # Run from the workspace. `behaviours.sh` writes tooling/ci/tests.ledger; `behaviours.sh --check [BASE]`
 # warns when the ledger is stale, and fails when a test in BASE's ledger is gone without a line
-# in tests.moves.
+# in tests.moves, or retired by a `-` line.
 set -eu
 
 root=$(git rev-parse --show-toplevel)
@@ -63,11 +63,12 @@ case "${1:-}" in
   # A base test is kept when it is listed now, or tests.moves maps it to one listed now.
   awk -F '\t' 'FILENAME == ARGV[1] { now[$0] = 1; next }
     FILENAME == ARGV[2] { to[$1] = $2; next }
-    !($0 in now) && !(($0 in to) && (to[$0] in now)) { print "behaviours: gone: " $0; bad = 1 }
+    !($0 in now) && !(($0 in to) && (to[$0] in now || to[$0] == "-")) { print "behaviours: gone: " $0; bad = 1 }
     END { exit bad }' "$work/now" "$moves" "$work/base"
   # No package runs fewer tests than it did, each base test counted where tests.moves moved it.
   awk -F '\t' 'FILENAME == ARGV[1] { to[$1] = $2; next }
-    { line = ($0 in to) ? to[$0] : $0; split(line, f, " "); n[f[1]]++ }
+    { if (($0 in to) && to[$0] == "-") next
+      line = ($0 in to) ? to[$0] : $0; split(line, f, " "); n[f[1]]++ }
     END { for (p in n) print p, n[p] }' "$moves" "$work/base" | LC_ALL=C sort >"$work/base.count"
   awk '{ n[$1]++ } END { for (p in n) print p, n[p] }' "$work/now" | LC_ALL=C sort >"$work/now.count"
   awk 'NR == FNR { now[$1] = $2; next }

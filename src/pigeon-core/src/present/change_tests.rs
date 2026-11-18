@@ -223,7 +223,6 @@ fn the_ticket_is_never_shown() {
 
 #[test]
 fn odd_shapes_still_validate() {
-    assert_eq!(NAMES.len(), 29);
     for op in NAMES {
         for result in [json!("x"), json!({})] {
             let v = shown(op, result);

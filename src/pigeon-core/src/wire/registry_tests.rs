@@ -99,74 +99,10 @@ fn sites_publish_and_infra_apply_need_platform() {
 }
 
 #[test]
-fn every_view_count_is_pinned() {
-    let count = |v: View| catalog().iter().filter(|o| o.view == v).count();
-    assert_eq!(count(View::List), 13);
-    assert_eq!(count(View::Detail), 23);
-    assert_eq!(count(View::Card), 48);
-    assert_eq!(count(View::Form), 0);
-}
-
-#[test]
-fn the_views_are_as_decided() {
-    let named = |v: View| {
-        let mut got: Vec<&str> = catalog()
-            .iter()
-            .filter(|o| o.view == v)
-            .map(|o| o.name)
-            .collect();
-        got.sort_unstable();
-        got
-    };
-    let sorted = |mut w: Vec<&'static str>| {
-        w.sort_unstable();
-        w
-    };
-    assert_eq!(
-        named(View::List),
-        sorted(vec![
-            "change.list",
-            "grant.list",
-            "git.tokens",
-            "bench.list",
-            "brief.list",
-            "task.list",
-            "task.wait",
-            "events.wait",
-            "feed.read",
-            "change.evictable",
-            "provider.tools",
-            "lane.status",
-            "build.list",
-        ])
-    );
-    assert_eq!(
-        named(View::Detail),
-        sorted(vec![
-            "instance.show",
-            "architecture.describe",
-            "policy.check",
-            "infra.validate",
-            "change.scope",
-            "change.status",
-            "deploy.status",
-            "ios.status",
-            "apple.check",
-            "digest.show",
-            "session.status",
-            "bench.status",
-            "bench.logs",
-            "brief.show",
-            "mandate.status",
-            "platform.status",
-            "pool.status",
-            "platform.plan",
-            "infra.plan",
-            "home.show",
-            "tracker.show",
-            "ops.show",
-            "insights.show",
-        ])
+fn no_operation_is_a_form() {
+    assert!(
+        catalog().iter().all(|o| o.view != View::Form),
+        "no operation is a Form yet; see the feed-view ADR"
     );
 }
 

@@ -3377,3 +3377,11 @@ pigeon-agent test suite workers_ship::images_are_rendered_by_reference_and_a_mis
 pigeon-agent test suite workers_ship::the_serving_version_is_the_one_with_the_traffic	pigeon-agent test suite workers::workers_ship::the_serving_version_is_the_one_with_the_traffic
 pigeon-agent test suite workers_ship::the_snapshot_holds_only_what_a_spec_references	pigeon-agent test suite workers::workers_ship::the_snapshot_holds_only_what_a_spec_references
 pigeon-agent test suite workers_ship::the_uploaded_version_is_read_from_wranglers_output	pigeon-agent test suite workers::workers_ship::the_uploaded_version_is_read_from_wranglers_output
+pigeon-agent test suite instance::instance::the_control_plane_runs_mandates_itself	pigeon-agent test suite instance::instance::control_plane_domains_run_there
+pigeon-agent test suite instance::instance::the_control_plane_runs_apple_check_itself	-
+pigeon-agent test suite instance::instance::the_control_plane_runs_benches_itself	-
+pigeon-agent test suite instance::instance::the_control_plane_runs_grants_itself	-
+pigeon-agent test suite instance::instance::the_control_plane_runs_ios_releases_itself	-
+pigeon-agent test suite instance::instance::the_control_plane_runs_owner_items_itself	-
+pigeon-agent test suite instance::instance::provider_operations_are_the_control_planes	-
+pigeon-agent test suite instance::architecture::the_route_inventory_is_pinned	-

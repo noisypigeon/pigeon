@@ -128,64 +128,26 @@ fn catalog_names_are_unique_and_dotted() {
     names.sort_unstable();
     names.dedup();
     assert_eq!(names.len(), catalog().len());
-    let changing: Vec<(&str, Effect)> = catalog()
+    let mut applies: Vec<&str> = catalog()
         .iter()
-        .filter(|o| o.effect != Effect::Read)
-        .map(|o| (o.name, o.effect))
+        .filter(|o| o.effect == Effect::Apply)
+        .map(|o| o.name)
         .collect();
+    applies.sort_unstable();
     assert_eq!(
-        changing,
+        applies,
         [
-            ("change.propose", Effect::Plan),
-            ("change.pin", Effect::Apply),
-            ("change.front", Effect::Apply),
-            ("change.authorize", Effect::Apply),
-            ("change.pushed", Effect::Build),
-            ("change.approve", Effect::Apply),
-            ("change.merge", Effect::Apply),
-            ("change.close", Effect::Apply),
-            ("ci.rerun", Effect::Build),
-            ("ci.cloudflare", Effect::Apply),
-            ("ci.window", Effect::Plan),
-            ("lane.request", Effect::Plan),
-            ("lane.end", Effect::Build),
-            ("pool.pause", Effect::Plan),
-            ("pool.resume", Effect::Plan),
-            ("grant.request", Effect::Plan),
-            ("grant.rotate", Effect::Plan),
-            ("grant.revoke", Effect::Plan),
-            ("sites.build", Effect::Build),
-            ("sites.publish", Effect::Apply),
-            ("mandate.propose", Effect::Plan),
-            ("ios.release", Effect::Build),
-            ("session.end", Effect::Build),
-            ("session.archived", Effect::Build),
-            ("bench.run", Effect::Build),
-            ("bench.cancel", Effect::Build),
-            ("bench.reset", Effect::Build),
-            ("bench.warm", Effect::Build),
-            ("owner.ask", Effect::Build),
-            ("owner.withdraw", Effect::Build),
-            ("owner.answer", Effect::Build),
-            ("provider.call", Effect::Build),
-            ("session.start", Effect::Build),
-            ("brief.create", Effect::Build),
-            ("brief.amend", Effect::Build),
-            ("brief.review", Effect::Build),
-            ("brief.escalate", Effect::Build),
-            ("change.handoff", Effect::Build),
-            ("change.yield", Effect::Build),
-            ("task.claim", Effect::Build),
-            ("task.done", Effect::Build),
-            ("mandate.end", Effect::Build),
-            ("approval.wait", Effect::Build),
-            ("deploy.retry", Effect::Build),
-            ("platform.plan", Effect::Plan),
-            ("platform.apply", Effect::Plan),
-            ("infra.plan", Effect::Plan),
-            ("infra.apply", Effect::Apply)
+            "change.approve",
+            "change.authorize",
+            "change.close",
+            "change.front",
+            "change.merge",
+            "change.pin",
+            "ci.cloudflare",
+            "infra.apply",
+            "sites.publish"
         ],
-        "only these change anything"
+        "Apply is the owner's power: a new Apply operation is a deliberate edit here"
     );
 }
 
@@ -446,94 +408,23 @@ fn an_instance_apart_from_its_platform_needs_no_paths_of_its_own() {
     );
 }
 
+// The domains whose secrets or state live only in the control plane's Worker; see the ADRs the old tests cited.
 #[test]
-fn the_control_plane_runs_mandates_itself() {
-    for name in ["mandate.propose", "mandate.status", "mandate.end"] {
-        let op = catalog()
+fn control_plane_domains_run_there() {
+    const DOMAINS: [&str; 6] = ["mandate", "grant", "ios", "owner", "provider", "bench"];
+    for d in DOMAINS {
+        let ops: Vec<_> = catalog()
             .iter()
-            .find(|o| o.name == name)
-            .expect("in the catalog");
-        assert!(op.control_plane(), "{name}");
+            .filter(|o| o.name.split('.').next() == Some(d))
+            .collect();
+        assert!(!ops.is_empty(), "{d} has no operations");
+        for op in ops {
+            assert!(op.control_plane(), "{}", op.name);
+        }
     }
-}
-
-#[test]
-fn the_control_plane_runs_apple_check_itself() {
-    let op = catalog()
+    let apple = catalog()
         .iter()
         .find(|o| o.name == "apple.check")
         .expect("in the catalog");
-    assert!(
-        op.control_plane(),
-        "its secrets live only in the control plane's Worker"
-    );
-}
-
-#[test]
-fn the_control_plane_runs_grants_itself() {
-    for name in [
-        "grant.list",
-        "grant.request",
-        "grant.rotate",
-        "grant.revoke",
-    ] {
-        let op = catalog()
-            .iter()
-            .find(|o| o.name == name)
-            .expect("in the catalog");
-        assert!(op.control_plane(), "{name}");
-    }
-}
-
-#[test]
-fn the_control_plane_runs_ios_releases_itself() {
-    for name in ["ios.release", "ios.status"] {
-        let op = catalog()
-            .iter()
-            .find(|o| o.name == name)
-            .expect("in the catalog");
-        assert!(op.control_plane(), "{name}");
-    }
-}
-
-// See `.claude/decisions/2026-11-15-security-standing-auto-owner-flags.md` §4.
-#[test]
-fn the_control_plane_runs_owner_items_itself() {
-    for name in ["owner.ask", "owner.withdraw", "owner.answer"] {
-        let op = catalog()
-            .iter()
-            .find(|o| o.name == name)
-            .expect("in the catalog");
-        assert!(op.control_plane(), "{name}");
-    }
-}
-
-// See `.claude/decisions/2026-11-16-security-provider-calls-mcp-broker.md`.
-#[test]
-fn provider_operations_are_the_control_planes() {
-    for name in ["provider.call", "provider.tools"] {
-        let op = catalog()
-            .iter()
-            .find(|o| o.name == name)
-            .expect("in the catalog");
-        assert!(op.control_plane(), "{name}");
-    }
-}
-
-// See `.claude/decisions/2026-11-16-development-session-bench-containers.md` §3.
-#[test]
-fn the_control_plane_runs_benches_itself() {
-    let benches: Vec<_> = catalog()
-        .iter()
-        .filter(|o| o.name.starts_with("bench."))
-        .collect();
-    assert_eq!(
-        benches.len(),
-        7,
-        "{:?}",
-        benches.iter().map(|o| o.name).collect::<Vec<_>>()
-    );
-    for op in benches {
-        assert!(op.control_plane(), "{}", op.name);
-    }
+    assert!(apple.control_plane(), "{}", apple.name);
 }

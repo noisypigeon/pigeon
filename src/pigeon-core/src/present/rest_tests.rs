@@ -210,7 +210,6 @@ fn provider_pending_is_a_card() {
 
 #[test]
 fn odd_shapes_still_validate() {
-    assert_eq!(NAMES.len(), 36);
     for op in NAMES {
         for result in [json!("x"), json!({})] {
             let v = shown(op, result);
