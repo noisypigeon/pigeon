@@ -25,12 +25,12 @@ thread_local! {
 }
 
 /// The host the proxy answers for `req`, or `None` for the platform's own routes: only where
-/// `INSTANCE_ZONE` is set, and never the platform's own hosts.
+/// `INSTANCE_ZONE` is set, and never the platform's own hosts, nor the front's host (`FRONT_HOST`, set only once Access covers it).
 #[must_use]
 pub fn ours(req: &Request, env: &Env) -> Option<String> {
     let zone = env.var(hosts::ZONE_VAR).ok()?.to_string();
     let host = req.url().ok()?.host_str()?.to_ascii_lowercase();
-    let own: Vec<String> = ["PASSKEY_RP_ID", "PUBLIC_HOST"]
+    let own: Vec<String> = ["PASSKEY_RP_ID", "PUBLIC_HOST", "FRONT_HOST"]
         .iter()
         .filter_map(|k| env.var(k).ok().map(|v| v.to_string()))
         .collect();

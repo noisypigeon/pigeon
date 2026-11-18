@@ -29,6 +29,10 @@ const DB: &str = "fedcba9876543210fedcba9876543210";
 const IMAGE: &str = "registry.cloudflare.com/0123456789abcdef/pigeon-control-runner:abc";
 
 fn fixture() -> (TempDir, workers::Found) {
+    fixture_with(SPEC)
+}
+
+fn fixture_with(spec: &str) -> (TempDir, workers::Found) {
     let root = TempDir::new().expect("tempdir");
     let p = root.path();
     for d in ["infra/pigeon/workers/control", "crates/agent/migrations"] {
@@ -36,7 +40,7 @@ fn fixture() -> (TempDir, workers::Found) {
     }
     fs::write(p.join("crates/agent/Cargo.toml"), "[package]\n").expect("write");
     fs::write(p.join("Dockerfile"), "FROM scratch AS ci\n").expect("write");
-    fs::write(p.join("infra/pigeon/workers/control/worker.yaml"), SPEC).expect("write");
+    fs::write(p.join("infra/pigeon/workers/control/worker.yaml"), spec).expect("write");
     let found = workers::discover(p)
         .expect("discovers")
         .into_iter()
@@ -93,6 +97,18 @@ fn images_are_rendered_by_reference_and_a_missing_one_is_named() {
             .iter()
             .any(|p| p.contains("pigeon-control/Runner") && p.contains("images push")),
         "{problems:?}"
+    );
+}
+
+#[test]
+fn a_service_binding_renders_as_wranglers_services() {
+    let (_root, found) = fixture_with(&format!(
+        "{SPEC}  services: {{ PIGEON_CONTROL: pigeon-control }}\n"
+    ));
+    let v = workers::render(&found, &outputs()).expect("renders");
+    assert_eq!(
+        v["services"],
+        json!([{ "binding": "PIGEON_CONTROL", "service": "pigeon-control" }])
     );
 }
 

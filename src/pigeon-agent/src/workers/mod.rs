@@ -342,6 +342,9 @@ pub struct Bindings {
     /// Plain-text variables; never an ID or a secret.
     #[serde(default)]
     pub vars: BTreeMap<String, String>,
+    /// Other Workers, by binding name: each value a Worker's name; see .claude/decisions/2026-11-18-runtime-independent-blue-green-workers.md, its 9a amendment.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub services: BTreeMap<String, String>,
     /// The binding that names the running version, for health checks.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub version_metadata: Option<String>,
@@ -803,6 +806,21 @@ fn validate_bindings(s: &Spec, root: &Path, add: &mut impl FnMut(String)) {
             add(format!("D1 `{}`: no migrations directory `{m}`", d.name));
         }
     }
+    for (k, v) in &b.services {
+        if !screaming(k) {
+            add(format!("service binding `{k}` isn't an upper-case name"));
+        }
+        let mut chars = v.chars();
+        let name_ok = chars
+            .next()
+            .is_some_and(|c| c.is_ascii_lowercase() || c.is_ascii_digit())
+            && chars.all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-');
+        if !name_ok {
+            add(format!(
+                "binding `{k}`'s service `{v}` isn't a Worker's name"
+            ));
+        }
+    }
     for (k, v) in &b.vars {
         if looks_like_id(v) {
             add(format!("var `{k}` looks like an ID; use a reference"));
@@ -1159,6 +1177,13 @@ fn render_bindings(bindings: &Bindings, out: &mut Value, get: &mut impl FnMut(&s
     }
     if !bindings.vars.is_empty() {
         out["vars"] = json!(bindings.vars);
+    }
+    if !bindings.services.is_empty() {
+        out["services"] = bindings
+            .services
+            .iter()
+            .map(|(k, s)| json!({ "binding": k, "service": s }))
+            .collect();
     }
     if let Some(v) = &bindings.version_metadata {
         out["version_metadata"] = json!({ "binding": v });
