@@ -1,0 +1,10 @@
+description: 'A test that pins a per-feature count or lists catalog names is refused unless its Test-Reason starts with enumeration: and says why; see .claude/decisions/2026-11-18-runtime-independent-blue-green-workers.md §C.2.'
+target: change
+when:
+  - field:
+      name: enumerations
+      at_least: 1
+rules:
+  - field:
+      name: test_reason
+      matches: '(?s)\s*enumeration:\s*\S.*'

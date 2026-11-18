@@ -1,0 +1,10 @@
+description: A change that adds a test says why in its first commit's Test-Reason trailer; see .claude/decisions/2026-11-18-runtime-independent-blue-green-workers.md §C.2.
+target: change
+when:
+  - field:
+      name: added_tests
+      at_least: 1
+rules:
+  - field:
+      name: test_reason
+      matches: '(?s)\s*\S.*'
