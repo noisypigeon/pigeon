@@ -13,6 +13,9 @@ workers_dev: false
 routes:
   - custom_domain: $deployment.domains[0]
   - custom_domain: $deployment.domains[1]
+  # The stack's next own host, under Access since run 43; see
+  # .claude/decisions/2026-11-18-runtime-independent-blue-green-workers.md, its step 9b amendment.
+  - custom_domain: $deployment.domains[3]
   # Standalones' hosts under the zone; see
   # .claude/decisions/2026-11-15-runtime-standalone-hostnames-platform-zone.md §1.
   - subdomains_of: $deployment.instance_zone
@@ -68,6 +71,8 @@ bindings:
     # pigeon-front's test host, under Access, which the primary takes as its own; see
     # .claude/decisions/2026-11-18-runtime-independent-blue-green-workers.md, its step 9a amendment.
     FRONT_HOST: $deployment.domains[2]
+    # The stack's other own host, which the primary takes as its own (the step 9b amendment).
+    STACK_ALIAS: $deployment.domains[3]
     # Codes are refused once the cutover's proofs are on record; see
     # .claude/decisions/2026-11-14-security-passkey-only-owner-proofs.md §4.
     PROOFS: passkey
