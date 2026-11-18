@@ -98,6 +98,16 @@ fn details() {
     );
     assert_eq!(title(&v), "b1 T");
     assert_eq!(v["sections"][2]["text"], "d1\n\nd2");
+    let v = shown(
+        "change.status",
+        json!({"change": change(), "branch": "change/7-x", "model": "sonnet", "position": 1,
+            "approval": "waiting",
+            "stage": {"stage": "checking", "needs": "agent", "next": "n", "waits_on": 3, "since": 9}}),
+    );
+    assert_eq!(title(&v), "!7 feat: x");
+    assert_eq!(v["sections"][0]["heading"], "Stage");
+    assert_eq!(v["sections"][2]["fields"][0]["value"]["text"], "passed ×2");
+    assert_eq!(v["sections"][3]["text"], "the plan");
 }
 
 #[test]
@@ -213,7 +223,7 @@ fn the_ticket_is_never_shown() {
 
 #[test]
 fn odd_shapes_still_validate() {
-    assert_eq!(NAMES.len(), 28);
+    assert_eq!(NAMES.len(), 29);
     for op in NAMES {
         for result in [json!("x"), json!({})] {
             let v = shown(op, result);

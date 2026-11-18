@@ -11,7 +11,7 @@ pub const PREFIXES: &[&str] = &["change.", "brief.", "session.", "task."];
 
 /// How many of this family's operations have no presenter yet; each brief that presents some lowers it.
 #[allow(dead_code)]
-pub const PENDING: usize = 1;
+pub const PENDING: usize = 0;
 
 /// The operations this family presents.
 pub const NAMES: &[&str] = &[
@@ -23,6 +23,7 @@ pub const NAMES: &[&str] = &[
     "change.scope",
     "session.status",
     "brief.show",
+    "change.status",
     "change.propose",
     "change.pin",
     "change.front",
@@ -267,6 +268,55 @@ fn session_status(op: &str, v: &Value) -> Value {
     )
 }
 
+fn status(op: &str, v: &Value) -> Value {
+    let c = &v["change"];
+    let mut sections = Vec::new();
+    let st_ = &v["stage"];
+    if st_.is_object() {
+        let mut f = vec![
+            field("stage", text(s(st_, "stage"))),
+            field("needs", text(s(st_, "needs"))),
+            field("next", text(s(st_, "next"))),
+        ];
+        if st_["waits_on"].is_number() {
+            f.push(field("waits on", text(&bang(st_, "waits_on"))));
+        }
+        if let Some(t) = st_["since"].as_u64() {
+            f.push(field("since", time(t)));
+        }
+        sections.push(section(Some("Stage"), f, None));
+    }
+    let mut f = vec![field("state", text(s(c, "state")))];
+    if let Some(h) = opt(c, "head") {
+        f.push(field("head", hash(h)));
+    }
+    f.push(field("branch", code(s(v, "branch"))));
+    f.extend(st("model", v, "model"));
+    if v["position"].is_number() {
+        f.push(field("position", count(n(v, "position"))));
+    }
+    f.extend(st("approval", v, "approval"));
+    sections.push(section(Some("Change"), f, None));
+    let jobs = items(c, "jobs")
+        .iter()
+        .map(|j| {
+            let mut t = s(j, "status").to_string();
+            let attempts = u(j, "attempts");
+            if attempts > 1 {
+                t = format!("{t} ×{attempts}");
+            }
+            field(s(j, "name"), text(&t))
+        })
+        .collect();
+    sections.push(section(Some("Jobs"), jobs, None));
+    sections.push(section(Some("Plan"), vec![], Some(s(c, "plan"))));
+    detail(
+        &titled(op, &format!("{} {}", bang(c, "number"), s(c, "title"))),
+        sections,
+        vec![],
+    )
+}
+
 fn brief_show(op: &str, v: &Value) -> Value {
     let d = items(v, "revisions")
         .last()
@@ -396,7 +446,10 @@ fn odd(op: &str, v: &Value) -> Value {
         "change.list" | "change.evictable" | "brief.list" | "task.list" | "task.wait"
     ) {
         0
-    } else if matches!(op, "change.scope" | "session.status" | "brief.show") {
+    } else if matches!(
+        op,
+        "change.scope" | "session.status" | "brief.show" | "change.status"
+    ) {
         1
     } else {
         2
@@ -426,6 +479,7 @@ pub fn view(op: &str, r: &crate::wire::Response) -> Option<serde_json::Value> {
         "change.scope" => scope(v),
         "session.status" => session_status(op, v),
         "brief.show" => brief_show(op, v),
+        "change.status" => status(op, v),
         "change.propose" => {
             let mut f = vec![
                 field("branch", code(s(v, "branch"))),

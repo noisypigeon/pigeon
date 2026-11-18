@@ -64,6 +64,9 @@ fn shape(op: &str) -> &'static str {
 }
 
 fn build(op: &str, v: &Value) -> Value {
+    if op == "pool.pause" {
+        return card("Pool paused", None, scalars(v), vec![]);
+    }
     if !v.is_object() {
         return fallback(op, v);
     }

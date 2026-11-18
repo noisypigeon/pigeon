@@ -318,7 +318,7 @@ fn an_unpresented_tool_answers_without_a_view() {
     let answer = mcp::answer(
         &json!(1),
         Ok(Response {
-            operation: "change.status".into(),
+            operation: "no.such".into(),
             ok: true,
             result: json!({ "state": "open" }),
             violations: vec![],

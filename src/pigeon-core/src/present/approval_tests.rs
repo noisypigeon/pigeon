@@ -191,3 +191,11 @@ fn odd_shapes_still_validate() {
         assert!(!v["title"].as_str().unwrap_or("").trim().is_empty(), "{op}");
     }
 }
+
+#[test]
+fn pool_pause_string_is_titled() {
+    let v = present("pool.pause", json!("paused"));
+    assert_eq!(v["title"], "Pool paused");
+    assert_eq!(v["fields"].as_array().map(Vec::len), Some(1));
+    assert_eq!(v["fields"][0]["label"], "result");
+}
