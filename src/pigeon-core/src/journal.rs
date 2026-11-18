@@ -44,3 +44,93 @@ pub fn event_entry(
         &serde_json::to_value(e).unwrap_or_default(),
     )
 }
+
+/// The Instance keys journaled as snapshots; see the ADR's 2026-11-18 amendment on identity state.
+pub const INSTANCE_KEYS: &[&str] = &[
+    "accounts",
+    "members",
+    "passkeys",
+    "passkey-adding",
+    "passkey-enrolments",
+    "passkey-proofs",
+    "totp",
+    "standalone.seeded",
+    "instances.private",
+    "tickets",
+    "yields",
+    "pins",
+    "queue",
+    "tasks",
+    "briefs",
+    "mandates",
+    "windows",
+    "lanes",
+    "owner_items",
+    "event-cursors",
+    "push-latest",
+    "digest-cursor",
+    "grant-registry",
+    "ci-window",
+    "macos-health",
+    "merges",
+    "bench-fleet",
+    "bench-used",
+    "learner.index",
+];
+
+/// Instance keys holding secret material, never journaled until owner item #42 is answered.
+pub const WITHHELD: &[&str] = &[
+    "devices",
+    "waiting",
+    "grant-requests",
+    "apns_token",
+    "push-devices",
+    "members.joins",
+];
+
+/// The DO-local key holding each journaled key's last digest.
+pub const DIGESTS: &str = "journal.digests";
+
+/// The DO-local key holding the snapshot object's last sequence number.
+pub const SEQ: &str = "journal.seq";
+
+/// The keys among `now` whose value changed since `previous`, each with its new digest (SHA-256 hex of the value's JSON text); a key in `previous` missing from `now` changes to an empty digest.
+#[must_use]
+pub fn changed(
+    previous: &std::collections::BTreeMap<String, String>,
+    now: &std::collections::BTreeMap<String, serde_json::Value>,
+) -> Vec<(String, String)> {
+    use sha2::Digest as _;
+    let mut out = Vec::new();
+    for (k, v) in now {
+        let d = format!("{:x}", sha2::Sha256::digest(v.to_string().as_bytes()));
+        if previous.get(k) != Some(&d) {
+            out.push((k.clone(), d));
+        }
+    }
+    for (k, d) in previous {
+        if !now.contains_key(k) && !d.is_empty() {
+            out.push((k.clone(), String::new()));
+        }
+    }
+    out
+}
+
+/// A snapshot entry for the Instance's `key`, at `seq` of its state object.
+#[must_use]
+pub fn snapshot_entry(
+    instance: &str,
+    seq: u64,
+    at: u64,
+    key: &str,
+    value: &serde_json::Value,
+) -> crate::control::Statement {
+    entry(
+        &format!("instance:{instance}/state"),
+        seq,
+        SHADOW_EPOCH,
+        at,
+        key,
+        value,
+    )
+}

@@ -1628,3 +1628,48 @@ fn a_journal_entry_appends_once() {
         .expect("row");
     assert_eq!(row, ("instance:noisypigeon/events".to_string(), 7, 0));
 }
+
+#[test]
+fn a_changed_key_is_journaled_once() {
+    use agent::core::journal;
+    use serde_json::json;
+    use std::collections::BTreeMap;
+    let mut now = BTreeMap::new();
+    now.insert("members".to_string(), json!({"a": 1}));
+    now.insert("tasks".to_string(), json!([]));
+    let first = journal::changed(&BTreeMap::new(), &now);
+    let keys: Vec<&str> = first.iter().map(|(k, _)| k.as_str()).collect();
+    assert_eq!(keys, ["members", "tasks"]);
+    let previous: BTreeMap<String, String> = first.into_iter().collect();
+    assert_eq!(
+        journal::changed(&previous, &now),
+        Vec::<(String, String)>::new()
+    );
+    now.insert("members".to_string(), json!({"a": 2}));
+    let second = journal::changed(&previous, &now);
+    assert_eq!(second.len(), 1);
+    assert_eq!(second[0].0, "members");
+    now.remove("tasks");
+    let third = journal::changed(&previous, &now);
+    assert!(third.contains(&("tasks".to_string(), String::new())));
+    let db = rusqlite::Connection::open_in_memory().expect("sqlite");
+    db.execute_batch(include_str!("../../../migrations/0008_journal.sql"))
+        .expect("migrates");
+    let s = journal::snapshot_entry("noisypigeon", 1, 100, "members", &json!({"a": 2}));
+    run(&db, &s);
+    run(&db, &s);
+    let rows: Vec<(String, String)> = db
+        .prepare("SELECT object, kind FROM journal")
+        .expect("prepare")
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+        .expect("query")
+        .collect::<Result<_, _>>()
+        .expect("rows");
+    assert_eq!(
+        rows,
+        [(
+            "instance:noisypigeon/state".to_string(),
+            "members".to_string()
+        )]
+    );
+}

@@ -2198,13 +2198,9 @@ pub struct Instance {
     env: Env,
 }
 
-impl DurableObject for Instance {
-    fn new(state: State, env: Env) -> Self {
-        Self { state, env }
-    }
-
+impl Instance {
     #[expect(clippy::too_many_lines, reason = "one branch per Instance path")]
-    async fn fetch(&self, mut req: Request) -> Result<Response> {
+    async fn route(&self, mut req: Request) -> Result<Response> {
         let path = req.path();
         if path == "/version" {
             return Response::ok(platform::version(&self.env));
@@ -2350,5 +2346,96 @@ impl DurableObject for Instance {
         };
         storage.put(QUEUE, &queue).await?;
         answer
+    }
+}
+
+impl DurableObject for Instance {
+    fn new(state: State, env: Env) -> Self {
+        Self { state, env }
+    }
+
+    async fn fetch(&self, req: Request) -> Result<Response> {
+        let write = req.method() != Method::Get;
+        let response = self.route(req).await;
+        if write {
+            journal_state(&self.state, &self.env).await;
+        }
+        response
+    }
+}
+
+/// Journals, in shadow, each of the Instance's journaled keys whose value changed: a failure is logged, never returned.
+async fn journal_state(state: &State, env: &Env) {
+    use crate::core::journal;
+    use std::collections::BTreeMap;
+    let storage = state.storage();
+    let mut now: BTreeMap<String, Value> = BTreeMap::new();
+    for key in journal::INSTANCE_KEYS {
+        match storage.get::<Value>(key).await {
+            Ok(Some(v)) => {
+                now.insert((*key).to_string(), v);
+            }
+            Ok(None) => {}
+            Err(e) => {
+                worker::console_warn!("journal: {e}");
+                return;
+            }
+        }
+    }
+    let previous: BTreeMap<String, String> = storage
+        .get(journal::DIGESTS)
+        .await
+        .ok()
+        .flatten()
+        .unwrap_or_default();
+    let seq: u64 = storage
+        .get(journal::SEQ)
+        .await
+        .ok()
+        .flatten()
+        .unwrap_or_default();
+    let changes = journal::changed(&previous, &now);
+    if changes.is_empty() {
+        return;
+    }
+    let settings = match Settings::from(env) {
+        Ok(s) => s,
+        Err(e) => {
+            worker::console_warn!("journal: {e}");
+            return;
+        }
+    };
+    let at = platform::now();
+    let mut digests = previous;
+    let mut last = seq;
+    let mut statements = Vec::new();
+    for (key, digest) in changes {
+        last += 1;
+        let value = now.get(&key).unwrap_or(&Value::Null);
+        statements.push(journal::snapshot_entry(
+            &settings.instance,
+            last,
+            at,
+            &key,
+            value,
+        ));
+        if digest.is_empty() {
+            digests.remove(&key);
+        } else {
+            digests.insert(key, digest);
+        }
+    }
+    let stored = match platform::d1(env, &statements).await {
+        Ok(()) => {
+            async {
+                storage.put(journal::DIGESTS, &digests).await?;
+                storage.put(journal::SEQ, &last).await
+            }
+            .await
+        }
+        Err(e) => Err(e),
+    };
+    if let Err(e) = stored {
+        worker::console_warn!("journal: {e}");
     }
 }
