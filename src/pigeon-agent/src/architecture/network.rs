@@ -234,6 +234,14 @@ pub const LINKS: &[Row] = &[
         &[("worker/minting.rs", ".secret_store(GRANTER)")],
     ),
     row(
+        "worker_journal_seal",
+        "Worker",
+        "Secrets Store",
+        "journal-seal: seals secret-bearing journal entries",
+        Kind::Call,
+        &[("worker/mod.rs", ".secret_store(JOURNAL_SEAL)")],
+    ),
+    row(
         "actions_checker",
         "Actions",
         "Checker",

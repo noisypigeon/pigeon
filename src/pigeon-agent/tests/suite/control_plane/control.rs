@@ -1752,6 +1752,25 @@ fn a_value_too_large_for_one_entry_is_not_journaled() {
 }
 
 #[test]
+fn a_sealed_entry_opens_only_as_its_own_object_and_key() {
+    use agent::core::journal;
+    let seal = journal::seal_key(&"ab".repeat(32)).unwrap();
+    let nonce = journal::nonce(&"0".repeat(24)).unwrap();
+    let value = json!({"push": "tok"});
+    let body = journal::sealed(&seal, nonce, "instance:x/state", "devices", &value).unwrap();
+    assert_eq!(
+        journal::unseal(&seal, "instance:x/state", "devices", &body).unwrap(),
+        value
+    );
+    assert!(journal::unseal(&seal, "instance:x/state", "waiting", &body).is_err());
+    assert!(journal::unseal(&seal, "instance:y/state", "devices", &body).is_err());
+    let other = journal::seal_key(&"cd".repeat(32)).unwrap();
+    assert!(journal::unseal(&other, "instance:x/state", "devices", &body).is_err());
+    assert!(!body.to_string().contains("tok"));
+    assert!(journal::seal_key("nope").is_err());
+}
+
+#[test]
 fn a_failed_deploy_advances_only_the_groups_that_passed() {
     let mut p = Pipeline::default();
     p.pushed(A);

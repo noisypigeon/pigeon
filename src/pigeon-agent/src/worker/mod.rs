@@ -2407,6 +2407,15 @@ impl DurableObject for Instance {
     }
 }
 
+/// The Secrets Store binding of `journal-seal`; see the blue-green ADR's #42 amendment.
+const JOURNAL_SEAL: &str = "JOURNAL_SEAL";
+
+/// The journal's sealing key, from `journal-seal`; none while the binding or the secret is missing.
+async fn journal_seal(env: &Env) -> Option<[u8; 32]> {
+    let s = env.secret_store(JOURNAL_SEAL).ok()?.get().await.ok()??;
+    crate::core::journal::seal_key(&s).ok()
+}
+
 /// Journals, in shadow, each of `keys` whose value in `state` changed, as entries of the object `object` names for the instance: a failure is logged, never returned.
 async fn journal_keys(state: &State, env: &Env, keys: &[&str], object: impl Fn(&str) -> String) {
     use crate::core::journal;
@@ -2415,10 +2424,14 @@ async fn journal_keys(state: &State, env: &Env, keys: &[&str], object: impl Fn(&
     if !crate::core::lease::acting(held.as_ref(), &lease::color(env)) {
         return;
     }
+    let seal = journal_seal(env).await;
     let epoch = held.as_ref().map_or(journal::SHADOW_EPOCH, |l| l.epoch);
     let storage = state.storage();
     let mut now: BTreeMap<String, Value> = BTreeMap::new();
     for key in keys {
+        if seal.is_none() && journal::SEALED.contains(key) {
+            continue;
+        }
         match storage.get::<Value>(key).await {
             Ok(Some(v)) => {
                 now.insert((*key).to_string(), v);
@@ -2465,7 +2478,21 @@ async fn journal_keys(state: &State, env: &Env, keys: &[&str], object: impl Fn(&
     for (key, digest) in changes {
         last += 1;
         let value = now.get(&key).unwrap_or(&Value::Null);
-        statements.push(journal::entry(&object, last, epoch, at, &key, value));
+        let body = match &seal {
+            Some(k) if journal::SEALED.contains(&key.as_str()) => {
+                let n = platform::random_hex(12)
+                    .ok()
+                    .and_then(|h| journal::nonce(&h));
+                let sealed = n.map(|n| journal::sealed(k, n, &object, &key, value));
+                let Some(Ok(b)) = sealed else {
+                    worker::console_warn!("journal: sealing {key} failed");
+                    return;
+                };
+                b
+            }
+            _ => value.clone(),
+        };
+        statements.push(journal::entry(&object, last, epoch, at, &key, &body));
         if digest.is_empty() {
             digests.remove(&key);
         } else {
