@@ -2,6 +2,7 @@
 //! .claude/decisions/2026-11-17-runtime-mcp-feed-view-contract.md's 2026-11-17 amendment on presenting.
 
 pub(crate) mod approval;
+pub mod asked;
 pub(crate) mod change;
 pub mod proof;
 pub(crate) mod rest;
