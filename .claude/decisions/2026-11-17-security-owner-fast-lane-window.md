@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: security
-* Governs: `src/**/approval/lanes.rs`, `src/**/approval/lanes_tests.rs`, `src/**/change/jobs.rs`, `src/**/change/gate.rs`, `src/**/change/queue.rs`, `src/**/change/forecast.rs`, `src/**/worker/main_run.rs`, `src/**/feed.rs`, `.config/approvals.yaml`
+* Governs: `src/**/approval/lanes.rs`, `src/**/approval/lanes_tests.rs`, `src/**/worker/lanes.rs`, `src/**/change/jobs.rs`, `src/**/change/gate.rs`, `src/**/change/queue.rs`, `src/**/change/forecast.rs`, `src/**/worker/main_run.rs`, `src/**/feed.rs`, `.config/approvals.yaml`
 
 ## Context
 
@@ -415,3 +415,28 @@ a feed item carries its event's `stage` and `wakes` (`events::wakes`), and
 - Lane events carry no `stage`: they aren't a change's events.
 - Step 7 adds `lane.broken` to `events::wakes`, with a test.
 - Nothing in !1063 (step 2) changes: it holds no events.
+
+### 2026-11-18: Steps 3 and 5 land as one change; the rest follow
+
+At the owner's request, for one passkey, merge and deploy, one change
+carries what makes a lane usable:
+
+- **Step 3:** waived jobs in the change lifecycle.
+- **Step 5a:** `worker/lanes.rs`, the `Instance`'s lane store, the
+  `lane.request`, `lane.status` and `lane.end` operations with their views
+  and presenters, and `/lane/<id>`, opened with the owner's passkey. Its
+  grant, `lane.grant`, is proven only on that page, which no window,
+  mandate or policy approves. A failed deploy ends the open lane, from
+  `mandates::hold_all`. Lane events carry their subjects for when
+  `/events/add` reads them (8b).
+- **Step 5b:** before the alarm dispatches a queued, waivable job,
+  `ChangeRun` asks the `Instance` whether the open lane covers the head,
+  and applies `Event::Waived` instead; a lane's end sends `Event::Unwaived`
+  to each unmerged change it waived jobs on. A lane past its `until` is
+  ended lazily, on the next call to the store, and its jobs run again once
+  it is ended by an operation; a sweep is left to step 6.
+- `Governs` gains `src/**/worker/lanes.rs`.
+
+These follow as their own changes: step 7a (!1088), step 5c (the queue's
+lane band and the owner's pre-emption in `merges.rs`), step 6 (deferred
+checks), 7b, and 9.

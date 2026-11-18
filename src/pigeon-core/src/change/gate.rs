@@ -12,11 +12,7 @@ impl Change {
     fn gate_missing(&self) -> Vec<Check> {
         let passed = |c: &Check, name: &str| {
             let carried = rerun_carried(c) && self.carried_checks.iter().any(|n| n == name);
-            !carried
-                && self
-                    .jobs
-                    .iter()
-                    .any(|j| j.name == name && j.status == JobStatus::Passed)
+            !carried && self.jobs.iter().any(|j| j.name == name && j.cleared())
         };
         let scoped = self.gate_why().is_none();
         self.full

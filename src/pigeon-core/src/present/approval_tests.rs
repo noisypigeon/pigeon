@@ -199,3 +199,32 @@ fn pool_pause_string_is_titled() {
     assert_eq!(v["fields"].as_array().map(Vec::len), Some(1));
     assert_eq!(v["fields"][0]["label"], "result");
 }
+
+#[test]
+fn fast_lanes_present_as_a_list_and_cards() {
+    let v = present(
+        "lane.status",
+        json!({ "open": null, "lanes": [
+            { "id": 3, "reason": "pool config", "state": "open", "waived": [{}, {}], "merged": [1060] },
+        ] }),
+    );
+    assert_eq!(v["title"], "Fast lanes");
+    assert_eq!(v["items"][0]["title"], "Fast lane #3");
+    assert_eq!(v["items"][0]["badge"], "open");
+    assert_eq!(
+        v["items"][0]["subtitle"],
+        "pool config · 2 waived, 1 merged"
+    );
+    let pending = json!({ "operation": "lane.grant", "link": "https://h/lane/3?grant=t" });
+    let v = present(
+        "lane.request",
+        json!({ "lane": { "id": 3, "reason": "r" }, "pending": pending }),
+    );
+    assert_eq!(v["title"], "Fast lane #3 asked");
+    assert_eq!(link_of(&v).map(|l| l["kind"].clone()), Some(json!("link")));
+    let v = present(
+        "lane.end",
+        json!({ "id": 3, "state": "ended", "reason": "r" }),
+    );
+    assert_eq!(v["title"], "Fast lane #3 ended");
+}

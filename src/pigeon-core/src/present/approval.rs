@@ -11,6 +11,7 @@ pub const PREFIXES: &[&str] = &[
     "approval.",
     "grant.",
     "mandate.",
+    "lane.",
     "platform.",
     "pool.",
     "deploy.",
@@ -34,6 +35,9 @@ pub const NAMES: &[&str] = &[
     "grant.revoke",
     "mandate.propose",
     "mandate.end",
+    "lane.request",
+    "lane.status",
+    "lane.end",
     "platform.apply",
     "pool.pause",
     "pool.resume",
@@ -56,7 +60,7 @@ pub fn view(op: &str, r: &crate::wire::Response) -> Option<Value> {
 /// Whether `op` is presented as a list, a detail or (otherwise) a card.
 fn shape(op: &str) -> &'static str {
     match op {
-        "grant.list" => "list",
+        "grant.list" | "lane.status" => "list",
         "mandate.status" | "platform.status" | "pool.status" | "platform.plan"
         | "deploy.status" => "detail",
         _ => "card",
@@ -73,6 +77,22 @@ fn build(op: &str, v: &Value) -> Value {
     match op {
         "grant.list" => grant_list(v),
         "mandate.status" => mandate_status(v),
+        "lane.status" => lane_status(v),
+        "lane.request" => card(
+            &format!("Fast lane #{} asked", s(&v["lane"], "id")),
+            opt_str(&v["lane"], "reason"),
+            pending_link(&v["pending"]).into_iter().collect(),
+            vec![],
+        ),
+        "lane.end" => card(
+            &format!("Fast lane #{} {}", s(v, "id"), s(v, "state")),
+            opt_str(v, "reason"),
+            vec![
+                field("waived", count(len(v, "waived"))),
+                field("merged", count(len(v, "merged"))),
+            ],
+            vec![],
+        ),
         "platform.status" => platform_status(v),
         "pool.status" => pool_status(v),
         "platform.plan" => platform_plan(v),
@@ -217,6 +237,40 @@ fn grant_list(v: &Value) -> Value {
         }
     }
     list("Grants", rows, None)
+}
+
+fn len(v: &Value, k: &str) -> i64 {
+    v[k].as_array()
+        .map_or(0, |a| i64::try_from(a.len()).unwrap_or(i64::MAX))
+}
+
+fn lane_status(v: &Value) -> Value {
+    let rows = v["lanes"]
+        .as_array()
+        .map(|a| {
+            a.iter()
+                .map(|l| {
+                    let id = s(l, "id");
+                    let state = s(l, "state");
+                    let sub = format!(
+                        "{} · {} waived, {} merged",
+                        s(l, "reason"),
+                        len(l, "waived"),
+                        len(l, "merged")
+                    );
+                    row(
+                        &id,
+                        &format!("Fast lane #{id}"),
+                        Some(&sub),
+                        Some(&state),
+                        None,
+                        None,
+                    )
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    list("Fast lanes", rows, None)
 }
 
 fn mandate_status(v: &Value) -> Value {

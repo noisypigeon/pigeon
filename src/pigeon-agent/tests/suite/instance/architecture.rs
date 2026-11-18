@@ -455,7 +455,7 @@ fn the_route_inventory_is_pinned() {
         ("mcp", 4),
         ("git", 1),
         ("app", 33),
-        ("owner", 13),
+        ("owner", 14),
         ("ci", 2),
     ]
     .map(|(id, n)| (id.to_string(), n))
@@ -466,7 +466,7 @@ fn the_route_inventory_is_pinned() {
     );
     assert_eq!(
         counts.iter().map(|c| c.1).sum::<usize>(),
-        53,
+        54,
         "a route changed: a new one is a shim over an operation, per .claude/decisions/2026-11-15-runtime-one-mcp-entry-point.md §7; update this count with it"
     );
 }

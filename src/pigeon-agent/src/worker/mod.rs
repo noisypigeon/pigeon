@@ -29,6 +29,7 @@ mod github;
 mod hosts;
 mod insights;
 mod instances;
+mod lanes;
 mod learner;
 mod listed;
 mod macos;
@@ -160,6 +161,7 @@ const SURFACES: &[&[Route]] = &[
     passkeys::ROUTES,
     platforms::ROUTES,
     mandates::ROUTES,
+    lanes::ROUTES,
     ci_window::ROUTES,
     minting::ROUTES,
     docs::ROUTES,
@@ -994,6 +996,13 @@ async fn dispatch(
             args,
         } => {
             let (status, v) = mandates::run(env, s, who, &op, &args).await?;
+            Ok((None, respond(operation, status, v)))
+        }
+        Routed::Lane {
+            operation: op,
+            args,
+        } => {
+            let (status, v) = lanes::run(env, s, who, &op, &args).await?;
             Ok((None, respond(operation, status, v)))
         }
         Routed::Platform {
@@ -1995,6 +2004,10 @@ impl DurableObject for Instance {
         if path.starts_with("/mandates/") {
             let body: Value = req.json().await?;
             return mandates::serve(&self.state, &path, body).await;
+        }
+        if path.starts_with("/lanes/") {
+            let body: Value = req.json().await?;
+            return lanes::serve(&self.state, &path, body).await;
         }
         if path.starts_with("/accounts/") {
             let body: Value = req.json().await?;

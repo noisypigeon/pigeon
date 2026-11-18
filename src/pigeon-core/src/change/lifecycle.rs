@@ -91,6 +91,8 @@ impl Change {
             Event::Lost { job, sha } => self.lost(&job, &sha),
             Event::StartFailed { job, sha, why } => self.start_failed(&job, &sha, &why),
             Event::Rerun { job } => self.rerun(&job),
+            Event::Waived { job, sha, lane } => self.waived(&job, &sha, lane),
+            Event::Unwaived { lane } => Ok(self.unwaived(lane)),
             Event::Accept { by, sha } => self.accept(&by, sha),
             Event::Escalate { by, question, at } => self.escalate(by, question, at),
             Event::Reopen { .. } => {

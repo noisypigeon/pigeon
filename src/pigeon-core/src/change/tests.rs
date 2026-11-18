@@ -1860,3 +1860,72 @@ fn a_forecast_puts_a_lane_change_first() {
         yields((9, "pushed"), (5, "approved"))
     );
 }
+
+/// `pushed()`, bounded with code checks `names` queued on head `A`.
+fn bounded_checking(names: &[&str]) -> Change {
+    let checks = names
+        .iter()
+        .map(|n| Check {
+            name: (*n).into(),
+            argv: vec![(*n).into()],
+        })
+        .collect();
+    let bound = Event::Bounded {
+        sha: A.into(),
+        violations: Vec::new(),
+        checks,
+        full: Vec::new(),
+        tiers: None,
+        gate: None,
+        patch: None,
+        own: None,
+    };
+    run(pushed(), vec![bound])
+}
+
+fn waive(job: &str, sha: &str, lane: u32) -> Event {
+    Event::Waived {
+        job: job.into(),
+        sha: sha.into(),
+        lane,
+    }
+}
+
+#[test]
+fn a_lane_waives_queued_checks_and_the_head_is_checked() {
+    let c = bounded_checking(&["fmt", "clippy"]);
+    assert_eq!(c.state, State::Bounded);
+    let c = run(c, vec![waive("fmt", A, 1), waive("clippy", A, 1)]);
+    assert_eq!(c.state, State::Checked);
+    assert_eq!(status(&c, "fmt"), Some(JobStatus::Waived));
+    assert_eq!(c.job("fmt").and_then(|j| j.lane), Some(1));
+}
+
+#[test]
+fn a_lane_never_waives_bound_or_policy_check_and_ignores_another_head() {
+    let c = bounded_checking(&["policy.check", "fmt"]);
+    for job in [
+        "bound",
+        "policy.check",
+        "gate: policy.check",
+        "merge",
+        "mirror",
+    ] {
+        assert!(step(&c, waive(job, A, 1)).is_err(), "{job}");
+    }
+    let stale = run(c, vec![waive("fmt", B, 1)]);
+    assert_eq!(status(&stale, "fmt"), Some(JobStatus::Queued));
+}
+
+#[test]
+fn a_lanes_end_requeues_what_it_waived_and_the_head_checks_again() {
+    let c = run(bounded_checking(&["fmt"]), vec![waive("fmt", A, 1)]);
+    assert_eq!(c.state, State::Checked);
+    let (other, effects) = step(&c, Event::Unwaived { lane: 2 }).expect("steps");
+    assert_eq!(effects, Vec::<Effect>::new());
+    assert_eq!(other.state, State::Checked);
+    let (c, effects) = step(&c, Event::Unwaived { lane: 1 }).expect("steps");
+    assert_eq!(c.state, State::Bounded);
+    assert_eq!(status(&c, "fmt"), Some(JobStatus::Queued));
+    assert_eq!(effects, vec![Effect::Start("fmt".into())]);
+}

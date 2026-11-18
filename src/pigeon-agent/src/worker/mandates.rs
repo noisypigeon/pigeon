@@ -221,6 +221,8 @@ async fn tell(env: &Env, s: &Settings, kind: &str, title: &str, said: &str) {
 pub async fn hold_all(env: &Env, s: &Settings, sha: &str, why: &str) -> Result<()> {
     let body = json!({ "sha": sha, "why": why });
     let short = sha.get(..12).unwrap_or(sha);
+    // A failed deploy also ends the fast lane; see the fast-lane ADR's §6.
+    super::lanes::end_open(env, s, &format!("deploy of {short} failed: {why}")).await?;
     let (_, v) = to_instance(env, s, "/windows/hold", &body).await?;
     if let Some(id) = v["window"].as_u64() {
         if v["ended"].as_bool() == Some(true) {

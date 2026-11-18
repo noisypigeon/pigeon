@@ -147,6 +147,7 @@ fn the_break_glass_is_offered_only_on_an_open_head_with_a_code_check_not_passed(
         attempts: 1,
         start_failures: 0,
         last_error: None,
+        lane: None,
     };
     let mut c = change(State::Bounded, Some(HEAD));
     c.jobs = vec![

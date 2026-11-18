@@ -25,8 +25,9 @@ const ADDING: &str = "passkey-adding";
 
 /// The grant pages whose grant the `Instance` keeps: each path prefix, its peek, and the
 /// operation its proof is bound to.
-const INSTANCE_PAGES: [(&str, &str, &str); 3] = [
+const INSTANCE_PAGES: [(&str, &str, &str); 4] = [
     ("/mandate/", "/mandates/peek", "mandate.grant"),
+    ("/lane/", "/lanes/peek", "lane.grant"),
     ("/grants/", "/grant-requests/peek", "grant.request"),
     ("/ci-window/", "/ci-window/peek", "ci.window"),
 ];

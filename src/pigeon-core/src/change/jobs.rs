@@ -191,6 +191,50 @@ impl Change {
         Ok(self.settle())
     }
 
+    /// Queued job `name` on head `sha`, waived by fast lane `lane`; see the fast-lane ADR's §3.
+    pub(super) fn waived(mut self, name: &str, sha: &str, lane: u32) -> Step {
+        if !crate::approval::lanes::waivable(name) {
+            return refuse(format!("`{name}` is never waived"));
+        }
+        if !self.on_head(sha) {
+            return Ok((self, Vec::new()));
+        }
+        let Some(i) = self.index(name) else {
+            return refuse(format!("no job `{name}`"));
+        };
+        if self.jobs[i].status != JobStatus::Queued {
+            return Ok((self, Vec::new()));
+        }
+        self.jobs[i].status = JobStatus::Waived;
+        self.jobs[i].lane = Some(lane);
+        if name.starts_with(GATE) {
+            return Ok(self.gate_settled());
+        }
+        Ok(self.settle())
+    }
+
+    /// Fast lane `lane` ended: each job it waived on the head is queued and started again, and a
+    /// head it checked goes back to checking.
+    pub(super) fn unwaived(mut self, lane: u32) -> (Change, Vec<Effect>) {
+        let mut effects = Vec::new();
+        self.jobs = self
+            .jobs
+            .into_iter()
+            .map(|j| {
+                if j.status == JobStatus::Waived && j.lane == Some(lane) {
+                    effects.push(Effect::Start(j.name.clone()));
+                    Job::queued(&j.name, j.argv)
+                } else {
+                    j
+                }
+            })
+            .collect();
+        if !effects.is_empty() && self.state == State::Checked {
+            self.state = State::Bounded;
+        }
+        (self, effects)
+    }
+
     /// After a check settles: a failure fails the change and stops the rest; the last pass
     /// checks it.
     pub(super) fn settle(mut self) -> (Change, Vec<Effect>) {
@@ -205,7 +249,7 @@ impl Change {
             self.state = State::Failed;
             return self.cancel_open();
         }
-        if gating.all(|j| j.status == JobStatus::Passed) {
+        if gating.all(Job::cleared) {
             self.state = State::Checked;
             return self.checked();
         }

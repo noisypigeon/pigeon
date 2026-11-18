@@ -194,8 +194,9 @@ const GRANT: [&str; 7] = [
     "change.front",
 ];
 
-const PAGE: [&str; 7] = [
+const PAGE: [&str; 8] = [
     "mandate.propose",
+    "lane.request",
     "ci.window",
     "pool.resume",
     "grant.request",
@@ -252,6 +253,7 @@ impl Operation {
             || self.name.starts_with("deploy.")
             || self.name.starts_with("git.")
             || self.name.starts_with("mandate.")
+            || self.name.starts_with("lane.")
             || self.name.starts_with("task.")
             || self.name.starts_with("brief.")
             || self.name.starts_with("events.")
@@ -498,6 +500,42 @@ const CATALOG: &[Operation] = &[
         summary: "Ask the owner to run every change's code checks on Cloudflare's Checker instead of GitHub Actions for `hours` (1 to 24; 0 closes the window early); answers with the page's link, granted with a passkey",
         args: &[
             arg("hours", true, Kind::Text),
+            arg("ticket", false, Kind::String),
+        ],
+        view: View::Card,
+    },
+    Operation {
+        name: "lane.request",
+        engine: Engine::Agent,
+        effect: Effect::Plan,
+        summary: "Ask the owner for a fast lane: for `minutes` (default 30, at most 120), the changes of one line of work, `session` (a session's URL), `changes` (numbers, one per line) or `paths` (globs, one per line), have their code checks waived and go to the front of the merge queue; `reason` is required, and `extends` names an open lane to widen or extend; answers with the page's link, granted with a passkey",
+        args: &[
+            arg("session", false, Kind::String),
+            arg("changes", false, Kind::Text),
+            arg("paths", false, Kind::String),
+            arg("minutes", false, Kind::Text),
+            arg("reason", true, Kind::String),
+            arg("extends", false, Kind::Text),
+            arg("ticket", false, Kind::String),
+        ],
+        view: View::Card,
+    },
+    Operation {
+        name: "lane.status",
+        engine: Engine::Agent,
+        effect: Effect::Read,
+        summary: "The open fast lane and the last ten: each one's line, reason, end, the jobs it waived and the changes merged under it",
+        args: &[],
+        view: View::List,
+    },
+    Operation {
+        name: "lane.end",
+        engine: Engine::Agent,
+        effect: Effect::Build,
+        summary: "End fast lane `id` now, saying `why`; open to the owner and to the sessions the lane names, since it only takes power away",
+        args: &[
+            arg("id", true, Kind::Text),
+            arg("why", false, Kind::String),
             arg("ticket", false, Kind::String),
         ],
         view: View::Card,

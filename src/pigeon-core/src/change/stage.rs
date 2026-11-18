@@ -317,7 +317,7 @@ pub fn of(c: &Change, cx: &Context) -> Stage {
             if all.is_empty() {
                 return at("checking", Needs::Provider, "the checks start");
             }
-            let done = all.iter().filter(|j| j.status == JobStatus::Passed).count();
+            let done = all.iter().filter(|j| j.cleared()).count();
             let waiting = names(all.iter().copied().filter(|j| j.open()));
             at(
                 format!("checking {done}/{}", all.len()),

@@ -391,6 +391,7 @@ pub fn of_change(
             (_, JobStatus::Running) => Some("job.started"),
             (Some(s), JobStatus::Passed) if s != JobStatus::Passed => Some("job.passed"),
             (Some(s), JobStatus::Failed) if s != JobStatus::Failed => Some("job.failed"),
+            (Some(s), JobStatus::Waived) if s != JobStatus::Waived => Some("job.waived"),
             _ => None,
         };
         if let Some(k) = kind {

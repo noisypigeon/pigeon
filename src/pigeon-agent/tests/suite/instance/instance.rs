@@ -147,6 +147,8 @@ fn catalog_names_are_unique_and_dotted() {
             ("ci.rerun", Effect::Build),
             ("ci.cloudflare", Effect::Apply),
             ("ci.window", Effect::Plan),
+            ("lane.request", Effect::Plan),
+            ("lane.end", Effect::Build),
             ("pool.pause", Effect::Plan),
             ("pool.resume", Effect::Plan),
             ("grant.request", Effect::Plan),

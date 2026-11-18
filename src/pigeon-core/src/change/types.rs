@@ -104,6 +104,8 @@ pub enum JobStatus {
     Failed,
     /// A newer push or a failure stopped it.
     Cancelled,
+    /// The owner's fast lane waived it; see the fast-lane ADR's §3.
+    Waived,
 }
 
 /// One job on one head.
@@ -126,6 +128,9 @@ pub struct Job {
     /// Why its last start failed, or that its Container was lost.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_error: Option<String>,
+    /// The fast lane that waived it, while it is waived.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lane: Option<u32>,
 }
 
 #[expect(
@@ -145,11 +150,17 @@ impl Job {
             attempts: 0,
             start_failures: 0,
             last_error: None,
+            lane: None,
         }
     }
 
     pub(super) fn open(&self) -> bool {
         matches!(self.status, JobStatus::Queued | JobStatus::Running)
+    }
+
+    /// Whether it passed, or a fast lane waived it.
+    pub(super) fn cleared(&self) -> bool {
+        matches!(self.status, JobStatus::Passed | JobStatus::Waived)
     }
 
     /// Whether its result decides the change: every job but [`MIRROR`].
@@ -554,6 +565,20 @@ pub enum Event {
     Rerun {
         /// The job.
         job: String,
+    },
+    /// Fast lane `lane` waived queued job `job` on head `sha`; see the fast-lane ADR's §3.
+    Waived {
+        /// The job.
+        job: String,
+        /// The head.
+        sha: String,
+        /// The lane.
+        lane: u32,
+    },
+    /// Fast lane `lane` ended: each job it waived on the head runs.
+    Unwaived {
+        /// The lane.
+        lane: u32,
     },
     /// Its executor asked its brief's planner `question`, at `at`; see
     /// `.claude/decisions/2026-11-13-development-model-tiered-agent-briefs.md` §6.

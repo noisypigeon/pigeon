@@ -104,6 +104,11 @@ pub(super) async fn live(env: &Env, s: &Settings) -> Result<Vec<Waiting>> {
                         .await?
                         .0
                         == 200
+                } else if w.path.starts_with("/lane/") {
+                    super::mandates::to_instance(env, s, "/lanes/peek", &body)
+                        .await?
+                        .0
+                        == 200
                 } else {
                     let (status, v) =
                         to_change(env, &s.repo, w.number, Method::Post, "/peek", Some(&body))

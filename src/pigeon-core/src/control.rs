@@ -227,6 +227,14 @@ pub enum Routed {
         /// Its arguments.
         args: Map<String, Value>,
     },
+    /// A fast-lane operation, with its arguments; see
+    /// `.claude/decisions/2026-11-17-security-owner-fast-lane-window.md` §1.
+    Lane {
+        /// The operation.
+        operation: String,
+        /// Its arguments.
+        args: Map<String, Value>,
+    },
 }
 
 fn text(args: &Map<String, Value>, k: &str) -> Option<String> {
@@ -442,6 +450,10 @@ pub fn route(request: &Request, by: &str, at: u64) -> Result<Routed, String> {
         "grant.list" | "grant.request" | "grant.rotate" | "grant.revoke" => grant(request),
         "approval.wait" => Err("`approval.wait` shows a card, so it is called over MCP".into()),
         "mandate.propose" | "mandate.status" | "mandate.end" => Ok(Routed::Mandate {
+            operation: request.operation.clone(),
+            args: a.clone(),
+        }),
+        "lane.request" | "lane.status" | "lane.end" => Ok(Routed::Lane {
             operation: request.operation.clone(),
             args: a.clone(),
         }),
@@ -1417,10 +1429,13 @@ pub fn retarget(request: &Request) -> Request {
 #[must_use]
 pub fn code_unpassed(change: &Change) -> bool {
     change.head.is_some()
-        && change
-            .jobs
-            .iter()
-            .any(|j| crate::actions::on_github(&j.argv) && j.status != changes::JobStatus::Passed)
+        && change.jobs.iter().any(|j| {
+            crate::actions::on_github(&j.argv)
+                && !matches!(
+                    j.status,
+                    changes::JobStatus::Passed | changes::JobStatus::Waived
+                )
+        })
 }
 
 /// Whether opening the CI window moves `change`: open, with a code check on its head queued or
@@ -1483,7 +1498,7 @@ pub fn break_glass(
             JobStatus::Failed => events.push(Event::Rerun {
                 job: j.name.clone(),
             }),
-            JobStatus::Passed | JobStatus::Cancelled => {}
+            JobStatus::Passed | JobStatus::Cancelled | JobStatus::Waived => {}
         }
     }
     Ok((events, start))

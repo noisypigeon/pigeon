@@ -864,6 +864,55 @@ impl ChangeRun {
         Ok(())
     }
 
+    /// Waives each queued, waivable job `pending` would start when the open fast lane covers the
+    /// head: `Event::Waived`, recorded on the lane, instead of a start; a waiver never ends a
+    /// merge, so none joins the alarm's applied events. See the fast-lane ADR's §3.
+    async fn waive_step(&self, change: &mut Change, pending: &mut Vec<Pending>) -> Result<()> {
+        let Some(sha) = change.head.clone() else {
+            return Ok(());
+        };
+        let queued = |j: &str| {
+            change
+                .jobs
+                .iter()
+                .any(|x| x.name == j && x.status == JobStatus::Queued)
+        };
+        let jobs: Vec<String> = pending
+            .iter()
+            .filter_map(|p| match p {
+                Pending::Start(j)
+                    if j != control::UNMIRROR
+                        && crate::core::approval::lanes::waivable(j)
+                        && queued(j) =>
+                {
+                    Some(j.clone())
+                }
+                _ => None,
+            })
+            .collect();
+        if jobs.is_empty() {
+            return Ok(());
+        }
+        let s = Settings::from(&self.env)?;
+        let Ok(lane) = super::lanes::cover(&self.env, &s, change).await? else {
+            return Ok(());
+        };
+        for job in jobs {
+            let waived = Event::Waived {
+                job: job.clone(),
+                sha: sha.clone(),
+                lane,
+            };
+            let mut effects = Vec::new();
+            if Self::apply(change, waived, &mut effects).is_ok() {
+                pending.retain(|p| !matches!(p, Pending::Start(j) if *j == job));
+                pending.extend(effects);
+                super::lanes::record_waiver(&self.env, &s, change, &job).await?;
+            }
+        }
+        Ok(())
+    }
+
     /// Starts `job`'s Container, applying `Started`, or `Lost` when it didn't start, which joins
     /// `applied`; false when it waits for a free Container, queued again.
     async fn start_container(
@@ -1235,6 +1284,7 @@ impl DurableObject for ChangeRun {
         let mirrors = super::github::mirror(&self.env).is_some();
         self.redispatch(&change, &github, mirrors, &mut pending)
             .await?;
+        self.waive_step(&mut change, &mut pending).await?;
         let window_open = mirrors
             && pending.iter().any(
                 |p| matches!(p, Pending::Start(j) if control::to_github(&change, j, true, false)),

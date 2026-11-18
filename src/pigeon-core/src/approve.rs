@@ -119,6 +119,7 @@ fn verb(operation: &str) -> &'static str {
         "change.front" => "Move it to the front of the merge queue",
         crate::control::BREAK_GLASS => "Run its code checks on Cloudflare",
         "mandate.grant" => "Grant the mandate",
+        "lane.grant" => "Open the fast lane",
         crate::ci_window::OPERATION => "Move code checks to Cloudflare",
         "grant.request" => "Make the grant",
         "grant.rotate" => "Rotate the grant",
@@ -181,6 +182,8 @@ pub fn inbox_with(waiting: &[Waiting], digest: &[String]) -> String {
                 escape(verb(&w.operation)),
                 if w.operation.starts_with("mandate.") {
                     "mandate"
+                } else if w.operation.starts_with("lane.") {
+                    "fast lane"
                 } else {
                     "change"
                 },
@@ -853,4 +856,49 @@ autocomplete=\"off\" minlength=\"20\" required></label></p>\
     }
     b.push_str("<p><small><a href=\"/approvals\">Everything waiting</a></small></p>");
     shell(&title, &b)
+}
+
+/// The page granting fast-lane request `l`, posting `token` back to `/lane/<id>` with the
+/// owner's passkey; see `.claude/decisions/2026-11-17-security-owner-fast-lane-window.md` §1.
+#[must_use]
+pub fn lane_page(l: &crate::approval::lanes::Lane, token: &str) -> String {
+    use crate::approval::lanes::Line;
+    let mut b = String::new();
+    let _ = write!(
+        b,
+        "<h1>Open fast lane {}</h1><p><strong>{}</strong></p><dl>",
+        l.id,
+        escape(&l.reason)
+    );
+    let mut row = |k: &str, v: String| {
+        let _ = write!(b, "<dt>{}</dt><dd>{v}</dd>", escape(k));
+    };
+    let line = match &l.line {
+        Line::Session(s) => format!("session <code>{}</code>", escape(s)),
+        Line::Changes(n) => {
+            let n: Vec<String> = n.iter().map(|n| format!("!{n}")).collect();
+            format!("changes {}", escape(&n.join(", ")))
+        }
+        Line::Paths(g) => format!("<pre>{}</pre>", escape(&g.join("\n"))),
+    };
+    row("Line of work", line);
+    row("Lasts", format!("{} minutes from now", l.minutes));
+    if let Some(open) = l.extends {
+        row("Widens", format!("open lane {open}"));
+    }
+    row("Asked by", escape(&l.asked_by));
+    let _ = write!(
+        b,
+        "</dl><p>Its changes' code checks (fmt, clippy, tests, builds) are waived and run after \
+they merge, and its changes go to the front of the merge queue. The bounds, the policies, the \
+approval rules, secrets and guarded paths are never waived, and each change still needs its \
+approval.</p><form method=\"post\" action=\"/lane/{}\">\
+<input type=\"hidden\" name=\"grant\" value=\"{}\">{}{CODE_FIELD}\
+<button type=\"submit\">Open the fast lane</button></form>\
+<p><small><a href=\"/approvals\">Everything waiting</a></small></p>",
+        l.id,
+        escape(token),
+        passkey_button(&crate::approval::passkeys::grant_purpose(token))
+    );
+    shell(&format!("Open fast lane {}", l.id), &b)
 }

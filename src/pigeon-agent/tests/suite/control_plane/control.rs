@@ -969,6 +969,7 @@ fn job(name: &str, cmd: &str, status: agent::core::change::JobStatus) -> agent::
         attempts: 1,
         start_failures: 0,
         last_error: None,
+        lane: None,
     }
 }
 
