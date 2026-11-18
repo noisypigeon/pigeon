@@ -17,3 +17,22 @@ rules:
       match: '\.rs$'
       forbid_content: 'Command::new\("python'
       ignore: ['^\.git$', '(^|/)target$', '(^|/)\.pigeon$']
+examples:
+  pass:
+    - files:
+        tooling/session/session.sh: "#!/bin/sh\n# see 2026-11-15-development-no-python-rust-tooling.md\n"
+        mise.toml: "[tasks.ci]\nrun = \"cargo test\"\n"
+        docs/notes.md: "Prose may say python3 -I x.\n"
+        src/a.rs: "let c = Command::new(\"cargo\");\n"
+        src/x/target/gen.py: ''
+        .config/policies/no-python.yaml: "match: python3\n"
+  fail:
+    - files: { tooling/x.py: '' }
+    - files: { pyproject.toml: '' }
+    - files: { tooling/requirements-dev.txt: '' }
+    - files: { tooling/run: "#!/usr/bin/env python3\n" }
+    - files: { mise.toml: "[tasks.x]\nrun = \"python3 -I x\"\n" }
+    - files: { .github/workflows/ci.yml: "run: /usr/bin/python3.12 y\n" }
+    - files: { .claude/settings.json: "{\"command\": \"python tool\"}\n" }
+    - files: { src/pigeon-cli/Dockerfile: "RUN python3 -m pip install x\n" }
+    - files: { src/a.rs: "let c = Command::new(\"python3\");\n" }

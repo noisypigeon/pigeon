@@ -16,3 +16,26 @@ rules:
       match: '(^|/)secrets\.config\.yaml$'
       allow_under: [infra/, workloads/]
       ignore: ['^\.git$', '(^|/)target$', '(^|/)\.pigeon$']
+examples:
+  pass:
+    - files:
+        infra/a/unit.yaml: ''
+        infra/a/modules/m/main.tf: ''
+        catalog/c/modules/m/main.tf: ''
+        workloads/w/unit.yaml: ''
+        src/x/target/debug/build.tf: ''
+        .pigeon/infra/a/main.tf.json: ''
+  fail:
+    - files: { src/pigeon-cli/main.tf: '' }
+    - files: { tooling/x.tf.json: '' }
+    - files: { x.tofu: '' }
+    - files: { src/vars.tfvars: '' }
+    - files: { .terraform.lock.hcl: '' }
+    - files: { src/unit.yaml: '' }
+    - files: { catalog/c/unit.yaml: '' }
+    - files: { catalog/c/vars.tfvars: '' }
+    - files: { catalog/c/.terraform.lock.hcl: '' }
+    - files: { catalog/c/secrets.config.yaml: '' }
+    - files: { infra/a/terraform.tfstate: '' }
+    - files: { workloads/w/terraform.tfstate.backup: '' }
+    - files: { infra/a/.terraform/providers/x: '' }

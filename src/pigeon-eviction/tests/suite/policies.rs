@@ -460,54 +460,6 @@ fn tree_root(files: &[(&str, &str)]) -> TempDir {
     root
 }
 
-#[test]
-fn terraform_rules() {
-    let ok = [
-        ("infra/a/unit.yaml", ""),
-        ("infra/a/modules/m/main.tf", ""),
-        ("catalog/c/modules/m/main.tf", ""),
-        ("workloads/w/unit.yaml", ""),
-        ("src/x/target/debug/build.tf", ""),
-        (".pigeon/infra/a/main.tf.json", ""),
-    ];
-    passes(&violations("terraform", tree_root(&ok).path(), None));
-    for bad in [
-        "src/pigeon-cli/main.tf",
-        "tooling/x.tf.json",
-        "x.tofu",
-        "src/vars.tfvars",
-        ".terraform.lock.hcl",
-        "src/unit.yaml",
-        "catalog/c/unit.yaml",
-        "catalog/c/vars.tfvars",
-        "catalog/c/.terraform.lock.hcl",
-        "catalog/c/secrets.config.yaml",
-        "infra/a/terraform.tfstate",
-        "workloads/w/terraform.tfstate.backup",
-        "infra/a/.terraform/providers/x",
-    ] {
-        let mut files = ok.to_vec();
-        files.push((bad, ""));
-        let v = violations("terraform", tree_root(&files).path(), None);
-        assert!(v.iter().any(|m| m.starts_with(bad)), "{bad}: {v:?}");
-    }
-}
-
-#[test]
-fn mirror_forbids_github_workflows() {
-    let ok = [(".github/pull_request_template.md", "# Summary\n")];
-    passes(&violations("mirror", tree_root(&ok).path(), None));
-    for file in [".github/workflows/rust.yml", ".github/workflows/x.yaml"] {
-        let mut files = ok.to_vec();
-        files.push((file, "on: push\n"));
-        let v = violations("mirror", tree_root(&files).path(), None);
-        assert!(
-            v.iter().any(|m| m.starts_with(&format!("{file}:1:"))),
-            "{file}: {v:?}"
-        );
-    }
-}
-
 const CI: &str = ".github/workflows/ci.yml";
 
 const CI_YML: &str =
@@ -727,40 +679,6 @@ fn eviction_actions_keeps_the_judge_read_only() {
 }
 
 #[test]
-fn no_python_fails_python_files_shebangs_and_invocations() {
-    let spawn = format!("let c = Command::new(\"{}\");\n", "python3");
-    let ok = [
-        (
-            "tooling/session/session.sh",
-            "#!/bin/sh\n# see 2026-11-15-development-no-python-rust-tooling.md\n",
-        ),
-        ("mise.toml", "[tasks.ci]\nrun = \"cargo test\"\n"),
-        ("docs/notes.md", "Prose may say python3 -I x.\n"),
-        ("src/a.rs", "let c = Command::new(\"cargo\");\n"),
-        ("src/x/target/gen.py", ""),
-        (".config/policies/no-python.yaml", "match: python3\n"),
-    ];
-    passes(&violations("no-python", tree_root(&ok).path(), None));
-    for (path, content) in [
-        ("tooling/x.py", ""),
-        ("pyproject.toml", ""),
-        ("tooling/requirements-dev.txt", ""),
-        ("tooling/run", "#!/usr/bin/env python3\n"),
-        ("mise.toml", "[tasks.x]\nrun = \"python3 -I x\"\n"),
-        (".github/workflows/ci.yml", "run: /usr/bin/python3.12 y\n"),
-        (".claude/settings.json", "{\"command\": \"python tool\"}\n"),
-        (
-            "src/pigeon-cli/Dockerfile",
-            "RUN python3 -m pip install x\n",
-        ),
-        ("src/a.rs", spawn.as_str()),
-    ] {
-        let v = violations("no-python", tree_root(&[(path, content)]).path(), None);
-        assert!(v.iter().any(|m| m.contains(path)), "{path}: {v:#?}");
-    }
-}
-
-#[test]
 fn names_forbids_the_old_names_but_the_stored_ones_and_history() {
     // Spelled apart, so this file doesn't name them; see names.yaml.
     let infra = concat!("co", "bot");
@@ -807,9 +725,12 @@ fn every_policy_runs_its_examples() {
         fs::write(path, text)
     };
     let mut problems = Vec::new();
+    let mut carrying = 0;
     for p in &eviction::load_dir(&dir).expect("policies load") {
+        carrying += usize::from(p.policy.examples.is_some());
         let scratch = TempDir::new().expect("tempdir");
         problems.extend(eviction::examples(p, scratch.path(), &write).expect("examples run"));
     }
+    assert!(carrying > 0, "no policy carries examples");
     assert!(problems.is_empty(), "{problems:#?}");
 }

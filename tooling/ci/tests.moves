@@ -3385,3 +3385,6 @@ pigeon-agent test suite instance::instance::the_control_plane_runs_ios_releases_
 pigeon-agent test suite instance::instance::the_control_plane_runs_owner_items_itself	-
 pigeon-agent test suite instance::instance::provider_operations_are_the_control_planes	-
 pigeon-agent test suite instance::architecture::the_route_inventory_is_pinned	-
+pigeon-eviction test suite policies::terraform_rules	-
+pigeon-eviction test suite policies::mirror_forbids_github_workflows	-
+pigeon-eviction test suite policies::no_python_fails_python_files_shebangs_and_invocations	-
