@@ -392,6 +392,17 @@ pub async fn holder(
     Ok(crate::tickets::holder(&key(env)?, &tickets, ticket, now()))
 }
 
+/// The model class `ticket`'s session declared, when it is live; R3's shadow picks an agent's
+/// service user by it.
+pub async fn model(env: &Env, s: &Settings, ticket: Option<&str>) -> Option<String> {
+    let (_, v) = to_instance(env, s, "/tickets/list", &json!({}))
+        .await
+        .ok()?;
+    let tickets: Tickets = serde_json::from_value(v).unwrap_or_default();
+    let label = crate::tickets::holder(&key(env).ok()?, &tickets, ticket, now()).ok()?;
+    tickets.class(&label).map(|c| c.name().to_string())
+}
+
 /// The guard on an agent's changing `request`: the sessions it names, by argument or by its
 /// change, must be acted on with their ticket.
 ///

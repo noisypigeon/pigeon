@@ -251,6 +251,7 @@ async fn post(
     let who = &Identity {
         subject: super::account::approver(env, s).await?,
         human: who.human,
+        device: who.device,
     };
     let body =
         json!({ "token": token, "operation": operation, "by": who.subject, "review": review });

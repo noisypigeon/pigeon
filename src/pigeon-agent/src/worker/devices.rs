@@ -341,13 +341,21 @@ async fn app_mcp(
     device: &Device,
     body: &Value,
 ) -> Result<Response> {
+    let (_, v) = super::mandates::to_instance(
+        env,
+        s,
+        "/members/administrator",
+        &serde_json::json!({ "device": device.id }),
+    )
+    .await?;
     let who = Identity {
         subject: if device.account.is_empty() {
             format!("device:{}", device.id)
         } else {
             device.account.clone()
         },
-        human: true,
+        human: v["administrator"].as_bool() == Some(true),
+        device: true,
     };
     let sid = req.headers().get(crate::mcp::SESSION_HEADER)?;
     let host = req.url()?.host_str().unwrap_or_default().to_string();

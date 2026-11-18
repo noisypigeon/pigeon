@@ -35,6 +35,9 @@ pub async fn serve(state: &State, path: &str, body: Value) -> Result<Response> {
     ) {
         return joining(state, path, &body).await;
     }
+    if path == "/members/shadow" {
+        return shadow(state, &body).await;
+    }
     let storage = state.storage();
     let accounts: Accounts = storage.get(account::STORE).await?.unwrap_or_default();
     let devices: Devices = storage.get(DEVICES).await?.unwrap_or_default();
@@ -51,6 +54,9 @@ pub async fn serve(state: &State, path: &str, body: Value) -> Result<Response> {
         return fail("no such device", 404);
     };
     match path {
+        "/members/administrator" => Response::from_json(&json!({
+            "administrator": member::shadow::administrator(&members) == Some(caller.account.as_str())
+        })),
         "/members/view" => Response::from_json(&members.view(&caller.account)),
         "/members/invite" => {
             let (token, email) = (s(&body, "token"), s(&body, "email"));
@@ -265,4 +271,46 @@ pub async fn write(
         v["link"] = json!(format!("pigeon://join?base={base}&token={token}"));
     }
     answer(&v)
+}
+
+/// Where each difference R3's shadow has logged is kept, by its key.
+const SHADOWED: &str = "member.shadow";
+
+/// How many differences are kept before new ones stop being logged.
+const SHADOWED_MAX: usize = 2000;
+
+/// `/members/shadow` on the `Instance`: `check` beside today's decision, answering a difference
+/// not logged before; see the feed-view ADR's R3 amendment.
+async fn shadow(state: &State, body: &Value) -> Result<Response> {
+    let storage = state.storage();
+    let stored: Members = storage.get(member::STORE).await?.unwrap_or_default();
+    let t = now();
+    let members = stored.clone().seed_services(t);
+    if members != stored {
+        storage.put(member::STORE, &members).await?;
+    }
+    let (Ok(roles), Ok(caller)) = (
+        super::standalone::roles(),
+        serde_json::from_value::<member::shadow::Caller>(body["caller"].clone()),
+    ) else {
+        return Response::from_json(&json!({ "shadow": null }));
+    };
+    let Some(op) = crate::core::wire::catalog()
+        .iter()
+        .find(|o| Some(o.name) == body["operation"].as_str())
+    else {
+        return Response::from_json(&json!({ "shadow": null }));
+    };
+    let args = body["args"].as_object().cloned().unwrap_or_default();
+    let today = body["today"].as_bool() == Some(true);
+    let Some(diff) = member::shadow::compare(&roles, &members, &caller, op, &args, today, t) else {
+        return Response::from_json(&json!({ "shadow": null }));
+    };
+    let mut seen: std::collections::BTreeSet<String> =
+        storage.get(SHADOWED).await?.unwrap_or_default();
+    if seen.len() >= SHADOWED_MAX || !seen.insert(diff.key()) {
+        return Response::from_json(&json!({ "shadow": null }));
+    }
+    storage.put(SHADOWED, &seen).await?;
+    Response::from_json(&json!({ "shadow": diff }))
 }

@@ -632,7 +632,7 @@ pub async fn proof_submit(
 ) -> Result<std::result::Result<Value, String>> {
     let text = |k: &str| args[k].as_str().unwrap_or_default();
     if let Some(p) = args["purpose"].as_str() {
-        if auto_purpose(p).is_none() {
+        if !matches!(p, "auto" | "auto-end") {
             return Ok(Err("`purpose` is auto or auto-end".into()));
         }
         let body = json!({ "passkey": {

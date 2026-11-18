@@ -104,6 +104,7 @@ pub(super) async fn serve_message(
             let person = Identity {
                 subject: who.subject.clone(),
                 human: true,
+                device: who.device,
             };
             super::passkeys::proof_submit(env, settings, &person, &args, door.host).await?
         };

@@ -68,14 +68,16 @@ fn a_person_and_a_service_token_are_told_apart() {
         who(&json!({ "email": "owner@example.com" })),
         Ok(Identity {
             subject: "owner@example.com".into(),
-            human: true
+            human: true,
+            device: false
         })
     );
     assert_eq!(
         who(&json!({ "common_name": "agent.access" })),
         Ok(Identity {
             subject: "agent.access".into(),
-            human: false
+            human: false,
+            device: false
         })
     );
     assert!(who(&json!({})).is_err(), "no one");
@@ -138,10 +140,12 @@ fn only_a_person_applies() {
     let person = Identity {
         subject: "owner@example.com".into(),
         human: true,
+        device: false,
     };
     let agent = Identity {
         subject: "agent.access".into(),
         human: false,
+        device: false,
     };
     let op = |n: &str| catalog().iter().find(|o| o.name == n).expect(n);
     for n in [

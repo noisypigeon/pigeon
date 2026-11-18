@@ -28,8 +28,11 @@ pub struct Token {
 pub struct Identity {
     /// A person's email, or a service token's client ID.
     pub subject: String,
-    /// Whether it is a person, signed in; a service token is not.
+    /// Whether it acts as the Administrator: a person signed in to Access, the owner's standing
+    /// approvals, or a device whose account is the Administrator's; a service token never does.
     pub human: bool,
+    /// Whether a linked device signed it, on the device door.
+    pub device: bool,
 }
 
 /// Decodes base64url without padding.
@@ -141,6 +144,7 @@ pub fn identity(token: &Token, team: &str, aud: &str, now: u64) -> Result<Identi
         return Ok(Identity {
             subject: email.to_string(),
             human: true,
+            device: false,
         });
     }
     c["common_name"]
@@ -149,6 +153,7 @@ pub fn identity(token: &Token, team: &str, aud: &str, now: u64) -> Result<Identi
         .map(|s| Identity {
             subject: s.to_string(),
             human: false,
+            device: false,
         })
         .ok_or_else(|| "the token names no one".into())
 }

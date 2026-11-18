@@ -13,6 +13,7 @@ mod tests;
 pub mod handover;
 pub mod join;
 pub mod listing;
+pub mod shadow;
 
 /// Every level permission an operation may require.
 pub const PERMISSIONS: [&str; 8] = [

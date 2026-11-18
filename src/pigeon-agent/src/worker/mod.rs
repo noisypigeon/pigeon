@@ -399,6 +399,7 @@ async fn under(
     let who = Identity {
         subject: format!("{by}:{id}"),
         human: true,
+        device: false,
     };
     Some(run(env, s, &who, &request).await)
 }
@@ -476,6 +477,7 @@ async fn under_policy(
     let who = Identity {
         subject: format!("policy:{rule}"),
         human: true,
+        device: false,
     };
     Ok(Some(run(env, s, &who, request).await))
 }
@@ -502,6 +504,7 @@ async fn under_change_grant(
     let who = Identity {
         subject: format!("grant:{by}"),
         human: true,
+        device: false,
     };
     Ok(Some(run(env, s, &who, request).await))
 }
@@ -613,6 +616,63 @@ fn respond(operation: &str, status: u16, result: Value) -> WireResponse {
     }
 }
 
+/// R3's shadow: `member::check` beside `today`, logging each new difference as `member.shadow`;
+/// it decides nothing. See the feed-view ADR's R3 amendment.
+async fn shadow(
+    env: &Env,
+    s: &Settings,
+    who: &Identity,
+    op: &wire::Operation,
+    request: &wire::Request,
+    today: bool,
+) {
+    use crate::core::member::shadow::Caller;
+    let caller = if who.device {
+        Caller::Device {
+            account: who.subject.clone(),
+        }
+    } else if who.human {
+        Caller::Person
+    } else {
+        let ticket = request.args.get("ticket").and_then(Value::as_str);
+        Caller::Service {
+            client_id: who.subject.clone(),
+            model: tickets::model(env, s, ticket).await,
+        }
+    };
+    let body = json!({
+        "caller": caller,
+        "operation": op.name,
+        "args": request.args,
+        "today": today,
+    });
+    let diff = match mandates::to_instance(env, s, "/members/shadow", &body).await {
+        Ok((_, v)) => v["shadow"].clone(),
+        Err(e) => {
+            worker::console_error!("member.shadow: {e}");
+            return;
+        }
+    };
+    if diff.is_null() {
+        return;
+    }
+    let said = format!(
+        "member.shadow: `{}` as {}: today {}, check {}",
+        diff["operation"].as_str().unwrap_or_default(),
+        diff["client_hash"].as_str().map_or_else(
+            || diff["account"].as_str().unwrap_or_default().to_string(),
+            |h| format!("unbound {h}")
+        ),
+        if diff["today"] == true {
+            "allows"
+        } else {
+            "refuses"
+        },
+        diff["refusal"].as_str().unwrap_or("allows"),
+    );
+    let _ = events::append(env, s, "member.shadow", None, None, &said, false).await;
+}
+
 /// Runs one operation as `who`: validated, authorized, routed and audited.
 async fn run(
     env: &Env,
@@ -623,7 +683,9 @@ async fn run(
     let retargeted = control::retarget(request);
     let request = &retargeted;
     let op = wire::validate(request)?;
-    access::authorize(op, who).map_err(|m| crate::Error::Invalid(vec![m]))?;
+    let today = access::authorize(op, who);
+    shadow(env, s, who, op, request, today.is_ok()).await;
+    today.map_err(|m| crate::Error::Invalid(vec![m]))?;
     if !who.human && op.effect != wire::Effect::Read {
         tickets::guard(env, s, request)
             .await
