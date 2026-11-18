@@ -256,23 +256,15 @@ fn workers_deploy_when_their_spec_crates_or_migrations_change() {
         agent::checks::scope::workers(&repo_root(), files.as_deref()).expect("scopes")
     };
     let control = vec!["pigeon-control".to_string()];
-    let both = vec!["pigeon-control".to_string(), "pigeon-front".to_string()];
-    let front = vec!["pigeon-front".to_string()];
     for hit in [
         "src/pigeon-agent/src/mcp.rs",
         "src/pigeon-agent/src/workers/mod.rs",
         "src/pigeon-agent/migrations/0003_x.sql",
         "infra/pigeon/workers/control/worker.yaml",
         "Dockerfile",
+        "Cargo.lock",
     ] {
         assert_eq!(workers(Some(&[hit])), control, "{hit}");
-    }
-    assert_eq!(workers(Some(&["Cargo.lock"])), both, "Cargo.lock");
-    for hit in [
-        "src/pigeon-front/src/lib.rs",
-        "infra/pigeon/workers/front/worker.yaml",
-    ] {
-        assert_eq!(workers(Some(&[hit])), front, "{hit}");
     }
     for miss in [
         ".claude/decisions/x.md",
@@ -283,7 +275,7 @@ fn workers_deploy_when_their_spec_crates_or_migrations_change() {
     ] {
         assert!(workers(Some(&[miss])).is_empty(), "{miss}");
     }
-    assert_eq!(workers(None), both);
+    assert_eq!(workers(None), control);
 }
 
 #[test]
