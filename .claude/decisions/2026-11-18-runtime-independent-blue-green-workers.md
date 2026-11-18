@@ -476,3 +476,31 @@ unthemed Feed tab goes. The two agree:
   governs.
 - It adds no test, and retires none of the kinds C.1 names.
 - Nothing else here changes.
+
+### 2026-11-18: A deploy ships Workers on the build before its own, so a new spec field or Worker lands in two steps
+
+Step 9a's front took seven failed deploys to land (!1240 to !1250). The
+deploy job ships Workers with `main`'s last stored `pigeon` build, and
+stores its own commit's build only after its Workers step
+(`src/pigeon-agent/src/ship.rs`). So a change to how Workers ship takes
+effect one deploy after it merges:
+
+- **A new spec field ships first, unused.** A spec that uses a field the
+  stored build doesn't know fails every deploy (`forwards`, !1240). The
+  field merges and deploys first; a spec uses it only after a deploy has
+  stored that build.
+- **A Worker never deployed has no deployments.** The API answers 404 for
+  one, which `workers::ship` read as an error, so no new Worker could
+  deploy. It now reads as none, and the Worker's first deploy is whole
+  (!1246).
+- **A spec the stored build can't ship is taken out, then returns.** While
+  it is in, every deploy fails and holds Auto, and even the fix's own
+  deploy runs on the old build. So the spec is reverted (!1248). Once a
+  deploy has stored a build that ships it, the spec returns (!1250). Merging
+  the return while the fix's deploy runs would supersede that deploy before
+  it stores its build.
+
+`pigeon-green` and `pigeon-blue` (step 9's `pigeon/color` kind) are new
+Workers, so they take this path: whatever their specs need ships in a
+stored build before the specs merge. An instance's own Workers would take
+it too, on that instance's pipeline.
