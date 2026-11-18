@@ -31,6 +31,9 @@ pub struct Layout {
     /// The package whose `worker` build compiles to wasm.
     #[serde(default)]
     pub worker: Option<Worker>,
+    /// Further packages whose `worker` build compiles to wasm, each checked the same way.
+    #[serde(default)]
+    pub workers: Vec<Worker>,
     /// The packages whose tests read this repository's own policies.
     #[serde(default)]
     pub policy_tests: Vec<String>,
@@ -100,6 +103,7 @@ impl Layout {
             cli: cli.into(),
             cli_shared: cli_shared(),
             worker: None,
+            workers: Vec::new(),
             policy_tests: Vec::new(),
             infra_tests: None,
             run: run(),
@@ -175,6 +179,7 @@ impl Layout {
     fn wasm_only(&self, path: &str) -> bool {
         self.worker
             .iter()
+            .chain(self.workers.iter())
             .any(|w| w.only.iter().any(|d| path.starts_with(d.as_str())))
     }
 }
@@ -266,11 +271,12 @@ impl Crates {
             .map(|(d, _)| d.as_str())
     }
 
-    /// The worker package, when the workspace has it.
-    fn worker(&self) -> Option<&Worker> {
+    /// The wasm worker packages the workspace has.
+    fn workers(&self) -> impl Iterator<Item = &Worker> {
         self.layout
             .worker
-            .as_ref()
+            .iter()
+            .chain(self.layout.workers.iter())
             .filter(|w| self.by_dir.values().any(|p| *p == w.package))
     }
 }
@@ -366,7 +372,7 @@ fn everything(features: &BTreeSet<String>, crates: &Crates) -> Vec<Job> {
         ],
     ));
     out.extend(features.iter().map(|f| feature_clippy(cli, f)));
-    out.extend(crates.worker().map(worker_job));
+    out.extend(crates.workers().map(worker_job));
     out.push(workspace_tests(crates));
     let root = crates.layout.root();
     let mut instance: Vec<&str> = crates.layout.instance.iter().map(String::as_str).collect();
@@ -427,12 +433,17 @@ fn worker_job(worker: &Worker) -> Job {
 fn rust_jobs(crates: &Crates, config: &Config, files: &[&str], map: Option<&TestMap>) -> Vec<Job> {
     let mut out = Vec::new();
     let layout = &crates.layout;
+    let all = files;
     let wasm = files.iter().any(|f| layout.wasm_only(f));
     let native: Vec<&str> = files
         .iter()
         .copied()
         .filter(|f| !layout.wasm_only(f))
         .collect();
+    let touched = |w: &Worker| {
+        all.iter()
+            .any(|f| w.only.iter().any(|d| f.starts_with(d.as_str())))
+    };
     let files = native.as_slice();
     let changed: BTreeSet<String> = files
         .iter()
@@ -447,7 +458,7 @@ fn rust_jobs(crates: &Crates, config: &Config, files: &[&str], map: Option<&Test
     let affected = crates.with_dependants(&changed);
     if affected.is_empty() && wasm {
         out.push(job("fmt", &["cargo", "fmt", "--all", "--", "--check"]));
-        out.extend(crates.worker().map(worker_job));
+        out.extend(crates.workers().filter(|w| touched(w)).map(worker_job));
     }
     if !affected.is_empty() {
         let packages: Vec<&str> = affected.iter().map(String::as_str).collect();
@@ -492,8 +503,8 @@ fn rust_jobs(crates: &Crates, config: &Config, files: &[&str], map: Option<&Test
         }
         out.extend(
             crates
-                .worker()
-                .filter(|w| wasm || affected.contains(&w.package))
+                .workers()
+                .filter(|w| touched(w) || affected.contains(&w.package))
                 .map(worker_job),
         );
         if let Some(picked) = map.and_then(|m| m.select(crates, files)) {
@@ -924,6 +935,7 @@ mod tests {
                     name: "clippy agent worker (wasm)".into(),
                     only: vec!["src/pigeon-agent/src/worker/".into()],
                 }),
+                workers: Vec::new(),
                 ..Layout::new("pigeon")
             },
         };
@@ -1018,6 +1030,7 @@ mod tests {
                 name: "clippy agent worker (wasm)".into(),
                 only: vec!["src/pigeon-agent/src/worker/".into()],
             }),
+            workers: Vec::new(),
             policy_tests: vec!["pigeon-eviction".into(), "pigeon-gone".into()],
             infra_tests: None,
             run: vec!["run".into()],

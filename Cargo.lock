@@ -1911,6 +1911,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "pigeon-front"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+ "wasm-bindgen",
+ "worker",
+]
+
+[[package]]
 name = "pigeon-harness"
 version = "0.1.0"
 dependencies = [
