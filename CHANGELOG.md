@@ -7,6 +7,9 @@
 - agent v0.1.53
 - agent v0.1.54
 - agent v0.1.55
+- agent v0.1.56
+- infra-cloudflare-access-application v0.1.3
+- infra-cloudflare-schema v0.1.24
 
 ### Merged
 
@@ -29,6 +32,10 @@
 - fix(agent): the Instance routes /feed/read to the events log, so feed.read and pigeon://feed answer (!1104) ([b1b0501](https://github.com/noisypigeon/pigeon/commit/b1b05011792c688578d0ec59c9dd1f423882f502)) · agent
 - feat(agent): Auto starts and ends through the proof tools: proof.challenge and proof.submit take purpose auto or auto-end (!1105) ([421677f](https://github.com/noisypigeon/pigeon/commit/421677fcb374d095a02ee01610290127f7a8384d)) · agent
 - feat(agent): owner.answer, the owner's answer to an ask as a tool, for a person's door only (!1106) ([2f26348](https://github.com/noisypigeon/pigeon/commit/2f26348f3235f1c0329dc5b82de2373b8091afa5)) · agent
+- docs(adr): independent blue and green Workers, deploys per unit, and lean tests (!1109) ([75613ae](https://github.com/noisypigeon/pigeon/commit/75613aeb1c83ea343b1aca1ead0fa7722ca69d1b))
+- feat(agent): the control plane ends an executor's session when its brief's change merges or is taken back (!1107) ([ffbf086](https://github.com/noisypigeon/pigeon/commit/ffbf0860b40bc1fe291d3090dfef682a29abebb2)) · agent
+- docs(adr): review !1110 against !1109 (!1114) ([1e03fb7](https://github.com/noisypigeon/pigeon/commit/1e03fb74235a06407d33869e358339d58e61fe90))
+- fix(infra): adopt the pigeon-pool Access token unrotated, in its own module (!1110) ([955163f](https://github.com/noisypigeon/pigeon/commit/955163f938fe610b1fb76197b7f49e2c4704c8dd)) · agent, infra-cloudflare-access-application, infra-cloudflare-schema
 
 ## 2026-11-17
 
