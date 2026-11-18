@@ -9,13 +9,51 @@ set -u
 baked=/usr/local/bin/pigeon
 dir="${TMPDIR:-/tmp}"
 
-# fetch URL SHA256 FILE: downloads with the builds token, whose headers go to curl on stdin,
-# never in argv; succeeds only when the file's SHA-256 matches.
+# access: the builds token's headers, as curl config on stdin, never in argv.
+access() {
+  printf 'header = "CF-Access-Client-Id: %s"\nheader = "CF-Access-Client-Secret: %s"\n' \
+    "${PIGEON_BUILD_ACCESS_ID:-}" "${PIGEON_BUILD_ACCESS_SECRET:-}"
+}
+
+# mcp HOST SESSION TOOL ARGS: one tools/call on HOST's /mcp, with the builds token.
+mcp() {
+  access | curl -fsS --retry 3 --max-time 120 --config - -X POST \
+    -H 'content-type: application/json' -H 'accept: application/json' -H "mcp-session-id: $2" \
+    --data "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"$3\",\"arguments\":$4}}" \
+    "https://$1/mcp"
+}
+
+# fetch URL SHA256 FILE: reads URL, https://<host>/builds/<sha>/<name>, through `build.read` on
+# <host>'s /mcp in pieces, with the builds token; succeeds only when the file's SHA-256 matches;
+# see .claude/decisions/2026-11-18-security-users-levels-capability-grants.md, its group E.
 fetch() {
-  if printf 'header = "CF-Access-Client-Id: %s"\nheader = "CF-Access-Client-Secret: %s"\n' \
-      "${PIGEON_BUILD_ACCESS_ID:-}" "${PIGEON_BUILD_ACCESS_SECRET:-}" \
-    | curl -fsSL --retry 3 --max-time 120 --config - -o "$3" "$1" \
-    && printf '%s  %s\n' "$2" "$3" | sha256sum -c - >/dev/null 2>&1; then
+  rest=${1#https://}
+  host=${rest%%/*}
+  path=${rest#*/}
+  case "$path" in
+    builds/*/*) ;;
+    *) return 1 ;;
+  esac
+  path=${path#builds/}
+  sha=${path%%/*}
+  name=${path#*/}
+  session=$(access | curl -fsS --max-time 30 --config - -o /dev/null -D - -X POST \
+      -H 'content-type: application/json' -H 'accept: application/json' \
+      --data '{"jsonrpc":"2.0","id":0,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"pigeon-start","version":"1"}}}' \
+      "https://$host/mcp" 2>/dev/null | tr -d '\r' |
+    sed -n 's/^[Mm][Cc][Pp]-[Ss][Ee][Ss][Ss][Ii][Oo][Nn]-[Ii][Dd]: *//p' | tail -n 1)
+  : >"$3" || return 1
+  offset=0
+  while [ -n "$session" ] && [ -n "$offset" ]; do
+    if ! mcp "$host" "$session" build_read "{\"sha\":\"$sha\",\"name\":\"$name\",\"offset\":\"$offset\"}" >"$3.part"; then
+      offset=
+      break
+    fi
+    sed -n 's/.*"data":"\([A-Za-z0-9+\/=]*\)".*/\1/p' "$3.part" | base64 -d >>"$3" || break
+    offset=$(sed -n 's/.*"next":\([0-9]*\).*/\1/p' "$3.part")
+  done
+  rm -f "$3.part"
+  if [ -n "$session" ] && printf '%s  %s\n' "$2" "$3" | sha256sum -c - >/dev/null 2>&1; then
     chmod +x "$3"
     return 0
   fi
