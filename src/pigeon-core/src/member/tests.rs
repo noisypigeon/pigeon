@@ -34,6 +34,7 @@ fn two_admins() -> Members {
 
 fn req<'a>(account: &'a str, p: &'static str) -> Request<'a> {
     Request {
+        operation: "change.propose",
         account,
         requires: Requires::Permission(p),
         scope: None,
@@ -693,4 +694,106 @@ fn migrate_grants_icbc_only_on_a_learner_instance_and_never_over_a_revocation() 
 fn parse_file_refuses_another_shape() {
     assert!(Roles::parse_file("roles:\n  standard: learner\n").is_err());
     assert!(Roles::parse_file("roles:\nstandard: [learner]\n").is_err());
+}
+
+#[test]
+fn a_pattern_covers_its_operation_or_its_area() {
+    assert!(matches("build.read", "build.read"));
+    assert!(matches("build.*", "build.read"));
+    assert!(!matches("build.*", "builder.read"));
+    assert!(!matches("build.read", "build.list"));
+    assert!(!matches("*", "build.read"));
+}
+
+#[test]
+fn seed_services_adds_each_service_user_once() {
+    let m = seeded().seed_services(100);
+    for (name, scopes, _, _) in SERVICE_USERS {
+        let s = m.active(name).unwrap();
+        assert_eq!(s.role, Role::Service, "{name}");
+        assert_eq!(s.scopes, scopes.to_vec(), "{name}");
+        assert!(
+            s.scopes
+                .iter()
+                .all(|c| SERVICE_CEILING.contains(&c.as_str())),
+            "{name}"
+        );
+    }
+    assert_eq!(m.clone().seed_services(200), m);
+}
+
+#[test]
+fn a_service_user_is_held_to_its_tools_and_denials() {
+    let m = seeded().seed_services(100);
+    assert!(check(&roles(), &m, &service_call("jobs", "build.read", "read")).is_ok());
+    assert_eq!(
+        check(&roles(), &m, &service_call("jobs", "feed.read", "read")),
+        Err(Refusal::Capability)
+    );
+    assert!(
+        check(
+            &roles(),
+            &m,
+            &service_call("agent-executor", "change.propose", "propose")
+        )
+        .is_ok()
+    );
+    for op in EXECUTOR_DENIED.iter().map(|d| d.replace('*', "x")) {
+        assert_eq!(
+            check(
+                &roles(),
+                &m,
+                &service_call("agent-executor", &op, "propose")
+            ),
+            Err(Refusal::Capability),
+            "{op}"
+        );
+        assert!(
+            check(&roles(), &m, &service_call("agent-planner", &op, "propose")).is_ok(),
+            "{op}"
+        );
+    }
+}
+
+#[test]
+fn only_the_administrator_binds_a_credential_and_only_its_hash_is_kept() {
+    let m = seeded().seed_services(100);
+    assert!(
+        m.clone()
+            .bind(AGENT, "client-1", "agent-planner", 200)
+            .is_err()
+    );
+    assert!(m.clone().bind("root", "client-1", "root", 200).is_err());
+    let (m, c) = m.bind(AGENT, "client-1", "root", 200).unwrap();
+    assert_eq!(c.client_hash, token_id("client-1"));
+    assert!(!serde_json::to_string(&m).unwrap().contains("client-1"));
+}
+
+#[test]
+fn a_bound_agent_token_acts_as_its_tickets_class_and_an_unbound_one_as_no_one() {
+    let (m, _) = seeded()
+        .seed_services(100)
+        .bind(AGENT, "client-1", "root", 200)
+        .unwrap();
+    let (m, _) = m.bind("jobs", "client-2", "root", 200).unwrap();
+    assert_eq!(
+        m.service_for("client-1", Some("opus")),
+        Some("agent-planner")
+    );
+    assert_eq!(
+        m.service_for("client-1", Some("sonnet")),
+        Some("agent-executor")
+    );
+    assert_eq!(m.service_for("client-1", None), Some("agent-executor"));
+    assert_eq!(m.service_for("client-2", Some("opus")), Some("jobs"));
+    assert_eq!(m.service_for("client-3", None), None);
+    let m = m.unbind("client-1", "root", 300).unwrap();
+    assert_eq!(m.service_for("client-1", Some("opus")), None);
+}
+
+fn service_call<'a>(account: &'a str, operation: &'a str, p: &'static str) -> Request<'a> {
+    Request {
+        operation,
+        ..req(account, p)
+    }
 }

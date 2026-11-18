@@ -258,6 +258,12 @@ pub struct Membership {
     /// A standard member's capability grants, revoked and expired ones included.
     #[serde(default)]
     pub grants: Vec<Grant>,
+    /// A service account's allowed operations, `<area>.*` or a name; every one within its scopes when empty.
+    #[serde(default)]
+    pub tools: Vec<String>,
+    /// A service account's refused operations, `<area>.*` or a name.
+    #[serde(default)]
+    pub denied: Vec<String>,
     /// Who admitted it, or the last to change its role.
     pub admitted_by: String,
     /// When, in Unix seconds.
@@ -302,6 +308,9 @@ pub struct Members {
     /// Invitations, closed ones included.
     #[serde(default)]
     pub invitations: Vec<Invitation>,
+    /// Service accounts' bound credentials, revoked ones included.
+    #[serde(default)]
+    pub credentials: Vec<Credential>,
 }
 
 fn hex(bytes: &[u8]) -> String {
@@ -417,6 +426,8 @@ impl Members {
                 status: Status::Active,
                 scopes: Vec::new(),
                 grants: Vec::new(),
+                tools: Vec::new(),
+                denied: Vec::new(),
                 admitted_by: SEED.to_owned(),
                 at: now,
                 ended: None,
@@ -534,6 +545,8 @@ impl Members {
             status: Status::Active,
             scopes: Vec::new(),
             grants: Vec::new(),
+            tools: Vec::new(),
+            denied: Vec::new(),
             admitted_by: by.to_owned(),
             at: now,
             ended: None,
@@ -679,6 +692,8 @@ impl Members {
             status: Status::Active,
             scopes: scopes.to_vec(),
             grants: Vec::new(),
+            tools: Vec::new(),
+            denied: Vec::new(),
             admitted_by: by.to_owned(),
             at: now,
             ended: None,
@@ -838,6 +853,8 @@ pub enum Requires {
 pub struct Request<'a> {
     /// The calling account.
     pub account: &'a str,
+    /// The operation called.
+    pub operation: &'a str,
     /// What the operation needs.
     pub requires: Requires,
     /// The scope argument's value.
@@ -901,6 +918,12 @@ pub fn check<'a>(
     if !allowed {
         return Err(Refusal::Capability);
     }
+    if service
+        && ((!m.tools.is_empty() && !m.tools.iter().any(|t| matches(t, r.operation)))
+            || m.denied.iter().any(|d| matches(d, r.operation)))
+    {
+        return Err(Refusal::Capability);
+    }
     if r.needs_proof && (service || r.proof != Some(r.account)) {
         return Err(Refusal::Proof);
     }
@@ -911,4 +934,183 @@ pub fn check<'a>(
         return Err(Refusal::Separation);
     }
     Ok(m)
+}
+
+/// Whether `pattern`, an operation's name or `<area>.*`, covers `operation`.
+#[must_use]
+pub fn matches(pattern: &str, operation: &str) -> bool {
+    pattern
+        .strip_suffix('*')
+        .map_or(pattern == operation, |area| {
+            area.ends_with('.') && operation.starts_with(area)
+        })
+}
+
+/// The bound credential that stands for both agent service users; a ticket's class picks one.
+pub const AGENT: &str = "agent";
+
+/// The operations an agent executor or a pool runner may not call.
+pub const EXECUTOR_DENIED: [&str; 7] = [
+    "brief.create",
+    "brief.amend",
+    "brief.review",
+    "owner.*",
+    "mandate.*",
+    "lane.*",
+    "grant.*",
+];
+
+/// The seeded service users: name, scopes, `tools` and whether the executor's denials apply; see
+/// .claude/decisions/2026-11-18-security-users-levels-capability-grants.md, step 9's shape.
+pub const SERVICE_USERS: [(&str, &[&str], &[&str], bool); 5] = [
+    ("agent-planner", &["read", "propose"], &[], false),
+    ("agent-executor", &["read", "propose"], &[], true),
+    ("pool", &["read", "propose"], &[], true),
+    ("jobs", &["read"], &["build.*"], false),
+    (
+        "ci",
+        &["read", "propose"],
+        &["build.*", "release.*", "ci.*"],
+        false,
+    ),
+];
+
+/// The agent service user a session of model class `model` acts as: `opus` plans, any other
+/// class, or none, executes.
+#[must_use]
+pub fn agent_user(model: Option<&str>) -> &'static str {
+    if model == Some("opus") {
+        "agent-planner"
+    } else {
+        "agent-executor"
+    }
+}
+
+/// A credential bound to a service account; only the client ID's SHA-256 is kept.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Credential {
+    /// The service account, or [`AGENT`].
+    pub account: String,
+    /// Its kind: `access`.
+    pub kind: String,
+    /// The client ID's SHA-256, hex.
+    pub client_hash: String,
+    /// Who bound it.
+    pub bound_by: String,
+    /// When, in Unix seconds.
+    pub at: u64,
+    /// When it was revoked.
+    #[serde(default)]
+    pub revoked: Option<u64>,
+}
+
+impl Members {
+    /// Adds each seeded service user that has no active membership.
+    #[must_use]
+    pub fn seed_services(mut self, now: u64) -> Self {
+        for (name, scopes, tools, executor) in SERVICE_USERS {
+            if self.active(name).is_some() {
+                continue;
+            }
+            self.memberships.push(Membership {
+                account: name.to_owned(),
+                role: Role::Service,
+                status: Status::Active,
+                scopes: scopes.iter().map(|s| (*s).to_owned()).collect(),
+                grants: Vec::new(),
+                tools: tools.iter().map(|s| (*s).to_owned()).collect(),
+                denied: if executor {
+                    EXECUTOR_DENIED.iter().map(|s| (*s).to_owned()).collect()
+                } else {
+                    Vec::new()
+                },
+                admitted_by: SEED.to_owned(),
+                at: now,
+                ended: None,
+            });
+        }
+        self
+    }
+
+    /// The administrator binds an Access client ID to a service account, or to [`AGENT`],
+    /// replacing any active binding of the same ID.
+    ///
+    /// # Errors
+    /// `by` is no administrator, the client ID is empty, or the account is neither [`AGENT`] nor
+    /// an active service account.
+    pub fn bind(
+        mut self,
+        account: &str,
+        client_id: &str,
+        by: &str,
+        now: u64,
+    ) -> Result<(Self, Credential), String> {
+        self.admin(by)?;
+        if client_id.trim().is_empty() {
+            return Err("no client ID".to_owned());
+        }
+        if account != AGENT
+            && !self
+                .active(account)
+                .is_some_and(|m| m.role == Role::Service)
+        {
+            return Err("only a service account is bound a credential".to_owned());
+        }
+        let client_hash = token_id(client_id);
+        for c in &mut self.credentials {
+            if c.client_hash == client_hash && c.revoked.is_none() {
+                c.revoked = Some(now);
+            }
+        }
+        let c = Credential {
+            account: account.to_owned(),
+            kind: "access".to_owned(),
+            client_hash,
+            bound_by: by.to_owned(),
+            at: now,
+            revoked: None,
+        };
+        self.credentials.push(c.clone());
+        Ok((self, c))
+    }
+
+    /// The administrator revokes the binding of an Access client ID.
+    ///
+    /// # Errors
+    /// `by` is no administrator, or the ID has no active binding.
+    pub fn unbind(mut self, client_id: &str, by: &str, now: u64) -> Result<Self, String> {
+        self.admin(by)?;
+        let client_hash = token_id(client_id);
+        let mut any = false;
+        for c in &mut self.credentials {
+            if c.client_hash == client_hash && c.revoked.is_none() {
+                c.revoked = Some(now);
+                any = true;
+            }
+        }
+        if any {
+            Ok(self)
+        } else {
+            Err("no such credential".to_owned())
+        }
+    }
+
+    /// The service account an Access client ID is bound to: [`AGENT`] resolves through
+    /// [`agent_user`] with the session's model class.
+    #[must_use]
+    pub fn service_for(&self, client_id: &str, model: Option<&str>) -> Option<&str> {
+        let client_hash = token_id(client_id);
+        let c = self
+            .credentials
+            .iter()
+            .find(|c| c.client_hash == client_hash && c.revoked.is_none())?;
+        let name = if c.account == AGENT {
+            agent_user(model)
+        } else {
+            c.account.as_str()
+        };
+        self.active(name)
+            .filter(|m| m.role == Role::Service)
+            .map(|m| m.account.as_str())
+    }
 }
