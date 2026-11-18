@@ -1036,7 +1036,13 @@ pub fn mirror(
         ],
     });
     if let Some(sha) = &change.head {
-        for j in &change.jobs {
+        // D1's CHECK has no 'waived', and migrations only expand: a waived job has no row
+        // until it runs; see the fast-lane ADR's §3.
+        for j in change
+            .jobs
+            .iter()
+            .filter(|j| j.status != changes::JobStatus::Waived)
+        {
             let status = serde_json::to_value(j.status)
                 .ok()
                 .and_then(|v| v.as_str().map(str::to_string))

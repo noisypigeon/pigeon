@@ -848,6 +848,66 @@ fn deploys_reference_the_newest_images_and_the_owners_push_wins() {
 }
 
 #[test]
+fn a_waived_job_mirrors_with_no_row() {
+    let db = db();
+    let logs = serde_json::Map::new();
+    let mut c = Change::propose(14, "x", "feat(x): y", "p", vec!["a/**".into()], "agent");
+    c.apply(Event::ApprovePlan {
+        by: "owner".into(),
+        at: 2,
+    })
+    .expect("approves");
+    c.apply(Event::Pushed { sha: A.into() }).expect("pushed");
+    c.apply(Event::Bounded {
+        sha: A.into(),
+        violations: vec![],
+        full: vec![],
+        checks: vec![
+            Check {
+                name: "fmt".into(),
+                argv: vec![],
+            },
+            Check {
+                name: "clippy".into(),
+                argv: vec![],
+            },
+        ],
+        tiers: None,
+        gate: None,
+        patch: None,
+        own: None,
+    })
+    .expect("bounded");
+    for s in control::mirror("pigeon", "pigeon", &c, &logs, 2) {
+        run(&db, &s);
+    }
+    c.apply(Event::Waived {
+        job: "fmt".into(),
+        sha: A.into(),
+        lane: 1,
+    })
+    .expect("waives");
+    for s in control::mirror("pigeon", "pigeon", &c, &logs, 3) {
+        run(&db, &s);
+    }
+    let statuses: Vec<(String, String)> = db
+        .prepare("SELECT name, status FROM jobs WHERE change = 14 AND name IN ('fmt', 'clippy') ORDER BY name")
+        .expect("prepares")
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+        .expect("queries")
+        .map(|r| r.expect("row"))
+        .collect();
+    assert_eq!(
+        statuses,
+        vec![
+            ("clippy".to_string(), "queued".to_string()),
+            ("fmt".to_string(), "queued".to_string()),
+        ],
+        "a waived job keeps its last row and is never written as waived or passed"
+    );
+}
+
+#[test]
 fn the_mirror_keeps_a_changes_session_and_affects_for_overlaps() {
     let db = db();
     let logs = serde_json::Map::new();
