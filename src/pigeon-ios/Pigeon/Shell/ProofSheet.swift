@@ -142,16 +142,20 @@ struct ProofSheet: View {
             let bytes = try JSONEncoder().encode(JSONValue.object(options))
             let answer = try await auth.prove(JSONDecoder().decode(PasskeyChallenge.self, from: bytes))
             let operation = data["operation"]?.string ?? ""
-            result = try await client.call(
-                "proof_submit",
-                [
-                    "page": .string(page),
-                    "fields": .object(["operation": .string(operation)]),
-                    "credential": .string(answer.id),
-                    "client_data": .string(answer.client),
-                    "authenticator_data": .string(answer.authenticator),
-                    "signature": .string(answer.signature),
-                ])
+            var args: [String: JSONValue] = [
+                "credential": .string(answer.id),
+                "client_data": .string(answer.client),
+                "authenticator_data": .string(answer.authenticator),
+                "signature": .string(answer.signature),
+            ]
+            if let purpose {
+                args["purpose"] = .string(purpose)
+                if let target { args["target"] = .string(target) }
+            } else {
+                args["page"] = .string(page)
+                args["fields"] = .object(["operation": .string(operation)])
+            }
+            result = try await client.call("proof_submit", args)
         } catch {
             self.error = error.localizedDescription
         }
