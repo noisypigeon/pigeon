@@ -123,6 +123,12 @@ pub(super) async fn dispatch(
     planner: &str,
     pool: &str,
 ) -> Result<std::result::Result<Value, String>> {
+    // The standby only reads; see the blue-green ADR §A.3.
+    if !super::lease::acting(env).await {
+        return Ok(Err(
+            "wait: standby: this Worker doesn't hold the lease".to_string()
+        ));
+    }
     let (_, v) = to_instance(env, s, "/tickets/list", &json!({})).await?;
     let tickets: crate::tickets::Tickets = serde_json::from_value(v).unwrap_or_default();
     let k = pd::next_k(tickets.0.keys().map(String::as_str), brief);

@@ -25,6 +25,10 @@ const CURSOR: &str = "digest-cursor";
 /// for the same count within a minute; see
 /// `.claude/decisions/2026-11-17-runtime-mcp-feed-view-contract.md` §5. Logs rather than fails.
 pub async fn notify(env: &Env, s: &Settings, _title: &str, _body: &str, _path: &str) {
+    // The standby only reads; see the blue-green ADR §A.3.
+    if !super::lease::acting(env).await {
+        return;
+    }
     let count = open_count(env, s).await;
     if count == 0 {
         return;

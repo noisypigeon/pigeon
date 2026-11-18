@@ -125,6 +125,11 @@ impl DurableObject for Bench {
         let (Some(label), Some(name)) = (label, name) else {
             return Response::ok("no bench");
         };
+        // The standby only reads; see the blue-green ADR §A.3.
+        if !super::lease::acting(&self.env).await {
+            storage.set_alarm(TICK_MS).await?;
+            return Response::ok("standby");
+        }
         let s = Settings::from(&self.env)?;
         if !live(&self.env, &s, &label).await? {
             let _ = release(&self.env, &s, &name).await;

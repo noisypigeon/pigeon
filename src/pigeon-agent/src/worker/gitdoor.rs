@@ -55,6 +55,10 @@ pub async fn serve(mut req: Request, env: &Env, s: &Settings, who: &Identity) ->
         return Ok(Response::empty()?.with_headers(headers));
     }
     if service == Service::ReceivePack {
+        // The standby only reads; see the blue-green ADR §A.3.
+        if !super::lease::acting(env).await {
+            return Response::error("wait: standby: this Worker doesn't hold the lease", 409);
+        }
         let bytes = body.as_deref().unwrap_or_default();
         let push = match gitdoor::commands(bytes) {
             Ok(p) => p,

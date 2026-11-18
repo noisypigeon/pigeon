@@ -290,6 +290,15 @@ async fn shadow(env: &Env, e: Option<&crate::events::Event>) {
 ///
 /// When storage fails.
 pub async fn serve(state: &State, env: &Env, path: &str, body: &Value) -> Result<Response> {
+    // The standby only reads; see the blue-green ADR §A.3.
+    if matches!(path, "/events/add" | "/events/nudge") && !super::lease::acting(env).await {
+        return Response::error("wait: standby: this Worker doesn't hold the lease", 409);
+    }
+    run_serve(state, env, path, body).await
+}
+
+/// `serve`'s work, once the standby has refused its writes.
+async fn run_serve(state: &State, env: &Env, path: &str, body: &Value) -> Result<Response> {
     let storage = state.storage();
     let mut log: Log = storage.get(LOG).await?.unwrap_or_default();
     match path {

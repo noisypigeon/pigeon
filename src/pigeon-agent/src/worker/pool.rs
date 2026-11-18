@@ -187,6 +187,12 @@ impl DurableObject for Pool {
         let Some((pool, _)) = self.pool().await? else {
             return Response::ok("no pool");
         };
+        // The standby only reads; see the blue-green ADR §A.3.
+        if !super::lease::acting(&self.env).await {
+            let l = self.ledger(&pool).await?;
+            self.arm(&l).await?;
+            return Response::ok("standby");
+        }
         let l = self.ledger(&pool).await?;
         let n = ledger::sweep(&l, &pool, now());
         if n != l {
