@@ -203,6 +203,12 @@ pub struct Item {
     /// The item it closes.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub resolves: Option<u64>,
+    /// The change's stage as the event was appended.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stage: Option<crate::change::stage::Stage>,
+    /// Whether the event wakes its session ([`crate::events::wakes`]), as `wake=agent` reads.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub wakes: bool,
 }
 
 /// The item for event `e`.
@@ -220,6 +226,8 @@ pub fn item(e: &crate::events::Event) -> Item {
         summary: e.summary.clone(),
         owner: e.owner,
         resolves: e.resolves,
+        stage: e.stage.clone(),
+        wakes: crate::events::wakes(e),
     }
 }
 
@@ -307,6 +315,8 @@ pub struct Query {
     pub needs: Option<Needs>,
     /// Only the open items.
     pub open: bool,
+    /// Only items that wake their session.
+    pub wake: bool,
     /// The most items; 0 means [`crate::events::PAGE`].
     pub limit: usize,
 }
@@ -330,7 +340,7 @@ pub fn read(events: &[crate::events::Event], reader: &Reader, q: &Query) -> Vec<
         q.limit
     };
     base.into_iter()
-        .filter(|i| i.id > q.after && q.needs.is_none_or(|n| i.needs == n))
+        .filter(|i| i.id > q.after && q.needs.is_none_or(|n| i.needs == n) && (!q.wake || i.wakes))
         .take(limit)
         .cloned()
         .collect()

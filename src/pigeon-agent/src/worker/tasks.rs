@@ -126,6 +126,26 @@ pub async fn run(
             {
                 v["closed"] = json!(n);
             }
+            if status == 200
+                && let Some(id) = id
+            {
+                let change = v["change"]
+                    .as_u64()
+                    .and_then(|n| u32::try_from(n).ok())
+                    .filter(|n| *n > 0);
+                let said = format!("task #{id} done");
+                let _ = super::events::append_about(
+                    env,
+                    s,
+                    "task.done",
+                    change,
+                    None,
+                    &said,
+                    false,
+                    &format!("task:{id}"),
+                )
+                .await;
+            }
             Ok((status, v))
         }
         "task.wait" => {
@@ -167,9 +187,26 @@ pub async fn add(
     let body = json!({
         "kind": kind, "change": change, "parent": parent, "session": session, "note": note,
     });
-    to_instance(env, s, "/tasks/add", &body).await?;
+    let (_, made) = to_instance(env, s, "/tasks/add", &body).await?;
     let said = format!("task ({kind}) on !{change}: {note}");
-    super::events::append(env, s, "task.made", Some(change), session, &said, false).await
+    match made["id"].as_u64() {
+        Some(id) => {
+            super::events::append_about(
+                env,
+                s,
+                "task.made",
+                Some(change),
+                session,
+                &said,
+                false,
+                &format!("task:{id}"),
+            )
+            .await
+        }
+        None => {
+            super::events::append(env, s, "task.made", Some(change), session, &said, false).await
+        }
+    }
 }
 
 /// A claimed handoff task `t`: its change becomes `session`'s; see

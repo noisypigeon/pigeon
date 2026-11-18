@@ -57,7 +57,7 @@ pub async fn run(
                 return Ok((if status == 200 { 500 } else { status }, v));
             };
             let said = format!("{} #{}: {}", kind.name(), item.id, item.title);
-            super::events::append(
+            super::events::append_about(
                 env,
                 s,
                 "owner.asked",
@@ -65,6 +65,7 @@ pub async fn run(
                 Some(session),
                 &said,
                 true,
+                &format!("owner:{}", item.id),
             )
             .await?;
             super::push::notify(env, s, kind.headline(), &item.title, "/approvals").await;
@@ -85,7 +86,7 @@ pub async fn run(
                 item.id,
                 item.title
             );
-            super::events::append(
+            super::events::append_about(
                 env,
                 s,
                 "owner.withdrawn",
@@ -93,6 +94,7 @@ pub async fn run(
                 Some(session),
                 &said,
                 false,
+                &format!("owner:{}", item.id),
             )
             .await?;
             Ok((200, json!({ "item": item })))
@@ -149,7 +151,7 @@ pub async fn answer(env: &Env, s: &Settings, id: &str, body: &Value) -> Result<R
         item.id,
         item.answer.as_deref().unwrap_or_default()
     );
-    super::events::append(
+    super::events::append_about(
         env,
         s,
         "owner.answered",
@@ -157,6 +159,7 @@ pub async fn answer(env: &Env, s: &Settings, id: &str, body: &Value) -> Result<R
         Some(item.session.clone()),
         &said,
         false,
+        &format!("owner:{}", item.id),
     )
     .await?;
     Response::from_json(&json!({ "item": item }))

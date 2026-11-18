@@ -42,6 +42,8 @@ fn it(id: u64, t: ItemType, n: Needs, change: Option<u32>) -> Item {
         summary: String::new(),
         owner: false,
         resolves: None,
+        stage: None,
+        wakes: false,
     }
 }
 
@@ -243,4 +245,31 @@ fn item_carries_resolves() {
     let ask = it(3, ItemType::OwnerAsk, Needs::Owner, None);
     let answer = item(&e);
     assert!(open(&[ask, answer]).iter().all(|i| i.id != 3));
+}
+
+#[test]
+fn items_carry_stage_and_wakes() {
+    let e = ev(1, "change.checked", Some(4), Some(StageNeeds::Agent));
+    let i = item(&e);
+    assert_eq!(i.stage, e.stage);
+    assert!(i.wakes);
+    assert!(!item(&ev(2, "job.passed", Some(4), None)).wakes);
+    let d = item(&ev(3, "deploy.failed", None, None));
+    assert!(d.wakes);
+    assert_eq!(d.needs, Needs::Owner);
+}
+
+#[test]
+fn wake_keeps_only_waking_items() {
+    let log = vec![
+        ev(1, "deploy.failed", None, None),
+        ev(2, "job.passed", Some(4), None),
+        ev(3, "change.checked", Some(5), Some(StageNeeds::Provider)),
+    ];
+    let q = Query {
+        wake: true,
+        ..Query::default()
+    };
+    let got = read(&log, &Reader::Owner, &q);
+    assert_eq!(got.iter().map(|i| i.id).collect::<Vec<_>>(), [1]);
 }

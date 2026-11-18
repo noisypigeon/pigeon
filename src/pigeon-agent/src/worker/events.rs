@@ -43,6 +43,29 @@ pub async fn append(
     to_instance(env, s, "/events/add", &body).await.map(|_| ())
 }
 
+/// Appends an event about `subject`, which the log links to the open event it closes; see .claude/decisions/2026-11-17-runtime-mcp-feed-view-contract.md, step 8.
+///
+/// # Errors
+///
+/// When a binding fails.
+#[allow(clippy::too_many_arguments)]
+pub async fn append_about(
+    env: &Env,
+    s: &Settings,
+    kind: &str,
+    change: Option<u32>,
+    session: Option<String>,
+    summary: &str,
+    owner: bool,
+    subject: &str,
+) -> Result<()> {
+    let body = json!({
+        "kind": kind, "change": change, "session": session, "summary": summary, "owner": owner,
+        "subject": subject,
+    });
+    to_instance(env, s, "/events/add", &body).await.map(|_| ())
+}
+
 /// Appends what happened to `after` since `before`, logging a failure rather than failing.
 pub async fn changed(
     env: &Env,
@@ -196,6 +219,7 @@ pub async fn feed(
         "session": text("session").filter(|v| !v.trim().is_empty()),
         "needs": text("needs"),
         "open": matches!(text("open").as_deref(), Some("1" | "true")),
+        "wake": text("wake").as_deref() == Some("agent"),
         "owner": owner,
     });
     let until = worker::Date::now().as_millis() + seconds * 1000;
@@ -264,6 +288,9 @@ pub async fn serve(state: &State, path: &str, body: &Value) -> Result<Response> 
                 e.stage = serde_json::from_value(body["stage"].clone()).ok();
                 e.model = e.session.as_deref().and_then(|l| tickets.class(l));
             }
+            if let Some(subject) = body["subject"].as_str().filter(|s| !s.trim().is_empty()) {
+                log.link(id, subject);
+            }
             storage.put(LOG, &log).await?;
             Response::from_json(&json!({ "id": id }))
         }
@@ -314,6 +341,7 @@ pub async fn serve(state: &State, path: &str, body: &Value) -> Result<Response> 
                 after,
                 needs: crate::core::feed::parse_needs(body["needs"].as_str()),
                 open: body["open"].as_bool() == Some(true),
+                wake: body["wake"].as_bool() == Some(true),
                 limit: 0,
             };
             let all = log.list.iter().cloned().collect::<Vec<_>>();

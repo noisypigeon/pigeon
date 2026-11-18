@@ -46,7 +46,17 @@ pub async fn run(env: &Env, s: &Settings, hours: u32) -> Result<(u16, Value)> {
     };
     elicit::inbox(env, s, "/approvals/add", &json!(waiting)).await?;
     let said = format!("`{OPERATION}` ({title}) waits for the owner");
-    let _ = super::events::append(env, s, "approval.pending", None, None, &said, false).await;
+    let _ = super::events::append_about(
+        env,
+        s,
+        "approval.pending",
+        None,
+        None,
+        &said,
+        false,
+        &format!("ci:{}", offer.id),
+    )
+    .await;
     super::push::notify(env, s, "Approval waiting", &said, &path).await;
     let host = env
         .var(crate::wire::ship_wire::HOST_VAR)
@@ -207,7 +217,17 @@ pub async fn page_serve(
                     ),
                 ),
             };
-            let _ = super::events::append(env, s, OPERATION, None, None, &said, false).await;
+            let _ = super::events::append_about(
+                env,
+                s,
+                OPERATION,
+                None,
+                None,
+                &said,
+                false,
+                &format!("ci:{id}"),
+            )
+            .await;
             page::html(200, &approve::outcome(title, &said))
         }
         _ => page::refused(405, "method not allowed"),

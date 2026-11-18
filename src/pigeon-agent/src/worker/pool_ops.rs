@@ -69,8 +69,17 @@ pub async fn run(
             let (status, v) = to_pool(env, name, "/pause", &body).await?;
             if status == 200 {
                 let said = format!("pool {name} paused: {why}");
-                let _ =
-                    super::events::append(env, s, "pool.paused", None, None, &said, false).await;
+                let _ = super::events::append_about(
+                    env,
+                    s,
+                    "pool.paused",
+                    None,
+                    None,
+                    &said,
+                    false,
+                    &format!("pool:{name}"),
+                )
+                .await;
             }
             Ok((status, v))
         }
@@ -186,7 +195,17 @@ pub async fn page_serve(
             }
             let by = super::account::approver(env, s).await?;
             let said = format!("pool {name} resumed by {by}");
-            let _ = super::events::append(env, s, "pool.resumed", None, None, &said, false).await;
+            let _ = super::events::append_about(
+                env,
+                s,
+                "pool.resumed",
+                None,
+                None,
+                &said,
+                false,
+                &format!("pool:{name}"),
+            )
+            .await;
             page::html(200, &approve::outcome("Pool resumed", &said))
         }
         _ => page::refused(405, "method not allowed"),

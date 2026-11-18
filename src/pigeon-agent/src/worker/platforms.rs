@@ -82,7 +82,17 @@ async fn announce(env: &Env, s: &Settings, run: &Run, operation: &str, token: &s
         "`{operation}` of {} (run {}) waits for the owner",
         run.unit, run.id
     );
-    let _ = super::events::append(env, s, "approval.pending", None, None, &said, false).await;
+    let _ = super::events::append_about(
+        env,
+        s,
+        "approval.pending",
+        None,
+        None,
+        &said,
+        false,
+        &format!("platform:{}", run.id),
+    )
+    .await;
     super::push::notify(env, s, "Approval waiting", &said, &path).await;
     format!("https://{}{path}", host(env))
 }
@@ -312,8 +322,17 @@ async fn plan_token(
                     "platform run {} of {}: its token wasn't minted: {why}",
                     run.id, run.unit
                 );
-                let _ =
-                    super::events::append(env, s, "grant.failed", None, None, &said, false).await;
+                let _ = super::events::append_about(
+                    env,
+                    s,
+                    "grant.failed",
+                    None,
+                    None,
+                    &said,
+                    false,
+                    &format!("platform:{}", run.id),
+                )
+                .await;
                 let _ = super::tasks::add(env, s, "grant-failed", 0, None, None, &said).await;
                 return Ok(Err(page::refused(
                     502,
@@ -406,8 +425,17 @@ async fn decide(
                     m.token_id,
                     m.capabilities.join(", ")
                 );
-                let _ =
-                    super::events::append(env, s, "grant.granted", None, None, &said, false).await;
+                let _ = super::events::append_about(
+                    env,
+                    s,
+                    "grant.granted",
+                    None,
+                    None,
+                    &said,
+                    false,
+                    &format!("platform:{id}"),
+                )
+                .await;
             }
             page::html(
                 200,
@@ -612,7 +640,17 @@ pub async fn tick(state: &State, env: &Env, sha: Option<&str>) -> Result<()> {
             else {
                 continue;
             };
-            let _ = super::events::append(env, &s, kind, None, None, &said, false).await;
+            let _ = super::events::append_about(
+                env,
+                &s,
+                kind,
+                None,
+                None,
+                &said,
+                false,
+                &format!("platform:{id}"),
+            )
+            .await;
         }
         for id in gone {
             let said = format!("platform run {id} expired, its token erased");
@@ -657,7 +695,17 @@ async fn revoke_ended(env: &Env, s: &Settings, runs: &mut Runs) -> bool {
             ),
         };
         *runs = runs.revoked(*id);
-        let _ = super::events::append(env, s, kind, None, None, &said, false).await;
+        let _ = super::events::append_about(
+            env,
+            s,
+            kind,
+            None,
+            None,
+            &said,
+            false,
+            &format!("platform:{id}"),
+        )
+        .await;
         if kind == "grant.failed" {
             let _ = super::tasks::add(env, s, "grant-failed", 0, None, None, &said).await;
         }

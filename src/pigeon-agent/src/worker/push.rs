@@ -343,6 +343,7 @@ pub async fn hourly(env: &Env) -> Result<()> {
             0 => lines.first().cloned().unwrap_or_default(),
             n => format!("{} (and {n} more)", lines[0]),
         };
+        let _ = super::events::append(env, &s, "digest", None, None, &body, true).await;
         notify(env, &s, "pigeon digest", &body, "/approvals").await;
         to_instance(
             env,
