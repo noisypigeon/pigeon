@@ -12,6 +12,7 @@
 - agent v0.1.58
 - agent v0.1.59
 - agent v0.1.60
+- agent v0.1.61
 - infra-cloudflare-access-application v0.1.3
 - infra-cloudflare-access-application v0.1.4
 - infra-cloudflare-schema v0.1.24
@@ -114,6 +115,7 @@
 - feat(agent): instances.standup on the device door, and the app's stand-up through it (!1209) ([91b85ee](https://github.com/noisypigeon/pigeon/commit/91b85eedb0e673cc88327dcf2a5537989f941418)) · agent
 - feat(agent)!: the Worker no longer serves the old Web Push pages' routes (!1210) ([091cfa1](https://github.com/noisypigeon/pigeon/commit/091cfa1a6df9fa4817fe13b2f53c69d429918895)) · agent
 - feat(deploy): pigeon and the judge build apart, each kept at the commit it was built at (!1206) ([98a562d](https://github.com/noisypigeon/pigeon/commit/98a562da035fc11e3466c3b2bf03347d45656198)) · agent
+- feat(core): MainRun's state is journaled in shadow, as the Instance's is (!1211) ([517d50f](https://github.com/noisypigeon/pigeon/commit/517d50f4ad53fa391f041cbfb8c8e61f7ab8690a)) · agent
 
 ## 2026-11-17
 
