@@ -17,6 +17,7 @@
 - agent v0.1.63
 - agent v0.1.64
 - agent v0.1.65
+- agent v0.1.66
 - infra-cloudflare-access-application v0.1.3
 - infra-cloudflare-access-application v0.1.4
 - infra-cloudflare-schema v0.1.24
@@ -166,6 +167,7 @@
 - docs(adr): step 9b's hosts: the front takes the platform host and the zone, each color keeps its own host (!1255) ([099b9ab](https://github.com/noisypigeon/pigeon/commit/099b9ab09202bd59301c589a34371ba6dc1c9fa1))
 - feat(infra): control.platform.pigeon.dev joins the platform's domains, so Access covers it before the stack takes it (!1257) ([d72c84e](https://github.com/noisypigeon/pigeon/commit/d72c84eb5ef27ebf0366a13fbab0fe06cde93d7f))
 - fix(images): the job image's context holds tooling/session/models.json, which pigeon-core includes (!1260) ([23a1f9c](https://github.com/noisypigeon/pigeon/commit/23a1f9cc34329e2b9ef2761493c0413f4ed80f7e)) · agent, pigeon-eviction
+- feat(infra): pigeon-control serves control.platform.pigeon.dev beside blue.platform, as its own host (!1262) ([b8ab90a](https://github.com/noisypigeon/pigeon/commit/b8ab90a1b4e9e8709ac1984809fac673eee9ea85)) · agent
 
 ## 2026-11-17
 
