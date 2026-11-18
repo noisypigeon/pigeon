@@ -22,6 +22,8 @@ guarded:
   - src/pigeon-core/src/approval/**
   # Each role's capabilities; see .claude/decisions/2026-11-14-security-instance-members-roles-invitations.md §2.
   - .config/roles.yaml
+  # Who may do what: levels, permissions and capability grants; see .claude/decisions/2026-11-18-security-users-levels-capability-grants.md §2.
+  - src/pigeon-core/src/member/**
   # The provider registry and the broker's verdict; see .claude/decisions/2026-11-16-security-provider-calls-mcp-broker.md §3.
   - .config/providers/**
   - src/pigeon-core/src/provider/**
@@ -45,6 +47,8 @@ gate:
   - src/pigeon-agent/src/worker/lanes.rs
   - src/pigeon-agent/src/worker/passkeys.rs
   - src/pigeon-agent/src/worker/passkey.js
+  # Who may do what; see .claude/decisions/2026-11-18-security-users-levels-capability-grants.md §2.
+  - src/pigeon-core/src/member/**
   # The credential plane: grant redemption, minting, the grants ledger and app devices.
   - .config/grants.yaml
   - src/pigeon-core/src/minting.rs

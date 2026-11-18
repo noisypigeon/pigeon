@@ -1,15 +1,15 @@
-description: Each role's capabilities are a comment, then exactly three explicit lists, with no wildcard, per 2026-11-14-security-instance-members-roles-invitations.md §2.
+description: Each level's permissions are a comment, then exactly three explicit lists, with no wildcard; standard holds no permission and service at most read and propose, per 2026-11-18-security-users-levels-capability-grants.md §2.
 target:
   files: [.config/roles.yaml]
   optional: true
 rules:
   - line: { at: 1, matches: '^# ' }
   - line: { at: 2, matches: '^roles:$' }
+  - line: { at: 3, matches: '^  administrator: \[read, propose, approve, approve\.owner, auto, mandates, platform, members(, learner)?\]$' }
+  - line: { at: 4, matches: '^  (user|standard): \[(learner)?\]$' }
   - fields:
-      after: 2
+      after: 4
       pattern: '^  (?<key>[a-z]+): (?<value>\[.*\])$'
       only: true
       expect:
-        - { key: administrator, matches: '^\[read, propose, approve, approve\.owner, auto, mandates, platform, members(, learner)?\]$' }
-        - { key: user, matches: '^\[((read|propose|approve|approve\.owner|auto|mandates|platform|members|learner)(, (read|propose|approve|approve\.owner|auto|mandates|platform|members|learner))*)?\]$' }
         - { key: service, matches: '^\[(read(, propose)?|propose)?\]$' }

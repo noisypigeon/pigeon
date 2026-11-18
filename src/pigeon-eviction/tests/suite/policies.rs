@@ -201,9 +201,7 @@ fn roles_holds_three_explicit_capability_lists_only() {
         )
     };
     passes(&check(good));
-    passes(&check(
-        &good.replace("user: [learner]", "user: [read, learner]"),
-    ));
+    passes(&check(&good.replace("  user: [learner]", "  standard: []")));
     passes(&check(
         &good.replace("service: [read, propose]", "service: []"),
     ));
@@ -212,6 +210,8 @@ fn roles_holds_three_explicit_capability_lists_only() {
         good.replace(", members, learner]", "]"),
         good.replace("user: [learner]", "user: [*]"),
         good.replace("user: [learner]", "user: [everything]"),
+        good.replace("user: [learner]", "user: [read, learner]"),
+        good.replace("  user: [learner]", "  standard: [approve.owner]"),
         good.replace("service: [read, propose]", "service: [read, approve]"),
         good.replace("  user: [learner]\n", ""),
         good.replace("# Each", "Each"),
