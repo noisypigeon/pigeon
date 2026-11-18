@@ -504,3 +504,43 @@ effect one deploy after it merges:
 Workers, so they take this path: whatever their specs need ships in a
 stored build before the specs merge. An instance's own Workers would take
 it too, on that instance's pipeline.
+
+### 2026-11-18: Step 9b's hosts: the front takes the platform host and the zone, each color keeps its own host
+
+A.5 step 4's second half gives `pigeon-front` `platform.pigeon.dev` and
+`*.pigeon.dev/*`, keeps `control.platform.pigeon.dev` for `pigeon-control`,
+and makes `PUBLIC_HOST` `platform.pigeon.dev`. Today `domains` is
+`[platform.pigeon.dev, blue.platform.pigeon.dev, front-test.pigeon.dev]`,
+`PUBLIC_HOST` is `domains[1]` and `PASSKEY_RP_ID` is `domains[0]`. So:
+
+- **`PUBLIC_HOST` stays each color's own host.** The deploy's
+  version-override smoke and A.4's verification reach one Worker by it, which
+  the front can't do. This replaces A.5 step 4's last clause. The front
+  serves `platform.pigeon.dev`, which stays `PASSKEY_RP_ID`, so a passkey
+  works through the front and on each color's own host under it.
+- **The stack's host becomes `control.platform.pigeon.dev`**, replacing
+  `blue.platform.pigeon.dev` in `domains[1]`, so `pigeon-blue` can take
+  `blue.platform.pigeon.dev` at A.5 step 8 while `pigeon-control` is still
+  warm. The new name changes the Access application, a plan the owner
+  applies. The old name stays in `domains` until no link or client names
+  it.
+- **The front takes the zone.** A `subdomains_of` route moves to the front's
+  spec. The Worker it forwards to keeps the zone's var, now set from
+  `$deployment.instance_zone`, so its standalone proxy is unchanged. "At
+  most one stack has `subdomains_of`" still holds.
+- **A custom domain moves in one deploy, rehearsed first.** The primary drops
+  `domains[0]` and the front adds it, in one change whose deploy ships the
+  primary before the front. The move is rehearsed with `front-test`: the
+  primary takes it as a custom domain, then the front takes it back. If the
+  front's step fails, `deploy_retry` repeats it. `platform.pigeon.dev`
+  stays reachable meanwhile, because the primary keeps its own host.
+
+Changes, in order: 9b.1, `domains[1]` renamed, with an Access plan the
+owner applies; 9b.2, the rehearsal on `front-test`; 9b.3, the front takes
+`subdomains_of`; 9b.4, the front takes `domains[0]`.
+
+**Multi-instance.** The lease is one row per D1 database (`id = 1`), so an
+instance with its own colors needs its own database, never the platform's.
+Standalones' hosts reach their instance through the platform's front and
+primary, so a platform flip briefly delays their proxying (the front's 5 s
+cache) without changing where they go.
