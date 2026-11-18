@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026-11-18
+
+### Released
+
+- agent v0.1.53
+
+### Merged
+
+- feat(core): every tool presents its view: the rest family, change.status and feed.read (!1076) ([77c8f89](https://github.com/noisypigeon/pigeon/commit/77c8f8933cde20fcf6b3d1fa9504cebcf6aed3c8))
+- feat(approval): the fast lane's core: who a lane covers, and the jobs it may never waive (!1063) ([410dcf7](https://github.com/noisypigeon/pigeon/commit/410dcf7577502417260a24fee2225b451be44859))
+- chore(approvals): the fast lane's Worker joins the gate (!1090) ([febd758](https://github.com/noisypigeon/pigeon/commit/febd758b18993305485ac408e6902de8b167c523))
+- feat(core): events name their subject, and the log links a closing event to the one it closes (!1078) ([905a55e](https://github.com/noisypigeon/pigeon/commit/905a55e22886e9dbf46610e7a72f2513ed4b7605))
+- docs(adr): review !1063 against !1081 (!1082) ([3d84210](https://github.com/noisypigeon/pigeon/commit/3d842109dd2900a918559a9f5e804cf7bd3e46c3))
+
 ## 2026-11-17
 
 ### Released
@@ -204,6 +218,23 @@
 - docs(adr): a tool's view is presented beside its result, and Governs takes the view and feed files (!1057) ([6d61175](https://github.com/noisypigeon/pigeon/commit/6d611755c7a96b8b4d5bbe93176e445ce68dc8fa))
 - feat(core): every operation declares its view, in tools/list's _meta, and initialize names the contract (!1055) ([5874157](https://github.com/noisypigeon/pigeon/commit/58741576cad15d7222aeb744cddf1006580096f0))
 - feat(infra): platform/blue declares the pigeon-pool service token and policy, adopted by name (!1056) ([9262ae7](https://github.com/noisypigeon/pigeon/commit/9262ae74c4c2945e77405dcce5577fd984664579))
+- chore(policies): the view contract is guarded, and the app declares screens only in its renderers, its shell and today's screens (!1058) ([2a29c7b](https://github.com/noisypigeon/pigeon/commit/2a29c7b965d9e5f2e477348cf2a0e63ebba55056))
+- fix(infra): an adopted service token with no rotation leaves its secret untouched (!1060) ([1c6d352](https://github.com/noisypigeon/pigeon/commit/1c6d352b788c2e6894761959dd0a8e47d6e54d5c))
+- feat(core): present: each tool's result as its declared view, checked and carried in _meta, with no tool presented yet (!1059) ([28479b9](https://github.com/noisypigeon/pigeon/commit/28479b99f4efd46d07bd6e820aca4f98a93dfd94))
+- fix(backplane): the pool's gateway name comes from platform/blue's settings, and its account from granter (!1061) ([78d12a0](https://github.com/noisypigeon/pigeon/commit/78d12a0ae7125499a424801ecc3527ccfffb1a0f)) · agent
+- docs(decisions): the owner's fast lane, a passkey-granted window that waives code checks and fronts the queue (!1062) ([8a4d453](https://github.com/noisypigeon/pigeon/commit/8a4d4532480bd047faee70b13f0489a3a9318581))
+- docs(adr): the one-catalog ADR governs step 5a's present/ (!1064) ([e9e0572](https://github.com/noisypigeon/pigeon/commit/e9e0572289c52993b785d1f7bf415389f2712744))
+- docs(adr): review !1064 against !1062 (!1068) ([88dc718](https://github.com/noisypigeon/pigeon/commit/88dc7180ec5cc61db276634db0c5d1c47e464e42))
+- feat(core): the approval family's results presented as views: approvals, grants, mandates, platform runs, pools and deploys (!1066) ([ccf2c9d](https://github.com/noisypigeon/pigeon/commit/ccf2c9d58c1bbd55817bb3c9002a752455c3d1b4))
+- feat(agent): feed.read, the feed as a tool: items per reader from the Instance's log, with the session's cursor and a long poll (!1065) ([f4d2763](https://github.com/noisypigeon/pigeon/commit/f4d2763325c5067236fb0af0c4e97db400b33636)) · agent
+- fix(backplane): a fresh Run token's 401 is retried once, and a request the gateway refuses costs $0 (!1071) ([93f5a42](https://github.com/noisypigeon/pigeon/commit/93f5a426204205eeb04a7d3fba11b42fad33402e)) · agent
+- docs(adr): review !1063 against !1064 (!1069) ([bb1c59f](https://github.com/noisypigeon/pigeon/commit/bb1c59fe193d6285628420c4d3090f5ffbc02652))
+- feat(core): the change family's results presented as views: changes, briefs, sessions and tasks (!1067) ([0b98825](https://github.com/noisypigeon/pigeon/commit/0b98825d759ce8f512af8f343bff89fee3c4042e))
+- docs(adr): step 8's shape: an event names its subject, and the log links a closing event to the item it closes (!1074) ([207e289](https://github.com/noisypigeon/pigeon/commit/207e28959b43fb596269b899c76994795c7924f8))
+- feat(core): the merge queue's fast-lane band, the owner's pre-emption, and the forecast's lane rule (!1073) ([ae2c4af](https://github.com/noisypigeon/pigeon/commit/ae2c4aff1dadd361cabf7f2609c257f0fcf89cdc))
+- docs(tooling): the README names tooling/session/ (!1075) ([bf66038](https://github.com/noisypigeon/pigeon/commit/bf660387c332135dddd0c18442d8ba5ce2aa1c37))
+- docs(adr): review !1063 against !1074 (!1077) ([fb010dd](https://github.com/noisypigeon/pigeon/commit/fb010ddf2a443998e4439f427af4f1aaefdc74fd))
+- docs(adr): step 13's shape: feed items carry the stage and today's wake rule, so the follower's lines don't change (!1081) ([295186b](https://github.com/noisypigeon/pigeon/commit/295186bbca609cfc8a0e61abbe1fcdb181f42590))
 
 ## 2026-11-16
 
