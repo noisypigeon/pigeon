@@ -826,3 +826,28 @@ group once its replacement was live and verified, and to move every link to
   counter wasn't needed: the owner's answers replaced it. R3, the authorizer
   in `run()`, moved to the users ADR's planner, who supplies `requires()` and
   `member::check`.
+
+### 2026-11-18: Step R3's shape: `member::check` beside `access::authorize`, in shadow, with the users ADR's step 5
+
+The outcome's note that R3 moved to the users ADR's planner is wrong: R3
+stays with this ADR's planner, and that ADR's 2026-11-18 step 9 amendment
+says so. Its planner supplies `Operation::requires()` (step 4) and
+`member::check` (step 3); R3 wires them in.
+
+- **One place.** `run()` calls `authorize_member` after
+  `access::authorize`. It loads `Members` from `member::STORE`, seeds the
+  Service users (`seed_services`) and saves them when that changed, reads
+  the roles from `standalone::roles()`, and builds `member::Request` with
+  the operation's name, its `requires()`, the account, the `Own` subject and
+  the scope from `scope_arg`.
+- **The account.** On the device door, the device's `account`. On `/mcp`,
+  an Access person is the Administrator (`ensure_owner`'s account); a
+  service token is `service_for(client_id, model)`, the model being its
+  ticket's class.
+- **Shadow.** It decides nothing. Each call whose answer differs from
+  today's is logged as `member.shadow` with the operation and the Service
+  user, or `unbound` and the client ID's `token_id`, never the ID. It
+  decides only when the users ADR's step 9 amendment says.
+- **Step 5.** Each `who.human` gate becomes an Administrator check: an
+  Access person on `/mcp`, or a device whose account is the
+  Administrator's. A Service user never passes it.
