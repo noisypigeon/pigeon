@@ -658,3 +658,35 @@ So the earlier amendment changes:
   paths), the link minters emit `/app#`; R7b (brief), the shell's proof
   flow (card, form, signing on `proof: true`) for every page kind. R13
   removes group A once R7a and R7b are verified.
+
+### 2026-11-18: Step R8's shape: the app's tools are device-door operations that act as their device
+
+The iOS app's Now and Insights tabs and their sheets still call `/v0/app/*`.
+Every handler behind those routes keys the `Instance` by the signing
+device's id, which `run()`'s `Identity` doesn't carry.
+
+- **Operations.** Each remaining platform call becomes a catalog operation,
+  named as the one-MCP ADR §1 lists them: `whoami`, `device.push`,
+  `profile.show`, `profile.update`, `avatar.show`, `avatar.put`,
+  `avatar.remove`, `device.unlink`, `passkey.remove`, `instances.list`,
+  `instances.standup`, `members.list`. The rest already have tools:
+  `home.show`, `tracker.show`, `ops.show`, `insights.show`, `feed.read`,
+  `change.status`, `owner.answer`, `approval.list` and `proof.*`.
+- **Doors.** `Operation::doors()` answers `[Device]` for these and
+  `[Access]` for the rest. `tools/list` on a door lists only the operations
+  that name it, beside the proof tools.
+- **The device.** `api::Door` carries the device `/v0/app/mcp` verified
+  (R8b, !1149). `serve_message` runs a device operation through the handler
+  its `/v0/app/*` route calls today, as that device, before `run()`. On
+  `/mcp` it is refused.
+- **Views.** Each answers a view through a presenter in `present/app.rs`.
+- **Not in R8.** The standalone app's `join.*` and `learner.*` routes are
+  the standalone's own surface (`worker/standalone.rs`) and stay.
+  `POST /v0/app/session`, the link code's redeem, signs with a key no
+  device holds yet, so it stays until `device.redeem` (R8c, gate) lets the
+  device door take that one call.
+
+Execution: R8a-1 (brief): the operations, `doors()`, the listing filter and
+the presenters. R8a-2 (brief): the dispatch. R8c (planner): `device.redeem`.
+R10 moves the app onto them; then group C goes, but `/v0/app/mcp` and, until
+R8c, `/v0/app/session` stay.
