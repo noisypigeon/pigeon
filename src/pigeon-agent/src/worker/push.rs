@@ -67,7 +67,7 @@ async fn send(env: &Env, s: &Settings, body: &str) -> Result<()> {
     let latest = Latest {
         title: "pigeon".to_string(),
         body: body.to_string(),
-        url: "/approvals".to_string(),
+        url: "/app".to_string(),
         at: now(),
     };
     to_instance(env, s, "/push/latest/put", &json!(latest)).await?;

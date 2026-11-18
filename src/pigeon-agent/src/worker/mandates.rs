@@ -121,7 +121,7 @@ async fn offer(env: &Env, s: &Settings, m: &Mandate) -> Result<String> {
         .var(crate::wire::ship_wire::HOST_VAR)
         .map(|v| v.to_string())
         .unwrap_or_default();
-    Ok(format!("https://{host}{path}"))
+    Ok(super::app_link(&host, &path))
 }
 
 /// What a window or mandate says of an operation, as the Worker acts on it.

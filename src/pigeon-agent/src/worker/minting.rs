@@ -113,7 +113,7 @@ pub async fn run(env: &Env, s: &Settings, operation: &str, name: &str) -> Result
         .unwrap_or_default();
     Ok((
         202,
-        json!({ "pending": { "operation": operation, "link": format!("https://{host}{path}") } }),
+        json!({ "pending": { "operation": operation, "link": super::app_link(&host, &path) } }),
     ))
 }
 

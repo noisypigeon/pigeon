@@ -172,6 +172,13 @@ const SURFACES: &[&[Route]] = &[
     shell::ROUTES,
 ];
 
+/// The owner's link to the grant page `path` (its path and query): the web client at `/app`,
+/// which opens its proof; see `.claude/decisions/2026-11-17-runtime-mcp-feed-view-contract.md`,
+/// its 2026-11-18 owner's answers.
+pub(super) fn app_link(host: &str, path: &str) -> String {
+    format!("https://{host}/app#{path}")
+}
+
 /// `form` posted to the page at `page` (its path and query) on `host`, as its own form, through
 /// that page's route, for `who`; the proof tools' way to a page's decision; see
 /// `.claude/decisions/2026-11-17-runtime-mcp-feed-view-contract.md` §4.

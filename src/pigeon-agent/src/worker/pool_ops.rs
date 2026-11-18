@@ -117,7 +117,7 @@ async fn offer(env: &Env, s: &Settings, name: &str) -> Result<(u16, Value)> {
         .unwrap_or_default();
     Ok((
         202,
-        json!({ "offer": offer, "pending": { "operation": OPERATION, "link": format!("https://{host}{path}") } }),
+        json!({ "offer": offer, "pending": { "operation": OPERATION, "link": super::app_link(&host, &path) } }),
     ))
 }
 

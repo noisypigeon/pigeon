@@ -72,7 +72,7 @@ pub async fn pending(
     elicit::inbox(env, s, "/approvals/put", &json!(waiting))
         .await
         .map_err(|e| e.to_string())?;
-    Ok((format!("https://{host}{path}"), grant.expires))
+    Ok((super::app_link(host, &path), grant.expires))
 }
 
 /// The approvals still waiting: those whose link is unexpired and unused, the rest dropped

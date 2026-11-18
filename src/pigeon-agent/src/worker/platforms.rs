@@ -94,7 +94,7 @@ async fn announce(env: &Env, s: &Settings, run: &Run, operation: &str, token: &s
     )
     .await;
     super::push::notify(env, s, "Approval waiting", &said, &path).await;
-    format!("https://{}{path}", host(env))
+    super::app_link(&host(env), &path)
 }
 
 fn text(args: &Map<String, Value>, k: &str) -> Option<String> {

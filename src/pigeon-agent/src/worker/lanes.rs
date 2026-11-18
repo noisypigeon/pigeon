@@ -240,7 +240,7 @@ async fn offer(env: &Env, s: &Settings, l: &Lane, token: &str) -> Result<String>
         .var(crate::wire::ship_wire::HOST_VAR)
         .map(|v| v.to_string())
         .unwrap_or_default();
-    Ok(format!("https://{host}{path}"))
+    Ok(super::app_link(&host, &path))
 }
 
 /// The lanes `lane.status` shows: the open one and the last [`SHOWN`], newest first.

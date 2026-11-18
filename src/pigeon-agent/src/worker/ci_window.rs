@@ -64,7 +64,7 @@ pub async fn run(env: &Env, s: &Settings, hours: u32) -> Result<(u16, Value)> {
         .unwrap_or_default();
     Ok((
         202,
-        json!({ "offer": offer, "pending": { "operation": OPERATION, "link": format!("https://{host}{path}") } }),
+        json!({ "offer": offer, "pending": { "operation": OPERATION, "link": super::app_link(&host, &path) } }),
     ))
 }
 
