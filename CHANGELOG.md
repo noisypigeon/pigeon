@@ -98,6 +98,7 @@
 - feat(ios): Now, Tracker and Insights read through the device door's tools (!1191) ([6ec6f35](https://github.com/noisypigeon/pigeon/commit/6ec6f3506e1adc741d6e88bcbdb1be625bc4b698))
 - test(core): the change and approval families declare their results, and their per-operation fixtures retire (!1193) ([57d55ec](https://github.com/noisypigeon/pigeon/commit/57d55eca6d69ac2b6387b5b22df26d79dc8d91fd))
 - feat(deploy): /healthz names the deployed commit, and the architecture site reads it at view time (!1195) ([c65680d](https://github.com/noisypigeon/pigeon/commit/c65680daafd405413fd70a353d081f211528921e)) · agent, site-template-architecture
+- feat(ios): profile, photo, push and instances go through the device door's tools (!1196) ([2cc6882](https://github.com/noisypigeon/pigeon/commit/2cc6882d2478d790c7a547d5b293340b05e79fe3))
 
 ## 2026-11-17
 
