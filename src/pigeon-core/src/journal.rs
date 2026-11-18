@@ -104,6 +104,26 @@ pub const MAIN_KEYS: &[&str] = &[
 /// `MainRun` keys that may hold infra outputs, withheld with owner item #42's.
 pub const MAIN_WITHHELD: &[&str] = &["platform-outputs"];
 
+/// The `ChangeRun` keys journaled as snapshots; `grants` is keyed by token hashes; see the ADR's #42 amendment.
+pub const CHANGE_KEYS: &[&str] = &[
+    "change",
+    "pending",
+    "journal",
+    "logs",
+    "failures",
+    "breaker",
+    "bound_log",
+    "grants",
+    "actions",
+    "forecast",
+    "after-seen",
+    "macos",
+    "queued",
+];
+
+/// `ChangeRun` keys holding plaintext page tokens, withheld until they are sealed.
+pub const CHANGE_WITHHELD: &[&str] = &["pages"];
+
 /// The most JSON text one snapshot entry holds; a larger value isn't journaled until it shrinks.
 pub const MAX_VALUE: usize = 1_000_000;
 

@@ -1131,8 +1131,44 @@ impl DurableObject for ChangeRun {
         }
     }
 
+    async fn fetch(&self, req: Request) -> Result<Response> {
+        let write = req.method() != Method::Get;
+        let response = Box::pin(self.run_fetch(req)).await;
+        if write {
+            self.journal().await;
+        }
+        response
+    }
+
+    async fn alarm(&self) -> Result<Response> {
+        // The standby only reads; see the blue-green ADR §A.3.
+        if !super::lease::acting(&self.env).await {
+            return Response::ok("standby");
+        }
+        let response = self.run_alarm().await;
+        self.journal().await;
+        response
+    }
+}
+
+impl ChangeRun {
+    /// Journals, in shadow, this change's state: its keys, as entries of its own object.
+    async fn journal(&self) {
+        let Ok(Some(change)) = self.state.storage().get::<Change>(CHANGE).await else {
+            return;
+        };
+        let number = u64::from(change.number);
+        super::journal_keys(
+            &self.state,
+            &self.env,
+            crate::core::journal::CHANGE_KEYS,
+            |i| crate::core::journal::change_object(i, number),
+        )
+        .await;
+    }
+
     #[expect(clippy::too_many_lines, reason = "one arm per route")]
-    async fn fetch(&self, mut req: Request) -> Result<Response> {
+    async fn run_fetch(&self, mut req: Request) -> Result<Response> {
         self.rearm().await?;
         let path = req.path();
         let existing: Option<Change> = self.state.storage().get(CHANGE).await?;
@@ -1268,16 +1304,6 @@ impl DurableObject for ChangeRun {
         }
     }
 
-    async fn alarm(&self) -> Result<Response> {
-        // The standby only reads; see the blue-green ADR §A.3.
-        if !super::lease::acting(&self.env).await {
-            return Response::ok("standby");
-        }
-        self.run_alarm().await
-    }
-}
-
-impl ChangeRun {
     /// The alarm's work, for the color that holds the lease.
     async fn run_alarm(&self) -> Result<Response> {
         let Some(mut change) = self.state.storage().get::<Change>(CHANGE).await? else {

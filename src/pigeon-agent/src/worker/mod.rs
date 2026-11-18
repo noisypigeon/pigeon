@@ -2408,7 +2408,7 @@ impl DurableObject for Instance {
 }
 
 /// Journals, in shadow, each of `keys` whose value in `state` changed, as entries of the object `object` names for the instance: a failure is logged, never returned.
-async fn journal_keys(state: &State, env: &Env, keys: &[&str], object: fn(&str) -> String) {
+async fn journal_keys(state: &State, env: &Env, keys: &[&str], object: impl Fn(&str) -> String) {
     use crate::core::journal;
     use std::collections::BTreeMap;
     let held = lease::current(env).await;
