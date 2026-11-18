@@ -29,6 +29,7 @@ pub mod insights;
 pub mod iosrelease;
 pub mod journal;
 pub mod learner;
+pub mod lease;
 pub mod ledger;
 pub mod look;
 pub mod macos;

@@ -333,3 +333,72 @@ fn a_change_closed_after_its_approval_mirrors_without_an_approver() {
         .expect("row");
     assert_eq!((state.as_str(), by), ("closed", None));
 }
+
+#[test]
+fn a_stale_epoch_fails_its_batch() {
+    use agent::core::lease;
+    let mut db = migrated();
+    let params = |s: &agent::control::Statement| -> Vec<rusqlite::types::Value> {
+        s.params
+            .iter()
+            .map(|v| match v {
+                serde_json::Value::Null => rusqlite::types::Value::Null,
+                serde_json::Value::Number(n) => {
+                    rusqlite::types::Value::Integer(n.as_i64().expect("integer"))
+                }
+                serde_json::Value::String(t) => rusqlite::types::Value::Text(t.clone()),
+                other => rusqlite::types::Value::Text(other.to_string()),
+            })
+            .collect()
+    };
+    let read = lease::read();
+    let row = db
+        .query_row(read.sql, [], |r| {
+            Ok(serde_json::json!({
+                "color": r.get::<_, String>(0)?,
+                "epoch": r.get::<_, i64>(1)?,
+                "state": r.get::<_, String>(2)?,
+            }))
+        })
+        .expect("lease row");
+    let first = lease::Lease {
+        color: "pigeon-control".into(),
+        epoch: 1,
+        state: "serving".into(),
+    };
+    assert_eq!(lease::from_row(&row), Some(first.clone()));
+    let journal =
+        "INSERT INTO journal (object, seq, epoch, at, kind, body) VALUES ('t', 1, 1, 0, 'k', '{}')";
+    let fenced = db.transaction().expect("transaction");
+    let f = lease::fence(1);
+    fenced
+        .execute(f.sql, rusqlite::params_from_iter(params(&f)))
+        .expect("fence passes");
+    fenced.execute(journal, []).expect("journal");
+    fenced.commit().expect("commits");
+    let stale = db.transaction().expect("transaction");
+    let f = lease::fence(0);
+    assert!(
+        stale
+            .execute(f.sql, rusqlite::params_from_iter(params(&f)))
+            .is_err()
+    );
+    drop(stale);
+    let rows: i64 = db
+        .query_row("SELECT count(*) FROM journal", [], |r| r.get(0))
+        .expect("count");
+    assert_eq!(rows, 1);
+    let file = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("migrations/0009_lease.sql");
+    db.execute_batch(&std::fs::read_to_string(file).expect("reads"))
+        .expect("0009 applies twice");
+    let row = db
+        .query_row(read.sql, [], |r| {
+            Ok(serde_json::json!({
+                "color": r.get::<_, String>(0)?,
+                "epoch": r.get::<_, i64>(1)?,
+                "state": r.get::<_, String>(2)?,
+            }))
+        })
+        .expect("lease row");
+    assert_eq!(lease::from_row(&row), Some(first));
+}

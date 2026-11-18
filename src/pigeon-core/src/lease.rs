@@ -1,0 +1,46 @@
+//! D1's lease, naming the acting color, and the fence that fails a batch written under a stale epoch; see .claude/decisions/2026-11-18-runtime-independent-blue-green-workers.md §A.3.
+
+use serde::{Deserialize, Serialize};
+use serde_json::json;
+
+/// The lease: who acts, under which epoch, in which state.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Lease {
+    /// The Worker that acts.
+    pub color: String,
+    /// Rises by one at each flip.
+    pub epoch: u64,
+    /// serving, draining or promoting.
+    pub state: String,
+}
+
+/// The color before blue and green exist.
+pub const FIRST_COLOR: &str = "pigeon-control";
+
+/// Reads the lease.
+#[must_use]
+pub fn read() -> crate::control::Statement {
+    crate::control::Statement {
+        sql: "SELECT color, epoch, state FROM lease WHERE id = 1",
+        params: vec![],
+    }
+}
+
+/// The lease from `read`'s row.
+#[must_use]
+pub fn from_row(row: &serde_json::Value) -> Option<Lease> {
+    Some(Lease {
+        color: row.get("color")?.as_str()?.to_string(),
+        epoch: row.get("epoch")?.as_u64()?,
+        state: row.get("state")?.as_str()?.to_string(),
+    })
+}
+
+/// The first statement of an act's batch: it fails the batch unless `epoch` is the lease's.
+#[must_use]
+pub fn fence(epoch: u64) -> crate::control::Statement {
+    crate::control::Statement {
+        sql: "INSERT OR REPLACE INTO fence (id, ok) VALUES (1, (SELECT CASE WHEN epoch = ?1 THEN 1 END FROM lease WHERE id = 1))",
+        params: vec![json!(epoch)],
+    }
+}
