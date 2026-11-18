@@ -414,3 +414,17 @@ Changes, in order: 9a.1 service bindings in the spec, and the primary taking
 every one of `domains` as its own host; 9a.2 `front-test.pigeon.dev` in
 `domains`, whose Access plan the owner applies; 9a.3, once it is applied, the
 crate and its spec on the test host, with its check.
+### 2026-11-18: !1158 agrees with this ADR
+
+!1158 carries out
+[`2026-11-17-runtime-mcp-feed-view-contract.md`](2026-11-17-runtime-mcp-feed-view-contract.md)'s
+R8 and R10b amendments: `proof.challenge` mints the passkey for unlinking a
+device or removing a passkey, and names the tool that redeems it. The two
+agree:
+
+- It changes `worker/passkeys.rs`, core `mcp.rs` and `present/proof.rs` with
+  its tests, none of the paths this ADR governs.
+- Its challenge is minted and checked in the color's own `Instance`, as every
+  proof is, so nothing crosses between blue and green.
+- It adds no test of the kinds C.1 retires: its one test checks a card on a fixture.
+- Nothing else here changes.
