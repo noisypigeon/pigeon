@@ -75,9 +75,18 @@ fn a_service_account_may_ask_every_control_plane_operation() {
 }
 
 #[test]
-fn every_operation_has_the_access_door() {
+fn every_operation_names_its_door() {
     for o in catalog() {
-        assert!(o.doors().contains(&Door::Access), "{} lacks Access", o.name);
+        if crate::wire::DEVICE_OPS.contains(&o.name) {
+            assert_eq!(
+                o.doors(),
+                [Door::Device],
+                "{} is not on the device door alone",
+                o.name
+            );
+        } else {
+            assert!(o.doors().contains(&Door::Access), "{} lacks Access", o.name);
+        }
     }
 }
 

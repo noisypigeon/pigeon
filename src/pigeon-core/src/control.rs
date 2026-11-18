@@ -525,6 +525,9 @@ pub fn route(request: &Request, by: &str, at: u64) -> Result<Routed, String> {
             state: text(a, "state"),
         }),
         "change.evictable" => Ok(Routed::Evictable),
+        op if crate::wire::DEVICE_OPS.contains(&op) => {
+            Err(format!("`{op}` runs only on the app's door, /v0/app/mcp"))
+        }
         other => Err(format!("`{other}` is not a control-plane operation")),
     }
 }

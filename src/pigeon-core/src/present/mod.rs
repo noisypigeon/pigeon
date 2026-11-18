@@ -1,6 +1,7 @@
 //! Presenters: each operation's result as its declared view, beside the result; see
 //! .claude/decisions/2026-11-17-runtime-mcp-feed-view-contract.md's 2026-11-17 amendment on presenting.
 
+pub(crate) mod app;
 pub(crate) mod approval;
 pub mod asked;
 pub(crate) mod change;
@@ -16,6 +17,7 @@ use serde_json::{Map, Value, json};
 pub fn presented() -> Vec<&'static str> {
     let mut all = Vec::new();
     all.extend_from_slice(change::NAMES);
+    all.extend_from_slice(app::NAMES);
     all.extend_from_slice(approval::NAMES);
     all.extend_from_slice(rest::NAMES);
     all
@@ -27,6 +29,7 @@ pub fn view(op: &str, r: &crate::wire::Response) -> Option<Value> {
     change::view(op, r)
         .or_else(|| approval::view(op, r))
         .or_else(|| rest::view(op, r))
+        .or_else(|| app::view(op, r))
 }
 
 /// A view checked against the one its operation declares.

@@ -1,12 +1,14 @@
 //! The presenters' frame: names, families, the check and what is still to present; see the ADR's 2026-11-17 amendment on presenting.
 
-use super::{approval, change, checked, rest};
+use super::{app, approval, change, checked, rest};
 use crate::view::View;
 use crate::wire::catalog;
 use serde_json::json;
 
 fn family(name: &str) -> &'static str {
-    if change::PREFIXES.iter().any(|p| name.starts_with(p)) {
+    if app::NAMES.contains(&name) {
+        "app"
+    } else if change::PREFIXES.iter().any(|p| name.starts_with(p)) {
         "change"
     } else if approval::PREFIXES.iter().any(|p| name.starts_with(p)) {
         "approval"
@@ -31,6 +33,7 @@ fn presented_names_are_unique_and_in_the_catalog() {
 #[test]
 fn every_name_is_in_its_family() {
     for (fam, names) in [
+        ("app", app::NAMES),
         ("change", change::NAMES),
         ("approval", approval::NAMES),
         ("rest", rest::NAMES),
@@ -44,6 +47,7 @@ fn every_name_is_in_its_family() {
 #[test]
 fn each_family_pins_what_it_still_has_to_present() {
     for (fam, names, pending) in [
+        ("app", app::NAMES, app::PENDING),
         ("change", change::NAMES, change::PENDING),
         ("approval", approval::NAMES, approval::PENDING),
         ("rest", rest::NAMES, rest::PENDING),

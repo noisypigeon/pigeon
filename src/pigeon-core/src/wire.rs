@@ -219,6 +219,21 @@ pub enum Door {
     Device,
 }
 
+/// The operations that act as the device `/v0/app/mcp` verified, listed and run only on that door; see .claude/decisions/2026-11-17-runtime-mcp-feed-view-contract.md, its R8 amendment.
+pub const DEVICE_OPS: [&str; 11] = [
+    "device.show",
+    "device.push",
+    "instances.list",
+    "members.list",
+    "profile.show",
+    "profile.edit",
+    "profile.update",
+    "avatar.show",
+    "avatar.edit",
+    "avatar.put",
+    "avatar.remove",
+];
+
 const GRANT: [&str; 7] = [
     "change.authorize",
     "change.approve",
@@ -354,7 +369,11 @@ impl Operation {
     /// The doors it is reachable through.
     #[must_use]
     pub fn doors(&self) -> &'static [Door] {
-        &[Door::Access]
+        if DEVICE_OPS.contains(&self.name) {
+            &[Door::Device]
+        } else {
+            &[Door::Access]
+        }
     }
 }
 
@@ -769,6 +788,97 @@ const CATALOG: &[Operation] = &[
         summary: "What waits for the owner: the open fast lanes, then every approval, grant and offer waiting, newest first, each opening its proof; see .claude/decisions/2026-11-17-runtime-mcp-feed-view-contract.md, its 2026-11-18 amendment §4",
         args: &[],
         view: View::List,
+    },
+    Operation {
+        name: "device.show",
+        engine: Engine::Agent,
+        effect: Effect::Read,
+        summary: "The device this app signs with, and its name; on the app's door only; see .claude/decisions/2026-11-17-runtime-mcp-feed-view-contract.md, its R8 amendment",
+        args: &[],
+        view: View::Card,
+    },
+    Operation {
+        name: "device.push",
+        engine: Engine::Agent,
+        effect: Effect::Build,
+        summary: "Register this device's APNs token for the owner's count-only pushes; on the app's door only; see .claude/decisions/2026-11-17-runtime-mcp-feed-view-contract.md, its R8 amendment",
+        args: &[arg("token", true, Kind::String)],
+        view: View::Card,
+    },
+    Operation {
+        name: "instances.list",
+        engine: Engine::Agent,
+        effect: Effect::Read,
+        summary: "The platform and each personal instance this device's account administers; on the app's door only; see .claude/decisions/2026-11-17-runtime-mcp-feed-view-contract.md, its R8 amendment",
+        args: &[],
+        view: View::List,
+    },
+    Operation {
+        name: "members.list",
+        engine: Engine::Agent,
+        effect: Effect::Read,
+        summary: "The members and open invitations this device's account may see; on the app's door only; see .claude/decisions/2026-11-17-runtime-mcp-feed-view-contract.md, its R8 amendment",
+        args: &[],
+        view: View::List,
+    },
+    Operation {
+        name: "profile.show",
+        engine: Engine::Agent,
+        effect: Effect::Read,
+        summary: "This device's account: its name, appearance, devices and passkeys; on the app's door only; see .claude/decisions/2026-11-17-runtime-mcp-feed-view-contract.md, its R8 amendment",
+        args: &[],
+        view: View::Detail,
+    },
+    Operation {
+        name: "profile.edit",
+        engine: Engine::Agent,
+        effect: Effect::Read,
+        summary: "The form that edits the profile's name and appearance; its submit is profile.update; on the app's door only; see .claude/decisions/2026-11-17-runtime-mcp-feed-view-contract.md, its R8 amendment",
+        args: &[],
+        view: View::Form,
+    },
+    Operation {
+        name: "profile.update",
+        engine: Engine::Agent,
+        effect: Effect::Build,
+        summary: "Set the profile's name or appearance (system, light or dark); on the app's door only; see .claude/decisions/2026-11-17-runtime-mcp-feed-view-contract.md, its R8 amendment",
+        args: &[
+            arg("name", false, Kind::Text),
+            arg("appearance", false, Kind::Text),
+        ],
+        view: View::Card,
+    },
+    Operation {
+        name: "avatar.show",
+        engine: Engine::Agent,
+        effect: Effect::Read,
+        summary: "The profile's photo, base64 JPEG in the result, for the client's header; on the app's door only; see .claude/decisions/2026-11-17-runtime-mcp-feed-view-contract.md, its R8 amendment",
+        args: &[],
+        view: View::Card,
+    },
+    Operation {
+        name: "avatar.edit",
+        engine: Engine::Agent,
+        effect: Effect::Read,
+        summary: "The form that picks a new photo; its submit is avatar.put; on the app's door only; see .claude/decisions/2026-11-17-runtime-mcp-feed-view-contract.md, its R8 amendment",
+        args: &[],
+        view: View::Form,
+    },
+    Operation {
+        name: "avatar.put",
+        engine: Engine::Agent,
+        effect: Effect::Build,
+        summary: "Set the profile's photo: base64 JPEG, at most 512 KiB; on the app's door only; see .claude/decisions/2026-11-17-runtime-mcp-feed-view-contract.md, its R8 amendment",
+        args: &[arg("jpeg", true, Kind::Text)],
+        view: View::Card,
+    },
+    Operation {
+        name: "avatar.remove",
+        engine: Engine::Agent,
+        effect: Effect::Build,
+        summary: "Remove the profile's photo; on the app's door only; see .claude/decisions/2026-11-17-runtime-mcp-feed-view-contract.md, its R8 amendment",
+        args: &[],
+        view: View::Card,
     },
     Operation {
         name: "push.key",

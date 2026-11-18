@@ -378,6 +378,24 @@ pub fn proof_tools() -> Vec<Value> {
     ]
 }
 
+/// `reply`, a `tools/list` answer, keeping the tools `door` may run; see .claude/decisions/2026-11-17-runtime-mcp-feed-view-contract.md, its R8 amendment.
+#[must_use]
+pub fn for_door(mut reply: Value, door: crate::wire::Door) -> Value {
+    if let Some(tools) = reply
+        .pointer_mut("/result/tools")
+        .and_then(Value::as_array_mut)
+    {
+        tools.retain(|t| {
+            let title = t.get("title").and_then(Value::as_str);
+            match title.and_then(|n| catalog().iter().find(|o| o.name == n)) {
+                Some(op) => op.doors().contains(&door),
+                None => true,
+            }
+        });
+    }
+    reply
+}
+
 /// `reply`, a `tools/list` answer, with the proof tools added.
 #[must_use]
 pub fn with_proof_tools(mut reply: Value) -> Value {
@@ -691,5 +709,36 @@ mod proof_tests {
         assert_eq!(ok["result"]["isError"], false);
         let refused = proof_answer(&json!(1), "proof.submit", Err("no".into()));
         assert_eq!(refused["result"]["isError"], true);
+    }
+}
+
+#[cfg(test)]
+mod door_tests {
+    use serde_json::Value;
+
+    use super::{for_door, tools};
+    use crate::wire::Door;
+
+    fn names(reply: &Value) -> Vec<&str> {
+        reply["result"]["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|t| t["name"].as_str())
+            .collect()
+    }
+
+    fn listing() -> Value {
+        serde_json::json!({ "jsonrpc": "2.0", "id": 1, "result": tools() })
+    }
+
+    #[test]
+    fn a_listing_follows_its_door() {
+        let access = for_door(listing(), Door::Access);
+        assert!(!names(&access).contains(&"device_show"));
+        assert!(names(&access).contains(&"change_status"));
+        let device = for_door(listing(), Door::Device);
+        assert!(names(&device).contains(&"device_show"));
+        assert!(!names(&device).contains(&"change_status"));
     }
 }
