@@ -104,6 +104,10 @@ pub fn compare(
         } => args.get(a).and_then(Value::as_str),
         _ => None,
     };
+    let subject = args
+        .get("account")
+        .and_then(Value::as_str)
+        .or_else(|| (requires == super::Requires::Own).then_some(account.as_str()));
     let request = Request {
         account: &account,
         operation: op.name,
@@ -113,7 +117,7 @@ pub fn compare(
         needs_proof: false,
         proof: None,
         proposer: None,
-        subject: Some(&account),
+        subject,
     };
     let refusal = check(roles, members, &request).err().map(|r| r.to_string());
     (refusal.is_none() != today).then(|| Shadow {
@@ -213,6 +217,23 @@ mod tests {
         .unwrap();
         assert_eq!(brief.account, "agent-executor");
         assert!(brief.refusal.is_some());
+    }
+
+    #[test]
+    fn an_own_operation_acts_only_on_the_callers_account() {
+        let m = members();
+        let device = Caller::Device {
+            account: "root".into(),
+        };
+        let own = op("device.show");
+        assert_eq!(
+            compare(&roles(), &m, &device, own, &Map::new(), true, 200),
+            None
+        );
+        let mut args = Map::new();
+        args.insert("account".into(), Value::from("bob"));
+        let other = compare(&roles(), &m, &device, own, &args, true, 200).unwrap();
+        assert!(other.refusal.is_some());
     }
 
     #[test]
