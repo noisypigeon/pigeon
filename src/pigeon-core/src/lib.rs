@@ -27,6 +27,7 @@ pub mod gitdoor;
 pub mod infra;
 pub mod insights;
 pub mod iosrelease;
+pub mod journal;
 pub mod learner;
 pub mod ledger;
 pub mod look;

@@ -259,13 +259,34 @@ async fn resolve(
     }
 }
 
+/// Appends `e` to the D1 journal in shadow: a failure is logged, never returned.
+async fn shadow(env: &Env, e: Option<&crate::events::Event>) {
+    let Some(e) = e else {
+        return;
+    };
+    let appended = match Settings::from(env) {
+        Ok(s) => {
+            let entry = crate::core::journal::event_entry(
+                &s.instance,
+                e,
+                crate::core::journal::SHADOW_EPOCH,
+            );
+            super::platform::d1(env, &[entry]).await
+        }
+        Err(err) => Err(err),
+    };
+    if let Err(err) = appended {
+        worker::console_warn!("journal: {err}");
+    }
+}
+
 /// The `Instance` Durable Object's side: `/events/add`, `/events/nudge`, `/events/since`,
 /// `/events/cursor` and `/feed/read`.
 ///
 /// # Errors
 ///
 /// When storage fails.
-pub async fn serve(state: &State, path: &str, body: &Value) -> Result<Response> {
+pub async fn serve(state: &State, env: &Env, path: &str, body: &Value) -> Result<Response> {
     let storage = state.storage();
     let mut log: Log = storage.get(LOG).await?.unwrap_or_default();
     match path {
@@ -292,6 +313,7 @@ pub async fn serve(state: &State, path: &str, body: &Value) -> Result<Response> 
                 log.link(id, subject);
             }
             storage.put(LOG, &log).await?;
+            shadow(env, log.list.back().filter(|e| e.id == id)).await;
             Response::from_json(&json!({ "id": id }))
         }
         "/events/nudge" => {
@@ -305,6 +327,7 @@ pub async fn serve(state: &State, path: &str, body: &Value) -> Result<Response> 
             let id = log.nudge(change, session, at, now());
             if id.is_some() {
                 storage.put(LOG, &log).await?;
+                shadow(env, log.list.back().filter(|e| Some(e.id) == id)).await;
             }
             Response::from_json(&json!({ "id": id }))
         }

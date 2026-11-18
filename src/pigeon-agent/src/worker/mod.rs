@@ -2278,7 +2278,7 @@ impl DurableObject for Instance {
         }
         if path.starts_with("/events/") || path == "/feed/read" {
             let body: Value = req.json().await?;
-            return events::serve(&self.state, &path, &body).await;
+            return events::serve(&self.state, &self.env, &path, &body).await;
         }
         if path.starts_with("/tasks/") {
             let body: Value = req.json().await?;

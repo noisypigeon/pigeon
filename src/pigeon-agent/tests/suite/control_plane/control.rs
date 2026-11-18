@@ -1594,3 +1594,37 @@ fn a_change_holding_the_merge_turn_wakes_every_10_seconds() {
         "never later than its own poll"
     );
 }
+
+#[test]
+fn a_journal_entry_appends_once() {
+    use agent::core::journal;
+    let db = rusqlite::Connection::open_in_memory().expect("sqlite");
+    db.execute_batch(include_str!("../../../migrations/0008_journal.sql"))
+        .expect("migrates");
+    let e = agent::core::events::Event {
+        id: 7,
+        at: 100,
+        kind: "change.checked".into(),
+        change: None,
+        session: None,
+        summary: "checked".into(),
+        owner: false,
+        stage: None,
+        model: None,
+        subject: None,
+        resolves: None,
+    };
+    let s = journal::event_entry("noisypigeon", &e, journal::SHADOW_EPOCH);
+    run(&db, &s);
+    run(&db, &s);
+    let count: i64 = db
+        .query_row("SELECT COUNT(*) FROM journal", [], |r| r.get(0))
+        .expect("count");
+    assert_eq!(count, 1);
+    let row: (String, i64, i64) = db
+        .query_row("SELECT object, seq, epoch FROM journal", [], |r| {
+            Ok((r.get(0)?, r.get(1)?, r.get(2)?))
+        })
+        .expect("row");
+    assert_eq!(row, ("instance:noisypigeon/events".to_string(), 7, 0));
+}
