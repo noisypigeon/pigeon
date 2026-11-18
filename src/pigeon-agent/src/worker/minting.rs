@@ -95,7 +95,17 @@ pub async fn run(env: &Env, s: &Settings, operation: &str, name: &str) -> Result
     };
     elicit::inbox(env, s, "/approvals/add", &json!(waiting)).await?;
     let said = format!("`{operation}` ({title}) waits for the owner");
-    let _ = super::events::append(env, s, "grant.requested", None, None, &said, false).await;
+    let _ = super::events::append_about(
+        env,
+        s,
+        "grant.requested",
+        None,
+        None,
+        &said,
+        false,
+        &subject(offer.id),
+    )
+    .await;
     super::push::notify(env, s, "Approval waiting", &said, &path).await;
     let host = env
         .var(crate::wire::ship_wire::HOST_VAR)
@@ -262,8 +272,17 @@ pub async fn page_serve(
                 Ok(said) => page::html(200, &approve::outcome("Done", &said)),
                 Err(why) => {
                     let said = format!("{} grant `{}` failed: {why}", verb(o.kind), o.name);
-                    let _ = super::events::append(env, s, "grant.failed", None, None, &said, false)
-                        .await;
+                    let _ = super::events::append_about(
+                        env,
+                        s,
+                        "grant.failed",
+                        None,
+                        None,
+                        &said,
+                        false,
+                        &subject(o.id),
+                    )
+                    .await;
                     let _ = super::tasks::add(env, s, "grant-failed", 0, None, None, &said).await;
                     page::refused(409, &said)
                 }
@@ -297,7 +316,7 @@ async fn execute(
         account: &account,
     };
     if o.kind == Kind::Revoke {
-        return revoke(env, s, &api, &registry, &o.name, by).await;
+        return revoke(env, s, &api, &registry, o, by).await;
     }
     let Some(grant) = resolved.ledger.grants.get(&o.name) else {
         return Ok(Err(format!("`{}` is not in the deployed ledger", o.name)));
@@ -355,7 +374,8 @@ async fn execute(
                     .map(|t| format!(", token {t}"))
                     .unwrap_or_default()
             );
-            super::events::append(env, s, kind, None, None, &said, false).await?;
+            super::events::append_about(env, s, kind, None, None, &said, false, &subject(o.id))
+                .await?;
             Ok(Ok(said))
         }
         Settled::Undo { revoke, why } => {
@@ -558,15 +578,16 @@ pub(super) async fn revoke_token(env: &Env, id: &str) -> Result<std::result::Res
     Ok(api.revoke(id).await.map_err(|e| e.to_string()))
 }
 
-/// Revokes grant `name`'s token and removes its value, as `by`.
+/// Revokes offer `o`'s grant's token and removes its value, as `by`.
 async fn revoke(
     env: &Env,
     s: &Settings,
     api: &Api<'_>,
     registry: &Registry,
-    name: &str,
+    o: &Offer,
     by: &str,
 ) -> Result<std::result::Result<String, String>> {
+    let name = o.name.as_str();
     let Some(record) = registry.grants.get(name) else {
         return Ok(Err(format!("`{name}` was never granted")));
     };
@@ -588,8 +609,24 @@ async fn revoke(
     }
     to_instance(env, s, "/grant-registry/remove", &json!({ "name": name })).await?;
     let said = format!("`{name}` revoked by {by}");
-    super::events::append(env, s, "grant.revoked", None, None, &said, false).await?;
+    super::events::append_about(
+        env,
+        s,
+        "grant.revoked",
+        None,
+        None,
+        &said,
+        false,
+        &subject(o.id),
+    )
+    .await?;
     Ok(Ok(said))
+}
+
+/// An offer's event subject, `grant:<offer id>`; see
+/// `.claude/decisions/2026-11-17-runtime-mcp-feed-view-contract.md`, step 8's amendment.
+fn subject(offer: u32) -> String {
+    format!("grant:{offer}")
 }
 
 fn route_said(r: &ledger::Route) -> String {
