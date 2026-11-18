@@ -158,18 +158,24 @@ const SURFACES: &[&[Route]] = &[
     api::ROUTES,
     gitdoor::ROUTES,
     push::ROUTES,
-    approve::ROUTES,
     passkeys::ROUTES,
-    platforms::ROUTES,
-    mandates::ROUTES,
-    lanes::ROUTES,
-    ci_window::ROUTES,
-    minting::ROUTES,
     docs::ROUTES,
     devices::ROUTES,
     pool::ROUTES,
-    pool_ops::ROUTES,
     shell::ROUTES,
+];
+
+/// The grant pages, which `page_post` alone reaches, so `proof.submit` redeems each page's grant
+/// through its own decision; see `.claude/decisions/2026-11-17-runtime-mcp-feed-view-contract.md`,
+/// its 2026-11-18 amendments.
+const PAGES: &[&[Route]] = &[
+    approve::PAGES,
+    platforms::PAGES,
+    mandates::PAGES,
+    lanes::PAGES,
+    ci_window::PAGES,
+    minting::PAGES,
+    pool_ops::PAGES,
 ];
 
 /// The owner's link to the grant page `path` (its path and query): the web client at `/app`,
@@ -191,7 +197,7 @@ pub(super) async fn page_post(
     host: &str,
 ) -> Result<Response> {
     let path = page.split_once('?').map_or(page, |(p, _)| p);
-    let Some(route) = crate::routes::find(SURFACES, &Method::Post, path) else {
+    let Some(route) = crate::routes::find(PAGES, &Method::Post, path) else {
         return Response::error("not found", 404);
     };
     let headers = worker::Headers::new();

@@ -229,7 +229,7 @@ fn the_inbox_installs_as_a_home_screen_app_for_ios_push() {
     assert!(approve::INBOX_CSP.contains("manifest-src 'self'"));
     let m: serde_json::Value = serde_json::from_str(approve::MANIFEST).expect("JSON");
     assert_eq!(m["display"], "standalone");
-    assert_eq!(m["start_url"], "/approvals");
+    assert_eq!(m["start_url"], "/app");
 }
 
 #[test]

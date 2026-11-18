@@ -135,7 +135,7 @@ pub struct Latest {
 /// `/approvals/latest.json` and shows it; a tap opens its page.
 pub const SERVICE_WORKER: &str = r#"self.addEventListener("push", (event) => {
   event.waitUntil((async () => {
-    let n = { title: "pigeon", body: "Something needs you.", url: "/approvals" };
+    let n = { title: "pigeon", body: "Something needs you.", url: "/app" };
     try {
       const r = await fetch("/approvals/latest.json", { credentials: "same-origin", cache: "no-store" });
       if (r.ok) { n = await r.json(); }
@@ -145,7 +145,7 @@ pub const SERVICE_WORKER: &str = r#"self.addEventListener("push", (event) => {
 });
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  event.waitUntil(clients.openWindow((event.notification.data && event.notification.data.url) || "/approvals"));
+  event.waitUntil(clients.openWindow((event.notification.data && event.notification.data.url) || "/app"));
 });
 "#;
 

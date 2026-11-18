@@ -382,7 +382,14 @@ fn served(root: &std::path::Path) -> Vec<String> {
     for f in &files {
         let text = fs::read_to_string(f).expect("read");
         let text = text.split("#[cfg(test)]").next().unwrap_or("");
-        out.extend(table_paths(text));
+        // A surface's served table is its `ROUTES`; a page's `PAGES` is reached only through
+        // `page_post`, per the feed-view ADR's 2026-11-18 amendments.
+        if let Some(at) = text.find("ROUTES: &[") {
+            let table = &text[at..];
+            out.extend(table_paths(
+                &table[..table.find("];").unwrap_or(table.len())],
+            ));
+        }
         out.extend(agent::architecture::literals(text, "/v0/app/"));
     }
     let main = fs::read_to_string(worker.join("mod.rs")).expect("read");

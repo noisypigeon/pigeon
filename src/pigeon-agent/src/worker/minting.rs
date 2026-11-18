@@ -835,8 +835,9 @@ fn iso(secs: u64) -> String {
         .map_or(iso.clone(), |(whole, _)| format!("{whole}Z"))
 }
 
-/// The routes this surface serves.
-pub(super) const ROUTES: &[super::Route] = &[super::Route::any(
+/// This page's routes, reached only through `page_post` (`proof.submit`), not served; see
+/// `.claude/decisions/2026-11-17-runtime-mcp-feed-view-contract.md`, its 2026-11-18 amendments.
+pub(super) const PAGES: &[super::Route] = &[super::Route::any(
     crate::routes::Path::Prefix("/grants/"),
     serve_route,
 )];

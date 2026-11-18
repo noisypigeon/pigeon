@@ -20,7 +20,7 @@ pub const PROOF_CSP: &str = "default-src 'none'; img-src data:; style-src 'unsaf
 pub const INBOX_CSP: &str = "default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'self'; connect-src 'self'; worker-src 'self'; manifest-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'";
 
 /// The inbox's web app manifest, so iOS installs it to the Home Screen, where Web Push works.
-pub const MANIFEST: &str = r##"{"name":"pigeon approvals","short_name":"pigeon","start_url":"/approvals","scope":"/","display":"standalone","background_color":"#14121A","theme_color":"#14121A"}"##;
+pub const MANIFEST: &str = r##"{"name":"pigeon approvals","short_name":"pigeon","start_url":"/app","scope":"/","display":"standalone","background_color":"#14121A","theme_color":"#14121A"}"##;
 
 /// The inbox's `<head>` additions: its manifest and iOS's standalone flags.
 const INBOX_HEAD: &str = "<link rel=\"manifest\" href=\"/approvals/manifest.json\">\

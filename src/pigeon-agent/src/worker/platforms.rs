@@ -840,8 +840,9 @@ async fn start(env: &Env, run: &Run, deployed: Option<&str>) -> std::result::Res
     }
 }
 
-/// The routes this surface serves.
-pub(super) const ROUTES: &[super::Route] = &[super::Route::any(
+/// This page's routes, reached only through `page_post` (`proof.submit`), not served; see
+/// `.claude/decisions/2026-11-17-runtime-mcp-feed-view-contract.md`, its 2026-11-18 amendments.
+pub(super) const PAGES: &[super::Route] = &[super::Route::any(
     crate::routes::Path::Prefix("/platform/"),
     serve_route,
 )];
