@@ -518,3 +518,20 @@ The standby answers only after replaying to the journal's head. So a
 revocation holds on both colors from the request after its append,
 including through `pigeon-front`'s 5-second lease cache. Step 10 of that
 ADR checks replay parity for both colors.
+### 2026-11-18: !1148 (`approval.list`) agrees with this ADR
+
+Review !1166 asked whether !1148 agrees with this ADR. !1148 carries out
+R6 of
+[`2026-11-17-runtime-mcp-feed-view-contract.md`](2026-11-17-runtime-mcp-feed-view-contract.md).
+The two agree, and neither changes the other:
+
+- !1148 adds `approval.list`, a read of the owner's waiting approvals,
+  grants and offers and the open fast lanes, each row opening its proof.
+  It changes no member, grant, level or learner code; its files are
+  `worker/app.rs`, `worker/mod.rs`, the shell, and pigeon-core's `wire.rs`,
+  `control.rs` and presenters.
+- Its rows carry each grant's page path, the token the owner's link
+  carries, so under §5 its requirement is Administrator-only. Step 4's
+  `requires()` gives it that, and R3 enforces it when it wires
+  `member::check`. Until then it is listed on `/mcp` for whoever Access
+  lets through, as `approval.wait`'s links are today.
