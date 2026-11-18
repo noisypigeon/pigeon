@@ -695,3 +695,36 @@ checked after the permission and before the ticket.
   with a passkey, as `owner_ask` items once 9b is deployed.
 - **R3 decides** only after 9b, the bindings, and a shadow day with every
   refusal explained.
+
+### 2026-11-18: Progress, and June's onboarding deferred
+
+**Landed:**
+
+| Step | Change | What |
+|---|---|---|
+| 2 | !1162 | `src/pigeon-core/src/member/**` guarded and gated; the roles policy's `standard` ceiling |
+| 3 | !1233 | `core/member`: Standard, one Administrator, permissions apart from capabilities, grants, `Requires`, `check`; the learner on `icbc` with its migration. Brief b170's code, carried by the planner because `.config/roles.yaml` is a `secrets:` path no brief's change may touch |
+| 9a | !1239 | Service users' `tools` and `denied`, `seed_services`, hashed `credentials` bound by the Administrator, `service_for` |
+| 10 | !1241 | The roles policy accepts `standard: []` only |
+
+**In progress:**
+
+- **Step 4,** `Operation::requires()` (!1238, brief b174), accepted and
+  merging.
+- **Step 5** is carried by the feed-view ADR's R3, as that ADR's
+  2026-11-18 amendment (!1245) sets out. It runs in shadow.
+
+**Step 9b is narrowed.**
+
+- R3 seeds the Service users and logs each unbound service token's
+  `token_id` as `member.shadow`, so the Worker part of 9b is only
+  `service.bind {account, client_hash}` and `service.unbind`.
+- They are page operations at `owner` tier, binding by the hash Willow
+  sees in the shadow log. No client ID is ever typed or stored.
+- `Members::bind` gains a variant that takes the hash.
+- 9b is proposed after R3 merges.
+
+**Step 8, June's onboarding, is deferred** by Willow. It waits until this
+ADR's execution and the blue-green ADR's are both complete, and the
+multi-instance preparation is done. Nothing for June has been started:
+no invitation, enrolment or TestFlight access.
