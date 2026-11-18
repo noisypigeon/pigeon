@@ -75,6 +75,12 @@ pub struct PullRequest {
     pub branch: Option<String>,
     /// A change's approved scope: path globs, one per line.
     pub scope: Option<String>,
+    /// The test functions a change adds, as a whole number.
+    pub added_tests: Option<String>,
+    /// The per-feature enumerations a change adds to tests, as a whole number.
+    pub enumerations: Option<String>,
+    /// The first commit's `Test-Reason` trailer.
+    pub test_reason: Option<String>,
 }
 
 /// An eviction candidate: each field the control plane read from the change's record and its

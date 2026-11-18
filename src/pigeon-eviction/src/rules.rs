@@ -143,6 +143,21 @@ pub fn run_pull_request(
             None => ctx.push(None, format!("`{name}` is not set")),
         }
     }
+    if change {
+        let tests = [
+            ("added_tests", &pr.added_tests),
+            ("enumerations", &pr.enumerations),
+            ("test_reason", &pr.test_reason),
+        ];
+        for (name, value) in tests {
+            if let Some(v) = value {
+                ctx.vars.insert(name.into(), v.clone());
+            }
+        }
+        if !when_holds(&ctx.vars, root, loaded) {
+            return;
+        }
+    }
     for rule in &loaded.policy.rules {
         match rule {
             Rule::Field(r) => field(&mut ctx, root, r),
@@ -150,6 +165,28 @@ pub fn run_pull_request(
             _ => {}
         }
     }
+}
+
+/// Whether a change policy's `when` rules all hold; a missing field counts as failing.
+fn when_holds(vars: &Vars, root: &Path, loaded: &LoadedPolicy) -> bool {
+    let mut scratch = Vec::new();
+    let mut gate = Ctx {
+        policy: &loaded.name,
+        path: "change".into(),
+        vars: vars.clone(),
+        out: &mut scratch,
+    };
+    for rule in &loaded.policy.when {
+        if let Rule::Field(r) = rule {
+            let name = field_name(r.name);
+            if gate.vars.contains_key(name) {
+                field(&mut gate, root, r);
+            } else {
+                gate.push(None, format!("`{name}` is not set"));
+            }
+        }
+    }
+    scratch.is_empty()
 }
 
 /// Runs an `eviction` policy's `field` rules against `candidate`; a field the policy names that
@@ -689,6 +726,9 @@ fn field_name(f: PrField) -> &'static str {
         PrField::Files => "files",
         PrField::Branch => "branch",
         PrField::Scope => "scope",
+        PrField::AddedTests => "added_tests",
+        PrField::Enumerations => "enumerations",
+        PrField::TestReason => "test_reason",
         PrField::Kind => "kind",
         PrField::State => "state",
         PrField::Pushed => "pushed",

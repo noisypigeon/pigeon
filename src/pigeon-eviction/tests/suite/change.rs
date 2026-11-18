@@ -33,6 +33,7 @@ fn change(branch: Option<&str>, files: &str, scope: &str) -> PullRequest {
         files: Some(files.into()),
         branch: branch.map(Into::into),
         scope: Some(scope.into()),
+        ..PullRequest::default()
     }
 }
 
@@ -115,4 +116,126 @@ fn change_fields_need_the_change_target_and_one_kind_per_rule() {
     );
     let two = "description: d\ntarget: change\nrules:\n  - field: { name: files, within: scope, max_lines: 2 }\n";
     assert!(loaded(two).unwrap_err().contains("takes one of"));
+}
+
+const TESTS_POLICY: &str = r"description: A change that adds a test says why in its first commit's Test-Reason trailer; see .claude/decisions/2026-11-18-runtime-independent-blue-green-workers.md §C.2.
+target: change
+when:
+  - field:
+      name: added_tests
+      at_least: 1
+rules:
+  - field:
+      name: test_reason
+      matches: '(?s)\s*\S.*'
+";
+
+const ENUMERATIONS_POLICY: &str = r"description: 'A test that pins a per-feature count or lists catalog names is refused unless its Test-Reason starts with enumeration: and says why; see .claude/decisions/2026-11-18-runtime-independent-blue-green-workers.md §C.2.'
+target: change
+when:
+  - field:
+      name: enumerations
+      at_least: 1
+rules:
+  - field:
+      name: test_reason
+      matches: '(?s)\s*enumeration:\s*\S.*'
+";
+
+fn inline_policy(name: &str) -> LoadedPolicy {
+    let text = if name == "tests.yaml" {
+        TESTS_POLICY
+    } else {
+        ENUMERATIONS_POLICY
+    };
+    loaded(text).expect("valid")
+}
+
+fn tests_verdict(
+    name: &str,
+    added_tests: Option<&str>,
+    enumerations: Option<&str>,
+    reason: Option<&str>,
+) -> Vec<String> {
+    let pr = PullRequest {
+        added_tests: added_tests.map(Into::into),
+        enumerations: enumerations.map(Into::into),
+        test_reason: reason.map(Into::into),
+        ..change(Some("change/3-x"), "a", "a")
+    };
+    let root = TempDir::new().expect("tempdir");
+    eviction::check(&[inline_policy(name)], root.path(), Some(&pr))
+        .expect("runs")
+        .violations
+        .iter()
+        .map(ToString::to_string)
+        .collect()
+}
+
+#[test]
+fn added_tests_without_a_reason_are_refused() {
+    assert_ne!(
+        tests_verdict("tests.yaml", Some("2"), None, Some("")),
+        Vec::<String>::new()
+    );
+}
+
+#[test]
+fn added_tests_with_a_reason_pass() {
+    let got = tests_verdict(
+        "tests.yaml",
+        Some("2"),
+        None,
+        Some("guards the lease fence"),
+    );
+    assert!(got.is_empty(), "{got:?}");
+}
+
+#[test]
+fn no_added_tests_need_no_reason() {
+    assert_eq!(
+        tests_verdict("tests.yaml", Some("0"), None, None),
+        Vec::<String>::new()
+    );
+}
+
+#[test]
+fn an_uncomputed_count_does_not_apply_the_tests_policy() {
+    assert_eq!(
+        tests_verdict("tests.yaml", None, None, None),
+        Vec::<String>::new()
+    );
+}
+
+#[test]
+fn an_enumeration_needs_its_own_reason() {
+    let name = "tests-enumerations.yaml";
+    assert_ne!(
+        tests_verdict(name, None, Some("1"), Some("guards x")),
+        Vec::<String>::new()
+    );
+    let got = tests_verdict(
+        name,
+        None,
+        Some("1"),
+        Some("enumeration: the closed set of view kinds"),
+    );
+    assert!(got.is_empty(), "{got:?}");
+}
+
+#[test]
+fn when_and_the_test_fields_are_limited_to_their_targets() {
+    let tree =
+        "description: d\ntarget: tree\nwhen:\n  - field: { name: title, matches: x }\nrules: []\n";
+    assert!(
+        loaded(tree)
+            .unwrap_err()
+            .contains("when needs the provider-call or change target")
+    );
+    let pull = "description: d\ntarget: pull-request\nrules:\n  - field: { name: test_reason, matches: x }\n";
+    assert!(
+        loaded(pull)
+            .unwrap_err()
+            .contains("need the `change` target")
+    );
 }

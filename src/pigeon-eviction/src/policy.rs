@@ -15,7 +15,7 @@ pub struct Policy {
     pub target: Target,
     /// The rules, in order.
     pub rules: Vec<Rule>,
-    /// For provider-call: field rules that must all hold for the policy to apply.
+    /// For provider-call and change: field rules that must all hold for the policy to apply.
     #[serde(default)]
     pub when: Vec<Rule>,
 }
@@ -399,6 +399,14 @@ pub enum PrField {
     Branch,
     /// A change's scope: path globs, one per line.
     Scope,
+    /// The number of test functions a change adds.
+    #[serde(rename = "added_tests")]
+    AddedTests,
+    /// The number of per-feature enumerations a change adds to tests.
+    Enumerations,
+    /// The reason a change gives for the tests it adds.
+    #[serde(rename = "test_reason")]
+    TestReason,
     /// An eviction candidate's kind: `change`, `reconcile` or `review`.
     Kind,
     /// An eviction candidate's state.
@@ -435,6 +443,15 @@ pub enum PrField {
 }
 
 impl PrField {
+    /// Whether this field exists only on a `change`.
+    #[must_use]
+    pub fn change_only(self) -> bool {
+        matches!(
+            self,
+            Self::Branch | Self::Scope | Self::AddedTests | Self::Enumerations | Self::TestReason
+        )
+    }
+
     /// Whether only the provider-call target has this field.
     #[must_use]
     pub fn call_only(self) -> bool {
@@ -513,6 +530,33 @@ fn call_field(r: &FieldRule) -> Result<(), &'static str> {
     Ok(())
 }
 
+/// Whether `r` fits a `pull-request` or `change` target.
+fn pr_field(r: &FieldRule, change: bool) -> Result<(), &'static str> {
+    let kinds = usize::from(r.matches.is_some() || r.not.is_some())
+        + usize::from(r.references.is_some())
+        + usize::from(r.within.is_some())
+        + usize::from(r.max_lines.is_some())
+        + usize::from(r.at_least.is_some() || r.at_most.is_some())
+        + usize::from(r.equals.is_some());
+    if kinds != 1 {
+        return Err(
+            "`field` takes one of `references`, `within`, `max_lines`, `at_least`/`at_most`, `equals`, or `matches` and/or `not`",
+        );
+    }
+    if r.name.call_only() || r.within.is_some_and(PrField::call_only) {
+        return Err("the call document's fields need the `provider-call` target");
+    }
+    if r.name.eviction_only() || r.within.is_some_and(PrField::eviction_only) {
+        return Err("the candidate's fields need the `eviction` target");
+    }
+    if !change && (r.name.change_only() || r.within.is_some_and(PrField::change_only)) {
+        return Err(
+            "`branch`, `scope`, `added_tests`, `enumerations` and `test_reason` need the `change` target",
+        );
+    }
+    Ok(())
+}
+
 impl Policy {
     /// Parses and validates a policy.
     ///
@@ -555,8 +599,18 @@ impl Policy {
         let call = matches!(self.target, Target::Named(NamedTarget::ProviderCall));
         if call {
             self.validate_call()?;
+        } else if change {
+            for (i, rule) in self.when.iter().enumerate() {
+                let verdict = match rule {
+                    Rule::Field(r) => pr_field(r, change),
+                    _ => Err("only `field` applies to `when`"),
+                };
+                if let Err(m) = verdict {
+                    return Err(format!("when rule {}: {m}", i + 1));
+                }
+            }
         } else if !self.when.is_empty() {
-            return Err("when needs the provider-call target".into());
+            return Err("when needs the provider-call or change target".into());
         }
         for (i, rule) in self.rules.iter().enumerate() {
             let at = |m: &str| Err(format!("rule {}: {m}", i + 1));
@@ -577,29 +631,8 @@ impl Policy {
                     if !pr {
                         return at("`field` needs the `pull-request` or `change` target");
                     }
-                    let kinds = usize::from(r.matches.is_some() || r.not.is_some())
-                        + usize::from(r.references.is_some())
-                        + usize::from(r.within.is_some())
-                        + usize::from(r.max_lines.is_some())
-                        + usize::from(r.at_least.is_some() || r.at_most.is_some())
-                        + usize::from(r.equals.is_some());
-                    if kinds != 1 {
-                        return at(
-                            "`field` takes one of `references`, `within`, `max_lines`, `at_least`/`at_most`, `equals`, or `matches` and/or `not`",
-                        );
-                    }
-                    if r.name.call_only() || r.within.is_some_and(PrField::call_only) {
-                        return at("the call document's fields need the `provider-call` target");
-                    }
-                    if r.name.eviction_only() || r.within.is_some_and(PrField::eviction_only) {
-                        return at("the candidate's fields need the `eviction` target");
-                    }
-                    if !change
-                        && (matches!(r.name, PrField::Branch | PrField::Scope)
-                            || r.within
-                                .is_some_and(|w| matches!(w, PrField::Branch | PrField::Scope)))
-                    {
-                        return at("`branch` and `scope` need the `change` target");
+                    if let Err(m) = pr_field(r, change) {
+                        return at(m);
                     }
                 }
                 Rule::Contains(_) => {}

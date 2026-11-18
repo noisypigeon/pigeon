@@ -157,6 +157,9 @@ fn run(check: &Check) -> u8 {
         files: env::var("PR_FILES").ok(),
         branch: env::var("PR_BRANCH").ok(),
         scope: env::var("PR_SCOPE").ok(),
+        added_tests: env::var("PR_ADDED_TESTS").ok(),
+        enumerations: env::var("PR_ENUMERATIONS").ok(),
+        test_reason: env::var("PR_TEST_REASON").ok(),
     });
     match eviction::check(&policies, &check.root, pull_request.as_ref()) {
         Ok(report) => {

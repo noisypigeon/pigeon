@@ -105,7 +105,7 @@ fn invalid_policies_are_refused_with_the_decisions_message() {
         (
             "when on tree",
             "description: x.\ntarget: tree\nwhen:\n  - field: { name: server, equals: a }\nrules: []\n",
-            "when needs the provider-call target",
+            "when needs the provider-call or change target",
         ),
         (
             "server on pull-request",
