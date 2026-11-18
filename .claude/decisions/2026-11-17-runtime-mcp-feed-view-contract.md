@@ -626,3 +626,35 @@ Replaces steps 14 and 17's remainder. "(planner)" is a gate path.
 - R12. The broker's step 6 and steps 7 to 11, as step 16 has them.
 - R13 to R17. Groups A to E removed, each as R1 counts it idle. (briefs)
 - R18. This ADR amended with the outcome. (planner)
+
+### 2026-11-18: The owner's answers: routes go once replaced and verified, and links move to `/app#`
+
+The owner answered two points of the amendment before this one:
+
+1. **No idle wait.** A route group goes as soon as its replacement is
+   deployed and verified live, not after 14 idle days:
+   - pages: a Playwright check of the shell view on the Bench, then a live
+     look;
+   - tools: a live call;
+   - group C: the iOS build on its replacement installed on the owner's
+     phone, then `MIN_APP_BUILD`.
+
+   §8's count is optional and R1 is dropped.
+2. **Old paths don't serve the shell.** Links already sent may stop
+   working. Every link minter (change approvals, minting grants, mandates,
+   lanes, the CI window, platform runs, pool resumes, the inbox's rows,
+   push and feed items) emits `https://<host>/app#<page path>`, e.g.
+   `/app#/approve/12?grant=…`. The shell routes the hash into
+   `proof.challenge {page}`. The page path stays the grant's name inside
+   `proof.challenge` and `proof.submit`.
+
+So the earlier amendment changes:
+
+- §1: the page handlers still move to `PAGES` for `page_post`, but `GET`
+  on an old path is not served; the paths go with group A.
+- §5 is dropped. §6's table stands; its "once idle 14 days" becomes "once
+  verified".
+- Execution: R1 is dropped. R7 is now two changes: R7a (planner, gate
+  paths), the link minters emit `/app#`; R7b (brief), the shell's proof
+  flow (card, form, signing on `proof: true`) for every page kind. R13
+  removes group A once R7a and R7b are verified.
