@@ -63,6 +63,30 @@ struct API {
         return data
     }
 
+    /// One MCP message, signed as any call is; answers the body and the response's `Mcp-Session-Id`.
+    func mcp(_ body: [String: Any], session: String?) async throws -> (Data, String?) {
+        let path = "/v0/app/mcp"
+        let bytes = try JSONSerialization.data(withJSONObject: body)
+        let at = Int(Date().timeIntervalSince1970)
+        let signature = try device.sign(canonical(method: "POST", path: path, at: at, body: bytes))
+        var request = URLRequest(url: URL(string: path, relativeTo: base)!)
+        request.httpMethod = "POST"
+        request.setValue(
+            headerValue(device: device.id, at: at, signature: signature),
+            forHTTPHeaderField: deviceHeader)
+        request.setValue("application/json", forHTTPHeaderField: "content-type")
+        request.setValue("application/json, text/event-stream", forHTTPHeaderField: "accept")
+        if let session { request.setValue(session, forHTTPHeaderField: "Mcp-Session-Id") }
+        request.httpBody = bytes
+        let (data, response) = try await URLSession.shared.data(for: request)
+        let http = response as? HTTPURLResponse
+        let status = http?.statusCode ?? 0
+        guard (200..<300).contains(status) else {
+            throw APIError(status: status, message: String(decoding: data, as: UTF8.self))
+        }
+        return (data, http?.value(forHTTPHeaderField: "Mcp-Session-Id"))
+    }
+
     /// Redeems a link code: unsigned, since the device isn't linked until it answers.
     static func redeem(code: String, device: DeviceKey) async throws {
         let signature = try device.sign(linkMessage(code: code))
