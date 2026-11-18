@@ -7,6 +7,7 @@ import SwiftUI
 struct ProofSheet: View {
     let client: MCPClient
     let page: String
+    var purpose: String? = nil
     @Environment(\.dismiss) private var dismiss
     @State private var auth = Auth()
     @State private var challenge: MCPOutcome?
@@ -63,7 +64,8 @@ struct ProofSheet: View {
 
     private func load() async {
         do {
-            let o = try await client.call("proof_challenge", ["page": .string(page)])
+            let o = try await client.call(
+                "proof_challenge", purpose.map { ["purpose": .string($0)] } ?? ["page": .string(page)])
             if let e = o.error { error = e } else { challenge = o; held = o.data; stage = o }
         } catch {
             self.error = error.localizedDescription
@@ -146,6 +148,30 @@ struct ProofSheet: View {
                 ])
         } catch {
             self.error = error.localizedDescription
+        }
+    }
+}
+
+/// An approval opened by its id: its page from approval.list, in the proof sheet; see the feed-view ADR's R10b amendment.
+struct ApprovalProof: View {
+    @EnvironmentObject private var store: Store
+    let id: String
+    @State private var page: String?
+    @State private var missing = false
+
+    var body: some View {
+        Group {
+            if let page, let client = try? store.mcp() {
+                ProofSheet(client: client, page: page)
+            } else if missing {
+                Text("This approval is no longer waiting.").padding()
+            } else {
+                ProgressView()
+            }
+        }
+        .task {
+            page = await store.approvalPage(id)
+            missing = page == nil
         }
     }
 }

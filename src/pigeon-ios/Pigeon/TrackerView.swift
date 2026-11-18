@@ -466,7 +466,7 @@ struct NeedsMeSheet: View {
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
         .sheet(item: $approval) { a in
-            ApprovalSheet(id: a.id).environmentObject(store)
+            ApprovalProof(id: a.id).environmentObject(store)
         }
         .sheet(item: $opened) { o in
             ChangeSheet(number: o.id, now: now).environmentObject(store)
@@ -791,7 +791,7 @@ struct ChangeSheet: View {
         .presentationDragIndicator(.visible)
         .task(id: number) { detail = await store.changeDetail(number) }
         .sheet(item: $approval) { a in
-            ApprovalSheet(id: a.id).environmentObject(store)
+            ApprovalProof(id: a.id).environmentObject(store)
         }
     }
 

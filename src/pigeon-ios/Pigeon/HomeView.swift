@@ -61,6 +61,7 @@ struct MiniBars: View {
 /// administrator still approves the owner tier and guarded paths.
 struct AutoBanner: View {
     @EnvironmentObject private var store: Store
+    @State private var proving: Proving?
     let window: AutoWindow
     let now: Int
 
@@ -76,13 +77,13 @@ struct AutoBanner: View {
             }
             Spacer()
             if window.state == "paused" {
-                Button("Resume") { Task { _ = await store.startAuto() } }
+                Button("Resume") { proving = Proving(purpose: "auto") }
                     .font(.footnote.weight(.semibold))
                     .padding(.horizontal, 12).frame(minHeight: 36)
                     .background(RoundedRectangle(cornerRadius: 10).fill(Theme.chip))
                     .disabled(store.busy)
             } else {
-                Button("Pause") { Task { _ = await store.endAuto() } }
+                Button("Pause") { proving = Proving(purpose: "auto-end") }
                     .font(.footnote.weight(.semibold))
                     .padding(.horizontal, 12).frame(minHeight: 36)
                     .background(RoundedRectangle(cornerRadius: 10).fill(Theme.chip))
@@ -92,6 +93,9 @@ struct AutoBanner: View {
         .foregroundStyle(Theme.ink)
         .padding(14)
         .block(shadow: Theme.accent)
+        .sheet(item: $proving, onDismiss: { Task { await store.refresh() } }) { p in
+            if let client = try? store.mcp() { ProofSheet(client: client, page: "", purpose: p.purpose) }
+        }
     }
 
     private var heading: String {
@@ -114,6 +118,7 @@ struct AutoBanner: View {
 /// Auto is off: the owner resumes it with a passkey.
 struct AutoOff: View {
     @EnvironmentObject private var store: Store
+    @State private var proving: Proving?
 
     var body: some View {
         HStack(spacing: 12) {
@@ -125,7 +130,7 @@ struct AutoOff: View {
                     .foregroundStyle(Theme.muted)
             }
             Spacer()
-            Button("Resume") { Task { _ = await store.startAuto() } }
+            Button("Resume") { proving = Proving(purpose: "auto") }
                 .font(.footnote.weight(.semibold))
                 .padding(.horizontal, 12).frame(minHeight: 36)
                 .background(RoundedRectangle(cornerRadius: 10).fill(Theme.chip))
@@ -134,7 +139,16 @@ struct AutoOff: View {
         .foregroundStyle(Theme.ink)
         .padding(14)
         .block()
+        .sheet(item: $proving, onDismiss: { Task { await store.refresh() } }) { p in
+            if let client = try? store.mcp() { ProofSheet(client: client, page: "", purpose: p.purpose) }
+        }
     }
+}
+
+/// A proof the Auto banner asks for: `proof.challenge`'s purpose.
+struct Proving: Identifiable {
+    let purpose: String
+    var id: String { purpose }
 }
 
 /// An owner item: a decision with its options and free text, or an action to mark done.

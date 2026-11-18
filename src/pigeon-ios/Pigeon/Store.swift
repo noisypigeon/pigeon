@@ -32,7 +32,7 @@ final class Store: ObservableObject {
     }
 
     /// The device door's MCP session; see the feed-view ADR's R10b amendment.
-    private func mcp() throws -> MCPClient {
+    func mcp() throws -> MCPClient {
         if let client { return client }
         let c = MCPClient(api: try api())
         client = c
@@ -152,30 +152,15 @@ final class Store: ObservableObject {
             "change.status", ["number": .string(String(number))], as: ChangeDetail.self)
     }
 
-    /// One approval's card.
-    func detail(_ id: String) async throws -> ApprovalDetail {
-        try await api().call("GET", "/v0/app/approvals/\(id)", as: ApprovalDetail.self)
-    }
-
-    /// Approves `id` with the owner's passkey; `hold` keeps the merge, and `answers` answer
-    /// the plan's asks.
-    func approve(_ id: String, hold: Bool, answers: [String: String] = [:]) async -> Bool {
-        await run {
-            let answer = try await self.proof(["id": id])
-            var body: [String: Any] = ["passkey": answer.json, "hold": hold]
-            if !answers.isEmpty { body["answers"] = answers }
-            try await self.api().send("POST", "/v0/app/approvals/\(id)", body: body)
-            await self.refresh()
-        }
-    }
-
-    /// Resumes standing Auto with the owner's passkey.
-    func startAuto() async -> Bool {
-        await run {
-            let answer = try await self.proof(["op": "auto"])
-            try await self.api().send("POST", "/v0/app/auto", body: ["passkey": answer.json])
-            await self.refresh()
-        }
+    /// The proof page of approval `id`: the waiting page whose grant token's SHA-256 is `id`.
+    func approvalPage(_ id: String) async -> String? {
+        guard let list = try? await tool("approval.list", as: ApprovalPages.self) else { return nil }
+        return list.waiting.first { w in
+            guard w.path.hasPrefix("/approve/"),
+                let token = w.path.components(separatedBy: "?grant=").dropFirst().first
+            else { return false }
+            return hex(SHA256.hash(data: Data(token.utf8))) == id
+        }?.path
     }
 
     /// Reloads the instances: the platform, then the personal ones this account administers.
@@ -201,15 +186,6 @@ final class Store: ObservableObject {
                 "POST", "/v0/app/instances/standup",
                 body: ["name": name, "label": label, "token": token, "passkey": answer.json])
             await self.loadInstances()
-        }
-    }
-
-    /// Pauses Auto with the owner's passkey.
-    func endAuto() async -> Bool {
-        await run {
-            let answer = try await self.proof(["op": "auto-end"])
-            try await self.api().send("DELETE", "/v0/app/auto", body: ["passkey": answer.json])
-            await self.refresh()
         }
     }
 
@@ -365,6 +341,12 @@ final class Store: ObservableObject {
 private struct FeedPage: Decodable {
     let last: Int
     let items: [JSONValue]
+}
+
+/// `approval.list`'s waiting pages.
+private struct ApprovalPages: Decodable {
+    struct Page: Decodable { let path: String }
+    let waiting: [Page]
 }
 
 /// `avatar.show`'s answer: the photo, base64url.
