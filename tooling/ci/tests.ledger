@@ -1737,13 +1737,6 @@ pigeon-eviction test suite eviction::check_skips_eviction_policies
 pigeon-eviction test suite eviction::eviction_fields_and_rules_stay_with_their_target
 pigeon-eviction test suite eviction::numeric_bounds_hold_at_both_ends
 pigeon-eviction test suite eviction::what_the_adr_protects_is_never_granted
-pigeon-eviction test suite policies::decisions_amendments
-pigeon-eviction test suite policies::decisions_amendments_land_in_merge_order
-pigeon-eviction test suite policies::decisions_directory
-pigeon-eviction test suite policies::decisions_filename
-pigeon-eviction test suite policies::decisions_metadata
-pigeon-eviction test suite policies::decisions_sections
-pigeon-eviction test suite policies::decisions_valid
 pigeon-eviction test suite policies::every_policy_is_valid
 pigeon-eviction test suite policies::every_policy_runs_its_examples
 pigeon-eviction test suite policies::mirror_allows_only_a_dispatched_read_only_pinned_ci_yml

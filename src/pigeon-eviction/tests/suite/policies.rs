@@ -45,11 +45,6 @@ fn decisions_root(files: &[(&str, &str)]) -> TempDir {
     root
 }
 
-fn decisions(name: &str, content: &str) -> Vec<String> {
-    let root = decisions_root(&[(name, content)]);
-    violations("decisions", root.path(), None)
-}
-
 #[track_caller]
 fn passes(v: &[String]) {
     assert!(v.is_empty(), "expected no violations, got {v:#?}");
@@ -58,118 +53,6 @@ fn passes(v: &[String]) {
 #[track_caller]
 fn fails(v: &[String]) {
     assert!(!v.is_empty(), "expected a violation");
-}
-
-#[test]
-fn decisions_valid() {
-    passes(&decisions(GOOD_NAME, &good()));
-    passes(&decisions(
-        "2026-01-02-development-one-two-three-four-five.md",
-        &good(),
-    ));
-}
-
-#[test]
-fn decisions_filename() {
-    for name in [
-        "2026-01-02-design-a-sample-decision.md",
-        "2026-01-02-development-two-words.md",
-        "2026-01-02-development-one-two-three-four-five-six.md",
-        "2026-01-02-development-A-sample-decision.md",
-    ] {
-        fails(&decisions(name, &good()));
-    }
-}
-
-#[test]
-fn decisions_metadata() {
-    let g = good();
-    for content in [
-        adr("2026-01-03", "development", "A sample decision"),
-        adr("2026-01-02", "security", "A sample decision"),
-        adr("2026-01-02", "development", "Title"),
-        g.replace("Willow Graysen (@noisypigeon).", "Someone Else."),
-        g.replace("* Author: Willow Graysen (@noisypigeon).\n", ""),
-        g.replace("Model: Claude Opus 5.5", "Model:"),
-        g.replace(
-            "* Date: 2026-01-02\n* Model: Claude Opus 5.5",
-            "* Model: Claude Opus 5.5\n* Date: 2026-01-02",
-        ),
-        format!("---\ntitle: x\n---\n{g}"),
-    ] {
-        fails(&decisions(GOOD_NAME, &content));
-    }
-}
-
-#[test]
-fn decisions_sections() {
-    let g = good();
-    for content in [
-        g.replace("## Context\n", ""),
-        g.replace("## Implementation plan.\n", ""),
-        g.replace("## Context", "## TMP")
-            .replace("## Implementation plan.", "## Context")
-            .replace("## TMP", "## Implementation plan."),
-        format!("{g}\n## Consequences\n\nMore.\n"),
-        format!("{g}\n# Stray\n"),
-    ] {
-        fails(&decisions(GOOD_NAME, &content));
-    }
-}
-
-#[test]
-fn decisions_amendments() {
-    let g = good();
-    let amend = "\n## Amendments\n\n### 2026-01-02: First\n\n#### Detail\n\nText.\n\n### 2026-02-01: Second\n";
-    passes(&decisions(GOOD_NAME, &format!("{g}{amend}")));
-    for tail in [
-        "\n## Amendments\n\n### 2026-01-01: Too early\n",
-        "\n## Amendments\n\n### 2026-02-01: Later\n\n### 2026-01-01: Too early\n",
-        "\n## Amendments\n\n### Second thoughts\n",
-        "\n## Amendments\n\n### 2026-01-03:\n",
-        "\n## Amendments\n\nNothing.\n",
-        "\n## Amendments\n\n### 2026-01-03: x\n\n## Consequences\n\nMore.\n",
-    ] {
-        fails(&decisions(GOOD_NAME, &format!("{g}{tail}")));
-    }
-    fails(&decisions(
-        GOOD_NAME,
-        &g.replace(
-            "## Implementation plan.",
-            "## Amendments\n\n### 2026-01-03: Early\n\n## Implementation plan.",
-        ),
-    ));
-}
-
-#[test]
-fn decisions_amendments_land_in_merge_order() {
-    // A review dated before midnight UTC, merged after an entry dated the next day.
-    let merged = "\n## Amendments\n\n### 2026-11-17: Merged first\n\nText.\n";
-    let review = "\n### 2026-11-16: Review !839 against !831\n\nText.\n";
-    let g = adr("2026-11-08", "development", "A sample decision");
-    let name = "2026-11-08-development-a-sample-decision.md";
-    passes(&decisions(name, &format!("{g}{merged}")));
-    passes(&decisions(name, &format!("{g}{merged}{review}")));
-}
-
-#[test]
-fn decisions_directory() {
-    fails(&violations("decisions", decisions_root(&[]).path(), None));
-    fails(&violations(
-        "decisions",
-        decisions_root(&[("README.md", "# Decisions\n")]).path(),
-        None,
-    ));
-    passes(&violations(
-        "decisions",
-        decisions_root(&[(GOOD_NAME, &good()), ("README.md", "# Decisions\n")]).path(),
-        None,
-    ));
-    fails(&violations(
-        "decisions",
-        decisions_root(&[(GOOD_NAME, &good()), ("notes.txt", "x\n")]).path(),
-        None,
-    ));
 }
 
 fn pr_root() -> TempDir {

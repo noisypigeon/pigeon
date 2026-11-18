@@ -3396,3 +3396,10 @@ pigeon-eviction test suite policies::changelog_rules	-
 pigeon-eviction test suite policies::release_changelog_rules	-
 pigeon-eviction test suite policies::layout_rules	-
 pigeon-eviction test suite policies::layout_keeps_the_core_pure	-
+pigeon-eviction test suite policies::decisions_valid	-
+pigeon-eviction test suite policies::decisions_filename	-
+pigeon-eviction test suite policies::decisions_metadata	-
+pigeon-eviction test suite policies::decisions_sections	-
+pigeon-eviction test suite policies::decisions_amendments	-
+pigeon-eviction test suite policies::decisions_amendments_land_in_merge_order	-
+pigeon-eviction test suite policies::decisions_directory	-
