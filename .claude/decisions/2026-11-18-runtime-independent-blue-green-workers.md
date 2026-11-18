@@ -594,3 +594,16 @@ back and `lease.flip` stay the planner's work.
 **Multi-instance.** Parity and the inventory diff compare two colours of one
 instance's deployment, reading only that instance's journal and graph.
 Nothing here reads another instance.
+### 2026-11-18: A change to the job image's entrypoint or context deploys the Worker that runs it
+
+A deploy rebuilds the job images only inside a Worker's deploy, and a
+Worker's inputs counted only its containers' `Dockerfile`. So a change to
+`pigeon-start` alone (!1264), or to `.dockerignore` alone (!1260), deployed no
+Worker and left the images stale until a `deploy_retry`. Now:
+
+- A Worker with containers also takes the image's other blocking inputs
+  (`pigeon-start`, `.dockerignore`, `rust-toolchain.toml`), so their change
+  deploys it and rebuilds its images. `mise.toml` still deploys no Worker, as
+  §B decided; its image change waits for the next Worker deploy.
+- `.dockerignore` blocks the image like `pigeon-start` does, since it decides
+  the build's context.

@@ -416,6 +416,16 @@ pub fn workers(root: &Path, files: Option<&[String]>) -> Result<Vec<String>, Err
                 .map(|m| format!("{}/", m.trim_end_matches('/'))),
         );
         inputs.extend(f.spec.containers.iter().map(|c| c.image.dockerfile.clone()));
+        // A Worker with containers deploys, and so rebuilds its images, when their entrypoint or
+        // context changes; see the blue-green ADR's 2026-11-18 image-inputs amendment.
+        if !f.spec.containers.is_empty() {
+            inputs.extend(
+                IMAGE_BLOCKS
+                    .iter()
+                    .filter(|p| **p != "mise.toml")
+                    .map(|p| (*p).to_string()),
+            );
+        }
         // The toolchain pin and release config change no Worker; see
         // .claude/decisions/2026-11-18-runtime-independent-blue-green-workers.md §B.
         inputs.extend(

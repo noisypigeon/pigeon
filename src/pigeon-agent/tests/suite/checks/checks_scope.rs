@@ -264,6 +264,9 @@ fn workers_deploy_when_their_spec_crates_or_migrations_change() {
         "src/pigeon-agent/migrations/0003_x.sql",
         "infra/pigeon/workers/control/worker.yaml",
         "Dockerfile",
+        "pigeon-start",
+        ".dockerignore",
+        "rust-toolchain.toml",
     ] {
         assert_eq!(workers(Some(&[hit])), control, "{hit}");
     }

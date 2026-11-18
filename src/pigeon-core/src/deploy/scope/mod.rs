@@ -873,9 +873,10 @@ fn spikes(layout: &Layout, files: &[&str]) -> Vec<Job> {
 /// deploy waits for a new image; jobs run `main`'s newest `pigeon` from `builds/`, so its code
 /// is not among them; see `.claude/decisions/2026-11-07-development-job-images-on-cloudflare.md`
 /// §3.
-pub const IMAGE_BLOCKS: [&str; 4] = [
+pub const IMAGE_BLOCKS: [&str; 5] = [
     "mise.toml",
     "Dockerfile",
+    ".dockerignore",
     "pigeon-start",
     "rust-toolchain.toml",
 ];
