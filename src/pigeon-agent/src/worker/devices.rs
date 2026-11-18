@@ -196,6 +196,10 @@ async fn signed(
     const ITEMS: &str = "/v0/app/items/";
     const CHANGES: &str = "/v0/app/changes/";
     match (method, path) {
+        // The app's MCP door: one handler with `/mcp`, the device's person as the caller; see
+        // the 2026-11-17 amendment "two doors, one handler" to
+        // .claude/decisions/2026-11-17-runtime-mcp-feed-view-contract.md.
+        (Method::Post, "/v0/app/mcp") => app_mcp(env, s, req, device, body).await,
         (Method::Get, "/v0/app/whoami") => {
             Response::from_json(&json!({ "device": device.id, "name": device.name }))
         }
@@ -408,4 +412,31 @@ fn serve_route<'a>(
     who: &'a Identity,
 ) -> futures_util::future::LocalBoxFuture<'a, Result<Response>> {
     Box::pin(page_serve(req, env, s, who))
+}
+
+/// `POST /v0/app/mcp`: one MCP message, served by `/mcp`'s handler with `device`'s person as its
+/// caller.
+async fn app_mcp(
+    env: &Env,
+    s: &Settings,
+    req: &Request,
+    device: &Device,
+    body: &Value,
+) -> Result<Response> {
+    let who = Identity {
+        subject: if device.account.is_empty() {
+            format!("device:{}", device.id)
+        } else {
+            device.account.clone()
+        },
+        human: true,
+    };
+    let sid = req.headers().get(crate::mcp::SESSION_HEADER)?;
+    let host = req.url()?.host_str().unwrap_or_default().to_string();
+    let door = super::api::Door {
+        name: super::api::DEVICE,
+        person: true,
+        host: &host,
+    };
+    super::api::serve_message(env, s, &who, &door, sid.as_deref(), body).await
 }

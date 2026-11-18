@@ -307,6 +307,110 @@ fn read(id: Value, params: &Value) -> Action {
     }
 }
 
+/// The owner's proof tools, listed only on a person's door; see
+/// `.claude/decisions/2026-11-17-runtime-mcp-feed-view-contract.md` §4.
+pub const PROOF_TOOLS: [&str; 2] = ["proof_challenge", "proof_submit"];
+
+/// The proof tools' definitions, each a card.
+#[must_use]
+pub fn proof_tools() -> Vec<Value> {
+    let page = json!({
+        "type": "string",
+        "description": "The approval link's path and query, as `/approve/12?grant=…`",
+    });
+    let text = json!({ "type": "string" });
+    vec![
+        json!({
+            "name": PROOF_TOOLS[0],
+            "title": "proof.challenge",
+            "description": "What the grant at `page` approves, from the grant itself, and the WebAuthn request options for the owner's passkey; see .claude/decisions/2026-11-17-runtime-mcp-feed-view-contract.md §4",
+            "inputSchema": {
+                "type": "object",
+                "properties": { "page": page },
+                "required": ["page"],
+                "additionalProperties": false,
+            },
+            "annotations": { "readOnlyHint": true, "destructiveHint": false },
+            "_meta": { "dev.pigeon/view": "card" },
+        }),
+        json!({
+            "name": PROOF_TOOLS[1],
+            "title": "proof.submit",
+            "description": "The owner's passkey assertion for the grant at `page`, with the page's other `fields` (as `operation`); the grant is redeemed and its operation run; see .claude/decisions/2026-11-17-runtime-mcp-feed-view-contract.md §4",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "page": page,
+                    "fields": { "type": "object", "additionalProperties": { "type": "string" } },
+                    "credential": text,
+                    "client_data": text,
+                    "authenticator_data": text,
+                    "signature": text,
+                },
+                "required": ["page", "credential", "client_data", "authenticator_data", "signature"],
+                "additionalProperties": false,
+            },
+            "annotations": { "readOnlyHint": false, "destructiveHint": false },
+            "_meta": { "dev.pigeon/view": "card" },
+        }),
+    ]
+}
+
+/// `reply`, a `tools/list` answer, with the proof tools added.
+#[must_use]
+pub fn with_proof_tools(mut reply: Value) -> Value {
+    if let Some(tools) = reply
+        .pointer_mut("/result/tools")
+        .and_then(Value::as_array_mut)
+    {
+        tools.extend(proof_tools());
+    }
+    reply
+}
+
+/// The proof tool `message` calls, with its ID and arguments; `None` for any other message.
+#[must_use]
+pub fn proof_call(message: &Value) -> Option<(Value, &'static str, Value)> {
+    if message.get("method").and_then(Value::as_str) != Some("tools/call") {
+        return None;
+    }
+    let name = message.pointer("/params/name").and_then(Value::as_str)?;
+    let tool = PROOF_TOOLS.into_iter().find(|t| *t == name)?;
+    let id = message.get("id").cloned().unwrap_or(Value::Null);
+    let args = message
+        .pointer("/params/arguments")
+        .cloned()
+        .unwrap_or_else(|| json!({}));
+    Some((id, tool, args))
+}
+
+/// A proof tool's answer: `r` as its structured content, presented as a card titled `title`
+/// from its scalar fields; or `why` as an error result.
+#[must_use]
+pub fn proof_answer(id: &Value, title: &str, outcome: Result<Value, String>) -> Value {
+    match outcome {
+        Ok(r) => {
+            let card = crate::present::card(title, None, crate::present::scalars(&r), Vec::new());
+            let view = crate::present::checked(crate::view::View::Card, Some(card))
+                .ok()
+                .flatten();
+            let mut answer = json!({
+                "content": [{ "type": "text", "text": r.to_string() }],
+                "structuredContent": r,
+                "isError": false,
+            });
+            if let Some(v) = view {
+                answer["_meta"] = json!({ "dev.pigeon/view": v });
+            }
+            result(id, &answer)
+        }
+        Err(why) => result(
+            id,
+            &json!({ "content": [{ "type": "text", "text": why }], "isError": true }),
+        ),
+    }
+}
+
 /// What `message`, one JSON-RPC message, asks.
 #[must_use]
 pub fn parse(message: &Value, version: &str) -> Action {
@@ -471,4 +575,78 @@ pub fn contents(id: &Value, uri: &str, outcome: Result<Response, Error>) -> Valu
 #[must_use]
 pub fn sse(message: &Value) -> String {
     format!("event: message\ndata: {message}\n\n")
+}
+
+#[cfg(test)]
+mod proof_tests {
+    use serde_json::json;
+
+    use super::{PROOF_TOOLS, proof_answer, proof_call, proof_tools, with_proof_tools};
+
+    #[test]
+    fn proof_tools_are_cards_with_their_schemas() {
+        let tools = proof_tools();
+        let names: Vec<_> = tools.iter().map(|t| t["name"].clone()).collect();
+        assert_eq!(names, [json!("proof_challenge"), json!("proof_submit")]);
+        for t in &tools {
+            assert_eq!(t["_meta"]["dev.pigeon/view"], "card");
+        }
+        assert_eq!(tools[0]["inputSchema"]["required"], json!(["page"]));
+        let submit = &tools[1]["inputSchema"]["required"];
+        for k in [
+            "page",
+            "credential",
+            "client_data",
+            "authenticator_data",
+            "signature",
+        ] {
+            assert!(submit.as_array().unwrap().contains(&json!(k)), "{k}");
+        }
+    }
+
+    #[test]
+    fn the_catalog_lists_no_proof_tool() {
+        let listed = super::tools();
+        let names: Vec<_> = listed["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|t| t["name"].as_str())
+            .collect();
+        assert!(PROOF_TOOLS.iter().all(|p| !names.contains(p)));
+    }
+
+    #[test]
+    fn a_persons_listing_adds_them() {
+        let reply = json!({ "jsonrpc": "2.0", "id": 1, "result": { "tools": [{ "name": "x" }] } });
+        let listed = with_proof_tools(reply);
+        assert_eq!(listed["result"]["tools"].as_array().unwrap().len(), 3);
+    }
+
+    #[test]
+    fn only_a_proof_tool_call_is_one() {
+        let call = |name: &str| {
+            json!({ "jsonrpc": "2.0", "id": 7, "method": "tools/call",
+                    "params": { "name": name, "arguments": { "page": "/lane/1?grant=ab" } } })
+        };
+        let (id, tool, args) = proof_call(&call("proof_submit")).unwrap();
+        assert_eq!((id, tool), (json!(7), "proof_submit"));
+        assert_eq!(args["page"], "/lane/1?grant=ab");
+        assert!(proof_call(&call("change_status")).is_none());
+        let listing = json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/list" });
+        assert!(proof_call(&listing).is_none());
+    }
+
+    #[test]
+    fn an_answer_presents_a_valid_card() {
+        let ok = proof_answer(
+            &json!(1),
+            "proof.challenge",
+            Ok(json!({ "operation": "lane.grant", "target": "1" })),
+        );
+        assert_eq!(ok["result"]["_meta"]["dev.pigeon/view"]["view"], "card");
+        assert_eq!(ok["result"]["isError"], false);
+        let refused = proof_answer(&json!(1), "proof.submit", Err("no".into()));
+        assert_eq!(refused["result"]["isError"], true);
+    }
 }

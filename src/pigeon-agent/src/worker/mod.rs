@@ -170,6 +170,33 @@ const SURFACES: &[&[Route]] = &[
     pool_ops::ROUTES,
 ];
 
+/// `form` posted to the page at `page` (its path and query) on `host`, as its own form, through
+/// that page's route, for `who`; the proof tools' way to a page's decision; see
+/// `.claude/decisions/2026-11-17-runtime-mcp-feed-view-contract.md` §4.
+pub(super) async fn page_post(
+    env: &Env,
+    s: &Settings,
+    who: &Identity,
+    page: &str,
+    form: &str,
+    host: &str,
+) -> Result<Response> {
+    let path = page.split_once('?').map_or(page, |(p, _)| p);
+    let Some(route) = crate::routes::find(SURFACES, &Method::Post, path) else {
+        return Response::error("not found", 404);
+    };
+    let headers = worker::Headers::new();
+    headers.set("content-type", "application/x-www-form-urlencoded")?;
+    headers.set("origin", &format!("https://{host}"))?;
+    headers.set("sec-fetch-site", "same-origin")?;
+    let mut init = worker::RequestInit::new();
+    init.with_method(Method::Post)
+        .with_headers(headers)
+        .with_body(Some(form.into()));
+    let req = Request::new_with_init(&format!("https://{host}{page}"), &init)?;
+    (route.serve)(req, env, s, who).await
+}
+
 /// The change number of `request`'s `number` argument.
 fn number_arg(request: &wire::Request) -> Option<u32> {
     request.args.get("number").and_then(|v| match v {

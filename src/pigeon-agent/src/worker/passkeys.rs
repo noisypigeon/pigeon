@@ -450,6 +450,127 @@ pub async fn on_page(
     }
 }
 
+// The proof tools; see `.claude/decisions/2026-11-17-runtime-mcp-feed-view-contract.md` §4.
+
+/// `proof.challenge {page}`: what the grant at `page` approves, from the grant, and the `WebAuthn`
+/// request options for its bound challenge; a refusal when `page` holds no open grant.
+///
+/// # Errors
+///
+/// When a binding fails.
+pub async fn proof_challenge(
+    env: &Env,
+    s: &Settings,
+    args: &Value,
+    host: &str,
+) -> Result<std::result::Result<Value, String>> {
+    let page = args["page"].as_str().unwrap_or_default();
+    let Some((Some(purpose), bound)) = bound_for(env, s, page).await? else {
+        return Ok(Err("that page holds no open grant".into()));
+    };
+    let asked = json!({ "purpose": purpose, "bound": &bound });
+    let v = to_instance(env, s, "/passkeys/challenge", &asked).await?;
+    Ok(Ok(json!({
+        "page": page,
+        "operation": bound.operation,
+        "target": bound.target,
+        "head": bound.head,
+        "purpose": purpose,
+        "challenge": v["challenge"],
+        "ids": v["ids"],
+        "user": v["user"],
+        "rp": rp_for(env, host),
+    })))
+}
+
+/// `proof.submit`: the passkey assertion in `args`, with the page's other `fields`, posted to the
+/// page at `args.page` as its own form, so [`on_page`] checks it and the page redeems its grant
+/// and runs its operation. The assertion goes nowhere else.
+///
+/// # Errors
+///
+/// When a binding fails.
+pub async fn proof_submit(
+    env: &Env,
+    s: &Settings,
+    who: &Identity,
+    args: &Value,
+    host: &str,
+) -> Result<std::result::Result<Value, String>> {
+    let text = |k: &str| args[k].as_str().unwrap_or_default();
+    let page = text("page");
+    let (path, query) = page.split_once('?').unwrap_or((page, ""));
+    let Some(token) = page::field(query, "grant").filter(|t| !t.is_empty()) else {
+        return Ok(Err("`page` names no grant".into()));
+    };
+    if !matches!(bound_for(env, s, page).await?, Some((Some(_), _))) {
+        return Ok(Err("that page holds no open grant".into()));
+    }
+    let mut pairs = vec![("grant".to_string(), token)];
+    if let Some(fields) = args["fields"].as_object() {
+        for (k, v) in fields {
+            let ours = k == "grant" || k == "code" || k.starts_with("pk_");
+            if let (false, Some(v)) = (ours, v.as_str()) {
+                pairs.push((k.clone(), v.to_string()));
+            }
+        }
+    }
+    for (k, from) in [
+        ("pk_id", "credential"),
+        ("pk_client", "client_data"),
+        ("pk_authenticator", "authenticator_data"),
+        ("pk_signature", "signature"),
+    ] {
+        pairs.push((k.to_string(), text(from).to_string()));
+    }
+    let form = pairs
+        .iter()
+        .map(|(k, v)| format!("{}={}", form_encode(k), form_encode(v)))
+        .collect::<Vec<_>>()
+        .join("&");
+    let mut r = super::page_post(env, s, who, page, &form, host).await?;
+    let status = r.status_code();
+    let said = plain(&r.text().await.unwrap_or_default());
+    Ok(if status == 200 {
+        Ok(json!({ "page": path, "status": status, "said": said }))
+    } else {
+        Err(format!("refused ({status}): {said}"))
+    })
+}
+
+/// `s` encoded as a form value: unreserved bytes as they are, every other byte as `%XX`.
+fn form_encode(s: &str) -> String {
+    s.bytes()
+        .map(|b| {
+            if b.is_ascii_alphanumeric() || b"-_.~".contains(&b) {
+                char::from(b).to_string()
+            } else {
+                format!("%{b:02X}")
+            }
+        })
+        .collect()
+}
+
+/// A page's text without its markup, its whitespace collapsed, at most 400 characters.
+fn plain(html: &str) -> String {
+    let body = html.split_once("<body").map_or(html, |(_, b)| b);
+    let mut out = String::new();
+    let mut tag = false;
+    for c in body.chars() {
+        match c {
+            '<' => tag = true,
+            '>' => {
+                tag = false;
+                out.push(' ');
+            }
+            c if !tag => out.push(c),
+            _ => {}
+        }
+    }
+    let words = out.split_whitespace().collect::<Vec<_>>().join(" ");
+    words.chars().take(400).collect()
+}
+
 /// Whether the cutover is made: codes are refused, and a passkey is the only proof.
 ///
 /// # Errors

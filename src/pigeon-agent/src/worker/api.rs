@@ -37,8 +37,8 @@ async fn serve_mcp(
     settings: &Settings,
     who: &Identity,
 ) -> Result<Response> {
-    let key = platform::secret(env, "SESSION_KEY").ok();
     let sid = req.headers().get(mcp::SESSION_HEADER)?;
+    let host = req.url()?.host_str().unwrap_or_default().to_string();
     let message: Value = match req.json().await {
         Ok(v) => v,
         Err(_) => {
@@ -49,18 +49,78 @@ async fn serve_mcp(
             ));
         }
     };
-    let action = mcp::parse(&message, crate::VERSION);
+    let door = Door {
+        name: "access",
+        person: who.human,
+        host: &host,
+    };
+    serve_message(env, settings, who, &door, sid.as_deref(), &message).await
+}
+
+/// The device-signed door's name.
+pub(super) const DEVICE: &str = "device";
+
+/// Which door a message came in by: its name, whether its caller is a person (an Access
+/// sign-in, or a linked device), and the host it was sent to; see the 2026-11-17 amendment
+/// "two doors, one handler" to `.claude/decisions/2026-11-17-runtime-mcp-feed-view-contract.md`.
+pub(super) struct Door<'a> {
+    /// `access` for `/mcp`, `device` for `/v0/app/mcp`.
+    pub name: &'static str,
+    /// Whether the proof tools are listed and callable.
+    pub person: bool,
+    /// The host the message was sent to.
+    pub host: &'a str,
+}
+
+/// One MCP message, from either door, for `who`.
+///
+/// # Errors
+///
+/// When a binding fails.
+pub(super) async fn serve_message(
+    env: &Env,
+    settings: &Settings,
+    who: &Identity,
+    door: &Door<'_>,
+    sid: Option<&str>,
+    message: &Value,
+) -> Result<Response> {
+    let key = platform::secret(env, "SESSION_KEY").ok();
+    let action = mcp::parse(message, crate::VERSION);
     if let Some(k) = &key {
         let admitted = matches!(action, Action::Initialize { .. })
-            || mcp::admits(sid.as_deref(), k.as_bytes(), "access", &who.subject);
+            || mcp::admits(sid, k.as_bytes(), door.name, &who.subject);
         if !admitted {
             return Response::error("unknown MCP session; initialize again", 404);
         }
     }
+    if let Some((id, tool, args)) = mcp::proof_call(message) {
+        if !door.person {
+            let why = "the proof tools are a person's, signed in or on a linked device";
+            return Response::from_json(&mcp::proof_answer(&id, tool, Err(why.into())));
+        }
+        let outcome = if tool == mcp::PROOF_TOOLS[0] {
+            super::passkeys::proof_challenge(env, settings, &args, door.host).await?
+        } else {
+            let person = Identity {
+                subject: who.subject.clone(),
+                human: true,
+            };
+            super::passkeys::proof_submit(env, settings, &person, &args, door.host).await?
+        };
+        let title = tool.replace('_', ".");
+        return Response::from_json(&mcp::proof_answer(&id, &title, outcome));
+    }
     match action {
-        Action::Reply(v) => Response::from_json(&v),
+        Action::Reply(v) => {
+            let listing = message.get("method").and_then(Value::as_str) == Some("tools/list");
+            if listing && door.person {
+                return Response::from_json(&mcp::with_proof_tools(v));
+            }
+            Response::from_json(&v)
+        }
         Action::Initialize { reply, mut session } => {
-            session.door = "access".into();
+            session.door = door.name.into();
             session.caller = mcp::caller_tag(&who.subject);
             let mut r = Response::from_json(&reply)?;
             if let Some(k) = key {
@@ -84,7 +144,10 @@ async fn serve_mcp(
             }
             // After the cutover a person's direct call waits for a passkey too; see
             // `.claude/decisions/2026-11-14-security-passkey-only-owner-proofs.md` §2.
-            if owners && super::passkeys::cutover_made(env, settings).await? {
+            // A device's call always waits for the owner's proof, whatever the cutover.
+            let waits = owners
+                && (door.name == DEVICE || super::passkeys::cutover_made(env, settings).await?);
+            if waits {
                 let Some(number) = super::number_arg(&request) else {
                     let why = "`number` must be a change number".to_string();
                     let refused = Err(crate::Error::Invalid(vec![why]));
