@@ -709,3 +709,52 @@ appearance, avatar) fully onto views. Contract 1 gains two additions:
   profile operations join R8's device-door set: `profile.show`,
   `profile.edit`, `profile.update`, `avatar.show`, `avatar.put`,
   `avatar.remove`.
+### 2026-11-18: Step R10b's shape: the app keeps its screens and calls the device door's tools
+
+The owner asked that the app keep its flow and styling. Its screens read
+`Store`, and `Store` reads `/v0/app/*`. Each tool on the device door runs
+the handler its route runs: `app_read`'s `home.show` builds the same JSON as
+`GET /v0/app/home`, and the change sheet's route is `change.status`'s result.
+
+- **Transport, not views.** R10b keeps `NowView`, `InsightsView`, their
+  sheets and `ProfileSheet`. `Store` calls the tool, through `MCPClient`, in
+  place of each route, and decodes `structuredContent.result` into the type
+  it decodes today.
+
+| `Store` | Route today | Tool |
+|---|---|---|
+| `refresh` | `GET /v0/app/home` | `home.show` |
+| `loadTracker` | `GET /v0/app/tracker` | `tracker.show` |
+| `loadOps` | `GET /v0/app/ops` | `ops.show {range}` |
+| `stacks` | `GET /v0/app/insights` | `insights.show {metric, source, range}` |
+| `follow` | `GET /v0/app/events` | `feed.read {after, seconds}` (its `items`) |
+| `changeDetail` | `GET /v0/app/changes/{n}` | `change.status {number}` |
+| `answer` | `POST /v0/app/items/{id}` | `owner.answer {id, answer}` |
+| `loadProfile` | `GET /v0/app/profile`, `…/avatar` | `profile.show`, `avatar.show` |
+| `rename`, `setAppearance` | `PATCH /v0/app/profile` | `profile.update` |
+| `setAvatar`, `removeAvatar` | `PUT`/`DELETE …/avatar` | `avatar.put`, `avatar.remove` |
+| `registerPush` | `PUT /v0/app/device/push` | `device.push` |
+| `loadInstances` | `GET /v0/app/instances` | `instances.list` |
+
+- **Proofs go through the proof sheet.** `ApprovalSheet`, `approve`,
+  `startAuto` and `endAuto` give way to `ProofSheet`: an approval opens
+  `/approve/<id>`, as its `/app#` link does, and Auto opens
+  `proof.challenge {purpose: auto|auto-end}`. Unlinking a device and
+  removing a passkey use `proof.challenge {purpose, target}` (!1158) and its
+  submit, `device.unlink` or `passkey.remove`, once those tools land.
+  `Store.proof` and `POST /v0/app/challenge` go with them.
+- **Still REST until R8c:** `instances.standup` and the link code's redeem.
+- **Group C's gate.** Willow is the one owner with a linked phone, so the
+  gate is her phone running a TestFlight build with R10b, not a count. When
+  group C goes, the Worker answers each removed `/v0/app/*` path with `426`
+  and "Update the app", which is what `MIN_APP_BUILD` was for. The
+  standalone's `join.*`, `learner.*` and `members.*` routes are not group
+  C, as R8's amendment has it.
+- **Names.** R8's `whoami` is `device.show`: the catalog's names are two
+  dotted parts. `approval.` and `push.` join `control_plane()`'s domains
+  (!1182), so `run()` routes `approval.list` and `push.*`.
+
+Execution: R10b-1 (brief): the reads, items, profile, avatar, push and
+instances, once R8a-2's dispatch is live. R10b-2 (brief): approvals and Auto
+through `ProofSheet`. R10b-3 (brief): unlink and passkey removal, after
+!1158 and those tools. Then TestFlight for the owner, then group C's 426.
