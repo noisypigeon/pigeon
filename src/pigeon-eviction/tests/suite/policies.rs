@@ -557,63 +557,6 @@ fn mirror_allows_only_a_dispatched_read_only_pinned_ci_yml() {
 }
 
 #[test]
-fn migrations_only_expand() {
-    let dir = "src/pigeon-agent/migrations";
-    let ok = [
-        (
-            "src/pigeon-agent/migrations/0001_schema.sql",
-            "CREATE TABLE runs (id TEXT PRIMARY KEY);\n",
-        ),
-        (
-            "src/pigeon-agent/migrations/0002_more.sql",
-            "ALTER TABLE runs ADD COLUMN at INTEGER;\n",
-        ),
-    ];
-    passes(&violations("migrations", tree_root(&ok).path(), None));
-    for sql in [
-        "DROP TABLE runs;\n",
-        "ALTER TABLE runs DROP COLUMN at;\n",
-        "ALTER TABLE runs RENAME TO jobs;\n",
-        "alter table runs rename column at to started;\n",
-    ] {
-        let file = format!("{dir}/0003_contract.sql");
-        let mut files = ok.to_vec();
-        files.push((file.as_str(), sql));
-        let v = violations("migrations", tree_root(&files).path(), None);
-        assert!(v.iter().any(|m| m.starts_with(&file)), "{sql}: {v:?}");
-    }
-}
-
-#[test]
-fn macos_holds_the_order_start_time_and_caps_only() {
-    let good = "# Where macOS jobs run.\norder: [github, bitrise, buildkite]\nstart_within_minutes: 10\ngithub_monthly_minutes: null\nbitrise_monthly_minutes: 450\nbuildkite_monthly_minutes: 150\n";
-    let check = |content: &str| {
-        violations(
-            "macos",
-            tree_root(&[(".config/macos.yaml", content)]).path(),
-            None,
-        )
-    };
-    passes(&check(good));
-    passes(&check(
-        &good
-            .replace(", members, learner]", ", members]")
-            .replace("user: [learner]", "user: []"),
-    ));
-    passes(&violations("macos", tree_root(&[]).path(), None));
-    for bad in [
-        good.replace("[github, bitrise, buildkite]", "[github, circle]"),
-        good.replace("start_within_minutes: 10", "start_within_minutes: 0"),
-        good.replace("450", "lots"),
-        good.replace("# Where", "Where"),
-        format!("{good}extra: 1\n"),
-        good.replace("github_monthly_minutes: null\n", ""),
-    ] {
-        fails(&check(&bad));
-    }
-}
-
-#[test]
 fn roles_holds_three_explicit_capability_lists_only() {
     let good = "# Each role's capabilities.\nroles:\n  administrator: [read, propose, approve, approve.owner, auto, mandates, platform, members, learner]\n  user: [learner]\n  service: [read, propose]\n";
     let check = |content: &str| {
@@ -642,39 +585,6 @@ fn roles_holds_three_explicit_capability_lists_only() {
         format!("{good}  owner: [read]\n"),
     ] {
         fails(&check(&bad));
-    }
-}
-
-#[test]
-fn eviction_actions_keeps_the_judge_read_only() {
-    let ok = [
-        ("src/pigeon-eviction/src/lib.rs", "use std::fs;\n"),
-        ("src/pigeon-eviction/tests/t.rs", "fs::write(p, c);\n"),
-        (
-            "src/pigeon-agent/src/release/git.rs",
-            "Command::new(\"git\");\n",
-        ),
-    ];
-    passes(&violations("eviction-actions", tree_root(&ok).path(), None));
-    for (file, content) in [
-        (
-            "src/pigeon-eviction/src/lib.rs",
-            "use std::process::Command;\n",
-        ),
-        (
-            "src/pigeon-eviction/src/x.rs",
-            "let c = Command::new(\"git\");\n",
-        ),
-        ("src/pigeon-eviction/src/y.rs", "fs::write(p, c)?;\n"),
-    ] {
-        let mut files = ok.to_vec();
-        files.retain(|(f, _)| *f != file);
-        files.push((file, content));
-        let v = violations("eviction-actions", tree_root(&files).path(), None);
-        assert!(
-            v.iter().any(|m| m.starts_with(&format!("{file}:1:"))),
-            "{file}: {v:?}"
-        );
     }
 }
 

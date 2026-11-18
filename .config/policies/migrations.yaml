@@ -4,3 +4,13 @@ rules:
   - find:
       match: '/migrations/[^/]+\.sql$'
       forbid_content: '(?i)\b(drop|rename)\b'
+examples:
+  pass:
+    - files:
+        src/pigeon-agent/migrations/0001_schema.sql: "CREATE TABLE runs (id TEXT PRIMARY KEY);\n"
+        src/pigeon-agent/migrations/0002_more.sql: "ALTER TABLE runs ADD COLUMN at INTEGER;\n"
+  fail:
+    - files: { src/pigeon-agent/migrations/0003_contract.sql: "DROP TABLE runs;\n" }
+    - files: { src/pigeon-agent/migrations/0003_contract.sql: "ALTER TABLE runs DROP COLUMN at;\n" }
+    - files: { src/pigeon-agent/migrations/0003_contract.sql: "ALTER TABLE runs RENAME TO jobs;\n" }
+    - files: { src/pigeon-agent/migrations/0003_contract.sql: "alter table runs rename column at to started;\n" }

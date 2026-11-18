@@ -1747,11 +1747,8 @@ pigeon-eviction test suite policies::decisions_sections
 pigeon-eviction test suite policies::decisions_valid
 pigeon-eviction test suite policies::every_policy_is_valid
 pigeon-eviction test suite policies::every_policy_runs_its_examples
-pigeon-eviction test suite policies::eviction_actions_keeps_the_judge_read_only
 pigeon-eviction test suite policies::layout_keeps_the_core_pure
 pigeon-eviction test suite policies::layout_rules
-pigeon-eviction test suite policies::macos_holds_the_order_start_time_and_caps_only
-pigeon-eviction test suite policies::migrations_only_expand
 pigeon-eviction test suite policies::mirror_allows_only_a_dispatched_read_only_pinned_ci_yml
 pigeon-eviction test suite policies::names_forbids_the_old_names_but_the_stored_ones_and_history
 pigeon-eviction test suite policies::pull_request

@@ -14,3 +14,14 @@ rules:
         - { key: github_monthly_minutes, matches: '^([0-9]+|null)$' }
         - { key: bitrise_monthly_minutes, matches: '^([0-9]+|null)$' }
         - { key: buildkite_monthly_minutes, matches: '^([0-9]+|null)$' }
+examples:
+  pass:
+    - files: { .config/macos.yaml: "# Where macOS jobs run.\norder: [github, bitrise, buildkite]\nstart_within_minutes: 10\ngithub_monthly_minutes: null\nbitrise_monthly_minutes: 450\nbuildkite_monthly_minutes: 150\n" }
+    - files: {}
+  fail:
+    - files: { .config/macos.yaml: "# Where macOS jobs run.\norder: [github, circle]\nstart_within_minutes: 10\ngithub_monthly_minutes: null\nbitrise_monthly_minutes: 450\nbuildkite_monthly_minutes: 150\n" }
+    - files: { .config/macos.yaml: "# Where macOS jobs run.\norder: [github, bitrise, buildkite]\nstart_within_minutes: 0\ngithub_monthly_minutes: null\nbitrise_monthly_minutes: 450\nbuildkite_monthly_minutes: 150\n" }
+    - files: { .config/macos.yaml: "# Where macOS jobs run.\norder: [github, bitrise, buildkite]\nstart_within_minutes: 10\ngithub_monthly_minutes: null\nbitrise_monthly_minutes: lots\nbuildkite_monthly_minutes: 150\n" }
+    - files: { .config/macos.yaml: "Where macOS jobs run.\norder: [github, bitrise, buildkite]\nstart_within_minutes: 10\ngithub_monthly_minutes: null\nbitrise_monthly_minutes: 450\nbuildkite_monthly_minutes: 150\n" }
+    - files: { .config/macos.yaml: "# Where macOS jobs run.\norder: [github, bitrise, buildkite]\nstart_within_minutes: 10\ngithub_monthly_minutes: null\nbitrise_monthly_minutes: 450\nbuildkite_monthly_minutes: 150\nextra: 1\n" }
+    - files: { .config/macos.yaml: "# Where macOS jobs run.\norder: [github, bitrise, buildkite]\nstart_within_minutes: 10\nbitrise_monthly_minutes: 450\nbuildkite_monthly_minutes: 150\n" }

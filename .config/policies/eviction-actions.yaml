@@ -4,3 +4,13 @@ rules:
   - find:
       match: '^src/pigeon-eviction/src/'
       forbid_content: 'std::process::Command|Command::new|fs::write'
+examples:
+  pass:
+    - files:
+        src/pigeon-eviction/src/lib.rs: "use std::fs;\n"
+        src/pigeon-eviction/tests/t.rs: "fs::write(p, c);\n"
+        src/pigeon-agent/src/release/git.rs: "Command::new(\"git\");\n"
+  fail:
+    - files: { src/pigeon-eviction/src/lib.rs: "use std::process::Command;\n" }
+    - files: { src/pigeon-eviction/src/x.rs: "let c = Command::new(\"git\");\n" }
+    - files: { src/pigeon-eviction/src/y.rs: "fs::write(p, c)?;\n" }
