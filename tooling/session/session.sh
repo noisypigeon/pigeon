@@ -35,11 +35,38 @@ digest() {
   fi 2>/dev/null | cut -d' ' -f1
 }
 
+# One `tools/call` of tool $1 with arguments $2 on /mcp, its JSON-RPC answer on stdout;
+# initializes the MCP session first. See .claude/decisions/2026-11-17-runtime-mcp-feed-view-contract.md §6.
+mcp() {
+  if [ -z "${mcp_session:-}" ]; then
+    mcp_session=$(curl -sS --max-time 8 -o /dev/null -D - -X POST \
+      -H 'content-type: application/json' -H 'accept: application/json' \
+      --data '{"jsonrpc":"2.0","id":0,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"session.sh","version":"1"}}}' \
+      "https://$host/mcp" 2>/dev/null | tr -d '\r' |
+      sed -n 's/^[Mm][Cc][Pp]-[Ss][Ee][Ss][Ss][Ii][Oo][Nn]-[Ii][Dd]: *//p' | tail -n 1)
+    [ -n "$mcp_session" ] || return 1
+  fi
+  curl -sSf --max-time 60 -X POST -H 'content-type: application/json' \
+    -H 'accept: application/json' -H "mcp-session-id: $mcp_session" \
+    --data "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"$1\",\"arguments\":$2}}" \
+    "https://$host/mcp" 2>/dev/null
+}
+
+# Build file $2 of commit $1 into $3, through `build.read`'s 4 MiB base64 chunks.
+fetch() {
+  : >"$3" || return 1
+  offset=0
+  while [ -n "$offset" ]; do
+    mcp build_read "{\"sha\":\"$1\",\"name\":\"$2\",\"offset\":\"$offset\"}" >"$3.part" || return 1
+    sed -n 's/.*"data":"\([A-Za-z0-9+\/=]*\)".*/\1/p' "$3.part" | base64 -d >>"$3" || return 1
+    offset=$(sed -n 's/.*"next":\([0-9]*\).*/\1/p' "$3.part")
+  done
+  rm -f "$3.part"
+}
+
 # The bootstrap: main's newest build into $cache, SHA-256 checked, with no `pigeon` yet.
 bootstrap() {
-  got=$(curl -sS --max-time 8 -X POST -H 'content-type: application/json' \
-    --data '{"operation":"deploy.status","args":{}}' "https://$host/v0/run" 2>/dev/null | latest) ||
-    return 1
+  got=$(mcp deploy_status '{}' | latest) || return 1
   sha=${got% *}
   sum=${got#* }
   if [ -x "$cache/pigeon" ] && [ "$(cat "$cache/pigeon.sha" 2>/dev/null)" = "$sha" ]; then
@@ -47,11 +74,10 @@ bootstrap() {
   fi
   mkdir -p "$cache" || return 1
   tmp="$cache/pigeon.tmp.$$"
-  if curl -sSf --max-time 60 -o "$tmp" "https://$host/builds/$sha/pigeon" &&
-    [ "$(digest "$tmp")" = "$sum" ]; then
+  if fetch "$sha" pigeon "$tmp" && [ "$(digest "$tmp")" = "$sum" ]; then
     chmod 755 "$tmp" && mv -f "$tmp" "$cache/pigeon" && printf '%s' "$sha" >"$cache/pigeon.sha"
   else
-    rm -f "$tmp"
+    rm -f "$tmp" "$tmp.part"
     return 1
   fi
 }
