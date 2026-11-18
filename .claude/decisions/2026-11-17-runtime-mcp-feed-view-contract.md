@@ -4,7 +4,7 @@
 * Model: Claude Opus 5.5
 * Author: Willow Graysen (@noisypigeon).
 * Category: runtime
-* Governs: `src/**/mcp.rs`, `src/**/wire.rs`, `src/**/events.rs`, `src/**/worker/events.rs`, `src/**/push.rs`, `src/**/worker/push.rs`, `src/**/worker/apns.rs`, `src/**/worker/api.rs`, `src/**/worker/devices.rs`, `src/**/tasks.rs`, `src/**/view.rs`, `src/**/view/**`, `src/**/feed.rs`, `src/**/feed/**`, `src/**/present/**`
+* Governs: `src/**/mcp.rs`, `src/**/wire.rs`, `src/**/events.rs`, `src/**/worker/events.rs`, `src/**/push.rs`, `src/**/worker/push.rs`, `src/**/worker/apns.rs`, `src/**/worker/api.rs`, `src/**/worker/devices.rs`, `src/**/tasks.rs`, `src/**/view.rs`, `src/**/view/**`, `src/**/feed.rs`, `src/**/feed/**`, `src/**/present/**`, `src/**/worker/shell.rs`, `src/**/worker/shell/**`
 
 ## Context
 
@@ -518,3 +518,111 @@ So the feed keeps both, and `needs` stays what it is for the clients:
     `classify`, cut and backoff rules are unchanged.
 - `/v0/events` and `events.wait` become shims over the feed (7c) only after
   13b has merged and every session runs it.
+
+### 2026-11-18: Steps 14 and 17's shape: owner pages as shell views, an internal page table, route groups
+
+The owner asked for the old routes to go and the owner pages to become
+client views that keep the old pages' flow and look. On `main` (955163f) the
+shell has four roots and a bare proof screen; every owner page is still
+served, `/v0/app/*` still serves the iOS Now and Insights tabs, and §8's
+per-route count doesn't exist.
+
+#### 1. The page handlers leave the public router
+
+- `worker/mod.rs`'s `SURFACES` keeps the MCP doors, §7's routes and the
+  shell. The owner pages' handlers (`approve`, `mandates`, `lanes`,
+  `minting`, `ci_window`, `platforms`, `pool_ops`) move to a `PAGES` table
+  that only `page_post` reads, so `proof.submit` still reaches each page's
+  decision unchanged.
+- `GET` on an old page path (`/approvals`, `/approve/…`, `/mandate/…`,
+  `/lane/…`, `/grants/…`, `/ci-window/…`, `/platform/…`, `/pool-resume/…`,
+  then `/app/link`, `/devices`, `/passkeys…`) serves the shell's
+  `index.html`; `app.js` routes the path and query into its view, so links
+  already sent keep working. A `POST` to one answers 410.
+
+#### 2. Each page kind is a view, inside contract 1
+
+- `proof.challenge {page}`'s result is presented as a `card` built from the
+  grant, never from the caller: what the old page showed above its form
+  (title, head, scope, checks, the plan's digest, the change as an `open`),
+  and its buttons as actions: the grant's verb (`proof: true`, tool
+  `proof.submit`), `Refuse` (`destructive`) where the page had it, and
+  `Back to approvals` (`approval.list`).
+- A page with inputs (asks, `review`, `account_token`) gets
+  `proof.form {page}`: a `form` view of those inputs whose submit is
+  `proof.submit`, `proof: true`. The card's primary action opens it.
+- The WebAuthn options stay in `structuredContent`. A client signs when it
+  runs an action with `proof: true`, and merges the assertion into that
+  action's arguments. `view.rs` doesn't change.
+- The presenters are pure, in `present/approval.rs`; their wiring in
+  `worker/passkeys.rs` is the planner's (gate).
+
+#### 3. The look is the owner pages'
+
+- `index.html` drops its own palette and inlines `look/tokens.css` and
+  `look/style.css` from pigeon-core, with the 40 px avatar header, per
+  [`2026-11-16-runtime-owner-pages-app-look.md`](2026-11-16-runtime-owner-pages-app-look.md).
+- `views.js` emits the plain elements `style.css` already styles: a `dl`,
+  `li` or `pre` as a card, the primary action as a submit-styled button.
+  The roots are the app's chips.
+
+#### 4. The tools the clients still lack
+
+- `approval.list` (list): open `lane.open` items with `End`, then one row per
+  open `approval.pending`, `open` on `proof.challenge`. It is the Approvals
+  root on both clients, replacing the Feed root's stand-in.
+- Not gate: `account.show` (whoami), `profile.show`, `profile.update`,
+  `instance.list`, `instance.standup`, `member.list`, `member.invite`,
+  `member.admit`, `member.join`, `learner.*`.
+- Gate, the planner's: `device.list`, `device.link`, `device.remove`,
+  `device.redeem` (the link-code redeem, on `/v0/app/mcp` signed by the new
+  key), `passkey.list`, `passkey.add`, `passkey.remove`, `push.subscribe`.
+  Owner-tier ones are listed only on a person's door, as the proof tools
+  are. Registering a passkey is the shell's moment, beside the proof.
+
+#### 5. §8's count
+
+- One step in `worker/mod.rs`'s fetch counts each call outside §7 and the
+  MCP doors by route group and client (`X-Pigeon-App` and its build, a
+  job's account, a session's label, a browser), daily, in the `Instance`.
+- `insights.show` gains an "Old routes" section: each group's calls per
+  client and days since the last call.
+- Tests check the counting on fixtures; no test lists routes.
+
+#### 6. Groups, removed in this order once idle 14 days
+
+| Group | Routes | Its clients move in |
+|---|---|---|
+| A, owner pages | the paths in §1, `/passkey.js`, `/passkeys/challenge` | the shell steps |
+| B, Web Push | `/approvals/push.js`, `/vapid`, `/push`, `/latest.json`, `/manifest.json` | `push.subscribe`; the manifest is the shell's |
+| C, app REST | `/v0/app/*` but `/v0/app/mcp` | the iOS build after `MIN_APP_BUILD` |
+| D, agent REST | `/v0/run`, `/v0/operations`, `/v0/events`, `events.wait` | the harness and `session.sh` on `/mcp` |
+| E, CI | `/builds/`, `/v0/apple/release` and `/archive` | the containers on `build.*`; `release.apple` |
+
+- Group A's paths are served by the shell until idle, then removed with
+  `PAGES`, whose handlers `proof.submit` then calls directly.
+- Each removal deletes the code only it used, and edits the route inventory
+  as the blue-green ADR's lean tests have it.
+
+#### Execution
+
+Replaces steps 14 and 17's remainder. "(planner)" is a gate path.
+
+- R1. §8's count (§5). (brief)
+- R2. Step 8c, `worker/minting.rs` passes `grant:<offer id>`. (planner)
+- R3. The §8 authorizer in `run()`. (planner)
+- R4. The shell's look (§3), with 390 px screenshots in both schemes.
+  (brief)
+- R5. The proof presenters and `proof.form` (§2): a, the core (brief); b,
+  the wiring (planner).
+- R6. `approval.list` and the Approvals root, web and iOS. (brief)
+- R7. `PAGES`, and the shell on the old page paths (§1). (brief)
+- R8. The tools of §4: a, not gate (brief); b, gate (planner).
+- R9. The web views for linking, devices and passkeys. (brief)
+- R10. iOS: Now and Insights onto the shell's roots, the proof sheet on
+  card and form; TestFlight, then `MIN_APP_BUILD`. (brief; the owner's
+  phone)
+- R11. The harness and `session.sh` on `/mcp`. (brief)
+- R12. The broker's step 6 and steps 7 to 11, as step 16 has them.
+- R13 to R17. Groups A to E removed, each as R1 counts it idle. (briefs)
+- R18. This ADR amended with the outcome. (planner)
