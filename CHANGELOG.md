@@ -6,6 +6,7 @@
 
 - agent v0.1.53
 - agent v0.1.54
+- agent v0.1.55
 
 ### Merged
 
@@ -17,6 +18,17 @@
 - feat(backplane): the owner's fast lane: lanes, waivers, queue priority, feed items and deferred checks (!1092) ([5eb9001](https://github.com/noisypigeon/pigeon/commit/5eb9001e83889fc8fe52e9f3c75eb4093fec7b95)) · agent
 - feat(agent): pushes carry only how many open items need the owner (!1086) ([3a2d56d](https://github.com/noisypigeon/pigeon/commit/3a2d56d0e658352a1a5468dbf97eeedc915f7e32)) · agent
 - feat(agent): pigeon://feed is an MCP resource: listed, and read through feed.read (!1087) ([3639500](https://github.com/noisypigeon/pigeon/commit/36395007c09260f162f9682b0f04b0a59e76307c)) · agent
+- feat(agent): build.list and build.read serve a commit's build files over MCP (!1094) ([0393eb6](https://github.com/noisypigeon/pigeon/commit/0393eb6d33cba9cacaba0367cb3a7fd534af243f)) · agent
+- feat(agent): feed items carry their stage and wake, and producers name the subjects they open and close (!1093) ([a5f8c18](https://github.com/noisypigeon/pigeon/commit/a5f8c185e5b8ce44e969cedc41315df1f4525d3b)) · agent
+- feat(agent): the owner's passkey proof as two MCP tools, and the app's MCP door at /v0/app/mcp (!1097) ([880524d](https://github.com/noisypigeon/pigeon/commit/880524d46e6d9d2fa835b893ca90d36329bbcb2d)) · agent
+- feat(agent): the app's home, approvals, tracker, ops and insights as MCP tools with views (!1096) ([8fa16dd](https://github.com/noisypigeon/pigeon/commit/8fa16dde5e7b22c303b8e41ae6e47620adc24733)) · agent
+- feat(harness): pigeon session follow reads the feed through feed.read, printing the same lines (!1098) ([e72150f](https://github.com/noisypigeon/pigeon/commit/e72150fff3d96ebdbda7c78c916163a4443a7bf1))
+- fix(core): D1's job mirror writes no row for a waived check (!1099) ([bc523ea](https://github.com/noisypigeon/pigeon/commit/bc523ea0bb16ef3caf5c4220d8a79b6a433bf2e0))
+- feat(agent): the web client at /app: a static shell that renders the four views from /mcp and proves with the owner's passkey (!1100) ([935fc13](https://github.com/noisypigeon/pigeon/commit/935fc13a037103d316701edc6f46efbcb8ba1648)) · agent
+- feat(ios): the app on MCP: the four views from /v0/app/mcp, a Feed tab, and the owner's proof through proof.challenge and proof.submit (!1102) ([98b66f0](https://github.com/noisypigeon/pigeon/commit/98b66f043f63bcbf45d4cd98d66d181374db2805))
+- fix(agent): the Instance routes /feed/read to the events log, so feed.read and pigeon://feed answer (!1104) ([b1b0501](https://github.com/noisypigeon/pigeon/commit/b1b05011792c688578d0ec59c9dd1f423882f502)) · agent
+- feat(agent): Auto starts and ends through the proof tools: proof.challenge and proof.submit take purpose auto or auto-end (!1105) ([421677f](https://github.com/noisypigeon/pigeon/commit/421677fcb374d095a02ee01610290127f7a8384d)) · agent
+- feat(agent): owner.answer, the owner's answer to an ask as a tool, for a person's door only (!1106) ([2f26348](https://github.com/noisypigeon/pigeon/commit/2f26348f3235f1c0329dc5b82de2373b8091afa5)) · agent
 
 ## 2026-11-17
 
