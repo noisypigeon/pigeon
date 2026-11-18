@@ -170,6 +170,7 @@
 - feat(infra): pigeon-control serves control.platform.pigeon.dev beside blue.platform, as its own host (!1262) ([b8ab90a](https://github.com/noisypigeon/pigeon/commit/b8ab90a1b4e9e8709ac1984809fac673eee9ea85)) · agent
 - fix(images): pigeon-start falls back to a GET of /builds/ when build.read fails (!1264) ([56adc4d](https://github.com/noisypigeon/pigeon/commit/56adc4dd183d8ce6e756f34bbcbc7a3d408e2856))
 - docs(adr): R3's first shadow differences; approval.list stays the Administrator's (!1263) ([b95babd](https://github.com/noisypigeon/pigeon/commit/b95babdb215e1c1f9b0d953807ccbd7704c7aedd))
+- feat(infra): PUBLIC_HOST becomes control.platform.pigeon.dev, and blue.platform stays the primary's as its alias (!1265) ([304f8c7](https://github.com/noisypigeon/pigeon/commit/304f8c78690ffbf0e313c7bb9c31dd7090e47c2d))
 
 ## 2026-11-17
 
