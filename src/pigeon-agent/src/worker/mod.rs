@@ -869,8 +869,13 @@ async fn dispatch(
             }
             Ok((Some(number.to_string()), respond(operation, status, v)))
         }
-        Routed::DeployRetry => {
-            let req = json_request("https://main/retry", Method::Post, None, None)?;
+        Routed::DeployRetry { unit } => {
+            let req = json_request(
+                "https://main/retry",
+                Method::Post,
+                Some(&json!({ "unit": unit })),
+                None,
+            )?;
             let mut r = platform::call(env, &main_stub(env, &s.repo)?, req).await?;
             let v: Value = r.json().await?;
             Ok((None, respond(operation, r.status_code(), v)))

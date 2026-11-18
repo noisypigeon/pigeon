@@ -82,7 +82,10 @@ pub enum Routed {
         args: serde_json::Map<String, Value>,
     },
     /// Deploy `main`'s newest push again after it failed.
-    DeployRetry,
+    DeployRetry {
+        /// The group to deploy in full, if any.
+        unit: Option<String>,
+    },
     /// The repository's git tokens, without their values.
     GitTokens,
     /// Every change, optionally in one state.
@@ -456,7 +459,9 @@ pub fn route(request: &Request, by: &str, at: u64) -> Result<Routed, String> {
         }),
         "change.status" => Ok(Routed::Status { number: number(a)? }),
         "deploy.status" => Ok(Routed::DeployStatus),
-        "deploy.retry" => Ok(Routed::DeployRetry),
+        "deploy.retry" => Ok(Routed::DeployRetry {
+            unit: text(a, "unit"),
+        }),
         "build.list" | "build.read" => Ok(Routed::Build {
             operation: request.operation.clone(),
             args: a.clone(),
@@ -616,7 +621,7 @@ pub struct JobSpec {
     pub title: String,
     /// Its plan, as the policy's body.
     pub plan: String,
-    /// Its approved scope.
+    /// Its approved scope; for a deploy, each group's baseline as `<group>=<sha>`, an empty SHA deploying the group in full.
     pub scope: Vec<String>,
     /// The job.
     pub job: String,
@@ -785,6 +790,9 @@ pub struct Report {
     /// For a deploy: each Worker it deployed, as `<name>: <from> → <to>`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub workers: Vec<String>,
+    /// For a deploy: the groups that passed.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub passed: Vec<String>,
     /// For a deploy: the `pigeon` it built and stored, if it built one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub build: Option<Build>,
@@ -838,6 +846,7 @@ impl Report {
             published: Vec::new(),
             ios: false,
             workers: Vec::new(),
+            passed: Vec::new(),
             build: None,
             images: None,
             tiers: None,
@@ -1876,6 +1885,26 @@ pub struct Pipeline {
     /// `.claude/decisions/2026-11-13-development-session-stages-subscriptions-breaker.md` §1.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub pushes: Vec<String>,
+    /// Each group's own baseline: the commit it last deployed without a failure; an empty one deploys the group in full next.
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub baselines: std::collections::BTreeMap<String, String>,
+}
+
+/// The groups a deploy passes or fails on its own; see .claude/decisions/2026-11-18-runtime-independent-blue-green-workers.md §B.
+pub const DEPLOY_GROUPS: [&str; 3] = ["sites", "workers", "build"];
+
+/// A deploy group's baseline from `spec`: its own, none for in full, else the deploy's `since`.
+#[must_use]
+pub fn group_since(spec: &JobSpec, group: &str) -> Option<String> {
+    match spec
+        .scope
+        .iter()
+        .find_map(|s| s.strip_prefix(group).and_then(|r| r.strip_prefix('=')))
+    {
+        Some("") => None,
+        Some(sha) => Some(sha.to_string()),
+        None => spec.since.clone(),
+    }
 }
 
 /// How many deploys `deploy.status` keeps.
@@ -1980,6 +2009,17 @@ impl Pipeline {
         };
         if report.outcome == Outcome::Passed {
             self.deployed = Some(sha.clone());
+            for g in DEPLOY_GROUPS {
+                self.baselines.insert(g.to_string(), sha.clone());
+            }
+        } else {
+            for g in report
+                .passed
+                .iter()
+                .filter(|g| DEPLOY_GROUPS.contains(&g.as_str()))
+            {
+                self.baselines.insert(g.clone(), sha.clone());
+            }
         }
         // A build stored from `main` is good for jobs whatever else the deploy did.
         if let Some(b) = report
@@ -2011,17 +2051,40 @@ impl Pipeline {
         });
     }
 
-    /// Deploy the newest push again: after it failed, as when its image was missing, from the
-    /// last deploy that passed; or after it passed, everything, as when new images or a change
-    /// to rendering take effect only on a deploy. None while a deploy runs or waits.
-    pub fn retry(&mut self) -> Option<String> {
+    /// Each group's baseline, for a deploy's `scope`.
+    #[must_use]
+    pub fn baselines_spec(&self) -> Vec<String> {
+        self.baselines
+            .iter()
+            .map(|(g, s)| format!("{g}={s}"))
+            .collect()
+    }
+
+    /// Deploy the newest push again. Without `unit`: after a failure, the groups that failed, each
+    /// from its own baseline; after a pass, everything. With `unit`, one of [`DEPLOY_GROUPS`]:
+    /// that group in full. None while a deploy runs or waits, or for an unknown unit.
+    pub fn retry(&mut self, unit: Option<&str>) -> Option<String> {
         if self.running.is_some() || self.target.is_some() {
             return None;
         }
         let last = self.history.first()?.sha.clone();
-        if self.deployed.as_deref() == Some(last.as_str()) {
-            // Nothing changed since itself, so only a deploy of everything redeploys its Workers.
-            self.deployed = None;
+        match unit {
+            Some(u) => {
+                if !DEPLOY_GROUPS.contains(&u) {
+                    return None;
+                }
+                self.baselines.insert(u.to_string(), String::new());
+                if self.deployed.as_deref() == Some(last.as_str()) {
+                    self.deployed = None;
+                }
+            }
+            None => {
+                if self.deployed.as_deref() == Some(last.as_str()) {
+                    // Nothing changed since itself, so only a deploy of everything redeploys its Workers.
+                    self.deployed = None;
+                    self.baselines.clear();
+                }
+            }
         }
         self.target = Some(last);
         self.start()

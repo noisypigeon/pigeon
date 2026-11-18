@@ -1101,7 +1101,8 @@ impl MainRun {
                 host.to_string(),
             );
         }
-        let spec = control::deploy_spec(&remote, &token, sha, p.deployed.as_deref(), env);
+        let mut spec = control::deploy_spec(&remote, &token, sha, p.deployed.as_deref(), env);
+        spec.scope = p.baselines_spec();
         let body = serde_json::to_value(&spec).map_err(|e| e.to_string())?;
         let req = json_request("https://checker/start", Method::Post, Some(&body), None)
             .map_err(|e| e.to_string())?;
@@ -1188,7 +1189,14 @@ impl DurableObject for MainRun {
             }
             (Method::Post, "retry") => {
                 let mut p = self.pipeline().await?;
-                let starting = p.retry();
+                let body: Value = req.json().await.unwrap_or(Value::Null);
+                let unit = body["unit"].as_str();
+                if let Some(u) = unit
+                    && !control::DEPLOY_GROUPS.contains(&u)
+                {
+                    return Response::error("unit is one of sites, workers, build", 400);
+                }
+                let starting = p.retry(unit);
                 self.save(&p, starting.as_deref()).await?;
                 let mut m = self.mirroring().await?;
                 let mirroring = github::mirror(&self.env).is_some()

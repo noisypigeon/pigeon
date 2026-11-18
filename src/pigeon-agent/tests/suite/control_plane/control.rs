@@ -182,6 +182,7 @@ fn reports_become_events() {
         published: vec![],
         ios: false,
         workers: vec![],
+        passed: vec![],
         build: None,
         images: None,
         tiers: None,
@@ -422,6 +423,7 @@ fn deploy_report(outcome: Outcome) -> Report {
         published: vec!["sites/docs".into()],
         ios: false,
         workers: vec!["pigeon-control: v1 → v2".into()],
+        passed: vec![],
         build: None,
         images: None,
         tiers: None,
@@ -760,30 +762,30 @@ fn git_tokens_show_metadata_and_never_a_value() {
 #[test]
 fn a_deploy_is_retried_on_request_and_only_then() {
     let mut p = Pipeline::default();
-    assert_eq!(p.retry(), None, "nothing deployed or failed yet");
+    assert_eq!(p.retry(None), None, "nothing deployed or failed yet");
     p.pushed(A);
     assert_eq!(p.start().as_deref(), Some(A));
-    assert_eq!(p.retry(), None, "a deploy runs");
+    assert_eq!(p.retry(None), None, "a deploy runs");
     p.finished(&deploy_report(Outcome::Passed), 1);
     assert_eq!(
         p.history[0].workers,
         vec!["pigeon-control: v1 → v2".to_string()]
     );
     assert_eq!(
-        p.retry().as_deref(),
+        p.retry(None).as_deref(),
         Some(A),
         "a passed push is deployed again"
     );
     assert_eq!(p.deployed, None, "from nothing: everything is deployed");
-    assert_eq!(p.retry(), None, "a deploy runs");
+    assert_eq!(p.retry(None), None, "a deploy runs");
     p.finished(&deploy_report(Outcome::Passed), 1);
     assert_eq!(p.deployed.as_deref(), Some(A));
     p.pushed(B);
     assert_eq!(p.start().as_deref(), Some(B));
     p.finished(&deploy_report(Outcome::Failed), 2);
     assert_eq!(p.start(), None, "a failure waits");
-    assert_eq!(p.retry().as_deref(), Some(B), "until it is retried");
-    assert_eq!(p.retry(), None, "once at a time");
+    assert_eq!(p.retry(None).as_deref(), Some(B), "until it is retried");
+    assert_eq!(p.retry(None), None, "once at a time");
     p.finished(&deploy_report(Outcome::Passed), 3);
     assert_eq!(p.deployed.as_deref(), Some(B));
 }
@@ -1672,4 +1674,54 @@ fn a_changed_key_is_journaled_once() {
             "members".to_string()
         )]
     );
+}
+
+#[test]
+fn a_failed_deploy_advances_only_the_groups_that_passed() {
+    let mut p = Pipeline::default();
+    p.pushed(A);
+    assert_eq!(p.start().as_deref(), Some(A));
+    p.finished(&deploy_report(Outcome::Passed), 1);
+    assert_eq!(p.baselines["build"], A);
+    assert_eq!(p.baselines["sites"], A);
+    assert_eq!(p.baselines["workers"], A);
+    p.pushed(B);
+    assert_eq!(p.start().as_deref(), Some(B));
+    let failed = Report {
+        passed: vec!["sites".into()],
+        ..deploy_report(Outcome::Failed)
+    };
+    p.finished(&failed, 2);
+    assert_eq!(p.deployed.as_deref(), Some(A));
+    assert_eq!(
+        p.baselines_spec(),
+        vec![
+            format!("build={A}"),
+            format!("sites={B}"),
+            format!("workers={A}")
+        ]
+    );
+}
+
+#[test]
+fn a_retry_deploys_a_named_group_in_full() {
+    let mut p = Pipeline::default();
+    p.pushed(A);
+    assert_eq!(p.start().as_deref(), Some(A));
+    p.finished(&deploy_report(Outcome::Passed), 1);
+    assert_eq!(p.retry(Some("nope")), None);
+    assert_eq!(p.running, None, "an unknown unit starts nothing");
+    assert_eq!(p.retry(Some("workers")).as_deref(), Some(A));
+    assert_eq!(p.baselines["workers"], "");
+    assert_eq!(p.baselines["sites"], A);
+    assert_eq!(p.baselines["build"], A);
+}
+
+#[test]
+fn a_group_reads_its_own_baseline() {
+    let mut spec = control::deploy_spec("r", "t", B, Some(A), std::collections::BTreeMap::new());
+    spec.scope = vec!["workers=".into(), format!("sites={B}")];
+    assert_eq!(control::group_since(&spec, "workers"), None);
+    assert_eq!(control::group_since(&spec, "sites").as_deref(), Some(B));
+    assert_eq!(control::group_since(&spec, "build").as_deref(), Some(A));
 }

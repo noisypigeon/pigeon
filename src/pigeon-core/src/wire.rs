@@ -1232,8 +1232,8 @@ const CATALOG: &[Operation] = &[
         name: "deploy.retry",
         engine: Engine::Agent,
         effect: Effect::Build,
-        summary: "Deploy main's newest push again: after a failed deploy, as when its image was missing, or after a passed one, everything, as when new images must roll out",
-        args: &[],
+        summary: "Deploy main's newest push again: without `unit`, only the groups (sites, workers, build) that failed, or after a passed deploy everything; with `unit`, that group in full",
+        args: &[arg("unit", false, Kind::String)],
         view: View::Card,
     },
     Operation {

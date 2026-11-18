@@ -76,6 +76,7 @@ impl Board {
             published: Vec::new(),
             ios: false,
             workers: Vec::new(),
+            passed: Vec::new(),
             build: None,
             images: None,
             tiers: None,
@@ -130,6 +131,7 @@ pub(crate) fn report(spec: &JobSpec, outcome: Outcome, log: &str) -> Report {
         published: Vec::new(),
         ios: false,
         workers: Vec::new(),
+        passed: Vec::new(),
         build: None,
         images: None,
         tiers: None,
@@ -429,6 +431,22 @@ fn mirror(spec: &JobSpec, dir: &Path) -> Report {
 /// published with the job's credentials, then the Workers whose inputs changed, then `pigeon`
 /// for job Containers; see
 /// `.claude/decisions/2026-11-07-development-control-plane-deploys-itself.md`.
+/// A deploy group's files changed since its own baseline, none for everything, logged.
+fn group_files(spec: &JobSpec, dir: &Path, group: &str, log: &mut String) -> Option<Vec<String>> {
+    let files = crate::control::group_since(spec, group)
+        .and_then(|since| crate::checks::ci::changed_since(dir, &since, &spec.sha).ok());
+    let _ = match &files {
+        Some(f) => writeln!(
+            log,
+            "{group}: {} file(s) changed since its baseline",
+            f.len()
+        ),
+        None => writeln!(log, "{group}: everything"),
+    };
+    files
+}
+
+#[expect(clippy::too_many_lines, reason = "one step per deploy group")]
 fn deploy(spec: &JobSpec, dir: &Path) -> Report {
     let failed = |why: String, log: &str| Report {
         violations: vec![why],
@@ -452,9 +470,15 @@ fn deploy(spec: &JobSpec, dir: &Path) -> Report {
             .filter(|s| s.len() >= 8)
             .fold(t.to_string(), |acc, s| acc.replace(s.as_str(), "…"))
     };
+    let site_files = group_files(spec, dir, "sites", &mut log);
+    let worker_files = group_files(spec, dir, "workers", &mut log);
+    let build_files = group_files(spec, dir, "build", &mut log);
+    let mut passed: Vec<String> = Vec::new();
     let ios = crate::iosrelease::triggers(files.as_deref());
     let mut violations = Vec::new();
-    let published = match publish_sites(spec, dir, files.as_deref(), &mut log) {
+    let published = match publish_sites(spec, dir, site_files.as_deref(), &mut log)
+        .inspect(|_| passed.push("sites".to_string()))
+    {
         Ok(p) => p,
         Err(why) => {
             violations.push(why);
@@ -475,19 +499,24 @@ fn deploy(spec: &JobSpec, dir: &Path) -> Report {
         return r;
     }
     let mut images = None;
-    let workers = match crate::ship::workers(spec, dir, files.as_deref(), &mut log, &mut images) {
-        Ok(w) => w,
-        Err(why) => {
-            violations.push(why);
-            Vec::new()
-        }
-    };
+    let workers =
+        match crate::ship::workers(spec, dir, worker_files.as_deref(), &mut log, &mut images)
+            .inspect(|_| passed.push("workers".to_string()))
+        {
+            Ok(w) => w,
+            Err(why) => {
+                violations.push(why);
+                Vec::new()
+            }
+        };
     if workers.is_empty()
         && let Some(r) = superseded(images.clone(), &log)
     {
         return r;
     }
-    let build = match crate::ship::build(spec, dir, files.as_deref(), &mut log) {
+    let build = match crate::ship::build(spec, dir, build_files.as_deref(), &mut log)
+        .inspect(|_| passed.push("build".to_string()))
+    {
         Ok(b) => b,
         Err(why) => {
             violations.push(why);
@@ -508,6 +537,7 @@ fn deploy(spec: &JobSpec, dir: &Path) -> Report {
     Report {
         published,
         workers,
+        passed,
         ios,
         build,
         images,
