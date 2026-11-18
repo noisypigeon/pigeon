@@ -1466,8 +1466,8 @@ fn answered(operation: &str, (status, v): (u16, Value)) -> (Option<String>, Wire
     (None, respond(operation, status, v))
 }
 
-/// `/healthz`: the version serving, and whether D1 and a Durable Object answer; see
-/// .claude/decisions/2026-11-07-development-control-plane-deploys-itself.md §7.
+/// `/healthz`: the version serving, whether D1 and a Durable Object answer, and the commit main last
+/// deployed; see .claude/decisions/2026-11-07-development-control-plane-deploys-itself.md §7.
 async fn health(env: &Env, s: &Settings) -> Result<Response> {
     let version = env
         .get_binding::<worker::WorkerVersionMetadata>("CF_VERSION_METADATA")
@@ -1499,6 +1499,10 @@ async fn health(env: &Env, s: &Settings) -> Result<Response> {
     };
     let main = ask("https://main/version").await;
     let instance = ask("https://instance/version").await;
+    let deployed = ask("https://main/status")
+        .await
+        .and_then(|t| serde_json::from_str::<Value>(&t).ok())
+        .and_then(|v| v["pipeline"]["deployed"].as_str().map(str::to_string));
     let object = instance.is_some();
     let current = crate::core::deploy::versions::object_current(instance.as_deref(), &mine);
     let ok = d1 && object && current && !version.is_empty();
@@ -1506,6 +1510,7 @@ async fn health(env: &Env, s: &Settings) -> Result<Response> {
         "ok": ok,
         "version": version,
         "instance": s.instance,
+        "deployed": deployed,
         "d1": d1,
         "durable_object": object,
         "objects": { "main": main, "instance": instance, "expected": mine },

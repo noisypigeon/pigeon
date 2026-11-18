@@ -37,4 +37,24 @@
   }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start);
   else start();
+  // The deployed commit, read from /healthz at view time; see .claude/decisions/2026-11-18-runtime-independent-blue-green-workers.md §B.
+  function deployed() {
+    var el = document.getElementById("deployed");
+    if (!el || typeof fetch !== "function") return;
+    fetch("/healthz", { credentials: "same-origin" })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (!j || typeof j.deployed !== "string" || !j.deployed) return;
+        var mono = document.createElement("span");
+        mono.className = "mono";
+        mono.textContent = j.deployed.slice(0, 12);
+        el.textContent = "Deployed ";
+        el.appendChild(mono);
+        el.appendChild(document.createTextNode("."));
+        el.removeAttribute("hidden");
+      })
+      .catch(function () {});
+  }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", deployed);
+  else deployed();
 })();

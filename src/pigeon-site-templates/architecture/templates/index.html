@@ -221,7 +221,7 @@
 
   <footer>
     <span>Derived from the code by <span class="mono">architecture.describe</span>; nothing here is placed by hand.</span>
-    {%- if sha %}<span>{{ shown | capitalize }} <span class="mono">{{ sha | truncate(length=12, end="") }}</span>.</span>{% endif %}
+    <span id="deployed"{% if not sha %} hidden{% endif %}>{{ shown | capitalize }} <span class="mono">{{ sha | truncate(length=12, end="") }}</span>.</span>
     {%- if data and data.network and data.network.access.hosts %}
     <span>Deploys, changes and approvals: <a href="https://{{ data.network.access.hosts | first }}/">{{ data.network.access.hosts | first }}</a>, behind Access.</span>
     {%- endif %}
