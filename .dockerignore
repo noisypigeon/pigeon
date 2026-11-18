@@ -8,5 +8,7 @@ src/pigeon-ios/
 !src/pigeon-ios/Cargo.toml
 !src/pigeon-ios/src/
 !src/pigeon-ios/tests/
+# `pigeon-core` includes it at compile time.
+!tooling/session/models.json
 **/target/
 **/CHANGELOG.md
