@@ -168,6 +168,8 @@
 - feat(infra): control.platform.pigeon.dev joins the platform's domains, so Access covers it before the stack takes it (!1257) ([d72c84e](https://github.com/noisypigeon/pigeon/commit/d72c84eb5ef27ebf0366a13fbab0fe06cde93d7f))
 - fix(images): the job image's context holds tooling/session/models.json, which pigeon-core includes (!1260) ([23a1f9c](https://github.com/noisypigeon/pigeon/commit/23a1f9cc34329e2b9ef2761493c0413f4ed80f7e)) · agent, pigeon-eviction
 - feat(infra): pigeon-control serves control.platform.pigeon.dev beside blue.platform, as its own host (!1262) ([b8ab90a](https://github.com/noisypigeon/pigeon/commit/b8ab90a1b4e9e8709ac1984809fac673eee9ea85)) · agent
+- fix(images): pigeon-start falls back to a GET of /builds/ when build.read fails (!1264) ([56adc4d](https://github.com/noisypigeon/pigeon/commit/56adc4dd183d8ce6e756f34bbcbc7a3d408e2856))
+- docs(adr): R3's first shadow differences; approval.list stays the Administrator's (!1263) ([b95babd](https://github.com/noisypigeon/pigeon/commit/b95babdb215e1c1f9b0d953807ccbd7704c7aedd))
 
 ## 2026-11-17
 
