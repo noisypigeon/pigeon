@@ -544,7 +544,7 @@ async fn wait(env: &Env, id: &Value, request: &wire::Request) -> Result<Response
         Err(why) => return refused(why),
     };
     let message = format!(
-        "`{operation}` on change {number} waits for the owner's passkey at {link}; it is listed on /approvals and pushed, and its stage moves when it lands"
+        "`{operation}` on change {number} waits for the owner's passkey at {link}; it is listed in /app and pushed, and its stage moves when it lands"
     );
     Response::from_json(&mcp::answer(
         id,

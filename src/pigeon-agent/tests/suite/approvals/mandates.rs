@@ -290,7 +290,7 @@ fn case_713_an_eviction_head_under_a_mandate_needs_the_owner_in_its_stage() {
     assert_eq!((s.stage.as_str(), s.needs), ("checked", Needs::Owner));
     assert!(
         s.next
-            .starts_with("the owner approves the head on `/approvals`: "),
+            .starts_with("the owner approves the head in `/app`: "),
         "{}",
         s.next
     );

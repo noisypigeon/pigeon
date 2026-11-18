@@ -192,7 +192,7 @@ fn ask_merge(covered: Option<&String>, uncovered: Option<&String>) -> Stage {
         (None, Some(why)) => at(
             "checked",
             Needs::Owner,
-            format!("the owner approves the head on `/approvals`: {why}"),
+            format!("the owner approves the head in `/app`: {why}"),
         ),
         (None, None) => at("checked", Needs::Owner, "approve the head"),
     }

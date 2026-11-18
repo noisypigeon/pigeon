@@ -195,7 +195,7 @@ Where each check runs:
   work left, per
   [`2026-11-13-development-session-stages-subscriptions-breaker.md`](.claude/decisions/2026-11-13-development-session-stages-subscriptions-breaker.md).
   The owner is pushed to (Web Push, from
-  `/approvals`, with `PUSH_VAPID_KEY` from `pigeon keys vapid`)
+  `/app`'s Notify button, with `PUSH_VAPID_KEY` from `pigeon keys vapid`)
   only when an approval waits, a mandate pauses, a deploy fails or the
   hourly digest (`digest_show`) needs them, per
   [`2026-11-08-development-events-tickets-digest-mandate.md`](.claude/decisions/2026-11-08-development-events-tickets-digest-mandate.md).
