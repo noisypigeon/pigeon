@@ -256,6 +256,8 @@ fn workers_deploy_when_their_spec_crates_or_migrations_change() {
         ".claude/decisions/x.md",
         "src/pigeon-site-templates/blog/templates/index.html",
         "infra/pigeon/sites/docs/config.yaml",
+        "mise.toml",
+        ".config/releases.yaml",
     ] {
         assert!(workers(Some(&[miss])).is_empty(), "{miss}");
     }

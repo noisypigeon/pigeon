@@ -399,7 +399,15 @@ pub fn workers(root: &Path, files: Option<&[String]>) -> Result<Vec<String>, Err
                 .map(|m| format!("{}/", m.trim_end_matches('/'))),
         );
         inputs.extend(f.spec.containers.iter().map(|c| c.image.dockerfile.clone()));
-        inputs.extend(crates.layout.everything());
+        // The toolchain pin and release config change no Worker; see
+        // .claude/decisions/2026-11-18-runtime-independent-blue-green-workers.md §B.
+        inputs.extend(
+            crates
+                .layout
+                .everything()
+                .into_iter()
+                .filter(|p| p != "mise.toml" && p != RELEASES),
+        );
         let entry = format!("{}/", f.spec.entry.krate.trim_end_matches('/'));
         if let Some(package) = crates.by_dir.get(&entry) {
             let mut wanted = BTreeSet::from([package.clone()]);
