@@ -13,6 +13,7 @@
 - agent v0.1.59
 - agent v0.1.60
 - agent v0.1.61
+- agent v0.1.62
 - infra-cloudflare-access-application v0.1.3
 - infra-cloudflare-access-application v0.1.4
 - infra-cloudflare-schema v0.1.24
@@ -120,6 +121,8 @@
 - docs(adr): step 9a's front: its own crate, service bindings, its own check, and only hosts Access covers (!1213) ([4673499](https://github.com/noisypigeon/pigeon/commit/46734999b286cfe48850acd860becdcdf33f58bc))
 - docs(adr): review !1158 against !1213 (!1214) ([13ca590](https://github.com/noisypigeon/pigeon/commit/13ca590e292626076b7367880325161e129dd832))
 - docs(adr): review !1162 against !1213 (!1215) ([46f63ce](https://github.com/noisypigeon/pigeon/commit/46f63ce04a9edb5490be2549f918eb61a8705905))
+- feat(deploy): a Worker spec binds other Workers, and the primary can take the front's host as its own (!1216) ([2e68027](https://github.com/noisypigeon/pigeon/commit/2e68027e2f604a04b113f82822befca34d307bb8)) · agent
+- feat(infra): front-test.pigeon.dev joins the platform's domains, so Access covers it before pigeon-front serves it (!1217) ([c650616](https://github.com/noisypigeon/pigeon/commit/c650616424529f6a4cf0e6cf0cda562b8e7a4c6f))
 
 ## 2026-11-17
 
