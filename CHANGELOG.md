@@ -9,6 +9,7 @@
 - agent v0.1.55
 - agent v0.1.56
 - agent v0.1.57
+- agent v0.1.58
 - infra-cloudflare-access-application v0.1.3
 - infra-cloudflare-access-application v0.1.4
 - infra-cloudflare-schema v0.1.24
@@ -102,6 +103,8 @@
 - test(eviction): the changelog policy carries its own examples (!1197) ([f712545](https://github.com/noisypigeon/pigeon/commit/f712545a002f2342d04e5e3b163a025ff6bbd504))
 - test(eviction): the layout policy carries its own examples (!1198) ([5bc546d](https://github.com/noisypigeon/pigeon/commit/5bc546db1b4f8d4382db033cd3dc24acb9674c53))
 - feat(ios): approvals and Auto go through the proof sheet (!1199) ([1453490](https://github.com/noisypigeon/pigeon/commit/145349056f53337ec54e225ef9f84da77e5c8872))
+- test(eviction): the decisions policy carries its own examples (!1200) ([ed2c40f](https://github.com/noisypigeon/pigeon/commit/ed2c40f7056f54fbe72febc039d316bcb7232fd2))
+- feat(agent): device.unlink and passkey.remove on the device door (!1201) ([1e26237](https://github.com/noisypigeon/pigeon/commit/1e26237572ae4a082551e83c83c49229788077f8)) · agent
 
 ## 2026-11-17
 
