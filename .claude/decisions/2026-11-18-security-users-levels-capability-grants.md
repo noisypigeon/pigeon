@@ -601,3 +601,24 @@ expiring within 14 days. `GRANT_TTL` is not added.
 
 **The step-3 brief** follows: `CAPABILITIES` holds the six, and a grant's
 `expires` is `None` unless named.
+
+### 2026-11-18: Reviewed !1226 against !1219: they agree
+
+[`2026-11-18-runtime-independent-blue-green-workers.md`](2026-11-18-runtime-independent-blue-green-workers.md)'s
+amendment for owner item #42 (!1219) journals secret-bearing `Instance`
+state sealed, hashes a grant request's token, and never journals the APNs
+token. !1226 is §7 step 3: levels, capability grants and the learner's
+`icbc` in `core/member`.
+
+- **What they share.** The only overlap is `wire/registry_tests.rs`. There
+  !1226 renames one import, `CAPABILITIES` to `PERMISSIONS`, and !1219
+  changes no test.
+- **Grants hold no secret.** A `Grant` is a capability's name, its scope,
+  who granted it and when. It lives in `members`, which !1219 journals as
+  is, as the blue-green planner confirmed. `members.joins`, which holds
+  enrolment challenges, is among the sealed keys, and !1226 doesn't touch
+  it.
+- **A check still reads after replay.** `learner.rs` reads `members` from
+  storage on each call and writes it back only when `migrate` adds a
+  grant. Both are ordinary `Instance` writes, journaled whether or not
+  `journal-seal` exists.
