@@ -464,3 +464,15 @@ protection the owner chose for push targets, under the same key.
 Changes, in order: 42a the grant request's token hashed at rest; 42b sealing
 in `journal` and `journal_keys`, skipping without the binding; 42c, once the
 owner has created `journal-seal`, the `JOURNAL_SEAL` binding.
+### 2026-11-18: !1223 agrees with this ADR
+
+!1223 carries out a follow-up to
+[`2026-11-17-runtime-mcp-feed-view-contract.md`](2026-11-17-runtime-mcp-feed-view-contract.md)'s
+R10b amendment, on the owner's word after testing the iOS build: the app's
+unthemed Feed tab goes. The two agree:
+
+- It changes `src/pigeon-ios/Pigeon/RootView.swift` and removes
+  `src/pigeon-ios/Pigeon/Shell/ShellView.swift`, none of the paths this ADR
+  governs.
+- It adds no test, and retires none of the kinds C.1 names.
+- Nothing else here changes.
