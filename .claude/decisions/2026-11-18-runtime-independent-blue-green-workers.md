@@ -323,3 +323,22 @@ fewer tests. The owner's decision #35 retires batch 1 (C.1), so:
   ([`2026-11-15-runtime-one-mcp-entry-point.md`](2026-11-15-runtime-one-mcp-entry-point.md)
   §7). Until then `every_route_binding_and_outbound_host_is_in_the_network`
   keeps coverage.
+
+### 2026-11-18: Identity state is journaled, and an authorization check reads after replay
+
+A.5 step 2's "every object appends, then applies" covers every `Instance`
+key, so its list is examples, not a whitelist. Named so that other ADRs can
+cite it: the identity state, which is `members` (with any capability grants
+inside `core::member::Members`), `accounts`, the passkey ring and `devices`,
+is journaled like the event log.
+
+- **Order:** 7a is the event log. Then the rest of the `Instance` keys,
+  identity included. Then `ChangeRun` and `MainRun`. Each object's first
+  journaled release backfills it as one snapshot entry.
+- **A grant or revoke is an act** (A.3): only the lease holder writes it,
+  fenced by the epoch.
+- **An authorization check reads identity state after replaying to the
+  journal's head**, never from a value cached across calls. So a revoke
+  that has committed answers on either color, including a request
+  `pigeon-front`'s 5 s lease cache still routes to the old one. Step 10's
+  replay parity checks it.
