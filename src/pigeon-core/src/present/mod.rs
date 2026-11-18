@@ -3,6 +3,7 @@
 
 pub(crate) mod approval;
 pub(crate) mod change;
+pub mod proof;
 pub(crate) mod rest;
 #[cfg(test)]
 mod tests;

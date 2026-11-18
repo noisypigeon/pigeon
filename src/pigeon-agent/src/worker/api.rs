@@ -99,7 +99,7 @@ pub(super) async fn serve_message(
             let why = "the proof tools are a person's, signed in or on a linked device";
             return Response::from_json(&mcp::proof_answer(&id, tool, Err(why.into())));
         }
-        let outcome = if tool == mcp::PROOF_TOOLS[0] {
+        let outcome = if tool == mcp::PROOF_TOOLS[0] || tool == mcp::PROOF_TOOLS[2] {
             super::passkeys::proof_challenge(env, settings, &args, door.host).await?
         } else {
             let person = Identity {

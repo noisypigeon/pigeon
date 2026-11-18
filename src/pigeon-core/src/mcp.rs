@@ -309,7 +309,7 @@ fn read(id: Value, params: &Value) -> Action {
 
 /// The owner's proof tools, listed only on a person's door; see
 /// `.claude/decisions/2026-11-17-runtime-mcp-feed-view-contract.md` §4.
-pub const PROOF_TOOLS: [&str; 2] = ["proof_challenge", "proof_submit"];
+pub const PROOF_TOOLS: [&str; 3] = ["proof_challenge", "proof_submit", "proof_form"];
 
 /// The proof tools' definitions, each a card.
 #[must_use]
@@ -340,7 +340,7 @@ pub fn proof_tools() -> Vec<Value> {
         json!({
             "name": PROOF_TOOLS[1],
             "title": "proof.submit",
-            "description": "The owner's passkey assertion for the grant at `page`, with the page's other `fields` (as `operation`), or for `purpose`; the grant is redeemed and its operation run, or the Auto window started or ended; see .claude/decisions/2026-11-17-runtime-mcp-feed-view-contract.md §4",
+            "description": "The owner's passkey assertion for the grant at `page`, with the page's other `fields` (as `operation`), or for `purpose`; the grant is redeemed and its operation run, or the Auto window started or ended; any other string argument is one of the page's fields; see .claude/decisions/2026-11-17-runtime-mcp-feed-view-contract.md §4",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -353,10 +353,23 @@ pub fn proof_tools() -> Vec<Value> {
                     "signature": text,
                 },
                 "required": ["credential", "client_data", "authenticator_data", "signature"],
-                "additionalProperties": false,
+                "additionalProperties": { "type": "string" },
             },
             "annotations": { "readOnlyHint": false, "destructiveHint": false },
             "_meta": { "dev.pigeon/view": "card" },
+        }),
+        json!({
+            "name": PROOF_TOOLS[2],
+            "title": "proof.form",
+            "description": "The inputs the grant at `page` asks for (asks, review, a token) as a form whose submit is proof.submit; see .claude/decisions/2026-11-17-runtime-mcp-feed-view-contract.md, its 2026-11-18 amendment §2",
+            "inputSchema": {
+                "type": "object",
+                "properties": { "page": page },
+                "required": ["page"],
+                "additionalProperties": false,
+            },
+            "annotations": { "readOnlyHint": true, "destructiveHint": false },
+            "_meta": { "dev.pigeon/view": "form" },
         }),
     ]
 }
@@ -395,10 +408,19 @@ pub fn proof_call(message: &Value) -> Option<(Value, &'static str, Value)> {
 pub fn proof_answer(id: &Value, title: &str, outcome: Result<Value, String>) -> Value {
     match outcome {
         Ok(r) => {
-            let card = crate::present::card(title, None, crate::present::scalars(&r), Vec::new());
-            let view = crate::present::checked(crate::view::View::Card, Some(card))
-                .ok()
-                .flatten();
+            use crate::view::View;
+            let presented = match title {
+                "proof.challenge" => crate::present::proof::challenge(&r).map(|v| (View::Card, v)),
+                "proof.form" => crate::present::proof::form(&r).map(|v| (View::Form, v)),
+                _ => None,
+            };
+            let (declared, v) = presented.unwrap_or_else(|| {
+                (
+                    View::Card,
+                    crate::present::card(title, None, crate::present::scalars(&r), Vec::new()),
+                )
+            });
+            let view = crate::present::checked(declared, Some(v)).ok().flatten();
             let mut answer = json!({
                 "content": [{ "type": "text", "text": r.to_string() }],
                 "structuredContent": r,
@@ -592,11 +614,19 @@ mod proof_tests {
     fn proof_tools_are_cards_with_their_schemas() {
         let tools = proof_tools();
         let names: Vec<_> = tools.iter().map(|t| t["name"].clone()).collect();
-        assert_eq!(names, [json!("proof_challenge"), json!("proof_submit")]);
-        for t in &tools {
+        assert_eq!(
+            names,
+            [
+                json!("proof_challenge"),
+                json!("proof_submit"),
+                json!("proof_form")
+            ]
+        );
+        assert_eq!(tools[2]["_meta"]["dev.pigeon/view"], "form");
+        for t in &tools[..2] {
             assert_eq!(t["_meta"]["dev.pigeon/view"], "card");
         }
-        for t in &tools {
+        for t in &tools[..2] {
             let props = &t["inputSchema"]["properties"];
             assert!(props["page"].is_object() && props["purpose"].is_object());
             assert_eq!(props["purpose"]["enum"], json!(["auto", "auto-end"]));
@@ -629,7 +659,7 @@ mod proof_tests {
     fn a_persons_listing_adds_them() {
         let reply = json!({ "jsonrpc": "2.0", "id": 1, "result": { "tools": [{ "name": "x" }] } });
         let listed = with_proof_tools(reply);
-        assert_eq!(listed["result"]["tools"].as_array().unwrap().len(), 3);
+        assert_eq!(listed["result"]["tools"].as_array().unwrap().len(), 4);
     }
 
     #[test]
