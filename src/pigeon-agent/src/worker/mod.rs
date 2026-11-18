@@ -2395,14 +2395,20 @@ impl DurableObject for Instance {
         let write = req.method() != Method::Get;
         let response = self.route(req).await;
         if write {
-            journal_state(&self.state, &self.env).await;
+            journal_keys(
+                &self.state,
+                &self.env,
+                crate::core::journal::INSTANCE_KEYS,
+                crate::core::journal::state_object,
+            )
+            .await;
         }
         response
     }
 }
 
-/// Journals, in shadow, each of the Instance's journaled keys whose value changed: a failure is logged, never returned.
-async fn journal_state(state: &State, env: &Env) {
+/// Journals, in shadow, each of `keys` whose value in `state` changed, as entries of the object `object` names for the instance: a failure is logged, never returned.
+async fn journal_keys(state: &State, env: &Env, keys: &[&str], object: fn(&str) -> String) {
     use crate::core::journal;
     use std::collections::BTreeMap;
     let held = lease::current(env).await;
@@ -2412,7 +2418,7 @@ async fn journal_state(state: &State, env: &Env) {
     let epoch = held.as_ref().map_or(journal::SHADOW_EPOCH, |l| l.epoch);
     let storage = state.storage();
     let mut now: BTreeMap<String, Value> = BTreeMap::new();
-    for key in journal::INSTANCE_KEYS {
+    for key in keys {
         match storage.get::<Value>(key).await {
             Ok(Some(v)) => {
                 now.insert((*key).to_string(), v);
@@ -2441,12 +2447,8 @@ async fn journal_state(state: &State, env: &Env) {
             return;
         }
     };
-    let mut last: u64 = match platform::d1_rows(
-        env,
-        &journal::last_seq(&journal::state_object(&settings.instance)),
-    )
-    .await
-    {
+    let object = object(&settings.instance);
+    let mut last: u64 = match platform::d1_rows(env, &journal::last_seq(&object)).await {
         Ok(rows) => rows
             .first()
             .and_then(|r| r.get("seq"))
@@ -2463,14 +2465,7 @@ async fn journal_state(state: &State, env: &Env) {
     for (key, digest) in changes {
         last += 1;
         let value = now.get(&key).unwrap_or(&Value::Null);
-        statements.push(journal::snapshot_entry_at(
-            &settings.instance,
-            last,
-            epoch,
-            at,
-            &key,
-            value,
-        ));
+        statements.push(journal::entry(&object, last, epoch, at, &key, value));
         if digest.is_empty() {
             digests.remove(&key);
         } else {

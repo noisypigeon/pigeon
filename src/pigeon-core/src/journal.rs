@@ -88,13 +88,32 @@ pub const WITHHELD: &[&str] = &[
     "members.joins",
 ];
 
+/// The `MainRun` keys journaled as snapshots; see the ADR's 2026-11-18 amendment on identity state.
+pub const MAIN_KEYS: &[&str] = &[
+    "pipeline",
+    "mirroring",
+    "ledger",
+    "releases",
+    "evictions",
+    "test_maps",
+    "ios_releases",
+    "starting",
+    "platform-runs",
+];
+
+/// `MainRun` keys that may hold infra outputs, withheld with owner item #42's.
+pub const MAIN_WITHHELD: &[&str] = &["platform-outputs"];
+
+/// The most JSON text one snapshot entry holds; a larger value isn't journaled until it shrinks.
+pub const MAX_VALUE: usize = 1_000_000;
+
 /// The DO-local key holding each journaled key's last digest.
 pub const DIGESTS: &str = "journal.digests";
 
 /// The DO-local key holding the snapshot object's last sequence number.
 pub const SEQ: &str = "journal.seq";
 
-/// The keys among `now` whose value changed since `previous`, each with its new digest (SHA-256 hex of the value's JSON text); a key in `previous` missing from `now` changes to an empty digest.
+/// The keys among `now` whose value changed since `previous`, each with its new digest (SHA-256 hex of the value's JSON text); a key in `previous` missing from `now` changes to an empty digest; a value whose JSON text exceeds [`MAX_VALUE`] is left out, keeping its previous digest.
 #[must_use]
 pub fn changed(
     previous: &std::collections::BTreeMap<String, String>,
@@ -103,7 +122,11 @@ pub fn changed(
     use sha2::Digest as _;
     let mut out = Vec::new();
     for (k, v) in now {
-        let d = format!("{:x}", sha2::Sha256::digest(v.to_string().as_bytes()));
+        let text = v.to_string();
+        if text.len() > MAX_VALUE {
+            continue;
+        }
+        let d = format!("{:x}", sha2::Sha256::digest(text.as_bytes()));
         if previous.get(k) != Some(&d) {
             out.push((k.clone(), d));
         }
@@ -129,6 +152,18 @@ pub fn last_seq(object: &str) -> crate::control::Statement {
 #[must_use]
 pub fn state_object(instance: &str) -> String {
     format!("instance:{instance}/state")
+}
+
+/// The `MainRun`'s state object.
+#[must_use]
+pub fn main_object(instance: &str) -> String {
+    format!("main:{instance}/state")
+}
+
+/// A `ChangeRun`'s state object.
+#[must_use]
+pub fn change_object(instance: &str, number: u64) -> String {
+    format!("change:{instance}/{number}/state")
 }
 
 /// A snapshot entry for the Instance's `key`, at `seq` of its state object.

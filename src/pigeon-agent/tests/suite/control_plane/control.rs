@@ -1737,6 +1737,21 @@ fn a_changed_key_is_journaled_once() {
 }
 
 #[test]
+fn a_value_too_large_for_one_entry_is_not_journaled() {
+    use agent::core::journal;
+    use serde_json::json;
+    use std::collections::BTreeMap;
+    let mut now = BTreeMap::new();
+    now.insert("small".to_string(), json!(1));
+    now.insert("big".to_string(), json!("x".repeat(journal::MAX_VALUE)));
+    let keys: Vec<String> = journal::changed(&BTreeMap::new(), &now)
+        .into_iter()
+        .map(|(k, _)| k)
+        .collect();
+    assert_eq!(keys, ["small"]);
+}
+
+#[test]
 fn a_failed_deploy_advances_only_the_groups_that_passed() {
     let mut p = Pipeline::default();
     p.pushed(A);

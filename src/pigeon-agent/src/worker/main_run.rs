@@ -1263,15 +1263,9 @@ impl MainRun {
         }
         Response::ok("ok")
     }
-}
-
-impl DurableObject for MainRun {
-    fn new(state: State, env: Env) -> Self {
-        Self { state, env }
-    }
 
     #[expect(clippy::too_many_lines, reason = "one arm per route")]
-    async fn fetch(&self, mut req: Request) -> Result<Response> {
+    async fn run_fetch(&self, mut req: Request) -> Result<Response> {
         let path = req.path();
         if path == "/version" {
             return Response::ok(platform::version(&self.env));
@@ -1373,13 +1367,42 @@ impl DurableObject for MainRun {
             _ => Response::error("not found", 404),
         }
     }
+}
+
+impl DurableObject for MainRun {
+    fn new(state: State, env: Env) -> Self {
+        Self { state, env }
+    }
+
+    async fn fetch(&self, req: Request) -> Result<Response> {
+        let write = req.method() != Method::Get;
+        let response = self.run_fetch(req).await;
+        if write {
+            super::journal_keys(
+                &self.state,
+                &self.env,
+                crate::core::journal::MAIN_KEYS,
+                crate::core::journal::main_object,
+            )
+            .await;
+        }
+        response
+    }
 
     async fn alarm(&self) -> Result<Response> {
         // The standby only reads; see the blue-green ADR §A.3.
         if !super::lease::acting(&self.env).await {
             return Response::ok("standby");
         }
-        self.run_alarm().await
+        let response = self.run_alarm().await;
+        super::journal_keys(
+            &self.state,
+            &self.env,
+            crate::core::journal::MAIN_KEYS,
+            crate::core::journal::main_object,
+        )
+        .await;
+        response
     }
 }
 
