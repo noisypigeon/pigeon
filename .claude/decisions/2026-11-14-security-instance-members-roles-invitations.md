@@ -558,3 +558,27 @@ glob under `src/pigeon-cli/` or `src/site-templates/` becomes `src/**/<tail>`
 (or `**<file>` for a workspace root file), which matches the file both before
 and after the restructure moves it. That ADR's step 12 tightens them to the
 new paths.
+
+### 2026-11-18: Three levels, one Administrator, and capabilities granted per user
+
+[`2026-11-18-security-users-levels-capability-grants.md`](2026-11-18-security-users-levels-capability-grants.md)
+carries the owner's request for Administrator, Standard and Service levels
+with per-user capabilities. Of this ADR, it changes:
+
+- **§1 and §2:** the role `user` is now `standard`, and the stored `user`
+  is read as `standard`. What §2 calls capabilities are now
+  **permissions**. **Capabilities** are the owner's four, `subdomain`,
+  `domain`, `blog` and `icbc`, granted per member.
+- **§2's slot is closed.** `standard` may hold no permission, and
+  `service` no more than `read` and `propose`. `check_roles` and the roles
+  policy both enforce it, so no edit to `.config/roles.yaml` gives
+  approval power below Administrator.
+- **§3:** an instance has exactly one Administrator, the seeded account.
+  Inviting, admitting or changing anyone to `administrator` is refused.
+- **§6:** a service account may also carry a tool list, which narrows its
+  scopes and never widens them.
+- **§8 step 3** checks the operation's requirement: a permission, a
+  granted capability within its scope and expiry, or the caller's own
+  credentials.
+- **The core is guarded.** `src/pigeon-core/src/member/**` joins `guarded`
+  and `gate`.

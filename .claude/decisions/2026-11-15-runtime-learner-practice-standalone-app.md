@@ -413,3 +413,20 @@ glob under `src/pigeon-cli/` or `src/site-templates/` becomes `src/**/<tail>`
 (or `**<file>` for a workspace root file), which matches the file both before
 and after the restructure moves it. That ADR's step 12 tightens them to the
 new paths.
+
+### 2026-11-18: `learner` becomes the `icbc` capability, granted to the learner
+
+Per
+[`2026-11-18-security-users-levels-capability-grants.md`](2026-11-18-security-users-levels-capability-grants.md)
+§2 and §4, §6's `learner` leaves `.config/roles.yaml`. It becomes the
+capability `icbc`, which the Administrator grants to the learner, a
+Standard member, with a passkey.
+
+- `worker/learner.rs` asks `member::check` for `icbc`. The Administrator
+  holds it implicitly.
+- **No lockout.** On load, `Members::migrate` gives each active Standard
+  member of an instance with the `learner` feature an unexpiring `icbc`
+  grant from `migration`, once. It lands in the same change as the roles
+  edit, so the learner never lacks access between deploys.
+- §7's admit card also shows the grant, so admitting the learner and
+  granting `icbc` take one proof.
