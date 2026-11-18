@@ -1,19 +1,16 @@
-//! The app's approvals: listed, shown, and approved with the owner's passkey, as the approval
-//! page does; see `.claude/decisions/2026-11-12-runtime-ios-app-approvals-insights.md` §3-§5.
+//! The app's reads (its approvals list, the tracker, Auto's state) and Auto's start and end,
+//! which the device door's tools and the proof submit call; see
+//! `.claude/decisions/2026-11-17-runtime-mcp-feed-view-contract.md`, its R10b amendment.
 
-use serde_json::{Map, Value, json};
-use worker::{Env, Method, Request, Response, Result};
+use serde_json::{Value, json};
+use worker::{Env, Method, Response, Result};
 
 use super::approve::live;
 use super::platform::Settings;
-use super::{elicit, run, to_change};
-use crate::access::Identity;
+use super::to_change;
 use crate::core::app::{approvals, tracker};
-use crate::core::approval::grants::Grant;
-use crate::core::approval::passkeys;
 use crate::core::approval::windows;
 use crate::core::change::Change;
-use crate::wire;
 
 /// The relying party the app's passkey answers for; its client data's origin is this host.
 pub(super) fn relying_party(env: &Env) -> String {
@@ -43,164 +40,6 @@ pub async fn approvals(env: &Env, s: &Settings) -> Result<Value> {
         .map(|a| a.iter().filter(|l| l["state"] == "open").cloned().collect())
         .unwrap_or_default();
     Ok(json!({ "lanes": open, "waiting": waiting }))
-}
-
-/// `GET /v0/app/approvals/<id>`.
-///
-/// # Errors
-///
-/// When a binding fails.
-pub async fn detail(env: &Env, s: &Settings, id: &str) -> Result<Response> {
-    let waiting = live(env, s).await?;
-    let Some((w, token)) = approvals::find(&waiting, id) else {
-        return Response::error("no such approval waiting", 404);
-    };
-    let (status, v) = to_change(
-        env,
-        &s.repo,
-        w.number,
-        Method::Post,
-        "/peek",
-        Some(&json!({ "token": token })),
-    )
-    .await?;
-    let (Ok(change), Ok(grant)) = (
-        serde_json::from_value::<Change>(v["change"].clone()),
-        serde_json::from_value::<Grant>(v["grant"].clone()),
-    ) else {
-        return Response::error(
-            "the approval can't be read",
-            if status == 200 { 500 } else { 404 },
-        );
-    };
-    Response::from_json(&approvals::detail(w, &change, &grant))
-}
-
-/// `POST /v0/app/challenge` with `{id}`: a passkey challenge for that approval.
-///
-/// # Errors
-///
-/// When a binding fails.
-pub async fn challenge(env: &Env, s: &Settings, body: &Value) -> Result<Response> {
-    let purpose = match body["op"].as_str() {
-        Some("auto") => windows::START.to_string(),
-        Some("auto-end") => windows::END.to_string(),
-        Some("instance:standup") => {
-            let sha = body["id"].as_str().unwrap_or_default();
-            if sha.len() != 64 || !sha.bytes().all(|b| b.is_ascii_hexdigit()) {
-                return Response::error("the id is the token's SHA-256, hex", 400);
-            }
-            crate::core::member::listing::standup_purpose(&sha.to_ascii_lowercase())
-        }
-        Some(op @ ("unlink" | "passkey:remove")) => {
-            let id = body["id"].as_str().unwrap_or_default();
-            if id.is_empty() {
-                return Response::error("the id is empty", 400);
-            }
-            if op == "unlink" {
-                crate::core::account::unlink_purpose(id)
-            } else {
-                crate::core::account::passkey_remove_purpose(id)
-            }
-        }
-        _ => {
-            let id = body["id"].as_str().unwrap_or_default();
-            let waiting = live(env, s).await?;
-            let Some((_, token)) = approvals::find(&waiting, id) else {
-                return Response::error("no such approval waiting", 404);
-            };
-            passkeys::grant_purpose(token)
-        }
-    };
-    let mut v = elicit::inbox(
-        env,
-        s,
-        "/passkeys/challenge",
-        &json!({ "purpose": purpose }),
-    )
-    .await?;
-    v["rp"] = json!(relying_party(env));
-    Response::from_json(&v)
-}
-
-/// `POST /v0/app/approvals/<id>` with `{passkey: {id, client, authenticator, signature}, hold}`:
-/// the passkey checked, the grant redeemed as the owner, and its operation run.
-///
-/// # Errors
-///
-/// When a binding fails.
-pub async fn approve(env: &Env, s: &Settings, id: &str, body: &Value) -> Result<Response> {
-    let waiting = live(env, s).await?;
-    let Some((entry, token)) = approvals::find(&waiting, id) else {
-        return Response::error("no such approval waiting", 404);
-    };
-    let (number, token) = (entry.number, token.to_string());
-    let rp = relying_party(env);
-    let form = approvals::proof_form(body);
-    let purpose = passkeys::grant_purpose(&token);
-    if let Err(why) = super::passkeys::prove(env, s, &form, &purpose, &rp).await? {
-        return Response::error(format!("refused: {why}"), 403);
-    }
-    let answers = if entry.operation == "change.authorize" {
-        let (_, st) = to_change(env, &s.repo, number, Method::Get, "/status", None).await?;
-        let Ok(change) = serde_json::from_value::<Change>(st["change"].clone()) else {
-            return Response::error("the change was unreadable", 500);
-        };
-        let answers = approvals::answers(&change, body);
-        if let Err(why) = crate::core::change::asks::check(&change.asks, &answers) {
-            return Response::error(why, 400);
-        }
-        answers
-    } else {
-        std::collections::BTreeMap::new()
-    };
-    let owner = super::account::approver(env, s).await?;
-    let hold = body["hold"].as_bool().unwrap_or(false);
-    let redeem =
-        json!({ "token": token, "operation": entry.operation, "by": owner, "review": hold });
-    let (status, v) =
-        to_change(env, &s.repo, number, Method::Post, "/redeem", Some(&redeem)).await?;
-    let _ = elicit::inbox(
-        env,
-        s,
-        "/approvals/remove",
-        &json!({ "path": format!("/approve/{number}?grant={token}") }),
-    )
-    .await;
-    if status != 200 {
-        return Response::error("the approval is no longer valid", 409);
-    }
-    let Ok(grant) = serde_json::from_value::<Grant>(v) else {
-        return Response::error("the grant was unreadable", 500);
-    };
-    let mut args = Map::new();
-    args.insert("number".into(), Value::from(number));
-    if !answers.is_empty() {
-        args.insert("answers".into(), json!(answers));
-    }
-    if grant.operation == "change.approve"
-        && let Some(head) = &grant.head
-    {
-        args.insert("sha".into(), Value::from(head.clone()));
-        if hold {
-            args.insert("hold".into(), Value::from(true));
-        }
-    }
-    let request = wire::Request {
-        operation: grant.operation.clone(),
-        args,
-    };
-    let who = Identity {
-        subject: owner,
-        human: true,
-    };
-    match run(env, s, &who, &request).await {
-        Ok(r) if r.ok => Response::from_json(&json!({
-            "done": grant.operation, "number": number, "result": r.result,
-        })),
-        Ok(r) => Response::error(r.violations.join("\n"), 409),
-        Err(e) => Response::error(e.to_string(), 409),
-    }
 }
 
 /// The Auto window running or paused, for the app's home.
@@ -360,47 +199,4 @@ pub async fn tracker(env: &Env, s: &Settings) -> Result<Value> {
     Ok(serde_json::to_value(tracker::build(
         &sessions, &changes, &briefs, now,
     ))?)
-}
-
-/// `GET /v0/app/changes/<n>`: a shim that runs `change.status` as the owner, until the app reads
-/// operations itself; see .claude/decisions/2026-11-15-runtime-ios-app-now-tab.md §4.
-///
-/// # Errors
-///
-/// When a binding fails.
-pub async fn change_sheet(env: &Env, s: &Settings, number: &str) -> Result<Response> {
-    let mut args = Map::new();
-    args.insert("number".into(), Value::from(number));
-    let request = wire::Request {
-        operation: "change.status".into(),
-        args,
-    };
-    let who = Identity {
-        subject: super::account::approver(env, s).await?,
-        human: true,
-    };
-    match run(env, s, &who, &request).await {
-        Ok(r) if r.ok => Response::from_json(&r.result),
-        Ok(r) => Response::error(r.violations.join("\n"), 404),
-        Err(e) => Response::error(e.to_string(), 400),
-    }
-}
-
-/// `GET /v0/app/events`: the event log as the owner, from `after`, waiting up to `seconds`; no
-/// session's cursor moves.
-///
-/// # Errors
-///
-/// When the request has no readable URL, or a binding fails.
-pub async fn events(env: &Env, s: &Settings, req: &Request) -> Result<Response> {
-    let url = req.url()?;
-    let mut args = Map::new();
-    for (k, default) in [("after", "0"), ("seconds", "25")] {
-        let v = url
-            .query_pairs()
-            .find(|(n, _)| n == k)
-            .map_or_else(|| default.to_string(), |(_, v)| v.to_string());
-        args.insert(k.into(), Value::String(v));
-    }
-    Response::from_json(&super::events::wait(env, s, &args, true).await?)
 }

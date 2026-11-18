@@ -182,7 +182,9 @@ async fn session(env: &Env, s: &Settings, req: &mut Request) -> Result<Response>
     }
 }
 
-/// The routes a device's signature has let through.
+/// The routes a device's signature has let through: the app's MCP door alone; every other path
+/// answers 426, as the R10b and R8c amendments to
+/// `.claude/decisions/2026-11-17-runtime-mcp-feed-view-contract.md` have it.
 async fn signed(
     env: &Env,
     s: &Settings,
@@ -192,94 +194,10 @@ async fn signed(
     path: &str,
     body: &Value,
 ) -> Result<Response> {
-    const APPROVALS: &str = "/v0/app/approvals/";
-    const ITEMS: &str = "/v0/app/items/";
-    const CHANGES: &str = "/v0/app/changes/";
-    match (method, path) {
-        // The app's MCP door: one handler with `/mcp`, the device's person as the caller; see
-        // the 2026-11-17 amendment "two doors, one handler" to
-        // .claude/decisions/2026-11-17-runtime-mcp-feed-view-contract.md.
-        (Method::Post, "/v0/app/mcp") => app_mcp(env, s, req, device, body).await,
-        (Method::Get, "/v0/app/whoami") => {
-            Response::from_json(&json!({ "device": device.id, "name": device.name }))
-        }
-        (Method::Put, "/v0/app/device/push") => {
-            let token = body["token"].as_str().unwrap_or_default();
-            if !crate::core::app::push::token_ok(token) {
-                return Response::error("not an APNs device token", 400);
-            }
-            to_instance(
-                env,
-                s,
-                "/devices/push",
-                &json!({ "id": device.id, "token": token }),
-            )
-            .await?;
-            Response::from_json(&json!({ "status": "ok" }))
-        }
-        (Method::Get, "/v0/app/home") => {
-            let mut home = super::insights::home(env).await?;
-            home["approvals"] = super::app::list(env, s).await?;
-            home["auto"] = super::app::auto_state(env, s).await?;
-            home["items"] = super::owner_items::open(env, s).await?;
-            Response::from_json(&home)
-        }
-        (Method::Get, "/v0/app/approvals") => Response::from_json(&super::app::list(env, s).await?),
-        (Method::Get, p) if p.starts_with(APPROVALS) => {
-            super::app::detail(env, s, p.trim_start_matches(APPROVALS)).await
-        }
-        (Method::Post, "/v0/app/challenge") => super::app::challenge(env, s, body).await,
-        (Method::Post, p) if p.starts_with(APPROVALS) => {
-            super::app::approve(env, s, p.trim_start_matches(APPROVALS), body).await
-        }
-        (Method::Post, "/v0/app/auto") => super::app::auto_start(env, s, body).await,
-        (Method::Delete, "/v0/app/auto") => super::app::auto_end(env, s, body).await,
-        (Method::Post, p) if p.starts_with(ITEMS) => {
-            super::owner_items::answer(env, s, p.trim_start_matches(ITEMS), body).await
-        }
-        (Method::Get, p) if p.starts_with(CHANGES) => {
-            super::app::change_sheet(env, s, p.trim_start_matches(CHANGES)).await
-        }
-        (Method::Get, "/v0/app/tracker") => {
-            Response::from_json(&super::app::tracker(env, s).await?)
-        }
-        (Method::Get, "/v0/app/events") => super::app::events(env, s, req).await,
-        (Method::Get, "/v0/app/insights") => {
-            let url = req.url()?;
-            let q = |k: &str| {
-                url.query_pairs()
-                    .find(|(n, _)| n == k)
-                    .map(|(_, v)| v.to_string())
-                    .unwrap_or_default()
-            };
-            let range = q("range").parse().unwrap_or(1);
-            match super::insights::detail(env, &q("metric"), &q("source"), range).await? {
-                Ok(v) => Response::from_json(&v),
-                Err(why) => Response::error(why, 400),
-            }
-        }
-        (Method::Get, "/v0/app/ops") => {
-            let url = req.url()?;
-            let range = url
-                .query_pairs()
-                .find(|(n, _)| n == "range")
-                .and_then(|(_, v)| v.parse().ok())
-                .unwrap_or(1);
-            if !crate::core::insights::ops::RANGES.contains(&range) {
-                return Response::error("range is 1, 7 or 30", 400);
-            }
-            Response::from_json(&super::insights::ops(env, s, range).await?)
-        }
-        (Method::Get, "/v0/app/instances") => super::instances::list(env, s, device).await,
-        (Method::Post, "/v0/app/instances/standup") => {
-            super::instances::standup(env, s, device, body).await
-        }
-        (Method::Get, super::members::PATH) => super::members::route(env, s, device).await,
-        (m, p) if super::account::handles(p) => {
-            super::account::route(env, s, device, m, p, body).await
-        }
-        _ => Response::error("not found", 404),
+    if (method, path) == (&Method::Post, "/v0/app/mcp") {
+        return app_mcp(env, s, req, device, body).await;
     }
+    Response::error("Update the app", 426)
 }
 
 fn association(env: &Env) -> Result<Response> {

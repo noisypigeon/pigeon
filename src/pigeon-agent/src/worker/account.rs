@@ -158,15 +158,6 @@ pub async fn approver(env: &Env, s: &Settings) -> Result<String> {
     }
 }
 
-/// Whether `path` is one this surface serves.
-#[must_use]
-pub fn handles(path: &str) -> bool {
-    path == PROFILE
-        || path == AVATAR
-        || path.starts_with(DEVICE_PREFIX)
-        || path.starts_with(PASSKEY_PREFIX)
-}
-
 /// `v` as a response: its `error` with its `code`, else itself.
 fn answer(v: &Value) -> Result<Response> {
     match v["error"].as_str() {
