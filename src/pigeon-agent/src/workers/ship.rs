@@ -56,12 +56,14 @@ fn tool(message: impl Into<String>) -> Error {
     }
 }
 
+/// `name`'s deployments; none for a Worker never deployed, which the API answers 404.
 fn deployments(t: &Target, name: &str) -> Result<Value, Error> {
     t.api
-        .get(&format!(
+        .find(&format!(
             "/accounts/{}/workers/scripts/{name}/deployments",
             t.account
         ))
+        .map(Option::unwrap_or_default)
         .map_err(tool)
 }
 
