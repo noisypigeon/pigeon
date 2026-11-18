@@ -192,7 +192,7 @@ fn mirror_allows_only_a_dispatched_read_only_pinned_ci_yml() {
 
 #[test]
 fn roles_holds_three_explicit_capability_lists_only() {
-    let good = "# Each role's capabilities.\nroles:\n  administrator: [read, propose, approve, approve.owner, auto, mandates, platform, members, learner]\n  user: [learner]\n  service: [read, propose]\n";
+    let good = "# Each level's permissions.\nroles:\n  administrator: [read, propose, approve, approve.owner, auto, mandates, platform, members]\n  standard: []\n  service: [read, propose]\n";
     let check = |content: &str| {
         violations(
             "roles",
@@ -201,19 +201,20 @@ fn roles_holds_three_explicit_capability_lists_only() {
         )
     };
     passes(&check(good));
-    passes(&check(&good.replace("  user: [learner]", "  standard: []")));
     passes(&check(
         &good.replace("service: [read, propose]", "service: []"),
     ));
     passes(&violations("roles", tree_root(&[]).path(), None));
     for bad in [
-        good.replace(", members, learner]", "]"),
-        good.replace("user: [learner]", "user: [*]"),
-        good.replace("user: [learner]", "user: [everything]"),
-        good.replace("user: [learner]", "user: [read, learner]"),
-        good.replace("  user: [learner]", "  standard: [approve.owner]"),
+        good.replace(", platform, members]", ", platform]"),
+        good.replace(", members]", ", members, learner]"),
+        good.replace("standard: []", "standard: [*]"),
+        good.replace("standard: []", "standard: [read]"),
+        good.replace("standard: []", "standard: [learner]"),
+        good.replace("standard: []", "standard: [approve.owner]"),
+        good.replace("standard: []", "user: []"),
         good.replace("service: [read, propose]", "service: [read, approve]"),
-        good.replace("  user: [learner]\n", ""),
+        good.replace("  standard: []\n", ""),
         good.replace("# Each", "Each"),
         good.replace("roles:\n", "members:\n"),
         format!("{good}  owner: [read]\n"),

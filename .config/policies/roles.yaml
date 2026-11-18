@@ -5,8 +5,8 @@ target:
 rules:
   - line: { at: 1, matches: '^# ' }
   - line: { at: 2, matches: '^roles:$' }
-  - line: { at: 3, matches: '^  administrator: \[read, propose, approve, approve\.owner, auto, mandates, platform, members(, learner)?\]$' }
-  - line: { at: 4, matches: '^  (user|standard): \[(learner)?\]$' }
+  - line: { at: 3, matches: '^  administrator: \[read, propose, approve, approve\.owner, auto, mandates, platform, members\]$' }
+  - line: { at: 4, matches: '^  standard: \[\]$' }
   - fields:
       after: 4
       pattern: '^  (?<key>[a-z]+): (?<value>\[.*\])$'
