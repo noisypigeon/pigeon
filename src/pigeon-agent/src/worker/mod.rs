@@ -878,8 +878,14 @@ async fn dispatch(
                 None,
             )?;
             let mut r = platform::call(env, &main_stub(env, &s.repo)?, req).await?;
-            let v: Value = r.json().await?;
-            Ok((None, respond(operation, r.status_code(), v)))
+            // main answers a refusal (nothing to retry, an unknown unit) as text.
+            let status = r.status_code();
+            let v: Value = if (200..300).contains(&status) {
+                r.json().await?
+            } else {
+                json!({ "error": r.text().await? })
+            };
+            Ok((None, respond(operation, status, v)))
         }
         Routed::Build {
             operation: op,
