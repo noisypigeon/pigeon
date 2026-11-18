@@ -318,16 +318,20 @@ pub fn proof_tools() -> Vec<Value> {
         "type": "string",
         "description": "The approval link's path and query, as `/approve/12?grant=…`",
     });
+    let purpose = json!({
+        "type": "string",
+        "enum": ["auto", "auto-end"],
+        "description": "Instead of `page`: start (`auto`) or end (`auto-end`) the Auto window",
+    });
     let text = json!({ "type": "string" });
     vec![
         json!({
             "name": PROOF_TOOLS[0],
             "title": "proof.challenge",
-            "description": "What the grant at `page` approves, from the grant itself, and the WebAuthn request options for the owner's passkey; see .claude/decisions/2026-11-17-runtime-mcp-feed-view-contract.md §4",
+            "description": "What the grant at `page` approves, from the grant itself, or what `purpose` does, and the WebAuthn request options for the owner's passkey; see .claude/decisions/2026-11-17-runtime-mcp-feed-view-contract.md §4",
             "inputSchema": {
                 "type": "object",
-                "properties": { "page": page },
-                "required": ["page"],
+                "properties": { "page": page, "purpose": purpose },
                 "additionalProperties": false,
             },
             "annotations": { "readOnlyHint": true, "destructiveHint": false },
@@ -336,18 +340,19 @@ pub fn proof_tools() -> Vec<Value> {
         json!({
             "name": PROOF_TOOLS[1],
             "title": "proof.submit",
-            "description": "The owner's passkey assertion for the grant at `page`, with the page's other `fields` (as `operation`); the grant is redeemed and its operation run; see .claude/decisions/2026-11-17-runtime-mcp-feed-view-contract.md §4",
+            "description": "The owner's passkey assertion for the grant at `page`, with the page's other `fields` (as `operation`), or for `purpose`; the grant is redeemed and its operation run, or the Auto window started or ended; see .claude/decisions/2026-11-17-runtime-mcp-feed-view-contract.md §4",
             "inputSchema": {
                 "type": "object",
                 "properties": {
                     "page": page,
+                    "purpose": purpose,
                     "fields": { "type": "object", "additionalProperties": { "type": "string" } },
                     "credential": text,
                     "client_data": text,
                     "authenticator_data": text,
                     "signature": text,
                 },
-                "required": ["page", "credential", "client_data", "authenticator_data", "signature"],
+                "required": ["credential", "client_data", "authenticator_data", "signature"],
                 "additionalProperties": false,
             },
             "annotations": { "readOnlyHint": false, "destructiveHint": false },
@@ -591,10 +596,14 @@ mod proof_tests {
         for t in &tools {
             assert_eq!(t["_meta"]["dev.pigeon/view"], "card");
         }
-        assert_eq!(tools[0]["inputSchema"]["required"], json!(["page"]));
+        for t in &tools {
+            let props = &t["inputSchema"]["properties"];
+            assert!(props["page"].is_object() && props["purpose"].is_object());
+            assert_eq!(props["purpose"]["enum"], json!(["auto", "auto-end"]));
+        }
+        assert!(tools[0]["inputSchema"]["required"].is_null());
         let submit = &tools[1]["inputSchema"]["required"];
         for k in [
-            "page",
             "credential",
             "client_data",
             "authenticator_data",

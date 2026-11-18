@@ -464,6 +464,27 @@ pub async fn proof_challenge(
     args: &Value,
     host: &str,
 ) -> Result<std::result::Result<Value, String>> {
+    if let Some(p) = args["purpose"].as_str() {
+        let Some((purpose, operation)) = auto_purpose(p) else {
+            return Ok(Err("`purpose` is auto or auto-end".into()));
+        };
+        let v = to_instance(
+            env,
+            s,
+            "/passkeys/challenge",
+            &json!({ "purpose": purpose }),
+        )
+        .await?;
+        return Ok(Ok(json!({
+            "purpose": purpose,
+            "operation": operation,
+            "target": "auto",
+            "challenge": v["challenge"],
+            "ids": v["ids"],
+            "user": v["user"],
+            "rp": super::app::relying_party(env),
+        })));
+    }
     let page = args["page"].as_str().unwrap_or_default();
     let Some((Some(purpose), bound)) = bound_for(env, s, page).await? else {
         return Ok(Err("that page holds no open grant".into()));
@@ -498,6 +519,30 @@ pub async fn proof_submit(
     host: &str,
 ) -> Result<std::result::Result<Value, String>> {
     let text = |k: &str| args[k].as_str().unwrap_or_default();
+    if let Some(p) = args["purpose"].as_str() {
+        if auto_purpose(p).is_none() {
+            return Ok(Err("`purpose` is auto or auto-end".into()));
+        }
+        let body = json!({ "passkey": {
+            "id": text("credential"), "client": text("client_data"),
+            "authenticator": text("authenticator_data"), "signature": text("signature"),
+        } });
+        let mut r = if p == "auto" {
+            super::app::auto_start(env, s, &body).await?
+        } else {
+            super::app::auto_end(env, s, &body).await?
+        };
+        let status = r.status_code();
+        return Ok(if status == 200 {
+            let v: Value = r.json().await?;
+            Ok(json!({ "purpose": p, "status": status, "window": v["window"]["id"] }))
+        } else {
+            Err(format!(
+                "refused ({status}): {}",
+                r.text().await.unwrap_or_default()
+            ))
+        });
+    }
     let page = text("page");
     let (path, query) = page.split_once('?').unwrap_or((page, ""));
     let Some(token) = page::field(query, "grant").filter(|t| !t.is_empty()) else {
@@ -536,6 +581,16 @@ pub async fn proof_submit(
     } else {
         Err(format!("refused ({status}): {said}"))
     })
+}
+
+/// A proof tool's `purpose`: the Auto window's proof purpose and the operation it stands for.
+fn auto_purpose(p: &str) -> Option<(&'static str, &'static str)> {
+    use crate::core::approval::windows;
+    match p {
+        "auto" => Some((windows::START, "auto.start")),
+        "auto-end" => Some((windows::END, "auto.end")),
+        _ => None,
+    }
 }
 
 /// `s` encoded as a form value: unreserved bytes as they are, every other byte as `%XX`.
