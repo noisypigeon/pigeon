@@ -10,6 +10,7 @@ use agent::core::bench::deal::{Check, deal};
 use agent::core::bench::{report, scratch_ref, session_id};
 use serde_json::{Value, json};
 
+use super::mcp;
 use super::session::{agent, home, host};
 use crate::cli::BenchCommand;
 
@@ -89,16 +90,7 @@ fn op(operation: &str, args: &Value) -> Result<Value, String> {
     let mut args = args.clone();
     args["ticket"] = json!(ticket);
     let seconds = if operation == "bench.status" { 40 } else { 60 };
-    let url = format!("https://{}/v0/run", host());
-    let mut response = agent(seconds)
-        .post(&url)
-        .header("content-type", "application/json")
-        .send(json!({"operation": operation, "args": args}).to_string())
-        .map_err(|e| e.to_string())?;
-    let text = response
-        .body_mut()
-        .read_to_string()
-        .map_err(|e| e.to_string())?;
+    let text = mcp::call(&agent(seconds), &host(), operation, &args)?.body;
     let body: Value = serde_json::from_str(&text).map_err(|_| text.clone())?;
     if body["ok"].as_bool() == Some(true) {
         return Ok(body["result"].clone());

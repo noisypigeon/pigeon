@@ -15,6 +15,7 @@ use agent::core::session::{self as core, Effect, Follow, HOLD, Outcome, Reply, S
 use serde_json::{Value, json};
 
 use crate::cli::SessionCommand;
+use crate::commands::mcp;
 
 /// How long `brief` waits for the control plane, in seconds.
 const BRIEF: u64 = 10;
@@ -88,31 +89,16 @@ fn follow() -> i32 {
 }
 
 fn poll(agent: &ureq::Agent, me: &str, s: &Follow) -> Outcome {
-    let url = format!("https://{}/v0/run", host());
-    let body = core::feed_request(me, s.cursor, s.hold).to_string();
-    let sent = agent
-        .post(&url)
-        .header("content-type", "application/json")
-        .send(body);
-    match sent {
-        Err(e) => Outcome::Unreachable(e.to_string()),
-        Ok(mut r) => {
-            let status = r.status().as_u16();
-            let content_type = r
-                .headers()
-                .get("content-type")
-                .and_then(|v| v.to_str().ok())
-                .unwrap_or_default()
-                .to_string();
-            let cloudflare = r.headers().contains_key("cf-ray");
-            let body = r.body_mut().read_to_string().unwrap_or_default();
-            core::classify(&Reply {
-                status,
-                content_type: &content_type,
-                cloudflare,
-                body: &body,
-            })
-        }
+    let request = core::feed_request(me, s.cursor, s.hold);
+    let operation = request["operation"].as_str().unwrap_or("feed.read");
+    match mcp::call(agent, &host(), operation, &request["args"]) {
+        Err(e) => Outcome::Unreachable(e),
+        Ok(r) => core::classify(&Reply {
+            status: r.status,
+            content_type: &r.content_type,
+            cloudflare: r.cloudflare,
+            body: &r.body,
+        }),
     }
 }
 
@@ -140,16 +126,7 @@ fn refresh(agent: &ureq::Agent, me: &str) -> Option<Status> {
 
 /// Runs `operation` on the control plane: its `result`, or `None`.
 fn call(agent: &ureq::Agent, operation: &str, args: &Value) -> Option<Value> {
-    let body = json!({ "operation": operation, "args": args });
-    let url = format!("https://{}/v0/run", host());
-    let text = agent
-        .post(&url)
-        .header("content-type", "application/json")
-        .send(body.to_string())
-        .ok()?
-        .body_mut()
-        .read_to_string()
-        .ok()?;
+    let text = mcp::call(agent, &host(), operation, args).ok()?.body;
     let result = serde_json::from_str::<Value>(&text).ok()?["result"].take();
     (!result.is_null()).then_some(result)
 }

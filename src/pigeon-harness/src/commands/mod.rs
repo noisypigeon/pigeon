@@ -9,6 +9,8 @@ pub mod eviction;
 #[cfg(feature = "infra")]
 pub mod infra;
 #[cfg(feature = "session")]
+pub(crate) mod mcp;
+#[cfg(feature = "session")]
 pub mod session;
 #[cfg(feature = "signing")]
 pub mod signing;
