@@ -10,6 +10,7 @@
 - agent v0.1.56
 - agent v0.1.57
 - agent v0.1.58
+- agent v0.1.59
 - infra-cloudflare-access-application v0.1.3
 - infra-cloudflare-access-application v0.1.4
 - infra-cloudflare-schema v0.1.24
@@ -105,6 +106,10 @@
 - feat(ios): approvals and Auto go through the proof sheet (!1199) ([1453490](https://github.com/noisypigeon/pigeon/commit/145349056f53337ec54e225ef9f84da77e5c8872))
 - test(eviction): the decisions policy carries its own examples (!1200) ([ed2c40f](https://github.com/noisypigeon/pigeon/commit/ed2c40f7056f54fbe72febc039d316bcb7232fd2))
 - feat(agent): device.unlink and passkey.remove on the device door (!1201) ([1e26237](https://github.com/noisypigeon/pigeon/commit/1e26237572ae4a082551e83c83c49229788077f8)) · agent
+- fix(deploy): deploy_retry reports main's refusal instead of a JSON error (!1205) ([2513d37](https://github.com/noisypigeon/pigeon/commit/2513d37232ea0c7a0f7b1f7f09b672b50d77ed66)) · agent
+- feat(deploy): the architecture site publishes only when what it describes changes (!1203) ([0d327f5](https://github.com/noisypigeon/pigeon/commit/0d327f57af8d305e8a5d4af629c55bb7ebba4cd1)) · agent
+- feat(ios): Unlink and Remove passkey go through the proof sheet (!1204) ([cbc3e7c](https://github.com/noisypigeon/pigeon/commit/cbc3e7c8f84a30919ff7a5846aa24b8e6572232f))
+- docs(adr): R8c's shape: the link code's redeem stays a bootstrap, and standing up an instance is a device tool (!1207) ([ad36d3f](https://github.com/noisypigeon/pigeon/commit/ad36d3f581a2ff596569ed88cb7071617f37f583))
 
 ## 2026-11-17
 
