@@ -2239,7 +2239,7 @@ impl DurableObject for Instance {
             let body: Value = req.json().await?;
             return push::serve(&self.state, &path, &body).await;
         }
-        if path.starts_with("/events/") {
+        if path.starts_with("/events/") || path == "/feed/read" {
             let body: Value = req.json().await?;
             return events::serve(&self.state, &path, &body).await;
         }
