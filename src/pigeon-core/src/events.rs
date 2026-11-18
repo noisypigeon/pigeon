@@ -43,7 +43,43 @@ pub struct Event {
     /// `.claude/decisions/2026-11-13-development-model-tiered-agent-briefs.md` §1.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model: Option<crate::sessions::Class>,
+    /// What it is about across events, such as `owner:7` or `pool:anthropic`; see
+    /// .claude/decisions/2026-11-17-runtime-mcp-feed-view-contract.md, step 8.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub subject: Option<String>,
+    /// The earlier event it closes, which the log sets; never a producer.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resolves: Option<u64>,
 }
+
+/// Kinds that open a subject.
+pub const OPENS: &[&str] = &[
+    "owner.asked",
+    "grant.requested",
+    "approval.pending",
+    "pool.paused",
+    "auto.paused",
+    "auto.held",
+    "task.made",
+    "mandate.proposed",
+];
+
+/// Kinds that close one.
+pub const CLOSES: &[&str] = &[
+    "owner.answered",
+    "owner.withdrawn",
+    "grant.granted",
+    "grant.failed",
+    "grant.rotated",
+    "grant.revoked",
+    "pool.resumed",
+    "auto.resumed",
+    "auto.ended",
+    "task.done",
+    "mandate.granted",
+    "mandate.ended",
+    "ci.window",
+];
 
 /// Which events a reader wants.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -255,6 +291,8 @@ impl Log {
             owner,
             stage: None,
             model: None,
+            subject: None,
+            resolves: None,
         });
         while self.list.len() > KEEP
             || self
@@ -288,6 +326,28 @@ impl Log {
             e.stage = Some(stage);
         }
         Some(id)
+    }
+
+    /// Names event `id`'s subject; a closing kind resolves the newest earlier open event of that
+    /// subject that nothing resolves yet.
+    pub fn link(&mut self, id: u64, subject: &str) {
+        if subject.trim().is_empty() {
+            return;
+        }
+        let Some(at) = self.list.iter().position(|e| e.id == id) else {
+            return;
+        };
+        self.list[at].subject = Some(subject.to_string());
+        if !CLOSES.contains(&self.list[at].kind.as_str()) {
+            return;
+        }
+        let open = self.list.iter().take(at).rev().find(|e| {
+            e.subject.as_deref() == Some(subject)
+                && OPENS.contains(&e.kind.as_str())
+                && !self.list.iter().any(|r| r.resolves == Some(e.id))
+        });
+        let found = open.map(|e| e.id);
+        self.list[at].resolves = found;
     }
 
     /// The events `f` wants, oldest first, at most [`PAGE`].
@@ -391,3 +451,7 @@ fn retrying(
         format!("!{n} job `{}`: {why} (attempt {a} of {max})", j.name)
     })
 }
+
+#[cfg(test)]
+#[path = "events/link_tests.rs"]
+mod link_tests;

@@ -17,6 +17,8 @@ fn ev(id: u64, at: u64, kind: &str, change: u32) -> Event {
         owner: false,
         stage: None,
         model: None,
+        subject: None,
+        resolves: None,
     }
 }
 

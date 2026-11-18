@@ -25,6 +25,8 @@ fn ev(id: u64, kind: &str, change: Option<u32>, st: Option<StageNeeds>) -> Event
         owner: false,
         stage: st.map(stage),
         model: None,
+        subject: None,
+        resolves: None,
     }
 }
 
@@ -231,4 +233,14 @@ fn needs_parse_from_text() {
     assert_eq!(parse_needs(Some(" ")), None);
     assert_eq!(parse_needs(None), None);
     assert_eq!(parse_needs(Some("x")), None);
+}
+
+#[test]
+fn item_carries_resolves() {
+    let mut e = ev(5, "owner.answered", None, None);
+    e.resolves = Some(3);
+    assert_eq!(item(&e).resolves, Some(3));
+    let ask = it(3, ItemType::OwnerAsk, Needs::Owner, None);
+    let answer = item(&e);
+    assert!(open(&[ask, answer]).iter().all(|i| i.id != 3));
 }

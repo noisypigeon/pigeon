@@ -219,7 +219,7 @@ pub fn item(e: &crate::events::Event) -> Item {
         session: e.session.clone(),
         summary: e.summary.clone(),
         owner: e.owner,
-        resolves: None,
+        resolves: e.resolves,
     }
 }
 

@@ -273,6 +273,8 @@ fn failed_starts_and_lost_containers_are_counted_in_a_line_that_is_never_pushed_
         owner: false,
         stage: None,
         model: None,
+        subject: None,
+        resolves: None,
     };
     let events = [
         event(
@@ -328,6 +330,8 @@ fn the_digest_counts_stops_by_kind_and_shows_none_without_them() {
         owner: false,
         stage: None,
         model: None,
+        subject: None,
+        resolves: None,
     };
     assert_eq!(agent::tasks::stops(&[]), None);
     assert_eq!(agent::tasks::stops(&[e(1, "change.checked", "x")]), None);
@@ -436,6 +440,8 @@ fn an_open_owner_item_is_pushed_first_and_counted_in_the_stops() {
         owner: true,
         stage: None,
         model: None,
+        subject: None,
+        resolves: None,
     };
     assert_eq!(
         agent::tasks::stops(&[e(1, "decision #1: x"), e(2, "action #2: y")]).as_deref(),
@@ -458,6 +464,8 @@ fn the_digest_shows_each_move_to_the_front() {
         owner: false,
         stage: None,
         model: None,
+        subject: None,
+        resolves: None,
     };
     let moved = "!585 was moved to the front of the merge queue by owner, from 17/17";
     let lines = agent::tasks::queue_lines(&[
