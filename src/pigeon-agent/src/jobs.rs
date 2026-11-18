@@ -472,7 +472,8 @@ fn deploy(spec: &JobSpec, dir: &Path) -> Report {
     };
     let site_files = group_files(spec, dir, "sites", &mut log);
     let worker_files = group_files(spec, dir, "workers", &mut log);
-    let build_files = group_files(spec, dir, "build", &mut log);
+    let build_files = group_files(spec, dir, "build:pigeon", &mut log);
+    let judge_files = group_files(spec, dir, "build:judge", &mut log);
     let mut passed: Vec<String> = Vec::new();
     let ios = crate::iosrelease::triggers(files.as_deref());
     let mut violations = Vec::new();
@@ -514,8 +515,14 @@ fn deploy(spec: &JobSpec, dir: &Path) -> Report {
     {
         return r;
     }
-    let build = match crate::ship::build(spec, dir, build_files.as_deref(), &mut log)
-        .inspect(|_| passed.push("build".to_string()))
+    let build = match crate::ship::build(
+        spec,
+        dir,
+        build_files.as_deref(),
+        judge_files.as_deref(),
+        &mut log,
+    )
+    .inspect(|_| passed.extend(["build:pigeon".to_string(), "build:judge".to_string()]))
     {
         Ok(b) => b,
         Err(why) => {

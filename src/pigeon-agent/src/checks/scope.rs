@@ -486,7 +486,10 @@ pub fn plan(root: &Path, files: &[String]) -> Result<Vec<String>, Error> {
             .map(|s| format!("site:{s}")),
     );
     if builds(some) {
-        units.push("build".to_string());
+        units.push("build:pigeon".to_string());
+    }
+    if builds_judge(some) {
+        units.push("build:judge".to_string());
     }
     if !image_inputs(&files).is_empty() {
         units.push("images".to_string());

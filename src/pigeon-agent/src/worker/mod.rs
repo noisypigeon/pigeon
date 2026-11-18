@@ -1850,7 +1850,7 @@ pub(super) async fn latest_build(env: &Env) -> Option<crate::containers::worker:
         (
             format!(
                 "https://{host}/builds/{}/{}",
-                b.sha,
+                b.judge_sha.as_deref().unwrap_or(&b.sha),
                 crate::wire::ship_wire::STORED_JUDGE
             ),
             sum,

@@ -1270,6 +1270,7 @@ impl DurableObject for MainRun {
         Self { state, env }
     }
 
+    #[expect(clippy::too_many_lines, reason = "one arm per route")]
     async fn fetch(&self, mut req: Request) -> Result<Response> {
         let path = req.path();
         if path == "/version" {
@@ -1304,7 +1305,10 @@ impl DurableObject for MainRun {
                 if let Some(u) = unit
                     && !control::DEPLOY_GROUPS.contains(&u)
                 {
-                    return Response::error("unit is one of sites, workers, build", 400);
+                    return Response::error(
+                        format!("unit is one of {}", control::DEPLOY_GROUPS.join(", ")),
+                        400,
+                    );
                 }
                 let starting = p.retry(unit);
                 self.save(&p, starting.as_deref()).await?;

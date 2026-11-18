@@ -893,6 +893,9 @@ pub struct Build {
         skip_serializing_if = "Option::is_none"
     )]
     pub judge_sha256: Option<String>,
+    /// The commit the judge was last built at, when it isn't [`Build::sha`]: each binary is built only when its crates change; see .claude/decisions/2026-11-18-runtime-independent-blue-green-workers.md §B.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub judge_sha: Option<String>,
 }
 
 /// The event a finished report is, for `job` on head `sha`; none while it runs.
@@ -1894,7 +1897,7 @@ pub struct Pipeline {
 }
 
 /// The groups a deploy passes or fails on its own; see .claude/decisions/2026-11-18-runtime-independent-blue-green-workers.md §B.
-pub const DEPLOY_GROUPS: [&str; 3] = ["sites", "workers", "build"];
+pub const DEPLOY_GROUPS: [&str; 4] = ["sites", "workers", "build:pigeon", "build:judge"];
 
 /// A deploy group's baseline from `spec`: its own, none for in full, else the deploy's `since`.
 #[must_use]
@@ -2025,12 +2028,8 @@ impl Pipeline {
             }
         }
         // A build stored from `main` is good for jobs whatever else the deploy did.
-        if let Some(b) = report
-            .build
-            .clone()
-            .filter(|b| b.sha == sha && b.sha256.len() == 64)
-        {
-            self.latest_build = Some(b);
+        if let Some(b) = report.build.clone().filter(|b| b.sha == sha) {
+            self.keep_build(&b);
         }
         // Images pushed from `main` are good for deploys whatever else the deploy did.
         if let Some(i) = report.images.clone().filter(|i| i.source == sha) {
@@ -2052,6 +2051,34 @@ impl Pipeline {
                 vec![failure(report)]
             },
         });
+    }
+
+    /// Keeps the binaries `b` built in `latest_build`, each at `b`'s commit; a binary it didn't build stays at its own.
+    fn keep_build(&mut self, b: &Build) {
+        let judge = b.judge_sha256.clone().filter(|s| s.len() == 64);
+        if b.sha256.len() == 64 {
+            if let Some(l) = self.latest_build.as_mut() {
+                l.judge_sha = Some(l.judge_sha.clone().unwrap_or_else(|| l.sha.clone()));
+                l.sha.clone_from(&b.sha);
+                l.sha256.clone_from(&b.sha256);
+            } else {
+                self.latest_build = Some(Build {
+                    sha: b.sha.clone(),
+                    sha256: b.sha256.clone(),
+                    judge_sha256: None,
+                    judge_sha: None,
+                });
+            }
+        }
+        if let (Some(j), Some(l)) = (judge, self.latest_build.as_mut()) {
+            l.judge_sha256 = Some(j);
+            l.judge_sha = Some(b.sha.clone());
+        }
+        if let Some(l) = self.latest_build.as_mut()
+            && l.judge_sha.as_deref() == Some(l.sha.as_str())
+        {
+            l.judge_sha = None;
+        }
     }
 
     /// Each group's baseline, for a deploy's `scope`.

@@ -142,21 +142,14 @@ fn ids_names_and_images_are_scrubbed() {
 fn image_inputs_block_only_on_the_image_tools() {
     let files = |f: &[&str]| f.iter().map(|s| (*s).to_string()).collect::<Vec<_>>();
     let blocks = agent::checks::scope::image_inputs(&files(&[
-        "src/pigeon-cli/Dockerfile",
+        "Dockerfile",
         "src/pigeon-agent/src/jobs.rs",
-        "src/pigeon-cli/pigeon-start",
-        "src/pigeon-cli/Cargo.lock",
+        "pigeon-start",
+        "Cargo.lock",
         "mise.toml",
         ".claude/decisions/x.md",
     ]));
-    assert_eq!(
-        blocks,
-        files(&[
-            "src/pigeon-cli/Dockerfile",
-            "src/pigeon-cli/pigeon-start",
-            "mise.toml"
-        ])
-    );
+    assert_eq!(blocks, files(&["Dockerfile", "pigeon-start", "mise.toml"]));
 }
 
 #[test]
@@ -166,12 +159,16 @@ fn a_deploy_builds_pigeon_only_when_the_workspace_changed() {
     assert!(agent::checks::scope::builds(Some(&files(&[
         "src/pigeon-agent/src/jobs.rs"
     ]))));
-    assert!(agent::checks::scope::builds(Some(&files(&[
-        "src/pigeon-cli/Cargo.lock"
-    ]))));
+    assert!(agent::checks::scope::builds(Some(&files(&["Cargo.lock"]))));
     assert!(!agent::checks::scope::builds(Some(&files(&[
         ".claude/decisions/x.md",
         "infra/pigeon/sites/docs/config.yaml"
+    ]))));
+    assert!(agent::checks::scope::builds_judge(Some(&files(&[
+        "src/pigeon-eviction/src/lib.rs"
+    ]))));
+    assert!(!agent::checks::scope::builds_judge(Some(&files(&[
+        "src/pigeon-agent/src/jobs.rs"
     ]))));
 }
 

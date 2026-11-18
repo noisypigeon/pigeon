@@ -709,7 +709,7 @@ fn a_deploy_plan_names_each_unit_its_paths_deploy() {
     let (w, s, b) = (
         at(&worker, "worker:pigeon-control"),
         at(&worker, "site:sites/docs"),
-        at(&worker, "build"),
+        at(&worker, "build:pigeon"),
     );
     assert!(w.is_some() && s.is_some() && b.is_some(), "{worker:?}");
     assert!(
@@ -722,7 +722,11 @@ fn a_deploy_plan_names_each_unit_its_paths_deploy() {
         !cli.contains(&"site:sites/docs".to_string()),
         "the harness isn't what the architecture site draws: {cli:?}"
     );
-    assert!(cli.contains(&"build".to_string()), "{cli:?}");
+    assert!(cli.contains(&"build:pigeon".to_string()), "{cli:?}");
+    assert!(
+        !cli.contains(&"build:judge".to_string()),
+        "the harness isn't the judge's crate: {cli:?}"
+    );
     assert!(!cli.iter().any(|u| u.starts_with("worker:")), "{cli:?}");
 
     assert!(plan_of(&["Dockerfile"]).contains(&"images".to_string()));

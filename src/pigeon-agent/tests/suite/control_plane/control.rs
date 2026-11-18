@@ -511,6 +511,7 @@ fn the_newest_build_a_deploy_stored_is_what_jobs_run() {
         sha: sha.into(),
         sha256: "ab".repeat(32),
         judge_sha256: None,
+        judge_sha: None,
     };
     let mut p = Pipeline::default();
     p.pushed(A);
@@ -556,6 +557,65 @@ fn the_newest_build_a_deploy_stored_is_what_jobs_run() {
         old.latest_build, None,
         "a pipeline stored before builds still reads"
     );
+}
+
+#[test]
+fn the_newest_build_keeps_each_binarys_own_commit() {
+    let mut p = Pipeline::default();
+    p.pushed(A);
+    p.start();
+    p.finished(
+        &Report {
+            build: Some(agent::control::Build {
+                sha: A.into(),
+                sha256: "a".repeat(64),
+                judge_sha256: Some("b".repeat(64)),
+                judge_sha: None,
+            }),
+            ..deploy_report(Outcome::Passed)
+        },
+        10,
+    );
+    let l = p.latest_build.clone().expect("build");
+    assert_eq!(l.sha, A);
+    assert_eq!(l.judge_sha, None);
+    p.pushed(B);
+    p.start();
+    p.finished(
+        &Report {
+            build: Some(agent::control::Build {
+                sha: B.into(),
+                sha256: "c".repeat(64),
+                judge_sha256: None,
+                judge_sha: None,
+            }),
+            ..deploy_report(Outcome::Passed)
+        },
+        11,
+    );
+    let l = p.latest_build.clone().expect("build");
+    assert_eq!(l.sha, B);
+    assert_eq!(l.sha256, "c".repeat(64));
+    assert_eq!(l.judge_sha.as_deref(), Some(A));
+    assert_eq!(l.judge_sha256, Some("b".repeat(64)));
+    p.pushed(C);
+    p.start();
+    p.finished(
+        &Report {
+            build: Some(agent::control::Build {
+                sha: C.into(),
+                sha256: String::new(),
+                judge_sha256: Some("d".repeat(64)),
+                judge_sha: None,
+            }),
+            ..deploy_report(Outcome::Passed)
+        },
+        12,
+    );
+    let l = p.latest_build.clone().expect("build");
+    assert_eq!(l.sha, B);
+    assert_eq!(l.judge_sha.as_deref(), Some(C));
+    assert_eq!(l.judge_sha256, Some("d".repeat(64)));
 }
 
 #[test]
@@ -1682,7 +1742,8 @@ fn a_failed_deploy_advances_only_the_groups_that_passed() {
     p.pushed(A);
     assert_eq!(p.start().as_deref(), Some(A));
     p.finished(&deploy_report(Outcome::Passed), 1);
-    assert_eq!(p.baselines["build"], A);
+    assert_eq!(p.baselines["build:pigeon"], A);
+    assert_eq!(p.baselines["build:judge"], A);
     assert_eq!(p.baselines["sites"], A);
     assert_eq!(p.baselines["workers"], A);
     p.pushed(B);
@@ -1696,7 +1757,8 @@ fn a_failed_deploy_advances_only_the_groups_that_passed() {
     assert_eq!(
         p.baselines_spec(),
         vec![
-            format!("build={A}"),
+            format!("build:judge={A}"),
+            format!("build:pigeon={A}"),
             format!("sites={B}"),
             format!("workers={A}")
         ]
@@ -1714,14 +1776,25 @@ fn a_retry_deploys_a_named_group_in_full() {
     assert_eq!(p.retry(Some("workers")).as_deref(), Some(A));
     assert_eq!(p.baselines["workers"], "");
     assert_eq!(p.baselines["sites"], A);
-    assert_eq!(p.baselines["build"], A);
+    assert_eq!(p.baselines["build:pigeon"], A);
 }
 
 #[test]
 fn a_group_reads_its_own_baseline() {
     let mut spec = control::deploy_spec("r", "t", B, Some(A), std::collections::BTreeMap::new());
-    spec.scope = vec!["workers=".into(), format!("sites={B}")];
+    spec.scope = vec![
+        "workers=".into(),
+        format!("sites={B}"),
+        format!("build:judge={B}"),
+    ];
     assert_eq!(control::group_since(&spec, "workers"), None);
     assert_eq!(control::group_since(&spec, "sites").as_deref(), Some(B));
-    assert_eq!(control::group_since(&spec, "build").as_deref(), Some(A));
+    assert_eq!(
+        control::group_since(&spec, "build:pigeon").as_deref(),
+        Some(A)
+    );
+    assert_eq!(
+        control::group_since(&spec, "build:judge").as_deref(),
+        Some(B)
+    );
 }

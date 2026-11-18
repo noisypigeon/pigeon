@@ -862,21 +862,15 @@ fn spikes(layout: &Layout, files: &[&str]) -> Vec<Job> {
 /// deploy waits for a new image; jobs run `main`'s newest `pigeon` from `builds/`, so its code
 /// is not among them; see `.claude/decisions/2026-11-07-development-job-images-on-cloudflare.md`
 /// §3.
-/// Each is listed in both layouts while the workspace moves to the root.
-pub const IMAGE_BLOCKS: [&str; 7] = [
-    "src/pigeon-cli/Dockerfile",
-    "src/pigeon-cli/pigeon-start",
+pub const IMAGE_BLOCKS: [&str; 4] = [
     "mise.toml",
-    "src/pigeon-cli/rust-toolchain.toml",
     "Dockerfile",
     "pigeon-start",
     "rust-toolchain.toml",
 ];
 
-/// The Rust workspace's paths in both layouts: its crates under `src/`, and the root's manifest
-/// and lockfile once it is there.
-const RUST: [&str; 7] = [
-    "src/pigeon-cli/",
+/// `pigeon`'s crates, every workspace member it builds from, and the root's manifest and lockfile.
+const RUST: [&str; 6] = [
     "src/common/",
     "src/pigeon-core/",
     "src/pigeon-eviction/",
@@ -884,6 +878,9 @@ const RUST: [&str; 7] = [
     "src/pigeon-harness/",
     "Cargo.",
 ];
+
+/// The judge's crate, and the root's manifest and lockfile; see .claude/decisions/2026-11-18-runtime-independent-blue-green-workers.md §B.
+const JUDGE: [&str; 2] = ["src/pigeon-eviction/", "Cargo."];
 
 /// The files among `files` that make the job image block a Worker deploy.
 #[must_use]
@@ -895,11 +892,16 @@ pub fn image_inputs(files: &[String]) -> Vec<String> {
         .collect()
 }
 
-/// Whether a deploy of `main` touching `files` builds `pigeon` again: when any of the Rust
-/// workspace changed; `files` of `None` means everything.
+/// Whether a deploy of `main` touching `files` builds `pigeon` again: when any of [`RUST`] changed; `files` of `None` means everything.
 #[must_use]
 pub fn builds(files: Option<&[String]>) -> bool {
     files.is_none_or(|f| f.iter().any(|f| under(f, &RUST)))
+}
+
+/// Whether a deploy of `main` touching `files` builds the judge again: when [`JUDGE`] changed; `files` of `None` means everything.
+#[must_use]
+pub fn builds_judge(files: Option<&[String]>) -> bool {
+    files.is_none_or(|f| f.iter().any(|f| under(f, &JUDGE)))
 }
 
 #[cfg(test)]
@@ -1134,19 +1136,29 @@ mod tests {
     fn a_deploy_builds_and_waits_for_an_image_in_either_layout() {
         let f = |p: &str| vec![p.to_string()];
         for p in [
-            "src/pigeon-cli/crates/x/a.rs",
             "src/pigeon-core/src/a.rs",
+            "src/pigeon-harness/src/a.rs",
             "Cargo.lock",
         ] {
             assert!(super::builds(Some(&f(p))), "{p}");
         }
-        for p in ["src/pigeon-ios/a.swift", "docs/Cargo.md"] {
+        for p in ["src/pigeon-eviction/src/a.rs", "Cargo.toml"] {
+            assert!(super::builds_judge(Some(&f(p))), "{p}");
+        }
+        for p in ["src/pigeon-core/src/a.rs", "src/pigeon-harness/src/a.rs"] {
+            assert!(!super::builds_judge(Some(&f(p))), "{p}");
+        }
+        for p in [
+            "src/pigeon-ios/a.swift",
+            "docs/Cargo.md",
+            "src/pigeon-cli/crates/x/a.rs",
+        ] {
             assert!(!super::builds(Some(&f(p))), "{p}");
         }
         assert_eq!(super::image_inputs(&f("Dockerfile")), ["Dockerfile"]);
         assert_eq!(
             super::image_inputs(&f("src/pigeon-cli/Dockerfile")),
-            ["src/pigeon-cli/Dockerfile"]
+            Vec::<String>::new()
         );
     }
 

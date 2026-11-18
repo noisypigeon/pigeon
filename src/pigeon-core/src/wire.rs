@@ -1391,7 +1391,7 @@ const CATALOG: &[Operation] = &[
         name: "deploy.retry",
         engine: Engine::Agent,
         effect: Effect::Build,
-        summary: "Deploy main's newest push again: without `unit`, only the groups (sites, workers, build) that failed, or after a passed deploy everything; with `unit`, that group in full",
+        summary: "Deploy main's newest push again: without `unit`, only the groups (sites, workers, build:pigeon, build:judge) that failed, or after a passed deploy everything; with `unit`, that group in full",
         args: &[arg("unit", false, Kind::String)],
         view: View::Card,
     },

@@ -233,20 +233,25 @@ pub fn judge_binary(ws: &Path) -> &'static str {
         .unwrap_or(crate::wire::ship_wire::STORED_JUDGE)
 }
 
-/// Builds `pigeon` from the checkout at `dir` when the workspace changed among `files`, and
-/// stores it at [`crate::wire::ship_wire::build_key`] in the [`BUILDS_BINDING`] bucket, with S3
+/// Builds `pigeon` from the checkout at `dir` when `files` changed its crates and the judge when
+/// `judge_files` changed its crate, and
+/// stores each at [`crate::wire::ship_wire::build_key`] in the [`BUILDS_BINDING`] bucket, with S3
 /// credentials from the deploy token; the build, or none when nothing changed.
 ///
 /// # Errors
 ///
 /// Why it wasn't built or stored: a missing variable, a failed build or upload.
+#[expect(clippy::too_many_lines, reason = "one step per stored binary")]
 pub fn build(
     spec: &JobSpec,
     dir: &Path,
     files: Option<&[String]>,
+    judge_files: Option<&[String]>,
     log: &mut String,
 ) -> Result<Option<Build>, String> {
-    if !crate::checks::scope::builds(files) {
+    let pigeon = crate::checks::scope::builds(files);
+    let judge = crate::checks::scope::builds_judge(judge_files);
+    if !pigeon && !judge {
         log.push_str("no Rust change: jobs keep the last build\n");
         return Ok(None);
     }
@@ -288,11 +293,23 @@ pub fn build(
             .map_err(|e| format!("the built {name} can't be read: {e}"))?;
         Ok((binary, took))
     };
-    let (binary, took) = compile(&BUILD, "pigeon", log)?;
-    let sha256 = crate::infra::s3::sha256_hex(&binary);
-    let judge = judge_binary(dir);
-    let (judge_path, judge_took) = compile(&judge_build(judge), judge, log)?;
-    let judge_sha256 = crate::infra::s3::sha256_hex(&judge_path);
+    let built_pigeon = if pigeon {
+        let (binary, took) = compile(&BUILD, "pigeon", log)?;
+        let sha256 = crate::infra::s3::sha256_hex(&binary);
+        Some((binary, took, sha256))
+    } else {
+        log.push_str("no change to pigeon's crates: jobs keep the last pigeon\n");
+        None
+    };
+    let built_judge = if judge {
+        let name = judge_binary(dir);
+        let (bytes, took) = compile(&judge_build(name), name, log)?;
+        let sha256 = crate::infra::s3::sha256_hex(&bytes);
+        Some((bytes, took, sha256))
+    } else {
+        log.push_str("no change to the judge's crate: jobs keep the last judge\n");
+        None
+    };
     let api = crate::workers::cloudflare::Api::new(None, token.clone());
     let account = api.account()?;
     let creds = crate::infra::s3::Credentials {
@@ -307,20 +324,24 @@ pub fn build(
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_or(0, |d| d.as_secs());
-    for (key, bytes, took, sum) in [
-        (
+    let mut uploads = Vec::new();
+    if let Some((bytes, took, sum)) = &built_pigeon {
+        uploads.push((
             crate::wire::ship_wire::build_key(&spec.sha),
-            &binary,
-            took,
-            &sha256,
-        ),
-        (
+            bytes,
+            *took,
+            sum,
+        ));
+    }
+    if let Some((bytes, took, sum)) = &built_judge {
+        uploads.push((
             crate::wire::ship_wire::judge_key(&spec.sha),
-            &judge_path,
-            judge_took,
-            &judge_sha256,
-        ),
-    ] {
+            bytes,
+            *took,
+            sum,
+        ));
+    }
+    for (key, bytes, took, sum) in uploads {
         store
             .put(&key, bytes, "application/octet-stream", now)
             .map_err(|e| {
@@ -336,8 +357,9 @@ pub fn build(
     }
     Ok(Some(Build {
         sha: spec.sha.clone(),
-        sha256,
-        judge_sha256: Some(judge_sha256),
+        sha256: built_pigeon.map(|(_, _, s)| s).unwrap_or_default(),
+        judge_sha256: built_judge.map(|(_, _, s)| s),
+        judge_sha: None,
     }))
 }
 
