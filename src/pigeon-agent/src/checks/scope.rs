@@ -437,6 +437,41 @@ pub fn workers(root: &Path, files: Option<&[String]>) -> Result<Vec<String>, Err
     Ok(out)
 }
 
+/// The units a merge of `files` deploys, in deploy order: each Worker, each site, the stored
+/// build, the images and the iOS app; see
+/// `.claude/decisions/2026-11-18-runtime-independent-blue-green-workers.md` §B.
+///
+/// # Errors
+///
+/// When the Workers or sites can't be read.
+pub fn plan(root: &Path, files: &[String]) -> Result<Vec<String>, Error> {
+    let files: Vec<String> = files
+        .iter()
+        .map(|f| f.trim().to_string())
+        .filter(|f| !f.is_empty())
+        .collect();
+    let some = Some(files.as_slice());
+    let mut units: Vec<String> = workers(root, some)?
+        .into_iter()
+        .map(|w| format!("worker:{w}"))
+        .collect();
+    units.extend(
+        deploys(root, some)?
+            .into_iter()
+            .map(|s| format!("site:{s}")),
+    );
+    if builds(some) {
+        units.push("build".to_string());
+    }
+    if !image_inputs(&files).is_empty() {
+        units.push("images".to_string());
+    }
+    if crate::core::iosrelease::triggers(some) {
+        units.push("ios".to_string());
+    }
+    Ok(units)
+}
+
 /// The integration test targets of the crate at `dir` with manifest `m`: its `[[test]]` names,
 /// and, unless `autotests = false`, each `tests/<x>.rs` and `tests/<x>/main.rs`.
 /// A package's binary targets: its `[[bin]]` names, else its own name for `src/main.rs`, and

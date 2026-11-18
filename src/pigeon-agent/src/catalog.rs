@@ -198,7 +198,13 @@ fn change_scope(instance: &Instance, args: &Map<String, Value>) -> Result<Value,
             message: e.to_string(),
         }
     })?;
-    Ok(json!({ "jobs": jobs }))
+    let deploys = crate::checks::scope::plan(instance.platform_root(), &files).map_err(|e| {
+        Error::Engine {
+            engine: Engine::Infra,
+            message: e.to_string(),
+        }
+    })?;
+    Ok(json!({ "jobs": jobs, "deploys": deploys }))
 }
 
 /// Publishes the named sites, or every site, with the run's Cloudflare token: built with

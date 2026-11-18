@@ -310,6 +310,9 @@ pub struct ScopeArgs {
     /// Print the checks as JSON
     #[arg(long, conflicts_with = "run")]
     pub json: bool,
+    /// Print the units a merge of the files deploys instead of the checks.
+    #[arg(long, conflicts_with = "run")]
+    pub deploys: bool,
     /// Choose the tests by this test map, `tests.json`
     #[arg(long)]
     pub test_map: Option<PathBuf>,

@@ -322,12 +322,33 @@ fn git_run(
 /// `pigeon dev scope`: the checks a change needs; see
 /// `.claude/decisions/2026-11-05-development-changes-through-pigeon-mcp.md` §4.
 fn scope(args: &ScopeArgs) -> i32 {
-    let jobs = if args.files.is_empty() {
+    let files = if args.files.is_empty() {
         agent::checks::scope::changed(&args.root, &args.base)
     } else {
         Ok(args.files.clone())
+    };
+    if args.deploys {
+        return match files.and_then(|files| agent::checks::scope::plan(&args.root, &files)) {
+            Ok(units) => {
+                if args.json {
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&units).unwrap_or_default()
+                    );
+                } else {
+                    for u in &units {
+                        println!("{u}");
+                    }
+                }
+                SUCCESS
+            }
+            Err(e) => {
+                eprintln!("infra: {e}");
+                INVALID
+            }
+        };
     }
-    .and_then(|files| {
+    let jobs = files.and_then(|files| {
         let map = match &args.test_map {
             Some(p) => Some(agent::checks::scope::TestMap::read(p)?),
             None => None,

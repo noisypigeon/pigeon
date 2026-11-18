@@ -354,7 +354,7 @@ const CATALOG: &[Operation] = &[
         name: "change.scope",
         engine: Engine::Infra,
         effect: Effect::Read,
-        summary: "The checks a change needs, from the paths it touches, in the order to run them (args: files, one path per line)",
+        summary: "The checks a change needs, from the paths it touches, in the order to run them, and the units a merge of them deploys (`deploys`) (args: files, one path per line)",
         args: &[arg("files", true, Kind::Text)],
         view: View::Detail,
     },

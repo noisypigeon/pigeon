@@ -679,3 +679,37 @@ fn a_deploy_releases_the_ios_app_only_when_it_changed_it() {
     .expect("an older job's report");
     assert!(!older.ios, "an older job never releases");
 }
+
+fn plan_of(files: &[&str]) -> Vec<String> {
+    let files: Vec<String> = files.iter().map(|f| (*f).to_string()).collect();
+    agent::checks::scope::plan(&repo_root(), &files).expect("plans")
+}
+
+#[test]
+fn a_deploy_plan_names_each_unit_its_paths_deploy() {
+    let at = |plan: &[String], unit: &str| plan.iter().position(|u| u == unit);
+
+    let worker = plan_of(&["src/pigeon-agent/src/mcp.rs"]);
+    let (w, s, b) = (
+        at(&worker, "worker:pigeon-control"),
+        at(&worker, "site:sites/docs"),
+        at(&worker, "build"),
+    );
+    assert!(w.is_some() && s.is_some() && b.is_some(), "{worker:?}");
+    assert!(
+        w < s && s < b,
+        "workers, then sites, then the build: {worker:?}"
+    );
+
+    let cli = plan_of(&["src/pigeon-harness/src/main.rs"]);
+    assert!(cli.contains(&"site:sites/docs".to_string()), "{cli:?}");
+    assert!(cli.contains(&"build".to_string()), "{cli:?}");
+    assert!(!cli.iter().any(|u| u.starts_with("worker:")), "{cli:?}");
+
+    assert!(plan_of(&["Dockerfile"]).contains(&"images".to_string()));
+    assert!(plan_of(&["src/pigeon-ios/App/x.swift"]).contains(&"ios".to_string()));
+
+    let adr = plan_of(&[".claude/decisions/x.md"]);
+    assert!(adr.contains(&"site:sites/docs".to_string()), "{adr:?}");
+    assert!(!adr.iter().any(|u| u.starts_with("worker:")), "{adr:?}");
+}
