@@ -758,3 +758,32 @@ Execution: R10b-1 (brief): the reads, items, profile, avatar, push and
 instances, once R8a-2's dispatch is live. R10b-2 (brief): approvals and Auto
 through `ProofSheet`. R10b-3 (brief): unlink and passkey removal, after
 !1158 and those tools. Then TestFlight for the owner, then group C's 426.
+### 2026-11-18: Step R8c's shape: the link code's redeem stays a bootstrap, and standing up an instance is a device tool
+
+R8's amendment left two app calls on REST until R8c: `POST /v0/app/session`,
+which redeems a link code, and `POST /v0/app/instances/standup`.
+
+- **The redeem joins §7.** It is the bootstrap that makes a device known: it
+  is signed by a key the device door doesn't know yet, as `POST /v0/pool/`
+  is shaped by its caller. Moving it onto the door would loosen the door's
+  signature check for one call. So `POST /v0/app/session` stays outside MCP,
+  with `/app/link`, the web page that mints the code, and `device.redeem`
+  isn't made.
+- **`instances.standup` is a device operation.** Its arguments are `name`,
+  `label`, `token` and the proof's `credential`, `client_data`,
+  `authenticator_data` and `signature`. It runs `instances::standup` as the
+  signing device, which checks the proof against
+  `listing::standup_purpose(sha256(token))` as now. The token is sent once
+  and never kept, as now.
+- **Its proof.** `proof.challenge {purpose: "instance-standup", target:
+  <the token's SHA-256, hex>}` mints that purpose's challenge (gate:
+  `passkeys.rs`). The app keeps its native stand-up sheet: it hashes the
+  token, asks the challenge, signs it, and calls `instances.standup`.
+- **Group C then** removes every platform `/v0/app/*` route but
+  `/v0/app/mcp` and `/v0/app/session`, each answering 426 and "Update the
+  app", as R10b's amendment has it.
+
+Execution: R8c-1 (planner, gate): the `instance-standup` purpose in
+`proof.challenge`. R8c-2 (brief): `instances.standup` on the device door and
+the app's stand-up sheet through it. Then group C, once the owner's phone runs
+the build.
