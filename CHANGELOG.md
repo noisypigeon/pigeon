@@ -16,11 +16,13 @@
 - agent v0.1.62
 - agent v0.1.63
 - agent v0.1.64
+- agent v0.1.65
 - infra-cloudflare-access-application v0.1.3
 - infra-cloudflare-access-application v0.1.4
 - infra-cloudflare-schema v0.1.24
 - infra-cloudflare-schema v0.1.25
 - pigeon-eviction v0.1.24
+- pigeon-eviction v0.1.25
 - site-template-architecture v0.1.5
 
 ### Merged
@@ -162,6 +164,8 @@
 - docs(adr): group E and R3's switch to deciding move to the users ADR; 9b lands (!1254) ([dfee80e](https://github.com/noisypigeon/pigeon/commit/dfee80eccb186a65034049c986930c9b67aae300))
 - feat(images): pigeon-start fetches builds through build.read on /mcp, with the builds token, from the same PIGEON_BUILD_URL (!1256) ([63e4ec3](https://github.com/noisypigeon/pigeon/commit/63e4ec33b0f1cec0f077e16db87b478a94a7860c))
 - docs(adr): step 9b's hosts: the front takes the platform host and the zone, each color keeps its own host (!1255) ([099b9ab](https://github.com/noisypigeon/pigeon/commit/099b9ab09202bd59301c589a34371ba6dc1c9fa1))
+- feat(infra): control.platform.pigeon.dev joins the platform's domains, so Access covers it before the stack takes it (!1257) ([d72c84e](https://github.com/noisypigeon/pigeon/commit/d72c84eb5ef27ebf0366a13fbab0fe06cde93d7f))
+- fix(images): the job image's context holds tooling/session/models.json, which pigeon-core includes (!1260) ([23a1f9c](https://github.com/noisypigeon/pigeon/commit/23a1f9cc34329e2b9ef2761493c0413f4ed80f7e)) · agent, pigeon-eviction
 
 ## 2026-11-17
 
