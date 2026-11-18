@@ -324,12 +324,12 @@ pub fn proof_tools() -> Vec<Value> {
     });
     let purpose = json!({
         "type": "string",
-        "enum": ["auto", "auto-end", "unlink", "passkey-remove"],
-        "description": "Instead of `page`: start (`auto`) or end (`auto-end`) the Auto window, or unlink a device (`unlink`) or remove a passkey (`passkey-remove`) named by `target`",
+        "enum": ["auto", "auto-end", "unlink", "passkey-remove", "instance-standup"],
+        "description": "Instead of `page`: start (`auto`) or end (`auto-end`) the Auto window, unlink a device (`unlink`), remove a passkey (`passkey-remove`) named by `target`, or stand up an instance (`instance-standup`) whose token's SHA-256 is `target`",
     });
     let target = json!({
         "type": "string",
-        "description": "With `purpose` `unlink` or `passkey-remove`: the device or passkey id",
+        "description": "With `purpose` `unlink`, `passkey-remove` or `instance-standup`: the device or passkey id, or the token's SHA-256",
     });
     let text = json!({ "type": "string" });
     vec![
@@ -657,7 +657,13 @@ mod proof_tests {
             assert!(props["page"].is_object() && props["purpose"].is_object());
             assert_eq!(
                 props["purpose"]["enum"],
-                json!(["auto", "auto-end", "unlink", "passkey-remove"])
+                json!([
+                    "auto",
+                    "auto-end",
+                    "unlink",
+                    "passkey-remove",
+                    "instance-standup"
+                ])
             );
         }
         assert!(tools[0]["inputSchema"]["required"].is_null());

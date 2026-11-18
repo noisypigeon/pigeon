@@ -573,7 +573,7 @@ pub async fn proof_challenge(
     if let Some(p) = args["purpose"].as_str() {
         let Some((purpose, operation)) = auto_purpose(p) else {
             return Ok(Err(
-                "`purpose` is auto, auto-end, unlink or passkey-remove".into()
+                "`purpose` is auto, auto-end, unlink, passkey-remove or instance-standup".into(),
             ));
         };
         let v = to_instance(
@@ -719,11 +719,21 @@ const TOOL_ARGS: [&str; 7] = [
 
 /// `proof.challenge`'s account purposes: `unlink` and `passkey-remove` with a `target` id, as
 /// the passkey purpose `/v0/app/devices/<id>` and `/v0/app/passkeys/<id>` prove, and the card
-/// whose `submit` redeems it as the device operation; see
-/// `.claude/decisions/2026-11-17-runtime-mcp-feed-view-contract.md`, its R8 amendment.
+/// whose `submit` redeems it as the device operation; `instance-standup` with the token's
+/// SHA-256 as `target`, whose card has no submit (the app signs it); see
+/// `.claude/decisions/2026-11-17-runtime-mcp-feed-view-contract.md`, its R8 and R8c amendments.
 fn account_purpose(args: &Value) -> Option<(String, Value)> {
     use crate::core::account;
     let target = args["target"].as_str().filter(|t| !t.is_empty())?;
+    if args["purpose"].as_str()? == "instance-standup" {
+        let asked = json!({
+            "title": "Stand up this instance",
+            "body": "The app's stand-up sheet signs this, then sends the account token once.",
+            "verb": "Stand up", "fields": [], "inputs": [], "refuse": false, "change": null,
+        });
+        let sha = target.to_ascii_lowercase();
+        return Some((crate::core::member::listing::standup_purpose(&sha), asked));
+    }
     let (purpose, title, verb, tool) = match args["purpose"].as_str()? {
         "unlink" => (
             account::unlink_purpose(target),
