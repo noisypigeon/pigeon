@@ -8,8 +8,13 @@
 - agent v0.1.54
 - agent v0.1.55
 - agent v0.1.56
+- agent v0.1.57
 - infra-cloudflare-access-application v0.1.3
+- infra-cloudflare-access-application v0.1.4
 - infra-cloudflare-schema v0.1.24
+- infra-cloudflare-schema v0.1.25
+- pigeon-eviction v0.1.24
+- site-template-architecture v0.1.5
 
 ### Merged
 
@@ -36,6 +41,63 @@
 - feat(agent): the control plane ends an executor's session when its brief's change merges or is taken back (!1107) ([ffbf086](https://github.com/noisypigeon/pigeon/commit/ffbf0860b40bc1fe291d3090dfef682a29abebb2)) · agent
 - docs(adr): review !1110 against !1109 (!1114) ([1e03fb7](https://github.com/noisypigeon/pigeon/commit/1e03fb74235a06407d33869e358339d58e61fe90))
 - fix(infra): adopt the pigeon-pool Access token unrotated, in its own module (!1110) ([955163f](https://github.com/noisypigeon/pigeon/commit/955163f938fe610b1fb76197b7f49e2c4704c8dd)) · agent, infra-cloudflare-access-application, infra-cloudflare-schema
+- docs(adr): steps 14 and 17's shape: owner pages as shell views, an internal page table, route groups (!1122) ([7e5b463](https://github.com/noisypigeon/pigeon/commit/7e5b4631f0a1e3c17bbab4a5abdd40274071e909))
+- feat(deploy): the deploy plan, the units a set of paths deploys, in pigeon dev scope --deploys and change.scope (!1116) ([d915d7b](https://github.com/noisypigeon/pigeon/commit/d915d7b240486f6eaeff6d83234bbc5cd40a8412)) · agent
+- fix(infra): an Access application lists its hostnames before its Worker, as Cloudflare holds them (!1121) ([c2f8c03](https://github.com/noisypigeon/pigeon/commit/c2f8c03f7bf27e7dd6c0a2dfc77e5470f1a5923b)) · infra-cloudflare-access-application, infra-cloudflare-schema
+- docs(adr): a test the owner retires is a `-` line in tests.moves; batch 1 split into 3a, 3b and 3c (!1129) ([ba12869](https://github.com/noisypigeon/pigeon/commit/ba12869e2c945e65139923f999a4bab026095048))
+- feat(agent): grant events name their offer as subject, so a granted, failed, rotated or revoked grant closes its request (!1127) ([ee33bc6](https://github.com/noisypigeon/pigeon/commit/ee33bc66bb703a6eafd97f06e5e570fbbb85517b)) · agent
+- docs(adr): the owner's answers on steps 14 and 17: routes go once replaced and verified, and links move to /app# (!1132) ([78e56c4](https://github.com/noisypigeon/pigeon/commit/78e56c49e9d0ee6e02fe39d8cbd099e3e6f6eea1))
+- feat(agent): the web shell takes the owner pages' look (!1123) ([1d287d6](https://github.com/noisypigeon/pigeon/commit/1d287d661e358b532ea61e6de6f99ce684d5f968)) · agent
+- feat(eviction): the change target takes added_tests, enumerations and test_reason, and `when` (!1135) ([ed9957e](https://github.com/noisypigeon/pigeon/commit/ed9957ea0ed8728f322d4bc5f4982ce8683197da)) · pigeon-eviction
+- feat(core): proof.challenge presents each owner page as a card, and proof.form its inputs as a form (!1130) ([a8a23c1](https://github.com/noisypigeon/pigeon/commit/a8a23c170760a6e629872cec5ba92e552d1097b1)) · agent
+- fix(infra): the adopted pigeon-pool token is read by name, never managed, so no plan writes it (!1139) ([fb6184f](https://github.com/noisypigeon/pigeon/commit/fb6184f82ed3f3669faeea98d3d89ee2348aa0b1)) · agent, infra-cloudflare-schema
+- feat(agent): the web shell signs a view's proof actions, and opens /app# links (!1137) ([13210d4](https://github.com/noisypigeon/pigeon/commit/13210d4fe94928172addd14cd22ace0bfd02ac51)) · agent
+- feat(core): present::asked, what each owner page shows, as data for its view (!1134) ([6a3faf7](https://github.com/noisypigeon/pigeon/commit/6a3faf717ff6bd4cc9b1c15a86a428463a7fbeff))
+- feat(core): testguard counts the test functions and per-feature enumerations a Rust diff adds (!1136) ([73b4895](https://github.com/noisypigeon/pigeon/commit/73b48954c20e6fc0d59c5238f9de4929df4e61d6))
+- feat(deploy): mise.toml and .config/releases.yaml no longer redeploy the Worker (!1140) ([c6e7f6b](https://github.com/noisypigeon/pigeon/commit/c6e7f6bdc46d84140ea52a64cce7c2f43861b3e2)) · agent
+- feat(agent): proof.challenge carries what each owner page shows, and proof.submit takes its fields (!1138) ([3d3ce92](https://github.com/noisypigeon/pigeon/commit/3d3ce92bc8852dc8717c555a932c30a6c5a80cb9)) · agent
+- feat(agent): every approval link opens the web client: https://<host>/app#<page path> (!1133) ([ef1a0a7](https://github.com/noisypigeon/pigeon/commit/ef1a0a763e75de5bc6419d28893d0df4568d06b4)) · agent
+- test: retire the per-feature pins, with invariants in their place and `-` retirements in tests.moves (!1141) ([d3465a5](https://github.com/noisypigeon/pigeon/commit/d3465a5ac23512e9ee7e853878e19e111d314062))
+- feat(agent): bound and pigeon dev policy-change feed the tests guard its counts and Test-Reason (!1142) ([af31a69](https://github.com/noisypigeon/pigeon/commit/af31a696adff52646b75658feb56925d1bfbafdf)) · agent
+- feat(agent): pigeon dev policy-change feeds the tests guard too, through policy.check's diff and test_reason (!1143) ([2401d38](https://github.com/noisypigeon/pigeon/commit/2401d3819ef16bb59623a27cd36a9f3e657b721f)) · agent
+- feat(policy): the tests guard: a Test-Reason for added tests, and enumeration: for per-feature pins (!1144) ([fceaa15](https://github.com/noisypigeon/pigeon/commit/fceaa15bbc0ce04167dbf5ecf591dba625266fe0))
+- feat(agent): the owner's grant pages leave the router; only proof.submit reaches their decisions (!1147) ([f703083](https://github.com/noisypigeon/pigeon/commit/f703083057a8b8b3dd7b1acde3b2b702bea5e6bc)) · agent
+- docs(adr): step R8's shape: the app's tools are device-door operations that act as their device (!1150) ([307c3e0](https://github.com/noisypigeon/pigeon/commit/307c3e0d488e51b8e006e1afbd8e12cb67132716))
+- feat(agent): the app's MCP door carries its signing device, for the tools that act as that device (!1149) ([539a2cc](https://github.com/noisypigeon/pigeon/commit/539a2cc1fc08d0d53f5bc5e259adb77f85e9a5a4)) · agent
+- feat(core): the view contract takes form-answering reads and an image input, as the owner chose (#36) (!1151) ([87a0e55](https://github.com/noisypigeon/pigeon/commit/87a0e55734bdabdd9ff03a2af16c5d1468591cd4))
+- feat(core): the journal in shadow, starting with the Instance's event log (!1146) ([a5b04bd](https://github.com/noisypigeon/pigeon/commit/a5b04bd9ea648e37ddabeaa08b596320289ebeeb)) · agent
+- docs(adr): users at three levels, one Administrator, and capability grants (!1155) ([056cd45](https://github.com/noisypigeon/pigeon/commit/056cd45fc65be7bd28ff702c3ec75fce0ba16213))
+- docs(adr): blue-green: identity state is journaled, and an authorization check reads after replay (!1156) ([e9c88f8](https://github.com/noisypigeon/pigeon/commit/e9c88f82bafdba9f5c14d192c9f6877d625043bd))
+- feat(agent): the web shell's forms take an image input, sent as a downscaled JPEG (!1153) ([ccec53c](https://github.com/noisypigeon/pigeon/commit/ccec53c8e315a1e9acaa410855bcf738604d8883)) · agent
+- test(core): the committed provider registry's exempt count is no longer pinned (!1152) ([83edde6](https://github.com/noisypigeon/pigeon/commit/83edde6500431c1cafe009a40e8dfb26c6cd69c7))
+- feat(core): approval.list, what waits for the owner, as the web shell's Approvals root (!1148) ([3aa59f3](https://github.com/noisypigeon/pigeon/commit/3aa59f39bddad50039e46d9ab705981751a87b1b)) · agent
+- feat(harness): the follower, session status and the bench call the control plane through /mcp (!1159) ([e4ec49b](https://github.com/noisypigeon/pigeon/commit/e4ec49b126fa48338c30f7ac89f01976e2ca8650)) · agent
+- docs(adr): agents are Service users, the platform's features split into base and capabilities, and checks read after replay (!1163) ([c54494c](https://github.com/noisypigeon/pigeon/commit/c54494cafb49289c11b9d149ca089c87324c7ccd))
+- docs(adr): review !1148 against !1155 (!1166) ([048e49b](https://github.com/noisypigeon/pigeon/commit/048e49bdc2506ce8efd5399a0035981a7ebfcab2))
+- docs(adr): blue-green: 3b adds result schemas first, 3c's policies carry examples, each in owner-gated parts (!1168) ([7f72352](https://github.com/noisypigeon/pigeon/commit/7f72352e2c1abbd39c87ef259645a9bb2a22ccd2))
+- feat(core): the journal in shadow, each changed Instance key snapshotted after a write (!1165) ([19dae83](https://github.com/noisypigeon/pigeon/commit/19dae83625ad98e9171b5b094db1a0f117668e3a)) · agent
+- feat(tooling): session.sh bootstraps through /mcp, with deploy.status and build.read (!1173) ([d6f995c](https://github.com/noisypigeon/pigeon/commit/d6f995cfbc93aab247affa871783688d476f6e95))
+- feat(core): operations declare their result, advertised as MCP outputSchema and presented from a sample (!1170) ([408035d](https://github.com/noisypigeon/pigeon/commit/408035d2f33a7462e46a8165dd89096d9d2696b6))
+- feat(core): the lease row and the fence that fails a batch under a stale epoch (!1171) ([dbc17da](https://github.com/noisypigeon/pigeon/commit/dbc17da27a4e70949599a8f55ec9d8e908c46a47)) · agent
+- feat(eviction): a policy carries its own pass and fail examples, run by one test (!1174) ([4bcf35a](https://github.com/noisypigeon/pigeon/commit/4bcf35a486f9b32431acde4212c234f7048b6ab6)) · pigeon-eviction
+- feat(tooling): session.sh's follow refreshes main's build before it follows (!1175) ([d18562f](https://github.com/noisypigeon/pigeon/commit/d18562f15f43113de6a7f094c40272a5e5b94196))
+- feat(agent): Web Push on MCP: push.key, push.subscribe, the shell's Notify button and the feed-reading service worker (!1154) ([3b6d64a](https://github.com/noisypigeon/pigeon/commit/3b6d64a3b29583bda25cf0b7aa4b84367cc818ed)) · agent
+- feat(ios): the shell's proof sheet shows each owner page's card and form, /app# links open it, forms take a photo (!1160) ([7c7088d](https://github.com/noisypigeon/pigeon/commit/7c7088d5a949e477e2179399e3f1a0802116fd98))
+- feat(deploy): sites, workers and build keep their own baselines, and deploy_retry takes unit (!1161) ([f1af08c](https://github.com/noisypigeon/pigeon/commit/f1af08cdd3496d7205bf711bfb1e05c5f8d12c5f)) · agent
+- feat(agent)!: the Worker no longer serves /v0/operations, /v0/events or /v0/run (!1176) ([2cebc98](https://github.com/noisypigeon/pigeon/commit/2cebc98bb0b167d8b2644b5d7faeed1d094e8f80)) · agent
+- feat(core): the app's device-door operations, listed per door and presented as views (!1169) ([aba120f](https://github.com/noisypigeon/pigeon/commit/aba120f6f6aa68e925ea200ac7d17a7a104fc5e4))
+- test(policy): terraform, mirror and no-python carry their own examples, and their tests retire (!1180) ([1db1885](https://github.com/noisypigeon/pigeon/commit/1db18855d9f9baf9a6c33fd297d030764da890e3))
+- test(policy): migrations, macos and eviction-actions carry their own examples, and their tests retire (!1183) ([06f3b90](https://github.com/noisypigeon/pigeon/commit/06f3b905203b4a384d662d9e7f054313946f1516))
+- fix(core): approval.list and push.* run on the control plane (!1182) ([6d9c0dc](https://github.com/noisypigeon/pigeon/commit/6d9c0dc433721d64424ce7d40a9b2e44e4e65ebd))
+- feat(core): the standby returns early, and journal appends are fenced by the lease's epoch (!1179) ([4439f3a](https://github.com/noisypigeon/pigeon/commit/4439f3af64f162efb27cb2dd61d28d57069cc6f5)) · agent
+- docs(adr): R10b's shape: the app keeps its screens and calls the device door's tools (!1187) ([5329003](https://github.com/noisypigeon/pigeon/commit/53290036225edff8de0072c796a44129e022703d))
+- feat(agent): the app's device-door operations run as the signing device, and tools are listed per door (!1186) ([3b715fd](https://github.com/noisypigeon/pigeon/commit/3b715fdf9c559644ad3d99153209a96caec5af57)) · agent
+- test(core): the rest family declares its results, and its per-operation fixtures retire (!1178) ([440339b](https://github.com/noisypigeon/pigeon/commit/440339ba4fc295d903daac0a769bdf70866f4477))
+- test(policy): pull-request carries its own examples, and its fixture test retires (!1188) ([5a7078e](https://github.com/noisypigeon/pigeon/commit/5a7078eb5daf981f65cc8e46e1e18b49420db49a))
+- feat(core): the standby's Pool and Bench alarms, pool dispatch, device pushes, git pushes and event writes stand down (!1190) ([f85f87b](https://github.com/noisypigeon/pigeon/commit/f85f87b2e6a6fb24235171c7e0419d06fb1d0f64)) · agent
+- feat(ios): Now, Tracker and Insights read through the device door's tools (!1191) ([6ec6f35](https://github.com/noisypigeon/pigeon/commit/6ec6f3506e1adc741d6e88bcbdb1be625bc4b698))
+- test(core): the change and approval families declare their results, and their per-operation fixtures retire (!1193) ([57d55ec](https://github.com/noisypigeon/pigeon/commit/57d55eca6d69ac2b6387b5b22df26d79dc8d91fd))
+- feat(deploy): /healthz names the deployed commit, and the architecture site reads it at view time (!1195) ([c65680d](https://github.com/noisypigeon/pigeon/commit/c65680daafd405413fd70a353d081f211528921e)) · agent, site-template-architecture
 
 ## 2026-11-17
 
