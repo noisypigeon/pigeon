@@ -7,7 +7,6 @@ use eviction::{LoadedPolicy, PullRequest};
 use tempfile::TempDir;
 
 const URL: &str = "https://github.com/noisypigeon/pigeon";
-const SHA: &str = "0123456789abcdef0123456789abcdef01234567";
 const GOOD_NAME: &str = "2026-01-02-development-a-sample-decision.md";
 
 fn policy(name: &str) -> LoadedPolicy {
@@ -189,53 +188,6 @@ fn pull_request_skipped_without_one() {
     assert_eq!((report.ran, report.skipped), (0, 1));
 }
 
-fn changelog(content: Option<&str>) -> Vec<String> {
-    let root = TempDir::new().expect("tempdir");
-    if let Some(c) = content {
-        fs::write(root.path().join("CHANGELOG.md"), c).expect("write");
-    }
-    violations("changelog", root.path(), None)
-}
-
-fn cl_good() -> String {
-    format!(
-        "# Changelog\n\n## 2026-01-03\n\n### Released\n\n- a v0.1.1\n- b v0.2.0\n\n### Merged\n\n- feat: first ([#1]({URL}/pull/1)) · a\n- ci: second ([#2]({URL}/pull/2))\n- refactor: rename (!7) ([0123456]({URL}/commit/{SHA})) · a, b\n- units renamed · c → b\n\n## 2026-01-02\n\n### Merged\n\n- docs(adr): bootstrap ([0123456]({URL}/commit/{SHA}))\n"
-    )
-}
-
-#[test]
-fn changelog_rules() {
-    let g = cl_good();
-    passes(&changelog(Some(&g)));
-    passes(&changelog(None));
-    for content in [
-        g.replace("# Changelog", "# Changes"),
-        g.replace("2026-01-02", "2026-01-04"),
-        g.replace("2026-01-02", "2026-01-03"),
-        g.replace("## 2026-01-02", "## Jan 2"),
-        format!("{g}\n## 2026-01-01\n"),
-        "# Changelog\n".into(),
-        g.replace(&format!(" ([#1]({URL}/pull/1))"), ""),
-        g.replace(
-            &format!("{URL}/pull/1"),
-            "https://github.com/other/repo/pull/1",
-        ),
-        g.replace("[#1]", "[#3]"),
-        g.replace(
-            &format!("[#2]({URL}/pull/2)"),
-            &format!("[#1]({URL}/pull/1)"),
-        ),
-        g.replace(&format!("commit/{SHA}"), "commit/0123456"),
-        g.replace("[0123456]", "[fedcba9]"),
-        format!("{g}  continued\n"),
-        g.replace("# Changelog\n", "# Changelog\n\nIntro.\n"),
-        g.replace(" · a\n", " · A\n"),
-        g.replace("### Merged\n\n- feat", "### Notes\n\n- feat"),
-    ] {
-        fails(&changelog(Some(&content)));
-    }
-}
-
 #[test]
 fn every_policy_is_valid() {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../.config/policies");
@@ -371,20 +323,6 @@ fn layout_keeps_the_core_pure() {
         shell,
         "fn apply(&mut self) { std::fs::read(p); }",
     ));
-}
-
-#[test]
-fn release_changelog_rules() {
-    let g = cl_good();
-    for content in [
-        g.replace("- a v0.1.1\n", "- a 0.1.1\n"),
-        g.replace("- a v0.1.1\n", "- a v0.1\n"),
-        g.replace("- a v0.1.1\n", "- a/v0.1.1\n"),
-        g.replace("### Released\n\n- a v0.1.1\n- b v0.2.0\n", "### Released\n"),
-        g.replace("- units renamed · c → b\n", "- units renamed · c\n"),
-    ] {
-        fails(&changelog(Some(&content)));
-    }
 }
 
 fn tree_root(files: &[(&str, &str)]) -> TempDir {

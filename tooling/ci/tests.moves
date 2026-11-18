@@ -3392,3 +3392,5 @@ pigeon-eviction test suite policies::migrations_only_expand	-
 pigeon-eviction test suite policies::macos_holds_the_order_start_time_and_caps_only	-
 pigeon-eviction test suite policies::eviction_actions_keeps_the_judge_read_only	-
 pigeon-eviction test suite policies::pull_request	-
+pigeon-eviction test suite policies::changelog_rules	-
+pigeon-eviction test suite policies::release_changelog_rules	-

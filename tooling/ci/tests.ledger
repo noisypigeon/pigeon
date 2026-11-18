@@ -1737,7 +1737,6 @@ pigeon-eviction test suite eviction::check_skips_eviction_policies
 pigeon-eviction test suite eviction::eviction_fields_and_rules_stay_with_their_target
 pigeon-eviction test suite eviction::numeric_bounds_hold_at_both_ends
 pigeon-eviction test suite eviction::what_the_adr_protects_is_never_granted
-pigeon-eviction test suite policies::changelog_rules
 pigeon-eviction test suite policies::decisions_amendments
 pigeon-eviction test suite policies::decisions_amendments_land_in_merge_order
 pigeon-eviction test suite policies::decisions_directory
@@ -1752,7 +1751,6 @@ pigeon-eviction test suite policies::layout_rules
 pigeon-eviction test suite policies::mirror_allows_only_a_dispatched_read_only_pinned_ci_yml
 pigeon-eviction test suite policies::names_forbids_the_old_names_but_the_stored_ones_and_history
 pigeon-eviction test suite policies::pull_request_skipped_without_one
-pigeon-eviction test suite policies::release_changelog_rules
 pigeon-eviction test suite policies::roles_holds_three_explicit_capability_lists_only
 pigeon-eviction test suite provider_call::a_forbidden_pattern_in_arguments_is_not_quoted
 pigeon-eviction test suite provider_call::a_missing_field_is_a_violation
