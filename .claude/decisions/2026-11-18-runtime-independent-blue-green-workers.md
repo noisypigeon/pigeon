@@ -428,3 +428,39 @@ agree:
   proof is, so nothing crosses between blue and green.
 - It adds no test of the kinds C.1 retires: its one test checks a card on a fixture.
 - Nothing else here changes.
+
+### 2026-11-18: Secret-bearing state is journaled sealed, a grant request's token hashed, and the APNs token never
+
+Owner item #42 chose option A: hash the grant tokens, re-mint the APNs token,
+and encrypt the push targets with a new shared Secrets Store key. Read
+against the code, the withheld keys are of three sorts:
+
+- **Compared only:** `grant-requests` holds each offer's page token, used
+  only to compare with a presented one. It is stored as its SHA-256 hex, as
+  ChangeRun's `grants` already is; `grants` is then journaled like any key.
+- **Read back:** `waiting` and ChangeRun's `pages` hold grant tokens the
+  approvals inbox and `approval_wait` show again, so hashing them would break
+  their links. `push-devices`, `devices` (a device's APNs token),
+  `members.joins` (live challenges and keys) and MainRun's `platform-outputs`
+  (every tofu output, sensitive ones too) are read back too. Each is
+  journaled **sealed**: its entry's body is `{"sealed": "<base64 nonce‖ciphertext>"}`,
+  AES-256-GCM under a key HKDF-SHA256 derives from the Secrets Store secret
+  `journal-seal` (64 hex), with info `pigeon journal v1` and the entry's
+  object and key as associated data. Replay opens it with the same key; both
+  colors bind the one secret, so nothing is copied between them.
+- **Re-minted:** `apns_token` is a cached provider JWT (50 minutes), minted
+  from Worker secrets both colors hold. It is never journaled; each color
+  mints its own.
+
+So grant tokens shown again are sealed rather than hashed. That is the same
+protection the owner chose for push targets, under the same key.
+
+- **`journal-seal` is the owner's to create**, in the account's one Secrets
+  Store, as `granter` was: its value never passes through a session.
+- **Until it exists** the sealed keys stay withheld. The code lands first and
+  skips them while the `JOURNAL_SEAL` binding is missing; the binding is added
+  to the colors' specs once the owner has created the secret.
+
+Changes, in order: 42a the grant request's token hashed at rest; 42b sealing
+in `journal` and `journal_keys`, skipping without the binding; 42c, once the
+owner has created `journal-seal`, the `JOURNAL_SEAL` binding.
