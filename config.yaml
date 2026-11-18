@@ -43,8 +43,10 @@ units:
       - { name: pigeon-agent, policy: agent, secret_version: 2, previous_secret_expires: "2026-11-06T02:37:43Z" }
       - { name: pigeon-deployer, policy: pigeon-deployer, secret_version: 1, previous_secret_expires: "2026-11-07T03:09:37Z" }
       - { name: pigeon-builds, policy: pigeon-builds, secret_version: 2, previous_secret_expires: "2026-11-08T04:20:01Z" }
-      # The capacity pool's; see .claude/decisions/2026-11-15-development-capacity-pools-hard-spend-cap.md §10.7.
-      - { name: pigeon-pool, policy: pigeon-pool, secret_version: null, previous_secret_expires: null }
+    # The capacity pool's, adopted unrotated; see
+    # .claude/decisions/2026-11-15-development-capacity-pools-hard-spend-cap.md §10.7 and its 2026-11-18 amendment.
+    adopted_service_tokens:
+      - { name: pigeon-pool, policy: pigeon-pool }
     # Reached without an Access login; each route authenticates its caller itself. See
     # .claude/decisions/2026-11-11-release-ios-app-buildkite-testflight.md §5 and
     # .claude/decisions/2026-11-12-runtime-ios-app-approvals-insights.md §4.

@@ -39,7 +39,7 @@ impl Kind {
                 Self::AccessPolicy,
                 "cloudflare_zero_trust_access_policy.this",
             ),
-            "access-service-token" => (
+            "access-service-token" | "access-service-token-adopted" => (
                 Self::ServiceToken,
                 "cloudflare_zero_trust_access_service_token.this",
             ),

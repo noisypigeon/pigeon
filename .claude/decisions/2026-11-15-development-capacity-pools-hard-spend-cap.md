@@ -1076,3 +1076,26 @@ ledger charged the refused request its reservation, about $0.03.
   calls the gateway's (no key, unauthorized, rate limited) never reached
   the provider. It settles at $0 under the model `refused`. A gateway 5xx,
   and any Anthropic error, is charged its reservation as before.
+
+### 2026-11-18: The pool's token is adopted unrotated
+
+Runs 36, 37 and 38 each planned `client_secret_version` null→1 for
+`pigeon-pool`, a new secret the Worker's `POOL_ACCESS_SECRET` wouldn't hold.
+A `lifecycle` can't differ per item, and a module holds one resource, so:
+
+- **`cloudflare/access-service-token-adopted`**, a new module: one token
+  whose `lifecycle` ignores `client_secret_version` and
+  `previous_client_secret_expires_at`, so its secret stays as Cloudflare
+  holds it. It has no `client_secret` output.
+- **The `pigeon/platform` kind gains `adopted_service_tokens`** (`name`,
+  `policy`), with `adopted_token_policies` beside `token_policies`.
+  `pigeon-pool` moves there from `service_tokens`; the other three tokens
+  keep rotation, unchanged.
+- **The application's policies stay in order:** `access-application` takes
+  `adopted_policy_id_map`, merged with `policy_id_map` by key, so
+  `pigeon-pool`'s policy keeps its place.
+- `infra/adopt.rs` imports the adopted module's token by name, as any token.
+- **Done when** a platform/blue plan shows no change to `pigeon-pool`'s
+  secret, version or expiry, removes no Access policy and replaces nothing.
+  Until the owner has checked that plan, platform/blue isn't applied, and no
+  token is rotated.

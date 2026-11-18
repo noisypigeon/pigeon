@@ -1,0 +1,3 @@
+version: 0.1.0
+description: One Access service token adopted unrotated, its secret left as Cloudflare holds it.
+capabilities: [access-tokens.write]

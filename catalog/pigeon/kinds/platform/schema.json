@@ -208,6 +208,41 @@
         }
       }
     },
+    "adopted_service_tokens": {
+      "type": "array",
+      "uniqueItems": true,
+      "description": "Service tokens adopted unrotated, each with its own Service Auth policy: the secret stays as Cloudflare holds it. See .claude/decisions/2026-11-15-development-capacity-pools-hard-spend-cap.md, 2026-11-18 amendment.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "policy"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "description": "The token's name."
+          },
+          "policy": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "description": "Its Service Auth policy's name."
+          }
+        }
+      },
+      "x-pigeon": {
+        "module": "cloudflare/access-service-token-adopted",
+        "for_each": "$item.name",
+        "inputs": {
+          "account_id": "$module.account.id",
+          "name": "$item.name"
+        }
+      }
+    },
     "public_paths": {
       "type": "array",
       "uniqueItems": true,
@@ -289,6 +324,7 @@
             "$module.owners.id"
           ],
           "policy_id_map": "$module.token_policies[*].id",
+          "adopted_policy_id_map": "$module.adopted_token_policies[*].id",
           "worker_id": "$module.worker.id",
           "hostnames": "$config.domains"
         }
@@ -327,6 +363,16 @@
           "account_id": "$module.account.id",
           "name": "$item.policy",
           "service_token_id": "$module.service_tokens[$item.name].id"
+        }
+      },
+      "adopted_token_policies": {
+        "module": "cloudflare/access-policy",
+        "over": "adopted_service_tokens",
+        "for_each": "$item.name",
+        "inputs": {
+          "account_id": "$module.account.id",
+          "name": "$item.policy",
+          "service_token_id": "$module.adopted_service_tokens[$item.name].id"
         }
       },
       "public_policies": {

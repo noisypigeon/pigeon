@@ -32,6 +32,13 @@ variable "policy_id_map" {
   nullable = false
 }
 
+# Adopted tokens' policy IDs, ordered by key with `policy_id_map`'s.
+variable "adopted_policy_id_map" {
+  type     = map(string)
+  default  = {}
+  nullable = false
+}
+
 variable "session_duration" {
   type    = string
   default = "24h"

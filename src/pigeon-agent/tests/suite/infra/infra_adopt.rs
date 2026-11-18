@@ -30,7 +30,7 @@ impl Lookup for Fake {
                 found("dup", "p3"),
                 found("agent", "p4"),
             ],
-            Kind::ServiceToken => vec![found("pigeon-agent", "t1")],
+            Kind::ServiceToken => vec![found("pigeon-agent", "t1"), found("pigeon-pool", "t2")],
         })
     }
 }
@@ -50,6 +50,8 @@ fn rendered() -> Value {
         "owners": { "source": src("access-policy"), "name": "pigeon-owner" },
         "service_tokens": { "source": src("access-service-token"), "name": "${each.value.name}",
             "for_each": { "pigeon-agent": { "name": "pigeon-agent" }, "pigeon-builds": { "name": "pigeon-builds" } } },
+        "adopted_service_tokens": { "source": src("access-service-token-adopted"), "name": "${each.value.name}",
+            "for_each": { "pigeon-pool": { "name": "pigeon-pool" } } },
         "token_policies": { "source": src("access-policy"), "name": "${each.value.policy}",
             "for_each": { "pigeon-agent": { "name": "pigeon-agent", "policy": "agent" } } }
     }})
@@ -110,6 +112,12 @@ fn each_declared_name_the_account_holds_is_imported_and_the_rest_created() {
             .as_deref(),
         Some("accounts/acct/t1")
     );
+    // An adopted token, by name, into its own module.
+    assert_eq!(
+        to(&got, "module.adopted_service_tokens[\"pigeon-pool\"].cloudflare_zero_trust_access_service_token.this")
+            .as_deref(),
+        Some("accounts/acct/t2")
+    );
     // Not held, so created: the plans bucket and the builds token.
     assert!(got.iter().all(|i| {
         !i["to"]
@@ -142,7 +150,7 @@ fn each_declared_name_the_account_holds_is_imported_and_the_rest_created() {
         Some("acct/p4"),
         "a name from the item's own field"
     );
-    assert_eq!(got.len(), 10, "{got:#?}");
+    assert_eq!(got.len(), 11, "{got:#?}");
 }
 
 #[test]

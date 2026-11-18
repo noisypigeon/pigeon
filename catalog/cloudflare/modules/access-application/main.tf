@@ -9,7 +9,7 @@ terraform {
 }
 
 locals {
-  policies = concat(var.policy_ids, values(var.policy_id_map))
+  policies = concat(var.policy_ids, values(merge(var.policy_id_map, var.adopted_policy_id_map)))
   # The Worker's own URLs, then each hostname it serves.
   destinations = concat(
     var.worker_id == null ? [] : [for t in var.worker_types : { type = t, worker_id = var.worker_id, uri = null }],

@@ -1210,9 +1210,9 @@ fn access(stacks: &[&crate::infra::manifest::Entry]) -> Access {
         access
             .hosts
             .extend(strings(&e.settings["domains"]).iter().map(|h| shown(h)));
-        for t in e.settings["service_tokens"]
-            .as_array()
-            .into_iter()
+        for t in ["service_tokens", "adopted_service_tokens"]
+            .iter()
+            .filter_map(|k| e.settings[*k].as_array())
             .flatten()
         {
             if let Some(n) = t["name"].as_str() {
