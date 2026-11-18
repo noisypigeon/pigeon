@@ -219,6 +219,10 @@ pub enum Door {
     Device,
 }
 
+/// Operations only the Administrator calls, each with the permission it requires; see .claude/decisions/2026-11-18-security-users-levels-capability-grants.md §2.
+pub const ADMINISTRATOR_OPS: [(&str, &str); 2] =
+    [("owner.answer", "approve"), ("approval.list", "approve")];
+
 /// The operations that act as the device `/v0/app/mcp` verified, listed and run only on that door; see .claude/decisions/2026-11-17-runtime-mcp-feed-view-contract.md, its R8 amendment.
 pub const DEVICE_OPS: [&str; 14] = [
     "device.show",
@@ -359,15 +363,37 @@ impl Operation {
         }
     }
 
-    /// The capability a caller needs to run it.
+    /// What a caller needs to run it: a level permission, a granted capability, or its own credentials.
     #[must_use]
-    pub fn capability(&self) -> &'static str {
-        if self.effect == Effect::Read {
-            "read"
+    pub fn requires(&self) -> crate::member::Requires {
+        use crate::member::Requires;
+        if let Some((_, permission)) = ADMINISTRATOR_OPS
+            .iter()
+            .find(|(name, _)| *name == self.name)
+        {
+            Requires::Permission(permission)
+        } else if self.name == "instances.standup" {
+            Requires::Capability {
+                name: "instances",
+                scope_arg: None,
+            }
+        } else if DEVICE_OPS.contains(&self.name) {
+            Requires::Own
+        } else if self.effect == Effect::Read {
+            Requires::Permission("read")
         } else if self.effect == Effect::Apply && !self.control_plane() {
-            "platform"
+            Requires::Permission("platform")
         } else {
-            "propose"
+            Requires::Permission("propose")
+        }
+    }
+
+    /// The level permission it requires, if it requires one.
+    #[must_use]
+    pub fn permission(&self) -> Option<&'static str> {
+        match self.requires() {
+            crate::member::Requires::Permission(p) => Some(p),
+            _ => None,
         }
     }
 

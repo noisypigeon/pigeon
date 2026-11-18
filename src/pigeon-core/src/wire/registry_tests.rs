@@ -1,8 +1,8 @@
 //! The registry: what each operation asks, needs and is reachable through.
 
-use super::{Asks, Door, Effect, GRANT, PAGE, catalog};
+use super::{ADMINISTRATOR_OPS, Asks, DEVICE_OPS, Door, Effect, GRANT, PAGE, catalog};
 use crate::approval::grants;
-use crate::member::{PERMISSIONS, SERVICE_CEILING};
+use crate::member::{CAPABILITIES, PERMISSIONS, Requires, SERVICE_CEILING, STANDARD_CEILING};
 use crate::view::View;
 
 #[test]
@@ -38,38 +38,108 @@ fn no_operation_is_both_grant_and_page() {
 }
 
 #[test]
-fn every_capability_is_a_member_capability() {
+fn every_requirement_is_known() {
     for o in catalog() {
-        assert!(
-            PERMISSIONS.contains(&o.capability()),
-            "{} needs {}",
-            o.name,
-            o.capability()
-        );
+        match o.requires() {
+            Requires::Permission(p) => {
+                assert!(PERMISSIONS.contains(&p), "{} needs {p}", o.name);
+            }
+            Requires::Capability { name, scope_arg } => {
+                assert!(CAPABILITIES.contains(&name), "{} needs {name}", o.name);
+                if let Some(a) = scope_arg {
+                    assert!(
+                        o.args.iter().any(|arg| arg.name == a),
+                        "{} scopes {name} by {a}, which is not its argument",
+                        o.name
+                    );
+                }
+            }
+            Requires::Own => {}
+        }
     }
 }
 
 #[test]
 fn reads_need_read() {
-    for o in catalog().iter().filter(|o| o.effect == Effect::Read) {
+    for o in catalog().iter().filter(|o| {
+        o.effect == Effect::Read
+            && !ADMINISTRATOR_OPS.iter().any(|(n, _)| *n == o.name)
+            && !DEVICE_OPS.contains(&o.name)
+    }) {
         assert_eq!(
-            o.capability(),
-            "read",
-            "{} needs {}",
+            o.permission(),
+            Some("read"),
+            "{} needs {:?}",
             o.name,
-            o.capability()
+            o.requires()
         );
     }
 }
 
 #[test]
 fn a_service_account_may_ask_every_control_plane_operation() {
-    for o in catalog().iter().filter(|o| o.control_plane()) {
+    for o in catalog().iter().filter(|o| {
+        o.control_plane()
+            && !ADMINISTRATOR_OPS.iter().any(|(n, _)| *n == o.name)
+            && !DEVICE_OPS.contains(&o.name)
+    }) {
         assert!(
-            SERVICE_CEILING.contains(&o.capability()),
-            "{} needs {}",
+            o.permission().is_some_and(|p| SERVICE_CEILING.contains(&p)),
+            "{} needs {:?}",
             o.name,
-            o.capability()
+            o.requires()
+        );
+    }
+}
+
+#[test]
+fn administrator_operations_require_what_no_other_level_holds() {
+    let all = catalog();
+    for (name, _) in ADMINISTRATOR_OPS {
+        let o = all
+            .iter()
+            .find(|o| o.name == name)
+            .unwrap_or_else(|| panic!("{name} is not in the catalog"));
+        let p = o
+            .permission()
+            .unwrap_or_else(|| panic!("{name} requires no permission"));
+        assert!(
+            !SERVICE_CEILING.contains(&p) && !STANDARD_CEILING.contains(&p),
+            "{name} requires {p}, which a lower level holds"
+        );
+    }
+}
+
+#[test]
+fn a_capability_never_answers_for_the_administrator() {
+    for o in catalog() {
+        if matches!(o.requires(), Requires::Capability { .. }) {
+            assert_eq!(
+                o.asks(),
+                Asks::None,
+                "{} asks, yet a capability runs it",
+                o.name
+            );
+            assert!(
+                !ADMINISTRATOR_OPS.iter().any(|(n, _)| *n == o.name),
+                "{} is an Administrator operation and a capability",
+                o.name
+            );
+        }
+    }
+}
+
+#[test]
+fn device_door_operations_need_own_or_a_capability() {
+    for o in catalog()
+        .iter()
+        .filter(|o| o.doors().contains(&Door::Device))
+    {
+        assert!(
+            matches!(o.requires(), Requires::Own | Requires::Capability { .. }),
+            "{} is on the device door but needs {:?}",
+            o.name,
+            o.requires()
         );
     }
 }
@@ -98,11 +168,11 @@ fn sites_publish_and_infra_apply_need_platform() {
             .find(|o| o.name == name)
             .unwrap_or_else(|| panic!("{name} is not in the catalog"));
         assert_eq!(
-            o.capability(),
-            "platform",
-            "{} needs {}",
+            o.permission(),
+            Some("platform"),
+            "{} needs {:?}",
             o.name,
-            o.capability()
+            o.requires()
         );
     }
 }
