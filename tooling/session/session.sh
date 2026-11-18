@@ -97,6 +97,11 @@ case ${1:-} in
       timeout 10 sh "$dir/session.sh" install >/dev/null 2>&1
     fi
     ;;
+  follow)
+    if command -v timeout >/dev/null 2>&1; then
+      timeout 90 sh "$dir/session.sh" install >/dev/null 2>&1
+    fi
+    ;;
 esac
 if bin=$(pick); then
   exec "$bin" session "$@"
