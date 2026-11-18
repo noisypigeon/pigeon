@@ -11,6 +11,7 @@ use crate::view::View;
 
 pub mod artifacts_wire;
 pub mod link;
+pub mod results;
 pub mod ship_wire;
 
 /// Why an operation could not run.
@@ -113,6 +114,16 @@ pub enum Kind {
     Text,
     /// A list of strings.
     Strings,
+    /// A number.
+    Number,
+    /// A boolean.
+    Bool,
+    /// Any value.
+    Any,
+    /// A list of objects with these fields.
+    List(&'static [Arg]),
+    /// An object with these fields.
+    Object(&'static [Arg]),
 }
 
 impl Kind {
@@ -121,6 +132,11 @@ impl Kind {
             Self::String => v.is_string(),
             Self::Text => v.is_string() || v.is_number() || v.is_boolean(),
             Self::Strings => v.as_array().is_some_and(|a| a.iter().all(Value::is_string)),
+            Self::Number => v.is_number(),
+            Self::Bool => v.is_boolean(),
+            Self::Any => true,
+            Self::List(_) => v.is_array(),
+            Self::Object(_) => v.is_object(),
         }
     }
 
@@ -129,6 +145,11 @@ impl Kind {
             Self::String => "a string",
             Self::Text => "text",
             Self::Strings => "a list of strings",
+            Self::Number => "a number",
+            Self::Bool => "a boolean",
+            Self::Any => "any value",
+            Self::List(_) => "a list of objects",
+            Self::Object(_) => "an object",
         }
     }
 
@@ -139,6 +160,11 @@ impl Kind {
             Self::String => json!({ "type": "string" }),
             Self::Text => json!({ "type": ["string", "number", "boolean"] }),
             Self::Strings => json!({ "type": "array", "items": { "type": "string" } }),
+            Self::Number => json!({ "type": "number" }),
+            Self::Bool => json!({ "type": "boolean" }),
+            Self::Any => json!({}),
+            Self::List(f) => json!({ "type": "array", "items": object_schema(f) }),
+            Self::Object(f) => object_schema(f),
         }
     }
 }
@@ -154,7 +180,16 @@ pub struct Arg {
     pub kind: Kind,
 }
 
-const fn arg(name: &'static str, required: bool, kind: Kind) -> Arg {
+/// An open object schema: these fields' types, none required, others allowed.
+fn object_schema(fields: &[Arg]) -> Value {
+    let properties: Map<String, Value> = fields
+        .iter()
+        .map(|a| (a.name.to_string(), a.kind.schema()))
+        .collect();
+    json!({ "type": "object", "properties": properties })
+}
+
+pub(crate) const fn arg(name: &'static str, required: bool, kind: Kind) -> Arg {
     Arg {
         name,
         required,
@@ -242,6 +277,23 @@ impl Operation {
             "properties": properties,
             "required": required,
             "additionalProperties": false,
+        })
+    }
+
+    /// Its MCP outputSchema: the response envelope, with its declared result; none when it declares none.
+    #[must_use]
+    pub fn output_schema(&self) -> Option<Value> {
+        results::result(self.name).map(|f| {
+            json!({
+                "type": "object",
+                "properties": {
+                    "operation": { "type": "string" },
+                    "ok": { "type": "boolean" },
+                    "result": object_schema(f),
+                    "violations": { "type": "array", "items": { "type": "string" } },
+                },
+                "required": ["operation", "ok"],
+            })
         })
     }
 

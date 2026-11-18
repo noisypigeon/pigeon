@@ -245,7 +245,7 @@ pub fn tools() -> Value {
     let tools: Vec<Value> = catalog()
         .iter()
         .map(|o| {
-            json!({
+            let mut tool = json!({
                 "name": tool_name(o),
                 "title": o.name,
                 "description": o.summary,
@@ -255,7 +255,11 @@ pub fn tools() -> Value {
                     "destructiveHint": o.effect == crate::wire::Effect::Apply,
                 },
                 "_meta": { "dev.pigeon/view": o.view.name() },
-            })
+            });
+            if let Some(out) = o.output_schema() {
+                tool["outputSchema"] = out;
+            }
+            tool
         })
         .collect();
     json!({ "tools": tools })

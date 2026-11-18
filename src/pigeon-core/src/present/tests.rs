@@ -137,3 +137,33 @@ fn scalars_take_only_scalars() {
     assert_eq!(one.len(), 1);
     assert_eq!(one[0]["label"], "result");
 }
+
+#[test]
+fn every_declared_result_presents() {
+    let presented = super::presented();
+    let mut checked_count = 0;
+    for o in catalog() {
+        if !presented.contains(&o.name) {
+            continue;
+        }
+        let Some(fields) = crate::wire::results::result(o.name) else {
+            continue;
+        };
+        let r = crate::wire::Response {
+            operation: o.name.into(),
+            ok: true,
+            result: crate::wire::results::sample(fields),
+            violations: vec![],
+        };
+        let v = checked(o.view, super::view(o.name, &r))
+            .unwrap_or_else(|p| panic!("{}: {p:?}", o.name))
+            .unwrap_or_else(|| panic!("{} presented nothing", o.name));
+        assert!(
+            v["title"].as_str().is_some_and(|t| !t.trim().is_empty()),
+            "{} has no title",
+            o.name
+        );
+        checked_count += 1;
+    }
+    assert!(checked_count > 0, "no declared result was checked");
+}
