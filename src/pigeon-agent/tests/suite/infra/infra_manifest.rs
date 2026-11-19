@@ -579,7 +579,8 @@ fn offline_platform() -> TempDir {
         (
             "dns-record",
             &[
-                "zone_id", "name", "type", "content", "ttl", "priority", "proxied",
+                "zone_id", "name", "type", "content", "ttl", "priority", "proxied", "data",
+                "comment",
             ][..],
             "",
         ),
