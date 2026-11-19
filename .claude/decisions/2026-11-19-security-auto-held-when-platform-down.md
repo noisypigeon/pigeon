@@ -205,3 +205,25 @@ front refuses, the change that builds it amends §1 here.
   Auto.
 - A report from an older job image, without `serving`, holds Auto.
 - An owner-tier or gate change still waits for the passkey with Auto on.
+
+## Amendments
+
+### 2026-11-19: !1334 reviewed against !1331: they agree
+
+!1331 amends
+[`2026-11-15-runtime-zoned-standalone-account-imports.md`](2026-11-15-runtime-zoned-standalone-account-imports.md)
+for its step 4a. `manifest::parse` now resolves private zones on the raw
+units. A zone without a private entry leaves the manifest, together with the
+units that name its alias. !1334 (step 2 here) loads the manifest the same
+way, and reads only the `pigeon/platform` unit's `worker` and `domains[0]`,
+and each `pigeon/color` unit's `worker` and `host`.
+
+- **No shared surface.** Neither the platform unit nor the colour units are
+  zone units, and none of them names a private alias. So resolving drops none
+  of them, and the hosts !1334 probes are the same with or without
+  `--private`.
+- **If one ever did leave,** the probe would see fewer colours, or no
+  platform unit, which fails closed and holds Auto (§1). Resolving can never
+  make the platform look like it serves when it doesn't.
+
+Neither changes.
