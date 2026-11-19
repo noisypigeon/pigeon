@@ -838,3 +838,13 @@ day runs (owner, about 23:42 UTC). June's onboarding stays deferred.
 - Willow's acts are batched: the passkey approvals for A1, A3 and A4; a
   binding or explanation for `f8cf3dd1…`; the Access policy for E1; owner
   item #47; and A5.
+
+### 2026-11-18: Reviewed !1269 against !1268: they agree
+
+- [`2026-11-18-runtime-independent-blue-green-workers.md`](2026-11-18-runtime-independent-blue-green-workers.md)'s
+  !1268 decides over `src/**/deploy/**`, `src/**/ship.rs`,
+  `src/**/checks/scope.rs` and `infra/pigeon/workers/**`.
+- !1269 (B1) changes only `src/pigeon-core/src/present/app.rs` and its tests:
+  how `members.list` shows each member's grants and a Standard user's own
+  row. It touches no path !1268 rules, and nothing in !1268 decides how
+  members or grants are presented. !1269 changes nothing there.
