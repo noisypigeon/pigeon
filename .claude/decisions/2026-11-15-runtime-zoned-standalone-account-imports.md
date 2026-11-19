@@ -363,3 +363,28 @@ sonnet executor, written by the capabilities planner.
       owner's page decrypts.
 - **Step 3's wildcard key.** The 2026-11-15 review left this to step 3's
   brief: an imported record at `*` is keyed `wildcard-<type>`.
+
+### 2026-11-19: 4a resolves private zones while the manifest parses
+
+This replaces the earlier 2026-11-19 amendment's description of 4a. The
+reason is §8 step 2: the blog's bucket and custom domains must be adopted in
+place. A bucket's name comes from its zone, so every downstream step has to
+see the real zone, not its alias.
+
+- **Where.** `infra::private::resolve` runs inside `manifest::parse`, on the
+  raw units, before any unit is built. Nothing downstream knows about
+  aliases.
+- **With an entry**, `zones/<alias>` becomes `zones/<zone>`, holding the
+  entry's `services` and `records`. Each unit with `zone: <alias>` names
+  `<zone>`.
+- **Without one**, the zone unit and every unit naming its alias leave the
+  manifest. That is what "renders nothing and plans nothing" means.
+- **The checks.** `resolve` refuses a private unit holding `services` or
+  `records`, a dotted alias, and an entry without its zone. The zone kind's
+  schema doesn't change, because private units never reach it.
+- **How the entries arrive.** The CLI's `--private FILE` sets them once per
+  process. A platform job will set them from `PIGEON_PRIVATE` when step 5
+  runs.
+- **Unit paths and names.** A resolved unit's path holds the real zone, and
+  a job's output masks it (4c). The stored plan keeps the real path, as it
+  keeps every real value.
