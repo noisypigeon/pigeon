@@ -16,6 +16,9 @@ routes:
   # The stack's own host, under Access since run 43; see
   # .claude/decisions/2026-11-18-runtime-independent-blue-green-workers.md, its step 9b amendment.
   - custom_domain: $deployment.domains[3]
+  # Standalones' hosts under the zone; see
+  # .claude/decisions/2026-11-15-runtime-standalone-hostnames-platform-zone.md §1.
+  - subdomains_of: $deployment.instance_zone
 durable_objects:
   classes: [Instance, ChangeRun, Checker, Runner, MainRun, Bench, Pool]
   migrations:
@@ -72,9 +75,6 @@ bindings:
     # The stack's previous host, still the primary's own until no link or client names it (the
     # step 9b amendment).
     STACK_ALIAS: $deployment.domains[1]
-    # The zone whose hosts it proxies to standalones; pigeon-front holds the zone's route (the step 9b
-    # amendment of .claude/decisions/2026-11-18-runtime-independent-blue-green-workers.md).
-    INSTANCE_ZONE: $deployment.instance_zone
     # Codes are refused once the cutover's proofs are on record; see
     # .claude/decisions/2026-11-14-security-passkey-only-owner-proofs.md §4.
     PROOFS: passkey
