@@ -235,3 +235,21 @@ amendment in the same change: `catalog/capabilities/**`, `src/**/capability/**`,
   They become functions over the registry when a capability first turns
   grantable (the Subdomain, Domain and Blog ADR's step 7), in that
   owner-tier change.
+
+### 2026-11-19: The capability paths are gate paths
+
+Found in review of !1352. Once `requires()` reads the registry, a manifest's
+`operations` decide what a Standard member holding that capability may call.
+
+- **The risk.** A code-tier change under Auto could list an approval, owner,
+  credential or platform operation in a manifest, and so widen Standard
+  members' reach without the owner's passkey.
+- **The fix.** `catalog/capabilities/**` and `src/pigeon-core/src/capability/**`
+  join both `guarded` and `gate` in `.config/approvals.yaml`. Every change to
+  them takes the owner's passkey, Auto or not.
+- **Two tests follow, apart:**
+  - no manifest lists an operation that is Administrator-only, asks for a
+    grant or a page, applies outside the control plane, or belongs to the
+    `change`, `mandate`, `lane`, `grant`, `member`, `service`, `secrets`,
+    `platform`, `owner`, `approval`, `deploy` or `infra` areas;
+  - no operation is owned by more than one capability.
