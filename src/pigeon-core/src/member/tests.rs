@@ -797,3 +797,16 @@ fn service_call<'a>(account: &'a str, operation: &'a str, p: &'static str) -> Re
         ..req(account, p)
     }
 }
+
+#[test]
+fn every_planner_class_acts_as_the_planner_agent() {
+    for c in crate::sessions::Class::ALL {
+        let expected = if c.role() == "planner" {
+            "agent-planner"
+        } else {
+            "agent-executor"
+        };
+        assert_eq!(super::agent_user(Some(c.name())), expected, "{}", c.name());
+    }
+    assert_eq!(super::agent_user(None), "agent-executor");
+}

@@ -978,11 +978,14 @@ pub const SERVICE_USERS: [(&str, &[&str], &[&str], bool); 5] = [
     ),
 ];
 
-/// The agent service user a session of model class `model` acts as: `opus` plans, any other
-/// class, or none, executes.
+/// The agent service user a session of model class `model` acts as: a planner class (`opus`,
+/// `fable`) plans; any other class, or none, executes.
 #[must_use]
 pub fn agent_user(model: Option<&str>) -> &'static str {
-    if model == Some("opus") {
+    let plans = model.is_some_and(|m| {
+        crate::sessions::Class::parse(Some(m)).is_ok_and(|c| c.role() == "planner")
+    });
+    if plans {
         "agent-planner"
     } else {
         "agent-executor"
