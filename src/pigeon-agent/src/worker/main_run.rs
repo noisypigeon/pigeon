@@ -1375,6 +1375,7 @@ impl DurableObject for MainRun {
     }
 
     async fn fetch(&self, req: Request) -> Result<Response> {
+        platform::load_store(&self.env).await;
         let write = req.method() != Method::Get;
         let response = self.run_fetch(req).await;
         if write {
@@ -1390,6 +1391,7 @@ impl DurableObject for MainRun {
     }
 
     async fn alarm(&self) -> Result<Response> {
+        platform::load_store(&self.env).await;
         // The standby only reads; see the blue-green ADR §A.3.
         if !super::lease::acting(&self.env).await {
             return Response::ok("standby");

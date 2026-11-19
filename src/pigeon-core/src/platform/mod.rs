@@ -4,3 +4,4 @@
 pub mod hosts;
 pub mod platforms;
 pub mod runs;
+pub mod secrets;

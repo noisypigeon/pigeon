@@ -164,6 +164,7 @@ impl DurableObject for Pool {
     }
 
     async fn fetch(&self, mut req: Request) -> Result<Response> {
+        platform::load_store(&self.env).await;
         let path = req.path();
         if let Some(tail) = path.strip_prefix("/forward/") {
             return self.forward(&mut req, tail).await;
@@ -184,6 +185,7 @@ impl DurableObject for Pool {
     }
 
     async fn alarm(&self) -> Result<Response> {
+        platform::load_store(&self.env).await;
         let Some((pool, _)) = self.pool().await? else {
             return Response::ok("no pool");
         };

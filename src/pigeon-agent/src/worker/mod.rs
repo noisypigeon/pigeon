@@ -82,6 +82,7 @@ const QUEUE: &str = "queue";
 
 #[event(fetch)]
 async fn fetch(req: Request, env: Env, _ctx: worker::Context) -> Result<Response> {
+    platform::load_store(&env).await;
     // An app-shape standalone answers `/v0/app/*` alone; see
     // .claude/decisions/2026-11-15-runtime-learner-practice-standalone-app.md, its 2026-11-15 amendment.
     if standalone::is_app(&env) {
@@ -2001,6 +2002,7 @@ pub(super) fn main_stub(env: &Env, repo: &str) -> Result<worker::Stub> {
 /// `.claude/decisions/2026-11-08-development-events-tickets-digest-mandate.md` §4.
 #[event(scheduled)]
 async fn scheduled(_event: worker::ScheduledEvent, env: Env, _ctx: worker::ScheduleContext) {
+    platform::load_store(&env).await;
     // The standby only reads; see the blue-green ADR §A.3.
     if !lease::acting(&env).await {
         return;
@@ -2306,6 +2308,7 @@ async fn reconcile_mirror(env: &Env) -> Result<()> {
 /// `main` goes to its pipeline.
 #[event(queue)]
 async fn queue(batch: MessageBatch<Value>, env: Env, _ctx: worker::Context) -> Result<()> {
+    platform::load_store(&env).await;
     let s = Settings::from(&env)?;
     for message in batch.messages()? {
         let Some(push) = control::push(message.body()) else {
@@ -2508,6 +2511,7 @@ impl DurableObject for Instance {
     }
 
     async fn fetch(&self, req: Request) -> Result<Response> {
+        platform::load_store(&self.env).await;
         let write = req.method() != Method::Get;
         let response = self.route(req).await;
         if write {

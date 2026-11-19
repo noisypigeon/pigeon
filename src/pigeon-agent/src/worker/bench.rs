@@ -108,6 +108,7 @@ impl DurableObject for Bench {
     }
 
     async fn fetch(&self, mut req: Request) -> Result<Response> {
+        platform::load_store(&self.env).await;
         let path = req.path();
         let body: Value = req.json().await.unwrap_or(Value::Null);
         match path.as_str() {
@@ -119,6 +120,7 @@ impl DurableObject for Bench {
     }
 
     async fn alarm(&self) -> Result<Response> {
+        platform::load_store(&self.env).await;
         let storage = self.state.storage();
         let label: Option<String> = storage.get("label").await.ok().flatten();
         let name: Option<String> = storage.get("name").await.ok().flatten();

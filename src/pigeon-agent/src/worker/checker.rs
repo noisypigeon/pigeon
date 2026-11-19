@@ -40,6 +40,7 @@ impl DurableObject for Checker {
     }
 
     async fn fetch(&self, req: Request) -> Result<Response> {
+        super::platform::load_store(&self.env).await;
         serve(&self.state, &self.env, req, "Checker").await
     }
 }
@@ -50,6 +51,7 @@ impl DurableObject for Runner {
     }
 
     async fn fetch(&self, req: Request) -> Result<Response> {
+        super::platform::load_store(&self.env).await;
         serve(&self.state, &self.env, req, "Runner").await
     }
 }

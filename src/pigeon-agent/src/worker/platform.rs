@@ -54,13 +54,38 @@ pub fn now() -> u64 {
     Date::now().as_millis() / 1000
 }
 
+thread_local! {
+    static STORE: std::cell::RefCell<std::collections::BTreeMap<String, String>> =
+        const { std::cell::RefCell::new(std::collections::BTreeMap::new()) };
+    static LOADED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Loads, once per isolate, each [`crate::core::platform::secrets::SHARED`] name the Worker has no secret for but binds in the Secrets Store; a name that fails to load is left out. A request arriving mid-load loads too, so none reads a partial cache.
+pub async fn load_store(env: &Env) {
+    if LOADED.with(std::cell::Cell::get) {
+        return;
+    }
+    for name in crate::core::platform::secrets::SHARED {
+        if env.secret(name).is_err()
+            && let Ok(store) = env.secret_store(name)
+            && let Ok(Some(v)) = store.get().await
+        {
+            STORE.with(|s| s.borrow_mut().insert(name.to_string(), v));
+        }
+    }
+    LOADED.with(|l| l.set(true));
+}
+
 /// A Worker secret's value.
 ///
 /// # Errors
 ///
 /// When the secret is missing or empty.
 pub fn secret(env: &Env, name: &str) -> Result<String> {
-    let v = env.secret(name)?.to_string();
+    let v = match env.secret(name) {
+        Ok(s) => s.to_string(),
+        Err(e) => STORE.with(|s| s.borrow().get(name).cloned()).ok_or(e)?,
+    };
     if v.is_empty() {
         return Err(format!("secret `{name}` is empty").into());
     }
