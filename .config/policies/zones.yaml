@@ -1,0 +1,34 @@
+description: "Private zones stay out of the tree: an instance config names a zone only as pigeon.dev, an example domain or an alias, and tests name only example domains and listed public service hosts. See .claude/decisions/2026-11-15-runtime-zoned-standalone-account-imports.md §2 and its 2026-11-19 amendment; each allow_under entry leaves at §8 step 4's scrub."
+target: tree
+rules:
+  - find:
+      match: '(^|/)config\.yaml$'
+      allow_under:
+        - workloads/
+        - infra/cloudflare/config.yaml
+      forbid_content: '^\s*(zones/[a-z0-9-]*\.|zone:\s*"?[a-z0-9-]+\.|hosts:.*[a-z0-9-]\.[a-z])'
+      except_content: '([a-z0-9-]+\.)*(pigeon\.dev|example\.(com|net|org|dev))\b'
+      ignore: ['^\.git$', '(^|/)target$', '(^|/)\.pigeon$', '(^|/)node_modules$']
+  - find:
+      match: '^src/.+/tests/'
+      allow_under:
+        - src/pigeon-agent/tests/suite/checks/checks_scope.rs
+        - src/pigeon-agent/tests/suite/infra/infra_manifest.rs
+        - src/pigeon-agent/tests/suite/infra/sites_apex.rs
+        - src/pigeon-agent/tests/suite/instance/architecture.rs
+      forbid_content: '\b[a-z0-9-]+(\.[a-z0-9-]+)*\.(com|net|org|io|ca|dev)\b'
+      except_content: '([a-z0-9-]+\.)*(example\.(com|net|org|dev)|pigeon\.dev|github\.com|json-schema\.org|w3\.org|cloudflare\.com|opentofu\.org|workers\.dev|cloudflareaccess\.com|googleapis\.com|apple\.com)\b|\b[a-z]\.(com|net|org|dev)\b|\bother\.com\b'
+      ignore: ['^\.git$', '(^|/)target$', '(^|/)\.pigeon$', '(^|/)node_modules$']
+examples:
+  pass:
+    - files:
+        config.yaml: "zones/pigeon.dev:\n  kind: cloudflare/zone\nsites/docs:\n  zone: pigeon.dev\n  hosts: [\"@\", docs]\nzones/blog:\n  private: true\nsites/blog:\n  zone: blog\n"
+        instances/x/config.yaml: "sites/s:\n  zone: example.com\n  hosts: [www.example.com]\n"
+        workloads/x/config.yaml: "zone: legacy.test.\n"
+        src/a/tests/suite/t.rs: "let u = \"https://json-schema.org/x\"; let h = \"a.example.com\"; let r = \"registry.cloudflare.com\"; let p = \"https://github.com/o/r\"; let w = \"x.workers.dev\"; let s = \"a.com\";\n"
+  fail:
+    - files: { config.yaml: "zones/shop.test.\n" }
+    - files: { config.yaml: "sites/s:\n  zone: shop.net\n" }
+    - files: { instances/x/config.yaml: "sites/s:\n  hosts: [\"@\", www.shop.org]\n" }
+    - files: { src/a/tests/suite/t.rs: "let z = \"shop-domain.com\";\n" }
+    - files: { src/a/tests/suite/t.rs: "let z = \"mail.someone.ca\";\n" }
