@@ -240,14 +240,13 @@ pub fn changed(
     previous: &std::collections::BTreeMap<String, String>,
     now: &std::collections::BTreeMap<String, serde_json::Value>,
 ) -> Vec<(String, String)> {
-    use sha2::Digest as _;
     let mut out = Vec::new();
     for (k, v) in now {
         let text = v.to_string();
         if text.len() > MAX_VALUE {
             continue;
         }
-        let d = format!("{:x}", sha2::Sha256::digest(text.as_bytes()));
+        let d = digest(v);
         if previous.get(k) != Some(&d) {
             out.push((k.clone(), d));
         }
@@ -255,6 +254,81 @@ pub fn changed(
     for (k, d) in previous {
         if !now.contains_key(k) && !d.is_empty() {
             out.push((k.clone(), String::new()));
+        }
+    }
+    out
+}
+
+/// A value's digest, as [`DIGESTS`] keeps it: SHA-256 hex of its JSON text.
+#[must_use]
+pub fn digest(value: &serde_json::Value) -> String {
+    use sha2::Digest as _;
+    format!("{:x}", sha2::Sha256::digest(value.to_string().as_bytes()))
+}
+
+/// One journal row of a `*/state` object: its `seq`, its `kind` (the key) and its `body` (the value, or `{"sealed": …}` for a [`SEALED`] key).
+#[derive(Debug, Clone, PartialEq)]
+pub struct Row {
+    /// Its place in the object's journal.
+    pub seq: u64,
+    /// The key it snapshots.
+    pub kind: String,
+    /// The key's value as journaled.
+    pub body: serde_json::Value,
+}
+
+/// The digest of each key's latest value in `rows`, taken in `seq` order: a `null` body removes the key; a [`SEALED`] key's body is first opened by `open(key, body)`, and a key `open` can't open is left out and named in the second value.
+#[must_use]
+pub fn replay(
+    rows: &[Row],
+    open: &dyn Fn(&str, &serde_json::Value) -> Option<serde_json::Value>,
+) -> (std::collections::BTreeMap<String, String>, Vec<String>) {
+    let mut sorted = rows.to_vec();
+    sorted.sort_by_key(|r| r.seq);
+    let mut map = std::collections::BTreeMap::new();
+    let mut unopened: Vec<String> = Vec::new();
+    for row in &sorted {
+        if row.body.is_null() {
+            map.remove(&row.kind);
+        } else if SEALED.contains(&row.kind.as_str()) {
+            match open(&row.kind, &row.body) {
+                Some(v) if v.is_null() => {
+                    map.remove(&row.kind);
+                }
+                Some(v) => {
+                    map.insert(row.kind.clone(), digest(&v));
+                }
+                None => {
+                    map.remove(&row.kind);
+                    if !unopened.contains(&row.kind) {
+                        unopened.push(row.kind.clone());
+                    }
+                }
+            }
+        } else {
+            map.insert(row.kind.clone(), digest(&row.body));
+        }
+    }
+    unopened.retain(|k| !map.contains_key(k));
+    (map, unopened)
+}
+
+/// Where a standby's replayed digests differ from the primary's held ones, as `<key>: replayed <r>, held <h>` (with `none` for a missing side), sorted by key; empty when they agree.
+#[must_use]
+pub fn parity(
+    replayed: &std::collections::BTreeMap<String, String>,
+    held: &std::collections::BTreeMap<String, String>,
+) -> Vec<String> {
+    let keys: std::collections::BTreeSet<&String> = replayed.keys().chain(held.keys()).collect();
+    let mut out = Vec::new();
+    for k in keys {
+        let (r, h) = (replayed.get(k), held.get(k));
+        if r != h {
+            out.push(format!(
+                "{k}: replayed {}, held {}",
+                r.map_or("none", String::as_str),
+                h.map_or("none", String::as_str)
+            ));
         }
     }
     out
@@ -310,4 +384,61 @@ pub fn snapshot_entry_at(
     value: &serde_json::Value,
 ) -> crate::control::Statement {
     entry(&state_object(instance), seq, epoch, at, key, value)
+}
+
+#[cfg(test)]
+mod replay_tests {
+    use super::*;
+    use serde_json::json;
+
+    fn row(seq: u64, kind: &str, body: serde_json::Value) -> Row {
+        Row {
+            seq,
+            kind: kind.to_string(),
+            body,
+        }
+    }
+
+    #[test]
+    fn replay_takes_each_keys_latest_value_and_a_null_removes_it() {
+        let rows = [
+            row(2, "a", json!(2)),
+            row(1, "a", json!(1)),
+            row(3, "b", json!("x")),
+            row(4, "b", json!(null)),
+        ];
+        let (map, unopened) = replay(&rows, &|_, _| None);
+        let want = std::collections::BTreeMap::from([("a".to_string(), digest(&json!(2)))]);
+        assert_eq!(map, want);
+        assert_eq!(unopened, Vec::<String>::new());
+    }
+
+    #[test]
+    fn a_sealed_key_is_digested_opened_and_named_when_it_cant_be() {
+        let rows = [
+            row(1, "devices", json!({"sealed": "s1"})),
+            row(2, "pages", json!({"sealed": "s2"})),
+        ];
+        let open = |k: &str, _: &serde_json::Value| (k == "devices").then(|| json!([1]));
+        let (map, unopened) = replay(&rows, &open);
+        let want = std::collections::BTreeMap::from([("devices".to_string(), digest(&json!([1])))]);
+        assert_eq!(map, want);
+        assert_eq!(unopened, vec!["pages".to_string()]);
+    }
+
+    #[test]
+    fn parity_names_each_differing_key_by_digest_only() {
+        let m = |p: &[(&str, &str)]| {
+            p.iter()
+                .map(|(k, v)| (k.to_string(), v.to_string()))
+                .collect::<std::collections::BTreeMap<_, _>>()
+        };
+        let replayed = m(&[("a", "1"), ("b", "2")]);
+        let held = m(&[("a", "1"), ("c", "3")]);
+        assert_eq!(
+            parity(&replayed, &held),
+            vec!["b: replayed 2, held none", "c: replayed none, held 3"]
+        );
+        assert_eq!(parity(&replayed, &replayed.clone()), Vec::<String>::new());
+    }
 }
