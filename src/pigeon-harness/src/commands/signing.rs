@@ -8,6 +8,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::Duration;
 
+use agent::core::seal;
 use agent::push::{b64url, b64url_decode};
 use agent::signing::{
     self, Grant, INTERMEDIATE_URL, Layout, ROUTE, SECURITY, State, Step, check_step, clean_plan,
@@ -119,7 +120,77 @@ fn load(args: &SigningArgs) -> Result<(), Failure> {
     Ok(())
 }
 
+/// The app's MCP door, where the sign step's OIDC token calls `release_apple`; see the users ADR's E2.
+const MCP: &str = "/v0/app/mcp";
+
+/// 32 random bytes: the seed of the run's X25519 key.
+fn seed() -> Result<[u8; 32], Failure> {
+    let mut bytes = [0u8; 32];
+    fs::File::open("/dev/urandom")
+        .and_then(|mut f| f.read_exact(&mut bytes))
+        .map_err(|e| broken(format!("no randomness: {e}")))?;
+    Ok(bytes)
+}
+
+/// The grant's bytes from `release_apple`'s JSON-RPC answer, opened with the run's key.
+fn open_answer(body: &str, private: &[u8], info: &[u8]) -> Result<Vec<u8>, Failure> {
+    let v: Value = serde_json::from_str(body)
+        .map_err(|_| Failure::Refused(format!("{MCP}: the answer isn't JSON")))?;
+    let result = &v["result"];
+    if result["isError"] == true {
+        return Err(Failure::Refused(format!(
+            "{MCP}: {}",
+            result["content"][0]["text"].as_str().unwrap_or("refused")
+        )));
+    }
+    let sealed: seal::Sealed = serde_json::from_value(result["structuredContent"].clone())
+        .map_err(|_| Failure::Refused(format!("{MCP}: the answer isn't a sealed grant")))?;
+    seal::open(private, info, &sealed).map_err(|e| Failure::Refused(format!("{MCP}: {e}")))
+}
+
 fn exchange(platform: &str, token: &str) -> Result<Grant, Failure> {
+    let (private, public) = seal::keypair(&seed()?);
+    let named =
+        || Failure::Refused("BUILDKITE_BUILD_NUMBER and BUILDKITE_COMMIT name the build".into());
+    let build: u64 = env("BUILDKITE_BUILD_NUMBER")
+        .and_then(|n| n.parse().ok())
+        .ok_or_else(named)?;
+    let commit = env("BUILDKITE_COMMIT").ok_or_else(named)?;
+    let info = seal::info(agent::core::apple::PIPELINE, build, &commit);
+
+    let agent: ureq::Agent = ureq::Agent::config_builder()
+        .http_status_as_error(false)
+        .timeout_global(Some(Duration::from_secs(30)))
+        .build()
+        .into();
+    let url = format!("{}{MCP}", platform.trim_end_matches('/'));
+    let call = serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "tools/call",
+        "params": {"name": "release_apple", "arguments": {"recipient": public}},
+    });
+    let mut response = agent
+        .post(&url)
+        .header("authorization", &format!("Bearer {token}"))
+        .header("content-type", "application/json")
+        .send(call.to_string())
+        .map_err(|e| Failure::Refused(format!("POST {MCP}: {e}")))?;
+    let status = response.status().as_u16();
+    if status != 200 {
+        eprintln!("signing: {MCP} refused with {status}; falling back to {ROUTE}");
+        return exchange_route(platform, token);
+    }
+    let body = response
+        .body_mut()
+        .read_to_string()
+        .map_err(|e| Failure::Refused(format!("POST {MCP}: {e}")))?;
+    let opened = open_answer(&body, &private, &info)?;
+    serde_json::from_slice(&opened)
+        .map_err(|_| Failure::Refused(format!("{MCP}: the opened grant isn't a grant")))
+}
+
+fn exchange_route(platform: &str, token: &str) -> Result<Grant, Failure> {
     let agent: ureq::Agent = ureq::Agent::config_builder()
         .http_status_as_error(false)
         .timeout_global(Some(Duration::from_secs(30)))
@@ -413,4 +484,39 @@ fn random() -> Result<String, Failure> {
         .and_then(|mut f| f.read_exact(&mut bytes))
         .map_err(|e| broken(format!("no randomness: {e}")))?;
     Ok(b64url(&bytes))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_sealed_answer_opens_with_the_runs_key() {
+        let (private, public) = seal::keypair(&[7; 32]);
+        let info = seal::info("p", 3, "c");
+        let sealed = seal::seal(&public, &info, b"{\"k\":1}", &[9; 32]).unwrap();
+        let body = serde_json::json!({
+            "jsonrpc": "2.0", "id": 1,
+            "result": {"structuredContent": sealed, "isError": false}
+        })
+        .to_string();
+        assert_eq!(
+            open_answer(&body, &private, &info).ok(),
+            Some(b"{\"k\":1}".to_vec())
+        );
+        assert!(open_answer(&body, &private, &seal::info("p", 4, "c")).is_err());
+    }
+
+    #[test]
+    fn an_error_answer_is_refused() {
+        let body = serde_json::json!({
+            "jsonrpc": "2.0", "id": 1,
+            "result": {
+                "content": [{"type": "text", "text": "no archived, unredeemed release"}],
+                "isError": true
+            }
+        })
+        .to_string();
+        assert!(open_answer(&body, &[0; 32], b"i").is_err());
+    }
 }
