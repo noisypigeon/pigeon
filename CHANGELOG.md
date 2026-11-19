@@ -10,6 +10,7 @@
 - agent v0.1.70
 - agent v0.1.71
 - agent v0.1.72
+- agent v0.1.73
 
 ### Merged
 
@@ -51,6 +52,7 @@
 - feat(catalog): the pigeon/color kind, and the binder resolves a colour spec's $deployment against its colour, then its platform (!1310) ([d85e65e](https://github.com/noisypigeon/pigeon/commit/d85e65e8e115a89115077fa86d455b3714745ff6)) · agent
 - feat(infra): the color/green unit, and green.platform.pigeon.dev under the platform's Access (!1311) ([6b8d40f](https://github.com/noisypigeon/pigeon/commit/6b8d40f3e1cd7b6a20d37706fb6d2d809d1861cf))
 - feat(platform): a platform run plans and applies a colour unit too (!1312) ([562fcca](https://github.com/noisypigeon/pigeon/commit/562fcca55c7e232ac8092014651be1a9a696ac5c)) · agent
+- feat(worker): secrets.migrate copies the shared Worker secrets into the Secrets Store in the Worker, with the owner's passkey (!1307) ([4a88996](https://github.com/noisypigeon/pigeon/commit/4a88996f9219b064ae081f687492de0aca9e266b)) · agent
 
 ## 2026-11-18
 
