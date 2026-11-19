@@ -41,6 +41,9 @@ pub async fn serve(state: &State, path: &str, body: Value) -> Result<Response> {
     if path.starts_with("/members/bind/") {
         return binding(state, path, &body).await;
     }
+    if path.starts_with("/members/grant/") {
+        return granting(state, path, &body).await;
+    }
     let storage = state.storage();
     let accounts: Accounts = storage.get(account::STORE).await?.unwrap_or_default();
     let devices: Devices = storage.get(DEVICES).await?.unwrap_or_default();
@@ -372,6 +375,73 @@ async fn binding(state: &State, path: &str, body: &Value) -> Result<Response> {
             } else {
                 members
                     .bind_hash(&offer.account, &offer.client_hash, &by, t)
+                    .map(|(m, _)| m)
+            };
+            match done {
+                Ok(members) => {
+                    storage.put(member::STORE, &members).await?;
+                    Response::from_json(&offer)
+                }
+                Err(why) => refused(&why, 409),
+            }
+        }
+        _ => refused("not found", 404),
+    }
+}
+
+/// Where the `Instance` keeps `member.grant`'s offers.
+const GRANT_OFFERS: &str = "members.grant";
+
+/// `/members/grant/offer`, `/peek` and `/grant`: `member.grant`'s offers, and the grant or
+/// revocation the Administrator's passkey redeems; see
+/// `.claude/decisions/2026-11-18-security-users-levels-capability-grants.md`, its "rest in
+/// parallel" amendment.
+async fn granting(state: &State, path: &str, body: &Value) -> Result<Response> {
+    let storage = state.storage();
+    let mut offers: member::grant::Offers = storage.get(GRANT_OFFERS).await?.unwrap_or_default();
+    let t = now();
+    let token = s(body, "token");
+    match path {
+        "/members/grant/offer" => {
+            let Ok(draft) = serde_json::from_value::<member::grant::Offer>(body["draft"].clone())
+            else {
+                return refused("the offer is malformed", 400);
+            };
+            let expires = body["expires"].as_u64().unwrap_or(t);
+            match offers.offer(draft, &token, t, expires) {
+                Ok(o) => {
+                    storage.put(GRANT_OFFERS, &offers).await?;
+                    Response::from_json(&o)
+                }
+                Err(why) => refused(&why, 400),
+            }
+        }
+        "/members/grant/peek" => match offers.peek(&token, t) {
+            Ok(o) => Response::from_json(o),
+            Err(why) => refused(&why, 403),
+        },
+        "/members/grant/grant" => {
+            let offer = match offers.take(&token, t) {
+                Ok(o) => o,
+                Err(why) => return refused(&why, 403),
+            };
+            storage.put(GRANT_OFFERS, &offers).await?;
+            let members: Members = storage.get(member::STORE).await?.unwrap_or_default();
+            let Some(by) = member::shadow::administrator(&members).map(str::to_string) else {
+                return refused("no administrator", 409);
+            };
+            let done = if offer.revoke {
+                members.revoke_grant(&offer.account, &offer.capability, &by, t)
+            } else {
+                members
+                    .grant(
+                        &offer.account,
+                        &offer.capability,
+                        offer.scope.as_deref(),
+                        offer.until,
+                        &by,
+                        t,
+                    )
                     .map(|(m, _)| m)
             };
             match done {

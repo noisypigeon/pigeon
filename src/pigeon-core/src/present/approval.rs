@@ -17,6 +17,7 @@ pub const PREFIXES: &[&str] = &[
     "pool.",
     "deploy.",
     "service.",
+    "member.",
 ];
 
 /// How many of this family's operations have no presenter yet; each brief that presents some lowers it.
@@ -46,6 +47,8 @@ pub const NAMES: &[&str] = &[
     "pool.resume",
     "service.bind",
     "service.unbind",
+    "member.grant",
+    "member.revoke",
     "deploy.retry",
 ];
 
@@ -142,6 +145,7 @@ fn build(op: &str, v: &Value) -> Value {
         ),
         "pool.pause" => card("Pool paused", None, scalars(v), vec![]),
         "service.bind" | "service.unbind" => service_bind(v),
+        "member.grant" | "member.revoke" => member_grant(v),
         "pool.resume" => card(
             "Resume offered",
             opt_str(&v["offer"], "pool"),
@@ -183,6 +187,33 @@ fn s(v: &Value, k: &str) -> String {
 }
 
 /// `v[k]` when a string.
+/// `member.grant` and `member.revoke`'s offer, as a card.
+fn member_grant(v: &Value) -> Value {
+    let o = &v["offer"];
+    let mut fields = vec![field(
+        "capability",
+        text(opt_str(o, "capability").unwrap_or_default()),
+    )];
+    if let Some(scope) = opt_str(o, "scope") {
+        fields.push(field("scope", text(scope)));
+    }
+    if o["until"].is_u64() {
+        fields.push(field("until", time(unum(o, "until"))));
+    }
+    fields.push(field("expires", time(unum(o, "expires"))));
+    fields.extend(pending_link(&v["pending"]));
+    card(
+        if o["revoke"].as_bool() == Some(true) {
+            "Revocation offered"
+        } else {
+            "Grant offered"
+        },
+        opt_str(o, "account"),
+        fields,
+        vec![],
+    )
+}
+
 /// `service.bind` and `service.unbind`'s offer, as a card.
 fn service_bind(v: &Value) -> Value {
     card(

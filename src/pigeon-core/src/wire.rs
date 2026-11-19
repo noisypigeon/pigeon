@@ -251,7 +251,7 @@ const GRANT: [&str; 7] = [
     "change.front",
 ];
 
-const PAGE: [&str; 10] = [
+const PAGE: [&str; 12] = [
     "mandate.propose",
     "lane.request",
     "ci.window",
@@ -262,6 +262,8 @@ const PAGE: [&str; 10] = [
     "platform.apply",
     "service.bind",
     "service.unbind",
+    "member.grant",
+    "member.revoke",
 ];
 
 /// One operation a surface may request.
@@ -350,6 +352,7 @@ impl Operation {
             || self.name.starts_with("bench.")
             || self.name.starts_with("pool.")
             || self.name.starts_with("service.")
+            || self.name.starts_with("member.")
             || self.name.starts_with("approval.")
             || self.name.starts_with("push.")
     }
@@ -702,6 +705,32 @@ const CATALOG: &[Operation] = &[
         summary: "Ask the Administrator to revoke the binding of the Access service token whose client ID hashes to `client_hash`; answers with the page's link, granted with a passkey",
         args: &[
             arg("client_hash", true, Kind::String),
+            arg("ticket", false, Kind::String),
+        ],
+        view: View::Card,
+    },
+    Operation {
+        name: "member.grant",
+        engine: Engine::Agent,
+        effect: Effect::Plan,
+        summary: "Ask the Administrator to grant Standard member `account` the capability `capability` (for `scope`, when it takes one; until `until`, Unix seconds, or for good); answers with the page's link, granted with a passkey",
+        args: &[
+            arg("account", true, Kind::String),
+            arg("capability", true, Kind::String),
+            arg("scope", false, Kind::String),
+            arg("until", false, Kind::Number),
+            arg("ticket", false, Kind::String),
+        ],
+        view: View::Card,
+    },
+    Operation {
+        name: "member.revoke",
+        engine: Engine::Agent,
+        effect: Effect::Plan,
+        summary: "Ask the Administrator to revoke every live grant of `capability` from member `account`; answers with the page's link, granted with a passkey",
+        args: &[
+            arg("account", true, Kind::String),
+            arg("capability", true, Kind::String),
             arg("ticket", false, Kind::String),
         ],
         view: View::Card,

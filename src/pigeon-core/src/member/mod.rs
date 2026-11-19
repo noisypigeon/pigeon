@@ -11,6 +11,7 @@ use sha2::{Digest as _, Sha256};
 mod tests;
 
 pub mod bind;
+pub mod grant;
 pub mod handover;
 pub mod join;
 pub mod listing;

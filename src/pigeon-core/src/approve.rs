@@ -745,6 +745,32 @@ job starts; the apply's page names that commit.</p>"
     });
 }
 
+/// `/member-grant/<id>`: the Administrator grants a Standard member a capability, or revokes it,
+/// with a passkey; see `.claude/decisions/2026-11-18-security-users-levels-capability-grants.md`,
+/// its "rest in parallel" amendment.
+#[must_use]
+pub fn member_grant_page(o: &crate::member::grant::Offer, token: &str) -> String {
+    let title = o.title();
+    let what = if o.revoke {
+        "Every live grant of this capability ends at once."
+    } else {
+        "The member may use this capability, within its scope and until its end. It grants no permission."
+    };
+    let b = format!(
+        "<h1>{}</h1><p>{}</p><form method=\"post\" action=\"{}{}\">\
+<input type=\"hidden\" name=\"grant\" value=\"{}\">{}{CODE_FIELD}\
+<button type=\"submit\">Approve</button></form>\
+<p><small><a href=\"/approvals\">Everything waiting</a></small></p>",
+        escape(&title),
+        escape(what),
+        crate::member::grant::PAGE,
+        o.id,
+        escape(token),
+        passkey_button(&crate::approval::passkeys::grant_purpose(token))
+    );
+    shell(&title, &b)
+}
+
 /// `/service-bind/<id>`: the Administrator binds, or revokes, a service token by its client ID's
 /// hash, with a passkey; see
 /// `.claude/decisions/2026-11-18-security-users-levels-capability-grants.md`, its step 9

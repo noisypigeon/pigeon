@@ -105,6 +105,7 @@ fn approval(name: &str) -> Option<&'static [Arg]> {
         "platform.apply" => Some(PLATFORM_APPLY),
         "pool.resume" => Some(POOL_RESUME),
         "service.bind" | "service.unbind" => Some(SERVICE_BIND),
+        "member.grant" | "member.revoke" => Some(MEMBER_GRANT),
         "deploy.retry" => Some(DEPLOY_RETRY),
         _ => None,
     }
@@ -627,6 +628,18 @@ const BIND_OFFER: &[Arg] = &[
 ];
 const SERVICE_BIND: &[Arg] = &[
     arg("offer", false, Kind::Object(BIND_OFFER)),
+    arg("pending", false, Kind::Object(LINK_ONLY)),
+];
+const GRANT_OFFER: &[Arg] = &[
+    arg("account", false, Kind::String),
+    arg("capability", false, Kind::String),
+    arg("scope", false, Kind::String),
+    arg("until", false, Kind::Number),
+    arg("revoke", false, Kind::Bool),
+    arg("expires", false, Kind::Number),
+];
+const MEMBER_GRANT: &[Arg] = &[
+    arg("offer", false, Kind::Object(GRANT_OFFER)),
     arg("pending", false, Kind::Object(LINK_ONLY)),
 ];
 const RETRY_PIPELINE: &[Arg] = &[arg("target", false, Kind::String)];

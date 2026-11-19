@@ -234,6 +234,25 @@ pub fn ci_window(o: &crate::ci_window::Offer) -> Value {
     page(&title, &what, "Approve", &[], &[], false, None)
 }
 
+/// What `/member-grant/<id>` shows: the Administrator grants a Standard member a capability, or
+/// revokes it.
+#[must_use]
+pub fn member_grant(o: &crate::member::grant::Offer) -> Value {
+    page(
+        &o.title(),
+        if o.revoke {
+            "Every live grant of this capability ends at once; the member's next call that needs it is refused."
+        } else {
+            "The member may use this capability, within its scope and until its end. It grants no permission: approving stays the Administrator's alone."
+        },
+        "Approve",
+        &[],
+        &[],
+        false,
+        None,
+    )
+}
+
 /// What `/service-bind/<id>` shows: the Administrator binds, or revokes, a service token by its
 /// client ID's hash.
 #[must_use]

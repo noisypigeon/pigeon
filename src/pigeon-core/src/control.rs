@@ -238,6 +238,15 @@ pub enum Routed {
         /// Its arguments.
         args: Map<String, Value>,
     },
+    /// A capability grant or revocation asked of the Administrator, with its arguments; see
+    /// `.claude/decisions/2026-11-18-security-users-levels-capability-grants.md`, its "rest in
+    /// parallel" amendment.
+    MemberGrant {
+        /// The operation.
+        operation: String,
+        /// Its arguments.
+        args: Map<String, Value>,
+    },
     /// A capacity pool operation, with its arguments; see
     /// `.claude/decisions/2026-11-15-development-capacity-pools-hard-spend-cap.md` §8.
     Pool {
@@ -500,6 +509,10 @@ pub fn route(request: &Request, by: &str, at: u64) -> Result<Routed, String> {
             args: a.clone(),
         }),
         "service.bind" | "service.unbind" => Ok(Routed::Service {
+            operation: request.operation.clone(),
+            args: a.clone(),
+        }),
+        "member.grant" | "member.revoke" => Ok(Routed::MemberGrant {
             operation: request.operation.clone(),
             args: a.clone(),
         }),

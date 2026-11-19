@@ -36,6 +36,7 @@ mod listed;
 mod macos;
 mod main_run;
 mod mandates;
+mod member_grants;
 mod members;
 mod merges;
 mod minting;
@@ -179,6 +180,7 @@ const PAGES: &[&[Route]] = &[
     minting::PAGES,
     pool_ops::PAGES,
     services::PAGES,
+    member_grants::PAGES,
 ];
 
 /// The owner's link to the grant page `path` (its path and query): the web client at `/app`,
@@ -1193,6 +1195,13 @@ async fn dispatch(
             args,
         } => {
             let (status, v) = services::run(env, s, &op, &args).await?;
+            Ok((None, respond(operation, status, v)))
+        }
+        Routed::MemberGrant {
+            operation: op,
+            args,
+        } => {
+            let (status, v) = member_grants::run(env, s, &op, &args).await?;
             Ok((None, respond(operation, status, v)))
         }
     }
