@@ -9,9 +9,11 @@ use super::platform::{self, Settings, json_request, now};
 use super::{approve as page, elicit};
 use crate::access::Identity;
 use crate::approve::{self, Waiting};
+use crate::core::approval::hold::{self, Streak};
 use crate::core::approval::mandates::{Decision, Mandate, Mandates};
 use crate::core::approval::windows::{self, SPAN, Window, Windows};
 use crate::core::change::Change;
+use crate::core::deploy::serving::Serving;
 
 /// The storage key of every mandate.
 const MANDATES: &str = "mandates";
@@ -210,6 +212,42 @@ async fn tell(env: &Env, s: &Settings, kind: &str, title: &str, said: &str) {
         worker::console_error!("{kind}: {e}");
     }
     super::push::notify(env, s, title, said, "/approvals").await;
+}
+
+/// After the deploy of `sha` failed for `why`: holds every window and mandate when
+/// [`hold::holds`] says so, else leaves Auto on and tells the owner what still serves; see
+/// .claude/decisions/2026-11-19-security-auto-held-when-platform-down.md §2 and §3.
+///
+/// # Errors
+///
+/// When a binding fails.
+pub async fn deploy_failed(
+    env: &Env,
+    s: &Settings,
+    sha: &str,
+    why: &str,
+    serving: Option<&Serving>,
+    streak: Streak,
+    pipeline: bool,
+) -> Result<()> {
+    if let Some(reason) = hold::holds(serving, streak, pipeline, now()) {
+        return hold_all(env, s, sha, &format!("{why}; held: {reason}")).await;
+    }
+    let short = sha.get(..12).unwrap_or(sha);
+    let up = serving.map(|v| v.up().join(", ")).unwrap_or_default();
+    let said = format!(
+        "the deploy of {short} failed: {why}; Auto stays on while {up} serve; {}",
+        streak.next()
+    );
+    tell(
+        env,
+        s,
+        "auto.strained",
+        "Deploy failed; Auto stays on",
+        &said,
+    )
+    .await;
+    Ok(())
 }
 
 /// Holds every active window and mandate after the deploy of `sha` failed for `why`; see the

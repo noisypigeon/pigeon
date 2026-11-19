@@ -68,10 +68,13 @@ belong in the ADR, never in the file.
 - Under a window a session never calls `change_authorize` or
   `change_approve`: it asks to merge (`change_merge`), and the control plane
   approves, per the same ADR's §2.
-- Auto is standing: on until the owner pauses it, held by a failed deploy,
-  never covering the owner tier or guarded paths. An owner-only decision or
-  action is filed with `owner_ask`, never left in a last message. See
-  [`2026-11-15-security-standing-auto-owner-flags.md`](.claude/decisions/2026-11-15-security-standing-auto-owner-flags.md).
+- Auto is standing: on until the owner pauses it, held by a failed deploy
+  only when no colour serves or `main` keeps failing, never covering the
+  owner tier or the gate. An owner-only decision or action is filed with
+  `owner_ask`, never left in a last message. See
+  [`2026-11-15-security-standing-auto-owner-flags.md`](.claude/decisions/2026-11-15-security-standing-auto-owner-flags.md)
+  and
+  [`2026-11-19-security-auto-held-when-platform-down.md`](.claude/decisions/2026-11-19-security-auto-held-when-platform-down.md).
 
 ## Briefs and model classes
 

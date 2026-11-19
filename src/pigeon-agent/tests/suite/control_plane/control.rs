@@ -193,6 +193,8 @@ fn reports_become_events() {
         built_on: None,
         ledger: None,
         pool: None,
+        serving: None,
+        pipeline: false,
         patch: None,
         own: None,
     };
@@ -434,6 +436,8 @@ fn deploy_report(outcome: Outcome) -> Report {
         built_on: None,
         ledger: None,
         pool: None,
+        serving: None,
+        pipeline: false,
         patch: None,
         own: None,
     }

@@ -863,6 +863,13 @@ pub struct Report {
     /// For the pool job: what it did.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pool: Option<crate::pool::job::Pooled>,
+    /// For a deploy of `main`: what serves once it ended; none holds Auto on a failure. See
+    /// .claude/decisions/2026-11-19-security-auto-held-when-platform-down.md §1.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub serving: Option<crate::deploy::serving::Serving>,
+    /// For a deploy of `main`: whether its range touches the deploy pipeline.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub pipeline: bool,
 }
 
 impl Report {
@@ -894,6 +901,8 @@ impl Report {
             built_on: None,
             ledger: None,
             pool: None,
+            serving: None,
+            pipeline: false,
         }
     }
 }

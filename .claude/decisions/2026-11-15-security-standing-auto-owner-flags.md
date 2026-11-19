@@ -481,3 +481,21 @@ R2's signing (`sites/credentials.rs`) stays out: it proves nothing about the
 owner. A gate file merges under `guarded: <file>`, so briefs no longer touch
 `worker/change.rs`. Its work goes to a planner and the owner's passkey,
 which the owner accepted.
+
+### 2026-11-19: A failed deploy holds Auto only when no colour serves, or `main` keeps failing
+
+[`2026-11-19-security-auto-held-when-platform-down.md`](2026-11-19-security-auto-held-when-platform-down.md)
+replaces the first row of §3's table. A failed deploy holds Auto when any of
+these holds:
+
+- the platform can't serve: no colour's own `/healthz` is ok, or the front
+  doesn't forward to a healthy colour;
+- the deploy changed the deploy pipeline;
+- 3 deploys in a row have failed;
+- `main` has gone 2 hours without a passed deploy.
+
+Any other failure leaves Auto on. It is still pushed, and listed in every
+digest until a deploy passes. Everything else in §3 is unchanged: what a hold
+lets through, how it resumes, and when it pauses. What Auto covers (§2 and the
+2026-11-16 amendments) is unchanged too. The owner approves this change with
+a passkey, because it loosens an approval rule.

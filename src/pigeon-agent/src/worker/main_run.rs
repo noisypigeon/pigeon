@@ -1156,6 +1156,38 @@ impl MainRun {
 }
 
 impl MainRun {
+    /// After the deploy of `sha` ended: a passed one resumes Auto; a failed one holds it only when
+    /// nothing serves or main is stuck; a superseded one does neither. See
+    /// .claude/decisions/2026-11-19-security-auto-held-when-platform-down.md §2 and the deploys
+    /// ADR's 2026-11-16 amendment.
+    async fn auto_after(&self, p: &control::Pipeline, sha: &str, report: &Report) {
+        let auto = match platform::Settings::from(&self.env) {
+            _ if report.outcome == Outcome::Superseded => Ok(()),
+            Ok(s) if report.outcome == Outcome::Passed => {
+                super::mandates::resume_all(&self.env, &s, sha).await
+            }
+            Ok(s) => {
+                let why = control::failure(report);
+                let streak = crate::core::approval::hold::Streak::of(&p.history);
+                let serving = report.serving.as_ref();
+                super::mandates::deploy_failed(
+                    &self.env,
+                    &s,
+                    sha,
+                    &why,
+                    serving,
+                    streak,
+                    report.pipeline,
+                )
+                .await
+            }
+            Err(e) => Err(e),
+        };
+        if let Err(e) = auto {
+            worker::console_error!("auto: {e}");
+        }
+    }
+
     /// The alarm's work, for the color that holds the lease.
     async fn run_alarm(&self) -> Result<Response> {
         let mut p = self.pipeline().await?;
@@ -1206,23 +1238,7 @@ impl MainRun {
                         self.release_target(&sha).await?;
                         self.ios_deployed(&sha, report.ios).await?;
                     }
-                    // A failed deploy holds Auto, and a passed one resumes it; see the iOS
-                    // approvals ADR's 2026-11-15 amendment. A superseded one does neither; see
-                    // the deploys ADR's 2026-11-16 amendment.
-                    let auto = match platform::Settings::from(&self.env) {
-                        _ if report.outcome == Outcome::Superseded => Ok(()),
-                        Ok(s) if report.outcome == Outcome::Passed => {
-                            super::mandates::resume_all(&self.env, &s, &sha).await
-                        }
-                        Ok(s) => {
-                            let why = control::failure(&report);
-                            super::mandates::hold_all(&self.env, &s, &sha, &why).await
-                        }
-                        Err(e) => Err(e),
-                    };
-                    if let Err(e) = auto {
-                        worker::console_error!("auto: {e}");
-                    }
+                    self.auto_after(&p, &sha, &report).await;
                     next = p.start();
                 }
                 Ok(None) => {}
