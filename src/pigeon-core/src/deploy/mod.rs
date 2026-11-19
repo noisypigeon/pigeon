@@ -4,6 +4,7 @@
 pub mod gate;
 pub mod scope;
 pub mod ship;
+pub mod standby;
 pub mod testmaps;
 pub mod versions;
 

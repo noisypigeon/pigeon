@@ -66,6 +66,9 @@ pub struct Spec {
     /// A forwarder's host: it deploys whole and is checked by `GET https://<host>/healthz` answering `ok`, which the Worker it forwards to answers; see .claude/decisions/2026-11-18-runtime-independent-blue-green-workers.md, its 9a amendment.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub forwards: Option<String>,
+    /// Whether it is one of the instance's colors, which the lease chooses between; a deploy goes to the one the lease doesn't name. See .claude/decisions/2026-11-18-runtime-independent-blue-green-workers.md, its step 10 amendment.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub color: bool,
     /// Cron Triggers.
     #[serde(default)]
     pub crons: Vec<String>,
