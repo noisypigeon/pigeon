@@ -711,3 +711,18 @@ there.
   count is 33: the control Worker's 35 secrets, less `DEPLOY_OUTPUTS` and
   `DEPLOY_IMAGES`. `journal-seal` and `granter` are already store bindings,
   not Worker secrets.
+
+### 2026-11-19: Review of !1325 against !1319: they agree
+
+!1325 restores pigeon-green's spec and makes the architecture graph, and its
+coverage check, skip colour specs. It touches none of the paths
+.claude/decisions/2026-11-15-runtime-zoned-standalone-account-imports.md
+governs (`apex.rs`, `adopt.rs`, `git.rs`, the zone and git-repo kinds). Where
+the two meet, they agree:
+
+- `apex.rs` reads the zone's hosts from `pigeon/platform` units' `domains`.
+  green.platform.pigeon.dev is platform/blue's `domains[4]` (!1311), so the
+  zone already accounts for the colour's host. A `pigeon/color` unit adds no
+  zone record of its own; its custom domain is created by its Worker's deploy.
+- Zone imports (§5) and the cutover (§8) see the colour's custom domain as one
+  of the Worker custom domains they already support.
