@@ -64,7 +64,10 @@
             "AAAA",
             "CNAME",
             "MX",
-            "TXT"
+            "TXT",
+            "SRV",
+            "CAA",
+            "NS"
           ]
         },
         "content": {
@@ -93,6 +96,13 @@
         },
         "proxied": {
           "type": "boolean"
+        },
+        "data": {
+          "type": "object"
+        },
+        "comment": {
+          "type": "string",
+          "maxLength": 100
         }
       }
     }
@@ -141,7 +151,9 @@
           "content": "$item.content",
           "ttl": "$item.ttl",
           "priority": "$item.priority",
-          "proxied": "$item.proxied"
+          "proxied": "$item.proxied",
+          "data": "$item.data",
+          "comment": "$item.comment"
         }
       },
       "zone_rulesets": {

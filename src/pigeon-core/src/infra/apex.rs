@@ -31,7 +31,9 @@ pub const PLACEHOLDER_ZONE_ID: &str = "00000000000000000000000000000000";
 
 /// The kind whose `domains` a zone claims; see `.claude/decisions/2026-11-13-runtime-zone-vendor-dns-placements.md` §4.
 const PLATFORM_KIND: &str = "pigeon/platform";
-const RECORD_TYPES: [&str; 5] = ["A", "AAAA", "CNAME", "MX", "TXT"];
+const RECORD_TYPES: [&str; 8] = ["A", "AAAA", "CNAME", "MX", "TXT", "SRV", "CAA", "NS"];
+const DATA_TYPES: [&str; 2] = ["SRV", "CAA"];
+const CAA_TAGS: [&str; 3] = ["issue", "issuewild", "iodef"];
 const ADDRESS_TYPES: [&str; 3] = ["A", "AAAA", "CNAME"];
 
 static NAME: LazyLock<Regex> =
@@ -350,6 +352,9 @@ pub enum ClaimType {
     /// A `v=DMARC1` `TXT`.
     #[serde(rename = "DMARC")]
     Dmarc,
+    /// A `CAA`.
+    #[serde(rename = "CAA")]
+    Caa,
 }
 
 impl ClaimType {
@@ -359,6 +364,7 @@ impl ClaimType {
             Self::Mx => "MX",
             Self::Spf => "SPF",
             Self::Dmarc => "DMARC",
+            Self::Caa => "CAA",
         }
     }
 }
@@ -386,13 +392,18 @@ pub struct RecordSpec {
     #[serde(rename = "type")]
     pub kind: String,
     /// Its content, with `${input}` placeholders.
-    pub content: String,
+    #[serde(default)]
+    pub content: Option<String>,
     /// Its TTL.
     pub ttl: Option<i64>,
     /// Its priority.
     pub priority: Option<i64>,
     /// Whether Cloudflare proxies it.
     pub proxied: Option<bool>,
+    /// SRV's or CAA's fields.
+    pub data: Option<Value>,
+    /// A note, at most 100 characters.
+    pub comment: Option<String>,
 }
 
 /// A record being assembled: content is already an HCL template.
@@ -407,6 +418,8 @@ struct Rec {
     ttl: i64,
     priority: Option<i64>,
     proxied: Option<bool>,
+    data: Option<Value>,
+    comment: Option<String>,
 }
 
 /// A resolved input value.
@@ -515,7 +528,7 @@ pub fn check_preset(service: &str, p: &Preset) -> Vec<String> {
                 "preset `{service}`: record key `{key}` is not kebab-case"
             ));
         }
-        for c in PLACE.captures_iter(&r.content) {
+        for c in PLACE.captures_iter(r.content.as_deref().unwrap_or_default()) {
             if !p.inputs.contains_key(&c[1]) {
                 out.push(format!(
                     "preset `{service}`: record `{key}` names unknown input `{}`",
@@ -660,6 +673,7 @@ fn implied_claim(kind: &str, content: Option<&str>) -> Option<ClaimType> {
     }
     match (kind, content) {
         ("MX", _) => Some(ClaimType::Mx),
+        ("CAA", _) => Some(ClaimType::Caa),
         ("TXT", Some(c)) if c.starts_with("v=spf1") => Some(ClaimType::Spf),
         ("TXT", Some(c)) if c.starts_with("v=DMARC1") => Some(ClaimType::Dmarc),
         _ => None,
@@ -837,8 +851,12 @@ impl Expansion {
                 }
             }
             for (key, r) in &preset.records {
-                if let Some(content) = fill(&r.content, &values) {
-                    let raw = fill_raw(&r.content, &values, &ex.secrets);
+                if let Some(content) = fill(r.content.as_deref().unwrap_or_default(), &values) {
+                    let raw = fill_raw(
+                        r.content.as_deref().unwrap_or_default(),
+                        &values,
+                        &ex.secrets,
+                    );
                     let k = format!("{service}-{key}");
                     if let Some(prev) = ex.recs.get(&k) {
                         ex.problems.push(format!(
@@ -858,6 +876,8 @@ impl Expansion {
                             ttl: r.ttl.unwrap_or(1),
                             priority: r.priority,
                             proxied: r.proxied,
+                            data: r.data.clone(),
+                            comment: r.comment.clone(),
                         },
                     );
                 }
@@ -946,6 +966,8 @@ impl Expansion {
                                 ttl: 1,
                                 priority: None,
                                 proxied: Some(proxied),
+                                data: None,
+                                comment: None,
                             },
                         );
                     }
@@ -986,15 +1008,22 @@ impl Expansion {
                 ));
                 continue;
             }
-            let (Some(name), Some(kind), Some(content)) = (
+            let (Some(name), Some(kind)) = (
                 o.get("name").and_then(Value::as_str),
                 o.get("type").and_then(Value::as_str),
-                o.get("content").map(content_of),
             ) else {
-                ex.problems
-                    .push(format!("{at}: a new record needs name, type and content"));
+                ex.problems.push(format!(
+                    "{at}: a new record needs name, type and content or data"
+                ));
                 continue;
             };
+            if !o.contains_key("content") && !o.contains_key("data") {
+                ex.problems.push(format!(
+                    "{at}: a new record needs name, type and content or data"
+                ));
+                continue;
+            }
+            let content = o.get("content").map(content_of).unwrap_or_default();
             let raw = o.get("content").and_then(|c| raw_of(c, &ex.secrets));
             let mut rec = Rec {
                 owner: at.clone(),
@@ -1005,6 +1034,8 @@ impl Expansion {
                 ttl: 1,
                 priority: None,
                 proxied: None,
+                data: None,
+                comment: None,
             };
             Rec::merge(&mut rec, o);
             ex.recs.insert(key.clone(), rec);
@@ -1029,6 +1060,18 @@ impl Expansion {
                 ));
             }
         }
+        for (ns_key, ns) in ex.recs.iter().filter(|(_, r)| r.kind == "NS") {
+            for (key, r) in ex.recs.iter().filter(|(k, _)| k != &ns_key) {
+                if (r.kind != "NS" && r.name == ns.name)
+                    || r.name.ends_with(&format!(".{}", ns.name))
+                {
+                    ex.problems.push(format!(
+                        "record `{key}`: {} is delegated by NS ({ns_key})",
+                        r.name
+                    ));
+                }
+            }
+        }
         let mut seen: BTreeMap<(String, ClaimType), String> = BTreeMap::new();
         for (name, kind, owner) in std::mem::take(&mut ex.claims) {
             match seen.get(&(name.clone(), kind)) {
@@ -1051,10 +1094,12 @@ impl Expansion {
                         json!({
                             "name": fqdn(&r.name, zone),
                             "type": r.kind,
-                            "content": r.content,
+                            "content": (!r.content.is_empty()).then(|| r.content.clone()),
                             "ttl": r.ttl,
                             "priority": r.priority,
                             "proxied": r.proxied.unwrap_or(false),
+                            "data": r.data,
+                            "comment": r.comment,
                         }),
                     );
                 }
@@ -1076,6 +1121,14 @@ impl Rec {
                 ex.priority = None;
             }
             ex.kind = t.to_string();
+            if DATA_TYPES.contains(&t) {
+                if !o.contains_key("content") {
+                    ex.content = String::new();
+                    ex.raw = None;
+                }
+            } else if !o.contains_key("data") {
+                ex.data = None;
+            }
         }
         if let Some(c) = o.get("content") {
             ex.content = content_of(c);
@@ -1090,6 +1143,12 @@ impl Rec {
         }
         if let Some(p) = o.get("proxied").and_then(Value::as_bool) {
             ex.proxied = Some(p);
+        }
+        if let Some(d) = o.get("data") {
+            ex.data = (!d.is_null()).then(|| d.clone());
+        }
+        if let Some(c) = o.get("comment") {
+            ex.comment = c.as_str().map(str::to_string);
         }
     }
 }
@@ -1230,8 +1289,78 @@ fn check_record(r: &Rec, zone: &str) -> Result<(), String> {
     if r.proxied == Some(true) && !ADDRESS_TYPES.contains(&r.kind.as_str()) {
         return Err("only A, AAAA and CNAME records can be proxied".into());
     }
-    if r.content.is_empty() {
-        return Err("content is empty".into());
+    if !r.content.is_empty() && r.data.is_some() {
+        return Err("a record takes content or data, never both".into());
+    }
+    if DATA_TYPES.contains(&r.kind.as_str()) {
+        let Some(data) = &r.data else {
+            return Err(format!("a {} record needs data", r.kind));
+        };
+        check_data(&r.kind, data)?;
+    } else {
+        if r.data.is_some() {
+            return Err(format!("a {} record takes content, not data", r.kind));
+        }
+        if r.content.is_empty() {
+            return Err("content is empty".into());
+        }
+    }
+    if r.kind == "NS" && r.name == "@" {
+        return Err("an NS record can't sit at @".into());
+    }
+    if r.comment
+        .as_deref()
+        .is_some_and(|c| c.chars().count() > 100)
+    {
+        return Err("comment is longer than 100 characters".into());
+    }
+    Ok(())
+}
+
+/// SRV's and CAA's `data`.
+fn check_data(kind: &str, d: &Value) -> Result<(), String> {
+    let Some(m) = d.as_object() else {
+        return Err("data must be a map".into());
+    };
+    let srv = kind == "SRV";
+    let all: [&str; 4] = if srv {
+        ["priority", "weight", "port", "target"]
+    } else {
+        ["flags", "tag", "value", ""]
+    };
+    let all = if srv { &all[..] } else { &all[..3] };
+    for k in m.keys() {
+        if !all.contains(&k.as_str()) {
+            return Err(format!("unknown data key `{k}`"));
+        }
+    }
+    for k in all {
+        if !m.contains_key(*k) {
+            return Err(format!("data needs `{k}`"));
+        }
+    }
+    if srv {
+        for k in ["priority", "weight", "port"] {
+            if m[k].as_u64().is_none_or(|n| n > 65_535) {
+                return Err(format!("data `{k}` must be 0 to 65535"));
+            }
+        }
+        if !m["target"]
+            .as_str()
+            .is_some_and(|t| t != "@" && HOST.is_match(t))
+        {
+            return Err("data `target` is not a DNS name".into());
+        }
+    } else {
+        if m["flags"].as_u64().is_none_or(|n| n > 255) {
+            return Err("data `flags` must be 0 to 255".into());
+        }
+        if !m["tag"].as_str().is_some_and(|t| CAA_TAGS.contains(&t)) {
+            return Err("data `tag` must be issue, issuewild or iodef".into());
+        }
+        if m["value"].as_str().is_none_or(str::is_empty) {
+            return Err("data `value` is empty".into());
+        }
     }
     Ok(())
 }

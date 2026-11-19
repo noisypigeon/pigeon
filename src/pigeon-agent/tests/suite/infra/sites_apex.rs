@@ -187,7 +187,7 @@ fn proton_expands_to_its_nine_records() {
     assert_eq!(
         rec(&got, "proton-mx1"),
         &json!({ "zone": ZONE, "name": "noisypigeon.com", "type": "MX", "content": "mx1.alias.proton.me",
-                "ttl": 1, "priority": 10, "proxied": false })
+                "ttl": 1, "priority": 10, "proxied": false, "data": null, "comment": null })
     );
     assert_eq!(
         rec(&got, "proton-dkim02")["name"],
@@ -218,7 +218,7 @@ fn unset_inputs_skip_records_and_overrides_change_only_their_fields() {
         rec(&got, "proton-spf"),
         &json!({ "zone": ZONE, "name": "noisypigeon.com", "type": "TXT",
                 "content": "v=spf1 include:alias.proton.me include:x.example ~all",
-                "ttl": 1, "priority": null, "proxied": false })
+                "ttl": 1, "priority": null, "proxied": false, "data": null, "comment": null })
     );
     assert_eq!(rec(&got, "own-dmarc")["name"], "_dmarc.noisypigeon.com");
 
@@ -279,6 +279,81 @@ fn unknown_keys_and_bad_records_fail() {
     assert_fails(repo.path(), "unknown input `extra`");
     let repo = self::repo(&PROTON.replace("proton:", "nothing: {}\n  proton:"));
     assert_fails(repo.path(), "no preset");
+}
+
+#[test]
+fn srv_caa_and_ns_records_render_with_data_and_comment() {
+    let repo = repo(&PROTON.replace(
+        "records: {}",
+        "records:
+  sip: { name: _sip._tcp, type: SRV, data: { priority: 10, weight: 5, port: 5060, target: sip.example.com } }
+  caa: { name: \"@\", type: CAA, data: { flags: 0, tag: issue, value: letsencrypt.org }, comment: certificates }
+  sub-ns: { name: sub, type: NS, content: ns1.example.net }",
+    ));
+    assert_eq!(problems(repo.path()), Vec::<String>::new());
+    let got = records(repo.path());
+    assert_eq!(rec(&got, "sip")["type"], "SRV");
+    assert_eq!(
+        rec(&got, "sip")["data"],
+        json!({ "priority": 10, "weight": 5, "port": 5060, "target": "sip.example.com" })
+    );
+    assert_eq!(rec(&got, "sip")["content"], Value::Null);
+    assert_eq!(rec(&got, "caa")["type"], "CAA");
+    assert_eq!(
+        rec(&got, "caa")["data"],
+        json!({ "flags": 0, "tag": "issue", "value": "letsencrypt.org" })
+    );
+    assert_eq!(rec(&got, "caa")["content"], Value::Null);
+    assert_eq!(rec(&got, "caa")["comment"], "certificates");
+    assert_eq!(rec(&got, "sub-ns")["type"], "NS");
+    assert_eq!(rec(&got, "sub-ns")["content"], "ns1.example.net");
+    assert_eq!(rec(&got, "sub-ns")["data"], Value::Null);
+}
+
+#[test]
+fn malformed_new_records_fail() {
+    let long = format!(
+        "t: {{ name: t, type: TXT, content: x, comment: {} }}",
+        "a".repeat(101)
+    );
+    for (records, want) in [
+        ("t: { name: t, type: SRV, content: x }", "needs data"),
+        (
+            "t: { name: t, type: TXT, content: x, data: { a: 1 } }",
+            "never both",
+        ),
+        (
+            "t: { name: t, type: SRV, data: { priority: 1, weight: 1, port: 70000, target: x.example.com } }",
+            "must be 0 to 65535",
+        ),
+        (
+            "t: { name: t, type: CAA, data: { flags: 0, tag: bogus, value: x } }",
+            "issue, issuewild or iodef",
+        ),
+        (
+            "t: { name: \"@\", type: NS, content: ns.example.net }",
+            "can't sit at @",
+        ),
+        (long.as_str(), "longer than 100"),
+        (
+            "half: { name: x, type: TXT }",
+            "needs name, type and content or data",
+        ),
+    ] {
+        let repo = repo(&PROTON.replace("records: {}", &format!("records:\n  {records}")));
+        assert_fails(repo.path(), want);
+    }
+}
+
+#[test]
+fn records_under_an_ns_are_delegated() {
+    let repo = repo(&PROTON.replace(
+        "records: {}",
+        "records:
+  sub-ns: { name: sub, type: NS, content: ns1.example.net }
+  w: { name: www.sub, type: A, content: 192.0.2.1 }",
+    ));
+    assert_fails(repo.path(), "delegated by NS");
 }
 
 #[test]
@@ -365,7 +440,7 @@ fn hosts_render_only_for_workloads_that_exist_with_ingress() {
     assert_eq!(
         rec(&got, "host-blog-apex"),
         &json!({ "zone": ZONE, "name": "noisypigeon.com", "type": "CNAME", "content": "blog.pages.example",
-                "ttl": 1, "priority": null, "proxied": true })
+                "ttl": 1, "priority": null, "proxied": true, "data": null, "comment": null })
     );
     assert_eq!(rec(&got, "host-blog-www")["name"], "www.noisypigeon.com");
     assert!(!got.keys().any(|k| k.contains(":host-docs")));
@@ -789,7 +864,7 @@ fn builtin_repo() -> TempDir {
         root,
         "infra/cloudflare/modules/dns-record",
         &[
-            "zone_id", "name", "type", "content", "ttl", "priority", "proxied",
+            "zone_id", "name", "type", "content", "ttl", "priority", "proxied", "data", "comment",
         ],
         "",
     );

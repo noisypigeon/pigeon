@@ -16,4 +16,6 @@ resource "cloudflare_dns_record" "this" {
   ttl      = var.ttl
   priority = var.priority
   proxied  = var.proxied
+  data     = var.data
+  comment  = var.comment
 }

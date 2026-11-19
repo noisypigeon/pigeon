@@ -11,7 +11,9 @@ variable "type" {
 }
 
 variable "content" {
-  type = string
+  type     = string
+  default  = null
+  nullable = true
 }
 
 variable "ttl" {
@@ -27,4 +29,14 @@ variable "priority" {
 variable "proxied" {
   type    = bool
   default = false
+}
+
+variable "data" {
+  type    = any
+  default = null
+}
+
+variable "comment" {
+  type    = string
+  default = null
 }
