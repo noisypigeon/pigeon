@@ -1085,3 +1085,24 @@ R3 decides: `pigeon-control` version cd1c6adf, deployed from 2b333a46, runs
   waits on the binding.
 - **After.** Once the logs show jobs fetching through `build.read`, E3
   removes `/builds/` and the fallback.
+### 2026-11-19: `f8cf3dd1…` is the deployer's smoke, now bound
+
+This corrects the parallel plan, A5 and the outcome amendments.
+
+- **Two claims were wrong.** The parallel plan said the deployer token never
+  reaches `run()`, and the outcome amendment called `f8cf3dd1…` an unknown
+  caller. Both describe the same mistake.
+- **What it is.** `/healthz/smoke` runs `change.list`, `change.status` and
+  `deploy.status` through `run()` as the deployer token. Those are the only
+  three operations `f8cf3dd1…` ever called.
+- **What broke.** Once R3 decided, the unbound token was refused, and the
+  first blue-green deploy (1047ccc7) failed its smoke: `pigeon-control`
+  741205f8 never took traffic, and d59ce0b0 served alone. Whole deploys skip
+  the smoke, so 58699e14 had passed.
+- **The binding.** Willow bound `f8cf3dd1…` to `agent` (`service.bind` offer
+  2). Without a ticket it acts as `agent-executor`, which may run these
+  reads. `narrow_token` still keeps the deployer on `/healthz` and
+  `/healthz/smoke`, so its `propose` scope is unreachable.
+- **The rule.** Every token that reaches `run()` is bound before R3
+  decides, and a door's smoke reaches `run()`. A new door token's smoke is
+  checked under `decide` before it ships.
