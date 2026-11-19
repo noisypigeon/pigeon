@@ -931,3 +931,29 @@ credential.
 3. **E2c (planner):** once one TestFlight upload has passed through the
    sealed path, `/v0/apple/release`, its archive route and its public path
    are removed, with the fallback.
+
+### 2026-11-19: The app's Access bypass narrows to its MCP door
+
+Willow chose to narrow the `/v0/app` bypass to `/v0/app/mcp`, the leftover
+of [`2026-11-15-runtime-one-mcp-entry-point.md`](2026-11-15-runtime-one-mcp-entry-point.md)
+§2 (owner, relayed 2026-11-19).
+
+- **The platform's hosts:** `platform`, `blue.platform` and
+  `control.platform` bypass Access only for `/v0/app/mcp` and
+  `/v0/app/session`, the link code's redeem, which R8c kept as a bootstrap.
+  The iOS app calls nothing else there (`API.swift`), so the other
+  `/v0/app/*` paths go back behind Access.
+- **Standalones stay as they are.** `*.pigeon.dev/v0/app` keeps its bypass:
+  the learner app's join, sync and members routes are still REST there (the
+  feed-view ADR's R8 amendment left them out). They narrow when those routes
+  move to the device door, with June's onboarding.
+- **Precedence.** If Access matches the wildcard path application before an
+  exact host, the platform hosts keep `/v0/app` open through the
+  standalones' entry until it narrows too. The platform plan's output shows
+  the applications. That only delays the narrowing; it never widens it.
+- **The builds token needs no platform change.** Every service token's policy
+  is on the one `pigeon-control` application, and the Worker's
+  `narrow_token` keeps the builds token on `/builds/`. E1's `build.read`
+  fetch waits for A5 and a binding of the builds token to `jobs`. Until
+  then, a service token on `/mcp` may run every read, and job containers run
+  the code of the changes they test.
