@@ -341,6 +341,15 @@ pub fn actions_token_request(repo: &str) -> Value {
     })
 }
 
+/// The installation-token request for an instance repository's mirror: `repo` only, contents only; see .claude/decisions/2026-11-15-runtime-zoned-standalone-account-imports.md §7.
+#[must_use]
+pub fn mirror_token_request(repo: &str) -> Value {
+    json!({
+        "repositories": [repo],
+        "permissions": { "contents": "write" },
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -532,6 +541,11 @@ mod tests {
             actions_token_request("pigeon"),
             json!({ "repositories": ["pigeon"], "permissions": { "actions": "write" } }),
             "a dispatch's token can't push"
+        );
+        assert_eq!(
+            mirror_token_request("site"),
+            json!({ "repositories": ["site"], "permissions": { "contents": "write" } }),
+            "an instance mirror's token can't touch workflows"
         );
     }
 }

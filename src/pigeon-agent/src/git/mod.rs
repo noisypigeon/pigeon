@@ -16,6 +16,15 @@ pub const KIND: &str = "cloudflare/git-repo";
 /// Where mirrors are staged, under the instance's root.
 pub const MIRROR_DIR: &str = ".pigeon/git";
 
+/// Who pushes a repository's mirror; see .claude/decisions/2026-11-15-runtime-zoned-standalone-account-imports.md §7.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MirrorApp {
+    /// The `pigeon-mirror` App, minted per run for this one repository.
+    PigeonMirror,
+    /// The owner's CLI only, with their own git credentials.
+    OwnerOnly,
+}
+
 /// One declared repository.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Declared {
@@ -25,10 +34,25 @@ pub struct Declared {
     pub name: String,
     /// Its GitHub mirror, if any.
     pub mirror: Option<String>,
+    /// Who pushes its mirror.
+    pub mirror_app: MirrorApp,
     /// Its default branch.
     pub branch: String,
     /// What it is.
     pub description: Option<String>,
+}
+
+impl Declared {
+    /// The GitHub owner and repository an App token is minted for: its mirror when it is on GitHub and `mirror_app` is the App; otherwise none.
+    #[must_use]
+    pub fn minted(&self) -> Option<(String, String)> {
+        if self.mirror_app != MirrorApp::PigeonMirror {
+            return None;
+        }
+        self.mirror
+            .as_deref()
+            .and_then(crate::mirroring::github_repo)
+    }
 }
 
 /// An instance's namespace and repositories.
@@ -74,6 +98,11 @@ pub fn declared(root: &Path, platform: &Path) -> Result<Instance, Error> {
             id: id.to_string(),
             name: crate::infra::manifest::name(id).to_string(),
             mirror: e.settings["mirror"].as_str().map(str::to_string),
+            mirror_app: if e.settings["mirror_app"].as_str() == Some("none") {
+                MirrorApp::OwnerOnly
+            } else {
+                MirrorApp::PigeonMirror
+            },
             branch: e.settings["default_branch"]
                 .as_str()
                 .unwrap_or("main")

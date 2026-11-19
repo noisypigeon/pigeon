@@ -456,6 +456,42 @@ fn a_git_repo_unit_never_plans_and_its_settings_are_checked() {
 }
 
 #[test]
+fn a_git_repo_unit_says_who_pushes_its_mirror() {
+    let platform = platform();
+    let declare = |fields: &str| {
+        let inst = instance(
+            "pigeon",
+            &format!("  repos/site:\n    kind: cloudflare/git-repo\n    {fields}\n"),
+        );
+        git::declared(inst.path(), platform.path())
+            .expect("declared")
+            .repos
+            .remove(0)
+    };
+    let d = declare("mirror: https://github.com/example/site");
+    assert_eq!(d.mirror_app, git::MirrorApp::PigeonMirror);
+    assert_eq!(d.minted(), Some(("example".into(), "site".into())));
+    let d = declare("mirror: https://github.com/example/site\n    mirror_app: none");
+    assert_eq!(d.mirror_app, git::MirrorApp::OwnerOnly);
+    assert_eq!(d.minted(), None);
+    let d = declare("mirror: https://git.example.com/a/b");
+    assert_eq!(d.minted(), None);
+
+    let inst = instance(
+        "pigeon",
+        "  repos/site:\n    kind: cloudflare/git-repo\n    mirror_app: bogus\n",
+    );
+    let allow =
+        agent::infra::providers::Allowlist::load(&platform.path().join(".config")).expect("allow");
+    let got: Vec<String> = agent::infra::unit::validate_in(inst.path(), platform.path(), &allow)
+        .into_iter()
+        .map(|p| format!("{}: {}", p.path, p.message))
+        .collect();
+    assert!(got.iter().any(|p| p.contains("repos/")), "{got:?}");
+    assert!(git::declared(inst.path(), platform.path()).is_err());
+}
+
+#[test]
 fn the_git_token_travels_only_in_the_environment() {
     let c = git::command("https://artifacts.example/r.git", GIT_TOKEN);
     let argv: Vec<String> = c

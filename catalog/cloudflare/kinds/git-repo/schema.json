@@ -10,6 +10,14 @@
       "type": "string",
       "pattern": "^https://[A-Za-z0-9.-]+/[A-Za-z0-9._/-]+$"
     },
+    "mirror_app": {
+      "description": "Who pushes the mirror: the pigeon-mirror App, minted per run for this repository, or none (the owner's CLI only).",
+      "enum": [
+        "pigeon-mirror",
+        "none"
+      ],
+      "default": "pigeon-mirror"
+    },
     "default_branch": {
       "type": "string",
       "pattern": "^[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*$",
