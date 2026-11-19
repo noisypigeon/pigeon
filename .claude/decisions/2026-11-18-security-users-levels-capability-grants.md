@@ -868,3 +868,66 @@ day runs (owner, about 23:42 UTC). June's onboarding stays deferred.
   ticket has no model class, so it acts as `agent-executor`, the narrower
   agent user. The status session's `approval.list` shadowed that way because
   its read carried no ticket. That is intended, not a fault.
+
+### 2026-11-19: E2's shape: the Apple release on MCP, its grant sealed
+
+Willow answered owner item #47: the release moves to MCP, and its
+credentials are sealed so the control plane only ever carries ciphertext
+(owner, relayed 2026-11-19). It goes on `/v0/app/mcp` with Buildkite's OIDC
+token, as the feed-view ADR's §6 amendment says, so it needs no new Access
+credential.
+
+#### The tools
+
+- **`release.apple {recipient}`.**
+  - The Buildkite `sign` step calls it with its OIDC token and `recipient`:
+    an X25519 public key, base64url, made fresh for the run.
+  - The Worker checks the token as `/v0/apple/release` does today, redeems
+    the release once, and builds the same `signing::Grant` (`p12`,
+    `p12_password`, `profile`, `upload_jwt` and the rest).
+  - It answers only `{enc, ciphertext, fingerprint}`.
+- **`release.apple.archive {offset}`.** The archive of the release that is
+  signing, in pieces with its SHA-256, as `build.read` serves builds. The
+  unsigned archive holds no secret, so it is not sealed.
+
+#### The seal
+
+- **HPKE.** RFC 9180, base mode, DHKEM(X25519, HKDF-SHA256), HKDF-SHA256 and
+  ChaCha20-Poly1305. Its `info` is `pigeon release.apple`, then the
+  pipeline, build number and commit from the token's claims, so a grant
+  opens only for the build it was sealed for.
+- **Who sees what.** `run()`, the result path, events, the feed and the logs
+  only ever hold `enc` and `ciphertext`. The grant is serialized, sealed and
+  dropped inside one function. It never reaches `WireResponse`, a log line,
+  or storage.
+- **Opening it.** `pigeon release open` (Rust) generates the key pair, keeps
+  the private key in memory only, and opens the answer from stdin into
+  files of mode 0600 in the step's temporary directory. A private key never
+  touches disk, and Buildkite stores no long-lived key.
+
+#### What sealing doesn't do
+
+- Sealing protects the path, not the redemption. Whoever holds a valid OIDC
+  token can send their own `recipient` and open what comes back. So today's
+  guards stay, and they decide:
+  - **Single redemption:** the release's row moves to `signing` once, and a
+    second call is refused.
+  - **Short life:** the OIDC token and the upload JWT keep their short
+    lifetimes.
+- Each redemption logs `release.apple.redeemed` with the build and the
+  recipient key's fingerprint (the first 16 hex of its SHA-256), never
+  secret material, so a second attempt shows in events.
+
+#### Steps
+
+1. **E2a (planner, gate):** the two tools on the device door, OIDC-
+   authenticated for those two only; the seal in `pigeon-core`, with a test
+   that a sealed grant opens with the run's key and fails with another key
+   or another build's `info`; the redemption event.
+2. **E2b (brief):** `pigeon release open`, and the `sign` step
+   (`tooling/ci/buildkite/ios-sign.sh`) calls `release.apple` and
+   `release.apple.archive`, falling back to `/v0/apple/release` if MCP
+   refuses.
+3. **E2c (planner):** once one TestFlight upload has passed through the
+   sealed path, `/v0/apple/release`, its archive route and its public path
+   are removed, with the fallback.
