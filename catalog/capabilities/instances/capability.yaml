@@ -1,0 +1,28 @@
+# The instances capability; see .claude/decisions/2026-11-19-runtime-capability-interface-manifest-trait.md §1.
+name: instances
+version: 1.0.0
+summary: Stand up and hold a standalone instance.
+built_on: null
+scope:
+  kind: none
+  arg: null
+  needs: []
+grantable: false
+operations: [instances.standup]
+routes: []
+storage:
+  object_keys: []
+  r2_prefixes: []
+  d1_tables: []
+migrations: null
+secrets: []
+config:
+  type: object
+  properties: {}
+  additionalProperties: false
+hooks: []
+members:
+  label: Instances
+  scope_label: null
+  help: Stand up a standalone instance of your own.
+tests: []

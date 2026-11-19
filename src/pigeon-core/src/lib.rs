@@ -14,6 +14,7 @@ pub mod architecture;
 pub mod bench;
 pub mod brief;
 pub mod briefs;
+pub mod capability;
 pub mod change;
 pub mod ci_window;
 pub mod connect;

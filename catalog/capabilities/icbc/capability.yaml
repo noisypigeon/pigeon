@@ -1,0 +1,31 @@
+# The icbc capability; see .claude/decisions/2026-11-19-runtime-capability-interface-manifest-trait.md §1.
+name: icbc
+version: 1.0.0
+summary: Practice tests for BC's Class 7L knowledge test, scored from a photo.
+built_on: null
+scope:
+  kind: none
+  arg: null
+  needs: []
+grantable: true
+operations: []
+routes:
+  - door: app
+    prefix: /v0/app/learner/
+storage:
+  object_keys: [learner.index]
+  r2_prefixes: [learner/]
+  d1_tables: []
+migrations: null
+secrets: [STATE_KEY]
+config:
+  type: object
+  properties: {}
+  additionalProperties: false
+hooks: []
+members:
+  label: ICBC 7L
+  scope_label: null
+  help: Generate, print and score Class 7L practice tests.
+tests:
+  - src/pigeon-core/src/learner/tests.rs
