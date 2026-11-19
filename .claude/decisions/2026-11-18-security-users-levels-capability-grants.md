@@ -1124,3 +1124,29 @@ This corrects the parallel plan, A5 and the outcome amendments.
   event is one fallback.
 - **E3.** Once a day of bound jobs on the current images logs no
   `builds.fetched`, E3 removes `/builds/`, the fallback and this event.
+
+### 2026-11-19: E3 and E2c go to the capabilities planner
+
+This ADR's execution is done except two removals, and each waits on
+something outside this work.
+
+- **Who.** The capabilities planner (`session_015XFA1otAgDxnZYCcNARf39`)
+  carries both. It waits on this planner's `session_end`, so neither tail
+  holds it back.
+- **E3.** `builds.fetched` (!1305) logs every `GET /builds/`. Once a day
+  of bound jobs on the current images logs none, one change removes
+  `/builds/`, `pigeon-start`'s fallback and `builds.fetched`. A
+  `builds.fetched` in that day means some job still falls back: find which,
+  and remove nothing yet.
+- **E2c.** Once events show one `release.apple.redeemed`, the sign step
+  (`tooling/ci/buildkite/ios-sign.sh`) reads its archive through
+  `release_apple_archive`. A second change then removes
+  `/v0/apple/release`, its archive route, its public path and
+  `pigeon signing load`'s `exchange_route` fallback.
+- **Rules.** Both touch gate and secrets paths, so the planner carries them
+  with Willow's passkey, never a brief. Neither grants Administrator or any
+  approval power. A bound-job outage is undone with the owner's
+  `DEPLOY_IMAGES` pin, as after !1256.
+- **Left parked.** B2, B3 and June's onboarding stay parked as the outcome
+  amendment says. The Subdomain, Domain and Blog ADRs and the reusable
+  learning capability are the capabilities planner's own work.
