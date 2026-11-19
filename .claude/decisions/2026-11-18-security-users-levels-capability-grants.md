@@ -1023,3 +1023,51 @@ The log runs from event 57195 (2026-11-18 19:15) to 58789.
   variable to `shadow` in the Cloudflare dashboard, with no deploy. The next
   deploy then restores what `worker.yaml` says, so that one-line change
   follows.
+
+### 2026-11-19: Outcome so far, and what remains
+
+R3 decides: `pigeon-control` version cd1c6adf, deployed from 2b333a46, runs
+`MEMBER_CHECK: decide`. Checked live:
+
+- A service call without a ticket that asks for `lane.status` is refused.
+  Its other reads pass.
+- With the planner's ticket in `X-Pigeon-Ticket`, `lane.status` and
+  `grant.list` pass.
+- A ticket that has expired resolves to nothing, so the call acts as
+  `agent-executor`. The status session hit this, and `session_start` with
+  `replace` cured it. A session renews its ticket before 24 hours pass.
+
+#### Landed
+
+| Step | Change | What |
+|---|---|---|
+| plan | !1267 | the parallel plan; the door tokens need no binding |
+| A1 | !1274 | `member.grant` and `member.revoke`, redeemed with the Administrator's passkey on `/member-grant/` |
+| A4 | !1277 | `MEMBER_CHECK`, the verdict on every call |
+| A5 | !1283 | `MEMBER_CHECK: decide`; the owner waived the full shadow day |
+| fix | !1284 | the ticket header reaches the member check |
+| B1 | !1269 | the Members list shows each member's live grants |
+| bypass | !1278 and platform run 44 | the platform hosts' `/v0/app` bypass narrows to `/v0/app/mcp` and `/v0/app/session` |
+| E2 | !1279, !1282 | the sealed Apple release, decided |
+| E2a | !1280 | `release_apple` and `release_apple_archive`, the grant HPKE-sealed to the run's key |
+| E2b | !1288 | `pigeon signing load` redeems through `release_apple` and opens the grant in memory |
+| E1, partly | !1256, !1264 | `pigeon-start` tries `build.read`, then `/builds/` |
+
+#### What remains
+
+- **E2c (planner):** once one TestFlight upload has passed through the
+  sealed path (`release.apple.redeemed` in events), the sign step reads
+  its archive through `release_apple_archive`. Then `/v0/apple/release`,
+  its archive route, its public path and the fallback are removed.
+- **E1's end (planner):** now that R3 decides, the builds token can be
+  bound to `jobs` and `narrow_token` can let it reach `/mcp`. Only then do
+  jobs fetch through `build.read` alone, and E3 removes `/builds/`. Until
+  then the `/builds/` fallback serves.
+- **Parked with June's onboarding (step 8):** the iOS Members screen (B3),
+  and narrowing the standalones' `*.pigeon.dev/v0/app` bypass. The
+  learner's join, sync and members routes move to the device door first.
+- **Parked until a capability beyond `icbc` is grantable:** the web
+  Members root (B2), which needs `members.list` on `/mcp`.
+- **Their own ADRs:** Subdomain, Domain, Blog, Sites and Instances
+  (owner's answers #39 to #41 and #45), each with its scope and how it is
+  granted, before `GRANTABLE` grows.
