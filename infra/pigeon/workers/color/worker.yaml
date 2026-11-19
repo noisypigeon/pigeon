@@ -1,0 +1,96 @@
+# A colour of the platform's control plane: pigeon-green, and later pigeon-blue; one spec for
+# each `pigeon/color` unit. See .claude/decisions/2026-11-18-runtime-independent-blue-green-workers.md,
+# its colour-kind and `secrets.migrate` amendments.
+description: A colour of pigeon's control plane, acting only while the lease names it.
+name: $deployment.worker
+deployment: pigeon/color
+color: true
+entry: { crate: src/pigeon-agent, features: [worker] }
+compatibility_date: "2026-10-01"
+workers_dev: false
+# Its own host, under the platform's Access.
+routes:
+  - custom_domain: $deployment.host
+durable_objects:
+  classes: [Instance, ChangeRun, Checker, Runner, MainRun, Bench, Pool]
+  migrations:
+    - { tag: v1, new_sqlite_classes: [Instance, ChangeRun, Checker] }
+    - { tag: v2, new_sqlite_classes: [MainRun] }
+    - { tag: v3, new_sqlite_classes: [Runner] }
+    - { tag: v4, new_sqlite_classes: [Bench] }
+    - { tag: v5, new_sqlite_classes: [Pool] }
+containers:
+  - class: Checker
+    image: { dockerfile: Dockerfile, target: ci, args: { FEATURES: agent } }
+    instance_type: standard-4
+    max_instances: 12
+  - class: Runner
+    image: { dockerfile: Dockerfile, target: ci, args: { FEATURES: agent } }
+    instance_type: standard-1
+    max_instances: 8
+  - class: Bench
+    image: { dockerfile: Dockerfile, target: ci, args: { FEATURES: agent } }
+    instance_type: standard-4
+    max_instances: 32
+bindings:
+  d1:
+    DB: { name: $deployment.database.name, id: $deployment.database_id, migrations: src/pigeon-agent/migrations }
+  r2:
+    CI_LOGS: $deployment.ci_bucket
+    DOCS: "$output.sites/docs.bucket"
+  queues:
+    consumers: [ { queue: $deployment.queue_name, max_batch_size: 10 } ]
+  vars:
+    # The lease's name for this Worker; it acts only while the lease names it.
+    COLOR: $deployment.worker
+    INSTANCE_NAME: $deployment.instance
+    NAMESPACE: pigeon
+    REPO: pigeon
+    CHANGE_FLOOR: $deployment.change_floor
+    PUBLIC_HOST: $deployment.host
+    PASSKEY_RP_ID: $deployment.domains[0]
+    FRONT_HOST: $deployment.domains[2]
+    INSTANCE_ZONE: $deployment.instance_zone
+    SECRETS_STORE: $deployment.secrets_store_id
+    AI_GATEWAY_ACCOUNT: $deployment.account_id
+    AI_GATEWAY: "$deployment.ai_gateways[0].name"
+  # The shared secrets, each the store's lower-kebab copy of pigeon-control's (`SHARED`); the
+  # Bitrise pair, never set on pigeon-control, stays unbound until it is.
+  secrets_store:
+    GRANTER: { store: $deployment.secrets_store_id, secret: granter }
+    JOURNAL_SEAL: { store: $deployment.secrets_store_id, secret: journal-seal }
+    BACKPLANE_TOKEN: { store: $deployment.secrets_store_id, secret: agent-token }
+    ARTIFACTS_TOKEN: { store: $deployment.secrets_store_id, secret: artifacts-token }
+    ACCESS_TEAM: { store: $deployment.secrets_store_id, secret: access-team }
+    ACCESS_AUD: { store: $deployment.secrets_store_id, secret: access-aud }
+    DEPLOY_TOKEN: { store: $deployment.secrets_store_id, secret: deploy-token }
+    SESSION_KEY: { store: $deployment.secrets_store_id, secret: session-key }
+    APPROVER_TOTP: { store: $deployment.secrets_store_id, secret: approver-totp }
+    APPROVER: { store: $deployment.secrets_store_id, secret: approver }
+    PASSKEY_ENROLL: { store: $deployment.secrets_store_id, secret: passkey-enroll }
+    WORKERS_DEPLOY_TOKEN: { store: $deployment.secrets_store_id, secret: workers-deploy-token }
+    DEPLOYER_ACCESS_ID: { store: $deployment.secrets_store_id, secret: deployer-access-id }
+    DEPLOYER_ACCESS_SECRET: { store: $deployment.secrets_store_id, secret: deployer-access-secret }
+    BUILDS_ACCESS_ID: { store: $deployment.secrets_store_id, secret: builds-access-id }
+    BUILDS_ACCESS_SECRET: { store: $deployment.secrets_store_id, secret: builds-access-secret }
+    PUSH_VAPID_KEY: { store: $deployment.secrets_store_id, secret: push-vapid-key }
+    PLATFORM_STATE_KEY: { store: $deployment.secrets_store_id, secret: platform-state-key }
+    GITHUB_APP_ID: { store: $deployment.secrets_store_id, secret: github-app-id }
+    GITHUB_APP_KEY: { store: $deployment.secrets_store_id, secret: github-app-key }
+    APPLE_ASC_KEY: { store: $deployment.secrets_store_id, secret: apple-asc-key }
+    APPLE_ASC_KEY_ID: { store: $deployment.secrets_store_id, secret: apple-asc-key-id }
+    APPLE_ASC_ISSUER: { store: $deployment.secrets_store_id, secret: apple-asc-issuer }
+    APPLE_TEAM_ID: { store: $deployment.secrets_store_id, secret: apple-team-id }
+    APPLE_DIST_P12: { store: $deployment.secrets_store_id, secret: apple-dist-p12 }
+    APPLE_DIST_P12_PASSWORD: { store: $deployment.secrets_store_id, secret: apple-dist-p12-password }
+    BUILDKITE_TOKEN: { store: $deployment.secrets_store_id, secret: buildkite-token }
+    APNS_KEY: { store: $deployment.secrets_store_id, secret: apns-key }
+    APNS_KEY_ID: { store: $deployment.secrets_store_id, secret: apns-key-id }
+    OBSERVABILITY_TOKEN: { store: $deployment.secrets_store_id, secret: observability-token }
+    POOL_ANTHROPIC_WORKSPACE: { store: $deployment.secrets_store_id, secret: pool-anthropic-workspace }
+    POOL_ACCESS_ID: { store: $deployment.secrets_store_id, secret: pool-access-id }
+    POOL_ACCESS_SECRET: { store: $deployment.secrets_store_id, secret: pool-access-secret }
+  version_metadata: CF_VERSION_METADATA
+# The pipeline's own, per Worker.
+secrets: [DEPLOY_OUTPUTS, DEPLOY_IMAGES]
+crons: ["17 * * * *"]
