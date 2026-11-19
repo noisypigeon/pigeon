@@ -9,8 +9,6 @@ workers_dev: false
 # Its test host, under Access since run 42.
 routes:
   - custom_domain: $deployment.domains[2]
-  # Standalones' hosts under the zone, forwarded to the lease's colour (the step 9b amendment).
-  - subdomains_of: $deployment.instance_zone
 # Checked through that host, which reaches the primary.
 forwards: $deployment.domains[2]
 bindings:

@@ -152,10 +152,13 @@ impl Api {
             (_, Some(b)) => headers
                 .iter()
                 .fold(
-                    agent
-                        .post(&url)
-                        .header("authorization", &auth)
-                        .header("content-type", "application/json"),
+                    if method == "PUT" {
+                        agent.put(&url)
+                    } else {
+                        agent.post(&url)
+                    }
+                    .header("authorization", &auth)
+                    .header("content-type", "application/json"),
                     |r, (k, v)| r.header(*k, *v),
                 )
                 .send(b.to_string().as_bytes()),
