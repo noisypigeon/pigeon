@@ -24,6 +24,45 @@ pub const STATE_BUCKET: &str = "pigeon-platform-state";
 /// The prefix the platform's state lives under in its bucket.
 pub const STATE_PREFIX: &str = "platform";
 
+/// The job's private zone entries, JSON `{alias: {zone, …}}`; see .claude/decisions/2026-11-15-runtime-zoned-standalone-account-imports.md §1.
+pub const PRIVATE_VAR: &str = "PIGEON_PRIVATE";
+
+/// Each private zone's name and the `<alias>` that stands for it in what a job shows, longest name first so a zone inside another's name is masked whole.
+#[must_use]
+pub fn private_masks(raw: Option<&str>) -> Vec<(String, String)> {
+    let Some(Value::Object(entries)) = raw.and_then(|r| serde_json::from_str::<Value>(r).ok())
+    else {
+        return Vec::new();
+    };
+    let mut masks: Vec<(String, String)> = entries
+        .iter()
+        .filter_map(|(alias, entry)| {
+            let zone = entry["zone"].as_str()?;
+            (!zone.is_empty() && zone.contains('.'))
+                .then(|| (zone.to_lowercase(), format!("<{alias}>")))
+        })
+        .collect();
+    masks.sort_by(|a, b| b.0.len().cmp(&a.0.len()).then_with(|| a.0.cmp(&b.0)));
+    masks
+}
+
+/// Replaces every case-insensitive occurrence of the lowercase `needle` in `text` with `with`.
+fn replace_ci(text: &str, needle: &str, with: &str) -> String {
+    if needle.is_empty() {
+        return text.to_string();
+    }
+    let lower = text.to_ascii_lowercase();
+    let mut out = String::with_capacity(text.len());
+    let mut last = 0;
+    for (at, _) in lower.match_indices(needle) {
+        out.push_str(&text[last..at]);
+        out.push_str(with);
+        last = at + needle.len();
+    }
+    out.push_str(&text[last..]);
+    out
+}
+
 /// What a platform job does.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Task {
@@ -188,11 +227,15 @@ fn with_values(shown: &Value, diff: impl IntoIterator<Item = infra::AttrChange>)
 pub fn run(spec: &JobSpec, dir: &Path) -> Report {
     let mut log = String::new();
     let secrets: Vec<String> = spec.env.values().cloned().collect();
+    let masks = private_masks(spec.env.get(PRIVATE_VAR).map(String::as_str));
     let scrub = |t: &str| {
-        secrets
+        let text = secrets
             .iter()
             .filter(|s| s.len() >= 8)
-            .fold(t.to_string(), |acc, s| acc.replace(s.as_str(), "…"))
+            .fold(t.to_string(), |acc, s| acc.replace(s.as_str(), "…"));
+        masks
+            .iter()
+            .fold(text, |acc, (zone, alias)| replace_ci(&acc, zone, alias))
     };
     let done = if crate::standup_job::asks(&spec.argv) {
         crate::standup_job::parse(&spec.argv)
@@ -201,10 +244,18 @@ pub fn run(spec: &JobSpec, dir: &Path) -> Report {
         minted_ok(spec, dir).and_then(|()| work(spec, dir, &mut log))
     };
     match done {
-        Ok(result) => Report {
-            platform: Some(result),
-            ..crate::jobs::report(spec, Outcome::Passed, &scrub(&log))
-        },
+        Ok(result) => {
+            let result = if masks.is_empty() {
+                result
+            } else {
+                let masked = scrub(&result.to_string());
+                serde_json::from_str(&masked).unwrap_or(Value::String(masked))
+            };
+            Report {
+                platform: Some(result),
+                ..crate::jobs::report(spec, Outcome::Passed, &scrub(&log))
+            }
+        }
         Err(why) => Report {
             violations: vec![scrub(&why)],
             ..crate::jobs::report(spec, Outcome::Failed, &scrub(&log))
@@ -363,6 +414,39 @@ mod tests {
             after: after.into(),
             replaces: false,
         }
+    }
+
+    #[test]
+    fn private_masks_read_each_alias_and_ignore_the_rest() {
+        let got = private_masks(Some(
+            r#"{"blog":{"zone":"Example.com"},"shop":{"zone":"shop.example.com"},"bad":{"zone":"nodot"},"none":{}}"#,
+        ));
+        assert_eq!(
+            got,
+            vec![
+                ("shop.example.com".into(), "<shop>".into()),
+                ("example.com".into(), "<blog>".into()),
+            ]
+        );
+        let none: Vec<(String, String)> = Vec::new();
+        assert_eq!(private_masks(None), none);
+        assert_eq!(private_masks(Some("not json")), none);
+    }
+
+    #[test]
+    fn replace_ci_masks_every_case_and_keeps_the_rest() {
+        assert_eq!(
+            replace_ci(
+                "Plan for WWW.Example.COM and example.com.",
+                "example.com",
+                "<blog>"
+            ),
+            "Plan for WWW.<blog> and <blog>."
+        );
+        assert_eq!(
+            replace_ci("nothing here", "example.com", "<blog>"),
+            "nothing here"
+        );
     }
 
     #[test]
