@@ -316,3 +316,50 @@ glob under `src/pigeon-cli/` or `src/site-templates/` becomes `src/**/<tail>`
 (or `**<file>` for a workspace root file), which matches the file both before
 and after the restructure moves it. That ADR's step 12 tightens them to the
 new paths.
+
+### 2026-11-19: Steps 2 to 6 start, and step 4 is three changes
+
+The owner let steps 2, 3, 4 and 6 start alongside blue-green, whose paths they
+don't touch. Step 5 waits for blue-green to end. Each step is a brief for a
+sonnet executor, written by the capabilities planner.
+
+- **The CLI is `pigeon infra`.** §1's `pigeon cobot render|plan|apply
+  --private FILE` is `pigeon infra render|plan|apply --private FILE`. The
+  flag sits on the shared run arguments, so each of the three takes it.
+- **The policy is `zones.yaml`, a tree policy of `find` rules.** §2 calls
+  it a sentinel policy. `names.yaml` forbids that word outside this
+  directory, so the policy never uses it.
+- **§2's tests rule names public hosts too.** Tests name public services
+  that are not zones anyone holds: `json-schema.org`,
+  `registry.cloudflare.com`, `registry.opentofu.org`, `*.workers.dev`,
+  `*.cloudflareaccess.com`, push services and `users.noreply.github.com`.
+  - The rule's allowlist adds service suffixes like these, each listed in
+    the policy.
+  - A zone or site anyone owns is never on it.
+- **What step 4 exempts:**
+  - **Files.** The four test files and the configs and policies that name
+    the blog's zone today are listed in the policy's `allow_under`. Each
+    one leaves the list in §8 step 4's scrub, which replaces the name with
+    `example.com`.
+  - **The legacy tree.** `workloads/` and `infra/cloudflare/config.yaml`
+    stay outside the policy's `match` until the cutover retires them.
+- **The three changes:**
+  - **4a: private units.**
+    - The zone kind gains `private`. A private unit has no `services` or
+      `records`.
+    - A zone unit's key, and the `zone` of a static site, may be an alias.
+    - `manifest_units` merges a `--private` entry into its alias's unit,
+      and leaves a private unit with no entry out of render and plan.
+    - The plan digest covers the merged config, so `apply` takes the same
+      file.
+    - 4a's schema shares the zone kind with step 2, so it starts after
+      step 2 merges.
+  - **4b: `zones.yaml`**, with examples that `policy.check` runs.
+  - **4c: masking.**
+    - `platform_job::run`'s scrub replaces each private zone name with
+      `<alias>`, in the log and in the structured plan and apply answers
+      it returns.
+    - A plan's stored `changes` keep the real values, which only the
+      owner's page decrypts.
+- **Step 3's wildcard key.** The 2026-11-15 review left this to step 3's
+  brief: an imported record at `*` is keyed `wildcard-<type>`.
