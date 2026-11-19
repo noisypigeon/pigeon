@@ -16,6 +16,7 @@
 - agent v0.1.76
 - agent v0.1.77
 - agent v0.1.78
+- agent v0.1.79
 - infra-cloudflare-dns-record v0.1.4
 - infra-cloudflare-schema v0.1.26
 
@@ -87,6 +88,10 @@
 - feat(infra): `pigeon infra zone import` prints a zone's live records as records YAML (!1346) ([13cd40a](https://github.com/noisypigeon/pigeon/commit/13cd40a4f9c60eeed997b2cdd5d8e90d1dac3344)) · agent
 - docs(decisions): capabilities get one manifest and trait; Subdomain, Domain, Blog and a pack-driven learning capability (!1349) ([405e658](https://github.com/noisypigeon/pigeon/commit/405e6581d2d0ffe4c90ea1884bdf280e579fd41e))
 - feat(core): capabilities get manifests, a trait and a registry (!1350) ([3214ac4](https://github.com/noisypigeon/pigeon/commit/3214ac40ab9006cd069038870da79b335b9da060))
+- feat(member): requires() and member.grant read the capability registry (!1352) ([61fa6c5](https://github.com/noisypigeon/pigeon/commit/61fa6c528f4ee475d44ec8c40f04f83b30e776db))
+- feat(workers): each colour's own hosts reach it by an exact-host zone route, over the front's wildcard (!1353) ([8011005](https://github.com/noisypigeon/pigeon/commit/8011005e436c79cde15fd08ee6b6e6b34f8c261b)) · agent
+- fix(infra): pigeon-control's host routes wait for the build that reads them (!1361) ([463fe7e](https://github.com/noisypigeon/pigeon/commit/463fe7efe34710dd6cc96a024a97b0517433c151))
+- feat(approvals): the capability manifests and code are gate paths (!1354) ([4726f20](https://github.com/noisypigeon/pigeon/commit/4726f2082d762539229b809d86663e4f6ae87847))
 
 ## 2026-11-18
 
