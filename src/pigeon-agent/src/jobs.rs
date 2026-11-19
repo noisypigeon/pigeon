@@ -500,19 +500,19 @@ fn deploy(spec: &JobSpec, dir: &Path) -> Report {
         return r;
     }
     let mut images = None;
-    let workers =
-        match crate::ship::workers(spec, dir, worker_files.as_deref(), &mut log, &mut images)
-            .inspect(|_| passed.push("workers".to_string()))
-        {
-            Ok(w) => w,
-            Err(why) => {
-                violations.push(why);
-                Vec::new()
-            }
-        };
-    if workers.is_empty()
-        && let Some(r) = superseded(images.clone(), &log)
-    {
+    let shipped = crate::ship::workers(spec, dir, worker_files.as_deref(), &mut log, &mut images)
+        .inspect(|_| passed.push("workers".to_string()));
+    // Only a Workers step that shipped nothing, and didn't fail, gives way to a newer push; a failure
+    // is reported as one.
+    let quiet = matches!(&shipped, Ok(w) if w.is_empty());
+    let workers = match shipped {
+        Ok(w) => w,
+        Err(why) => {
+            violations.push(why);
+            Vec::new()
+        }
+    };
+    if quiet && let Some(r) = superseded(images.clone(), &log) {
         return r;
     }
     let build = match crate::ship::build(
