@@ -84,6 +84,7 @@
 - feat(infra): the zone import core parses BIND or API records into keyed records YAML (!1339) ([73090e3](https://github.com/noisypigeon/pigeon/commit/73090e399f4e01493040471795b39f7ae80e7a77))
 - feat(deploy): the serving probe says why a host is down: its status and failing health fields (!1347) ([c14df1a](https://github.com/noisypigeon/pigeon/commit/c14df1a0983447c6ae104602249122d5fcc93c13)) · agent
 - feat(infra): `pigeon infra zone import` prints a zone's live records as records YAML (!1346) ([13cd40a](https://github.com/noisypigeon/pigeon/commit/13cd40a4f9c60eeed997b2cdd5d8e90d1dac3344)) · agent
+- docs(decisions): capabilities get one manifest and trait; Subdomain, Domain, Blog and a pack-driven learning capability (!1349) ([405e658](https://github.com/noisypigeon/pigeon/commit/405e6581d2d0ffe4c90ea1884bdf280e579fd41e))
 
 ## 2026-11-18
 
