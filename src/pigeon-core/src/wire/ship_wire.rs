@@ -13,6 +13,8 @@ pub const ACCESS_ID_VAR: &str = "DEPLOYER_ACCESS_ID";
 pub const ACCESS_SECRET_VAR: &str = "DEPLOYER_ACCESS_SECRET";
 /// The host the health check asks; a var, not a secret.
 pub const HOST_VAR: &str = "PUBLIC_HOST";
+/// The lease's colour, which `MainRun` passes the deploy job; see .claude/decisions/2026-11-19-security-auto-held-when-platform-down.md §1.
+pub const LEASE_VAR: &str = "DEPLOY_LEASE";
 
 /// The Worker var naming the stack it was bound to; see `agent::workers::bind`.
 pub const DEPLOYMENT_VAR: &str = "DEPLOYMENT";

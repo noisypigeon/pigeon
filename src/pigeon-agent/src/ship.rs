@@ -37,6 +37,109 @@ pub fn superseded(spec: &JobSpec, dir: &Path) -> Option<String> {
         })
 }
 
+/// What `/healthz` is asked of: the front host, and each colour's `(worker, host)`.
+type Probes = (String, Vec<(String, String)>);
+
+/// The hosts to probe, from the manifest and the job's `PUBLIC_HOST`: the `pigeon/platform`
+/// unit's first domain as the front, its Worker at `public_host`, and each `pigeon/color` unit's
+/// Worker at its own host. `None` without a platform unit.
+fn probes(m: &crate::infra::manifest::Manifest, public_host: &str) -> Option<Probes> {
+    let platform = m.units.values().find(|e| e.kind == "pigeon/platform")?;
+    let front = platform.settings["domains"][0].as_str()?.to_string();
+    let mut colors = Vec::new();
+    if let Some(w) = platform.settings["worker"].as_str() {
+        colors.push((w.to_string(), public_host.to_string()));
+    }
+    for e in m.units.values().filter(|e| e.kind == "pigeon/color") {
+        if let (Some(w), Some(h)) = (e.settings["worker"].as_str(), e.settings["host"].as_str()) {
+            colors.push((w.to_string(), h.to_string()));
+        }
+    }
+    Some((front, colors))
+}
+
+/// Whether `GET https://<host>/healthz` answers 200 with `ok` true, in up to 3 tries 10 s apart.
+fn probe(host: &str, access: (&str, &str)) -> bool {
+    let agent: ureq::Agent = ureq::Agent::config_builder()
+        .http_status_as_error(false)
+        .timeout_global(Some(std::time::Duration::from_secs(10)))
+        .build()
+        .into();
+    for attempt in 0..3 {
+        if attempt > 0 {
+            std::thread::sleep(std::time::Duration::from_secs(10));
+        }
+        let ok = agent
+            .get(&format!("https://{host}/healthz"))
+            .header("CF-Access-Client-Id", access.0)
+            .header("CF-Access-Client-Secret", access.1)
+            .call()
+            .ok()
+            .filter(|r| r.status().as_u16() == 200)
+            .and_then(|mut r| r.body_mut().read_to_string().ok())
+            .and_then(|b| serde_json::from_str::<serde_json::Value>(&b).ok())
+            .is_some_and(|v| v["ok"].as_bool() == Some(true));
+        if ok {
+            return true;
+        }
+    }
+    false
+}
+
+/// What serves once the deploy ended, by `/healthz` on the front host and on each colour's own
+/// host; `None` (failing closed) when the job lacks what it takes to ask, and the log says why;
+/// see .claude/decisions/2026-11-19-security-auto-held-when-platform-down.md §1.
+pub fn serving(
+    spec: &JobSpec,
+    dir: &Path,
+    log: &mut String,
+) -> Option<crate::core::deploy::serving::Serving> {
+    use crate::wire::ship_wire as w;
+    let var = |k: &str| {
+        spec.env
+            .get(k)
+            .filter(|v| !v.is_empty())
+            .map(String::as_str)
+    };
+    let (Some(public), Some(id), Some(secret)) = (
+        var(w::HOST_VAR),
+        var(w::ACCESS_ID_VAR),
+        var(w::ACCESS_SECRET_VAR),
+    ) else {
+        let _ = writeln!(
+            log,
+            "serving: not probed: the job lacks a host or Access token"
+        );
+        return None;
+    };
+    let Some((m, _)) = crate::infra::manifest::load(dir, dir) else {
+        let _ = writeln!(log, "serving: not probed: no manifest");
+        return None;
+    };
+    let Some((front, colors)) = probes(&m, public) else {
+        let _ = writeln!(
+            log,
+            "serving: not probed: no pigeon/platform unit with a domain"
+        );
+        return None;
+    };
+    let say = |ok: bool| if ok { "up" } else { "down" };
+    let mut out = crate::core::deploy::serving::Serving {
+        lease: var(w::LEASE_VAR)
+            .unwrap_or(crate::core::lease::FIRST_COLOR)
+            .to_string(),
+        ..Default::default()
+    };
+    for (worker, host) in colors {
+        let ok = probe(&host, (id, secret));
+        let _ = writeln!(log, "serving: {worker} {host}: {}", say(ok));
+        out.colors.insert(worker, ok);
+    }
+    out.front = probe(&front, (id, secret));
+    let _ = writeln!(log, "serving: front {front}: {}", say(out.front));
+    Some(out)
+}
+
 /// Deploys the Workers whose inputs changed among `files` from the checkout at `dir`; each as
 /// `<name>: <from> → <to>`. When the job image's inputs changed since its commit, it is built and
 /// pushed first, and set in `built`, even if a later step fails.
@@ -499,5 +602,62 @@ mod tests {
                 "pigeon-eviction"
             ]
         );
+    }
+}
+
+#[cfg(test)]
+mod serving_tests {
+    use super::*;
+    use crate::infra::manifest::{Entry, Manifest, Role};
+
+    fn unit(kind: &str, settings: serde_json::Value) -> Entry {
+        Entry {
+            kind: kind.into(),
+            schema: serde_json::Value::Null,
+            role: Role::Plain,
+            settings,
+            api: None,
+        }
+    }
+
+    #[test]
+    fn probes_the_front_and_each_colour() {
+        let m = Manifest {
+            root: ".".into(),
+            name: "pigeon".into(),
+            units: [
+                (
+                    "platform/blue".to_string(),
+                    unit(
+                        "pigeon/platform",
+                        serde_json::json!({"worker": "pigeon-control", "domains": ["platform.example.com"]}),
+                    ),
+                ),
+                (
+                    "color/green".to_string(),
+                    unit(
+                        "pigeon/color",
+                        serde_json::json!({"worker": "pigeon-green", "host": "green.example.com"}),
+                    ),
+                ),
+            ]
+            .into(),
+            moves: Vec::new(),
+            linked: std::collections::BTreeSet::default(),
+        };
+        let (front, colors) = probes(&m, "blue.example.com").expect("probes");
+        assert_eq!(front, "platform.example.com");
+        assert_eq!(
+            colors,
+            vec![
+                ("pigeon-control".to_string(), "blue.example.com".to_string()),
+                ("pigeon-green".to_string(), "green.example.com".to_string()),
+            ]
+        );
+        let none = Manifest {
+            units: std::collections::BTreeMap::default(),
+            ..m
+        };
+        assert!(probes(&none, "x").is_none());
     }
 }

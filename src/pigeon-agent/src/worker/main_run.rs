@@ -1101,6 +1101,12 @@ impl MainRun {
                 host.to_string(),
             );
         }
+        env.insert(
+            crate::wire::ship_wire::LEASE_VAR.to_string(),
+            super::lease::current(&self.env)
+                .await
+                .map_or_else(|| crate::core::lease::FIRST_COLOR.to_string(), |l| l.color),
+        );
         let mut spec = control::deploy_spec(&remote, &token, sha, p.deployed.as_deref(), env);
         spec.scope = p.baselines_spec();
         let body = serde_json::to_value(&spec).map_err(|e| e.to_string())?;

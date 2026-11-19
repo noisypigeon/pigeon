@@ -178,6 +178,12 @@ pub async fn build(env: &Env, s: &Settings) -> Result<(Digest, u64)> {
     if let Some(line) = w.as_ref().and_then(window_line) {
         d.held.insert(0, line);
     }
+    if w.as_ref().and_then(|w| w.hold.as_ref()).is_none() {
+        let streak = crate::core::approval::hold::Streak::of(&history(env, s).await);
+        if streak.failures > 0 {
+            d.held.push(crate::tasks::undeployable_line(streak, now()));
+        }
+    }
     d.stops = crate::tasks::stops(&events);
     d.items = super::owner_items::lines(env, s).await?;
     d.queue = crate::tasks::queue_lines(&events);
@@ -308,6 +314,23 @@ async fn mirror_behind(env: &Env, s: &Settings) -> Option<String> {
     let mut r = platform::call(env, &stub, req).await.ok()?;
     let v: Value = r.json().await.ok()?;
     v["mirror_behind"].as_str().map(str::to_string)
+}
+
+/// `MainRun`'s deploy history, newest first; empty when it can't be read.
+async fn history(env: &Env, s: &Settings) -> Vec<crate::control::Deployed> {
+    let Ok(req) = platform::json_request("https://main/status", Method::Get, None, None) else {
+        return Vec::new();
+    };
+    let Ok(stub) = super::main_stub(env, &s.repo) else {
+        return Vec::new();
+    };
+    let Ok(mut r) = platform::call(env, &stub, req).await else {
+        return Vec::new();
+    };
+    let Ok(v) = r.json::<Value>().await else {
+        return Vec::new();
+    };
+    serde_json::from_value(v["pipeline"]["history"].clone()).unwrap_or_default()
 }
 
 /// `digest.show`: the digest now; an approval's page link only for the owner.

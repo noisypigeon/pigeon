@@ -634,6 +634,20 @@ pub fn held_line(what: &str, h: &crate::approval::mandates::Hold, now: u64) -> S
     )
 }
 
+/// The digest's line for a failing streak that doesn't hold Auto yet; see
+/// .claude/decisions/2026-11-19-security-auto-held-when-platform-down.md §3.
+#[must_use]
+pub fn undeployable_line(streak: crate::approval::hold::Streak, now: u64) -> String {
+    use crate::approval::hold::{STREAK_FAILURES, STREAK_MAX};
+    format!(
+        "main undeployable for {} min: {} failed deploys; Auto stays on until {} failures or {} hours",
+        now.saturating_sub(streak.since) / 60,
+        streak.failures,
+        STREAK_FAILURES,
+        STREAK_MAX / 3600
+    )
+}
+
 /// The digest's line on the job Containers among `events` that failed to start, were lost, or
 /// sat queued and were dispatched again: how many, and the last; none when there were none.
 #[must_use]
@@ -776,5 +790,17 @@ mod tests {
         assert_eq!(t.list[0].claimed_by, None);
         assert!(!t.list[0].done);
         assert_eq!(t.release_brief("b8"), None, "no such brief");
+    }
+
+    #[test]
+    fn an_undeployable_main_is_named_while_auto_stays_on() {
+        let streak = crate::approval::hold::Streak {
+            failures: 2,
+            since: 0,
+        };
+        assert_eq!(
+            undeployable_line(streak, 1800),
+            "main undeployable for 30 min: 2 failed deploys; Auto stays on until 3 failures or 2 hours"
+        );
     }
 }

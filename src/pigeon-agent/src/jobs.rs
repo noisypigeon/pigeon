@@ -541,6 +541,10 @@ fn deploy(spec: &JobSpec, dir: &Path) -> Report {
             None
         }
     };
+    let pipeline = files
+        .as_deref()
+        .is_none_or(crate::core::deploy::serving::touches_pipeline);
+    let serving = crate::ship::serving(spec, dir, &mut log);
     let violations: Vec<String> = violations.iter().map(|v| scrub(v)).collect();
     for v in &violations {
         let _ = writeln!(log, "violation: {v}");
@@ -553,6 +557,8 @@ fn deploy(spec: &JobSpec, dir: &Path) -> Report {
         build,
         images,
         ledger,
+        serving,
+        pipeline,
         violations: violations.clone(),
         ..report(
             spec,
