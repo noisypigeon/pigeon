@@ -957,3 +957,16 @@ of [`2026-11-15-runtime-one-mcp-entry-point.md`](2026-11-15-runtime-one-mcp-entr
   fetch waits for A5 and a binding of the builds token to `jobs`. Until
   then, a service token on `/mcp` may run every read, and job containers run
   the code of the changes they test.
+
+### 2026-11-19: E2b opens the grant inside `pigeon signing load`
+
+- **No separate command.** `pigeon signing load` already redeems the grant
+  and loads the keychain in one process. E2b makes it generate the run's
+  key pair, call `release_apple`, and open the sealed grant there, so the
+  private key and the grant never leave that process. That replaces E2's
+  separate `pigeon release open`, which would hand the grant across a pipe.
+- **Fallback.** It falls back to `POST /v0/apple/release` only when MCP
+  refuses before redeeming. Once the release is redeemed through MCP, the
+  old route refuses it, so a failure after redemption fails closed.
+- **The archive** stays on `/v0/apple/release/archive` until E2c moves it to
+  `release_apple_archive`, with the rest of the old route.
