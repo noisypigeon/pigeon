@@ -99,19 +99,44 @@ pub const DEPLOYMENT_PREFIX: &str = "$deployment.";
 
 pub use crate::wire::ship_wire::DEPLOYMENT_VAR;
 
-fn rebind(v: &mut Value, unit: &str, settings: &Value, bad: &mut Vec<String>) {
+/// A unit a spec binds against: its settings, and the outputs its kind declares (`None` for any).
+struct Layer<'a> {
+    unit: &'a str,
+    settings: &'a Value,
+    outputs: Option<Vec<String>>,
+}
+
+impl Layer<'_> {
+    fn holds(&self, key: &str) -> bool {
+        self.outputs
+            .as_ref()
+            .is_none_or(|o| o.iter().any(|x| x == key))
+    }
+}
+
+/// Binds each `$deployment.<key>` in `v` to the first of `layers` with that setting or output; a
+/// colour's own, then its platform's (the colour-kind amendment of
+/// `.claude/decisions/2026-11-18-runtime-independent-blue-green-workers.md`).
+fn rebind(v: &mut Value, layers: &[Layer], bad: &mut Vec<String>) {
     match v {
         Value::String(s) => {
             let Some(rest) = s.strip_prefix(DEPLOYMENT_PREFIX) else {
                 return;
             };
             let key = rest.split(['.', '[']).next().unwrap_or_default();
-            if settings[key].is_null() {
-                *s = format!("$output.{unit}.{rest}");
+            let Some(layer) = layers
+                .iter()
+                .find(|l| !l.settings[key].is_null() || l.holds(key))
+            else {
+                bad.push(format!("`{s}`: no setting or output `{key}`"));
+                return;
+            };
+            if layer.settings[key].is_null() {
+                *s = format!("$output.{}.{rest}", layer.unit);
                 return;
             }
             // A nested setting is named by its path, such as `database.name` or `domains[0]`.
-            match setting_at(settings, rest) {
+            match setting_at(layer.settings, rest) {
                 Some(Value::String(x)) => *s = x.clone(),
                 Some(Value::Number(n)) => *s = n.to_string(),
                 Some(Value::Bool(b)) => *s = b.to_string(),
@@ -119,10 +144,8 @@ fn rebind(v: &mut Value, unit: &str, settings: &Value, bad: &mut Vec<String>) {
                 None => bad.push(format!("`{s}`: no setting `{rest}`")),
             }
         }
-        Value::Array(items) => items
-            .iter_mut()
-            .for_each(|x| rebind(x, unit, settings, bad)),
-        Value::Object(m) => m.values_mut().for_each(|x| rebind(x, unit, settings, bad)),
+        Value::Array(items) => items.iter_mut().for_each(|x| rebind(x, layers, bad)),
+        Value::Object(m) => m.values_mut().for_each(|x| rebind(x, layers, bad)),
         _ => {}
     }
 }
@@ -172,8 +195,35 @@ pub fn bind(root: &Path, found: &Found, unit: &str) -> Result<Found, String> {
                 .is_none_or(|k| setting_at(&entry.settings, k).is_some_and(|x| !x.is_null()))
         });
     }
+    // A unit naming its `platform` binds in layers: its own settings and declared outputs first.
+    let mut layers = Vec::new();
+    if let Some(platform) = entry.settings["platform"].as_str() {
+        let shared = manifest.units.get(platform).ok_or_else(|| {
+            format!("`{unit}` names platform `{platform}`, which config.yaml lacks")
+        })?;
+        let outputs = entry.schema["x-pigeon"]["outputs"]
+            .as_object()
+            .map(|o| o.keys().cloned().collect())
+            .unwrap_or_default();
+        layers.push(Layer {
+            unit,
+            settings: &entry.settings,
+            outputs: Some(outputs),
+        });
+        layers.push(Layer {
+            unit: platform,
+            settings: &shared.settings,
+            outputs: None,
+        });
+    } else {
+        layers.push(Layer {
+            unit,
+            settings: &entry.settings,
+            outputs: None,
+        });
+    }
     let mut bad = Vec::new();
-    rebind(&mut v, unit, &entry.settings, &mut bad);
+    rebind(&mut v, &layers, &mut bad);
     if !bad.is_empty() {
         return Err(bad.join("; "));
     }
@@ -199,7 +249,12 @@ pub fn bind(root: &Path, found: &Found, unit: &str) -> Result<Found, String> {
 pub fn bind_settings(found: &Found, unit: &str, settings: &Value) -> Result<Found, String> {
     let mut v = serde_json::to_value(&found.spec).map_err(|e| e.to_string())?;
     let mut bad = Vec::new();
-    rebind(&mut v, unit, settings, &mut bad);
+    let layers = [Layer {
+        unit,
+        settings,
+        outputs: None,
+    }];
+    rebind(&mut v, &layers, &mut bad);
     if !bad.is_empty() {
         return Err(bad.join("; "));
     }

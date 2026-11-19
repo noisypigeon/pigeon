@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "pigeon/color",
+  "description": "One colour of a platform: its own Worker, host, CI bucket and queue; everything else, its platform unit's; see .claude/decisions/2026-11-18-runtime-independent-blue-green-workers.md, its `Step 9's colour kind` amendment.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "platform",
+    "worker",
+    "host",
+    "bucket",
+    "queue"
+  ],
+  "properties": {
+    "platform": {
+      "type": "string",
+      "pattern": "^platform/[a-z0-9]+(-[a-z0-9]+)*$",
+      "description": "The pigeon/platform unit whose shared resources this colour binds."
+    },
+    "worker": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+      "description": "The colour's Worker."
+    },
+    "host": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*(\\.[a-z0-9]+(-[a-z0-9]+)*)+$",
+      "description": "The colour's own custom domain, its PUBLIC_HOST."
+    },
+    "bucket": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+          "maxLength": 56
+        }
+      },
+      "description": "The colour's CI bucket."
+    },
+    "queue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+        }
+      },
+      "description": "The queue the colour's push events arrive on."
+    }
+  },
+  "x-pigeon": {
+    "version": "0.1.0",
+    "local": true,
+    "secrets": [],
+    "providers": {
+      "cloudflare": {}
+    },
+    "singletons": {
+      "account": {
+        "module": "cloudflare/account",
+        "inputs": {}
+      },
+      "bucket_suffix": {
+        "module": "agnostic/random-string",
+        "inputs": {}
+      },
+      "bucket": {
+        "module": "cloudflare/r2-bucket",
+        "inputs": {
+          "account_id": "$module.account.id",
+          "name": "$config.bucket.name",
+          "suffix": "$module.bucket_suffix.result"
+        }
+      },
+      "queue": {
+        "module": "cloudflare/queue",
+        "inputs": {
+          "account_id": "$module.account.id",
+          "name": "$config.queue.name"
+        }
+      }
+    },
+    "outputs": {
+      "ci_bucket": "$module.bucket.name",
+      "queue_name": "$module.queue.name"
+    }
+  }
+}

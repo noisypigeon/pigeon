@@ -743,6 +743,50 @@ fn a_stack_bound_spec_takes_its_settings_and_names_its_outputs() {
 }
 
 #[test]
+fn a_colour_spec_binds_its_own_settings_and_outputs_then_its_platforms() {
+    let spec = STACK_SPEC
+        .replace("deployment: pigeon/platform", "deployment: pigeon/color")
+        .replace(
+            "$deployment.bucket_names[pigeon-ci]",
+            "$deployment.ci_bucket",
+        )
+        .replace("$deployment.hostname", "$deployment.host");
+    let root = fixture(&spec);
+    stacks(root.path());
+    let p = root.path();
+    fs::create_dir_all(p.join("catalog/pigeon/kinds/color")).expect("mkdir");
+    fs::write(
+        p.join("catalog/pigeon/kinds/color/schema.json"),
+        r#"{"type":"object","x-pigeon":{"version":"0.1.0","local":true,"outputs":{"ci_bucket":"$module.bucket.name","queue_name":"$module.queue.name"}}}"#,
+    )
+    .expect("write");
+    let config = p.join("config.yaml");
+    let colour = "  color/green:\n    kind: pigeon/color\n    platform: platform/blue\n    worker: pigeon-green\n    host: green.example.com\n";
+    let text = fs::read_to_string(&config).expect("read");
+    fs::write(&config, format!("{text}{colour}")).expect("write");
+    let green = workers::bind(p, &found(p), "color/green").expect("binds");
+    assert_eq!(green.spec.name, "pigeon-green");
+    let db = &green.spec.bindings.d1["DB"];
+    assert_eq!(db.name, "pigeon", "the platform's setting");
+    assert_eq!(
+        db.id, "$output.platform/blue.database_id",
+        "the platform's output"
+    );
+    assert_eq!(
+        green.spec.bindings.r2["CI_LOGS"], "$output.color/green.ci_bucket",
+        "the colour's own output"
+    );
+    let vars = &green.spec.bindings.vars;
+    assert_eq!(vars["PUBLIC_HOST"], "green.example.com");
+    assert_eq!(vars["CHANGE_FLOOR"], "12");
+    assert_eq!(vars[workers::DEPLOYMENT_VAR], "color/green");
+    let orphan = format!("{text}{}", colour.replace("platform/blue", "platform/red"));
+    fs::write(&config, orphan).expect("write");
+    let e = workers::bind(p, &found(p), "color/green").expect_err("no such platform");
+    assert!(e.contains("platform/red"), "{e}");
+}
+
+#[test]
 fn a_stack_bound_spec_is_validated_against_every_stack_and_needs_one() {
     let root = fixture(STACK_SPEC);
     stacks(root.path());
