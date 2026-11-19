@@ -138,6 +138,29 @@ fn health_is_the_new_versions_and_ok() {
 }
 
 #[test]
+fn a_deploy_claims_only_one_hosts_route_never_a_wildcard() {
+    assert!(ship::claimable("green.platform.pigeon.dev/*"));
+    assert!(ship::claimable("control.platform.pigeon.dev/*"));
+    assert!(
+        !ship::claimable("*.pigeon.dev/*"),
+        "the front's zone wildcard"
+    );
+    assert!(!ship::claimable("*pigeon.dev/*"));
+    assert!(!ship::claimable("/*"));
+}
+
+#[test]
+fn a_probe_says_whether_the_front_forwarded_the_answer() {
+    assert_eq!(agent::ship::reached(None), "direct");
+    assert_eq!(agent::ship::reached(Some("")), "direct");
+    assert_eq!(
+        agent::ship::reached(Some("pigeon-control")),
+        "via front to pigeon-control"
+    );
+    assert_eq!(agent::ship::FORWARDED, "x-pigeon-front");
+}
+
+#[test]
 fn a_colour_or_forwarder_is_checked_on_its_own_host() {
     let (_root, found) = fixture();
     assert_eq!(ship::own_host(&found), None, "the deploy's own host");

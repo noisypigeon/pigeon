@@ -58,6 +58,26 @@ fn probes(m: &crate::infra::manifest::Manifest, public_host: &str) -> Option<Pro
     Some((front, colors))
 }
 
+/// Each `{ host }` route of the Worker specs at `dir`, bound to `deployment`, as `(worker, host)`.
+fn route_hosts(dir: &Path, deployment: Option<&str>) -> Vec<(String, String)> {
+    let Ok(found) = crate::workers::discover(dir) else {
+        return Vec::new();
+    };
+    found
+        .iter()
+        .filter_map(|f| crate::workers::bound(dir, f, deployment).ok())
+        .flat_map(|b| {
+            let name = b.spec.name.clone();
+            b.spec
+                .routes
+                .iter()
+                .filter_map(|r| r.host.clone())
+                .map(move |h| (name.clone(), h))
+                .collect::<Vec<_>>()
+        })
+        .collect()
+}
+
 /// Why a `/healthz` answer of `status` with `body` isn't up: the status, and the names of the
 /// health fields that fail; `None` when it is up. Never a value.
 #[must_use]
@@ -85,9 +105,22 @@ pub fn down_reason(status: u16, body: &str) -> Option<String> {
     })
 }
 
+/// How an up host was reached: `direct`, or `via front` with the colour pigeon-front forwarded to,
+/// from its [`FORWARDED`] header (the blue-green ADR's exact-host route amendment).
+#[must_use]
+pub fn reached(forwarded: Option<&str>) -> String {
+    match forwarded {
+        Some(c) if !c.is_empty() => format!("via front to {c}"),
+        _ => "direct".into(),
+    }
+}
+
+/// pigeon-front's header naming the colour it forwarded an answer to.
+pub const FORWARDED: &str = "x-pigeon-front";
+
 /// Whether `GET https://<host>/healthz` answers 200 with `ok` true, in up to 3 tries 10 s apart:
-/// `Ok`, or why the last try wasn't, as [`down_reason`] gives it.
-fn probe(host: &str, access: (&str, &str)) -> Result<(), String> {
+/// how it was reached, as [`reached`] says, or why the last try wasn't up, as [`down_reason`] says.
+fn probe(host: &str, access: (&str, &str)) -> Result<String, String> {
     let agent: ureq::Agent = ureq::Agent::config_builder()
         .http_status_as_error(false)
         .timeout_global(Some(std::time::Duration::from_secs(10)))
@@ -106,9 +139,10 @@ fn probe(host: &str, access: (&str, &str)) -> Result<(), String> {
         why = match answer {
             Ok(mut r) => {
                 let status = r.status().as_u16();
+                let via = reached(r.headers().get(FORWARDED).and_then(|v| v.to_str().ok()));
                 let body = r.body_mut().read_to_string().unwrap_or_default();
                 match down_reason(status, &body) {
-                    None => return Ok(()),
+                    None => return Ok(via),
                     Some(w) => w,
                 }
             }
@@ -155,8 +189,8 @@ pub fn serving(
         );
         return None;
     };
-    let say = |r: &Result<(), String>| match r {
-        Ok(()) => "up".to_string(),
+    let say = |r: &Result<String, String>| match r {
+        Ok(via) => format!("up ({via})"),
         Err(why) => format!("down ({why})"),
     };
     let mut out = crate::core::deploy::serving::Serving {
@@ -165,10 +199,19 @@ pub fn serving(
             .to_string(),
         ..Default::default()
     };
+    let probed: Vec<String> = colors.iter().map(|(_, h)| h.clone()).collect();
     for (worker, host) in colors {
         let r = probe(&host, (id, secret));
         let _ = writeln!(log, "serving: {worker} {host}: {}", say(&r));
         out.colors.insert(worker, r.is_ok());
+    }
+    // Each Worker's other own hosts, by its exact-host routes, logged only.
+    for (worker, host) in route_hosts(dir, var(crate::workers::DEPLOYMENT_VAR)) {
+        if probed.contains(&host) {
+            continue;
+        }
+        let r = probe(&host, (id, secret));
+        let _ = writeln!(log, "serving: {worker} {host}: {}", say(&r));
     }
     let r = probe(&front, (id, secret));
     let _ = writeln!(log, "serving: front {front}: {}", say(&r));

@@ -1246,7 +1246,7 @@ fn shown(host: &str) -> String {
 }
 
 /// The route keys [`hosts`] represents; the coverage test fails on any other.
-pub const ROUTE_KEYS: &[&str] = &["custom_domain", "subdomains_of"];
+pub const ROUTE_KEYS: &[&str] = &["custom_domain", "subdomains_of", "host", "zone"];
 
 /// The hostnames the spec's routes serve, each with what it is.
 fn hosts(spec: &crate::workers::Spec) -> Vec<Item> {
@@ -1259,6 +1259,7 @@ fn hosts(spec: &crate::workers::Spec) -> Vec<Item> {
             let Some(v) = v.as_str() else { continue };
             match k.as_str() {
                 "custom_domain" => out.push(item(shown(v), "custom domain")),
+                "host" => out.push(item(shown(v), "its own host, by route")),
                 "subdomains_of" => out.push(item(
                     if shown(v) == STANDALONE {
                         STANDALONE.to_string()

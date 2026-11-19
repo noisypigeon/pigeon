@@ -726,3 +726,33 @@ the two meet, they agree:
   zone record of its own; its custom domain is created by its Worker's deploy.
 - Zone imports (§5) and the cutover (§8) see the colour's custom domain as one
   of the Worker custom domains they already support.
+
+### 2026-11-19: Each colour's own host reaches it by an exact-host route: the zone wildcard beats a Custom Domain
+
+Step 9b assumed a colour's Custom Domain outranks pigeon-front's
+`*.pigeon.dev/*` zone route. It doesn't, here:
+
+- **Evidence.** pigeon-green has green.platform.pigeon.dev as a Custom Domain,
+  and DNS holds it as a Worker record on pigeon-green, with no `*.platform`
+  wildcard. Yet its Observability shows no fetch events, only its
+  `17 * * * *` cron. Meanwhile each deploy probe of that host logged
+  `down (status 404, not JSON)`, the empty 404 pigeon-control's `hosts::serve`
+  gives a zone host it doesn't own. So the front's wildcard took the request
+  and forwarded it to the lease's colour. blue.platform and control.platform
+  reach pigeon-control the same way, so they'd follow the lease to green.
+- **Rule.** A colour's own hosts each take an exact-host zone route,
+  `{ host, zone }` in its spec, rendered as `<host>/*`. Cloudflare matches the
+  most specific route pattern, so `<host>/*` beats `*.<zone>/*`. The Custom
+  Domain stays for its DNS record and certificate.
+- **Claiming.** A deploy may move a route from another Worker only if it is an
+  exact-host pattern. It never moves the front's `*.<zone>/*` or any other
+  wildcard (`ship::claimable`).
+- **Proof.** pigeon-front marks what it forwards with `x-pigeon-front: <colour>`.
+  The serving probe logs `up (direct)` or `up (via front to <colour>)` for each
+  colour host and each exact-host route. A colour's hosts count as fixed only
+  once they show `direct`.
+- **Order.** A1 gives pigeon-control its two host routes. A2, the colour spec's
+  restore, gives pigeon-green its route and caps its queue consumer's retries.
+  P5 waits for green.platform to answer `direct` with green's version.
+- **Fallback.** If wrangler refuses a route on a host that's also a Custom
+  Domain, the front routes by host instead, with a service binding per colour.

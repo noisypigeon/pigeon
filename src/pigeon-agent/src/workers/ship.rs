@@ -56,9 +56,19 @@ fn tool(message: impl Into<String>) -> Error {
     }
 }
 
-/// Each zone route `rendered` names that another Worker holds, moved to `name`, since wrangler
-/// refuses such a route; see .claude/decisions/2026-11-18-runtime-independent-blue-green-workers.md,
-/// its step 9b amendment.
+/// Whether a deploy may move zone route `pattern` from another Worker: only one host's route,
+/// never a wildcard such as the front's `*.<zone>/*` (the blue-green ADR's exact-host route
+/// amendment).
+#[must_use]
+pub fn claimable(pattern: &str) -> bool {
+    let host = pattern.split('/').next().unwrap_or_default();
+    !host.is_empty() && !host.contains('*')
+}
+
+/// Each exact-host zone route `rendered` names that another Worker holds, moved to `name`, since
+/// wrangler refuses such a route; see
+/// .claude/decisions/2026-11-18-runtime-independent-blue-green-workers.md, its step 9b and
+/// exact-host route amendments.
 fn claim_routes(
     t: &Target,
     name: &str,
@@ -69,6 +79,9 @@ fn claim_routes(
         let (Some(pattern), Some(zone)) = (r["pattern"].as_str(), r["zone_name"].as_str()) else {
             continue;
         };
+        if !claimable(pattern) {
+            continue;
+        }
         let id = t.api.zone_id(zone).map_err(tool)?;
         let path = format!("/zones/{id}/workers/routes");
         let held = t.api.get(&path).map_err(tool)?;

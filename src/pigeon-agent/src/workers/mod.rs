@@ -338,8 +338,9 @@ pub struct Entry {
     pub features: Vec<String>,
 }
 
-/// A route: a custom domain, or every first-level subdomain of a zone; see
-/// `.claude/decisions/2026-11-15-runtime-standalone-hostnames-platform-zone.md` §1.
+/// A route: a custom domain, every first-level subdomain of a zone (see
+/// `.claude/decisions/2026-11-15-runtime-standalone-hostnames-platform-zone.md` §1), or one host of
+/// a zone, which outranks that zone's wildcard (the blue-green ADR's exact-host route amendment).
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Route {
@@ -349,6 +350,12 @@ pub struct Route {
     /// A zone, served as `*.<zone>/*`, with [`SUBDOMAINS_VAR`] set to it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub subdomains_of: Option<String>,
+    /// One host, served as `<host>/*` in [`Route::zone`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub host: Option<String>,
+    /// The zone a [`Route::host`] lies in.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub zone: Option<String>,
 }
 
 /// The var a `subdomains_of` route sets to its zone, the one the proxy reads.
@@ -767,7 +774,18 @@ pub fn validate(root: &Path, found: &Found) -> Vec<Problem> {
     out
 }
 
-/// Each route is one custom domain or one zone's subdomains, and at most one is the latter.
+/// Whether `h` names one host strictly under zone `z`, with no wildcard; both may still be
+/// unbound `$deployment` references, which binding checks again.
+#[must_use]
+pub fn exact_host(h: &str, z: &str) -> bool {
+    if h.starts_with(DEPLOYMENT_PREFIX) || z.starts_with(DEPLOYMENT_PREFIX) {
+        return true;
+    }
+    !h.contains('*') && h.len() > z.len() + 1 && h.ends_with(&format!(".{z}"))
+}
+
+/// Each route is one custom domain, one zone's subdomains, or one host of a zone; at most one is
+/// a zone's subdomains.
 fn validate_routes(s: &Spec, add: &mut impl FnMut(String)) {
     let host = |h: &str| {
         h.split('.').count() >= 2
@@ -780,12 +798,21 @@ fn validate_routes(s: &Spec, add: &mut impl FnMut(String)) {
             })
     };
     for r in &s.routes {
-        match (&r.custom_domain, &r.subdomains_of) {
-            (Some(_), Some(_)) | (None, None) => {
-                add("a route is one of `custom_domain` or `subdomains_of`".into());
+        match (&r.custom_domain, &r.subdomains_of, &r.host, &r.zone) {
+            (Some(_), None, None, None) => {}
+            (None, Some(z), None, None) => {
+                if !host(z) {
+                    add(format!("`subdomains_of` `{z}` is not a zone"));
+                }
             }
-            (None, Some(z)) if !host(z) => add(format!("`subdomains_of` `{z}` is not a zone")),
-            _ => {}
+            (None, None, Some(h), Some(z)) => {
+                if !exact_host(h, z) {
+                    add(format!("`host` `{h}` is not a host under zone `{z}`"));
+                }
+            }
+            _ => add(
+                "a route is one of `custom_domain`, `subdomains_of`, or `host` with `zone`".into(),
+            ),
         }
     }
     if s.routes
@@ -1141,7 +1168,10 @@ fn render_script(spec: &Spec, images: Option<&BTreeMap<String, String>>) -> Valu
             .map(|r| match (&r.custom_domain, &r.subdomains_of) {
                 (Some(d), _) => json!({ "pattern": d, "custom_domain": true }),
                 (None, Some(z)) => json!({ "pattern": format!("*.{z}/*"), "zone_name": z }),
-                (None, None) => Value::Null,
+                (None, None) => match (&r.host, &r.zone) {
+                    (Some(h), Some(z)) => json!({ "pattern": format!("{h}/*"), "zone_name": z }),
+                    _ => Value::Null,
+                },
             })
             .collect();
     }

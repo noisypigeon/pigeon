@@ -940,8 +940,36 @@ fn a_subdomains_route_renders_a_wildcard_and_its_var() {
 }
 
 #[test]
+fn an_exact_host_route_renders_one_host_of_its_zone() {
+    let spec = SPEC.replace(
+        "routes: [ { custom_domain: pigeon.dev } ]",
+        "routes: [ { custom_domain: a.example.dev }, { host: a.example.dev, zone: example.dev } ]",
+    );
+    let root = fixture(&spec);
+    let f = found(root.path());
+    assert_eq!(workers::validate(root.path(), &f), Vec::new());
+    let w = workers::render(&f, &outputs()).expect("renders");
+    assert_eq!(
+        w["routes"][1],
+        json!({ "pattern": "a.example.dev/*", "zone_name": "example.dev" })
+    );
+    assert!(w["vars"].get(workers::SUBDOMAINS_VAR).is_none());
+}
+
+#[test]
 fn bad_routes_are_refused() {
     for (routes, want) in [
+        ("[ { host: a.dev } ]", "one of"),
+        ("[ { host: a.dev, zone: a.dev } ]", "not a host under"),
+        ("[ { host: '*.a.dev', zone: a.dev } ]", "not a host under"),
+        (
+            "[ { host: a.example.dev, zone: b.example.dev } ]",
+            "not a host under",
+        ),
+        (
+            "[ { custom_domain: a.b.dev, host: a.b.dev, zone: b.dev } ]",
+            "one of",
+        ),
         (
             "[ { custom_domain: a.dev, subdomains_of: a.dev } ]",
             "one of",

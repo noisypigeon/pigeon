@@ -3,7 +3,11 @@
 
 use std::cell::RefCell;
 
-use worker::{Context, Env, Request, Response, Result, event};
+use worker::{Context, Env, Headers, Request, Response, Result, event};
+
+/// The header naming the colour an answer was forwarded to, so a probe tells a host the front
+/// answered from one its colour answered directly (the blue-green ADR's exact-host route amendment).
+pub const FORWARDED: &str = "x-pigeon-front";
 
 /// How long an isolate keeps the lease's color, in milliseconds.
 const CACHE_MS: u64 = 5_000;
@@ -44,8 +48,15 @@ async fn fetch(req: Request, env: Env, _ctx: Context) -> Result<Response> {
     let Some(c) = color(&env).await else {
         return Response::error("no lease", 503);
     };
-    match env.service(&binding(&c)) {
-        Ok(service) => service.fetch_request(req).await,
-        Err(_) => Response::error(format!("no binding for {c}"), 503),
+    let Ok(service) = env.service(&binding(&c)) else {
+        return Response::error(format!("no binding for {c}"), 503);
+    };
+    let answer = service.fetch_request(req).await?;
+    // A copy of its headers, marked: a forwarded answer's own headers can't be changed.
+    let headers = Headers::new();
+    for (k, v) in answer.headers().entries() {
+        headers.append(&k, &v)?;
     }
+    headers.set(FORWARDED, &c)?;
+    Ok(answer.with_headers(headers))
 }
