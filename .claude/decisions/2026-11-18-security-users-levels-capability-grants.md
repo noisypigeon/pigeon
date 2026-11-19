@@ -1085,6 +1085,7 @@ R3 decides: `pigeon-control` version cd1c6adf, deployed from 2b333a46, runs
   waits on the binding.
 - **After.** Once the logs show jobs fetching through `build.read`, E3
   removes `/builds/` and the fallback.
+
 ### 2026-11-19: `f8cf3dd1…` is the deployer's smoke, now bound
 
 This corrects the parallel plan, A5 and the outcome amendments.
@@ -1106,3 +1107,20 @@ This corrects the parallel plan, A5 and the outcome amendments.
 - **The rule.** Every token that reaches `run()` is bound before R3
   decides, and a door's smoke reaches `run()`. A new door token's smoke is
   checked under `decide` before it ships.
+
+### 2026-11-19: E3's proof is the Worker's own event, not a job's log
+
+- **Why not the log.** `pigeon-start`'s stderr (!1301) goes to the
+  Container's own log, which no tool reads. A Bench run's log starts with
+  the command it runs.
+- **Why not the shadow.** It logs a difference once. The builds token's
+  "unbound" difference was logged before the binding (event 59343). Silence
+  since then can't tell a fixed caller from an unchanged one.
+- **What is known.** The token is bound to `jobs` (59343). Before the
+  binding, today's check let its `build.read` reach `run()`. `build.read`
+  returns main's `pigeon` byte for byte, matching `deploy.status`'s sha256.
+- **The proof.** Each `GET /builds/` logs `builds.fetched`, naming the file
+  and its commit. Jobs reach `/builds/` only when `build.read` fails, so one
+  event is one fallback.
+- **E3.** Once a day of bound jobs on the current images logs no
+  `builds.fetched`, E3 removes `/builds/`, the fallback and this event.

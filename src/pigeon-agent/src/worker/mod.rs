@@ -1939,6 +1939,11 @@ async fn build(env: &Env, path: &str) -> Result<Response> {
     let Some(body) = object.body() else {
         return Response::error("no build of that commit", 404);
     };
+    // A job here fell back from `build.read`; see the users ADR's E3 proof amendment.
+    if let Ok(s) = Settings::from(env) {
+        let said = format!("GET /builds/{}/{binary}", &sha[..12]);
+        let _ = events::append(env, &s, "builds.fetched", None, None, &said, false).await;
+    }
     // Streamed: a build is tens of MB, too much to hold in the Worker's memory.
     let mut r = Response::from_stream(body.stream()?)?;
     let h = r.headers_mut();
