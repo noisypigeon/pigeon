@@ -12,6 +12,9 @@
 - agent v0.1.72
 - agent v0.1.73
 - agent v0.1.74
+- agent v0.1.75
+- infra-cloudflare-dns-record v0.1.4
+- infra-cloudflare-schema v0.1.26
 
 ### Merged
 
@@ -56,6 +59,16 @@
 - feat(worker): secrets.migrate copies the shared Worker secrets into the Secrets Store in the Worker, with the owner's passkey (!1307) ([4a88996](https://github.com/noisypigeon/pigeon/commit/4a88996f9219b064ae081f687492de0aca9e266b)) · agent
 - feat(infra): pigeon-green's spec: one colour spec, bound to color/green, reading the shared secrets from the Secrets Store (!1315) ([8e805a6](https://github.com/noisypigeon/pigeon/commit/8e805a6a5f076a2b9add8c3086797d98ae4fc136))
 - fix(workers): a deploy binds a colour spec to its platform's colour unit; pigeon-green's spec waits for that build (!1317) ([15b00a3](https://github.com/noisypigeon/pigeon/commit/15b00a367276c3e6eafe229d9e7b287854b17fe6)) · agent
+- docs(decisions): zoned standalones' steps 2 to 6 start, and step 4 is three changes (!1319) ([a0ef117](https://github.com/noisypigeon/pigeon/commit/a0ef1170b3b93b6e2902cfdea2a63122689f183f))
+- feat(policy): zones.yaml keeps private zones out of instance configs and tests (!1320) ([3658081](https://github.com/noisypigeon/pigeon/commit/3658081953c35767de59a551cf30b167f8d144ef))
+- test(infra): infra_manifest's dns-record fixture declares data and comment (!1326) ([81bc01e](https://github.com/noisypigeon/pigeon/commit/81bc01e320e18d0402bec0689d1ebbc020483b1d))
+- feat(infra): pigeon-green's spec again, now that a deploy binds it to color/green (!1325) ([b471cc3](https://github.com/noisypigeon/pigeon/commit/b471cc308a5bdfdb1e6b0e2fce605708c4b089b9)) · agent
+- feat(backplane): a failed deploy holds Auto only when no colour serves, or main keeps failing (!1327) ([88046d1](https://github.com/noisypigeon/pigeon/commit/88046d12fe1d3ade0d56a04c04d82837aab89665)) · agent
+- feat(git): a git-repo unit says who pushes its mirror, `mirror_app` (!1318) ([5740e06](https://github.com/noisypigeon/pigeon/commit/5740e066ccf4cbe2c852b56d11cdac933a14a153)) · agent
+- docs(adr): review !1325 against !1319 (!1329) ([152a3b8](https://github.com/noisypigeon/pigeon/commit/152a3b863cb4604ca30105e8db9e01e55fdaa15e))
+- feat(platform): a platform job masks each private zone's name as <alias> (!1328) ([3a4a54a](https://github.com/noisypigeon/pigeon/commit/3a4a54aba5500d01c28eafefd5e2e88c9630762a)) · agent
+- feat(infra): zone records take SRV, CAA and NS, with data and a comment (!1316) ([54175a4](https://github.com/noisypigeon/pigeon/commit/54175a4b13b5d0e33f21ce3877f58189aad81cfe)) · infra-cloudflare-dns-record, infra-cloudflare-schema
+- revert(infra): set pigeon-green's spec aside until pigeon-control's Runner can bind it (!1336) ([dc4873c](https://github.com/noisypigeon/pigeon/commit/dc4873c7961e74faf9a093f1b7069cbda9ff80fb))
 
 ## 2026-11-18
 
