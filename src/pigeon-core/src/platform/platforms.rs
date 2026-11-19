@@ -262,11 +262,11 @@ pub fn hash(token: &str) -> String {
         })
 }
 
-/// Whether `unit` is a platform unit ID.
+/// Whether `unit` is a platform or colour unit ID.
 #[must_use]
 pub fn is_unit(unit: &str) -> bool {
     unit.split_once('/').is_some_and(|(a, n)| {
-        a == "platform"
+        matches!(a, "platform" | "color")
             && !n.is_empty()
             && n.bytes()
                 .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
@@ -297,7 +297,7 @@ impl Runs {
     pub fn propose(&self, unit: &str, token: &str, now: u64) -> Result<(Self, Run), String> {
         if !is_unit(unit) {
             return Err(format!(
-                "`{unit}` is not a platform unit (`platform/<name>`)"
+                "`{unit}` is not a platform or colour unit (`platform/<name>` or `color/<name>`)"
             ));
         }
         if let Some(open) = self

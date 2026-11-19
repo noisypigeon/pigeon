@@ -67,6 +67,7 @@ fn one_open_run_per_unit_and_only_platform_units() {
     stepped!(runs.propose("platform/blue", "g", 0)).expect("proposes");
     assert!(stepped!(runs.propose("platform/blue", "h", 1)).is_err());
     assert!(stepped!(runs.propose("platform/green", "h", 1)).is_ok());
+    assert!(stepped!(runs.propose("color/green", "h", 1)).is_ok());
     assert!(stepped!(runs.propose("infra/pigeon", "h", 1)).is_err());
 }
 

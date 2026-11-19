@@ -269,10 +269,12 @@ pub fn ledger_resolved(
     )))
 }
 
-/// The kind whose units a `from-unit` mint serves.
-const PLATFORM_KIND: &str = "pigeon/platform";
+/// The kinds whose units a `from-unit` mint serves: a platform, and its colours (the colour-kind
+/// amendment of `.claude/decisions/2026-11-18-runtime-independent-blue-green-workers.md`).
+const PLATFORM_KINDS: [&str; 2] = ["pigeon/platform", "pigeon/color"];
 
-/// Each `pigeon/platform` unit's capability names under the instance at `root`, by unit; see
+/// Each `pigeon/platform` and `pigeon/color` unit's capability names under the instance at
+/// `root`, by unit; see
 /// `.claude/decisions/2026-11-17-security-platform-run-minted-token.md` §2–§3.
 ///
 /// # Errors
@@ -285,10 +287,11 @@ pub fn platform_units(
     let (units, _) = crate::infra::unit::discover_in(root, platform);
     let mut out = BTreeMap::new();
     let mut problems = Vec::new();
-    for u in units
-        .iter()
-        .filter(|u| u.kind.as_deref() == Some(PLATFORM_KIND))
-    {
+    for u in units.iter().filter(|u| {
+        u.kind
+            .as_deref()
+            .is_some_and(|k| PLATFORM_KINDS.contains(&k))
+    }) {
         let Some(c) = &u.config else {
             continue;
         };

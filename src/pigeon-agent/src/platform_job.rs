@@ -65,7 +65,7 @@ impl Task {
 
 fn is_unit(u: &str) -> bool {
     u.split_once('/').is_some_and(|(a, n)| {
-        a == "platform"
+        matches!(a, "platform" | "color")
             && !n.is_empty()
             && n.bytes()
                 .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
