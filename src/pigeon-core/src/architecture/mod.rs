@@ -1,9 +1,11 @@
 //! The platform's architecture as a graph, and its layout; see
 //! `.claude/decisions/2026-11-05-runtime-architecture-site-through-backplane.md` §2.
 
+pub mod diff;
 mod layout;
 pub mod render;
 
+pub use diff::{Diff, diff, expected};
 pub use layout::{GroupBox, LaneBox, Layout, Placed, Routed, layout};
 
 use serde::{Deserialize, Serialize};
