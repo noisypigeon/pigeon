@@ -82,6 +82,12 @@ impl Api {
             .and_then(|(status, b)| ok(status, &b, "POST", path))
     }
 
+    /// `PUT path` with a JSON `body`; its result.
+    pub(crate) fn put(&self, path: &str, body: &Value) -> Result<Value, String> {
+        self.call("PUT", path, Some(body))
+            .and_then(|(status, b)| ok(status, &b, "PUT", path))
+    }
+
     /// `POST path` with the first of `bodies` the API accepts, trying the next on a 400 or 404;
     /// see `.claude/decisions/2026-11-05-development-git-hosting-cloudflare-artifacts.md`.
     pub(crate) fn post_first(&self, path: &str, bodies: &[Value]) -> Result<Value, String> {

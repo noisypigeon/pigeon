@@ -56,6 +56,38 @@ fn tool(message: impl Into<String>) -> Error {
     }
 }
 
+/// Each zone route `rendered` names that another Worker holds, moved to `name`, since wrangler
+/// refuses such a route; see .claude/decisions/2026-11-18-runtime-independent-blue-green-workers.md,
+/// its step 9b amendment.
+fn claim_routes(
+    t: &Target,
+    name: &str,
+    rendered: &Value,
+    steps: &mut Vec<String>,
+) -> Result<(), Error> {
+    for r in rendered["routes"].as_array().into_iter().flatten() {
+        let (Some(pattern), Some(zone)) = (r["pattern"].as_str(), r["zone_name"].as_str()) else {
+            continue;
+        };
+        let id = t.api.zone_id(zone).map_err(tool)?;
+        let path = format!("/zones/{id}/workers/routes");
+        let held = t.api.get(&path).map_err(tool)?;
+        for route in held.as_array().into_iter().flatten() {
+            let other = route["script"].as_str().unwrap_or_default();
+            if route["pattern"] != pattern || other.is_empty() || other == name {
+                continue;
+            }
+            let rid = route["id"]
+                .as_str()
+                .ok_or_else(|| tool(format!("GET {path}: a route with no id")))?;
+            let body = serde_json::json!({ "pattern": pattern, "script": name });
+            t.api.put(&format!("{path}/{rid}"), &body).map_err(tool)?;
+            steps.push(format!("took {pattern} from {other}"));
+        }
+    }
+    Ok(())
+}
+
 /// `name`'s deployments; none for a Worker never deployed, which the API answers 404.
 fn deployments(t: &Target, name: &str) -> Result<Value, Error> {
     t.api
@@ -167,6 +199,7 @@ pub fn ship(
                     why.unwrap_or_else(|| "no version serves yet".into())
                 }
             ));
+            claim_routes(target, &name, &rendered, &mut steps)?;
             workers::wrangler_deploy(found, &dir, tools)?;
             let to = serving(&deployments(target, &name)?)
                 .ok_or_else(|| tool(format!("{name}: no version serves after the deploy")))?;
