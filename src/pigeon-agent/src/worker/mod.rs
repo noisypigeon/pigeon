@@ -133,6 +133,7 @@ async fn fetch(req: Request, env: Env, _ctx: worker::Context) -> Result<Response
     match req.path().as_str() {
         "/healthz" => return health(&env, &settings).await,
         "/healthz/smoke" => return smoke(&env, &settings, &who).await,
+        "/healthz/parity" => return parity(&env, &settings).await,
         _ => {}
     }
     if let Some(refused) = narrow_token(&env, &who, &req.path()) {
@@ -1636,6 +1637,79 @@ async fn health(env: &Env, s: &Settings) -> Result<Response> {
     .with_status(if ok { 200 } else { 503 }))
 }
 
+/// Each object's held and replayed journal digests, and whether they agree; only digests leave the Worker. See .claude/decisions/2026-11-18-runtime-independent-blue-green-workers.md, its step 10 amendment.
+async fn parity(env: &Env, s: &Settings) -> Result<Response> {
+    use crate::core::journal;
+    use std::collections::BTreeMap;
+    let seal = journal_seal(env).await;
+    let mut ok = true;
+    let mut objects = serde_json::Map::new();
+    for (object, url) in [
+        (
+            journal::state_object(&s.instance),
+            "https://instance/journal/digests",
+        ),
+        (
+            journal::main_object(&s.instance),
+            "https://main/journal/digests",
+        ),
+    ] {
+        let mut error: Option<String> = None;
+        let held: BTreeMap<String, String> = async {
+            let req = json_request(url, Method::Get, None, None).map_err(|e| e.to_string())?;
+            let stub = if url.starts_with("https://main") {
+                main_stub(env, &s.repo).map_err(|e| e.to_string())?
+            } else {
+                env.durable_object("INSTANCE")
+                    .map_err(|e| e.to_string())?
+                    .id_from_name(&s.instance)
+                    .map_err(|e| e.to_string())?
+                    .get_stub()
+                    .map_err(|e| e.to_string())?
+            };
+            let mut r = platform::call(env, &stub, req)
+                .await
+                .map_err(|e| e.to_string())?;
+            if r.status_code() != 200 {
+                return Err(format!("status {}", r.status_code()));
+            }
+            r.json::<BTreeMap<String, String>>()
+                .await
+                .map_err(|e| e.to_string())
+        }
+        .await
+        .unwrap_or_else(|e| {
+            error = Some(e);
+            BTreeMap::new()
+        });
+        let rows = match platform::d1_rows(env, &journal::rows(&object)).await {
+            Ok(r) => journal::from_rows(&r),
+            Err(e) => {
+                error.get_or_insert_with(|| e.to_string());
+                Vec::new()
+            }
+        };
+        let open = |k: &str, body: &Value| {
+            seal.as_ref()
+                .and_then(|key| journal::unseal(key, &object, k, body).ok())
+        };
+        let (replayed, unopened) = journal::replay(&rows, &open);
+        let differs = journal::parity(&replayed, &held);
+        ok &= differs.is_empty() && unopened.is_empty() && error.is_none();
+        objects.insert(
+            object.clone(),
+            json!({
+                "held": held,
+                "replayed": replayed,
+                "unopened": unopened,
+                "differs": differs,
+                "error": error,
+            }),
+        );
+    }
+    Response::from_json(&json!({ "ok": ok, "objects": objects }))
+}
+
 /// The newest deploy's log, from where its job stored it.
 async fn last_log(env: &Env, status: &Value) -> Result<Option<String>> {
     let Some(sha) = status["pipeline"]["history"][0]["sha"].as_str() else {
@@ -2365,6 +2439,17 @@ impl Instance {
         let path = req.path();
         if path == "/version" {
             return Response::ok(platform::version(&self.env));
+        }
+        if path == "/journal/digests" {
+            let d: Value = self
+                .state
+                .storage()
+                .get(crate::core::journal::DIGESTS)
+                .await
+                .ok()
+                .flatten()
+                .unwrap_or_else(|| json!({}));
+            return Response::from_json(&d);
         }
         if path.starts_with("/elicit/") || path.starts_with("/approvals/") || path == "/code/verify"
         {

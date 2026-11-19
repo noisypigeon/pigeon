@@ -343,6 +343,29 @@ pub fn last_seq(object: &str) -> crate::control::Statement {
     }
 }
 
+/// Every journal row of `object`, oldest first.
+#[must_use]
+pub fn rows(object: &str) -> crate::control::Statement {
+    crate::control::Statement {
+        sql: "SELECT seq, kind, body FROM journal WHERE object = ?1 ORDER BY seq",
+        params: vec![json!(object)],
+    }
+}
+
+/// [`Row`]s from [`rows`]' D1 answer; a row whose `seq` isn't a number, or whose `body` text isn't JSON, is left out.
+#[must_use]
+pub fn from_rows(rows: &[serde_json::Value]) -> Vec<Row> {
+    rows.iter()
+        .filter_map(|row| {
+            Some(Row {
+                seq: row["seq"].as_u64()?,
+                kind: row["kind"].as_str()?.to_string(),
+                body: serde_json::from_str(row["body"].as_str()?).ok()?,
+            })
+        })
+        .collect()
+}
+
 /// The Instance's state object.
 #[must_use]
 pub fn state_object(instance: &str) -> String {
@@ -397,6 +420,16 @@ mod replay_tests {
             kind: kind.to_string(),
             body,
         }
+    }
+
+    #[test]
+    fn rows_parse_from_d1_and_skip_what_isnt_a_row() {
+        let d1 = [
+            json!({"seq": 2, "kind": "a", "body": "1"}),
+            json!({"seq": "x", "kind": "b", "body": "2"}),
+            json!({"seq": 3, "kind": "c", "body": "not json"}),
+        ];
+        assert_eq!(from_rows(&d1), vec![row(2, "a", json!(1))]);
     }
 
     #[test]

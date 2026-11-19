@@ -1270,6 +1270,17 @@ impl MainRun {
         if path == "/version" {
             return Response::ok(platform::version(&self.env));
         }
+        if path == "/journal/digests" {
+            let d: Value = self
+                .state
+                .storage()
+                .get(crate::core::journal::DIGESTS)
+                .await
+                .ok()
+                .flatten()
+                .unwrap_or_else(|| json!({}));
+            return Response::from_json(&d);
+        }
         self.rearm().await?;
         if let Some(rest) = path.trim_matches('/').strip_prefix("platform/") {
             let body: Value = req.json().await.unwrap_or(Value::Null);
