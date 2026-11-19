@@ -13,6 +13,7 @@
 - agent v0.1.73
 - agent v0.1.74
 - agent v0.1.75
+- agent v0.1.76
 - infra-cloudflare-dns-record v0.1.4
 - infra-cloudflare-schema v0.1.26
 
@@ -69,6 +70,17 @@
 - feat(platform): a platform job masks each private zone's name as <alias> (!1328) ([3a4a54a](https://github.com/noisypigeon/pigeon/commit/3a4a54aba5500d01c28eafefd5e2e88c9630762a)) · agent
 - feat(infra): zone records take SRV, CAA and NS, with data and a comment (!1316) ([54175a4](https://github.com/noisypigeon/pigeon/commit/54175a4b13b5d0e33f21ce3877f58189aad81cfe)) · infra-cloudflare-dns-record, infra-cloudflare-schema
 - revert(infra): set pigeon-green's spec aside until pigeon-control's Runner can bind it (!1336) ([dc4873c](https://github.com/noisypigeon/pigeon/commit/dc4873c7961e74faf9a093f1b7069cbda9ff80fb))
+- docs(decisions): zoned step 4a resolves private zones while the manifest parses (!1331) ([c1e904d](https://github.com/noisypigeon/pigeon/commit/c1e904d5106d3bff9144e5ec31b86c0bdb7f168b))
+- feat(infra): private zone units resolve by alias from --private, or render nothing (!1332) ([1ee7d9d](https://github.com/noisypigeon/pigeon/commit/1ee7d9d335ce4f99490c0fe6ebb66539de667601)) · agent
+- feat(infra): pigeon-green's spec back, its queue named by setting (!1337) ([132b7b0](https://github.com/noisypigeon/pigeon/commit/132b7b0ff7673f5a175e44bcda967382174a9c97))
+- feat(deploy): the deploy job reports what serves and whether it touched the pipeline; the digest names an undeployable main (!1334) ([2b2bf17](https://github.com/noisypigeon/pigeon/commit/2b2bf17d7066c2d8a6d31836e9ef7152d9f5383f)) · agent
+- docs(adr): review !1334 against !1331 (!1340) ([b6a6b18](https://github.com/noisypigeon/pigeon/commit/b6a6b18419aa9b993f1f4c8159f864e1ea03f226))
+- feat(infra): `plan --adopt` adopts DNS records, and an adopting plan that destroys one is refused (!1338) ([8d7b008](https://github.com/noisypigeon/pigeon/commit/8d7b008e129e59b408b9e8572ec3ae44a0fd88fb)) · agent
+- fix(workers): a colour Worker is smoked and health-checked on its own host (!1342) ([6003ea4](https://github.com/noisypigeon/pigeon/commit/6003ea485d73eda2e7d21555a8bd96f5f36f1080)) · agent
+- revert(infra): set pigeon-green's spec aside until the deploy job runs a current pigeon (!1343) ([81ad66b](https://github.com/noisypigeon/pigeon/commit/81ad66ba2ed1246af8165d6547464a93744ed44b))
+- feat(deploy): the deploy log names the pigeon that runs it and the build it was handed (!1344) ([e671ee8](https://github.com/noisypigeon/pigeon/commit/e671ee84db403b8e86b3d96574b0aff73f1d711d)) · agent
+- fix(worker): the standby colour leaves its queue's messages for when it acts (!1345) ([ee5c53a](https://github.com/noisypigeon/pigeon/commit/ee5c53a28f19842780f154c5e9a7f99f18b6aa6a)) · agent
+- feat(infra): the zone import core parses BIND or API records into keyed records YAML (!1339) ([73090e3](https://github.com/noisypigeon/pigeon/commit/73090e399f4e01493040471795b39f7ae80e7a77))
 
 ## 2026-11-18
 
