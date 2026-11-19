@@ -15,3 +15,4 @@ pub mod providers;
 pub mod secrets;
 pub mod static_site;
 pub mod unit;
+pub mod zone_import;
