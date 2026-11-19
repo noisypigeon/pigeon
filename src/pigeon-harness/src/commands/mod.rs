@@ -114,5 +114,6 @@ fn infra(c: crate::cli::InfraCommand) -> crate::cli::InfraOp {
         I::Lock(a) => C::Lock(a),
         I::Capabilities(a) => C::Capabilities(a),
         I::Secrets(a) => C::Secrets(a),
+        I::Zone(a) => C::Zone(a),
     }
 }

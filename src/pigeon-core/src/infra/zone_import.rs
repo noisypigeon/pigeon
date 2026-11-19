@@ -783,4 +783,60 @@ mod tests {
         );
         assert_eq!(origin_of("www A 192.0.2.1\n"), None);
     }
+
+    #[test]
+    fn api_records_drop_the_apex_ns_and_never_show_ids() {
+        let zid = "fedcba9876543210fedcba9876543210";
+        let rec = |name: &str, kind: &str, extra: Value| {
+            let mut r = json!({
+                "id": "0123456789abcdef0123456789abcdef", "zone_id": zid,
+                "zone_name": "example.com", "name": name, "type": kind, "ttl": 1,
+            });
+            r.as_object_mut()
+                .expect("object")
+                .extend(extra.as_object().expect("object").clone());
+            r
+        };
+        let records = vec![
+            rec("example.com", "NS", json!({"content": "ns1.example.net"})),
+            rec(
+                "www.example.com",
+                "A",
+                json!({"content": "192.0.2.1", "proxied": true, "comment": "front door"}),
+            ),
+            rec("example.com", "TXT", json!({"content": "\"v=spf1 -all\""})),
+            rec(
+                "example.com",
+                "MX",
+                json!({"content": "mx.example.net", "priority": 10}),
+            ),
+            rec(
+                "_sip._tcp.example.com",
+                "SRV",
+                json!({"data": {"priority": 10, "weight": 5, "port": 5060, "target": "sip.example.com"}}),
+            ),
+            rec("example.com", "HTTPS", json!({"content": "1 . alpn=h2"})),
+            rec(
+                "shop.example.com",
+                "CNAME",
+                json!({"content": "x.example.net", "meta": {"read_only": true}}),
+            ),
+        ];
+        let i = import(Source::Api(&records), "example.com", &[]).expect("import");
+        assert_eq!(
+            yaml(&i),
+            json!({"records": {
+                "www-a": {"name": "www", "type": "A", "content": "192.0.2.1", "proxied": true, "comment": "front door"},
+                "apex-txt": {"name": "@", "type": "TXT", "content": "v=spf1 -all"},
+                "apex-mx": {"name": "@", "type": "MX", "content": "mx.example.net", "priority": 10},
+                "sip-tcp-srv": {"name": "_sip._tcp", "type": "SRV",
+                    "data": {"priority": 10, "weight": 5, "port": 5060, "target": "sip.example.com"}},
+            }})
+        );
+        let shown: Vec<String> = i.unmanaged.iter().map(ToString::to_string).collect();
+        assert_eq!(shown, ["record HTTPS at @", "record CNAME at shop"]);
+        assert!(!i.yaml.contains("0123456789abcdef"));
+        assert!(!i.yaml.contains("fedcba"));
+        assert!(!i.yaml.contains("zone_id"));
+    }
 }

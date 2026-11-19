@@ -10,6 +10,7 @@ use std::path::PathBuf;
 #[cfg(feature = "infra")]
 use super::{
     InfraApply, InfraPlan, InfraRoot, InfraRun, InfraShow, ReleaseArgs, SecretsCommand, TagsArgs,
+    ZoneCommand,
 };
 #[cfg(feature = "agent")]
 use super::{JobsArgs, ServeArgs};
@@ -35,6 +36,9 @@ pub enum InfraCommand {
     /// Manage a unit's encrypted secrets.config.yaml
     #[command(subcommand)]
     Secrets(SecretsCommand),
+    /// Import a zone's live records as `records:` YAML
+    #[command(subcommand)]
+    Zone(ZoneCommand),
 }
 
 /// `pigeon release`: cut releases, or `pigeon release tags`.

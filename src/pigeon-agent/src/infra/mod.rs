@@ -16,5 +16,6 @@ pub mod session;
 pub mod state;
 mod tofu;
 pub mod unit;
+pub mod zone_import;
 
 pub use engines::*;

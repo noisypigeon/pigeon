@@ -24,6 +24,9 @@ pub enum InfraOp {
     /// Manage a unit's encrypted secrets.config.yaml
     #[command(subcommand)]
     Secrets(SecretsCommand),
+    /// Import a zone's live records as `records:` YAML
+    #[command(subcommand)]
+    Zone(ZoneCommand),
     /// Build static sites, or publish them to their R2 buckets
     #[command(subcommand)]
     Sites(SitesCommand),
@@ -134,6 +137,30 @@ pub enum SecretsCommand {
     Set(SecretsKey),
     /// List the keys and verify each decrypts; never prints a value
     Check(SecretsUnit),
+}
+
+/// `pigeon infra zone` commands.
+#[derive(Subcommand, Debug)]
+pub enum ZoneCommand {
+    /// Print a zone's live records as `records:` YAML on stdout, less what the instance's units
+    /// render; exit 3 when anything sits outside DNS
+    Import(ZoneImport),
+}
+
+/// `pigeon infra zone import` arguments.
+#[derive(Args, Debug)]
+pub struct ZoneImport {
+    /// The repository root, providers and instance
+    #[command(flatten)]
+    pub at: InfraRoot,
+    /// The zone unit's alias, or its name when it is public
+    pub alias: String,
+    /// The zone's name [default: the alias when it has a dot; with --from, the file's $ORIGIN]
+    #[arg(long)]
+    pub zone: Option<String>,
+    /// A BIND zone file to read instead of the API
+    #[arg(long)]
+    pub from: Option<PathBuf>,
 }
 
 /// `pigeon sites` commands.

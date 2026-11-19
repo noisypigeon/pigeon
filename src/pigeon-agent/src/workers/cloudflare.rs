@@ -120,6 +120,24 @@ impl Api {
             .and_then(|(status, body)| ok(status, &body, "GET", path))
     }
 
+    /// Every item of a paged GET `path`, 100 a page, until a page comes back empty.
+    ///
+    /// # Errors
+    ///
+    /// A message when a call fails or there are more than 1000 pages.
+    pub(crate) fn get_all(&self, path: &str) -> Result<Vec<Value>, String> {
+        let sep = if path.contains('?') { '&' } else { '?' };
+        let mut items = Vec::new();
+        for page in 1..=1000 {
+            let got = self.get(&format!("{path}{sep}per_page=100&page={page}"))?;
+            match got.as_array() {
+                Some(a) if !a.is_empty() => items.extend(a.iter().cloned()),
+                _ => return Ok(items),
+            }
+        }
+        Err(format!("GET {}: more than 1000 pages", shown(path)))
+    }
+
     /// One call: its status and JSON body. Messages name the method and path, never the token.
     fn call(&self, method: &str, path: &str, body: Option<&Value>) -> Result<(u16, Value), String> {
         self.call_with(method, path, body, &[])
@@ -234,7 +252,13 @@ fn shown(path: &str) -> String {
             Some((_, tail)) => format!("/accounts/…/{tail}"),
             None => "/accounts/…".into(),
         },
-        None => path.to_string(),
+        None => match path.strip_prefix("/zones/") {
+            Some(rest) => match rest.split_once('/') {
+                Some((_, tail)) => format!("/zones/…/{tail}"),
+                None => "/zones/…".into(),
+            },
+            None => path.to_string(),
+        },
     }
 }
 
@@ -311,6 +335,15 @@ mod tests {
         assert_eq!(shown("/accounts/0123456789abcdef"), "/accounts/…");
         assert_eq!(shown("/accounts?per_page=2"), "/accounts");
         assert_eq!(shown("/zones?name=a.com"), "/zones");
+    }
+
+    #[test]
+    fn messages_never_show_a_zone_id() {
+        assert_eq!(
+            shown("/zones/0123456789abcdef/dns_records?page=2"),
+            "/zones/…/dns_records"
+        );
+        assert_eq!(shown("/zones?name=example.com&per_page=2"), "/zones");
     }
 
     #[test]

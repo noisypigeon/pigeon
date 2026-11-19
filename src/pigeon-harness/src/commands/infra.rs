@@ -14,8 +14,11 @@ use super::{INVALID, SUCCESS, VIOLATION};
 use crate::cli::{
     GitCommand, GitMirror, GitRun, InfraApply, InfraOp, InfraPlan, InfraRoot, InfraRun, InfraShow,
     ReleaseArgs, ScopeArgs, SecretsCommand, SecretsKey, SecretsUnit, SitesBuild, SitesCommand,
-    SitesPublish, TagsArgs,
+    SitesPublish, TagsArgs, ZoneCommand, ZoneImport,
 };
+
+/// Something in the zone sits outside DNS; see the ADR's §5.
+const UNMANAGED: i32 = 3;
 
 /// Runs a `pigeon infra` command and returns its exit code.
 #[must_use]
@@ -38,6 +41,7 @@ pub fn run(command: InfraOp) -> i32 {
         InfraOp::Capabilities(args) => capabilities(&args.root),
         InfraOp::Secrets(SecretsCommand::Set(args)) => secrets_set(&args),
         InfraOp::Secrets(SecretsCommand::Check(args)) => secrets_check(&args),
+        InfraOp::Zone(ZoneCommand::Import(args)) => return zone_import(&args),
         InfraOp::Sites(SitesCommand::Build(args)) => sites_build(&args),
         InfraOp::Sites(SitesCommand::Publish(args)) => sites_publish(&args),
         InfraOp::Git(command) => git(command),
@@ -56,6 +60,90 @@ pub fn run(command: InfraOp) -> i32 {
             eprintln!("infra: {e}");
             INVALID
         }
+    }
+}
+
+/// `pigeon infra zone import`: a zone's live records as `records:` YAML on stdout; see
+/// `.claude/decisions/2026-11-15-runtime-zoned-standalone-account-imports.md` §5.
+fn zone_import(args: &ZoneImport) -> i32 {
+    use agent::infra::zone_import::{self, Source};
+
+    let alias = &args.alias;
+    let text = match args.from.as_ref().map(fs::read_to_string) {
+        Some(Err(e)) => {
+            eprintln!("infra: zone import {alias}: --from: {e}");
+            return INVALID;
+        }
+        Some(Ok(text)) => Some(text),
+        None => None,
+    };
+    let zone = args
+        .zone
+        .clone()
+        .or_else(|| alias.contains('.').then(|| alias.clone()))
+        .or_else(|| text.as_deref().and_then(zone_import::origin_of));
+    let Some(zone) = zone.map(|z| z.to_ascii_lowercase()) else {
+        eprintln!(
+            "infra: zone import {alias}: name the zone with --zone; an alias's zone is private and never inferred"
+        );
+        return INVALID;
+    };
+    let (records, outside) = if text.is_some() {
+        (Vec::new(), Vec::new())
+    } else {
+        let fetched = cloudflare()
+            .map_err(|e| e.to_string())
+            .and_then(|api| zone_import::fetch(&api, &zone));
+        match fetched {
+            Ok(found) => found,
+            Err(e) => {
+                eprintln!("infra: zone import {alias}: {e}");
+                return INVALID;
+            }
+        }
+    };
+    let covered = match zone_import::covered(
+        args.at.instance_root(),
+        &args.at.root,
+        &args.at.providers_dir(),
+        &zone,
+    ) {
+        Ok(covered) => covered,
+        Err(e) => {
+            eprintln!("infra: zone import {alias}: {e}");
+            return INVALID;
+        }
+    };
+    let source = match &text {
+        Some(text) => Source::Bind(text),
+        None => Source::Api(&records),
+    };
+    let mut import = match zone_import::import(source, &zone, &covered) {
+        Ok(import) => import,
+        Err(e) => {
+            eprintln!("infra: zone import {alias}: {e}");
+            return INVALID;
+        }
+    };
+    import.unmanaged.extend(outside);
+    print!("{}", import.yaml);
+    for u in &import.unmanaged {
+        eprintln!("infra: unmanaged: {u}");
+    }
+    if text.is_none() {
+        eprintln!(
+            "infra: zone import {alias}: page rules, Email Routing, Workers custom domains and R2 custom domains aren't read; check them in the dashboard before cutover"
+        );
+    }
+    eprintln!(
+        "infra: zone import {alias}: {} record(s), {} unmanaged",
+        import.records,
+        import.unmanaged.len()
+    );
+    if import.unmanaged.is_empty() {
+        SUCCESS
+    } else {
+        UNMANAGED
     }
 }
 
