@@ -9,6 +9,17 @@ use crate::infra::moves::Move;
 
 pub use crate::core::infra::manifest::*;
 
+/// The run's private zone entries, set once by `--private`; see .claude/decisions/2026-11-15-runtime-zoned-standalone-account-imports.md §1.
+static PRIVATE: std::sync::RwLock<Option<serde_json::Map<String, serde_json::Value>>> =
+    std::sync::RwLock::new(None);
+
+/// Sets the run's private zone entries, which every later manifest load resolves.
+pub fn set_private(entries: serde_json::Map<String, serde_json::Value>) {
+    if let Ok(mut p) = PRIVATE.write() {
+        *p = Some(entries);
+    }
+}
+
 /// A kind's schema path under `platform`.
 #[must_use]
 pub fn kind_schema(platform: &Path, kind: &str) -> PathBuf {
@@ -74,6 +85,11 @@ pub fn disk(root: &Path, platform: &Path) -> Option<Disk> {
             .into_iter()
             .filter(|c| reaches_link(root, c))
             .collect(),
+        private: PRIVATE
+            .read()
+            .ok()
+            .and_then(|p| p.clone())
+            .unwrap_or_default(),
         text,
     })
 }

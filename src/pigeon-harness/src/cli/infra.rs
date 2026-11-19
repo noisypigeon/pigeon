@@ -54,6 +54,9 @@ pub struct InfraRoot {
     /// templates still come from the root
     #[arg(long)]
     pub instance: Option<PathBuf>,
+    /// A JSON file of private zone entries by alias, from the private store; never under the instance root
+    #[arg(long)]
+    pub private: Option<PathBuf>,
 }
 
 impl InfraRoot {

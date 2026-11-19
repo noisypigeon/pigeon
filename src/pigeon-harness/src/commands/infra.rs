@@ -20,6 +20,10 @@ use crate::cli::{
 /// Runs a `pigeon infra` command and returns its exit code.
 #[must_use]
 pub fn run(command: InfraOp) -> i32 {
+    if let Err(e) = load_private(&command) {
+        eprintln!("infra: {e}");
+        return INVALID;
+    }
     let result = match command {
         InfraOp::Validate(args) => {
             { agent::infra::validate_in(args.instance_root(), &args.root, &args.providers_dir()) }
@@ -53,6 +57,31 @@ pub fn run(command: InfraOp) -> i32 {
             INVALID
         }
     }
+}
+
+/// Loads `--private`, when given, for the run's manifest loads.
+fn load_private(command: &InfraOp) -> Result<(), String> {
+    let at = match command {
+        InfraOp::Validate(args) => args,
+        InfraOp::Render(args) => &args.at,
+        InfraOp::Plan(args) => &args.run.at,
+        InfraOp::Apply(args) => &args.run.at,
+        InfraOp::Show(args) => &args.run.at,
+        _ => return Ok(()),
+    };
+    let Some(path) = &at.private else {
+        return Ok(());
+    };
+    let file = fs::canonicalize(path).map_err(|e| format!("--private: {e}"))?;
+    let root = fs::canonicalize(at.instance_root()).map_err(|e| format!("--private: {e}"))?;
+    if file.starts_with(&root) {
+        return Err("--private must not be under the instance root".into());
+    }
+    let text = fs::read_to_string(&file).map_err(|e| format!("--private: {e}"))?;
+    let entries: serde_json::Map<String, serde_json::Value> =
+        serde_json::from_str(&text).map_err(|e| format!("--private: {e}"))?;
+    agent::infra::manifest::set_private(entries);
+    Ok(())
 }
 
 fn capabilities(root: &std::path::Path) -> Result<(), agent::infra::Error> {

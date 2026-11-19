@@ -10,6 +10,7 @@ pub mod generations;
 pub mod manifest;
 pub mod moves;
 pub mod plans;
+pub mod private;
 pub mod providers;
 pub mod secrets;
 pub mod static_site;

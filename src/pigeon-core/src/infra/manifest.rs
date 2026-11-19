@@ -151,6 +151,8 @@ pub struct Disk {
     pub kinds: BTreeMap<String, String>,
     /// The content paths whose existing components reach a symlink.
     pub linked: BTreeSet<String>,
+    /// The private zone entries a run hands over, by alias; empty when none. See [`crate::infra::private`].
+    pub private: Map<String, Value>,
 }
 
 impl Default for Disk {
@@ -159,6 +161,7 @@ impl Default for Disk {
             text: Err(String::new()),
             kinds: BTreeMap::new(),
             linked: BTreeSet::new(),
+            private: Map::new(),
         }
     }
 }
@@ -284,8 +287,10 @@ pub fn parse(root: &Path, disk: &Disk) -> (Manifest, Vec<(String, String)>) {
             problems.push((FILE.into(), format!("`{field}` must not be empty")));
         }
     }
+    let (raw_units, private_problems) = crate::infra::private::resolve(raw.units, &disk.private);
+    problems.extend(private_problems);
     let mut units = BTreeMap::new();
-    for (id, value) in raw.units {
+    for (id, value) in raw_units {
         match entry(&id, &value, &disk.kinds) {
             Ok(e) => {
                 units.insert(id, e);
