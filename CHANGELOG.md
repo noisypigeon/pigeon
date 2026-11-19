@@ -5,6 +5,7 @@
 ### Released
 
 - agent v0.1.67
+- agent v0.1.68
 
 ### Merged
 
@@ -18,6 +19,26 @@
 - feat(core): architecture::diff and expected hold a standby's inventory against the primary's (!1270) ([33c2959](https://github.com/noisypigeon/pigeon/commit/33c29593e423d61110ce61597e94e23a6f26d2f3))
 - feat(deploy): a Worker spec may be a `color`, unused yet, and deploy::standby::target picks the colour the lease doesn't name (!1271) ([c445630](https://github.com/noisypigeon/pigeon/commit/c44563059b52a6d1bc91acf34a37a89354edd123)) · agent
 - feat(core): journal::replay folds a state object's rows into digests, and journal::parity compares them (!1272) ([316aacf](https://github.com/noisypigeon/pigeon/commit/316aacf453a8d84f80b24d1dcbe7cee27bbc502a))
+- feat(gate): release.apple and release.apple.archive on /v0/app/mcp for the sign step's OIDC token, the grant HPKE-sealed to its key (!1280) ([f98ded3](https://github.com/noisypigeon/pigeon/commit/f98ded35dd598aa899ed168687c02cb74f96f21f)) · agent
+- feat(infra): rehearsal, part two: front-test.pigeon.dev moves back from pigeon-control to pigeon-front in one deploy (!1281) ([e5fe8a1](https://github.com/noisypigeon/pigeon/commit/e5fe8a1f035cbc4f0e5be8cc768f31c4e78ee23d))
+- docs(adr): E2b opens the sealed grant inside pigeon signing load, not a separate command (!1282) ([880ae19](https://github.com/noisypigeon/pigeon/commit/880ae192378fab829b71b6f3193a8a2e7cbde59e))
+- fix(agent): /mcp carries the X-Pigeon-Ticket header to the member check, so a planner's reads act as agent-planner (!1284) ([4986f91](https://github.com/noisypigeon/pigeon/commit/4986f912b8e5686b4bedfd3af03ef372ddc8a58e)) · agent
+- feat(infra): pigeon-front takes the standalones' zone route, and pigeon-control keeps INSTANCE_ZONE as a plain var (!1285) ([928a3f6](https://github.com/noisypigeon/pigeon/commit/928a3f602d0d8951fc7192faeb13ac4d25a8ed30))
+- feat(harness): pigeon signing load redeems its grant through release_apple and opens it sealed to the run's key (!1288) ([6d06c92](https://github.com/noisypigeon/pigeon/commit/6d06c9277ef4404f864ffd426758399cdc60f7c2))
+- feat(gate): R3 decides: MEMBER_CHECK=decide, the owner having waived the full shadow day (!1283) ([2b333a4](https://github.com/noisypigeon/pigeon/commit/2b333a468643046dbb315f0d89ef3499165af4d7))
+- revert(infra): the standalones' zone route stays pigeon-control's until a deploy can move a zone route (!1290) ([58699e1](https://github.com/noisypigeon/pigeon/commit/58699e145110f92b76d1bbb6e03cc9c6d86f511b))
+- fix(deploy): a Worker that fails to ship fails the deploy, never reads as superseded (!1289) ([1047ccc](https://github.com/noisypigeon/pigeon/commit/1047ccc7b78afd97a167ba0e3f4083dfe7cad1b0)) · agent
+- fix(deploy): a Worker's deploy takes over a zone route another Worker holds, which wrangler refuses (!1293) ([c554cf5](https://github.com/noisypigeon/pigeon/commit/c554cf5b6532a2696b62709d93497cec0aab618f)) · agent
+- docs(adr): the users ADR's outcome so far: R3 decides, and what remains (!1291) ([09a42c9](https://github.com/noisypigeon/pigeon/commit/09a42c92bce2d187d64fe952e5d2c2ba67368acd))
+- feat(agent): the builds token reaches /mcp while the member check decides, to be bound to jobs (!1292) ([27d75e3](https://github.com/noisypigeon/pigeon/commit/27d75e3e57c573d019e499b1d44f5c93673e7e19)) · agent
+- docs(adr): f8cf3dd1… is the deployer's smoke, bound to agent; it reaches run() after all (!1295) ([0cb77dc](https://github.com/noisypigeon/pigeon/commit/0cb77dc446351a6eb823aba89c927e9cfc9795f5))
+- fix(gate): a fable planner acts as agent-planner; agent_user follows the class's role, not the opus name (!1298) ([70d30ff](https://github.com/noisypigeon/pigeon/commit/70d30ff45a2b085600fd35ae2fa2e3b373eafef7))
+- test(core): no Standard or Service user passes a catalog operation that needs an Administrator-only permission (!1296) ([b22d67b](https://github.com/noisypigeon/pigeon/commit/b22d67b89c998a42bee4b22b2677fd31200aa498))
+- docs(adr): step 9's colour kind: a colour unit inherits its platform's shared resources, and reads shared secrets from the Secrets Store (!1299) ([1ebb727](https://github.com/noisypigeon/pigeon/commit/1ebb7278466414f7bf9eb875ba2fe7ade7b013db))
+- feat(infra): pigeon-front takes the standalones' zone route again, now that a deploy moves a zone route (!1294) ([b52e31d](https://github.com/noisypigeon/pigeon/commit/b52e31dfa2aab2b4b948293f7735ac933eae5838))
+- feat(images): pigeon-start says whether each file came through build.read or /builds/ (!1301) ([8ebcd7f](https://github.com/noisypigeon/pigeon/commit/8ebcd7f65167f6ed4f2bc32595f53ed8da4199b8))
+- feat(worker): platform::secret falls back to the Secrets Store for the shared names, loaded once per isolate (!1302) ([c47b672](https://github.com/noisypigeon/pigeon/commit/c47b6722c56d07065b15c667a8c41c45cb71d295)) · agent
+- fix(workers): Api::put sends a PUT, not a POST; pigeon-front leaves the zone route until a build carries that (!1303) ([2c65436](https://github.com/noisypigeon/pigeon/commit/2c6543622abcbc618a05d702302d855f7b71d1e5)) · agent
 
 ## 2026-11-18
 
