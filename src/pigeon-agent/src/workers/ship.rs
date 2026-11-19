@@ -150,6 +150,25 @@ fn wait_for(
     Err(last)
 }
 
+/// The host `found` is smoked and health-checked on, when not the deploy's: a forwarder's
+/// `forwards`, or a colour's own `PUBLIC_HOST`; see
+/// .claude/decisions/2026-11-18-runtime-independent-blue-green-workers.md, its colour-kind amendment.
+#[must_use]
+pub fn own_host(found: &Found) -> Option<String> {
+    if found.spec.forwards.is_some() {
+        return found.spec.forwards.clone();
+    }
+    if found.spec.color {
+        return found
+            .spec
+            .bindings
+            .vars
+            .get(crate::wire::ship_wire::HOST_VAR)
+            .cloned();
+    }
+    None
+}
+
 /// Deploys `found` from the checkout at `root`: renders it with `outputs` and `images`, applies
 /// its migrations, and deploys it whole when [`whole_deploy`] names a reason (`whole`), else as
 /// version blue-green; a forwarder (`Spec::forwards`) always deploys whole and is checked
@@ -185,10 +204,19 @@ pub fn ship(
     let mut steps = Vec::new();
     workers::migrate(found, &dir, tools)?;
     let forwards = found.spec.forwards.clone();
+    let own = own_host(found);
+    let host_target;
+    let checked = match own.as_deref() {
+        Some(host) => {
+            host_target = Target { host, ..*target };
+            &host_target
+        }
+        None => target,
+    };
     let to = match (forwards.is_some(), whole(from.as_deref()), from.as_deref()) {
         (false, None, Some(blue)) => {
             steps.push("version blue-green".to_string());
-            blue_green(&name, blue, &dir, tools, target, &mut steps)?
+            blue_green(&name, blue, &dir, tools, checked, &mut steps)?
         }
         (_, why, _) => {
             steps.push(format!(
@@ -209,14 +237,6 @@ pub fn ship(
             }
             to
         }
-    };
-    let host_target;
-    let checked = match forwards.as_deref() {
-        Some(host) => {
-            host_target = Target { host, ..*target };
-            &host_target
-        }
-        None => target,
     };
     let last = match wait_for(checked, &name, "/healthz", None, HEALTH_WAIT, |v| {
         if forwards.is_some() {

@@ -138,6 +138,24 @@ fn health_is_the_new_versions_and_ok() {
 }
 
 #[test]
+fn a_colour_or_forwarder_is_checked_on_its_own_host() {
+    let (_root, found) = fixture();
+    assert_eq!(ship::own_host(&found), None, "the deploy's own host");
+    let mut colour = found.clone();
+    colour.spec.color = true;
+    assert_eq!(
+        ship::own_host(&colour).as_deref(),
+        Some("control.example.workers.dev")
+    );
+    let mut forwarder = found;
+    forwarder.spec.forwards = Some("front.example.com".into());
+    assert_eq!(
+        ship::own_host(&forwarder).as_deref(),
+        Some("front.example.com")
+    );
+}
+
+#[test]
 fn ids_names_and_images_are_scrubbed() {
     let images = Images {
         source: "abc".into(),
