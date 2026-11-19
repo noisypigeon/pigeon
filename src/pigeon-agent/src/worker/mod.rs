@@ -49,6 +49,7 @@ mod pool_dispatch;
 mod pool_ops;
 mod provider;
 mod push;
+mod secrets_migrate;
 mod services;
 mod shell;
 mod stages;
@@ -183,6 +184,7 @@ const PAGES: &[&[Route]] = &[
     pool_ops::PAGES,
     services::PAGES,
     member_grants::PAGES,
+    secrets_migrate::PAGES,
 ];
 
 /// The owner's link to the grant page `path` (its path and query): the web client at `/app`,
@@ -1215,6 +1217,10 @@ async fn dispatch(
             args,
         } => {
             let (status, v) = services::run(env, s, &op, &args).await?;
+            Ok((None, respond(operation, status, v)))
+        }
+        Routed::SecretsMigrate { args } => {
+            let (status, v) = secrets_migrate::run(env, s, &args).await?;
             Ok((None, respond(operation, status, v)))
         }
         Routed::MemberGrant {
@@ -2487,6 +2493,10 @@ impl Instance {
         if path.starts_with("/standalone/") {
             let body: Value = req.json().await.unwrap_or(Value::Null);
             return standalone::serve(&self.state, &path, body).await;
+        }
+        if path.starts_with("/secrets/migrate/") {
+            let body: Value = req.json().await?;
+            return secrets_migrate::serve(&self.state, &path, &body).await;
         }
         if path.starts_with("/members/") {
             let body: Value = req.json().await?;

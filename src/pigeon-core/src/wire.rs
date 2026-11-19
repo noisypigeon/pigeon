@@ -251,7 +251,8 @@ const GRANT: [&str; 7] = [
     "change.front",
 ];
 
-const PAGE: [&str; 12] = [
+const PAGE: [&str; 13] = [
+    "secrets.migrate",
     "mandate.propose",
     "lane.request",
     "ci.window",
@@ -338,6 +339,7 @@ impl Operation {
             || self.name.starts_with("events.")
             || self.name.starts_with("feed.")
             || self.name.starts_with("digest.")
+            || self.name.starts_with("secrets.")
             || self.name.starts_with("home.")
             || self.name.starts_with("tracker.")
             || self.name.starts_with("ops.")
@@ -694,6 +696,17 @@ const CATALOG: &[Operation] = &[
         args: &[
             arg("account", true, Kind::String),
             arg("client_hash", true, Kind::String),
+            arg("ticket", false, Kind::String),
+        ],
+        view: View::Card,
+    },
+    Operation {
+        name: "secrets.migrate",
+        engine: Engine::Agent,
+        effect: Effect::Plan,
+        summary: "Ask the owner to copy the shared Worker secrets `names` (each in `SHARED`) into the Secrets Store, in the Worker: no value leaves it, and the page answers each name's outcome and fingerprint; answers with the page's link, granted with a passkey",
+        args: &[
+            arg("names", true, Kind::Strings),
             arg("ticket", false, Kind::String),
         ],
         view: View::Card,

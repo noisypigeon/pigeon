@@ -18,6 +18,7 @@ pub const PREFIXES: &[&str] = &[
     "deploy.",
     "service.",
     "member.",
+    "secrets.",
 ];
 
 /// How many of this family's operations have no presenter yet; each brief that presents some lowers it.
@@ -50,6 +51,7 @@ pub const NAMES: &[&str] = &[
     "member.grant",
     "member.revoke",
     "deploy.retry",
+    "secrets.migrate",
 ];
 
 /// The view of operation `op`'s result, when this family presents it.
@@ -119,6 +121,7 @@ fn build(op: &str, v: &Value) -> Value {
             .concat(),
             vec![],
         ),
+        "secrets.migrate" => secrets_migrate(v),
         "grant.request" | "grant.rotate" | "grant.revoke" => card(
             "Asked the owner",
             opt_str(&v["pending"], "operation"),
@@ -210,6 +213,23 @@ fn member_grant(v: &Value) -> Value {
         },
         opt_str(o, "account"),
         fields,
+        vec![],
+    )
+}
+
+/// `secrets.migrate`'s offer, as a card.
+fn secrets_migrate(v: &Value) -> Value {
+    card(
+        "Copy offered",
+        v["offer"]["names"]
+            .as_array()
+            .map(|n| format!("{} shared secret(s)", n.len()))
+            .as_deref(),
+        [
+            vec![field("expires", time(unum(&v["offer"], "expires")))],
+            pending_link(&v["pending"]).into_iter().collect(),
+        ]
+        .concat(),
         vec![],
     )
 }

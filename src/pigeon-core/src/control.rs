@@ -247,6 +247,13 @@ pub enum Routed {
         /// Its arguments.
         args: Map<String, Value>,
     },
+    /// `secrets.migrate`, with its arguments; see
+    /// `.claude/decisions/2026-11-18-runtime-independent-blue-green-workers.md`, its `secrets.migrate`
+    /// amendment.
+    SecretsMigrate {
+        /// Its arguments.
+        args: Map<String, Value>,
+    },
     /// A capacity pool operation, with its arguments; see
     /// `.claude/decisions/2026-11-15-development-capacity-pools-hard-spend-cap.md` §8.
     Pool {
@@ -512,6 +519,7 @@ pub fn route(request: &Request, by: &str, at: u64) -> Result<Routed, String> {
             operation: request.operation.clone(),
             args: a.clone(),
         }),
+        "secrets.migrate" => Ok(Routed::SecretsMigrate { args: a.clone() }),
         "member.grant" | "member.revoke" => Ok(Routed::MemberGrant {
             operation: request.operation.clone(),
             args: a.clone(),

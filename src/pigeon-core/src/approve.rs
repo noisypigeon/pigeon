@@ -124,6 +124,7 @@ fn verb(operation: &str) -> &'static str {
         "grant.request" => "Make the grant",
         "grant.rotate" => "Rotate the grant",
         "grant.revoke" => "Revoke the grant",
+        crate::platform::migrate::OPERATION => "Copy into the Secrets Store",
         _ => "Confirm",
     }
 }
@@ -792,6 +793,30 @@ pub fn service_bind_page(o: &crate::member::bind::Offer, token: &str) -> String 
         escape(what),
         escape(&o.client_hash),
         crate::member::bind::PAGE,
+        o.id,
+        escape(token),
+        passkey_button(&crate::approval::passkeys::grant_purpose(token))
+    );
+    shell(&title, &b)
+}
+
+/// The page copying the shared Worker secrets of offer `o` into the Secrets Store, posting `token`
+/// back to `/secrets-migrate/<id>` with the passkey; see
+/// `.claude/decisions/2026-11-18-runtime-independent-blue-green-workers.md`, its `secrets.migrate`
+/// amendment.
+#[must_use]
+pub fn secrets_migrate_page(o: &crate::platform::migrate::Offer, token: &str) -> String {
+    let title = o.title();
+    let what = "The Worker copies each value into the Secrets Store itself: no value leaves it. A name the store already holds is left as it is, and its fingerprint is the Worker's value, not the store's. The page then lists each name's outcome and fingerprint.";
+    let b = format!(
+        "<h1>{}</h1><p>{}</p><p><small>{}</small></p><form method=\"post\" action=\"{}{}\">\
+<input type=\"hidden\" name=\"grant\" value=\"{}\">{}{CODE_FIELD}\
+<button type=\"submit\">Approve</button></form>\
+<p><small><a href=\"/approvals\">Everything waiting</a></small></p>",
+        escape(&title),
+        escape(what),
+        escape(&o.names.join(", ")),
+        crate::platform::migrate::PAGE,
         o.id,
         escape(token),
         passkey_button(&crate::approval::passkeys::grant_purpose(token))

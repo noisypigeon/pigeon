@@ -105,6 +105,7 @@ fn approval(name: &str) -> Option<&'static [Arg]> {
         "platform.apply" => Some(PLATFORM_APPLY),
         "pool.resume" => Some(POOL_RESUME),
         "service.bind" | "service.unbind" => Some(SERVICE_BIND),
+        "secrets.migrate" => Some(SECRETS_MIGRATE),
         "member.grant" | "member.revoke" => Some(MEMBER_GRANT),
         "deploy.retry" => Some(DEPLOY_RETRY),
         _ => None,
@@ -629,6 +630,15 @@ const BIND_OFFER: &[Arg] = &[
 const SERVICE_BIND: &[Arg] = &[
     arg("offer", false, Kind::Object(BIND_OFFER)),
     arg("pending", false, Kind::Object(LINK_ONLY)),
+];
+const MIGRATE_OFFER: &[Arg] = &[
+    arg("id", false, Kind::Number),
+    arg("names", false, Kind::Strings),
+    arg("expires", false, Kind::Number),
+];
+const SECRETS_MIGRATE: &[Arg] = &[
+    arg("offer", false, Kind::Object(MIGRATE_OFFER)),
+    arg("pending", false, Kind::Object(PENDING_OP_FIELDS)),
 ];
 const GRANT_OFFER: &[Arg] = &[
     arg("account", false, Kind::String),

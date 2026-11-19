@@ -578,6 +578,55 @@ pub(super) async fn revoke_token(env: &Env, id: &str) -> Result<std::result::Res
     Ok(api.revoke(id).await.map_err(|e| e.to_string()))
 }
 
+/// A token holding only `permission` on the account, for `ttl` seconds: the account, the token's
+/// ID (for [`revoke_token`]) and its value; or why it can't be minted. The caller revokes it.
+///
+/// # Errors
+///
+/// When a binding fails.
+pub(super) async fn mint_helper(
+    env: &Env,
+    permission: &str,
+    ttl: u64,
+) -> Result<std::result::Result<(String, String, String), String>> {
+    let granter = match granter(env).await {
+        Ok(g) => g,
+        Err(why) => return Ok(Err(why)),
+    };
+    let account = match platform::account(&granter).await {
+        Ok(a) => a,
+        Err(e) => return Ok(Err(format!("`granter` sees no single account: {e}"))),
+    };
+    let api = Api {
+        granter: &granter,
+        account: &account,
+    };
+    let groups = api.groups().await?;
+    let wanted = [minting::Wanted {
+        name: "helper".into(),
+        permissions: vec![permission.into()],
+        scope: "account".into(),
+    }];
+    let t = now();
+    let spec = match minting::token_body(
+        "pigeon helper",
+        &account,
+        &wanted,
+        &[],
+        &BTreeMap::new(),
+        &groups,
+        &iso(t),
+        &iso(t + ttl),
+    ) {
+        Ok(b) => b,
+        Err(p) => return Ok(Err(p.join("; "))),
+    };
+    match api.mint(&spec).await {
+        Ok((id, value)) => Ok(Ok((account, id, value))),
+        Err(e) => Ok(Err(format!("the token wasn't minted: {e}"))),
+    }
+}
+
 /// Revokes offer `o`'s grant's token and removes its value, as `by`.
 async fn revoke(
     env: &Env,

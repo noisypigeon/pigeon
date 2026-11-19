@@ -101,6 +101,8 @@ pub(super) async fn live(env: &Env, s: &Settings) -> Result<Vec<Waiting>> {
                     super::pool_ops::live(env, &w.path, &token).await?
                 } else if w.path.starts_with(crate::core::member::bind::PAGE) {
                     super::services::live(env, s, &w.path, &token).await?
+                } else if w.path.starts_with(crate::core::platform::migrate::PAGE) {
+                    super::secrets_migrate::live(env, s, &w.path, &token).await?
                 } else if w.path.starts_with(crate::core::member::grant::PAGE) {
                     super::member_grants::live(env, s, &w.path, &token).await?
                 } else if w.path.starts_with("/mandate/") {

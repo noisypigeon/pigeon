@@ -272,6 +272,24 @@ pub fn service_bind(o: &crate::member::bind::Offer) -> Value {
     )
 }
 
+/// What `/secrets-migrate/<id>` shows: the owner copies shared Worker secrets into the Secrets
+/// Store, in the Worker.
+#[must_use]
+pub fn secrets_migrate(o: &crate::platform::migrate::Offer) -> Value {
+    page(
+        &o.title(),
+        &format!(
+            "The Worker copies each value into the Secrets Store itself: no value leaves it. A name the store already holds is left as it is, and its fingerprint is the Worker's value, not the store's. Names: {}.",
+            o.names.join(", ")
+        ),
+        "Approve",
+        &[],
+        &[],
+        false,
+        None,
+    )
+}
+
 /// The page resuming capacity pool offer `o`.
 #[must_use]
 pub fn pool_resume(o: &crate::pool::resume::Offer) -> Value {

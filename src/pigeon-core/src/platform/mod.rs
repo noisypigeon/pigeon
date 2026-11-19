@@ -2,6 +2,7 @@
 //! transitions; see `.claude/decisions/2026-11-10-development-factory-crates-functional-core.md` §3.
 
 pub mod hosts;
+pub mod migrate;
 pub mod platforms;
 pub mod runs;
 pub mod secrets;
