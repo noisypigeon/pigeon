@@ -22,7 +22,7 @@ engines = [
   "dep:httparse",
   "dep:rustls",
 ]
-worker = ["dep:futures-util", "dep:wasm-bindgen", "dep:worker", "worker/d1", "worker/queue"]
+worker = ["dep:futures-util", "dep:getrandom02", "dep:wasm-bindgen", "dep:worker", "worker/d1", "worker/queue"]
 
 [dependencies]
 aes-gcm.workspace = true
@@ -45,6 +45,7 @@ toml.workspace = true
 ureq = { workspace = true, optional = true }
 httparse = { workspace = true, optional = true }
 rustls = { workspace = true, optional = true }
+getrandom02 = { workspace = true, optional = true }
 wasm-bindgen = { workspace = true, optional = true }
 worker = { workspace = true, optional = true }
 

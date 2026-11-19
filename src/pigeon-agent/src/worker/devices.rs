@@ -149,6 +149,16 @@ pub async fn public(mut req: Request, env: &Env) -> Option<Result<Response>> {
             if (method.clone(), path.as_str()) == (Method::Post, "/v0/app/session") {
                 return session(env, &s, &mut req).await;
             }
+            // A Buildkite `sign` step: its OIDC token, for the release's two tools; see the users
+            // ADR's E2 amendment.
+            if (method.clone(), path.as_str()) == (Method::Post, "/v0/app/mcp")
+                && req
+                    .headers()
+                    .get("authorization")?
+                    .is_some_and(|h| h.starts_with("Bearer "))
+            {
+                return super::apple::mcp(req, env).await;
+            }
             let bytes = if method == Method::Get {
                 Vec::new()
             } else {

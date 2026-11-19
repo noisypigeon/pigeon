@@ -47,6 +47,7 @@ pub mod push;
 pub mod reconcile;
 pub mod release;
 pub mod routes;
+pub mod seal;
 pub mod session;
 pub mod sessions;
 pub mod signing;

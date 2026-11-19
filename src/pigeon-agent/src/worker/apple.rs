@@ -309,3 +309,163 @@ pub(super) async fn processing(
     .await?;
     Ok(crate::iosrelease::processing_state(&builds).map(String::from))
 }
+
+/// The most of the archive one `release.apple.archive` answers with.
+const ARCHIVE_PIECE: u64 = 4 * 1024 * 1024;
+
+/// 32 random bytes, for a seal's sender.
+fn seed() -> Result<[u8; 32]> {
+    let hex = super::platform::random_hex(32)?;
+    let mut out = [0; 32];
+    for (i, b) in out.iter_mut().enumerate() {
+        *b = u8::from_str_radix(hex.get(2 * i..2 * i + 2).unwrap_or("00"), 16)
+            .map_err(|e| worker::Error::RustError(e.to_string()))?;
+    }
+    Ok(out)
+}
+
+/// One JSON-RPC answer to a `tools/call`: `value` as its text and structured content.
+fn answer(id: &Value, ok: bool, value: &Value) -> Result<Response> {
+    let text = value
+        .as_str()
+        .map_or_else(|| value.to_string(), str::to_string);
+    Response::from_json(&json!({
+        "jsonrpc": "2.0",
+        "id": id,
+        "result": {
+            "content": [{ "type": "text", "text": text }],
+            "structuredContent": if value.is_object() { value.clone() } else { json!({ "message": value }) },
+            "isError": !ok,
+        }
+    }))
+}
+
+/// `POST /v0/app/mcp` with a Buildkite OIDC token: `release.apple` and `release.apple.archive`
+/// for the `sign` step, its grant sealed to the step's own key; see
+/// `.claude/decisions/2026-11-18-security-users-levels-capability-grants.md`, its E2 amendment.
+///
+/// # Errors
+///
+/// When D1 or R2 fails; every refusal is an answer.
+pub async fn mcp(mut req: Request, env: &Env) -> Result<Response> {
+    let job = match job(&req).await {
+        Ok(job) => job,
+        Err(why) => return Response::error(format!("unauthorized: {why}"), 401),
+    };
+    let body: Value = req.json().await.unwrap_or(Value::Null);
+    let id = body["id"].clone();
+    if body["method"] != "tools/call" {
+        return Response::error(
+            "this door answers `tools/call` alone for a Buildkite step",
+            400,
+        );
+    }
+    let args = &body["params"]["arguments"];
+    match body["params"]["name"].as_str().unwrap_or_default() {
+        "release_apple" => sealed_release(env, &job, &id, args).await,
+        "release_apple_archive" => archive_piece(env, &job, &id, args).await,
+        other => answer(
+            &id,
+            false,
+            &json!(format!("no tool `{other}` for a Buildkite step")),
+        ),
+    }
+}
+
+/// `release.apple {recipient}`: redeems the release once and answers its grant sealed to
+/// `recipient`, logging the key's fingerprint and never the grant.
+async fn sealed_release(env: &Env, job: &Job, id: &Value, args: &Value) -> Result<Response> {
+    let Some(recipient) = args["recipient"].as_str().filter(|r| !r.is_empty()) else {
+        return answer(
+            id,
+            false,
+            &json!("`recipient` is the step's X25519 public key, base64url"),
+        );
+    };
+    let Ok(public) = access::base64url(recipient) else {
+        return answer(id, false, &json!("`recipient` is not base64url"));
+    };
+    let redeemed = d1_rows(env, &apple::redeem(job, now())).await?;
+    let Some(build) = redeemed.first().and_then(|r| r["build"].as_u64()) else {
+        return answer(
+            id,
+            false,
+            &json!("no archived, unredeemed release for this build and commit"),
+        );
+    };
+    let fingerprint = crate::core::seal::fingerprint(&public);
+    let said = format!(
+        "release {build} (Buildkite {}) redeemed for key {fingerprint}",
+        job.build
+    );
+    if let Ok(s) = super::platform::Settings::from(env) {
+        let _ = super::events::append(env, &s, "release.apple.redeemed", None, None, &said, false)
+            .await;
+    }
+    let info = crate::core::seal::info(apple::PIPELINE, job.build, &job.commit);
+    let sealed = match grant(env).await {
+        Ok(grant) => {
+            let plain = serde_json::to_vec(&grant)?;
+            crate::core::seal::seal(recipient, &info, &plain, &seed()?)
+        }
+        Err(why) => Err(why),
+    };
+    match sealed {
+        Ok(sealed) => answer(id, true, &json!(sealed)),
+        Err(why) => {
+            d1(env, &[apple::fail(build, &why, now())]).await?;
+            answer(id, false, &json!(format!("the grant failed: {why}")))
+        }
+    }
+}
+
+/// `release.apple.archive {offset}`: the signing release's archive in pieces, with its size and
+/// R2's etag.
+async fn archive_piece(env: &Env, job: &Job, id: &Value, args: &Value) -> Result<Response> {
+    let rows = d1_rows(env, &crate::iosrelease::signing_row(job.build, &job.commit)).await?;
+    let Some(build) = rows.first().and_then(|r| r["build"].as_u64()) else {
+        return answer(
+            id,
+            false,
+            &json!("no release of this build and commit is signing"),
+        );
+    };
+    let offset = args["offset"]
+        .as_u64()
+        .or_else(|| args["offset"].as_str().and_then(|t| t.parse().ok()))
+        .unwrap_or(0);
+    let key = crate::iosrelease::key(&job.commit, build);
+    let bucket = env.bucket("CI_LOGS")?;
+    let Some(head) = bucket.head(key.clone()).await? else {
+        return answer(id, false, &json!("the archive is missing"));
+    };
+    let size = head.size();
+    if offset > size {
+        return answer(id, false, &json!("`offset` is past the end"));
+    }
+    let length = ARCHIVE_PIECE.min(size - offset);
+    let bytes = if length == 0 {
+        Vec::new()
+    } else {
+        let object = bucket
+            .get(key)
+            .range(worker::Range::OffsetWithLength { offset, length })
+            .execute()
+            .await?;
+        match object.as_ref().and_then(worker::Object::body) {
+            Some(body) => body.bytes().await?,
+            None => return answer(id, false, &json!("the archive is missing")),
+        }
+    };
+    let next = (offset + length < size).then_some(offset + length);
+    answer(
+        id,
+        true,
+        &json!({
+            "data": crate::core::mirroring::base64url(&bytes),
+            "next": next,
+            "size": size,
+            "etag": head.etag(),
+        }),
+    )
+}
