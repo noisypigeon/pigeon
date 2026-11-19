@@ -1,7 +1,7 @@
 //! Adopting existing resources by name; see
 //! `.claude/decisions/2026-11-08-runtime-blue-green-self-standup.md`, step 4's amendment.
 
-use agent::infra::adopt::{self, Found, Kind, Lookup};
+use agent::infra::adopt::{self, Found, Kind, Lookup, Record};
 use serde_json::{Value, json};
 
 struct Fake;
@@ -235,5 +235,145 @@ fn an_adopted_token_is_only_read_and_never_imported() {
     assert!(
         got.iter().all(|i| i["id"] != "accounts/acct/t9"),
         "{got:#?}"
+    );
+}
+
+struct Zone {
+    calls: std::cell::Cell<usize>,
+    records: Vec<Record>,
+}
+
+impl Lookup for Zone {
+    fn list(&self, _kind: Kind, _jurisdiction: &str) -> Result<Vec<Found>, String> {
+        Ok(vec![])
+    }
+
+    fn records(&self, zone: &str) -> Result<(String, Vec<Record>), String> {
+        self.calls.set(self.calls.get() + 1);
+        assert_eq!(zone, "example.com");
+        Ok(("zone1".into(), self.records.clone()))
+    }
+}
+
+fn rec(id: &str, name: &str, kind: &str, content: &str, data: Option<Value>) -> Record {
+    Record {
+        id: id.into(),
+        name: name.into(),
+        kind: kind.into(),
+        content: content.into(),
+        data,
+    }
+}
+
+fn dns(items: &Value) -> Value {
+    json!({ "module": {
+        "zone": { "source": "/platform/catalog/cloudflare/modules/zone", "name": "example.com" },
+        "dns_records": { "source": "/platform/catalog/cloudflare/modules/dns-record",
+            "zone_id": "${module.zone.id}", "for_each": items }
+    }})
+}
+
+fn record_address(key: &str) -> String {
+    format!("module.dns_records[\"{key}\"].cloudflare_dns_record.this")
+}
+
+#[test]
+fn dns_records_are_adopted_by_name_type_and_content_or_data() {
+    let items = json!({
+        "example.com:www-a": { "zone": "example.com", "name": "www.example.com", "type": "A", "content": "192.0.2.1", "data": null },
+        "example.com:apex-txt": { "zone": "example.com", "name": "example.com", "type": "TXT", "content": "v=spf1 -all", "data": null },
+        "example.com:sip": { "zone": "example.com", "name": "_sip._tcp.example.com", "type": "SRV", "content": null,
+            "data": { "priority": 10, "weight": 5, "port": 5060, "target": "sip.example.com" } },
+        "example.com:caa": { "zone": "example.com", "name": "example.com", "type": "CAA", "content": null,
+            "data": { "flags": 0, "tag": "issue", "value": "ca.example.net" } },
+        "example.com:mail-mx": { "zone": "example.com", "name": "mail.example.com", "type": "MX", "content": "mx2.example.net", "data": null }
+    });
+    let lookup = Zone {
+        calls: std::cell::Cell::new(0),
+        records: vec![
+            rec("r1", "www.example.com", "A", "192.0.2.1", None),
+            rec("r2", "example.com", "TXT", "\"v=spf1 -all\"", None),
+            rec(
+                "r3",
+                "_sip._tcp.example.com",
+                "SRV",
+                "",
+                Some(
+                    json!({ "priority": 10, "weight": 5, "port": 5060, "target": "sip.example.com." }),
+                ),
+            ),
+            rec(
+                "r4",
+                "example.com",
+                "CAA",
+                "",
+                Some(json!({ "flags": 0, "tag": "issue", "value": "ca.example.net" })),
+            ),
+            rec("r5", "www.example.com", "AAAA", "2001:db8::1", None),
+            rec("r6", "mail.example.com", "MX", "mx.example.net", None),
+        ],
+    };
+    let got = adopt::imports(&dns(&items), "acct", &lookup).expect("imports");
+    assert_eq!(
+        to(&got, &record_address("example.com:www-a")).as_deref(),
+        Some("zone1/r1")
+    );
+    assert_eq!(
+        to(&got, &record_address("example.com:apex-txt")).as_deref(),
+        Some("zone1/r2")
+    );
+    assert_eq!(
+        to(&got, &record_address("example.com:sip")).as_deref(),
+        Some("zone1/r3")
+    );
+    assert_eq!(
+        to(&got, &record_address("example.com:caa")).as_deref(),
+        Some("zone1/r4")
+    );
+    assert_eq!(to(&got, &record_address("example.com:mail-mx")), None);
+    assert!(got.iter().all(|i| {
+        !i["to"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("cloudflare_zone")
+    }));
+    assert_eq!(lookup.calls.get(), 1);
+}
+
+#[test]
+fn a_record_matching_two_live_records_is_refused() {
+    let items = json!({
+        "example.com:www-a": { "zone": "example.com", "name": "www.example.com", "type": "A", "content": "192.0.2.1", "data": null }
+    });
+    let lookup = Zone {
+        calls: std::cell::Cell::new(0),
+        records: vec![
+            rec("r1", "www.example.com", "A", "192.0.2.1", None),
+            rec("r2", "www.example.com", "A", "192.0.2.1", None),
+        ],
+    };
+    let err = adopt::imports(&dns(&items), "acct", &lookup).expect_err("ambiguous");
+    assert!(err.contains("matches 2 live records"), "{err}");
+}
+
+#[test]
+fn a_secret_record_is_adopted_by_name_and_type() {
+    let items = json!({
+        "example.com:dkim": { "zone": "example.com", "name": "k._domainkey.example.com", "type": "TXT", "content": "${var.secrets[\"dkim\"]}", "data": null }
+    });
+    let lookup = Zone {
+        calls: std::cell::Cell::new(0),
+        records: vec![rec(
+            "r7",
+            "k._domainkey.example.com",
+            "TXT",
+            "\"v=DKIM1; p=abc\"",
+            None,
+        )],
+    };
+    let got = adopt::imports(&dns(&items), "acct", &lookup).expect("imports");
+    assert_eq!(
+        to(&got, &record_address("example.com:dkim")).as_deref(),
+        Some("zone1/r7")
     );
 }

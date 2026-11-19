@@ -1010,7 +1010,7 @@ pub fn plan_stored(
     }
     let state = absolute(&ctx.state)?;
     plans::prune_completed(&state, now)?;
-    let stored = plans::store(&state, &files, now)?;
+    let stored = plans::store(&state, &files, now, ctx.adopt)?;
     Ok((stored, planned))
 }
 
@@ -1088,6 +1088,9 @@ pub fn apply_stored_with(
             .collect());
     }
     let stored = plans::load(&state, id, now)?;
+    if let Some(why) = plans::adoption_refused(&stored) {
+        return Err(Error::Plan(why));
+    }
     let done = plans::applied(&state, id);
     let pending: Vec<&plans::StoredUnit> = stored
         .units

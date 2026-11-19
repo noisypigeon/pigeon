@@ -114,7 +114,8 @@ fn module_files(root: &Path, dir: &Path, out: &mut Vec<String>) -> Result<(), Er
     Ok(())
 }
 
-/// Stores each unit's plan file under `<state>/plans/<id>/`, with a manifest.
+/// Stores each unit's plan file under `<state>/plans/<id>/`, with a manifest; `adopted` records
+/// that it was planned with `--adopt`.
 ///
 /// # Errors
 ///
@@ -123,6 +124,7 @@ pub fn store(
     state: &Path,
     planned: &[(&Unit, PathBuf, Vec<Change>, String)],
     now: u64,
+    adopted: bool,
 ) -> Result<Stored, Error> {
     let mut h = Sha256::new();
     h.update(now.to_be_bytes());
@@ -152,6 +154,7 @@ pub fn store(
         created: now,
         expires: now + LIFETIME_SECS,
         units,
+        adopted,
     };
     let manifest = dir.join(MANIFEST);
     let json = serde_json::to_string_pretty(&stored).map_err(|e| Error::Io {

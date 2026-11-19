@@ -3,7 +3,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::engines::Change;
+use super::engines::{Action, Change};
 
 /// The directory under the state holding stored plans.
 pub const DIR: &str = "plans";
@@ -55,6 +55,10 @@ pub struct Stored {
     pub expires: u64,
     /// Its units, in apply order.
     pub units: Vec<StoredUnit>,
+    /// Whether it was planned with `--adopt`; its apply then refuses to destroy a DNS record (see
+    /// .claude/decisions/2026-11-15-runtime-zoned-standalone-account-imports.md §5).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub adopted: bool,
 }
 
 /// One unit of a stored plan.
@@ -113,4 +117,83 @@ pub fn completed_of(id: &str, text: &str, now: u64) -> Option<Completed> {
 pub fn expired(text: Option<&str>, now: u64) -> bool {
     text.and_then(|t| serde_json::from_str::<Completed>(t).ok())
         .is_none_or(|r| now >= r.completed + COMPLETED_SECS)
+}
+
+/// Why plan `stored` may not be applied: it adopted live resources and would replace or delete a
+/// DNS record.
+#[must_use]
+pub fn adoption_refused(stored: &Stored) -> Option<String> {
+    if !stored.adopted {
+        return None;
+    }
+    let gone: Vec<String> = stored
+        .units
+        .iter()
+        .flat_map(|u| &u.changes)
+        .filter(|c| {
+            matches!(c.action, Action::Replace | Action::Delete)
+                && c.address.contains(".cloudflare_dns_record.")
+        })
+        .map(|c| format!("{} ({})", c.address, c.action.word()))
+        .collect();
+    if gone.is_empty() {
+        return None;
+    }
+    Some(format!(
+        "plan {} adopted live resources and would destroy DNS records: {}; an adopted zone's first apply keeps every record, so declare them as they are live and plan again",
+        stored.id,
+        gone.join(", ")
+    ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const RECORD: &str = "module.dns_records[\"example.com:www-a\"].cloudflare_dns_record.this";
+
+    fn stored(adopted: bool, address: &str, action: Action) -> Stored {
+        Stored {
+            id: "0".repeat(32),
+            created: 0,
+            expires: 1,
+            units: vec![StoredUnit {
+                unit: "zones/example.com".into(),
+                digest: String::new(),
+                changes: vec![Change {
+                    address: address.into(),
+                    action,
+                    attributes: vec![],
+                }],
+            }],
+            adopted,
+        }
+    }
+
+    #[test]
+    fn an_adopting_plan_that_destroys_a_dns_record_is_refused() {
+        let why = adoption_refused(&stored(true, RECORD, Action::Replace)).expect("refused");
+        assert!(why.contains("would destroy DNS records"), "{why}");
+        assert!(why.contains("(replace)"), "{why}");
+        let why = adoption_refused(&stored(true, RECORD, Action::Delete)).expect("refused");
+        assert!(why.contains("(delete)"), "{why}");
+    }
+
+    #[test]
+    fn creates_updates_and_plans_without_adopt_pass() {
+        assert!(adoption_refused(&stored(true, RECORD, Action::Create)).is_none());
+        assert!(adoption_refused(&stored(true, RECORD, Action::Update)).is_none());
+        assert!(adoption_refused(&stored(false, RECORD, Action::Delete)).is_none());
+        let bucket = "module.buckets[\"x\"].cloudflare_r2_bucket.this";
+        assert!(adoption_refused(&stored(true, bucket, Action::Delete)).is_none());
+    }
+
+    #[test]
+    fn a_manifest_without_adopted_reads_as_not_adopting() {
+        let s = stored(false, RECORD, Action::Create);
+        let json = serde_json::to_string(&s).expect("json");
+        assert!(!json.contains("adopted"));
+        let back = check(&s.id, Some(&json), 0).expect("check");
+        assert!(!back.adopted);
+    }
 }

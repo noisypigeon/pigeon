@@ -2,6 +2,8 @@
 //! declares that its account already holds under that name, so no ID enters the repository;
 //! see `.claude/decisions/2026-11-08-runtime-blue-green-self-standup.md`, step 4's amendment.
 
+use std::collections::BTreeMap;
+
 use serde_json::{Value, json};
 
 use crate::workers::cloudflare::Api;
@@ -67,6 +69,21 @@ pub struct Found {
     pub id: String,
 }
 
+/// One DNS record in a zone.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Record {
+    /// Its ID.
+    pub id: String,
+    /// Its fully qualified name.
+    pub name: String,
+    /// Its type.
+    pub kind: String,
+    /// Its content; empty for a record with only `data`.
+    pub content: String,
+    /// SRV's or CAA's fields.
+    pub data: Option<Value>,
+}
+
 /// Lists an account's resources of one kind.
 pub trait Lookup {
     /// Every resource of `kind`; for a bucket, in `jurisdiction`.
@@ -75,6 +92,16 @@ pub trait Lookup {
     ///
     /// A message naming the call that failed.
     fn list(&self, kind: Kind, jurisdiction: &str) -> Result<Vec<Found>, String>;
+
+    /// Zone `zone`'s ID and every DNS record in it.
+    ///
+    /// # Errors
+    ///
+    /// A message naming the call that failed.
+    fn records(&self, zone: &str) -> Result<(String, Vec<Record>), String> {
+        let _ = zone;
+        Err("this lookup lists no DNS records".into())
+    }
 }
 
 /// The Cloudflare API, on one account.
@@ -130,6 +157,34 @@ impl Lookup for Cloudflare<'_> {
                 })
             })
             .collect())
+    }
+
+    fn records(&self, zone: &str) -> Result<(String, Vec<Record>), String> {
+        let id = self.api.zone_id(zone)?;
+        let mut all = Vec::new();
+        for page in 1..=1000 {
+            let v = self
+                .api
+                .get(&format!("/zones/{id}/dns_records?per_page=100&page={page}"))?;
+            let batch = items(&v);
+            if batch.is_empty() {
+                let records = all
+                    .iter()
+                    .filter_map(|x: &Value| {
+                        Some(Record {
+                            id: x["id"].as_str()?.to_string(),
+                            name: x["name"].as_str()?.to_string(),
+                            kind: x["type"].as_str()?.to_string(),
+                            content: x["content"].as_str().unwrap_or_default().to_string(),
+                            data: x.get("data").filter(|d| d.is_object()).cloned(),
+                        })
+                    })
+                    .collect();
+                return Ok((id, records));
+            }
+            all.extend(batch);
+        }
+        Err("the zone holds more than 100000 DNS records; adopt it in parts".into())
     }
 }
 
@@ -193,7 +248,8 @@ fn address(block: &str, key: Option<&str>, resource: &str) -> String {
 
 /// The `import` blocks for the modules of a rendered `main.tf.json` whose resources `lookup`
 /// finds by name on `account`. A random suffix a bucket was found with is imported into its
-/// suffix block. A name matching none is left to be created.
+/// suffix block. A name matching none is left to be created. DNS records are matched in their
+/// zone by name, type, and content or data.
 ///
 /// # Errors
 ///
@@ -203,6 +259,7 @@ pub fn imports(rendered: &Value, account: &str, lookup: &dyn Lookup) -> Result<V
     let Some(modules) = rendered["module"].as_object() else {
         return Ok(out);
     };
+    let mut zones: BTreeMap<String, (String, Vec<Record>)> = BTreeMap::new();
     for (block, m) in modules {
         let source = m["source"].as_str().unwrap_or_default();
         let module = source
@@ -210,6 +267,10 @@ pub fn imports(rendered: &Value, account: &str, lookup: &dyn Lookup) -> Result<V
             .rsplit('/')
             .next()
             .unwrap_or_default();
+        if module == "dns-record" {
+            dns_imports(block, m, lookup, &mut zones, &mut out)?;
+            continue;
+        }
         let Some((kind, resource)) = Kind::of_module(module) else {
             continue;
         };
@@ -263,4 +324,110 @@ pub fn imports(rendered: &Value, account: &str, lookup: &dyn Lookup) -> Result<V
         }
     }
     Ok(out)
+}
+
+/// The import blocks for a dns-record block's items that their zone already holds; each zone is
+/// listed once.
+fn dns_imports(
+    block: &str,
+    m: &Value,
+    lookup: &dyn Lookup,
+    zones: &mut BTreeMap<String, (String, Vec<Record>)>,
+    out: &mut Vec<Value>,
+) -> Result<(), String> {
+    let Some(items) = m["for_each"].as_object() else {
+        return Ok(());
+    };
+    for (key, item) in items {
+        let (Some(zone), Some(name), Some(kind)) = (
+            item["zone"].as_str(),
+            item["name"].as_str(),
+            item["type"].as_str(),
+        ) else {
+            continue;
+        };
+        if !zones.contains_key(zone) {
+            let listed = lookup.records(zone)?;
+            zones.insert(zone.to_string(), listed);
+        }
+        let (zone_id, records) = &zones[zone];
+        let hits: Vec<&Record> = records
+            .iter()
+            .filter(|r| r.name.eq_ignore_ascii_case(name) && r.kind == kind && matches(item, r))
+            .collect();
+        match hits.as_slice() {
+            [] => {}
+            [r] => out.push(json!({
+                "to": address(block, Some(key), "cloudflare_dns_record.this"),
+                "id": format!("{zone_id}/{}", r.id),
+            })),
+            _ => {
+                return Err(format!(
+                    "record `{key}` matches {} live records; adopt it by removing the others",
+                    hits.len()
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Whether the live record `r` holds what `item` declares.
+fn matches(item: &Value, r: &Record) -> bool {
+    if let Some(d) = item["data"].as_object() {
+        return r
+            .data
+            .as_ref()
+            .and_then(Value::as_object)
+            .is_some_and(|rd| {
+                d.iter()
+                    .all(|(k, v)| rd.get(k).is_some_and(|x| same_field(v, x)))
+            });
+    }
+    match item["content"].as_str() {
+        Some(c) if c.contains("${var.secrets[") => true,
+        Some(c) => same_content(
+            &r.kind,
+            &c.replace("$${", "${").replace("%%{", "%{"),
+            &r.content,
+        ),
+        None => false,
+    }
+}
+
+/// Whether two data fields are equal: strings ignoring a trailing dot and case, numbers by value.
+fn same_field(a: &Value, b: &Value) -> bool {
+    match (a.as_str(), b.as_str()) {
+        (Some(x), Some(y)) => x
+            .trim_end_matches('.')
+            .eq_ignore_ascii_case(y.trim_end_matches('.')),
+        _ => a.as_f64().is_some() && a.as_f64() == b.as_f64(),
+    }
+}
+
+/// Whether two record contents of type `kind` are the same.
+fn same_content(kind: &str, a: &str, b: &str) -> bool {
+    match kind {
+        "TXT" => txt(a) == txt(b),
+        "CNAME" | "MX" | "NS" => a
+            .trim_end_matches('.')
+            .eq_ignore_ascii_case(b.trim_end_matches('.')),
+        "AAAA" => match (
+            a.parse::<std::net::Ipv6Addr>(),
+            b.parse::<std::net::Ipv6Addr>(),
+        ) {
+            (Ok(x), Ok(y)) => x == y,
+            _ => a == b,
+        },
+        _ => a == b,
+    }
+}
+
+/// A TXT content without its outer quotes and the joints between its quoted chunks.
+fn txt(s: &str) -> String {
+    if s.len() >= 2 && s.starts_with('"') && s.ends_with('"') {
+        s[1..s.len() - 1].replace("\" \"", "")
+    } else {
+        s.to_string()
+    }
 }
