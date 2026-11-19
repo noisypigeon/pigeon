@@ -633,7 +633,7 @@ pub fn network(root: &Path, platform: &Path) -> Option<Network> {
     let found = crate::workers::discover(platform)
         .ok()?
         .into_iter()
-        .find(|f| is_agent(&f.spec.entry.krate))?;
+        .find(|f| is_agent(&f.spec.entry.krate) && !f.spec.color)?;
     let kind = found.spec.deployment.clone();
     let (manifest, _) = crate::infra::manifest::load(root, platform)?;
     let stacks: Vec<&crate::infra::manifest::Entry> = manifest

@@ -479,7 +479,7 @@ fn spec_gaps(root: &std::path::Path, net: &Value) -> Vec<String> {
     let found = agent::workers::discover(root)
         .expect("discovers")
         .into_iter()
-        .find(|f| f.spec.entry.krate.ends_with("pigeon-agent"))
+        .find(|f| f.spec.entry.krate.ends_with("pigeon-agent") && !f.spec.color)
         .expect("the control plane's Worker");
     let spec = &found.spec;
     let w = &net["worker"];
