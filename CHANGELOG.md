@@ -15,6 +15,7 @@
 - agent v0.1.75
 - agent v0.1.76
 - agent v0.1.77
+- agent v0.1.78
 - infra-cloudflare-dns-record v0.1.4
 - infra-cloudflare-schema v0.1.26
 
@@ -85,6 +86,7 @@
 - feat(deploy): the serving probe says why a host is down: its status and failing health fields (!1347) ([c14df1a](https://github.com/noisypigeon/pigeon/commit/c14df1a0983447c6ae104602249122d5fcc93c13)) · agent
 - feat(infra): `pigeon infra zone import` prints a zone's live records as records YAML (!1346) ([13cd40a](https://github.com/noisypigeon/pigeon/commit/13cd40a4f9c60eeed997b2cdd5d8e90d1dac3344)) · agent
 - docs(decisions): capabilities get one manifest and trait; Subdomain, Domain, Blog and a pack-driven learning capability (!1349) ([405e658](https://github.com/noisypigeon/pigeon/commit/405e6581d2d0ffe4c90ea1884bdf280e579fd41e))
+- feat(core): capabilities get manifests, a trait and a registry (!1350) ([3214ac4](https://github.com/noisypigeon/pigeon/commit/3214ac40ab9006cd069038870da79b335b9da060))
 
 ## 2026-11-18
 
