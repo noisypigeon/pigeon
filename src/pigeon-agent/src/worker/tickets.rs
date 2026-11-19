@@ -18,6 +18,10 @@ pub const TICKETS: &str = "tickets";
 /// The header a push through the git front door carries its ticket in.
 pub const HEADER: &str = "x-pigeon-ticket";
 
+/// The argument `/mcp` carries [`HEADER`] in to the member check, which `run()` strips before anything else
+/// sees it; see the users ADR's A5 amendment.
+pub const HEADER_ARG: &str = "_ticket";
+
 fn key(env: &Env) -> Result<Vec<u8>> {
     Ok(platform::secret(env, "SESSION_KEY")?.into_bytes())
 }

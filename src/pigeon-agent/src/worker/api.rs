@@ -34,8 +34,9 @@ async fn serve_mcp(
     who: &Identity,
 ) -> Result<Response> {
     let sid = req.headers().get(mcp::SESSION_HEADER)?;
+    let ticket = req.headers().get(super::tickets::HEADER)?;
     let host = req.url()?.host_str().unwrap_or_default().to_string();
-    let message: Value = match req.json().await {
+    let mut message: Value = match req.json().await {
         Ok(v) => v,
         Err(_) => {
             return Response::from_json(&mcp::error(
@@ -45,6 +46,15 @@ async fn serve_mcp(
             ));
         }
     };
+    // A service call's ticket, by header, reaches only the member check; see the users ADR's A5
+    // amendment.
+    if let (Some(t), false) = (ticket, who.human)
+        && message["method"] == "tools/call"
+        && let Some(args) = message["params"]["arguments"].as_object_mut()
+        && !args.contains_key("ticket")
+    {
+        args.insert(super::tickets::HEADER_ARG.into(), Value::String(t));
+    }
     let door = Door {
         name: "access",
         person: who.human,

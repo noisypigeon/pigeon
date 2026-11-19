@@ -629,6 +629,7 @@ async fn shadow(
     who: &Identity,
     op: &wire::Operation,
     request: &wire::Request,
+    header_ticket: Option<String>,
     today: bool,
 ) -> std::result::Result<Option<String>, String> {
     use crate::core::member::shadow::Caller;
@@ -639,7 +640,11 @@ async fn shadow(
     } else if who.human {
         Caller::Person
     } else {
-        let ticket = request.args.get("ticket").and_then(Value::as_str);
+        let ticket = request
+            .args
+            .get("ticket")
+            .and_then(Value::as_str)
+            .or(header_ticket.as_deref());
         Caller::Service {
             client_id: who.subject.clone(),
             model: tickets::model(env, s, ticket).await,
@@ -692,11 +697,24 @@ async fn run(
     who: &Identity,
     request: &wire::Request,
 ) -> std::result::Result<WireResponse, crate::Error> {
-    let retargeted = control::retarget(request);
+    let mut retargeted = control::retarget(request);
+    let header_ticket = match retargeted.args.remove(tickets::HEADER_ARG) {
+        Some(Value::String(t)) => Some(t),
+        _ => None,
+    };
     let request = &retargeted;
     let op = wire::validate(request)?;
     let today = access::authorize(op, who);
-    let checked = shadow(env, s, who, op, request, today.is_ok()).await;
+    let checked = Box::pin(shadow(
+        env,
+        s,
+        who,
+        op,
+        request,
+        header_ticket,
+        today.is_ok(),
+    ))
+    .await;
     today.map_err(|m| crate::Error::Invalid(vec![m]))?;
     if deciding(env)
         && let Ok(Some(why)) | Err(why) = checked
