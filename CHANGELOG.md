@@ -1,5 +1,24 @@
 # Changelog
 
+## 2026-11-19
+
+### Released
+
+- agent v0.1.67
+
+### Merged
+
+- docs(adr): review !1269 against !1268 (!1275) ([fc73338](https://github.com/noisypigeon/pigeon/commit/fc7333806a376fb013cef4cc9c8e4fb74feefd9f))
+- feat(present): the Members list shows each member's live grants, and a Standard user's own row (!1269) ([1c93116](https://github.com/noisypigeon/pigeon/commit/1c93116349a1bf7e0eafe2231b40d4288c5120ab))
+- feat(gate): member::check can decide beside today's check, behind MEMBER_CHECK (shadow by default) (!1277) ([fd69587](https://github.com/noisypigeon/pigeon/commit/fd6958785365ee7ab35da11fe8675d1e6fadc016)) · agent
+- feat(gate): member.grant and member.revoke, granted with the Administrator's passkey on /member-grant/ (!1274) ([84390db](https://github.com/noisypigeon/pigeon/commit/84390db421bf031d04d9ac1ae87c7e6c8f002af6)) · agent
+- docs(adr): E2's shape: the Apple release on MCP, its grant HPKE-sealed to the run's key (!1279) ([8482464](https://github.com/noisypigeon/pigeon/commit/8482464393f95ea1a361ca623906e98f9cc731c2))
+- feat(infra): the app's Access bypass narrows to /v0/app/mcp and /v0/app/session on the platform's hosts (!1278) ([34bfe56](https://github.com/noisypigeon/pigeon/commit/34bfe56d1f54c47deec139671113b4fc228516eb))
+- feat(infra): rehearsal, part one: front-test.pigeon.dev moves from pigeon-front to pigeon-control in one deploy (!1273) ([dd977b1](https://github.com/noisypigeon/pigeon/commit/dd977b16773fa95ad20919d324961c222829c62d))
+- feat(core): architecture::diff and expected hold a standby's inventory against the primary's (!1270) ([33c2959](https://github.com/noisypigeon/pigeon/commit/33c29593e423d61110ce61597e94e23a6f26d2f3))
+- feat(deploy): a Worker spec may be a `color`, unused yet, and deploy::standby::target picks the colour the lease doesn't name (!1271) ([c445630](https://github.com/noisypigeon/pigeon/commit/c44563059b52a6d1bc91acf34a37a89354edd123)) · agent
+- feat(core): journal::replay folds a state object's rows into digests, and journal::parity compares them (!1272) ([316aacf](https://github.com/noisypigeon/pigeon/commit/316aacf453a8d84f80b24d1dcbe7cee27bbc502a))
+
 ## 2026-11-18
 
 ### Released
@@ -171,6 +190,10 @@
 - fix(images): pigeon-start falls back to a GET of /builds/ when build.read fails (!1264) ([56adc4d](https://github.com/noisypigeon/pigeon/commit/56adc4dd183d8ce6e756f34bbcbc7a3d408e2856))
 - docs(adr): R3's first shadow differences; approval.list stays the Administrator's (!1263) ([b95babd](https://github.com/noisypigeon/pigeon/commit/b95babdb215e1c1f9b0d953807ccbd7704c7aedd))
 - feat(infra): PUBLIC_HOST becomes control.platform.pigeon.dev, and blue.platform stays the primary's as its alias (!1265) ([304f8c7](https://github.com/noisypigeon/pigeon/commit/304f8c78690ffbf0e313c7bb9c31dd7090e47c2d))
+- fix(shell): open /service-bind/ proof links in the web and iOS clients (!1259) ([fe486c7](https://github.com/noisypigeon/pigeon/commit/fe486c730a899beb6e71fa00d950f6bd78035727)) · agent
+- docs(adr): the rest of the users ADR in parallel; the door tokens need no binding (!1267) ([bbff5ca](https://github.com/noisypigeon/pigeon/commit/bbff5cab85c325e4aa8f3dbfcb02394fac56a192))
+- docs(adr): step 10's pieces: replay parity, the inventory diff, the standby target, and part B's resolved inputs (!1268) ([bda8b6a](https://github.com/noisypigeon/pigeon/commit/bda8b6a72e5a454c9fa4ad7ebb8a5ed815e3f059))
+- fix(deploy): a change to the job image's entrypoint or context deploys the Worker that runs it, so the image is rebuilt (!1266) ([1d0d5a9](https://github.com/noisypigeon/pigeon/commit/1d0d5a9d47a7d5bd602ff968d92c466823e9bb10)) · agent
 
 ## 2026-11-17
 
