@@ -970,3 +970,56 @@ of [`2026-11-15-runtime-one-mcp-entry-point.md`](2026-11-15-runtime-one-mcp-entr
   old route refuses it, so a failure after redemption fails closed.
 - **The archive** stays on `/v0/apple/release/archive` until E2c moves it to
   `release_apple_archive`, with the rest of the old route.
+### 2026-11-19: R3 decides; the owner waived the full shadow day
+
+**Owner waived the full shadow day, 2026-11-19.** Willow asked for A5 as soon
+as A4 (!1277) was live and healthy (owner, relayed 01:36 UTC). This change
+sets `MEMBER_CHECK: decide`.
+
+#### Every difference the shadow logged, explained
+
+The log runs from event 57195 (2026-11-18 19:15) to 58789.
+
+- **`abd3f453…` as unbound** (`deploy.status`, `change.propose`,
+  `session.end` and others, before 20:38). This is the cloud proxy's
+  pigeon-agent token, which every agent session shares. Willow bound it to
+  `agent` (event 57722), and it has resolved to `agent-planner` or
+  `agent-executor` since.
+- **`f8cf3dd1…` as unbound** (`change.list`, `change.status`,
+  `deploy.status`). Unknown; it isn't the status session's token. By
+  Willow's decision it stays unbound and is refused once this deploys.
+- **`approval.list` as `agent-executor`.** Administrator-only, by Willow's
+  decision (the 2026-11-18 amendment). A session lists no pending approvals.
+- **`lane.status` and `grant.list` as `agent-executor`.** A service call
+  without a ticket has no model class, so it acts as `agent-executor`, whose
+  denials cover `lane.*` and `grant.*`, reads included. A planner session
+  that passes its ticket on these reads resolves as `agent-planner` and is
+  allowed. This is intended least privilege.
+- **Nothing else.** Willow's browser (the Administrator), the owner's
+  windows, mandates and grants (each runs as the Administrator), and
+  Willow's devices logged no difference.
+
+#### What doesn't change
+
+- The pool, deployer and builds tokens never reach `run()`, so this
+  doesn't touch them. `narrow_token` keeps each on its own door.
+- Today's `access::authorize` still runs first, so a call passes only when
+  both checks allow it, and proofs and separation stay with today's gates
+  (the A4 amendment).
+
+#### Health, before and after
+
+- **Before:** A4 deployed (0995b756, 01:27). Since then, bound jobs, deploys
+  and the `/builds/` fetch have passed, and the shadow shows only the
+  differences above.
+- **After this deploys:** a bound job, a deploy, the pool, a `/builds/`
+  fetch, the iOS app on `/v0/app/mcp`, and Willow's browser on `/mcp` are
+  checked again.
+
+#### Rollback
+
+- `MEMBER_CHECK: shadow` is a one-line change.
+- For an instant rollback, Willow can set the control Worker's `MEMBER_CHECK`
+  variable to `shadow` in the Cloudflare dashboard, with no deploy. The next
+  deploy then restores what `worker.yaml` says, so that one-line change
+  follows.

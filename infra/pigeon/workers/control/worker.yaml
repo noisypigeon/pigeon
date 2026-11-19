@@ -80,7 +80,7 @@ bindings:
     PROOFS: passkey
     # `shadow` logs member::check beside today's check; `decide` also refuses on it; see
     # .claude/decisions/2026-11-18-security-users-levels-capability-grants.md, its A4 amendment.
-    MEMBER_CHECK: shadow
+    MEMBER_CHECK: decide
     # The GitHub mirror MainRun pushes to; see .claude/decisions/2026-11-08-development-github-mirror-on-merge.md.
     MIRROR: https://github.com/noisypigeon/pigeon
     # The merges' author, the owner's GitHub noreply address; see the 2026-11-10 amendment of
