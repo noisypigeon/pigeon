@@ -58,32 +58,64 @@ fn probes(m: &crate::infra::manifest::Manifest, public_host: &str) -> Option<Pro
     Some((front, colors))
 }
 
-/// Whether `GET https://<host>/healthz` answers 200 with `ok` true, in up to 3 tries 10 s apart.
-fn probe(host: &str, access: (&str, &str)) -> bool {
+/// Why a `/healthz` answer of `status` with `body` isn't up: the status, and the names of the
+/// health fields that fail; `None` when it is up. Never a value.
+#[must_use]
+pub fn down_reason(status: u16, body: &str) -> Option<String> {
+    let Ok(v) = serde_json::from_str::<serde_json::Value>(body) else {
+        return Some(format!("status {status}, not JSON"));
+    };
+    if status == 200 && v["ok"].as_bool() == Some(true) {
+        return None;
+    }
+    let mut failing: Vec<&str> = ["d1", "durable_object"]
+        .into_iter()
+        .filter(|k| v[*k].as_bool() != Some(true))
+        .collect();
+    if v["objects"]["instance"] != v["objects"]["expected"] {
+        failing.push("objects");
+    }
+    if v["version"].as_str().is_none_or(str::is_empty) {
+        failing.push("version");
+    }
+    Some(if failing.is_empty() {
+        format!("status {status}")
+    } else {
+        format!("status {status}: {}", failing.join(", "))
+    })
+}
+
+/// Whether `GET https://<host>/healthz` answers 200 with `ok` true, in up to 3 tries 10 s apart:
+/// `Ok`, or why the last try wasn't, as [`down_reason`] gives it.
+fn probe(host: &str, access: (&str, &str)) -> Result<(), String> {
     let agent: ureq::Agent = ureq::Agent::config_builder()
         .http_status_as_error(false)
         .timeout_global(Some(std::time::Duration::from_secs(10)))
         .build()
         .into();
+    let mut why = String::from("no answer");
     for attempt in 0..3 {
         if attempt > 0 {
             std::thread::sleep(std::time::Duration::from_secs(10));
         }
-        let ok = agent
+        let answer = agent
             .get(&format!("https://{host}/healthz"))
             .header("CF-Access-Client-Id", access.0)
             .header("CF-Access-Client-Secret", access.1)
-            .call()
-            .ok()
-            .filter(|r| r.status().as_u16() == 200)
-            .and_then(|mut r| r.body_mut().read_to_string().ok())
-            .and_then(|b| serde_json::from_str::<serde_json::Value>(&b).ok())
-            .is_some_and(|v| v["ok"].as_bool() == Some(true));
-        if ok {
-            return true;
-        }
+            .call();
+        why = match answer {
+            Ok(mut r) => {
+                let status = r.status().as_u16();
+                let body = r.body_mut().read_to_string().unwrap_or_default();
+                match down_reason(status, &body) {
+                    None => return Ok(()),
+                    Some(w) => w,
+                }
+            }
+            Err(_) => "no answer".into(),
+        };
     }
-    false
+    Err(why)
 }
 
 /// What serves once the deploy ended, by `/healthz` on the front host and on each colour's own
@@ -123,7 +155,10 @@ pub fn serving(
         );
         return None;
     };
-    let say = |ok: bool| if ok { "up" } else { "down" };
+    let say = |r: &Result<(), String>| match r {
+        Ok(()) => "up".to_string(),
+        Err(why) => format!("down ({why})"),
+    };
     let mut out = crate::core::deploy::serving::Serving {
         lease: var(w::LEASE_VAR)
             .unwrap_or(crate::core::lease::FIRST_COLOR)
@@ -131,12 +166,13 @@ pub fn serving(
         ..Default::default()
     };
     for (worker, host) in colors {
-        let ok = probe(&host, (id, secret));
-        let _ = writeln!(log, "serving: {worker} {host}: {}", say(ok));
-        out.colors.insert(worker, ok);
+        let r = probe(&host, (id, secret));
+        let _ = writeln!(log, "serving: {worker} {host}: {}", say(&r));
+        out.colors.insert(worker, r.is_ok());
     }
-    out.front = probe(&front, (id, secret));
-    let _ = writeln!(log, "serving: front {front}: {}", say(out.front));
+    let r = probe(&front, (id, secret));
+    let _ = writeln!(log, "serving: front {front}: {}", say(&r));
+    out.front = r.is_ok();
     Some(out)
 }
 
@@ -549,6 +585,30 @@ fn build_images(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_down_host_is_named_by_its_status_and_failing_fields_only() {
+        let up = r#"{"ok":true,"version":"v","d1":true,"durable_object":true,"objects":{"instance":"a","expected":"a"}}"#;
+        assert_eq!(down_reason(200, up), None);
+        let stale = r#"{"ok":false,"version":"v","d1":true,"durable_object":true,"objects":{"instance":"a","expected":"b"}}"#;
+        assert_eq!(
+            down_reason(503, stale).as_deref(),
+            Some("status 503: objects")
+        );
+        let bare = r#"{"ok":false,"version":"","d1":false,"durable_object":true,"objects":{}}"#;
+        assert_eq!(
+            down_reason(503, bare).as_deref(),
+            Some("status 503: d1, version")
+        );
+        assert_eq!(
+            down_reason(302, "<html>sign in</html>").as_deref(),
+            Some("status 302, not JSON")
+        );
+        assert_eq!(
+            down_reason(401, "unauthorized: no token").as_deref(),
+            Some("status 401, not JSON")
+        );
+    }
 
     fn tree(crates: &[(&str, &str, bool)]) -> tempfile::TempDir {
         let dir = tempfile::tempdir().expect("tempdir");
