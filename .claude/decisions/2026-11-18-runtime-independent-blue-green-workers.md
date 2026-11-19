@@ -607,3 +607,107 @@ Worker and left the images stale until a `deploy_retry`. Now:
   §B decided; its image change waits for the next Worker deploy.
 - `.dockerignore` blocks the image like `pigeon-start` does, since it decides
   the build's context.
+
+### 2026-11-19: Step 9's colour kind: a colour inherits its platform's shared resources, and reads shared secrets from the Secrets Store
+
+A.5.5 names a `pigeon/color` kind with `color/green` and `color/blue`, but not
+their shape. `pigeon-control` holds 35 Worker secrets, and a Worker secret
+can't be read back. So a colour that took its own copies would need the owner
+to enter every value again for each colour, and again for any later instance.
+Instead:
+
+- **A colour unit** (`kind: pigeon/color`) names its `platform` unit,
+  `worker` (`pigeon-green`) and own `host` (`green.platform.pigeon.dev`), and
+  owns a CI bucket and a queue. Its kind's modules create those two. It
+  inherits everything else from its platform unit: D1, the Secrets Store,
+  Artifacts, the AI Gateway and the docs bucket.
+- **Binding:** a spec whose `deployment` is `pigeon/color` resolves
+  `$deployment.<key>` against the colour unit's own settings and outputs
+  first, then its platform unit's. One spec, `infra/pigeon/workers/color/`,
+  serves both colours, with `color: true`.
+- **Shared secrets move to the Secrets Store.** A Worker reads a secret
+  through one helper, `platform::secret(env, name)`: its Worker secret if
+  set, else the Secrets Store binding of the same name. The colours bind
+  every shared name to the store and hold no copy. `pigeon-control` keeps
+  its Worker secrets until it retires, so nothing changes for it meanwhile.
+  Only what the pipeline writes per Worker (`DEPLOY_OUTPUTS`,
+  `DEPLOY_IMAGES`) stays a Worker secret, put by `pigeon workers`.
+- **Hosts:** `green.platform.pigeon.dev` and `blue.platform.pigeon.dev` are
+  each a colour's own custom domain and `PUBLIC_HOST`. `blue.platform` is
+  `pigeon-control`'s `STACK_ALIAS` until `pigeon-blue` stands up (A.5.8),
+  when it moves the way 9b.2 rehearsed. `green.platform` joins the
+  platform's `domains`.
+
+Changes, in order:
+
+1. `platform::secret` and its use at each call site. Gate-path call sites
+   are the planner's.
+2. The binder's colour lookup, and the kind's schema and modules.
+3. The owner batch, in one sitting: a platform plan adding
+   `green.platform.pigeon.dev` to `domains` and creating `color/green`'s
+   bucket and queue, then putting each shared secret in the Secrets Store
+   once.
+4. pigeon-green's spec, shipped to the colour unit.
+
+**Multi-instance.** A colour belongs to one platform unit, of one instance.
+Moving shared secrets to the Secrets Store also lets a new instance's
+colours bind them without the owner entering values again.
+
+### 2026-11-19: Shared secrets move to the Secrets Store by an in-Worker copy, `secrets.migrate`
+
+The colour-kind amendment moves shared secrets to the Secrets Store. The
+owner no longer holds the original values, so they move by copy: the values
+already live in `pigeon-control`'s environment, and they are copied from
+there.
+
+- **`secrets.migrate`** is an owner-tier, guarded operation of
+  `pigeon-control`.
+  - Its argument is a list of names, each in `core::platform::secrets::SHARED`.
+  - For each name, it reads the Worker secret at runtime and writes it to the
+    platform's Secrets Store as `<name in lower-kebab-case>`, through the
+    Cloudflare API.
+  - It writes with a token the granter mints for that one call: Secrets Store
+    write only, at most 10 minutes. The token is revoked when the call ends,
+    whether it succeeded or failed.
+  - Values never leave the Worker. No session, log, event, journal entry,
+    response or error carries one. An error names the secret and the step,
+    never the value.
+  - The response lists, per name, whether it was written, and a fingerprint:
+    the first 12 hex digits of HMAC-SHA-256 under `SESSION_KEY`. A colour can
+    later check its store value against that fingerprint without anyone
+    seeing either value.
+  - It is approved like any owner act: a proof page and a passkey. It refuses
+    a name outside `SHARED`, and it never runs from a workload.
+- **What is copied, not reissued:** every name in `SHARED`.
+  - Copying keeps each value. Some secrets must never be reissued, because
+    existing data or enrolments depend on them:
+    - `PLATFORM_STATE_KEY` decrypts stored state.
+    - `SESSION_KEY` signs live sessions and tickets.
+    - `APPROVER_TOTP` is the owner's authenticator.
+    - `PUSH_VAPID_KEY` holds existing push subscriptions.
+    - The Access service tokens (`*_ACCESS_ID`, `*_ACCESS_SECRET`) are never
+      rotated, by the owner's standing instruction.
+    - `journal-seal` is already in the store.
+  - Reissue is a fallback, for a value that turns out to be missing or wrong.
+    It happens in-platform for random keys, and at the third party for
+    GitHub, Buildkite, Bitrise, Apple and Cloudflare tokens, never as part of
+    this move.
+- **What stays per Worker:** `DEPLOY_OUTPUTS` and `DEPLOY_IMAGES`, which the
+  pipeline writes for each Worker.
+- **Order:**
+  1. `platform::secret`'s store fallback lands.
+  2. `secrets.migrate` lands (gate paths, the planner's).
+  3. The owner runs it once and checks the names and fingerprints.
+  4. The colours bind the store.
+  5. `pigeon-control` keeps its Worker secrets until it retires.
+- **Who reads the store:** only `pigeon-control` and the colour Workers
+  (`color: true`) bind a `SHARED` secret. `pigeon-front`, standalones and
+  app Workers never do. The architecture test fails if any other Worker spec
+  binds one.
+- **No wider access:** a Secrets Store value can't be read back, through the
+  API or the dashboard; only a Worker that binds it can read it. So the move
+  gives no API token or dashboard role a read it lacks today.
+  `secrets.migrate`'s token can only write, and only for 10 minutes. The
+  count is 33: the control Worker's 35 secrets, less `DEPLOY_OUTPUTS` and
+  `DEPLOY_IMAGES`. `journal-seal` and `granter` are already store bindings,
+  not Worker secrets.
