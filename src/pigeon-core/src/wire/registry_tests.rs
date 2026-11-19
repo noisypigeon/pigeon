@@ -2,7 +2,10 @@
 
 use super::{ADMINISTRATOR_OPS, Asks, DEVICE_OPS, Door, Effect, GRANT, PAGE, catalog};
 use crate::approval::grants;
-use crate::member::{CAPABILITIES, PERMISSIONS, Requires, SERVICE_CEILING, STANDARD_CEILING};
+use crate::member::{
+    CAPABILITIES, Grant, Members, PERMISSIONS, Request, Requires, Role, Roles, SERVICE_CEILING,
+    SERVICE_USERS, STANDARD_CEILING, check,
+};
 use crate::view::View;
 
 #[test]
@@ -218,6 +221,62 @@ fn every_operation_the_control_plane_routes_runs_there() {
                 "{} is routed by the control plane but not marked as running there",
                 o.name
             );
+        }
+    }
+}
+
+#[test]
+fn no_standard_or_service_user_passes_an_administrator_permission() {
+    let roles = Roles::parse_file(include_str!("../../../../.config/roles.yaml")).unwrap();
+    let (m, _) = Members::default()
+        .seed("root", 100)
+        .seed_services(100)
+        .invite("t1", "bob@example.com", Role::Standard, "root", 100)
+        .unwrap();
+    let (m, inv) = m.enrol("t1", "bob", "pk", b"key", 101).unwrap();
+    let mut m = m.admit(&inv.id, "root", 102).unwrap().0;
+    m.memberships
+        .iter_mut()
+        .find(|x| x.account == "bob")
+        .unwrap()
+        .grants = CAPABILITIES
+        .iter()
+        .map(|c| Grant {
+            capability: (*c).to_string(),
+            scope: None,
+            granted_by: "root".into(),
+            at: 103,
+            expires: None,
+            revoked: None,
+        })
+        .collect();
+    let administrator_only: Vec<&str> = PERMISSIONS
+        .iter()
+        .copied()
+        .filter(|p| !SERVICE_CEILING.contains(p))
+        .collect();
+    for op in catalog() {
+        for u in std::iter::once("bob").chain(SERVICE_USERS.iter().map(|u| u.0)) {
+            let request = Request {
+                account: u,
+                operation: op.name,
+                requires: op.requires(),
+                scope: None,
+                now: 200,
+                needs_proof: false,
+                proof: None,
+                proposer: None,
+                subject: Some(u),
+            };
+            if check(&roles, &m, &request).is_ok() {
+                assert!(
+                    op.permission()
+                        .is_none_or(|p| !administrator_only.contains(&p)),
+                    "{u} passes `{}`, which needs `{:?}`",
+                    op.name,
+                    op.permission()
+                );
+            }
         }
     }
 }
