@@ -14,6 +14,7 @@
 - agent v0.1.74
 - agent v0.1.75
 - agent v0.1.76
+- agent v0.1.77
 - infra-cloudflare-dns-record v0.1.4
 - infra-cloudflare-schema v0.1.26
 
@@ -81,6 +82,8 @@
 - feat(deploy): the deploy log names the pigeon that runs it and the build it was handed (!1344) ([e671ee8](https://github.com/noisypigeon/pigeon/commit/e671ee84db403b8e86b3d96574b0aff73f1d711d)) · agent
 - fix(worker): the standby colour leaves its queue's messages for when it acts (!1345) ([ee5c53a](https://github.com/noisypigeon/pigeon/commit/ee5c53a28f19842780f154c5e9a7f99f18b6aa6a)) · agent
 - feat(infra): the zone import core parses BIND or API records into keyed records YAML (!1339) ([73090e3](https://github.com/noisypigeon/pigeon/commit/73090e399f4e01493040471795b39f7ae80e7a77))
+- feat(deploy): the serving probe says why a host is down: its status and failing health fields (!1347) ([c14df1a](https://github.com/noisypigeon/pigeon/commit/c14df1a0983447c6ae104602249122d5fcc93c13)) · agent
+- feat(infra): `pigeon infra zone import` prints a zone's live records as records YAML (!1346) ([13cd40a](https://github.com/noisypigeon/pigeon/commit/13cd40a4f9c60eeed997b2cdd5d8e90d1dac3344)) · agent
 
 ## 2026-11-18
 
