@@ -6,8 +6,10 @@ deployment: pigeon/platform
 entry: { crate: src/pigeon-front, features: [worker] }
 compatibility_date: "2026-10-01"
 workers_dev: false
-# Its test host, under Access since run 42.
+# The platform's host, and its test host (under Access since run 42), each forwarded to the lease's
+# colour (the step 9b amendment).
 routes:
+  - custom_domain: $deployment.domains[0]
   - custom_domain: $deployment.domains[2]
   # Standalones' hosts under the zone, forwarded to the lease's colour (the step 9b amendment).
   - subdomains_of: $deployment.instance_zone

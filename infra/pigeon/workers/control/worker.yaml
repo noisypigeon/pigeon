@@ -9,9 +9,9 @@ compatibility_date: "2026-10-01"
 # Served only at its domains below; see
 # .claude/decisions/2026-11-10-runtime-platform-hostname-dashboard-observability.md §1.
 workers_dev: false
-# The platform's hostname and the stack's own, which Access covers.
+# The stack's own hostnames, which Access covers; platform.pigeon.dev is pigeon-front's (the step 9b
+# amendment of .claude/decisions/2026-11-18-runtime-independent-blue-green-workers.md).
 routes:
-  - custom_domain: $deployment.domains[0]
   - custom_domain: $deployment.domains[1]
   # The stack's own host, under Access since run 43; see
   # .claude/decisions/2026-11-18-runtime-independent-blue-green-workers.md, its step 9b amendment.
