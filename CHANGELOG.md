@@ -39,6 +39,7 @@
 - feat(images): pigeon-start says whether each file came through build.read or /builds/ (!1301) ([8ebcd7f](https://github.com/noisypigeon/pigeon/commit/8ebcd7f65167f6ed4f2bc32595f53ed8da4199b8))
 - feat(worker): platform::secret falls back to the Secrets Store for the shared names, loaded once per isolate (!1302) ([c47b672](https://github.com/noisypigeon/pigeon/commit/c47b6722c56d07065b15c667a8c41c45cb71d295)) · agent
 - fix(workers): Api::put sends a PUT, not a POST; pigeon-front leaves the zone route until a build carries that (!1303) ([2c65436](https://github.com/noisypigeon/pigeon/commit/2c6543622abcbc618a05d702302d855f7b71d1e5)) · agent
+- feat(infra): pigeon-front takes the standalones' zone route, now that the stored build PUTs a route (!1304) ([16e72c4](https://github.com/noisypigeon/pigeon/commit/16e72c40d9354d48b62356a8cdcf2642139d1bc4))
 
 ## 2026-11-18
 
