@@ -6,6 +6,7 @@
 
 - agent v0.1.67
 - agent v0.1.68
+- agent v0.1.69
 
 ### Merged
 
@@ -40,6 +41,9 @@
 - feat(worker): platform::secret falls back to the Secrets Store for the shared names, loaded once per isolate (!1302) ([c47b672](https://github.com/noisypigeon/pigeon/commit/c47b6722c56d07065b15c667a8c41c45cb71d295)) · agent
 - fix(workers): Api::put sends a PUT, not a POST; pigeon-front leaves the zone route until a build carries that (!1303) ([2c65436](https://github.com/noisypigeon/pigeon/commit/2c6543622abcbc618a05d702302d855f7b71d1e5)) · agent
 - feat(infra): pigeon-front takes the standalones' zone route, now that the stored build PUTs a route (!1304) ([16e72c4](https://github.com/noisypigeon/pigeon/commit/16e72c40d9354d48b62356a8cdcf2642139d1bc4))
+- feat(worker): each GET /builds/ logs builds.fetched, E3's proof that jobs no longer fall back (!1305) ([c5633f2](https://github.com/noisypigeon/pigeon/commit/c5633f213882d01693266a65fd1374dd167d6d9f)) · agent
+- feat(infra): pigeon-front takes platform.pigeon.dev, so the platform host follows the lease (!1287) ([615d6bc](https://github.com/noisypigeon/pigeon/commit/615d6bc0ba5c0111cfbd0df86a520ccd3d39c04b))
+- docs(adr): E3 and E2c go to the capabilities planner (!1306) ([17bfec2](https://github.com/noisypigeon/pigeon/commit/17bfec218744b436f213a133197a41071125c014))
 
 ## 2026-11-18
 
