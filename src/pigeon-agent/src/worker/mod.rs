@@ -2394,6 +2394,11 @@ async fn reconcile_mirror(env: &Env) -> Result<()> {
 #[event(queue)]
 async fn queue(batch: MessageBatch<Value>, env: Env, _ctx: worker::Context) -> Result<()> {
     platform::load_store(&env).await;
+    // The standby only reads (the blue-green ADR §A.3): its messages wait for it to act.
+    if !lease::acting(&env).await {
+        batch.retry_all();
+        return Ok(());
+    }
     let s = Settings::from(&env)?;
     for message in batch.messages()? {
         let Some(push) = control::push(message.body()) else {
