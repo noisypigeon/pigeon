@@ -1672,6 +1672,11 @@ fn narrow_token(env: &Env, who: &Identity, path: &str) -> Option<Result<Response
         ));
     }
     if is(crate::wire::ship_wire::BUILDS_ACCESS_ID_VAR) {
+        // `/mcp` only while the member check decides, which holds it to `jobs`' tools once bound; see
+        // the users ADR's E1 amendment.
+        if path == "/mcp" && deciding(env) {
+            return None;
+        }
         return Some(Response::error("the builds token reads /builds/ only", 403));
     }
     None

@@ -1071,3 +1071,17 @@ R3 decides: `pigeon-control` version cd1c6adf, deployed from 2b333a46, runs
 - **Their own ADRs:** Subdomain, Domain, Blog, Sites and Instances
   (owner's answers #39 to #41 and #45), each with its scope and how it is
   granted, before `GRANTABLE` grows.
+### 2026-11-19: E1's end: the builds token reaches `/mcp` while the check decides
+
+- **The door.** `narrow_token` lets the builds token reach `/mcp`, but
+  only while `MEMBER_CHECK` is `decide`. Under `shadow`, today's check
+  would let a service token run every read, and job containers run the
+  code of the changes they test.
+- **The binding.** Until it is bound, the member check refuses the token's
+  every call, and logs its hash once as `member.shadow`. An agent then asks
+  `service.bind` for that hash to `jobs`, whose tools are `build.*` and
+  scope `read`, and Willow approves with a passkey.
+- **Meanwhile.** `pigeon-start` falls back to `/builds/` (!1264), so no job
+  waits on the binding.
+- **After.** Once the logs show jobs fetching through `build.read`, E3
+  removes `/builds/` and the fallback.
