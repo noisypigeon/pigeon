@@ -450,6 +450,11 @@ fn group_files(spec: &JobSpec, dir: &Path, group: &str, log: &mut String) -> Opt
     files
 }
 
+/// The deploy log's first line: the `pigeon` running it and the build `pigeon-start` was handed.
+fn runs_as(exe: &str, handed: Option<&str>) -> String {
+    format!("pigeon: {exe} (build {})\n", handed.unwrap_or("none"))
+}
+
 #[expect(clippy::too_many_lines, reason = "one step per deploy group")]
 fn deploy(spec: &JobSpec, dir: &Path) -> Report {
     let failed = |why: String, log: &str| Report {
@@ -463,10 +468,17 @@ fn deploy(spec: &JobSpec, dir: &Path) -> Report {
         Some(since) => crate::checks::ci::changed_since(dir, since, &spec.sha).ok(),
         None => None,
     };
-    let mut log = match &files {
-        Some(f) => format!("{} file(s) changed since the last deploy\n", f.len()),
-        None => "first deploy, or the last one is unknown: everything\n".to_string(),
-    };
+    let exe =
+        std::env::current_exe().map_or_else(|_| "unknown".into(), |p| p.display().to_string());
+    // `pigeon-start`'s build checksum, `containers::worker::BUILD_SHA256_VAR`.
+    let handed = std::env::var("PIGEON_BUILD_SHA256").ok();
+    let mut log = runs_as(&exe, handed.as_deref());
+    match &files {
+        Some(f) => {
+            let _ = writeln!(log, "{} file(s) changed since the last deploy", f.len());
+        }
+        None => log.push_str("first deploy, or the last one is unknown: everything\n"),
+    }
     let secrets: Vec<String> = spec.env.values().cloned().collect();
     let scrub = |t: &str| {
         secrets
@@ -1201,4 +1213,19 @@ pub fn status(board: &Board, id: &str) -> (u16, Value) {
             (200, json!(r))
         },
     )
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn the_deploy_log_names_its_pigeon_and_the_build_it_was_handed() {
+        assert_eq!(
+            super::runs_as("/tmp/pigeon-build", Some("ab12")),
+            "pigeon: /tmp/pigeon-build (build ab12)\n"
+        );
+        assert_eq!(
+            super::runs_as("/usr/local/bin/pigeon", None),
+            "pigeon: /usr/local/bin/pigeon (build none)\n"
+        );
+    }
 }
