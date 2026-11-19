@@ -780,6 +780,13 @@ fn a_colour_spec_binds_its_own_settings_and_outputs_then_its_platforms() {
     assert_eq!(vars["PUBLIC_HOST"], "green.example.com");
     assert_eq!(vars["CHANGE_FLOOR"], "12");
     assert_eq!(vars[workers::DEPLOYMENT_VAR], "color/green");
+    // A deploy names its own platform unit; the colour spec binds to that platform's colour.
+    let via = workers::bound(p, &found(p), Some("platform/blue")).expect("binds via its platform");
+    assert_eq!(via.spec.name, "pigeon-green");
+    assert_eq!(
+        via.spec.bindings.vars[workers::DEPLOYMENT_VAR],
+        "color/green"
+    );
     let orphan = format!("{text}{}", colour.replace("platform/blue", "platform/red"));
     fs::write(&config, orphan).expect("write");
     let e = workers::bind(p, &found(p), "color/green").expect_err("no such platform");

@@ -279,7 +279,14 @@ pub fn bound(root: &Path, found: &Found, deployment: Option<&str>) -> Result<Fou
         return Ok(found.clone());
     };
     if let Some(unit) = deployment {
-        return bind(root, found, unit);
+        if stacks(root, kind).iter().any(|s| s == unit) {
+            return bind(root, found, unit);
+        }
+        // A colour spec, given its platform's unit, binds to that platform's colour; see the
+        // colour-kind amendment of .claude/decisions/2026-11-18-runtime-independent-blue-green-workers.md.
+        if let [colour] = colours_of(root, kind, unit).as_slice() {
+            return bind(root, found, colour);
+        }
     }
     match stacks(root, kind).as_slice() {
         [only] => bind(root, found, only),
@@ -290,6 +297,19 @@ pub fn bound(root: &Path, found: &Found, deployment: Option<&str>) -> Result<Fou
             "deployed into a `{kind}`, and config.yaml has several: pass --deployment <unit>"
         )),
     }
+}
+
+/// The units of `kind` in the manifest at `root` whose `platform` setting is `platform`, sorted.
+fn colours_of(root: &Path, kind: &str, platform: &str) -> Vec<String> {
+    crate::infra::manifest::load(root, root)
+        .map(|(m, _)| {
+            m.units
+                .into_iter()
+                .filter(|(_, e)| e.kind == kind && e.settings["platform"] == platform)
+                .map(|(id, _)| id)
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 /// The units of `kind` in the manifest at `root`, sorted.
