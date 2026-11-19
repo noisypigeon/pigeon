@@ -306,16 +306,17 @@ async fn shadow(state: &State, body: &Value) -> Result<Response> {
     };
     let args = body["args"].as_object().cloned().unwrap_or_default();
     let today = body["today"].as_bool() == Some(true);
+    let (_, _, refusal) = member::shadow::verdict(&roles, &members, &caller, op, &args, t);
     let Some(diff) = member::shadow::compare(&roles, &members, &caller, op, &args, today, t) else {
-        return Response::from_json(&json!({ "shadow": null }));
+        return Response::from_json(&json!({ "shadow": null, "refusal": refusal }));
     };
     let mut seen: std::collections::BTreeSet<String> =
         storage.get(SHADOWED).await?.unwrap_or_default();
     if seen.len() >= SHADOWED_MAX || !seen.insert(diff.key()) {
-        return Response::from_json(&json!({ "shadow": null }));
+        return Response::from_json(&json!({ "shadow": null, "refusal": refusal }));
     }
     storage.put(SHADOWED, &seen).await?;
-    Response::from_json(&json!({ "shadow": diff }))
+    Response::from_json(&json!({ "shadow": diff, "refusal": refusal }))
 }
 
 /// Where the `Instance` keeps `service.bind`'s offers.

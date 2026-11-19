@@ -618,8 +618,9 @@ fn respond(operation: &str, status: u16, result: Value) -> WireResponse {
     }
 }
 
-/// R3's shadow: `member::check` beside `today`, logging each new difference as `member.shadow`;
-/// it decides nothing. See the feed-view ADR's R3 amendment.
+/// R3's check: `member::check` beside `today`, logging each new difference as `member.shadow`,
+/// and answering its verdict: `Ok(None)` allows, `Ok(Some(why))` refuses, `Err` when it couldn't
+/// check. See the feed-view ADR's R3 amendment and the users ADR's A4.
 async fn shadow(
     env: &Env,
     s: &Settings,
@@ -627,7 +628,7 @@ async fn shadow(
     op: &wire::Operation,
     request: &wire::Request,
     today: bool,
-) {
+) -> std::result::Result<Option<String>, String> {
     use crate::core::member::shadow::Caller;
     let caller = if who.device {
         Caller::Device {
@@ -648,15 +649,21 @@ async fn shadow(
         "args": request.args,
         "today": today,
     });
-    let diff = match mandates::to_instance(env, s, "/members/shadow", &body).await {
-        Ok((_, v)) => v["shadow"].clone(),
+    let v = match mandates::to_instance(env, s, "/members/shadow", &body).await {
+        Ok((_, v)) => v,
         Err(e) => {
             worker::console_error!("member.shadow: {e}");
-            return;
+            return Err(format!("the member check couldn't run: {e}"));
         }
     };
+    let verdict = match v.get("refusal") {
+        Some(Value::Null) => Ok(None),
+        Some(Value::String(why)) => Ok(Some(why.clone())),
+        _ => Err("the member check gave no verdict".to_string()),
+    };
+    let diff = &v["shadow"];
     if diff.is_null() {
-        return;
+        return verdict;
     }
     let said = format!(
         "member.shadow: `{}` as {}: today {}, check {}",
@@ -673,6 +680,7 @@ async fn shadow(
         diff["refusal"].as_str().unwrap_or("allows"),
     );
     let _ = events::append(env, s, "member.shadow", None, None, &said, false).await;
+    verdict
 }
 
 /// Runs one operation as `who`: validated, authorized, routed and audited.
@@ -686,8 +694,13 @@ async fn run(
     let request = &retargeted;
     let op = wire::validate(request)?;
     let today = access::authorize(op, who);
-    shadow(env, s, who, op, request, today.is_ok()).await;
+    let checked = shadow(env, s, who, op, request, today.is_ok()).await;
     today.map_err(|m| crate::Error::Invalid(vec![m]))?;
+    if deciding(env)
+        && let Ok(Some(why)) | Err(why) = checked
+    {
+        return Err(crate::Error::Invalid(vec![why]));
+    }
     if !who.human && op.effect != wire::Effect::Read {
         tickets::guard(env, s, request)
             .await
@@ -2577,4 +2590,11 @@ async fn journal_keys(state: &State, env: &Env, keys: &[&str], object: impl Fn(&
     if let Err(e) = stored.await {
         worker::console_warn!("journal: {e}");
     }
+}
+
+/// Whether `member::check` decides beside today's check (`MEMBER_CHECK=decide`), rather than
+/// only logging (`shadow`, the default); see the users ADR's A4.
+fn deciding(env: &Env) -> bool {
+    env.var("MEMBER_CHECK")
+        .is_ok_and(|v| v.to_string() == "decide")
 }

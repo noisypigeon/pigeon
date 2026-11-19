@@ -848,3 +848,23 @@ day runs (owner, about 23:42 UTC). June's onboarding stays deferred.
   how `members.list` shows each member's grants and a Standard user's own
   row. It touches no path !1268 rules, and nothing in !1268 decides how
   members or grants are presented. !1269 changes nothing there.
+### 2026-11-19: A4's shape: deciding beside today's check
+
+- **The verdict on every call.** `/members/shadow` answers `refusal`,
+  `member::check`'s verdict, on every call. `shadow` still names only a
+  difference not logged before, so deciding can't lean on the log, which
+  logs each difference once.
+- **`MEMBER_CHECK`.** The control Worker's variable is `shadow` until A5:
+  - `shadow`: the verdict is logged and nothing else changes.
+  - `decide`: `run()` refuses when either check refuses, so today's
+    `access::authorize` stays in front. A check that can't run, or answers
+    no verdict, refuses (fail closed).
+- **Proof, separation and proposer.** Because today's check stays in front,
+  proofs and separation stay with today's gates. `needs_proof`, `proof` and
+  `proposer` stay unset in the verdict. That replaces "the change that
+  decides fills them" in the group E amendment: filling them would repeat a
+  gate that still runs.
+- **A call without a ticket.** A service token's call that carries no
+  ticket has no model class, so it acts as `agent-executor`, the narrower
+  agent user. The status session's `approval.list` shadowed that way because
+  its read carried no ticket. That is intended, not a fault.

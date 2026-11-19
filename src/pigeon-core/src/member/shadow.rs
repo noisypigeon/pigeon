@@ -66,17 +66,17 @@ impl Shadow {
     }
 }
 
-/// `check` for `caller` on `op`, compared with `today`; a difference when they disagree.
+/// `check`'s verdict for `caller` on `op`: the member it checked (`unbound` for a caller who is no
+/// member, with an unbound service token's `token_id`), and why it refuses, when it does.
 #[must_use]
-pub fn compare(
+pub fn verdict(
     roles: &Roles,
     members: &Members,
     caller: &Caller,
     op: &Operation,
     args: &Map<String, Value>,
-    today: bool,
     now: u64,
-) -> Option<Shadow> {
+) -> (String, Option<String>, Option<String>) {
     let account = match caller {
         Caller::Person => administrator(members).map(str::to_string),
         Caller::Device { account } => Some(account.clone()),
@@ -89,13 +89,11 @@ pub fn compare(
             Caller::Service { client_id, .. } => Some(token_id(client_id)),
             _ => None,
         };
-        return Some(Shadow {
-            operation: op.name.to_string(),
-            account: "unbound".into(),
+        return (
+            "unbound".into(),
             client_hash,
-            today,
-            refusal: Some(super::Refusal::NotMember.to_string()),
-        });
+            Some(super::Refusal::NotMember.to_string()),
+        );
     };
     let requires = op.requires();
     let scope = match requires {
@@ -120,10 +118,25 @@ pub fn compare(
         subject,
     };
     let refusal = check(roles, members, &request).err().map(|r| r.to_string());
+    (account, None, refusal)
+}
+
+/// `check` for `caller` on `op`, compared with `today`; a difference when they disagree.
+#[must_use]
+pub fn compare(
+    roles: &Roles,
+    members: &Members,
+    caller: &Caller,
+    op: &Operation,
+    args: &Map<String, Value>,
+    today: bool,
+    now: u64,
+) -> Option<Shadow> {
+    let (account, client_hash, refusal) = verdict(roles, members, caller, op, args, now);
     (refusal.is_none() != today).then(|| Shadow {
         operation: op.name.to_string(),
         account,
-        client_hash: None,
+        client_hash,
         today,
         refusal,
     })
@@ -217,6 +230,45 @@ mod tests {
         .unwrap();
         assert_eq!(brief.account, "agent-executor");
         assert!(brief.refusal.is_some());
+    }
+
+    #[test]
+    fn the_verdict_holds_on_every_call_where_a_difference_is_logged_once() {
+        let args = Map::new();
+        let unbound = verdict(
+            &roles(),
+            &members(),
+            &agent("opus"),
+            op("change.status"),
+            &args,
+            200,
+        );
+        assert_eq!(unbound.0, "unbound");
+        assert!(unbound.2.is_some());
+        let person = verdict(
+            &roles(),
+            &members(),
+            &Caller::Person,
+            op("change.status"),
+            &args,
+            200,
+        );
+        assert_eq!(person, ("root".to_string(), None, None));
+        let (m, _) = members()
+            .bind(super::super::AGENT, "client-1", "root", 150)
+            .unwrap();
+        for _ in 0..2 {
+            let brief = verdict(
+                &roles(),
+                &m,
+                &agent("sonnet"),
+                op("brief.create"),
+                &args,
+                200,
+            );
+            assert_eq!(brief.0, "agent-executor");
+            assert!(brief.2.is_some());
+        }
     }
 
     #[test]
