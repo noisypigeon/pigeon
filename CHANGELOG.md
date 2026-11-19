@@ -7,6 +7,7 @@
 - agent v0.1.67
 - agent v0.1.68
 - agent v0.1.69
+- agent v0.1.70
 
 ### Merged
 
@@ -44,6 +45,7 @@
 - feat(worker): each GET /builds/ logs builds.fetched, E3's proof that jobs no longer fall back (!1305) ([c5633f2](https://github.com/noisypigeon/pigeon/commit/c5633f213882d01693266a65fd1374dd167d6d9f)) · agent
 - feat(infra): pigeon-front takes platform.pigeon.dev, so the platform host follows the lease (!1287) ([615d6bc](https://github.com/noisypigeon/pigeon/commit/615d6bc0ba5c0111cfbd0df86a520ccd3d39c04b))
 - docs(adr): E3 and E2c go to the capabilities planner (!1306) ([17bfec2](https://github.com/noisypigeon/pigeon/commit/17bfec218744b436f213a133197a41071125c014))
+- feat(worker): /healthz/parity answers the Instance's and MainRun's held and replayed journal digests (!1297) ([b03ffd6](https://github.com/noisypigeon/pigeon/commit/b03ffd64c00540c1e49a46e937bcb9e7c72f211c)) · agent
 
 ## 2026-11-18
 
