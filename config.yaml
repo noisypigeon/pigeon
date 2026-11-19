@@ -33,7 +33,8 @@ units:
     # The third is pigeon-front's test host, the fourth the stack's next own host, each under Access
     # before it is served; see .claude/decisions/2026-11-18-runtime-independent-blue-green-workers.md,
     # its step 9a and 9b amendments.
-    domains: [platform.pigeon.dev, blue.platform.pigeon.dev, front-test.pigeon.dev, control.platform.pigeon.dev]
+    # The fifth is color/green's own host (the colour-kind amendment).
+    domains: [platform.pigeon.dev, blue.platform.pigeon.dev, front-test.pigeon.dev, control.platform.pigeon.dev, green.platform.pigeon.dev]
     instance_zone: pigeon.dev
     instance: pigeon
     change_floor: 12
@@ -54,10 +55,20 @@ units:
     # .claude/decisions/2026-11-11-release-ios-app-buildkite-testflight.md §5 and
     # .claude/decisions/2026-11-12-runtime-ios-app-approvals-insights.md §4.
     public_paths:
-      - { name: pigeon-control apple release, paths: [platform.pigeon.dev/v0/apple/release, blue.platform.pigeon.dev/v0/apple/release, control.platform.pigeon.dev/v0/apple/release] }
+      - { name: pigeon-control apple release, paths: [platform.pigeon.dev/v0/apple/release, blue.platform.pigeon.dev/v0/apple/release, control.platform.pigeon.dev/v0/apple/release, green.platform.pigeon.dev/v0/apple/release] }
       # The app reaches the platform only on its MCP door and its link redeem; see
       # .claude/decisions/2026-11-18-security-users-levels-capability-grants.md, its bypass amendment.
-      - { name: pigeon-control app api, paths: [platform.pigeon.dev/v0/app/mcp, blue.platform.pigeon.dev/v0/app/mcp, control.platform.pigeon.dev/v0/app/mcp, platform.pigeon.dev/v0/app/session, blue.platform.pigeon.dev/v0/app/session, control.platform.pigeon.dev/v0/app/session] }
-      - { name: pigeon-control app association, paths: [platform.pigeon.dev/.well-known/apple-app-site-association, blue.platform.pigeon.dev/.well-known/apple-app-site-association, control.platform.pigeon.dev/.well-known/apple-app-site-association] }
+      - { name: pigeon-control app api, paths: [platform.pigeon.dev/v0/app/mcp, blue.platform.pigeon.dev/v0/app/mcp, control.platform.pigeon.dev/v0/app/mcp, green.platform.pigeon.dev/v0/app/mcp, platform.pigeon.dev/v0/app/session, blue.platform.pigeon.dev/v0/app/session, control.platform.pigeon.dev/v0/app/session, green.platform.pigeon.dev/v0/app/session] }
+      - { name: pigeon-control app association, paths: [platform.pigeon.dev/.well-known/apple-app-site-association, blue.platform.pigeon.dev/.well-known/apple-app-site-association, control.platform.pigeon.dev/.well-known/apple-app-site-association, green.platform.pigeon.dev/.well-known/apple-app-site-association] }
       # Standalones' hosts; see .claude/decisions/2026-11-15-runtime-standalone-hostnames-platform-zone.md.
       - { name: pigeon-control standalone hosts, paths: ["*.pigeon.dev/v0/app"] }
+  # The green colour: its own Worker, host, CI bucket and queue, and platform/blue's shared
+  # resources; see .claude/decisions/2026-11-18-runtime-independent-blue-green-workers.md, its
+  # colour-kind amendment.
+  color/green:
+    kind: pigeon/color
+    platform: platform/blue
+    worker: pigeon-green
+    host: green.platform.pigeon.dev
+    bucket: { name: pigeon-green-ci }
+    queue: { name: pigeon-green-ci-events }
