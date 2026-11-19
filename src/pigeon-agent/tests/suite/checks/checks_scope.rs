@@ -255,18 +255,14 @@ fn workers_deploy_when_their_spec_crates_or_migrations_change() {
             files.map(|f| f.iter().map(|s| (*s).to_string()).collect());
         agent::checks::scope::workers(&repo_root(), files.as_deref()).expect("scopes")
     };
-    // pigeon-green is a colour of pigeon-control, built from the same crate and image.
-    let control = vec!["pigeon-green".to_string(), "pigeon-control".to_string()];
-    let both = vec![
-        "pigeon-green".to_string(),
-        "pigeon-control".to_string(),
-        "pigeon-front".to_string(),
-    ];
+    let control = vec!["pigeon-control".to_string()];
+    let both = vec!["pigeon-control".to_string(), "pigeon-front".to_string()];
     let front = vec!["pigeon-front".to_string()];
     for hit in [
         "src/pigeon-agent/src/mcp.rs",
         "src/pigeon-agent/src/workers/mod.rs",
         "src/pigeon-agent/migrations/0003_x.sql",
+        "infra/pigeon/workers/control/worker.yaml",
         "Dockerfile",
         "pigeon-start",
         ".dockerignore",
@@ -274,14 +270,6 @@ fn workers_deploy_when_their_spec_crates_or_migrations_change() {
     ] {
         assert_eq!(workers(Some(&[hit])), control, "{hit}");
     }
-    assert_eq!(
-        workers(Some(&["infra/pigeon/workers/control/worker.yaml"])),
-        vec!["pigeon-control".to_string()]
-    );
-    assert_eq!(
-        workers(Some(&["infra/pigeon/workers/color/worker.yaml"])),
-        vec!["pigeon-green".to_string()]
-    );
     assert_eq!(workers(Some(&["Cargo.lock"])), both, "Cargo.lock");
     for hit in [
         "src/pigeon-front/src/lib.rs",
