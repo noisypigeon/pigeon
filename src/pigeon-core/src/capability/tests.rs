@@ -63,3 +63,9 @@ fn hooks_default_to_nothing() {
     assert_eq!(icbc.lifecycle(&Lifecycle::Disable), Ok(Plan::default()));
     assert_eq!(icbc.behaviour(&Behaviour::OnRevoke), Outcome::Pass);
 }
+
+#[test]
+fn an_operation_is_owned_by_the_capability_listing_it() {
+    assert_eq!(owner_of("instances.standup"), Some(("instances", None)));
+    assert_eq!(owner_of("change.status"), None);
+}

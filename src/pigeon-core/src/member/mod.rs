@@ -710,7 +710,7 @@ impl Members {
     ///
     /// # Errors
     /// `by` is no administrator, the capability is unknown or not grantable yet, the member is no
-    /// standard member, `icbc` is given a scope, or the expiry is not in the future.
+    /// standard member, the scope breaks the capability's rule, or the expiry is not in the future.
     pub fn grant(
         mut self,
         account: &str,
@@ -733,8 +733,9 @@ impl Members {
         {
             return Err("only a standard member is granted a capability".to_owned());
         }
-        if capability == "icbc" && scope.is_some() {
-            return Err("`icbc` takes no scope".to_owned());
+        if let Some(c) = crate::capability::get(capability) {
+            use crate::capability::Capability as _;
+            c.check_scope(scope).map_err(|r| r.0)?;
         }
         if expires.is_some_and(|t| t <= now) {
             return Err("a grant must expire in the future".to_owned());

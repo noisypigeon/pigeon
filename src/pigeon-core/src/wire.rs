@@ -380,11 +380,8 @@ impl Operation {
             .find(|(name, _)| *name == self.name)
         {
             Requires::Permission(permission)
-        } else if self.name == "instances.standup" {
-            Requires::Capability {
-                name: "instances",
-                scope_arg: None,
-            }
+        } else if let Some((name, scope_arg)) = crate::capability::owner_of(self.name) {
+            Requires::Capability { name, scope_arg }
         } else if DEVICE_OPS.contains(&self.name) {
             Requires::Own
         } else if self.effect == Effect::Read {

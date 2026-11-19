@@ -236,8 +236,8 @@ impl Capability for Declared {
         let name = &self.0.name;
         match (self.0.scope.kind, scope) {
             (ScopeKind::None, None) => Ok(()),
-            (ScopeKind::None, Some(_)) => Err(Refusal(format!("{name} takes no scope"))),
-            (ScopeKind::DnsLabel, None) => Err(Refusal(format!("{name} needs a label"))),
+            (ScopeKind::None, Some(_)) => Err(Refusal(format!("`{name}` takes no scope"))),
+            (ScopeKind::DnsLabel, None) => Err(Refusal(format!("`{name}` needs a label"))),
             (ScopeKind::DnsLabel, Some(l)) => {
                 crate::platform::hosts::check_label(l, std::iter::empty())
                     .map_or(Ok(()), |m| Err(Refusal(m)))
@@ -336,3 +336,15 @@ pub fn grantable() -> Vec<&'static str> {
 
 #[cfg(test)]
 mod tests;
+
+/// The capability that owns operation `op`, and the argument naming its scope, if any.
+#[must_use]
+pub fn owner_of(op: &str) -> Option<(&'static str, Option<&'static str>)> {
+    registry().iter().find_map(|c| {
+        let m = c.manifest();
+        m.operations
+            .iter()
+            .any(|o| o == op)
+            .then_some((m.name.as_str(), m.scope.arg.as_deref()))
+    })
+}

@@ -214,3 +214,24 @@ whose shape doesn't change.
 Each step's change adds the paths it creates to what this ADR governs, by an
 amendment in the same change: `catalog/capabilities/**`, `src/**/capability/**`,
 `.config/policies/capabilities.yaml` and `src/**/wire/capability_tests.rs`.
+
+## Amendments
+
+### 2026-11-19: Steps 2 and 3 land; the constants stay as a pinned mirror
+
+- **Step 2 (!1350)** added the six manifests under `catalog/capabilities/`
+  and `pigeon_core::capability`, holding `Manifest`, the trait, `Declared`
+  and `REGISTRY`. This amendment adds `catalog/capabilities/**` and
+  `src/**/capability/**` to what the ADR governs.
+- **Step 3** reads the registry where it decides:
+  - `Operation::requires()` asks `capability::owner_of`. The hard-coded
+    `instances.standup` case goes, because the `instances` manifest lists
+    that operation.
+  - `Members::grant` refuses a scope through the capability's
+    `check_scope`, in place of the rule written out for `icbc`.
+- **The constants stay, as a mirror.** `member::CAPABILITIES` and
+  `GRANTABLE` remain the compiled lists the grant offer and the roles
+  checks read. A test pins them to the registry, so the two can't drift.
+  They become functions over the registry when a capability first turns
+  grantable (the Subdomain, Domain and Blog ADR's step 7), in that
+  owner-tier change.
