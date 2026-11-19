@@ -139,20 +139,45 @@ fn instances(v: &Value) -> Vec<Value> {
         .collect()
 }
 
-fn members(v: &Value) -> Vec<Value> {
-    let mut rows: Vec<Value> = entries(v, "members")
+/// A membership's grants that are not revoked, each as its capability or capability:scope.
+fn grants_of(m: &Value) -> Vec<String> {
+    entries(m, "grants")
         .iter()
-        .map(|m| {
-            row(
-                s(m, "account"),
-                s(m, "account"),
-                Some(s(m, "role")),
-                None,
-                None,
-                None,
-            )
+        .filter(|g| g["revoked"].is_null())
+        .map(|g| match s(g, "scope") {
+            "" => s(g, "capability").to_string(),
+            scope => format!("{}:{scope}", s(g, "capability")),
         })
-        .collect();
+        .collect()
+}
+
+/// A membership's role, then its grants after a middle dot.
+fn subtitle(m: &Value) -> String {
+    let grants = grants_of(m);
+    if grants.is_empty() {
+        s(m, "role").to_string()
+    } else {
+        format!("{} · {}", s(m, "role"), grants.join(", "))
+    }
+}
+
+fn member_row(m: &Value) -> Value {
+    let sub = subtitle(m);
+    row(
+        s(m, "account"),
+        s(m, "account"),
+        Some(sub.as_str()),
+        None,
+        None,
+        None,
+    )
+}
+
+fn members(v: &Value) -> Vec<Value> {
+    let mut rows: Vec<Value> = entries(v, "members").iter().map(member_row).collect();
+    if rows.is_empty() && v["me"].is_object() {
+        rows.push(member_row(&v["me"]));
+    }
     rows.extend(entries(v, "invitations").iter().map(|i| {
         row(
             s(i, "id"),

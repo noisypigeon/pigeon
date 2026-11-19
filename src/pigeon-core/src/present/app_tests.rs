@@ -151,3 +151,37 @@ fn standup_presents_a_card() {
         "Standing up"
     );
 }
+
+#[test]
+fn a_member_row_lists_its_live_grants() {
+    let v = present(
+        "members.list",
+        json!({
+            "members": [{
+                "account": "m1",
+                "role": "standard",
+                "grants": [
+                    { "capability": "icbc" },
+                    { "capability": "blog", "scope": "site1" },
+                    { "capability": "domain", "revoked": 5 },
+                ],
+            }],
+        }),
+    );
+    assert_eq!(v["items"][0]["subtitle"], "standard · icbc, blog:site1");
+}
+
+#[test]
+fn a_standard_user_sees_its_own_row() {
+    let v = present(
+        "members.list",
+        json!({
+            "me": { "account": "m2", "role": "standard", "grants": [{ "capability": "icbc" }] },
+            "members": [],
+            "invitations": [],
+        }),
+    );
+    assert_eq!(v["items"][0]["title"], "m2");
+    assert_eq!(v["items"][0]["subtitle"], "standard · icbc");
+    assert!(v["items"][1].is_null());
+}
