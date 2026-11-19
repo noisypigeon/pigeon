@@ -6,8 +6,9 @@ deployment: pigeon/platform
 entry: { crate: src/pigeon-front, features: [worker] }
 compatibility_date: "2026-10-01"
 workers_dev: false
-# No route while pigeon-control holds its test host, the step 9b rehearsal's part one.
-routes: []
+# Its test host, under Access since run 42.
+routes:
+  - custom_domain: $deployment.domains[2]
 # Checked through that host, which reaches the primary.
 forwards: $deployment.domains[2]
 bindings:
