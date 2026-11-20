@@ -27,7 +27,7 @@ containers:
 bindings:
   d1: { DB: { name: pigeon, id: $output.infra/pigeon.database_id, migrations: crates/agent/migrations } }
   r2: { STATE: "$output.infra/pigeon.bucket_names[0]" }
-  queues: { producers: { EVENTS: ci-events }, consumers: [ { queue: ci-events, max_batch_size: 10 } ] }
+  queues: { producers: { EVENTS: ci-events }, consumers: [ { queue: ci-events, max_batch_size: 10, max_retries: 100 } ] }
   vars: { TEAM: pigeon }
 secrets: [GRANT_KEY]
 "#;
@@ -178,6 +178,7 @@ fn render_is_stable_and_resolves_every_binding() {
     );
     assert_eq!(w["triggers"]["crons"][0], "17 3 * * *");
     assert_eq!(w["queues"]["consumers"][0]["max_batch_size"], 10);
+    assert_eq!(w["queues"]["consumers"][0]["max_retries"], 100);
     assert_eq!(w["workers_dev"], false);
     assert!(workers::render(&f, &BTreeMap::new()).is_err());
     assert_eq!(workers::binding_of("ChangeRun"), "CHANGE_RUN");

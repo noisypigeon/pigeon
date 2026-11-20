@@ -483,6 +483,10 @@ pub struct Consumer {
     /// The largest batch delivered at once.
     #[serde(default)]
     pub max_batch_size: Option<u32>,
+    /// How often a message is retried before it is dropped; a standby retries every batch it
+    /// is handed (the blue-green ADR's 2026-11-20 amendment).
+    #[serde(default)]
+    pub max_retries: Option<u32>,
 }
 
 /// A spec, and the unit it belongs to.
@@ -1303,6 +1307,9 @@ fn render_bindings(bindings: &Bindings, out: &mut Value, get: &mut impl FnMut(&s
                         let mut v = json!({ "queue": c.queue });
                         if let Some(n) = c.max_batch_size {
                             v["max_batch_size"] = json!(n);
+                        }
+                        if let Some(n) = c.max_retries {
+                            v["max_retries"] = json!(n);
                         }
                         v
                     })
