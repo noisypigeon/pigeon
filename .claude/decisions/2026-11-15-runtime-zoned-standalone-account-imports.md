@@ -388,3 +388,24 @@ see the real zone, not its alias.
 - **Unit paths and names.** A resolved unit's path holds the real zone, and
   a job's output masks it (4c). The stored plan keeps the real path, as it
   keeps every real value.
+
+### 2026-11-20: Paused at hand-off
+
+The owner asked to wrap up, so this ADR pauses here.
+
+- **Done.** Steps 2, 3, 4 (4a, 4b, 4c) and 6. Step 5a: the store (!1358)
+  and its passkey page (!1365). The owner did steps 7 and 8.
+- **Left.**
+  - 5b, `/v0/app/mint`: minting per account through its granter.
+  - 5c, `instance.plan`; 5d, `instance.apply`.
+  - Step 9 needs 5b to 5d and a stand-up generalised from the learner
+    stand-up, which today is hard-wired to `learner`.
+  - Step 10 is the cutover.
+  - Two masking nits from 4c's review:
+    - `private_masks` lowers with `to_lowercase` but `replace_ci` with
+      `to_ascii_lowercase`; use ASCII in both.
+    - No test pins a zone masked inside a longer name.
+  - `Api::zone_id`'s error names the zone; 5b rewords it to name the alias.
+- **To resume.** A planner session reads this ADR, writes 5b's brief from §3
+  and §4, then 5c and 5d. A brief can't touch the approval pages or
+  `platform_job.rs`, so the planner carries those parts.

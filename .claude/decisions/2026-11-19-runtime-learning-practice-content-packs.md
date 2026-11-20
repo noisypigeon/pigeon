@@ -150,3 +150,16 @@ sources: { label: "Learn to Drive Smart" }
 - Steps 3 and 4 keep `icbc`'s routes, prefix and key derivation. Reverting
   either one leaves stored data readable.
 - The golden test fails any change that alters a 7L form.
+
+## Amendments
+
+### 2026-11-20: Paused at hand-off
+
+The owner asked to wrap up, so this ADR pauses here.
+
+- **Done.** Step 1.
+- **Left.** Steps 2 to 5 haven't started. June's onboarding stays parked.
+  Step 2's manifests are gate paths, so the planner carries that step. Step 4
+  waits on the capability ADR's step 6.
+- **To resume.** A planner session takes step 2 itself, after the capability
+  ADR's !1366 merges.

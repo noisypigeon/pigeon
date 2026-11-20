@@ -211,3 +211,16 @@ read-only on live DNS.
   removes its routes and keeps its data.
 - The legacy workload stays until rollout step 6. Until then the blog is
   served by what serves it today.
+
+## Amendments
+
+### 2026-11-20: Paused at hand-off
+
+The owner asked to wrap up, so this ADR pauses here.
+
+- **Done.** Steps 1 and 2. Step 3 is the zoned ADR's step 5, done as far as
+  5a.
+- **Left.** Step 3's 5b to 5d, as that ADR's hand-off lists them. Steps 4 to
+  8 haven't started. Their manifests sit in `catalog/capabilities/`, which is
+  now a gate path, so the planner carries each one.
+- **To resume.** Finish the zoned ADR's step 5, then step 4 (Subdomain).

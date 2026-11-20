@@ -253,3 +253,17 @@ Found in review of !1352. Once `requires()` reads the registry, a manifest's
     `change`, `mandate`, `lane`, `grant`, `member`, `service`, `secrets`,
     `platform`, `owner`, `approval`, `deploy` or `infra` areas;
   - no operation is owned by more than one capability.
+
+### 2026-11-20: Paused at hand-off
+
+The owner asked to wrap up, so this ADR pauses here.
+
+- **Done.** Steps 1 to 3 (!1349, !1350, !1352), the gate amendment (!1354)
+  and its two tests (!1355). Step 4's validator, its three tests and
+  `pigeon dev capabilities` are !1366, merging with the owner's passkey.
+- **Left.** Step 4's `.config/policies/capabilities.yaml` is an eviction
+  path, so it is a change of its own. Steps 5 to 7 haven't started. The
+  capability paths are gate paths, so a brief can't touch them: the planner
+  carries each change and the owner approves it.
+- **To resume.** A planner session reads this ADR, checks that !1366 has
+  merged, proposes the policy file alone, then step 5.
