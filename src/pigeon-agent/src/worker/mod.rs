@@ -2950,6 +2950,10 @@ async fn journal_seal(env: &Env) -> Option<[u8; 32]> {
 }
 
 /// Journals, in shadow, each of `keys` whose value in `state` changed, as entries of the object `object` names for the instance: a failure is logged, never returned.
+#[expect(
+    clippy::too_many_lines,
+    reason = "one pass from an object's storage to its journal rows"
+)]
 async fn journal_keys(state: &State, env: &Env, keys: &[&str], object: impl Fn(&str) -> String) {
     use crate::core::journal;
     use std::collections::BTreeMap;
@@ -3034,7 +3038,9 @@ async fn journal_keys(state: &State, env: &Env, keys: &[&str], object: impl Fn(&
             }
             _ => value.clone(),
         };
-        statements.push(journal::entry(&object, last, epoch, at, &key, &body));
+        let rows = journal::entries(&object, last, epoch, at, &key, &body);
+        last += rows.len() as u64 - 1;
+        statements.extend(rows);
         if digest.is_empty() {
             digests.remove(&key);
         } else {

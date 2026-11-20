@@ -228,11 +228,15 @@ pub fn unseal(
     serde_json::from_slice(&plain).map_err(|e| e.to_string())
 }
 
-/// The most JSON text one snapshot entry holds, under D1's 2 MB row with room for a sealed value's
-/// growth; a larger value isn't journaled until it shrinks, and [`oversized`] names it.
+/// The most JSON text one journal row holds, under D1's 2 MB row; a longer body is written in
+/// parts by [`entries`].
 pub const MAX_VALUE: usize = 1_400_000;
 
-/// Each key among `now` whose JSON text exceeds [`MAX_VALUE`], as `<key>: <bytes> bytes`, which
+/// The most JSON text one value journals, in however many parts; a larger value isn't journaled
+/// until it shrinks, and [`oversized`] names it.
+pub const MAX_TOTAL: usize = 16_000_000;
+
+/// Each key among `now` whose JSON text exceeds [`MAX_TOTAL`], as `<key>: <bytes> bytes`, which
 /// [`changed`] leaves out; see the blue-green ADR's 2026-11-20 oversized amendment.
 #[must_use]
 pub fn oversized(now: &std::collections::BTreeMap<String, serde_json::Value>) -> Option<String> {
@@ -240,10 +244,10 @@ pub fn oversized(now: &std::collections::BTreeMap<String, serde_json::Value>) ->
         .iter()
         .filter_map(|(k, v)| {
             let n = v.to_string().len();
-            (n > MAX_VALUE).then(|| format!("{k}: {n} bytes"))
+            (n > MAX_TOTAL).then(|| format!("{k}: {n} bytes"))
         })
         .collect();
-    (!over.is_empty()).then(|| format!("over the journal's {MAX_VALUE} bytes: {}", over.join(", ")))
+    (!over.is_empty()).then(|| format!("over the journal's {MAX_TOTAL} bytes: {}", over.join(", ")))
 }
 
 /// The DO-local key holding each journaled key's last digest.
@@ -376,7 +380,7 @@ pub fn baseline(
         .collect()
 }
 
-/// The keys among `now` whose value changed since `previous`, each with its new digest (SHA-256 hex of the value's JSON text); a key in `previous` missing from `now` changes to an empty digest; a value whose JSON text exceeds [`MAX_VALUE`] is left out, keeping its previous digest.
+/// The keys among `now` whose value changed since `previous`, each with its new digest (SHA-256 hex of the value's JSON text); a key in `previous` missing from `now` changes to an empty digest; a value whose JSON text exceeds [`MAX_TOTAL`] is left out, keeping its previous digest.
 #[must_use]
 pub fn changed(
     previous: &std::collections::BTreeMap<String, String>,
@@ -385,7 +389,7 @@ pub fn changed(
     let mut out = Vec::new();
     for (k, v) in now {
         let text = v.to_string();
-        if text.len() > MAX_VALUE {
+        if text.len() > MAX_TOTAL {
             continue;
         }
         let d = digest(v);
@@ -430,6 +434,118 @@ pub fn replay(
     (map, unopened)
 }
 
+/// The tag of one part of a body [`entries`] split: `{"$part": i, "of": n, "text": …}`.
+pub const PART_TAG: &str = "$part";
+
+/// `rows` in `seq` order with each run of parts joined into the one row it was split from, at
+/// the last part's `seq`; a key whose parts don't make a whole body is left out and named in the
+/// second value. See the blue-green ADR's 2026-11-20 parts amendment.
+fn assembled(rows: Vec<Row>) -> (Vec<Row>, Vec<String>) {
+    let mut out = Vec::new();
+    let mut broken: Vec<String> = Vec::new();
+    let mut open: std::collections::BTreeMap<String, (u64, Vec<String>)> =
+        std::collections::BTreeMap::new();
+    for row in rows {
+        let Some(i) = row.body.get(PART_TAG).and_then(serde_json::Value::as_u64) else {
+            open.remove(&row.kind);
+            out.push(row);
+            continue;
+        };
+        let of = row.body["of"].as_u64().unwrap_or(0);
+        let text = row.body["text"].as_str().unwrap_or_default().to_string();
+        let parts = open.entry(row.kind.clone()).or_insert((of, Vec::new()));
+        if i == 0 {
+            *parts = (of, Vec::new());
+        }
+        if parts.0 != of || parts.1.len() as u64 != i {
+            open.remove(&row.kind);
+            if !broken.contains(&row.kind) {
+                broken.push(row.kind.clone());
+            }
+            continue;
+        }
+        parts.1.push(text);
+        if i + 1 == of {
+            let whole = parts.1.concat();
+            open.remove(&row.kind);
+            match serde_json::from_str(&whole) {
+                Ok(body) => {
+                    broken.retain(|k| k != &row.kind);
+                    out.push(Row {
+                        seq: row.seq,
+                        kind: row.kind,
+                        body,
+                    });
+                }
+                Err(_) => broken.push(row.kind),
+            }
+        }
+    }
+    broken.extend(
+        open.into_keys()
+            .filter(|k| !broken.contains(k))
+            .collect::<Vec<_>>(),
+    );
+    (out, broken)
+}
+
+/// What `c` takes in a JSON string once escaped.
+fn escaped_len(c: char) -> usize {
+    match c {
+        '"' | '\\' | '\n' | '\r' | '\t' | '\u{8}' | '\u{c}' => 2,
+        c if u32::from(c) < 0x20 => 6,
+        c => c.len_utf8(),
+    }
+}
+
+/// Room a part's row keeps for its tag, counters and quotes around the escaped text.
+const PART_OVERHEAD: usize = 64;
+
+/// The rows that journal `body` for `kind` from `seq` on: one [`entry`] while its JSON text fits
+/// [`MAX_VALUE`], else that text in parts whose row text, with the chunk escaped again inside it,
+/// stays within [`MAX_VALUE`], each tagged by [`PART_TAG`] at the next `seq`, written in the same
+/// batch. See the blue-green ADR's 2026-11-20 parts amendment.
+#[must_use]
+pub fn entries(
+    object: &str,
+    seq: u64,
+    epoch: u64,
+    at: u64,
+    kind: &str,
+    body: &serde_json::Value,
+) -> Vec<crate::control::Statement> {
+    let text = body.to_string();
+    if text.len() <= MAX_VALUE {
+        return vec![entry(object, seq, epoch, at, kind, body)];
+    }
+    let mut chunks: Vec<&str> = Vec::new();
+    let mut rest = text.as_str();
+    while !rest.is_empty() {
+        let mut room = MAX_VALUE - PART_OVERHEAD;
+        let mut cut = rest.len();
+        for (i, c) in rest.char_indices() {
+            let n = escaped_len(c);
+            if n > room {
+                cut = i;
+                break;
+            }
+            room -= n;
+        }
+        let (head, tail) = rest.split_at(cut);
+        chunks.push(head);
+        rest = tail;
+    }
+    let of = chunks.len();
+    chunks
+        .into_iter()
+        .enumerate()
+        .map(|(i, t)| {
+            let part = json!({ PART_TAG: i, "of": of, "text": t });
+            entry(object, seq + i as u64, epoch, at, kind, &part)
+        })
+        .collect()
+}
+
 /// Each key's latest value in `rows`, taken in `seq` order: a `null` body removes the key; a [`SEALED`] key's body is first opened by `open(key, body)`, and a key `open` can't open is left out and named in the second value.
 #[must_use]
 pub fn restore(
@@ -441,8 +557,8 @@ pub fn restore(
 ) {
     let mut sorted = rows.to_vec();
     sorted.sort_by_key(|r| r.seq);
+    let (sorted, mut unopened) = assembled(sorted);
     let mut map = std::collections::BTreeMap::new();
-    let mut unopened: Vec<String> = Vec::new();
     for row in &sorted {
         if row.body.is_null() {
             map.remove(&row.kind);
@@ -602,15 +718,62 @@ mod replay_tests {
     use super::*;
     use serde_json::json;
 
+    fn rows_of(statements: &[crate::control::Statement]) -> Vec<Row> {
+        statements
+            .iter()
+            .map(|s| Row {
+                seq: s.params[1].as_u64().unwrap(),
+                kind: s.params[4].as_str().unwrap().to_string(),
+                body: serde_json::from_str(s.params[5].as_str().unwrap()).unwrap(),
+            })
+            .collect()
+    }
+
+    #[test]
+    fn every_part_row_fits_a_row_however_much_its_text_escapes() {
+        let prose = json!({"briefs": "say \"hi\"\n\t\\ \u{1}é".repeat(MAX_VALUE / 4)});
+        let parts = entries("o", 1, 3, 0, "briefs", &prose);
+        assert!(parts.len() > 1);
+        for s in &parts {
+            let n = s.params[5].as_str().unwrap().len();
+            assert!(n <= MAX_VALUE, "a part row is {n} bytes");
+        }
+        let none = |_: &str, _: &serde_json::Value| None;
+        let (values, _) = restore(&rows_of(&parts), &none);
+        assert_eq!(values["briefs"], prose);
+    }
+
+    #[test]
+    fn a_body_longer_than_a_row_is_journaled_in_parts_and_restored_whole() {
+        let big = json!({"briefs": "é".repeat(MAX_VALUE)});
+        let small = entries("o", 1, 3, 0, "k", &json!(1));
+        assert_eq!(small.len(), 1);
+        let parts = entries("o", 2, 3, 0, "briefs", &big);
+        assert_eq!(parts.len(), 3);
+        for s in &parts {
+            assert!(s.params[5].as_str().unwrap().len() < MAX_VALUE + 100);
+        }
+        let mut rows = rows_of(&small);
+        rows.extend(rows_of(&parts));
+        let none = |_: &str, _: &serde_json::Value| None;
+        let (values, unopened) = restore(&rows, &none);
+        assert_eq!(values["briefs"], big);
+        assert_eq!(values["k"], json!(1));
+        assert_eq!(unopened, Vec::<String>::new());
+        let (values, unopened) = restore(&rows[..2], &none);
+        assert!(!values.contains_key("briefs"));
+        assert_eq!(unopened, vec!["briefs".to_string()]);
+    }
+
     #[test]
     fn an_oversized_value_is_named_with_its_size() {
         use std::collections::BTreeMap;
         let mut now: BTreeMap<String, serde_json::Value> = BTreeMap::new();
         now.insert("small".into(), json!(1));
         assert_eq!(oversized(&now), None);
-        now.insert("briefs".into(), json!("x".repeat(MAX_VALUE)));
+        now.insert("briefs".into(), json!("x".repeat(MAX_TOTAL)));
         let why = oversized(&now).unwrap();
-        assert!(why.contains("briefs: 1400002 bytes"), "{why}");
+        assert!(why.contains("briefs: 16000002 bytes"), "{why}");
     }
 
     #[test]

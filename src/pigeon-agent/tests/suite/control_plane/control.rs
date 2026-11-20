@@ -1749,7 +1749,7 @@ fn a_value_too_large_for_one_entry_is_not_journaled() {
     use std::collections::BTreeMap;
     let mut now = BTreeMap::new();
     now.insert("small".to_string(), json!(1));
-    now.insert("big".to_string(), json!("x".repeat(journal::MAX_VALUE)));
+    now.insert("big".to_string(), json!("x".repeat(journal::MAX_TOTAL)));
     let keys: Vec<String> = journal::changed(&BTreeMap::new(), &now)
         .into_iter()
         .map(|(k, _)| k)

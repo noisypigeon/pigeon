@@ -1153,3 +1153,18 @@ the cap is named with its size under `journal.error`, as
 deploy's parity and a promote both stop on it. If `briefs` outgrows even
 this, the next step is to journal it in parts, or to keep only open
 briefs in it. Either is a change to `briefs` itself, not to the cap.
+
+### 2026-11-20: A value longer than one row is journaled in parts
+
+The deploy of f17af879 named it: `briefs` is 3,128,578 bytes, over the
+1.4 MB cap and over D1's 2 MB row, so no cap can carry it in one row.
+
+`journal::entries` writes a body whose JSON text exceeds `MAX_VALUE`
+(1.4 MB, now the most one row holds) as consecutive rows tagged
+`{"$part": i, "of": n, "text": …}`, in the same batch as the rest, so a
+version lands whole or not at all. `restore` joins a run of parts back
+into the one body, at the last part's `seq`, before the usual handling,
+including opening a sealed key. A key whose parts don't make a whole body
+is left out and named as unopened, never restored half-written.
+`MAX_TOTAL` (16 MB) is now the cap on a whole value: `changed` leaves out
+anything over it, and `oversized` names it under `journal.error`.
