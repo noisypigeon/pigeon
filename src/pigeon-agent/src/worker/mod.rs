@@ -136,6 +136,16 @@ async fn fetch(req: Request, env: Env, _ctx: worker::Context) -> Result<Response
         "/healthz" => return health(&env, &settings).await,
         "/healthz/smoke" => return smoke(&env, &settings, &who).await,
         "/healthz/parity" => return parity(&env, &settings).await,
+        "/healthz/adopt" | "/healthz/resume" if req.method() == Method::Post => {
+            if !deployer(&env, &who) {
+                return Response::error("the deployer's token alone adopts and resumes", 403);
+            }
+            return if req.path() == "/healthz/adopt" {
+                adopt(&env, &settings, false).await
+            } else {
+                resume(&env, &settings, false).await
+            };
+        }
         _ => {}
     }
     if let Some(refused) = narrow_token(&env, &who, &req.path()) {
@@ -1725,6 +1735,184 @@ async fn parity(env: &Env, s: &Settings) -> Result<Response> {
     Response::from_json(&json!({ "ok": ok, "objects": objects }))
 }
 
+/// Whether `who` is the deployer's Access token.
+fn deployer(env: &Env, who: &Identity) -> bool {
+    platform::secret(env, crate::wire::ship_wire::ACCESS_ID_VAR).is_ok_and(|id| id == who.subject)
+}
+
+/// Each state object a colour adopts and resumes: the Instance, `MainRun` and each change D1 shows open, by journal object and stub.
+async fn adoptable(env: &Env, s: &Settings) -> Result<Vec<(String, worker::Stub)>> {
+    use crate::core::journal;
+    let mut out = vec![
+        (
+            journal::state_object(&s.instance),
+            env.durable_object("INSTANCE")?
+                .id_from_name(&s.instance)?
+                .get_stub()?,
+        ),
+        (journal::main_object(&s.instance), main_stub(env, &s.repo)?),
+    ];
+    let rows = platform::d1_rows(env, &control::open(&s.instance, &s.repo)).await?;
+    for o in control::open_rows(&rows) {
+        out.push((
+            journal::change_object(&s.instance, u64::from(o.number)),
+            change_stub(env, &s.repo, o.number)?,
+        ));
+    }
+    Ok(out)
+}
+
+/// `object`'s journal, restored into each key's latest value; a sealed key that doesn't open fails it.
+pub(super) async fn restored(
+    env: &Env,
+    object: &str,
+) -> std::result::Result<std::collections::BTreeMap<String, Value>, String> {
+    use crate::core::journal;
+    let seal = journal_seal(env).await;
+    let rows = platform::d1_rows(env, &journal::rows(object))
+        .await
+        .map_err(|e| e.to_string())?;
+    let open = |k: &str, body: &Value| {
+        seal.as_ref()
+            .and_then(|key| journal::unseal(key, object, k, body).ok())
+    };
+    let (values, unopened) = journal::restore(&journal::from_rows(&rows), &open);
+    if unopened.is_empty() {
+        Ok(values)
+    } else {
+        Err(format!("unopened: {}", unopened.join(", ")))
+    }
+}
+
+/// `/healthz/adopt`: restores each adoptable object's journal and has the object adopt it, while this colour stands by; `MainRun` is left out when it adopts inline. See the blue-green ADR's 2026-11-20 adopt amendment.
+pub(super) async fn adopt(env: &Env, s: &Settings, skip_main: bool) -> Result<Response> {
+    let main = crate::core::journal::main_object(&s.instance);
+    let mut ok = true;
+    let mut objects = serde_json::Map::new();
+    for (object, stub) in adoptable(env, s).await? {
+        if skip_main && object == main {
+            continue;
+        }
+        let outcome: std::result::Result<String, String> = async {
+            let values = restored(env, &object).await?;
+            let body = serde_json::to_value(&values).map_err(|e| e.to_string())?;
+            let req = json_request(
+                "https://object/journal/adopt",
+                Method::Post,
+                Some(&body),
+                None,
+            )
+            .map_err(|e| e.to_string())?;
+            let mut r = platform::call(env, &stub, req)
+                .await
+                .map_err(|e| e.to_string())?;
+            let text = r.text().await.unwrap_or_default();
+            if r.status_code() == 200 {
+                Ok(text)
+            } else {
+                Err(format!("status {}: {text}", r.status_code()))
+            }
+        }
+        .await;
+        ok &= outcome.is_ok();
+        objects.insert(
+            object,
+            match outcome {
+                Ok(t) => json!({ "adopted": t }),
+                Err(e) => json!({ "error": e }),
+            },
+        );
+    }
+    Ok(
+        Response::from_json(&json!({ "ok": ok, "objects": objects }))?.with_status(if ok {
+            200
+        } else {
+            503
+        }),
+    )
+}
+
+/// `/healthz/resume`: re-arms each adoptable object's alarm, once this colour holds the lease; `MainRun` is left out when it resumes itself.
+pub(super) async fn resume(env: &Env, s: &Settings, skip_main: bool) -> Result<Response> {
+    let main = crate::core::journal::main_object(&s.instance);
+    let mut ok = true;
+    let mut objects = serde_json::Map::new();
+    for (object, stub) in adoptable(env, s).await? {
+        if object == crate::core::journal::state_object(&s.instance)
+            || (skip_main && object == main)
+        {
+            continue;
+        }
+        let r = match json_request("https://object/journal/resume", Method::Post, None, None) {
+            Ok(req) => platform::call(env, &stub, req)
+                .await
+                .map(|r| r.status_code())
+                .map_err(|e| e.to_string()),
+            Err(e) => Err(e.to_string()),
+        };
+        ok &= r == Ok(200);
+        objects.insert(
+            object,
+            match r {
+                Ok(code) => json!({ "status": code }),
+                Err(e) => json!({ "error": e }),
+            },
+        );
+    }
+    Ok(
+        Response::from_json(&json!({ "ok": ok, "objects": objects }))?.with_status(if ok {
+            200
+        } else {
+            503
+        }),
+    )
+}
+
+/// Writes restored `values` into `storage`'s journaled `keys`: puts each it holds, deletes each it lacks, and sets the journal's digests to its own. Its count of keys.
+///
+/// # Errors
+///
+/// When storage fails, or a value isn't JSON.
+pub(super) async fn put_adopted(
+    storage: &worker::Storage,
+    keys: &[&str],
+    values: &std::collections::BTreeMap<String, Value>,
+) -> Result<usize> {
+    use crate::core::journal;
+    let mut digests: std::collections::BTreeMap<String, String> = std::collections::BTreeMap::new();
+    for key in keys {
+        match values.get(*key) {
+            Some(v) => {
+                // Plain objects, as a typed value's fields read back.
+                let js = worker::js_sys::JSON::parse(&v.to_string())
+                    .map_err(|_| worker::Error::RustError(format!("{key}: not JSON")))?;
+                storage.put_raw(key, js).await?;
+                digests.insert((*key).to_string(), journal::digest(v));
+            }
+            None => {
+                storage.delete(key).await?;
+            }
+        }
+    }
+    storage.put(journal::DIGESTS, &digests).await?;
+    Ok(digests.len())
+}
+
+/// An object's `POST /journal/adopt`: [`put_adopted`] with the restored map it is sent; refused while this Worker acts. See the blue-green ADR's 2026-11-20 adopt amendment.
+pub(super) async fn adopt_into(
+    state: &State,
+    env: &Env,
+    keys: &[&str],
+    mut req: Request,
+) -> Result<Response> {
+    if lease::acting(env).await {
+        return Response::error("conflict: this Worker acts; only a standby adopts", 409);
+    }
+    let values: std::collections::BTreeMap<String, Value> = req.json().await?;
+    let n = put_adopted(&state.storage(), keys, &values).await?;
+    Response::ok(n.to_string())
+}
+
 /// The newest deploy's log, from where its job stored it.
 async fn last_log(env: &Env, status: &Value) -> Result<Option<String>> {
     let Some(sha) = status["pipeline"]["history"][0]["sha"].as_str() else {
@@ -2470,6 +2658,15 @@ impl Instance {
                 .flatten()
                 .unwrap_or_else(|| json!({}));
             return Response::from_json(&d);
+        }
+        if path == "/journal/adopt" && req.method() == Method::Post {
+            return adopt_into(
+                &self.state,
+                &self.env,
+                crate::core::journal::INSTANCE_KEYS,
+                req,
+            )
+            .await;
         }
         if path.starts_with("/elicit/") || path.starts_with("/approvals/") || path == "/code/verify"
         {

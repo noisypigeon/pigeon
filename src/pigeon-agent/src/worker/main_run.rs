@@ -1310,7 +1310,14 @@ impl MainRun {
                 .unwrap_or_else(|| json!({}));
             return Response::from_json(&d);
         }
+        if req.method() == Method::Post && path == "/journal/adopt" {
+            return super::adopt_into(&self.state, &self.env, crate::core::journal::MAIN_KEYS, req)
+                .await;
+        }
         self.rearm().await?;
+        if req.method() == Method::Post && path == "/journal/resume" {
+            return Response::ok("resumed");
+        }
         if let Some(rest) = path.trim_matches('/').strip_prefix("platform/") {
             let body: Value = req.json().await.unwrap_or(Value::Null);
             return super::platforms::serve(&self.state, rest, &body).await;

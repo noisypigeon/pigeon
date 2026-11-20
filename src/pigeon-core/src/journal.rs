@@ -279,12 +279,26 @@ pub struct Row {
     pub body: serde_json::Value,
 }
 
-/// The digest of each key's latest value in `rows`, taken in `seq` order: a `null` body removes the key; a [`SEALED`] key's body is first opened by `open(key, body)`, and a key `open` can't open is left out and named in the second value.
+/// The digest of each key's latest value in `rows`, as [`restore`] folds them.
 #[must_use]
 pub fn replay(
     rows: &[Row],
     open: &dyn Fn(&str, &serde_json::Value) -> Option<serde_json::Value>,
 ) -> (std::collections::BTreeMap<String, String>, Vec<String>) {
+    let (values, unopened) = restore(rows, open);
+    let map = values.iter().map(|(k, v)| (k.clone(), digest(v))).collect();
+    (map, unopened)
+}
+
+/// Each key's latest value in `rows`, taken in `seq` order: a `null` body removes the key; a [`SEALED`] key's body is first opened by `open(key, body)`, and a key `open` can't open is left out and named in the second value.
+#[must_use]
+pub fn restore(
+    rows: &[Row],
+    open: &dyn Fn(&str, &serde_json::Value) -> Option<serde_json::Value>,
+) -> (
+    std::collections::BTreeMap<String, serde_json::Value>,
+    Vec<String>,
+) {
     let mut sorted = rows.to_vec();
     sorted.sort_by_key(|r| r.seq);
     let mut map = std::collections::BTreeMap::new();
@@ -298,7 +312,7 @@ pub fn replay(
                     map.remove(&row.kind);
                 }
                 Some(v) => {
-                    map.insert(row.kind.clone(), digest(&v));
+                    map.insert(row.kind.clone(), v);
                 }
                 None => {
                     map.remove(&row.kind);
@@ -308,7 +322,7 @@ pub fn replay(
                 }
             }
         } else {
-            map.insert(row.kind.clone(), digest(&row.body));
+            map.insert(row.kind.clone(), row.body.clone());
         }
     }
     unopened.retain(|k| !map.contains_key(k));
@@ -459,6 +473,25 @@ mod replay_tests {
         let want = std::collections::BTreeMap::from([("devices".to_string(), digest(&json!([1])))]);
         assert_eq!(map, want);
         assert_eq!(unopened, vec!["pages".to_string()]);
+    }
+
+    #[test]
+    fn restore_keeps_each_keys_latest_value_opened() {
+        let rows = [
+            row(1, "a", json!(1)),
+            row(3, "a", json!({"x": 2})),
+            row(2, "b", json!(true)),
+            row(4, "b", json!(null)),
+            row(5, "devices", json!({"sealed": "s"})),
+        ];
+        let open = |_: &str, _: &serde_json::Value| Some(json!(["d"]));
+        let (values, unopened) = restore(&rows, &open);
+        let want = std::collections::BTreeMap::from([
+            ("a".to_string(), json!({"x": 2})),
+            ("devices".to_string(), json!(["d"])),
+        ]);
+        assert_eq!(values, want);
+        assert_eq!(unopened, Vec::<String>::new());
     }
 
     #[test]

@@ -1175,6 +1175,17 @@ impl ChangeRun {
         let path = req.path();
         let existing: Option<Change> = self.state.storage().get(CHANGE).await?;
         match (req.method(), path.trim_matches('/')) {
+            (Method::Post, "journal/adopt") => {
+                super::adopt_into(
+                    &self.state,
+                    &self.env,
+                    crate::core::journal::CHANGE_KEYS,
+                    req,
+                )
+                .await
+            }
+            // `rearm` above re-armed the alarm.
+            (Method::Post, "journal/resume") => Response::ok("resumed"),
             (Method::Post, "propose") => {
                 if existing.is_some() {
                     return Response::error("this change number is taken", 409);
