@@ -1791,6 +1791,10 @@ async fn colour_call(req: &Request, env: &Env, s: &Settings) -> Option<Result<Re
         "/healthz/parity" => parity(env, s, true).await,
         "/healthz/adopt" if post => adopt(env, s, false).await,
         "/healthz/resume" if post => resume(env, s, false).await,
+        "/healthz/push" if post => match req.clone() {
+            Ok(r) => take_push(r, env, s).await,
+            Err(e) => Err(e),
+        },
         _ => Response::error("a colour token reaches /healthz only", 403),
     })
 }
@@ -2709,51 +2713,130 @@ async fn reconcile_mirror(env: &Env) -> Result<()> {
 }
 
 /// Artifacts push events: a push to a change's branch is that change's `Pushed`; a push to
-/// `main` goes to its pipeline.
+/// `main` goes to its pipeline. A standby forwards each to the colour that acts; see the
+/// blue-green ADR's 2026-11-20 push-forwarding amendment.
 #[event(queue)]
 async fn queue(batch: MessageBatch<Value>, env: Env, _ctx: worker::Context) -> Result<()> {
     platform::load_store(&env).await;
-    // The standby only reads (the blue-green ADR §A.3): its messages wait for it to act.
-    if !lease::acting(&env).await {
-        batch.retry_all();
-        return Ok(());
-    }
+    let lease = lease::current(&env).await;
+    let acts = crate::core::lease::acting(lease.as_ref(), &lease::color(&env));
     let s = Settings::from(&env)?;
     for message in batch.messages()? {
-        let Some(push) = control::push(message.body()) else {
-            message.ack();
-            continue;
-        };
-        if push.repo.as_deref().is_some_and(|r| r != s.repo) {
-            message.ack();
-            continue;
-        }
-        let number = match push.target {
-            control::Target::Main => {
-                let body = json!({ "sha": push.sha });
-                let req = json_request("https://main/pushed", Method::Post, Some(&body), None)?;
-                match platform::call(&env, &main_stub(&env, &s.repo)?, req).await {
-                    Ok(r) if (200..300).contains(&r.status_code()) => message.ack(),
-                    _ => message.retry(),
-                }
-                continue;
+        let done = if acts {
+            dispatch_push(&env, &s, message.body()).await?
+        } else {
+            match &lease {
+                Some(l) => forward_push(&env, &l.color, message.body()).await,
+                None => false,
             }
-            control::Target::Change(n) => n,
         };
-        let body = serde_json::to_value(Event::Pushed {
-            sha: push.sha.clone(),
-        })?;
-        match to_change(&env, &s.repo, number, Method::Post, "/event", Some(&body)).await {
+        if done {
+            message.ack();
+        } else {
+            message.retry();
+        }
+    }
+    Ok(())
+}
+
+/// Dispatches one push event, as the colour that acts: whether it is done with (to ack), or
+/// should come again (to retry).
+async fn dispatch_push(env: &Env, s: &Settings, body: &Value) -> Result<bool> {
+    let Some(push) = control::push(body) else {
+        return Ok(true);
+    };
+    if push.repo.as_deref().is_some_and(|r| r != s.repo) {
+        return Ok(true);
+    }
+    let number = match push.target {
+        control::Target::Main => {
+            let body = json!({ "sha": push.sha });
+            let req = json_request("https://main/pushed", Method::Post, Some(&body), None)?;
+            return Ok(matches!(
+                platform::call(env, &main_stub(env, &s.repo)?, req).await,
+                Ok(r) if (200..300).contains(&r.status_code())
+            ));
+        }
+        control::Target::Change(n) => n,
+    };
+    let body = serde_json::to_value(Event::Pushed {
+        sha: push.sha.clone(),
+    })?;
+    Ok(
+        match to_change(env, &s.repo, number, Method::Post, "/event", Some(&body)).await {
             Ok((status, v)) if (200..300).contains(&status) || status == 409 || status == 404 => {
                 if status != 200 {
                     worker::console_warn!("push to change {number} refused: {v}");
                 }
-                message.ack();
+                true
             }
-            _ => message.retry(),
+            _ => false,
+        },
+    )
+}
+
+/// A standby's push event, sent to `color` as a colour call: whether that colour took it.
+async fn forward_push(env: &Env, color: &str, body: &Value) -> bool {
+    let sent: std::result::Result<u16, String> = async {
+        let service = env
+            .service(&promote::binding(color))
+            .map_err(|_| format!("no binding for {color}"))?;
+        let token = checker::signing_key(env).map_err(|e| e.to_string())?;
+        let mut req = json_request(
+            "https://colour/healthz/push",
+            Method::Post,
+            Some(body),
+            None,
+        )
+        .map_err(|e| e.to_string())?;
+        req.headers_mut()
+            .and_then(|h| h.set(crate::core::lease::COLOUR_TOKEN, &token))
+            .map_err(|e| e.to_string())?;
+        let r = service
+            .fetch_request(req)
+            .await
+            .map_err(|e| e.to_string())?;
+        Ok(r.status_code())
+    }
+    .await;
+    match sent {
+        Ok(status) if (200..300).contains(&status) => true,
+        Ok(status) => {
+            worker::console_warn!("push forwarded to {color}: status {status}");
+            false
+        }
+        Err(e) => {
+            worker::console_warn!("push forwarded to {color}: {e}");
+            false
         }
     }
-    Ok(())
+}
+
+/// `/healthz/push`, a standby's forwarded push event: dispatched only while this colour acts, and
+/// only when it names its ref's current head, so the colour token alone can't forge a push.
+async fn take_push(mut req: Request, env: &Env, s: &Settings) -> Result<Response> {
+    if !lease::acting(env).await {
+        return Response::error("this colour doesn't act", 409);
+    }
+    let body: Value = req.json().await?;
+    let refs = match platform::credentials(env, false, crate::wire::artifacts_wire::TOKEN_TTL).await
+    {
+        Ok((remote, token)) => github::refs(&remote, Some(&token)).await,
+        Err(e) => Err(e.to_string()),
+    };
+    let refs = match refs {
+        Ok(r) => r,
+        Err(e) => return Response::error(format!("refs unread: {e}; send it again"), 503),
+    };
+    if !push_is_head(&body, &refs) {
+        // A stale push, its ref since moved, or a forged one: never dispatched, and not retried.
+        return Response::ok("not its ref's head: dropped");
+    }
+    if dispatch_push(env, s, &body).await? {
+        Response::ok("taken")
+    } else {
+        Response::error("not taken; send it again", 503)
+    }
 }
 
 /// One instance's runs, one at a time (ADR §3); reached only by the Worker.
@@ -3226,4 +3309,14 @@ pub(super) async fn live_digests(
         out.insert(crate::core::journal::ERROR.to_string(), e);
     }
     Ok(out)
+}
+
+/// Whether push `event` names its ref's current head among `refs`, `(ref, sha)` as Artifacts
+/// advertises them; see the blue-green ADR's 2026-11-20 push-forwarding amendment.
+fn push_is_head(event: &Value, refs: &[(String, String)]) -> bool {
+    let p = event.get("payload").unwrap_or(event);
+    let (Some(r#ref), Some(sha)) = (p["ref"].as_str(), p["after"].as_str()) else {
+        return false;
+    };
+    refs.iter().any(|(r, s)| r == r#ref && s == sha)
 }

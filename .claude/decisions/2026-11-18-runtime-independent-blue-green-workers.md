@@ -1242,3 +1242,38 @@ old colour through the watch. Its target waits, and the release runs on
 the tick after the promote ends. A release that is already running
 finishes. Merges from the queue still land during a drain. Holding them
 too is a follow-up in the `Instance`'s queue.
+
+### 2026-11-20: A standby forwards push events to the colour that acts
+
+After the flip to green, `main` stopped deploying. Artifacts sends push
+events to the platform's queue, and pigeon-control is its only consumer.
+A standby retried every batch "until it holds the lease", so while green
+served, no push reached it: not a push to `main`, so no deploy, and not a
+push to a change's branch, so each one needed `change_pushed`.
+
+A standby now forwards each message to the colour the lease names,
+through that colour's service binding, as a colour call with the colour
+token: `POST /healthz/push` with the message's body. The colour that acts
+dispatches it as its own queue handler does, to `MainRun` or the change.
+A 2xx answer acks the message. Any other answer, or no binding for the
+lease's colour, retries it. A colour that doesn't act answers 409, so a
+message is never dispatched by a standby. The consumer and its queue
+don't change, so this lands in one step.
+
+The colour token is `AGENT_TOKEN`, and job Containers hold it too, so it
+can't vouch for a push alone. The colour that acts reads Artifacts'
+advertised refs first, and dispatches a forwarded push only when the ref
+it names is at its SHA (`push_is_head`). Any other push, stale
+or forged, is acked and dropped. When the refs can't be read, it retries.
+
+The queue's consumer must still outlive pigeon-control before P7. Moving
+it to the front, which would need the colour token as a secret, is a
+follow-up.
+
+It lands with control serving, after the owner flips back. The fix must
+run on pigeon-control before the next flip to green, since control is the
+standby that forwards. So the same change edits `.config/deploy-in-place`,
+which still names pigeon-control: it drops the file's final newline. The
+name reads the same, and the edit asks for one in-place ship of control
+with the fix. That puts the change at the owner tier. The next standby
+deploy carries the fix to green.

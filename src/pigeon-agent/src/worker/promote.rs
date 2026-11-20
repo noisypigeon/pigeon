@@ -24,7 +24,7 @@ pub const EVERY: std::time::Duration = std::time::Duration::from_secs(60);
 const RUNNING_SINCE_S: u64 = 30 * 60;
 
 /// The binding a colour is reached through, as the front names it.
-fn binding(color: &str) -> String {
+pub(super) fn binding(color: &str) -> String {
     color.to_ascii_uppercase().replace('-', "_")
 }
 
