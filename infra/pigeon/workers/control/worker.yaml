@@ -9,16 +9,13 @@ compatibility_date: "2026-10-01"
 # Served only at its domains below; see
 # .claude/decisions/2026-11-10-runtime-platform-hostname-dashboard-observability.md §1.
 workers_dev: false
-# The stack's own hostnames, which Access covers; platform.pigeon.dev is pigeon-front's (the step 9b
-# amendment of .claude/decisions/2026-11-18-runtime-independent-blue-green-workers.md).
+# The stack's own host, under Access; platform.pigeon.dev is pigeon-front's (the step 9b
+# amendment of .claude/decisions/2026-11-18-runtime-independent-blue-green-workers.md), and
+# blue.platform.pigeon.dev is color/blue's (its 2026-11-20 blue amendment).
 routes:
-  - custom_domain: $deployment.domains[1]
-  # The stack's own host, under Access since run 43; see
-  # .claude/decisions/2026-11-18-runtime-independent-blue-green-workers.md, its step 9b amendment.
   - custom_domain: $deployment.domains[3]
-  # Each also by an exact-host route, which outranks pigeon-front's zone wildcard; see the
+  # Also by an exact-host route, which outranks pigeon-front's zone wildcard; see the
   # blue-green ADR's exact-host route amendment.
-  - { host: "$deployment.domains[1]", zone: $deployment.instance_zone }
   - { host: "$deployment.domains[3]", zone: $deployment.instance_zone }
 durable_objects:
   classes: [Instance, ChangeRun, Checker, Runner, MainRun, Bench, Pool]
