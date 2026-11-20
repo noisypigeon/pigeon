@@ -620,3 +620,16 @@ directory.
   owner approves it.
 - **Then, the mirror policy** lands as written, with its `POLICIES` entry,
   as one eviction change.
+
+### 2026-11-19: Five Cloudflare reads are pigeon's own `cloudflare.read`, not the broker's
+
+[`2026-11-19-security-agents-read-cloudflare-minted.md`](2026-11-19-security-agents-read-cloudflare-minted.md)
+serves queues, invocations, logs, a Worker's settings and DNS records
+through one operation in the Worker. It keeps answer #12's shape: one token
+per call, only the groups that call needs, 5 minutes, revoked after.
+
+- **Why not the broker:** typed rows keep IDs out of the output by
+  construction.
+- **What this changes here:** rows C2 and C3 no longer cover those five
+  reads. Every other Cloudflare read still goes through the broker, as
+  planned.

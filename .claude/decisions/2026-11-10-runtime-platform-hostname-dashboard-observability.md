@@ -238,3 +238,12 @@ glob under `src/pigeon-cli/` or `src/site-templates/` becomes `src/**/<tail>`
 (or `**<file>` for a workspace root file), which matches the file both before
 and after the restructure moves it. That ADR's step 12 tightens them to the
 new paths.
+
+### 2026-11-19: `logs_query` and `stats_show` ship as `cloudflare.read`
+
+[`2026-11-19-security-agents-read-cloudflare-minted.md`](2026-11-19-security-agents-read-cloudflare-minted.md)
+serves Workers logs (`what: logs`) and invocation stats
+(`what: invocations`). The token is minted per call, not
+`OBSERVABILITY_TOKEN`.
+
+`traces_query`, `trace_show` and `events_query` stay planned here.
