@@ -3,6 +3,8 @@
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
+pub mod step;
+
 /// The lease: who acts, under which epoch, in which state.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Lease {
@@ -49,4 +51,18 @@ pub fn fence(epoch: u64) -> crate::control::Statement {
 #[must_use]
 pub fn acting(lease: Option<&Lease>, color: &str) -> bool {
     lease.is_none_or(|l| l.color == color)
+}
+
+/// Writes `lease` only while the lease's epoch is still `old_epoch`; the one fenced statement a promote's flip is.
+#[must_use]
+pub fn write(old_epoch: u64, lease: &Lease) -> crate::control::Statement {
+    crate::control::Statement {
+        sql: "UPDATE lease SET color = ?1, epoch = ?2, state = ?3 WHERE id = 1 AND epoch = ?4",
+        params: vec![
+            json!(lease.color),
+            json!(lease.epoch),
+            json!(lease.state),
+            json!(old_epoch),
+        ],
+    }
 }
