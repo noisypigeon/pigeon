@@ -962,3 +962,58 @@ the cutover. What building step 2 found changes four more details.
   lease. Then its plan is applied, its first deploy claims its host's
   route from control, `PIGEON_BLUE` joins the front's and the colours'
   bindings, and green ↔ blue is proven both ways.
+
+### 2026-11-20: P5's cutover left gaps; control takes the lease back, then blue
+
+The owner's `lease.flip` moved the lease to pigeon-green at about 1795153808:
+drain, adopt, key and parity gates, flip, then a clean 10-minute watch.
+`MainRun`'s state carried over. Six gaps showed once green served:
+
+1. **The event log.** Adopt carried the Instance's state keys, not its
+   event log, which the journal keeps as its own object
+   (`instance:<i>/events`). Green's log restarted at 1, behind every
+   session's cursor.
+2. **Change history.** Adopt restored the open changes' `ChangeRun`s only,
+   so a merged change answered "no such change".
+3. **Vars.** The colour spec lacked four of pigeon-control's vars:
+   `PROOFS: passkey`, `MEMBER_CHECK: decide`, `MIRROR` and
+   `COMMIT_AUTHOR`. While green serves, owner proofs take authenticator
+   codes again, the member check only logs, and merges neither mirror nor
+   carry the owner's author.
+4. **Member bindings.** Green logged the agent's token as unbound, which is
+   (3)'s shadow check. Whether it is bound at all is checked on control
+   after the flip back.
+5. Green's own event ids restart at 1, so its journal appends collide with
+   control's earlier ids.
+6. **Passkeys.** The flip back on green's `/lease-switch/<id>` page was
+   refused: "this passkey isn't registered here". Deploy-time parity had
+   matched green's replayed `passkeys` digest to control's held one, so the
+   keyring arrived but didn't verify. The cause is still open.
+
+**The break-glass.** The owner then wrote the lease row in the D1 console,
+the statement `lease::write` makes, unfenced: `UPDATE lease SET color =
+'pigeon-control', epoch = epoch + 1, state = 'serving' WHERE id = 1`. The
+front followed within seconds and control served with its own state intact:
+the event log, merged changes, members and passkeys. What green wrote while
+it served stayed on green: two proposals, re-proposed on control. This is the
+break-glass for a primary whose owner pages can't be used.
+
+The fixes, in one change:
+
+- The Instance's adopt rebuilds its event log from the journal: the newest
+  2000 events, and the highest id as `last`.
+- A `ChangeRun` asked about a change it doesn't hold adopts that change's
+  journal, only while it holds no record.
+- The colour spec carries the four vars.
+- `/healthz/parity` also answers `vars` (those four) and `passkeys` (each
+  registered passkey id's digest), to the deployer and colours. A promote
+  aborts if either differs, as it does for keys.
+
+**Order, and the owner's change of plan.** On 2026-11-20 Willow asked to
+skip the deliberate flip back and test rollback with blue instead. Since
+the break-glass returned the lease to control, the fixes now deploy to
+green as the standby. Before any next flip, a check on green proves the
+event log, merged changes, members, passkeys and vars hold there. Then
+`color/blue` joins the config, and green ↔ blue proves the cutover and
+rollback both ways (P6). The deliberate control → green → control round
+trip is dropped.
