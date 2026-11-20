@@ -2,12 +2,14 @@ description: Cloudflare capabilities a unit may request; minted per run, per 202
 capabilities:
   dns.write: { permissions: [DNS Write], scope: zone }
   zone.read: { permissions: [Zone Read], scope: zone }
+  dns.read: { permissions: [DNS Read], scope: zone }
   transform.write: { permissions: [Zone Transform Rules Write], scope: zone }
   redirects.write: { permissions: [Dynamic URL Redirects Write], scope: zone }
   r2.write: { permissions: [Workers R2 Storage Write], scope: account }
   artifacts.write: { permissions: [Artifacts Read, Artifacts Edit], scope: account }
   d1.write: { permissions: [D1 Write], scope: account }
   queues.write: { permissions: [Queues Write], scope: account }
+  queues.read: { permissions: [Queues Read], scope: account }
   access.write: { permissions: ["Access: Apps and Policies Write", "Access: Service Tokens Write"], scope: account }
   observability.read: { permissions: [Workers Observability Read], scope: account }
   analytics.read: { permissions: [Account Analytics Read], scope: account }

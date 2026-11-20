@@ -14,3 +14,8 @@ grants:
   platform-run:
     mint: { capabilities: from-unit, ttl: 24h }
     route: { job: platform.plan }
+  # Agents' read-only Cloudflare token, minted per `cloudflare.read` call on every zone, revoked after;
+  # see .claude/decisions/2026-11-19-security-agents-read-cloudflare-minted.md §2.
+  cloudflare-read:
+    mint: { capabilities: [observability.read, analytics.read, workers.read, zone.read, dns.read, queues.read], ttl: 5m, zones: ["*"] }
+    route: { object: Instance }

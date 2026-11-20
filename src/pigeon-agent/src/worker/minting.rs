@@ -463,6 +463,98 @@ pub(super) async fn for_object(
     Ok(Ok((value, expires)))
 }
 
+/// Mints `subset` of grant `name` for one call by Durable Object class `class`, only when the
+/// deployed ledger routes it there, then verifies it; one that doesn't verify is revoked. The
+/// registry records its ID, capabilities and expiry, never its value; the caller holds the value
+/// for the call alone and revokes it with [`revoke_token`] when the call ends; see
+/// `.claude/decisions/2026-11-19-security-agents-read-cloudflare-minted.md` §2.
+///
+/// # Errors
+///
+/// When a binding fails.
+#[expect(dead_code, reason = "cloudflare.read calls it in its next change")]
+pub(super) async fn for_call(
+    env: &Env,
+    s: &Settings,
+    name: &str,
+    class: &str,
+    subset: &[&str],
+) -> Result<std::result::Result<RunToken, String>> {
+    let Some(resolved) = deployed(env, s).await? else {
+        return Ok(Err("no deploy has reported the grants ledger yet".into()));
+    };
+    let Some(grant) = resolved.ledger.grants.get(name) else {
+        return Ok(Err(format!("`{name}` is not in the deployed ledger")));
+    };
+    if grant.route.object.as_deref() != Some(class) {
+        return Ok(Err(format!("`{name}` is not routed to {class}")));
+    }
+    let Some(m) = &grant.mint else {
+        return Ok(Err(format!("`{name}` is not minted")));
+    };
+    let wanted = match resolved.wanted_of(name, subset) {
+        Ok(w) => w,
+        Err(why) => return Ok(Err(why)),
+    };
+    let Some(ttl) = ledger::seconds(&m.ttl) else {
+        return Ok(Err(format!("`{name}`'s ttl doesn't read")));
+    };
+    let granter = match granter(env).await {
+        Ok(g) => g,
+        Err(why) => return Ok(Err(why)),
+    };
+    let account = match platform::account(&granter).await {
+        Ok(a) => a,
+        Err(e) => return Ok(Err(format!("`granter` sees no single account: {e}"))),
+    };
+    let api = Api {
+        granter: &granter,
+        account: &account,
+    };
+    let groups = api.groups().await?;
+    let t = now();
+    let body = match minting::token_body(
+        &format!("pigeon {name}"),
+        &account,
+        &wanted,
+        &m.zones,
+        &BTreeMap::new(),
+        &groups,
+        &iso(t),
+        &iso(t + ttl),
+    ) {
+        Ok(b) => b,
+        Err(p) => return Ok(Err(p.join("; "))),
+    };
+    let (id, value) = api.mint(&body).await?;
+    if let Err(why) = verify(&account, &value).await {
+        api.revoke(&id).await?;
+        return Ok(Err(format!("{why}; the new token was revoked")));
+    }
+    let capabilities: Vec<String> = wanted.into_iter().map(|w| w.name).collect();
+    let record = Record {
+        token_id: Some(id.clone()),
+        route: grant.route.clone(),
+        capabilities: capabilities.clone(),
+        made: t,
+        expires: Some(t + ttl),
+        by: format!("call:{class}"),
+    };
+    to_instance(
+        env,
+        s,
+        "/grant-registry/put",
+        &json!({ "name": name, "record": record }),
+    )
+    .await?;
+    Ok(Ok(RunToken {
+        id,
+        value,
+        capabilities,
+        expires: t + ttl,
+    }))
+}
+
 /// A token minted for a platform run: its ID, its value (held by the caller alone, never kept),
 /// its capabilities and its expiry.
 pub(super) struct RunToken {

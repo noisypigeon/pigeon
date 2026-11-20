@@ -16,6 +16,26 @@ pub const FROM_UNIT: &str = "from-unit";
 /// `.claude/decisions/2026-11-17-security-platform-run-minted-token.md` §3.
 pub const PLATFORM_JOB: &str = "platform.plan";
 
+/// The agents' read-only Cloudflare grant; see
+/// `.claude/decisions/2026-11-19-security-agents-read-cloudflare-minted.md` §2 and §3.
+pub const CLOUDFLARE_READ: &str = "cloudflare-read";
+
+/// The capabilities [`CLOUDFLARE_READ`] mints, each read-only.
+pub const READ_ONLY: [&str; 6] = [
+    "observability.read",
+    "analytics.read",
+    "workers.read",
+    "zone.read",
+    "dns.read",
+    "queues.read",
+];
+
+/// The longest a [`CLOUDFLARE_READ`] token lives, in seconds.
+pub const READ_TTL: u64 = 300;
+
+/// A zone list meaning every zone in the account, so no zone is named in git.
+pub const ALL_ZONES: &str = "*";
+
 /// The ledger: each grant by name.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -251,11 +271,24 @@ pub fn check(ledger: &Ledger, known: &BTreeSet<String>) -> Vec<String> {
             }
             Capabilities::Unit(_) => {}
         }
-        if r.job.as_deref() == Some(PLATFORM_JOB) {
-            platform_run(m, ttl, &mut say);
-        }
+        special(name, g, m, ttl, &mut say);
     }
     problems
+}
+
+/// The rules of the grants that differ: the platform run's and [`CLOUDFLARE_READ`]'s.
+fn special(name: &str, g: &Grant, m: &Mint, ttl: Option<u64>, say: &mut impl FnMut(String)) {
+    if g.route.job.as_deref() == Some(PLATFORM_JOB) {
+        platform_run(m, ttl, say);
+    }
+    if m.zones.iter().any(|z| z == ALL_ZONES) && name != CLOUDFLARE_READ {
+        say(format!(
+            "mints on every zone (`{ALL_ZONES}`), which only `{CLOUDFLARE_READ}` may"
+        ));
+    }
+    if name == CLOUDFLARE_READ {
+        cloudflare_read(g, m, ttl, say);
+    }
 }
 
 /// A platform run's mint: its unit's capabilities, for one run; see
@@ -275,6 +308,40 @@ fn platform_run(m: &Mint, ttl: Option<u64>, say: &mut impl FnMut(String)) {
         say(format!(
             "routes to `{PLATFORM_JOB}`, whose token lives one run; it takes no rotate"
         ));
+    }
+}
+
+/// [`CLOUDFLARE_READ`]: exactly [`READ_ONLY`], every zone, on the `Instance`, for at most
+/// [`READ_TTL`], never rotated; see
+/// `.claude/decisions/2026-11-19-security-agents-read-cloudflare-minted.md` §3.
+fn cloudflare_read(g: &Grant, m: &Mint, ttl: Option<u64>, say: &mut impl FnMut(String)) {
+    let mut want: Vec<String> = READ_ONLY.map(String::from).to_vec();
+    want.sort_unstable();
+    let mut got = match &m.capabilities {
+        Capabilities::Named(c) => c.clone(),
+        Capabilities::Unit(_) => Vec::new(),
+    };
+    got.sort_unstable();
+    if got != want {
+        say(format!(
+            "mints `{}`; it mints exactly {}",
+            got.join(", "),
+            READ_ONLY.join(", ")
+        ));
+    }
+    if m.zones != [ALL_ZONES] {
+        say(format!(
+            "names zones; it mints on every zone, `[\"{ALL_ZONES}\"]`"
+        ));
+    }
+    if g.route.object.as_deref() != Some("Instance") {
+        say("routes elsewhere than the `Instance`, which mints it per call".into());
+    }
+    if ttl.is_none_or(|t| t > READ_TTL) {
+        say(format!("lives longer than {READ_TTL} seconds"));
+    }
+    if m.rotate.is_some() {
+        say("is minted per call; it takes no rotate".into());
     }
 }
 
@@ -480,6 +547,74 @@ mod tests {
     fn a_minted_token_routes_to_an_object() {
         let g = object(mint(&["r2.write"], "1h", None), "Pool");
         assert_eq!(one("aigateway", g), Vec::<String>::new());
+    }
+
+    fn read(caps: &[&str], ttl: &str, zones: &[&str]) -> Grant {
+        let mut g = object(mint(caps, ttl, None), "Instance");
+        if let Some(m) = g.mint.as_mut() {
+            m.zones = zones.iter().map(|z| (*z).to_string()).collect();
+        }
+        g
+    }
+
+    fn read_known() -> BTreeSet<String> {
+        READ_ONLY
+            .map(String::from)
+            .into_iter()
+            .chain(known())
+            .collect()
+    }
+
+    #[test]
+    fn cloudflare_read_is_its_six_reads_on_every_zone_for_five_minutes() {
+        let ok = read(&READ_ONLY, "5m", &[ALL_ZONES]);
+        let check1 = |g: Grant| {
+            check(
+                &Ledger {
+                    grants: [(CLOUDFLARE_READ.to_string(), g)].into(),
+                },
+                &read_known(),
+            )
+        };
+        assert_eq!(check1(ok.clone()), Vec::<String>::new());
+        let mut wider = READ_ONLY.to_vec();
+        wider.push("r2.write");
+        assert!(check1(read(&wider, "5m", &[ALL_ZONES]))[0].contains("it mints exactly"));
+        assert!(check1(read(&READ_ONLY, "1h", &[ALL_ZONES]))[0].contains("longer than 300"));
+        assert!(check1(read(&READ_ONLY, "5m", &["example.com"]))[0].contains("every zone"));
+        assert!(check1(object(ok.clone(), "Pool"))[0].contains("`Instance`"));
+        let mut rotated = ok;
+        if let Some(m) = rotated.mint.as_mut() {
+            m.rotate = Some("1m".into());
+        }
+        assert!(check1(rotated).iter().any(|p| p.contains("no rotate")));
+    }
+
+    #[test]
+    fn only_cloudflare_read_mints_on_every_zone() {
+        let mut g = object(mint(&["r2.write"], "1h", None), "Pool");
+        if let Some(m) = g.mint.as_mut() {
+            m.zones = vec![ALL_ZONES.into()];
+        }
+        assert!(one("aigateway", g)[0].contains("only `cloudflare-read` may"));
+    }
+
+    #[test]
+    fn cloudflare_reads_capabilities_are_read_only_in_the_catalog() {
+        let text = include_str!("../../../catalog/cloudflare/capabilities.yaml");
+        let v: serde_json::Value = serde_saphyr::from_str(text).expect("the catalog parses");
+        for c in READ_ONLY {
+            let perms = v["capabilities"][c]["permissions"]
+                .as_array()
+                .unwrap_or_else(|| panic!("`{c}` is in the catalog"));
+            assert!(!perms.is_empty(), "`{c}` names a permission");
+            for p in perms.iter().filter_map(serde_json::Value::as_str) {
+                assert!(p.ends_with(" Read"), "`{c}`: `{p}` is not a read");
+                for never in ["API Tokens", "Secrets", "Access"] {
+                    assert!(!p.contains(never), "`{c}`: `{p}` names {never}");
+                }
+            }
+        }
     }
 
     #[test]

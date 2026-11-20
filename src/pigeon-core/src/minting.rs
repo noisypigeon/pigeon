@@ -7,7 +7,7 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
-use super::ledger::{Grant, Ledger, Route};
+use super::ledger::{ALL_ZONES, Grant, Ledger, Route};
 
 /// The resource prefix of an account-scoped policy.
 const ACCOUNT: &str = "com.cloudflare.api.account";
@@ -62,20 +62,27 @@ pub fn token_body(
         let (scope, resources) = match w.scope.as_str() {
             "account" => (ACCOUNT, json!({ format!("{ACCOUNT}.{account}"): "*" })),
             "zone" => {
-                if zones.is_empty() {
-                    problems.push(format!("`{}` is zone-scoped and names no zone", w.name));
-                    continue;
-                }
-                let mut r = serde_json::Map::new();
-                for z in zones {
-                    match zone_ids.get(z) {
-                        Some(id) => {
-                            r.insert(format!("{ZONE}.{id}"), json!("*"));
-                        }
-                        None => problems.push(format!("`{}`'s zone `{z}` is unknown", w.name)),
+                if zones == [ALL_ZONES] {
+                    // Every zone in the account; see
+                    // .claude/decisions/2026-11-19-security-agents-read-cloudflare-minted.md §2.
+                    let all = json!({ format!("{ZONE}.*"): "*" });
+                    (ZONE, json!({ format!("{ACCOUNT}.{account}"): all }))
+                } else {
+                    if zones.is_empty() {
+                        problems.push(format!("`{}` is zone-scoped and names no zone", w.name));
+                        continue;
                     }
+                    let mut r = serde_json::Map::new();
+                    for z in zones {
+                        match zone_ids.get(z) {
+                            Some(id) => {
+                                r.insert(format!("{ZONE}.{id}"), json!("*"));
+                            }
+                            None => problems.push(format!("`{}`'s zone `{z}` is unknown", w.name)),
+                        }
+                    }
+                    (ZONE, Value::Object(r))
                 }
-                (ZONE, Value::Object(r))
             }
             other => {
                 problems.push(format!(
@@ -191,6 +198,25 @@ impl Resolved {
                 })
             })
             .collect()
+    }
+
+    /// What grant `name` mints, only the capabilities in `subset`, for one call.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::wanted`], an empty subset, or one naming a capability the grant lacks.
+    pub fn wanted_of(&self, name: &str, subset: &[&str]) -> Result<Vec<Wanted>, String> {
+        if subset.is_empty() {
+            return Err(format!("`{name}`: a call mints at least one capability"));
+        }
+        let all = self.wanted(name)?;
+        if let Some(c) = subset.iter().find(|c| !all.iter().any(|w| w.name == **c)) {
+            return Err(format!("`{name}` doesn't grant `{c}`"));
+        }
+        Ok(all
+            .into_iter()
+            .filter(|w| subset.contains(&w.name.as_str()))
+            .collect())
     }
 
     /// What grant `name` mints.
@@ -423,7 +449,7 @@ pub fn due(ledger: &Ledger, registry: &Registry, now: u64) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ledger::{Capabilities, Mint};
+    use crate::ledger::{Capabilities, Mint, Route};
 
     fn group(id: &str, name: &str, scope: &str) -> Group {
         Group {
@@ -454,6 +480,62 @@ mod tests {
         let ids: BTreeMap<String, String> = [("pigeon.dev".to_string(), "z1".to_string())].into();
         let zones: Vec<String> = zones.iter().map(|z| (*z).to_string()).collect();
         token_body("t", "acct", w, &zones, &ids, &groups(), "a", "b")
+    }
+
+    #[test]
+    fn every_zone_is_one_resource_under_the_account() {
+        let b = body(&[wanted("dns.read", "DNS Write", "zone")], &[ALL_ZONES]).expect("a body");
+        assert_eq!(
+            b["policies"][0]["resources"],
+            json!({ "com.cloudflare.api.account.acct": { "com.cloudflare.api.account.zone.*": "*" } })
+        );
+        assert_eq!(
+            b["policies"][0]["permission_groups"],
+            json!([{ "id": "d" }])
+        );
+    }
+
+    #[test]
+    fn a_call_mints_only_the_subset_it_names() {
+        let declared = |p: &str, scope: &str| Declared {
+            permissions: vec![p.into()],
+            scope: scope.into(),
+        };
+        let grant = Grant {
+            mint: Some(Mint {
+                capabilities: Capabilities::Named(vec!["dns.read".into(), "queues.read".into()]),
+                ttl: "5m".into(),
+                rotate: None,
+                zones: vec![ALL_ZONES.into()],
+            }),
+            generate: None,
+            derive: None,
+            route: Route {
+                object: Some("Instance".into()),
+                ..Route::default()
+            },
+        };
+        let r = Resolved {
+            ledger: Ledger {
+                grants: [("cloudflare-read".to_string(), grant)].into(),
+            },
+            capabilities: [
+                ("dns.read".to_string(), declared("DNS Read", "zone")),
+                (
+                    "queues.read".to_string(),
+                    declared("Queues Read", "account"),
+                ),
+            ]
+            .into(),
+            ..Resolved::default()
+        };
+        let w = r
+            .wanted_of("cloudflare-read", &["queues.read"])
+            .expect("a subset");
+        assert_eq!(w.len(), 1);
+        assert_eq!(w[0].permissions, ["Queues Read"]);
+        assert!(r.wanted_of("cloudflare-read", &["r2.write"]).is_err());
+        assert!(r.wanted_of("cloudflare-read", &[]).is_err());
     }
 
     #[test]
