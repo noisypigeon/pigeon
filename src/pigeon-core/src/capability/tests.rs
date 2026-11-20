@@ -128,3 +128,103 @@ fn no_operation_has_two_owners() {
         }
     }
 }
+
+#[test]
+fn the_registry_validates() {
+    let manifests: Vec<&Manifest> = registry().iter().map(Capability::manifest).collect();
+    let problems = validate::validate(&manifests, crate::wire::catalog());
+    assert!(problems.is_empty(), "{problems:#?}");
+}
+
+#[test]
+fn every_manifest_names_test_files_that_exist() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    for c in registry() {
+        for t in &c.manifest().tests {
+            assert!(
+                root.join(t).is_file(),
+                "{} names `{t}`, which isn't a file",
+                c.manifest().name
+            );
+        }
+    }
+}
+
+#[test]
+fn validate_names_each_broken_rule() {
+    let blog = cap("blog").manifest().clone();
+    let icbc = cap("icbc").manifest().clone();
+    let says = |m: &Manifest, other: &Manifest, fragment: &str| {
+        let problems = validate::validate(&[m, other], crate::wire::catalog());
+        assert!(
+            problems.iter().any(|p| p.contains(fragment)),
+            "no problem says `{fragment}`: {problems:#?}"
+        );
+    };
+    let with = |f: &dyn Fn(&mut Manifest)| {
+        let mut m = blog.clone();
+        f(&mut m);
+        m
+    };
+
+    says(&with(&|m| m.version = "1.0".into()), &icbc, "x.y.z");
+    says(
+        &with(&|m| m.operations = vec!["nope.op".into()]),
+        &icbc,
+        "isn't in the catalog",
+    );
+    let mut a = cap("instances").manifest().clone();
+    a.name = "a".into();
+    let mut b = a.clone();
+    b.name = "b".into();
+    says(&a, &b, "is also");
+    says(
+        &with(&|m| {
+            m.routes = vec![Route {
+                door: Door::App,
+                prefix: "/v0/app/learner/x/".into(),
+            }];
+        }),
+        &icbc,
+        "overlaps",
+    );
+    says(
+        &with(&|m| {
+            m.routes = vec![Route {
+                door: Door::App,
+                prefix: "/other/".into(),
+            }];
+        }),
+        &icbc,
+        "under its door",
+    );
+    says(
+        &with(&|m| m.storage.object_keys = vec!["learner.index".into()]),
+        &icbc,
+        "is also",
+    );
+    says(
+        &with(&|m| m.secrets = vec!["bad-name".into()]),
+        &icbc,
+        "Secrets Store",
+    );
+    says(
+        &with(&|m| m.built_on = Some("zzz".into())),
+        &icbc,
+        "names no capability",
+    );
+    says(
+        &with(&|m| {
+            m.grantable = true;
+            m.operations = vec![];
+            m.routes = vec![];
+        }),
+        &icbc,
+        "nothing to grant",
+    );
+    says(
+        &with(&|m| m.config = json!({"type": "string"})),
+        &icbc,
+        "object schema",
+    );
+}

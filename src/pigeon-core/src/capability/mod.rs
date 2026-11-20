@@ -5,6 +5,8 @@ use std::sync::LazyLock;
 use regex::Regex;
 use serde::Deserialize;
 
+pub mod validate;
+
 /// A capability's manifest, as `catalog/capabilities/<name>/capability.yaml` declares it.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]

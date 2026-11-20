@@ -118,6 +118,12 @@ cargo run -q --locked -p pigeon-harness -- run policy.check --root . \
         run: &["cargo run -q --locked -p pigeon-harness -- instance --root ."],
     },
     Task {
+        name: "capabilities",
+        about: "Check every capability manifest's shape",
+        depends: &[],
+        run: &["cargo test -q --locked -p pigeon-core --lib capability::"],
+    },
+    Task {
         name: "ci",
         about: "Every check",
         depends: &["rust", "policy", "instance"],
