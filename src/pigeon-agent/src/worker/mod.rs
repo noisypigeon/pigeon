@@ -2096,23 +2096,40 @@ async fn smoke(env: &Env, s: &Settings, who: &Identity) -> Result<Response> {
     // A standby's change objects are empty until a promote adopts the journal (the blue-green
     // ADR's 2026-11-20 adopt amendment), so it checks only that the list answers.
     let standby = !lease::acting(env).await;
-    let change = match newest {
-        Some(n) if !standby => run(
-            env,
-            s,
-            who,
-            &read("change.status", json!({ "number": n.to_string() })),
-        )
-        .await
-        .is_ok_and(|r| r.ok),
-        _ => listed.is_ok_and(|r| r.ok),
+    // Why a probe through `run` failed, so a failed smoke names its cause.
+    let why = |r: &std::result::Result<WireResponse, crate::Error>| -> Option<String> {
+        match r {
+            Ok(r) if r.ok => None,
+            Ok(r) => Some(r.violations.join("; ")),
+            Err(e) => Some(e.to_string()),
+        }
     };
-    let deploy = run(env, s, who, &read("deploy.status", json!({})))
-        .await
-        .is_ok_and(|r| r.ok);
+    let change_answer = match newest {
+        Some(n) if !standby => {
+            run(
+                env,
+                s,
+                who,
+                &read("change.status", json!({ "number": n.to_string() })),
+            )
+            .await
+        }
+        _ => listed,
+    };
+    let deploy_answer = run(env, s, who, &read("deploy.status", json!({}))).await;
+    let mut errors = serde_json::Map::new();
+    for (probe, answer) in [
+        ("change_status", &change_answer),
+        ("deploy_status", &deploy_answer),
+    ] {
+        if let Some(e) = why(answer) {
+            errors.insert(probe.into(), json!(e.chars().take(300).collect::<String>()));
+        }
+    }
     let mut probes = json!({
         "d1": d1, "instance": instance, "main": main, "tools": tools,
-        "change_status": change, "deploy_status": deploy,
+        "change_status": why(&change_answer).is_none(),
+        "deploy_status": why(&deploy_answer).is_none(),
     });
     // The docs site, once its bucket is bound.
     if let Ok(bucket) = env.bucket(docs::BINDING) {
@@ -2123,10 +2140,10 @@ async fn smoke(env: &Env, s: &Settings, who: &Identity) -> Result<Response> {
         && probes
             .as_object()
             .is_some_and(|m| m.values().all(|v| v == true));
-    Ok(
-        Response::from_json(&json!({ "ok": ok, "version": version, "probes": probes }))?
-            .with_status(if ok { 200 } else { 503 }),
-    )
+    Ok(Response::from_json(
+        &json!({ "ok": ok, "version": version, "probes": probes, "errors": errors }),
+    )?
+    .with_status(if ok { 200 } else { 503 }))
 }
 
 /// The R2 key of build file `name` at `sha`, as `GET /builds/` chooses it.
