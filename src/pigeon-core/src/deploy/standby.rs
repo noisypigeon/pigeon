@@ -66,7 +66,10 @@ pub fn parity(standby: &serde_json::Value, primary: &serde_json::Value) -> Vec<S
             if VOLATILE.contains(&key.as_str()) {
                 continue;
             }
-            if held.get(key) != replayed.get(key) {
+            if key == crate::journal::ERROR {
+                let why = held.get(key).and_then(|v| v.as_str()).unwrap_or_default();
+                out.push(format!("{object}: journal failing: {why}"));
+            } else if held.get(key) != replayed.get(key) {
                 out.push(format!("{object}: {key}"));
             }
         }
@@ -149,5 +152,11 @@ mod tests {
         );
         let ring = |v: &str| json!({"objects": {}, "passkeys": [v]});
         assert_eq!(parity(&ring("a"), &ring("b")), Vec::<String>::new());
+        let failing = json!({"objects": {"i": {"held": {"journal.error": "too big"}}}});
+        assert_eq!(
+            parity(&json!({"objects": {}}), &failing),
+            vec!["i: journal failing: too big"]
+        );
+        assert_eq!(crate::journal::error_text("a\n  b"), "a b");
     }
 }

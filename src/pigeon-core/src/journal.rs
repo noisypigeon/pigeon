@@ -240,6 +240,20 @@ pub const SEQ: &str = "journal.seq";
 /// The DO-local key holding the lease epoch an object last journaled under.
 pub const EPOCH: &str = "journal.epoch";
 
+/// The DO-local key holding why the object's last journal write failed; cleared by the next that lands.
+pub const ERROR: &str = "journal.error";
+
+/// `e` as [`ERROR`] keeps it: one line, at most 300 characters.
+#[must_use]
+pub fn error_text(e: &str) -> String {
+    e.split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .chars()
+        .take(300)
+        .collect()
+}
+
 /// The digests [`changed`] compares against: `previous` while `journaled` is `epoch`; else each of `keys` as stale, so the first write under a new epoch journals every key afresh, and removes each it lacks, over whatever another colour journaled. See .claude/decisions/2026-11-18-runtime-independent-blue-green-workers.md, its 2026-11-20 rebaseline amendment.
 #[must_use]
 pub fn baseline(

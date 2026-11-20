@@ -1087,3 +1087,19 @@ already compared: the Instance's journaled `passkeys` key, replayed on
 the standby, against the primary's live value. That covers the whole
 keyring, not only its ids. The promote's gate still compares live ids,
 after the adopt, and aborts on any difference.
+
+### 2026-11-20: A failing journal write names itself in parity
+
+Once control ran !1411, the deploys of d9f0e337 and before still found the
+same seven Instance keys replaying another colour's values, though every
+write to the Instance journals. The likeliest cause is that the
+rebaseline's single batch, every Instance key in one fenced D1 write,
+fails. `journal_keys` only logs a failure, and keeps neither digests nor
+epoch, so each later write retries the same batch and fails again.
+
+To see it rather than guess: when an object's journal write fails, the
+object keeps why under `journal.error`, one line and at most 300
+characters, and the next write that lands clears it. The object's held
+digests carry that key, so a standby deploy's parity names it as
+`<object>: journal failing: <why>`, and a promote, which compares held
+digests, aborts while it is set. The fix follows from what it says.

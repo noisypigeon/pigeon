@@ -2993,7 +2993,7 @@ async fn journal_keys(state: &State, env: &Env, keys: &[&str], object: impl Fn(&
                     .and_then(|h| journal::nonce(&h));
                 let sealed = n.map(|n| journal::sealed(k, n, &object, &key, value));
                 let Some(Ok(b)) = sealed else {
-                    worker::console_warn!("journal: sealing {key} failed");
+                    note_journal(&storage, Err(format!("sealing {key} failed"))).await;
                     return;
                 };
                 b
@@ -3012,8 +3012,21 @@ async fn journal_keys(state: &State, env: &Env, keys: &[&str], object: impl Fn(&
         storage.put(journal::DIGESTS, &digests).await?;
         storage.put(journal::EPOCH, &epoch).await
     };
-    if let Err(e) = stored.await {
-        worker::console_warn!("journal: {e}");
+    note_journal(&storage, stored.await.map_err(|e| e.to_string())).await;
+}
+
+/// Clears or keeps why a journal write failed, under `journal::ERROR`; see the blue-green ADR's
+/// 2026-11-20 journal-error amendment.
+async fn note_journal(storage: &worker::Storage, result: std::result::Result<(), String>) {
+    use crate::core::journal;
+    match result {
+        Ok(()) => {
+            let _ = storage.delete(journal::ERROR).await;
+        }
+        Err(e) => {
+            worker::console_warn!("journal: {e}");
+            let _ = storage.put(journal::ERROR, &journal::error_text(&e)).await;
+        }
     }
 }
 
@@ -3131,6 +3144,11 @@ pub(super) async fn live_digests(
         if let Some(v) = storage.get::<Value>(key).await? {
             out.insert((*key).to_string(), crate::core::journal::digest(&v));
         }
+    }
+    // A failing journal names itself, so parity and a promote see it; see the blue-green ADR's
+    // 2026-11-20 journal-error amendment.
+    if let Some(e) = storage.get::<String>(crate::core::journal::ERROR).await? {
+        out.insert(crate::core::journal::ERROR.to_string(), e);
     }
     Ok(out)
 }
