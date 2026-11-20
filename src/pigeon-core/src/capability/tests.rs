@@ -69,3 +69,62 @@ fn an_operation_is_owned_by_the_capability_listing_it() {
     assert_eq!(owner_of("instances.standup"), Some(("instances", None)));
     assert_eq!(owner_of("change.status"), None);
 }
+
+/// Operation areas no capability may hand a Standard member; see the ADR's gate amendment.
+const NEVER_AREAS: [&str; 12] = [
+    "change.",
+    "mandate.",
+    "lane.",
+    "grant.",
+    "member.",
+    "service.",
+    "secrets.",
+    "platform.",
+    "owner.",
+    "approval.",
+    "deploy.",
+    "infra.",
+];
+
+#[test]
+fn no_capability_hands_out_an_approval_owner_credential_or_platform_operation() {
+    use crate::wire::{ADMINISTRATOR_OPS, Asks, Effect, catalog};
+    for c in registry() {
+        let name = &c.manifest().name;
+        for op in &c.manifest().operations {
+            assert!(
+                !NEVER_AREAS.iter().any(|a| op.starts_with(a)),
+                "{name} lists `{op}`, an area no capability hands out"
+            );
+            assert!(
+                !ADMINISTRATOR_OPS.iter().any(|(n, _)| n == op),
+                "{name} lists `{op}`, which is Administrator-only"
+            );
+            let o = catalog()
+                .iter()
+                .find(|o| o.name == op)
+                .unwrap_or_else(|| panic!("{name} lists `{op}`, which isn't in the catalog"));
+            assert_eq!(
+                o.asks(),
+                Asks::None,
+                "{name} lists `{op}`, which asks for approval"
+            );
+            assert!(
+                o.effect != Effect::Apply || o.control_plane(),
+                "{name} lists `{op}`, a platform apply"
+            );
+        }
+    }
+}
+
+#[test]
+fn no_operation_has_two_owners() {
+    let mut seen = std::collections::BTreeMap::new();
+    for c in registry() {
+        for op in &c.manifest().operations {
+            if let Some(first) = seen.insert(op.clone(), c.manifest().name.clone()) {
+                panic!("`{op}` is listed by both {first} and {}", c.manifest().name);
+            }
+        }
+    }
+}
