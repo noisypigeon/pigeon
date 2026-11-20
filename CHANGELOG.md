@@ -5,6 +5,7 @@
 ### Released
 
 - agent v0.1.80
+- agent v0.1.81
 - infra-cloudflare-schema v0.1.27
 
 ### Merged
@@ -26,6 +27,9 @@
 - feat(grants): the cloudflare-read grant, read-only, minted per call on every zone in the account (!1368) ([3168df3](https://github.com/noisypigeon/pigeon/commit/3168df3cba34281481ccdd89ef5c0c2852fc9b99)) · agent, infra-cloudflare-schema
 - docs(decisions): the deployable-check and cloudflare.read ADRs record where they stand at hand-off (!1378) ([4633ed7](https://github.com/noisypigeon/pigeon/commit/4633ed7f01aa354bd0072472637ddfb6d201a62a))
 - docs(adr): blue-green's standby deploy, promote, watch and flip, as built steps (!1375) ([8478a23](https://github.com/noisypigeon/pigeon/commit/8478a2386a482551144bc7613343a3257185f8d5))
+- fix(workers): deployable stubs are valid resource names, and main's pass skips its own dry-run (!1382) ([c46ea6b](https://github.com/noisypigeon/pigeon/commit/c46ea6b04fe842ddfc5a87e093465d679b503033)) · agent
+- docs(adr): review !1382 against !1375 (!1384) ([b70dfbb](https://github.com/noisypigeon/pigeon/commit/b70dfbb1c5cddbbc126a65997379ae7525ae7dd8))
+- docs(adr): review !1369 against !1375 (!1383) ([2d68841](https://github.com/noisypigeon/pigeon/commit/2d68841ee7d9dc36a98b59289bcba7299b401c65))
 
 ## 2026-11-19
 
