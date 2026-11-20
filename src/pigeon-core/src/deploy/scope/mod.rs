@@ -213,6 +213,13 @@ const SITES: [&str; 5] = [
 /// `.claude/decisions/2026-11-11-release-ios-app-buildkite-testflight.md`.
 const IOS: [&str; 1] = ["src/pigeon-ios/"];
 
+/// The check that proves every Worker spec deploys, on main's stored build and the head's; see
+/// `.claude/decisions/2026-11-19-development-workers-deployable-before-merge.md` §3.
+pub const DEPLOYABLE: &str = "workers deployable";
+
+/// Paths, besides an `infra/<unit>/workers/` spec, whose change can stop a Worker deploying.
+const WORKER_INPUTS: [&str; 3] = ["src/pigeon-agent/src/workers/", "config.yaml", "Dockerfile"];
+
 /// One check: a name, and the command to run in the workspace.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Job {
@@ -335,6 +342,28 @@ impl Crates {
 
 fn under(path: &str, prefixes: &[&str]) -> bool {
     prefixes.iter().any(|p| path.starts_with(p))
+}
+
+/// Whether `path` is a Worker spec or something its deploy reads: the spec code, the binder's
+/// settings, a pigeon kind's outputs, or the image.
+fn deploys_workers(path: &str) -> bool {
+    (path.starts_with("infra/") && path.contains("/workers/"))
+        || path.starts_with("catalog/pigeon/kinds/")
+        || under(path, &WORKER_INPUTS)
+}
+
+/// [`DEPLOYABLE`], when `files` reach a Worker's deploy, run as the head's `pigeon workers
+/// deployable` on the root.
+fn deployable(layout: &Layout, files: &[&str]) -> Option<Job> {
+    if !files.iter().any(|f| deploys_workers(f)) {
+        return None;
+    }
+    let root = layout.root();
+    Some(Job {
+        name: DEPLOYABLE.into(),
+        argv: layout.pigeon(&["workers", "deployable", "--root", root.as_str()]),
+        units: Vec::new(),
+    })
 }
 
 /// The full set, for a change to a workspace-wide setting.
@@ -784,6 +813,7 @@ pub fn jobs_of(
             });
         }
     }
+    out.extend(deployable(layout, &files));
     let policy_tests: Vec<&str> = crates.of(&layout
         .policy_tests
         .iter()

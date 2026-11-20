@@ -2,7 +2,9 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use super::scope::{Binary, Crates, InfraTests, Layout, TestMap, Unit, carried_of, jobs_of};
+use super::scope::{
+    Binary, Crates, DEPLOYABLE, InfraTests, Layout, TestMap, Unit, carried_of, jobs_of,
+};
 use super::ship::{healthy, whole_deploy};
 use super::testmaps::{CHECK, Map, TestMaps};
 use crate::actions::Finished;
@@ -145,6 +147,42 @@ fn units(crates: &Crates, files: &[&str], name: &str) -> Vec<Unit> {
         .find(|j| j.name == name)
         .map(|j| j.units)
         .unwrap_or_default()
+}
+
+#[test]
+fn a_worker_spec_or_what_renders_it_runs_the_deployable_check() {
+    let crates = reach_crates();
+    let has = |files: &[&str]| -> Option<Vec<String>> {
+        let files: Vec<String> = files.iter().map(|f| (*f).to_string()).collect();
+        jobs_of(&reach_config(), &crates, &files, Some(&reach_map()))
+            .into_iter()
+            .find(|j| j.name == DEPLOYABLE)
+            .map(|j| j.argv)
+    };
+    let root = crates.layout.root();
+    for file in [
+        "infra/pigeon/workers/control/worker.yaml",
+        "infra/example/workers/app/worker.yaml",
+        "src/pigeon-agent/src/workers/mod.rs",
+        "config.yaml",
+        "catalog/pigeon/kinds/platform/schema.json",
+        "Dockerfile",
+    ] {
+        let argv = has(&[file]).unwrap_or_else(|| panic!("{file} selects the check"));
+        assert_eq!(
+            argv[argv.len() - 4..],
+            ["workers", "deployable", "--root", root.as_str()],
+            "{file}"
+        );
+    }
+    for file in [
+        "src/pigeon-core/src/wire.rs",
+        "infra/pigeon/main.tf",
+        "catalog/cloudflare/capabilities.yaml",
+        "catalog/cloudflare/kinds/git-repo/schema.json",
+    ] {
+        assert_eq!(has(&[file]), None, "{file} doesn't");
+    }
 }
 
 #[test]
