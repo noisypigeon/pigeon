@@ -7,6 +7,7 @@
 - agent v0.1.80
 - agent v0.1.81
 - agent v0.1.82
+- agent v0.1.83
 - infra-cloudflare-schema v0.1.27
 
 ### Merged
@@ -46,6 +47,29 @@
 - feat(lease): MainRun promotes the standby: drain, adopt, secrets and parity, the fenced flip, the watch from the old colour, flip-back (!1402) ([206fdc8](https://github.com/noisypigeon/pigeon/commit/206fdc8c200c8c8ee10ef8cb806adf3539ffd56b)) · agent
 - feat(infra): pigeon-control's and every colour's queue consumer retries 100 times, so a standby's batches outlive a promote (!1403) ([8a5321e](https://github.com/noisypigeon/pigeon/commit/8a5321e41efe2b98c877b23f8395b14e2c557095))
 - docs(adr): P5's cutover left gaps; the owner's break-glass returned the lease to control; then blue (!1406) ([2694a9c](https://github.com/noisypigeon/pigeon/commit/2694a9c80700afcf213cec3fc5078dae12322b4a))
+- feat(deploy): a standby's check also compares the colours' secret fingerprints, matched vars and passkey ids (!1408) ([63c49cf](https://github.com/noisypigeon/pigeon/commit/63c49cf198ce66aaa00310130bbad001f4421f9c))
+- fix(journal): a colour that takes the lease brings the event log, merged changes and the matched vars, and a flip checks passkeys (!1407) ([30cd61e](https://github.com/noisypigeon/pigeon/commit/30cd61ee20303f636ad2f2171c9e78a47701cd78)) · agent
+- fix(journal): parity compares what each object holds now, so a write its journal missed shows before a flip (!1410) ([a6a96d6](https://github.com/noisypigeon/pigeon/commit/a6a96d6c9d2bc3a46315c065598097432fbad9f5)) · agent
+- fix(journal): a colour's first journal write under a new epoch re-journals every key (!1411) ([3cefbb8](https://github.com/noisypigeon/pigeon/commit/3cefbb8f6ab1bad8aa29d1bd6240f90d16118b2c)) · agent
+- feat(deploy): a standby deploy also ships the primary in place when .config/deploy-in-place names it (!1412) ([d113d69](https://github.com/noisypigeon/pigeon/commit/d113d692ef4d523149f322fc0817c21bb06e102d)) · agent
+- chore(approvals): .config/deploy-in-place is guarded and in the gate (!1413) ([0f80509](https://github.com/noisypigeon/pigeon/commit/0f805092ea0b6f7c43d6e195c9beb5a8579d83b4))
+- chore(deploy): ship pigeon-control once in place (!1414) ([36903e0](https://github.com/noisypigeon/pigeon/commit/36903e0faa22e3f1aa0aa4accbf5f220a2e7151a))
+- fix(deploy): a standby deploy compares passkeys by the journal, not the standby's live keyring (!1415) ([d9f0e33](https://github.com/noisypigeon/pigeon/commit/d9f0e337af62f650eddf88da8431da45f9f5fee5))
+- fix(journal): a failing journal write names itself in parity (!1417) ([2a9f258](https://github.com/noisypigeon/pigeon/commit/2a9f2584c8d9c542c7aeb03813b84e8cf36ad76a)) · agent
+- chore(deploy): remove .config/deploy-in-place now pigeon-control has shipped (!1416) ([6a70aff](https://github.com/noisypigeon/pigeon/commit/6a70aff597225e092cfb8cb6c94efeb87665abed))
+- fix(journal): the journal reads and adopts each value in its stored shape, and parity fails on an unreadable object (!1418) ([ef46085](https://github.com/noisypigeon/pigeon/commit/ef4608540b1f5d5844a7f3d7c4da9b95c609e527)) · agent
+- chore(deploy): ship pigeon-control in place once more, for the journal's stored-shape fix (!1419) ([548af95](https://github.com/noisypigeon/pigeon/commit/548af95ad17a9fff478936d0073095f94ac8db15))
+- fix(journal): an oversized value names itself, and the journal's cap rises to 1.4 MB (!1420) ([f17af87](https://github.com/noisypigeon/pigeon/commit/f17af8796d8e7bf987e7907d429af4dfef4e6b8a)) · agent
+- fix(journal): a value longer than one row is journaled in parts (!1421) ([31ef8ec](https://github.com/noisypigeon/pigeon/commit/31ef8ec1f419ae3d4027d029267274517d0cdfe2)) · agent
+- fix(journal): a journal read takes only each key's current version (!1422) ([eacaa64](https://github.com/noisypigeon/pigeon/commit/eacaa64d4bc3a3aa42e62a36cb42771576d94646))
+- docs(adr): only open briefs stay on the Instance; finished ones move to D1 (!1423) ([340d37f](https://github.com/noisypigeon/pigeon/commit/340d37f6d587cc79b6d83af375aa23c31acad74e))
+- feat(journal): the journal is compacted at each append (!1426) ([91d26a4](https://github.com/noisypigeon/pigeon/commit/91d26a4d9305e66ff57447a5ca3aaf2f8416e6f8)) · agent
+- feat(migrations): brief_archive holds finished briefs (!1424) ([f9344ed](https://github.com/noisypigeon/pigeon/commit/f9344ed547bbb58167133ba38fdaa42386404b91)) · agent
+- feat(briefs): finished briefs move to brief_archive, and are read and restored from it (!1427) ([122991e](https://github.com/noisypigeon/pigeon/commit/122991edfa18518845ae78ff5d0440c1f72acbfe)) · agent
+- fix(smoke): a failed probe names its cause in the smoke answer (!1428) ([64fee4d](https://github.com/noisypigeon/pigeon/commit/64fee4d74b17530d6a23f73a0c98920903598901)) · agent
+- fix(builds): every colour reads and writes builds in the platform's bucket (!1431) ([fe04ad9](https://github.com/noisypigeon/pigeon/commit/fe04ad944f8e702daadcb343c4cb8e842546056b)) · agent
+- fix(workers): deployable checks a kind with several units by each unit, not the deploy's stack (!1432) ([e71a0b6](https://github.com/noisypigeon/pigeon/commit/e71a0b6cfca5a2349697c86b7436055130e5e0f5)) · agent
+- fix(worker): a standby's smoke reads don't wait on member state it hasn't adopted (!1430) ([6da034f](https://github.com/noisypigeon/pigeon/commit/6da034f613d6d7cf8ec7f1eff18c6c1c3dd550ea)) · agent
 
 ## 2026-11-19
 
