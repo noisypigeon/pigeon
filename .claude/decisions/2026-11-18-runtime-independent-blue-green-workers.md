@@ -1071,3 +1071,19 @@ It lands in order, by the two-step rule and the eviction rule:
 4. The file's removal, once control has shipped. The next standby
    deploy's parity then shows whether the journal replays to control's
    state.
+
+### 2026-11-20: The deploy-time check compares passkeys by the journal, not the standby's live keyring
+
+Once control ran !1407, the deploy of 36903e0f also reported `passkeys
+differ`. That field compares each colour's live keyring, and a standby's
+live keyring is whatever it last held, which a promote replaces when it
+adopts the journal. So before an adopt, the field differs whenever the
+standby's leftover keyring isn't the primary's, and it says nothing about
+whether a flip would carry the right one.
+
+The deploy-time check drops the `passkeys` field and keeps `keys` and
+`vars`, which are per-colour configuration. What a flip would carry is
+already compared: the Instance's journaled `passkeys` key, replayed on
+the standby, against the primary's live value. That covers the whole
+keyring, not only its ids. The promote's gate still compares live ids,
+after the adopt, and aborts on any difference.

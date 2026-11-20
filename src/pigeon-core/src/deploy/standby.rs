@@ -48,7 +48,7 @@ pub fn colours(platform: &str, units: &[String], lease: &str) -> Vec<String> {
     v
 }
 
-/// Where a standby's `/healthz/parity` answer differs from the primary's: per object of the primary's, each key whose `replayed` digest on the standby isn't its `held` digest on the primary, and each key the standby couldn't open, as `<object>: <key>`; [`VOLATILE`] keys are left out; and `keys`, `vars` or `passkeys differ` when both carry one that differs. Sorted; empty when they agree.
+/// Where a standby's `/healthz/parity` answer differs from the primary's: per object of the primary's, each key whose `replayed` digest on the standby isn't its `held` digest on the primary, and each key the standby couldn't open, as `<object>: <key>`; [`VOLATILE`] keys are left out; and `keys` or `vars differ` when both carry one that differs. Sorted; empty when they agree.
 #[must_use]
 pub fn parity(standby: &serde_json::Value, primary: &serde_json::Value) -> Vec<String> {
     let empty = serde_json::Map::new();
@@ -76,8 +76,10 @@ pub fn parity(standby: &serde_json::Value, primary: &serde_json::Value) -> Vec<S
             }
         }
     }
-    // What every colour must hold alike, when both answers carry it.
-    for field in ["keys", "vars", "passkeys"] {
+    // What every colour must hold alike, when both answers carry it. Passkeys are compared by the
+    // replayed `passkeys` key here, and live only once adopted, by a promote; see the blue-green
+    // ADR's 2026-11-20 deploy-time passkeys amendment.
+    for field in ["keys", "vars"] {
         let (theirs, ours) = (&standby[field], &primary[field]);
         if !theirs.is_null() && !ours.is_null() && theirs != ours {
             out.push(format!("{field} differ"));
@@ -145,5 +147,7 @@ mod tests {
             parity(&with("passkey"), &json!({"objects": {}})),
             Vec::<String>::new()
         );
+        let ring = |v: &str| json!({"objects": {}, "passkeys": [v]});
+        assert_eq!(parity(&ring("a"), &ring("b")), Vec::<String>::new());
     }
 }
