@@ -59,6 +59,11 @@ bindings:
     INSTANCE_ZONE: $deployment.instance_zone
     # The platform Worker's host, which a deploy from this colour checks it on.
     CONTROL_HOST: $deployment.domains[3]
+    # As pigeon-control's, which a promote checks match (the blue-green ADR's 2026-11-20 amendments).
+    PROOFS: passkey
+    MEMBER_CHECK: decide
+    MIRROR: https://github.com/noisypigeon/pigeon
+    COMMIT_AUTHOR: "noisypigeon <167243387+noisypigeon@users.noreply.github.com>"
     SECRETS_STORE: $deployment.secrets_store_id
     AI_GATEWAY_ACCOUNT: $deployment.account_id
     AI_GATEWAY: "$deployment.ai_gateways[0].name"

@@ -604,10 +604,17 @@ async fn to_change(
     path: &str,
     body: Option<&Value>,
 ) -> Result<(u16, Value)> {
-    let req = json_request(&format!("https://change{path}"), method, body, None)?;
-    let mut r = platform::call(env, &change_stub(env, repo, number)?, req).await?;
-    let status = r.status_code();
-    let text = r.text().await?;
+    let ask = |m: Method| async move {
+        let req = json_request(&format!("https://change{path}"), m, body, None)?;
+        let mut r = platform::call(env, &change_stub(env, repo, number)?, req).await?;
+        Ok::<_, worker::Error>((r.status_code(), r.text().await?))
+    };
+    let (mut status, mut text) = ask(method.clone()).await?;
+    // A change this colour never held answers from the journal (the blue-green ADR's 2026-11-20
+    // amendments); once adopted, it is asked again.
+    if status == 404 && text.contains("no such change") && adopt_change(env, repo, number).await {
+        (status, text) = ask(method).await?;
+    }
     Ok((
         status,
         serde_json::from_str(&text).unwrap_or(Value::String(text)),
@@ -1749,6 +1756,8 @@ pub(super) async fn parity(env: &Env, s: &Settings, with_keys: bool) -> Result<R
     // Only the deployer and another colour see the secrets' fingerprints.
     if with_keys {
         answer["keys"] = key_fingerprints(env);
+        answer["vars"] = matched_vars(env);
+        answer["passkeys"] = passkey_ids(env, s).await;
     }
     Response::from_json(&answer)
 }
@@ -1836,7 +1845,10 @@ pub(super) async fn adopt(env: &Env, s: &Settings, skip_main: bool) -> Result<Re
             continue;
         }
         let outcome: std::result::Result<String, String> = async {
-            let values = restored(env, &object).await?;
+            let mut values = restored(env, &object).await?;
+            if object == crate::core::journal::state_object(&s.instance) {
+                values.insert(events::LOG.to_string(), event_log(env, s).await?);
+            }
             let body = serde_json::to_value(&values).map_err(|e| e.to_string())?;
             let req = json_request(
                 "https://object/journal/adopt",
@@ -2705,13 +2717,24 @@ impl Instance {
             return Response::from_json(&d);
         }
         if path == "/journal/adopt" && req.method() == Method::Post {
-            return adopt_into(
-                &self.state,
-                &self.env,
-                crate::core::journal::INSTANCE_KEYS,
-                req,
-            )
-            .await;
+            return adopt_instance(&self.state, &self.env, req).await;
+        }
+        // Each registered passkey's id, digested, which a promote compares across colours (the
+        // blue-green ADR's 2026-11-20 amendments).
+        if path == "/passkeys/ids" {
+            let ring: crate::core::approval::passkeys::Keyring = self
+                .state
+                .storage()
+                .get(passkeys::KEYRING)
+                .await?
+                .unwrap_or_default();
+            let mut ids: Vec<String> = ring
+                .keys
+                .iter()
+                .map(|k| crate::wire::link::derive(&k.id, "pigeon-passkey-id")[..12].to_string())
+                .collect();
+            ids.sort();
+            return Response::from_json(&ids);
         }
         if path.starts_with("/elicit/") || path.starts_with("/approvals/") || path == "/code/verify"
         {
@@ -3009,4 +3032,85 @@ pub(super) fn key_fingerprints(env: &Env) -> Value {
         out.insert(name.to_string(), json!(fp));
     }
     Value::Object(out)
+}
+
+/// The Instance's event log as the journal holds it, as JSON; see the blue-green ADR's 2026-11-20 amendments.
+async fn event_log(env: &Env, s: &Settings) -> std::result::Result<Value, String> {
+    use crate::core::journal;
+    let object = journal::events_object(&s.instance);
+    let keep = u64::try_from(crate::core::events::KEEP).unwrap_or(u64::MAX);
+    let rows = platform::d1_rows(env, &journal::recent_rows(&object, keep))
+        .await
+        .map_err(|e| e.to_string())?;
+    serde_json::to_value(journal::event_log(&journal::from_rows(&rows))).map_err(|e| e.to_string())
+}
+
+/// The Instance's `POST /journal/adopt`: its journaled keys as [`adopt_into`] writes them, and its event log, so every session's cursor stays valid; refused while this Worker acts.
+async fn adopt_instance(state: &State, env: &Env, mut req: Request) -> Result<Response> {
+    if lease::acting(env).await {
+        return Response::error("conflict: this Worker acts; only a standby adopts", 409);
+    }
+    let values: std::collections::BTreeMap<String, Value> = req.json().await?;
+    let storage = state.storage();
+    let n = put_adopted(&storage, crate::core::journal::INSTANCE_KEYS, &values).await?;
+    if let Some(log) = values.get(events::LOG) {
+        let js = worker::js_sys::JSON::parse(&log.to_string())
+            .map_err(|_| worker::Error::RustError("events: not JSON".into()))?;
+        storage.put_raw(events::LOG, js).await?;
+    }
+    Response::ok(n.to_string())
+}
+
+/// Adopts change `number`'s journal into its object when the object holds no record: whether it did.
+async fn adopt_change(env: &Env, repo: &str, number: u32) -> bool {
+    let Ok(s) = Settings::from(env) else {
+        return false;
+    };
+    let object = crate::core::journal::change_object(&s.instance, u64::from(number));
+    let Ok(values) = restored(env, &object).await else {
+        return false;
+    };
+    if values.is_empty() {
+        return false;
+    }
+    let Ok(body) = serde_json::to_value(&values) else {
+        return false;
+    };
+    let Ok(req) = json_request(
+        "https://change/journal/adopt-if-empty",
+        Method::Post,
+        Some(&body),
+        None,
+    ) else {
+        return false;
+    };
+    let Ok(stub) = change_stub(env, repo, number) else {
+        return false;
+    };
+    platform::call(env, &stub, req)
+        .await
+        .is_ok_and(|r| r.status_code() == 200)
+}
+
+/// The vars every colour must hold alike, which a promote compares before it flips; see the blue-green ADR's 2026-11-20 amendments.
+pub(super) const MATCHED_VARS: [&str; 4] = ["PROOFS", "MEMBER_CHECK", "MIRROR", "COMMIT_AUTHOR"];
+
+/// Each of [`MATCHED_VARS`] as this colour holds it.
+pub(super) fn matched_vars(env: &Env) -> Value {
+    let mut out = serde_json::Map::new();
+    for name in MATCHED_VARS {
+        out.insert(
+            name.to_string(),
+            json!(env.var(name).ok().map(|v| v.to_string())),
+        );
+    }
+    Value::Object(out)
+}
+
+/// The digests of the owner's registered passkey ids, as this colour's Instance holds them; none when it can't say.
+pub(super) async fn passkey_ids(env: &Env, s: &Settings) -> Value {
+    match mandates::to_instance(env, s, "/passkeys/ids", &json!({})).await {
+        Ok((200, v)) => v,
+        _ => Value::Null,
+    }
 }

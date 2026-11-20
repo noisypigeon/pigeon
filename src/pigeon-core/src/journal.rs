@@ -36,7 +36,7 @@ pub fn event_entry(
     epoch: u64,
 ) -> crate::control::Statement {
     entry(
-        &format!("instance:{instance}/events"),
+        &events_object(instance),
         e.id,
         epoch,
         e.at,
@@ -383,6 +383,38 @@ pub fn from_rows(rows: &[serde_json::Value]) -> Vec<Row> {
         .collect()
 }
 
+/// The newest `n` journal rows of `object`, newest first.
+#[must_use]
+pub fn recent_rows(object: &str, n: u64) -> crate::control::Statement {
+    crate::control::Statement {
+        sql: "SELECT seq, kind, body FROM journal WHERE object = ?1 ORDER BY seq DESC LIMIT ?2",
+        params: vec![json!(object), json!(n)],
+    }
+}
+
+/// The Instance's event-log object, which [`event_entry`] appends to.
+#[must_use]
+pub fn events_object(instance: &str) -> String {
+    format!("instance:{instance}/events")
+}
+
+/// The event log `rows` rebuild: their events in id order, the newest [`crate::events::KEEP`] kept, and the highest id as `last`, so a colour that adopts it keeps every session's cursor valid; see the blue-green ADR's 2026-11-20 amendments.
+#[must_use]
+pub fn event_log(rows: &[Row]) -> crate::events::Log {
+    let mut events: Vec<crate::events::Event> = rows
+        .iter()
+        .filter(|r| r.kind == "event")
+        .filter_map(|r| serde_json::from_value(r.body.clone()).ok())
+        .collect();
+    events.sort_by_key(|e| e.id);
+    let last = rows.iter().map(|r| r.seq).max().unwrap_or_default();
+    let skip = events.len().saturating_sub(crate::events::KEEP);
+    crate::events::Log {
+        last,
+        list: events.into_iter().skip(skip).collect(),
+    }
+}
+
 /// The Instance's state object.
 #[must_use]
 pub fn state_object(instance: &str) -> String {
@@ -474,6 +506,23 @@ mod replay_tests {
         let want = std::collections::BTreeMap::from([("devices".to_string(), digest(&json!([1])))]);
         assert_eq!(map, want);
         assert_eq!(unopened, vec!["pages".to_string()]);
+    }
+
+    #[test]
+    fn an_event_log_is_rebuilt_in_id_order_with_its_last_id() {
+        let ev = |id: u64| json!({"id": id, "at": id, "kind": "k", "summary": "s"});
+        let rows = [
+            row(7, "event", ev(7)),
+            row(3, "event", ev(3)),
+            row(5, "event", ev(5)),
+        ];
+        let log = event_log(&rows);
+        assert_eq!(log.last, 7);
+        assert_eq!(
+            log.list.iter().map(|e| e.id).collect::<Vec<_>>(),
+            vec![3, 5, 7]
+        );
+        assert_eq!(event_log(&[]).last, 0);
     }
 
     #[test]

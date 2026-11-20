@@ -87,6 +87,24 @@ async fn ready(
         return Err(format!("parity: status {status}"));
     }
     let theirs: Value = serde_json::from_str(&body).map_err(|e| format!("parity: {e}"))?;
+    let ours_passkeys = super::passkey_ids(env, s).await;
+    if ours_passkeys.is_null() || theirs["passkeys"] != ours_passkeys {
+        return Err(format!(
+            "{to} holds other passkeys than this colour, or none could be read"
+        ));
+    }
+    let ours_vars = super::matched_vars(env);
+    let vars: Vec<&String> = ours_vars
+        .as_object()
+        .into_iter()
+        .flatten()
+        .filter(|(k, v)| theirs["vars"].get(k.as_str()) != Some(*v))
+        .map(|(k, _)| k)
+        .collect();
+    if !vars.is_empty() {
+        let names: Vec<&str> = vars.iter().map(|k| k.as_str()).collect();
+        return Err(format!("{to} holds other vars: {}", names.join(", ")));
+    }
     let ours_keys = super::key_fingerprints(env);
     let keys: Vec<&String> = ours_keys
         .as_object()

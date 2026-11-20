@@ -13,7 +13,7 @@ use super::platform::{Settings, now};
 use crate::events::{After, Cursors, Filter, Log};
 
 /// The storage key of the log.
-const LOG: &str = "events";
+pub(super) const LOG: &str = "events";
 
 /// How long `events.wait` waits at most, in seconds: under the 30 seconds
 /// after which a request is cut on its way; see

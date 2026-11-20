@@ -1186,6 +1186,23 @@ impl ChangeRun {
             }
             // `rearm` above re-armed the alarm.
             (Method::Post, "journal/resume") => Response::ok("resumed"),
+            // A change this colour never held, such as one merged before it took the lease:
+            // adopted from the journal, never over a record it has (the blue-green ADR's
+            // 2026-11-20 amendments).
+            (Method::Post, "journal/adopt-if-empty") => {
+                if existing.is_some() {
+                    return Response::error("conflict: this change has its record", 409);
+                }
+                let values: std::collections::BTreeMap<String, serde_json::Value> =
+                    req.json().await?;
+                let n = super::put_adopted(
+                    &self.state.storage(),
+                    crate::core::journal::CHANGE_KEYS,
+                    &values,
+                )
+                .await?;
+                Response::ok(n.to_string())
+            }
             (Method::Post, "propose") => {
                 if existing.is_some() {
                     return Response::error("this change number is taken", 409);
@@ -1301,7 +1318,7 @@ impl ChangeRun {
                     Err(why) => Response::error(why, 403),
                 }
             }
-            (Method::Post, "window") => self.window(existing).await,
+            (Method::Post, "window") => Box::pin(self.window(existing)).await,
             (Method::Post, "cloudflare") => match existing {
                 Some(change) => self.break_glass(change).await,
                 None => Response::error("no such change", 404),
