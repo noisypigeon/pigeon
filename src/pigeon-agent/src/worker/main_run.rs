@@ -1342,14 +1342,8 @@ impl MainRun {
             return Response::ok(platform::version(&self.env));
         }
         if path == "/journal/digests" {
-            let d: Value = self
-                .state
-                .storage()
-                .get(crate::core::journal::DIGESTS)
-                .await
-                .ok()
-                .flatten()
-                .unwrap_or_else(|| json!({}));
+            let d =
+                super::live_digests(&self.state.storage(), crate::core::journal::MAIN_KEYS).await?;
             return Response::from_json(&d);
         }
         if req.method() == Method::Post && path == "/journal/adopt" {

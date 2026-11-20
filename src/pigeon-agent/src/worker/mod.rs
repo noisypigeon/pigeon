@@ -2706,14 +2706,8 @@ impl Instance {
             return Response::ok(platform::version(&self.env));
         }
         if path == "/journal/digests" {
-            let d: Value = self
-                .state
-                .storage()
-                .get(crate::core::journal::DIGESTS)
-                .await
-                .ok()
-                .flatten()
-                .unwrap_or_else(|| json!({}));
+            let d =
+                live_digests(&self.state.storage(), crate::core::journal::INSTANCE_KEYS).await?;
             return Response::from_json(&d);
         }
         if path == "/journal/adopt" && req.method() == Method::Post {
@@ -3113,4 +3107,22 @@ pub(super) async fn passkey_ids(env: &Env, s: &Settings) -> Value {
         Ok((200, v)) => v,
         _ => Value::Null,
     }
+}
+
+/// Each of `keys`' digest as `storage` holds it now, as `journal.digests` would record it, so parity finds an object that drifted from its journal (a write whose journal append failed); see the blue-green ADR's 2026-11-20 amendments.
+///
+/// # Errors
+///
+/// When storage fails.
+pub(super) async fn live_digests(
+    storage: &worker::Storage,
+    keys: &[&str],
+) -> Result<std::collections::BTreeMap<String, String>> {
+    let mut out = std::collections::BTreeMap::new();
+    for key in keys {
+        if let Some(v) = storage.get::<Value>(key).await? {
+            out.insert((*key).to_string(), crate::core::journal::digest(&v));
+        }
+    }
+    Ok(out)
 }

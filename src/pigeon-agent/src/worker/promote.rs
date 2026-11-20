@@ -377,13 +377,9 @@ async fn held_here(state: &State, env: &Env, s: &Settings) -> std::result::Resul
         .await
         .map_err(|e| e.to_string())?;
     let instance: Value = r.json().await.map_err(|e| e.to_string())?;
-    let main: Value = state
-        .storage()
-        .get(journal::DIGESTS)
+    let main = super::live_digests(&state.storage(), journal::MAIN_KEYS)
         .await
-        .ok()
-        .flatten()
-        .unwrap_or_else(|| serde_json::json!({}));
+        .map_err(|e| e.to_string())?;
     Ok(serde_json::json!({ "objects": {
         journal::state_object(&s.instance): { "held": instance },
         journal::main_object(&s.instance): { "held": main },
