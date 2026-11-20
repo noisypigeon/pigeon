@@ -756,3 +756,103 @@ Step 9b assumed a colour's Custom Domain outranks pigeon-front's
   P5 waits for green.platform to answer `direct` with green's version.
 - **Fallback.** If wrangler refuses a route on a host that's also a Custom
   Domain, the front routes by host instead, with a service binding per colour.
+
+### 2026-11-20: The remaining steps, as built: per-colour binding, the standby deploy, promote, and `lease.flip`
+
+Willow set the goal on 2026-11-20: green and blue fully capable. Each colour
+serves, each is the other's standby, promotion and flip-back work in both
+directions, and the probe shows each colour `up (direct)`. Step 10's pieces
+(parity, the inventory diff, `standby::target`) exist. These are the shapes
+of what joins them.
+
+- **1a, a colour spec binds once per colour unit.**
+  - `select_bound(root, [name], deployment)` binds a spec whose kind has
+    several units to the unit whose bound `name` is the one asked for. Today
+    it binds to the only colour and errors on several.
+  - `checks::scope::workers` already lists each unit's name (`known_as`), so
+    a colour-spec change deploys pigeon-green and pigeon-blue alike.
+  - Code only. `color/blue` joins config.yaml only after a build with 1a is
+    stored, per the two-step rule.
+- **1b, the standby deploy.**
+  - `MainRun` passes `DEPLOY_STANDBY=1` once step 2 is deployed; without it,
+    deploys are as today.
+  - With it, the deploy job picks
+    `standby::target(DEPLOY_LEASE, colours)`, where `colours` is the
+    platform's Worker and each colour unit's `worker`. It ships each
+    colour-capable Worker only for that colour; pigeon-front and other
+    Workers ship as today.
+  - It then checks the standby in order, stopping at the first failure:
+    `/healthz` on its own host, `up (direct)` at the new version; its smoke
+    on its own host; replay parity, where the standby's `/healthz/parity`
+    `replayed` equals the primary's `held`.
+  - The outcome goes in `Report.standby`: colour, version, passed, and the
+    failing check. The job never writes the lease.
+- **2, promote, drain, watch, flip-back** (MainRun, gate code).
+  - After a deploy whose `Report.standby` passed, MainRun sets the lease to
+    `promoting`. While it is promoting, the primary takes no new acts:
+    `lease::acting` is false for a colour whose lease state is `promoting`,
+    except for jobs already running.
+  - MainRun waits until the primary reports no running job, at most
+    10 minutes. Then one fenced statement moves the lease to the standby at
+    `epoch + 1`, `serving`. The front follows within its 5 s cache.
+  - **Watch:** for 10 minutes MainRun probes the new primary's `/healthz` on
+    its own host. A failure flips the lease back at `epoch + 2`; the old
+    colour is warm. Each transition is an event: `lease.promoting`,
+    `lease.promoted`, `lease.flipped_back`.
+  - A suite test drives each transition and a forced watch failure through
+    the core state machine, `core::lease::step`.
+- **Promote's guards** (also step 2):
+  - **Drain timeout:** if the primary still has a running job after
+    10 minutes, the promote aborts and the lease returns to `serving` on the
+    current primary (`lease.promote_aborted`). The lease never flips while a
+    job is running.
+  - **Migrations are expand-only for one release.** Both colours share
+    platform/blue's D1, and the standby deploy applies migrations while the
+    old primary still serves. A migration may add tables, columns and
+    indexes, but it may not drop, rename or narrow anything the previous
+    release reads. A contraction lands in a later deploy, once no colour
+    runs the old code. `.config/policies/` gains a rule refusing `DROP` and
+    `RENAME` in `src/**/migrations/**` without a `Contract-After:` trailer
+    naming the release that stopped reading the column.
+  - **Watch scope:** each minute of the watch checks the new primary's own
+    `/healthz` (`up (direct)` at its version) and the platform host through
+    the front (`up (via front to <new colour>)`). Either failing flips back.
+  - **The owner's hold:** an owner switch, `promote.hold` (passkey), stops
+    auto-promotion. Deploys still reach and verify the standby, but MainRun
+    doesn't flip until the owner releases it, or uses `lease.flip`. The
+    hold shows on the approvals page and in `deploy_status`.
+  - **The Auto hold rule:** a failed standby check leaves the primary
+    serving, so it doesn't count toward Auto's failed-deploy streak (the
+    2026-11-19 auto-held ADR). It pushes the owner "standby <colour> failed
+    <check>". A promote that flips back counts as one failed deploy, and
+    pushes too.
+- **3, `lease.flip`.** An owner operation, with a passkey, in
+  `pigeon-rescue`'s set. It flips the lease to the other colour, through the
+  same drain and watch. It is the break-glass, and the first real cutover
+  from pigeon-control to green is started with it.
+- **Order and owner acts.**
+  - A2 (green's spec with its route; owner merge), then 1a, then 1b, 2 and 3
+    (gate merges: owner).
+  - Then rehearse control → green → control with `lease.flip`, then the real
+    control → green (P5).
+  - Then the color/blue config change (owner), `platform_plan(color/blue)`
+    and Willow's apply. Then blue's host moves from pigeon-control to the
+    colour spec: blue takes its route first, then control drops it.
+  - Then pigeon-blue deploys as the standby, and green ↔ blue is proven both
+    ways (P6).
+- **Recovery notes.**
+  - The fail-fast (!1370) needs a fresh container on retry. Until the
+    Runner restarts its container when `latest_build` changes, a reused
+    stale container can fail several deploys in a row. `deploy_retry` is
+    not the remedy: a deploy's job Container is keyed by its job id, per
+    commit, so a retry reuses the same stale container. A new commit on main
+    gets a fresh one. The durable fix: rebuild the job images, so the baked
+    pigeon is current, and have the Runner restart its container when
+    `latest_build` differs from the build it started with.
+  - If main's stored build becomes unfetchable, every deploy stops. The
+    break-glass is the owner's `deploy_retry` with the build check waived
+    for that run, which a later change adds as `deploy_retry { stale_ok }`.
+- **P7:** pigeon-control is drained once green serves, kept 7 days, then torn
+  down by Willow.
+- **Multi-instance.** Every check reads one instance's lease, colours and
+  journal; nothing reads another instance.
