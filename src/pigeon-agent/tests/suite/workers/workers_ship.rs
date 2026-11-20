@@ -316,3 +316,32 @@ fn a_var_whose_output_is_missing_renders_as_written() {
         json!("$output.infra/pigeon.bucket_names[pigeon-state]")
     );
 }
+
+#[test]
+fn builds_go_to_the_platform_workers_bucket_never_a_colours() {
+    let root = TempDir::new().expect("tempdir");
+    let p = root.path();
+    fs::create_dir_all(p.join("crates/agent")).expect("mkdir");
+    fs::write(p.join("crates/agent/Cargo.toml"), "[package]\n").expect("write");
+    let spec = |name: &str, color: bool, bucket: &str| {
+        format!(
+            "description: A colour.\nname: {name}\ncolor: {color}\nentry: {{ crate: crates/agent, features: [worker] }}\ncompatibility_date: \"2026-10-01\"\nbindings:\n  r2: {{ CI_LOGS: \"$output.infra/pigeon.bucket_names[{bucket}]\" }}\n"
+        )
+    };
+    // `color/` sorts before `control/`, so a search by order alone would pick green's bucket.
+    for (dir, text) in [
+        ("color", spec("pigeon-green", true, "green-ci")),
+        ("control", spec("pigeon-control", false, "pigeon-ci")),
+    ] {
+        fs::create_dir_all(p.join(format!("infra/pigeon/workers/{dir}"))).expect("mkdir");
+        fs::write(
+            p.join(format!("infra/pigeon/workers/{dir}/worker.yaml")),
+            text,
+        )
+        .expect("write");
+    }
+    assert_eq!(
+        agent::ship::builds_reference(p, None).as_deref(),
+        Ok("$output.infra/pigeon.bucket_names[pigeon-ci]")
+    );
+}

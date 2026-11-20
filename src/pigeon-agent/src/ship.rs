@@ -415,6 +415,32 @@ pub fn judge_binary(ws: &Path) -> &'static str {
         .unwrap_or(crate::wire::ship_wire::STORED_JUDGE)
 }
 
+/// The reference of the bucket builds are stored in: the first platform Worker spec at `dir`,
+/// bound to `deployment`, that binds [`BUILDS_BINDING`]. A colour spec never counts, since
+/// `/builds/` is served from the platform Worker's bucket (the blue-green ADR's 2026-11-20
+/// recovery notes).
+///
+/// # Errors
+///
+/// When the specs can't be read, or none binds the bucket.
+pub fn builds_reference(dir: &Path, deployment: Option<&str>) -> Result<String, String> {
+    for f in workers::discover(dir).map_err(|e| e.to_string())? {
+        if f.spec.color {
+            continue;
+        }
+        // A spec that doesn't bind here holds no bucket.
+        let Ok(f) = workers::bound(dir, &f, deployment) else {
+            continue;
+        };
+        if let Some(r) = f.spec.bindings.r2.get(BUILDS_BINDING) {
+            return Ok(r.clone());
+        }
+    }
+    Err(format!(
+        "no Worker binds {BUILDS_BINDING}, where builds are stored"
+    ))
+}
+
 /// Builds `pigeon` from the checkout at `dir` when `files` changed its crates and the judge when
 /// `judge_files` changed its crate, and
 /// stores each at [`crate::wire::ship_wire::build_key`] in the [`BUILDS_BINDING`] bucket, with S3
@@ -448,23 +474,7 @@ pub fn build(
     let outputs: Outputs = serde_json::from_str(&outputs)
         .map_err(|e| format!("{} is not JSON outputs: {e}", ship::OUTPUTS_VAR))?;
     let deployment = var(workers::DEPLOYMENT_VAR);
-    let mut reference = None;
-    for f in workers::discover(dir).map_err(|e| e.to_string())? {
-        // Builds live where the platform Worker serves them, never in a colour's bucket.
-        if f.spec.color {
-            continue;
-        }
-        // A spec that doesn't bind here holds no bucket.
-        let Ok(f) = workers::bound(dir, &f, deployment.as_deref()) else {
-            continue;
-        };
-        if let Some(r) = f.spec.bindings.r2.get(BUILDS_BINDING) {
-            reference = Some(r.clone());
-            break;
-        }
-    }
-    let reference = reference
-        .ok_or_else(|| format!("no Worker binds {BUILDS_BINDING}, where builds are stored"))?;
+    let reference = builds_reference(dir, deployment.as_deref())?;
     let bucket = workers::resolve(&reference, &outputs)?;
     let target = std::env::var_os("CARGO_TARGET_DIR")
         .map_or_else(|| dir.join("target"), std::path::PathBuf::from);
