@@ -301,6 +301,12 @@ pub fn secrets_migrate(o: &crate::platform::migrate::Offer) -> Value {
     )
 }
 
+/// What `/lease-switch/<id>` shows: the owner flips the lease, or holds or releases automatic promotion.
+#[must_use]
+pub fn lease_switch(o: &crate::deploy::flip::Offer) -> Value {
+    page(&o.title(), &o.what(), "Approve", &[], &[], false, None)
+}
+
 /// The page resuming capacity pool offer `o`.
 #[must_use]
 pub fn pool_resume(o: &crate::pool::resume::Offer) -> Value {

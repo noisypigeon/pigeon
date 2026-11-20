@@ -262,6 +262,13 @@ pub enum Routed {
         /// Its arguments.
         args: Map<String, Value>,
     },
+    /// `lease.flip` and `promote.hold`, with their arguments; see the blue-green ADR's 2026-11-20 amendment.
+    LeaseSwitch {
+        /// Which of the two.
+        operation: String,
+        /// Its arguments.
+        args: Map<String, Value>,
+    },
     /// A capacity pool operation, with its arguments; see
     /// `.claude/decisions/2026-11-15-development-capacity-pools-hard-spend-cap.md` §8.
     Pool {
@@ -528,6 +535,10 @@ pub fn route(request: &Request, by: &str, at: u64) -> Result<Routed, String> {
             args: a.clone(),
         }),
         "secrets.migrate" => Ok(Routed::SecretsMigrate { args: a.clone() }),
+        "lease.flip" | "promote.hold" => Ok(Routed::LeaseSwitch {
+            operation: request.operation.clone(),
+            args: a.clone(),
+        }),
         "member.grant" | "member.revoke" => Ok(Routed::MemberGrant {
             operation: request.operation.clone(),
             args: a.clone(),

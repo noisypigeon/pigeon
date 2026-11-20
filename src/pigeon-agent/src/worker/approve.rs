@@ -103,6 +103,8 @@ pub(super) async fn live(env: &Env, s: &Settings) -> Result<Vec<Waiting>> {
                     super::services::live(env, s, &w.path, &token).await?
                 } else if w.path.starts_with(crate::core::platform::migrate::PAGE) {
                     super::secrets_migrate::live(env, s, &w.path, &token).await?
+                } else if w.path.starts_with(crate::core::deploy::flip::PAGE) {
+                    super::lease_ops::live(env, s, &w.path, &token).await?
                 } else if w.path.starts_with(crate::core::member::grant::PAGE) {
                     super::member_grants::live(env, s, &w.path, &token).await?
                 } else if w.path.starts_with(crate::core::zones_private::PAGE) {

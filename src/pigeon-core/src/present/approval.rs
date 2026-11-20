@@ -19,6 +19,8 @@ pub const PREFIXES: &[&str] = &[
     "service.",
     "member.",
     "secrets.",
+    "lease.",
+    "promote.",
 ];
 
 /// How many of this family's operations have no presenter yet; each brief that presents some lowers it.
@@ -52,6 +54,8 @@ pub const NAMES: &[&str] = &[
     "member.revoke",
     "deploy.retry",
     "secrets.migrate",
+    "lease.flip",
+    "promote.hold",
 ];
 
 /// The view of operation `op`'s result, when this family presents it.
@@ -122,7 +126,7 @@ fn build(op: &str, v: &Value) -> Value {
             vec![],
         ),
         "secrets.migrate" => secrets_migrate(v),
-        "grant.request" | "grant.rotate" | "grant.revoke" => card(
+        "grant.request" | "grant.rotate" | "grant.revoke" | "lease.flip" | "promote.hold" => card(
             "Asked the owner",
             opt_str(&v["pending"], "operation"),
             pending_link(&v["pending"]).into_iter().collect(),

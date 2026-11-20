@@ -853,6 +853,25 @@ pub fn secrets_migrate_page(o: &crate::platform::migrate::Offer, token: &str) ->
     shell(&title, &b)
 }
 
+/// The page granting lease switch `o`, posting `token` back to `/lease-switch/<id>` with the passkey; see the blue-green ADR's 2026-11-20 amendment.
+#[must_use]
+pub fn lease_switch_page(o: &crate::deploy::flip::Offer, token: &str) -> String {
+    let title = o.title();
+    let b = format!(
+        "<h1>{}</h1><p>{}</p><form method=\"post\" action=\"{}{}\">\
+<input type=\"hidden\" name=\"grant\" value=\"{}\">{}{CODE_FIELD}\
+<button type=\"submit\">Approve</button></form>\
+<p><small><a href=\"/approvals\">Everything waiting</a></small></p>",
+        escape(&title),
+        escape(&o.what()),
+        crate::deploy::flip::PAGE,
+        o.id,
+        escape(token),
+        passkey_button(&crate::approval::passkeys::grant_purpose(token))
+    );
+    shell(&title, &b)
+}
+
 /// The page resuming capacity pool offer `o`, posting `token` back to
 /// `/pool-resume/<pool>/<id>` with the passkey; see
 /// `.claude/decisions/2026-11-15-development-capacity-pools-hard-spend-cap.md` §8.

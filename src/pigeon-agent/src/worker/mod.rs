@@ -32,6 +32,7 @@ mod instances;
 mod lanes;
 mod learner;
 mod lease;
+mod lease_ops;
 mod listed;
 mod macos;
 mod main_run;
@@ -196,6 +197,7 @@ const PAGES: &[&[Route]] = &[
     services::PAGES,
     member_grants::PAGES,
     secrets_migrate::PAGES,
+    lease_ops::PAGES,
     zones_private::PAGES,
 ];
 
@@ -1233,6 +1235,13 @@ async fn dispatch(
         }
         Routed::SecretsMigrate { args } => {
             let (status, v) = secrets_migrate::run(env, s, &args).await?;
+            Ok((None, respond(operation, status, v)))
+        }
+        Routed::LeaseSwitch {
+            operation: op,
+            args,
+        } => {
+            let (status, v) = lease_ops::run(env, s, &op, &args).await?;
             Ok((None, respond(operation, status, v)))
         }
         Routed::MemberGrant {
@@ -2708,6 +2717,10 @@ impl Instance {
         if path.starts_with("/secrets/migrate/") {
             let body: Value = req.json().await?;
             return secrets_migrate::serve(&self.state, &path, &body).await;
+        }
+        if path.starts_with("/lease/switch/") {
+            let body: Value = req.json().await?;
+            return lease_ops::serve(&self.state, &path, &body).await;
         }
         if path.starts_with(zones_private::PREFIX) {
             let body: Value = req.json().await?;

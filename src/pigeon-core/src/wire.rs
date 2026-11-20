@@ -251,8 +251,10 @@ const GRANT: [&str; 7] = [
     "change.front",
 ];
 
-const PAGE: [&str; 14] = [
+const PAGE: [&str; 16] = [
     "secrets.migrate",
+    "lease.flip",
+    "promote.hold",
     "mandate.propose",
     "lane.request",
     "ci.window",
@@ -359,6 +361,8 @@ impl Operation {
             || self.name.starts_with("approval.")
             || self.name.starts_with("push.")
             || self.name.starts_with("zones.")
+            || self.name.starts_with("lease.")
+            || self.name.starts_with("promote.")
     }
 
     /// Who answers its request for approval.
@@ -706,6 +710,28 @@ const CATALOG: &[Operation] = &[
         summary: "Ask the owner to copy the shared Worker secrets `names` (each in `SHARED`) into the Secrets Store, in the Worker: no value leaves it, and the page answers each name's outcome and fingerprint; answers with the page's link, granted with a passkey",
         args: &[
             arg("names", true, Kind::Strings),
+            arg("ticket", false, Kind::String),
+        ],
+        view: View::Card,
+    },
+    Operation {
+        name: "lease.flip",
+        engine: Engine::Agent,
+        effect: Effect::Plan,
+        summary: "Ask the owner to flip the lease to colour `color` (`pigeon-control`, `pigeon-green` or `pigeon-blue`), through the drain, adopt, parity and the 10-minute watch with flip-back; answers with the page's link, granted with a passkey",
+        args: &[
+            arg("color", true, Kind::String),
+            arg("ticket", false, Kind::String),
+        ],
+        view: View::Card,
+    },
+    Operation {
+        name: "promote.hold",
+        engine: Engine::Agent,
+        effect: Effect::Plan,
+        summary: "Ask the owner to hold (`hold` true) or release (`hold` false) automatic promotion: a passed standby doesn't promote while it is held, and `lease.flip` still does; answers with the page's link, granted with a passkey",
+        args: &[
+            arg("hold", true, Kind::Bool),
             arg("ticket", false, Kind::String),
         ],
         view: View::Card,
