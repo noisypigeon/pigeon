@@ -777,8 +777,17 @@ impl MainRun {
                 self.free_release_turn().await;
             }
         }
-        let turn =
-            r.running.is_none() && r.target.is_some() && self.release_turn(r.waited(at)).await;
+        // No release starts while a promote runs; see the blue-green ADR's 2026-11-20 amendment.
+        let promoting = self
+            .state
+            .storage()
+            .get::<Value>(super::promote::PROMOTE)
+            .await?
+            .is_some();
+        let turn = !promoting
+            && r.running.is_none()
+            && r.target.is_some()
+            && self.release_turn(r.waited(at)).await;
         if let Some(sha) = turn.then(|| r.start()).flatten() {
             match self.start_release(&sha).await {
                 Ok(()) => {}

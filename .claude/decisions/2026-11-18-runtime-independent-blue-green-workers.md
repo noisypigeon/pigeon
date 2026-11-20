@@ -1228,3 +1228,17 @@ logs stay in its own `CI_LOGS`. The colour spec gains the binding, so the
 next standby deploy carries it to green; green has it before any further
 flip. Pre-flip checks should also confirm that the standby's `build.read`
 finds main's build. That is a follow-up.
+
+### 2026-11-20: The release bot waits while a promote runs
+
+The third flip to green started at 20:23Z. The release bot's
+"chore(release): agent v0.1.83" landed on `main` 40 seconds later. Its
+deploy kept the drain from emptying, so the promote would time out.
+
+A release that starts during a promote moves `main` and starts a deploy,
+and a running deploy holds the drain. So `MainRun`'s release step takes
+no merge turn while `promote` is stored: through the drain, and on the
+old colour through the watch. Its target waits, and the release runs on
+the tick after the promote ends. A release that is already running
+finishes. Merges from the queue still land during a drain. Holding them
+too is a follow-up in the `Instance`'s queue.
