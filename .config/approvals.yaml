@@ -34,11 +34,15 @@ guarded:
   - src/pigeon-core/src/view.rs
   # The pools' spend caps; see .claude/decisions/2026-11-15-development-capacity-pools-hard-spend-cap.md, 2026-11-17 amendments.
   - .config/pool.yaml
+  # A deploy that ships the primary in place; see .claude/decisions/2026-11-18-runtime-independent-blue-green-workers.md, its 2026-11-20 in-place amendment.
+  - .config/deploy-in-place
 # The gate: the guarded paths Auto never covers, the code that sets the owner tier and proves
 # the owner; Auto covers every other guarded and eviction path. See
 # .claude/decisions/2026-11-15-security-standing-auto-owner-flags.md's 2026-11-16 amendments.
 gate:
   - .config/approvals.yaml
+  # The in-place primary deploy; see the blue-green ADR's 2026-11-20 in-place amendment.
+  - .config/deploy-in-place
   - .config/policies/secrets*.yaml
   - .github/**
   - src/pigeon-core/src/approval/**
