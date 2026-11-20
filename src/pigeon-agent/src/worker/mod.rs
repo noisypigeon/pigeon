@@ -2146,6 +2146,12 @@ async fn smoke(env: &Env, s: &Settings, who: &Identity) -> Result<Response> {
     .with_status(if ok { 200 } else { 503 }))
 }
 
+/// The bucket builds, test maps and iOS artifacts live in: `BUILDS`, the platform's bucket every
+/// colour binds, else this Worker's `CI_LOGS`; see the blue-green ADR's 2026-11-20 builds amendment.
+pub(super) fn builds_bucket(env: &Env) -> Result<worker::Bucket> {
+    env.bucket("BUILDS").or_else(|_| env.bucket("CI_LOGS"))
+}
+
 /// The R2 key of build file `name` at `sha`, as `GET /builds/` chooses it.
 fn build_file_key(sha: &str, name: &str) -> String {
     if name == crate::wire::ship_wire::STORED_JUDGE {
@@ -2246,7 +2252,7 @@ async fn build_tool(
             )),
         ));
     }
-    let bucket = env.bucket("CI_LOGS")?;
+    let bucket = builds_bucket(env)?;
     if op == "build.list" {
         let mut files = Vec::new();
         for file in crate::wire::ship_wire::BUILD_BINARIES
@@ -2316,7 +2322,7 @@ async fn build(env: &Env, path: &str) -> Result<Response> {
         return Response::error("not found", 404);
     };
     let key = build_file_key(sha, binary);
-    let Some(object) = env.bucket("CI_LOGS")?.get(key).execute().await? else {
+    let Some(object) = builds_bucket(env)?.get(key).execute().await? else {
         return Response::error("no build of that commit", 404);
     };
     let Some(body) = object.body() else {

@@ -274,7 +274,7 @@ pub async fn archive(req: Request, env: &Env) -> Result<Response> {
         return Response::error("no release of this build and commit is signing", 403);
     };
     let key = crate::iosrelease::key(&job.commit, build);
-    let Some(object) = env.bucket("CI_LOGS")?.get(key).execute().await? else {
+    let Some(object) = super::builds_bucket(env)?.get(key).execute().await? else {
         return Response::error("the archive is missing", 404);
     };
     let Some(body) = object.body() else {
@@ -435,7 +435,7 @@ async fn archive_piece(env: &Env, job: &Job, id: &Value, args: &Value) -> Result
         .or_else(|| args["offset"].as_str().and_then(|t| t.parse().ok()))
         .unwrap_or(0);
     let key = crate::iosrelease::key(&job.commit, build);
-    let bucket = env.bucket("CI_LOGS")?;
+    let bucket = super::builds_bucket(env)?;
     let Some(head) = bucket.head(key.clone()).await? else {
         return answer(id, false, &json!("the archive is missing"));
     };

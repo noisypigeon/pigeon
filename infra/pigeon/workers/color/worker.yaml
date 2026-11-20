@@ -42,6 +42,9 @@ bindings:
     DB: { name: $deployment.database.name, id: $deployment.database_id, migrations: src/pigeon-agent/migrations }
   r2:
     CI_LOGS: $deployment.ci_bucket
+    # Builds, test maps and iOS artifacts: the platform's bucket, the same for every colour (the
+    # blue-green ADR's 2026-11-20 builds amendment).
+    BUILDS: "$deployment.bucket_names[pigeon-ci]"
     DOCS: "$output.sites/docs.bucket"
   queues:
     # A standby retries every batch until it holds the lease (the blue-green ADR's 2026-11-20 amendment).

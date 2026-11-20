@@ -1208,3 +1208,23 @@ compacted. Superseded values can't be recovered from the journal
 afterwards; D1's Time Travel still covers 30 days. A suite test on
 SQLite pins it: only superseded rows go, another object's rows stay, and
 the current-version read and restore give the same values as before.
+
+### 2026-11-20: Builds live in the platform's bucket, and every colour reads them there
+
+After the flip to green, every bound job failed: "pigeon-eviction didn't
+run". A job's Container fetches the judge and the `pigeon` build through
+`build.read`, and `build.read` read the serving Worker's own `CI_LOGS`.
+But the pipeline stores every build in the platform Worker's bucket
+(`ship::builds_reference`), whichever colour runs it. While green served,
+`build.read` looked in green's CI bucket, which held no builds. The owner
+flipped back to control to unblock the checks.
+
+The fix: every colour binds `BUILDS`, the platform's bucket, beside its
+own `CI_LOGS`. `builds_bucket(env)` is `BUILDS` when bound, else
+`CI_LOGS`. Everything that reads or writes builds, test maps or iOS
+release artifacts uses it: `build.read`, `build.list`, `GET /builds/`,
+`MainRun`'s test-map and iOS writes, and the iOS reads. A colour's deploy
+logs stay in its own `CI_LOGS`. The colour spec gains the binding, so the
+next standby deploy carries it to green; green has it before any further
+flip. Pre-flip checks should also confirm that the standby's `build.read`
+finds main's build. That is a follow-up.

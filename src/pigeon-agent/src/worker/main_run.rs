@@ -675,8 +675,7 @@ impl MainRun {
         if let Some(why) = iosrelease::invalid(&body) {
             return Err(why);
         }
-        self.env
-            .bucket("CI_LOGS")
+        super::builds_bucket(&self.env)
             .map_err(|e| e.to_string())?
             .put(iosrelease::key(&c.sha, c.build), body)
             .execute()
@@ -897,8 +896,7 @@ impl MainRun {
             match got.and_then(|b| testmaps::invalid(&b, &sha).map_or(Ok(b), Err)) {
                 Ok(body) => {
                     let sum = crate::core::approval::grants::hex(&sha2::Sha256::digest(&body));
-                    self.env
-                        .bucket("CI_LOGS")?
+                    super::builds_bucket(&self.env)?
                         .put(testmaps::key(&sha), body)
                         .execute()
                         .await?;
