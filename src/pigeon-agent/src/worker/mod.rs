@@ -2016,8 +2016,11 @@ async fn smoke(env: &Env, s: &Settings, who: &Identity) -> Result<Response> {
         .as_ref()
         .ok()
         .and_then(|r| r.result["changes"][0]["number"].as_u64());
+    // A standby's change objects are empty until a promote adopts the journal (the blue-green
+    // ADR's 2026-11-20 adopt amendment), so it checks only that the list answers.
+    let standby = !lease::acting(env).await;
     let change = match newest {
-        Some(n) => run(
+        Some(n) if !standby => run(
             env,
             s,
             who,
@@ -2025,7 +2028,7 @@ async fn smoke(env: &Env, s: &Settings, who: &Identity) -> Result<Response> {
         )
         .await
         .is_ok_and(|r| r.ok),
-        None => listed.is_ok_and(|r| r.ok),
+        _ => listed.is_ok_and(|r| r.ok),
     };
     let deploy = run(env, s, who, &read("deploy.status", json!({})))
         .await
