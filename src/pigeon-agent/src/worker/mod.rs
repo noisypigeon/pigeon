@@ -726,6 +726,18 @@ async fn run(
     who: &Identity,
     request: &wire::Request,
 ) -> std::result::Result<WireResponse, crate::Error> {
+    Box::pin(run_as(env, s, who, request, true)).await
+}
+
+/// [`run`], asking the member check only when `members`; a standby's smoke doesn't (the
+/// blue-green ADR's "A standby's smoke checks `change.list`").
+async fn run_as(
+    env: &Env,
+    s: &Settings,
+    who: &Identity,
+    request: &wire::Request,
+    members: bool,
+) -> std::result::Result<WireResponse, crate::Error> {
     let mut retargeted = control::retarget(request);
     let header_ticket = match retargeted.args.remove(tickets::HEADER_ARG) {
         Some(Value::String(t)) => Some(t),
@@ -734,16 +746,13 @@ async fn run(
     let request = &retargeted;
     let op = wire::validate(request)?;
     let today = access::authorize(op, who);
-    let checked = Box::pin(shadow(
-        env,
-        s,
-        who,
-        op,
-        request,
-        header_ticket,
-        today.is_ok(),
-    ))
-    .await;
+    let ok = today.is_ok();
+    let shadowed = shadow(env, s, who, op, request, header_ticket, ok);
+    let checked = if members {
+        Box::pin(shadowed).await
+    } else {
+        Ok(None)
+    };
     today.map_err(|m| crate::Error::Invalid(vec![m]))?;
     if deciding(env)
         && let Ok(Some(why)) | Err(why) = checked
@@ -2088,14 +2097,15 @@ async fn smoke(env: &Env, s: &Settings, who: &Identity) -> Result<Response> {
         operation: operation.into(),
         args: serde_json::from_value(args).unwrap_or_default(),
     };
-    let listed = run(env, s, who, &read("change.list", json!({}))).await;
+    // A standby's change objects and members are what it last adopted (the blue-green ADR's
+    // 2026-11-20 adopt amendment), so it checks only that the list answers, without the member check.
+    let standby = !lease::acting(env).await;
+    let members = crate::core::deploy::standby::smoke_checks_members(!standby);
+    let listed = run_as(env, s, who, &read("change.list", json!({})), members).await;
     let newest = listed
         .as_ref()
         .ok()
         .and_then(|r| r.result["changes"][0]["number"].as_u64());
-    // A standby's change objects are empty until a promote adopts the journal (the blue-green
-    // ADR's 2026-11-20 adopt amendment), so it checks only that the list answers.
-    let standby = !lease::acting(env).await;
     // Why a probe through `run` failed, so a failed smoke names its cause.
     let why = |r: &std::result::Result<WireResponse, crate::Error>| -> Option<String> {
         match r {
@@ -2116,7 +2126,7 @@ async fn smoke(env: &Env, s: &Settings, who: &Identity) -> Result<Response> {
         }
         _ => listed,
     };
-    let deploy_answer = run(env, s, who, &read("deploy.status", json!({}))).await;
+    let deploy_answer = run_as(env, s, who, &read("deploy.status", json!({})), members).await;
     let mut errors = serde_json::Map::new();
     for (probe, answer) in [
         ("change_status", &change_answer),

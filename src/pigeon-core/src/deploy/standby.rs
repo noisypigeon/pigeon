@@ -35,6 +35,13 @@ pub fn target<'a>(lease: Option<&Lease>, colors: &'a [String]) -> Option<&'a str
         .map(String::as_str)
 }
 
+/// Whether `/healthz/smoke`'s reads take the member check: only on the colour that acts. A
+/// standby's members are checked at promote, by adopt and parity.
+#[must_use]
+pub const fn smoke_checks_members(acting: bool) -> bool {
+    acting
+}
+
 /// Instance keys that change on every read of the event log; parity leaves them out.
 pub const VOLATILE: &[&str] = &["event-cursors", "push-latest", "digest-cursor"];
 

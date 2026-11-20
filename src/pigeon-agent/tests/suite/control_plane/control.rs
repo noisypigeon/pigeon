@@ -1958,3 +1958,42 @@ fn compaction_deletes_only_rows_a_later_version_supersedes() {
     assert_eq!(values.get("gone"), None);
     assert_eq!(unopened, Vec::<String>::new());
 }
+
+#[test]
+fn a_standby_smoke_reads_without_the_member_check_that_refuses_an_unbound_token() {
+    use agent::core::deploy::standby;
+    use agent::core::member::shadow::{self, Caller};
+    use agent::core::member::{Members, Roles};
+    let roles =
+        Roles::parse_file(include_str!("../../../../../.config/roles.yaml")).expect("roles");
+    // A standby's members as last adopted: no credential for the deployer's token.
+    let members = Members::default().seed("root", 100).seed_services(100);
+    let deployer = Caller::Service {
+        client_id: "deployer.access".into(),
+        model: None,
+    };
+    for name in ["change.list", "deploy.status"] {
+        let op = agent::core::wire::catalog()
+            .iter()
+            .find(|o| o.name == name)
+            .expect("in the catalog");
+        let (account, _, refusal) = shadow::verdict(
+            &roles,
+            &members,
+            &deployer,
+            op,
+            &serde_json::Map::new(),
+            200,
+        );
+        assert_eq!(account, "unbound", "{name}");
+        assert!(refusal.is_some(), "{name}: the member check refuses it");
+    }
+    assert!(
+        standby::smoke_checks_members(true),
+        "the primary's smoke is unchanged"
+    );
+    assert!(
+        !standby::smoke_checks_members(false),
+        "a standby's smoke reads skip it"
+    );
+}
