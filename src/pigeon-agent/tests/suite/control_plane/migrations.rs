@@ -442,3 +442,23 @@ fn the_lease_says_who_acts_and_where_the_journal_stands() {
         .expect("epoch");
     assert_eq!(epoch, 1);
 }
+
+#[test]
+fn brief_archive_takes_a_finished_brief_and_applies_twice() {
+    let db = migrated();
+    db.execute(
+        "INSERT OR REPLACE INTO brief_archive (number, body, archived_at) VALUES (?1, ?2, ?3)",
+        rusqlite::params![7, "{\"id\":\"b7\"}", 1],
+    )
+    .expect("inserts");
+    let file =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("migrations/0010_brief_archive.sql");
+    db.execute_batch(&std::fs::read_to_string(file).expect("reads"))
+        .expect("0010 applies twice");
+    let body: String = db
+        .query_row("SELECT body FROM brief_archive WHERE number = 7", [], |r| {
+            r.get(0)
+        })
+        .expect("row");
+    assert_eq!(body, "{\"id\":\"b7\"}");
+}
