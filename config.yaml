@@ -72,3 +72,12 @@ units:
     host: green.platform.pigeon.dev
     bucket: { name: pigeon-green-ci }
     queue: { name: pigeon-green-ci-events }
+  # The blue colour, as green is: its own Worker, host, CI bucket and queue; see the blue-green
+  # ADR's 2026-11-20 amendment (P6).
+  color/blue:
+    kind: pigeon/color
+    platform: platform/blue
+    worker: pigeon-blue
+    host: blue.platform.pigeon.dev
+    bucket: { name: pigeon-blue-ci }
+    queue: { name: pigeon-blue-ci-events }
