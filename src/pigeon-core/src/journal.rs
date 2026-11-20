@@ -627,6 +627,18 @@ pub fn rows(object: &str) -> crate::control::Statement {
     }
 }
 
+/// Deletes the journal rows of `object` that a later version of the same key supersedes: per key,
+/// every row before the start [`rows`] reads from, so nothing a read or an adopt uses goes. Run in
+/// the batch of each append, after it. The owner approved it (`owner_ask` #52); see the blue-green
+/// ADR's 2026-11-20 compaction amendment.
+#[must_use]
+pub fn compact(object: &str) -> crate::control::Statement {
+    crate::control::Statement {
+        sql: "DELETE FROM journal WHERE object = ?1 AND seq < (SELECT MAX(k.seq) FROM journal k WHERE k.object = journal.object AND k.kind = journal.kind AND (k.body NOT LIKE '{\"$part\":%' OR k.body LIKE '{\"$part\":0,%'))",
+        params: vec![json!(object)],
+    }
+}
+
 /// [`Row`]s from [`rows`]' D1 answer; a row whose `seq` isn't a number, or whose `body` text isn't JSON, is left out.
 #[must_use]
 pub fn from_rows(rows: &[serde_json::Value]) -> Vec<Row> {

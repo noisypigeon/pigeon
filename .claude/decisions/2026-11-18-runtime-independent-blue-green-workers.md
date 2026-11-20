@@ -1191,3 +1191,20 @@ Still open:
 - `briefs` itself holds every brief's full text, and every Instance write
   digests it. Keeping only open briefs there is the owner's call. It
   changes how briefs are stored.
+
+### 2026-11-20: The journal is compacted at each append
+
+The owner approved this on 2026-11-20 (owner_ask #52). Since the
+current-version read, rows before each key's current version are never
+read again. They only grow D1, by about 3 MB each time `briefs` changes.
+
+`journal::compact(object)` deletes, per key, every row before the start
+that `journal::rows` reads from: its latest whole row or first part.
+`journal_keys` runs it as the last statement of each append's batch, so
+the append and the compaction land together or not at all. Only state
+objects are compacted (the Instance, `MainRun`, each `ChangeRun`), since
+those are all `journal_keys` writes. The event log's rows are never
+compacted. Superseded values can't be recovered from the journal
+afterwards; D1's Time Travel still covers 30 days. A suite test on
+SQLite pins it: only superseded rows go, another object's rows stay, and
+the current-version read and restore give the same values as before.

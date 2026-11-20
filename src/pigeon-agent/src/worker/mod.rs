@@ -3047,6 +3047,7 @@ async fn journal_keys(state: &State, env: &Env, keys: &[&str], object: impl Fn(&
             digests.insert(key, digest);
         }
     }
+    statements.push(journal::compact(&object));
     let stored = async {
         lease::append(env, held.as_ref(), statements).await?;
         storage.put(journal::DIGESTS, &digests).await?;

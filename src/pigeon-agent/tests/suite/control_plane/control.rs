@@ -1898,3 +1898,63 @@ fn a_journal_read_takes_only_each_keys_current_version() {
     assert_eq!(unopened, ["big"]);
     assert_eq!(values.get("k"), Some(&json!(2)));
 }
+
+#[test]
+fn compaction_deletes_only_rows_a_later_version_supersedes() {
+    use agent::core::journal;
+    use serde_json::json;
+    let db = rusqlite::Connection::open_in_memory().expect("sqlite");
+    db.execute_batch(include_str!("../../../migrations/0008_journal.sql"))
+        .expect("migrates");
+    let big = |c: &str| json!({ "text": c.repeat(journal::MAX_VALUE) });
+    let mut seq = 1;
+    let mut write = |object: &str, kind: &str, body: &serde_json::Value| {
+        for s in journal::entries(object, seq, 3, 0, kind, body) {
+            run(&db, &s);
+            seq += 1;
+        }
+    };
+    write("o", "k", &json!(1));
+    write("o", "big", &big("a"));
+    write("o", "k", &json!(2));
+    write("o", "big", &big("b"));
+    write("o", "gone", &json!("x"));
+    write("o", "gone", &serde_json::Value::Null);
+    write("other", "k", &json!(1));
+    write("other", "k", &json!(2));
+    run(&db, &journal::compact("o"));
+    let seqs = |object: &str| -> Vec<i64> {
+        let mut stmt = db
+            .prepare("SELECT seq FROM journal WHERE object = ?1 ORDER BY seq")
+            .expect("prepares");
+        stmt.query_map([object], |r| r.get(0))
+            .expect("queries")
+            .map(|r| r.expect("row"))
+            .collect()
+    };
+    assert_eq!(
+        seqs("o"),
+        [4, 5, 6, 8],
+        "k v2, big v2's parts, gone's removal"
+    );
+    assert_eq!(seqs("other"), [9, 10], "another object is untouched");
+    let q = journal::rows("o");
+    let mut stmt = db.prepare(q.sql).expect("prepares");
+    let rows: Vec<serde_json::Value> = stmt
+        .query_map(["o"], |r| {
+            Ok(json!({
+                "seq": r.get::<_, i64>(0)?,
+                "kind": r.get::<_, String>(1)?,
+                "body": r.get::<_, String>(2)?,
+            }))
+        })
+        .expect("queries")
+        .map(|r| r.expect("row"))
+        .collect();
+    let none = |_: &str, _: &serde_json::Value| None;
+    let (values, unopened) = journal::restore(&journal::from_rows(&rows), &none);
+    assert_eq!(values.get("k"), Some(&json!(2)));
+    assert_eq!(values.get("big"), Some(&big("b")));
+    assert_eq!(values.get("gone"), None);
+    assert_eq!(unopened, Vec::<String>::new());
+}
