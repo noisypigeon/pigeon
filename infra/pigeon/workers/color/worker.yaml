@@ -44,7 +44,8 @@ bindings:
     CI_LOGS: $deployment.ci_bucket
     DOCS: "$output.sites/docs.bucket"
   queues:
-    consumers: [ { queue: $deployment.queue.name, max_batch_size: 10 } ]
+    # A standby retries every batch until it holds the lease (the blue-green ADR's 2026-11-20 amendment).
+    consumers: [ { queue: $deployment.queue.name, max_batch_size: 10, max_retries: 100 } ]
   vars:
     # The lease's name for this Worker; it acts only while the lease names it.
     COLOR: $deployment.worker
