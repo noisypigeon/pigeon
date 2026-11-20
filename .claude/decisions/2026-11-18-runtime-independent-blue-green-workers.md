@@ -856,3 +856,46 @@ of what joins them.
   down by Willow.
 - **Multi-instance.** Every check reads one instance's lease, colours and
   journal; nothing reads another instance.
+
+### 2026-11-20: The standby adopts the journal before the flip, and the old colour runs the watch
+
+A.5.7 says in-flight changes rebuild by replay, but nothing yet writes the
+journal into a colour's objects: `/healthz/parity` only compares digests. A
+flip today would hand the lease to a colour whose `Instance`, `MainRun` and
+`ChangeRun`s are empty. These are the shapes that close the gap, ahead of
+the 2026-11-20 steps' step 2.
+
+- **`journal::restore(rows, open)`**, in `pigeon-core`, folds a `*/state`
+  object's rows as `replay` does, but into each key's latest value, not its
+  digest. A sealed key it can't open is named, and the restore fails.
+- **Adopt.** Each object (`Instance`, `MainRun`, `ChangeRun`) answers
+  `POST /journal/adopt`, given a restored map:
+  - it puts every key in the map;
+  - it deletes each key its own `journal.digests` names that the map lacks;
+  - it sets `journal.digests` to the map's digests, so its `held` equals
+    the journal's `replayed`.
+  - It refuses (`409`) while its Worker acts, so adopt never overwrites a
+    primary. Keys that are never journaled (above `MAX_VALUE`, or the
+    APNs token) aren't touched.
+- **The colour's `POST /healthz/adopt`**, under the deployer's Access
+  token, restores and adopts the `Instance`, `MainRun`, and each
+  `ChangeRun` with journal rows. It answers each object's outcome and is
+  idempotent. `/healthz/parity` covers the same objects.
+- **`POST /healthz/resume`**, under the same token, arms the alarm of each
+  object `adopt` wrote, so the new primary picks up in-flight work once it
+  holds the lease.
+- **Promote, as step 2 runs it.**
+  1. After the drain finds no running job, `MainRun` calls the standby's
+     `/healthz/adopt`, then its `/healthz/parity`, which must find its
+     `held` equal to the primary's `held`, object by object. Either
+     failing aborts the promote (`lease.promote_aborted`, naming the
+     check), and the primary serves on.
+  2. Then the fenced flip, then the new primary's `/healthz/resume`.
+  3. The watch runs on the old colour. Its `MainRun` keeps the promote
+     under a key that is never journaled, and the standby's early return
+     lets the promote's own steps through, and nothing else. A failed
+     probe makes the old colour adopt the journal into its own objects,
+     then flip back at `epoch + 1` and resume itself.
+- **Order.** `restore`, adopt and the two endpoints are one change, before
+  step 2's wiring. Every flip, the rehearsal's included, goes through
+  adopt.
