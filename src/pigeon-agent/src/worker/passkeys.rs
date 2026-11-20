@@ -27,7 +27,7 @@ const ADDING: &str = "passkey-adding";
 
 /// The grant pages whose grant the `Instance` keeps: each path prefix, its peek, and the
 /// operation its proof is bound to.
-const INSTANCE_PAGES: [(&str, &str, &str); 7] = [
+const INSTANCE_PAGES: [(&str, &str, &str); 8] = [
     (
         "/secrets-migrate/",
         "/secrets/migrate/peek",
@@ -39,6 +39,7 @@ const INSTANCE_PAGES: [(&str, &str, &str); 7] = [
     ("/ci-window/", "/ci-window/peek", "ci.window"),
     ("/service-bind/", "/members/bind/peek", "service.bind"),
     ("/member-grant/", "/members/grant/peek", "member.grant"),
+    ("/zone-private/", "/zones/private/peek", "zones.set"),
 ];
 
 /// Where the `Instance` keeps what it has seen proven with a passkey.
@@ -453,6 +454,9 @@ async fn asked_for(env: &Env, s: &Settings, page: &str) -> Result<Option<Value>>
             "/member-grant/" => serde_json::from_value(v)
                 .ok()
                 .map(|o| asked::member_grant(&o)),
+            "/zone-private/" => serde_json::from_value(v)
+                .ok()
+                .map(|o| asked::zone_private(&o)),
             "/secrets-migrate/" => serde_json::from_value(v)
                 .ok()
                 .map(|o| asked::secrets_migrate(&o)),

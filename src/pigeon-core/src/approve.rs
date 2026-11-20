@@ -772,6 +772,35 @@ pub fn member_grant_page(o: &crate::member::grant::Offer, token: &str) -> String
     shell(&title, &b)
 }
 
+/// `/zone-private/<id>`: the Administrator sets a private zone's entry by its alias, with a
+/// passkey; the zone shows on this page alone; see
+/// `.claude/decisions/2026-11-15-runtime-zoned-standalone-account-imports.md` §1.
+#[must_use]
+pub fn zone_private_page(o: &crate::zones_private::Offer, token: &str) -> String {
+    let title = o.title();
+    let what = "The alias then stands for this zone in every private render, plan and apply. Nothing logs the zone.";
+    let held = format!(
+        "{}: {} service(s), {} record(s)",
+        o.entry.zone,
+        o.entry.services.len(),
+        o.entry.records.len()
+    );
+    let b = format!(
+        "<h1>{}</h1><p>{}</p><p><small>{}</small></p><form method=\"post\" action=\"{}{}\">\
+<input type=\"hidden\" name=\"grant\" value=\"{}\">{}{CODE_FIELD}\
+<button type=\"submit\">Approve</button></form>\
+<p><small><a href=\"/approvals\">Everything waiting</a></small></p>",
+        escape(&title),
+        escape(what),
+        escape(&held),
+        crate::zones_private::PAGE,
+        o.id,
+        escape(token),
+        passkey_button(&crate::approval::passkeys::grant_purpose(token))
+    );
+    shell(&title, &b)
+}
+
 /// `/service-bind/<id>`: the Administrator binds, or revokes, a service token by its client ID's
 /// hash, with a passkey; see
 /// `.claude/decisions/2026-11-18-security-users-levels-capability-grants.md`, its step 9

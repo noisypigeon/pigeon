@@ -283,4 +283,15 @@ mod tests {
         assert_eq!(parse("/zone-private/"), None);
         assert_eq!(parse("/member-grant/7"), None);
     }
+
+    #[test]
+    fn the_page_shows_the_zone_and_the_proof_view_never_does() {
+        let o = draft("blog", "example.com");
+        let page = crate::approve::zone_private_page(&o, "tok");
+        assert!(page.contains("example.com"));
+        assert!(page.contains("/zone-private/"));
+        let asked = crate::present::asked::zone_private(&o).to_string();
+        assert!(asked.contains("blog"));
+        assert!(!asked.contains("example.com"));
+    }
 }

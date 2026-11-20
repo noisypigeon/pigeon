@@ -105,6 +105,8 @@ pub(super) async fn live(env: &Env, s: &Settings) -> Result<Vec<Waiting>> {
                     super::secrets_migrate::live(env, s, &w.path, &token).await?
                 } else if w.path.starts_with(crate::core::member::grant::PAGE) {
                     super::member_grants::live(env, s, &w.path, &token).await?
+                } else if w.path.starts_with(crate::core::zones_private::PAGE) {
+                    super::zones_private::live(env, s, &w.path, &token).await?
                 } else if w.path.starts_with("/mandate/") {
                     super::mandates::to_instance(env, s, "/mandates/peek", &body)
                         .await?

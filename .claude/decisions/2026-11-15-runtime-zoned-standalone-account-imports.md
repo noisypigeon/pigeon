@@ -409,3 +409,17 @@ The owner asked to wrap up, so this ADR pauses here.
 - **To resume.** A planner session reads this ADR, writes 5b's brief from §3
   and §4, then 5c and 5d. A brief can't touch the approval pages or
   `platform_job.rs`, so the planner carries those parts.
+### 2026-11-19: 5a's names, and its page is a gate change
+
+Step 5a splits in two: the store (!1358), then its passkey page, a gate
+change because it touches the approval pages.
+
+- **Names.** The catalog takes operation names of exactly two dotted parts,
+  so the store's operations are `zones.set`, `zones.show` and `zones.list`,
+  and its event is `zones.updated`. The Instance key stays `zones.private`.
+  The pure store sits in `pigeon_core::zones_private`, outside `infra/`,
+  whose layout policy forbids `&mut self`.
+- **The page.** `/zone-private/<id>` is redeemed with the Administrator's
+  passkey, like `member.grant`. Only that HTML page shows the zone, so the
+  Administrator can check it before approving. The proof's view, the inbox
+  title, the event and the answer name only the alias and counts.

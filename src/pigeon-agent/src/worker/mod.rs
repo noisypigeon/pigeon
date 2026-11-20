@@ -186,6 +186,7 @@ const PAGES: &[&[Route]] = &[
     services::PAGES,
     member_grants::PAGES,
     secrets_migrate::PAGES,
+    zones_private::PAGES,
 ];
 
 /// The owner's link to the grant page `path` (its path and query): the web client at `/app`,

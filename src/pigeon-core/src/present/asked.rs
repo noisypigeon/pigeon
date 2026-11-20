@@ -253,6 +253,17 @@ pub fn member_grant(o: &crate::member::grant::Offer) -> Value {
     )
 }
 
+/// What `/zone-private/<id>` shows to the proof's view: the alias and counts, never the zone.
+#[must_use]
+pub fn zone_private(o: &crate::zones_private::Offer) -> Value {
+    let what = format!(
+        "The alias then stands for the zone this offer holds, with {} service(s) and {} record(s). The zone shows on the page alone.",
+        o.entry.services.len(),
+        o.entry.records.len()
+    );
+    page(&o.title(), &what, "Approve", &[], &[], false, None)
+}
+
 /// What `/service-bind/<id>` shows: the Administrator binds, or revokes, a service token by its
 /// client ID's hash.
 #[must_use]
