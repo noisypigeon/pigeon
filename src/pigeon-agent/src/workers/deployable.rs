@@ -63,7 +63,7 @@ pub fn stub_outputs(
                 let v = if x.output.ends_with("_id") {
                     json!("0".repeat(32))
                 } else {
-                    json!(format!("stub-{}", x.output))
+                    json!(format!("stub-{}", x.output.replace('_', "-")))
                 };
                 slot.insert(x.output.clone(), v);
             }
@@ -77,7 +77,10 @@ pub fn stub_outputs(
                         Item::At(i) => {
                             while list.len() < i + 1 {
                                 let k = list.len();
-                                list.push(json!(format!("stub-{}-{k}", x.output)));
+                                list.push(json!(format!(
+                                    "stub-{}-{k}",
+                                    x.output.replace('_', "-")
+                                )));
                             }
                         }
                         Item::Named(n) => {
@@ -378,6 +381,9 @@ pub fn main_pass(main: &Path, root: &Path) -> Result<&'static str, Vec<String>> 
             .args(["--deployment", DEPLOY_STACK]);
         ("validate", c)
     };
+    // Main's build checks parse, bind and render only; the head pass runs the dry-run.
+    cmd.env(super::WRANGLER_VAR, "/nonexistent/wrangler")
+        .env_remove(BUILD_VAR);
     let out = cmd.output().map_err(|e| {
         vec![format!(
             "main's build `{}` can't deploy this tree ({form}); {e}",

@@ -167,7 +167,7 @@ fn fake_pigeon(dir: &Path, has_subcommand: bool, log: &Path) -> PathBuf {
     let path = dir.join("pigeon");
     let script = format!(
         r#"#!/bin/sh
-echo "$*" >> "{log}"
+echo "$* wrangler=$PIGEON_WRANGLER build=${{PIGEON_BUILD_SHA256:-unset}}" >> "{log}"
 case "$*" in
   "workers deployable --help") {help} ;;
   "workers deployable"*) exit 0 ;;
@@ -206,6 +206,28 @@ fn a_main_build_with_the_subcommand_runs_it_on_the_head() {
     assert_eq!(main_pass(&main, tmp.path()), Ok("deployable"));
     let logged = fs::read_to_string(&log).expect("log");
     assert!(logged.contains("workers deployable --root"), "{logged}");
+    assert!(
+        logged.contains("--pass head wrangler=/nonexistent/wrangler build=unset"),
+        "{logged}"
+    );
+}
+
+#[test]
+fn an_underscored_output_stubs_as_a_valid_name() {
+    let root = fixture(&clean_spec().replace(
+        "\"$deployment.bucket_names[pigeon-ci]\"",
+        "$deployment.ci_bucket",
+    ));
+    stacks(root.path());
+    fs::write(
+        root.path().join("catalog/pigeon/kinds/platform/schema.json"),
+        r#"{"type":"object","x-pigeon":{"version":"0.1.0","local":true,"outputs":{"database_id":"$module.d1.id","ci_bucket":"$module.bucket.name"}}}"#,
+    )
+    .expect("write");
+    let blue = workers::bind(root.path(), &found(root.path()), "platform/blue").expect("binds");
+    let (out, problems) = stub_outputs(root.path(), &blue);
+    assert!(problems.is_empty(), "{problems:?}");
+    assert_eq!(out["platform/blue"]["ci_bucket"], json!("stub-ci-bucket"));
 }
 
 #[test]
