@@ -48,7 +48,7 @@ pub fn colours(platform: &str, units: &[String], lease: &str) -> Vec<String> {
     v
 }
 
-/// Where a standby's `/healthz/parity` answer differs from the primary's: per object of the primary's, each key whose `replayed` digest on the standby isn't its `held` digest on the primary, and each key the standby couldn't open, as `<object>: <key>` sorted; [`VOLATILE`] keys are left out. Empty when they agree.
+/// Where a standby's `/healthz/parity` answer differs from the primary's: per object of the primary's, each key whose `replayed` digest on the standby isn't its `held` digest on the primary, and each key the standby couldn't open, as `<object>: <key>`; [`VOLATILE`] keys are left out; and `keys`, `vars` or `passkeys differ` when both carry one that differs. Sorted; empty when they agree.
 #[must_use]
 pub fn parity(standby: &serde_json::Value, primary: &serde_json::Value) -> Vec<String> {
     let empty = serde_json::Map::new();
@@ -74,6 +74,13 @@ pub fn parity(standby: &serde_json::Value, primary: &serde_json::Value) -> Vec<S
             if let Some(k) = k.as_str() {
                 out.push(format!("{object}: {k} unopened"));
             }
+        }
+    }
+    // What every colour must hold alike, when both answers carry it.
+    for field in ["keys", "vars", "passkeys"] {
+        let (theirs, ours) = (&standby[field], &primary[field]);
+        if !theirs.is_null() && !ours.is_null() && theirs != ours {
+            out.push(format!("{field} differ"));
         }
     }
     out.sort();
@@ -132,5 +139,11 @@ mod tests {
         );
         let same = json!({"objects": {"i": {"replayed": {"a": "1", "b": "2"}}}});
         assert_eq!(parity(&same, &primary), Vec::<String>::new());
+        let with = |v: &str| json!({"objects": {}, "vars": {"PROOFS": v}});
+        assert_eq!(parity(&with("x"), &with("passkey")), vec!["vars differ"]);
+        assert_eq!(
+            parity(&with("passkey"), &json!({"objects": {}})),
+            Vec::<String>::new()
+        );
     }
 }
