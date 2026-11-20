@@ -379,17 +379,76 @@ pub async fn review_needed(
     super::tasks::add(env, s, "brief-review", after.number, None, planner, &note).await
 }
 
+/// Brief `n` as `brief_archive` holds it, if it does.
+async fn archived(env: &Env, n: u32) -> Option<crate::core::brief::Brief> {
+    let q = crate::control::Statement {
+        sql: "SELECT body FROM brief_archive WHERE number = ?1",
+        params: vec![json!(n)],
+    };
+    let rows = super::platform::d1_rows(env, &q).await.ok()?;
+    let body = rows.first()?["body"].as_str()?;
+    serde_json::from_str(body).ok()
+}
+
+/// Moves each finished brief of `all` into `brief_archive`: the rows first, in one batch, and
+/// only then out of `all`; a failure leaves every brief where it was. See the briefs ADR's
+/// 2026-11-20 archive amendment.
+async fn archive_finished(env: &Env, all: &mut Briefs) {
+    let Ok(s) = Settings::from(env) else {
+        return;
+    };
+    let Ok(rows) = super::platform::d1_rows(env, &crate::control::open(&s.instance, &s.repo)).await
+    else {
+        return;
+    };
+    let open: std::collections::BTreeSet<u32> = rows
+        .iter()
+        .filter_map(|r| r["number"].as_u64().and_then(|n| u32::try_from(n).ok()))
+        .collect();
+    let done = all.finished(&open, now());
+    let statements: Vec<crate::control::Statement> = done
+        .iter()
+        .filter_map(|n| {
+            let b = all.briefs.get(n)?;
+            Some(crate::control::Statement {
+                sql: "INSERT OR REPLACE INTO brief_archive (number, body, archived_at) VALUES (?1, ?2, ?3)",
+                params: vec![json!(n), json!(serde_json::to_string(b).ok()?), json!(now())],
+            })
+        })
+        .collect();
+    if statements.is_empty() {
+        return;
+    }
+    if let Err(e) = super::platform::d1(env, &statements).await {
+        worker::console_warn!("briefs: archiving failed: {e}");
+        return;
+    }
+    for n in done {
+        all.take(n);
+    }
+}
+
 /// The `Instance` Durable Object's side: `/briefs/create`, `/briefs/amend`, `/briefs/show`,
-/// `/briefs/list`, `/briefs/all` and `/briefs/tally`.
+/// `/briefs/list`, `/briefs/all` and `/briefs/tally`. A finished brief lives in
+/// `brief_archive`: `show` reads it there, and a write to it puts it back first.
 ///
 /// # Errors
 ///
 /// When storage fails.
-pub async fn serve(state: &State, path: &str, body: &Value) -> Result<Response> {
+pub async fn serve(state: &State, env: &Env, path: &str, body: &Value) -> Result<Response> {
     let storage = state.storage();
     let mut all: Briefs = storage.get(BRIEFS).await?.unwrap_or_default();
     let planner = body["planner"].as_str().unwrap_or_default();
     let id = body["id"].as_str().unwrap_or_default();
+    if all.get(id).is_none()
+        && let Some(n) = crate::briefs::number(id)
+        && let Some(b) = archived(env, n).await
+    {
+        if path == "/briefs/show" {
+            return Response::from_json(&b);
+        }
+        all.put_back(b);
+    }
     let draft =
         || serde_json::from_value::<Draft>(body["draft"].clone()).map_err(|e| vec![e.to_string()]);
     let answer = match path {
@@ -439,6 +498,7 @@ pub async fn serve(state: &State, path: &str, body: &Value) -> Result<Response> 
     };
     match answer {
         Ok(b) => {
+            archive_finished(env, &mut all).await;
             storage.put(BRIEFS, &all).await?;
             Response::from_json(&b)
         }

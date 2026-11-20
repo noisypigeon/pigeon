@@ -2852,7 +2852,7 @@ impl Instance {
         }
         if path.starts_with("/briefs/") {
             let body: Value = req.json().await?;
-            return briefs::serve(&self.state, &path, &body).await;
+            return briefs::serve(&self.state, &self.env, &path, &body).await;
         }
         if path.starts_with("/grant-requests/") || path.starts_with("/grant-registry/") {
             let body: Value = req.json().await?;

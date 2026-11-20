@@ -109,4 +109,32 @@ impl Briefs {
             .filter(|b| planner.is_none_or(|p| b.planner == p))
             .collect()
     }
+
+    /// The briefs finished at `now`: each with a change whose latest isn't in `open`, and whose
+    /// newest revision is older than [`crate::brief::report::RECENT`], so the digest no longer
+    /// counts it. See the briefs ADR's 2026-11-20 archive amendment.
+    #[must_use]
+    pub fn finished(&self, open: &std::collections::BTreeSet<u32>, now: u64) -> Vec<u32> {
+        self.briefs
+            .iter()
+            .filter(|(_, b)| {
+                b.changes.last().is_some_and(|c| !open.contains(c))
+                    && now.saturating_sub(b.latest().at) > crate::brief::report::RECENT
+            })
+            .map(|(n, _)| *n)
+            .collect()
+    }
+
+    /// Takes brief `n` out of the store, as the archive takes it.
+    pub fn take(&mut self, n: u32) -> Option<Brief> {
+        self.briefs.remove(&n)
+    }
+
+    /// Puts an archived `brief` back under its number, before a write to it; `last` never falls.
+    pub fn put_back(&mut self, brief: Brief) {
+        if let Some(n) = number(&brief.id) {
+            self.last = self.last.max(n);
+            self.briefs.insert(n, brief);
+        }
+    }
 }

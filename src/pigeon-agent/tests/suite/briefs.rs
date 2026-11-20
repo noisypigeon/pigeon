@@ -469,3 +469,33 @@ mod report {
         assert!(Briefs::default().tally("b9", Tally::default()).is_err());
     }
 }
+
+#[test]
+fn a_brief_is_finished_once_its_last_change_closed_and_the_digest_lets_it_go() {
+    use agent::briefs::Briefs;
+    use agent::core::brief::report::RECENT;
+    let mut all = Briefs::default();
+    all.create(PLANNER, draft(Class::Haiku), 1).expect("b1");
+    all.create(PLANNER, draft(Class::Haiku), 1).expect("b2");
+    all.create(PLANNER, draft(Class::Haiku), 1).expect("b3");
+    all.bind("b1", 10).expect("binds");
+    all.bind("b2", 20).expect("binds");
+    let open: std::collections::BTreeSet<u32> = [20].into();
+    let later = 1 + RECENT + 1;
+    assert_eq!(
+        all.finished(&open, later),
+        [1],
+        "b2's change is open; b3 has none"
+    );
+    assert_eq!(
+        all.finished(&open, 1 + RECENT),
+        Vec::<u32>::new(),
+        "still in the digest"
+    );
+    let b1 = all.take(1).expect("takes");
+    assert!(all.get("b1").is_none());
+    assert_eq!(all.last, 3);
+    all.put_back(b1);
+    assert_eq!(all.get("b1").map(|b| b.id.as_str()), Some("b1"));
+    assert_eq!(all.last, 3, "last never falls");
+}
