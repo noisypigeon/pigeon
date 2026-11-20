@@ -670,7 +670,9 @@ pub fn deployed_name(root: &Path, found: &Found) -> String {
     bound(root, found, None).map_or_else(|_| found.spec.name.clone(), |b| b.spec.name)
 }
 
-/// As [`select`], each spec bound with [`bind`] to the stack `deployment`.
+/// As [`select`], each spec bound with [`bind`] to the stack `deployment`; a spec whose kind
+/// has several units binds, for each of `names`, to the unit that gives it that name (the blue-green
+/// ADR's 2026-11-20 amendment, step 1a).
 ///
 /// # Errors
 ///
@@ -685,6 +687,11 @@ pub fn select_bound(
     let mut problems = Vec::new();
     for f in select(root, names)? {
         let path = format!("{}/{SPEC}", f.dir);
+        let by_unit = named_units(root, &f, names);
+        if !by_unit.is_empty() {
+            out.extend(by_unit);
+            continue;
+        }
         match bound(root, &f, deployment) {
             Ok(b) => out.push(b),
             Err(message) => problems.push(Problem { path, message }),
@@ -695,6 +702,23 @@ pub fn select_bound(
     } else {
         Err(Error::Invalid(problems))
     }
+}
+
+/// `found` bound to each of its kind's units whose bound name is one of `names`, when the kind has
+/// several units; none otherwise.
+fn named_units(root: &Path, found: &Found, names: &[String]) -> Vec<Found> {
+    let Some(kind) = found.spec.deployment.as_deref() else {
+        return Vec::new();
+    };
+    let units = stacks(root, kind);
+    if units.len() < 2 {
+        return Vec::new();
+    }
+    units
+        .iter()
+        .filter_map(|u| bind(root, found, u).ok())
+        .filter(|b| names.contains(&b.spec.name))
+        .collect()
 }
 
 /// Every problem with `found`'s spec, against the files under `root`.

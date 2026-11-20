@@ -450,7 +450,10 @@ pub fn build(
     let deployment = var(workers::DEPLOYMENT_VAR);
     let mut reference = None;
     for f in workers::discover(dir).map_err(|e| e.to_string())? {
-        let f = workers::bound(dir, &f, deployment.as_deref())?;
+        // A spec that doesn't bind here, such as a colour spec with several units, holds no bucket.
+        let Ok(f) = workers::bound(dir, &f, deployment.as_deref()) else {
+            continue;
+        };
         if let Some(r) = f.spec.bindings.r2.get(BUILDS_BINDING) {
             reference = Some(r.clone());
             break;

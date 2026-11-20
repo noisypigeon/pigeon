@@ -1051,3 +1051,43 @@ fn a_subdomains_route_follows_its_stack_setting_and_only_one_stack_may_set_it() 
         "{got:?}"
     );
 }
+
+#[test]
+fn a_colour_spec_binds_to_the_unit_each_worker_name_asks_for() {
+    let spec = STACK_SPEC
+        .replace("deployment: pigeon/platform", "deployment: pigeon/color")
+        .replace(
+            "$deployment.bucket_names[pigeon-ci]",
+            "$deployment.ci_bucket",
+        )
+        .replace("$deployment.hostname", "$deployment.host");
+    let root = fixture(&spec);
+    stacks(root.path());
+    let p = root.path();
+    fs::create_dir_all(p.join("catalog/pigeon/kinds/color")).expect("mkdir");
+    fs::write(
+        p.join("catalog/pigeon/kinds/color/schema.json"),
+        r#"{"type":"object","x-pigeon":{"version":"0.1.0","local":true,"outputs":{"ci_bucket":"$module.bucket.name","queue_name":"$module.queue.name"}}}"#,
+    )
+    .expect("write");
+    let config = p.join("config.yaml");
+    let colours = "  color/green:\n    kind: pigeon/color\n    platform: platform/blue\n    worker: pigeon-green\n    host: green.example.com\n  color/blue:\n    kind: pigeon/color\n    platform: platform/blue\n    worker: pigeon-blue\n    host: blue.example.com\n";
+    let text = fs::read_to_string(&config).expect("read");
+    fs::write(&config, format!("{text}{colours}")).expect("write");
+    for (name, unit, host) in [
+        ("pigeon-green", "color/green", "green.example.com"),
+        ("pigeon-blue", "color/blue", "blue.example.com"),
+    ] {
+        let got = workers::select_bound(p, &[name.to_string()], Some("platform/blue"))
+            .expect("binds by name");
+        assert_eq!(got.len(), 1, "{name}");
+        let vars = &got[0].spec.bindings.vars;
+        assert_eq!(got[0].spec.name, name);
+        assert_eq!(vars[workers::DEPLOYMENT_VAR], unit);
+        assert_eq!(vars["PUBLIC_HOST"], host);
+    }
+    assert!(
+        workers::bound(p, &found(p), Some("platform/blue")).is_err(),
+        "two colours of one platform: no single colour to fall back to"
+    );
+}
