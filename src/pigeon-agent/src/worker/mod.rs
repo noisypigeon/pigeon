@@ -2950,6 +2950,13 @@ async fn journal_keys(state: &State, env: &Env, keys: &[&str], object: impl Fn(&
         .ok()
         .flatten()
         .unwrap_or_default();
+    let journaled: Option<u64> = storage.get(journal::EPOCH).await.ok().flatten();
+    let journalable: Vec<&str> = keys
+        .iter()
+        .copied()
+        .filter(|k| seal.is_some() || !journal::SEALED.contains(k))
+        .collect();
+    let previous = journal::baseline(previous, journaled, epoch, &journalable);
     let changes = journal::changed(&previous, &now);
     if changes.is_empty() {
         return;
@@ -3002,7 +3009,8 @@ async fn journal_keys(state: &State, env: &Env, keys: &[&str], object: impl Fn(&
     }
     let stored = async {
         lease::append(env, held.as_ref(), statements).await?;
-        storage.put(journal::DIGESTS, &digests).await
+        storage.put(journal::DIGESTS, &digests).await?;
+        storage.put(journal::EPOCH, &epoch).await
     };
     if let Err(e) = stored.await {
         worker::console_warn!("journal: {e}");

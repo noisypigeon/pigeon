@@ -1017,3 +1017,29 @@ event log, merged changes, members, passkeys and vars hold there. Then
 `color/blue` joins the config, and green ↔ blue proves the cutover and
 rollback both ways (P6). The deliberate control → green → control round
 trip is dropped.
+
+### 2026-11-20: A colour's first journal write under a new epoch re-journals every key
+
+The deploy of !1408 (63c49cf1) failed the standby's parity on eight keys:
+the Instance's `devices`, `lanes`, `members`, `passkeys`, `tasks`,
+`waiting` and `windows`, and `MainRun`'s `evictions`. While green served,
+it journaled its own values for these keys. After the break-glass, control
+journals a key only when its value changes against control's own
+`journal.digests`, which green's rows never touched. So for every key
+control hasn't written since, the journal's latest row is green's, and a
+replay no longer matches what control holds. This is also the likeliest
+cause of gap 6: a keyring replayed from rows that weren't the serving
+colour's.
+
+The fix: each object keeps the lease epoch it last journaled under, as
+`journal.epoch`. The first write under any other epoch treats every
+journaled key as stale, so it journals each key it holds and a removal for
+each it lacks, over whatever another colour wrote. After any flip or
+break-glass, the journal again replays to the serving colour's state at
+that colour's first write. Sealed keys are left out while the seal is
+missing, as before. `journal::baseline` holds the rule, and a core test
+pins it.
+
+Until this deploys and control has written once to each object, every
+standby deploy fails parity on those keys. That failure is expected, and
+it keeps blocking any flip, as it should.

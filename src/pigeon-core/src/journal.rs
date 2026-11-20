@@ -237,6 +237,25 @@ pub const DIGESTS: &str = "journal.digests";
 /// The DO-local key holding the snapshot object's last sequence number.
 pub const SEQ: &str = "journal.seq";
 
+/// The DO-local key holding the lease epoch an object last journaled under.
+pub const EPOCH: &str = "journal.epoch";
+
+/// The digests [`changed`] compares against: `previous` while `journaled` is `epoch`; else each of `keys` as stale, so the first write under a new epoch journals every key afresh, and removes each it lacks, over whatever another colour journaled. See .claude/decisions/2026-11-18-runtime-independent-blue-green-workers.md, its 2026-11-20 rebaseline amendment.
+#[must_use]
+pub fn baseline(
+    previous: std::collections::BTreeMap<String, String>,
+    journaled: Option<u64>,
+    epoch: u64,
+    keys: &[&str],
+) -> std::collections::BTreeMap<String, String> {
+    if journaled == Some(epoch) {
+        return previous;
+    }
+    keys.iter()
+        .map(|k| ((*k).to_string(), "stale".to_string()))
+        .collect()
+}
+
 /// The keys among `now` whose value changed since `previous`, each with its new digest (SHA-256 hex of the value's JSON text); a key in `previous` missing from `now` changes to an empty digest; a value whose JSON text exceeds [`MAX_VALUE`] is left out, keeping its previous digest.
 #[must_use]
 pub fn changed(
@@ -462,6 +481,24 @@ pub fn snapshot_entry_at(
 mod replay_tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn a_new_epoch_journals_every_key_and_removes_each_absent_one() {
+        use std::collections::BTreeMap;
+        let now: BTreeMap<String, serde_json::Value> = [("a".to_string(), json!(1))].into();
+        let previous: BTreeMap<String, String> = [("a".to_string(), digest(&json!(1)))].into();
+        let same = baseline(previous.clone(), Some(3), 3, &["a", "b"]);
+        assert_eq!(changed(&same, &now), Vec::<(String, String)>::new());
+        let fresh = baseline(previous.clone(), Some(2), 3, &["a", "b"]);
+        assert_eq!(
+            changed(&fresh, &now),
+            vec![
+                ("a".to_string(), digest(&json!(1))),
+                ("b".to_string(), String::new())
+            ]
+        );
+        assert_eq!(changed(&baseline(previous, None, 3, &["a"]), &now).len(), 1);
+    }
 
     fn row(seq: u64, kind: &str, body: serde_json::Value) -> Row {
         Row {
