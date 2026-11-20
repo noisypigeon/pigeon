@@ -9,7 +9,9 @@ use agent::infra::session::Session;
 use agent::workers::{self, Found, Tools};
 use serde_json::{Map, Value};
 
-use crate::cli::{ImagesPush, WorkersCommand, WorkersImages, WorkersSecrets, WorkersState};
+use crate::cli::{
+    ImagesPush, WorkersCommand, WorkersDeployable, WorkersImages, WorkersSecrets, WorkersState,
+};
 
 /// Runs a `pigeon workers` command.
 ///
@@ -30,6 +32,7 @@ pub fn run(command: WorkersCommand) -> Result<(), agent::infra::Error> {
             println!("infra: {} Worker spec(s) valid", found.len());
             Ok(())
         }
+        WorkersCommand::Deployable(d) => deployable(&d),
         WorkersCommand::Permissions(at) => {
             let specs: Vec<_> =
                 workers::select_bound(&at.root, &at.names, at.deployment.as_deref())?
@@ -102,6 +105,55 @@ pub fn run(command: WorkersCommand) -> Result<(), agent::infra::Error> {
             }
             Ok(())
         }
+    }
+}
+
+/// `pigeon workers deployable`: the head pass on this build, the main pass on main's.
+fn deployable(d: &WorkersDeployable) -> Result<(), agent::infra::Error> {
+    use agent::infra::unit::Problem;
+    use agent::workers::deployable as dep;
+    let on_checker = env::var_os(dep::BUILD_VAR).is_some();
+    let mut problems: Vec<Problem> = Vec::new();
+    if d.pass != "main" {
+        let tools = Tools::from(|k| env::var(k).ok());
+        let ok = match dep::wrangler(&tools, on_checker) {
+            Ok(ok) => ok,
+            Err(message) => {
+                problems.push(Problem {
+                    path: "wrangler".into(),
+                    message,
+                });
+                false
+            }
+        };
+        if !ok && problems.is_empty() {
+            println!("infra: wrangler not found; the dry-run is skipped");
+        }
+        match dep::head_pass(&d.root, ok.then_some(&tools)) {
+            Ok(n) => println!("infra: head pass: {n} spec and stack pair(s) deployable"),
+            Err(p) => problems.extend(p),
+        }
+    }
+    if d.pass != "head" {
+        match dep::main_build(|k| env::var(k).ok(), d.main.clone()) {
+            Ok(None) => println!("infra: no main build here; the main pass is skipped"),
+            Ok(Some(p)) => match dep::main_pass(&p, &d.root) {
+                Ok(form) => println!("infra: main pass ({form}) on `{}`: deployable", p.display()),
+                Err(lines) => problems.extend(lines.into_iter().map(|message| Problem {
+                    path: "main build".into(),
+                    message,
+                })),
+            },
+            Err(message) => problems.push(Problem {
+                path: "main build".into(),
+                message,
+            }),
+        }
+    }
+    if problems.is_empty() {
+        Ok(())
+    } else {
+        Err(agent::infra::Error::Invalid(problems))
     }
 }
 

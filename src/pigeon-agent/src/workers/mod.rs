@@ -3,6 +3,7 @@
 //! `.claude/decisions/2026-11-05-development-cobot-workers-area.md`.
 
 pub mod cloudflare;
+pub mod deployable;
 pub mod imagebuild;
 pub mod ship;
 

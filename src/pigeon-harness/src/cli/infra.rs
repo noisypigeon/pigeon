@@ -211,6 +211,8 @@ pub struct GitRun {
 pub enum WorkersCommand {
     /// Check every spec; exit 1 on a problem
     Validate(WorkersAt),
+    /// Prove every spec deploys, on this build and on main's stored build; exit 1 on a problem
+    Deployable(WorkersDeployable),
     /// Print the token permissions the specs need, on the account
     Permissions(WorkersAt),
     /// Write each Worker's wrangler.jsonc under .pigeon/workers/, its references resolved from state
@@ -252,6 +254,20 @@ pub struct ImagesPush {
     /// How long the registry login lasts, in minutes
     #[arg(long, default_value_t = agent::workers::LOGIN_MINUTES)]
     pub expiration_minutes: u32,
+}
+
+/// The root, main's build, and which pass to run.
+#[derive(Args, Debug)]
+pub struct WorkersDeployable {
+    /// The repository root
+    #[arg(long, default_value = ".")]
+    pub root: PathBuf,
+    /// main's stored build [default: $TMPDIR/pigeon-build on a Checker, else the session's]
+    #[arg(long)]
+    pub main: Option<PathBuf>,
+    /// `head`, `main` or `both`
+    #[arg(long, default_value = "both", value_parser = ["head", "main", "both"])]
+    pub pass: String,
 }
 
 /// The repository root, and Workers by name [default: every one].
