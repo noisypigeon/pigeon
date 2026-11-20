@@ -928,3 +928,39 @@ glob under `src/pigeon-cli/` or `src/site-templates/` becomes `src/**/<tail>`
 (or `**<file>` for a workspace root file), which matches the file both before
 and after the restructure moves it. That ADR's step 12 tightens them to the
 new paths.
+
+### 2026-11-20: Only open briefs stay on the Instance; finished ones move to D1
+
+On 2026-11-20 the owner chose this (owner_ask #51). The Instance's
+`briefs` key held every brief ever written, each with every revision's
+full draft: 3,128,578 bytes. Every Instance write reads and hashes it for
+the blue-green journal, and each change to it journals about 3 MB (see
+[`2026-11-18-runtime-independent-blue-green-workers.md`](2026-11-18-runtime-independent-blue-green-workers.md),
+its 2026-11-20 amendments).
+
+- **Finished** is the digest's own test inverted: a brief has a change,
+  and its latest change is no longer open (merged or closed). A brief
+  with no change yet, or with an open latest change, stays.
+- **Where they go.** A D1 table, `brief_archive (number INTEGER PRIMARY
+  KEY, body TEXT NOT NULL, archived_at INTEGER NOT NULL)`, holds each
+  finished brief's whole JSON, every revision included. D1 is shared by
+  every colour, so archived briefs need no journaling and survive a flip
+  as they are.
+- **When.** The Instance moves finished briefs whenever it writes
+  `briefs`, and once on its first write after the change deploys. It
+  inserts the archive row first (`INSERT OR REPLACE`), and only then
+  drops the brief from `briefs`. A failure leaves the brief where it was.
+- **Reading.** `brief.show` falls back to `brief_archive` for a number
+  the Instance no longer holds. `brief.list` lists open briefs as today,
+  plus finished ones from `brief_archive` when asked (`all`). `last`
+  stays on the Instance, so numbers never repeat.
+- **Amending a finished brief** brings it back: `brief.amend` on an
+  archived number restores it to `briefs`, then amends it, and the
+  archive row stays until the brief is finished again.
+- **Order**, by the two-step rule:
+  1. The migration, alone. It's owner tier, being a migration.
+  2. The code: reading the archive, then moving into it. It deploys to
+     control in place while `.config/deploy-in-place` is present, since
+     control is the primary.
+  3. The first deploy after it: `briefs` shrinks to the open briefs, and
+     the next standby parity shows it.
