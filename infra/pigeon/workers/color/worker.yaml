@@ -11,9 +11,6 @@ workers_dev: false
 # Its own host, under the platform's Access.
 routes:
   - custom_domain: $deployment.host
-  # Also by an exact-host route, which outranks pigeon-front's zone wildcard; see the blue-green
-  # ADR's exact-host route amendment.
-  - { host: "$deployment.host", zone: $deployment.instance_zone }
 durable_objects:
   classes: [Instance, ChangeRun, Checker, Runner, MainRun, Bench, Pool]
   migrations:
