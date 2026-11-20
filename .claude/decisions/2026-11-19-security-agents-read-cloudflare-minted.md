@@ -278,3 +278,16 @@ step 4. The planner session that ran it hands off here.
 - **To resume:** start an opus planner with this ADR. Read !1368's and
   !1369's state. Brief only step 4's non-gate code, and carry the
   `worker/minting.rs` line and the merge yourself.
+
+### 2026-11-20: Reviewed !1369 against !1375: they agree
+
+!1375 amended
+[`2026-11-18-runtime-independent-blue-green-workers.md`](2026-11-18-runtime-independent-blue-green-workers.md)
+with the standby deploy, promotion and flip, over the Worker spec, ship,
+job, standby, `MainRun` and lease paths.
+
+- **!1369 doesn't touch them.** It adds a pure module to pigeon-core
+  (`cloudflare_read.rs`) and one line in its `lib.rs`.
+- **Step 4 runs on the acting colour.** When it lands, `cloudflare.read`
+  runs on the colour the lease names. It mints from the shared `GRANTER`, so
+  a flip changes nothing in this ADR.
