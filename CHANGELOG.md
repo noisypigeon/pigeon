@@ -8,6 +8,7 @@
 - agent v0.1.81
 - agent v0.1.82
 - agent v0.1.83
+- agent v0.1.84
 - infra-cloudflare-schema v0.1.27
 
 ### Merged
@@ -70,6 +71,9 @@
 - fix(builds): every colour reads and writes builds in the platform's bucket (!1431) ([fe04ad9](https://github.com/noisypigeon/pigeon/commit/fe04ad944f8e702daadcb343c4cb8e842546056b)) · agent
 - fix(workers): deployable checks a kind with several units by each unit, not the deploy's stack (!1432) ([e71a0b6](https://github.com/noisypigeon/pigeon/commit/e71a0b6cfca5a2349697c86b7436055130e5e0f5)) · agent
 - fix(worker): a standby's smoke reads don't wait on member state it hasn't adopted (!1430) ([6da034f](https://github.com/noisypigeon/pigeon/commit/6da034f613d6d7cf8ec7f1eff18c6c1c3dd550ea)) · agent
+- feat(worker): the release bot waits while a promote runs (!1434) ([f7c82a2](https://github.com/noisypigeon/pigeon/commit/f7c82a2175a35e3f7483706fe86d49bf7b4334a4)) · agent
+- feat(infra): pigeon-control gives up blue.platform.pigeon.dev for color/blue (!1433) ([aaeb521](https://github.com/noisypigeon/pigeon/commit/aaeb521c2845a09dbfe9e907a471d54b12cca694))
+- fix(worker): a standby forwards push events to the colour that acts (!1435) ([a674819](https://github.com/noisypigeon/pigeon/commit/a674819fef1bbffcae434ddcc40be6e45257ab18)) · agent
 
 ## 2026-11-19
 
