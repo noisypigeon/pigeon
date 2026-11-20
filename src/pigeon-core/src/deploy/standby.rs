@@ -78,6 +78,12 @@ pub fn parity(standby: &serde_json::Value, primary: &serde_json::Value) -> Vec<S
                 out.push(format!("{object}: {k} unopened"));
             }
         }
+        // An object a side couldn't read matches nothing, however empty both look.
+        for (side, answer) in [("primary", p), ("standby", theirs)] {
+            if let Some(e) = answer["error"].as_str() {
+                out.push(format!("{object}: the {side} couldn't read it: {e}"));
+            }
+        }
     }
     // What every colour must hold alike, when both answers carry it. Passkeys are compared by the
     // replayed `passkeys` key here, and live only once adopted, by a promote; see the blue-green
@@ -158,5 +164,10 @@ mod tests {
             vec!["i: journal failing: too big"]
         );
         assert_eq!(crate::journal::error_text("a\n  b"), "a b");
+        let unread = json!({"objects": {"i": {"held": {}, "error": "bad key"}}});
+        assert_eq!(
+            parity(&json!({"objects": {}}), &unread),
+            vec!["i: the primary couldn't read it: bad key"]
+        );
     }
 }

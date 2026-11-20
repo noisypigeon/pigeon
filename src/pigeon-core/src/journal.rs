@@ -234,6 +234,97 @@ pub const MAX_VALUE: usize = 1_000_000;
 /// The DO-local key holding each journaled key's last digest.
 pub const DIGESTS: &str = "journal.digests";
 
+/// The tag of a map whose keys aren't all strings, as [`Stored`] keeps it: `{"$map": [[key, value], …]}`.
+pub const MAP_TAG: &str = "$map";
+
+/// A stored value as the journal keeps it: JSON, except that a map with a key that isn't a string
+/// (a `BTreeMap<u32, _>`, which Workers storage holds as a JS `Map` with number keys) is kept
+/// tagged by [`MAP_TAG`], so it journals and adopts back as it was. See
+/// .claude/decisions/2026-11-18-runtime-independent-blue-green-workers.md, its 2026-11-20
+/// stored-shape amendment.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Stored(pub serde_json::Value);
+
+impl<'de> serde::Deserialize<'de> for Stored {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        d.deserialize_any(StoredVisitor).map(Stored)
+    }
+}
+
+/// [`Stored`]'s visitor: `serde_json`'s, but for a map's keys.
+struct StoredVisitor;
+
+impl<'de> serde::de::Visitor<'de> for StoredVisitor {
+    type Value = serde_json::Value;
+
+    fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        f.write_str("any stored value")
+    }
+    fn visit_bool<E>(self, v: bool) -> Result<Self::Value, E> {
+        Ok(v.into())
+    }
+    fn visit_i64<E>(self, v: i64) -> Result<Self::Value, E> {
+        Ok(v.into())
+    }
+    fn visit_u64<E>(self, v: u64) -> Result<Self::Value, E> {
+        Ok(v.into())
+    }
+    fn visit_f64<E>(self, v: f64) -> Result<Self::Value, E> {
+        Ok(serde_json::Number::from_f64(v).map_or(serde_json::Value::Null, Into::into))
+    }
+    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E> {
+        Ok(v.into())
+    }
+    fn visit_string<E>(self, v: String) -> Result<Self::Value, E> {
+        Ok(v.into())
+    }
+    fn visit_none<E>(self) -> Result<Self::Value, E> {
+        Ok(serde_json::Value::Null)
+    }
+    fn visit_unit<E>(self) -> Result<Self::Value, E> {
+        Ok(serde_json::Value::Null)
+    }
+    fn visit_some<D: serde::Deserializer<'de>>(self, d: D) -> Result<Self::Value, D::Error> {
+        d.deserialize_any(self)
+    }
+    fn visit_seq<A: serde::de::SeqAccess<'de>>(self, mut a: A) -> Result<Self::Value, A::Error> {
+        let mut out = Vec::new();
+        while let Some(Stored(v)) = a.next_element()? {
+            out.push(v);
+        }
+        Ok(out.into())
+    }
+    fn visit_map<A: serde::de::MapAccess<'de>>(self, mut a: A) -> Result<Self::Value, A::Error> {
+        let mut pairs = Vec::new();
+        while let Some((Stored(k), Stored(v))) = a.next_entry()? {
+            pairs.push((k, v));
+        }
+        if pairs.iter().all(|(k, _)| k.is_string()) {
+            let map = pairs
+                .into_iter()
+                .map(|(k, v)| (k.as_str().unwrap_or_default().to_string(), v))
+                .collect();
+            return Ok(serde_json::Value::Object(map));
+        }
+        let pairs: Vec<serde_json::Value> = pairs.into_iter().map(|(k, v)| json!([k, v])).collect();
+        Ok(json!({ MAP_TAG: pairs }))
+    }
+}
+
+/// The `[key, value]` pairs of a value [`Stored`] tagged as a map with keys that aren't strings.
+#[must_use]
+pub fn tagged_map(v: &serde_json::Value) -> Option<Vec<(&serde_json::Value, &serde_json::Value)>> {
+    let o = v.as_object().filter(|o| o.len() == 1)?;
+    o.get(MAP_TAG)?
+        .as_array()?
+        .iter()
+        .map(|p| match p.as_array().map(Vec::as_slice) {
+            Some([k, v]) => Some((k, v)),
+            _ => None,
+        })
+        .collect()
+}
+
 /// The DO-local key holding the snapshot object's last sequence number.
 pub const SEQ: &str = "journal.seq";
 
@@ -495,6 +586,33 @@ pub fn snapshot_entry_at(
 mod replay_tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn a_map_with_number_keys_is_kept_tagged_and_others_stay_plain() {
+        use serde::Deserialize as _;
+        use serde::de::IntoDeserializer as _;
+        use std::collections::BTreeMap;
+        type E = serde::de::value::Error;
+        let numbered: BTreeMap<u32, String> = [(1, "b1".to_string()), (7, "b7".to_string())].into();
+        let Stored(v) = Stored::deserialize(
+            numbered.into_deserializer() as serde::de::value::MapDeserializer<'_, _, E>
+        )
+        .unwrap();
+        assert_eq!(v, json!({"$map": [[1, "b1"], [7, "b7"]]}));
+        let pairs = tagged_map(&v).unwrap();
+        assert_eq!(
+            pairs,
+            vec![(&json!(1), &json!("b1")), (&json!(7), &json!("b7"))]
+        );
+        let named: BTreeMap<String, u32> = [("a".to_string(), 1)].into();
+        let Stored(w) = Stored::deserialize(
+            named.into_deserializer() as serde::de::value::MapDeserializer<'_, _, E>
+        )
+        .unwrap();
+        assert_eq!(w, json!({"a": 1}));
+        assert_eq!(tagged_map(&w), None);
+        assert_eq!(tagged_map(&json!({"$map": [[1]]})), None);
+    }
 
     #[test]
     fn a_new_epoch_journals_every_key_and_removes_each_absent_one() {

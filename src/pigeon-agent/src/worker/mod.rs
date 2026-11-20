@@ -1937,9 +1937,8 @@ pub(super) async fn put_adopted(
     for key in keys {
         match values.get(*key) {
             Some(v) => {
-                // Plain objects, as a typed value's fields read back.
-                let js = worker::js_sys::JSON::parse(&v.to_string())
-                    .map_err(|_| worker::Error::RustError(format!("{key}: not JSON")))?;
+                let js =
+                    stored_js(v).map_err(|e| worker::Error::RustError(format!("{key}: {e}")))?;
                 storage.put_raw(key, js).await?;
                 digests.insert((*key).to_string(), journal::digest(v));
             }
@@ -1950,6 +1949,39 @@ pub(super) async fn put_adopted(
     }
     storage.put(journal::DIGESTS, &digests).await?;
     Ok(digests.len())
+}
+
+/// `v` as storage held it: plain objects, as a typed value's fields read back, and each map
+/// [`crate::core::journal::Stored`] tagged as a JS `Map` with its keys as they were; see the
+/// blue-green ADR's 2026-11-20 stored-shape amendment.
+fn stored_js(v: &Value) -> std::result::Result<worker::wasm_bindgen::JsValue, String> {
+    use worker::js_sys::{Array, JSON, Map};
+    use worker::wasm_bindgen::JsValue;
+    if let Some(pairs) = crate::core::journal::tagged_map(v) {
+        let map = Map::new();
+        for (k, val) in pairs {
+            map.set(&stored_js(k)?, &stored_js(val)?);
+        }
+        return Ok(map.into());
+    }
+    match v {
+        Value::Array(items) => {
+            let arr = Array::new();
+            for item in items {
+                arr.push(&stored_js(item)?);
+            }
+            Ok(arr.into())
+        }
+        Value::Object(o) => {
+            let obj = worker::js_sys::Object::new();
+            for (k, val) in o {
+                worker::js_sys::Reflect::set(&obj, &JsValue::from_str(k), &stored_js(val)?)
+                    .map_err(|_| format!("{k}: not settable"))?;
+            }
+            Ok(obj.into())
+        }
+        _ => JSON::parse(&v.to_string()).map_err(|_| "not JSON".to_string()),
+    }
 }
 
 /// An object's `POST /journal/adopt`: [`put_adopted`] with the restored map it is sent; refused while this Worker acts. See the blue-green ADR's 2026-11-20 adopt amendment.
@@ -2933,8 +2965,8 @@ async fn journal_keys(state: &State, env: &Env, keys: &[&str], object: impl Fn(&
         if seal.is_none() && journal::SEALED.contains(key) {
             continue;
         }
-        match storage.get::<Value>(key).await {
-            Ok(Some(v)) => {
+        match storage.get::<journal::Stored>(key).await {
+            Ok(Some(journal::Stored(v))) => {
                 now.insert((*key).to_string(), v);
             }
             Ok(None) => {}
@@ -3141,7 +3173,7 @@ pub(super) async fn live_digests(
 ) -> Result<std::collections::BTreeMap<String, String>> {
     let mut out = std::collections::BTreeMap::new();
     for key in keys {
-        if let Some(v) = storage.get::<Value>(key).await? {
+        if let Some(crate::core::journal::Stored(v)) = storage.get(key).await? {
             out.insert((*key).to_string(), crate::core::journal::digest(&v));
         }
     }

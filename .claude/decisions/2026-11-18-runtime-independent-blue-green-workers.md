@@ -1103,3 +1103,36 @@ characters, and the next write that lands clears it. The object's held
 digests carry that key, so a standby deploy's parity names it as
 `<object>: journal failing: <why>`, and a promote, which compares held
 digests, aborts while it is set. The fix follows from what it says.
+
+### 2026-11-20: The Instance's journal couldn't read its own state; the journal keeps each value's stored shape
+
+Control's own `/healthz/parity`, read directly, showed the cause of the
+seven keys. Its Instance answered `held: {}` with the error
+`invalid type: floating point 1.0, expected a string key`. Workers
+storage holds a Rust `BTreeMap<u32, _>`, such as `briefs` or the merge
+queue's maps, as a JS `Map` with number keys, and a `serde_json::Value`
+can't hold a map like that. `journal_keys` and `live_digests` read every
+Instance key as a `Value`, so the first such key failed the whole read.
+The Instance has journaled nothing since, and the !1411 rebaseline never
+ran there. The only Instance rows are the ten green wrote while it
+served. Every earlier deploy-time "parity ok" was hollow: the held map
+was empty and so was the journal, and the deploy check ignored the
+answer's `error`. That is also why P5's adopt carried so little of the
+Instance. `MainRun` was never affected.
+
+The fix:
+
+- `journal::Stored` reads a stored value as JSON, but keeps a map with a
+  key that isn't a string as `{"$map": [[key, value], …]}`.
+  `journal_keys` and `live_digests` read through it, so every key
+  journals and digests.
+- Adopt writes each value back in the shape storage held it: plain
+  objects for fields, and a JS `Map` with its keys as they were for each
+  tagged map, so `briefs` and the queue read back as their types.
+- The deploy-time check fails when either side reports an `error` for an
+  object, so an object that can't be read can't pass by being empty.
+
+Control is the primary, so this needs one more in-place ship: the owner
+re-adds `.config/deploy-in-place`, and a later change removes it. Its
+first Instance write then journals every key under the current epoch,
+which !1411 set out to do.
