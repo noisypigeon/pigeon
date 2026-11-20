@@ -1838,3 +1838,63 @@ fn a_group_reads_its_own_baseline() {
         Some(B)
     );
 }
+
+#[test]
+fn a_journal_read_takes_only_each_keys_current_version() {
+    use agent::core::journal;
+    use serde_json::json;
+    let db = rusqlite::Connection::open_in_memory().expect("sqlite");
+    db.execute_batch(include_str!("../../../migrations/0008_journal.sql"))
+        .expect("migrates");
+    let big = |c: &str| json!({ "text": c.repeat(journal::MAX_VALUE) });
+    let mut seq = 1;
+    let mut write = |kind: &str, body: &serde_json::Value| {
+        for s in journal::entries("o", seq, 3, 0, kind, body) {
+            run(&db, &s);
+            seq += 1;
+        }
+    };
+    write("k", &json!(1));
+    write("big", &big("a"));
+    write("k", &json!(2));
+    write("big", &big("b"));
+    write("gone", &json!("x"));
+    write("gone", &serde_json::Value::Null);
+    let read = |db: &rusqlite::Connection| -> Vec<serde_json::Value> {
+        let q = journal::rows("o");
+        let mut stmt = db.prepare(q.sql).expect("prepares");
+        stmt.query_map(["o"], |r| {
+            Ok(json!({
+                "seq": r.get::<_, i64>(0)?,
+                "kind": r.get::<_, String>(1)?,
+                "body": r.get::<_, String>(2)?,
+            }))
+        })
+        .expect("queries")
+        .map(|r| r.expect("row"))
+        .collect()
+    };
+    let rows = read(&db);
+    let seqs: Vec<i64> = rows
+        .iter()
+        .map(|r| r["seq"].as_i64().unwrap_or(0))
+        .collect();
+    assert_eq!(
+        seqs,
+        [4, 5, 6, 8],
+        "k v2, big v2's two parts, gone's removal"
+    );
+    let none = |_: &str, _: &serde_json::Value| None;
+    let (values, unopened) = journal::restore(&journal::from_rows(&rows), &none);
+    assert_eq!(values.get("k"), Some(&json!(2)));
+    assert_eq!(values.get("big"), Some(&big("b")));
+    assert_eq!(values.get("gone"), None);
+    assert_eq!(unopened, Vec::<String>::new());
+    // A latest run of parts missing its last is named, never read as the version before it.
+    let first = json!({ journal::PART_TAG: 0, "of": 2, "text": "{\"text\":\"c" });
+    run(&db, &journal::entry("o", 9, 3, 0, "big", &first));
+    let (values, unopened) = journal::restore(&journal::from_rows(&read(&db)), &none);
+    assert_eq!(values.get("big"), None);
+    assert_eq!(unopened, ["big"]);
+    assert_eq!(values.get("k"), Some(&json!(2)));
+}

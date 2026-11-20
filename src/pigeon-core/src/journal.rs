@@ -615,11 +615,14 @@ pub fn last_seq(object: &str) -> crate::control::Statement {
     }
 }
 
-/// Every journal row of `object`, oldest first.
+/// The journal rows of `object` that make each key's current version, oldest first: per key, its
+/// rows from its latest whole row or first part (`{"$part":0,`, as `serde_json` writes the tag
+/// first) on, so a read is bounded by the state, not the history; see the blue-green ADR's
+/// 2026-11-20 current-version amendment.
 #[must_use]
 pub fn rows(object: &str) -> crate::control::Statement {
     crate::control::Statement {
-        sql: "SELECT seq, kind, body FROM journal WHERE object = ?1 ORDER BY seq",
+        sql: "WITH starts AS (SELECT kind, MAX(seq) AS s FROM journal WHERE object = ?1 AND (body NOT LIKE '{\"$part\":%' OR body LIKE '{\"$part\":0,%') GROUP BY kind) SELECT j.seq, j.kind, j.body FROM journal j JOIN starts ON j.kind = starts.kind WHERE j.object = ?1 AND j.seq >= starts.s ORDER BY j.seq",
         params: vec![json!(object)],
     }
 }

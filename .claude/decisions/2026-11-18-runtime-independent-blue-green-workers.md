@@ -1168,3 +1168,26 @@ including opening a sealed key. A key whose parts don't make a whole body
 is left out and named as unopened, never restored half-written.
 `MAX_TOTAL` (16 MB) is now the cap on a whole value: `changed` leaves out
 anything over it, and `oversized` names it under `journal.error`.
+
+### 2026-11-20: A journal read takes only each key's current version
+
+Once `briefs` journaled in parts (deploy 31ef8ec1), `/healthz/parity`
+failed on both colours: HTTP 500 after about 4 s, while serving stayed
+up. `journal::rows` read every row an object had ever written, and replay
+and adopt parsed each one. Each version of `briefs` is about 3 MB, so a
+read that grows with history is the likeliest cause, through the Worker's
+CPU or memory. That isn't proven, since the Worker's logs weren't to hand.
+
+`journal::rows` now reads, per key, only the rows from its latest whole
+row or first part on. Replay, parity and adopt therefore read the
+object's current state, not its history. A removal is a whole row, so it
+starts a version too. A suite test runs the query on SQLite with two
+versions of a plain key, two of a key in parts, and a removed key.
+
+Still open:
+
+- Nothing compacts the journal. Each change to `briefs` adds about 3 MB
+  of rows. Dropping rows a later version supersedes is a separate change.
+- `briefs` itself holds every brief's full text, and every Instance write
+  digests it. Keeping only open briefs there is the owner's call. It
+  changes how briefs are stored.
