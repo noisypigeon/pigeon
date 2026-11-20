@@ -1,5 +1,32 @@
 # Changelog
 
+## 2026-11-20
+
+### Released
+
+- agent v0.1.80
+- infra-cloudflare-schema v0.1.27
+
+### Merged
+
+- test(core): no capability hands out an approval, owner, credential or platform operation (!1355) ([470c99e](https://github.com/noisypigeon/pigeon/commit/470c99ef800637fa186ab7034117391ad912e865))
+- feat(infra): pigeon-control's own hosts take their exact-host routes (!1362) ([d9ed479](https://github.com/noisypigeon/pigeon/commit/d9ed479347d63b08afc7100763be6b8b35ee29cf))
+- feat(zones): zones.private in the Instance, with zones.set, .show and .list (!1358) ([cc9582c](https://github.com/noisypigeon/pigeon/commit/cc9582c3405b96b8349742dc68c6388f357f4bad)) · agent
+- docs(decisions): agents read Cloudflare state through cloudflare.read, on a read-only token minted per call (!1364) ([2ebf38a](https://github.com/noisypigeon/pigeon/commit/2ebf38a105dde9a54e3475db3a9b8fe441b5bafe))
+- docs(decisions): the capability, zoned, Subdomain/Domain/Blog and learning ADRs pause at hand-off (!1371) ([4e5af01](https://github.com/noisypigeon/pigeon/commit/4e5af01dbd6cb6e739fc3ef3d42b7e1f62142f7c))
+- feat(infra): pigeon-green's spec back, with its own exact-host route (!1374) ([46db79d](https://github.com/noisypigeon/pigeon/commit/46db79dd27055e3198c9e9327c937a8c9b1e2a94))
+- fix(deploy): the deploy job stops at once unless it runs main's stored build (!1370) ([7cc3e1a](https://github.com/noisypigeon/pigeon/commit/7cc3e1aebf1428a205bf5fc275fded02a8a147e0)) · agent
+- feat(zones): /zone-private/<id> sets a private zone with the Administrator's passkey (!1365) ([98e55c4](https://github.com/noisypigeon/pigeon/commit/98e55c4a054743ef519ce03d7bb66960f899d8b9)) · agent
+- feat(workers): pigeon workers deployable proves every spec deploys, on this build and on main's stored build (!1367) ([97bec8e](https://github.com/noisypigeon/pigeon/commit/97bec8e8e1fc58c6dae444993f0d9dff4d3cd211)) · agent
+- feat(core): capability::validate checks every manifest, and pigeon dev capabilities runs it (!1366) ([bd8594a](https://github.com/noisypigeon/pigeon/commit/bd8594ad2f0cb6bba724de8ee003110a3e8924b4))
+- fix(infra): set the exact-host routes aside so main's pigeon can be rebuilt (!1379) ([6631e02](https://github.com/noisypigeon/pigeon/commit/6631e0285da350867f7d74db8302aeec17ce6448))
+- feat(workers): a colour spec binds once per colour unit, by the Worker name asked for (!1377) ([7c8931a](https://github.com/noisypigeon/pigeon/commit/7c8931a6d3abbe329b6e670738312a71fc4a8684)) · agent
+- feat(scope): a change to a Worker spec or what renders it runs `pigeon workers deployable` (!1373) ([7322834](https://github.com/noisypigeon/pigeon/commit/7322834af9aaa032d126df55f550b2e097620ee2))
+- fix(deploy): builds go to the platform Worker's bucket, never a colour's; the colour spec steps aside to store one (!1380) ([557851e](https://github.com/noisypigeon/pigeon/commit/557851eecbb1d794013bc840f84db6bdf7b98314)) · agent
+- feat(grants): the cloudflare-read grant, read-only, minted per call on every zone in the account (!1368) ([3168df3](https://github.com/noisypigeon/pigeon/commit/3168df3cba34281481ccdd89ef5c0c2852fc9b99)) · agent, infra-cloudflare-schema
+- docs(decisions): the deployable-check and cloudflare.read ADRs record where they stand at hand-off (!1378) ([4633ed7](https://github.com/noisypigeon/pigeon/commit/4633ed7f01aa354bd0072472637ddfb6d201a62a))
+- docs(adr): blue-green's standby deploy, promote, watch and flip, as built steps (!1375) ([8478a23](https://github.com/noisypigeon/pigeon/commit/8478a2386a482551144bc7613343a3257185f8d5))
+
 ## 2026-11-19
 
 ### Released
@@ -92,6 +119,7 @@
 - feat(workers): each colour's own hosts reach it by an exact-host zone route, over the front's wildcard (!1353) ([8011005](https://github.com/noisypigeon/pigeon/commit/8011005e436c79cde15fd08ee6b6e6b34f8c261b)) · agent
 - fix(infra): pigeon-control's host routes wait for the build that reads them (!1361) ([463fe7e](https://github.com/noisypigeon/pigeon/commit/463fe7efe34710dd6cc96a024a97b0517433c151))
 - feat(approvals): the capability manifests and code are gate paths (!1354) ([4726f20](https://github.com/noisypigeon/pigeon/commit/4726f2082d762539229b809d86663e4f6ae87847))
+- docs(decisions): every Worker spec is proven deployable before merge, on main's build and its own (!1363) ([b777987](https://github.com/noisypigeon/pigeon/commit/b7779872d326d6324d0ac882783f018a7a8ef9ce))
 
 ## 2026-11-18
 
