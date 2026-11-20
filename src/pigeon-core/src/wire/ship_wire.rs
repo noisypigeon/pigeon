@@ -18,6 +18,8 @@ pub const LEASE_VAR: &str = "DEPLOY_LEASE";
 /// The SHA-256 of main's stored build, which `MainRun` passes the deploy job; a job running any
 /// other stops (the blue-green ADR's two-step rule).
 pub const BUILD_VAR: &str = "DEPLOY_BUILD_SHA256";
+/// Set to `1` by `MainRun` once it promotes: a deploy ships each colour Worker to the standby only; see the blue-green ADR's 2026-11-20 amendment.
+pub const STANDBY_VAR: &str = "DEPLOY_STANDBY";
 
 /// The Worker var naming the stack it was bound to; see `agent::workers::bind`.
 pub const DEPLOYMENT_VAR: &str = "DEPLOYMENT";

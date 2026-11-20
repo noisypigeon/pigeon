@@ -221,18 +221,24 @@ pub fn serving(
 
 /// Deploys the Workers whose inputs changed among `files` from the checkout at `dir`; each as
 /// `<name>: <from> → <to>`. When the job image's inputs changed since its commit, it is built and
-/// pushed first, and set in `built`, even if a later step fails.
+/// pushed first, and set in `built`, even if a later step fails. Under `DEPLOY_STANDBY`, colour
+/// Workers ship only to the standby, and `standby` is set to what its checks found.
 ///
 /// # Errors
 ///
 /// Why no Worker, or not every one, was deployed: a missing variable, a failed image build, or a
 /// failed step, after any rollback.
+#[expect(
+    clippy::too_many_lines,
+    reason = "one step per stage of a Workers deploy"
+)]
 pub fn workers(
     spec: &JobSpec,
     dir: &Path,
     files: Option<&[String]>,
     log: &mut String,
     built: &mut Option<crate::control::Images>,
+    standby: &mut Option<crate::core::deploy::standby::Checked>,
 ) -> Result<Vec<String>, String> {
     let names = crate::checks::scope::workers(dir, files).map_err(|e| e.to_string())?;
     if names.is_empty() {
@@ -304,8 +310,16 @@ pub fn workers(
         host: &host,
         access: (&id, &secret),
     };
+    let pick = standby_pick(spec, dir, &host, log);
     let mut shipped = Vec::new();
     for name in names {
+        if let Some(p) = &pick
+            && p.colours.contains(&name)
+            && name != p.target
+        {
+            let _ = writeln!(log, "{name}: not the standby ({}); not shipped", p.target);
+            continue;
+        }
         let found = workers::select_bound(dir, std::slice::from_ref(&name), deployment.as_deref())
             .map_err(|e| e.to_string())?
             .into_iter()
@@ -313,8 +327,17 @@ pub fn workers(
             .ok_or_else(|| format!("no Worker `{name}`"))?;
         let rebuilt = built.is_some();
         let whole = |from: Option<&str>| ship::whole_deploy(&found.dir, files, rebuilt, from);
-        let s = ship::ship(dir, &found, &outputs, &images, &tools, &target, whole)
-            .map_err(|e| e.to_string())?;
+        let s = match ship::ship(dir, &found, &outputs, &images, &tools, &target, whole) {
+            Ok(s) => s,
+            Err(e) if pick.as_ref().is_some_and(|p| p.target == name) => {
+                let failed = format!("health or smoke: {e}");
+                *standby = pick
+                    .as_ref()
+                    .map(|p| p.checked(String::new(), Some(failed)));
+                return Err(format!("standby {name} failed its check: {e}"));
+            }
+            Err(e) => return Err(e.to_string()),
+        };
         for step in &s.steps {
             let _ = writeln!(log, "{}: {step}", s.name);
         }
@@ -327,7 +350,145 @@ pub fn workers(
         let _ = writeln!(log, "deployed {line}");
         shipped.push(line);
     }
+    if let Some(p) = &pick
+        && let Some(line) = shipped
+            .iter()
+            .find(|l| l.starts_with(&format!("{}: ", p.target)))
+    {
+        let version = line.rsplit(" → ").next().unwrap_or_default().to_string();
+        let checked = p.parity(version, (&id, &secret), log);
+        let failed = checked.failed.clone();
+        *standby = Some(checked);
+        if let Some(why) = failed {
+            return Err(format!("standby {} failed {why}", p.target));
+        }
+    }
     Ok(shipped)
+}
+
+/// The standby a deploy ships colour Workers to, under `DEPLOY_STANDBY`; see the blue-green ADR's 2026-11-20 amendment.
+struct Pick {
+    /// The standby.
+    target: String,
+    /// The colours it was picked among, which ship to it only.
+    colours: Vec<String>,
+    /// The lease's colour: the primary.
+    lease: String,
+    /// Each colour Worker's own host.
+    hosts: Vec<(String, String)>,
+}
+
+impl Pick {
+    /// `worker`'s own host, or an empty string.
+    fn host(&self, worker: &str) -> String {
+        self.hosts
+            .iter()
+            .find(|(w, _)| w == worker)
+            .map(|(_, h)| h.clone())
+            .unwrap_or_default()
+    }
+
+    /// What the checks found on the standby at `version`.
+    fn checked(
+        &self,
+        version: String,
+        failed: Option<String>,
+    ) -> crate::core::deploy::standby::Checked {
+        crate::core::deploy::standby::Checked {
+            color: self.target.clone(),
+            host: self.host(&self.target),
+            version,
+            passed: failed.is_none(),
+            failed,
+        }
+    }
+
+    /// The standby's replay parity against the primary, in up to 3 tries 10 s apart.
+    fn parity(
+        &self,
+        version: String,
+        access: (&str, &str),
+        log: &mut String,
+    ) -> crate::core::deploy::standby::Checked {
+        let (theirs, ours) = (self.host(&self.target), self.host(&self.lease));
+        let mut why = String::from("parity: not asked");
+        for attempt in 0..3 {
+            if attempt > 0 {
+                std::thread::sleep(std::time::Duration::from_secs(10));
+            }
+            let diffs = parity_answer(&theirs, access).and_then(|t| {
+                parity_answer(&ours, access).map(|o| crate::core::deploy::standby::parity(&t, &o))
+            });
+            match diffs {
+                Ok(d) if d.is_empty() => {
+                    let _ = writeln!(log, "standby: {} parity ok", self.target);
+                    return self.checked(version, None);
+                }
+                Ok(d) => why = format!("parity: {}", d.join("; ")),
+                Err(e) => why = format!("parity: {e}"),
+            }
+        }
+        let _ = writeln!(log, "standby: {} {why}", self.target);
+        self.checked(version, Some(why))
+    }
+}
+
+/// The standby under `DEPLOY_STANDBY`, from the manifest and the lease; None without the variable, a manifest or a standby, so the deploy ships as before.
+fn standby_pick(spec: &JobSpec, dir: &Path, host: &str, log: &mut String) -> Option<Pick> {
+    use crate::wire::ship_wire as w;
+    let var = |k: &str| spec.env.get(k).filter(|v| !v.is_empty()).cloned();
+    if var(w::STANDBY_VAR).as_deref() != Some("1") {
+        return None;
+    }
+    let Some((_, hosts)) =
+        crate::infra::manifest::load(dir, dir).and_then(|(m, _)| probes(&m, host))
+    else {
+        log.push_str("standby: no manifest or platform unit; shipped as before\n");
+        return None;
+    };
+    let platform = hosts.first()?.0.clone();
+    let units: Vec<String> = hosts.iter().skip(1).map(|(w, _)| w.clone()).collect();
+    let lease = var(w::LEASE_VAR).unwrap_or_else(|| crate::core::lease::FIRST_COLOR.to_string());
+    let colours = crate::core::deploy::standby::colours(&platform, &units, &lease);
+    let held = crate::core::lease::Lease {
+        color: lease.clone(),
+        epoch: 1,
+        state: "serving".into(),
+    };
+    let Some(target) =
+        crate::core::deploy::standby::target(Some(&held), &colours).map(str::to_string)
+    else {
+        let _ = writeln!(log, "standby: none (lease {lease})");
+        return None;
+    };
+    let _ = writeln!(
+        log,
+        "standby: {target} (lease {lease}; colours {})",
+        colours.join(", ")
+    );
+    Some(Pick {
+        target,
+        colours,
+        lease,
+        hosts,
+    })
+}
+
+/// `GET https://<host>/healthz/parity`'s answer, whatever its status.
+fn parity_answer(host: &str, access: (&str, &str)) -> Result<serde_json::Value, String> {
+    let agent: ureq::Agent = ureq::Agent::config_builder()
+        .http_status_as_error(false)
+        .timeout_global(Some(std::time::Duration::from_secs(20)))
+        .build()
+        .into();
+    let mut r = agent
+        .get(&format!("https://{host}/healthz/parity"))
+        .header("CF-Access-Client-Id", access.0)
+        .header("CF-Access-Client-Secret", access.1)
+        .call()
+        .map_err(|e| format!("{host}: {e}"))?;
+    let body = r.body_mut().read_to_string().unwrap_or_default();
+    serde_json::from_str(&body).map_err(|_| format!("{host}: not JSON"))
 }
 
 /// The R2 binding, in some Worker's spec, of the bucket builds are stored in and served from.
