@@ -254,3 +254,19 @@ ran this ADR hands off here.
   Read !1367's and !1373's state with `change_status`. If one was evicted,
   resume it with `change_propose resumes: <n>` and leave its content as it
   is.
+
+### 2026-11-20: Reviewed !1382 against !1375: they agree
+
+!1375 amended
+[`2026-11-18-runtime-independent-blue-green-workers.md`](2026-11-18-runtime-independent-blue-green-workers.md)
+with the standby deploy, promotion and flip.
+
+- **Step 1a and the head pass.** In !1375's step 1a, `select_bound` binds a
+  colour spec once per colour unit. The head pass binds through `bound`,
+  for every stack of a spec's kind plus `platform/blue`, so it already
+  renders and dry-runs each colour unit as that deploy ships it.
+- **What !1382 changes.** It changes only how the check stubs outputs and
+  runs main's build. It touches no shipping, lease or `MainRun` path, so
+  nothing !1375 rules.
+- **Step 1b, the standby deploy.** It can call `pigeon workers deployable`
+  on the rendered config, as §4 plans; nothing here stands in its way.
