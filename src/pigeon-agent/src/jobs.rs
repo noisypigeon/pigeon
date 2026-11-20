@@ -455,6 +455,21 @@ fn runs_as(exe: &str, handed: Option<&str>) -> String {
     format!("pigeon: {exe} (build {})\n", handed.unwrap_or("none"))
 }
 
+/// Why the deploy mustn't go on: it runs `exe`, handed build `handed` (or none), when main's
+/// stored build is `want`; `None` when they match or no build is named. See the blue-green ADR's
+/// 2026-11-18 rule that a deploy ships on the build before its own.
+fn stale_build(exe: &str, handed: Option<&str>, want: Option<&str>) -> Option<String> {
+    let want = want.filter(|w| !w.is_empty())?;
+    if handed == Some(want) {
+        return None;
+    }
+    Some(format!(
+        "the deploy runs {exe} (build {}), not main's stored build {want}: the job's Container \
+         didn't get or fetch it, so this deploy stops before any step; deploy again",
+        handed.unwrap_or("none")
+    ))
+}
+
 #[expect(clippy::too_many_lines, reason = "one step per deploy group")]
 fn deploy(spec: &JobSpec, dir: &Path) -> Report {
     let failed = |why: String, log: &str| Report {
@@ -473,13 +488,26 @@ fn deploy(spec: &JobSpec, dir: &Path) -> Report {
     // `pigeon-start`'s build checksum, `containers::worker::BUILD_SHA256_VAR`.
     let handed = std::env::var("PIGEON_BUILD_SHA256").ok();
     let mut log = runs_as(&exe, handed.as_deref());
+    let want = spec
+        .env
+        .get(crate::wire::ship_wire::BUILD_VAR)
+        .map(String::as_str);
+    if let Some(why) = stale_build(&exe, handed.as_deref(), want) {
+        return failed(why, &log);
+    }
     match &files {
         Some(f) => {
             let _ = writeln!(log, "{} file(s) changed since the last deploy", f.len());
         }
         None => log.push_str("first deploy, or the last one is unknown: everything\n"),
     }
-    let secrets: Vec<String> = spec.env.values().cloned().collect();
+    // Every value is scrubbed but the stored build's SHA-256, which the log names on purpose.
+    let secrets: Vec<String> = spec
+        .env
+        .iter()
+        .filter(|(k, _)| k.as_str() != crate::wire::ship_wire::BUILD_VAR)
+        .map(|(_, v)| v.clone())
+        .collect();
     let scrub = |t: &str| {
         secrets
             .iter()
@@ -1217,6 +1245,18 @@ pub fn status(board: &Board, id: &str) -> (u16, Value) {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_deploy_stops_unless_it_runs_the_stored_build() {
+        let run = "/tmp/pigeon-build";
+        assert_eq!(super::stale_build(run, Some("ab"), Some("ab")), None);
+        assert_eq!(super::stale_build(run, None, None), None, "no build named");
+        assert_eq!(super::stale_build(run, Some("ab"), Some("")), None);
+        let why = super::stale_build("/usr/local/bin/pigeon", None, Some("ab")).expect("stale");
+        assert!(why.contains("/usr/local/bin/pigeon (build none)"), "{why}");
+        assert!(why.contains("stored build ab"), "{why}");
+        assert!(super::stale_build(run, Some("cd"), Some("ab")).is_some());
+    }
+
     #[test]
     fn the_deploy_log_names_its_pigeon_and_the_build_it_was_handed() {
         assert_eq!(

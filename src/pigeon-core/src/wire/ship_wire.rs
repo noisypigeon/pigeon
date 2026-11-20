@@ -15,6 +15,9 @@ pub const ACCESS_SECRET_VAR: &str = "DEPLOYER_ACCESS_SECRET";
 pub const HOST_VAR: &str = "PUBLIC_HOST";
 /// The lease's colour, which `MainRun` passes the deploy job; see .claude/decisions/2026-11-19-security-auto-held-when-platform-down.md §1.
 pub const LEASE_VAR: &str = "DEPLOY_LEASE";
+/// The SHA-256 of main's stored build, which `MainRun` passes the deploy job; a job running any
+/// other stops (the blue-green ADR's two-step rule).
+pub const BUILD_VAR: &str = "DEPLOY_BUILD_SHA256";
 
 /// The Worker var naming the stack it was bound to; see `agent::workers::bind`.
 pub const DEPLOYMENT_VAR: &str = "DEPLOYMENT";

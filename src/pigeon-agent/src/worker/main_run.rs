@@ -1107,6 +1107,13 @@ impl MainRun {
                 .await
                 .map_or_else(|| crate::core::lease::FIRST_COLOR.to_string(), |l| l.color),
         );
+        // The build the job must run; see the blue-green ADR's two-step rule.
+        if let Some(b) = &p.latest_build {
+            env.insert(
+                crate::wire::ship_wire::BUILD_VAR.to_string(),
+                b.sha256.clone(),
+            );
+        }
         let mut spec = control::deploy_spec(&remote, &token, sha, p.deployed.as_deref(), env);
         spec.scope = p.baselines_spec();
         let body = serde_json::to_value(&spec).map_err(|e| e.to_string())?;
