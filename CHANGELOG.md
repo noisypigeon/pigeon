@@ -6,6 +6,7 @@
 
 - agent v0.1.80
 - agent v0.1.81
+- agent v0.1.82
 - infra-cloudflare-schema v0.1.27
 
 ### Merged
@@ -30,6 +31,20 @@
 - fix(workers): deployable stubs are valid resource names, and main's pass skips its own dry-run (!1382) ([c46ea6b](https://github.com/noisypigeon/pigeon/commit/c46ea6b04fe842ddfc5a87e093465d679b503033)) · agent
 - docs(adr): review !1382 against !1375 (!1384) ([b70dfbb](https://github.com/noisypigeon/pigeon/commit/b70dfbb1c5cddbbc126a65997379ae7525ae7dd8))
 - docs(adr): review !1369 against !1375 (!1383) ([2d68841](https://github.com/noisypigeon/pigeon/commit/2d68841ee7d9dc36a98b59289bcba7299b401c65))
+- docs(adr): the standby adopts the journal before a flip, and the old colour runs the watch (!1386) ([c645bd2](https://github.com/noisypigeon/pigeon/commit/c645bd2f023220f28c6658f9854b4786ece38cfe))
+- feat(lease): core::lease::step, the promote's state machine: drain, flip, watch, flip-back, abort (!1385) ([5c187f8](https://github.com/noisypigeon/pigeon/commit/5c187f8db7b3fe3e566075a652919001cfe041f1))
+- feat(infra): pigeon-green's spec and every colour's exact-host route back, with the builds bucket pinned (!1381) ([e393553](https://github.com/noisypigeon/pigeon/commit/e393553772b24ca166e57aacc0517f2316ed44ea)) · agent
+- docs(adr): colours call each other by service binding, and the front binds every colour (!1389) ([68d5580](https://github.com/noisypigeon/pigeon/commit/68d5580f0bbca54efaa7f4d778fd78304d805c58))
+- feat(deploy): a deploy's Report carries its standby check, and no job starts while the lease promotes (!1391) ([467adff](https://github.com/noisypigeon/pigeon/commit/467adff0158b21e11c5ce42761f378ec6deaa2f0)) · agent
+- feat(journal): a standby adopts the journal into its objects, and resumes them once it holds the lease (!1387) ([6c04d89](https://github.com/noisypigeon/pigeon/commit/6c04d891ea40d14ff8ab848f5388f2e57e6a1706)) · agent
+- feat(lease): lease.flip and promote.hold, the owner's switches over the lease, granted with a passkey (!1397) ([9fb1bfd](https://github.com/noisypigeon/pigeon/commit/9fb1bfd7c5b36ae3ab3aa3689337f9b533502b69)) · agent
+- fix(worker): a standby's smoke checks change.list, not a change it hasn't adopted (!1398) ([b203347](https://github.com/noisypigeon/pigeon/commit/b20334786dfb53ef7baf15d34ea949e83a402bf9)) · agent
+- docs(adr): the cutover is the rehearsal, flips check secrets first, and blue follows P5 (!1400) ([22db737](https://github.com/noisypigeon/pigeon/commit/22db737f5ecc2f304b7b58a9be2325dc2c4220fb))
+- feat(infra): colours call each other by service binding with the colour token, and the front binds green (!1394) ([3f61355](https://github.com/noisypigeon/pigeon/commit/3f613552544cfcf555737aa8f35c213b8dd78920)) · agent
+- feat(deploy): with DEPLOY_STANDBY=1 a deploy ships colour Workers to the standby only, checks its replay parity, and reports it (!1396) ([dda703a](https://github.com/noisypigeon/pigeon/commit/dda703a28d5cc6083416958a323ba1ac28d013e4)) · agent
+- feat(workers): a queue consumer may set max_retries, so a standby's retried batches outlive a promote (!1399) ([5a85d74](https://github.com/noisypigeon/pigeon/commit/5a85d74e875dc91750302414f449fabdb44be2c3)) · agent
+- feat(lease): MainRun promotes the standby: drain, adopt, secrets and parity, the fenced flip, the watch from the old colour, flip-back (!1402) ([206fdc8](https://github.com/noisypigeon/pigeon/commit/206fdc8c200c8c8ee10ef8cb806adf3539ffd56b)) · agent
+- feat(infra): pigeon-control's and every colour's queue consumer retries 100 times, so a standby's batches outlive a promote (!1403) ([8a5321e](https://github.com/noisypigeon/pigeon/commit/8a5321e41efe2b98c877b23f8395b14e2c557095))
 
 ## 2026-11-19
 
