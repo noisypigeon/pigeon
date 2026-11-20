@@ -899,3 +899,33 @@ the 2026-11-20 steps' step 2.
 - **Order.** `restore`, adopt and the two endpoints are one change, before
   step 2's wiring. Every flip, the rehearsal's included, goes through
   adopt.
+
+### 2026-11-20: Colours call each other by service binding, and the front binds every colour
+
+Two gaps stand between the steps above and a real flip. The front binds only
+`PIGEON_CONTROL`, so it can't forward to green once the lease names it. And
+a promote's calls from one colour to another (adopt, parity, resume, the
+watch's probe) can't count on a fetch to a host on the Worker's own zone:
+the zone's routes and Custom Domains don't reliably serve a Worker's
+subrequests.
+
+- **The front binds each colour** under the name it already derives
+  (`PIGEON_GREEN`, then `PIGEON_BLUE` once blue exists). It deletes the
+  colour-token header (below) from every request it forwards.
+- **Each colour binds the others it may promote to or from**, under the
+  same names: pigeon-control binds `PIGEON_GREEN`, and the colour spec
+  binds `PIGEON_CONTROL`. `PIGEON_BLUE` and `PIGEON_GREEN` join the colour
+  spec only once pigeon-blue exists, since a binding to a missing Worker
+  fails the deploy.
+- **A colour's call carries `x-pigeon-colour-token`**, the shared
+  `agent-token` (`BACKPLANE_TOKEN`), which every colour holds. A request
+  that carries it and matches reaches `/healthz`, `/healthz/parity`,
+  `/healthz/adopt` and `/healthz/resume` without Access. Nothing else
+  takes it. A service-binding request never passes Access, and the front
+  strips the header, so it is never accepted from outside.
+- **The watch's probes** are the new primary's `/healthz` through its
+  binding, and the front's answer as the lease's reader sees it: the
+  lease names the new colour, and its `/healthz` answers `ok`.
+- **Order.** The bindings and the token check are one change, after the
+  adopt change and before step 2's wiring. The front's `PIGEON_GREEN`
+  must be deployed before the rehearsal.
