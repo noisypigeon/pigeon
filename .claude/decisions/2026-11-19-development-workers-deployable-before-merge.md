@@ -209,3 +209,48 @@ A.4 and step 9).
 4. **The first change that runs it** is b2's own. Its main pass is the
    bootstrap form until b1's build is `latest_build`.
 5. §4 belongs to the blue-green planner.
+
+## Amendments
+
+### 2026-11-20: Hand-off: where execution stands, and how to resume
+
+The owner asked on 2026-11-20 for work to wrap up. The planner session that
+ran this ADR hands off here.
+
+- **Done:**
+  - step 1, this ADR (!1363);
+  - step 2, brief b193: `pigeon workers deployable` (!1367). Its executor
+    ran the real command on the head: the head pass covered both spec and
+    stack pairs, and the main pass passed on main's stored build;
+  - step 3, brief b195: `deploy::scope` selects the check (!1373).
+- **Changed from §3: only `catalog/pigeon/kinds/**` selects the check among
+  catalogs.** The platform and colour kinds feed the binder. A provider
+  catalog's kinds don't, and the two tests that pin an infra change's checks
+  use them.
+- **Where it stands at hand-off:** !1367 and !1373 are approved, with every
+  check passed, and queued in that order behind the blue-green line.
+- **What remains:**
+  1. Once !1373 has deployed, the first change to touch
+     `infra/**/workers/**` runs the check on a Checker. Its log should show
+     the head pass with the wrangler dry-run, and the main pass. The main
+     pass uses the `validate` form until a deploy stores a build with !1367
+     as `latest_build`, then the `deployable` form. If the dry-run fails on
+     this repository's own specs for a reason the spec doesn't cause (a
+     Container image, a route), fix `dry_config`, not the spec.
+  2. §4 belongs to the blue-green planner. It is gated on its step 9.
+- **What the check can't see.**
+  - **The failure:** a `latest_build` that is recorded but has no stored
+    file. Every job then falls back to the image's baked `pigeon`.
+    - On 2026-11-20 that baked build predated `Route { host, zone }`.
+    - So the deploys of !1370, !1365 and !1367 failed on specs that main's
+      recorded build parses.
+    - !1379 took the routes out to recover.
+  - **Why the check passes it:** its main pass fails it on a Checker, since
+    `$TMPDIR/pigeon-build` is missing or doesn't match. Locally it passes,
+    and the specs themselves are sound.
+  - **What guards it:** the deploy job's fail-fast (!1370), which only works
+    once that job runs a build containing it.
+- **To resume:** start an opus planner with this ADR and the blue-green ADR.
+  Read !1367's and !1373's state with `change_status`. If one was evicted,
+  resume it with `change_propose resumes: <n>` and leave its content as it
+  is.

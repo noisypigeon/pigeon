@@ -231,3 +231,50 @@ an event:
 5. **After step 4 deploys,** a planner calls each `what` once against the
    platform and attaches the outputs, scrubbed, to the change. Any group
    name `token_body` rejects is fixed in the catalog.
+
+## Amendments
+
+### 2026-11-20: Hand-off: where execution stands, and how to resume
+
+The owner asked on 2026-11-20 for work to wrap up. They ranked this ADR
+after the deployable check, because nothing calls `cloudflare.read` until
+step 4. The planner session that ran it hands off here.
+
+- **Done:**
+  - step 1, this ADR (!1364);
+  - step 2, the grant (!1368):
+    - the `dns.read` and `queues.read` capabilities;
+    - the `cloudflare-read` ledger entry;
+    - `ledger::check`'s read-only rule;
+    - `token_body`'s all-zones form;
+    - `Resolved::wanted_of`;
+    - `worker::minting::for_call`, `#[expect(dead_code)]` until step 4.
+
+    The owner approved it after the status session's review. It is queued
+    behind the deployable check's changes.
+  - step 3, brief b194 revision 2 (!1369): `pigeon_core::cloudflare_read`,
+    with the arguments, the path table, the typed rows and the scrub. Revision
+    2 cuts a log row's URL to its path and masks credentials in text, with a
+    test. Its Bench passed. It was rebased onto !1364 and held out of the merge
+    queue at the owner's request.
+- **What remains:**
+  1. Merge !1369 once the owner releases it.
+  2. **Step 4 is the planner's, at owner tier, not started.**
+     - `src/pigeon-agent/src/worker/cloudflare_read.rs`. It checks the
+       arguments with `cloudflare_read::ask`, using the Workers in the
+       architecture graph and the aliases in `zones.private`. It mints with
+       `for_call(.., "cloudflare-read", "Instance", what.capabilities())`. It
+       makes only the calls `allowed` passes on `api.cloudflare.com`, builds
+       the rows, then scrubs them with every private zone, the account names
+       and the secrets. It revokes the token with `revoke_token` on every
+       path, and returns.
+     - The operation in `wire.rs`: `cloudflare.read`, `Effect::Read`, prefix
+       `cloudflare.` in `control_plane()`. It is routed as `Routed::App` and
+       added to `results.rs` `OPEN` and to `present/rest.rs` `NAMES` and
+       `shape`.
+     - The removal of `for_call`'s `#[expect(dead_code)]`, which is a gate
+       path.
+  3. Step 5: one live call of each `what`, as §Execution 5 says.
+- **To resume:** start an opus planner with this ADR. Read !1368's and
+  !1369's state. Brief only step 4's non-gate code, and carry the
+  `worker/minting.rs` line and the merge yourself.
