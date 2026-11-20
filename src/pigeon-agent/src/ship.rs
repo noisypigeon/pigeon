@@ -241,7 +241,7 @@ pub fn workers(
     standby: &mut Option<crate::core::deploy::standby::Checked>,
 ) -> Result<Vec<String>, String> {
     let names = crate::checks::scope::workers(dir, files).map_err(|e| e.to_string())?;
-    if names.is_empty() {
+    if names.is_empty() && asked_in_place(dir, files).is_none() {
         log.push_str("no Worker to deploy\n");
         return Ok(Vec::new());
     }
@@ -311,11 +311,19 @@ pub fn workers(
         access: (&id, &secret),
     };
     let pick = standby_pick(spec, dir, &host, log);
+    let in_place = pick
+        .as_ref()
+        .and_then(|p| asked_in_place(dir, files).filter(|c| *c == p.lease));
+    if let Some(c) = &in_place {
+        let _ = writeln!(log, "{c}: the primary, shipped in place first ({IN_PLACE})");
+    }
+    let names = first(names, in_place.as_deref());
     let mut shipped = Vec::new();
     for name in names {
         if let Some(p) = &pick
             && p.colours.contains(&name)
             && name != p.target
+            && in_place.as_deref() != Some(name.as_str())
         {
             let _ = writeln!(log, "{name}: not the standby ({}); not shipped", p.target);
             continue;
@@ -431,6 +439,33 @@ impl Pick {
         let _ = writeln!(log, "standby: {} {why}", self.target);
         self.checked(version, Some(why))
     }
+}
+
+/// The file naming a primary colour Worker a standby deploy also ships in place; see the blue-green ADR's 2026-11-20 in-place amendment.
+pub const IN_PLACE: &str = ".config/deploy-in-place";
+
+/// The colour Worker [`IN_PLACE`] names at `dir`, if any.
+fn in_place(dir: &Path) -> Option<String> {
+    let text = std::fs::read_to_string(dir.join(IN_PLACE)).ok()?;
+    let name = text.trim();
+    (!name.is_empty()).then(|| name.to_string())
+}
+
+/// The colour Worker [`IN_PLACE`] names, only when the file is among `files`, those changed since the last passed deploy: one in-place ship per edit of the file, never a whole deploy's.
+fn asked_in_place(dir: &Path, files: Option<&[String]>) -> Option<String> {
+    files?
+        .iter()
+        .any(|f| f == IN_PLACE)
+        .then(|| in_place(dir))?
+}
+
+/// `names` with `primary` first, added when its inputs didn't change, so a failing standby can't stop it.
+fn first(mut names: Vec<String>, primary: Option<&str>) -> Vec<String> {
+    if let Some(p) = primary {
+        names.retain(|n| n != p);
+        names.insert(0, p.to_string());
+    }
+    names
 }
 
 /// The standby under `DEPLOY_STANDBY`, from the manifest and the lease; None without the variable, a manifest or a standby, so the deploy ships as before.
@@ -806,6 +841,33 @@ fn build_images(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_in_place_primary_ships_first_and_only_when_named() {
+        let names = |v: &[&str]| v.iter().map(|s| (*s).to_string()).collect::<Vec<_>>();
+        let all = names(&["pigeon-green", "pigeon-front", "pigeon-control"]);
+        assert_eq!(
+            first(all.clone(), Some("pigeon-control")),
+            names(&["pigeon-control", "pigeon-green", "pigeon-front"])
+        );
+        assert_eq!(first(all.clone(), None), all);
+        assert_eq!(
+            first(names(&["pigeon-green"]), Some("pigeon-control")),
+            names(&["pigeon-control", "pigeon-green"])
+        );
+        let dir = std::env::temp_dir().join(format!("in-place-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join(".config")).unwrap();
+        let changed = names(&[IN_PLACE]);
+        assert_eq!(asked_in_place(&dir, Some(&changed)), None);
+        std::fs::write(dir.join(IN_PLACE), "pigeon-control\n").unwrap();
+        assert_eq!(
+            asked_in_place(&dir, Some(&changed)).as_deref(),
+            Some("pigeon-control")
+        );
+        assert_eq!(asked_in_place(&dir, Some(&names(&["src/x.rs"]))), None);
+        assert_eq!(asked_in_place(&dir, None), None);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
 
     #[test]
     fn a_down_host_is_named_by_its_status_and_failing_fields_only() {

@@ -1043,3 +1043,31 @@ pins it.
 Until this deploys and control has written once to each object, every
 standby deploy fails parity on those keys. That failure is expected, and
 it keeps blocking any flip, as it should.
+
+### 2026-11-20: A standby deploy can also ship the primary in place, when the owner asks
+
+The rebaseline fix (!1411) only takes effect on a colour running it, and
+standby deploys never ship the primary. While parity fails, no flip can
+carry the fix to the primary either. On 2026-11-20 the owner chose to ship
+pigeon-control once in place, as every deploy did before step 1b.
+
+`.config/deploy-in-place` names a colour Worker. A standby deploy ships
+it in place only when it names the lease's colour and the file itself is
+among the files changed since the last passed deploy. It ships first,
+through the same gradual rollout, smoke and rollback as any Worker, and
+then the standby ships as before. A file naming another colour, an
+unchanged file and a whole deploy all do nothing, so each edit of the file
+asks for in-place ships only until a deploy passes; nothing lingers once
+one has. Shipping the primary untested by a standby bypasses blue-green's
+safety, so the file is guarded and in the gate in `.config/approvals.yaml`:
+only the owner can approve a change to it, under any window.
+
+It lands in order, by the two-step rule and the eviction rule:
+
+1. The reader, in `ship.rs`.
+2. The guard, its own change, since `.config/approvals.yaml` is an
+   eviction path.
+3. The file naming pigeon-control, at the owner tier.
+4. The file's removal, once control has shipped. The next standby
+   deploy's parity then shows whether the journal replays to control's
+   state.
