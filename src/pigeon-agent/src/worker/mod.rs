@@ -48,6 +48,7 @@ mod platforms;
 mod pool;
 mod pool_dispatch;
 mod pool_ops;
+mod promote;
 mod provider;
 mod push;
 mod secrets_migrate;
@@ -139,7 +140,7 @@ async fn fetch(req: Request, env: Env, _ctx: worker::Context) -> Result<Response
     match req.path().as_str() {
         "/healthz" => return health(&env, &settings).await,
         "/healthz/smoke" => return smoke(&env, &settings, &who).await,
-        "/healthz/parity" => return parity(&env, &settings).await,
+        "/healthz/parity" => return parity(&env, &settings, deployer(&env, &who)).await,
         "/healthz/adopt" | "/healthz/resume" if req.method() == Method::Post => {
             if !deployer(&env, &who) {
                 return Response::error("the deployer's token alone adopts and resumes", 403);
@@ -1674,8 +1675,8 @@ async fn health(env: &Env, s: &Settings) -> Result<Response> {
     .with_status(if ok { 200 } else { 503 }))
 }
 
-/// Each object's held and replayed journal digests, and whether they agree; only digests leave the Worker. See .claude/decisions/2026-11-18-runtime-independent-blue-green-workers.md, its step 10 amendment.
-async fn parity(env: &Env, s: &Settings) -> Result<Response> {
+/// Each object's held and replayed journal digests, and whether they agree, and, `with_keys`, the shared secrets' fingerprints; only digests leave the Worker. See .claude/decisions/2026-11-18-runtime-independent-blue-green-workers.md, its step 10 amendment.
+pub(super) async fn parity(env: &Env, s: &Settings, with_keys: bool) -> Result<Response> {
     use crate::core::journal;
     use std::collections::BTreeMap;
     let seal = journal_seal(env).await;
@@ -1744,7 +1745,12 @@ async fn parity(env: &Env, s: &Settings) -> Result<Response> {
             }),
         );
     }
-    Response::from_json(&json!({ "ok": ok, "objects": objects }))
+    let mut answer = json!({ "ok": ok, "objects": objects });
+    // Only the deployer and another colour see the secrets' fingerprints.
+    if with_keys {
+        answer["keys"] = key_fingerprints(env);
+    }
+    Response::from_json(&answer)
 }
 
 /// Another colour's call, by service binding, carrying the shared agent token: it reaches the `/healthz` paths only. None when the request carries no token, so Access decides as usual. See the blue-green ADR's colour-calls amendment.
@@ -1764,7 +1770,7 @@ async fn colour_call(req: &Request, env: &Env, s: &Settings) -> Option<Result<Re
     let post = req.method() == Method::Post;
     Some(match req.path().as_str() {
         "/healthz" => health(env, s).await,
-        "/healthz/parity" => parity(env, s).await,
+        "/healthz/parity" => parity(env, s, true).await,
         "/healthz/adopt" if post => adopt(env, s, false).await,
         "/healthz/resume" if post => resume(env, s, false).await,
         _ => Response::error("a colour token reaches /healthz only", 403),
@@ -2991,4 +2997,16 @@ async fn journal_keys(state: &State, env: &Env, keys: &[&str], object: impl Fn(&
 fn deciding(env: &Env) -> bool {
     env.var("MEMBER_CHECK")
         .is_ok_and(|v| v.to_string() == "decide")
+}
+
+/// Each shared secret's fingerprint as this colour reads it: 12 hex digits of HMAC-SHA-256 keyed by the value over a fixed label, so no value leaves the Worker. Two colours that hold different values can't both verify a ticket; a promote compares these first (the blue-green ADR's 2026-11-20 amendments).
+pub(super) fn key_fingerprints(env: &Env) -> Value {
+    let mut out = serde_json::Map::new();
+    for name in crate::core::platform::secrets::SHARED {
+        let fp = platform::secret(env, name)
+            .ok()
+            .map(|v| crate::wire::link::derive(&v, "pigeon-key-fingerprint")[..12].to_string());
+        out.insert(name.to_string(), json!(fp));
+    }
+    Value::Object(out)
 }

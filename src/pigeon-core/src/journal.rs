@@ -90,6 +90,7 @@ pub const WITHHELD: &[&str] = &["apns_token"];
 /// The `MainRun` keys journaled as snapshots; see the ADR's 2026-11-18 amendment on identity state.
 pub const MAIN_KEYS: &[&str] = &[
     "pipeline",
+    "promote.hold",
     "mirroring",
     "ledger",
     "releases",

@@ -1095,7 +1095,12 @@ impl MainRun {
                 d.to_string(),
             );
         }
-        if let Ok(host) = self.env.var(crate::wire::ship_wire::HOST_VAR) {
+        // The platform Worker's host, which a colour names as CONTROL_HOST; see the blue-green ADR's colour-calls amendment.
+        if let Ok(host) = self
+            .env
+            .var("CONTROL_HOST")
+            .or_else(|_| self.env.var(crate::wire::ship_wire::HOST_VAR))
+        {
             env.insert(
                 crate::wire::ship_wire::HOST_VAR.to_string(),
                 host.to_string(),
@@ -1106,6 +1111,12 @@ impl MainRun {
             super::lease::current(&self.env)
                 .await
                 .map_or_else(|| crate::core::lease::FIRST_COLOR.to_string(), |l| l.color),
+        );
+        // The deploy ships colour Workers to the standby only (step 1b); see the blue-green ADR's
+        // 2026-11-20 amendment.
+        env.insert(
+            crate::wire::ship_wire::STANDBY_VAR.to_string(),
+            "1".to_string(),
         );
         // The build the job must run; see the blue-green ADR's two-step rule.
         if let Some(b) = &p.latest_build {
@@ -1179,6 +1190,15 @@ impl MainRun {
             Ok(s) if report.outcome == Outcome::Passed => {
                 super::mandates::resume_all(&self.env, &s, sha).await
             }
+            // A failed standby leaves the primary serving: no failed deploy; see the blue-green ADR's 2026-11-20 amendment.
+            Ok(s)
+                if report.standby.as_ref().is_some_and(|c| !c.passed)
+                    && report.violations.iter().all(|v| v.starts_with("standby ")) =>
+            {
+                let why = control::failure(report);
+                super::push::notify(&self.env, &s, "Standby failed", &why, "/approvals").await;
+                Ok(())
+            }
             Ok(s) => {
                 let why = control::failure(report);
                 let streak = crate::core::approval::hold::Streak::of(&p.history);
@@ -1202,8 +1222,16 @@ impl MainRun {
     }
 
     /// The alarm's work, for the color that holds the lease.
+    #[expect(clippy::too_many_lines, reason = "one step per pipeline duty")]
     async fn run_alarm(&self) -> Result<Response> {
         let mut p = self.pipeline().await?;
+        // A promote holds new deploys; see the blue-green ADR's 2026-11-20 amendments.
+        let promoting = super::promote::tick(&self.state, &self.env, p.running.is_some())
+            .await
+            .unwrap_or_else(|e| {
+                worker::console_error!("promote: {e}");
+                false
+            });
         // Platform jobs share the alarm, and never hold up a deploy; see
         // .claude/decisions/2026-11-08-runtime-blue-green-self-standup.md, step 4's amendment.
         if let Err(e) = super::platforms::tick(&self.state, &self.env, p.deployed.as_deref()).await
@@ -1219,7 +1247,7 @@ impl MainRun {
         {
             // A stale slot never redeploys what's deployed; `deploy_retry` clears `deployed`.
             worker::console_warn!("{sha} is already deployed; its deploy is dropped");
-            next = p.start();
+            next = if promoting { None } else { p.start() };
         } else if let Some(sha) = starting {
             let secret = secret(&self.env, crate::wire::ship_wire::IMAGES_VAR)
                 .ok()
@@ -1247,18 +1275,21 @@ impl MainRun {
                         self.state.storage().put(LEDGER, l).await?;
                     }
                     deploy_event(&self.env, &sha, &report).await;
+                    if let Some(c) = &report.standby {
+                        super::promote::standby_checked(&self.state, c).await?;
+                    }
                     if report.outcome == Outcome::Passed {
                         self.release_target(&sha).await?;
                         self.ios_deployed(&sha, report.ios).await?;
                     }
                     self.auto_after(&p, &sha, &report).await;
-                    next = p.start();
+                    next = if promoting { None } else { p.start() };
                 }
                 Ok(None) => {}
                 Err(()) => next = p.lost(now()),
             }
         } else {
-            next = p.start();
+            next = if promoting { None } else { p.start() };
         }
         self.save_after(&p, next.as_deref(), wait).await?;
         if let Err(e) = self.mirror_step().await {
@@ -1290,6 +1321,17 @@ impl MainRun {
                 storage.set_alarm(super::platforms::POLL).await?;
             }
         }
+        // A promote, or a passed standby waiting for one, ticks each minute.
+        if promoting
+            || storage.get::<Value>(super::promote::READY).await?.is_some()
+            || storage.get::<Value>(super::promote::FLIP).await?.is_some()
+        {
+            let at =
+                i64::try_from((now() + super::promote::EVERY.as_secs()) * 1000).unwrap_or(i64::MAX);
+            if storage.get_alarm().await?.is_none_or(|t| t > at) {
+                storage.set_alarm(super::promote::EVERY).await?;
+            }
+        }
         Response::ok("ok")
     }
 
@@ -1317,6 +1359,9 @@ impl MainRun {
         self.rearm().await?;
         if req.method() == Method::Post && path == "/journal/resume" {
             return Response::ok("resumed");
+        }
+        if path.starts_with("/promote") {
+            return super::promote::serve(&self.state, req).await;
         }
         if let Some(rest) = path.trim_matches('/').strip_prefix("platform/") {
             let body: Value = req.json().await.unwrap_or(Value::Null);
@@ -1439,8 +1484,11 @@ impl DurableObject for MainRun {
 
     async fn alarm(&self) -> Result<Response> {
         platform::load_store(&self.env).await;
-        // The standby only reads; see the blue-green ADR §A.3.
+        // The standby only reads (the blue-green ADR §A.3), but the old colour runs its promote's watch.
         if !super::lease::acting(&self.env).await {
+            if super::promote::watching(&self.state).await? {
+                return super::promote::watch_tick(&self.state, &self.env).await;
+            }
             return Response::ok("standby");
         }
         let response = self.run_alarm().await;
