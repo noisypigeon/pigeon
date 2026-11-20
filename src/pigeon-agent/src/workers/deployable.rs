@@ -270,10 +270,12 @@ pub fn head_pass(root: &Path, tools: Option<&Tools>) -> Result<usize, Vec<Proble
         problems.extend(validate(root, f));
         let mut targets: Vec<(String, Found)> = Vec::new();
         if let Some(kind) = f.spec.deployment.as_deref() {
-            let units: Vec<String> = stacks(root, kind)
-                .into_iter()
-                .chain([DEPLOY_STACK.to_string()])
-                .collect();
+            let own = stacks(root, kind);
+            // A kind with several units deploys each by its Worker's name, never through the
+            // deploy's stack, which would be ambiguous (the blue-green ADR's 2026-11-20 blue
+            // amendment).
+            let deploy = (own.len() < 2).then(|| DEPLOY_STACK.to_string());
+            let units: Vec<String> = own.into_iter().chain(deploy).collect();
             let mut seen: BTreeSet<(String, Option<String>)> = BTreeSet::new();
             for u in units {
                 match bound(root, f, Some(&u)) {
