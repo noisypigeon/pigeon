@@ -45,6 +45,7 @@
 - feat(workers): a queue consumer may set max_retries, so a standby's retried batches outlive a promote (!1399) ([5a85d74](https://github.com/noisypigeon/pigeon/commit/5a85d74e875dc91750302414f449fabdb44be2c3)) · agent
 - feat(lease): MainRun promotes the standby: drain, adopt, secrets and parity, the fenced flip, the watch from the old colour, flip-back (!1402) ([206fdc8](https://github.com/noisypigeon/pigeon/commit/206fdc8c200c8c8ee10ef8cb806adf3539ffd56b)) · agent
 - feat(infra): pigeon-control's and every colour's queue consumer retries 100 times, so a standby's batches outlive a promote (!1403) ([8a5321e](https://github.com/noisypigeon/pigeon/commit/8a5321e41efe2b98c877b23f8395b14e2c557095))
+- docs(adr): P5's cutover left gaps; the owner's break-glass returned the lease to control; then blue (!1406) ([2694a9c](https://github.com/noisypigeon/pigeon/commit/2694a9c80700afcf213cec3fc5078dae12322b4a))
 
 ## 2026-11-19
 
