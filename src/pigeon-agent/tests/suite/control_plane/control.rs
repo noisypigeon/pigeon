@@ -195,6 +195,7 @@ fn reports_become_events() {
         pool: None,
         serving: None,
         pipeline: false,
+        standby: None,
         patch: None,
         own: None,
     };
@@ -438,6 +439,7 @@ fn deploy_report(outcome: Outcome) -> Report {
         pool: None,
         serving: None,
         pipeline: false,
+        standby: None,
         patch: None,
         own: None,
     }

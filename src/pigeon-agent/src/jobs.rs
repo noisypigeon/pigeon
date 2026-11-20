@@ -89,6 +89,7 @@ impl Board {
             pool: None,
             serving: None,
             pipeline: false,
+            standby: None,
         };
         self.set(running.clone());
         let board = Arc::clone(self);
@@ -146,6 +147,7 @@ pub(crate) fn report(spec: &JobSpec, outcome: Outcome, log: &str) -> Report {
         pool: None,
         serving: None,
         pipeline: false,
+        standby: None,
     }
 }
 

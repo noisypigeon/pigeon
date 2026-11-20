@@ -1,6 +1,24 @@
 //! The colour a Worker deploy goes to: the one the lease doesn't name; see .claude/decisions/2026-11-18-runtime-independent-blue-green-workers.md, its step 10 amendment.
 
+use serde::{Deserialize, Serialize};
+
 use crate::lease::Lease;
+
+/// What a deploy found on the standby it shipped: checked on its own host, in order, stopping at the first failure.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Checked {
+    /// The standby colour.
+    pub color: String,
+    /// Its own host.
+    pub host: String,
+    /// The version it shipped.
+    pub version: String,
+    /// Whether every check passed.
+    pub passed: bool,
+    /// The first check that failed, and why.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub failed: Option<String>,
+}
 
 /// The colour among `colors` a deploy goes to: the first, in sorted order, that `lease` doesn't name. None without a lease, with fewer than two colours, or when the lease names none of them, so today's deploy is unchanged.
 #[must_use]

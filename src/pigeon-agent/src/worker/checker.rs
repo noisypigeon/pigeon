@@ -65,6 +65,10 @@ async fn serve(state: &State, env: &Env, mut req: Request, class: &str) -> Resul
     let segments: Vec<&str> = path.trim_matches('/').split('/').collect();
     match (req.method(), segments.as_slice()) {
         (Method::Post, ["start"]) => {
+            // No job starts during a drain; see the blue-green ADR's 2026-11-20 amendment.
+            if crate::core::lease::promoting(super::lease::current(env).await.as_ref()) {
+                return Response::error(crate::core::lease::WAIT, 503);
+            }
             let body = req.bytes().await?;
             let token = signing_key(env)?;
             if let Err(e) = crate::containers::worker::start_jobs(

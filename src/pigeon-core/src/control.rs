@@ -882,6 +882,9 @@ pub struct Report {
     /// For a deploy of `main`: whether its range touches the deploy pipeline.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub pipeline: bool,
+    /// For a deploy of `main` with a standby: what it found there; see the blue-green ADR's 2026-11-20 amendment.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub standby: Option<crate::deploy::standby::Checked>,
 }
 
 impl Report {
@@ -915,6 +918,7 @@ impl Report {
             pool: None,
             serving: None,
             pipeline: false,
+            standby: None,
         }
     }
 }
@@ -2223,6 +2227,7 @@ impl Pipeline {
 pub fn no_capacity(why: &str) -> bool {
     why.contains("Maximum number of running container instances")
         || why.contains("no container instance that can be provided")
+        || why.contains(crate::lease::WAIT)
 }
 
 /// The Container class a job runs in (approvals-images-state ADR §4): Rust checks and builds

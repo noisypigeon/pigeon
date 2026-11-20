@@ -66,3 +66,39 @@ pub fn write(old_epoch: u64, lease: &Lease) -> crate::control::Statement {
         ],
     }
 }
+
+/// What a job Container's start answers while the lease is `promoting`: no job starts during a drain, and callers wait as for a full fleet.
+pub const WAIT: &str = "the lease is promoting: no job starts until it serves";
+
+/// Whether `lease` is promoting.
+#[must_use]
+pub fn promoting(lease: Option<&Lease>) -> bool {
+    lease.is_some_and(|l| l.state == "promoting")
+}
+
+/// The code-check jobs D1 shows running, updated at or after `since`: what a drain waits for.
+#[must_use]
+pub fn running_jobs(instance: &str, repo: &str, since: u64) -> crate::control::Statement {
+    crate::control::Statement {
+        sql: "SELECT COUNT(*) AS n FROM jobs WHERE instance = ?1 AND repo = ?2 AND status = 'running' AND updated >= ?3",
+        params: vec![json!(instance), json!(repo), json!(since)],
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn only_a_promoting_lease_holds_job_starts() {
+        let l = |state: &str| Lease {
+            color: FIRST_COLOR.into(),
+            epoch: 1,
+            state: state.into(),
+        };
+        assert!(promoting(Some(&l("promoting"))));
+        assert!(!promoting(Some(&l("serving"))));
+        assert!(!promoting(None));
+        assert!(crate::control::no_capacity(WAIT));
+    }
+}
