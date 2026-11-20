@@ -17,4 +17,5 @@ routes:
 forwards: $deployment.domains[2]
 bindings:
   d1: { DB: { name: $deployment.database.name, id: $deployment.database_id } }
-  services: { PIGEON_CONTROL: pigeon-control }
+  # Each colour the lease may name (the blue-green ADR's colour-calls amendment).
+  services: { PIGEON_CONTROL: pigeon-control, PIGEON_GREEN: pigeon-green }

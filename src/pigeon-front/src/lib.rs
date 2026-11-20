@@ -3,11 +3,15 @@
 
 use std::cell::RefCell;
 
-use worker::{Context, Env, Headers, Request, Response, Result, event};
+use worker::{Context, Env, Headers, Request, RequestInit, Response, Result, event};
 
 /// The header naming the colour an answer was forwarded to, so a probe tells a host the front
 /// answered from one its colour answered directly (the blue-green ADR's exact-host route amendment).
 pub const FORWARDED: &str = "x-pigeon-front";
+
+/// The header one colour's call to another carries; never taken from outside, so the front drops it
+/// (the blue-green ADR's colour-calls amendment).
+pub const COLOUR_TOKEN: &str = "x-pigeon-colour-token";
 
 /// How long an isolate keeps the lease's color, in milliseconds.
 const CACHE_MS: u64 = 5_000;
@@ -51,6 +55,11 @@ async fn fetch(req: Request, env: Env, _ctx: Context) -> Result<Response> {
     let Ok(service) = env.service(&binding(&c)) else {
         return Response::error(format!("no binding for {c}"), 503);
     };
+    let req = if req.headers().has(COLOUR_TOKEN)? {
+        without_colour_token(&req)?
+    } else {
+        req
+    };
     let answer = service.fetch_request(req).await?;
     // A copy of its headers, marked: a forwarded answer's own headers can't be changed.
     let headers = Headers::new();
@@ -59,4 +68,20 @@ async fn fetch(req: Request, env: Env, _ctx: Context) -> Result<Response> {
     }
     headers.set(FORWARDED, &c)?;
     Ok(answer.with_headers(headers))
+}
+
+/// `req` with every header but [`COLOUR_TOKEN`].
+fn without_colour_token(req: &Request) -> Result<Request> {
+    let headers = Headers::new();
+    for (k, v) in req.headers().entries() {
+        if !k.eq_ignore_ascii_case(COLOUR_TOKEN) {
+            headers.append(&k, &v)?;
+        }
+    }
+    let mut init = RequestInit::new();
+    init.with_method(req.method()).with_headers(headers);
+    if let Some(body) = req.inner().body() {
+        init.with_body(Some(body.into()));
+    }
+    Request::new_with_init(req.url()?.as_str(), &init)
 }

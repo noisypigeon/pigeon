@@ -36,6 +36,8 @@ containers:
     instance_type: standard-4
     max_instances: 32
 bindings:
+  # The colours it promotes to and watches (the blue-green ADR's colour-calls amendment).
+  services: { PIGEON_CONTROL: pigeon-control }
   d1:
     DB: { name: $deployment.database.name, id: $deployment.database_id, migrations: src/pigeon-agent/migrations }
   r2:
@@ -54,6 +56,8 @@ bindings:
     PASSKEY_RP_ID: $deployment.domains[0]
     FRONT_HOST: $deployment.domains[2]
     INSTANCE_ZONE: $deployment.instance_zone
+    # The platform Worker's host, which a deploy from this colour checks it on.
+    CONTROL_HOST: $deployment.domains[3]
     SECRETS_STORE: $deployment.secrets_store_id
     AI_GATEWAY_ACCOUNT: $deployment.account_id
     AI_GATEWAY: "$deployment.ai_gateways[0].name"

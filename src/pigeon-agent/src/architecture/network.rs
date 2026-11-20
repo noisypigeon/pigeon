@@ -524,6 +524,8 @@ pub struct Worker {
     pub r2: Vec<String>,
     /// Its Secrets Store bindings.
     pub secrets_store: Vec<String>,
+    /// Its service bindings: the other Workers it calls.
+    pub services: Vec<String>,
     /// The hostnames it serves, from its spec's routes; only `pigeon.dev`'s are named.
     pub hosts: Vec<Item>,
 }
@@ -1176,6 +1178,15 @@ fn parts(platform: &Path, w: &Worker, repos: &[String], github: Option<&str>) ->
             spec,
         ));
     }
+    if !w.services.is_empty() {
+        out.push(part(
+            "Colours",
+            "service",
+            w.services.join(" · "),
+            false,
+            spec,
+        ));
+    }
     if !repos.is_empty() {
         out.push(part(
             "Artifacts",
@@ -1313,6 +1324,7 @@ fn worker(
         d1: spec.bindings.d1.keys().cloned().collect(),
         r2: spec.bindings.r2.keys().cloned().collect(),
         secrets_store: spec.bindings.secrets_store.keys().cloned().collect(),
+        services: spec.bindings.services.values().cloned().collect(),
         hosts: hosts(spec),
     }
 }

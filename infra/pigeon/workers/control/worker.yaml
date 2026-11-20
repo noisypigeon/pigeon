@@ -49,6 +49,8 @@ containers:
     instance_type: standard-4
     max_instances: 32
 bindings:
+  # The colours it promotes to and watches (the blue-green ADR's colour-calls amendment).
+  services: { PIGEON_GREEN: pigeon-green }
   d1:
     DB: { name: $deployment.database.name, id: $deployment.database_id, migrations: src/pigeon-agent/migrations }
   r2:

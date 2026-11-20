@@ -129,6 +129,9 @@ async fn fetch(req: Request, env: Env, _ctx: worker::Context) -> Result<Response
             .unwrap_or_else(|| Response::error("not found", 404));
     }
     let settings = Settings::from(&env)?;
+    if let Some(answer) = colour_call(&req, &env, &settings).await {
+        return answer;
+    }
     let who = match platform::identify(&req, &settings).await {
         Ok(who) => who,
         Err(why) => return Response::error(format!("unauthorized: {why}"), 401),
@@ -1742,6 +1745,30 @@ async fn parity(env: &Env, s: &Settings) -> Result<Response> {
         );
     }
     Response::from_json(&json!({ "ok": ok, "objects": objects }))
+}
+
+/// Another colour's call, by service binding, carrying the shared agent token: it reaches the `/healthz` paths only. None when the request carries no token, so Access decides as usual. See the blue-green ADR's colour-calls amendment.
+async fn colour_call(req: &Request, env: &Env, s: &Settings) -> Option<Result<Response>> {
+    let token = req
+        .headers()
+        .get(crate::core::lease::COLOUR_TOKEN)
+        .ok()
+        .flatten()?;
+    let ours = checker::signing_key(env).ok();
+    if !ours.is_some_and(|o| crate::wire::link::constant_eq(o.as_bytes(), token.as_bytes())) {
+        return Some(Response::error(
+            "unauthorized: a colour token that doesn't match",
+            401,
+        ));
+    }
+    let post = req.method() == Method::Post;
+    Some(match req.path().as_str() {
+        "/healthz" => health(env, s).await,
+        "/healthz/parity" => parity(env, s).await,
+        "/healthz/adopt" if post => adopt(env, s, false).await,
+        "/healthz/resume" if post => resume(env, s, false).await,
+        _ => Response::error("a colour token reaches /healthz only", 403),
+    })
 }
 
 /// Whether `who` is the deployer's Access token.

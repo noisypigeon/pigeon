@@ -498,6 +498,7 @@ fn spec_gaps(root: &std::path::Path, net: &Value) -> Vec<String> {
             "r2",
             "secrets_store",
             "queues",
+            "services",
             "vars",
             "version_metadata",
         ]
@@ -512,6 +513,10 @@ fn spec_gaps(root: &std::path::Path, net: &Value) -> Vec<String> {
         (
             "secrets_store",
             spec.bindings.secrets_store.keys().cloned().collect(),
+        ),
+        (
+            "services",
+            spec.bindings.services.values().cloned().collect(),
         ),
     ] {
         for b in have {

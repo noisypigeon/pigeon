@@ -85,6 +85,9 @@ pub fn running_jobs(instance: &str, repo: &str, since: u64) -> crate::control::S
     }
 }
 
+/// The header one colour's call to another carries: the shared agent token. It reaches a colour's `/healthz` paths only, and the front drops it; see the blue-green ADR's colour-calls amendment.
+pub const COLOUR_TOKEN: &str = "x-pigeon-colour-token";
+
 #[cfg(test)]
 mod tests {
     use super::*;
