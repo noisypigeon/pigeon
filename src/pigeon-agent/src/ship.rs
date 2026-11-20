@@ -450,7 +450,11 @@ pub fn build(
     let deployment = var(workers::DEPLOYMENT_VAR);
     let mut reference = None;
     for f in workers::discover(dir).map_err(|e| e.to_string())? {
-        // A spec that doesn't bind here, such as a colour spec with several units, holds no bucket.
+        // Builds live where the platform Worker serves them, never in a colour's bucket.
+        if f.spec.color {
+            continue;
+        }
+        // A spec that doesn't bind here holds no bucket.
         let Ok(f) = workers::bound(dir, &f, deployment.as_deref()) else {
             continue;
         };
