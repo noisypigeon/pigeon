@@ -2990,7 +2990,9 @@ async fn journal_keys(state: &State, env: &Env, keys: &[&str], object: impl Fn(&
         .collect();
     let previous = journal::baseline(previous, journaled, epoch, &journalable);
     let changes = journal::changed(&previous, &now);
+    let over = journal::oversized(&now);
     if changes.is_empty() {
+        note_journal(&storage, over.map_or(Ok(()), Err)).await;
         return;
     }
     let settings = match Settings::from(env) {
@@ -3044,7 +3046,8 @@ async fn journal_keys(state: &State, env: &Env, keys: &[&str], object: impl Fn(&
         storage.put(journal::DIGESTS, &digests).await?;
         storage.put(journal::EPOCH, &epoch).await
     };
-    note_journal(&storage, stored.await.map_err(|e| e.to_string())).await;
+    let result = stored.await.map_err(|e| e.to_string());
+    note_journal(&storage, result.and_then(|()| over.map_or(Ok(()), Err))).await;
 }
 
 /// Clears or keeps why a journal write failed, under `journal::ERROR`; see the blue-green ADR's

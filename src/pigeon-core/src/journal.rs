@@ -228,8 +228,23 @@ pub fn unseal(
     serde_json::from_slice(&plain).map_err(|e| e.to_string())
 }
 
-/// The most JSON text one snapshot entry holds; a larger value isn't journaled until it shrinks.
-pub const MAX_VALUE: usize = 1_000_000;
+/// The most JSON text one snapshot entry holds, under D1's 2 MB row with room for a sealed value's
+/// growth; a larger value isn't journaled until it shrinks, and [`oversized`] names it.
+pub const MAX_VALUE: usize = 1_400_000;
+
+/// Each key among `now` whose JSON text exceeds [`MAX_VALUE`], as `<key>: <bytes> bytes`, which
+/// [`changed`] leaves out; see the blue-green ADR's 2026-11-20 oversized amendment.
+#[must_use]
+pub fn oversized(now: &std::collections::BTreeMap<String, serde_json::Value>) -> Option<String> {
+    let over: Vec<String> = now
+        .iter()
+        .filter_map(|(k, v)| {
+            let n = v.to_string().len();
+            (n > MAX_VALUE).then(|| format!("{k}: {n} bytes"))
+        })
+        .collect();
+    (!over.is_empty()).then(|| format!("over the journal's {MAX_VALUE} bytes: {}", over.join(", ")))
+}
 
 /// The DO-local key holding each journaled key's last digest.
 pub const DIGESTS: &str = "journal.digests";
@@ -586,6 +601,17 @@ pub fn snapshot_entry_at(
 mod replay_tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn an_oversized_value_is_named_with_its_size() {
+        use std::collections::BTreeMap;
+        let mut now: BTreeMap<String, serde_json::Value> = BTreeMap::new();
+        now.insert("small".into(), json!(1));
+        assert_eq!(oversized(&now), None);
+        now.insert("briefs".into(), json!("x".repeat(MAX_VALUE)));
+        let why = oversized(&now).unwrap();
+        assert!(why.contains("briefs: 1400002 bytes"), "{why}");
+    }
 
     #[test]
     fn a_map_with_number_keys_is_kept_tagged_and_others_stay_plain() {

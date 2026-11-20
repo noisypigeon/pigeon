@@ -1136,3 +1136,20 @@ Control is the primary, so this needs one more in-place ship: the owner
 re-adds `.config/deploy-in-place`, and a later change removes it. Its
 first Instance write then journals every key under the current epoch,
 which !1411 set out to do.
+
+### 2026-11-20: An oversized value names itself, and the journal's cap rises to 1.4 MB
+
+Once control ran !1418, its Instance read all 27 of its keys and the
+journal replayed 26: every key but `briefs`. No `journal.error` was set,
+so the writes landed. `briefs` was left out on purpose, silently:
+`journal::changed` skips any value whose JSON exceeds `MAX_VALUE`
+(1,000,000 bytes), and the briefs, which hold every brief's full text,
+outgrew it.
+
+`MAX_VALUE` rises to 1,400,000 bytes. That stays under D1's 2 MB row
+limit with room for a sealed value's base64 growth. A value still over
+the cap is named with its size under `journal.error`, as
+`over the journal's 1400000 bytes: <key>: <bytes> bytes`, so a standby
+deploy's parity and a promote both stop on it. If `briefs` outgrows even
+this, the next step is to journal it in parts, or to keep only open
+briefs in it. Either is a change to `briefs` itself, not to the cap.
