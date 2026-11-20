@@ -251,7 +251,7 @@ const GRANT: [&str; 7] = [
     "change.front",
 ];
 
-const PAGE: [&str; 13] = [
+const PAGE: [&str; 14] = [
     "secrets.migrate",
     "mandate.propose",
     "lane.request",
@@ -265,6 +265,7 @@ const PAGE: [&str; 13] = [
     "service.unbind",
     "member.grant",
     "member.revoke",
+    "zones.set",
 ];
 
 /// One operation a surface may request.
@@ -357,6 +358,7 @@ impl Operation {
             || self.name.starts_with("member.")
             || self.name.starts_with("approval.")
             || self.name.starts_with("push.")
+            || self.name.starts_with("zones.")
     }
 
     /// Who answers its request for approval.
@@ -744,6 +746,34 @@ const CATALOG: &[Operation] = &[
             arg("ticket", false, Kind::String),
         ],
         view: View::Card,
+    },
+    Operation {
+        name: "zones.set",
+        engine: Engine::Agent,
+        effect: Effect::Plan,
+        summary: "Ask the Administrator to set private zone `alias` ([a-z0-9-], no dot) to `entry`, {zone, services?, records?}, in zones.private; answers with the page link, set with a passkey; opens no change",
+        args: &[
+            arg("alias", true, Kind::String),
+            arg("entry", true, Kind::Any),
+            arg("ticket", false, Kind::String),
+        ],
+        view: View::Card,
+    },
+    Operation {
+        name: "zones.show",
+        engine: Engine::Agent,
+        effect: Effect::Read,
+        summary: "One private zone entry by `alias`: its zone, services, records and when it was set; never logged",
+        args: &[arg("alias", true, Kind::String)],
+        view: View::Detail,
+    },
+    Operation {
+        name: "zones.list",
+        engine: Engine::Agent,
+        effect: Effect::Read,
+        summary: "The private zone aliases, each with when it was set; never a zone name",
+        args: &[],
+        view: View::List,
     },
     Operation {
         name: "grant.list",
@@ -1629,3 +1659,6 @@ mod tests {
 
 #[cfg(test)]
 mod registry_tests;
+
+#[cfg(test)]
+mod zones_private_tests;

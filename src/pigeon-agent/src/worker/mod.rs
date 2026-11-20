@@ -56,6 +56,7 @@ mod stages;
 mod standalone;
 mod tasks;
 mod tickets;
+mod zones_private;
 
 use serde_json::{Value, json};
 use worker::{
@@ -1228,6 +1229,13 @@ async fn dispatch(
             args,
         } => {
             let (status, v) = member_grants::run(env, s, &op, &args).await?;
+            Ok((None, respond(operation, status, v)))
+        }
+        Routed::ZonePrivate {
+            operation: op,
+            args,
+        } => {
+            let (status, v) = zones_private::run(env, s, &op, &args).await?;
             Ok((None, respond(operation, status, v)))
         }
     }
@@ -2502,6 +2510,10 @@ impl Instance {
         if path.starts_with("/secrets/migrate/") {
             let body: Value = req.json().await?;
             return secrets_migrate::serve(&self.state, &path, &body).await;
+        }
+        if path.starts_with(zones_private::PREFIX) {
+            let body: Value = req.json().await?;
+            return zones_private::serve(&self.state, &path, &body).await;
         }
         if path.starts_with("/members/") {
             let body: Value = req.json().await?;

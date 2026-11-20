@@ -54,13 +54,16 @@ pub const NAMES: &[&str] = &[
     "insights.show",
     "push.key",
     "push.subscribe",
+    "zones.list",
+    "zones.show",
+    "zones.set",
 ];
 
 /// Whether `op` is presented as a list, a detail or (otherwise) a card.
 fn shape(op: &str) -> &'static str {
     match op {
         "git.tokens" | "bench.list" | "events.wait" | "provider.tools" | "feed.read"
-        | "build.list" => "list",
+        | "build.list" | "zones.list" => "list",
         "instance.show"
         | "architecture.describe"
         | "policy.check"
@@ -73,6 +76,7 @@ fn shape(op: &str) -> &'static str {
         | "infra.plan"
         | "home.show"
         | "tracker.show"
+        | "zones.show"
         | "ops.show"
         | "insights.show" => "detail",
         _ => "card",
@@ -244,6 +248,7 @@ fn lists(op: &str, v: &Value) -> Value {
                 .collect();
             list("Provider tools", rows, None)
         }
+        "zones.list" => zones_list(v),
         _ => {
             let rows = arr(v, "items")
                 .iter()
@@ -272,6 +277,24 @@ fn lists(op: &str, v: &Value) -> Value {
             list("Feed", rows, None)
         }
     }
+}
+
+/// `zones.list`: the private zone aliases, each with when it was set.
+fn zones_list(v: &Value) -> Value {
+    let rows = arr(v, "zones")
+        .iter()
+        .map(|z| {
+            row(
+                &s(z, "alias"),
+                &s(z, "alias"),
+                Some(&format!("updated {}", s(z, "updated"))),
+                None,
+                None,
+                None,
+            )
+        })
+        .collect();
+    list("Private zones", rows, None)
 }
 
 /// `build.list`: a commit's stored build files, each with its size.
@@ -353,6 +376,20 @@ fn details(op: &str, v: &Value) -> Value {
         }
         "bench.status" | "bench.logs" => bench_detail(v),
         "home.show" | "tracker.show" | "ops.show" | "insights.show" => parts(op, v),
+        "zones.show" => detail(
+            &format!("Private zone {}", s(v, "alias")),
+            vec![section(
+                None,
+                vec![
+                    field("zone", text(&s(v, "zone"))),
+                    field("updated", time(u(v, "updated"))),
+                    field("services", code(&v["services"].to_string())),
+                    field("records", code(&v["records"].to_string())),
+                ],
+                None,
+            )],
+            vec![],
+        ),
         _ => {
             let mut sections = vec![section(
                 None,
@@ -538,6 +575,16 @@ fn cards(op: &str, v: &Value) -> Value {
                     vec![],
                 )
             }
+        }
+        "zones.set" => {
+            let mut f = vec![field("expires", time(u(&v["offer"], "expires")))];
+            f.extend(pending_fields(v));
+            card(
+                "Private zone offered",
+                opt(&v["offer"], "alias").as_deref(),
+                f,
+                vec![],
+            )
         }
         _ => {
             let f = arr(v, "units")

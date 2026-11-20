@@ -58,3 +58,4 @@ pub mod testguard;
 pub mod tickets;
 pub mod view;
 pub mod wire;
+pub mod zones_private;

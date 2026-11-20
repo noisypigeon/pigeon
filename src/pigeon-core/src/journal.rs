@@ -81,6 +81,7 @@ pub const INSTANCE_KEYS: &[&str] = &[
     "grant-requests",
     "push-devices",
     "members.joins",
+    "zones.private",
 ];
 
 /// Instance keys never journaled: each color mints its own APNs provider token; see the ADR's #42 amendment.
@@ -125,6 +126,7 @@ pub const SEALED: &[&str] = &[
     "grant-requests",
     "push-devices",
     "members.joins",
+    "zones.private",
     "pages",
     "platform-outputs",
 ];

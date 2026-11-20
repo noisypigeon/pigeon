@@ -247,6 +247,14 @@ pub enum Routed {
         /// Its arguments.
         args: Map<String, Value>,
     },
+    /// `zones.*`, with its arguments; see
+    /// `.claude/decisions/2026-11-15-runtime-zoned-standalone-account-imports.md` §1.
+    ZonePrivate {
+        /// The operation.
+        operation: String,
+        /// Its arguments.
+        args: Map<String, Value>,
+    },
     /// `secrets.migrate`, with its arguments; see
     /// `.claude/decisions/2026-11-18-runtime-independent-blue-green-workers.md`, its `secrets.migrate`
     /// amendment.
@@ -521,6 +529,10 @@ pub fn route(request: &Request, by: &str, at: u64) -> Result<Routed, String> {
         }),
         "secrets.migrate" => Ok(Routed::SecretsMigrate { args: a.clone() }),
         "member.grant" | "member.revoke" => Ok(Routed::MemberGrant {
+            operation: request.operation.clone(),
+            args: a.clone(),
+        }),
+        "zones.set" | "zones.show" | "zones.list" => Ok(Routed::ZonePrivate {
             operation: request.operation.clone(),
             args: a.clone(),
         }),
