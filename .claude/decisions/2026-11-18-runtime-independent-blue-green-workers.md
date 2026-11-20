@@ -929,3 +929,36 @@ subrequests.
 - **Order.** The bindings and the token check are one change, after the
   adopt change and before step 2's wiring. The front's `PIGEON_GREEN`
   must be deployed before the rehearsal.
+
+### 2026-11-20: The cutover is the rehearsal, flips check secrets first, and blue follows P5
+
+Willow, 2026-11-20, through the status session: combine the rehearsal and
+the cutover. What building step 2 found changes four more details.
+
+- **One cutover, rollback proven live.** `lease.flip` control → green is
+  the real cutover. After its 10-minute watch, a second `lease.flip` back to
+  control proves rollback, and a third flips to green again. Each flip
+  drains, adopts, checks parity and watches. This replaces the separate
+  control → green → control rehearsal in A.5.7.
+- **Secrets before state.** A colour's `/healthz/parity` also answers
+  `keys`: each `SHARED` secret's fingerprint (12 hex digits of HMAC-SHA-256
+  keyed by the value over a fixed label). It answers them only to the
+  deployer's token and to another colour. A promote compares them after
+  adopt and aborts on any difference (`lease.promote_aborted`, naming the
+  secrets), so a flip never strands tickets signed under another
+  `SESSION_KEY`. The remedy is `secrets.migrate`.
+- **A standby's smoke checks `change.list`.** Its `ChangeRun`s are empty
+  until adopt, so `change.status` of the newest change isn't asked of it
+  (!1398).
+- **Adopt deletes journaled keys.** An object's adopt deletes each key in
+  its journaled set (`INSTANCE_KEYS`, `MAIN_KEYS`, `CHANGE_KEYS`) that the
+  restored map lacks, not only those its `journal.digests` names. Parity
+  leaves out the event-log keys every read moves (`event-cursors`,
+  `push-latest`, `digest-cursor`).
+- **Blue follows P5.** While the lease names pigeon-control, the standby
+  is picked among control and every colour unit, and `target` takes
+  pigeon-blue before green. blue.platform.pigeon.dev is also still
+  control's. So `color/blue` joins config.yaml only after green holds the
+  lease. Then its plan is applied, its first deploy claims its host's
+  route from control, `PIGEON_BLUE` joins the front's and the colours'
+  bindings, and green ↔ blue is proven both ways.
